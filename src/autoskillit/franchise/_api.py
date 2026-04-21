@@ -7,7 +7,7 @@ import json
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from autoskillit.core import get_logger
@@ -41,6 +41,8 @@ async def execute_dispatch(
     dispatch_name: str | None,
     timeout_sec: int | None,
     prompt_builder: Callable[..., str],
+    quota_checker: Callable[..., Any],
+    quota_refresher: Callable[..., Any],
 ) -> str:
     """Execute a single food truck dispatch.
 
@@ -92,6 +94,8 @@ async def execute_dispatch(
             dispatch_name=dispatch_name,
             timeout_sec=timeout_sec,
             prompt_builder=prompt_builder,
+            quota_checker=quota_checker,
+            quota_refresher=quota_refresher,
         )
     except asyncio.CancelledError:
         raise
@@ -116,9 +120,10 @@ async def _run_dispatch(
     dispatch_name: str | None,
     timeout_sec: int | None,
     prompt_builder: Callable[..., str],
+    quota_checker: Callable[..., Any],
+    quota_refresher: Callable[..., Any],
 ) -> str:
     """Inner dispatch body — called after lock acquisition."""
-    from autoskillit.execution import _refresh_quota_cache, check_and_sleep_if_needed
     from autoskillit.franchise.state import (
         DispatchRecord,
         DispatchStatus,
@@ -171,7 +176,7 @@ async def _run_dispatch(
                 }
             )
 
-    quota_result = await check_and_sleep_if_needed(tool_ctx.config.quota_guard)
+    quota_result = await quota_checker(tool_ctx.config.quota_guard)
     if quota_result.get("should_sleep"):
         await asyncio.sleep(quota_result.get("sleep_seconds", 0))
 
@@ -240,7 +245,7 @@ async def _run_dispatch(
 
     if tool_ctx.background is not None:
         tool_ctx.background.submit(
-            _refresh_quota_cache(tool_ctx.config.quota_guard),
+            quota_refresher(tool_ctx.config.quota_guard),
             label="quota_post_dispatch_refresh",
         )
 

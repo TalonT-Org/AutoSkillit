@@ -30,29 +30,19 @@ def _simple_prompt_builder(**kwargs) -> str:
     return f"prompt-for-{kwargs.get('recipe', 'unknown')}"
 
 
-def _patch_quota(monkeypatch) -> None:
-    """Patch check_and_sleep_if_needed to return no-sleep result."""
-    monkeypatch.setattr(
-        "autoskillit.execution.check_and_sleep_if_needed",
-        AsyncMock(
-            return_value={
-                "should_sleep": False,
-                "sleep_seconds": 0,
-                "utilization": None,
-                "resets_at": None,
-                "window_name": None,
-            }
-        ),
-    )
+async def _no_sleep_quota_checker(config, **kwargs) -> dict:
+    """Quota checker stub: always returns no-sleep result."""
+    return {
+        "should_sleep": False,
+        "sleep_seconds": 0,
+        "utilization": None,
+        "resets_at": None,
+        "window_name": None,
+    }
 
 
-def _patch_quota_refresh(monkeypatch) -> None:
-    """Patch _refresh_quota_cache so it returns a no-op coroutine."""
-
-    async def _noop(_config):
-        pass
-
-    monkeypatch.setattr("autoskillit.execution._refresh_quota_cache", _noop)
+async def _noop_quota_refresher(config, **kwargs) -> None:
+    """Quota refresher stub: no-op."""
 
 
 # ---------------------------------------------------------------------------
@@ -92,8 +82,6 @@ class TestDispatchFoodTruckGates:
         lock = asyncio.Lock()
         await lock.acquire()  # lock it
         tool_ctx.franchise_lock = lock
-        _patch_quota(monkeypatch)
-        _patch_quota_refresh(monkeypatch)
 
         result = json.loads(
             await execute_dispatch(
@@ -104,6 +92,8 @@ class TestDispatchFoodTruckGates:
                 dispatch_name=None,
                 timeout_sec=None,
                 prompt_builder=_simple_prompt_builder,
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
             )
         )
         assert result["success"] is False
@@ -129,8 +119,6 @@ class TestDispatchFoodTruckValidation:
             Recipe(name="campaign-recipe", description="test", kind=RecipeKind.CAMPAIGN),
         )
         tool_ctx.recipes = repo
-        _patch_quota(monkeypatch)
-        _patch_quota_refresh(monkeypatch)
 
         result = json.loads(
             await execute_dispatch(
@@ -141,6 +129,8 @@ class TestDispatchFoodTruckValidation:
                 dispatch_name=None,
                 timeout_sec=None,
                 prompt_builder=_simple_prompt_builder,
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
             )
         )
         assert result["success"] is False
@@ -156,8 +146,6 @@ class TestDispatchFoodTruckValidation:
         repo.add_recipe("test-recipe", _make_standard_recipe("test-recipe", ["task"]))
         tool_ctx.recipes = repo
         tool_ctx.executor = InMemoryHeadlessExecutor()
-        _patch_quota(monkeypatch)
-        _patch_quota_refresh(monkeypatch)
 
         result = json.loads(
             await execute_dispatch(
@@ -168,6 +156,8 @@ class TestDispatchFoodTruckValidation:
                 dispatch_name=None,
                 timeout_sec=None,
                 prompt_builder=_simple_prompt_builder,
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
             )
         )
         assert result["success"] is False
@@ -181,8 +171,6 @@ class TestDispatchFoodTruckValidation:
 
         lock = asyncio.Lock()
         tool_ctx.franchise_lock = lock
-        _patch_quota(monkeypatch)
-        _patch_quota_refresh(monkeypatch)
 
         result = json.loads(
             await execute_dispatch(
@@ -193,6 +181,8 @@ class TestDispatchFoodTruckValidation:
                 dispatch_name=None,
                 timeout_sec=None,
                 prompt_builder=_simple_prompt_builder,
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
             )
         )
         assert result["success"] is False
@@ -207,8 +197,6 @@ class TestDispatchFoodTruckValidation:
 
         tool_ctx.franchise_lock = asyncio.Lock()
         tool_ctx.recipes = None
-        _patch_quota(monkeypatch)
-        _patch_quota_refresh(monkeypatch)
 
         result = json.loads(
             await execute_dispatch(
@@ -219,6 +207,8 @@ class TestDispatchFoodTruckValidation:
                 dispatch_name=None,
                 timeout_sec=None,
                 prompt_builder=_simple_prompt_builder,
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
             )
         )
         assert result["success"] is False
@@ -234,8 +224,6 @@ class TestDispatchFoodTruckValidation:
         repo.add_recipe("test-recipe", _make_standard_recipe("test-recipe"))
         tool_ctx.recipes = repo
         tool_ctx.executor = None
-        _patch_quota(monkeypatch)
-        _patch_quota_refresh(monkeypatch)
 
         result = json.loads(
             await execute_dispatch(
@@ -246,6 +234,8 @@ class TestDispatchFoodTruckValidation:
                 dispatch_name=None,
                 timeout_sec=None,
                 prompt_builder=_simple_prompt_builder,
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
             )
         )
         assert result["success"] is False
@@ -272,8 +262,6 @@ class TestDispatchFoodTruckExecution:
         from autoskillit.franchise._api import execute_dispatch
 
         self._setup_standard_dispatch(tool_ctx)
-        _patch_quota(monkeypatch)
-        _patch_quota_refresh(monkeypatch)
 
         await execute_dispatch(
             tool_ctx=tool_ctx,
@@ -283,6 +271,8 @@ class TestDispatchFoodTruckExecution:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
         )
         assert not tool_ctx.franchise_lock.locked()
 
@@ -295,8 +285,6 @@ class TestDispatchFoodTruckExecution:
         tool_ctx.executor.dispatch_food_truck = AsyncMock(
             side_effect=RuntimeError("executor crashed")
         )
-        _patch_quota(monkeypatch)
-        _patch_quota_refresh(monkeypatch)
 
         result = json.loads(
             await execute_dispatch(
@@ -307,6 +295,8 @@ class TestDispatchFoodTruckExecution:
                 dispatch_name=None,
                 timeout_sec=None,
                 prompt_builder=_simple_prompt_builder,
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
             )
         )
         assert result["success"] is False
@@ -319,8 +309,6 @@ class TestDispatchFoodTruckExecution:
 
         self._setup_standard_dispatch(tool_ctx)
         tool_ctx.executor.dispatch_food_truck = AsyncMock(side_effect=asyncio.CancelledError())
-        _patch_quota(monkeypatch)
-        _patch_quota_refresh(monkeypatch)
 
         with pytest.raises(asyncio.CancelledError):
             await execute_dispatch(
@@ -331,6 +319,8 @@ class TestDispatchFoodTruckExecution:
                 dispatch_name=None,
                 timeout_sec=None,
                 prompt_builder=_simple_prompt_builder,
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
             )
         assert not tool_ctx.franchise_lock.locked()
 
@@ -353,8 +343,6 @@ class TestDispatchFoodTruckExecution:
                 token_usage={"input_tokens": 100},
             )
         )
-        _patch_quota(monkeypatch)
-        _patch_quota_refresh(monkeypatch)
 
         raw = await execute_dispatch(
             tool_ctx=tool_ctx,
@@ -364,6 +352,8 @@ class TestDispatchFoodTruckExecution:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
         )
         result = json.loads(raw)
         assert result["success"] is True
@@ -403,8 +393,6 @@ class TestDispatchFoodTruckExecution:
         from autoskillit.franchise.state import read_state
 
         self._setup_standard_dispatch(tool_ctx)
-        _patch_quota(monkeypatch)
-        _patch_quota_refresh(monkeypatch)
 
         # Wrap dispatch_food_truck to invoke on_spawn before returning,
         # simulating the real headless executor calling the callback on process start.
@@ -426,6 +414,8 @@ class TestDispatchFoodTruckExecution:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
         )
         dispatch_id = tool_ctx.executor.dispatch_calls[0].order_id
         state_path = tool_ctx.temp_dir / "dispatches" / f"{dispatch_id}.json"
@@ -439,8 +429,6 @@ class TestDispatchFoodTruckExecution:
         from autoskillit.franchise._api import execute_dispatch
 
         self._setup_standard_dispatch(tool_ctx)
-        _patch_quota(monkeypatch)
-        _patch_quota_refresh(monkeypatch)
 
         submitted_labels: list[str] = []
 
@@ -458,6 +446,8 @@ class TestDispatchFoodTruckExecution:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
         )
         assert "quota_post_dispatch_refresh" in submitted_labels
 
@@ -480,8 +470,6 @@ class TestDispatchFoodTruckExecution:
                 session_id="l2-session-xyz",
             )
         )
-        _patch_quota(monkeypatch)
-        _patch_quota_refresh(monkeypatch)
 
         cleanup_calls: list[str] = []
 
@@ -499,5 +487,7 @@ class TestDispatchFoodTruckExecution:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
         )
         assert "l2-session-xyz" in cleanup_calls

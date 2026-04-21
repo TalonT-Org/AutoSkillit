@@ -425,7 +425,11 @@ async def dispatch_food_truck(
     try:
         from autoskillit.franchise import execute_dispatch
         from autoskillit.server import _get_ctx
-        from autoskillit.server.helpers import _get_food_truck_prompt_builder
+        from autoskillit.server.helpers import (
+            _get_food_truck_prompt_builder,
+            _refresh_quota_cache,
+            check_and_sleep_if_needed,
+        )
 
         tool_ctx = _get_ctx()
         return await execute_dispatch(
@@ -436,6 +440,8 @@ async def dispatch_food_truck(
             dispatch_name=dispatch_name,
             timeout_sec=timeout_sec,
             prompt_builder=_get_food_truck_prompt_builder(),
+            quota_checker=check_and_sleep_if_needed,
+            quota_refresher=_refresh_quota_cache,
         )
     except Exception as exc:
         logger.error("dispatch_food_truck unhandled exception", exc_info=True)

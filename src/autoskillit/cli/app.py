@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Annotated
 
 import anyio
 
+from autoskillit.cli._franchise import franchise_app
 from autoskillit.cli._serve_guard import serve_with_signal_guard
 
 if TYPE_CHECKING:
@@ -51,6 +52,7 @@ app.command(config_app)
 app.command(skills_app)
 app.command(recipes_app)
 app.command(workspace_app)
+app.command(franchise_app)
 
 
 class CliError(Exception):

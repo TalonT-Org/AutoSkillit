@@ -313,4 +313,8 @@ __all__ = [
     "register_active_kitchen",
     "sweep_retiring_cache",
     "unregister_active_kitchen",
+    # _plugin_ids
+    "DIRECT_PREFIX",
+    "MARKETPLACE_PREFIX",
+    "detect_autoskillit_mcp_prefix",
 ]

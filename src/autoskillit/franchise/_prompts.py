@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import re
 
-from autoskillit.core import get_logger
+from autoskillit.core import get_logger, pkg_root
 from autoskillit.hooks import QUOTA_GUARD_DENY_TRIGGER, QUOTA_POST_WARNING_TRIGGER
 
 logger = get_logger(__name__)
@@ -35,8 +35,6 @@ def _build_l2_sous_chef_block() -> str:
     whose title starts with one of the _L2_RETAINED_SECTIONS prefixes.
     Returns empty string if SKILL.md is absent (graceful degradation).
     """
-    from autoskillit.core import pkg_root
-
     path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
     if not path.exists():
         return ""

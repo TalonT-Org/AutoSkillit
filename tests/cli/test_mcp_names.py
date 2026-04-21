@@ -24,14 +24,14 @@ class TestDetectAutoskillitMcpPrefix:
     ) -> None:
         f = tmp_path / "installed_plugins.json"
         f.write_text(json.dumps({"version": 2, "plugins": {_PLUGIN_KEY: []}}))
-        monkeypatch.setattr("autoskillit.cli._mcp_names._installed_plugins_path", lambda: f)
+        monkeypatch.setattr("autoskillit.core._plugin_ids._installed_plugins_path", lambda: f)
         assert detect_autoskillit_mcp_prefix() == MARKETPLACE_PREFIX
 
     def test_returns_direct_prefix_when_file_absent(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "autoskillit.cli._mcp_names._installed_plugins_path",
+            "autoskillit.core._plugin_ids._installed_plugins_path",
             lambda: tmp_path / "no_such_file.json",
         )
         assert detect_autoskillit_mcp_prefix() == DIRECT_PREFIX
@@ -41,7 +41,7 @@ class TestDetectAutoskillitMcpPrefix:
     ) -> None:
         f = tmp_path / "installed_plugins.json"
         f.write_text(json.dumps({"version": 2, "plugins": {"other@other-local": []}}))
-        monkeypatch.setattr("autoskillit.cli._mcp_names._installed_plugins_path", lambda: f)
+        monkeypatch.setattr("autoskillit.core._plugin_ids._installed_plugins_path", lambda: f)
         assert detect_autoskillit_mcp_prefix() == DIRECT_PREFIX
 
     def test_returns_direct_prefix_on_malformed_json(
@@ -49,7 +49,7 @@ class TestDetectAutoskillitMcpPrefix:
     ) -> None:
         f = tmp_path / "installed_plugins.json"
         f.write_text("not valid json {{{")
-        monkeypatch.setattr("autoskillit.cli._mcp_names._installed_plugins_path", lambda: f)
+        monkeypatch.setattr("autoskillit.core._plugin_ids._installed_plugins_path", lambda: f)
         assert detect_autoskillit_mcp_prefix() == DIRECT_PREFIX
 
     def test_direct_prefix_ends_with_double_underscore(self) -> None:

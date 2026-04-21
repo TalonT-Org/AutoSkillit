@@ -354,7 +354,7 @@ class TestDispatchFoodTruckExecution:
             dispatches=[DispatchRecord(name="test-dispatch-name")],
         )
 
-        _write_pid(state_path, "test-dispatch-name", "dispatch-id-abc", 54321)
+        _write_pid(state_path, "test-dispatch-name", "dispatch-id-abc", 54321, 0)
 
         state_data = json.loads(state_path.read_text())
         dispatch_record = state_data["dispatches"][0]

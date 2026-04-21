@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import fcntl
 import signal
+import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -133,10 +134,9 @@ async def _franchise_signal_guard(
                         except Exception:
                             logger.warning("signal_guard: workspace cleanup failed", exc_info=True)
 
-                    logger.info(
-                        "Campaign %s interrupted. Resume: autoskillit franchise run --resume %s",
-                        campaign_id,
-                        campaign_id,
+                    sys.stderr.write(
+                        f"Campaign {campaign_id} interrupted."
+                        f" Resume: autoskillit franchise run --resume {campaign_id}\n"
                     )
                 return
 

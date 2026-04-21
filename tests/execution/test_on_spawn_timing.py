@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import psutil
 import pytest
 
-pytestmark = [pytest.mark.layer("franchise"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 class TestOnPidResolvedTiming:

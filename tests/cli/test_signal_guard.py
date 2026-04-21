@@ -18,7 +18,7 @@ from autoskillit.franchise import (
     write_initial_state,
 )
 
-pytestmark = [pytest.mark.layer("franchise"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 BOOT_ID = "boot-sg-001"
 TICKS = 5000
@@ -94,11 +94,11 @@ class TestSignalGuard:
 
         with (
             patch(
-                "autoskillit.execution.linux_tracing.read_starttime_ticks",
+                "autoskillit.execution.read_starttime_ticks",
                 return_value=TICKS,
             ),
             patch(
-                "autoskillit.execution._process_kill.async_kill_process_tree",
+                "autoskillit.execution.async_kill_process_tree",
                 side_effect=fake_kill,
             ),
         ):
@@ -130,7 +130,7 @@ class TestSignalGuard:
             kill_calls.append(pid)
 
         with patch(
-            "autoskillit.execution._process_kill.async_kill_process_tree",
+            "autoskillit.execution.async_kill_process_tree",
             side_effect=fake_kill,
         ):
             await _run_signal_guard(state_path, campaign_id, _signal.SIGTERM)
@@ -152,11 +152,11 @@ class TestSignalGuard:
 
         with (
             patch(
-                "autoskillit.execution.linux_tracing.read_starttime_ticks",
+                "autoskillit.execution.read_starttime_ticks",
                 return_value=9999,  # mismatch → recycled
             ),
             patch(
-                "autoskillit.execution._process_kill.async_kill_process_tree",
+                "autoskillit.execution.async_kill_process_tree",
                 side_effect=fake_kill,
             ),
         ):
@@ -188,7 +188,7 @@ class TestSignalGuard:
                 return MagicMock()
 
         with (
-            patch("autoskillit.workspace.cleanup.DefaultWorkspaceManager", FakeWorkspaceManager),
+            patch("autoskillit.workspace.DefaultWorkspaceManager", FakeWorkspaceManager),
             patch("autoskillit.core.ensure_project_temp", return_value=tmp_path / "ws"),
         ):
             await _run_signal_guard(
@@ -208,7 +208,7 @@ class TestSignalGuard:
                 return MagicMock()
 
         with (
-            patch("autoskillit.workspace.cleanup.DefaultWorkspaceManager", FakeWorkspaceManager),
+            patch("autoskillit.workspace.DefaultWorkspaceManager", FakeWorkspaceManager),
             patch("autoskillit.core.ensure_project_temp", return_value=tmp_path / "ws"),
         ):
             await _run_signal_guard(state_path, campaign_id, _signal.SIGTERM)

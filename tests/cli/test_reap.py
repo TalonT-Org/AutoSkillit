@@ -15,7 +15,7 @@ from autoskillit.franchise import (
     write_initial_state,
 )
 
-pytestmark = [pytest.mark.layer("franchise"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 BOOT_ID = "boot-abc-123"
 OTHER_BOOT_ID = "boot-xyz-999"
@@ -62,14 +62,14 @@ class TestReap:
         with (
             patch("psutil.pid_exists", return_value=True),
             patch(
-                "autoskillit.execution.linux_tracing.read_starttime_ticks",
+                "autoskillit.execution.read_starttime_ticks",
                 return_value=1000,
             ),
             patch(
-                "autoskillit.execution.linux_tracing.read_boot_id",
+                "autoskillit.execution.read_boot_id",
                 return_value=BOOT_ID,
             ),
-            patch("autoskillit.execution._process_kill.kill_process_tree") as mock_kill,
+            patch("autoskillit.execution.kill_process_tree") as mock_kill,
         ):
             _reap(sp)
 
@@ -84,14 +84,14 @@ class TestReap:
         with (
             patch("psutil.pid_exists", return_value=True),
             patch(
-                "autoskillit.execution.linux_tracing.read_starttime_ticks",
+                "autoskillit.execution.read_starttime_ticks",
                 return_value=9999,  # different ticks → recycled
             ),
             patch(
-                "autoskillit.execution.linux_tracing.read_boot_id",
+                "autoskillit.execution.read_boot_id",
                 return_value=BOOT_ID,
             ),
-            patch("autoskillit.execution._process_kill.kill_process_tree") as mock_kill,
+            patch("autoskillit.execution.kill_process_tree") as mock_kill,
         ):
             _reap(sp)
 
@@ -106,10 +106,10 @@ class TestReap:
         with (
             patch("psutil.pid_exists", return_value=False),
             patch(
-                "autoskillit.execution.linux_tracing.read_boot_id",
+                "autoskillit.execution.read_boot_id",
                 return_value=BOOT_ID,
             ),
-            patch("autoskillit.execution._process_kill.kill_process_tree") as mock_kill,
+            patch("autoskillit.execution.kill_process_tree") as mock_kill,
         ):
             _reap(sp)
 
@@ -124,7 +124,7 @@ class TestReap:
         with (
             patch("psutil.pid_exists", return_value=False),
             patch(
-                "autoskillit.execution.linux_tracing.read_boot_id",
+                "autoskillit.execution.read_boot_id",
                 return_value=BOOT_ID,
             ),
         ):
@@ -152,7 +152,7 @@ class TestReap:
 
         with (
             patch(
-                "autoskillit.execution.linux_tracing.read_boot_id",
+                "autoskillit.execution.read_boot_id",
                 return_value=BOOT_ID,
             ),
             patch("psutil.pid_exists") as mock_pid,
@@ -174,11 +174,11 @@ class TestReap:
         )
         with (
             patch(
-                "autoskillit.execution.linux_tracing.read_boot_id",
+                "autoskillit.execution.read_boot_id",
                 return_value=BOOT_ID,  # current boot differs from stored
             ),
             patch("psutil.pid_exists", return_value=True),
-            patch("autoskillit.execution._process_kill.kill_process_tree") as mock_kill,
+            patch("autoskillit.execution.kill_process_tree") as mock_kill,
         ):
             _reap(sp)
 
@@ -194,14 +194,14 @@ class TestReap:
         with (
             patch("psutil.pid_exists", return_value=True),
             patch(
-                "autoskillit.execution.linux_tracing.read_starttime_ticks",
+                "autoskillit.execution.read_starttime_ticks",
                 return_value=1000,
             ),
             patch(
-                "autoskillit.execution.linux_tracing.read_boot_id",
+                "autoskillit.execution.read_boot_id",
                 return_value=BOOT_ID,
             ),
-            patch("autoskillit.execution._process_kill.kill_process_tree"),
+            patch("autoskillit.execution.kill_process_tree"),
         ):
             _reap(sp, dry_run=True)
 
@@ -214,7 +214,7 @@ class TestReap:
         with (
             patch("psutil.pid_exists", return_value=False),
             patch(
-                "autoskillit.execution.linux_tracing.read_boot_id",
+                "autoskillit.execution.read_boot_id",
                 return_value=BOOT_ID,
             ),
         ):

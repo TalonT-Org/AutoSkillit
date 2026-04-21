@@ -214,6 +214,12 @@ async def _run_dispatch(
         )
 
     started_at = time.time()
+    _l2_pid: list[int] = []
+
+    def _on_spawn(pid: int) -> None:
+        _l2_pid.append(pid)
+        _write_pid(state_path, effective_name, dispatch_id, pid)
+
     skill_result = await tool_ctx.executor.dispatch_food_truck(
         orchestrator_prompt=prompt,
         cwd=str(tool_ctx.project_dir),
@@ -225,7 +231,7 @@ async def _run_dispatch(
             "AUTOSKILLIT_PROJECT_DIR": str(tool_ctx.project_dir),
             "AUTOSKILLIT_CAMPAIGN_ID": campaign_id,
         },
-        on_spawn=lambda pid: _write_pid(state_path, effective_name, dispatch_id, pid),
+        on_spawn=_on_spawn,
     )
     ended_at = time.time()
 
@@ -237,6 +243,7 @@ async def _run_dispatch(
             status=final_status,
             dispatch_id=dispatch_id,
             l2_session_id=skill_result.session_id,
+            l2_pid=_l2_pid[0] if _l2_pid else 0,
             token_usage=skill_result.token_usage or {},
             started_at=started_at,
             ended_at=ended_at,

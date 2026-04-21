@@ -219,7 +219,8 @@ generic_automation_mcp/
 │   └── store.py             #   FailureStore (JSON, atomic writes)
 │
 ├── franchise/               # L2
-│   └── __init__.py          #   Package skeleton — business logic in downstream tickets
+│   ├── __init__.py          #   Package skeleton — business logic in downstream tickets
+│   └── result_parser.py     #   L2 result block parser with Channel B JSONL fallback
 │
 ├── server/                  # L3 FastMCP server
 │   ├── __init__.py          #   FastMCP app, kitchen gating, headless tool reveal

@@ -144,4 +144,5 @@ class SubprocessRunner(Protocol):
         linux_tracing_config: Any | None = None,
         idle_output_timeout: float | None = None,
         max_suppression_seconds: float | None = None,
+        on_pid_resolved: Any | None = None,
     ) -> Awaitable[SubprocessResult]: ...

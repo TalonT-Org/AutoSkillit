@@ -990,7 +990,7 @@ async def _execute_claude_headless(
     recipe_content_hash: str = "",
     recipe_composite_hash: str = "",
     recipe_version: str = "",
-    on_spawn: Callable[[int], None] | None = None,
+    on_spawn: Callable[[int, int], None] | None = None,
     skip_clone_guard: bool = False,
 ) -> SkillResult:
     """Shared subprocess execution for headless Claude sessions.
@@ -1038,6 +1038,7 @@ async def _execute_claude_headless(
             linux_tracing_config=linux_tracing_cfg,
             idle_output_timeout=effective_idle,
             max_suppression_seconds=cfg.max_suppression_seconds,
+            on_pid_resolved=on_spawn,
         )
     except Exception as exc:
         logger.error("headless_runner_crashed", exc_info=True)
@@ -1113,9 +1114,6 @@ async def _execute_claude_headless(
     result = dataclasses.replace(  # type: ignore[arg-type]
         _result, start_ts=_start_ts, end_ts=_end_ts, elapsed_seconds=_elapsed
     )
-
-    if on_spawn is not None and result.pid > 0:
-        on_spawn(result.pid)
 
     audit_count_before = len(ctx.audit.get_report())
     skill_result = _build_skill_result(
@@ -1389,7 +1387,7 @@ class DefaultHeadlessExecutor:
         idle_output_timeout: float | None = None,
         env_extras: Mapping[str, str] | None = None,
         requires_packs: Sequence[str] = (),
-        on_spawn: Callable[[int], None] | None = None,
+        on_spawn: Callable[[int, int], None] | None = None,
     ) -> SkillResult:
         cfg = self._ctx.config
         resolved_model = _resolve_model(model, cfg)

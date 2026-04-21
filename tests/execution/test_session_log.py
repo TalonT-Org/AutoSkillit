@@ -1403,6 +1403,15 @@ def test_flush_writes_meta_json_sidecar(tmp_path):
     assert meta == {"campaign_id": "c1", "dispatch_id": "d1"}
 
 
+def test_flush_writes_meta_json_sidecar_campaign_only(tmp_path):
+    """meta.json written with empty dispatch_id when only campaign_id is provided."""
+    _flush(tmp_path, session_id="gh-005b", campaign_id="c1")
+    meta_path = tmp_path / "sessions" / "gh-005b" / "meta.json"
+    assert meta_path.exists()
+    meta = json.loads(meta_path.read_text())
+    assert meta == {"campaign_id": "c1", "dispatch_id": ""}
+
+
 def test_flush_omits_meta_json_when_no_campaign(tmp_path):
     """No meta.json written when campaign_id is empty (default)."""
     _flush(tmp_path, session_id="gh-006")
@@ -1535,11 +1544,13 @@ def test_retention_protects_active_campaign_sessions(tmp_path, monkeypatch):
         proc_snapshots=None,
     )
 
-    # Protected sessions survive
+    # Protected sessions survive — they were the oldest (expired) but protection saved them
     assert (sessions_dir / "session-0000").exists(), "active campaign session must survive"
     assert (sessions_dir / "session-0001").exists(), "active campaign session must survive"
-    # Non-campaign expired sessions may be deleted (session-0002 is oldest non-campaign)
-    # session-0006 (just flushed) must be present
+    # Non-campaign sessions outside the expired window survive unchanged
+    for i in range(2, 6):
+        assert (sessions_dir / f"session-{i:04d}").exists(), f"session-{i:04d} must survive"
+    # Newly flushed session must be present
     assert (sessions_dir / "session-0006").exists()
 
 

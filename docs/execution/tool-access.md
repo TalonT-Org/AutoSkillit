@@ -203,7 +203,7 @@ GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`
 
 | Tool | Tags | Source File |
 |------|------|-------------|
-| `dispatch_food_truck` | AS, K, franchise | `server/tools_execution.py` |
+| `dispatch_food_truck` | AS, K, KC, franchise | `server/tools_execution.py` |
 
 ---
 

@@ -25,13 +25,6 @@ def _make_standard_recipe(name: str = "test-recipe", ingredient_keys: list[str] 
     return Recipe(name=name, description="test", ingredients=ingredients, kind=RecipeKind.STANDARD)
 
 
-def _make_campaign_recipe(name: str = "campaign-recipe"):
-    """Return a minimal Recipe with kind=CAMPAIGN."""
-    from autoskillit.recipe.schema import Recipe, RecipeKind
-
-    return Recipe(name=name, description="test", kind=RecipeKind.CAMPAIGN)
-
-
 def _simple_prompt_builder(**kwargs) -> str:
     """Minimal prompt builder for tests — avoids CLI imports."""
     return f"prompt-for-{kwargs.get('recipe', 'unknown')}"
@@ -127,10 +120,14 @@ class TestDispatchFoodTruckValidation:
     async def test_dispatch_food_truck_rejects_non_standard_recipe(self, tool_ctx, monkeypatch):
         """Campaign recipe → franchise_invalid_recipe_kind error."""
         from autoskillit.franchise._api import execute_dispatch
+        from autoskillit.recipe.schema import Recipe, RecipeKind
 
         tool_ctx.franchise_lock = asyncio.Lock()
         repo = InMemoryRecipeRepository()
-        repo.add_recipe("campaign-recipe", _make_campaign_recipe("campaign-recipe"))
+        repo.add_recipe(
+            "campaign-recipe",
+            Recipe(name="campaign-recipe", description="test", kind=RecipeKind.CAMPAIGN),
+        )
         tool_ctx.recipes = repo
         _patch_quota(monkeypatch)
         _patch_quota_refresh(monkeypatch)
@@ -202,6 +199,57 @@ class TestDispatchFoodTruckValidation:
         assert result["error"] == "franchise_invalid_ingredients"
         # Lock must not have been acquired
         assert not lock.locked()
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_no_recipes_configured(self, tool_ctx, monkeypatch):
+        """recipes=None → franchise_not_configured error."""
+        from autoskillit.franchise._api import execute_dispatch
+
+        tool_ctx.franchise_lock = asyncio.Lock()
+        tool_ctx.recipes = None
+        _patch_quota(monkeypatch)
+        _patch_quota_refresh(monkeypatch)
+
+        result = json.loads(
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="r",
+                task="t",
+                ingredients=None,
+                dispatch_name=None,
+                timeout_sec=None,
+                prompt_builder=_simple_prompt_builder,
+            )
+        )
+        assert result["success"] is False
+        assert result["error"] == "franchise_not_configured"
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_no_executor_configured(self, tool_ctx, monkeypatch):
+        """executor=None → franchise_not_configured error."""
+        from autoskillit.franchise._api import execute_dispatch
+
+        tool_ctx.franchise_lock = asyncio.Lock()
+        repo = InMemoryRecipeRepository()
+        repo.add_recipe("test-recipe", _make_standard_recipe("test-recipe"))
+        tool_ctx.recipes = repo
+        tool_ctx.executor = None
+        _patch_quota(monkeypatch)
+        _patch_quota_refresh(monkeypatch)
+
+        result = json.loads(
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="t",
+                ingredients=None,
+                dispatch_name=None,
+                timeout_sec=None,
+                prompt_builder=_simple_prompt_builder,
+            )
+        )
+        assert result["success"] is False
+        assert result["error"] == "franchise_not_configured"
 
 
 # ---------------------------------------------------------------------------
@@ -350,12 +398,25 @@ class TestDispatchFoodTruckExecution:
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_passes_on_spawn_to_executor(self, tool_ctx, monkeypatch):
-        """execute_dispatch passes a callable on_spawn to the executor."""
+        """execute_dispatch passes an on_spawn that writes the PID to the state file."""
         from autoskillit.franchise._api import execute_dispatch
+        from autoskillit.franchise.state import read_state
 
         self._setup_standard_dispatch(tool_ctx)
         _patch_quota(monkeypatch)
         _patch_quota_refresh(monkeypatch)
+
+        # Wrap dispatch_food_truck to invoke on_spawn before returning,
+        # simulating the real headless executor calling the callback on process start.
+        original_dispatch = tool_ctx.executor.dispatch_food_truck
+
+        async def _dispatch_invoking_spawn(*args, on_spawn=None, **kwargs):
+            result = await original_dispatch(*args, on_spawn=on_spawn, **kwargs)
+            if on_spawn is not None:
+                on_spawn(99999)
+            return result
+
+        monkeypatch.setattr(tool_ctx.executor, "dispatch_food_truck", _dispatch_invoking_spawn)
 
         await execute_dispatch(
             tool_ctx=tool_ctx,
@@ -366,8 +427,11 @@ class TestDispatchFoodTruckExecution:
             timeout_sec=None,
             prompt_builder=_simple_prompt_builder,
         )
-        on_spawn = tool_ctx.executor.dispatch_calls[0].on_spawn
-        assert callable(on_spawn)
+        dispatch_id = tool_ctx.executor.dispatch_calls[0].order_id
+        state_path = tool_ctx.temp_dir / "dispatches" / f"{dispatch_id}.json"
+        state = read_state(state_path)
+        assert state is not None
+        assert any(d.l2_pid == 99999 for d in state.dispatches)
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_invalidates_quota_cache(self, tool_ctx, monkeypatch):
@@ -376,6 +440,7 @@ class TestDispatchFoodTruckExecution:
 
         self._setup_standard_dispatch(tool_ctx)
         _patch_quota(monkeypatch)
+        _patch_quota_refresh(monkeypatch)
 
         submitted_labels: list[str] = []
 

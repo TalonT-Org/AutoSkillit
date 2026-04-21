@@ -12,7 +12,7 @@ from autoskillit.recipe.schema import CampaignDispatch, Recipe, RecipeKind
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
-# --- Fixtures ---
+# --- Constants ---
 
 _CAMPAIGN_ID = "campaign-test-1234-5678"
 _MAX_QUOTA_WAIT = 3600

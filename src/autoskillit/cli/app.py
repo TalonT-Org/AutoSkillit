@@ -32,7 +32,14 @@ from autoskillit.cli._init_helpers import (
     _register_all,
 )
 from autoskillit.cli._prompts import _build_orchestrator_prompt, _get_ingredients_table
-from autoskillit.core import RecipeSource, atomic_write, pkg_root
+from autoskillit.core import (
+    NoResume,
+    RecipeSource,
+    ResumeSpec,
+    atomic_write,
+    pkg_root,
+    resume_spec_from_cli,
+)
 
 app = App(
     name="autoskillit",
@@ -445,7 +452,7 @@ def _launch_cook_session(
     *,
     initial_message: str | None = None,
     extra_env: dict[str, str] | None = None,
-    resume_session_id: str | None = None,
+    resume_spec: ResumeSpec = NoResume(),
 ) -> None:
     """Launch an interactive Claude Code cook session with the given system prompt."""
     from autoskillit.cli._session_launch import _run_interactive_session
@@ -454,7 +461,7 @@ def _launch_cook_session(
         system_prompt,
         initial_message=initial_message,
         extra_env=extra_env,
-        resume_session_id=resume_session_id,
+        resume_spec=resume_spec,
     )
 
 
@@ -522,8 +529,8 @@ def _cook_cmd(session_id: str | None = None, *, resume: bool = False) -> None:
     """Launch an interactive Claude session with all skills and kitchen tools.
 
     Use --resume to restore a previous session. Optionally provide a session ID
-    directly after --resume to target a specific session; omit for automatic
-    discovery of the most recent session.
+    directly after --resume to target a specific session; omit to present
+    Claude Code's interactive session picker.
     """
     cook_interactive(resume=resume or (session_id is not None), session_id=session_id)
 
@@ -559,14 +566,10 @@ def order(recipe: str | None = None, session_id: str | None = None, *, resume: b
         print("Run this command in a regular terminal.")
         sys.exit(1)
 
-    # Resolve resume session ID — must come before the 'if recipe is None:' block
-    from autoskillit.core import find_latest_session_id
-
-    resume_session_id: str | None = None
-    if resume or session_id:
-        resume_session_id = session_id or find_latest_session_id()
-        if resume_session_id is None:
-            print("No previous session found. Starting a fresh session.")
+    # Build resume intent — must come before the 'if recipe is None:' block
+    resume_spec = resume_spec_from_cli(
+        resume=resume or (session_id is not None), session_id=session_id
+    )
 
     mcp_prefix = detect_autoskillit_mcp_prefix()
 
@@ -601,7 +604,7 @@ def order(recipe: str | None = None, session_id: str | None = None, *, resume: b
             _launch_cook_session(
                 _build_open_kitchen_prompt(mcp_prefix=mcp_prefix),
                 initial_message=greeting,
-                resume_session_id=resume_session_id,
+                resume_spec=resume_spec,
             )
             return
         elif resolved is None:
@@ -717,7 +720,7 @@ def order(recipe: str | None = None, session_id: str | None = None, *, resume: b
         _build_orchestrator_prompt(recipe, mcp_prefix=mcp_prefix, ingredients_table=_itable),
         initial_message=greeting,
         extra_env=_extra_env if _extra_env else None,
-        resume_session_id=resume_session_id,
+        resume_spec=resume_spec,
     )
 
 

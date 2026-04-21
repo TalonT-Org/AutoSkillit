@@ -899,13 +899,13 @@ class TestCLIOrder:
         )
 
     @patch("autoskillit.cli.subprocess.run")
-    def test_order_resume_discovered_session_id_in_subprocess_cmd(
+    def test_order_resume_bare_flag_produces_bare_resume_skips_discovery(
         self,
         mock_run: MagicMock,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """order(resume=True) discovers session via find_latest_session_id and passes --resume."""
+        """order(resume=True) passes bare --resume; find_latest_session_id must not be called."""
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
@@ -916,13 +916,21 @@ class TestCLIOrder:
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="", stderr=""
         )
+        discovery_calls: list = []
 
-        with patch("autoskillit.core.find_latest_session_id", return_value="sess_abc"):
+        with patch(
+            "autoskillit.core.find_latest_session_id",
+            side_effect=lambda *a, **kw: discovery_calls.append(1) or "sess_abc",
+        ):
             cli.order("test-script", resume=True)
 
         cmd = mock_run.call_args[0][0]
         assert "--resume" in cmd
-        assert cmd[cmd.index("--resume") + 1] == "sess_abc"
+        idx = cmd.index("--resume")
+        assert idx == len(cmd) - 1 or cmd[idx + 1].startswith("-"), (
+            "bare --resume must not be followed by a session ID"
+        )
+        assert not discovery_calls, "find_latest_session_id must not be called for bare --resume"
 
     @patch("autoskillit.cli.subprocess.run")
     def test_order_resume_explicit_session_id_skips_discovery(
@@ -959,13 +967,13 @@ class TestCLIOrder:
         )
 
     @patch("autoskillit.cli.subprocess.run")
-    def test_order_resume_no_prior_session_starts_fresh(
+    def test_order_resume_bare_flag_always_emits_resume(
         self,
         mock_run: MagicMock,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """order(resume=True) with no prior session omits --resume from subprocess command."""
+        """order(resume=True) always emits bare --resume; Claude Code handles empty history."""
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
@@ -977,11 +985,14 @@ class TestCLIOrder:
             args=[], returncode=0, stdout="", stderr=""
         )
 
-        with patch("autoskillit.core.find_latest_session_id", return_value=None):
-            cli.order("test-script", resume=True)
+        cli.order("test-script", resume=True)
 
         cmd = mock_run.call_args[0][0]
-        assert "--resume" not in cmd
+        assert "--resume" in cmd
+        idx = cmd.index("--resume")
+        assert idx == len(cmd) - 1 or cmd[idx + 1].startswith("-"), (
+            "bare --resume must not be followed by a session ID"
+        )
 
 
 class TestOrderDisplayOwnership:
@@ -1450,16 +1461,17 @@ class TestOrderResumeParsing:
     def test_order_recipe_resume_with_session_id(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        """order my-recipe --resume <uuid> passes session_id to launch — REQ-CLI-003."""
+        """order my-recipe --resume <uuid> passes NamedResume to launch — REQ-CLI-003."""
         from autoskillit.cli.app import app
+        from autoskillit.core import NamedResume, NoResume
 
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
 
         captured: dict = {}
 
-        def fake_launch(prompt, *, initial_message=None, extra_env=None, resume_session_id=None):
-            captured["resume_session_id"] = resume_session_id
+        def fake_launch(prompt, *, initial_message=None, extra_env=None, resume_spec=NoResume()):
+            captured["resume_spec"] = resume_spec
 
         with (
             patch("autoskillit.cli.app._launch_cook_session", side_effect=fake_launch),
@@ -1469,11 +1481,12 @@ class TestOrderResumeParsing:
             ),
             patch("autoskillit.recipe.load_recipe", return_value=MagicMock()),
             patch("autoskillit.recipe.validate_recipe", return_value=[]),
-            patch("autoskillit.core.find_latest_session_id", return_value=None),
             patch("builtins.input", return_value=""),
         ):
             with pytest.raises(SystemExit) as exc_info:
                 app(["order", "my-recipe", "--resume", "fa910a41-d1ca-4cae-b878-01028a0c7c1c"])
             assert exc_info.value.code == 0
 
-        assert captured["resume_session_id"] == "fa910a41-d1ca-4cae-b878-01028a0c7c1c"
+        assert captured["resume_spec"] == NamedResume(
+            session_id="fa910a41-d1ca-4cae-b878-01028a0c7c1c"
+        )

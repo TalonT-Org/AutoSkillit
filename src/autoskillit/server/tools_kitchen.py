@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict
 from uuid import uuid4
@@ -417,6 +418,27 @@ async def open_kitchen(
                 return _kitchen_failure_envelope(exc, stage="hook_diagnostic")
             if warning:
                 result["hook_warning"] = warning.strip()
+
+            # Inject sous-chef discipline into the response so headless L2 sessions
+            # receive mandatory step-execution rules. Headless sessions receive no
+            # system prompt injection; this named-recipe path is their sole delivery
+            # channel. Graceful degradation: missing SKILL.md is non-fatal.
+            _sc_path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
+            try:
+                if _sc_path.exists():
+                    _sc_text = _sc_path.read_text()
+                    _sections = re.split(r"(?=^## )", _sc_text, flags=re.MULTILINE)
+                    _discipline = next(
+                        (s for s in _sections if "STEP EXECUTION IS NOT DISCRETIONARY" in s),
+                        "",
+                    )
+                    if _discipline:
+                        result["sous_chef_discipline"] = _discipline.strip()
+            except Exception:
+                logger.warning(
+                    "open_kitchen_failure", stage="read_sous_chef_discipline", exc_info=True
+                )
+
             return json.dumps(result)
 
         text = (

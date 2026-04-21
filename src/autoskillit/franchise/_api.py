@@ -11,7 +11,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from autoskillit.core import get_logger
+from autoskillit.core import FranchiseErrorCode, get_logger
+from autoskillit.pipeline.gate import franchise_error, gate_error_result
 
 if TYPE_CHECKING:
     from autoskillit.pipeline.context import ToolContext
@@ -51,36 +52,18 @@ async def execute_dispatch(
     if ingredients is not None:
         bad_vals = [k for k, v in ingredients.items() if not isinstance(v, str)]
         if bad_vals:
-            return json.dumps(
-                {
-                    "success": False,
-                    "error": "franchise_invalid_ingredients",
-                    "user_visible_message": (
-                        f"Ingredient values must be strings. Non-string keys: {bad_vals}"
-                    ),
-                }
+            return franchise_error(
+                FranchiseErrorCode.FRANCHISE_UNKNOWN_INGREDIENT,
+                f"Ingredient values must be strings. Non-string keys: {bad_vals}",
             )
 
     lock = tool_ctx.franchise_lock
     if lock is None:
-        return json.dumps(
-            {
-                "success": False,
-                "error": "franchise_not_configured",
-                "user_visible_message": (
-                    "Franchise lock not initialized — open_kitchen with franchise mode."
-                ),
-            }
-        )
+        return gate_error_result("Franchise lock not initialized — open_kitchen with franchise mode.")
     if lock.locked():
-        return json.dumps(
-            {
-                "success": False,
-                "error": "franchise_parallel_refused",
-                "user_visible_message": (
-                    "A dispatch is already in progress. Only one dispatch at a time."
-                ),
-            }
+        return franchise_error(
+            FranchiseErrorCode.FRANCHISE_PARALLEL_REFUSED,
+            "A dispatch is already in progress. Only one dispatch at a time.",
         )
 
     await lock.acquire()
@@ -98,11 +81,9 @@ async def execute_dispatch(
         raise
     except Exception as exc:
         logger.error("execute_dispatch failed", exc_info=True)
-        return json.dumps(
-            {
-                "success": False,
-                "error": f"{type(exc).__name__}: {exc}",
-            }
+        return franchise_error(
+            FranchiseErrorCode.L2_STARTUP_OR_CRASH,
+            f"{type(exc).__name__}: {exc}",
         )
     finally:
         lock.release()
@@ -130,48 +111,29 @@ async def _run_dispatch(
     _refresh_quota_cache = _execution._refresh_quota_cache
 
     if tool_ctx.recipes is None:
-        return json.dumps(
-            {
-                "success": False,
-                "error": "franchise_not_configured",
-                "user_visible_message": "Recipe repository not configured.",
-            }
-        )
+        return gate_error_result("Recipe repository not configured.")
 
     recipe_obj = tool_ctx.recipes.find(recipe, tool_ctx.project_dir)
     if recipe_obj is None:
-        return json.dumps(
-            {
-                "success": False,
-                "error": "franchise_invalid_recipe_kind",
-                "user_visible_message": f"Recipe '{recipe}' not found.",
-            }
+        return franchise_error(
+            FranchiseErrorCode.FRANCHISE_RECIPE_NOT_FOUND,
+            f"Recipe '{recipe}' not found.",
         )
     if recipe_obj.kind != "standard":
-        return json.dumps(
-            {
-                "success": False,
-                "error": "franchise_invalid_recipe_kind",
-                "user_visible_message": (
-                    f"Recipe '{recipe}' has kind '{recipe_obj.kind}'. "
-                    "Only standard recipes can be dispatched as food trucks."
-                ),
-            }
+        return franchise_error(
+            FranchiseErrorCode.FRANCHISE_RECIPE_NOT_FOUND,
+            f"Recipe '{recipe}' has kind '{recipe_obj.kind}'. "
+            "Only standard recipes can be dispatched as food trucks.",
         )
 
     effective_ingredients = ingredients or {}
     if effective_ingredients:
         unknown = set(effective_ingredients.keys()) - set(recipe_obj.ingredients.keys())
         if unknown:
-            return json.dumps(
-                {
-                    "success": False,
-                    "error": "franchise_invalid_ingredients",
-                    "user_visible_message": (
-                        f"Unknown ingredient keys: {sorted(unknown)}. "
-                        f"Valid keys: {sorted(recipe_obj.ingredients.keys())}"
-                    ),
-                }
+            return franchise_error(
+                FranchiseErrorCode.FRANCHISE_UNKNOWN_INGREDIENT,
+                f"Unknown ingredient keys: {sorted(unknown)}. "
+                f"Valid keys: {sorted(recipe_obj.ingredients.keys())}",
             )
 
     quota_result = await check_and_sleep_if_needed(tool_ctx.config.quota_guard)
@@ -203,13 +165,7 @@ async def _run_dispatch(
     )
 
     if tool_ctx.executor is None:
-        return json.dumps(
-            {
-                "success": False,
-                "error": "franchise_not_configured",
-                "user_visible_message": "Executor not configured.",
-            }
-        )
+        return gate_error_result("Executor not configured.")
 
     started_at = time.time()
     skill_result = await tool_ctx.executor.dispatch_food_truck(

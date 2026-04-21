@@ -22,15 +22,7 @@ def _apply_session_type_visibility() -> None:
     if _session is SessionType.FRANCHISE:
         mcp.enable(tags={"franchise"})
     elif _session is SessionType.ORCHESTRATOR and _headless:
-        tool_tags = os.environ.get("AUTOSKILLIT_L2_TOOL_TAGS", "")
-        if tool_tags:
-            mcp.enable(tags={"kitchen-core"})
-            for pack in tool_tags.split(","):
-                pack = pack.strip()
-                if pack:
-                    mcp.enable(tags={pack})
-        else:
-            mcp.enable(tags={"kitchen"})
+        mcp.enable(tags={"kitchen"})
     elif _session is SessionType.LEAF and _headless:
         mcp.enable(tags={"headless"})
     # ORCHESTRATOR+interactive and LEAF+interactive: no pre-reveal.

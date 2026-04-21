@@ -3308,7 +3308,6 @@ class TestOutputPathTokensDerivedFromContracts:
     _EXPECTED_OUTPUT_PATH_TOKENS = frozenset(
         {
             "analysis_file",
-            "campaign_path",
             "conflict_report_path",
             "diagnosis_path",
             "diagram_path",
@@ -4330,91 +4329,6 @@ class TestDispatchFoodTruck:
 
         assert isinstance(result, SkillResult)
         assert result.success is True
-
-
-class TestDispatchFoodTruckPackInjection:
-    """Tests that dispatch_food_truck correctly injects AUTOSKILLIT_L2_TOOL_TAGS."""
-
-    def _make_success_stdout(self, marker: str = "%%FT_DONE%%") -> str:
-        import json
-
-        return json.dumps(
-            {
-                "type": "result",
-                "subtype": "success",
-                "result": f"L2 done {marker}",
-                "session_id": "ft-session",
-                "is_error": False,
-            }
-        )
-
-    @pytest.mark.anyio
-    async def test_requires_packs_injected_as_l2_tool_tags(self, minimal_ctx, tmp_path: Path):
-        """dispatch_food_truck with requires_packs injects sorted comma-joined env var."""
-        from autoskillit.core.types import SubprocessResult, TerminationReason
-        from autoskillit.execution.headless import DefaultHeadlessExecutor
-        from tests.fakes import MockSubprocessRunner
-
-        runner = MockSubprocessRunner()
-        runner.set_default(
-            SubprocessResult(
-                returncode=0,
-                stdout=self._make_success_stdout(),
-                stderr="",
-                termination=TerminationReason.NATURAL_EXIT,
-                pid=12345,
-            )
-        )
-        minimal_ctx.runner = runner
-        minimal_ctx.plugin_dir = str(tmp_path)
-
-        executor = DefaultHeadlessExecutor(minimal_ctx)
-        await executor.dispatch_food_truck(
-            "You are an L2 orchestrator",
-            str(tmp_path),
-            completion_marker="%%FT_DONE%%",
-            requires_packs=["ci", "github", "clone"],
-        )
-
-        assert runner.call_args_list, "runner was never called"
-        _cmd, _cwd, _timeout, kwargs = runner.call_args_list[0]
-        env = kwargs.get("env")
-        assert env is not None
-        assert env["AUTOSKILLIT_L2_TOOL_TAGS"] == "ci,clone,github"
-
-    @pytest.mark.anyio
-    async def test_requires_packs_empty_omits_l2_tool_tags(self, minimal_ctx, tmp_path: Path):
-        """dispatch_food_truck with empty requires_packs does not inject L2_TOOL_TAGS."""
-        from autoskillit.core.types import SubprocessResult, TerminationReason
-        from autoskillit.execution.headless import DefaultHeadlessExecutor
-        from tests.fakes import MockSubprocessRunner
-
-        runner = MockSubprocessRunner()
-        runner.set_default(
-            SubprocessResult(
-                returncode=0,
-                stdout=self._make_success_stdout(),
-                stderr="",
-                termination=TerminationReason.NATURAL_EXIT,
-                pid=12345,
-            )
-        )
-        minimal_ctx.runner = runner
-        minimal_ctx.plugin_dir = str(tmp_path)
-
-        executor = DefaultHeadlessExecutor(minimal_ctx)
-        await executor.dispatch_food_truck(
-            "You are an L2 orchestrator",
-            str(tmp_path),
-            completion_marker="%%FT_DONE%%",
-            requires_packs=[],
-        )
-
-        assert runner.call_args_list, "runner was never called"
-        _cmd, _cwd, _timeout, kwargs = runner.call_args_list[0]
-        env = kwargs.get("env")
-        assert env is not None
-        assert "AUTOSKILLIT_L2_TOOL_TAGS" not in env
 
 
 def test_default_executor_satisfies_protocol_with_dispatch(minimal_ctx) -> None:

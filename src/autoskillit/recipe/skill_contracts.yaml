@@ -237,16 +237,6 @@ skills:
     pattern_examples:
     - "recipe_path = /tmp/recipe.yaml\n%%ORDER_UP%%"
     write_behavior: always
-  make-campaign:
-    inputs: []
-    outputs:
-    - name: campaign_path
-      type: file_path
-    expected_output_patterns:
-    - "campaign_path\\s*=\\s*/.+"
-    pattern_examples:
-    - "campaign_path = /home/user/project/.autoskillit/recipes/campaigns/my-campaign.yaml\n%%ORDER_UP%%"
-    write_behavior: always
   mermaid:
     inputs: []
     outputs: []

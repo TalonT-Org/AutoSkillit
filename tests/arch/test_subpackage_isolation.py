@@ -69,7 +69,6 @@ def _get_call_func_name(node: ast.Call) -> str | None:
 SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
     {
         "__init__",  # server/__init__.py: mcp = FastMCP(...)
-        "_franchise",  # cli/_franchise.py: franchise_app = App(...)
         "app",  # cli/app.py: app = App(...), config_app = App(...), etc.
         "store",  # migration/store.py: defensive exemption for future module-level construction
         "validator",  # recipe/validator.py: defensive exemption for decorator-based rule registry
@@ -705,7 +704,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "recipe": 36,
         "execution": 26,
         "core": 20,
-        "cli": 22,
+        "cli": 20,
         "hooks": 21,
     }
     violations: list[str] = []
@@ -760,13 +759,12 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "circular imports; all enums/protocols/constants consolidated here",
     ),
     "headless.py": (
-        1500,
+        1450,
         "REQ-CNST-010-E2: headless session orchestration — Channel B drain-race "
         "recovery + IDLE_STALL routing + contract nudge resume tier "
         "+ DIR_MISSING late-bind recovery arm + RecordingSubprocessRunner "
         "step-name auto-derivation gate + recipe identity threading "
-        "+ _execute_claude_headless extraction + dispatch_food_truck L2 path "
-        "+ campaign_id/dispatch_id propagation kwargs; "
+        "+ _execute_claude_headless extraction + dispatch_food_truck L2 path; "
         "splitting would fragment the adjudication pipeline across modules",
     ),
     "session.py": (

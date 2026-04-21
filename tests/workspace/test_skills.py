@@ -72,7 +72,6 @@ BUNDLED_SKILLS = [
     "investigate",
     "issue-splitter",
     "make-arch-diag",
-    "make-campaign",
     "make-experiment-diag",
     "make-groups",
     "make-plan",
@@ -422,17 +421,17 @@ class TestSkillResolver:
         assert names == {"open-kitchen", "close-kitchen", "sous-chef"}
 
     def test_90_skills_in_skills_extended(self) -> None:
-        """skills_extended/ contains exactly 108 SKILL.md-carrying directories."""
+        """skills_extended/ contains exactly 107 SKILL.md-carrying directories."""
         skills = [
             d
             for d in bundled_skills_extended_dir().iterdir()
             if d.is_dir() and (d / "SKILL.md").is_file()
         ]
-        assert len(skills) == 108
+        assert len(skills) == 107
 
     def test_skill_resolver_list_all_total_count(self) -> None:
-        """list_all() returns 110 public skills (2 Tier-1 + 108 extended)."""
-        assert len(DefaultSkillResolver().list_all()) == 110
+        """list_all() returns 109 public skills (2 Tier-1 + 107 extended)."""
+        assert len(DefaultSkillResolver().list_all()) == 109
 
     def test_skill_resolver_resolve_extended_skill(self) -> None:
         """resolve() finds a skill living in skills_extended/ with BUNDLED_EXTENDED source."""

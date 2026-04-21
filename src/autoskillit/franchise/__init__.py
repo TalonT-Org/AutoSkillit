@@ -4,8 +4,6 @@ Gateway exports per REQ-IMP-001 — consumers import from
 ``autoskillit.franchise``, not from sub-modules.
 """
 
-from ._api import execute_dispatch
-from .result_parser import L2ParseResult, parse_l2_result_block
 from .state import (
     CampaignState,
     DispatchRecord,
@@ -20,9 +18,6 @@ from .state import (
 )
 
 __all__ = [
-    "execute_dispatch",
-    "L2ParseResult",
-    "parse_l2_result_block",
     "CampaignState",
     "DispatchRecord",
     "DispatchStatus",

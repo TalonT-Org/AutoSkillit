@@ -90,14 +90,10 @@ class DispatchFoodTruckCall:
     step_name: str = ""
     kitchen_id: str = ""
     order_id: str = ""
-    campaign_id: str = ""
-    dispatch_id: str = ""
-    project_dir: str = ""
     timeout: float | None = None
     stale_threshold: float | None = None
     idle_output_timeout: float | None = None
     env_extras: Mapping[str, str] | None = None
-    requires_packs: Sequence[str] = ()
     on_spawn: Callable[[int], None] | None = None
 
 
@@ -190,14 +186,10 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         step_name: str = "",
         kitchen_id: str = "",
         order_id: str = "",
-        campaign_id: str = "",
-        dispatch_id: str = "",
-        project_dir: str = "",
         timeout: float | None = None,
         stale_threshold: float | None = None,
         idle_output_timeout: float | None = None,
         env_extras: Mapping[str, str] | None = None,
-        requires_packs: Sequence[str] = (),
         on_spawn: Callable[[int], None] | None = None,
     ) -> SkillResult:
         self.dispatch_calls.append(
@@ -209,14 +201,10 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 step_name=step_name,
                 kitchen_id=kitchen_id,
                 order_id=order_id,
-                campaign_id=campaign_id,
-                dispatch_id=dispatch_id,
-                project_dir=project_dir,
                 timeout=timeout,
                 stale_threshold=stale_threshold,
                 idle_output_timeout=idle_output_timeout,
                 env_extras=env_extras,
-                requires_packs=requires_packs,
                 on_spawn=on_spawn,
             )
         )

@@ -105,6 +105,12 @@ class TestL3SousChefDiscipline:
         result = _build()
         assert isinstance(result, str)
         assert len(result) > 0
+        # Non-sous-chef structural sections must survive degradation
+        assert "CAMPAIGN OVERVIEW" in result
+        assert "DISPATCH MANIFEST" in result
+        assert "FAILURE RECOVERY" in result
+        assert "QUOTA RETRY" in result
+        assert "INTERRUPT/CLEANUP SEQUENCE" in result
 
 
 # --- K-3: TestCampaignOverviewSection ---
@@ -167,9 +173,9 @@ class TestFailureRecoverySection:
 
     def test_three_failure_conditions(self) -> None:
         prompt = _build()
-        assert "success=false" in prompt or "success: false" in prompt.lower()
+        assert "success=false" in prompt
         assert "null" in prompt
-        assert ".success=false" in prompt or "payload .success" in prompt
+        assert ".success=false" in prompt
 
     def test_continue_on_failure_referenced(self) -> None:
         prompt = _build()
@@ -228,7 +234,7 @@ class TestResumeStateInjection:
 class TestInterruptCleanupSection:
     def test_interrupt_cleanup_header(self) -> None:
         prompt = _build()
-        assert "INTERRUPT" in prompt or "CLEANUP" in prompt
+        assert "INTERRUPT/CLEANUP SEQUENCE" in prompt
 
     def test_batch_cleanup_clones_called_first(self) -> None:
         prompt = _build()

@@ -64,11 +64,6 @@ def _error_findings(recipe: Recipe, **ctx_kwargs: Any) -> list[RuleFinding]:
     return [f for f in run_semantic_rules(ctx) if f.severity == Severity.ERROR]
 
 
-# ---------------------------------------------------------------------------
-# Test 12: minimal valid campaign passes structural + semantic validation
-# ---------------------------------------------------------------------------
-
-
 def test_minimal_campaign_yaml_validates() -> None:
     """Minimal campaign YAML matching skill output format passes structural validation."""
     campaign = _minimal_campaign()
@@ -80,11 +75,6 @@ def test_minimal_campaign_yaml_validates() -> None:
         f"Minimal campaign YAML must pass all semantic rules with no ERROR findings.\n"
         f"Got errors: {[(f.rule, f.message) for f in errors]}"
     )
-
-
-# ---------------------------------------------------------------------------
-# Test 13: cyclic depends_on triggers depends-on-acyclic rule
-# ---------------------------------------------------------------------------
 
 
 def test_campaign_with_cycle_fails_semantic_validation() -> None:
@@ -108,11 +98,6 @@ def test_campaign_with_cycle_fails_semantic_validation() -> None:
     findings = _findings_for_rule(campaign, "depends-on-acyclic")
     assert findings, "Cyclic depends_on must trigger depends-on-acyclic rule"
     assert findings[0].severity == Severity.ERROR
-
-
-# ---------------------------------------------------------------------------
-# Test 14: invalid ingredient key triggers dispatch-ingredients-keys-in-target-schema
-# ---------------------------------------------------------------------------
 
 
 def test_campaign_invalid_ingredient_key_detected(tmp_path) -> None:

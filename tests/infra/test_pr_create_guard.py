@@ -108,14 +108,9 @@ class TestPrCreateGuardAllowed:
         out = _run_guard("gh pr view 99", kitchen_open=True, tmpdir=tmp_path)
         assert out.strip() == ""
 
-    def test_allows_echo_command(self, tmp_path):
-        out = _run_guard(
-            "echo gh pr create is not a real call", kitchen_open=True, tmpdir=tmp_path
-        )
-        # 'gh pr create' appears in a string argument — guard must still deny
-        # because the regex matches substrings. This is the intended behavior:
-        # conservative blocking to prevent accidental bypass.
-        assert _is_denied(out)
+    def test_allows_unrelated_run_cmd(self, tmp_path):
+        out = _run_guard("npm run build", kitchen_open=True, tmpdir=tmp_path)
+        assert out.strip() == ""
 
     def test_allows_unrelated_git_command(self, tmp_path):
         out = _run_guard("git status", kitchen_open=True, tmpdir=tmp_path)

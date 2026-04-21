@@ -286,6 +286,7 @@ def test_franchise_status_cleanup_calls_batch_delete(
     mock_delete = _mock_batch_delete(monkeypatch)
     _franchise_status("abc123", cleanup=True)
     assert mock_delete.called
+    assert mock_delete.call_args.args[0] == ""
     assert mock_delete.call_args.kwargs.get("owner") == "abc123"
 
 

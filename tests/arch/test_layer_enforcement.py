@@ -609,7 +609,7 @@ def test_server_tools_import_only_allowed_packages() -> None:
     autoskillit.pipeline, autoskillit.config, and intra-package autoskillit.server.*.
     TYPE_CHECKING exempt.
     """
-    ALLOWED = {"core", "pipeline", "server", "config", "franchise"}
+    ALLOWED = {"core", "pipeline", "server", "config"}
     tools_files = [
         p for p in _SOURCE_FILES if p.parent.name == "server" and p.stem.startswith("tools_")
     ]
@@ -1011,7 +1011,6 @@ def test_default_classes_only_instantiated_inside_factory_or_allowlist() -> None
         Path("server/_factory.py"): {"*"},  # Composition Root
         Path("cli/_workspace.py"): {"DefaultSubprocessRunner"},  # CLI worktree listing
         Path("cli/_cook.py"): {"DefaultSessionSkillManager"},  # interactive cook
-        Path("cli/_franchise.py"): {"DefaultSessionSkillManager"},  # interactive cleanup
         Path("cli/app.py"): {"DefaultSkillResolver"},  # skill listing command
         Path("execution/recording.py"): {"DefaultSubprocessRunner"},  # lazy fallback
         Path("pipeline/context.py"): {  # __post_init__ +
@@ -1075,9 +1074,7 @@ _TEST_LAYER_ALLOWED: dict[str, frozenset[str]] = {
     "tests/workspace": frozenset({"autoskillit.core", "autoskillit.workspace"}),
     "tests/recipe": frozenset({"autoskillit.core", "autoskillit.recipe"}),
     "tests/migration": frozenset({"autoskillit.core", "autoskillit.migration"}),
-    "tests/franchise": frozenset(
-        {"autoskillit.core", "autoskillit.franchise", "autoskillit.recipe", "autoskillit.server"}
-    ),
+    "tests/franchise": frozenset({"autoskillit.core", "autoskillit.franchise"}),
     "tests/server": frozenset({"autoskillit"}),  # wildcard: any autoskillit.* import allowed
     "tests/cli": frozenset({"autoskillit"}),  # wildcard: any autoskillit.* import allowed
 }

@@ -50,7 +50,6 @@ def test_gated_tools_contains_expected_names():
         "validate_recipe",
         "register_clone_status",
         "batch_cleanup_clones",
-        "dispatch_food_truck",
     }
     assert GATED_TOOLS == expected
 

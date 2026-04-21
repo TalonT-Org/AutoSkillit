@@ -187,7 +187,6 @@ skills:
     - make-req
     - elaborate-phase
     - write-recipe
-    - make-campaign
     - migrate-recipes
     - setup-project
     - sprint-planner

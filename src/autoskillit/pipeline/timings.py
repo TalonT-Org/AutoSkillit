@@ -108,7 +108,6 @@ class DefaultTimingLog:
         since: str = "",
         cwd_filter: str = "",
         kitchen_id_filter: str = "",
-        campaign_id_filter: str = "",
     ) -> int:
         """Reconstruct timing entries from persisted session logs.
 
@@ -119,13 +118,12 @@ class DefaultTimingLog:
         cwd_filter: if non-empty, only sessions whose cwd matches are loaded.
         kitchen_id_filter: if non-empty, only sessions whose kitchen_id matches are loaded.
             Falls back to pipeline_id for sessions written before the rename.
-        campaign_id_filter: if non-empty, only sessions whose campaign_id matches are loaded.
 
         Returns the count of session directories successfully loaded.
         """
         count = 0
         for st_path in _iter_session_log_entries(
-            log_root, since, "step_timing.json", cwd_filter, kitchen_id_filter, campaign_id_filter
+            log_root, since, "step_timing.json", cwd_filter, kitchen_id_filter
         ):
             try:
                 data = json.loads(st_path.read_text(encoding="utf-8"))

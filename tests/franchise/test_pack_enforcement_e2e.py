@@ -52,6 +52,7 @@ def franchise_runtime():
     async def _get_surface(recipe_name: str) -> set[str]:
         from fastmcp.client import Client
         from fastmcp.client.transports import StdioTransport
+
         from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 
         path = builtin_recipes_dir() / f"{recipe_name}.yaml"
@@ -67,7 +68,7 @@ def franchise_runtime():
 
         transport = StdioTransport(
             command=sys.executable,
-            args=["-m", "autoskillit", "serve"],
+            args=["-m", "autoskillit"],
             env=env,
         )
         async with Client(transport) as client:

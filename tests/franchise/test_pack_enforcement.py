@@ -8,6 +8,7 @@ plus only the tools from packs declared in the recipe's requires_packs field.
 from __future__ import annotations
 
 import pytest
+
 from autoskillit.core._type_constants import PACK_REGISTRY, TOOL_SUBSET_TAGS
 
 pytestmark = [pytest.mark.layer("franchise"), pytest.mark.small]
@@ -69,6 +70,7 @@ class TestPerRecipeToolSurface:
     @pytest.mark.anyio
     async def test_implementation_food_truck_sees_expected_tools(self, monkeypatch):
         from fastmcp.client import Client
+
         from autoskillit.server import mcp
 
         expected = compute_food_truck_tool_surface("implementation")
@@ -84,6 +86,7 @@ class TestPerRecipeToolSurface:
     @pytest.mark.anyio
     async def test_implementation_food_truck_hides_research_tools(self, monkeypatch):
         from fastmcp.client import Client
+
         from autoskillit.core import UNGATED_TOOLS
         from autoskillit.server import mcp
 
@@ -100,6 +103,7 @@ class TestPerRecipeToolSurface:
     @pytest.mark.anyio
     async def test_merge_prs_food_truck_sees_expected_tools(self, monkeypatch):
         from fastmcp.client import Client
+
         from autoskillit.server import mcp
 
         expected = compute_food_truck_tool_surface("merge-prs")
@@ -115,6 +119,7 @@ class TestPerRecipeToolSurface:
     @pytest.mark.anyio
     async def test_merge_prs_food_truck_hides_research_tools(self, monkeypatch):
         from fastmcp.client import Client
+
         from autoskillit.core import UNGATED_TOOLS
         from autoskillit.server import mcp
 
@@ -131,6 +136,7 @@ class TestPerRecipeToolSurface:
     @pytest.mark.anyio
     async def test_remediation_food_truck_sees_expected_tools(self, monkeypatch):
         from fastmcp.client import Client
+
         from autoskillit.server import mcp
 
         expected = compute_food_truck_tool_surface("remediation")
@@ -146,6 +152,7 @@ class TestPerRecipeToolSurface:
     @pytest.mark.anyio
     async def test_remediation_food_truck_hides_research_tools(self, monkeypatch):
         from fastmcp.client import Client
+
         from autoskillit.core import UNGATED_TOOLS
         from autoskillit.server import mcp
 
@@ -162,6 +169,7 @@ class TestPerRecipeToolSurface:
     @pytest.mark.anyio
     async def test_implementation_groups_food_truck_sees_expected_tools(self, monkeypatch):
         from fastmcp.client import Client
+
         from autoskillit.server import mcp
 
         expected = compute_food_truck_tool_surface("implementation-groups")
@@ -179,6 +187,7 @@ class TestPerRecipeToolSurface:
     @pytest.mark.anyio
     async def test_implementation_groups_food_truck_hides_research_tools(self, monkeypatch):
         from fastmcp.client import Client
+
         from autoskillit.core import UNGATED_TOOLS
         from autoskillit.server import mcp
 
@@ -202,10 +211,9 @@ class TestPerRecipeToolSurface:
 
 class TestSyntheticPackScenarios:
     @pytest.mark.anyio
-    async def test_food_truck_with_empty_requires_packs_sees_only_kitchen_core(
-        self, monkeypatch
-    ):
+    async def test_food_truck_with_empty_requires_packs_sees_only_kitchen_core(self, monkeypatch):
         from fastmcp.client import Client
+
         from autoskillit.core import GATED_TOOLS
         from autoskillit.server import _apply_session_type_visibility, mcp
 
@@ -226,6 +234,7 @@ class TestSyntheticPackScenarios:
     @pytest.mark.anyio
     async def test_food_truck_with_single_pack_sees_kitchen_core_plus_pack(self, monkeypatch):
         from fastmcp.client import Client
+
         from autoskillit.server import mcp
 
         _simulate_food_truck(monkeypatch, "github")
@@ -249,7 +258,7 @@ class TestSyntheticPackScenarios:
         monkeypatch.setenv("AUTOSKILLIT_L2_TOOL_TAGS", "github,ci,telemetry")
 
         mock_mcp = MagicMock()
-        with patch("autoskillit.server._session_type.mcp", mock_mcp):
+        with patch("autoskillit.server.mcp", mock_mcp):
             from autoskillit.server._session_type import _apply_session_type_visibility
 
             _apply_session_type_visibility()
@@ -293,8 +302,7 @@ async def test_no_tool_has_bare_kitchen_tag_only() -> None:
         if "kitchen" in tool.tags and "autoskillit" in tool.tags:
             pack_tags = tool.tags & CATEGORY_TAGS
             assert pack_tags, (
-                f"{name} has 'kitchen' tag but no pack tag from CATEGORY_TAGS. "
-                f"Tags: {tool.tags}"
+                f"{name} has 'kitchen' tag but no pack tag from CATEGORY_TAGS. Tags: {tool.tags}"
             )
 
 

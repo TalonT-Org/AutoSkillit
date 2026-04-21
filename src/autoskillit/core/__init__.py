@@ -197,6 +197,8 @@ __all__ = [
     # logging
     "configure_logging",
     "get_logger",
+    # kitchen_state
+    "sweep_stale_markers",
     # readiness
     "cleanup_readiness_sentinel",
     "readiness_sentinel_path",

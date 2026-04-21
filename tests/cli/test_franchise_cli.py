@@ -91,7 +91,7 @@ def _setup_campaign_recipes(tmp_path: Path, names: list[str]) -> None:
 def _mock_batch_delete(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     """Stub batch_delete and return the mock."""
     mock = MagicMock(return_value={"deleted": [], "delete_failures": [], "preserved": []})
-    monkeypatch.setattr("autoskillit.workspace.clone_registry.batch_delete", mock)
+    monkeypatch.setattr("autoskillit.workspace.batch_delete", mock)
     return mock
 
 

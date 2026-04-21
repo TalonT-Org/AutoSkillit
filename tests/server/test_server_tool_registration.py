@@ -89,6 +89,7 @@ class TestToolRegistration:
             "set_commit_status",
             "register_clone_status",
             "batch_cleanup_clones",
+            "dispatch_food_truck",
         }
         assert expected == tool_names
 

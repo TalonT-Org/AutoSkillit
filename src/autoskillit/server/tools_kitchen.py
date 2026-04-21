@@ -118,6 +118,7 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "get_quota_events",
         ),
     ),
+    ("Franchise", ("dispatch_food_truck",)),
     ("Kitchen", ("open_kitchen", "close_kitchen", "disable_quota_guard")),
 )
 

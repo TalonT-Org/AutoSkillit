@@ -7,22 +7,25 @@ minimal valid campaign YAML passes all rules.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 import autoskillit.recipe  # noqa: F401 -- triggers rule registration
+from autoskillit.core import Severity
 from autoskillit.recipe._analysis import make_validation_context
-from autoskillit.recipe.registry import run_semantic_rules
+from autoskillit.recipe.registry import RuleFinding, run_semantic_rules
 from autoskillit.recipe.schema import CampaignDispatch, Recipe, RecipeKind
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
-def _dispatch(name: str, recipe: str, task: str, **kwargs) -> CampaignDispatch:
+def _dispatch(name: str, recipe: str, task: str, **kwargs: Any) -> CampaignDispatch:
     return CampaignDispatch(name=name, recipe=recipe, task=task, **kwargs)
 
 
-def _minimal_campaign(**overrides) -> Recipe:
-    defaults: dict = {
+def _minimal_campaign(**overrides: Any) -> Recipe:
+    defaults: dict[str, Any] = {
         "name": "my-feature-campaign",
         "description": "Campaign to implement and verify a feature",
         "kind": RecipeKind.CAMPAIGN,
@@ -50,15 +53,13 @@ def _minimal_campaign(**overrides) -> Recipe:
     return Recipe(**defaults)
 
 
-def _findings_for_rule(recipe: Recipe, rule: str, **ctx_kwargs) -> list:
+def _findings_for_rule(recipe: Recipe, rule: str, **ctx_kwargs: Any) -> list[RuleFinding]:
     ctx = make_validation_context(recipe, **ctx_kwargs)
     return [f for f in run_semantic_rules(ctx) if f.rule == rule]
 
 
-def _error_findings(recipe: Recipe, **ctx_kwargs) -> list:
+def _error_findings(recipe: Recipe, **ctx_kwargs: Any) -> list[RuleFinding]:
     """Return only ERROR-severity semantic findings."""
-    from autoskillit.core import Severity
-
     ctx = make_validation_context(recipe, **ctx_kwargs)
     return [f for f in run_semantic_rules(ctx) if f.severity == Severity.ERROR]
 
@@ -106,8 +107,6 @@ def test_campaign_with_cycle_fails_semantic_validation() -> None:
     )
     findings = _findings_for_rule(campaign, "depends-on-acyclic")
     assert findings, "Cyclic depends_on must trigger depends-on-acyclic rule"
-    from autoskillit.core import Severity
-
     assert findings[0].severity == Severity.ERROR
 
 
@@ -173,7 +172,5 @@ def test_campaign_invalid_ingredient_key_detected(tmp_path) -> None:
     assert findings, (
         "Invalid ingredient key must trigger dispatch-ingredients-keys-in-target-schema rule"
     )
-    from autoskillit.core import Severity
-
     assert findings[0].severity == Severity.ERROR
     assert "nonexistent_key" in findings[0].message

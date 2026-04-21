@@ -85,7 +85,6 @@ class AuditLog(Protocol):
         since: str = "",
         cwd_filter: str = "",
         kitchen_id_filter: str = "",
-        campaign_id_filter: str = "",
     ) -> int: ...
 
 
@@ -117,7 +116,6 @@ class TokenLog(Protocol):
         since: str = "",
         cwd_filter: str = "",
         kitchen_id_filter: str = "",
-        campaign_id_filter: str = "",
     ) -> int: ...
 
 
@@ -140,7 +138,6 @@ class TimingLog(Protocol):
         since: str = "",
         cwd_filter: str = "",
         kitchen_id_filter: str = "",
-        campaign_id_filter: str = "",
     ) -> int: ...
 
 
@@ -209,14 +206,10 @@ class HeadlessExecutor(Protocol):
         step_name: str = "",
         kitchen_id: str = "",
         order_id: str = "",
-        campaign_id: str = "",
-        dispatch_id: str = "",
-        project_dir: str = "",
         timeout: float | None = None,
         stale_threshold: float | None = None,
         idle_output_timeout: float | None = None,
         env_extras: Mapping[str, str] | None = None,
-        requires_packs: Sequence[str] = (),
         on_spawn: Callable[[int], None] | None = None,
     ) -> SkillResult: ...
 
@@ -497,8 +490,6 @@ class SessionSkillManager(Protocol):
     def compute_skill_closure(self, skill_name: str) -> frozenset[str]: ...
 
     def activate_skill_deps(self, session_id: str, skill_name: str) -> bool: ...
-
-    def cleanup_session(self, session_id: str) -> bool: ...
 
     def cleanup_stale(self, max_age_seconds: int = 86400) -> int: ...
 

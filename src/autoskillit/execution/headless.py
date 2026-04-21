@@ -24,8 +24,6 @@ import anyio
 import structlog
 
 from autoskillit.core import (
-    CAMPAIGN_ID_ENV_VAR,
-    DISPATCH_ID_ENV_VAR,
     ChannelConfirmation,
     CliSubtype,
     FailureRecord,
@@ -982,9 +980,6 @@ async def _execute_claude_headless(
     step_name: str = "",
     kitchen_id: str = "",
     order_id: str = "",
-    campaign_id: str = "",
-    dispatch_id: str = "",
-    project_dir: str = "",
     timeout: float,
     stale_threshold: float,
     idle_output_timeout: float | None = None,
@@ -1005,9 +1000,6 @@ async def _execute_claude_headless(
     Used by both run_headless_core (leaf path) and
     DefaultHeadlessExecutor.dispatch_food_truck (food truck path).
     """
-    campaign_id = campaign_id or os.environ.get(CAMPAIGN_ID_ENV_VAR, "")
-    dispatch_id = dispatch_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
-
     cfg = ctx.config.run_skill
     _raw_idle = (
         idle_output_timeout if idle_output_timeout is not None else float(cfg.idle_output_timeout)
@@ -1061,9 +1053,6 @@ async def _execute_claude_headless(
                 cwd=str(cwd),
                 kitchen_id=kitchen_id,
                 order_id=order_id,
-                campaign_id=campaign_id,
-                dispatch_id=dispatch_id,
-                project_dir=project_dir,
                 session_id="",
                 pid=0,
                 skill_command=skill_command,
@@ -1100,9 +1089,6 @@ async def _execute_claude_headless(
                     cwd=str(cwd),
                     kitchen_id=kitchen_id,
                     order_id=order_id,
-                    campaign_id=campaign_id,
-                    dispatch_id=dispatch_id,
-                    project_dir=project_dir,
                     session_id="",
                     pid=0,
                     skill_command=skill_command,
@@ -1189,9 +1175,6 @@ async def _execute_claude_headless(
                 cwd=cwd,
                 kitchen_id=kitchen_id,
                 order_id=order_id,
-                campaign_id=campaign_id,
-                dispatch_id=dispatch_id,
-                project_dir=project_dir,
                 session_id=skill_result.session_id,
                 pid=result.pid,
                 skill_command=skill_command,
@@ -1262,8 +1245,6 @@ async def run_headless_core(
     step_name: str = "",
     kitchen_id: str = "",
     order_id: str = "",
-    campaign_id: str = "",
-    dispatch_id: str = "",
     add_dirs: Sequence[ValidatedAddDir] = (),
     timeout: float | None = None,
     stale_threshold: float | None = None,
@@ -1329,8 +1310,6 @@ async def run_headless_core(
             step_name=step_name,
             kitchen_id=kitchen_id,
             order_id=order_id,
-            campaign_id=campaign_id,
-            dispatch_id=dispatch_id,
             timeout=float(effective_timeout),
             stale_threshold=float(effective_stale),
             idle_output_timeout=idle_output_timeout,
@@ -1405,14 +1384,10 @@ class DefaultHeadlessExecutor:
         step_name: str = "",
         kitchen_id: str = "",
         order_id: str = "",
-        campaign_id: str = "",
-        dispatch_id: str = "",
-        project_dir: str = "",
         timeout: float | None = None,
         stale_threshold: float | None = None,
         idle_output_timeout: float | None = None,
         env_extras: Mapping[str, str] | None = None,
-        requires_packs: Sequence[str] = (),
         on_spawn: Callable[[int], None] | None = None,
     ) -> SkillResult:
         cfg = self._ctx.config
@@ -1425,17 +1400,13 @@ class DefaultHeadlessExecutor:
                 "dispatch_food_truck requires a configured plugin_dir; ctx.plugin_dir is None"
             )
 
-        merged_extras: dict[str, str] = dict(env_extras) if env_extras else {}
-        if requires_packs:
-            merged_extras["AUTOSKILLIT_L2_TOOL_TAGS"] = ",".join(sorted(requires_packs))
-
         spec = build_food_truck_cmd(
             orchestrator_prompt=orchestrator_prompt,
             plugin_dir=plugin_dir,
             cwd=cwd,
             completion_marker=completion_marker,
             model=resolved_model,
-            env_extras=merged_extras or None,
+            env_extras=env_extras,
             output_format_value=cfg.run_skill.output_format.value,
         )
 
@@ -1454,9 +1425,6 @@ class DefaultHeadlessExecutor:
             step_name=step_name,
             kitchen_id=kitchen_id,
             order_id=order_id,
-            campaign_id=campaign_id,
-            dispatch_id=dispatch_id,
-            project_dir=project_dir,
             timeout=float(effective_timeout),
             stale_threshold=float(effective_stale),
             idle_output_timeout=idle_output_timeout,

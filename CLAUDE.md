@@ -219,8 +219,7 @@ generic_automation_mcp/
 │   └── store.py             #   FailureStore (JSON, atomic writes)
 │
 ├── franchise/               # L2
-│   ├── __init__.py          #   Package skeleton — business logic in downstream tickets
-│   └── result_parser.py     #   L2 result block parser with Channel B JSONL fallback
+│   └── __init__.py          #   Package skeleton — business logic in downstream tickets
 │
 ├── server/                  # L3 FastMCP server
 │   ├── __init__.py          #   FastMCP app, kitchen gating, headless tool reveal
@@ -250,8 +249,6 @@ generic_automation_mcp/
 │   ├── _terminal.py         #   terminal_guard() TTY restore
 │   ├── _terminal_table.py   #   Re-export shim from core/_terminal_table
 │   ├── _cook.py             #   cook: ephemeral skill session launcher
-│   ├── _franchise.py        #   franchise sub-app: run, list, status campaign commands
-│   ├── _session_launch.py   #   _run_interactive_session: shared interactive session launch prelude
 │   ├── _doctor.py           #   16 project setup checks
 │   ├── _hooks.py            #   PreToolUse hook registration helpers
 │   ├── _init_helpers.py

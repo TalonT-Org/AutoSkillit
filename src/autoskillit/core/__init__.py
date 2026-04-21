@@ -55,7 +55,6 @@ from .io import (
     temp_dir_display_str,
     write_versioned_json,
 )
-from .kitchen_state import sweep_stale_markers as sweep_stale_markers
 from .logging import (
     configure_logging,
     get_logger,
@@ -81,7 +80,6 @@ from .types import (
     CAMPAIGN_ID_ENV_VAR,
     CATEGORY_TAGS,
     CONTEXT_EXHAUSTION_MARKER,
-    DISPATCH_ID_ENV_VAR,
     FRANCHISE_TOOLS,
     FREE_RANGE_TOOLS,
     GATED_TOOLS,
@@ -198,8 +196,6 @@ __all__ = [
     # logging
     "configure_logging",
     "get_logger",
-    # kitchen_state
-    "sweep_stale_markers",
     # readiness
     "cleanup_readiness_sentinel",
     "readiness_sentinel_path",
@@ -284,7 +280,6 @@ __all__ = [
     "SESSION_TYPE_LEAF",
     "HEADLESS_ENV_VAR",
     "CAMPAIGN_ID_ENV_VAR",
-    "DISPATCH_ID_ENV_VAR",
     "KITCHEN_SESSION_ID_ENV_VAR",
     "Severity",
     "KillReason",

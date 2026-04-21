@@ -128,6 +128,7 @@ async def _run_dispatch(
     _execution = sys.modules["autoskillit.execution"]
     check_and_sleep_if_needed = _execution.check_and_sleep_if_needed
     _refresh_quota_cache = _execution._refresh_quota_cache
+    invalidate_cache = _execution.invalidate_cache
 
     if tool_ctx.recipes is None:
         return json.dumps(
@@ -241,6 +242,8 @@ async def _run_dispatch(
         ),
     )
 
+    invalidate_cache(tool_ctx.config.quota_guard.cache_path)
+
     if tool_ctx.background is not None:
         tool_ctx.background.submit(
             _refresh_quota_cache(tool_ctx.config.quota_guard),
@@ -248,7 +251,14 @@ async def _run_dispatch(
         )
 
     if tool_ctx.session_skill_manager is not None and skill_result.session_id:
-        tool_ctx.session_skill_manager.cleanup_session(skill_result.session_id)
+        try:
+            tool_ctx.session_skill_manager.cleanup_session(skill_result.session_id)
+        except Exception:
+            logger.warning(
+                "session skills cleanup failed — dispatch not affected",
+                session_id=skill_result.session_id,
+                exc_info=True,
+            )
 
     return json.dumps(
         {

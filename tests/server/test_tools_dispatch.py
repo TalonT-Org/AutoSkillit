@@ -436,3 +436,115 @@ class TestDispatchFoodTruckExecution:
             prompt_builder=_simple_prompt_builder,
         )
         assert "l2-session-xyz" in cleanup_calls
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_invalidates_quota_cache_file(self, tool_ctx, monkeypatch):
+        """After dispatch, invalidate_cache is called with the configured cache path."""
+        from autoskillit.franchise._api import execute_dispatch
+
+        self._setup_standard_dispatch(tool_ctx)
+        _patch_quota(monkeypatch)
+        _patch_quota_refresh(monkeypatch)
+
+        invalidate_calls: list[str] = []
+
+        def _capture_invalidate(cache_path: str) -> None:
+            invalidate_calls.append(cache_path)
+
+        monkeypatch.setattr("autoskillit.execution.invalidate_cache", _capture_invalidate)
+
+        await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="t",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=_simple_prompt_builder,
+        )
+
+        assert tool_ctx.config.quota_guard.cache_path in invalidate_calls
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_succeeds_when_cleanup_session_raises(
+        self, tool_ctx, monkeypatch
+    ):
+        """Dispatch result is success even when cleanup_session raises RuntimeError."""
+        import dataclasses
+        import json
+
+        from autoskillit.franchise._api import execute_dispatch
+        from tests.fakes import _DEFAULT_SKILL_RESULT
+
+        self._setup_standard_dispatch(tool_ctx)
+        tool_ctx.executor = InMemoryHeadlessExecutor(
+            default_result=dataclasses.replace(
+                _DEFAULT_SKILL_RESULT,
+                success=True,
+                session_id="l2-session-err",
+            )
+        )
+        _patch_quota(monkeypatch)
+        _patch_quota_refresh(monkeypatch)
+        monkeypatch.setattr("autoskillit.execution.invalidate_cache", lambda _: None)
+
+        def _raise_runtime_error(session_id: str) -> bool:
+            raise RuntimeError("permission denied")
+
+        monkeypatch.setattr(
+            tool_ctx.session_skill_manager, "cleanup_session", _raise_runtime_error
+        )
+
+        result_json = await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="t",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=_simple_prompt_builder,
+        )
+
+        result = json.loads(result_json)
+        assert result["success"] is True
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_succeeds_when_cleanup_session_raises_oserror(
+        self, tool_ctx, monkeypatch
+    ):
+        """Dispatch result is success even when cleanup_session raises OSError."""
+        import dataclasses
+        import json
+
+        from autoskillit.franchise._api import execute_dispatch
+        from tests.fakes import _DEFAULT_SKILL_RESULT
+
+        self._setup_standard_dispatch(tool_ctx)
+        tool_ctx.executor = InMemoryHeadlessExecutor(
+            default_result=dataclasses.replace(
+                _DEFAULT_SKILL_RESULT,
+                success=True,
+                session_id="l2-session-oserr",
+            )
+        )
+        _patch_quota(monkeypatch)
+        _patch_quota_refresh(monkeypatch)
+        monkeypatch.setattr("autoskillit.execution.invalidate_cache", lambda _: None)
+
+        def _raise_os_error(session_id: str) -> bool:
+            raise OSError("read-only filesystem")
+
+        monkeypatch.setattr(tool_ctx.session_skill_manager, "cleanup_session", _raise_os_error)
+
+        result_json = await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="t",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=_simple_prompt_builder,
+        )
+
+        result = json.loads(result_json)
+        assert result["success"] is True

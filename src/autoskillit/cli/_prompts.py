@@ -51,6 +51,9 @@ def _build_l3_orchestrator_prompt(
     """
     dispatch_count = len(campaign_recipe.dispatches)
     sous_chef_content = _read_full_sous_chef()
+    sous_chef_section = (
+        f"\n## SOUS-CHEF DISCIPLINE\n\n{sous_chef_content}\n" if sous_chef_content else ""
+    )
 
     resume_section = ""
     if completed_dispatches:
@@ -67,11 +70,7 @@ dispatch name NOT listed above.
     return f"""\
 You are an L3 campaign dispatcher. Execute campaign '{campaign_recipe.name}' autonomously.
 Campaign ID: {campaign_id}. Dispatches: {dispatch_count}.
-
-## SOUS-CHEF DISCIPLINE
-
-{sous_chef_content}
-
+{sous_chef_section}
 ## CAMPAIGN OVERVIEW
 
 - Name: {campaign_recipe.name}
@@ -254,8 +253,8 @@ def _build_orchestrator_prompt(
     is discovered by the session via ``load_recipe``.
     """
     # Inject sous-chef global orchestration rules (graceful degradation if absent)
-    _raw = _read_full_sous_chef()
-    sous_chef_content = "\n\n" + _raw if _raw else ""
+    raw = _read_full_sous_chef()
+    sous_chef_content = "\n\n" + raw if raw else ""
 
     _ing_section = ""
     if ingredients_table:
@@ -422,8 +421,8 @@ SKILL_COMMAND FORMATTING — MANDATORY:
 
 def _build_open_kitchen_prompt(mcp_prefix: str) -> str:
     """Build the --append-system-prompt content for an open-kitchen cook session (no recipe)."""
-    _raw = _read_full_sous_chef()
-    sous_chef_content = "\n\n" + _raw if _raw else ""
+    raw = _read_full_sous_chef()
+    sous_chef_content = "\n\n" + raw if raw else ""
 
     _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
     text = (

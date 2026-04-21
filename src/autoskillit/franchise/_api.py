@@ -305,6 +305,7 @@ async def _run_dispatch(
                 "l2_session_id": skill_result.session_id,
                 "l2_payload": None,
                 "reason": "l2_no_result_block",
+                "l2_parse_source": parsed.source,
                 "token_usage": skill_result.token_usage,
             }
         )

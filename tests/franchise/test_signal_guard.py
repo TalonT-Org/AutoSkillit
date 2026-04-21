@@ -5,9 +5,8 @@ from __future__ import annotations
 import json
 import os
 import signal as _signal
-import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import anyio
 import pytest
@@ -112,7 +111,8 @@ class TestSignalGuard:
 
     async def test_signal_guard_reason_contains_signal_name(self, tmp_path: Path) -> None:
         state_path, campaign_id = _make_running_state(
-            tmp_path, l2_pid=0  # zero pid → skips kill, goes straight to mark
+            tmp_path,
+            l2_pid=0,  # zero pid → skips kill, goes straight to mark
         )
 
         await _run_signal_guard(state_path, campaign_id, _signal.SIGINT)
@@ -197,9 +197,7 @@ class TestSignalGuard:
 
         assert len(cleanup_calls) == 1
 
-    async def test_signal_guard_cleanup_on_interrupt_default_false(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_signal_guard_cleanup_on_interrupt_default_false(self, tmp_path: Path) -> None:
         """cleanup_on_interrupt=False (default) → workspace cleanup NOT invoked."""
         state_path, campaign_id = _make_running_state(tmp_path, l2_pid=0)
         cleanup_calls: list[Path] = []
@@ -217,9 +215,7 @@ class TestSignalGuard:
 
         assert cleanup_calls == []
 
-    async def test_signal_guard_cancels_scope_before_state_write(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_signal_guard_cancels_scope_before_state_write(self, tmp_path: Path) -> None:
         """Scope is cancelled (guard exits) AND state is written (in shielded section).
 
         Verifies that scope cancellation happens before the state write by checking
@@ -229,7 +225,6 @@ class TestSignalGuard:
         state_path, campaign_id = _make_running_state(tmp_path, l2_pid=0)
 
         events: list[str] = []
-        original_mark = None
 
         from autoskillit.franchise import mark_dispatch_interrupted as _real_mark
 

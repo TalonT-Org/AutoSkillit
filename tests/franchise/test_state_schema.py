@@ -21,7 +21,9 @@ pytestmark = [pytest.mark.layer("franchise"), pytest.mark.small]
 
 def _make_state(tmp_path: Path, dispatch_name: str = "a") -> Path:
     sp = tmp_path / "state.json"
-    write_initial_state(sp, "cid-schema", "test-campaign", "/m.yaml", [DispatchRecord(name=dispatch_name)])
+    write_initial_state(
+        sp, "cid-schema", "test-campaign", "/m.yaml", [DispatchRecord(name=dispatch_name)]
+    )
     return sp
 
 

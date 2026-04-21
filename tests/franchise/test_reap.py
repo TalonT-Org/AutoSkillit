@@ -31,7 +31,9 @@ def _make_running_state(
 ) -> Path:
     """Create a state file with a single RUNNING dispatch."""
     sp = tmp_path / "state.json"
-    write_initial_state(sp, "cid-reap", "reap-campaign", "/m.yaml", [DispatchRecord(name=dispatch_name)])
+    write_initial_state(
+        sp, "cid-reap", "reap-campaign", "/m.yaml", [DispatchRecord(name=dispatch_name)]
+    )
     # Inject RUNNING state directly into the JSON to bypass transition validation
     raw = json.loads(sp.read_text())
     raw["dispatches"][0].update(
@@ -67,9 +69,7 @@ class TestReap:
                 "autoskillit.execution.linux_tracing.read_boot_id",
                 return_value=BOOT_ID,
             ),
-            patch(
-                "autoskillit.execution._process_kill.kill_process_tree"
-            ) as mock_kill,
+            patch("autoskillit.execution._process_kill.kill_process_tree") as mock_kill,
         ):
             _reap(sp)
 
@@ -91,9 +91,7 @@ class TestReap:
                 "autoskillit.execution.linux_tracing.read_boot_id",
                 return_value=BOOT_ID,
             ),
-            patch(
-                "autoskillit.execution._process_kill.kill_process_tree"
-            ) as mock_kill,
+            patch("autoskillit.execution._process_kill.kill_process_tree") as mock_kill,
         ):
             _reap(sp)
 
@@ -111,9 +109,7 @@ class TestReap:
                 "autoskillit.execution.linux_tracing.read_boot_id",
                 return_value=BOOT_ID,
             ),
-            patch(
-                "autoskillit.execution._process_kill.kill_process_tree"
-            ) as mock_kill,
+            patch("autoskillit.execution._process_kill.kill_process_tree") as mock_kill,
         ):
             _reap(sp)
 
@@ -182,9 +178,7 @@ class TestReap:
                 return_value=BOOT_ID,  # current boot differs from stored
             ),
             patch("psutil.pid_exists", return_value=True),
-            patch(
-                "autoskillit.execution._process_kill.kill_process_tree"
-            ) as mock_kill,
+            patch("autoskillit.execution._process_kill.kill_process_tree") as mock_kill,
         ):
             _reap(sp)
 

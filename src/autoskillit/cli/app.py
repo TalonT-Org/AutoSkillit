@@ -528,9 +528,8 @@ def _enable_subsets_permanently(project_dir: Path, subsets: frozenset[str]) -> N
 def _cook_cmd(session_id: str | None = None, *, resume: bool = False) -> None:
     """Launch an interactive Claude session with all skills and kitchen tools.
 
-    Use --resume to restore a previous session. Optionally provide a session ID
-    directly after --resume to target a specific session; omit to present
-    Claude Code's interactive session picker.
+    Use --resume to restore a previous session. Pass a session ID to target a
+    specific one, or omit for Claude Code's interactive picker.
     """
     cook_interactive(resume=resume or (session_id is not None), session_id=session_id)
 
@@ -565,11 +564,8 @@ def order(recipe: str | None = None, session_id: str | None = None, *, resume: b
         print("ERROR: 'order' cannot run inside a Claude Code session.")
         print("Run this command in a regular terminal.")
         sys.exit(1)
-
-    # Build resume intent — must come before the 'if recipe is None:' block
-    resume_spec = resume_spec_from_cli(
-        resume=resume or (session_id is not None), session_id=session_id
-    )
+    _resume = resume or (session_id is not None)
+    resume_spec = resume_spec_from_cli(resume=_resume, session_id=session_id)
 
     mcp_prefix = detect_autoskillit_mcp_prefix()
 

@@ -927,9 +927,13 @@ class TestCLIOrder:
         cmd = mock_run.call_args[0][0]
         assert "--resume" in cmd
         idx = cmd.index("--resume")
-        assert idx == len(cmd) - 1 or cmd[idx + 1].startswith("-"), (
-            "bare --resume must not be followed by a session ID"
-        )
+        # bare --resume: next token (if any) must not be a session ID;
+        # session IDs have no spaces, initial prompts and flags are distinguishable
+        if idx + 1 < len(cmd):
+            next_tok = str(cmd[idx + 1])
+            assert " " in next_tok or next_tok.startswith("-"), (
+                f"bare --resume must not be followed by a session ID, got: {next_tok!r}"
+            )
         assert not discovery_calls, "find_latest_session_id must not be called for bare --resume"
 
     @patch("autoskillit.cli.subprocess.run")
@@ -990,9 +994,13 @@ class TestCLIOrder:
         cmd = mock_run.call_args[0][0]
         assert "--resume" in cmd
         idx = cmd.index("--resume")
-        assert idx == len(cmd) - 1 or cmd[idx + 1].startswith("-"), (
-            "bare --resume must not be followed by a session ID"
-        )
+        # bare --resume: next token (if any) must not be a session ID;
+        # session IDs have no spaces, initial prompts and flags are distinguishable
+        if idx + 1 < len(cmd):
+            next_tok = str(cmd[idx + 1])
+            assert " " in next_tok or next_tok.startswith("-"), (
+                f"bare --resume must not be followed by a session ID, got: {next_tok!r}"
+            )
 
 
 class TestOrderDisplayOwnership:

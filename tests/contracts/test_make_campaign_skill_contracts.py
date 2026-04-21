@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from typing import Any
 
 import yaml
 
@@ -17,11 +18,13 @@ def _read_skill_md() -> str:
     return _SKILL_MD.read_text()
 
 
-def _parse_frontmatter(content: str) -> dict:
+def _parse_frontmatter(content: str) -> dict[str, Any]:
     """Extract YAML frontmatter between --- delimiters."""
     m = re.match(r"^---\n(.+?)\n---\n", content, re.DOTALL)
     assert m, "SKILL.md must have YAML frontmatter delimited by ---"
-    return yaml.safe_load(m.group(1))
+    parsed = yaml.safe_load(m.group(1))
+    assert isinstance(parsed, dict), "SKILL.md frontmatter must be a YAML mapping"
+    return parsed
 
 
 def test_make_campaign_skill_discovered():

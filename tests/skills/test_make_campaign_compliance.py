@@ -17,6 +17,7 @@ from autoskillit.recipe._skill_placeholder_parser import (
     extract_declared_ingredients,
     shell_vars_assigned,
 )
+from tests.skills.test_skill_output_compliance import FIXED_NAME_SKILLS
 
 _CONTRACTS_PATH = pkg_root() / "recipe" / "skill_contracts.yaml"
 _SKILL_MD_PATH = pkg_root() / "skills_extended" / "make-campaign" / "SKILL.md"
@@ -24,8 +25,6 @@ _SKILL_MD_PATH = pkg_root() / "skills_extended" / "make-campaign" / "SKILL.md"
 
 def test_make_campaign_in_fixed_name_skills() -> None:
     """make-campaign IS in FIXED_NAME_SKILLS (name-based output, no timestamp needed)."""
-    from tests.skills.test_skill_output_compliance import FIXED_NAME_SKILLS
-
     assert "make-campaign" in FIXED_NAME_SKILLS, (
         "make-campaign must be in FIXED_NAME_SKILLS — output is identity-based "
         "(.autoskillit/recipes/campaigns/<name>.yaml), no timestamp needed."

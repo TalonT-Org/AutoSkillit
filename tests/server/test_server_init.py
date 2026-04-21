@@ -697,6 +697,89 @@ class TestSessionTypeVisibility:
             assert name not in tool_names, f"{name} (kitchen) should be hidden for leaf+headless"
 
     @pytest.mark.anyio
+    async def test_food_truck_with_tool_tags_sees_kitchen_core_plus_declared(self, monkeypatch):
+        """ORCHESTRATOR+HEADLESS with L2_TOOL_TAGS sees kitchen-core + github only."""
+        from fastmcp.client import Client
+
+        from autoskillit.server import _apply_session_type_visibility, mcp
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_L2_TOOL_TAGS", "github")
+        _apply_session_type_visibility()
+
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
+        tool_names = {t.name for t in tools}
+
+        assert "run_cmd" in tool_names
+        assert "run_skill" in tool_names
+        assert "merge_worktree" in tool_names
+        assert "fetch_github_issue" in tool_names
+        assert "wait_for_ci" not in tool_names
+        assert "clone_repo" not in tool_names
+
+    @pytest.mark.anyio
+    async def test_food_truck_with_multiple_packs(self, monkeypatch):
+        """ORCHESTRATOR+HEADLESS with L2_TOOL_TAGS=github,ci sees both packs."""
+        from fastmcp.client import Client
+
+        from autoskillit.server import _apply_session_type_visibility, mcp
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_L2_TOOL_TAGS", "github,ci")
+        _apply_session_type_visibility()
+
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
+        tool_names = {t.name for t in tools}
+
+        assert "fetch_github_issue" in tool_names
+        assert "wait_for_ci" in tool_names
+        assert "clone_repo" not in tool_names
+
+    @pytest.mark.anyio
+    async def test_food_truck_without_tool_tags_sees_full_kitchen(self, monkeypatch):
+        """ORCHESTRATOR+HEADLESS without L2_TOOL_TAGS falls back to full kitchen."""
+        from fastmcp.client import Client
+
+        from autoskillit.core import GATED_TOOLS
+        from autoskillit.server import _apply_session_type_visibility, mcp
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.delenv("AUTOSKILLIT_L2_TOOL_TAGS", raising=False)
+        _apply_session_type_visibility()
+
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
+        tool_names = {t.name for t in tools}
+
+        for name in GATED_TOOLS:
+            assert name in tool_names
+
+    @pytest.mark.anyio
+    async def test_cook_interactive_unaffected_by_tool_tags(self, monkeypatch):
+        """Interactive ORCHESTRATOR (cook) ignores L2_TOOL_TAGS."""
+        from fastmcp.client import Client
+
+        from autoskillit.core import GATED_TOOLS
+        from autoskillit.server import _apply_session_type_visibility, mcp
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
+        monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
+        monkeypatch.setenv("AUTOSKILLIT_L2_TOOL_TAGS", "github")
+        _apply_session_type_visibility()
+
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
+        tool_names = {t.name for t in tools}
+
+        for name in GATED_TOOLS:
+            assert name not in tool_names
+
+    @pytest.mark.anyio
     async def test_leaf_interactive_no_pre_reveal(self, monkeypatch):
         from fastmcp.client import Client
 

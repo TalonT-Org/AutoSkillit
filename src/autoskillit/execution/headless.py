@@ -1388,6 +1388,7 @@ class DefaultHeadlessExecutor:
         stale_threshold: float | None = None,
         idle_output_timeout: float | None = None,
         env_extras: Mapping[str, str] | None = None,
+        requires_packs: Sequence[str] = (),
         on_spawn: Callable[[int], None] | None = None,
     ) -> SkillResult:
         cfg = self._ctx.config
@@ -1400,13 +1401,22 @@ class DefaultHeadlessExecutor:
                 "dispatch_food_truck requires a configured plugin_dir; ctx.plugin_dir is None"
             )
 
+        merged_extras: dict[str, str] = dict(env_extras) if env_extras else {}
+        if requires_packs:
+            if "AUTOSKILLIT_L2_TOOL_TAGS" in merged_extras:
+                raise ValueError(
+                    "dispatch_food_truck: requires_packs and env_extras both specify "
+                    "AUTOSKILLIT_L2_TOOL_TAGS — use requires_packs exclusively"
+                )
+            merged_extras["AUTOSKILLIT_L2_TOOL_TAGS"] = ",".join(sorted(requires_packs))
+
         spec = build_food_truck_cmd(
             orchestrator_prompt=orchestrator_prompt,
             plugin_dir=plugin_dir,
             cwd=cwd,
             completion_marker=completion_marker,
             model=resolved_model,
-            env_extras=env_extras,
+            env_extras=merged_extras or None,
             output_format_value=cfg.run_skill.output_format.value,
         )
 

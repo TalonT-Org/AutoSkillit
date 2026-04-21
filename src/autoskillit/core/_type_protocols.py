@@ -210,6 +210,7 @@ class HeadlessExecutor(Protocol):
         stale_threshold: float | None = None,
         idle_output_timeout: float | None = None,
         env_extras: Mapping[str, str] | None = None,
+        requires_packs: Sequence[str] = (),
         on_spawn: Callable[[int], None] | None = None,
     ) -> SkillResult: ...
 

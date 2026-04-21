@@ -79,7 +79,7 @@ async def _resolve_base_ref(
     4. default_base_branch (from BranchingConfig)
     5. None (no base ref available)
     """
-    if config_base_ref:
+    if config_base_ref is not None:
         return config_base_ref
 
     sidecar_ref = _read_sidecar_base_branch(cwd)
@@ -114,7 +114,7 @@ async def _resolve_base_ref(
     except OSError:
         pass
 
-    if default_base_branch:
+    if default_base_branch is not None:
         return default_base_branch
 
     return None

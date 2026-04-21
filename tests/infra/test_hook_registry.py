@@ -91,7 +91,7 @@ def test_extract_script_basenames_filters_user_hooks() -> None:
 # T7 — Hook file renames: new names exist, old names removed
 # ---------------------------------------------------------------------------
 
-_HOOKS_DIR = Path(__file__).parent.parent / "src" / "autoskillit" / "hooks"
+_HOOKS_DIR = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "hooks"
 
 
 def test_renamed_hook_files_exist() -> None:

@@ -69,7 +69,6 @@ def pytest_collection_modifyitems(items, config):
                 stacklevel=1,
             )
 
-        # Always record counts when scope is active
         config.stash[_selected_count_key] = len(items)
         config.stash[_deselected_count_key] = len(deselected)
     except Exception as exc:

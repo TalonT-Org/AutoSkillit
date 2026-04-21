@@ -430,7 +430,6 @@ def pytest_collection_modifyitems(
                 stacklevel=1,
             )
 
-        # Always record path-based counts when scope is active
         config.stash[_selected_count_key] = len(items)
         config.stash[_deselected_count_key] = len(deselected)
 

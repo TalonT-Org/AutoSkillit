@@ -633,6 +633,34 @@ def test_server_tools_import_only_allowed_packages() -> None:
     )
 
 
+def test_server_non_tools_no_cli_imports() -> None:
+    """REQ-ARCH-003b: server/*.py (non-tools_*) files must not import from
+    autoskillit.cli — cross-L3 peer dependency. TYPE_CHECKING exempt.
+    """
+    DENIED = {"cli"}
+    non_tools_files = [
+        p for p in _SOURCE_FILES if p.parent.name == "server" and not p.stem.startswith("tools_")
+    ]
+    violations: list[str] = []
+
+    for path in non_tools_files:
+        for node in _runtime_import_froms(path):
+            if node.module is None:
+                continue
+            parts = node.module.split(".")
+            if parts[0] == "autoskillit" and len(parts) >= 2:
+                if parts[1] in DENIED:
+                    violations.append(
+                        f"{path.name}:{node.lineno} imports from "
+                        f"autoskillit.{parts[1]} (cross-L3 peer, not allowed)"
+                    )
+
+    assert not violations, (
+        "server/*.py (non-tools_*) files import from peer-L3 autoskillit sub-packages:\n"
+        + "\n".join(violations)
+    )
+
+
 # ── Notification and convention guards ────────────────────────────────────────
 
 

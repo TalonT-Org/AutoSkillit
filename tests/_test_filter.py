@@ -639,9 +639,7 @@ def build_test_scope(
     result: set[Path] = set()
     for d in test_dirs:
         dir_path = tests_root / d
-        if dir_path.is_dir():
-            result.add(dir_path)
-        elif dir_path.is_file():
+        if dir_path.is_dir() or dir_path.is_file():
             result.add(dir_path)
 
     for f in direct_test_files:

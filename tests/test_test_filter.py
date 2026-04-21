@@ -961,7 +961,7 @@ def test_build_test_scope_includes_file_entries_from_manifest(tmp_path: Path) ->
         tests_root=str(tests_root),
     )
     assert scope is not None
-    assert target_file in scope or any(p.name == "test_version.py" for p in scope)
+    assert target_file in scope
 
 
 def test_build_test_scope_skills_extended_manifest(tmp_path: Path) -> None:

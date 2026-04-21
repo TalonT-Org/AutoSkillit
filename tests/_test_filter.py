@@ -641,6 +641,8 @@ def build_test_scope(
         dir_path = tests_root / d
         if dir_path.is_dir():
             result.add(dir_path)
+        elif dir_path.is_file():
+            result.add(dir_path)
 
     for f in direct_test_files:
         result.add(Path(f))

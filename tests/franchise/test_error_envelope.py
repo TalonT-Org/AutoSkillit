@@ -62,14 +62,13 @@ class TestFranchiseErrorCodeEnum:
 
 class TestFranchiseErrorHelper:
     def test_franchise_error_rejects_unregistered_code(self):
-        from autoskillit.pipeline import franchise_error
+        from autoskillit.core import franchise_error
 
         with pytest.raises(ValueError, match="Unregistered franchise error code"):
             franchise_error("bogus_code", "msg")
 
     def test_franchise_error_returns_valid_json_envelope(self):
-        from autoskillit.core import FranchiseErrorCode
-        from autoskillit.pipeline import franchise_error
+        from autoskillit.core import FranchiseErrorCode, franchise_error
 
         result = franchise_error(FranchiseErrorCode.L2_TIMEOUT, "timed out")
         data = json.loads(result)
@@ -79,15 +78,13 @@ class TestFranchiseErrorHelper:
         assert data["user_visible_message"] == "timed out"
 
     def test_franchise_error_details_default_none(self):
-        from autoskillit.core import FranchiseErrorCode
-        from autoskillit.pipeline import franchise_error
+        from autoskillit.core import FranchiseErrorCode, franchise_error
 
         result = json.loads(franchise_error(FranchiseErrorCode.L2_TIMEOUT, "msg"))
         assert result["details"] is None
 
     def test_franchise_error_details_json_serializable(self):
-        from autoskillit.core import FranchiseErrorCode
-        from autoskillit.pipeline import franchise_error
+        from autoskillit.core import FranchiseErrorCode, franchise_error
 
         result = json.loads(
             franchise_error(
@@ -106,9 +103,11 @@ class TestFranchiseErrorHelper:
             )
 
     def test_franchise_error_re_exported_from_pipeline(self):
-        from autoskillit.pipeline import franchise_error  # noqa: F401
+        import importlib
 
-        assert franchise_error is not None
+        pipeline = importlib.import_module("autoskillit.pipeline")
+        assert hasattr(pipeline, "franchise_error")
+        assert pipeline.franchise_error is not None
 
 
 class TestFranchiseErrorASTScan:

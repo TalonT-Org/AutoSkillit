@@ -27,26 +27,30 @@ def main() -> None:
     try:
         data = json.loads(sys.stdin.read())
         cmd = data.get("tool_input", {}).get("cmd", "")
-        if not _GH_PR_CREATE_RE.search(cmd):
-            sys.exit(0)
-        # Hook config file is written by open_kitchen and removed by close_kitchen.
-        # Its presence reliably signals an open kitchen without needing session ID.
+    except (json.JSONDecodeError, AttributeError, OSError):
+        sys.exit(0)
+
+    if not _GH_PR_CREATE_RE.search(cmd):
+        sys.exit(0)
+    # Hook config file is written by open_kitchen and removed by close_kitchen.
+    # Its presence reliably signals an open kitchen without needing session ID.
+    try:
         cfg_path = Path.cwd() / ".autoskillit" / "temp" / ".hook_config.json"
         if not cfg_path.exists():
             sys.exit(0)  # kitchen not open; fail-open
-        # Kitchen is open and command matches: deny
-        payload = json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": _DENY_REASON,
-                }
+    except OSError:
+        sys.exit(0)
+    # Kitchen is open and command matches: deny
+    payload = json.dumps(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": _DENY_REASON,
             }
-        )
-        sys.stdout.write(payload + "\n")
-    except Exception:
-        pass
+        }
+    )
+    sys.stdout.write(payload + "\n")
     sys.exit(0)
 
 

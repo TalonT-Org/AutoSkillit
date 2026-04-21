@@ -64,14 +64,20 @@ def _read_sidecar_base_branch(cwd: Path) -> str | None:
     return None
 
 
-async def _resolve_base_ref(config_base_ref: str | None, cwd: Path) -> str | None:
+async def _resolve_base_ref(
+    config_base_ref: str | None,
+    cwd: Path,
+    *,
+    default_base_branch: str | None = None,
+) -> str | None:
     """Resolve the base ref for test filtering.
 
     Resolution chain (first non-None wins):
     1. Config override (explicit base_ref in TestCheckConfig)
     2. Worktree sidecar (base-branch file written by implement-worktree skills)
     3. Git upstream tracking ref (``@{upstream}`` of current branch)
-    4. None (no base ref available)
+    4. default_base_branch (from BranchingConfig)
+    5. None (no base ref available)
     """
     if config_base_ref:
         return config_base_ref
@@ -107,6 +113,9 @@ async def _resolve_base_ref(config_base_ref: str | None, cwd: Path) -> str | Non
                 return ref
     except OSError:
         pass
+
+    if default_base_branch:
+        return default_base_branch
 
     return None
 
@@ -200,7 +209,11 @@ class DefaultTestRunner:
         if filter_mode:
             env["AUTOSKILLIT_TEST_FILTER"] = filter_mode
 
-        base_ref = await _resolve_base_ref(self._config.test_check.base_ref, cwd)
+        base_ref = await _resolve_base_ref(
+            self._config.test_check.base_ref,
+            cwd,
+            default_base_branch=self._config.branching.default_base_branch,
+        )
         if base_ref:
             env["AUTOSKILLIT_TEST_BASE_REF"] = base_ref
 

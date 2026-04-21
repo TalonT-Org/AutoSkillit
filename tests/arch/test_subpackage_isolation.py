@@ -69,6 +69,7 @@ def _get_call_func_name(node: ast.Call) -> str | None:
 SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
     {
         "__init__",  # server/__init__.py: mcp = FastMCP(...)
+        "_franchise",  # cli/_franchise.py: franchise_app = App(...)
         "app",  # cli/app.py: app = App(...), config_app = App(...), etc.
         "store",  # migration/store.py: defensive exemption for future module-level construction
         "validator",  # recipe/validator.py: defensive exemption for decorator-based rule registry
@@ -704,7 +705,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "recipe": 36,
         "execution": 26,
         "core": 21,
-        "cli": 20,
+        "cli": 22,
         "hooks": 21,
     }
     violations: list[str] = []

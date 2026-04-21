@@ -326,14 +326,14 @@ class TestDispatchFoodTruckExecution:
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_success_envelope(self, tool_ctx, monkeypatch):
-        """Returns {success, dispatch_id, l2_session_id, l2_payload, token_usage}."""
-        from autoskillit.franchise._api import execute_dispatch
-
-        self._setup_standard_dispatch(tool_ctx)
+        """Returns envelope with success, dispatch_id, l2_payload, token_usage, l2_parse_source."""
         import dataclasses
 
+        from autoskillit.franchise._api import execute_dispatch
+        from autoskillit.franchise.result_parser import L2ParseResult
         from tests.fakes import _DEFAULT_SKILL_RESULT
 
+        self._setup_standard_dispatch(tool_ctx)
         tool_ctx.executor = InMemoryHeadlessExecutor(
             default_result=dataclasses.replace(
                 _DEFAULT_SKILL_RESULT,
@@ -342,6 +342,19 @@ class TestDispatchFoodTruckExecution:
                 session_id="sess-abc",
                 token_usage={"input_tokens": 100},
             )
+        )
+
+        canned_payload = {"success": True, "data": "dispatch done"}
+        canned_result = L2ParseResult(
+            outcome="completed_clean",
+            payload=canned_payload,
+            raw_body=None,
+            parse_error=None,
+            source="stdout",
+        )
+        monkeypatch.setattr(
+            "autoskillit.franchise._api.parse_l2_result_block",
+            lambda **_kwargs: canned_result,
         )
 
         raw = await execute_dispatch(
@@ -359,8 +372,9 @@ class TestDispatchFoodTruckExecution:
         assert result["success"] is True
         assert "dispatch_id" in result
         assert result["l2_session_id"] == "sess-abc"
-        assert result["l2_payload"] == "dispatch done"
+        assert result["l2_payload"] == canned_payload
         assert result["token_usage"] == {"input_tokens": 100}
+        assert result["l2_parse_source"] == "stdout"
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_on_spawn_writes_pid(self, tool_ctx, monkeypatch):

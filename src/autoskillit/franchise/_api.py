@@ -10,7 +10,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from autoskillit.core import get_logger
+from autoskillit.core import claude_code_log_path, get_logger
+from autoskillit.franchise.result_parser import parse_l2_result_block
 
 if TYPE_CHECKING:
     from autoskillit.pipeline.context import ToolContext
@@ -235,7 +236,18 @@ async def _run_dispatch(
     )
     ended_at = time.time()
 
-    final_status = DispatchStatus.SUCCESS if skill_result.success else DispatchStatus.FAILURE
+    jsonl_path = claude_code_log_path(str(tool_ctx.project_dir), skill_result.session_id or "")
+    parsed = parse_l2_result_block(
+        stdout=skill_result.result or "",
+        expected_dispatch_id=dispatch_id,
+        assistant_messages_path=jsonl_path,
+    )
+
+    if parsed.outcome == "completed_clean" and parsed.payload and parsed.payload.get("success"):
+        final_status = DispatchStatus.SUCCESS
+    else:
+        final_status = DispatchStatus.FAILURE
+
     append_dispatch_record(
         state_path,
         DispatchRecord(
@@ -259,12 +271,41 @@ async def _run_dispatch(
     if tool_ctx.session_skill_manager is not None and skill_result.session_id:
         tool_ctx.session_skill_manager.cleanup_session(skill_result.session_id)
 
-    return json.dumps(
-        {
-            "success": skill_result.success,
-            "dispatch_id": dispatch_id,
-            "l2_session_id": skill_result.session_id,
-            "l2_payload": skill_result.result,
-            "token_usage": skill_result.token_usage,
-        }
-    )
+    if parsed.outcome == "completed_clean":
+        envelope_success = bool(parsed.payload and parsed.payload.get("success", False))
+        return json.dumps(
+            {
+                "success": envelope_success,
+                "dispatch_id": dispatch_id,
+                "l2_session_id": skill_result.session_id,
+                "l2_payload": parsed.payload,
+                "token_usage": skill_result.token_usage,
+                "l2_parse_source": parsed.source,
+            }
+        )
+    elif parsed.outcome == "completed_dirty":
+        return json.dumps(
+            {
+                "success": False,
+                "dispatch_id": dispatch_id,
+                "l2_session_id": skill_result.session_id,
+                "l2_payload": None,
+                "reason": "l2_parse_failed",
+                "l2_raw_body": parsed.raw_body,
+                "l2_parse_error": parsed.parse_error,
+                "token_usage": skill_result.token_usage,
+                "l2_parse_source": parsed.source,
+            }
+        )
+    else:
+        return json.dumps(
+            {
+                "success": False,
+                "dispatch_id": dispatch_id,
+                "l2_session_id": skill_result.session_id,
+                "l2_payload": None,
+                "reason": "l2_no_result_block",
+                "l2_parse_source": parsed.source,
+                "token_usage": skill_result.token_usage,
+            }
+        )

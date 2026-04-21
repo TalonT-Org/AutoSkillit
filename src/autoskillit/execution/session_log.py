@@ -441,7 +441,12 @@ def _build_protected_campaign_ids(project_dir: Path) -> frozenset[str]:
                 cid = data.get("campaign_id", "")
                 if not cid:
                     continue
-                for record in data.get("dispatches", []):
+                dispatches = data.get("dispatches", [])
+                if not dispatches:
+                    # Campaign exists but has no dispatches yet — protect conservatively
+                    protected.add(cid)
+                    continue
+                for record in dispatches:
                     status = record.get("status", "")
                     if status not in _TERMINAL_DISPATCH_STATUSES:
                         protected.add(cid)

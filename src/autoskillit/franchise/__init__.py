@@ -5,12 +5,9 @@ Gateway exports per REQ-IMP-001 — consumers import from
 """
 
 from ._api import execute_dispatch
-<<<<<<< ours
 from ._prompts import _build_food_truck_prompt as _build_food_truck_prompt
 from ._prompts import _build_l2_sous_chef_block as _build_l2_sous_chef_block
-=======
 from .result_parser import L2ParseResult, parse_l2_result_block
->>>>>>> theirs
 from .state import (
     CampaignState,
     DispatchRecord,
@@ -30,14 +27,11 @@ FRANCHISE_MENU_TOOLS: tuple[str, ...] = ("dispatch_food_truck",)
 
 __all__ = [
     "execute_dispatch",
-<<<<<<< ours
     "FRANCHISE_MENU_TOOLS",
     "_build_food_truck_prompt",
     "_build_l2_sous_chef_block",
-=======
     "L2ParseResult",
     "parse_l2_result_block",
->>>>>>> theirs
     "CampaignState",
     "DispatchRecord",
     "DispatchStatus",

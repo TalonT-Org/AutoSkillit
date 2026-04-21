@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -21,13 +22,14 @@ def _close(dispatch_id: str = DISPATCH_ID) -> str:
 
 def make_stdout(payload_json: str, dispatch_id: str = DISPATCH_ID) -> str:
     """Build a well-formed stdout string with sentinel block."""
-    return f"some prefix output\n{_open(dispatch_id)}\n{payload_json}\n{_close(dispatch_id)}\nsome suffix"
+    return (
+        f"some prefix output\n{_open(dispatch_id)}\n"
+        f"{payload_json}\n{_close(dispatch_id)}\nsome suffix"
+    )
 
 
 def make_jsonl_file(tmp_path, messages: list[str]) -> Path:
     """Write a JSONL file with type=assistant records containing given text."""
-    from pathlib import Path
-
     path: Path = tmp_path / "session.jsonl"
     lines = []
     for text in messages:

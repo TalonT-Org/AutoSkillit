@@ -11,8 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from autoskillit.core import FranchiseErrorCode, get_logger
-from autoskillit.pipeline.gate import franchise_error, gate_error_result
+from autoskillit.core import FranchiseErrorCode, franchise_error, get_logger
 
 if TYPE_CHECKING:
     from autoskillit.pipeline.context import ToolContext
@@ -59,8 +58,9 @@ async def execute_dispatch(
 
     lock = tool_ctx.franchise_lock
     if lock is None:
-        return gate_error_result(
-            "Franchise lock not initialized — open_kitchen with franchise mode."
+        return franchise_error(
+            FranchiseErrorCode.FRANCHISE_MANIFEST_MISSING,
+            "Franchise lock not initialized — open_kitchen with franchise mode.",
         )
     if lock.locked():
         return franchise_error(
@@ -113,7 +113,10 @@ async def _run_dispatch(
     _refresh_quota_cache = _execution._refresh_quota_cache
 
     if tool_ctx.recipes is None:
-        return gate_error_result("Recipe repository not configured.")
+        return franchise_error(
+            FranchiseErrorCode.FRANCHISE_MANIFEST_MISSING,
+            "Recipe repository not configured.",
+        )
 
     recipe_obj = tool_ctx.recipes.find(recipe, tool_ctx.project_dir)
     if recipe_obj is None:
@@ -167,7 +170,10 @@ async def _run_dispatch(
     )
 
     if tool_ctx.executor is None:
-        return gate_error_result("Executor not configured.")
+        return franchise_error(
+            FranchiseErrorCode.FRANCHISE_MANIFEST_MISSING,
+            "Executor not configured.",
+        )
 
     started_at = time.time()
     skill_result = await tool_ctx.executor.dispatch_food_truck(

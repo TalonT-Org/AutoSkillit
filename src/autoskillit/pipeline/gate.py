@@ -12,9 +12,8 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any
 
-from autoskillit.core import GATED_TOOLS, UNGATED_TOOLS, KillReason  # noqa: F401
+from autoskillit.core import GATED_TOOLS, UNGATED_TOOLS, KillReason, franchise_error  # noqa: F401
 
 
 @dataclass(slots=True)
@@ -98,33 +97,5 @@ def headless_error_result(message: str | None = None) -> str:
             "token_usage": None,
             "write_path_warnings": [],
             "write_call_count": 0,
-        }
-    )
-
-
-def franchise_error(
-    code: str,
-    message: str,
-    *,
-    details: dict[str, Any] | None = None,
-) -> str:
-    """Return canonical JSON error envelope for franchise dispatch failures.
-
-    Validates that code is a registered FranchiseErrorCode. Raises ValueError
-    for unregistered codes. The details dict must be JSON-serializable.
-    """
-    from autoskillit.core import FRANCHISE_ERROR_CODES
-
-    if code not in FRANCHISE_ERROR_CODES:
-        msg = f"Unregistered franchise error code: {code!r}"
-        raise ValueError(msg)
-    if details is not None:
-        json.dumps(details)  # raises TypeError on non-serializable values
-    return json.dumps(
-        {
-            "success": False,
-            "error": str(code),
-            "user_visible_message": message,
-            "details": details,
         }
     )

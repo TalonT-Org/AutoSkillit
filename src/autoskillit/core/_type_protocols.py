@@ -85,6 +85,7 @@ class AuditLog(Protocol):
         since: str = "",
         cwd_filter: str = "",
         kitchen_id_filter: str = "",
+        campaign_id_filter: str = "",
     ) -> int: ...
 
 
@@ -116,6 +117,7 @@ class TokenLog(Protocol):
         since: str = "",
         cwd_filter: str = "",
         kitchen_id_filter: str = "",
+        campaign_id_filter: str = "",
     ) -> int: ...
 
 
@@ -138,6 +140,7 @@ class TimingLog(Protocol):
         since: str = "",
         cwd_filter: str = "",
         kitchen_id_filter: str = "",
+        campaign_id_filter: str = "",
     ) -> int: ...
 
 
@@ -206,6 +209,9 @@ class HeadlessExecutor(Protocol):
         step_name: str = "",
         kitchen_id: str = "",
         order_id: str = "",
+        campaign_id: str = "",
+        dispatch_id: str = "",
+        project_dir: str = "",
         timeout: float | None = None,
         stale_threshold: float | None = None,
         idle_output_timeout: float | None = None,

@@ -95,6 +95,9 @@ def flush_session_log(
     cwd: str,
     kitchen_id: str = "",
     order_id: str = "",
+    campaign_id: str = "",
+    dispatch_id: str = "",
+    project_dir: str = "",
     session_id: str,
     pid: int,
     skill_command: str,
@@ -311,6 +314,8 @@ def flush_session_log(
         "last_stop_reason": last_stop_reason,
         "request_ids": _cb_request_ids,
         "turn_timestamps": _cb_turn_timestamps,
+        "campaign_id": campaign_id,
+        "dispatch_id": dispatch_id,
     }
     if versions is not None:
         effective_model_id = model_identifier or _primary_model_identifier(token_usage)
@@ -328,6 +333,13 @@ def flush_session_log(
         }
     summary_path = session_dir / "summary.json"
     atomic_write(summary_path, json.dumps(summary, sort_keys=True, indent=2) + "\n")
+
+    if campaign_id:
+        meta_path = session_dir / "meta.json"
+        atomic_write(
+            meta_path,
+            json.dumps({"campaign_id": campaign_id, "dispatch_id": dispatch_id}, sort_keys=True),
+        )
 
     if not success and raw_stdout:
         atomic_write(session_dir / "raw_stdout.jsonl", raw_stdout)
@@ -371,6 +383,8 @@ def flush_session_log(
         "cwd": cwd,
         "kitchen_id": kitchen_id,
         "order_id": order_id,
+        "campaign_id": campaign_id,
+        "dispatch_id": dispatch_id,
         "claude_code_log": cc_log_str,
         "skill_command": skill_command[:100],
         "success": success,
@@ -400,11 +414,57 @@ def flush_session_log(
         f.write(json.dumps(index_entry, sort_keys=True) + "\n")
 
     # Retention: keep at most _MAX_SESSIONS session directories
-    _enforce_retention(log_root)
+    _enforce_retention(log_root, project_dir=project_dir)
 
 
-def _enforce_retention(log_root: Path) -> None:
-    """Delete oldest session directories if count exceeds _MAX_SESSIONS."""
+_TERMINAL_DISPATCH_STATUSES: frozenset[str] = frozenset(
+    {"success", "failure", "skipped", "released"}
+)
+
+
+def _build_protected_campaign_ids(project_dir: Path) -> frozenset[str]:
+    """Return campaign IDs with at least one non-terminal dispatch.
+
+    Reads franchise state files from ``{project_dir}/.autoskillit/temp/dispatches/``.
+    A campaign is protected if any of its dispatch records has a status that is NOT
+    in the terminal set ``{success, failure, skipped, released}``.
+    Returns an empty frozenset on any error (missing dir, corrupt files, permission errors).
+    """
+    try:
+        dispatches_dir = project_dir / ".autoskillit" / "temp" / "dispatches"
+        if not dispatches_dir.is_dir():
+            return frozenset()
+        protected: set[str] = set()
+        for state_file in dispatches_dir.glob("*.json"):
+            try:
+                data = json.loads(state_file.read_text(encoding="utf-8"))
+                cid = data.get("campaign_id", "")
+                if not cid:
+                    continue
+                dispatches = data.get("dispatches", [])
+                if not dispatches:
+                    # Campaign exists but has no dispatches yet — protect conservatively
+                    protected.add(cid)
+                    continue
+                for record in dispatches:
+                    status = record.get("status", "")
+                    if status not in _TERMINAL_DISPATCH_STATUSES:
+                        protected.add(cid)
+                        break
+            except (json.JSONDecodeError, OSError):
+                continue
+        return frozenset(protected)
+    except Exception:
+        logger.warning("campaign_ids_protection_error", exc_info=True)
+        return frozenset()
+
+
+def _enforce_retention(log_root: Path, project_dir: str = "") -> None:
+    """Delete oldest session directories if count exceeds _MAX_SESSIONS.
+
+    When ``project_dir`` is provided, reads franchise state files and ``meta.json``
+    sidecars to skip deletion of sessions belonging to active campaigns.
+    """
     sessions_dir = log_root / "sessions"
     if not sessions_dir.is_dir():
         return
@@ -416,7 +476,21 @@ def _enforce_retention(log_root: Path) -> None:
     expired = dirs[: len(dirs) - _MAX_SESSIONS]
     surviving_names = {d.name for d in dirs[len(dirs) - _MAX_SESSIONS :]}
 
+    protected_ids = (
+        _build_protected_campaign_ids(Path(project_dir)) if project_dir else frozenset()
+    )
+
     for d in expired:
+        if protected_ids:
+            meta_path = d / "meta.json"
+            if meta_path.is_file():
+                try:
+                    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                    if meta.get("campaign_id") in protected_ids:
+                        surviving_names.add(d.name)
+                        continue
+                except (json.JSONDecodeError, OSError):
+                    pass
         shutil.rmtree(d, ignore_errors=True)
 
     # Rewrite sessions.jsonl to remove expired entries

@@ -17,9 +17,7 @@ pytestmark = [pytest.mark.layer("franchise"), pytest.mark.small]
 SRC_ROOT = Path(__file__).parent.parent.parent / "src" / "autoskillit"
 
 # Matches error code strings in the franchise/l2/dispatch/cleanup namespace
-_FRANCHISE_CODE_PATTERN = re.compile(
-    r"^(franchise_|l2_|dispatch_|cleanup_)"
-)
+_FRANCHISE_CODE_PATTERN = re.compile(r"^(franchise_|l2_|dispatch_|cleanup_)")
 
 
 class TestFranchiseErrorCodeEnum:

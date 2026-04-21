@@ -61,7 +61,9 @@ _VALID_SUMMARY_DICT: dict = {
 
 def _make_sentinel_text(data: dict, campaign_id: str = _VALID_CAMPAIGN_ID) -> str:
     body = json.dumps(data, indent=2)
-    return f"---campaign-summary::{campaign_id}---\n{body}\n---end-campaign-summary::{campaign_id}---"
+    return (
+        f"---campaign-summary::{campaign_id}---\n{body}\n---end-campaign-summary::{campaign_id}---"
+    )
 
 
 _VALID_SENTINEL_TEXT = _make_sentinel_text(_VALID_SUMMARY_DICT)
@@ -111,9 +113,9 @@ class TestCampaignSummarySchema:
         assert any("status" in e for e in errors)
 
     def test_per_dispatch_token_usage_exactly_4_keys(self):
-        from autoskillit.franchise import DispatchTokenUsage
-
         import dataclasses
+
+        from autoskillit.franchise import DispatchTokenUsage
 
         fields = {f.name for f in dataclasses.fields(DispatchTokenUsage)}
         assert fields == {"input", "output", "cache_read", "cache_creation"}

@@ -418,7 +418,8 @@ Emit this EXACT block as your final output. No other text after the block.
 Fields:
 - schema_version: always 1
 - dispatch_count / completed_count / failure_count / skipped_count: integer tallies
-- per_dispatch: one entry per dispatch, in execution order; status is one of success, failure, skipped
+- per_dispatch: one entry per dispatch, in execution order;
+  status is one of success, failure, skipped
 - error_records: one entry per failed dispatch; empty list if no failures
 - NO aggregate token fields (no total_input_tokens, no total_output_tokens, no total_duration)
 

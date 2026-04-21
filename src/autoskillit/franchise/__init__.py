@@ -5,16 +5,6 @@ Gateway exports per REQ-IMP-001 — consumers import from
 """
 
 from ._api import execute_dispatch
-from .summary import (
-    CampaignSummary,
-    CampaignSummaryStatus,
-    DispatchTokenUsage,
-    PerDispatchEntry,
-    SummaryErrorRecord,
-    parse_campaign_summary,
-    serialize_campaign_summary,
-    validate_campaign_summary,
-)
 from .state import (
     CampaignState,
     DispatchRecord,
@@ -26,6 +16,16 @@ from .state import (
     read_state,
     resume_campaign_from_state,
     write_initial_state,
+)
+from .summary import (
+    CampaignSummary,
+    CampaignSummaryStatus,
+    DispatchTokenUsage,
+    PerDispatchEntry,
+    SummaryErrorRecord,
+    parse_campaign_summary,
+    serialize_campaign_summary,
+    validate_campaign_summary,
 )
 
 __all__ = [

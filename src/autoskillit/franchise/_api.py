@@ -59,7 +59,9 @@ async def execute_dispatch(
 
     lock = tool_ctx.franchise_lock
     if lock is None:
-        return gate_error_result("Franchise lock not initialized — open_kitchen with franchise mode.")
+        return gate_error_result(
+            "Franchise lock not initialized — open_kitchen with franchise mode."
+        )
     if lock.locked():
         return franchise_error(
             FranchiseErrorCode.FRANCHISE_PARALLEL_REFUSED,

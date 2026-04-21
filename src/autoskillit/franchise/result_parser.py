@@ -116,6 +116,15 @@ def _parse_body(
             source=source,
         )
 
+    if not isinstance(parsed, dict):
+        return L2ParseResult(
+            outcome="completed_dirty",
+            payload=None,
+            raw_body=body,
+            parse_error=f"expected JSON object, got {type(parsed).__name__}",
+            source=source,
+        )
+
     return L2ParseResult(
         outcome="completed_clean",
         payload=parsed,

@@ -363,6 +363,9 @@ When `run_skill` output contains `--- QUOTA WARNING ---`:
 You MUST execute every step the pipeline routes you to. The recipe step graph is the
 sole authority on what executes and in what order.
 
+Context management is handled by the system via on_context_limit routing. Execute
+every step at full fidelity regardless of session length.
+
 ### 1. Anti-skip rule
 
 - NEVER skip a step because the PR is small, the diff is trivial, the change looks

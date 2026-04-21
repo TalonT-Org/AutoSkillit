@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 from cyclopts import App, Parameter
 
 from autoskillit.cli._cook import cook as cook_interactive
+from autoskillit.cli._franchise import franchise_app
 from autoskillit.cli._init_helpers import (
     _MARKER_CONTENT,
     _check_secret_scanning,
@@ -47,6 +48,7 @@ app.command(config_app)
 app.command(skills_app)
 app.command(recipes_app)
 app.command(workspace_app)
+app.command(franchise_app)
 
 
 class CliError(Exception):

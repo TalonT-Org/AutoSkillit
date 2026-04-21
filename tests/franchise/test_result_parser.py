@@ -24,7 +24,7 @@ def make_stdout(payload_json: str, dispatch_id: str = DISPATCH_ID) -> str:
     return f"some prefix output\n{_open(dispatch_id)}\n{payload_json}\n{_close(dispatch_id)}\nsome suffix"
 
 
-def make_jsonl_file(tmp_path, messages: list[str]) -> "Path":
+def make_jsonl_file(tmp_path, messages: list[str]) -> Path:
     """Write a JSONL file with type=assistant records containing given text."""
     from pathlib import Path
 
@@ -64,9 +64,7 @@ def test_last_occurrence_wins() -> None:
     first_payload = {"success": False, "value": "first"}
     second_payload = {"success": True, "value": "second"}
     stdout = (
-        make_stdout(json.dumps(first_payload))
-        + "\n"
-        + make_stdout(json.dumps(second_payload))
+        make_stdout(json.dumps(first_payload)) + "\n" + make_stdout(json.dumps(second_payload))
     )
 
     result = parse_l2_result_block(stdout=stdout, expected_dispatch_id=DISPATCH_ID)

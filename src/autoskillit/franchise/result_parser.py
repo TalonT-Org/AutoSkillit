@@ -159,7 +159,9 @@ def parse_l2_result_block(
     positions = _scan_for_sentinel(jsonl_text, open_sentinel, close_sentinel)
     if positions is not None:
         open_pos, close_pos = positions
-        return _parse_body(jsonl_text, open_pos, close_pos, open_sentinel, "assistant_messages_jsonl")
+        return _parse_body(
+            jsonl_text, open_pos, close_pos, open_sentinel, "assistant_messages_jsonl"
+        )
 
     return L2ParseResult(
         outcome="no_sentinel",

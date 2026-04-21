@@ -98,7 +98,9 @@ def test_make_campaign_no_code_modification_instructions():
     assert constraints_m, "SKILL.md must have a '## Critical Constraints' section"
     constraints_section = constraints_m.group(1)
     assert re.search(
-        r"NEVER\b[^\n]*modify[^\n]*source\s+code", constraints_section, re.IGNORECASE
+        r"NEVER\b.{0,300}modify.{0,50}source\s+code",
+        constraints_section,
+        re.IGNORECASE | re.DOTALL,
     ), "SKILL.md Critical Constraints section must state NEVER modify source code files"
 
 

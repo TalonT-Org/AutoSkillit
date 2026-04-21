@@ -136,7 +136,11 @@ def test_manifest_includes_blocked_lists():
 
 def test_eligible_prs_ordered_without_blocked():
     """Blocked PRs do not appear in the eligible_prs array."""
+    _sig = "<!-- autoskillit:pipeline-signature -->"
     prs = [_make_pr(10), _make_pr(20), _make_pr(30)]
+    prs[0]["body"] = _sig
+    prs[1]["body"] = ""
+    prs[2]["body"] = _sig
     checks = {
         10: [{"conclusion": "success"}],
         20: [{"conclusion": "failure"}],  # blocked
@@ -192,8 +196,11 @@ def test_review_blocked_pr_has_reason_string():
 
 
 def test_all_prs_eligible_when_no_gates_fire():
-    """When all PRs pass both gates, ci_blocked and review_blocked are empty."""
+    """When all PRs pass both gates and carry the pipeline signature, they are eligible."""
+    _sig = "<!-- autoskillit:pipeline-signature -->"
     prs = [_make_pr(1), _make_pr(2)]
+    prs[0]["body"] = _sig
+    prs[1]["body"] = _sig
     checks = {1: [{"conclusion": "success"}], 2: [{"conclusion": "skipped"}]}
     reviews = {1: [], 2: [{"state": "APPROVED"}]}
 

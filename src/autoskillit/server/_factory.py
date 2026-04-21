@@ -18,9 +18,11 @@ from typing import Any
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
+    MARKETPLACE_PREFIX,
     FranchiseLock,
     SubprocessRunner,
     WriteBehaviorSpec,
+    detect_autoskillit_mcp_prefix,
     get_logger,
     pkg_root,
     resolve_temp_dir,
@@ -123,10 +125,8 @@ def _gh_cli_token() -> str | None:
 
 
 def _check_plugin_installed() -> bool:
-    """Deferred import to avoid server→cli module-level dependency."""
-    from autoskillit.cli import _is_plugin_installed  # noqa: PLC0415
-
-    return _is_plugin_installed()
+    """Detect if autoskillit is marketplace-installed via installed_plugins.json."""
+    return detect_autoskillit_mcp_prefix() == MARKETPLACE_PREFIX
 
 
 def make_context(

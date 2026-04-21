@@ -1339,7 +1339,7 @@ class TestOrderMcpPrefixSelection:
         plugins_file = tmp_path / "plugins.json"
         plugins_file.write_text('{"version": 2, "plugins": {}}')
         monkeypatch.setattr(
-            "autoskillit.cli._mcp_names._installed_plugins_path", lambda: plugins_file
+            "autoskillit.core._plugin_ids._installed_plugins_path", lambda: plugins_file
         )
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="", stderr=""
@@ -1370,7 +1370,7 @@ class TestOrderMcpPrefixSelection:
         plugins_file = tmp_path / "plugins.json"
         plugins_file.write_text(f'{{"version": 2, "plugins": {{"{_PLUGIN_KEY}": []}}}}')
         monkeypatch.setattr(
-            "autoskillit.cli._mcp_names._installed_plugins_path", lambda: plugins_file
+            "autoskillit.core._plugin_ids._installed_plugins_path", lambda: plugins_file
         )
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="", stderr=""
@@ -1407,7 +1407,7 @@ class TestOrderMcpPrefixSelection:
         plugins_file = tmp_path / "plugins.json"
         plugins_file.write_text('{"version": 2, "plugins": {}}')
         monkeypatch.setattr(
-            "autoskillit.cli._mcp_names._installed_plugins_path", lambda: plugins_file
+            "autoskillit.core._plugin_ids._installed_plugins_path", lambda: plugins_file
         )
         import importlib
         import sys as _sys

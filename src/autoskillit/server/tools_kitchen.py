@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict
 from uuid import uuid4
@@ -148,8 +149,18 @@ def _quota_guard_hook_payload(cfg: QuotaGuardConfig) -> QuotaGuardHookPayload:
     }
 
 
+def _extract_sous_chef_discipline(sc_text: str) -> str:
+    """Extract the STEP EXECUTION IS NOT DISCRETIONARY section from sous-chef SKILL.md.
+
+    Returns the matching section text, or an empty string if not found.
+    """
+    sections = re.split(r"(?=^## )", sc_text, flags=re.MULTILINE)
+    match = next((s for s in sections if "STEP EXECUTION IS NOT DISCRETIONARY" in s), "")
+    return match.strip()
+
+
 def _write_hook_config() -> None:
-    """Write user-configured quota values to temp/.autoskillit_hook_config.json.
+    """Write user-configured quota values to .autoskillit/temp/.hook_config.json.
 
     The hook subprocess (quota_guard.py) reads this file to apply user settings
     without importing the autoskillit package.
@@ -417,6 +428,22 @@ async def open_kitchen(
                 return _kitchen_failure_envelope(exc, stage="hook_diagnostic")
             if warning:
                 result["hook_warning"] = warning.strip()
+
+            # Inject sous-chef discipline into the response so headless L2 sessions
+            # receive mandatory step-execution rules. Headless sessions receive no
+            # system prompt injection; this named-recipe path is their sole delivery
+            # channel. Graceful degradation: missing SKILL.md is non-fatal.
+            _sc_path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
+            try:
+                if _sc_path.exists():
+                    _discipline = _extract_sous_chef_discipline(_sc_path.read_text())
+                    if _discipline:
+                        result["sous_chef_discipline"] = _discipline
+            except Exception:
+                logger.warning(
+                    "open_kitchen_failure", stage="read_sous_chef_discipline", exc_info=True
+                )
+
             return json.dumps(result)
 
         text = (

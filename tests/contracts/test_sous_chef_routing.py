@@ -108,6 +108,23 @@ def test_sous_chef_contains_pr_pipeline_protection() -> None:
     assert "NEVER" in text[max(0, idx - 400) : idx + 200]
 
 
+def test_sous_chef_contains_context_ownership_line() -> None:
+    """The STEP EXECUTION section must contain a context-ownership assertion.
+
+    The model must be told that context management is handled by the system
+    so it cannot rationalize step-skipping with context-pressure arguments.
+    The assertion must appear within 600 characters of the STEP EXECUTION sentinel.
+    """
+    content = _sous_chef_text()
+    idx = content.find("STEP EXECUTION IS NOT DISCRETIONARY")
+    assert idx >= 0, "STEP EXECUTION sentinel missing from sous-chef SKILL.md"
+    section = content[idx : idx + 600]
+    assert "on_context_limit routing" in section, (
+        "Context-ownership line missing from STEP EXECUTION section. "
+        "The model must be told the system handles context via on_context_limit routing."
+    )
+
+
 def test_sous_chef_merge_phase_documents_queue_no_auto_path() -> None:
     """MERGE PHASE section must document the queue_enqueue_no_auto routing cell."""
     skill_md = _sous_chef_text()

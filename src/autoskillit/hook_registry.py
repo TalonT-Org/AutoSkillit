@@ -63,7 +63,7 @@ HOOK_REGISTRY: list[HookDef] = [
     ),
     HookDef(
         matcher=r"mcp__.*autoskillit.*__run_cmd",
-        scripts=["unsafe_install_guard.py"],
+        scripts=["unsafe_install_guard.py", "pr_create_guard.py"],
     ),
     HookDef(
         matcher=r"Write|Edit",

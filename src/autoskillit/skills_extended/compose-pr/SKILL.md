@@ -150,6 +150,7 @@ Closes #{closing_issue}
 Plan file: `{plan_path}`
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code) via AutoSkillit
+<!-- autoskillit:pipeline-signature steps=prepare_pr,run_arch_lenses,compose_pr,annotate_pr_diff,review_pr -->
 ```
 
 #### Multiple plans format:
@@ -201,6 +202,7 @@ Plan files:
 - `{plan_path_2}`
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code) via AutoSkillit
+<!-- autoskillit:pipeline-signature steps=prepare_pr,run_arch_lenses,compose_pr,annotate_pr_diff,review_pr -->
 ```
 
 ### Step 4: Check GitHub Availability

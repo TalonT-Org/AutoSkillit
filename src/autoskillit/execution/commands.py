@@ -13,7 +13,11 @@ from autoskillit.core import (
     KITCHEN_SESSION_ID_ENV_VAR,
     SESSION_TYPE_LEAF,
     SESSION_TYPE_ORCHESTRATOR,
+    BareResume,
     ClaudeFlags,
+    NamedResume,
+    NoResume,
+    ResumeSpec,
     ValidatedAddDir,
     build_claude_env,
     temp_dir_display_str,
@@ -53,7 +57,7 @@ def build_interactive_cmd(
     model: str | None = None,
     plugin_dir: Path | None = None,
     add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
-    resume_session_id: str | None = None,
+    resume_spec: ResumeSpec = NoResume(),
     env_extras: Mapping[str, str] | None = None,
 ) -> ClaudeInteractiveCmd:
     """Build a Claude interactive session command.
@@ -70,14 +74,21 @@ def build_interactive_cmd(
         When provided, appended as ``--plugin-dir <path>``.
     add_dirs
         Each entry is appended as ``--add-dir <path>``.
-    resume_session_id
-        When provided, appended as ``--resume <id>`` before any positional prompt.
+    resume_spec
+        Resume intent discriminated union. ``NoResume`` (default) starts a fresh
+        session. ``BareResume`` passes ``--resume`` without an ID (Claude Code's
+        interactive picker). ``NamedResume`` passes ``--resume <id>``.
     env_extras
         Optional caller overrides merged into the resolved env after IDE scrubbing.
     """
     cmd = ["claude", ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS]
-    if resume_session_id is not None:
-        cmd += [ClaudeFlags.RESUME, resume_session_id]
+    match resume_spec:
+        case NamedResume(session_id=sid):
+            cmd += [ClaudeFlags.RESUME, sid]
+        case BareResume():
+            cmd.append(ClaudeFlags.RESUME)
+        case NoResume():
+            pass
     if model:
         cmd += [ClaudeFlags.MODEL, model]
     if plugin_dir is not None:

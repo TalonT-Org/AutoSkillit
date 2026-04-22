@@ -86,10 +86,16 @@ def test_skill_reports_thread_resolution_count(resolve_review_skill_md: str) -> 
 
 def test_resolve_review_uses_graphql_aliases(resolve_review_skill_md: str) -> None:
     """Thread resolution must use aliased GraphQL mutations, not individual calls."""
+    assert "resolveReviewThread" in resolve_review_skill_md, (
+        "SKILL.md must include resolveReviewThread mutation for thread resolution"
+    )
     assert (
         "alias" in resolve_review_skill_md.lower()
         or "resolve1:" in resolve_review_skill_md
-        or "resolveReviewThread" in resolve_review_skill_md
+        or "resolve${" in resolve_review_skill_md
+    ), (
+        "SKILL.md must use GraphQL aliases (alias pattern or resolve${i}:) "
+        "to batch thread resolutions, not individual mutations per call"
     )
 
 

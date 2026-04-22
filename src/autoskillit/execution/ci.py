@@ -130,8 +130,14 @@ class DefaultCIWatcher:
             req_headers["If-None-Match"] = cached[0]
 
         resp = await client.get(url, headers=req_headers, params=params)
-        if resp.status_code == 304 and cached:
-            return cached[1]
+        if resp.status_code == 304:
+            if cached:
+                return cached[1]
+            raise RuntimeError(
+                f"Server returned 304 Not Modified for {url!r} "
+                "but no cached response exists for this URL. "
+                "This indicates a server-side inconsistency."
+            )
         resp.raise_for_status()
         data = resp.json()
 

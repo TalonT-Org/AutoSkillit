@@ -216,6 +216,10 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
 
     current_boot_id = read_boot_id()
 
+    if not state_path.exists():
+        _log.info("reap: state file not found, nothing to reap: %s", state_path)
+        return
+
     with open(state_path, "r+") as _lock_fh:
         fcntl.flock(_lock_fh, fcntl.LOCK_EX)
         try:

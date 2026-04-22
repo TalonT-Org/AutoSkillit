@@ -21,14 +21,14 @@ _FRANCHISE_CODE_PATTERN = re.compile(r"^(franchise_|l2_|dispatch_|cleanup_)")
 
 
 class TestFranchiseErrorCodeEnum:
-    def test_franchise_error_code_enum_has_all_13_codes(self):
+    def test_franchise_error_code_enum_has_expected_codes(self):
         from autoskillit.core import FranchiseErrorCode
 
-        assert len(FranchiseErrorCode) == 13
         expected_values = {
             "franchise_parallel_refused",
             "franchise_unknown_ingredient",
             "franchise_recipe_not_found",
+            "franchise_invalid_recipe_kind",
             "franchise_hard_refusal_headless",
             "franchise_manifest_missing",
             "franchise_manifest_corrupted",
@@ -155,12 +155,8 @@ class TestFranchiseErrorASTScan:
         return violations
 
     def test_all_franchise_errors_use_registered_code(self):
-        files_to_scan = [
-            SRC_ROOT / "franchise" / "_api.py",
-            SRC_ROOT / "server" / "tools_execution.py",
-        ]
         all_violations: list[str] = []
-        for f in files_to_scan:
+        for f in sorted(SRC_ROOT.rglob("*.py")):
             all_violations.extend(self._find_raw_franchise_error_dumps(f))
         assert not all_violations, (
             "Raw json.dumps franchise error patterns found. "

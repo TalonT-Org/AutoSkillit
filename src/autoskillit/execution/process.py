@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import subprocess
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, assert_never
 
@@ -195,6 +195,7 @@ async def run_managed_async(
     linux_tracing_config: LinuxTracingConfig | None = None,
     idle_output_timeout: float | None = None,
     max_suppression_seconds: float | None = None,
+    on_pid_resolved: Callable[[int, int], None] | None = None,
     _phase1_poll: float = 1.0,
     _phase2_poll: float = 2.0,
     _heartbeat_poll: float = 0.5,
@@ -267,6 +268,16 @@ async def run_managed_async(
                 assert _target is not None
                 _observed_pid = _target.pid
                 _tracked_comm = _target.comm
+
+            if on_pid_resolved is not None and _observed_pid > 0:
+                _ticks: int = 0
+                if _target is not None and hasattr(_target, "starttime_ticks"):
+                    _ticks = _target.starttime_ticks or 0
+                if _ticks == 0:
+                    from autoskillit.execution.linux_tracing import read_starttime_ticks
+
+                    _ticks = read_starttime_ticks(_observed_pid) or 0
+                on_pid_resolved(_observed_pid, _ticks)
 
             termination = TerminationReason.NATURAL_EXIT
             _channel_confirmation = ChannelConfirmation.UNMONITORED
@@ -545,6 +556,7 @@ class DefaultSubprocessRunner:
         linux_tracing_config: LinuxTracingConfig | None = None,
         idle_output_timeout: float | None = None,
         max_suppression_seconds: float | None = None,
+        on_pid_resolved: Callable[[int, int], None] | None = None,
     ) -> SubprocessResult:
         return await run_managed_async(
             cmd,
@@ -560,4 +572,5 @@ class DefaultSubprocessRunner:
             linux_tracing_config=linux_tracing_config,
             idle_output_timeout=idle_output_timeout,
             max_suppression_seconds=max_suppression_seconds,
+            on_pid_resolved=on_pid_resolved,
         )

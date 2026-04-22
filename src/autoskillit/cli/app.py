@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Annotated
 
 import anyio
 
+from autoskillit.cli._franchise import franchise_app
 from autoskillit.cli._serve_guard import serve_with_signal_guard
 
 if TYPE_CHECKING:
@@ -21,7 +22,6 @@ if TYPE_CHECKING:
 from cyclopts import App, Parameter
 
 from autoskillit.cli._cook import cook as cook_interactive
-from autoskillit.cli._franchise import franchise_app
 from autoskillit.cli._init_helpers import (
     _MARKER_CONTENT,
     _check_secret_scanning,

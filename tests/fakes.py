@@ -98,7 +98,7 @@ class DispatchFoodTruckCall:
     idle_output_timeout: float | None = None
     env_extras: Mapping[str, str] | None = None
     requires_packs: Sequence[str] = ()
-    on_spawn: Callable[[int], None] | None = None
+    on_spawn: Callable[[int, int], None] | None = None
 
 
 _DEFAULT_SKILL_RESULT = SkillResult(
@@ -198,7 +198,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         idle_output_timeout: float | None = None,
         env_extras: Mapping[str, str] | None = None,
         requires_packs: Sequence[str] = (),
-        on_spawn: Callable[[int], None] | None = None,
+        on_spawn: Callable[[int, int], None] | None = None,
     ) -> SkillResult:
         self.dispatch_calls.append(
             DispatchFoodTruckCall(
@@ -571,6 +571,8 @@ class MockSubprocessRunner(SubprocessRunner):
         **kwargs: object,
     ) -> SubprocessResult:
         self.call_args_list.append((cmd, cwd, timeout, kwargs))
-        if self._queue:
-            return self._queue.popleft()
-        return self._default
+        result = self._queue.popleft() if self._queue else self._default
+        on_pid_resolved = kwargs.get("on_pid_resolved")
+        if callable(on_pid_resolved) and result.pid > 0:
+            on_pid_resolved(result.pid, 0)
+        return result

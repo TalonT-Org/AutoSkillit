@@ -4296,7 +4296,7 @@ class TestDispatchFoodTruck:
             "You are an L2 orchestrator",
             str(tmp_path),
             completion_marker="%%FT_DONE%%",
-            on_spawn=spawned_pids.append,
+            on_spawn=lambda pid, ticks: spawned_pids.append(pid),
         )
 
         assert spawned_pids == [55555]

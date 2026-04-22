@@ -339,6 +339,7 @@ class TestGroupDApiContractPreservation:
             "linux_tracing_config",
             "idle_output_timeout",
             "max_suppression_seconds",
+            "on_pid_resolved",
         }
         assert expected == public_params, (
             f"run_managed_async public params changed.\n"
@@ -400,6 +401,7 @@ class TestGroupDApiContractPreservation:
             "env",
             "idle_output_timeout",
             "max_suppression_seconds",
+            "on_pid_resolved",
         }
         assert expected == actual, (
             f"DefaultSubprocessRunner.__call__ params changed.\n"

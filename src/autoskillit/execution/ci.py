@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import random
 import time
+import urllib.parse
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -96,6 +97,7 @@ class DefaultCIWatcher:
         else:
             self._token_factory = None
             self._token = token
+        self._etag_cache: dict[str, tuple[str, Any]] = {}  # url -> (etag, cached_json)
 
     def _resolve_token(self) -> str | None:
         if self._token is self._UNRESOLVED:
@@ -104,6 +106,39 @@ class DefaultCIWatcher:
 
     def _headers(self) -> dict[str, str]:
         return github_headers(self._resolve_token())
+
+    async def _get_with_etag(
+        self,
+        client: httpx.AsyncClient,
+        headers: dict[str, str],
+        url: str,
+        params: dict[str, str | int] | None = None,
+    ) -> Any:
+        """GET with ETag conditional request support.
+
+        Returns parsed JSON. On 304 (Not Modified), returns cached body.
+        On 200, stores ETag + body for future conditional requests.
+        """
+        cache_key = url + (
+            "?" + urllib.parse.urlencode(sorted((str(k), str(v)) for k, v in params.items()))
+            if params
+            else ""
+        )
+        req_headers = dict(headers)
+        cached = self._etag_cache.get(cache_key)
+        if cached:
+            req_headers["If-None-Match"] = cached[0]
+
+        resp = await client.get(url, headers=req_headers, params=params)
+        if resp.status_code == 304 and cached:
+            return cached[1]
+        resp.raise_for_status()
+        data = resp.json()
+
+        etag = resp.headers.get("ETag")
+        if etag:
+            self._etag_cache[cache_key] = (etag, data)
+        return data
 
     async def _resolve_repo(self, repo: str | None, cwd: str) -> str | None:
         """Resolve owner/repo from argument or git remote."""
@@ -136,9 +171,7 @@ class DefaultCIWatcher:
         if scope.event:
             params["event"] = scope.event
 
-        resp = await client.get(url, headers=headers, params=params)
-        resp.raise_for_status()
-        data = resp.json()
+        data = await self._get_with_etag(client, headers, url, params)
 
         cutoff = datetime.now(UTC) - timedelta(seconds=lookback_seconds)
         runs = []
@@ -174,9 +207,7 @@ class DefaultCIWatcher:
         if scope.event:
             params["event"] = scope.event
 
-        resp = await client.get(url, headers=headers, params=params)
-        resp.raise_for_status()
-        data = resp.json()
+        data = await self._get_with_etag(client, headers, url, params)
 
         return [r for r in data.get("workflow_runs", []) if r.get("status") != "completed"]
 

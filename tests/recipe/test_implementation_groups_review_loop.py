@@ -51,3 +51,34 @@ def test_check_review_loop_has_on_failure(recipe) -> None:
     (on-result-missing-failure-route semantic rule requires it)."""
     step = recipe.steps["check_review_loop"]
     assert step.on_failure == "ci_watch"
+
+
+# T_IG_LOOP5
+def test_review_pr_routes_approved_with_comments_to_resolve_review(recipe) -> None:
+    """review_pr on_result must route approved_with_comments to resolve_review."""
+    step = recipe.steps["review_pr"]
+    assert step.on_result is not None
+    routes = {c.when: c.route for c in step.on_result.conditions if c.when}
+    matching = [
+        when
+        for when, route in routes.items()
+        if "approved_with_comments" in when and route == "resolve_review"
+    ]
+    assert matching, "No approved_with_comments → resolve_review route found"
+
+
+# T_IG_LOOP6
+def test_review_pr_captures_review_verdict(recipe) -> None:
+    """review_pr must capture verdict as review_verdict (not verdict) to avoid clobber."""
+    step = recipe.steps["review_pr"]
+    capture = step.capture or {}
+    assert "review_verdict" in capture
+    assert "result.verdict" in capture["review_verdict"]
+
+
+# T_IG_LOOP7
+def test_check_review_loop_with_args_has_previous_verdict(recipe) -> None:
+    """check_review_loop with: must pass previous_verdict from context.review_verdict."""
+    step = recipe.steps["check_review_loop"]
+    assert "previous_verdict" in step.with_args
+    assert "review_verdict" in step.with_args["previous_verdict"]

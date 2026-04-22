@@ -91,3 +91,37 @@ def test_needs_human_prose_describes_genuine_ambiguity():
         "needs_human verdict prose must describe it as triggered by genuine ambiguity "
         "or decisions requiring human judgment — not by a count of findings."
     )
+
+
+def test_contract_yamls_include_approved_with_comments() -> None:
+    """All 3 contract YAML files must include approved_with_comments in
+    expected_output_patterns and pattern_examples for the review-pr contract."""
+    import yaml
+
+    contracts_dir = (
+        Path(__file__).parent.parent.parent
+        / "src"
+        / "autoskillit"
+        / "recipes"
+        / "contracts"
+    )
+    contract_files = [
+        contracts_dir / "implementation.yaml",
+        contracts_dir / "remediation.yaml",
+        contracts_dir / "implementation-groups.yaml",
+    ]
+    for contract_path in contract_files:
+        data = yaml.safe_load(contract_path.read_text())
+        review_pr = data.get("skills", {}).get("review-pr", {})
+        patterns = review_pr.get("expected_output_patterns", [])
+        examples = review_pr.get("pattern_examples", [])
+        pattern_str = " ".join(patterns)
+        assert "approved_with_comments" in pattern_str, (
+            f"{contract_path.name}: expected_output_patterns for review-pr must include "
+            "'approved_with_comments'"
+        )
+        examples_str = " ".join(examples)
+        assert "approved_with_comments" in examples_str, (
+            f"{contract_path.name}: pattern_examples for review-pr must include "
+            "'approved_with_comments'"
+        )

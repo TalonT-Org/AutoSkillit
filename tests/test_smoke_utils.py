@@ -130,6 +130,27 @@ def test_check_review_loop_has_no_subprocess_calls() -> None:
             break
 
 
+# T_CRL12
+def test_crl_had_blocking_true_when_changes_requested() -> None:
+    """had_blocking=true when previous_verdict is changes_requested."""
+    result = check_review_loop("42", "/tmp", previous_verdict="changes_requested")
+    assert result["had_blocking"] == "true"
+
+
+# T_CRL13
+def test_crl_had_blocking_false_when_approved_with_comments() -> None:
+    """had_blocking=false when previous_verdict is approved_with_comments."""
+    result = check_review_loop("42", "/tmp", previous_verdict="approved_with_comments")
+    assert result["had_blocking"] == "false"
+
+
+# T_CRL14
+def test_crl_had_blocking_false_when_empty_verdict() -> None:
+    """had_blocking=false when previous_verdict is absent (first-pass guard)."""
+    result = check_review_loop("42", "/tmp")
+    assert result["had_blocking"] == "false"
+
+
 def test_subprocess_calls_have_timeout() -> None:
     """All subprocess.run() calls in smoke_utils.py must have a timeout= argument."""
     import ast

@@ -759,6 +759,7 @@ def run_update_checks(home: Path | None = None) -> None:
                 raise ValueError("no entry")
             expiry = (dismissed_at + window).strftime("%Y-%m-%d")
         except Exception:
+            logger.warning("Failed to parse dismissed_at for expiry calculation", exc_info=True)
             expiry = (datetime.now(UTC) + window).strftime("%Y-%m-%d")
         messages = "; ".join(s.message for s in dismissed)
         print(

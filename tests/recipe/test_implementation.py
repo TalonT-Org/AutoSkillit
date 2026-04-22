@@ -38,18 +38,16 @@ def test_check_review_loop_has_skip_when_false_open_pr(recipe) -> None:
 
 
 # T_IP_LOOP4
-def test_check_review_loop_on_result_routes_to_review_pr_when_blocking(recipe) -> None:
-    """check_review_loop on_result routes to review_pr when has_blocking=true AND
-    max_exceeded=false."""
+def test_check_review_loop_on_result_routes_to_review_pr_when_max_not_exceeded(recipe) -> None:
+    """check_review_loop on_result routes to review_pr when max_exceeded=false."""
     step = recipe.steps["check_review_loop"]
     assert step.on_result is not None
-    blocking_conditions = [
-        c
-        for c in step.on_result.conditions
-        if c.when is not None and "has_blocking" in c.when and "max_exceeded" in c.when
+    review_conditions = [
+        c for c in step.on_result.conditions if c.when is not None and c.route == "review_pr"
     ]
-    assert blocking_conditions, "No condition for has_blocking + max_exceeded found"
-    assert blocking_conditions[0].route == "review_pr"
+    assert review_conditions, "No conditional route to review_pr found"
+    assert "max_exceeded" in review_conditions[0].when
+    assert "has_blocking" not in review_conditions[0].when
 
 
 # T_IP_LOOP5
@@ -63,8 +61,9 @@ def test_check_review_loop_on_result_default_routes_to_ci_watch(recipe) -> None:
 
 
 # T_IP_LOOP6
-def test_check_review_loop_on_failure_routes_to_ci_watch(recipe) -> None:
-    """check_review_loop on_failure routes to ci_watch (API failure must not block pipeline)."""
+def test_check_review_loop_has_on_failure(recipe) -> None:
+    """check_review_loop must declare on_failure because it uses on_result
+    (on-result-missing-failure-route semantic rule requires it)."""
     step = recipe.steps["check_review_loop"]
     assert step.on_failure == "ci_watch"
 

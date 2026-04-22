@@ -1,20 +1,23 @@
 """Core skill name resolution and text-processing helpers.
 
 Zero autoskillit imports outside this sub-package. Provides extract_skill_name,
-extract_path_arg, resolve_target_skill, and truncate_text.
+extract_path_arg, resolve_target_skill, truncate_text, and franchise_error.
 """
 
 from __future__ import annotations
 
+import json
 import re
+from typing import Any
 
-from ._type_constants import AUTOSKILLIT_SKILL_PREFIX, SKILL_COMMAND_PREFIX
+from ._type_constants import AUTOSKILLIT_SKILL_PREFIX, FRANCHISE_ERROR_CODES, SKILL_COMMAND_PREFIX
 from ._type_enums import SkillSource
 from ._type_protocols import SkillResolver
 
 __all__ = [
     "extract_path_arg",
     "extract_skill_name",
+    "franchise_error",
     "resolve_target_skill",
     "truncate_text",
 ]
@@ -97,3 +100,27 @@ def truncate_text(text: str, max_len: int = 5000) -> str:
     if len(text) <= max_len:
         return text
     return f"...[truncated {len(text) - max_len} chars]...\n" + text[-max_len:]
+
+
+def franchise_error(
+    code: str,
+    message: str,
+    *,
+    details: dict[str, Any] | None = None,
+) -> str:
+    """Return canonical JSON error envelope for franchise dispatch failures.
+
+    Validates that code is a registered FranchiseErrorCode. Raises ValueError
+    for unregistered codes. The details dict must be JSON-serializable.
+    """
+    if code not in FRANCHISE_ERROR_CODES:
+        msg = f"Unregistered franchise error code: {code!r}"
+        raise ValueError(msg)
+    return json.dumps(
+        {
+            "success": False,
+            "error": str(code),
+            "user_visible_message": message,
+            "details": details,
+        }
+    )

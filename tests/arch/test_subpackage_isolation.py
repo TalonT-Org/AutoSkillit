@@ -689,7 +689,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         sessions. _install_info.py adds pure install classification + policy.
         _update_checks.py adds the unified update check orchestration.
         _update.py adds the first-class update subcommand implementation.
-        Exempt at 17 files.
+        _franchise.py adds franchise error envelope rendering for CLI consumers.
+        Exempt at 21 files.
       hooks/ — REQ-CNST-003-E6: hooks/ hosts one standalone script per hook event
         (PreToolUse, PostToolUse, SessionStart). Each script must remain a separate
         file so Claude Code can invoke it directly as a subprocess. pretty_output_hook.py

@@ -221,8 +221,9 @@ generic_automation_mcp/
 │   └── store.py             #   FailureStore (JSON, atomic writes)
 │
 ├── franchise/               # L2
-│   ├── __init__.py          #   Package skeleton — business logic in downstream tickets
-│   └── result_parser.py     #   L2 result block parser with Channel B JSONL fallback
+│   ├── __init__.py          #   Re-exports: CampaignSummary, parse_campaign_summary, etc.
+│   ├── result_parser.py     #   L2 result block parser with Channel B JSONL fallback
+│   └── summary.py           #   Campaign summary schema v1: frozen dataclasses, sentinel parser, validator
 │
 ├── server/                  # L3 FastMCP server
 │   ├── __init__.py          #   FastMCP app, kitchen gating, headless tool reveal
@@ -268,6 +269,7 @@ generic_automation_mcp/
 │   ├── _update_checks.py    #   Unified startup update check: version/hook/source-drift signals, branch-aware dismissal
 │   ├── _serve_guard.py      #   Async signal-guarded MCP server bootstrap (extracted from app.py)
 │   ├── _workspace.py        #   Workspace clean helpers
+│   ├── _franchise.py        #   render_franchise_error(): franchise error envelope rendering (stderr + exit 3)
 │   └── app.py               #   CLI entry: serve, init, config, skills, recipes, doctor, update, etc.
 │
 ├── hooks/                   # Claude Code PreToolUse/PostToolUse/SessionStart scripts

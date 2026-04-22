@@ -180,13 +180,13 @@ is active on `{base_branch}` with `MERGEABLE` entries.
 
       # --- CI Gate ---
       FAILING=$(echo "$PR_DATA" | jq '
-        [.commits.nodes[0].commit.statusCheckRollup.contexts.nodes[] |
+        [(.commits.nodes[0].commit.statusCheckRollup.contexts.nodes // [])[] |
          select(.conclusion != null and
                 .conclusion != "success" and
                 .conclusion != "skipped" and
                 .conclusion != "neutral")] | length')
       IN_PROGRESS=$(echo "$PR_DATA" | jq '
-        [.commits.nodes[0].commit.statusCheckRollup.contexts.nodes[] |
+        [(.commits.nodes[0].commit.statusCheckRollup.contexts.nodes // [])[] |
          select(.conclusion == null)] | length')
 
       if [ "${FAILING:-0}" -gt 0 ] || [ "${IN_PROGRESS:-0}" -gt 0 ]; then
@@ -197,7 +197,10 @@ is active on `{base_branch}` with `MERGEABLE` entries.
 
       # --- Review Gate ---
       CHANGES_REQUESTED=$(echo "$PR_DATA" | jq '
-        [.reviews.nodes[] | select(.state == "CHANGES_REQUESTED")] | length')
+        [.reviews.nodes |
+         group_by(.author.login)[] |
+         last |
+         select(.state == "CHANGES_REQUESTED")] | length')
 
       if [ "${CHANGES_REQUESTED:-0}" -gt 0 ]; then
         REASON="${CHANGES_REQUESTED} unresolved CHANGES_REQUESTED review(s)"
@@ -205,7 +208,8 @@ is active on `{base_branch}` with `MERGEABLE` entries.
         continue
       fi
 
-      ELIGIBLE_PRS+=($(echo "$ALL_PRS" | jq --argjson n "$NUM" '.[] | select(.number == $n)'))
+      mapfile -t _pr_entry < <(echo "$ALL_PRS" | jq -c --argjson n "$NUM" '.[] | select(.number == $n)')
+      ELIGIBLE_PRS+=("${_pr_entry[@]}")
     done
   done
   ```

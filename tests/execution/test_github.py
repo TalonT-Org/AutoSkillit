@@ -883,10 +883,12 @@ async def test_ensure_label_cache_different_repos(httpx_mock):
     )
     fetcher = DefaultGitHubFetcher(token="tok")
     with patch("autoskillit.execution.github.asyncio.sleep", new_callable=AsyncMock):
-        await fetcher.ensure_label("owner", "repo1", "bug")
-        await fetcher.ensure_label("owner", "repo2", "bug")
+        result1 = await fetcher.ensure_label("owner", "repo1", "bug")
+        result2 = await fetcher.ensure_label("owner", "repo2", "bug")
 
     assert len(httpx_mock.get_requests()) == 2
+    assert result1 == {"success": True, "created": True}
+    assert result2 == {"success": True, "created": True}
 
 
 # ---------------------------------------------------------------------------
@@ -909,6 +911,9 @@ async def test_throttle_serializes_concurrent_mutating_calls(httpx_mock):
     )
     fetcher = DefaultGitHubFetcher(token="test")
     with patch("autoskillit.execution.github.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+        # Use side_effect to actually yield to the event loop, so both coroutines
+        # interleave concurrently and the lock serialization is genuinely exercised.
+        mock_sleep.side_effect = lambda _: asyncio.sleep(0)
         await asyncio.gather(
             fetcher.add_labels("owner", "repo", 42, ["bug"]),
             fetcher.create_issue("owner", "repo", "Title", "body"),

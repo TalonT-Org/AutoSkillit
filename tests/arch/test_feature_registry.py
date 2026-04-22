@@ -4,10 +4,8 @@ from __future__ import annotations
 
 import importlib
 from datetime import date
-from pathlib import Path
 
 import pytest
-
 
 # ── Structural registry tests ─────────────────────────────────────────────────
 
@@ -195,12 +193,10 @@ def test_config_rejects_unknown_feature():
 
 
 def test_config_dependency_validation():
-    """_build_features_dict raises ConfigSchemaError when B is enabled but its dep A is disabled."""
-    import dataclasses
-    from datetime import date as _date
+    """_build_features_dict raises ConfigSchemaError when B is enabled but dep A is disabled."""
 
     from autoskillit.config.settings import AutomationConfig, ConfigSchemaError
-    from autoskillit.core._type_constants import FEATURE_REGISTRY, FeatureDef
+    from autoskillit.core._type_constants import FeatureDef
     from autoskillit.core._type_enums import FeatureLifecycle
 
     # Temporarily patch FEATURE_REGISTRY with a dep-requiring entry for this test

@@ -388,6 +388,7 @@ async def test_default_test_runner_omits_filter_env_when_none(monkeypatch, tmp_p
             pid=12345,
         )
 
+    monkeypatch.delenv("AUTOSKILLIT_TEST_FILTER", raising=False)
     config = make_test_config(test_check=make_test_check_config())
     runner = DefaultTestRunner(config=config, runner=capturing_runner)
     await runner.run(cwd=tmp_path)
@@ -593,3 +594,52 @@ async def test_default_test_runner_no_sidecar_means_no_filter_stats(tmp_path: Pa
     assert result.filter_mode is None
     assert result.tests_selected is None
     assert result.tests_deselected is None
+
+
+@pytest.mark.anyio
+async def test_resolve_base_ref_default_base_branch_fallback(tmp_path: Path) -> None:
+    """AC5: When no config, sidecar, or upstream, default_base_branch is used."""
+    result = await _resolve_base_ref(None, tmp_path, default_base_branch="integration")
+    assert result == "integration"
+
+
+@pytest.mark.anyio
+async def test_resolve_base_ref_config_wins_over_default_base_branch(tmp_path: Path) -> None:
+    """Config base_ref takes precedence over default_base_branch."""
+    result = await _resolve_base_ref("origin/main", tmp_path, default_base_branch="integration")
+    assert result == "origin/main"
+
+
+@pytest.mark.anyio
+async def test_resolve_base_ref_none_default_base_branch_still_returns_none(
+    tmp_path: Path,
+) -> None:
+    """When default_base_branch is also None, returns None."""
+    result = await _resolve_base_ref(None, tmp_path, default_base_branch=None)
+    assert result is None
+
+
+@pytest.mark.anyio
+async def test_default_test_runner_passes_default_base_branch(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """AC5: DefaultTestRunner.run() passes branching.default_base_branch to _resolve_base_ref."""
+    captured_kwargs: dict = {}
+
+    async def capturing_runner(cmd, *, cwd, timeout, env):
+        captured_kwargs["env"] = env
+        return SubprocessResult(
+            returncode=0,
+            stdout="1 passed",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+        )
+
+    config = make_test_config(
+        test_check=make_test_check_config(filter_mode="conservative"),
+    )
+    config.branching.default_base_branch = "integration"
+    runner = DefaultTestRunner(config=config, runner=capturing_runner)
+    await runner.run(cwd=tmp_path)
+    assert captured_kwargs["env"].get("AUTOSKILLIT_TEST_BASE_REF") == "integration"

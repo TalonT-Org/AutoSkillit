@@ -429,8 +429,9 @@ def pytest_collection_modifyitems(
                 f"({len(scope)} scope paths)",
                 stacklevel=1,
             )
-            config.stash[_selected_count_key] = len(selected)
-            config.stash[_deselected_count_key] = len(deselected)
+
+        config.stash[_selected_count_key] = len(items)
+        config.stash[_deselected_count_key] = len(deselected)
 
     except Exception as exc:
         warnings.warn(

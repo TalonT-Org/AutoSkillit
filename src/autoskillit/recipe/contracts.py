@@ -185,6 +185,25 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
     )
 
 
+def get_callable_contract(dotted_path: str, manifest: dict[str, Any] | None = None) -> SkillContract | None:
+    """Look up a run_python callable in the manifest and return a SkillContract.
+
+    Callable contracts live under the ``callable_contracts`` top-level key in
+    skill_contracts.yaml, keyed by the fully-qualified dotted Python path
+    (e.g. ``autoskillit.smoke_utils.check_review_loop``).
+    """
+    if manifest is None:
+        manifest = load_bundled_manifest()
+    callables = manifest.get("callable_contracts", {})
+    entry = callables.get(dotted_path)
+    if entry is None:
+        return None
+    outputs = [
+        SkillOutput(name=out["name"], type=out["type"]) for out in entry.get("outputs", [])
+    ]
+    return SkillContract(inputs=[], outputs=outputs)
+
+
 def compute_skill_hash(skill_name: str, *, skills_dir: Path) -> str:
     """Compute SHA256 hash of a skill's SKILL.md file."""
     skill_md = skills_dir / skill_name / "SKILL.md"

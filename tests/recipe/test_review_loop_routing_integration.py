@@ -31,6 +31,7 @@ def test_review_loop_routes_to_review_pr_after_resolve_cycle(recipe_name: str) -
 
     recipe = load_recipe(builtin_recipes_dir() / recipe_name)
     step = recipe.steps["check_review_loop"]
+    assert step.on_result is not None
     conditions = step.on_result.conditions
 
     # Simulate template interpolation
@@ -40,7 +41,7 @@ def test_review_loop_routes_to_review_pr_after_resolve_cycle(recipe_name: str) -
 
     # The first condition (route to review_pr) must be satisfiable
     # when_expr becomes e.g. "false == false" — evaluate as string equality
-    lhs, rhs = [s.strip() for s in when_expr.split("==")]
+    lhs, rhs = [s.strip() for s in when_expr.split("==", 1)]
     assert lhs == rhs
     assert conditions[0].route == "review_pr"
 
@@ -57,6 +58,7 @@ def test_review_loop_routes_to_ci_watch_at_max_iterations(recipe_name: str) -> N
 
     recipe = load_recipe(builtin_recipes_dir() / recipe_name)
     step = recipe.steps["check_review_loop"]
+    assert step.on_result is not None
     conditions = step.on_result.conditions
 
     # Simulate template interpolation on the first (review_pr) condition
@@ -66,7 +68,7 @@ def test_review_loop_routes_to_ci_watch_at_max_iterations(recipe_name: str) -> N
 
     # The first condition must NOT be satisfied — falls through to default ci_watch
     # when_expr becomes e.g. "true == false" — evaluate as string equality
-    lhs, rhs = [s.strip() for s in when_expr.split("==")]
+    lhs, rhs = [s.strip() for s in when_expr.split("==", 1)]
     assert lhs != rhs
 
 
@@ -76,6 +78,7 @@ def test_check_review_loop_routes_on_max_exceeded_only(recipe_name: str) -> None
     NOT on has_blocking."""
     recipe = load_recipe(builtin_recipes_dir() / recipe_name)
     step = recipe.steps["check_review_loop"]
+    assert step.on_result is not None
     conditions = step.on_result.conditions
     review_condition = next(c for c in conditions if c.route == "review_pr")
     assert "max_exceeded" in review_condition.when

@@ -1245,10 +1245,10 @@ class TestReviewPrRecipeIntegration:
         assert any(c.route == "ci_watch" for c in default_conditions)
 
     def test_review_pr_captures_verdict(self, recipe: object) -> None:
-        """T_RP4b: review_pr captures the verdict output from the skill result."""
+        """T_RP4b: review_pr captures the verdict output as review_verdict to avoid clobber."""
         step = recipe.steps["review_pr"]  # type: ignore[attr-defined]
-        assert "verdict" in step.capture
-        assert step.capture["verdict"] == "${{ result.verdict }}"
+        assert "review_verdict" in step.capture
+        assert step.capture["review_verdict"] == "${{ result.verdict }}"
 
     def test_review_pr_changes_requested_routes_to_resolve_review(self, recipe: object) -> None:
         """T_RP4c: on_result routes changes_requested verdict to resolve_review."""

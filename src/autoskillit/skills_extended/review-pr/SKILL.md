@@ -381,20 +381,27 @@ This is not optional. Do not proceed to Step 5 without stating this.
 
 ### Step 5: Determine Verdict
 
-- Any `actionable_findings` present → `verdict = "changes_requested"` (clear fix exists, automated resolver handles it)
-- No actionable findings, but `decision_findings` present → `verdict = "needs_human"` (`needs_human` fires only when one or more findings have `requires_decision=true` — meaning the correct path forward requires a human decision that the automated reviewer cannot make)
-- No actionable or decision findings → `verdict = "approved"`
+- Any `blocking_findings` (critical severity, non-decision) present → `verdict = "changes_requested"` (clear fix exists, automated resolver handles it)
+- No blocking findings, but `warning_findings` (warning severity, non-decision) present → `verdict = "approved_with_comments"` (recipe routes to `resolve_review` but does not require a re-review cycle)
+- No blocking or warning findings, but `decision_findings` present → `verdict = "needs_human"` (`needs_human` fires only when one or more findings have `requires_decision=true` — meaning the correct path forward requires a human decision that the automated reviewer cannot make)
+- No findings of any kind → `verdict = "approved"`
 
 **Verdict logic:**
 ```python
 decision_findings = [f for f in all_findings if f.get("requires_decision")]
-actionable_findings = [
+blocking_findings = [
     f for f in all_findings
-    if not f.get("requires_decision") and f["severity"] in ("critical", "warning")
+    if not f.get("requires_decision") and f["severity"] == "critical"
+]
+warning_findings = [
+    f for f in all_findings
+    if not f.get("requires_decision") and f["severity"] == "warning"
 ]
 
-if actionable_findings:
+if blocking_findings:
     verdict = "changes_requested"
+elif warning_findings:
+    verdict = "approved_with_comments"
 elif decision_findings:
     verdict = "needs_human"
 else:
@@ -442,6 +449,7 @@ gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \
 
 Event mapping:
 - `approved` → `APPROVE`
+- `approved_with_comments` → `COMMENT`
 - `needs_human` → `COMMENT`
 - `changes_requested` → `REQUEST_CHANGES`
 
@@ -516,6 +524,9 @@ Never reference local file paths (e.g., `{{AUTOSKILLIT_TEMP}}/...`, `summary_*.m
 # approved
 gh pr review {pr_number} --approve --body "AutoSkillit review passed. No blocking issues found."
 
+# approved_with_comments
+gh pr review {pr_number} --comment --body "AutoSkillit review: warning-only findings detected. See inline comments — no blocking changes required."
+
 # changes_requested
 gh pr review {pr_number} --request-changes --body "AutoSkillit review found {N} blocking issues. See inline comments."
 
@@ -537,7 +548,7 @@ Output the verdict as the final line:
 > exact token name — decorators cause match failure.
 
 ```
-verdict = {approved|changes_requested|needs_human}
+verdict = {approved|approved_with_comments|changes_requested|needs_human}
 ```
 
 Exit 0 in all normal cases (approved, needs_human, changes_requested).
@@ -546,6 +557,7 @@ Exit 1 only for unrecoverable tool-level errors.
 ## Output
 
 - `verdict=approved` — No blocking issues; CI can proceed
+- `verdict=approved_with_comments` — Warning-only findings; recipe routes to `resolve_review` but does not require a re-review cycle
 - `verdict=changes_requested` — Blocking issues found; recipe routes to `resolve_review`
 - `verdict=needs_human` — Uncertain trade-offs; human review requested via the authenticated GitHub user mention (derived at runtime)
 

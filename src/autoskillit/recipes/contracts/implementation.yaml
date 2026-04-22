@@ -146,9 +146,10 @@ skills:
     - name: verdict
       type: string
     expected_output_patterns:
-    - verdict\s*=\s*(approved|changes_requested|needs_human)
+    - verdict\s*=\s*(approved|approved_with_comments|changes_requested|needs_human)
     pattern_examples:
     - 'verdict = approved'
+    - 'verdict = approved_with_comments'
     - 'verdict = changes_requested'
     - 'verdict = needs_human'
   resolve-review:

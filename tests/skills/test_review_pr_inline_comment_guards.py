@@ -294,12 +294,15 @@ def test_mandatory_echo_positioned_between_step4_and_step5():
 def test_review_pr_http200_success_signal():
     """HTTP 200 must be treated as review-post success; response body must not be inspected."""
     skill_md = SKILL_TEXT
-    assert "HTTP 200" in skill_md or "http 200" in skill_md.lower()
     lower = skill_md.lower()
-    assert (
-        "do not inspect" in lower
-        or "do not check" in lower
-        or "regardless of response body" in lower
+    assert "http 200" in lower, "Skill must reference HTTP 200 as the success signal"
+    idx = lower.find("http 200")
+    # Require the body-inspection prohibition appears in proximity to the HTTP 200
+    # success signal instruction (not just anywhere in the document).
+    window = lower[max(0, idx - 100) : idx + 500]
+    assert "regardless of response body" in window, (
+        "The 'regardless of response body' prohibition must appear in proximity to "
+        "the HTTP 200 success signal instruction"
     )
 
 

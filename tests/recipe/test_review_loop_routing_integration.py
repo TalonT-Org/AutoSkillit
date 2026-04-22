@@ -82,7 +82,9 @@ def test_check_review_loop_review_pr_route_uses_had_blocking_and_max_exceeded(
     recipe = load_recipe(builtin_recipes_dir() / recipe_name)
     step = recipe.steps["check_review_loop"]
     assert step.on_result is not None
-    review_condition = next(c for c in step.on_result.conditions if c.route == "review_pr")
+    review_conditions = [c for c in step.on_result.conditions if c.route == "review_pr"]
+    assert review_conditions, f"No conditional route to review_pr found in {recipe_name}"
+    review_condition = review_conditions[0]
     assert "had_blocking" in review_condition.when
     assert "max_exceeded" in review_condition.when
 

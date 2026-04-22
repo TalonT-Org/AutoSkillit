@@ -1228,7 +1228,7 @@ async def test_sous_chef_discipline_injected_on_named_open_kitchen_path(tmp_path
 
     result = json.loads(result_str)
     assert result["success"] is True
-    discipline = result.get("sous_chef_discipline", "")
+    discipline = result["sous_chef_discipline"]
     assert "STEP EXECUTION IS NOT DISCRETIONARY" in discipline, (
         "Named open_kitchen path must inject sous-chef discipline — "
         "headless L2 sessions have no system prompt injection"

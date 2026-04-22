@@ -16,6 +16,7 @@ from autoskillit.cli._init_helpers import (
     _check_dual_mcp_files,
     _detect_secret_scanner,
 )
+from autoskillit.config import load_config
 from autoskillit.core import SESSION_TYPE_ENV_VAR, Severity, get_logger, pkg_root
 from autoskillit.execution import QUOTA_CACHE_SCHEMA_VERSION
 from autoskillit.hook_registry import (
@@ -870,8 +871,62 @@ def _check_campaign_manifest_clone_dests(project_dir: Path | None = None) -> Doc
     return DoctorResult(Severity.OK, check_name, "All dispatch clone destinations unique")
 
 
+def _check_feature_dependencies(features: dict[str, bool]) -> DoctorResult:
+    """Verify all enabled features have their dependencies satisfied."""
+    from autoskillit.core import FEATURE_REGISTRY, is_feature_enabled
+
+    for name, defn in FEATURE_REGISTRY.items():
+        if not is_feature_enabled(name, features) or not defn.depends_on:
+            continue
+        for dep in defn.depends_on:
+            if not is_feature_enabled(dep, features):
+                return DoctorResult(
+                    severity=Severity.ERROR,
+                    check="feature_dependencies",
+                    message=(
+                        f"Feature '{name}' requires '{dep}' but '{dep}' is disabled. "
+                        f"Enable '{dep}' in features config first."
+                    ),
+                )
+    return DoctorResult(
+        severity=Severity.OK,
+        check="feature_dependencies",
+        message="All feature dependencies satisfied",
+    )
+
+
+def _check_feature_registry_consistency() -> DoctorResult:
+    """Verify FEATURE_REGISTRY import_package entries resolve to importable modules."""
+    import importlib
+
+    from autoskillit.core import FEATURE_REGISTRY
+
+    for name, defn in FEATURE_REGISTRY.items():
+        if not defn.import_package:
+            continue
+        try:
+            importlib.import_module(defn.import_package)
+        except ImportError as exc:
+            return DoctorResult(
+                severity=Severity.ERROR,
+                check="feature_registry_consistency",
+                message=(
+                    f"Feature '{name}' import_package {defn.import_package!r} "
+                    f"cannot be imported: {exc}"
+                ),
+            )
+    return DoctorResult(
+        severity=Severity.OK,
+        check="feature_registry_consistency",
+        message="All FEATURE_REGISTRY import packages resolve",
+    )
+
+
 def run_doctor(*, output_json: bool = False) -> None:
     """Check project setup for common issues."""
+    from autoskillit.core import is_feature_enabled
+
+    cfg = load_config(Path.cwd())
     results: list[DoctorResult] = []
 
     # Check 1: Stale MCP servers — dead binaries or nonexistent paths
@@ -1099,20 +1154,28 @@ def run_doctor(*, output_json: bool = False) -> None:
     # Check 21: Ambient CAMPAIGN_ID leak detection
     results.append(_check_ambient_campaign_id())
 
-    # Check 22: Sous-chef skill directory exists
-    results.append(_check_sous_chef_bundled())
+    # Check 22: Feature dependency consistency
+    results.append(_check_feature_dependencies(cfg.features))
 
-    # Check 23: Franchise dispatch guard registered
-    results.append(_check_franchise_dispatch_guard_registered())
+    # Check 23: Feature registry import consistency
+    results.append(_check_feature_registry_consistency())
 
-    # Check 24: Stale franchise state (running > 7 days)
-    results.append(_check_stale_franchise_state())
+    # Checks 24–28: Franchise infrastructure — only when franchise feature is enabled
+    if is_feature_enabled("franchise", cfg.features):
+        # Check 24: Sous-chef skill directory exists
+        results.append(_check_sous_chef_bundled())
 
-    # Check 25: Campaign onboarding hint
-    results.append(_check_campaign_onboarding_hint())
+        # Check 25: Franchise dispatch guard registered
+        results.append(_check_franchise_dispatch_guard_registered())
 
-    # Check 26: Campaign manifest clone destination collisions
-    results.append(_check_campaign_manifest_clone_dests())
+        # Check 26: Stale franchise state (running > 7 days)
+        results.append(_check_stale_franchise_state())
+
+        # Check 27: Campaign onboarding hint
+        results.append(_check_campaign_onboarding_hint())
+
+        # Check 28: Campaign manifest clone destination collisions
+        results.append(_check_campaign_manifest_clone_dests())
 
     # Output
     if output_json:

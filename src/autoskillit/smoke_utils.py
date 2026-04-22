@@ -102,6 +102,10 @@ def check_review_loop(
 
     Returns next_iteration, max_exceeded, and had_blocking to determine
     whether to re-review (blocking + iterations remain) or proceed to ci_watch.
+
+    ``had_blocking`` is true only when ``previous_verdict == "changes_requested"``.
+    ``approved_with_comments`` intentionally yields ``had_blocking=false`` — the
+    resolve_review pass is one-shot and does not trigger a re-review cycle.
     """
     iteration = int(current_iteration.strip()) if current_iteration.strip() else 0
     next_iteration = iteration + 1

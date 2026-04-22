@@ -1039,6 +1039,7 @@ def test_default_classes_only_instantiated_inside_factory_or_allowlist() -> None
         Path("server/_factory.py"): {"*"},  # Composition Root
         Path("cli/_workspace.py"): {"DefaultSubprocessRunner"},  # CLI worktree listing
         Path("cli/_cook.py"): {"DefaultSessionSkillManager"},  # interactive cook
+        Path("cli/_franchise.py"): {"DefaultSessionSkillManager"},  # interactive cleanup
         Path("cli/app.py"): {"DefaultSkillResolver"},  # skill listing command
         Path("execution/recording.py"): {"DefaultSubprocessRunner"},  # lazy fallback
         Path("pipeline/context.py"): {  # __post_init__ +

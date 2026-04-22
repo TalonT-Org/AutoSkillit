@@ -481,12 +481,12 @@ class TestCookTerminalGuard:
             lambda fd, when, attrs: tcsetattr_calls.append(attrs),
         )
         monkeypatch.setattr("autoskillit.cli._terminal.termios.error", termios.error)
+        monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: False)
         monkeypatch.setattr(
             "subprocess.run",
             lambda *a, **kw: (_ for _ in ()).throw(KeyboardInterrupt()),
         )
         monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/claude")
-        monkeypatch.setattr(app_mod, "_is_plugin_installed", lambda: False)
 
         with pytest.raises(KeyboardInterrupt):
             app_mod._launch_cook_session("system prompt")

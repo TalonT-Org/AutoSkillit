@@ -277,6 +277,7 @@ def _watch_loop(state_path: Path) -> int:
         state = read_state(state_path)
         return _compute_exit_code(state) if state else 3
     except Exception as exc:
+        _log.error("unexpected error in --watch loop: %s", exc, exc_info=True)
         sys.stderr.write(f"ERROR: unexpected error in --watch loop: {exc}\n")
         return 3
     finally:

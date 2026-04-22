@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -898,7 +899,13 @@ async def test_ensure_label_cache_different_repos(httpx_mock):
 
 @pytest.mark.anyio
 async def test_throttle_serializes_concurrent_mutating_calls(httpx_mock):
-    """Concurrent add_labels + create_issue calls are serialized by the throttle lock."""
+    """Lock must block the second call until the first fully exits _throttle_mutating.
+
+    Seeds _last_mutating_ts so both coroutines need to sleep, then uses a
+    recording side_effect that yields to the event loop inside the lock region.
+    The assertion verifies strict sequential ordering of sleeps: second sleep must
+    start only after the first sleep has ended — impossible without the lock.
+    """
     httpx_mock.add_response(
         url="https://api.github.com/repos/owner/repo/issues/42/labels",
         method="POST",
@@ -910,10 +917,27 @@ async def test_throttle_serializes_concurrent_mutating_calls(httpx_mock):
         json={"number": 2, "html_url": "https://github.com/owner/repo/issues/2"},
     )
     fetcher = DefaultGitHubFetcher(token="test")
-    with patch("autoskillit.execution.github.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+    # Seed _last_mutating_ts so both coroutines will need to sleep,
+    # placing both in the lock-held region where ordering matters.
+    fetcher._last_mutating_ts = time.monotonic()
+
+    events: list[str] = []
+
+    async def recording_sleep(_delay: float) -> None:
+        events.append("sleep_start")
+        await asyncio.sleep(0)  # yield to event loop while lock is held
+        events.append("sleep_end")
+
+    with patch("autoskillit.execution.github.asyncio.sleep", side_effect=recording_sleep):
         await asyncio.gather(
             fetcher.add_labels("owner", "repo", 42, ["bug"]),
             fetcher.create_issue("owner", "repo", "Title", "body"),
         )
 
-    assert mock_sleep.call_count == 1
+    starts = [i for i, e in enumerate(events) if e == "sleep_start"]
+    ends = [i for i, e in enumerate(events) if e == "sleep_end"]
+    assert len(starts) == 2 and len(ends) == 2
+    # Second sleep must start after the first sleep ends — only possible with the lock.
+    assert starts[1] > ends[0], (
+        "Second sleep started before first sleep ended: lock is not serializing coroutines"
+    )

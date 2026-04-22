@@ -158,11 +158,10 @@ def test_merge_prs_enqueue_current_pr_references_single_pr(pmp_recipe) -> None:
     assert "jq -r '.[].number'" not in cmd
 
 
-def test_merge_prs_get_first_pr_number_captures_index(pmp_recipe) -> None:
-    """get_first_pr_number must capture both current_pr_number and current_pr_index."""
+def test_merge_prs_get_first_pr_number_captures_pr_number(pmp_recipe) -> None:
+    """get_first_pr_number must capture current_pr_number."""
     step = pmp_recipe.steps["get_first_pr_number"]
     assert "current_pr_number" in (step.capture or {})
-    assert "current_pr_index" in (step.capture or {})
 
 
 def test_merge_prs_get_first_pr_number_routes_to_enqueue(pmp_recipe) -> None:
@@ -256,11 +255,11 @@ def test_merge_prs_next_queue_pr_or_done_removed(pmp_recipe) -> None:
 
 
 def test_merge_prs_advance_queue_pr_cmd_references_pr_order(pmp_recipe) -> None:
-    """advance_queue_pr cmd must reference pr_order_file and current_pr_index."""
+    """advance_queue_pr cmd must reference pr_order_file and current_pr_number."""
     step = pmp_recipe.steps["advance_queue_pr"]
     cmd = step.with_args.get("cmd", "")
     assert "pr_order_file" in cmd
-    assert "current_pr_index" in cmd
+    assert "current_pr_number" in cmd
 
 
 def test_merge_prs_advance_queue_pr_captures_pr_number(pmp_recipe) -> None:

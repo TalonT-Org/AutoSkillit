@@ -42,9 +42,9 @@ kitchen_rules:
     All PR merges and worktree merges target context.integration_branch. The final
     review PR opens from context.integration_branch into inputs.base_branch."
   - "PR QUEUE: The agent reads context.pr_order_file once at analyze_prs and
-    maintains an ordered queue. context.current_pr_index (agent-maintained, starts
-    at 0) tracks progress. Advance the index after each successful merge or
-    complex-pr cycle completes."
+    maintains an ordered queue. context.current_pr_number tracks the current PR.
+    advance_queue_pr captures the next PR number at the recipe level after each
+    successful merge."
   - "COMPLEX PR PATH: When merge_pr returns needs_plan=true, context.task is set to
     the conflict_report_path. Pass context.task to make-plan. The plan+implement
     cycle creates a worktree from the integration branch; the worktree branch is
@@ -67,9 +67,9 @@ kitchen_rules:
     merge queue. The batch branch (context.integration_branch) is the same as base_branch.
     Never invoke create_integration_branch, publish_integration_branch, merge_pr, or
     push_integration_branch in queue mode."
-  - "QUEUE LOOP: In queue mode, context.current_pr_index tracks the current PR being waited on.
-    Initialize to 0 after enqueue_all_prs. Advance by 1 in next_queue_pr_or_done after each
-    successful merge. Read pr_number from pr_order_file[current_pr_index].number."
+  - "QUEUE LOOP: In queue mode, context.current_pr_number tracks the current PR being waited on.
+    Initialized by get_first_pr_number from pr_order_file[0]. advance_queue_pr looks up
+    the current number in pr_order_file and captures the next entry's number."
   - "CONFLICT REPORT PATHS: context.all_conflict_report_paths accumulates conflict_report_path
     values from resolve_ejected_conflicts and resolve_integration_conflicts via capture_list.
     Pass it as the 5th argument to open_integration_pr and 4th argument to audit_impl.
@@ -223,13 +223,11 @@ steps:
       step_name: "get_first_pr_number"
     capture:
       current_pr_number: "${{ result.stdout | trim }}"
-      current_pr_index: "0"
     on_success: enqueue_current_pr
     on_failure: register_clone_failure
     note: >
       Queue mode only. Extracts the first PR's number from pr_order_file to initialize
-      context.current_pr_number and sets current_pr_index = 0 before the sequential
-      enqueue loop.
+      context.current_pr_number before the sequential enqueue loop.
 
   enqueue_current_pr:
     tool: run_cmd
@@ -345,13 +343,14 @@ steps:
       pr_number: "${{ context.current_pr_number }}"
       cwd: "${{ context.work_dir }}"
       remote_url: "${{ context.remote_url }}"
-      event: "push"
+      event: "${{ context.ci_event }}"
       timeout_seconds: 600
     on_success: reenter_queue
     on_failure: register_clone_failure
     note: >
       Validates CI passes on the rebased branch before re-entering the merge queue.
       Prevents re-enqueue of a broken branch that would be ejected again.
+      Uses context.ci_event captured from check_repo_ci_event upstream.
 
   reenter_queue:
     tool: run_cmd
@@ -369,35 +368,37 @@ steps:
     tool: run_cmd
     with:
       cmd: >
-        IDX=$(( ${{ context.current_pr_index }} + 1 )) &&
-        TOTAL=$(jq length '${{ context.pr_order_file }}') &&
-        if [ "$IDX" -lt "$TOTAL" ]; then
-          jq -r ".[$IDX].number" '${{ context.pr_order_file }}'
-        else
-          echo "done"
-        fi
+        CURRENT='${{ context.current_pr_number }}' &&
+        NEXT=$(jq -r --arg cur "$CURRENT" '
+          (to_entries | map(select(.value.number == ($cur | tonumber))) | .[0].key) as $idx |
+          if ($idx + 1) < length then .[$idx + 1].number | tostring
+          else "done"
+          end
+        ' '${{ context.pr_order_file }}') &&
+        echo "$NEXT"
       cwd: "${{ context.work_dir }}"
       step_name: "advance_queue_pr"
     capture:
       current_pr_number: "${{ result.stdout | trim }}"
-      current_pr_index: "${{ context.current_pr_index + 1 }}"
     on_result:
       - when: "${{ result.stdout | trim }} == done"
         route: collect_artifacts
       - route: enqueue_current_pr
     on_failure: register_clone_failure
     note: >
-      Advances the queue index and captures the next PR number at the recipe level.
-      The cmd outputs exactly the PR number (or "done"), so capture uses only | trim.
-      No agent-managed variable updates — the capture block enforces correctness.
-      Routes to enqueue_current_pr for the next PR or collect_artifacts when done.
+      Advances to the next PR by looking up the current PR number in pr_order_file
+      and returning the next entry. Outputs the next PR number (or "done").
+      The capture block sets current_pr_number at the recipe level — no agent-managed
+      variable updates. Routes to enqueue_current_pr or collect_artifacts when done.
 
   diagnose_queue_ci:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:diagnose-ci '${{ context.current_pr_number }}'"
+      skill_command: "/autoskillit:diagnose-ci '${{ context.current_pr_number }}' - - - ${{ context.ci_event }}"
       cwd: "${{ context.work_dir }}"
       step_name: "diagnose_queue_ci"
+    capture:
+      diagnosis_path: "${{ result.diagnosis_path }}"
     on_success: register_clone_failure
     on_failure: register_clone_failure
     note: >
@@ -430,7 +431,7 @@ steps:
     note: >
       Creates the integration branch from the latest base_branch HEAD.
       context.integration_branch was computed by analyze_prs.
-      The agent initializes context.current_pr_index = 0 here.
+      The agent initializes context.current_pr_number from the first PR here.
 
   publish_integration_branch:
     tool: push_to_remote
@@ -470,8 +471,8 @@ steps:
     on_exhausted: register_clone_failure
     on_context_limit: register_clone_failure
     note: >
-      The agent reads context.pr_order_file at context.current_pr_index to get the
-      current PR's number and complexity. Appends them to skill_command:
+      The agent reads context.pr_order_file at context.current_pr_number to get the
+      current PR's complexity. Appends number and complexity to skill_command:
         /autoskillit:merge-pr {pr_number} {complexity}
       escalation_required=true → ambiguous conflict, human intervention needed → escalate_stop.
       needs_plan=true → conflict_report_path set as context.task → plan.
@@ -664,7 +665,7 @@ steps:
     note: >
       Routing step — no tool call. The agent evaluates what comes next:
       1. If more plan_parts remain for the current PR → verify (next part).
-      2. If all parts done, advance current_pr_index. If more PRs remain → merge_pr.
+      2. If all parts done, advance current_pr_number. If more PRs remain → merge_pr.
       3. If all PRs processed → push_integration_branch.
 
   push_integration_branch:

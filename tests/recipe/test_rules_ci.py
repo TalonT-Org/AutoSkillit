@@ -421,13 +421,31 @@ def _make_mq_recipe(
     fallback_route: str = "release_issue_timeout",
     on_failure: str = "release_issue_timeout",
 ) -> Recipe:
-    """Build a recipe that includes release_issue_timeout so the new rules activate."""
+    """Build a recipe with release_issue_timeout (impl/remed family pattern)."""
     return _make_recipe(
         {
             "wait_for_queue": _make_mq_step(
                 exclude=exclude, fallback_route=fallback_route, on_failure=on_failure
             ),
             "release_issue_timeout": RecipeStep(action="stop", message="timeout"),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+
+
+def _make_mq_recipe_no_sentinel(
+    *,
+    exclude: set[str] | None = None,
+    fallback_route: str = "register_clone_failure",
+    on_failure: str = "register_clone_failure",
+) -> Recipe:
+    """Build a recipe WITHOUT release_issue_timeout (e.g. merge-prs family pattern)."""
+    return _make_recipe(
+        {
+            "wait_for_queue": _make_mq_step(
+                exclude=exclude, fallback_route=fallback_route, on_failure=on_failure
+            ),
+            "register_clone_failure": RecipeStep(action="stop", message="failed"),
             "done": RecipeStep(action="stop", message="done"),
         }
     )
@@ -482,4 +500,61 @@ def test_conformance_rule_clean_when_targets_correct() -> None:
     conformance_findings = [f for f in findings if f.rule == _CONFORMANCE_RULE]
     assert conformance_findings == [], (
         f"Expected no conformance findings for correct targets, got: {conformance_findings}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Tool-presence scope gate tests (I7 fires without release_issue_timeout sentinel)
+# ---------------------------------------------------------------------------
+
+
+def test_coverage_rule_fires_without_release_issue_timeout_step() -> None:
+    """I7 must fire on recipes without release_issue_timeout if they have mq routing."""
+    recipe = _make_mq_recipe_no_sentinel(exclude={"dropped_healthy", "stalled"})
+    findings = run_semantic_rules(recipe)
+    coverage_findings = [f for f in findings if f.rule == _COVERAGE_RULE]
+    assert len(coverage_findings) >= 1, (
+        f"Expected coverage rule finding for recipe without release_issue_timeout, got: {findings}"
+    )
+    assert coverage_findings[0].severity == Severity.ERROR
+    assert "dropped_healthy" in coverage_findings[0].message
+    assert "stalled" in coverage_findings[0].message
+
+
+def test_coverage_rule_clean_without_sentinel_when_all_states_present() -> None:
+    """I7 is silent for a non-sentinel recipe when all PRState values are present."""
+    recipe = _make_mq_recipe_no_sentinel()
+    findings = run_semantic_rules(recipe)
+    coverage_findings = [f for f in findings if f.rule == _COVERAGE_RULE]
+    assert coverage_findings == [], (
+        f"Expected no coverage findings for complete routing without sentinel, "
+        f"got: {coverage_findings}"
+    )
+
+
+def test_coverage_rule_silent_for_non_queue_recipe() -> None:
+    """I7 must not fire on recipes that have no wait_for_merge_queue step."""
+    recipe = _make_recipe(
+        {
+            "do_work": RecipeStep(tool="run_skill", on_success="done"),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    coverage_findings = [f for f in findings if f.rule == _COVERAGE_RULE]
+    assert coverage_findings == [], (
+        f"Non-queue recipe should produce no I7 findings, got: {coverage_findings}"
+    )
+
+
+def test_conformance_rule_silent_without_sentinel() -> None:
+    """I8 must NOT fire on recipes without release_issue_timeout (family-specific rule)."""
+    recipe = _make_mq_recipe_no_sentinel(
+        fallback_route="register_clone_failure",
+        on_failure="register_clone_failure",
+    )
+    findings = run_semantic_rules(recipe)
+    conformance_findings = [f for f in findings if f.rule == _CONFORMANCE_RULE]
+    assert conformance_findings == [], (
+        f"I8 should be silent for non-sentinel recipes, got: {conformance_findings}"
     )

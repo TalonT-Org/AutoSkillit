@@ -6,6 +6,8 @@ wired in merge-prs.yaml, implementation.yaml, and remediation.yaml.
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from autoskillit.core import PRState
@@ -66,10 +68,10 @@ def test_merge_prs_route_by_queue_mode_is_route_action(pmp_recipe) -> None:
     assert step.action == "route"
 
 
-def test_merge_prs_enqueue_all_prs_exists(pmp_recipe) -> None:
-    """enqueue_all_prs step must exist with tool=run_cmd."""
-    assert "enqueue_all_prs" in pmp_recipe.steps
-    step = pmp_recipe.steps["enqueue_all_prs"]
+def test_merge_prs_enqueue_current_pr_exists(pmp_recipe) -> None:
+    """enqueue_current_pr step must exist with tool=run_cmd."""
+    assert "enqueue_current_pr" in pmp_recipe.steps
+    step = pmp_recipe.steps["enqueue_current_pr"]
     assert step.tool == "run_cmd"
 
 
@@ -85,11 +87,11 @@ def test_merge_prs_reenter_queue_exists(pmp_recipe) -> None:
     assert "reenter_queue" in pmp_recipe.steps
 
 
-def test_merge_prs_next_queue_pr_or_done_is_route_action(pmp_recipe) -> None:
-    """next_queue_pr_or_done must be an action: route step."""
-    assert "next_queue_pr_or_done" in pmp_recipe.steps
-    step = pmp_recipe.steps["next_queue_pr_or_done"]
-    assert step.action == "route"
+def test_merge_prs_advance_queue_pr_exists(pmp_recipe) -> None:
+    """advance_queue_pr step must exist with tool=run_cmd."""
+    assert "advance_queue_pr" in pmp_recipe.steps
+    step = pmp_recipe.steps["advance_queue_pr"]
+    assert step.tool == "run_cmd"
 
 
 # ---------------------------------------------------------------------------
@@ -129,6 +131,193 @@ def test_merge_prs_classic_path_merge_pr_present(pmp_recipe) -> None:
 def test_merge_prs_classic_path_push_integration_branch_present(pmp_recipe) -> None:
     """push_integration_branch step must still be present (classic path)."""
     assert "push_integration_branch" in pmp_recipe.steps
+
+
+# ---------------------------------------------------------------------------
+# merge-prs.yaml — sequential enqueue behavioral (Test 1A)
+# ---------------------------------------------------------------------------
+
+
+def test_merge_prs_enqueue_all_prs_removed(pmp_recipe) -> None:
+    """enqueue_all_prs batch step must be removed."""
+    assert "enqueue_all_prs" not in pmp_recipe.steps
+
+
+def test_merge_prs_enqueue_current_pr_routes_to_wait(pmp_recipe) -> None:
+    """enqueue_current_pr.on_success must route to wait_queue_pr."""
+    step = pmp_recipe.steps["enqueue_current_pr"]
+    assert step.on_success == "wait_queue_pr"
+
+
+def test_merge_prs_enqueue_current_pr_references_single_pr(pmp_recipe) -> None:
+    """enqueue_current_pr cmd must reference context.current_pr_number (no batch loop)."""
+    step = pmp_recipe.steps["enqueue_current_pr"]
+    cmd = step.with_args.get("cmd", "")
+    assert "context.current_pr_number" in cmd
+    assert "while read" not in cmd
+    assert "jq -r '.[].number'" not in cmd
+
+
+def test_merge_prs_get_first_pr_number_captures_pr_number(pmp_recipe) -> None:
+    """get_first_pr_number must capture current_pr_number."""
+    step = pmp_recipe.steps["get_first_pr_number"]
+    assert "current_pr_number" in (step.capture or {})
+
+
+def test_merge_prs_get_first_pr_number_routes_to_enqueue(pmp_recipe) -> None:
+    """get_first_pr_number.on_success must route to enqueue_current_pr."""
+    step = pmp_recipe.steps["get_first_pr_number"]
+    assert step.on_success == "enqueue_current_pr"
+
+
+# ---------------------------------------------------------------------------
+# merge-prs.yaml — cheap rebase pre-check (Test 1C)
+# ---------------------------------------------------------------------------
+
+
+def test_merge_prs_attempt_cheap_rebase_exists(pmp_recipe) -> None:
+    """attempt_cheap_rebase step must exist with tool=run_cmd."""
+    assert "attempt_cheap_rebase" in pmp_recipe.steps
+    step = pmp_recipe.steps["attempt_cheap_rebase"]
+    assert step.tool == "run_cmd"
+
+
+def test_merge_prs_attempt_cheap_rebase_cmd_uses_rebase(pmp_recipe) -> None:
+    """attempt_cheap_rebase cmd must contain git rebase and clean/conflicts output."""
+    step = pmp_recipe.steps["attempt_cheap_rebase"]
+    cmd = step.with_args.get("cmd", "")
+    assert "git rebase" in cmd
+    assert "clean" in cmd
+    assert "conflicts" in cmd
+
+
+def test_merge_prs_attempt_cheap_rebase_routing(pmp_recipe) -> None:
+    """attempt_cheap_rebase clean routes to push_ejected_fix, conflicts to resolve."""
+    step = pmp_recipe.steps["attempt_cheap_rebase"]
+    assert step.on_result is not None
+    conditions = step.on_result.conditions
+    clean_routes = [c for c in conditions if c.when and "clean" in c.when]
+    assert clean_routes, "must have a 'clean' condition"
+    assert clean_routes[0].route == "push_ejected_fix"
+    fallback = [c for c in conditions if c.when is None]
+    assert fallback, "must have a fallback condition"
+    assert fallback[0].route == "resolve_ejected_conflicts"
+
+
+def test_merge_prs_get_ejected_routes_to_cheap_rebase(pmp_recipe) -> None:
+    """get_ejected_pr_branch.on_success must route to attempt_cheap_rebase."""
+    step = pmp_recipe.steps["get_ejected_pr_branch"]
+    assert step.on_success == "attempt_cheap_rebase"
+
+
+def test_merge_prs_checkout_ejected_pr_removed(pmp_recipe) -> None:
+    """checkout_ejected_pr step must be removed (consolidated into attempt_cheap_rebase)."""
+    assert "checkout_ejected_pr" not in pmp_recipe.steps
+
+
+# ---------------------------------------------------------------------------
+# merge-prs.yaml — CI watch before reenter_queue (Test 1D)
+# ---------------------------------------------------------------------------
+
+
+def test_merge_prs_ci_watch_post_queue_fix_exists(pmp_recipe) -> None:
+    """ci_watch_post_queue_fix step must exist in merge-prs.yaml."""
+    assert "ci_watch_post_queue_fix" in pmp_recipe.steps
+
+
+def test_merge_prs_push_ejected_fix_routes_to_ci_watch(pmp_recipe) -> None:
+    """push_ejected_fix.on_success must route to ci_watch_post_queue_fix."""
+    step = pmp_recipe.steps["push_ejected_fix"]
+    assert step.on_success == "ci_watch_post_queue_fix"
+
+
+def test_merge_prs_ci_watch_routes_to_reenter(pmp_recipe) -> None:
+    """ci_watch_post_queue_fix.on_success must route to reenter_queue."""
+    step = pmp_recipe.steps["ci_watch_post_queue_fix"]
+    assert step.on_success == "reenter_queue"
+
+
+# ---------------------------------------------------------------------------
+# merge-prs.yaml — recipe-level capture for advancement (Test 1E)
+# ---------------------------------------------------------------------------
+
+
+def test_merge_prs_advance_queue_pr_is_run_cmd(pmp_recipe) -> None:
+    """advance_queue_pr step must exist with tool=run_cmd."""
+    assert "advance_queue_pr" in pmp_recipe.steps
+    step = pmp_recipe.steps["advance_queue_pr"]
+    assert step.tool == "run_cmd"
+
+
+def test_merge_prs_next_queue_pr_or_done_removed(pmp_recipe) -> None:
+    """next_queue_pr_or_done step must be removed (replaced by advance_queue_pr)."""
+    assert "next_queue_pr_or_done" not in pmp_recipe.steps
+
+
+def test_merge_prs_advance_queue_pr_cmd_references_pr_order(pmp_recipe) -> None:
+    """advance_queue_pr cmd must reference pr_order_file and current_pr_number."""
+    step = pmp_recipe.steps["advance_queue_pr"]
+    cmd = step.with_args.get("cmd", "")
+    assert "pr_order_file" in cmd
+    assert "current_pr_number" in cmd
+
+
+def test_merge_prs_advance_queue_pr_captures_pr_number(pmp_recipe) -> None:
+    """advance_queue_pr must have a capture block for current_pr_number using | trim."""
+    step = pmp_recipe.steps["advance_queue_pr"]
+    capture = step.capture or {}
+    assert "current_pr_number" in capture
+    assert "trim" in capture["current_pr_number"]
+
+
+def test_merge_prs_advance_queue_pr_routing(pmp_recipe) -> None:
+    """advance_queue_pr routes to enqueue_current_pr (default) or collect_artifacts (done)."""
+    step = pmp_recipe.steps["advance_queue_pr"]
+    assert step.on_result is not None
+    conditions = step.on_result.conditions
+    done_routes = [c for c in conditions if c.when and "done" in c.when]
+    assert done_routes, "must have a 'done' condition"
+    assert done_routes[0].route == "collect_artifacts"
+    default_routes = [c for c in conditions if c.when is None]
+    assert default_routes, "must have a default route"
+    assert default_routes[0].route == "enqueue_current_pr"
+
+
+# ---------------------------------------------------------------------------
+# merge-prs.yaml — new PRState route steps (Test 1F)
+# ---------------------------------------------------------------------------
+
+
+def test_merge_prs_diagnose_queue_ci_exists(pmp_recipe) -> None:
+    """diagnose_queue_ci step must exist with tool=run_skill."""
+    assert "diagnose_queue_ci" in pmp_recipe.steps
+    step = pmp_recipe.steps["diagnose_queue_ci"]
+    assert step.tool == "run_skill"
+
+
+def test_merge_prs_reenroll_stalled_queue_pr_exists(pmp_recipe) -> None:
+    """reenroll_stalled_queue_pr step must exist with tool=toggle_auto_merge."""
+    assert "reenroll_stalled_queue_pr" in pmp_recipe.steps
+    step = pmp_recipe.steps["reenroll_stalled_queue_pr"]
+    assert step.tool == "toggle_auto_merge"
+
+
+def test_merge_prs_reenroll_stalled_routes_to_wait(pmp_recipe) -> None:
+    """reenroll_stalled_queue_pr must route back to wait_queue_pr."""
+    step = pmp_recipe.steps["reenroll_stalled_queue_pr"]
+    assert step.on_success == "wait_queue_pr"
+
+
+def test_merge_prs_dropped_healthy_routes_to_reenter(pmp_recipe) -> None:
+    """dropped_healthy in wait_queue_pr must route to reenter_queue."""
+    step = pmp_recipe.steps["wait_queue_pr"]
+    assert step.on_result is not None
+    dropped_routes = [
+        c
+        for c in step.on_result.conditions
+        if c.when is not None and "dropped_healthy" in c.when and c.route == "reenter_queue"
+    ]
+    assert dropped_routes, "dropped_healthy must route to reenter_queue"
 
 
 # ---------------------------------------------------------------------------
@@ -770,23 +959,59 @@ def test_impl_groups_recipe_still_valid(impl_groups_recipe) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Gap 1 + Gap 6: ci_watch_post_queue_fix step + ejected_ci_failure routing
-# (applies to all three recipes)
+# Queue recipe auto-discovery — any recipe with wait_for_merge_queue routing
 # ---------------------------------------------------------------------------
 
-QUEUE_RECIPES = ["impl_recipe", "remed_recipe", "impl_groups_recipe"]
+
+def _discover_queue_recipe_fixtures() -> list[str]:
+    """Return fixture names for all bundled recipes with wait_for_merge_queue routing."""
+    fixture_map = {
+        "implementation": "impl_recipe",
+        "remediation": "remed_recipe",
+        "implementation-groups": "impl_groups_recipe",
+        "merge-prs": "pmp_recipe",
+    }
+    result = []
+    for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):
+        name = yaml_path.stem
+        recipe = load_recipe(yaml_path)
+        for step in recipe.steps.values():
+            if (
+                step.tool == "wait_for_merge_queue"
+                and step.on_result is not None
+                and getattr(step.on_result, "conditions", None)
+            ):
+                fixture_name = fixture_map.get(name)
+                if fixture_name:
+                    result.append(fixture_name)
+                break
+    return sorted(result)
 
 
-@pytest.mark.parametrize("recipe_fixture", QUEUE_RECIPES)
+QUEUE_RECIPES = _discover_queue_recipe_fixtures()
+
+# Family-specific list: impl/remed/impl_groups use release_issue_timeout as
+# their queue error escalation step.  Tests that assert step names or routing
+# targets specific to this family use this constant instead of QUEUE_RECIPES.
+RELEASE_TIMEOUT_RECIPES = ["impl_recipe", "remed_recipe", "impl_groups_recipe"]
+
+
+# ---------------------------------------------------------------------------
+# Gap 1 + Gap 6: ci_watch_post_queue_fix step + ejected_ci_failure routing
+# (applies to release_issue_timeout family only)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("recipe_fixture", RELEASE_TIMEOUT_RECIPES)
 def test_ci_watch_post_queue_fix_exists(recipe_fixture, request):
-    """ci_watch_post_queue_fix step must exist in all three queue-capable recipes."""
+    """ci_watch_post_queue_fix step must exist in release_issue_timeout family recipes."""
     recipe = request.getfixturevalue(recipe_fixture)
     assert "ci_watch_post_queue_fix" in recipe.steps, (
         f"ci_watch_post_queue_fix must be a step in {recipe_fixture}"
     )
 
 
-@pytest.mark.parametrize("recipe_fixture", QUEUE_RECIPES)
+@pytest.mark.parametrize("recipe_fixture", RELEASE_TIMEOUT_RECIPES)
 def test_re_push_queue_fix_routes_to_ci_watch_post_queue_fix(recipe_fixture, request):
     """re_push_queue_fix.on_success must route to ci_watch_post_queue_fix."""
     recipe = request.getfixturevalue(recipe_fixture)
@@ -796,7 +1021,7 @@ def test_re_push_queue_fix_routes_to_ci_watch_post_queue_fix(recipe_fixture, req
     )
 
 
-@pytest.mark.parametrize("recipe_fixture", QUEUE_RECIPES)
+@pytest.mark.parametrize("recipe_fixture", RELEASE_TIMEOUT_RECIPES)
 def test_ci_watch_post_queue_fix_routes_reenter_on_success(recipe_fixture, request):
     """ci_watch_post_queue_fix.on_success must route to reenter_merge_queue."""
     recipe = request.getfixturevalue(recipe_fixture)
@@ -809,7 +1034,7 @@ def test_ci_watch_post_queue_fix_routes_reenter_on_success(recipe_fixture, reque
     )
 
 
-@pytest.mark.parametrize("recipe_fixture", QUEUE_RECIPES)
+@pytest.mark.parametrize("recipe_fixture", RELEASE_TIMEOUT_RECIPES)
 def test_ci_watch_post_queue_fix_routes_detect_ci_conflict_on_failure(recipe_fixture, request):
     """ci_watch_post_queue_fix.on_failure must route to detect_ci_conflict."""
     recipe = request.getfixturevalue(recipe_fixture)
@@ -822,7 +1047,7 @@ def test_ci_watch_post_queue_fix_routes_detect_ci_conflict_on_failure(recipe_fix
     )
 
 
-@pytest.mark.parametrize("recipe_fixture", QUEUE_RECIPES)
+@pytest.mark.parametrize("recipe_fixture", RELEASE_TIMEOUT_RECIPES)
 def test_ci_watch_post_queue_fix_uses_wait_for_ci_tool(recipe_fixture, request):
     """ci_watch_post_queue_fix must use the wait_for_ci tool."""
     recipe = request.getfixturevalue(recipe_fixture)
@@ -833,7 +1058,7 @@ def test_ci_watch_post_queue_fix_uses_wait_for_ci_tool(recipe_fixture, request):
     assert step.tool == "wait_for_ci"
 
 
-@pytest.mark.parametrize("recipe_fixture", QUEUE_RECIPES)
+@pytest.mark.parametrize("recipe_fixture", RELEASE_TIMEOUT_RECIPES)
 def test_ci_watch_post_queue_fix_has_skip_when_false(recipe_fixture, request):
     """ci_watch_post_queue_fix must have skip_when_false: inputs.open_pr."""
     recipe = request.getfixturevalue(recipe_fixture)
@@ -844,7 +1069,7 @@ def test_ci_watch_post_queue_fix_has_skip_when_false(recipe_fixture, request):
     assert step.skip_when_false == "inputs.open_pr"
 
 
-@pytest.mark.parametrize("recipe_fixture", QUEUE_RECIPES)
+@pytest.mark.parametrize("recipe_fixture", RELEASE_TIMEOUT_RECIPES)
 def test_wait_for_queue_routes_ejected_ci_failure_to_diagnose_ci(recipe_fixture, request):
     """wait_for_queue.on_result must route ejected_ci_failure to diagnose_ci."""
     recipe = request.getfixturevalue(recipe_fixture)
@@ -862,7 +1087,7 @@ def test_wait_for_queue_routes_ejected_ci_failure_to_diagnose_ci(recipe_fixture,
     )
 
 
-@pytest.mark.parametrize("recipe_fixture", QUEUE_RECIPES)
+@pytest.mark.parametrize("recipe_fixture", RELEASE_TIMEOUT_RECIPES)
 def test_wait_for_queue_ejected_ci_failure_precedes_ejected(recipe_fixture, request):
     """ejected_ci_failure route must precede generic ejected in wait_for_queue.on_result."""
     recipe = request.getfixturevalue(recipe_fixture)
@@ -1044,41 +1269,76 @@ def test_remediation_wait_for_queue_has_timeout_arm_and_release_timeout_fallback
 
 
 # ---------------------------------------------------------------------------
-# T9: Full routing parity — every PRState covered, fallback and on_failure identical
+# T9: Full routing parity — every PRState covered (universal + family-specific)
 # ---------------------------------------------------------------------------
 
 _REQUIRED_PR_STATE_VALUES = frozenset(s.value for s in PRState if s != PRState.ERROR)
+_PR_STATE_WHEN_RE = re.compile(r"\$\{\{\s*result\.pr_state\s*\}\}\s*==\s*(\w+)")
 
 
 @pytest.mark.parametrize("recipe_fixture", QUEUE_RECIPES)
 def test_wait_for_queue_routing_covers_every_pr_state(recipe_fixture, request) -> None:
-    """wait_for_queue.on_result must cover every non-error PRState with explicit when arms."""
+    """Every wait_for_merge_queue step must cover every non-error PRState."""
+    recipe = request.getfixturevalue(recipe_fixture)
+
+    # Find wait_for_merge_queue steps dynamically
+    mq_steps = {
+        name: step
+        for name, step in recipe.steps.items()
+        if step.tool == "wait_for_merge_queue"
+        and step.on_result is not None
+        and step.on_result.conditions
+    }
+    assert mq_steps, f"{recipe_fixture}: no wait_for_merge_queue step with on_result found"
+
+    for step_name, step in mq_steps.items():
+        conditions = step.on_result.conditions
+
+        covered: set[str] = set()
+        for c in conditions:
+            if c.when is None:
+                continue
+            m = _PR_STATE_WHEN_RE.search(c.when)
+            if m:
+                covered.add(m.group(1))
+
+        missing = _REQUIRED_PR_STATE_VALUES - covered
+        assert not missing, (
+            f"{recipe_fixture}: {step_name}.on_result is missing explicit routing arms "
+            f"for PRState values: {sorted(missing)}. Every non-error PRState must have a "
+            f"when condition."
+        )
+
+        # ejected_ci_failure must precede generic ejected
+        whens = [c.when or "" for c in conditions]
+        ci_fail_idx = next((i for i, w in enumerate(whens) if "ejected_ci_failure" in w), None)
+        ejected_idx = next(
+            (i for i, w in enumerate(whens) if w.strip() == "${{ result.pr_state }} == ejected"),
+            None,
+        )
+        assert ci_fail_idx is not None, (
+            f"{recipe_fixture}: {step_name} ejected_ci_failure route must exist"
+        )
+        assert ejected_idx is not None, f"{recipe_fixture}: {step_name} ejected route must exist"
+        assert ci_fail_idx < ejected_idx, (
+            f"{recipe_fixture}: {step_name} ejected_ci_failure route must appear "
+            f"before generic ejected route"
+        )
+
+
+# ---------------------------------------------------------------------------
+# T9 family-specific: fallback, on_failure, reenter_merge_queue_cheap
+# (release_issue_timeout family only)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("recipe_fixture", RELEASE_TIMEOUT_RECIPES)
+def test_wait_for_queue_fallback_routes_to_release_issue_timeout(recipe_fixture, request) -> None:
+    """wait_for_queue fallback (when=None) must route to release_issue_timeout."""
     recipe = request.getfixturevalue(recipe_fixture)
     step = recipe.steps["wait_for_queue"]
-    assert step.on_result is not None, "wait_for_queue must have on_result"
-    conditions = step.on_result.conditions
-
-    # Collect the explicit when values by extracting the value after '=='
-    import re
-
-    _PR_STATE_WHEN_RE = re.compile(r"\$\{\{\s*result\.pr_state\s*\}\}\s*==\s*(\w+)")
-    covered: set[str] = set()
-    for c in conditions:
-        if c.when is None:
-            continue
-        m = _PR_STATE_WHEN_RE.search(c.when)
-        if m:
-            covered.add(m.group(1))
-
-    missing = _REQUIRED_PR_STATE_VALUES - covered
-    assert not missing, (
-        f"{recipe_fixture}: wait_for_queue.on_result is missing explicit routing arms "
-        f"for PRState values: {sorted(missing)}. Every non-error PRState must have a "
-        f"when condition."
-    )
-
-    # Fallback target must be release_issue_timeout
-    fallback_conditions = [c for c in conditions if c.when is None]
+    assert step.on_result is not None
+    fallback_conditions = [c for c in step.on_result.conditions if c.when is None]
     assert fallback_conditions, (
         f"{recipe_fixture}: wait_for_queue.on_result must have a fallback condition"
     )
@@ -1087,36 +1347,61 @@ def test_wait_for_queue_routing_covers_every_pr_state(recipe_fixture, request) -
         f"got: {fallback_conditions[0].route!r}"
     )
 
-    # on_failure target must be release_issue_timeout
+
+@pytest.mark.parametrize("recipe_fixture", RELEASE_TIMEOUT_RECIPES)
+def test_wait_for_queue_on_failure_routes_to_release_issue_timeout(
+    recipe_fixture, request
+) -> None:
+    """wait_for_queue.on_failure must route to release_issue_timeout."""
+    recipe = request.getfixturevalue(recipe_fixture)
+    step = recipe.steps["wait_for_queue"]
     assert step.on_failure == "release_issue_timeout", (
         f"{recipe_fixture}: wait_for_queue on_failure must be release_issue_timeout, "
         f"got: {step.on_failure!r}"
     )
 
-    # ejected_ci_failure must precede generic ejected (existing invariant preserved)
-    whens = [c.when or "" for c in conditions]
-    ci_fail_idx = next((i for i, w in enumerate(whens) if "ejected_ci_failure" in w), None)
-    ejected_idx = next(
-        (i for i, w in enumerate(whens) if w.strip() == "${{ result.pr_state }} == ejected"),
-        None,
-    )
-    assert ci_fail_idx is not None, f"{recipe_fixture}: ejected_ci_failure route must exist"
-    assert ejected_idx is not None, f"{recipe_fixture}: ejected route must exist"
-    assert ci_fail_idx < ejected_idx, (
-        f"{recipe_fixture}: ejected_ci_failure route must appear before generic ejected route"
-    )
 
-    # reenter_merge_queue_cheap must exist and be reachable from dropped_healthy
+@pytest.mark.parametrize("recipe_fixture", RELEASE_TIMEOUT_RECIPES)
+def test_wait_for_queue_dropped_healthy_routes_to_reenter_merge_queue_cheap(
+    recipe_fixture, request
+) -> None:
+    """dropped_healthy must route to reenter_merge_queue_cheap."""
+    recipe = request.getfixturevalue(recipe_fixture)
     assert "reenter_merge_queue_cheap" in recipe.steps, (
         f"{recipe_fixture}: reenter_merge_queue_cheap step must exist"
     )
+    step = recipe.steps["wait_for_queue"]
+    assert step.on_result is not None
     dropped_routes = [
         c
-        for c in conditions
+        for c in step.on_result.conditions
         if c.when is not None
         and "dropped_healthy" in c.when
         and c.route == "reenter_merge_queue_cheap"
     ]
     assert dropped_routes, (
         f"{recipe_fixture}: dropped_healthy must route to reenter_merge_queue_cheap"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Auto-discovery structural guards
+# ---------------------------------------------------------------------------
+
+
+def test_auto_discovery_includes_merge_prs() -> None:
+    """merge-prs.yaml must appear in the auto-discovered queue recipe list."""
+    assert "pmp_recipe" in QUEUE_RECIPES, (
+        "merge-prs.yaml (pmp_recipe) must be in QUEUE_RECIPES — if this fails, "
+        "someone removed wait_for_merge_queue from merge-prs.yaml"
+    )
+
+
+def test_auto_discovery_matches_known_queue_recipes() -> None:
+    """Auto-discovered queue recipes must match the expected set exactly."""
+    expected = {"impl_recipe", "remed_recipe", "impl_groups_recipe", "pmp_recipe"}
+    actual = set(QUEUE_RECIPES)
+    assert actual == expected, (
+        f"QUEUE_RECIPES mismatch — expected {sorted(expected)}, got {sorted(actual)}. "
+        f"Missing: {sorted(expected - actual)}, Extra: {sorted(actual - expected)}"
     )

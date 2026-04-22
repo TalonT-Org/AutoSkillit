@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
+from autoskillit.core import FranchiseErrorCode
+
 
 class CampaignSummaryStatus(StrEnum):
     """Strict 3-value status enum for per-dispatch summary entries."""
@@ -47,7 +49,7 @@ class SummaryErrorRecord:
     """One entry per failed dispatch."""
 
     dispatch_name: str
-    code: str
+    code: FranchiseErrorCode
     message: str
     l2_session_id: str
 
@@ -68,7 +70,7 @@ class CampaignSummary:
 
 
 _SUMMARY_PATTERN = re.compile(
-    r"---campaign-summary::(?P<cid>.+?)---\s*\n"
+    r"---campaign-summary::(?P<cid>.+?)---[^\n]*\n"
     r"(?P<body>.*?)\n"
     r"---end-campaign-summary::(?P<cid_end>.+?)---",
     re.DOTALL,
@@ -155,41 +157,44 @@ def parse_campaign_summary(text: str, campaign_id: str) -> CampaignSummary | Non
     errors = validate_campaign_summary(data)
     if errors:
         return None
-    per_dispatch = [
-        PerDispatchEntry(
-            name=e["name"],
-            status=CampaignSummaryStatus(e["status"]),
-            elapsed_seconds=float(e["elapsed_seconds"]),
-            token_usage=DispatchTokenUsage(
-                input=e["token_usage"]["input"],
-                output=e["token_usage"]["output"],
-                cache_read=e["token_usage"]["cache_read"],
-                cache_creation=e["token_usage"]["cache_creation"],
-            ),
-            l2_session_id=e["l2_session_id"],
+    try:
+        per_dispatch = [
+            PerDispatchEntry(
+                name=e["name"],
+                status=CampaignSummaryStatus(e["status"]),
+                elapsed_seconds=float(e["elapsed_seconds"]),
+                token_usage=DispatchTokenUsage(
+                    input=e["token_usage"]["input"],
+                    output=e["token_usage"]["output"],
+                    cache_read=e["token_usage"]["cache_read"],
+                    cache_creation=e["token_usage"]["cache_creation"],
+                ),
+                l2_session_id=e["l2_session_id"],
+            )
+            for e in data["per_dispatch"]
+        ]
+        error_records = [
+            SummaryErrorRecord(
+                dispatch_name=r["dispatch_name"],
+                code=FranchiseErrorCode(r["code"]),
+                message=r["message"],
+                l2_session_id=r["l2_session_id"],
+            )
+            for r in data["error_records"]
+        ]
+        return CampaignSummary(
+            schema_version=data["schema_version"],
+            campaign_id=data["campaign_id"],
+            campaign_name=data["campaign_name"],
+            dispatch_count=data["dispatch_count"],
+            completed_count=data["completed_count"],
+            failure_count=data["failure_count"],
+            skipped_count=data["skipped_count"],
+            per_dispatch=per_dispatch,
+            error_records=error_records,
         )
-        for e in data["per_dispatch"]
-    ]
-    error_records = [
-        SummaryErrorRecord(
-            dispatch_name=r["dispatch_name"],
-            code=r["code"],
-            message=r["message"],
-            l2_session_id=r["l2_session_id"],
-        )
-        for r in data["error_records"]
-    ]
-    return CampaignSummary(
-        schema_version=data["schema_version"],
-        campaign_id=data["campaign_id"],
-        campaign_name=data["campaign_name"],
-        dispatch_count=data["dispatch_count"],
-        completed_count=data["completed_count"],
-        failure_count=data["failure_count"],
-        skipped_count=data["skipped_count"],
-        per_dispatch=per_dispatch,
-        error_records=error_records,
-    )
+    except (KeyError, TypeError, ValueError):
+        return None
 
 
 def serialize_campaign_summary(summary: CampaignSummary) -> str:

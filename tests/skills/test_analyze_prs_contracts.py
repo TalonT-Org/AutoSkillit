@@ -61,3 +61,8 @@ def test_analyze_prs_contract_has_merge_queue_data_path() -> None:
     assert "merge_queue_data_path" in names, (
         "analyze-prs contract must have a merge_queue_data_path input entry"
     )
+
+
+def test_analyze_prs_step_1_5_graphql_batch(skill_text: str) -> None:
+    """Step 1.5 must use GraphQL aliases to batch PR queries, not sequential gh CLI calls."""
+    assert "graphql" in skill_text.lower() or "alias" in skill_text.lower()

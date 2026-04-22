@@ -82,3 +82,17 @@ def test_skill_reports_thread_resolution_count(resolve_review_skill_md: str) -> 
         "Threads resolved" in resolve_review_skill_md
         or "threads resolved" in resolve_review_skill_md.lower()
     )
+
+
+def test_resolve_review_uses_graphql_aliases(resolve_review_skill_md: str) -> None:
+    """Thread resolution must use aliased GraphQL mutations, not individual calls."""
+    assert (
+        "alias" in resolve_review_skill_md.lower()
+        or "resolve1:" in resolve_review_skill_md
+        or "resolveReviewThread" in resolve_review_skill_md
+    )
+
+
+def test_resolve_review_reply_loop_has_delay(resolve_review_skill_md: str) -> None:
+    """Reply POST loop must include sleep 1 between calls."""
+    assert "sleep 1" in resolve_review_skill_md or "sleep(1)" in resolve_review_skill_md

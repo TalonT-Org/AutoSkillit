@@ -93,6 +93,13 @@ def test_needs_human_prose_describes_genuine_ambiguity():
     )
 
 
+def test_review_pr_own_pr_comment_retry():
+    """SKILL.md must handle own-PR REQUEST_CHANGES 422 by retrying with COMMENT event."""
+    skill_md = _skill_text()
+    assert "COMMENT" in skill_md
+    assert "422" in skill_md or "own-PR" in skill_md.lower() or "self-review" in skill_md.lower()
+
+
 def test_contract_yamls_include_approved_with_comments() -> None:
     """All 3 contract YAML files must include approved_with_comments in
     expected_output_patterns and pattern_examples for the review-pr contract."""

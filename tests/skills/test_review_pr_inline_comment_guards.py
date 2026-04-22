@@ -289,3 +289,21 @@ def test_mandatory_echo_positioned_between_step4_and_step5():
     assert "do not proceed to step 5" in between.lower(), (
         "The 'Do not proceed to Step 5' gate must appear between Step 4 and Step 5."
     )
+
+
+def test_review_pr_http200_success_signal():
+    """HTTP 200 must be treated as review-post success; response body must not be inspected."""
+    skill_md = SKILL_TEXT
+    assert "HTTP 200" in skill_md or "http 200" in skill_md.lower()
+    lower = skill_md.lower()
+    assert (
+        "do not inspect" in lower
+        or "do not check" in lower
+        or "regardless of response body" in lower
+    )
+
+
+def test_review_pr_tier1_fallback_has_delay():
+    """Tier 1 fallback loop must include sleep 1 between individual POSTs."""
+    skill_md = SKILL_TEXT
+    assert "sleep 1" in skill_md or "sleep(1)" in skill_md

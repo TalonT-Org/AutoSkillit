@@ -107,3 +107,9 @@ def test_claude_md_no_stale_fidelity_reference(claude_md: str) -> None:
         "The helpers extract_linked_issues and is_valid_fidelity_finding live in "
         "execution/pr_analysis.py. Remove the stale pipeline/fidelity.py entry (P2-5)."
     )
+
+
+def test_claude_md_has_github_api_discipline(claude_md: str) -> None:
+    """CLAUDE.md must include §3.5 GitHub API Call Discipline rule."""
+    assert "GitHub API Call Discipline" in claude_md
+    assert "sleep" in claude_md.lower() or "delay" in claude_md.lower()

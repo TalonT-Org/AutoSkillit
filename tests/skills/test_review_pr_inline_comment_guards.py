@@ -306,4 +306,10 @@ def test_review_pr_http200_success_signal():
 def test_review_pr_tier1_fallback_has_delay():
     """Tier 1 fallback loop must include sleep 1 between individual POSTs."""
     skill_md = SKILL_TEXT
-    assert "sleep 1" in skill_md or "sleep(1)" in skill_md
+    tier1_idx = skill_md.find("Fallback Tier 1")
+    assert tier1_idx >= 0, "Tier 1 fallback section not found in skill"
+    tier2_idx = skill_md.find("Tier 2", tier1_idx)
+    tier1_section = skill_md[tier1_idx:tier2_idx] if tier2_idx >= 0 else skill_md[tier1_idx:]
+    assert "sleep 1" in tier1_section or "sleep(1)" in tier1_section, (
+        "Tier 1 fallback loop must include sleep 1 between individual POST calls"
+    )

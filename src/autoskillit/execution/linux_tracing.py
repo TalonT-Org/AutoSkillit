@@ -33,6 +33,8 @@ import anyio.abc
 import psutil
 
 from autoskillit.core import get_logger
+from autoskillit.core import read_boot_id as read_boot_id
+from autoskillit.core import read_starttime_ticks as read_starttime_ticks
 
 if TYPE_CHECKING:
     from autoskillit.config import LinuxTracingConfig
@@ -40,35 +42,6 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 LINUX_TRACING_AVAILABLE = sys.platform == "linux"
-
-
-def read_boot_id() -> str | None:
-    """Read the system boot ID from /proc/sys/kernel/random/boot_id."""
-    try:
-        return Path("/proc/sys/kernel/random/boot_id").read_text().strip()
-    except OSError:
-        return None
-
-
-def read_starttime_ticks(pid: int) -> int | None:
-    """Read process starttime ticks from /proc/pid/stat.
-
-    Uses rfind(")") to correctly locate the field boundary even when the
-    process comm contains a ")" character. Matches psutil's own _parse_stat_file()
-    which uses rfind(b")") for the same reason.
-    """
-    try:
-        stat = Path(f"/proc/{pid}/stat").read_text()
-        # comm may contain ")" — use rfind to find the *last* ")" as the boundary
-        rpar = stat.rfind(")")
-        if rpar == -1:
-            return None
-        fields = stat[rpar + 2 :].split()
-        # starttime is field 22 (1-indexed per man page), offset 19 from the field after ")"
-        return int(fields[19])
-    except (OSError, ValueError, IndexError):
-        pass
-    return None
 
 
 # ---------------------------------------------------------------------------

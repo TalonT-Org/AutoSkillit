@@ -110,6 +110,7 @@ generic_automation_mcp/
 │   ├── _type_protocols.py   #   Protocols: GatePolicy, HeadlessExecutor, CIWatcher, etc.
 │   ├── _type_helpers.py
 │   ├── _type_resume.py      #   ResumeSpec discriminated union: NoResume, BareResume, NamedResume
+│   ├── _linux_proc.py       #   read_boot_id, read_starttime_ticks — Linux /proc helpers (L0)
 │   ├── _claude_env.py       #   IDE-scrubbing canonical env builder for claude subprocesses
 │   ├── _terminal_table.py   #   L0 color-agnostic terminal table primitive
 │   ├── _version_snapshot.py #   Process-scoped version snapshot for session telemetry (lru_cache'd)
@@ -268,8 +269,8 @@ generic_automation_mcp/
 │   ├── _update.py           #   run_update_command(): first-class upgrade path for `autoskillit update`
 │   ├── _update_checks.py    #   Unified startup update check: version/hook/source-drift signals, branch-aware dismissal
 │   ├── _serve_guard.py      #   Async signal-guarded MCP server bootstrap (extracted from app.py)
+│   ├── _franchise.py        #   franchise subcommand group: status --reap/--dry-run, run stub, signal guard; render_franchise_error()
 │   ├── _workspace.py        #   Workspace clean helpers
-│   ├── _franchise.py        #   render_franchise_error(): franchise error envelope rendering (stderr + exit 3)
 │   └── app.py               #   CLI entry: serve, init, config, skills, recipes, doctor, update, etc.
 │
 ├── hooks/                   # Claude Code PreToolUse/PostToolUse/SessionStart scripts

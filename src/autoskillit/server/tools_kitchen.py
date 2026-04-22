@@ -160,7 +160,7 @@ def _extract_sous_chef_discipline(sc_text: str) -> str:
 
 
 def _write_hook_config() -> None:
-    """Write user-configured quota values to temp/.autoskillit_hook_config.json.
+    """Write user-configured quota values to .autoskillit/temp/.hook_config.json.
 
     The hook subprocess (quota_guard.py) reads this file to apply user settings
     without importing the autoskillit package.

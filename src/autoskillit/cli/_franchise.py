@@ -113,7 +113,7 @@ def _humanize(n: int | float | None) -> str:
 
 
 def _build_status_rows(state: CampaignState) -> list[tuple[str, ...]]:
-    """Build table rows from campaign state dispatches."""
+    """Build table rows from campaign state dispatches, including separator and TOTAL rows."""
     rows: list[tuple[str, ...]] = []
     for d in state.dispatches:
         tu = d.token_usage
@@ -129,6 +129,20 @@ def _build_status_rows(state: CampaignState) -> list[tuple[str, ...]]:
                 d.l2_session_log_dir or "-",
             )
         )
+    totals = _aggregate_totals(state)
+    rows.append(("─" * 6, "", "", "", "", "", "", ""))
+    rows.append(
+        (
+            "TOTAL",
+            "",
+            "",
+            _humanize(totals["input_tokens"]),
+            _humanize(totals["output_tokens"]),
+            _humanize(totals["cache_read"]),
+            _humanize(totals["cache_creation"]),
+            "",
+        )
+    )
     return rows
 
 
@@ -149,22 +163,29 @@ def _aggregate_totals(state: CampaignState) -> dict[str, int]:
     return totals
 
 
-def _cross_check_tokens(state: CampaignState, state_totals: dict[str, int]) -> None:
-    """Warn on >5% token divergence between state.json and sessions.jsonl."""
+def _load_log_totals(state: CampaignState) -> dict[str, int] | None:
+    """Load token totals from sessions.jsonl for the campaign. Returns None if unavailable."""
     from autoskillit.execution import resolve_log_dir
     from autoskillit.pipeline import DefaultTokenLog
 
     log_root = resolve_log_dir("")
     sessions_index = log_root / "sessions.jsonl"
     if not sessions_index.exists():
-        return
+        return None
 
     token_log = DefaultTokenLog()
     loaded = token_log.load_from_log_dir(log_root, campaign_id_filter=state.campaign_id)
     if loaded == 0:
-        return
+        return None
 
-    log_totals = token_log.compute_total()
+    return token_log.compute_total()
+
+
+def _cross_check_tokens(state: CampaignState, state_totals: dict[str, int]) -> None:
+    """Warn on >5% token divergence between state.json and sessions.jsonl."""
+    log_totals = _load_log_totals(state)
+    if log_totals is None:
+        return
 
     for label, state_key, log_key in [
         ("input_tokens", "input_tokens", "input_tokens"),
@@ -193,23 +214,9 @@ def _render_status_display(state: CampaignState) -> int:
     print(header)
 
     rows = _build_status_rows(state)
-    totals = _aggregate_totals(state)
-    rows.append(("─" * 6, "", "", "", "", "", "", ""))
-    rows.append(
-        (
-            "TOTAL",
-            "",
-            "",
-            _humanize(totals["input_tokens"]),
-            _humanize(totals["output_tokens"]),
-            _humanize(totals["cache_read"]),
-            _humanize(totals["cache_creation"]),
-            "",
-        )
-    )
     table_str = _render_terminal_table(_STATUS_COLUMNS, rows)
     print(table_str)
-    return 1 + table_str.count("\n") + 1
+    return 1 + table_str.rstrip("\n").count("\n") + 1
 
 
 def _watch_loop(state_path: Path) -> int:
@@ -244,6 +251,7 @@ def _watch_loop(state_path: Path) -> int:
         while True:
             state = read_state(state_path)
             if state is None:
+                sys.stdout.flush()
                 sys.stderr.write("ERROR: state file disappeared or corrupted\n")
                 return 3
 
@@ -268,6 +276,9 @@ def _watch_loop(state_path: Path) -> int:
     except KeyboardInterrupt:
         state = read_state(state_path)
         return _compute_exit_code(state) if state else 3
+    except Exception as exc:
+        sys.stderr.write(f"ERROR: unexpected error in --watch loop: {exc}\n")
+        return 3
     finally:
         try:
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
@@ -691,6 +702,10 @@ def franchise_status(
             print(json.dumps(data))
             _cross_check_tokens(state, totals)
             sys.exit(_compute_exit_code(state))
+
+        if watch and cleanup:
+            print("ERROR: --watch and --cleanup are mutually exclusive.")
+            sys.exit(3)
 
         if watch:
             sys.exit(_watch_loop(state_path))

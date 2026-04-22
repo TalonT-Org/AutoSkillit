@@ -116,8 +116,6 @@ def franchise_error(
     if code not in FRANCHISE_ERROR_CODES:
         msg = f"Unregistered franchise error code: {code!r}"
         raise ValueError(msg)
-    if details is not None:
-        json.dumps(details)  # raises TypeError on non-serializable values
     return json.dumps(
         {
             "success": False,

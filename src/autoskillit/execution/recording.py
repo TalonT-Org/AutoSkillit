@@ -84,6 +84,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
         linux_tracing_config: Any | None = None,
         idle_output_timeout: float | None = None,
         max_suppression_seconds: float | None = None,
+        on_pid_resolved: Any | None = None,
     ) -> SubprocessResult:
         step_name = (env or {}).get(SCENARIO_STEP_NAME_ENV, "")
 
@@ -109,6 +110,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
             linux_tracing_config=linux_tracing_config,
             idle_output_timeout=idle_output_timeout,
             max_suppression_seconds=max_suppression_seconds,
+            on_pid_resolved=on_pid_resolved,
         )
 
         if step_name:
@@ -201,6 +203,7 @@ class ReplayingSubprocessRunner(SubprocessRunner):
         linux_tracing_config: Any | None = None,
         idle_output_timeout: float | None = None,
         max_suppression_seconds: float | None = None,
+        on_pid_resolved: Any | None = None,
     ) -> SubprocessResult:
         step_name = (env or {}).get(SCENARIO_STEP_NAME_ENV, "")
 

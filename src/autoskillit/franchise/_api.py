@@ -19,8 +19,15 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-def _write_pid(state_path: Path, dispatch_name: str, dispatch_id: str, pid: int) -> None:
-    """on_spawn callback: atomically mark dispatch as running with l2_pid."""
+def _write_pid(
+    state_path: Path,
+    dispatch_name: str,
+    dispatch_id: str,
+    pid: int,
+    starttime_ticks: int,
+) -> None:
+    """on_spawn callback: atomically mark dispatch as running with l2_pid and identity fields."""
+    from autoskillit.core import read_boot_id
     from autoskillit.franchise.state import mark_dispatch_running
 
     try:
@@ -29,6 +36,8 @@ def _write_pid(state_path: Path, dispatch_name: str, dispatch_id: str, pid: int)
             dispatch_name,
             dispatch_id=dispatch_id,
             l2_pid=pid,
+            starttime_ticks=starttime_ticks,
+            boot_id=read_boot_id() or "",
         )
     except Exception:
         logger.warning("_write_pid: failed to mark dispatch running", exc_info=True)
@@ -183,9 +192,9 @@ async def _run_dispatch(
     started_at = time.time()
     _l2_pid: list[int] = []
 
-    def _on_spawn(pid: int) -> None:
+    def _on_spawn(pid: int, ticks: int) -> None:
         _l2_pid.append(pid)
-        _write_pid(state_path, effective_name, dispatch_id, pid)
+        _write_pid(state_path, effective_name, dispatch_id, pid, ticks)
 
     skill_result = await tool_ctx.executor.dispatch_food_truck(
         orchestrator_prompt=prompt,

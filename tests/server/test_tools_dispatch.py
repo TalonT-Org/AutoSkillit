@@ -392,7 +392,7 @@ class TestDispatchFoodTruckExecution:
             dispatches=[DispatchRecord(name="test-dispatch-name")],
         )
 
-        _write_pid(state_path, "test-dispatch-name", "dispatch-id-abc", 54321)
+        _write_pid(state_path, "test-dispatch-name", "dispatch-id-abc", 54321, 0)
 
         state_data = json.loads(state_path.read_text())
         dispatch_record = state_data["dispatches"][0]
@@ -415,7 +415,7 @@ class TestDispatchFoodTruckExecution:
         async def _dispatch_invoking_spawn(*args, on_spawn=None, **kwargs):
             result = await original_dispatch(*args, on_spawn=on_spawn, **kwargs)
             if on_spawn is not None:
-                on_spawn(99999)
+                on_spawn(99999, 0)
             return result
 
         monkeypatch.setattr(tool_ctx.executor, "dispatch_food_truck", _dispatch_invoking_spawn)

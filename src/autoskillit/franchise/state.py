@@ -17,7 +17,7 @@ from autoskillit.core import get_logger, write_versioned_json
 
 _log = get_logger(__name__)
 
-_SCHEMA_VERSION = 1
+_SCHEMA_VERSION = 2
 
 
 class DispatchStatus(StrEnum):
@@ -46,6 +46,8 @@ class DispatchRecord:
     l2_session_id: str = ""
     l2_session_log_dir: str = ""
     l2_pid: int = 0
+    l2_starttime_ticks: int = 0
+    l2_boot_id: str = ""
     reason: str = ""
     token_usage: dict[str, Any] = field(default_factory=dict)
     started_at: float = 0.0
@@ -147,6 +149,8 @@ def read_state(state_path: Path) -> CampaignState | None:
                 l2_session_id=d.get("l2_session_id", ""),
                 l2_session_log_dir=d.get("l2_session_log_dir", ""),
                 l2_pid=d.get("l2_pid", 0),
+                l2_starttime_ticks=d.get("l2_starttime_ticks", 0),
+                l2_boot_id=d.get("l2_boot_id", ""),
                 reason=d.get("reason", ""),
                 token_usage=d.get("token_usage", {}),
                 started_at=d.get("started_at", 0.0),
@@ -185,6 +189,8 @@ def mark_dispatch_running(
     *,
     dispatch_id: str,
     l2_pid: int,
+    starttime_ticks: int = 0,
+    boot_id: str = "",
 ) -> None:
     """Atomically mark a dispatch as running with its dispatch_id and l2_pid."""
     state = read_state(state_path)
@@ -196,6 +202,8 @@ def mark_dispatch_running(
             d.status = DispatchStatus.RUNNING
             d.dispatch_id = dispatch_id
             d.l2_pid = l2_pid
+            d.l2_starttime_ticks = starttime_ticks
+            d.l2_boot_id = boot_id
             d.started_at = time.time()
             break
     else:

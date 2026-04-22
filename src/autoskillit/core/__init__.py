@@ -6,6 +6,8 @@ explicit `from autoskillit.core.logging import get_logger`.
 """
 
 from ._claude_env import build_claude_env
+from ._linux_proc import read_boot_id as read_boot_id
+from ._linux_proc import read_starttime_ticks as read_starttime_ticks
 from ._plugin_cache import (
     _InstallLock as _InstallLock,
 )
@@ -215,6 +217,9 @@ __all__ = [
     "cleanup_readiness_sentinel",
     "readiness_sentinel_path",
     "write_readiness_sentinel",
+    # _linux_proc
+    "read_boot_id",
+    "read_starttime_ticks",
     # paths
     "GENERATED_FILES",
     "claude_code_log_path",

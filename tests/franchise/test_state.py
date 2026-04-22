@@ -121,8 +121,9 @@ class TestResumeMarksRunningInterrupted:
         b = next(d for d in state.dispatches if d.name == "B")
         assert b.status == DispatchStatus.INTERRUPTED
 
-        # Per algorithm: interrupted is not in {success, skipped}, so B is the next dispatch
-        assert decision.next_dispatch_name == "B"
+        # INTERRUPTED dispatches are skipped when searching for next_dispatch_name;
+        # the first PENDING dispatch (C) is returned, not the interrupted one (B).
+        assert decision.next_dispatch_name == "C"
 
 
 class TestResumeRejectsHaltedOnFailure:

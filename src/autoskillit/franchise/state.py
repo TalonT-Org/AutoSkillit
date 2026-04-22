@@ -301,7 +301,7 @@ def resume_campaign_from_state(
     for d in state.dispatches:
         if d.status in _COMPLETED_STATUSES:
             completed_lines.append(f"- {d.name}: {d.status}")
-        elif not next_name:
+        elif d.status != DispatchStatus.INTERRUPTED and not next_name:
             next_name = d.name
 
     completed_block = "\n".join(completed_lines) if completed_lines else ""

@@ -1145,6 +1145,12 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/recipe/test_review_loop_routing_integration.py": frozenset({"autoskillit.smoke_utils"}),
     # migration tests — migration engine integrates with execution.session
     "tests/migration/test_engine.py": frozenset({"autoskillit.execution"}),
+    # franchise E2E tests exercise full dispatch pipeline: DefaultHeadlessExecutor
+    # (execution layer) and _reap_stale_dispatches (cli layer) are required to wire
+    # the real executor and to test orphan reaping via the CLI-layer reap function.
+    "tests/franchise/test_franchise_e2e.py": frozenset(
+        {"autoskillit.execution", "autoskillit.cli"}
+    ),
 }
 
 

@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from autoskillit.core import claude_code_log_path, get_logger
-from autoskillit.execution import invalidate_cache
 from autoskillit.franchise.result_parser import parse_l2_result_block
 
 if TYPE_CHECKING:
@@ -45,6 +44,7 @@ async def execute_dispatch(
     prompt_builder: Callable[..., str],
     quota_checker: Callable[..., Any],
     quota_refresher: Callable[..., Any],
+    cache_invalidator: Callable[[str], None] | None = None,
 ) -> str:
     """Execute a single food truck dispatch.
 
@@ -98,6 +98,7 @@ async def execute_dispatch(
             prompt_builder=prompt_builder,
             quota_checker=quota_checker,
             quota_refresher=quota_refresher,
+            cache_invalidator=cache_invalidator,
         )
     except asyncio.CancelledError:
         raise
@@ -124,6 +125,7 @@ async def _run_dispatch(
     prompt_builder: Callable[..., str],
     quota_checker: Callable[..., Any],
     quota_refresher: Callable[..., Any],
+    cache_invalidator: Callable[[str], None] | None = None,
 ) -> str:
     """Inner dispatch body — called after lock acquisition."""
     from autoskillit.franchise.state import (
@@ -267,7 +269,8 @@ async def _run_dispatch(
         ),
     )
 
-    invalidate_cache(tool_ctx.config.quota_guard.cache_path)
+    if cache_invalidator is not None:
+        cache_invalidator(tool_ctx.config.quota_guard.cache_path)
 
     if tool_ctx.background is not None:
         tool_ctx.background.submit(

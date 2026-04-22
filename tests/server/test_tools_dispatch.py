@@ -507,8 +507,8 @@ class TestDispatchFoodTruckExecution:
         assert "l2-session-xyz" in cleanup_calls
 
     @pytest.mark.anyio
-    async def test_dispatch_food_truck_invalidates_quota_cache_file(self, tool_ctx, monkeypatch):
-        """After dispatch, invalidate_cache is called with the configured cache path."""
+    async def test_dispatch_food_truck_invalidates_quota_cache_file(self, tool_ctx):
+        """After dispatch, cache_invalidator is called with the configured cache path."""
         from autoskillit.franchise._api import execute_dispatch
 
         self._setup_standard_dispatch(tool_ctx)
@@ -517,8 +517,6 @@ class TestDispatchFoodTruckExecution:
 
         def _capture_invalidate(cache_path: str) -> None:
             invalidate_calls.append(cache_path)
-
-        monkeypatch.setattr("autoskillit.franchise._api.invalidate_cache", _capture_invalidate)
 
         await execute_dispatch(
             tool_ctx=tool_ctx,
@@ -530,6 +528,7 @@ class TestDispatchFoodTruckExecution:
             prompt_builder=_simple_prompt_builder,
             quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
+            cache_invalidator=_capture_invalidate,
         )
 
         assert tool_ctx.config.quota_guard.cache_path in invalidate_calls
@@ -554,7 +553,6 @@ class TestDispatchFoodTruckExecution:
                 session_id="l2-session-err",
             )
         )
-        monkeypatch.setattr("autoskillit.franchise._api.invalidate_cache", lambda _: None)
 
         def _raise_error(session_id: str) -> bool:
             raise exc_cls("simulated cleanup failure")

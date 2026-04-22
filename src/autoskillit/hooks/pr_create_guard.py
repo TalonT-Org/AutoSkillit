@@ -57,6 +57,8 @@ def main() -> None:
     # Hook config file is written by open_kitchen and removed by close_kitchen.
     # Its presence reliably signals an open kitchen without needing session ID.
     try:
+        # Keep in sync with HOOK_DIR_COMPONENTS/HOOK_CONFIG_FILENAME in _hook_settings.py
+        # (stdlib-only boundary prevents a shared import).
         cfg_path = Path.cwd() / ".autoskillit" / "temp" / ".hook_config.json"
         if not cfg_path.exists():
             sys.exit(0)  # kitchen not open; fail-open

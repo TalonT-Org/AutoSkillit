@@ -836,3 +836,153 @@ class TestSessionTypeVisibility:
 
         for name in GATED_TOOLS:
             assert name not in tool_names, f"{name} should be hidden after conftest reset"
+
+
+class TestFeatureGateVisibility:
+    """Feature gate override layer in _apply_session_type_visibility."""
+
+    @pytest.fixture(autouse=True)
+    def _reset_mcp_visibility(self):
+        """Reset gated tag visibility on the shared mcp singleton before each test."""
+        from autoskillit.server import mcp
+
+        mcp.disable(tags={"franchise", "kitchen", "headless"})
+        yield
+        mcp.disable(tags={"franchise", "kitchen", "headless"})
+
+    @pytest.mark.anyio
+    async def test_franchise_tools_hidden_when_feature_disabled(self, monkeypatch):
+        """SESSION_TYPE=franchise + AUTOSKILLIT_FEATURES__FRANCHISE=false → no franchise tools."""
+        from fastmcp.client import Client
+
+        from autoskillit.core import FRANCHISE_TOOLS
+        from autoskillit.server import mcp
+        from autoskillit.server._session_type import (
+            _apply_session_type_visibility,
+            _franchise_gate,
+        )
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "franchise")
+        monkeypatch.setenv("AUTOSKILLIT_FEATURES__FRANCHISE", "false")
+        _apply_session_type_visibility(feature_gates=[_franchise_gate])
+
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
+        tool_names = {t.name for t in tools}
+        for name in FRANCHISE_TOOLS:
+            assert name not in tool_names, (
+                f"{name} should be hidden when franchise feature is disabled"
+            )
+
+    @pytest.mark.anyio
+    async def test_franchise_tools_visible_when_feature_enabled(self, monkeypatch):
+        """SESSION_TYPE=franchise with no override → franchise tools visible (default_enabled)."""
+        from fastmcp.client import Client
+
+        from autoskillit.core import FRANCHISE_TOOLS
+        from autoskillit.server import mcp
+        from autoskillit.server._session_type import (
+            _apply_session_type_visibility,
+            _franchise_gate,
+        )
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "franchise")
+        monkeypatch.delenv("AUTOSKILLIT_FEATURES__FRANCHISE", raising=False)
+        _apply_session_type_visibility(feature_gates=[_franchise_gate])
+
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
+        tool_names = {t.name for t in tools}
+        for name in FRANCHISE_TOOLS:
+            assert name in tool_names, (
+                f"{name} should be visible for franchise session when feature is enabled"
+            )
+
+    @pytest.mark.anyio
+    async def test_session_type_franchise_respects_gate(self, monkeypatch):
+        """franchise session + feature disabled → no franchise tools, non-franchise hidden too."""
+        from fastmcp.client import Client
+
+        from autoskillit.core import FRANCHISE_TOOLS, GATED_TOOLS
+        from autoskillit.server import mcp
+        from autoskillit.server._session_type import (
+            _apply_session_type_visibility,
+            _franchise_gate,
+        )
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "franchise")
+        monkeypatch.setenv("AUTOSKILLIT_FEATURES__FRANCHISE", "false")
+        _apply_session_type_visibility(feature_gates=[_franchise_gate])
+
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
+        tool_names = {t.name for t in tools}
+        # No franchise tool visible — gate neutralized the pre-reveal
+        for name in FRANCHISE_TOOLS:
+            assert name not in tool_names, f"{name} should be hidden after franchise gate override"
+        # Non-franchise kitchen tools also absent (only franchise was pre-revealed)
+        for name in GATED_TOOLS - FRANCHISE_TOOLS:
+            assert name not in tool_names, (
+                f"{name} (non-franchise kitchen) should be hidden for franchise session"
+            )
+
+    def test_feature_gate_ordering(self, monkeypatch):
+        """Feature gates execute AFTER session-type dispatch (structural ordering test)."""
+        from unittest.mock import patch
+
+        from autoskillit.core import SessionType
+        from autoskillit.server._session_type import _apply_session_type_visibility
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "franchise")
+
+        call_order: list[str] = []
+
+        # Monkeypatch mcp.enable to record dispatch happening
+        import autoskillit.server._session_type as st_mod
+
+        def recording_gate(mcp_instance, session: SessionType) -> None:
+            call_order.append("gate")
+
+        with patch.object(st_mod, "_resolve_session_type", return_value=SessionType.FRANCHISE):
+            import autoskillit.server as server_mod
+
+            real_enable = server_mod.mcp.enable
+
+            def patched_enable(*, tags):
+                call_order.append("dispatch_enable")
+                return real_enable(tags=tags)
+
+            with patch.object(server_mod.mcp, "enable", patched_enable):
+                _apply_session_type_visibility(feature_gates=[recording_gate])
+
+        # Gate must be called, and after dispatch_enable
+        assert "gate" in call_order, "Gate was never called"
+        dispatch_idx = next((i for i, v in enumerate(call_order) if v == "dispatch_enable"), None)
+        gate_idx = next((i for i, v in enumerate(call_order) if v == "gate"), None)
+        assert dispatch_idx is not None, "Dispatch enable was never called"
+        assert gate_idx > dispatch_idx, (
+            f"Gate (idx={gate_idx}) must run AFTER dispatch (idx={dispatch_idx})"
+        )
+
+    @pytest.mark.anyio
+    async def test_apply_session_type_visibility_accepts_no_gates(self, monkeypatch):
+        """Backward compat: _apply_session_type_visibility() with no args behaves identically."""
+        from fastmcp.client import Client
+
+        from autoskillit.core import FRANCHISE_TOOLS
+        from autoskillit.server import mcp
+        from autoskillit.server._session_type import _apply_session_type_visibility
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "franchise")
+        monkeypatch.delenv("AUTOSKILLIT_FEATURES__FRANCHISE", raising=False)
+        # Call with no feature_gates argument (backward-compatible call)
+        _apply_session_type_visibility()
+
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
+        tool_names = {t.name for t in tools}
+        # Phase 1 still works: franchise tools visible
+        for name in FRANCHISE_TOOLS:
+            assert name in tool_names, (
+                f"{name} should be visible with no-gate backward-compatible call"
+            )

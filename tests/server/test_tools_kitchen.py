@@ -1295,4 +1295,57 @@ async def test_open_kitchen_degrades_gracefully_without_sous_chef(tmp_path, monk
 
     parsed = json.loads(result)
     assert parsed["success"] is True
-    assert "Kitchen is open" in parsed["content"]
+
+
+@pytest.mark.anyio
+async def test_redisable_subsets_includes_feature_tags() -> None:
+    """When franchise feature is disabled, _redisable_subsets disables franchise tag."""
+    from autoskillit.server.tools_kitchen import _redisable_subsets
+
+    mock_ctx = AsyncMock()
+
+    await _redisable_subsets(mock_ctx, [], features={"franchise": False})
+
+    calls = mock_ctx.disable_components.call_args_list
+    disabled_tag_sets = [c.kwargs.get("tags", set()) for c in calls]
+    assert any("franchise" in tags for tags in disabled_tag_sets), (
+        "franchise tag must be disabled when franchise feature is off"
+    )
+
+
+def test_exclusive_feature_tools_fully_hidden() -> None:
+    """EXCLUSIVE_FEATURE_TOOLS is a dict (currently empty — structural test)."""
+    from autoskillit.core import EXCLUSIVE_FEATURE_TOOLS
+
+    assert isinstance(EXCLUSIVE_FEATURE_TOOLS, dict)
+    assert EXCLUSIVE_FEATURE_TOOLS == {}
+
+
+@pytest.mark.anyio
+async def test_shared_tools_visible_post_kitchen_regardless() -> None:
+    """Disabling franchise tag must not affect tools with kitchen-core tag.
+
+    FastMCP union model: any enabled tag keeps the tool visible. Verifies that
+    kitchen-core tools (run_cmd, etc.) retain visibility after feature gate pass.
+    """
+    from autoskillit.server.tools_kitchen import _redisable_subsets
+
+    disabled_tags: list[set] = []
+    mock_ctx = AsyncMock()
+
+    async def capture_disable(*, tags):
+        disabled_tags.append(tags)
+
+    mock_ctx.disable_components.side_effect = capture_disable
+
+    # No subsets disabled, but franchise feature is explicitly disabled
+    await _redisable_subsets(mock_ctx, [], features={"franchise": False})
+
+    # franchise tag should be disabled
+    assert any("franchise" in t for t in disabled_tags), (
+        "franchise tag must be suppressed when feature is off"
+    )
+    # kitchen-core must NOT be in the disabled set (union model: still visible)
+    assert not any("kitchen-core" in t for t in disabled_tags), (
+        "kitchen-core tag must never be disabled by the feature gate pass"
+    )

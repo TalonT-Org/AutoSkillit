@@ -78,6 +78,7 @@ from autoskillit.server import (  # noqa: E402, F401
 from autoskillit.server._factory import make_context  # noqa: E402, F401
 from autoskillit.server._session_type import (  # noqa: E402, F401
     _apply_session_type_visibility,
+    _franchise_gate,
 )
 from autoskillit.server.tools_kitchen import _build_tool_category_listing  # noqa: E402, F401
 
@@ -91,4 +92,4 @@ from autoskillit.server._wire_compat import ClaudeCodeCompatMiddleware  # noqa: 
 
 mcp.add_middleware(ClaudeCodeCompatMiddleware())
 
-_apply_session_type_visibility()
+_apply_session_type_visibility(feature_gates=[_franchise_gate])

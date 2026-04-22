@@ -11,6 +11,7 @@ from autoskillit.core import (
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.contracts import (
     RESULT_CAPTURE_RE,
+    get_callable_contract,
     get_skill_contract,
     load_bundled_manifest,
     resolve_skill_name,
@@ -120,6 +121,80 @@ def _check_capture_output_coverage(ctx: ValidationContext) -> list[RuleFinding]:
                             ),
                         )
                     )
+
+    return findings
+
+
+@semantic_rule(
+    name="undeclared-python-capture-key",
+    description="result.X references in run_python steps must match callable contract outputs",
+    severity=Severity.WARNING,
+)
+def _check_python_capture_output_coverage(ctx: ValidationContext) -> list[RuleFinding]:
+    """Validate that run_python steps only reference declared callable output fields.
+
+    Checks both capture: mappings and on_result condition when: expressions
+    for result.* field references, and verifies each against the callable's
+    contract in callable_contracts section of skill_contracts.yaml.
+    """
+    wf = ctx.recipe
+    findings: list[RuleFinding] = []
+    manifest = load_bundled_manifest()
+
+    for step_name, step in wf.steps.items():
+        if step.tool != "run_python":
+            continue
+
+        callable_path = step.with_args.get("callable", "")
+        if not callable_path:
+            continue
+
+        # Collect all result.* references from capture, capture_list, and on_result
+        result_refs: list[str] = []
+        for _capture_var, capture_expr in step.capture.items():
+            result_refs.extend(RESULT_CAPTURE_RE.findall(capture_expr))
+        for _capture_var, capture_expr in step.capture_list.items():
+            result_refs.extend(RESULT_CAPTURE_RE.findall(capture_expr))
+        if step.on_result is not None:
+            for cond in step.on_result.conditions:
+                if cond.when is not None:
+                    result_refs.extend(RESULT_CAPTURE_RE.findall(cond.when))
+
+        if not result_refs:
+            continue
+
+        contract = get_callable_contract(callable_path, manifest)
+        if contract is None:
+            findings.append(
+                RuleFinding(
+                    rule="undeclared-python-capture-key",
+                    severity=Severity.WARNING,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' references result.* fields from callable "
+                        f"'{callable_path}' which has no callable contract entry in "
+                        f"skill_contracts.yaml. Add a callable_contracts section to "
+                        f"verify capture correctness."
+                    ),
+                )
+            )
+            continue
+
+        declared_keys = {out.name for out in contract.outputs}
+        for ref_key in result_refs:
+            if ref_key not in declared_keys:
+                findings.append(
+                    RuleFinding(
+                        rule="undeclared-python-capture-key",
+                        severity=Severity.WARNING,
+                        step_name=step_name,
+                        message=(
+                            f"Step '{step_name}' references result.{ref_key} "
+                            f"but callable '{callable_path}' does not declare "
+                            f"'{ref_key}' in its outputs contract."
+                        ),
+                    )
+                )
 
     return findings
 

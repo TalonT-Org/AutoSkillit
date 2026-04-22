@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import os
 import warnings
-from enum import StrEnum
+from enum import StrEnum, unique
 
 __all__ = [
     "RetryReason",
@@ -29,6 +29,7 @@ __all__ = [
     "PRState",
     "SessionType",
     "session_type",
+    "FranchiseErrorCode",
 ]
 
 
@@ -376,3 +377,26 @@ def session_type() -> SessionType:
             stacklevel=2,
         )
     return SessionType.LEAF
+
+
+@unique
+class FranchiseErrorCode(StrEnum):
+    """Registered error codes for franchise dispatch failures.
+
+    Every franchise error envelope must use one of these codes.
+    Unregistered codes are rejected by franchise_error() at runtime.
+    """
+
+    FRANCHISE_PARALLEL_REFUSED = "franchise_parallel_refused"
+    FRANCHISE_UNKNOWN_INGREDIENT = "franchise_unknown_ingredient"
+    FRANCHISE_RECIPE_NOT_FOUND = "franchise_recipe_not_found"
+    FRANCHISE_HARD_REFUSAL_HEADLESS = "franchise_hard_refusal_headless"
+    FRANCHISE_MANIFEST_MISSING = "franchise_manifest_missing"
+    FRANCHISE_MANIFEST_CORRUPTED = "franchise_manifest_corrupted"
+    L2_TIMEOUT = "l2_timeout"
+    L2_NO_RESULT_BLOCK = "l2_no_result_block"
+    L2_PARSE_FAILED = "l2_parse_failed"
+    L2_STARTUP_OR_CRASH = "l2_startup_or_crash"
+    DISPATCH_BUDGET_EXCEEDED = "dispatch_budget_exceeded"
+    QUOTA_EXHAUSTED = "quota_exhausted"
+    CLEANUP_FAILED = "cleanup_failed"

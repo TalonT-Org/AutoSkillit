@@ -21,6 +21,7 @@ from autoskillit.pipeline.gate import (
     GATED_TOOLS,
     UNGATED_TOOLS,
     DefaultGateState,
+    franchise_error,
     gate_error_result,
     headless_error_result,
 )
@@ -55,6 +56,7 @@ __all__ = [
     "DefaultGateState",
     "GATED_TOOLS",
     "UNGATED_TOOLS",
+    "franchise_error",
     "gate_error_result",
     "headless_error_result",
     # telemetry_fmt

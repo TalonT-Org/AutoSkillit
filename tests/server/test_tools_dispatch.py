@@ -108,7 +108,7 @@ class TestDispatchFoodTruckGates:
 class TestDispatchFoodTruckValidation:
     @pytest.mark.anyio
     async def test_dispatch_food_truck_rejects_non_standard_recipe(self, tool_ctx, monkeypatch):
-        """Campaign recipe → franchise_recipe_not_found error."""
+        """Campaign recipe → franchise_invalid_recipe_kind error."""
         from autoskillit.franchise._api import execute_dispatch
         from autoskillit.recipe.schema import Recipe, RecipeKind
 
@@ -134,7 +134,7 @@ class TestDispatchFoodTruckValidation:
             )
         )
         assert result["success"] is False
-        assert result["error"] == "franchise_recipe_not_found"
+        assert result["error"] == "franchise_invalid_recipe_kind"
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_rejects_unknown_ingredients(self, tool_ctx, monkeypatch):
@@ -192,7 +192,7 @@ class TestDispatchFoodTruckValidation:
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_no_recipes_configured(self, tool_ctx, monkeypatch):
-        """recipes=None → franchise_not_configured error."""
+        """recipes=None → franchise_manifest_missing error."""
         from autoskillit.franchise._api import execute_dispatch
 
         tool_ctx.franchise_lock = asyncio.Lock()
@@ -212,11 +212,11 @@ class TestDispatchFoodTruckValidation:
             )
         )
         assert result["success"] is False
-        assert result["error"] == "franchise_not_configured"
+        assert result["error"] == "franchise_manifest_missing"
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_no_executor_configured(self, tool_ctx, monkeypatch):
-        """executor=None → franchise_not_configured error."""
+        """executor=None → franchise_manifest_missing error."""
         from autoskillit.franchise._api import execute_dispatch
 
         tool_ctx.franchise_lock = asyncio.Lock()
@@ -239,7 +239,7 @@ class TestDispatchFoodTruckValidation:
             )
         )
         assert result["success"] is False
-        assert result["error"] == "franchise_not_configured"
+        assert result["error"] == "franchise_manifest_missing"
 
 
 # ---------------------------------------------------------------------------

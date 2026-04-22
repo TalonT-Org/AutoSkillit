@@ -589,7 +589,7 @@ def test_cross_check_warns_on_divergence(
     state_totals = _aggregate_totals(state)
 
     monkeypatch.setattr(
-        "autoskillit.execution.session_log.resolve_log_dir",
+        "autoskillit.execution.resolve_log_dir",
         lambda *a: tmp_path,
     )
     monkeypatch.setattr(

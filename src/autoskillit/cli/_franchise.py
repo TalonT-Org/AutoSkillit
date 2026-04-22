@@ -151,8 +151,8 @@ def _aggregate_totals(state: CampaignState) -> dict[str, int]:
 
 def _cross_check_tokens(state: CampaignState, state_totals: dict[str, int]) -> None:
     """Warn on >5% token divergence between state.json and sessions.jsonl."""
-    from autoskillit.execution.session_log import resolve_log_dir
-    from autoskillit.pipeline.tokens import DefaultTokenLog
+    from autoskillit.execution import resolve_log_dir
+    from autoskillit.pipeline import DefaultTokenLog
 
     log_root = resolve_log_dir("")
     sessions_index = log_root / "sessions.jsonl"

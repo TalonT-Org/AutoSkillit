@@ -81,7 +81,7 @@ class TestBuildInteractiveCmd:
         result = build_interactive_cmd(resume_spec=BareResume())
         assert "--resume" in result.cmd
         idx = result.cmd.index("--resume")
-        assert idx == len(result.cmd) - 1 or result.cmd[idx + 1].startswith("-")
+        assert idx == len(result.cmd) - 1
 
     def test_no_resume_spec_emits_no_flag(self) -> None:
         result = build_interactive_cmd(resume_spec=NoResume())

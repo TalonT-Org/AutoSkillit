@@ -295,7 +295,7 @@ def render_franchise_error(envelope_json: str) -> int:
         return 0
     if data.get("success") is not False:
         return 0
-    msg = data.get("user_visible_message") or data.get("error", "unknown error")
+    msg = data.get("user_visible_message") or "unknown error"
     code = data.get("error", "")
     sys.stderr.write(f"franchise error [{code}]: {msg}\n")
     details = data.get("details")

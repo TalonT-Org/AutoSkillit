@@ -156,9 +156,7 @@ class FranchiseTestRunner:
             on_pid_resolved(proc.pid, ticks)
 
         try:
-            stdout_b, stderr_b = await asyncio.to_thread(
-                lambda: proc.communicate(timeout=timeout)
-            )
+            stdout_b, stderr_b = await asyncio.to_thread(lambda: proc.communicate(timeout=timeout))
         except subprocess.TimeoutExpired:
             await asyncio.to_thread(kill_process_tree, proc.pid)
             return SubprocessResult(
@@ -673,7 +671,12 @@ async def test_orphan_l2_reaping(franchise_runtime: FranchiseRuntime, tmp_path: 
     """_reap_stale_dispatches kills a real orphan process and marks it interrupted."""
     from autoskillit.cli._franchise import _reap_stale_dispatches
     from autoskillit.core._linux_proc import read_boot_id, read_starttime_ticks
-    from autoskillit.franchise.state import DispatchRecord, DispatchStatus, read_state, write_initial_state
+    from autoskillit.franchise.state import (
+        DispatchRecord,
+        DispatchStatus,
+        read_state,
+        write_initial_state,
+    )
 
     orphan = subprocess.Popen(["sleep", "999"])
     orphan_pid = orphan.pid
@@ -738,9 +741,7 @@ async def test_l2_timeout_enforced(franchise_runtime: FranchiseRuntime) -> None:
 
 
 @pytest.mark.anyio
-async def test_resume_after_l3_crash(
-    franchise_runtime: FranchiseRuntime, tmp_path: Path
-) -> None:
+async def test_resume_after_l3_crash(franchise_runtime: FranchiseRuntime, tmp_path: Path) -> None:
     """resume_campaign_from_state marks stale RUNNING as interrupted and returns next pending."""
     from autoskillit.franchise.state import (
         DispatchRecord,
@@ -756,7 +757,9 @@ async def test_resume_after_l3_crash(
         DispatchRecord(name="crashed-one"),
         DispatchRecord(name="pending-one"),
     ]
-    write_initial_state(state_path, "test-campaign-id", "test-campaign", str(state_path), dispatches)
+    write_initial_state(
+        state_path, "test-campaign-id", "test-campaign", str(state_path), dispatches
+    )
     _force_state_statuses(state_path, {"completed-one": "success", "crashed-one": "running"})
 
     decision = resume_campaign_from_state(state_path, continue_on_failure=True)
@@ -791,7 +794,11 @@ async def test_manifest_mid_campaign_deletion(
     franchise_runtime: FranchiseRuntime, tmp_path: Path
 ) -> None:
     """resume_campaign_from_state returns None when state file is missing."""
-    from autoskillit.franchise.state import DispatchRecord, resume_campaign_from_state, write_initial_state
+    from autoskillit.franchise.state import (
+        DispatchRecord,
+        resume_campaign_from_state,
+        write_initial_state,
+    )
 
     state_path = tmp_path / "missing-state.json"
     write_initial_state(

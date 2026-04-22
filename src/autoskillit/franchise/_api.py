@@ -44,6 +44,7 @@ async def execute_dispatch(
     prompt_builder: Callable[..., str],
     quota_checker: Callable[..., Any],
     quota_refresher: Callable[..., Any],
+    cache_invalidator: Callable[[str], None] | None = None,
 ) -> str:
     """Execute a single food truck dispatch.
 
@@ -97,6 +98,7 @@ async def execute_dispatch(
             prompt_builder=prompt_builder,
             quota_checker=quota_checker,
             quota_refresher=quota_refresher,
+            cache_invalidator=cache_invalidator,
         )
     except asyncio.CancelledError:
         raise
@@ -123,6 +125,7 @@ async def _run_dispatch(
     prompt_builder: Callable[..., str],
     quota_checker: Callable[..., Any],
     quota_refresher: Callable[..., Any],
+    cache_invalidator: Callable[[str], None] | None = None,
 ) -> str:
     """Inner dispatch body — called after lock acquisition."""
     from autoskillit.franchise.state import (
@@ -266,6 +269,9 @@ async def _run_dispatch(
         ),
     )
 
+    if cache_invalidator is not None:
+        cache_invalidator(tool_ctx.config.quota_guard.cache_path)
+
     if tool_ctx.background is not None:
         tool_ctx.background.submit(
             quota_refresher(tool_ctx.config.quota_guard),
@@ -273,7 +279,15 @@ async def _run_dispatch(
         )
 
     if tool_ctx.session_skill_manager is not None and skill_result.session_id:
-        tool_ctx.session_skill_manager.cleanup_session(skill_result.session_id)
+        try:
+            tool_ctx.session_skill_manager.cleanup_session(skill_result.session_id)
+        except Exception as exc:
+            logger.warning(
+                "session skills cleanup failed — dispatch not affected",
+                session_id=skill_result.session_id,
+                exc_class=type(exc).__name__,
+                exc_info=True,
+            )
 
     if parsed.outcome == "completed_clean":
         envelope_success = bool(parsed.payload and parsed.payload.get("success", False))

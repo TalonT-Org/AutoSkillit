@@ -429,6 +429,7 @@ async def dispatch_food_truck(
             _get_food_truck_prompt_builder,
             _refresh_quota_cache,
             check_and_sleep_if_needed,
+            invalidate_cache,
         )
 
         tool_ctx = _get_ctx()
@@ -442,6 +443,7 @@ async def dispatch_food_truck(
             prompt_builder=_get_food_truck_prompt_builder(),
             quota_checker=check_and_sleep_if_needed,
             quota_refresher=_refresh_quota_cache,
+            cache_invalidator=invalidate_cache,
         )
     except Exception as exc:
         logger.error("dispatch_food_truck unhandled exception", exc_info=True)

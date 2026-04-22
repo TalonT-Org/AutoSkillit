@@ -879,6 +879,7 @@ def _build_skill_result(
             write_path_warnings=write_path_warnings,
             write_call_count=write_call_count,
             last_stop_reason=session.last_stop_reason,
+            lifespan_started=session.lifespan_started,
         )
     else:
         sr = SkillResult(
@@ -898,6 +899,7 @@ def _build_skill_result(
             write_call_count=write_call_count,
             kill_reason=result.kill_reason,
             last_stop_reason=session.last_stop_reason,
+            lifespan_started=session.lifespan_started,
         )
     sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
 
@@ -1009,9 +1011,17 @@ async def _execute_claude_headless(
     dispatch_id = dispatch_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
 
     cfg = ctx.config.run_skill
-    _raw_idle = (
-        idle_output_timeout if idle_output_timeout is not None else float(cfg.idle_output_timeout)
-    )
+    if idle_output_timeout is not None:
+        _raw_idle = idle_output_timeout
+    else:
+        env_idle = os.environ.get("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT")
+        if env_idle is not None:
+            try:
+                _raw_idle = float(env_idle)
+            except ValueError:
+                _raw_idle = float(cfg.idle_output_timeout)
+        else:
+            _raw_idle = float(cfg.idle_output_timeout)
     effective_idle: float | None = _raw_idle if _raw_idle > 0.0 else None
 
     runner = ctx.runner
@@ -1433,6 +1443,10 @@ class DefaultHeadlessExecutor:
                     "AUTOSKILLIT_L2_TOOL_TAGS — use requires_packs exclusively"
                 )
             merged_extras["AUTOSKILLIT_L2_TOOL_TAGS"] = ",".join(sorted(requires_packs))
+
+        idle_cfg_val = cfg.run_skill.idle_output_timeout
+        if idle_cfg_val > 0:
+            merged_extras.setdefault("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(int(idle_cfg_val)))
 
         spec = build_food_truck_cmd(
             orchestrator_prompt=orchestrator_prompt,

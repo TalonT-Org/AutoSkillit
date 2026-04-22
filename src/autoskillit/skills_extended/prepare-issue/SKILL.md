@@ -346,22 +346,22 @@ sleep 1  # Rate-limit discipline: 1s between mutating calls
 gh label create "recipe:remediation" --force \
     --description "Route: investigate/decompose before implementation" \
     --color "D93F0B"
-sleep 1
+sleep 1  # Rate-limit discipline: 1s between mutating calls
 gh label create "bug" --force \
     --description "Existing behavior is broken" \
     --color "d73a4a"
-sleep 1
+sleep 1  # Rate-limit discipline: 1s between mutating calls
 gh label create "enhancement" --force \
     --description "New feature or request" \
     --color "a2eeef"
-sleep 1
+sleep 1  # Rate-limit discipline: 1s between mutating calls
 
 # Apply triage labels (use the route determined in Step 6)
 gh issue edit {issue_number} --add-label "recipe:implementation"
-sleep 1
+sleep 1  # Rate-limit discipline: 1s between mutating calls
 # or, for remediation route:
 gh issue edit {issue_number} --add-label "recipe:remediation"
-sleep 1
+sleep 1  # Rate-limit discipline: 1s between mutating calls
 gh issue edit {issue_number} --add-label "{issue_type}"
 ```
 

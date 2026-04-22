@@ -70,6 +70,7 @@ def test_review_loop_routes_to_ci_watch_at_max_iterations(recipe_name: str) -> N
     # when_expr becomes e.g. "true == false" — evaluate as string equality
     lhs, rhs = [s.strip() for s in when_expr.split("==", 1)]
     assert lhs != rhs
+    assert conditions[1].route == "ci_watch"
 
 
 @pytest.mark.parametrize("recipe_name", RECIPE_NAMES)

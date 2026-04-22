@@ -564,6 +564,7 @@ def test_no_prompt_when_no_conditions_fire(
     printed, input_calls = _setup_run_checks(monkeypatch, tmp_path)
     run_update_checks(home=tmp_path)
     assert not input_calls
+    assert not printed, f"No output expected when zero signals fire; got: {printed!r}"
 
 
 def test_single_prompt_when_only_binary_fires(
@@ -1265,92 +1266,6 @@ def test_timed_prompt_respects_no_color(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 # ---------------------------------------------------------------------------
-# Pre-flight feedback ordering test
-# ---------------------------------------------------------------------------
-
-
-def test_run_update_checks_emits_status_before_network(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    """The first print() call in run_update_checks occurs before any signal
-    gatherer is invoked (the 'time to first output' structural test)."""
-    import select as _select_mod
-
-    from autoskillit.cli._update_checks import Signal
-
-    monkeypatch.delenv("CLAUDECODE", raising=False)
-    monkeypatch.delenv("CI", raising=False)
-    monkeypatch.delenv("AUTOSKILLIT_SKIP_STALE_CHECK", raising=False)
-    monkeypatch.delenv("AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK", raising=False)
-    monkeypatch.delenv("AUTOSKILLIT_FORCE_UPDATE_CHECK", raising=False)
-
-    fake_stdin = MagicMock()
-    fake_stdin.isatty.return_value = True
-    fake_stdout = MagicMock()
-    fake_stdout.isatty.return_value = True
-    monkeypatch.setattr(sys, "stdin", fake_stdin)
-    monkeypatch.setattr(sys, "stdout", fake_stdout)
-
-    monkeypatch.setattr(
-        _select_mod,
-        "select",
-        lambda rlist, wlist, xlist, timeout=None: (rlist, [], []),
-    )
-
-    info = _make_stable_info()
-    monkeypatch.setattr("autoskillit.cli._update_checks.detect_install", lambda: info)
-    monkeypatch.setattr(
-        "autoskillit.cli._update_checks._claude_settings_path",
-        lambda scope: tmp_path / "settings.json",
-    )
-
-    import autoskillit as _pkg
-
-    monkeypatch.setattr(_pkg, "__version__", "0.7.77")
-
-    # Track call order: print vs signal gatherers
-    call_log: list[str] = []
-
-    def tracking_print(*args: Any, **kw: Any) -> None:
-        call_log.append("print")
-
-    monkeypatch.setattr("builtins.print", tracking_print)
-
-    monkeypatch.setattr(
-        "autoskillit.cli._update_checks._binary_signal",
-        lambda info, home, current: (
-            call_log.append("binary_signal")
-            or Signal("binary", "New release: 0.9.0 (you have 0.7.77)")
-        ),
-    )
-    monkeypatch.setattr(
-        "autoskillit.cli._update_checks._hooks_signal",
-        lambda settings_path: call_log.append("hooks_signal"),
-    )
-    monkeypatch.setattr(
-        "autoskillit.cli._update_checks._source_drift_signal",
-        lambda info, home: call_log.append("source_drift_signal"),
-    )
-
-    monkeypatch.setattr("builtins.input", lambda _="": "n")
-
-    run_update_checks(home=tmp_path)
-
-    # The first print (status_line) must come before any signal gatherer
-    assert call_log[0] == "print", (
-        f"Expected first call to be print() (status_line), got: {call_log}"
-    )
-    signal_calls = [c for c in call_log if c.endswith("_signal")]
-    assert signal_calls, f"No signal gatherers were called — call_log: {call_log}"
-    first_signal_idx = call_log.index(signal_calls[0])
-    first_print_idx = call_log.index("print")
-    assert first_print_idx < first_signal_idx, (
-        f"print() must occur before signal gatherers. Order: {call_log}"
-    )
-
-
-# ---------------------------------------------------------------------------
 # AUTOSKILLIT_FORCE_UPDATE_CHECK override
 # ---------------------------------------------------------------------------
 
@@ -1577,3 +1492,100 @@ def test_fetch_fails_fast_offline(tmp_path: Path) -> None:
         result = _fetch_latest_version("releases/latest", tmp_path)
 
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# UC-10 Passive notification for dismissed signals (REQ-UX-002–006, REQ-FLOW-001–004)
+# ---------------------------------------------------------------------------
+
+
+def test_dismissed_signal_prints_passive_notification(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    state = _dismissed_state(ago=timedelta(hours=1), conditions=["binary"])
+    printed, input_calls = _setup_run_checks(
+        monkeypatch, tmp_path, binary_signal=True, state=state
+    )
+    run_update_checks(home=tmp_path)
+    assert not input_calls, "Dismissed signal must not trigger interactive prompt"
+    combined = " ".join(printed)
+    assert "autoskillit update" in combined, (
+        "Dismissed signal must produce passive notification containing 'autoskillit update'"
+    )
+
+
+def test_passive_notification_contains_version_info(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    state = _dismissed_state(ago=timedelta(hours=1), conditions=["binary"])
+    printed, _ = _setup_run_checks(monkeypatch, tmp_path, binary_signal=True, state=state)
+    run_update_checks(home=tmp_path)
+    combined = " ".join(printed)
+    # The binary signal message is "New release: 0.9.0 (you have 0.7.77)"
+    assert "0.9.0" in combined or "0.7.77" in combined, (
+        "Passive notification must include version info"
+    )
+
+
+def test_passive_notification_contains_expiry_date(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    dismissed_ago = timedelta(hours=1)
+    state = _dismissed_state(ago=dismissed_ago, conditions=["binary"])
+    # Derive expiry from state to avoid date-boundary races between setup and assertion
+    dismissed_at = datetime.fromisoformat(state["update_prompt"]["dismissed_at"])
+    printed, _ = _setup_run_checks(monkeypatch, tmp_path, binary_signal=True, state=state)
+    run_update_checks(home=tmp_path)
+    combined = " ".join(printed)
+    # Stable install: 7-day window.
+    expected_expiry = (dismissed_at + timedelta(days=7)).strftime("%Y-%m-%d")
+    assert expected_expiry in combined, (
+        f"Passive notification must include expiry date {expected_expiry!r}; got: {combined!r}"
+    )
+
+
+def test_passive_notification_contains_update_command(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    state = _dismissed_state(ago=timedelta(hours=1), conditions=["binary"])
+    printed, _ = _setup_run_checks(monkeypatch, tmp_path, binary_signal=True, state=state)
+    run_update_checks(home=tmp_path)
+    combined = " ".join(printed)
+    assert "autoskillit update" in combined, (
+        "Passive notification must contain 'autoskillit update'"
+    )
+
+
+def test_undismissed_signal_still_gets_interactive_prompt_when_dismissed_also_present(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # binary is dismissed; hooks is NOT dismissed (not in conditions list)
+    state = _dismissed_state(ago=timedelta(hours=1), conditions=["binary"])
+    printed, input_calls = _setup_run_checks(
+        monkeypatch,
+        tmp_path,
+        binary_signal=True,
+        hooks_signal=True,
+        state=state,
+    )
+    run_update_checks(home=tmp_path)
+    assert len(input_calls) == 1, "Undismissed hooks signal must trigger interactive prompt"
+
+
+def test_all_dismissed_signals_produce_no_interactive_prompt(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    state = _dismissed_state(ago=timedelta(hours=1), conditions=["binary", "hooks"])
+    printed, input_calls = _setup_run_checks(
+        monkeypatch,
+        tmp_path,
+        binary_signal=True,
+        hooks_signal=True,
+        state=state,
+    )
+    run_update_checks(home=tmp_path)
+    assert not input_calls, "All-dismissed signals must not trigger interactive prompt"
+    combined = " ".join(printed)
+    assert "autoskillit update" in combined, (
+        "All-dismissed signals must produce passive notification containing 'autoskillit update'"
+    )

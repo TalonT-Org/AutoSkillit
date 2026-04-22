@@ -684,12 +684,7 @@ def run_update_checks(home: Path | None = None) -> None:
     window = dismissal_window(info)
     state = _read_dismiss_state(_home)
 
-    # Pre-flight feedback: ensure the terminal is never silent during network I/O
-    from autoskillit.cli._timed_input import status_line
-
-    status_line("Checking for updates...")
-
-    # Gather signals
+    # Gather signals (network I/O happens here; status_line deferred until we know output exists)
     raw_signals: list[Signal | None] = [
         _binary_signal(info, _home, current),
         _hooks_signal(_claude_settings_path("user")),
@@ -697,49 +692,75 @@ def run_update_checks(home: Path | None = None) -> None:
         _dual_mcp_signal(_home),
     ]
 
-    # Filter by dismissal
-    firing_signals: list[Signal] = [
+    all_fired: list[Signal] = [s for s in raw_signals if s is not None]
+
+    # Zero signals: return silently — no "Checking for updates..." printed (REQ-UX-006)
+    if not all_fired:
+        return
+
+    # Partition into dismissed vs. non-dismissed (REQ-FLOW-001)
+    undismissed: list[Signal] = [
         s
-        for s in raw_signals
-        if s is not None
-        and not _is_dismissed(
-            state,
-            window=window,
-            current_version=current,
-            condition=s.kind,
-        )
+        for s in all_fired
+        if not _is_dismissed(state, window=window, current_version=current, condition=s.kind)
+    ]
+    dismissed: list[Signal] = [
+        s
+        for s in all_fired
+        if _is_dismissed(state, window=window, current_version=current, condition=s.kind)
     ]
 
-    if not firing_signals:
-        return
+    if undismissed:
+        # Consolidated interactive prompt — behavior unchanged (REQ-FLOW-002)
+        from autoskillit.cli._timed_input import status_line, timed_prompt
 
-    # Consolidated prompt
-    from autoskillit.cli._timed_input import timed_prompt
+        status_line("Checking for updates...")
 
-    _TIMEOUT_SENTINEL = "__timeout__"
-    bullet_lines = "\n".join(f"  - {s.message}" for s in firing_signals)
-    prompt_text = f"\nAutoSkillit has updates available:\n{bullet_lines}\nUpdate now? [Y/n]"
-    answer = timed_prompt(prompt_text, default=_TIMEOUT_SENTINEL, timeout=30, label="update check")
+        _TIMEOUT_SENTINEL = "__timeout__"
+        bullet_lines = "\n".join(f"  - {s.message}" for s in undismissed)
+        prompt_text = f"\nAutoSkillit has updates available:\n{bullet_lines}\nUpdate now? [Y/n]"
+        answer = timed_prompt(
+            prompt_text, default=_TIMEOUT_SENTINEL, timeout=30, label="update check"
+        )
 
-    # On timeout: proceed to app() without writing a dismissal record so the
-    # prompt reappears on the next invocation.
-    if answer == _TIMEOUT_SENTINEL:
-        return
+        # On timeout: proceed to app() without writing a dismissal record so the
+        # prompt reappears on the next invocation.
+        if answer == _TIMEOUT_SENTINEL:
+            return
 
-    if answer.lower() in ("", "y", "yes"):
-        _run_update_sequence(info, current, _home, state, _skip_env)
-        return
+        if answer.lower() in ("", "y", "yes"):
+            _run_update_sequence(info, current, _home, state, _skip_env)
+            return
 
-    # N path — write unified dismissal record
-    state["update_prompt"] = {
-        "dismissed_at": datetime.now(UTC).isoformat(),
-        "dismissed_version": current,
-        "conditions": [s.kind for s in firing_signals],
-    }
-    _write_dismiss_state(_home, state)
-    expiry = (datetime.now(UTC) + window).strftime("%Y-%m-%d")
-    print(
-        f"Dismissed until {expiry}. Run 'autoskillit update' to update sooner, "
-        f"or set AUTOSKILLIT_SKIP_STALE_CHECK=1 to silence.",
-        flush=True,
-    )
+        # N path — write unified dismissal record
+        state["update_prompt"] = {
+            "dismissed_at": datetime.now(UTC).isoformat(),
+            "dismissed_version": current,
+            "conditions": [s.kind for s in undismissed],
+        }
+        _write_dismiss_state(_home, state)
+        expiry = (datetime.now(UTC) + window).strftime("%Y-%m-%d")
+        print(
+            f"Dismissed until {expiry}. Run 'autoskillit update' to update sooner, "
+            f"or set AUTOSKILLIT_SKIP_STALE_CHECK=1 to silence.",
+            flush=True,
+        )
+    else:
+        # All signals are dismissed — passive one-liner (REQ-UX-002 through REQ-UX-005)
+        entry = state.get("update_prompt")
+        try:
+            if isinstance(entry, dict):
+                dismissed_at_raw = entry.get("dismissed_at", "")
+                dismissed_at = datetime.fromisoformat(str(dismissed_at_raw))
+            else:
+                raise ValueError("no entry")
+            expiry = (dismissed_at + window).strftime("%Y-%m-%d")
+        except Exception:
+            logger.warning("Failed to parse dismissed_at for expiry calculation", exc_info=True)
+            expiry = (datetime.now(UTC) + window).strftime("%Y-%m-%d")
+        messages = "; ".join(s.message for s in dismissed)
+        print(
+            f"{messages}. Auto-prompt silenced until {expiry}. "
+            f"Run 'autoskillit update' to upgrade.",
+            flush=True,
+        )

@@ -479,14 +479,18 @@ async def test_ci_etag_returns_cached_on_304(httpx_mock):
 
 @pytest.mark.anyio
 async def test_ci_etag_stores_on_200(httpx_mock):
-    """_fetch_completed_runs stores ETag from 200 response for subsequent conditional GET."""
+    """ETag from a 200 response is sent as If-None-Match on the next request."""
     httpx_mock.add_response(
         json=_runs_response(_run(run_id=99, conclusion="success")),
         headers={"ETag": '"abc123"'},
     )
+    httpx_mock.add_response(
+        json=_runs_response(_run(run_id=99, conclusion="success")),
+    )
     watcher = DefaultCIWatcher(token="tok")
     await watcher.wait("feature-x", repo="owner/repo", timeout_seconds=60)
+    await watcher.wait("feature-x", repo="owner/repo", timeout_seconds=60)
 
-    assert len(watcher._etag_cache) == 1
-    cached_etag, _ = next(iter(watcher._etag_cache.values()))
-    assert cached_etag == '"abc123"'
+    requests = httpx_mock.get_requests()
+    assert len(requests) == 2
+    assert requests[1].headers.get("if-none-match") == '"abc123"'

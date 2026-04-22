@@ -10,7 +10,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from autoskillit.core import FranchiseErrorCode, claude_code_log_path, franchise_error, get_logger
+from autoskillit.core import (
+    FranchiseErrorCode,
+    SkillResult,
+    claude_code_log_path,
+    franchise_error,
+    get_logger,
+)
 from autoskillit.franchise.result_parser import parse_l2_result_block
 
 if TYPE_CHECKING:
@@ -41,6 +47,34 @@ def _write_pid(
         )
     except Exception:
         logger.warning("_write_pid: failed to mark dispatch running", exc_info=True)
+
+
+def _post_dispatch_cleanup(
+    tool_ctx: ToolContext,
+    skill_result: SkillResult,
+    cache_invalidator: Callable[[str], None] | None,
+    quota_refresher: Callable[..., Any],
+) -> None:
+    """Run quota cache invalidation, background quota refresh, and session skill cleanup."""
+    if cache_invalidator is not None:
+        cache_invalidator(tool_ctx.config.quota_guard.cache_path)
+
+    if tool_ctx.background is not None:
+        tool_ctx.background.submit(
+            quota_refresher(tool_ctx.config.quota_guard),
+            label="quota_post_dispatch_refresh",
+        )
+
+    if tool_ctx.session_skill_manager is not None and skill_result.session_id:
+        try:
+            tool_ctx.session_skill_manager.cleanup_session(skill_result.session_id)
+        except Exception as exc:
+            logger.warning(
+                "session skills cleanup failed — dispatch not affected",
+                session_id=skill_result.session_id,
+                exc_class=type(exc).__name__,
+                exc_info=True,
+            )
 
 
 async def execute_dispatch(
@@ -215,6 +249,34 @@ async def _run_dispatch(
     )
     ended_at = time.time()
 
+    # --- Timeout pre-check: short-circuit before result-block parsing ---
+    if skill_result.subtype == "timeout":
+        append_dispatch_record(
+            state_path,
+            DispatchRecord(
+                name=effective_name,
+                status=DispatchStatus.FAILURE,
+                dispatch_id=dispatch_id,
+                l2_session_id=skill_result.session_id,
+                l2_pid=_l2_pid[0] if _l2_pid else 0,
+                reason="l2_timeout",
+                token_usage=skill_result.token_usage or {},
+                started_at=started_at,
+                ended_at=ended_at,
+            ),
+        )
+        _post_dispatch_cleanup(tool_ctx, skill_result, cache_invalidator, quota_refresher)
+        return franchise_error(
+            FranchiseErrorCode.L2_TIMEOUT,
+            f"L2 dispatch '{effective_name}' timed out",
+            details={
+                "dispatch_id": dispatch_id,
+                "l2_session_id": skill_result.session_id,
+                "lifespan_started": skill_result.lifespan_started,
+                "token_usage": skill_result.token_usage,
+            },
+        )
+
     jsonl_path = claude_code_log_path(str(tool_ctx.project_dir), skill_result.session_id or "")
     parsed = parse_l2_result_block(
         stdout=skill_result.result or "",
@@ -222,10 +284,19 @@ async def _run_dispatch(
         assistant_messages_path=jsonl_path,
     )
 
+    # Classify outcome → (final_status, reason)
     if parsed.outcome == "completed_clean" and parsed.payload and parsed.payload.get("success"):
         final_status = DispatchStatus.SUCCESS
-    else:
+        reason = ""
+    elif parsed.outcome == "completed_clean":
         final_status = DispatchStatus.FAILURE
+        reason = parsed.payload.get("reason", "") if parsed.payload else ""
+    elif parsed.outcome == "completed_dirty":
+        final_status = DispatchStatus.FAILURE
+        reason = "l2_parse_failed"
+    else:  # no_sentinel
+        final_status = DispatchStatus.FAILURE
+        reason = "l2_no_result_block"
 
     append_dispatch_record(
         state_path,
@@ -235,31 +306,14 @@ async def _run_dispatch(
             dispatch_id=dispatch_id,
             l2_session_id=skill_result.session_id,
             l2_pid=_l2_pid[0] if _l2_pid else 0,
+            reason=reason,
             token_usage=skill_result.token_usage or {},
             started_at=started_at,
             ended_at=ended_at,
         ),
     )
 
-    if cache_invalidator is not None:
-        cache_invalidator(tool_ctx.config.quota_guard.cache_path)
-
-    if tool_ctx.background is not None:
-        tool_ctx.background.submit(
-            quota_refresher(tool_ctx.config.quota_guard),
-            label="quota_post_dispatch_refresh",
-        )
-
-    if tool_ctx.session_skill_manager is not None and skill_result.session_id:
-        try:
-            tool_ctx.session_skill_manager.cleanup_session(skill_result.session_id)
-        except Exception as exc:
-            logger.warning(
-                "session skills cleanup failed — dispatch not affected",
-                session_id=skill_result.session_id,
-                exc_class=type(exc).__name__,
-                exc_info=True,
-            )
+    _post_dispatch_cleanup(tool_ctx, skill_result, cache_invalidator, quota_refresher)
 
     if parsed.outcome == "completed_clean":
         envelope_success = bool(parsed.payload and parsed.payload.get("success", False))
@@ -269,8 +323,10 @@ async def _run_dispatch(
                 "dispatch_id": dispatch_id,
                 "l2_session_id": skill_result.session_id,
                 "l2_payload": parsed.payload,
+                "reason": reason,
                 "token_usage": skill_result.token_usage,
                 "l2_parse_source": parsed.source,
+                "lifespan_started": skill_result.lifespan_started,
             }
         )
     elif parsed.outcome == "completed_dirty":
@@ -285,6 +341,7 @@ async def _run_dispatch(
                 "l2_parse_error": parsed.parse_error,
                 "token_usage": skill_result.token_usage,
                 "l2_parse_source": parsed.source,
+                "lifespan_started": skill_result.lifespan_started,
             }
         )
     else:
@@ -297,5 +354,6 @@ async def _run_dispatch(
                 "reason": "l2_no_result_block",
                 "l2_parse_source": parsed.source,
                 "token_usage": skill_result.token_usage,
+                "lifespan_started": skill_result.lifespan_started,
             }
         )

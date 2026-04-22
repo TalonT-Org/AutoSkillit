@@ -844,6 +844,7 @@ class TestBuildSkillResultCrossValidation:
         "exit_code",
         "kill_reason",
         "last_stop_reason",
+        "lifespan_started",
         "needs_retry",
         "retry_reason",
         "stderr",
@@ -968,6 +969,53 @@ class TestBuildSkillResultCrossValidation:
         )
         response = json.loads(_build_skill_result(result_obj).to_json())
         assert set(response.keys()) == self.EXPECTED_SKILL_KEYS
+
+
+def _make_subprocess_result_with_tool_uses(
+    tool_use_names: list[str] | None = None,
+) -> SubprocessResult:
+    """Build a SubprocessResult whose stdout includes optional tool_use NDJSON blocks."""
+    records = []
+    if tool_use_names:
+        content = [
+            {"type": "tool_use", "name": name, "id": f"tu-{i}"}
+            for i, name in enumerate(tool_use_names)
+        ]
+        records.append(json.dumps({"type": "assistant", "message": {"content": content}}))
+    records.append(
+        json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "done",
+                "session_id": "test-session",
+            }
+        )
+    )
+    return SubprocessResult(
+        returncode=0,
+        stdout="\n".join(records),
+        stderr="",
+        termination=TerminationReason.NATURAL_EXIT,
+        pid=12345,
+    )
+
+
+class TestBuildSkillResultLifespanStarted:
+    """_build_skill_result sets lifespan_started based on tool_uses in stdout."""
+
+    def test_build_skill_result_sets_lifespan_started_true(self):
+        """Non-empty tool_uses in stdout → _build_skill_result produces lifespan_started=True."""
+        result = _make_subprocess_result_with_tool_uses(tool_use_names=["Write", "Edit"])
+        sr = _build_skill_result(result)
+        assert sr.lifespan_started is True
+
+    def test_build_skill_result_sets_lifespan_started_false_no_tool_uses(self):
+        """Empty tool_uses in stdout → _build_skill_result produces lifespan_started=False."""
+        result = _make_subprocess_result_with_tool_uses(tool_use_names=None)
+        sr = _build_skill_result(result)
+        assert sr.lifespan_started is False
 
 
 class TestBuildSkillResultStderr:

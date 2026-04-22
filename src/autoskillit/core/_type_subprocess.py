@@ -6,7 +6,7 @@ SubprocessRunner, and the termination contract sentinel.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
@@ -144,5 +144,5 @@ class SubprocessRunner(Protocol):
         linux_tracing_config: Any | None = None,
         idle_output_timeout: float | None = None,
         max_suppression_seconds: float | None = None,
-        on_pid_resolved: Any | None = None,
+        on_pid_resolved: Callable[[int, int], None] | None = None,
     ) -> Awaitable[SubprocessResult]: ...

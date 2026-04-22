@@ -73,7 +73,6 @@ def franchise_run(
     campaign_name: str,
     *,
     resume_campaign: str | None = None,
-    cleanup_on_interrupt: bool = False,
 ) -> None:
     """Launch an interactive Claude Code session to execute a campaign."""
     if os.environ.get("CLAUDECODE"):

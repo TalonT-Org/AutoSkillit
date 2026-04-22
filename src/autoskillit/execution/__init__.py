@@ -66,6 +66,7 @@ from autoskillit.execution.quota import (
     QuotaStatus,
     _refresh_quota_cache,  # noqa: F401 — imported for re-export via server.helpers; not in __all__
     check_and_sleep_if_needed,
+    invalidate_cache,
 )
 from autoskillit.execution.recording import (
     RECORD_SCENARIO_DIR_ENV,
@@ -125,6 +126,7 @@ __all__ = [
     "QUOTA_CACHE_SCHEMA_VERSION",
     "QuotaStatus",
     "check_and_sleep_if_needed",
+    "invalidate_cache",
     # session
     "ClaudeSessionResult",
     "ContentState",

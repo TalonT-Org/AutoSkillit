@@ -59,3 +59,11 @@ def test_check_review_loop_routes_on_max_exceeded_only(recipe) -> None:
     assert review_conditions, "No conditional route to review_pr found"
     assert "max_exceeded" in review_conditions[0].when
     assert "has_blocking" not in review_conditions[0].when
+
+
+# T_REM_LOOP4
+def test_check_review_loop_has_on_failure(recipe) -> None:
+    """check_review_loop must declare on_failure because it uses on_result
+    (on-result-missing-failure-route semantic rule requires it)."""
+    step = recipe.steps["check_review_loop"]
+    assert step.on_failure == "ci_watch"

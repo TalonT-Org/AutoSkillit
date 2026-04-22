@@ -143,15 +143,18 @@ For each concern (up to `max_sub_issues`):
 gh label create "split-from:#N" --force \
   --description "Sub-issue created from parent #N" \
   --color "e4e669" [--repo {repo}]
+sleep 1  # Rate-limit discipline: 1s between mutating calls
 
 # Ensure the recipe route label exists (idempotent)
 gh label create "recipe:implementation" --force \
   --description "Route through implementation recipe" \
   --color "0E8A16" [--repo {repo}]
+sleep 1  # Rate-limit discipline: 1s between mutating calls
 # or:
 gh label create "recipe:remediation" --force \
   --description "Route through remediation recipe" \
   --color "D93F0B" [--repo {repo}]
+sleep 1  # Rate-limit discipline: 1s between mutating calls
 
 # Create the sub-issue
 gh issue create \
@@ -160,6 +163,7 @@ gh issue create \
   --label "split-from:#N" \
   --label "recipe:{route}" \
   [--repo {repo}]
+sleep 1  # Rate-limit discipline: 1s between mutating calls
 ```
 
 Capture the new issue URL and number from stdout.

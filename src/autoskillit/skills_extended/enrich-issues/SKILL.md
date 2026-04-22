@@ -190,6 +190,7 @@ The API layer exposes skill execution to MCP clients through the headless execut
   cat "${REQUIREMENTS_FILE}" >> "${EDIT_BODY_FILE}"
 
   gh issue edit N --body-file "${EDIT_BODY_FILE}"
+  sleep 1  # Rate-limit discipline: throttle within each subagent
   ```
 
   Always fetch the current body immediately before editing to avoid overwriting

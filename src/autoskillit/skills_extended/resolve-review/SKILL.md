@@ -281,17 +281,26 @@ Record each skip with: `(file, line, reason)`.
 
 ### Step 6: Resolve Addressed Review Threads
 
-For each `thread_id` in `addressed_thread_ids`:
+Batch all thread resolutions into a single GraphQL request using aliased mutations.
+This reduces N requests (5 pts each = 5N pts) to 1 request (5 pts total).
+If `addressed_thread_ids` has more than 50 threads, chunk into batches of 50.
 
 ```bash
-gh api graphql \
-  -f query='mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{isResolved}}}' \
-  -f threadId="$thread_id"
+# Build aliased mutation query for all addressed threads
+MUTATION_QUERY="mutation {"
+for i in $(seq 0 $((${#ADDRESSED_THREAD_IDS[@]} - 1))); do
+    tid="${ADDRESSED_THREAD_IDS[$i]}"
+    MUTATION_QUERY="${MUTATION_QUERY} resolve${i}: resolveReviewThread(input: {threadId: \"${tid}\"}) { thread { isResolved } }"
+done
+MUTATION_QUERY="${MUTATION_QUERY} }"
+
+gh api graphql -f query="${MUTATION_QUERY}"
 ```
 
-- **Success** (`isResolved: true` in response): increment `resolved_count`.
-- **Failure** (non-zero exit code, parse error, or `isResolved: false`): log a warning
-  `"Warning: could not resolve thread {thread_id}: {error}"`. Continue to the next thread.
+Parse the response: for each `resolve${i}` alias key, check `thread.isResolved`.
+- **Success** (`isResolved: true`): increment `resolved_count`.
+- **Failure** (non-zero exit code, parse error, or `isResolved: false` for any alias): log a warning
+  `"Warning: could not resolve thread ${tid}: {error}"`. Continue to the next thread.
   Do not modify exit code.
 
 Track:
@@ -320,6 +329,7 @@ BODY="Valid observation — flagged for design decision. ${evidence}"
 gh api repos/{owner}/{repo}/pulls/{pr_number}/comments/{comment_id}/replies \
   --method POST \
   --field body="${BODY}"
+sleep 1  # Rate-limit discipline: 1s between mutating calls
 ```
 
 For ACCEPT replies, use the `commit_sha` from the most recent commit made in Step 4

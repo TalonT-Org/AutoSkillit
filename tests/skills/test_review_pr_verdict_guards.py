@@ -93,6 +93,15 @@ def test_needs_human_prose_describes_genuine_ambiguity():
     )
 
 
+def test_review_pr_own_pr_comment_retry():
+    """SKILL.md must handle own-PR REQUEST_CHANGES 422 by retrying with COMMENT event."""
+    skill_md = _skill_text()
+    assert re.search(r"422.{0,300}COMMENT|COMMENT.{0,300}422", skill_md, re.DOTALL), (
+        "SKILL.md must describe retrying with COMMENT event when batch POST returns "
+        "HTTP 422 due to own-PR restriction"
+    )
+
+
 def test_contract_yamls_include_approved_with_comments() -> None:
     """All 3 contract YAML files must include approved_with_comments in
     expected_output_patterns and pattern_examples for the review-pr contract."""

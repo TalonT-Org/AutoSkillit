@@ -76,14 +76,32 @@ Read the JSON file. Extract: `prs` array (each: `number`, `title`, `branch`,
 
 ### Step 3: Fetch Closes/Fixes References from Original PR Bodies
 
-For each PR in `pr_list`:
+Fetch all PR bodies in a single GraphQL alias query (1 API call instead of N sequential
+REST calls). Chunk into batches of 20 to stay within GraphQL complexity limits.
 
 ```bash
-gh pr view {number} --json body -q .body 2>/dev/null
+# Build GraphQL alias query for all PRs
+PR_NUMS=($(echo "$pr_list" | jq -r '.[].number'))
+BODIES_JSON="{}"
+BATCH_SIZE=20
+for batch_start in $(seq 0 $BATCH_SIZE $((${#PR_NUMS[@]} - 1))); do
+    BATCH_NUMS=("${PR_NUMS[@]:$batch_start:$BATCH_SIZE}")
+    QUERY="query { "
+    for i in $(seq 0 $((${#BATCH_NUMS[@]} - 1))); do
+        NUM="${BATCH_NUMS[$i]}"
+        QUERY="${QUERY} pr${i}: repository(owner: \"${OWNER}\", name: \"${REPO}\") {
+            pullRequest(number: ${NUM}) { number body }
+        }"
+    done
+    QUERY="${QUERY} }"
+    BATCH=$(gh api graphql -f query="${QUERY}" 2>/dev/null || echo "{}")
+    BODIES_JSON=$(echo "${BODIES_JSON} ${BATCH}" | jq -s 'add // {}')
+done
 ```
 
-Extract every line matching `(Closes|Fixes|Resolves)\s+#\d+` (case-insensitive).
-Deduplicate across all PRs. Store as `closing_refs` (list of strings like `Closes #42`).
+Extract every line matching `(Closes|Fixes|Resolves)\s+#\d+` (case-insensitive) from
+each PR body in `BODIES_JSON`. Deduplicate across all PRs. Store as `closing_refs`
+(list of strings like `Closes #42`).
 Skip gracefully if `gh` is unavailable — `closing_refs` remains empty.
 
 ### Step 4: Get Changed Files
@@ -338,6 +356,7 @@ For each PR in `pr_list`:
 
 ```bash
 gh pr close {number} --comment "Collapsed into integration PR #{new_pr_number} ({new_pr_url})"
+sleep 1  # Rate-limit discipline: 1s between mutating calls
 ```
 
 Continue even if individual close operations fail (log warning, do not exit).

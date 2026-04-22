@@ -336,6 +336,7 @@ For each triaged issue, apply its recipe label:
 
 ```bash
 gh issue edit {number} --add-label "recipe:{recipe}"
+sleep 1  # Rate-limit discipline: 1s between mutating calls
 ```
 
 ## Output Location

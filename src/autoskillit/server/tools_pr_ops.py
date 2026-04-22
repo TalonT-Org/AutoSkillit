@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 
 import structlog
@@ -52,7 +53,9 @@ async def _close_issues_sequentially(
     """Run gh issue close for each number; return (closed, failed) lists."""
     closed: list[int] = []
     failed: list[int] = []
-    for num in issue_numbers:
+    for i, num in enumerate(issue_numbers):
+        if i > 0:
+            await asyncio.sleep(1)
         cmd = ["gh", "issue", "close", str(num)]
         if comment:
             cmd.extend(["--comment", comment])

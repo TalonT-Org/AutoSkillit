@@ -453,6 +453,16 @@ Event mapping:
 - `needs_human` → `COMMENT`
 - `changes_requested` → `REQUEST_CHANGES`
 
+**Success signal:** If the batch POST returns HTTP 200, treat the review as successfully
+posted regardless of response body content. Do NOT inspect the response body for a
+`comments` array — GitHub's review API does not echo back the submitted comments, so any
+length check would always read 0 and falsely trigger Tier 1 fallback.
+
+**Own-PR guard:** If the batch POST returns HTTP 422 and the error message mentions
+"review" or "author", the PR is self-authored. Retry the same request with event
+`COMMENT` instead of `REQUEST_CHANGES`. GitHub does not allow a PR author to submit a
+`REQUEST_CHANGES` review on their own PR.
+
 **Fallback Tier 1 — Individual Comments (if batch POST fails):**
 
 Attempt to post each finding from `FILTERED_FINDINGS` individually via:
@@ -468,6 +478,7 @@ gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments \
   --field side="RIGHT" \
   --field commit_id="$COMMIT_ID" \
   --field body="[{finding.severity}] {finding.dimension}: {finding.message}"
+sleep 1  # Rate-limit discipline: 1s between mutating calls
 ```
 
 Individual POSTs are not atomic — one failure does not block others.

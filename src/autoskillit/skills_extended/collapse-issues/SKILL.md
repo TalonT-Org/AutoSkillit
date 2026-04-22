@@ -292,12 +292,14 @@ For each original issue that was collapsed (one by one, in order):
 gh issue comment {orig_number} \
   --body "Collapsed into #{combined_number}: {combined_url}" \
   [--repo {repo}]
+sleep 1  # Rate-limit discipline: 1s between mutating calls
 ```
 
 **8b. Close the issue:**
 
 ```bash
 gh issue close {orig_number} [--repo {repo}]
+sleep 1  # Rate-limit discipline: 1s between mutating calls
 ```
 
 ### Step 9: Emit Result Block

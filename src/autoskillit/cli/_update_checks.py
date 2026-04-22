@@ -710,14 +710,11 @@ def run_update_checks(home: Path | None = None) -> None:
         if _is_dismissed(state, window=window, current_version=current, condition=s.kind)
     ]
 
-    # We have output to show: print status line now
-    from autoskillit.cli._timed_input import status_line
-
-    status_line("Checking for updates...")
-
     if undismissed:
         # Consolidated interactive prompt — behavior unchanged (REQ-FLOW-002)
-        from autoskillit.cli._timed_input import timed_prompt
+        from autoskillit.cli._timed_input import status_line, timed_prompt
+
+        status_line("Checking for updates...")
 
         _TIMEOUT_SENTINEL = "__timeout__"
         bullet_lines = "\n".join(f"  - {s.message}" for s in undismissed)

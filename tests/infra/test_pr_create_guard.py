@@ -43,8 +43,8 @@ def _run_guard(cmd: str, kitchen_open: bool, tmpdir, raw_stdin: str | None = Non
             with unittest.mock.patch("pathlib.Path.cwd", return_value=tmpdir):
                 try:
                     main()
-                except SystemExit:
-                    pass
+                except SystemExit as exc:
+                    assert exc.code == 0, f"Guard exited non-zero: {exc.code!r}"
 
     return buf.getvalue()
 

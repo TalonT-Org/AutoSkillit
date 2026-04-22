@@ -61,11 +61,11 @@ def test_check_review_loop_on_result_default_routes_to_ci_watch(recipe) -> None:
 
 
 # T_IP_LOOP6
-def test_check_review_loop_has_no_on_failure(recipe) -> None:
-    """check_review_loop is a pure iteration guard with no subprocess calls,
-    so on_failure is not needed."""
+def test_check_review_loop_has_on_failure(recipe) -> None:
+    """check_review_loop must declare on_failure because it uses on_result
+    (on-result-missing-failure-route semantic rule requires it)."""
     step = recipe.steps["check_review_loop"]
-    assert step.on_failure is None
+    assert step.on_failure == "ci_watch"
 
 
 # T_IP_LOOP7

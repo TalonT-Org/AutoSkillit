@@ -922,10 +922,14 @@ async def test_throttle_serializes_concurrent_mutating_calls(httpx_mock):
     fetcher._last_mutating_ts = time.monotonic()
 
     events: list[str] = []
+    # Capture the real sleep before the patch replaces it; asyncio.sleep is patched
+    # globally via the module attribute, so recording_sleep must use this reference
+    # directly to avoid infinite recursion when yielding to the event loop.
+    _real_sleep = asyncio.sleep
 
     async def recording_sleep(_delay: float) -> None:
         events.append("sleep_start")
-        await asyncio.sleep(0)  # yield to event loop while lock is held
+        await _real_sleep(0)  # yield to event loop while lock is held
         events.append("sleep_end")
 
     with patch("autoskillit.execution.github.asyncio.sleep", side_effect=recording_sleep):

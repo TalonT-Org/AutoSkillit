@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core import (
+    FEATURE_REGISTRY,
     PACK_REGISTRY,
     ClaudeDirectoryConventions,
     PackDef,
@@ -24,6 +25,7 @@ from autoskillit.core import (
     ValidatedAddDir,
     atomic_write,
     get_logger,
+    is_feature_enabled,
 )
 from autoskillit.workspace.skills import (
     DefaultSkillResolver,
@@ -149,12 +151,17 @@ def _is_skill_disabled(
     skill_info: SkillInfo,
     disabled: list[str],
     custom_tags: dict[str, list[str]],
+    features: dict[str, bool] | None = None,
 ) -> bool:
     """Return True if skill should be excluded due to a disabled subset.
 
     For each tag in disabled:
     - If the tag is a custom_tag key: check if skill.name is in custom_tags[tag]
     - Otherwise (built-in category): check if tag is in skill_info.categories
+
+    Feature-gate branch: for each feature in FEATURE_REGISTRY that is disabled
+    in `features`, suppress any skill whose categories intersect the feature's
+    skill_categories.
     """
     for tag in disabled:
         if tag in custom_tags:
@@ -162,6 +169,13 @@ def _is_skill_disabled(
                 return True
         elif tag in skill_info.categories:
             return True
+
+    if features is not None:
+        for feat_name, feat_def in FEATURE_REGISTRY.items():
+            if not is_feature_enabled(feat_name, features):
+                if feat_def.skill_categories & skill_info.categories:
+                    return True
+
     return False
 
 
@@ -196,6 +210,7 @@ def _should_inject_skill(
     overrides: frozenset[str],
     effective_disabled: frozenset[str],
     effective_custom_tags: dict[str, list[str]],
+    features: dict[str, bool] | None = None,
 ) -> bool:
     """Return True if this skill should be written to the ephemeral session dir.
 
@@ -210,7 +225,7 @@ def _should_inject_skill(
     if skill_info.name in overrides:
         return False
     # Apply effective filtering
-    if _is_skill_disabled(skill_info, list(effective_disabled), effective_custom_tags):
+    if _is_skill_disabled(skill_info, list(effective_disabled), effective_custom_tags, features):
         return False
     return True
 
@@ -368,6 +383,7 @@ class DefaultSessionSkillManager:
             effective_custom_tags = dict(config.subsets.custom_tags)
 
         packs_enabled: list[str] = [] if config is None else list(config.packs.enabled)
+        session_features: dict[str, bool] | None = config.features if config is not None else None
 
         effective_disabled = _resolve_effective_disabled(
             explicit_disabled=explicit_disabled,
@@ -394,6 +410,7 @@ class DefaultSessionSkillManager:
                 overrides=overrides,
                 effective_disabled=effective_disabled,
                 effective_custom_tags=effective_custom_tags,
+                features=session_features,
             ):
                 if skill_info.source == SkillSource.BUNDLED:
                     _log.debug("init_session_plugin_dir_skip", skill=skill_info.name)

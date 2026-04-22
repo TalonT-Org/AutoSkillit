@@ -20,6 +20,16 @@ from .state import (
     resume_campaign_from_state,
     write_initial_state,
 )
+from .summary import (
+    CampaignSummary,
+    CampaignSummaryStatus,
+    DispatchTokenUsage,
+    PerDispatchEntry,
+    SummaryErrorRecord,
+    parse_campaign_summary,
+    serialize_campaign_summary,
+    validate_campaign_summary,
+)
 
 # Tools that appear in the Franchise group in menu listings (cook + kitchen).
 # Both cli/_cook.py and server/tools_kitchen.py use this constant.
@@ -32,6 +42,14 @@ __all__ = [
     "_build_l2_sous_chef_block",
     "L2ParseResult",
     "parse_l2_result_block",
+    "CampaignSummary",
+    "CampaignSummaryStatus",
+    "DispatchTokenUsage",
+    "PerDispatchEntry",
+    "SummaryErrorRecord",
+    "parse_campaign_summary",
+    "serialize_campaign_summary",
+    "validate_campaign_summary",
     "CampaignState",
     "DispatchRecord",
     "DispatchStatus",

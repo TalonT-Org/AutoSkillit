@@ -138,7 +138,7 @@ class TestDispatchFoodTruckValidation:
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_rejects_unknown_ingredients(self, tool_ctx, monkeypatch):
-        """Keys not in recipe.ingredients → franchise_invalid_ingredients error."""
+        """Keys not in recipe.ingredients → franchise_unknown_ingredient error."""
         from autoskillit.franchise._api import execute_dispatch
 
         tool_ctx.franchise_lock = asyncio.Lock()
@@ -161,7 +161,7 @@ class TestDispatchFoodTruckValidation:
             )
         )
         assert result["success"] is False
-        assert result["error"] == "franchise_invalid_ingredients"
+        assert result["error"] == "franchise_unknown_ingredient"
         assert "unknown_key" in result["user_visible_message"]
 
     @pytest.mark.anyio
@@ -186,13 +186,13 @@ class TestDispatchFoodTruckValidation:
             )
         )
         assert result["success"] is False
-        assert result["error"] == "franchise_invalid_ingredients"
+        assert result["error"] == "franchise_unknown_ingredient"
         # Lock must not have been acquired
         assert not lock.locked()
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_no_recipes_configured(self, tool_ctx, monkeypatch):
-        """recipes=None → franchise_not_configured error."""
+        """recipes=None → franchise_manifest_missing error."""
         from autoskillit.franchise._api import execute_dispatch
 
         tool_ctx.franchise_lock = asyncio.Lock()
@@ -212,11 +212,11 @@ class TestDispatchFoodTruckValidation:
             )
         )
         assert result["success"] is False
-        assert result["error"] == "franchise_not_configured"
+        assert result["error"] == "franchise_manifest_missing"
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_no_executor_configured(self, tool_ctx, monkeypatch):
-        """executor=None → franchise_not_configured error."""
+        """executor=None → franchise_manifest_missing error."""
         from autoskillit.franchise._api import execute_dispatch
 
         tool_ctx.franchise_lock = asyncio.Lock()
@@ -239,7 +239,7 @@ class TestDispatchFoodTruckValidation:
             )
         )
         assert result["success"] is False
-        assert result["error"] == "franchise_not_configured"
+        assert result["error"] == "franchise_manifest_missing"
 
 
 # ---------------------------------------------------------------------------

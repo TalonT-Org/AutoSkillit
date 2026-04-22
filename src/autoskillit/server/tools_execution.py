@@ -412,17 +412,14 @@ async def dispatch_food_truck(
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    if os.environ.get("AUTOSKILLIT_HEADLESS") == "1":
-        return json.dumps(
-            {
-                "success": False,
-                "error": "franchise_hard_refusal_headless",
-                "user_visible_message": (
-                    "dispatch_food_truck cannot be called from headless sessions."
-                ),
-            }
-        )
     try:
+        if os.environ.get("AUTOSKILLIT_HEADLESS") == "1":
+            from autoskillit.core import FranchiseErrorCode, franchise_error
+
+            return franchise_error(
+                FranchiseErrorCode.FRANCHISE_HARD_REFUSAL_HEADLESS,
+                "dispatch_food_truck cannot be called from headless sessions.",
+            )
         from autoskillit.franchise import execute_dispatch
         from autoskillit.server import _get_ctx
         from autoskillit.server.helpers import (
@@ -447,4 +444,9 @@ async def dispatch_food_truck(
         )
     except Exception as exc:
         logger.error("dispatch_food_truck unhandled exception", exc_info=True)
-        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+        from autoskillit.core import FranchiseErrorCode, franchise_error
+
+        return franchise_error(
+            FranchiseErrorCode.L2_STARTUP_OR_CRASH,
+            f"{type(exc).__name__}: {exc}",
+        )

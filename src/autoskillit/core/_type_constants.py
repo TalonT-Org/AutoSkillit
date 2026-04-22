@@ -8,6 +8,8 @@ from __future__ import annotations
 from importlib.metadata import version
 from typing import NamedTuple
 
+from ._type_enums import FranchiseErrorCode
+
 __all__ = [
     "AUTOSKILLIT_INSTALLED_VERSION",
     "AUTOSKILLIT_PRIVATE_ENV_VARS",
@@ -38,6 +40,7 @@ __all__ = [
     "CAMPAIGN_ID_ENV_VAR",
     "DISPATCH_ID_ENV_VAR",
     "KITCHEN_SESSION_ID_ENV_VAR",
+    "FRANCHISE_ERROR_CODES",
 ]
 
 AUTOSKILLIT_INSTALLED_VERSION: str = version("autoskillit")
@@ -194,6 +197,8 @@ FRANCHISE_TOOLS: frozenset[str] = frozenset(
         "dispatch_food_truck",
     }
 )
+
+FRANCHISE_ERROR_CODES: frozenset[str] = frozenset(FranchiseErrorCode)
 
 FREE_RANGE_TOOLS: frozenset[str] = frozenset(
     {"open_kitchen", "close_kitchen", "disable_quota_guard"}

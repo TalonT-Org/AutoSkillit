@@ -147,6 +147,7 @@ def test_is_feature_enabled_override():
     from autoskillit.core._type_constants import FEATURE_REGISTRY
     from autoskillit.core.feature_flags import is_feature_enabled
 
+    assert len(FEATURE_REGISTRY) > 0, "FEATURE_REGISTRY must not be empty"
     for name in FEATURE_REGISTRY:
         assert is_feature_enabled(name, {name: True}) is True
         assert is_feature_enabled(name, {name: False}) is False

@@ -282,6 +282,7 @@ generic_automation_mcp/
 │   ├── ask_user_question_guard.py #  Blocks AskUserQuestion if kitchen is not open
 │   ├── open_kitchen_guard.py
 │   ├── unsafe_install_guard.py
+│   ├── pr_create_guard.py       #  Blocks gh pr create via run_cmd when kitchen is open
 │   ├── generated_file_write_guard.py
 │   ├── leaf_orchestration_guard.py
 │   ├── franchise_dispatch_guard.py #  Blocks dispatch_food_truck from headless callers (L3→L3 recursion guard)

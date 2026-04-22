@@ -131,7 +131,7 @@ async def _run_dispatch(
         )
     if recipe_obj.kind != "standard":
         return franchise_error(
-            FranchiseErrorCode.FRANCHISE_RECIPE_NOT_FOUND,
+            FranchiseErrorCode.FRANCHISE_INVALID_RECIPE_KIND,
             f"Recipe '{recipe}' has kind '{recipe_obj.kind}'. "
             "Only standard recipes can be dispatched as food trucks.",
         )

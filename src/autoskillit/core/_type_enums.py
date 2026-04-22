@@ -390,6 +390,7 @@ class FranchiseErrorCode(StrEnum):
     FRANCHISE_PARALLEL_REFUSED = "franchise_parallel_refused"
     FRANCHISE_UNKNOWN_INGREDIENT = "franchise_unknown_ingredient"
     FRANCHISE_RECIPE_NOT_FOUND = "franchise_recipe_not_found"
+    FRANCHISE_INVALID_RECIPE_KIND = "franchise_invalid_recipe_kind"
     FRANCHISE_HARD_REFUSAL_HEADLESS = "franchise_hard_refusal_headless"
     FRANCHISE_MANIFEST_MISSING = "franchise_manifest_missing"
     FRANCHISE_MANIFEST_CORRUPTED = "franchise_manifest_corrupted"

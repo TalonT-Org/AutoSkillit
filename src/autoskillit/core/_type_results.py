@@ -160,6 +160,8 @@ class SkillResult:
     with the kill cause, resolving the "success=True + exit_code=-9" contradiction.
     """
     last_stop_reason: str = ""
+    lifespan_started: bool = False
+    """True when the L2 session invoked at least one MCP tool (heuristic for server lifespan)."""
 
     def to_json(self) -> str:
         data: dict[str, Any] = {
@@ -178,6 +180,7 @@ class SkillResult:
             "write_path_warnings": self.write_path_warnings,
             "write_call_count": self.write_call_count,
             "last_stop_reason": self.last_stop_reason,
+            "lifespan_started": self.lifespan_started,
         }
         if self.worktree_path is not None:
             data["worktree_path"] = self.worktree_path

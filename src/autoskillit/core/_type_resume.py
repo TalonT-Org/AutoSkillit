@@ -41,7 +41,7 @@ ResumeSpec = NoResume | BareResume | NamedResume
 
 def resume_spec_from_cli(*, resume: bool, session_id: str | None) -> ResumeSpec:
     """Construct a ResumeSpec from CLI input without any I/O."""
-    if session_id is not None:
+    if session_id:
         return NamedResume(session_id=session_id)
     if resume:
         return BareResume()

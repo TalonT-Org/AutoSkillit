@@ -42,11 +42,11 @@ def test_cook_session_ignores_ide_lock_file(
 
     with (
         patch("shutil.which", return_value="/usr/bin/claude"),
+        patch("autoskillit.cli._init_helpers._is_plugin_installed", return_value=False),
         patch(
-            "autoskillit.cli.app.subprocess.run",
+            "autoskillit.cli._session_launch.subprocess.run",
             return_value=MagicMock(returncode=0),
         ) as mock_run,
-        patch("autoskillit.cli.app.terminal_guard"),
     ):
         _launch_cook_session("system prompt", initial_message="hello")
 

@@ -106,14 +106,8 @@ class TestCLIOrder:
 
     @pytest.fixture(autouse=True)
     def _stub_is_plugin_installed(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Stub _is_plugin_installed in app.py to False to prevent subprocess.run collision."""
-        import importlib
-        import sys as _sys
-
-        _app_mod = _sys.modules.get("autoskillit.cli.app") or importlib.import_module(
-            "autoskillit.cli.app"
-        )
-        monkeypatch.setattr(_app_mod, "_is_plugin_installed", lambda: False)
+        """Stub _is_plugin_installed to False to prevent subprocess.run collision."""
+        monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: False)
 
     @pytest.fixture(autouse=True)
     def _stub_ingredients_table(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -473,9 +467,6 @@ class TestCLIOrder:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """order omits --plugin-dir when marketplace plugin is installed."""
-        import importlib
-        import sys as _sys
-
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
@@ -483,10 +474,7 @@ class TestCLIOrder:
         (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
-        _app_mod = _sys.modules.get("autoskillit.cli.app") or importlib.import_module(
-            "autoskillit.cli.app"
-        )
-        monkeypatch.setattr(_app_mod, "_is_plugin_installed", lambda: True)
+        monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: True)
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="", stderr=""
         )
@@ -505,9 +493,6 @@ class TestCLIOrder:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """order includes --plugin-dir when marketplace plugin is not installed."""
-        import importlib
-        import sys as _sys
-
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
@@ -515,10 +500,7 @@ class TestCLIOrder:
         (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
-        _app_mod = _sys.modules.get("autoskillit.cli.app") or importlib.import_module(
-            "autoskillit.cli.app"
-        )
-        monkeypatch.setattr(_app_mod, "_is_plugin_installed", lambda: False)
+        monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: False)
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="", stderr=""
         )
@@ -1102,14 +1084,8 @@ class TestOrderSubsetGate:
 
     @pytest.fixture(autouse=True)
     def _stub_is_plugin_installed(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Stub _is_plugin_installed in app.py to False to prevent subprocess.run collision."""
-        import importlib
-        import sys as _sys
-
-        _app_mod = _sys.modules.get("autoskillit.cli.app") or importlib.import_module(
-            "autoskillit.cli.app"
-        )
-        monkeypatch.setattr(_app_mod, "_is_plugin_installed", lambda: False)
+        """Stub _is_plugin_installed to False to prevent subprocess.run collision."""
+        monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: False)
 
     @pytest.fixture(autouse=True)
     def _stub_ingredients_table(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1302,14 +1278,8 @@ class TestOrderMcpPrefixSelection:
 
     @pytest.fixture(autouse=True)
     def _stub_is_plugin_installed(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Stub _is_plugin_installed in app.py to False to prevent subprocess.run collision."""
-        import importlib
-        import sys as _sys
-
-        _app_mod = _sys.modules.get("autoskillit.cli.app") or importlib.import_module(
-            "autoskillit.cli.app"
-        )
-        monkeypatch.setattr(_app_mod, "_is_plugin_installed", lambda: False)
+        """Stub _is_plugin_installed to False to prevent subprocess.run collision."""
+        monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: False)
 
     @pytest.fixture(autouse=True)
     def _stub_ingredients_table(self, monkeypatch: pytest.MonkeyPatch) -> None:

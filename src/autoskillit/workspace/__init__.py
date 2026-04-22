@@ -23,6 +23,9 @@ from autoskillit.workspace.clone import (
     remove_clone,
 )
 from autoskillit.workspace.clone_registry import (
+    batch_delete as batch_delete,
+)
+from autoskillit.workspace.clone_registry import (
     cleanup_candidates as cleanup_candidates,
 )
 from autoskillit.workspace.clone_registry import (
@@ -52,6 +55,7 @@ from autoskillit.workspace.worktree import (
 delete_directory_contents = _delete_directory_contents
 
 __all__ = [
+    "batch_delete",
     "CleanupResult",
     "cleanup_candidates",
     "delete_directory_contents",

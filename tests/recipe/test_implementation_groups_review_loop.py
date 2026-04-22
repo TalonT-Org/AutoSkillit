@@ -32,7 +32,22 @@ def test_re_push_review_routes_to_check_review_loop(recipe) -> None:
 
 
 # T_IG_LOOP3
-def test_check_review_loop_on_failure_routes_to_ci_watch(recipe) -> None:
-    """check_review_loop on_failure must route to ci_watch in implementation-groups recipe."""
+def test_check_review_loop_routes_on_max_exceeded_only(recipe) -> None:
+    """check_review_loop on_result condition must route on max_exceeded alone,
+    NOT on has_blocking."""
+    step = recipe.steps["check_review_loop"]
+    assert step.on_result is not None
+    review_conditions = [
+        c for c in step.on_result.conditions if c.when is not None and c.route == "review_pr"
+    ]
+    assert review_conditions, "No conditional route to review_pr found"
+    assert "max_exceeded" in review_conditions[0].when
+    assert "has_blocking" not in review_conditions[0].when
+
+
+# T_IG_LOOP4
+def test_check_review_loop_has_on_failure(recipe) -> None:
+    """check_review_loop must declare on_failure because it uses on_result
+    (on-result-missing-failure-route semantic rule requires it)."""
     step = recipe.steps["check_review_loop"]
     assert step.on_failure == "ci_watch"

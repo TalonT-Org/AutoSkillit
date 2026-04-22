@@ -1744,3 +1744,28 @@ skills:
     pattern_examples:
     - "html_path = /tmp/research/report.html\n%%ORDER_UP%%"
     write_behavior: always
+callable_contracts:
+  autoskillit.smoke_utils.check_review_loop:
+    outputs:
+    - name: next_iteration
+      type: str
+    - name: max_exceeded
+      type: str
+  autoskillit.smoke_utils.check_bug_report_non_empty:
+    outputs:
+    - name: non_empty
+      type: str
+  autoskillit.smoke_utils.annotate_pr_diff:
+    outputs:
+    - name: annotated_diff_path
+      type: file_path
+    - name: hunk_ranges_path
+      type: file_path
+  autoskillit.smoke_utils.compute_domain_partitions:
+    outputs:
+    - name: domain_partitions_path
+      type: file_path
+  autoskillit.smoke_utils.fetch_merge_queue_data:
+    outputs:
+    - name: merge_queue_data_path
+      type: file_path

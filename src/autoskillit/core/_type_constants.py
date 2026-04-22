@@ -333,15 +333,14 @@ FEATURE_REGISTRY: dict[str, FeatureDef] = {
         skill_categories=frozenset(),
         import_package="autoskillit.franchise",
         tier=1,
-        default_enabled=True,  # True during transition; flipped to False in ticket #8
+        default_enabled=True,
         since_version="0.9.51",
     ),
 }
 
 RETIRED_FEATURES: frozenset[str] = frozenset()
 
-# Module-level assertion: all tool_tags entries must exist in TOOL_SUBSET_TAGS tag values.
-# This catches stale tags at import time, before any test or server startup.
+# Guard: FeatureDef.tool_tags must be in TOOL_SUBSET_TAGS — checked at import time.
 _ALL_REGISTERED_TOOL_TAGS: frozenset[str] = frozenset(
     tag for tags in TOOL_SUBSET_TAGS.values() for tag in tags
 )

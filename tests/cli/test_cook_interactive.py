@@ -355,14 +355,17 @@ class TestCookInteractive:
         assert not rmtree_calls, "cook() must not rmtree skills_dir on exit"
 
     # REQ-CLI-001 + REQ-CLI-002
-    def test_cook_resume_passes_resume_flag(self, monkeypatch, tmp_path):
-        """cook(resume=True) passes --resume <session_id> to subprocess."""
+    def test_cook_resume_bare_flag_produces_bare_resume_and_skips_discovery(
+        self, monkeypatch, tmp_path
+    ):
+        """cook(resume=True) passes bare --resume; find_latest_session_id must not be called."""
         from unittest.mock import MagicMock, patch
 
         fake_skills_dir = tmp_path / "skills"
         fake_skills_dir.mkdir()
         mock_mgr = MagicMock()
         mock_mgr.init_session.return_value = fake_skills_dir
+        discovery_calls: list = []
 
         with (
             patch("shutil.which", return_value="/usr/bin/claude"),
@@ -371,7 +374,7 @@ class TestCookInteractive:
             patch("subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
             patch(
                 "autoskillit.core.find_latest_session_id",
-                return_value="session123",
+                side_effect=lambda *a, **kw: discovery_calls.append(1) or "latest",
             ),
         ):
             import autoskillit.cli._cook as module
@@ -381,7 +384,10 @@ class TestCookInteractive:
         args = mock_run.call_args[0][0]
         assert "--resume" in args
         idx = args.index("--resume")
-        assert args[idx + 1] == "session123"
+        assert idx == len(args) - 1 or args[idx + 1].startswith("-"), (
+            "bare --resume must not be followed by a session ID"
+        )
+        assert not discovery_calls, "find_latest_session_id must not be called for bare --resume"
 
     # REQ-CLI-002
     def test_cook_resume_explicit_session_id(self, monkeypatch, tmp_path):
@@ -414,9 +420,9 @@ class TestCookInteractive:
         assert args[args.index("--resume") + 1] == "explicit-abc"
         assert not discovery_calls, "discovery must not be called when session_id is explicit"
 
-    # REQ-CLI-002 — fallback when no session exists
-    def test_cook_resume_falls_back_to_fresh_when_no_session(self, monkeypatch, tmp_path):
-        """cook(resume=True) with no prior session starts a fresh session."""
+    # REQ-CLI-002 — bare --resume always emits --resume; Claude Code's picker handles empty history
+    def test_cook_resume_bare_flag_always_emits_resume(self, monkeypatch, tmp_path):
+        """cook(resume=True) always emits bare --resume; empty history is Claude Code's concern."""
         from unittest.mock import MagicMock, patch
 
         fake_skills_dir = tmp_path / "skills"
@@ -429,14 +435,17 @@ class TestCookInteractive:
             patch("builtins.input", return_value=""),
             patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
             patch("subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
-            patch("autoskillit.core.find_latest_session_id", return_value=None),
         ):
             import autoskillit.cli._cook as module
 
             module.cook(resume=True)
 
         args = mock_run.call_args[0][0]
-        assert "--resume" not in args
+        assert "--resume" in args
+        idx = args.index("--resume")
+        assert idx == len(args) - 1 or args[idx + 1].startswith("-"), (
+            "bare --resume must not be followed by a session ID"
+        )
 
     # REQ-CLI-003
     def test_cook_cmd_resume_with_session_id_no_error(

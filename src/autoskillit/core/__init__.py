@@ -107,6 +107,7 @@ from .types import (
     UNGATED_TOOLS,
     AuditLog,
     BackgroundSupervisor,
+    BareResume,
     ChannelBStatus,
     ChannelConfirmation,
     CIRunScope,
@@ -133,6 +134,8 @@ from .types import (
     MergeQueueWatcher,
     MergeState,
     MigrationService,
+    NamedResume,
+    NoResume,
     OutputFormat,
     OutputPatternResolver,
     PackDef,
@@ -142,6 +145,7 @@ from .types import (
     RecipeRepository,
     RecipeSource,
     RestartScope,
+    ResumeSpec,
     RetryReason,
     SessionOutcome,
     SessionSkillManager,
@@ -168,6 +172,7 @@ from .types import (
     extract_path_arg,
     extract_skill_name,
     resolve_target_skill,
+    resume_spec_from_cli,
     session_type,
     truncate_text,
 )
@@ -309,6 +314,12 @@ __all__ = [
     "TokenLog",
     "WorkspaceManager",
     "truncate_text",
+    # _type_resume
+    "NoResume",
+    "BareResume",
+    "NamedResume",
+    "ResumeSpec",
+    "resume_spec_from_cli",
     # _version_snapshot
     "collect_version_snapshot",
     # _plugin_cache

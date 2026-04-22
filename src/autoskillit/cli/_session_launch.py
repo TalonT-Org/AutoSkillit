@@ -5,6 +5,10 @@ from __future__ import annotations
 import shutil
 import subprocess
 import sys
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from autoskillit.core import ResumeSpec
 
 
 def _run_interactive_session(
@@ -12,7 +16,7 @@ def _run_interactive_session(
     *,
     initial_message: str | None = None,
     extra_env: dict[str, str] | None = None,
-    resume_session_id: str | None = None,
+    resume_spec: ResumeSpec | None = None,
 ) -> None:
     """Launch an interactive Claude Code session with the given system prompt."""
     if shutil.which("claude") is None:
@@ -20,12 +24,12 @@ def _run_interactive_session(
         sys.exit(1)
     from autoskillit.cli._init_helpers import _is_plugin_installed
     from autoskillit.cli._terminal import terminal_guard
-    from autoskillit.core import ClaudeFlags, pkg_root
+    from autoskillit.core import ClaudeFlags, NoResume, pkg_root
     from autoskillit.execution import build_interactive_cmd
 
     spec = build_interactive_cmd(
         initial_prompt=initial_message,
-        resume_session_id=resume_session_id,
+        resume_spec=resume_spec if resume_spec is not None else NoResume(),
         env_extras=extra_env,
     )
     plugin_flags = [] if _is_plugin_installed() else [ClaudeFlags.PLUGIN_DIR, str(pkg_root())]

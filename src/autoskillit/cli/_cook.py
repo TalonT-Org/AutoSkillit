@@ -135,16 +135,12 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
     from autoskillit.cli._init_helpers import _is_plugin_installed
     from autoskillit.cli._onboarding import is_first_run, run_onboarding_menu
     from autoskillit.config import load_config
-    from autoskillit.core import configure_logging, find_latest_session_id, pkg_root
+    from autoskillit.core import configure_logging, pkg_root, resume_spec_from_cli
     from autoskillit.execution import build_interactive_cmd
 
     configure_logging()
 
-    resume_session_id: str | None = None
-    if resume:
-        resume_session_id = session_id or find_latest_session_id()
-        if resume_session_id is None:
-            print("No previous session found. Starting a fresh session.")
+    resume_spec = resume_spec_from_cli(resume=resume, session_id=session_id)
 
     project_dir = Path.cwd()
     initial_prompt: str | None = None
@@ -166,7 +162,7 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
         plugin_dir=plugin_dir,
         add_dirs=[skills_dir],
         initial_prompt=initial_prompt,
-        resume_session_id=resume_session_id,
+        resume_spec=resume_spec,
     )
     _run_cook_session(
         cmd=spec.cmd,

@@ -9,44 +9,22 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.core._type_constants import PACK_REGISTRY, TOOL_SUBSET_TAGS
+from tests.franchise._helpers import (
+    KITCHEN_CORE_TOOLS,
+    TOOLS_BY_PACK,
+    compute_food_truck_tool_surface,
+)
 
 pytestmark = [pytest.mark.layer("franchise"), pytest.mark.small]
 
 # ---------------------------------------------------------------------------
-# Module-level constants — derived from the authoritative TOOL_SUBSET_TAGS map
+# Module-level constants — additional packs used only in this test module
 # ---------------------------------------------------------------------------
 
-_tools_by_pack: dict[str, set[str]] = {}
-for _tool, _tags in TOOL_SUBSET_TAGS.items():
-    for _tag in _tags:
-        if _tag in PACK_REGISTRY:
-            _tools_by_pack.setdefault(_tag, set()).add(_tool)
-
-TOOLS_BY_PACK: dict[str, frozenset[str]] = {k: frozenset(v) for k, v in _tools_by_pack.items()}
-
-KITCHEN_CORE_TOOLS = TOOLS_BY_PACK["kitchen-core"]
 GITHUB_PACK_TOOLS = TOOLS_BY_PACK["github"]
 CI_PACK_TOOLS = TOOLS_BY_PACK["ci"]
 CLONE_PACK_TOOLS = TOOLS_BY_PACK["clone"]
 TELEMETRY_PACK_TOOLS = TOOLS_BY_PACK["telemetry"]
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def compute_food_truck_tool_surface(recipe_name: str) -> frozenset[str]:
-    """Compute the expected tool surface for a food truck running the given recipe."""
-    from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
-
-    path = builtin_recipes_dir() / f"{recipe_name}.yaml"
-    recipe = load_recipe(path)
-    expected: set[str] = set(KITCHEN_CORE_TOOLS)
-    for pack in recipe.requires_packs or []:
-        expected |= TOOLS_BY_PACK.get(pack, frozenset())
-    return frozenset(expected)
 
 
 def _simulate_food_truck(monkeypatch: pytest.MonkeyPatch, packs: str) -> None:
@@ -211,7 +189,9 @@ class TestPerRecipeToolSurface:
 
 class TestSyntheticPackScenarios:
     @pytest.mark.anyio
-    async def test_food_truck_with_empty_requires_packs_sees_only_kitchen_core(self, monkeypatch):
+    async def test_food_truck_with_empty_requires_packs_sees_full_kitchen_fallback(
+        self, monkeypatch
+    ):
         from fastmcp.client import Client
 
         from autoskillit.core import GATED_TOOLS
@@ -264,6 +244,9 @@ class TestSyntheticPackScenarios:
             _apply_session_type_visibility()
 
         enable_calls = mock_mcp.enable.call_args_list
+        assert len(enable_calls) == 4, (
+            f"Expected 4 enable calls, got {len(enable_calls)}: {enable_calls}"
+        )
         assert enable_calls[0] == call(tags={"kitchen-core"}), "kitchen-core must be first"
         assert enable_calls[1] == call(tags={"github"})
         assert enable_calls[2] == call(tags={"ci"})

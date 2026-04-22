@@ -11,36 +11,9 @@ import sys
 
 import pytest
 
-from autoskillit.core._type_constants import PACK_REGISTRY, TOOL_SUBSET_TAGS
+from tests.franchise._helpers import compute_food_truck_tool_surface
 
 pytestmark = [pytest.mark.layer("franchise"), pytest.mark.medium]
-
-# ---------------------------------------------------------------------------
-# Module-level constants (mirrors test_pack_enforcement.py)
-# ---------------------------------------------------------------------------
-
-_tools_by_pack: dict[str, set[str]] = {}
-for _tool, _tags in TOOL_SUBSET_TAGS.items():
-    for _tag in _tags:
-        if _tag in PACK_REGISTRY:
-            _tools_by_pack.setdefault(_tag, set()).add(_tool)
-
-TOOLS_BY_PACK: dict[str, frozenset[str]] = {k: frozenset(v) for k, v in _tools_by_pack.items()}
-
-KITCHEN_CORE_TOOLS = TOOLS_BY_PACK["kitchen-core"]
-
-
-def compute_food_truck_tool_surface(recipe_name: str) -> frozenset[str]:
-    """Compute the expected tool surface for a food truck running the given recipe."""
-    from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
-
-    path = builtin_recipes_dir() / f"{recipe_name}.yaml"
-    recipe = load_recipe(path)
-    expected: set[str] = set(KITCHEN_CORE_TOOLS)
-    for pack in recipe.requires_packs or []:
-        expected |= TOOLS_BY_PACK.get(pack, frozenset())
-    return frozenset(expected)
-
 
 # ---------------------------------------------------------------------------
 # Fixture
@@ -57,7 +30,7 @@ def franchise_runtime():
 
         path = builtin_recipes_dir() / f"{recipe_name}.yaml"
         recipe = load_recipe(path)
-        packs = ",".join(sorted(recipe.requires_packs))
+        packs = ",".join(sorted(recipe.requires_packs or []))
 
         env = {
             **os.environ,

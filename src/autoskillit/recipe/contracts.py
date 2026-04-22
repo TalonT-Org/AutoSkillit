@@ -185,7 +185,9 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
     )
 
 
-def get_callable_contract(dotted_path: str, manifest: dict[str, Any] | None = None) -> SkillContract | None:
+def get_callable_contract(
+    dotted_path: str, manifest: dict[str, Any] | None = None
+) -> SkillContract | None:
     """Look up a run_python callable in the manifest and return a SkillContract.
 
     Callable contracts live under the ``callable_contracts`` top-level key in
@@ -198,9 +200,7 @@ def get_callable_contract(dotted_path: str, manifest: dict[str, Any] | None = No
     entry = callables.get(dotted_path)
     if entry is None:
         return None
-    outputs = [
-        SkillOutput(name=out["name"], type=out["type"]) for out in entry.get("outputs", [])
-    ]
+    outputs = [SkillOutput(name=out["name"], type=out["type"]) for out in entry.get("outputs", [])]
     return SkillContract(inputs=[], outputs=outputs)
 
 

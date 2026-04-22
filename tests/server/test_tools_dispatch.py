@@ -535,10 +535,11 @@ class TestDispatchFoodTruckExecution:
         assert tool_ctx.config.quota_guard.cache_path in invalidate_calls
 
     @pytest.mark.anyio
+    @pytest.mark.parametrize("exc_cls", [RuntimeError, OSError])
     async def test_dispatch_food_truck_succeeds_when_cleanup_session_raises(
-        self, tool_ctx, monkeypatch
+        self, tool_ctx, monkeypatch, exc_cls
     ):
-        """Dispatch result is success even when cleanup_session raises RuntimeError."""
+        """Dispatch result is success even when cleanup_session raises an exception."""
         import dataclasses
         import json
 
@@ -555,53 +556,10 @@ class TestDispatchFoodTruckExecution:
         )
         monkeypatch.setattr("autoskillit.franchise._api.invalidate_cache", lambda _: None)
 
-        def _raise_runtime_error(session_id: str) -> bool:
-            raise RuntimeError("permission denied")
+        def _raise_error(session_id: str) -> bool:
+            raise exc_cls("simulated cleanup failure")
 
-        monkeypatch.setattr(
-            tool_ctx.session_skill_manager, "cleanup_session", _raise_runtime_error
-        )
-
-        result_json = await execute_dispatch(
-            tool_ctx=tool_ctx,
-            recipe="test-recipe",
-            task="t",
-            ingredients=None,
-            dispatch_name=None,
-            timeout_sec=None,
-            prompt_builder=_simple_prompt_builder,
-            quota_checker=_no_sleep_quota_checker,
-            quota_refresher=_noop_quota_refresher,
-        )
-
-        result = json.loads(result_json)
-        assert result["success"] is True
-
-    @pytest.mark.anyio
-    async def test_dispatch_food_truck_succeeds_when_cleanup_session_raises_oserror(
-        self, tool_ctx, monkeypatch
-    ):
-        """Dispatch result is success even when cleanup_session raises OSError."""
-        import dataclasses
-        import json
-
-        from autoskillit.franchise._api import execute_dispatch
-        from tests.fakes import _DEFAULT_SKILL_RESULT
-
-        self._setup_standard_dispatch(tool_ctx)
-        tool_ctx.executor = InMemoryHeadlessExecutor(
-            default_result=dataclasses.replace(
-                _DEFAULT_SKILL_RESULT,
-                success=True,
-                session_id="l2-session-oserr",
-            )
-        )
-        monkeypatch.setattr("autoskillit.franchise._api.invalidate_cache", lambda _: None)
-
-        def _raise_os_error(session_id: str) -> bool:
-            raise OSError("read-only filesystem")
-
-        monkeypatch.setattr(tool_ctx.session_skill_manager, "cleanup_session", _raise_os_error)
+        monkeypatch.setattr(tool_ctx.session_skill_manager, "cleanup_session", _raise_error)
 
         result_json = await execute_dispatch(
             tool_ctx=tool_ctx,

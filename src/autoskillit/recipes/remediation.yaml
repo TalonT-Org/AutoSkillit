@@ -618,21 +618,16 @@ steps:
     capture:
       review_loop_count: "${{ result.next_iteration }}"
     on_result:
-      - when: "${{ result.has_blocking }} == true and ${{ result.max_exceeded }} == false"
+      - when: "${{ result.max_exceeded }} == false"
         route: review_pr
       - route: ci_watch
-    on_failure: ci_watch
-    optional: true
     skip_when_false: "inputs.open_pr"
     optional_context_refs:
       - review_loop_count
     note: >
-      After resolve_review fixes are pushed, checks GitHub API for unresolved
-      critical/warning review threads. Routes back to review_pr for another
-      review-resolve cycle if blocking comments persist and the iteration guard
-      (inputs.review_max_retries, default 3) has not been exceeded. Captures
-      review_loop_count to track iterations across loop passes. On GitHub API
-      failure, degrades to ci_watch to avoid blocking the pipeline.
+      Pure iteration guard. Routes back to review_pr if the iteration budget
+      (inputs.review_max_retries) is not exhausted; otherwise proceeds to
+      ci_watch.
 
   ci_watch:
     tool: wait_for_ci

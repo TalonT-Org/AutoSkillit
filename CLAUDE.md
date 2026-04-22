@@ -269,9 +269,8 @@ generic_automation_mcp/
 │   ├── _update.py           #   run_update_command(): first-class upgrade path for `autoskillit update`
 │   ├── _update_checks.py    #   Unified startup update check: version/hook/source-drift signals, branch-aware dismissal
 │   ├── _serve_guard.py      #   Async signal-guarded MCP server bootstrap (extracted from app.py)
-│   ├── _franchise.py        #   franchise subcommand group: status --reap/--dry-run, run stub, signal guard
+│   ├── _franchise.py        #   franchise subcommand group: status --reap/--dry-run, run stub, signal guard; render_franchise_error()
 │   ├── _workspace.py        #   Workspace clean helpers
-│   ├── _franchise.py        #   render_franchise_error(): franchise error envelope rendering (stderr + exit 3)
 │   └── app.py               #   CLI entry: serve, init, config, skills, recipes, doctor, update, etc.
 │
 ├── hooks/                   # Claude Code PreToolUse/PostToolUse/SessionStart scripts

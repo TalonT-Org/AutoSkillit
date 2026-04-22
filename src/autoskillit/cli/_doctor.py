@@ -873,13 +873,15 @@ def _check_campaign_manifest_clone_dests(project_dir: Path | None = None) -> Doc
 
 def _check_feature_dependencies(features: dict[str, bool]) -> DoctorResult:
     """Verify all enabled features have their dependencies satisfied."""
-    from autoskillit.core import FEATURE_REGISTRY, is_feature_enabled
+    from autoskillit.core import FEATURE_REGISTRY
 
     for name, defn in FEATURE_REGISTRY.items():
-        if not is_feature_enabled(name, features) or not defn.depends_on:
+        if not features.get(name, defn.default_enabled) or not defn.depends_on:
             continue
         for dep in defn.depends_on:
-            if not is_feature_enabled(dep, features):
+            dep_defn = FEATURE_REGISTRY.get(dep)
+            dep_default = dep_defn.default_enabled if dep_defn is not None else False
+            if not features.get(dep, dep_default):
                 return DoctorResult(
                     severity=Severity.ERROR,
                     check="feature_dependencies",

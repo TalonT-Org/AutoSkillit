@@ -482,6 +482,50 @@ def test_init_session_recipe_packs_enables_default_disabled(tmp_path: Path) -> N
     )
 
 
+# ── Tests: feature-gate skill filtering ─────────────────────────────────────
+
+
+def test_skill_disabled_when_feature_off(tmp_path: Path) -> None:
+    """make-campaign excluded from session skills when features.franchise=false."""
+    from tests._helpers import make_test_config
+
+    config = make_test_config(features={"franchise": False})
+    provider = SkillsDirectoryProvider()
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
+    session_path = mgr.init_session("test-franchise-off", cook_session=False, config=config)
+    skill_names = {p.parent.name for p in session_path.glob(".claude/skills/*/SKILL.md")}
+    assert "make-campaign" not in skill_names, (
+        "make-campaign must be excluded when franchise feature is disabled"
+    )
+
+
+def test_skill_enabled_when_feature_on(tmp_path: Path) -> None:
+    """make-campaign present in session skills when features.franchise=true."""
+    from tests._helpers import make_test_config
+
+    config = make_test_config(features={"franchise": True})
+    provider = SkillsDirectoryProvider()
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
+    session_path = mgr.init_session("test-franchise-on", cook_session=False, config=config)
+    skill_names = {p.parent.name for p in session_path.glob(".claude/skills/*/SKILL.md")}
+    assert "make-campaign" in skill_names, (
+        "make-campaign must be present when franchise feature is enabled"
+    )
+
+
+def test_other_skills_unaffected_by_franchise_feature(tmp_path: Path) -> None:
+    """Non-franchise skills unaffected when franchise feature is disabled."""
+    from tests._helpers import make_test_config
+
+    config = make_test_config(features={"franchise": False})
+    provider = SkillsDirectoryProvider()
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
+    session_path = mgr.init_session("test-others-unaffected", cook_session=False, config=config)
+    skill_names = {p.parent.name for p in session_path.glob(".claude/skills/*/SKILL.md")}
+    assert "make-plan" in skill_names
+    assert "implement-worktree" in skill_names
+
+
 # ── Tests: _parse_activate_deps ─────────────────────────────────────────────
 
 

@@ -12,11 +12,6 @@ from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
 pytestmark = [pytest.mark.layer("franchise"), pytest.mark.small]
 
 
-# ---------------------------------------------------------------------------
-# Shared helpers (mirror test_dispatch_failure_semantics.py pattern)
-# ---------------------------------------------------------------------------
-
-
 def _make_standard_recipe(name: str = "test-recipe"):
     from autoskillit.recipe.schema import Recipe, RecipeKind
 
@@ -102,11 +97,6 @@ def _make_completed_dirty():
     )
 
 
-# ---------------------------------------------------------------------------
-# Group G: SkillResult.lifespan_started field
-# ---------------------------------------------------------------------------
-
-
 class TestLifespanStartedField:
     def test_skill_result_lifespan_started_field_exists(self):
         """SkillResult has a lifespan_started: bool field defaulting to False."""
@@ -126,11 +116,6 @@ class TestLifespanStartedField:
         )
         assert hasattr(sr, "lifespan_started")
         assert sr.lifespan_started is False
-
-
-# ---------------------------------------------------------------------------
-# Group G: lifespan_started in dispatch envelopes
-# ---------------------------------------------------------------------------
 
 
 class TestLifespanStartedInEnvelopes:

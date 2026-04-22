@@ -12,11 +12,6 @@ from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
 pytestmark = [pytest.mark.layer("franchise"), pytest.mark.small]
 
 
-# ---------------------------------------------------------------------------
-# Shared helpers
-# ---------------------------------------------------------------------------
-
-
 def _make_standard_recipe(name: str = "test-recipe"):
     from autoskillit.recipe.schema import Recipe, RecipeKind
 
@@ -112,11 +107,6 @@ def _make_completed_clean(success: bool, reason: str = ""):
         parse_error=None,
         source="stdout",
     )
-
-
-# ---------------------------------------------------------------------------
-# Group F tests
-# ---------------------------------------------------------------------------
 
 
 class TestTimeoutPath:

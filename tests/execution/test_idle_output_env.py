@@ -14,12 +14,7 @@ from tests.fakes import MockSubprocessRunner
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
-# ---------------------------------------------------------------------------
-# Shared helpers
-# ---------------------------------------------------------------------------
-
-
-def _success_result(idle_value: float | None = None) -> SubprocessResult:
+def _success_result() -> SubprocessResult:
     """Build a minimal successful SubprocessResult for MockSubprocessRunner."""
     return SubprocessResult(
         returncode=0,
@@ -36,11 +31,6 @@ def _success_result(idle_value: float | None = None) -> SubprocessResult:
         termination=TerminationReason.NATURAL_EXIT,
         pid=12345,
     )
-
-
-# ---------------------------------------------------------------------------
-# Test _execute_claude_headless idle timeout env resolution
-# ---------------------------------------------------------------------------
 
 
 class TestExecuteClaudeHeadlessIdleEnv:
@@ -134,11 +124,6 @@ class TestExecuteClaudeHeadlessIdleEnv:
         _, _, _, kwargs = minimal_ctx.runner.call_args_list[0]
         actual = kwargs.get("idle_output_timeout")
         assert actual is None, f"Expected idle_output_timeout=None when env=0, got {actual!r}"
-
-
-# ---------------------------------------------------------------------------
-# Test dispatch_food_truck idle env injection
-# ---------------------------------------------------------------------------
 
 
 class TestDispatchFoodTruckIdleEnvInjection:

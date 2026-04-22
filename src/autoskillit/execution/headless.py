@@ -1019,6 +1019,11 @@ async def _execute_claude_headless(
             try:
                 _raw_idle = float(env_idle)
             except ValueError:
+                logger.warning(
+                    "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT: invalid float — falling back to config",
+                    env_value=env_idle,
+                    fallback=cfg.idle_output_timeout,
+                )
                 _raw_idle = float(cfg.idle_output_timeout)
         else:
             _raw_idle = float(cfg.idle_output_timeout)
@@ -1446,7 +1451,7 @@ class DefaultHeadlessExecutor:
 
         idle_cfg_val = cfg.run_skill.idle_output_timeout
         if idle_cfg_val > 0:
-            merged_extras.setdefault("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(int(idle_cfg_val)))
+            merged_extras.setdefault("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(idle_cfg_val))
 
         spec = build_food_truck_cmd(
             orchestrator_prompt=orchestrator_prompt,

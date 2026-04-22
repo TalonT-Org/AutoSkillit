@@ -323,6 +323,7 @@ async def _run_dispatch(
                 "dispatch_id": dispatch_id,
                 "l2_session_id": skill_result.session_id,
                 "l2_payload": parsed.payload,
+                "reason": reason,
                 "token_usage": skill_result.token_usage,
                 "l2_parse_source": parsed.source,
                 "lifespan_started": skill_result.lifespan_started,

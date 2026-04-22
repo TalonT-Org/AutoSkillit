@@ -101,12 +101,10 @@ def test_check_review_loop_stops_at_max_iterations() -> None:
     assert result["next_iteration"] == "3"
 
 
-def test_check_review_loop_returns_only_iteration_fields() -> None:
-    """Pure iteration guard must not return has_blocking or blocking_count."""
+def test_check_review_loop_returns_expected_fields() -> None:
+    """check_review_loop must return next_iteration, max_exceeded, and had_blocking."""
     result = check_review_loop(pr_number="42", cwd="/tmp")
-    assert "has_blocking" not in result
-    assert "blocking_count" not in result
-    assert set(result.keys()) == {"next_iteration", "max_exceeded"}
+    assert set(result.keys()) == {"next_iteration", "max_exceeded", "had_blocking"}
 
 
 # T_CRL11 — verify check_review_loop has no subprocess calls
@@ -128,6 +126,27 @@ def test_check_review_loop_has_no_subprocess_calls() -> None:
                             "it is a pure iteration guard"
                         )
             break
+
+
+# T_CRL12
+def test_crl_had_blocking_true_when_changes_requested() -> None:
+    """had_blocking=true when previous_verdict is changes_requested."""
+    result = check_review_loop("42", "/tmp", previous_verdict="changes_requested")
+    assert result["had_blocking"] == "true"
+
+
+# T_CRL13
+def test_crl_had_blocking_false_when_approved_with_comments() -> None:
+    """had_blocking=false when previous_verdict is approved_with_comments."""
+    result = check_review_loop("42", "/tmp", previous_verdict="approved_with_comments")
+    assert result["had_blocking"] == "false"
+
+
+# T_CRL14
+def test_crl_had_blocking_false_when_empty_verdict() -> None:
+    """had_blocking=false when previous_verdict is absent (first-pass guard)."""
+    result = check_review_loop("42", "/tmp")
+    assert result["had_blocking"] == "false"
 
 
 def test_subprocess_calls_have_timeout() -> None:

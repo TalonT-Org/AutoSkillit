@@ -96,11 +96,16 @@ def check_review_loop(
     cwd: str,
     current_iteration: str = "",
     max_iterations: str = "3",
+    previous_verdict: str = "",
 ) -> dict[str, str]:
     """Pure iteration guard for the review-resolve loop.
 
-    Returns next_iteration and max_exceeded to determine whether
-    to re-review (iterate) or proceed to ci_watch (budget exhausted).
+    Returns next_iteration, max_exceeded, and had_blocking to determine
+    whether to re-review (blocking + iterations remain) or proceed to ci_watch.
+
+    ``had_blocking`` is true only when ``previous_verdict == "changes_requested"``.
+    ``approved_with_comments`` intentionally yields ``had_blocking=false`` — the
+    resolve_review pass is one-shot and does not trigger a re-review cycle.
     """
     iteration = int(current_iteration.strip()) if current_iteration.strip() else 0
     next_iteration = iteration + 1
@@ -109,6 +114,7 @@ def check_review_loop(
     return {
         "next_iteration": str(next_iteration),
         "max_exceeded": "true" if next_iteration >= max_iter else "false",
+        "had_blocking": "true" if previous_verdict.strip() == "changes_requested" else "false",
     }
 
 

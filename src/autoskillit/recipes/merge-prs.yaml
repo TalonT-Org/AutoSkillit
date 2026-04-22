@@ -431,7 +431,6 @@ steps:
     note: >
       Creates the integration branch from the latest base_branch HEAD.
       context.integration_branch was computed by analyze_prs.
-      The agent initializes context.current_pr_number from the first PR here.
 
   publish_integration_branch:
     tool: push_to_remote

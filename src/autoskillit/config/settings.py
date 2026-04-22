@@ -348,12 +348,21 @@ class AutomationConfig:
         """
         result: dict[str, bool] = {}
         for name, value in raw.items():
+            if not isinstance(name, str):
+                raise ConfigSchemaError(
+                    f"Feature key must be a string, got {type(name).__name__!r}: {name!r}"
+                )
             if name not in FEATURE_REGISTRY:
                 known = sorted(FEATURE_REGISTRY.keys())
                 raise ConfigSchemaError(
                     f"Unknown feature {name!r} in features config. Known features: {known}"
                 )
-            result[name] = bool(value)
+            if not isinstance(value, bool):
+                raise ConfigSchemaError(
+                    f"Feature {name!r} value must be a bool, "
+                    f"got {type(value).__name__!r}: {value!r}"
+                )
+            result[name] = value
 
         # Dependency validation
         for name, enabled in result.items():
@@ -361,7 +370,14 @@ class AutomationConfig:
                 continue
             defn = FEATURE_REGISTRY[name]
             for dep in defn.depends_on:
-                dep_enabled = result.get(dep, FEATURE_REGISTRY[dep].default_enabled)
+                try:
+                    dep_default = FEATURE_REGISTRY[dep].default_enabled
+                except KeyError:
+                    raise ConfigSchemaError(
+                        f"Feature {name!r} depends_on {dep!r}, which is not in FEATURE_REGISTRY. "
+                        f"This is a bug in the FeatureDef definition."
+                    )
+                dep_enabled = result.get(dep, dep_default)
                 if not dep_enabled:
                     raise ConfigSchemaError(
                         f"Feature {name!r} is enabled but its dependency {dep!r} is disabled. "

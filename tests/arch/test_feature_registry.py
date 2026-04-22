@@ -111,37 +111,20 @@ def test_feature_skill_categories_match_real_skills():
     from autoskillit.core.paths import pkg_root
 
     skills_dirs = [pkg_root() / "skills", pkg_root() / "skills_extended"]
-    # Build a set of all category tags found in any SKILL.md
+    # Build a set of skill directory names as proxy for categories
     all_category_tags: set[str] = set()
     for skills_dir in skills_dirs:
         if not skills_dir.exists():
             continue
         for skill_md in skills_dir.rglob("SKILL.md"):
-            content = skill_md.read_text(encoding="utf-8")
-            for line in content.splitlines():
-                if line.strip().startswith("categories:") or "category:" in line:
-                    # naive tag extraction — collect any word after "- "
-                    pass
-            # Collect skill directory names as proxy for categories
             all_category_tags.add(skill_md.parent.name)
 
-    # Collect all category tags from all SKILL.md `category:` frontmatter lines
-    # (fallback: accept skill directory name match)
-    violations = []
-    for defn in FEATURE_REGISTRY.values():
-        for cat in defn.skill_categories:
-            # A skill_category must match at least one real skill directory name
-            # or appear as a category tag somewhere under skills/ or skills_extended/
-            found = any(
-                cat == skill_md.parent.name
-                for sd in skills_dirs
-                if sd.exists()
-                for skill_md in sd.rglob("SKILL.md")
-            )
-            if not found:
-                violations.append(
-                    f"{defn.name}.skill_categories contains {cat!r}: no matching SKILL.md found"
-                )
+    violations = [
+        f"{defn.name}.skill_categories contains {cat!r}: no matching SKILL.md found"
+        for defn in FEATURE_REGISTRY.values()
+        for cat in defn.skill_categories
+        if cat not in all_category_tags
+    ]
     assert not violations, "\n".join(violations)
 
 
@@ -192,7 +175,7 @@ def test_config_rejects_unknown_feature():
         AutomationConfig._build_features_dict({unknown: True})
 
 
-def test_config_dependency_validation():
+def test_config_dependency_validation(monkeypatch):
     """_build_features_dict raises ConfigSchemaError when B is enabled but dep A is disabled."""
 
     from autoskillit.config.settings import AutomationConfig, ConfigSchemaError
@@ -219,18 +202,13 @@ def test_config_dependency_validation():
     )
     import autoskillit.core._type_constants as tc
 
-    original = dict(tc.FEATURE_REGISTRY)
-    tc.FEATURE_REGISTRY["test_dep_a"] = dep_parent
-    tc.FEATURE_REGISTRY["test_dep_b"] = dep_feature
-    try:
-        # B enabled without A → ConfigSchemaError
-        with pytest.raises(ConfigSchemaError):
-            AutomationConfig._build_features_dict({"test_dep_b": True, "test_dep_a": False})
-        # B enabled with A → no error
-        AutomationConfig._build_features_dict({"test_dep_b": True, "test_dep_a": True})
-    finally:
-        tc.FEATURE_REGISTRY.clear()
-        tc.FEATURE_REGISTRY.update(original)
+    monkeypatch.setitem(tc.FEATURE_REGISTRY, "test_dep_a", dep_parent)
+    monkeypatch.setitem(tc.FEATURE_REGISTRY, "test_dep_b", dep_feature)
+    # B enabled without A → ConfigSchemaError
+    with pytest.raises(ConfigSchemaError):
+        AutomationConfig._build_features_dict({"test_dep_b": True, "test_dep_a": False})
+    # B enabled with A → no error
+    AutomationConfig._build_features_dict({"test_dep_b": True, "test_dep_a": True})
 
 
 def test_no_unregistered_feature_tag_on_tools():

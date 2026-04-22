@@ -543,6 +543,7 @@ class TestDispatchFoodTruckExecution:
         import json
 
         from autoskillit.franchise._api import execute_dispatch
+        from autoskillit.franchise.result_parser import L2ParseResult
         from tests.fakes import _DEFAULT_SKILL_RESULT
 
         self._setup_standard_dispatch(tool_ctx)
@@ -552,6 +553,16 @@ class TestDispatchFoodTruckExecution:
                 success=True,
                 session_id="l2-session-err",
             )
+        )
+        monkeypatch.setattr(
+            "autoskillit.franchise._api.parse_l2_result_block",
+            lambda **_kwargs: L2ParseResult(
+                outcome="completed_clean",
+                payload={"success": True},
+                raw_body=None,
+                parse_error=None,
+                source="stdout",
+            ),
         )
 
         def _raise_error(session_id: str) -> bool:

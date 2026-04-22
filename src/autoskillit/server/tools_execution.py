@@ -423,13 +423,13 @@ async def dispatch_food_truck(
             }
         )
     try:
-        from autoskillit.execution import invalidate_cache
         from autoskillit.franchise import execute_dispatch
         from autoskillit.server import _get_ctx
         from autoskillit.server.helpers import (
             _get_food_truck_prompt_builder,
             _refresh_quota_cache,
             check_and_sleep_if_needed,
+            invalidate_cache,
         )
 
         tool_ctx = _get_ctx()

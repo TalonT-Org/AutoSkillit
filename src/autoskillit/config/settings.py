@@ -598,7 +598,9 @@ class AutomationConfig:
                     val(fr, "l2_default_timeout_sec", _fr["l2_default_timeout_sec"])
                 ),
             ),
-            features=AutomationConfig._build_features_dict(dict(feat)),
+            features=AutomationConfig._build_features_dict(
+                dict(feat) if isinstance(feat, dict) else {}
+            ),
         )
 
 

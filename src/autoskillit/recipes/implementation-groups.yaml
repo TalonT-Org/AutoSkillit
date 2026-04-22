@@ -645,6 +645,7 @@ steps:
       - when: "${{ result.max_exceeded }} == false"
         route: review_pr
       - route: ci_watch
+    on_failure: ci_watch
     skip_when_false: "inputs.open_pr"
     optional_context_refs:
       - review_loop_count

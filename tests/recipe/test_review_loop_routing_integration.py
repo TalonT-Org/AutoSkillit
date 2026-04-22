@@ -39,7 +39,9 @@ def test_review_loop_routes_to_review_pr_after_resolve_cycle(recipe_name: str) -
         when_expr = when_expr.replace(f"${{{{ result.{key} }}}}", value)
 
     # The first condition (route to review_pr) must be satisfiable
-    assert eval(when_expr) is True  # noqa: S307
+    # when_expr becomes e.g. "false == false" — evaluate as string equality
+    lhs, rhs = [s.strip() for s in when_expr.split("==")]
+    assert lhs == rhs
     assert conditions[0].route == "review_pr"
 
 
@@ -63,7 +65,9 @@ def test_review_loop_routes_to_ci_watch_at_max_iterations(recipe_name: str) -> N
         when_expr = when_expr.replace(f"${{{{ result.{key} }}}}", value)
 
     # The first condition must NOT be satisfied — falls through to default ci_watch
-    assert eval(when_expr) is False  # noqa: S307
+    # when_expr becomes e.g. "true == false" — evaluate as string equality
+    lhs, rhs = [s.strip() for s in when_expr.split("==")]
+    assert lhs != rhs
 
 
 @pytest.mark.parametrize("recipe_name", RECIPE_NAMES)

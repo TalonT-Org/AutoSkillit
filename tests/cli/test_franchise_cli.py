@@ -8,10 +8,14 @@ import shutil
 import subprocess
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
 import pytest
 from cyclopts import App
+
+if TYPE_CHECKING:
+    from autoskillit.franchise import CampaignState
 
 from autoskillit.cli._franchise import franchise_list as _franchise_list
 from autoskillit.cli._franchise import franchise_run as _franchise_run
@@ -145,7 +149,7 @@ def _setup_campaign_with_sessions(
     )
 
 
-def _make_state(*, statuses: list[str]):  # type: ignore[no-untyped-def]
+def _make_state(*, statuses: list[str]) -> CampaignState:
     """Build an in-memory CampaignState for unit-testing _compute_exit_code."""
     from autoskillit.franchise import CampaignState, DispatchRecord, DispatchStatus
 
@@ -162,7 +166,7 @@ def _make_state(*, statuses: list[str]):  # type: ignore[no-untyped-def]
     )
 
 
-def _make_state_with_tokens(*, input_total: int):  # type: ignore[no-untyped-def]
+def _make_state_with_tokens(*, input_total: int) -> CampaignState:
     """Build an in-memory CampaignState with known token totals."""
     from autoskillit.franchise import CampaignState, DispatchRecord, DispatchStatus
 
@@ -702,6 +706,9 @@ def test_status_table_shows_totals_row(
         _franchise_status("cid01")
     out = capsys.readouterr().out
     assert "TOTAL" in out.upper()
+    # Verify the humanized token values actually appear in the TOTAL row
+    assert "100" in out  # input_tokens=100 → "100"
+    assert "50" in out  # output_tokens=50 → "50"
 
 
 # ---------------------------------------------------------------------------

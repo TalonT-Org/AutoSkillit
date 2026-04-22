@@ -222,6 +222,7 @@ generic_automation_mcp/
 │
 ├── franchise/               # L2
 │   ├── __init__.py          #   Re-exports: CampaignSummary, parse_campaign_summary, etc.
+│   ├── result_parser.py     #   L2 result block parser with Channel B JSONL fallback
 │   └── summary.py           #   Campaign summary schema v1: frozen dataclasses, sentinel parser, validator
 │
 ├── server/                  # L3 FastMCP server

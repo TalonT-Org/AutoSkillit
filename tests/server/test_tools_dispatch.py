@@ -505,3 +505,82 @@ class TestDispatchFoodTruckExecution:
             quota_refresher=_noop_quota_refresher,
         )
         assert "l2-session-xyz" in cleanup_calls
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_invalidates_quota_cache_file(self, tool_ctx):
+        """After dispatch, cache_invalidator is called with the configured cache path."""
+        from autoskillit.franchise._api import execute_dispatch
+
+        self._setup_standard_dispatch(tool_ctx)
+
+        invalidate_calls: list[str] = []
+
+        def _capture_invalidate(cache_path: str) -> None:
+            invalidate_calls.append(cache_path)
+
+        await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="t",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+            cache_invalidator=_capture_invalidate,
+        )
+
+        assert tool_ctx.config.quota_guard.cache_path in invalidate_calls
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize("exc_cls", [RuntimeError, OSError])
+    async def test_dispatch_food_truck_succeeds_when_cleanup_session_raises(
+        self, tool_ctx, monkeypatch, exc_cls
+    ):
+        """Dispatch result is success even when cleanup_session raises an exception."""
+        import dataclasses
+        import json
+
+        from autoskillit.franchise._api import execute_dispatch
+        from autoskillit.franchise.result_parser import L2ParseResult
+        from tests.fakes import _DEFAULT_SKILL_RESULT
+
+        self._setup_standard_dispatch(tool_ctx)
+        tool_ctx.executor = InMemoryHeadlessExecutor(
+            default_result=dataclasses.replace(
+                _DEFAULT_SKILL_RESULT,
+                success=True,
+                session_id="l2-session-err",
+            )
+        )
+        monkeypatch.setattr(
+            "autoskillit.franchise._api.parse_l2_result_block",
+            lambda **_kwargs: L2ParseResult(
+                outcome="completed_clean",
+                payload={"success": True},
+                raw_body=None,
+                parse_error=None,
+                source="stdout",
+            ),
+        )
+
+        def _raise_error(session_id: str) -> bool:
+            raise exc_cls("simulated cleanup failure")
+
+        monkeypatch.setattr(tool_ctx.session_skill_manager, "cleanup_session", _raise_error)
+
+        result_json = await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="t",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+        )
+
+        result = json.loads(result_json)
+        assert result["success"] is True

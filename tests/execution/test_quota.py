@@ -1957,3 +1957,57 @@ class TestAPIWindowVocabularyContract:
             f"LONG_WINDOW_NAMES contains names not in KNOWN_QUOTA_WINDOW_NAMES: "
             f"{LONG_WINDOW_NAMES - KNOWN_QUOTA_WINDOW_NAMES}"
         )
+
+
+class TestInvalidateCache:
+    def test_invalidate_cache_removes_existing_file(self, tmp_path):
+        from autoskillit.execution.quota import invalidate_cache
+
+        cache_file = tmp_path / "quota_cache.json"
+        cache_file.write_text('{"version": 3}')
+        assert cache_file.exists()
+
+        invalidate_cache(str(cache_file))
+
+        assert not cache_file.exists()
+
+    def test_invalidate_cache_tolerates_missing_file(self, tmp_path):
+        from autoskillit.execution.quota import invalidate_cache
+
+        missing_path = tmp_path / "nonexistent_cache.json"
+        invalidate_cache(str(missing_path))  # must not raise
+
+    def test_invalidate_cache_logs_warning_on_permission_error(self, monkeypatch):
+        import structlog.testing
+
+        from autoskillit.execution.quota import invalidate_cache
+
+        def _raise_permission_error(self, missing_ok=False):
+            raise PermissionError("denied")
+
+        from pathlib import Path
+
+        monkeypatch.setattr(Path, "unlink", _raise_permission_error)
+
+        with structlog.testing.capture_logs() as cap:
+            invalidate_cache("/some/path/cache.json")
+
+        assert any("quota cache invalidation failed" in rec.get("event", "") for rec in cap)
+
+    def test_invalidate_cache_expands_user_tilde(self, monkeypatch):
+        from pathlib import Path
+
+        from autoskillit.execution.quota import invalidate_cache
+
+        unlinked_paths: list[str] = []
+
+        def _capture_unlink(self, missing_ok=False):
+            unlinked_paths.append(str(self))
+
+        monkeypatch.setattr(Path, "unlink", _capture_unlink)
+
+        invalidate_cache("~/some/cache.json")
+
+        assert len(unlinked_paths) == 1
+        assert not unlinked_paths[0].startswith("~")
+        assert "cache.json" in unlinked_paths[0]

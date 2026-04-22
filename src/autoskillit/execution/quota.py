@@ -248,6 +248,19 @@ def _write_cache(cache_path: str, result: QuotaFetchResult) -> None:
         _log.warning("quota cache write failed", path=cache_path, error=str(exc))
 
 
+def invalidate_cache(cache_path: str) -> None:
+    """Remove the quota cache file so the next read triggers a live fetch.
+
+    Tolerates missing files and logs a warning on permission errors.
+    """
+    try:
+        Path(cache_path).expanduser().unlink()
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        _log.warning("quota cache invalidation failed", path=cache_path, error=str(exc))
+
+
 async def _fetch_quota(
     credentials_path: str,
     *,

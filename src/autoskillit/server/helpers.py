@@ -23,6 +23,7 @@ from autoskillit.execution import (
     _refresh_quota_cache,  # noqa: F401 — re-exported for tools_execution.py; patched by tests
     check_and_sleep_if_needed,  # noqa: F401 — re-exported for tools_execution.py dispatch
     fetch_repo_merge_state,  # noqa: F401 — re-exported for tools_ci.py
+    invalidate_cache,  # noqa: F401 — re-exported for tools_execution.py dispatch
     resolve_log_dir,  # noqa: F401 — used by tools_github.py, tools_status.py
     write_telemetry_clear_marker,  # noqa: F401 — used by tools_status.py
 )

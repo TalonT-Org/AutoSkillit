@@ -45,6 +45,7 @@ src/autoskillit/skills_extended/*/SKILL.md:
   - skills/
   - contracts/
   - recipe/
+  - skills_extended/
 
 src/autoskillit/config/defaults.yaml:
   - config/

@@ -1,5 +1,7 @@
 test_check:
   command: ["task", "test-all"]
+  filter_mode: "conservative"
+  base_ref: "integration"
   # timeout: 600
 
 safety:

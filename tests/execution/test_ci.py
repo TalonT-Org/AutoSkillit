@@ -442,3 +442,55 @@ class TestCIVocabularyContract:
             f"FAILED_CONCLUSIONS contains values not in KNOWN_CI_CONCLUSIONS: "
             f"{FAILED_CONCLUSIONS - KNOWN_CI_CONCLUSIONS}"
         )
+
+
+# ---------------------------------------------------------------------------
+# T6 — CI ETag caching returns cached body on 304
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_ci_etag_returns_cached_on_304(httpx_mock):
+    """When server returns 304, _fetch_completed_runs returns previously cached body."""
+    httpx_mock.add_response(
+        json=_runs_response(_run(run_id=42, conclusion="success")),
+        headers={"ETag": '"abc123"'},
+    )
+    httpx_mock.add_response(status_code=304, content=b"")
+
+    watcher = DefaultCIWatcher(token="tok")
+    result1 = await watcher.wait("feature-x", repo="owner/repo", timeout_seconds=60)
+    result2 = await watcher.wait("feature-x", repo="owner/repo", timeout_seconds=60)
+
+    assert result1["run_id"] == 42
+    assert result2["run_id"] == 42
+    assert result1["conclusion"] == "success"
+    assert result2["conclusion"] == "success"
+
+    requests = httpx_mock.get_requests()
+    assert len(requests) == 2
+    assert requests[1].headers.get("if-none-match") == '"abc123"'
+
+
+# ---------------------------------------------------------------------------
+# T7 — CI ETag stores new ETag on 200
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_ci_etag_stores_on_200(httpx_mock):
+    """ETag from a 200 response is sent as If-None-Match on the next request."""
+    httpx_mock.add_response(
+        json=_runs_response(_run(run_id=99, conclusion="success")),
+        headers={"ETag": '"abc123"'},
+    )
+    httpx_mock.add_response(
+        json=_runs_response(_run(run_id=99, conclusion="success")),
+    )
+    watcher = DefaultCIWatcher(token="tok")
+    await watcher.wait("feature-x", repo="owner/repo", timeout_seconds=60)
+    await watcher.wait("feature-x", repo="owner/repo", timeout_seconds=60)
+
+    requests = httpx_mock.get_requests()
+    assert len(requests) == 2
+    assert requests[1].headers.get("if-none-match") == '"abc123"'

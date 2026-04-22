@@ -59,7 +59,11 @@ async def test_close_issues_sequentially_all_succeed() -> None:
         "autoskillit.server.tools_pr_ops._run_subprocess",
         new=AsyncMock(return_value=(0, "", "")),
     ):
-        closed, failed = await _close_issues_sequentially([1, 2], "closing", "/tmp")
+        with patch(
+            "autoskillit.server.tools_pr_ops.asyncio.sleep",
+            new_callable=AsyncMock,
+        ):
+            closed, failed = await _close_issues_sequentially([1, 2], "closing", "/tmp")
 
     assert closed == [1, 2]
     assert failed == []
@@ -79,10 +83,39 @@ async def test_close_issues_sequentially_partial_failure() -> None:
         "autoskillit.server.tools_pr_ops._run_subprocess",
         new=_mock_subprocess,
     ):
-        closed, failed = await _close_issues_sequentially([1, 2], "", "/tmp")
+        with patch(
+            "autoskillit.server.tools_pr_ops.asyncio.sleep",
+            new_callable=AsyncMock,
+        ):
+            closed, failed = await _close_issues_sequentially([1, 2], "", "/tmp")
 
     assert closed == [1]
     assert failed == [2]
+
+
+# ---------------------------------------------------------------------------
+# T5 — _close_issues_sequentially inserts inter-call delay
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_close_issues_sequentially_delays_between_calls() -> None:
+    """Each gh issue close call is preceded by asyncio.sleep(1) after the first."""
+    with patch(
+        "autoskillit.server.tools_pr_ops._run_subprocess",
+        new=AsyncMock(return_value=(0, "", "")),
+    ):
+        with patch(
+            "autoskillit.server.tools_pr_ops.asyncio.sleep",
+            new_callable=AsyncMock,
+        ) as mock_sleep:
+            closed, failed = await _close_issues_sequentially([1, 2, 3], "", "/tmp")
+
+    assert closed == [1, 2, 3]
+    assert failed == []
+    assert mock_sleep.call_count == 2
+    for call in mock_sleep.call_args_list:
+        assert call[0][0] == 1
 
 
 # ---------------------------------------------------------------------------
@@ -159,7 +192,11 @@ async def test_bulk_close_issues_all_closed(tool_ctx, monkeypatch: pytest.Monkey
         "autoskillit.server.tools_pr_ops._run_subprocess",
         new=AsyncMock(return_value=(0, "", "")),
     ):
-        result = json.loads(await bulk_close_issues([1, 2, 3], "", "/tmp"))
+        with patch(
+            "autoskillit.server.tools_pr_ops.asyncio.sleep",
+            new_callable=AsyncMock,
+        ):
+            result = json.loads(await bulk_close_issues([1, 2, 3], "", "/tmp"))
 
     assert result["closed"] == [1, 2, 3]
     assert result["failed"] == []
@@ -181,7 +218,11 @@ async def test_bulk_close_issues_partial_failure(
         "autoskillit.server.tools_pr_ops._run_subprocess",
         new=_mock_subprocess,
     ):
-        result = json.loads(await bulk_close_issues([1, 2, 3], "", "/tmp"))
+        with patch(
+            "autoskillit.server.tools_pr_ops.asyncio.sleep",
+            new_callable=AsyncMock,
+        ):
+            result = json.loads(await bulk_close_issues([1, 2, 3], "", "/tmp"))
 
     assert 1 in result["closed"]
     assert 2 in result["failed"]

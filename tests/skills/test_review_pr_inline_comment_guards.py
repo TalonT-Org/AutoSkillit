@@ -289,3 +289,30 @@ def test_mandatory_echo_positioned_between_step4_and_step5():
     assert "do not proceed to step 5" in between.lower(), (
         "The 'Do not proceed to Step 5' gate must appear between Step 4 and Step 5."
     )
+
+
+def test_review_pr_http200_success_signal():
+    """HTTP 200 must be treated as review-post success; response body must not be inspected."""
+    skill_md = SKILL_TEXT
+    lower = skill_md.lower()
+    assert "http 200" in lower, "Skill must reference HTTP 200 as the success signal"
+    idx = lower.find("http 200")
+    # Require the body-inspection prohibition appears in proximity to the HTTP 200
+    # success signal instruction (not just anywhere in the document).
+    window = lower[max(0, idx - 100) : idx + 500]
+    assert "regardless of response body" in window, (
+        "The 'regardless of response body' prohibition must appear in proximity to "
+        "the HTTP 200 success signal instruction"
+    )
+
+
+def test_review_pr_tier1_fallback_has_delay():
+    """Tier 1 fallback loop must include sleep 1 between individual POSTs."""
+    skill_md = SKILL_TEXT
+    tier1_idx = skill_md.find("Fallback Tier 1")
+    assert tier1_idx >= 0, "Tier 1 fallback section not found in skill"
+    tier2_idx = skill_md.find("Tier 2", tier1_idx)
+    tier1_section = skill_md[tier1_idx:tier2_idx] if tier2_idx >= 0 else skill_md[tier1_idx:]
+    assert "sleep 1" in tier1_section or "sleep(1)" in tier1_section, (
+        "Tier 1 fallback loop must include sleep 1 between individual POST calls"
+    )

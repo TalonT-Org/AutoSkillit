@@ -140,43 +140,77 @@ is active on `{base_branch}` with `MERGEABLE` entries.
   building the overlap matrix. PRs that fail either gate are reported in the manifest but
   excluded from merge ordering.
 
+  Use a single GraphQL alias query to fetch CI status and reviews for all PRs at once
+  (1 API call regardless of PR count, instead of 2N sequential REST calls). Chunk into
+  batches of 20 PRs to stay within GraphQL complexity limits.
+
   ```bash
   ELIGIBLE_PRS=()
   CI_BLOCKED_PRS=()      # [{number, title, reason}]
   REVIEW_BLOCKED_PRS=()  # [{number, title, reason}]
 
-  for PR in "${ALL_PRS[@]}"; do
-    PR_NUM=$(echo "$PR" | jq -r .number)
-    PR_TITLE=$(echo "$PR" | jq -r .title)
+  # Build GraphQL alias query for all PRs in batches of 20
+  ALL_PR_NUMS=($(echo "$ALL_PRS" | jq -r '.[].number'))
+  BATCH_SIZE=20
+  for batch_start in $(seq 0 $BATCH_SIZE $((${#ALL_PR_NUMS[@]} - 1))); do
+    BATCH_NUMS=("${ALL_PR_NUMS[@]:$batch_start:$BATCH_SIZE}")
 
-    # --- CI Gate ---
-    CI_CHECKS=$(gh pr checks "$PR_NUM" --json name,status,conclusion 2>/dev/null \
-      || echo "[]")
-    FAILING=$(echo "$CI_CHECKS" | jq '[.[] | select(
-      .conclusion != null and
-      .conclusion != "success" and
-      .conclusion != "skipped" and
-      .conclusion != "neutral"
-    )] | length')
-    IN_PROGRESS=$(echo "$CI_CHECKS" | jq '[.[] | select(.conclusion == null)] | length')
+    QUERY="query { "
+    for i in $(seq 0 $((${#BATCH_NUMS[@]} - 1))); do
+      NUM="${BATCH_NUMS[$i]}"
+      QUERY="${QUERY} pr${i}: repository(owner: \"${OWNER}\", name: \"${REPO}\") {
+        pullRequest(number: ${NUM}) {
+          number
+          reviews(last: 20) { nodes { state } }
+          commits(last: 1) { nodes { commit { statusCheckRollup {
+            state
+            contexts(last: 100) { nodes { ... on CheckRun { name status conclusion } } }
+          } } } }
+        }
+      }"
+    done
+    QUERY="${QUERY} }"
+    BATCH_RESULT=$(gh api graphql -f query="${QUERY}")
 
-    if [ "$FAILING" -gt 0 ] || [ "$IN_PROGRESS" -gt 0 ]; then
-      REASON="CI failing: ${FAILING} failed, ${IN_PROGRESS} in-progress"
-      CI_BLOCKED_PRS+=("{\"number\":${PR_NUM},\"title\":\"${PR_TITLE}\",\"reason\":\"${REASON}\"}")
-      continue
-    fi
+    # Parse per-PR results from BATCH_RESULT
+    for i in $(seq 0 $((${#BATCH_NUMS[@]} - 1))); do
+      NUM="${BATCH_NUMS[$i]}"
+      PR_TITLE=$(echo "$ALL_PRS" | jq -r --argjson n "$NUM" '.[] | select(.number == $n) | .title')
+      PR_DATA=$(echo "$BATCH_RESULT" | jq --arg key "pr${i}" '.data[$key].pullRequest')
 
-    # --- Review Gate ---
-    REVIEWS=$(gh pr view "$PR_NUM" --json reviews -q '.reviews // []')
-    CHANGES_REQUESTED=$(echo "$REVIEWS" | jq '[.[] | select(.state == "CHANGES_REQUESTED")] | length')
+      # --- CI Gate ---
+      FAILING=$(echo "$PR_DATA" | jq '
+        [(.commits.nodes[0].commit.statusCheckRollup.contexts.nodes // [])[] |
+         select(.conclusion != null and
+                .conclusion != "success" and
+                .conclusion != "skipped" and
+                .conclusion != "neutral")] | length')
+      IN_PROGRESS=$(echo "$PR_DATA" | jq '
+        [(.commits.nodes[0].commit.statusCheckRollup.contexts.nodes // [])[] |
+         select(.conclusion == null)] | length')
 
-    if [ "$CHANGES_REQUESTED" -gt 0 ]; then
-      REASON="${CHANGES_REQUESTED} unresolved CHANGES_REQUESTED review(s)"
-      REVIEW_BLOCKED_PRS+=("{\"number\":${PR_NUM},\"title\":\"${PR_TITLE}\",\"reason\":\"${REASON}\"}")
-      continue
-    fi
+      if [ "${FAILING:-0}" -gt 0 ] || [ "${IN_PROGRESS:-0}" -gt 0 ]; then
+        REASON="CI failing: ${FAILING} failed, ${IN_PROGRESS} in-progress"
+        CI_BLOCKED_PRS+=("{\"number\":${NUM},\"title\":\"${PR_TITLE}\",\"reason\":\"${REASON}\"}")
+        continue
+      fi
 
-    ELIGIBLE_PRS+=("$PR")
+      # --- Review Gate ---
+      CHANGES_REQUESTED=$(echo "$PR_DATA" | jq '
+        [.reviews.nodes |
+         group_by(.author.login)[] |
+         last |
+         select(.state == "CHANGES_REQUESTED")] | length')
+
+      if [ "${CHANGES_REQUESTED:-0}" -gt 0 ]; then
+        REASON="${CHANGES_REQUESTED} unresolved CHANGES_REQUESTED review(s)"
+        REVIEW_BLOCKED_PRS+=("{\"number\":${NUM},\"title\":\"${PR_TITLE}\",\"reason\":\"${REASON}\"}")
+        continue
+      fi
+
+      mapfile -t _pr_entry < <(echo "$ALL_PRS" | jq -c --argjson n "$NUM" '.[] | select(.number == $n)')
+      ELIGIBLE_PRS+=("${_pr_entry[@]}")
+    done
   done
   ```
 

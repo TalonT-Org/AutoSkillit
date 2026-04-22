@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
+import time
+from unittest.mock import AsyncMock, patch
+
 import httpx
 import pytest
 
@@ -779,3 +783,165 @@ def test_parse_merge_queue_response_missing_position_sorts_last():
     assert len(entries) == 2
     assert entries[0]["pr_number"] == 1
     assert entries[1]["pr_number"] == 99
+
+
+# ---------------------------------------------------------------------------
+# T1 — Mutating throttle enforces 1s gap
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_mutating_throttle_enforces_delay(httpx_mock):
+    """Two consecutive mutating calls sleep to enforce 1s gap."""
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo/issues",
+        method="POST",
+        json={"number": 1, "html_url": "https://github.com/owner/repo/issues/1"},
+    )
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo/issues",
+        method="POST",
+        json={"number": 2, "html_url": "https://github.com/owner/repo/issues/2"},
+    )
+    fetcher = DefaultGitHubFetcher(token="test")
+    with patch("autoskillit.execution.github.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+        await fetcher.create_issue("owner", "repo", "Title 1", "body")
+        await fetcher.create_issue("owner", "repo", "Title 2", "body")
+
+    assert mock_sleep.call_count == 1
+    sleep_duration = mock_sleep.call_args[0][0]
+    assert sleep_duration == pytest.approx(1.0, abs=0.1)
+
+
+# ---------------------------------------------------------------------------
+# T2 — Read-only methods bypass throttle
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_read_methods_bypass_throttle(httpx_mock):
+    """fetch_issue does not trigger throttle delay after a mutating call."""
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo/issues",
+        method="POST",
+        json={"number": 1, "html_url": "https://github.com/owner/repo/issues/1"},
+    )
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo/issues/1",
+        json=_ISSUE_NO_COMMENTS_JSON,
+    )
+    fetcher = DefaultGitHubFetcher(token="test")
+    with patch("autoskillit.execution.github.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+        await fetcher.create_issue("owner", "repo", "Title", "body")
+        await fetcher.fetch_issue("owner/repo#1", include_comments=False)
+
+    mock_sleep.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# T3 — ensure_label cache hit skips API call
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_ensure_label_cache_hit(httpx_mock):
+    """Second ensure_label for same owner/repo/label returns cached result without API call."""
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo/labels",
+        method="POST",
+        status_code=201,
+        json={"name": "bug", "color": "ededed"},
+    )
+    fetcher = DefaultGitHubFetcher(token="tok")
+    with patch("autoskillit.execution.github.asyncio.sleep", new_callable=AsyncMock):
+        result1 = await fetcher.ensure_label("owner", "repo", "bug")
+        result2 = await fetcher.ensure_label("owner", "repo", "bug")
+
+    assert result1 == {"success": True, "created": True}
+    assert result2 == {"success": True, "created": False}
+    assert len(httpx_mock.get_requests()) == 1
+
+
+# ---------------------------------------------------------------------------
+# T4 — ensure_label cache is scoped to owner/repo/label triple
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_ensure_label_cache_different_repos(httpx_mock):
+    """ensure_label for different repos hits API separately."""
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo1/labels",
+        method="POST",
+        status_code=201,
+        json={"name": "bug", "color": "ededed"},
+    )
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo2/labels",
+        method="POST",
+        status_code=201,
+        json={"name": "bug", "color": "ededed"},
+    )
+    fetcher = DefaultGitHubFetcher(token="tok")
+    with patch("autoskillit.execution.github.asyncio.sleep", new_callable=AsyncMock):
+        result1 = await fetcher.ensure_label("owner", "repo1", "bug")
+        result2 = await fetcher.ensure_label("owner", "repo2", "bug")
+
+    assert len(httpx_mock.get_requests()) == 2
+    assert result1 == {"success": True, "created": True}
+    assert result2 == {"success": True, "created": True}
+
+
+# ---------------------------------------------------------------------------
+# T8 — Throttle lock serializes concurrent mutating calls
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_throttle_serializes_concurrent_mutating_calls(httpx_mock):
+    """Lock must block the second call until the first fully exits _throttle_mutating.
+
+    Seeds _last_mutating_ts so both coroutines need to sleep, then uses a
+    recording side_effect that yields to the event loop inside the lock region.
+    The assertion verifies strict sequential ordering of sleeps: second sleep must
+    start only after the first sleep has ended — impossible without the lock.
+    """
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo/issues/42/labels",
+        method="POST",
+        json=[{"name": "bug"}],
+    )
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo/issues",
+        method="POST",
+        json={"number": 2, "html_url": "https://github.com/owner/repo/issues/2"},
+    )
+    fetcher = DefaultGitHubFetcher(token="test")
+    # Seed _last_mutating_ts so both coroutines will need to sleep,
+    # placing both in the lock-held region where ordering matters.
+    fetcher._last_mutating_ts = time.monotonic()
+
+    events: list[str] = []
+    # Capture the real sleep before the patch replaces it; asyncio.sleep is patched
+    # globally via the module attribute, so recording_sleep must use this reference
+    # directly to avoid infinite recursion when yielding to the event loop.
+    _real_sleep = asyncio.sleep
+
+    async def recording_sleep(_delay: float) -> None:
+        events.append("sleep_start")
+        await _real_sleep(0)  # yield to event loop while lock is held
+        events.append("sleep_end")
+
+    with patch("autoskillit.execution.github.asyncio.sleep", side_effect=recording_sleep):
+        await asyncio.gather(
+            fetcher.add_labels("owner", "repo", 42, ["bug"]),
+            fetcher.create_issue("owner", "repo", "Title", "body"),
+        )
+
+    starts = [i for i, e in enumerate(events) if e == "sleep_start"]
+    ends = [i for i, e in enumerate(events) if e == "sleep_end"]
+    assert len(starts) == 2 and len(ends) == 2
+    # Second sleep must start after the first sleep ends — only possible with the lock.
+    assert starts[1] > ends[0], (
+        "Second sleep started before first sleep ended: lock is not serializing coroutines"
+    )

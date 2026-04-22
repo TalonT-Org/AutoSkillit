@@ -6,7 +6,9 @@ Never raises — all errors are captured and returned as {"success": False, "err
 
 from __future__ import annotations
 
+import asyncio
 import re
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -133,6 +135,9 @@ class DefaultGitHubFetcher:
         else:
             self._token_factory = None
             self._token = token
+        self._last_mutating_ts: float = 0.0
+        self._mutating_lock: asyncio.Lock = asyncio.Lock()
+        self._label_cache: set[tuple[str, str, str]] = set()
 
     def _resolve_token(self) -> str | None:
         if self._token is self._UNRESOLVED:
@@ -146,6 +151,20 @@ class DefaultGitHubFetcher:
 
     def _headers(self) -> dict[str, str]:
         return github_headers(self._resolve_token())
+
+    async def _throttle_mutating(self) -> None:
+        """Enforce >= 1s gap between mutating GitHub API calls.
+
+        Acquires an async lock to serialize concurrent mutating calls,
+        then sleeps for the remaining time if < 1s has elapsed since
+        the last mutating call.
+        """
+        async with self._mutating_lock:
+            now = time.monotonic()
+            elapsed = now - self._last_mutating_ts
+            if elapsed < 1.0:
+                await asyncio.sleep(1.0 - elapsed)
+            self._last_mutating_ts = time.monotonic()
 
     async def fetch_issue(
         self,
@@ -296,6 +315,7 @@ class DefaultGitHubFetcher:
 
         Returns {success, issue_number, url}. Never raises.
         """
+        await self._throttle_mutating()
         headers = self._headers()
         payload: dict[str, Any] = {"title": title, "body": body}
         if labels:
@@ -336,6 +356,7 @@ class DefaultGitHubFetcher:
 
         Returns {success, comment_id, url}. Never raises.
         """
+        await self._throttle_mutating()
         headers = self._headers()
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
@@ -414,6 +435,7 @@ class DefaultGitHubFetcher:
         labels: list[str],
     ) -> dict[str, Any]:
         """Add labels to an issue. Returns {success, labels}. Never raises."""
+        await self._throttle_mutating()
         headers = self._headers()
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
@@ -445,6 +467,7 @@ class DefaultGitHubFetcher:
     ) -> dict[str, Any]:
         """Remove a label from an issue. 404 is treated as success (idempotent).
         Returns {success}. Never raises."""
+        await self._throttle_mutating()
         headers = self._headers()
         encoded = label.replace(" ", "%20")
         try:
@@ -476,7 +499,15 @@ class DefaultGitHubFetcher:
         description: str = "",
     ) -> dict[str, Any]:
         """Create a label if it doesn't exist. 422 (already exists) is success.
-        Returns {success, created}. Never raises."""
+        Returns {success, created}. Never raises.
+        Caches successful results per (owner, repo, label) triple to skip
+        redundant API calls within a session.
+        """
+        cache_key = (owner, repo, label)
+        if cache_key in self._label_cache:
+            return {"success": True, "created": False}
+
+        await self._throttle_mutating()
         headers = self._headers()
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
@@ -486,7 +517,8 @@ class DefaultGitHubFetcher:
                     json={"name": label, "color": color, "description": description},
                 )
                 if resp.status_code == 422:
-                    return {"success": True, "created": False}  # already exists
+                    self._label_cache.add(cache_key)
+                    return {"success": True, "created": False}
                 resp.raise_for_status()
         except httpx.HTTPStatusError as exc:
             _log.warning("github ensure_label http error", status=exc.response.status_code)
@@ -497,4 +529,5 @@ class DefaultGitHubFetcher:
         except httpx.RequestError as exc:
             _log.warning("github ensure_label request error", error=str(exc))
             return {"success": False, "error": f"Request error: {exc}"}
+        self._label_cache.add(cache_key)
         return {"success": True, "created": True}

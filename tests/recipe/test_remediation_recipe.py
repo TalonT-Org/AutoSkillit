@@ -48,17 +48,19 @@ def test_re_push_review_routes_to_check_review_loop(recipe) -> None:
 
 
 # T_REM_LOOP3
-def test_check_review_loop_routes_on_max_exceeded_only(recipe) -> None:
-    """check_review_loop on_result condition must route on max_exceeded alone,
-    NOT on has_blocking."""
+def test_check_review_loop_on_result_routes_to_review_pr_when_had_blocking_and_not_max_exceeded(
+    recipe,
+) -> None:
+    """check_review_loop on_result condition must gate on had_blocking AND max_exceeded."""
     step = recipe.steps["check_review_loop"]
     assert step.on_result is not None
     review_conditions = [
         c for c in step.on_result.conditions if c.when is not None and c.route == "review_pr"
     ]
     assert review_conditions, "No conditional route to review_pr found"
-    assert "max_exceeded" in review_conditions[0].when
-    assert "has_blocking" not in review_conditions[0].when
+    cond = review_conditions[0].when
+    assert "had_blocking" in cond
+    assert "max_exceeded" in cond
 
 
 # T_REM_LOOP4

@@ -566,9 +566,11 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "review_pr"
     capture:
-      verdict: "${{ result.verdict }}"
+      review_verdict: "${{ result.verdict }}"
     on_result:
       - when: "${{ result.verdict }} == changes_requested"
+        route: resolve_review
+      - when: "${{ result.verdict }} == approved_with_comments"
         route: resolve_review
       - when: "${{ result.verdict }} == needs_human"
         route: ci_watch
@@ -584,9 +586,10 @@ steps:
       Runs after compose_pr creates the PR. Invokes the review-pr skill as a
       headless session to leave inline review comments on the PR. The skill finds
       the open PR by feature branch name (context.merge_target). Captures verdict
-      and routes via on_result: changes_requested → resolve_review,
-      needs_human → ci_watch (explicit), approved → ci_watch. On tool-level failure (MCP error, gh
-      unavailable), routes to resolve_review. Skipped when open_pr=false.
+      as review_verdict and routes via on_result: changes_requested/approved_with_comments
+      → resolve_review, needs_human → ci_watch (explicit), approved → ci_watch. On
+      tool-level failure (MCP error, gh unavailable), routes to resolve_review.
+      Skipped when open_pr=false.
 
   resolve_review:
     tool: run_skill
@@ -639,20 +642,22 @@ steps:
       cwd: "${{ context.work_dir }}"
       current_iteration: "${{ context.review_loop_count }}"
       max_iterations: "${{ inputs.review_max_retries }}"
+      previous_verdict: "${{ context.review_verdict }}"
     capture:
       review_loop_count: "${{ result.next_iteration }}"
     on_result:
-      - when: "${{ result.max_exceeded }} == false"
+      - when: "${{ result.had_blocking }} == true and ${{ result.max_exceeded }} == false"
         route: review_pr
       - route: ci_watch
     on_failure: ci_watch
     skip_when_false: "inputs.open_pr"
     optional_context_refs:
       - review_loop_count
+      - review_verdict
     note: >
-      Pure iteration guard. Routes back to review_pr if the iteration budget
-      (inputs.review_max_retries) is not exhausted; otherwise proceeds to
-      ci_watch.
+      Compound iteration + blocking guard. Routes back to review_pr only when the
+      previous verdict was changes_requested (had_blocking=true) AND the iteration
+      budget is not exhausted (max_exceeded=false); otherwise proceeds to ci_watch.
 
   ci_watch:
     tool: wait_for_ci

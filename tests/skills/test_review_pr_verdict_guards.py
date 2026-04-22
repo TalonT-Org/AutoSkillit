@@ -99,11 +99,7 @@ def test_contract_yamls_include_approved_with_comments() -> None:
     import yaml
 
     contracts_dir = (
-        Path(__file__).parent.parent.parent
-        / "src"
-        / "autoskillit"
-        / "recipes"
-        / "contracts"
+        Path(__file__).parent.parent.parent / "src" / "autoskillit" / "recipes" / "contracts"
     )
     contract_files = [
         contracts_dir / "implementation.yaml",

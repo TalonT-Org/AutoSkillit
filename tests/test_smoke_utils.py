@@ -101,12 +101,10 @@ def test_check_review_loop_stops_at_max_iterations() -> None:
     assert result["next_iteration"] == "3"
 
 
-def test_check_review_loop_returns_only_iteration_fields() -> None:
-    """Pure iteration guard must not return has_blocking or blocking_count."""
+def test_check_review_loop_returns_expected_fields() -> None:
+    """check_review_loop must return next_iteration, max_exceeded, and had_blocking."""
     result = check_review_loop(pr_number="42", cwd="/tmp")
-    assert "has_blocking" not in result
-    assert "blocking_count" not in result
-    assert set(result.keys()) == {"next_iteration", "max_exceeded"}
+    assert set(result.keys()) == {"next_iteration", "max_exceeded", "had_blocking"}
 
 
 # T_CRL11 — verify check_review_loop has no subprocess calls

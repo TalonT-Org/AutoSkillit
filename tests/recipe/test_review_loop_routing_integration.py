@@ -16,17 +16,18 @@ RECIPE_NAMES = ["implementation.yaml", "remediation.yaml", "implementation-group
 def test_review_loop_routes_to_review_pr_after_resolve_cycle(recipe_name: str) -> None:
     """End-to-end routing test: after resolve_review -> re_push_review,
     check_review_loop must route to review_pr (not ci_watch) when
-    iterations remain.
+    previous verdict was changes_requested and iterations remain.
 
     This test calls the actual check_review_loop callable with
-    current_iteration=0 and max_iterations=3, then evaluates the
-    recipe's on_result conditions against the callable's return value.
+    previous_verdict=changes_requested, current_iteration=0 and max_iterations=3,
+    then evaluates the recipe's on_result conditions against the callable's return value.
     """
     result = check_review_loop(
         pr_number="42",
         cwd="/tmp",
         current_iteration="0",
         max_iterations="3",
+        previous_verdict="changes_requested",
     )
 
     recipe = load_recipe(builtin_recipes_dir() / recipe_name)
@@ -40,9 +41,8 @@ def test_review_loop_routes_to_review_pr_after_resolve_cycle(recipe_name: str) -
         when_expr = when_expr.replace(f"${{{{ result.{key} }}}}", value)
 
     # The first condition (route to review_pr) must be satisfiable
-    # when_expr becomes e.g. "false == false" — evaluate as string equality
-    lhs, rhs = [s.strip() for s in when_expr.split("==", 1)]
-    assert lhs == rhs
+    # when_expr becomes "true == true and false == false" — evaluate compound
+    assert _eval_compound_condition(when_expr)
     assert conditions[0].route == "review_pr"
 
 
@@ -54,6 +54,7 @@ def test_review_loop_routes_to_ci_watch_at_max_iterations(recipe_name: str) -> N
         cwd="/tmp",
         current_iteration="2",
         max_iterations="3",
+        previous_verdict="changes_requested",
     )
 
     recipe = load_recipe(builtin_recipes_dir() / recipe_name)
@@ -67,9 +68,8 @@ def test_review_loop_routes_to_ci_watch_at_max_iterations(recipe_name: str) -> N
         when_expr = when_expr.replace(f"${{{{ result.{key} }}}}", value)
 
     # The first condition must NOT be satisfied — falls through to default ci_watch
-    # when_expr becomes e.g. "true == false" — evaluate as string equality
-    lhs, rhs = [s.strip() for s in when_expr.split("==", 1)]
-    assert lhs != rhs
+    # when_expr becomes "true == true and true == false" — second clause is False
+    assert not _eval_compound_condition(when_expr)
     assert conditions[1].route == "ci_watch"
 
 

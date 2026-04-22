@@ -1508,7 +1508,10 @@ def test_dismissed_signal_prints_passive_notification(
     )
     run_update_checks(home=tmp_path)
     assert not input_calls, "Dismissed signal must not trigger interactive prompt"
-    assert any(printed), "Dismissed signal must produce passive notification output"
+    combined = " ".join(printed)
+    assert "autoskillit update" in combined, (
+        "Dismissed signal must produce passive notification containing 'autoskillit update'"
+    )
 
 
 def test_passive_notification_contains_version_info(
@@ -1529,11 +1532,13 @@ def test_passive_notification_contains_expiry_date(
 ) -> None:
     dismissed_ago = timedelta(hours=1)
     state = _dismissed_state(ago=dismissed_ago, conditions=["binary"])
+    # Derive expiry from state to avoid date-boundary races between setup and assertion
+    dismissed_at = datetime.fromisoformat(state["update_prompt"]["dismissed_at"])
     printed, _ = _setup_run_checks(monkeypatch, tmp_path, binary_signal=True, state=state)
     run_update_checks(home=tmp_path)
     combined = " ".join(printed)
-    # Stable install: 7-day window. Expiry ≈ now + ~7 days.
-    expected_expiry = (datetime.now(UTC) + timedelta(days=7) - dismissed_ago).strftime("%Y-%m-%d")
+    # Stable install: 7-day window.
+    expected_expiry = (dismissed_at + timedelta(days=7)).strftime("%Y-%m-%d")
     assert expected_expiry in combined, (
         f"Passive notification must include expiry date {expected_expiry!r}; got: {combined!r}"
     )
@@ -1580,4 +1585,7 @@ def test_all_dismissed_signals_produce_no_interactive_prompt(
     )
     run_update_checks(home=tmp_path)
     assert not input_calls, "All-dismissed signals must not trigger interactive prompt"
-    assert any(printed), "All-dismissed signals must still produce passive notification"
+    combined = " ".join(printed)
+    assert "autoskillit update" in combined, (
+        "All-dismissed signals must produce passive notification containing 'autoskillit update'"
+    )

@@ -1042,6 +1042,7 @@ def test_default_classes_only_instantiated_inside_factory_or_allowlist() -> None
         Path("cli/_franchise.py"): {
             "DefaultSessionSkillManager",  # interactive cleanup
             "DefaultWorkspaceManager",  # signal guard cleanup
+            "DefaultTokenLog",  # cross-check token diagnostic
         },
         Path("cli/app.py"): {"DefaultSkillResolver"},  # skill listing command
         Path("execution/recording.py"): {"DefaultSubprocessRunner"},  # lazy fallback

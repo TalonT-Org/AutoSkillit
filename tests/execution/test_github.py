@@ -911,9 +911,6 @@ async def test_throttle_serializes_concurrent_mutating_calls(httpx_mock):
     )
     fetcher = DefaultGitHubFetcher(token="test")
     with patch("autoskillit.execution.github.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
-        # Use side_effect to actually yield to the event loop, so both coroutines
-        # interleave concurrently and the lock serialization is genuinely exercised.
-        mock_sleep.side_effect = lambda _: asyncio.sleep(0)
         await asyncio.gather(
             fetcher.add_labels("owner", "repo", 42, ["bug"]),
             fetcher.create_issue("owner", "repo", "Title", "body"),

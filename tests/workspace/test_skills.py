@@ -577,7 +577,7 @@ class TestSkillCategories:
         assert "exp-lens" in info.categories
 
     def test_make_campaign_has_franchise_category(self) -> None:
-        """make-campaign SKILL.md must declare both orchestration-family and franchise categories."""
+        """make-campaign must declare both orchestration-family and franchise categories."""
         info = DefaultSkillResolver().resolve("make-campaign")
         assert info is not None
         assert "franchise" in info.categories, "make-campaign missing 'franchise' category"

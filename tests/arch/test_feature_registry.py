@@ -106,7 +106,7 @@ def test_feature_depends_on_references_valid_features():
 
 
 def test_feature_skill_categories_match_real_skills():
-    """Every FeatureDef.skill_categories entry maps to at least one skill's frontmatter categories."""
+    """Every FeatureDef.skill_categories entry must map to a frontmatter category tag."""
     import yaml
 
     from autoskillit.core._type_constants import FEATURE_REGISTRY
@@ -136,7 +136,10 @@ def test_feature_skill_categories_match_real_skills():
                 all_category_tags.update(str(c) for c in cats)
 
     violations = [
-        f"{defn.name}.skill_categories contains {cat!r}: no skill declares this category in frontmatter"
+        (
+            f"{defn.name}.skill_categories contains {cat!r}:"
+            " no skill declares this category in frontmatter"
+        )
         for defn in FEATURE_REGISTRY.values()
         for cat in defn.skill_categories
         if cat not in all_category_tags
@@ -150,8 +153,7 @@ def test_franchise_feature_def_has_franchise_skill_category() -> None:
 
     defn = FEATURE_REGISTRY["franchise"]
     assert "franchise" in defn.skill_categories, (
-        f"franchise FeatureDef.skill_categories={defn.skill_categories!r} "
-        "must include 'franchise'"
+        f"franchise FeatureDef.skill_categories={defn.skill_categories!r} must include 'franchise'"
     )
 
 

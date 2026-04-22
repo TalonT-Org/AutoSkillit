@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from autoskillit.core import (
     CATEGORY_TAGS,
+    FEATURE_REGISTRY,
     OutputFormat,
     atomic_write,
     dump_yaml_str,
@@ -333,6 +334,57 @@ class AutomationConfig:
     packs: PacksConfig = field(default_factory=PacksConfig)
     workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
     franchise: FranchiseConfig = field(default_factory=FranchiseConfig)
+    features: dict[str, bool] = field(default_factory=dict)
+
+    @staticmethod
+    def _build_features_dict(raw: dict[str, Any]) -> dict[str, bool]:
+        """Validate and coerce the features section from a raw config dict.
+
+        Raises ConfigSchemaError for:
+        - Unknown feature names (not in FEATURE_REGISTRY)
+        - Dependency violations: enabling feature B without its required feature A
+
+        Coerces all values to bool.
+        """
+        result: dict[str, bool] = {}
+        for name, value in raw.items():
+            if not isinstance(name, str):
+                raise ConfigSchemaError(
+                    f"Feature key must be a string, got {type(name).__name__!r}: {name!r}"
+                )
+            if name not in FEATURE_REGISTRY:
+                known = sorted(FEATURE_REGISTRY.keys())
+                raise ConfigSchemaError(
+                    f"Unknown feature {name!r} in features config. Known features: {known}"
+                )
+            if not isinstance(value, bool):
+                raise ConfigSchemaError(
+                    f"Feature {name!r} value must be a bool, "
+                    f"got {type(value).__name__!r}: {value!r}"
+                )
+            result[name] = value
+
+        # Dependency validation
+        for name, enabled in result.items():
+            if not enabled:
+                continue
+            defn = FEATURE_REGISTRY[name]
+            for dep in defn.depends_on:
+                try:
+                    dep_default = FEATURE_REGISTRY[dep].default_enabled
+                except KeyError:
+                    raise ConfigSchemaError(
+                        f"Feature {name!r} depends_on {dep!r}, which is not in FEATURE_REGISTRY. "
+                        f"This is a bug in the FeatureDef definition."
+                    )
+                dep_enabled = result.get(dep, dep_default)
+                if not dep_enabled:
+                    raise ConfigSchemaError(
+                        f"Feature {name!r} is enabled but its dependency {dep!r} is disabled. "
+                        f"Enable {dep!r} first."
+                    )
+
+        return result
 
     @classmethod
     def from_dynaconf(cls, d: Dynaconf) -> AutomationConfig:
@@ -373,6 +425,7 @@ class AutomationConfig:
         pk = sec("packs")
         ws_raw = sec("workspace")
         fr = sec("franchise")
+        feat = sec("features")
 
         _tc = _field_defaults(TestCheckConfig)
         _cf = _field_defaults(ClassifyFixConfig)
@@ -545,6 +598,9 @@ class AutomationConfig:
                     val(fr, "l2_default_timeout_sec", _fr["l2_default_timeout_sec"])
                 ),
             ),
+            features=AutomationConfig._build_features_dict(
+                dict(feat) if isinstance(feat, dict) else {}
+            ),
         )
 
 
@@ -552,6 +608,10 @@ def _build_config_schema() -> dict[str, frozenset[str]]:
     """Derive a two-level schema map {section: {valid_field_names}} from AutomationConfig."""
     schema: dict[str, frozenset[str]] = {}
     for f in dataclasses.fields(AutomationConfig):
+        # Special case: features is a dict[str, bool]; valid sub-keys come from FEATURE_REGISTRY
+        if f.name == "features":
+            schema["features"] = frozenset(FEATURE_REGISTRY.keys())
+            continue
         sub_type: type | None = None
         if f.default_factory is not dataclasses.MISSING:  # type: ignore[misc]
             factory = f.default_factory  # type: ignore[assignment]

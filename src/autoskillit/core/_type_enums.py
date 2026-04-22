@@ -30,6 +30,7 @@ __all__ = [
     "SessionType",
     "session_type",
     "FranchiseErrorCode",
+    "FeatureLifecycle",
 ]
 
 
@@ -401,3 +402,16 @@ class FranchiseErrorCode(StrEnum):
     DISPATCH_BUDGET_EXCEEDED = "dispatch_budget_exceeded"
     QUOTA_EXHAUSTED = "quota_exhausted"
     CLEANUP_FAILED = "cleanup_failed"
+
+
+class FeatureLifecycle(StrEnum):
+    """Lifecycle stage of a registered feature gate.
+
+    EXPERIMENTAL — Off by default; explicit opt-in required via config or env var.
+    STABLE       — On by default; opt-out possible via config.
+    DEPRECATED   — Scheduled for removal; may be disabled without warning.
+    """
+
+    EXPERIMENTAL = "experimental"
+    STABLE = "stable"
+    DEPRECATED = "deprecated"

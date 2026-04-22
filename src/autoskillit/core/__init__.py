@@ -41,6 +41,7 @@ from ._terminal_table import _render_terminal_table as _render_terminal_table
 from ._version_snapshot import collect_version_snapshot as collect_version_snapshot
 from .branch_guard import is_protected_branch
 from .claude_conventions import ClaudeDirectoryConventions, LayoutError, validate_add_dir
+from .feature_flags import is_feature_enabled as is_feature_enabled
 from .github_url import _parse_issue_ref as _parse_issue_ref
 from .github_url import normalize_owner_repo as normalize_owner_repo
 from .github_url import parse_github_repo as parse_github_repo
@@ -87,6 +88,7 @@ from .types import (
     CATEGORY_TAGS,
     CONTEXT_EXHAUSTION_MARKER,
     DISPATCH_ID_ENV_VAR,
+    FEATURE_REGISTRY,
     FRANCHISE_ERROR_CODES,
     FRANCHISE_TOOLS,
     FREE_RANGE_TOOLS,
@@ -99,6 +101,7 @@ from .types import (
     RECIPE_PACK_REGISTRY,
     RECIPE_PACK_TAGS,
     RESERVED_LOG_RECORD_KEYS,
+    RETIRED_FEATURES,
     RETIRED_READINESS_TOKENS,
     SESSION_TYPE_ENV_VAR,
     SESSION_TYPE_FRANCHISE,
@@ -125,6 +128,8 @@ from .types import (
     CloneSuccessResult,
     DatabaseReader,
     FailureRecord,
+    FeatureDef,
+    FeatureLifecycle,
     FranchiseErrorCode,
     FranchiseLock,
     GateState,
@@ -249,9 +254,11 @@ __all__ = [
     "TOOL_SUBSET_TAGS",
     "CONTEXT_EXHAUSTION_MARKER",
     "RETIRED_READINESS_TOKENS",
+    "FEATURE_REGISTRY",
     "FRANCHISE_ERROR_CODES",
     "FRANCHISE_TOOLS",
     "FREE_RANGE_TOOLS",
+    "RETIRED_FEATURES",
     "GATED_TOOLS",
     "HEADLESS_TOOLS",
     "PIPELINE_FORBIDDEN_TOOLS",
@@ -276,6 +283,8 @@ __all__ = [
     "CloneSuccessResult",
     "DatabaseReader",
     "FailureRecord",
+    "FeatureDef",
+    "FeatureLifecycle",
     "FranchiseErrorCode",
     "FranchiseLock",
     "GateState",
@@ -344,4 +353,6 @@ __all__ = [
     "DIRECT_PREFIX",
     "MARKETPLACE_PREFIX",
     "detect_autoskillit_mcp_prefix",
+    # feature_flags
+    "is_feature_enabled",
 ]

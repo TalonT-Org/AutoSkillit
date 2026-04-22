@@ -5,10 +5,12 @@ Zero autoskillit imports. Provides the shared constant vocabulary for all higher
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+from datetime import date
 from importlib.metadata import version
 from typing import NamedTuple
 
-from ._type_enums import FranchiseErrorCode
+from ._type_enums import FeatureLifecycle, FranchiseErrorCode
 
 __all__ = [
     "AUTOSKILLIT_INSTALLED_VERSION",
@@ -41,6 +43,9 @@ __all__ = [
     "DISPATCH_ID_ENV_VAR",
     "KITCHEN_SESSION_ID_ENV_VAR",
     "FRANCHISE_ERROR_CODES",
+    "FeatureDef",
+    "FEATURE_REGISTRY",
+    "RETIRED_FEATURES",
 ]
 
 AUTOSKILLIT_INSTALLED_VERSION: str = version("autoskillit")
@@ -300,6 +305,55 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     # kitchen-core — git
     "merge_worktree": frozenset({"kitchen-core"}),
 }
+
+
+@dataclass(frozen=True)
+class FeatureDef:
+    """Definition of a named feature gate."""
+
+    name: str
+    lifecycle: FeatureLifecycle
+    description: str
+    tool_tags: frozenset[str]
+    skill_categories: frozenset[str]
+    import_package: str | None
+    tier: int = 1
+    default_enabled: bool = False
+    depends_on: frozenset[str] = field(default_factory=frozenset)
+    since_version: str | None = None
+    sunset_date: date | None = None
+
+
+FEATURE_REGISTRY: dict[str, FeatureDef] = {
+    "franchise": FeatureDef(
+        name="franchise",
+        lifecycle=FeatureLifecycle.EXPERIMENTAL,
+        description="L3 Franchise Orchestrator — multi-session campaign dispatch",
+        tool_tags=frozenset({"franchise"}),
+        skill_categories=frozenset(),
+        import_package="autoskillit.franchise",
+        tier=1,
+        default_enabled=True,
+        since_version="0.9.51",
+    ),
+}
+
+RETIRED_FEATURES: frozenset[str] = frozenset()
+
+# Guard: FeatureDef.tool_tags must be in TOOL_SUBSET_TAGS — checked at import time.
+_ALL_REGISTERED_TOOL_TAGS: frozenset[str] = frozenset(
+    tag for tags in TOOL_SUBSET_TAGS.values() for tag in tags
+)
+if not all(
+    tag in _ALL_REGISTERED_TOOL_TAGS
+    for defn in FEATURE_REGISTRY.values()
+    for tag in defn.tool_tags
+):
+    raise AssertionError(
+        "FeatureDef.tool_tags contains a tag not present in TOOL_SUBSET_TAGS values. "
+        "Add the tag to the appropriate tool entry in TOOL_SUBSET_TAGS first."
+    )
+
 
 # Canonical prefix required for all skill_command values passed to run_skill.
 # Enforced at the Claude Code hook boundary by skill_command_guard.py.

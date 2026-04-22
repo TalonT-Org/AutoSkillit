@@ -682,7 +682,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         _plugin_cache.py adds the plugin cache lifecycle: retiring cache sweep,
         install locking, and kitchen registry (accessible from server/ without
         cli/ import).
-        Exempt at 20 files.
+        feature_flags.py adds the L0 is_feature_enabled() primitive — must live
+        in core/ to be importable by all layers without cross-layer violations.
+        Exempt at 24 files.
       cli/ — REQ-CNST-003-E5: cli/ retains _terminal_table.py as a re-export shim
         for backward-compatible cli/ imports; canonical implementation lives in
         core/_terminal_table.py. Also contains _terminal.py — the terminal state
@@ -706,7 +708,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "server": 20,
         "recipe": 36,
         "execution": 26,
-        "core": 23,
+        "core": 24,
         "cli": 22,
         "hooks": 22,
     }

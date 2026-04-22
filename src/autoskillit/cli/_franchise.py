@@ -29,7 +29,6 @@ from autoskillit.franchise import (
 )
 
 _log = get_logger(__name__)
-logger = _log
 
 if TYPE_CHECKING:
     from autoskillit.franchise import ResumeDecision
@@ -130,7 +129,7 @@ async def _franchise_signal_guard(
                                         reason=f"signal_{signame}",
                                     )
                                 except Exception:
-                                    logger.warning(
+                                    _log.warning(
                                         "signal_guard: failed to mark dispatch interrupted",
                                         exc_info=True,
                                     )
@@ -146,12 +145,12 @@ async def _franchise_signal_guard(
                                     try:
                                         await async_kill_process_tree(dispatch.l2_pid, timeout=5.0)
                                     except Exception:
-                                        logger.warning(
+                                        _log.warning(
                                             "signal_guard: kill_process_tree failed",
                                             exc_info=True,
                                         )
                                 else:
-                                    logger.warning(
+                                    _log.warning(
                                         "signal_guard: PID %d recycled (ticks mismatch)",
                                         dispatch.l2_pid,
                                     )
@@ -161,7 +160,7 @@ async def _franchise_signal_guard(
                                     try:
                                         await async_kill_process_tree(dispatch.l2_pid, timeout=5.0)
                                     except Exception:
-                                        logger.warning(
+                                        _log.warning(
                                             "signal_guard: kill_process_tree failed (non-linux)",
                                             exc_info=True,
                                         )
@@ -173,7 +172,7 @@ async def _franchise_signal_guard(
                                     reason=f"signal_{signame}",
                                 )
                             except Exception:
-                                logger.warning(
+                                _log.warning(
                                     "signal_guard: failed to mark dispatch interrupted",
                                     exc_info=True,
                                 )
@@ -187,7 +186,7 @@ async def _franchise_signal_guard(
                             mgr = DefaultWorkspaceManager()
                             mgr.delete_contents(workspace_dir)
                         except Exception:
-                            logger.warning("signal_guard: workspace cleanup failed", exc_info=True)
+                            _log.warning("signal_guard: workspace cleanup failed", exc_info=True)
 
                     sys.stderr.write(
                         f"Campaign {campaign_id} interrupted."
@@ -222,15 +221,15 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
         try:
             state = read_state(state_path)
             if state is None:
-                logger.warning("reap: cannot read state file: %s", state_path)
+                _log.warning("reap: cannot read state file: %s", state_path)
                 return
 
             running = [d for d in state.dispatches if d.status == DispatchStatus.RUNNING]
             if not running:
-                logger.info("reap: no running dispatches in campaign %s", state.campaign_id)
+                _log.info("reap: no running dispatches in campaign %s", state.campaign_id)
                 return
 
-            logger.info(
+            _log.info(
                 "reap: scanning %d dispatches in campaign %s", len(running), state.campaign_id
             )
 
@@ -241,13 +240,13 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
                 if pid == 0:
                     _action = "reaped_dead_pid"
                     if dry_run:
-                        logger.info("reap: [WOULD MARK]  %s  pid=0  (no PID recorded)", name)
+                        _log.info("reap: [WOULD MARK]  %s  pid=0  (no PID recorded)", name)
                     else:
                         try:
                             mark_dispatch_interrupted(state_path, name, reason=_action)
-                            logger.info("reap: [MARKED]      %s  (no PID recorded)", name)
+                            _log.info("reap: [MARKED]      %s  (no PID recorded)", name)
                         except ValueError:
-                            logger.info("reap: [SKIPPED]     %s  (already terminal)", name)
+                            _log.info("reap: [SKIPPED]     %s  (already terminal)", name)
                     continue
 
                 # Boot ID check: if machine rebooted, all PIDs are recycled
@@ -257,7 +256,7 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
                     and dispatch.l2_boot_id != current_boot_id
                 ):
                     if dry_run:
-                        logger.info(
+                        _log.info(
                             "reap: [WOULD MARK]  %s  pid=%d  (rebooted, pid_recycled)", name, pid
                         )
                     else:
@@ -265,52 +264,48 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
                             mark_dispatch_interrupted(
                                 state_path, name, reason="reaped_pid_recycled"
                             )
-                            logger.info(
+                            _log.info(
                                 "reap: [MARKED]      %s  pid=%d  (rebooted, pid_recycled)",
                                 name,
                                 pid,
                             )
                         except ValueError:
-                            logger.info("reap: [SKIPPED]     %s  (already terminal)", name)
+                            _log.info("reap: [SKIPPED]     %s  (already terminal)", name)
                     continue
 
                 if not psutil.pid_exists(pid):
                     if dry_run:
-                        logger.info("reap: [WOULD MARK]  %s  pid=%d  (process dead)", name, pid)
+                        _log.info("reap: [WOULD MARK]  %s  pid=%d  (process dead)", name, pid)
                     else:
                         try:
                             mark_dispatch_interrupted(state_path, name, reason="reaped_dead_pid")
-                            logger.info(
-                                "reap: [MARKED]      %s  pid=%d  (process dead)", name, pid
-                            )
+                            _log.info("reap: [MARKED]      %s  pid=%d  (process dead)", name, pid)
                         except ValueError:
-                            logger.info("reap: [SKIPPED]     %s  (already terminal)", name)
+                            _log.info("reap: [SKIPPED]     %s  (already terminal)", name)
                     continue
 
                 # Process is alive — check identity
                 current_ticks = read_starttime_ticks(pid)
                 if current_ticks is not None and current_ticks == dispatch.l2_starttime_ticks:
                     if dry_run:
-                        logger.info(
+                        _log.info(
                             "reap: [WOULD KILL]  %s  pid=%d  (orphan, identity match)", name, pid
                         )
                     else:
                         try:
                             kill_process_tree(pid)
                         except Exception:
-                            logger.warning(
+                            _log.warning(
                                 "reap: kill_process_tree failed for pid=%d", pid, exc_info=True
                             )
                         try:
                             mark_dispatch_interrupted(state_path, name, reason="reaped_orphan")
-                            logger.info(
-                                "reap: [KILLED]      %s  pid=%d  (orphan reaped)", name, pid
-                            )
+                            _log.info("reap: [KILLED]      %s  pid=%d  (orphan reaped)", name, pid)
                         except ValueError:
-                            logger.info("reap: [SKIPPED]     %s  (already terminal)", name)
+                            _log.info("reap: [SKIPPED]     %s  (already terminal)", name)
                 else:
                     if dry_run:
-                        logger.info(
+                        _log.info(
                             "reap: [WOULD MARK]  %s  pid=%d  (PID recycled, no kill)", name, pid
                         )
                     else:
@@ -318,13 +313,13 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
                             mark_dispatch_interrupted(
                                 state_path, name, reason="reaped_pid_recycled"
                             )
-                            logger.info(
+                            _log.info(
                                 "reap: [MARKED]      %s  pid=%d  (PID recycled, no kill)",
                                 name,
                                 pid,
                             )
                         except ValueError:
-                            logger.info("reap: [SKIPPED]     %s  (already terminal)", name)
+                            _log.info("reap: [SKIPPED]     %s  (already terminal)", name)
         finally:
             fcntl.flock(_lock_fh, fcntl.LOCK_UN)
 

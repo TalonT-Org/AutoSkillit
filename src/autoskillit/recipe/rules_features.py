@@ -17,7 +17,6 @@ from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.contracts import resolve_skill_name
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -25,18 +24,12 @@ from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 def _tools_for_feature(fdef: FeatureDef) -> frozenset[str]:
     """Return all MCP tool names that carry at least one of this feature's tool_tags."""
-    return frozenset(
-        tool for tool, tags in TOOL_SUBSET_TAGS.items() if fdef.tool_tags & tags
-    )
+    return frozenset(tool for tool, tags in TOOL_SUBSET_TAGS.items() if fdef.tool_tags & tags)
 
 
 def _get_disabled_feature_defs(ctx: ValidationContext) -> list[FeatureDef]:
     """Return FeatureDef objects for all features named in ctx.disabled_features."""
-    return [
-        fdef
-        for name, fdef in FEATURE_REGISTRY.items()
-        if name in ctx.disabled_features
-    ]
+    return [fdef for name, fdef in FEATURE_REGISTRY.items() if name in ctx.disabled_features]
 
 
 def _get_skill_category_map() -> dict[str, frozenset[str]]:

@@ -15,7 +15,10 @@ def test_feature_gate_rule_fires_on_disabled_feature_tool() -> None:
     from autoskillit.recipe.schema import Recipe, RecipeStep
 
     recipe = Recipe(
-        name="r", description="d", version="0.2.0", kitchen_rules="k",
+        name="r",
+        description="d",
+        version="0.2.0",
+        kitchen_rules="k",
         steps={"s": RecipeStep(tool="dispatch_food_truck", with_args={})},
     )
     ctx = make_validation_context(recipe, disabled_features=frozenset({"franchise"}))
@@ -33,7 +36,10 @@ def test_feature_gate_rule_passes_when_feature_enabled() -> None:
     from autoskillit.recipe.schema import Recipe, RecipeStep
 
     recipe = Recipe(
-        name="r", description="d", version="0.2.0", kitchen_rules="k",
+        name="r",
+        description="d",
+        version="0.2.0",
+        kitchen_rules="k",
         steps={"s": RecipeStep(tool="dispatch_food_truck", with_args={})},
     )
     ctx = make_validation_context(recipe, disabled_features=frozenset())
@@ -48,7 +54,10 @@ def test_feature_gate_rule_ignores_non_feature_tools() -> None:
     from autoskillit.recipe.schema import Recipe, RecipeStep
 
     recipe = Recipe(
-        name="r", description="d", version="0.2.0", kitchen_rules="k",
+        name="r",
+        description="d",
+        version="0.2.0",
+        kitchen_rules="k",
         steps={"s": RecipeStep(tool="run_cmd", with_args={"cmd": "echo hi"})},
     )
     ctx = make_validation_context(recipe, disabled_features=frozenset({"franchise"}))
@@ -61,7 +70,9 @@ def test_feature_gate_rule_fires_on_disabled_feature_skill(monkeypatch) -> None:
     import autoskillit.core._type_constants as _consts
     from autoskillit.core import FeatureDef, FeatureLifecycle, Severity
     from autoskillit.recipe._analysis import (
-        ValidationContext, _build_step_graph, analyze_dataflow,
+        ValidationContext,
+        _build_step_graph,
+        analyze_dataflow,
     )
     from autoskillit.recipe.registry import run_semantic_rules
     from autoskillit.recipe.schema import Recipe, RecipeStep
@@ -78,11 +89,16 @@ def test_feature_gate_rule_fires_on_disabled_feature_skill(monkeypatch) -> None:
     monkeypatch.setitem(_consts.FEATURE_REGISTRY, "test-skill-gate", test_fdef)
 
     recipe = Recipe(
-        name="r", description="d", version="0.2.0", kitchen_rules="k",
-        steps={"s": RecipeStep(
-            tool="run_skill",
-            with_args={"skill_command": "/autoskillit:arch-lens-c4-container"},
-        )},
+        name="r",
+        description="d",
+        version="0.2.0",
+        kitchen_rules="k",
+        steps={
+            "s": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/autoskillit:arch-lens-c4-container"},
+            )
+        },
     )
     step_graph = _build_step_graph(recipe)
     ctx = ValidationContext(
@@ -101,7 +117,7 @@ def test_feature_gate_rule_fires_on_disabled_feature_skill(monkeypatch) -> None:
 def test_feature_gate_rule_with_multiple_features(monkeypatch) -> None:
     """Each disabled feature independently flags its own tools."""
     import autoskillit.core._type_constants as _consts
-    from autoskillit.core import FeatureDef, FeatureLifecycle, TOOL_SUBSET_TAGS, Severity
+    from autoskillit.core import FeatureDef, FeatureLifecycle, Severity
     from autoskillit.recipe._analysis import make_validation_context
     from autoskillit.recipe.registry import run_semantic_rules
     from autoskillit.recipe.schema import Recipe, RecipeStep
@@ -118,7 +134,10 @@ def test_feature_gate_rule_with_multiple_features(monkeypatch) -> None:
     monkeypatch.setitem(_consts.FEATURE_REGISTRY, "test-ci-gate", test_ci_fdef)
 
     recipe = Recipe(
-        name="r", description="d", version="0.2.0", kitchen_rules="k",
+        name="r",
+        description="d",
+        version="0.2.0",
+        kitchen_rules="k",
         steps={
             "franchise_step": RecipeStep(tool="dispatch_food_truck", with_args={}),
             "ci_step": RecipeStep(tool="wait_for_ci", with_args={}),

@@ -9,6 +9,7 @@ import os
 import shutil
 import signal
 import sys
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -21,7 +22,7 @@ import anyio.abc
 import psutil
 from cyclopts import App, Parameter
 
-from autoskillit.core import get_logger
+from autoskillit.core import TerminalColumn, get_logger
 from autoskillit.franchise import (
     DispatchStatus,
     mark_dispatch_interrupted,
@@ -31,8 +32,248 @@ from autoskillit.franchise import (
 _log = get_logger(__name__)
 
 if TYPE_CHECKING:
-    from autoskillit.franchise import ResumeDecision
+    from autoskillit.franchise import CampaignState, DispatchRecord, ResumeDecision
     from autoskillit.recipe.schema import Recipe
+
+_FAILURE_STATUSES = frozenset(
+    {
+        DispatchStatus.FAILURE,
+        DispatchStatus.INTERRUPTED,
+        DispatchStatus.REFUSED,
+        DispatchStatus.RELEASED,
+    }
+)
+
+_IN_PROGRESS_STATUSES = frozenset(
+    {
+        DispatchStatus.RUNNING,
+        DispatchStatus.PENDING,
+    }
+)
+
+_STATUS_COLUMNS = (
+    TerminalColumn("NAME", 30, "<"),
+    TerminalColumn("STATUS", 12, "<"),
+    TerminalColumn("ELAPSED", 10, ">"),
+    TerminalColumn("INPUT", 10, ">"),
+    TerminalColumn("OUTPUT", 10, ">"),
+    TerminalColumn("CACHE_RD", 10, ">"),
+    TerminalColumn("CACHE_WR", 10, ">"),
+    TerminalColumn("SESSION_LOG", None, "<"),
+)
+
+
+def _compute_exit_code(state: CampaignState) -> int:
+    """Compute CLI exit code from dispatch statuses.
+
+    0 = all success/skipped, 1 = any failure, 2 = any in-progress.
+    """
+    has_failure = any(d.status in _FAILURE_STATUSES for d in state.dispatches)
+    has_in_progress = any(d.status in _IN_PROGRESS_STATUSES for d in state.dispatches)
+    if has_failure:
+        return 1
+    if has_in_progress:
+        return 2
+    return 0
+
+
+def _fmt_elapsed(dispatch: DispatchRecord) -> str:
+    """Format dispatch elapsed time as human-readable string."""
+    if dispatch.started_at <= 0:
+        return "-"
+    if dispatch.status == DispatchStatus.RUNNING:
+        seconds = time.time() - dispatch.started_at
+    elif dispatch.ended_at > 0:
+        seconds = dispatch.ended_at - dispatch.started_at
+    else:
+        return "-"
+    seconds = max(0, seconds)
+    if seconds < 60:
+        return f"{seconds:.0f}s"
+    minutes = int(seconds // 60)
+    secs = int(seconds % 60)
+    if minutes < 60:
+        return f"{minutes}m {secs}s"
+    hours = minutes // 60
+    mins = minutes % 60
+    return f"{hours}h {mins}m"
+
+
+def _humanize(n: int | float | None) -> str:
+    """Humanize token counts: 1234 -> '1.2k', 1234567 -> '1.2M'."""
+    if n is None or n == 0:
+        return "0"
+    if not isinstance(n, (int, float)):
+        return "0"
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M"
+    if n >= 1_000:
+        return f"{n / 1_000:.1f}k"
+    return str(int(n))
+
+
+def _build_status_rows(state: CampaignState) -> list[tuple[str, ...]]:
+    """Build table rows from campaign state dispatches."""
+    rows: list[tuple[str, ...]] = []
+    for d in state.dispatches:
+        tu = d.token_usage
+        rows.append(
+            (
+                d.name,
+                str(d.status),
+                _fmt_elapsed(d),
+                _humanize(tu.get("input_tokens", 0)),
+                _humanize(tu.get("output_tokens", 0)),
+                _humanize(tu.get("cache_read_input_tokens", 0)),
+                _humanize(tu.get("cache_creation_input_tokens", 0)),
+                d.l2_session_log_dir or "-",
+            )
+        )
+    return rows
+
+
+def _aggregate_totals(state: CampaignState) -> dict[str, int]:
+    """Sum token_usage across all dispatches."""
+    totals: dict[str, int] = {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_read": 0,
+        "cache_creation": 0,
+    }
+    for d in state.dispatches:
+        tu = d.token_usage
+        totals["input_tokens"] += tu.get("input_tokens", 0)
+        totals["output_tokens"] += tu.get("output_tokens", 0)
+        totals["cache_read"] += tu.get("cache_read_input_tokens", 0)
+        totals["cache_creation"] += tu.get("cache_creation_input_tokens", 0)
+    return totals
+
+
+def _cross_check_tokens(state: CampaignState, state_totals: dict[str, int]) -> None:
+    """Warn on >5% token divergence between state.json and sessions.jsonl."""
+    from autoskillit.execution.session_log import resolve_log_dir
+    from autoskillit.pipeline.tokens import DefaultTokenLog
+
+    log_root = resolve_log_dir("")
+    sessions_index = log_root / "sessions.jsonl"
+    if not sessions_index.exists():
+        return
+
+    token_log = DefaultTokenLog()
+    loaded = token_log.load_from_log_dir(log_root, campaign_id_filter=state.campaign_id)
+    if loaded == 0:
+        return
+
+    log_totals = token_log.compute_total()
+
+    for label, state_key, log_key in [
+        ("input_tokens", "input_tokens", "input_tokens"),
+        ("output_tokens", "output_tokens", "output_tokens"),
+        ("cache_read", "cache_read", "cache_read_input_tokens"),
+        ("cache_creation", "cache_creation", "cache_creation_input_tokens"),
+    ]:
+        sv = state_totals.get(state_key, 0)
+        lv = log_totals.get(log_key, 0)
+        if sv > 0 and abs(sv - lv) / sv > 0.05:
+            sys.stderr.write(
+                f"WARNING: {label} diverge {abs(sv - lv) / sv:.1%} (>5%)"
+                f" (state={sv}, sessionlog={lv}); state.json wins\n"
+            )
+
+
+def _render_status_display(state: CampaignState) -> int:
+    """Print campaign header and 8-column dispatch table to stdout.
+
+    Returns the number of lines printed (for cursor-based screen refresh).
+    """
+    from autoskillit.cli._ansi import _render_terminal_table
+
+    started = datetime.fromtimestamp(state.started_at, tz=UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+    header = f"Campaign: {state.campaign_name}  ID: {state.campaign_id}  Started: {started}"
+    print(header)
+
+    rows = _build_status_rows(state)
+    totals = _aggregate_totals(state)
+    rows.append(("─" * 6, "", "", "", "", "", "", ""))
+    rows.append(
+        (
+            "TOTAL",
+            "",
+            "",
+            _humanize(totals["input_tokens"]),
+            _humanize(totals["output_tokens"]),
+            _humanize(totals["cache_read"]),
+            _humanize(totals["cache_creation"]),
+            "",
+        )
+    )
+    table_str = _render_terminal_table(_STATUS_COLUMNS, rows)
+    print(table_str)
+    return 1 + table_str.count("\n") + 1
+
+
+def _watch_loop(state_path: Path) -> int:
+    """1 Hz polling loop for franchise status. Returns exit code."""
+    import select
+    import termios
+    import tty
+
+    state = read_state(state_path)
+    if state is None:
+        sys.stderr.write("ERROR: state file disappeared or corrupted\n")
+        return 3
+
+    # If campaign already terminal, render once and exit without needing a TTY
+    if all(d.status not in _IN_PROGRESS_STATUSES for d in state.dispatches):
+        _render_status_display(state)
+        print("\nAll dispatches complete.")
+        return _compute_exit_code(state)
+
+    if not sys.stdin.isatty() or not sys.stdout.isatty():
+        sys.stderr.write(
+            "ERROR: --watch requires an interactive terminal"
+            " (both stdin and stdout must be TTYs).\n"
+        )
+        return 1
+
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    prev_lines = 0
+    try:
+        tty.setcbreak(fd)
+        while True:
+            state = read_state(state_path)
+            if state is None:
+                sys.stderr.write("ERROR: state file disappeared or corrupted\n")
+                return 3
+
+            if prev_lines > 0:
+                sys.stdout.write(f"\033[{prev_lines}A")
+                for _ in range(prev_lines):
+                    sys.stdout.write("\033[2K\033[1B")
+                sys.stdout.write(f"\033[{prev_lines}A")
+            sys.stdout.flush()
+
+            prev_lines = _render_status_display(state)
+
+            if all(d.status not in _IN_PROGRESS_STATUSES for d in state.dispatches):
+                print("\nAll dispatches complete.")
+                return _compute_exit_code(state)
+
+            rlist, _, _ = select.select([sys.stdin], [], [], 1.0)
+            if rlist:
+                ch = sys.stdin.read(1)
+                if ch.lower() == "q":
+                    return _compute_exit_code(state)
+    except KeyboardInterrupt:
+        state = read_state(state_path)
+        return _compute_exit_code(state) if state else 3
+    finally:
+        try:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        except (termios.error, OSError):
+            pass
+
 
 franchise_app = App(name="franchise", help="Campaign franchise management.")
 
@@ -429,8 +670,6 @@ def franchise_status(
     json_output: Annotated[bool, Parameter(name=["--json"])] = False,
 ) -> None:
     """Show franchise campaign status."""
-    from autoskillit.core import TerminalColumn, _render_terminal_table
-
     franchise_dir = Path.cwd() / ".autoskillit" / "temp" / "franchise"
 
     if campaign_id is not None:
@@ -438,30 +677,25 @@ def franchise_status(
         state = read_state(state_path)
         if state is None:
             print(f"ERROR: Campaign '{campaign_id}' not found or state corrupted.")
-            sys.exit(1)
+            sys.exit(3)
 
         if json_output:
+            totals = _aggregate_totals(state)
             data = {
                 "campaign_id": state.campaign_id,
                 "campaign_name": state.campaign_name,
                 "started_at": state.started_at,
                 "dispatches": [d.to_dict() for d in state.dispatches],
+                "totals": totals,
             }
             print(json.dumps(data))
-            return
+            _cross_check_tokens(state, totals)
+            sys.exit(_compute_exit_code(state))
 
-        started = datetime.fromtimestamp(state.started_at, tz=UTC).strftime(
-            "%Y-%m-%d %H:%M:%S UTC"
-        )
-        print(f"Campaign: {state.campaign_name}  ID: {state.campaign_id}  Started: {started}")
-        columns = [
-            TerminalColumn("NAME", 30, "<"),
-            TerminalColumn("STATUS", 12, "<"),
-            TerminalColumn("DISPATCH_ID", 36, "<"),
-            TerminalColumn("REASON", 40, "<"),
-        ]
-        rows = [(d.name, str(d.status), d.dispatch_id, d.reason) for d in state.dispatches]
-        print(_render_terminal_table(columns, rows))
+        if watch:
+            sys.exit(_watch_loop(state_path))
+
+        _render_status_display(state)
 
         if cleanup:
             from autoskillit.core import sweep_stale_markers
@@ -478,21 +712,32 @@ def franchise_status(
                     provider=SkillsDirectoryProvider(),
                     ephemeral_root=resolve_ephemeral_root(),
                 )
+                for d in state.dispatches:
+                    if d.l2_session_id:
+                        skill_mgr.cleanup_session(d.l2_session_id)
                 skill_mgr.cleanup_session(campaign_id)
             except Exception:
                 _log.warning(
                     "Session skill cleanup failed for campaign %s", campaign_id, exc_info=True
                 )
             sweep_stale_markers()
+            kitchen_state_dir = (
+                Path.cwd() / ".autoskillit" / "temp" / "kitchen_state" / campaign_id
+            )
+            if kitchen_state_dir.is_dir():
+                shutil.rmtree(kitchen_state_dir, ignore_errors=True)
             print(f"Cleanup complete for campaign '{campaign_id}'.")
 
         if reap or dry_run:
             _reap_stale_dispatches(state_path, dry_run=dry_run)
 
-        if watch:
-            raise NotImplementedError("--watch is not yet implemented.")
+        totals = _aggregate_totals(state)
+        _cross_check_tokens(state, totals)
+        sys.exit(_compute_exit_code(state))
 
     else:
+        from autoskillit.core import _render_terminal_table
+
         if not franchise_dir.exists():
             print("No campaigns found.")
             return
@@ -529,19 +774,19 @@ def franchise_status(
             TerminalColumn("DISPATCHES", 10, "<"),
             TerminalColumn("STARTED", 24, "<"),
         ]
-        rows = []
+        rows_list = []
         for subdir in sorted(subdirs):
             s = read_state(subdir / "state.json")
             if s is None:
                 continue
             started = datetime.fromtimestamp(s.started_at, tz=UTC).strftime("%Y-%m-%d %H:%M UTC")
-            rows.append((s.campaign_name, s.campaign_id, str(len(s.dispatches)), started))
+            rows_list.append((s.campaign_name, s.campaign_id, str(len(s.dispatches)), started))
 
-        if not rows:
+        if not rows_list:
             print("No campaigns found.")
             return
 
-        print(_render_terminal_table(columns, rows))
+        print(_render_terminal_table(columns, rows_list))
 
 
 def render_franchise_error(envelope_json: str) -> int:

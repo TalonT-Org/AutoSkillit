@@ -6,6 +6,8 @@ wired in merge-prs.yaml, implementation.yaml, and remediation.yaml.
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from autoskillit.core import PRState
@@ -1082,8 +1084,6 @@ def test_remediation_wait_for_queue_has_timeout_arm_and_release_timeout_fallback
 # ---------------------------------------------------------------------------
 # T9: Full routing parity — every PRState covered (universal + family-specific)
 # ---------------------------------------------------------------------------
-
-import re
 
 _REQUIRED_PR_STATE_VALUES = frozenset(s.value for s in PRState if s != PRState.ERROR)
 _PR_STATE_WHEN_RE = re.compile(r"\$\{\{\s*result\.pr_state\s*\}\}\s*==\s*(\w+)")

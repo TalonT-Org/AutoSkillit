@@ -120,6 +120,7 @@ generic_automation_mcp/
 │   ├── kitchen_state.py     #   Kitchen-open session marker (stdlib-only; readable from hooks)
 │   ├── _plugin_cache.py     #   Plugin cache lifecycle: retiring cache, install locking, kitchen registry
 │   ├── _plugin_ids.py       #   DIRECT_PREFIX, MARKETPLACE_PREFIX, detect_autoskillit_mcp_prefix (stdlib-only)
+│   ├── feature_flags.py     #   is_feature_enabled() — L0 feature gate resolution primitive
 │   └── readiness.py         #   Filesystem readiness sentinel primitives for MCP server startup (L0)
 │
 ├── config/                  # L1

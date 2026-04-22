@@ -254,3 +254,6 @@ workspace:
 
 franchise:
   l2_default_timeout_sec: 3600
+
+features:
+  franchise: true  # True during transition; flipped to false in ticket #8

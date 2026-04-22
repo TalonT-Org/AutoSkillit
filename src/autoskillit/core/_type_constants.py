@@ -5,10 +5,12 @@ Zero autoskillit imports. Provides the shared constant vocabulary for all higher
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+from datetime import date
 from importlib.metadata import version
 from typing import NamedTuple
 
-from ._type_enums import FranchiseErrorCode
+from ._type_enums import FeatureLifecycle, FranchiseErrorCode
 
 __all__ = [
     "AUTOSKILLIT_INSTALLED_VERSION",
@@ -41,6 +43,9 @@ __all__ = [
     "DISPATCH_ID_ENV_VAR",
     "KITCHEN_SESSION_ID_ENV_VAR",
     "FRANCHISE_ERROR_CODES",
+    "FeatureDef",
+    "FEATURE_REGISTRY",
+    "RETIRED_FEATURES",
 ]
 
 AUTOSKILLIT_INSTALLED_VERSION: str = version("autoskillit")
@@ -300,6 +305,70 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     # kitchen-core — git
     "merge_worktree": frozenset({"kitchen-core"}),
 }
+
+
+@dataclass(frozen=True)
+class FeatureDef:
+    """Definition of a named feature gate.
+
+    Fields
+    ------
+    name:             Canonical feature name (must match FEATURE_REGISTRY key).
+    lifecycle:        Current lifecycle stage (EXPERIMENTAL / STABLE / DEPRECATED).
+    description:      Human-readable description of the feature.
+    tool_tags:        MCP tool subset tags controlled by this gate.
+    skill_categories: Skill category names controlled by this gate.
+    import_package:   Top-level package to probe for importability (optional).
+    tier:             Isolation tier — 1=package-isolated, 2=tag-isolated, 3=config-only.
+    default_enabled:  Whether the feature is on by default when no config override exists.
+    depends_on:       Other features that must be enabled when this one is enabled.
+    since_version:    Package version when this feature was first introduced (optional).
+    sunset_date:      Date after which the feature should be removed (optional time-bomb).
+    """
+
+    name: str
+    lifecycle: FeatureLifecycle
+    description: str
+    tool_tags: frozenset[str]
+    skill_categories: frozenset[str]
+    import_package: str | None
+    tier: int = 1
+    default_enabled: bool = False
+    depends_on: frozenset[str] = field(default_factory=frozenset)
+    since_version: str | None = None
+    sunset_date: date | None = None
+
+
+FEATURE_REGISTRY: dict[str, FeatureDef] = {
+    "franchise": FeatureDef(
+        name="franchise",
+        lifecycle=FeatureLifecycle.EXPERIMENTAL,
+        description="L3 Franchise Orchestrator — multi-session campaign dispatch",
+        tool_tags=frozenset({"franchise"}),
+        skill_categories=frozenset(),
+        import_package="autoskillit.franchise",
+        tier=1,
+        default_enabled=True,  # True during transition; flipped to False in ticket #8
+        since_version="0.9.51",
+    ),
+}
+
+RETIRED_FEATURES: frozenset[str] = frozenset()
+
+# Module-level assertion: all tool_tags entries must exist in TOOL_SUBSET_TAGS tag values.
+# This catches stale tags at import time, before any test or server startup.
+_ALL_REGISTERED_TOOL_TAGS: frozenset[str] = frozenset(
+    tag for tags in TOOL_SUBSET_TAGS.values() for tag in tags
+)
+assert all(
+    tag in _ALL_REGISTERED_TOOL_TAGS
+    for defn in FEATURE_REGISTRY.values()
+    for tag in defn.tool_tags
+), (
+    "FeatureDef.tool_tags contains a tag not present in TOOL_SUBSET_TAGS values. "
+    "Add the tag to the appropriate tool entry in TOOL_SUBSET_TAGS first."
+)
+
 
 # Canonical prefix required for all skill_command values passed to run_skill.
 # Enforced at the Claude Code hook boundary by skill_command_guard.py.

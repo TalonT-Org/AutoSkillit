@@ -363,21 +363,6 @@ dataflow:
   - work_dir
   required: []
   produced: []
-- step: enqueue_all_prs
-  available:
-  - audit
-  - base_branch
-  - integration_branch
-  - merge_queue_data_path
-  - plans_dir
-  - pr_order_file
-  - queue_mode
-  - remote_url
-  - run_name
-  - source_dir
-  - work_dir
-  required: []
-  produced: []
 - step: get_first_pr_number
   available:
   - audit
@@ -394,6 +379,22 @@ dataflow:
   required: []
   produced:
   - current_pr_number
+- step: enqueue_current_pr
+  available:
+  - audit
+  - base_branch
+  - current_pr_number
+  - integration_branch
+  - merge_queue_data_path
+  - plans_dir
+  - pr_order_file
+  - queue_mode
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced: []
 - step: wait_queue_pr
   available:
   - audit
@@ -429,7 +430,7 @@ dataflow:
   required: []
   produced:
   - ejected_pr_branch
-- step: checkout_ejected_pr
+- step: attempt_cheap_rebase
   available:
   - audit
   - base_branch
@@ -485,6 +486,25 @@ dataflow:
   - work_dir
   required: []
   produced: []
+- step: ci_watch_post_queue_fix
+  available:
+  - audit
+  - base_branch
+  - conflict_escalation_required
+  - current_pr_number
+  - ejected_pr_branch
+  - integration_branch
+  - merge_queue_data_path
+  - plans_dir
+  - pr_order_file
+  - queue_mode
+  - queue_pr_state
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced: []
 - step: reenter_queue
   available:
   - audit
@@ -504,7 +524,47 @@ dataflow:
   - work_dir
   required: []
   produced: []
-- step: next_queue_pr_or_done
+- step: advance_queue_pr
+  available:
+  - audit
+  - base_branch
+  - conflict_escalation_required
+  - current_pr_number
+  - ejected_pr_branch
+  - integration_branch
+  - merge_queue_data_path
+  - plans_dir
+  - pr_order_file
+  - queue_mode
+  - queue_pr_state
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced:
+  - current_pr_number
+- step: diagnose_queue_ci
+  available:
+  - audit
+  - base_branch
+  - conflict_escalation_required
+  - current_pr_number
+  - ejected_pr_branch
+  - integration_branch
+  - merge_queue_data_path
+  - plans_dir
+  - pr_order_file
+  - queue_mode
+  - queue_pr_state
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced:
+  - diagnosis_path
+- step: reenroll_stalled_queue_pr
   available:
   - audit
   - base_branch

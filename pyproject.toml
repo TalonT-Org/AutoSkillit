@@ -97,6 +97,7 @@ markers = [
     "small: pure unit test — no persistent I/O, no network, no subprocess (RAM-backed tmpfs via tmp_path IS allowed)",
     "medium: filesystem and subprocess allowed — no network, no external services",
     "large: full integration — everything allowed (default for unannotated tests)",
+    "feature(name): marks tests requiring a specific feature gate to be enabled",
 ]
 
 [tool.coverage.run]

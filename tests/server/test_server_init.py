@@ -573,6 +573,7 @@ class TestClaudeCodeCompatMiddleware:
         assert result[0].parameters == {"type": "object", "properties": {}}
 
 
+@pytest.mark.feature("franchise")
 class TestSessionTypeVisibility:
     """3-branch session-type tag visibility dispatch."""
 

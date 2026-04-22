@@ -6,7 +6,7 @@ import inspect
 
 import pytest
 
-pytestmark = [pytest.mark.layer("franchise"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("franchise"), pytest.mark.small, pytest.mark.feature("franchise")]
 
 
 def test_franchise_package_importable() -> None:

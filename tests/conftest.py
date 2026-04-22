@@ -357,6 +357,28 @@ def pytest_configure(config: pytest.Config) -> None:
         )
 
 
+def _is_test_feature_enabled(feature_name: str) -> bool:
+    """Return True if feature_name is enabled for this test run.
+
+    Resolution order:
+    1. If AUTOSKILLIT_TEST_FEATURES is set (including empty string), parse it
+       as a comma-separated list of enabled feature names.  Only listed names
+       are enabled; all others are disabled.
+    2. If unset, fall back to FEATURE_REGISTRY[name].default_enabled.
+       Unknown feature names return True (fail-open: don't skip unrecognised names).
+    """
+    env_val = os.environ.get("AUTOSKILLIT_TEST_FEATURES")
+    if env_val is not None:
+        enabled = {f.strip() for f in env_val.split(",") if f.strip()}
+        return feature_name in enabled
+    from autoskillit.core import FEATURE_REGISTRY
+
+    defn = FEATURE_REGISTRY.get(feature_name)
+    if defn is None:
+        return True  # Fail-open: unrecognised feature names are not skipped.
+    return defn.default_enabled
+
+
 def pytest_collection_modifyitems(
     items: list[pytest.Item],
     config: pytest.Config,
@@ -387,6 +409,23 @@ def pytest_collection_modifyitems(
                         f"but lives in tests/{expected_dir}/",
                         stacklevel=1,
                     )
+
+    # Feature gate pass — orthogonal to layer/size, runs on every worker
+    for item in items:
+        marker = item.get_closest_marker("feature")
+        if marker and marker.args:
+            feature_name = marker.args[0]
+            if not _is_test_feature_enabled(feature_name):
+                env_display = os.environ.get("AUTOSKILLIT_TEST_FEATURES", "")
+                item.add_marker(
+                    pytest.mark.skip(
+                        reason=(
+                            f"feature '{feature_name}' disabled"
+                            f" (AUTOSKILLIT_TEST_FEATURES='{env_display}'"
+                            f" does not include '{feature_name}')"
+                        )
+                    )
+                )
 
     scope: set[_Path] | None = config.stash.get(_scope_key, None)
     if scope is None:

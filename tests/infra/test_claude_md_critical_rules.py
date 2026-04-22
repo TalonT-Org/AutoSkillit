@@ -112,4 +112,4 @@ def test_claude_md_no_stale_fidelity_reference(claude_md: str) -> None:
 def test_claude_md_has_github_api_discipline(claude_md: str) -> None:
     """CLAUDE.md must include §3.5 GitHub API Call Discipline rule."""
     assert "GitHub API Call Discipline" in claude_md
-    assert "sleep" in claude_md.lower() or "delay" in claude_md.lower()
+    assert "sleep 1" in claude_md or "asyncio.sleep(1)" in claude_md

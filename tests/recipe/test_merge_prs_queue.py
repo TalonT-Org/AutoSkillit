@@ -68,10 +68,10 @@ def test_merge_prs_route_by_queue_mode_is_route_action(pmp_recipe) -> None:
     assert step.action == "route"
 
 
-def test_merge_prs_enqueue_all_prs_exists(pmp_recipe) -> None:
-    """enqueue_all_prs step must exist with tool=run_cmd."""
-    assert "enqueue_all_prs" in pmp_recipe.steps
-    step = pmp_recipe.steps["enqueue_all_prs"]
+def test_merge_prs_enqueue_current_pr_exists(pmp_recipe) -> None:
+    """enqueue_current_pr step must exist with tool=run_cmd."""
+    assert "enqueue_current_pr" in pmp_recipe.steps
+    step = pmp_recipe.steps["enqueue_current_pr"]
     assert step.tool == "run_cmd"
 
 
@@ -87,11 +87,11 @@ def test_merge_prs_reenter_queue_exists(pmp_recipe) -> None:
     assert "reenter_queue" in pmp_recipe.steps
 
 
-def test_merge_prs_next_queue_pr_or_done_is_route_action(pmp_recipe) -> None:
-    """next_queue_pr_or_done must be an action: route step."""
-    assert "next_queue_pr_or_done" in pmp_recipe.steps
-    step = pmp_recipe.steps["next_queue_pr_or_done"]
-    assert step.action == "route"
+def test_merge_prs_advance_queue_pr_exists(pmp_recipe) -> None:
+    """advance_queue_pr step must exist with tool=run_cmd."""
+    assert "advance_queue_pr" in pmp_recipe.steps
+    step = pmp_recipe.steps["advance_queue_pr"]
+    assert step.tool == "run_cmd"
 
 
 # ---------------------------------------------------------------------------
@@ -131,6 +131,194 @@ def test_merge_prs_classic_path_merge_pr_present(pmp_recipe) -> None:
 def test_merge_prs_classic_path_push_integration_branch_present(pmp_recipe) -> None:
     """push_integration_branch step must still be present (classic path)."""
     assert "push_integration_branch" in pmp_recipe.steps
+
+
+# ---------------------------------------------------------------------------
+# merge-prs.yaml — sequential enqueue behavioral (Test 1A)
+# ---------------------------------------------------------------------------
+
+
+def test_merge_prs_enqueue_all_prs_removed(pmp_recipe) -> None:
+    """enqueue_all_prs batch step must be removed."""
+    assert "enqueue_all_prs" not in pmp_recipe.steps
+
+
+def test_merge_prs_enqueue_current_pr_routes_to_wait(pmp_recipe) -> None:
+    """enqueue_current_pr.on_success must route to wait_queue_pr."""
+    step = pmp_recipe.steps["enqueue_current_pr"]
+    assert step.on_success == "wait_queue_pr"
+
+
+def test_merge_prs_enqueue_current_pr_references_single_pr(pmp_recipe) -> None:
+    """enqueue_current_pr cmd must reference context.current_pr_number (no batch loop)."""
+    step = pmp_recipe.steps["enqueue_current_pr"]
+    cmd = step.with_args.get("cmd", "")
+    assert "context.current_pr_number" in cmd
+    assert "while read" not in cmd
+    assert "jq -r '.[].number'" not in cmd
+
+
+def test_merge_prs_get_first_pr_number_captures_index(pmp_recipe) -> None:
+    """get_first_pr_number must capture both current_pr_number and current_pr_index."""
+    step = pmp_recipe.steps["get_first_pr_number"]
+    assert "current_pr_number" in (step.capture or {})
+    assert "current_pr_index" in (step.capture or {})
+
+
+def test_merge_prs_get_first_pr_number_routes_to_enqueue(pmp_recipe) -> None:
+    """get_first_pr_number.on_success must route to enqueue_current_pr."""
+    step = pmp_recipe.steps["get_first_pr_number"]
+    assert step.on_success == "enqueue_current_pr"
+
+
+# ---------------------------------------------------------------------------
+# merge-prs.yaml — cheap rebase pre-check (Test 1C)
+# ---------------------------------------------------------------------------
+
+
+def test_merge_prs_attempt_cheap_rebase_exists(pmp_recipe) -> None:
+    """attempt_cheap_rebase step must exist with tool=run_cmd."""
+    assert "attempt_cheap_rebase" in pmp_recipe.steps
+    step = pmp_recipe.steps["attempt_cheap_rebase"]
+    assert step.tool == "run_cmd"
+
+
+def test_merge_prs_attempt_cheap_rebase_cmd_uses_rebase(pmp_recipe) -> None:
+    """attempt_cheap_rebase cmd must contain git rebase and clean/conflicts output."""
+    step = pmp_recipe.steps["attempt_cheap_rebase"]
+    cmd = step.with_args.get("cmd", "")
+    assert "git rebase" in cmd
+    assert "clean" in cmd
+    assert "conflicts" in cmd
+
+
+def test_merge_prs_attempt_cheap_rebase_routing(pmp_recipe) -> None:
+    """attempt_cheap_rebase clean routes to push_ejected_fix, conflicts to resolve."""
+    step = pmp_recipe.steps["attempt_cheap_rebase"]
+    assert step.on_result is not None
+    conditions = step.on_result.conditions
+    clean_routes = [c for c in conditions if c.when and "clean" in c.when]
+    assert clean_routes, "must have a 'clean' condition"
+    assert clean_routes[0].route == "push_ejected_fix"
+    fallback = [c for c in conditions if c.when is None]
+    assert fallback, "must have a fallback condition"
+    assert fallback[0].route == "resolve_ejected_conflicts"
+
+
+def test_merge_prs_get_ejected_routes_to_cheap_rebase(pmp_recipe) -> None:
+    """get_ejected_pr_branch.on_success must route to attempt_cheap_rebase."""
+    step = pmp_recipe.steps["get_ejected_pr_branch"]
+    assert step.on_success == "attempt_cheap_rebase"
+
+
+def test_merge_prs_checkout_ejected_pr_removed(pmp_recipe) -> None:
+    """checkout_ejected_pr step must be removed (consolidated into attempt_cheap_rebase)."""
+    assert "checkout_ejected_pr" not in pmp_recipe.steps
+
+
+# ---------------------------------------------------------------------------
+# merge-prs.yaml — CI watch before reenter_queue (Test 1D)
+# ---------------------------------------------------------------------------
+
+
+def test_merge_prs_ci_watch_post_queue_fix_exists(pmp_recipe) -> None:
+    """ci_watch_post_queue_fix step must exist in merge-prs.yaml."""
+    assert "ci_watch_post_queue_fix" in pmp_recipe.steps
+
+
+def test_merge_prs_push_ejected_fix_routes_to_ci_watch(pmp_recipe) -> None:
+    """push_ejected_fix.on_success must route to ci_watch_post_queue_fix."""
+    step = pmp_recipe.steps["push_ejected_fix"]
+    assert step.on_success == "ci_watch_post_queue_fix"
+
+
+def test_merge_prs_ci_watch_routes_to_reenter(pmp_recipe) -> None:
+    """ci_watch_post_queue_fix.on_success must route to reenter_queue."""
+    step = pmp_recipe.steps["ci_watch_post_queue_fix"]
+    assert step.on_success == "reenter_queue"
+
+
+# ---------------------------------------------------------------------------
+# merge-prs.yaml — recipe-level capture for advancement (Test 1E)
+# ---------------------------------------------------------------------------
+
+
+def test_merge_prs_advance_queue_pr_is_run_cmd(pmp_recipe) -> None:
+    """advance_queue_pr step must exist with tool=run_cmd."""
+    assert "advance_queue_pr" in pmp_recipe.steps
+    step = pmp_recipe.steps["advance_queue_pr"]
+    assert step.tool == "run_cmd"
+
+
+def test_merge_prs_next_queue_pr_or_done_removed(pmp_recipe) -> None:
+    """next_queue_pr_or_done step must be removed (replaced by advance_queue_pr)."""
+    assert "next_queue_pr_or_done" not in pmp_recipe.steps
+
+
+def test_merge_prs_advance_queue_pr_cmd_references_pr_order(pmp_recipe) -> None:
+    """advance_queue_pr cmd must reference pr_order_file and current_pr_index."""
+    step = pmp_recipe.steps["advance_queue_pr"]
+    cmd = step.with_args.get("cmd", "")
+    assert "pr_order_file" in cmd
+    assert "current_pr_index" in cmd
+
+
+def test_merge_prs_advance_queue_pr_captures_pr_number(pmp_recipe) -> None:
+    """advance_queue_pr must have a capture block for current_pr_number using | trim."""
+    step = pmp_recipe.steps["advance_queue_pr"]
+    capture = step.capture or {}
+    assert "current_pr_number" in capture
+    assert "trim" in capture["current_pr_number"]
+
+
+def test_merge_prs_advance_queue_pr_routing(pmp_recipe) -> None:
+    """advance_queue_pr routes to enqueue_current_pr (default) or collect_artifacts (done)."""
+    step = pmp_recipe.steps["advance_queue_pr"]
+    assert step.on_result is not None
+    conditions = step.on_result.conditions
+    done_routes = [c for c in conditions if c.when and "done" in c.when]
+    assert done_routes, "must have a 'done' condition"
+    assert done_routes[0].route == "collect_artifacts"
+    default_routes = [c for c in conditions if c.when is None]
+    assert default_routes, "must have a default route"
+    assert default_routes[0].route == "enqueue_current_pr"
+
+
+# ---------------------------------------------------------------------------
+# merge-prs.yaml — new PRState route steps (Test 1F)
+# ---------------------------------------------------------------------------
+
+
+def test_merge_prs_diagnose_queue_ci_exists(pmp_recipe) -> None:
+    """diagnose_queue_ci step must exist with tool=run_skill."""
+    assert "diagnose_queue_ci" in pmp_recipe.steps
+    step = pmp_recipe.steps["diagnose_queue_ci"]
+    assert step.tool == "run_skill"
+
+
+def test_merge_prs_reenroll_stalled_queue_pr_exists(pmp_recipe) -> None:
+    """reenroll_stalled_queue_pr step must exist with tool=toggle_auto_merge."""
+    assert "reenroll_stalled_queue_pr" in pmp_recipe.steps
+    step = pmp_recipe.steps["reenroll_stalled_queue_pr"]
+    assert step.tool == "toggle_auto_merge"
+
+
+def test_merge_prs_reenroll_stalled_routes_to_wait(pmp_recipe) -> None:
+    """reenroll_stalled_queue_pr must route back to wait_queue_pr."""
+    step = pmp_recipe.steps["reenroll_stalled_queue_pr"]
+    assert step.on_success == "wait_queue_pr"
+
+
+def test_merge_prs_dropped_healthy_routes_to_reenter(pmp_recipe) -> None:
+    """dropped_healthy in wait_queue_pr must route to reenter_queue."""
+    step = pmp_recipe.steps["wait_queue_pr"]
+    assert step.on_result is not None
+    dropped_routes = [
+        c
+        for c in step.on_result.conditions
+        if c.when is not None and "dropped_healthy" in c.when and c.route == "reenter_queue"
+    ]
+    assert dropped_routes, "dropped_healthy must route to reenter_queue"
 
 
 # ---------------------------------------------------------------------------
@@ -1093,11 +1281,6 @@ _PR_STATE_WHEN_RE = re.compile(r"\$\{\{\s*result\.pr_state\s*\}\}\s*==\s*(\w+)")
 def test_wait_for_queue_routing_covers_every_pr_state(recipe_fixture, request) -> None:
     """Every wait_for_merge_queue step must cover every non-error PRState."""
     recipe = request.getfixturevalue(recipe_fixture)
-
-    if recipe_fixture == "pmp_recipe":
-        pytest.xfail(
-            reason="merge-prs.yaml queue routes incomplete — see rectify plan Part B",
-        )
 
     # Find wait_for_merge_queue steps dynamically
     mq_steps = {

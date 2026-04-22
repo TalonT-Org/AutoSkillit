@@ -208,32 +208,12 @@ steps:
     action: route
     on_result:
       - when: "${{ context.queue_mode }} == true"
-        route: enqueue_all_prs
+        route: get_first_pr_number
       - route: create_integration_branch
     note: >
-      Routes to queue mode (enqueue_all_prs) when analyze-prs detected a merge queue
+      Routes to queue mode (get_first_pr_number) when analyze-prs detected a merge queue
       on the target branch. Falls back to the classic batch-branch path otherwise.
       context.queue_mode is captured from analyze_prs result.
-
-  enqueue_all_prs:
-    tool: run_cmd
-    with:
-      cmd: >
-        cat '${{ context.pr_order_file }}' |
-        jq -r '.[].number' |
-        while read pr; do
-          echo "Enqueueing PR #$pr..." &&
-          gh pr merge "$pr" --squash --auto || echo "WARNING: Failed to enqueue PR #$pr";
-        done
-      cwd: "${{ context.work_dir }}"
-      step_name: "enqueue_all_prs"
-    on_success: get_first_pr_number
-    on_failure: register_clone_failure
-    note: >
-      Queue mode only. Submits all PRs in analyzed order to the merge queue via
-      gh pr merge --squash --auto. Non-fatal per-PR failures are warned but do not
-      abort — a PR may already be in queue or have auto-merge enabled. The orchestrator
-      initializes context.current_pr_index = 0 after this step.
 
   get_first_pr_number:
     tool: run_cmd
@@ -243,13 +223,26 @@ steps:
       step_name: "get_first_pr_number"
     capture:
       current_pr_number: "${{ result.stdout | trim }}"
-    on_success: wait_queue_pr
+      current_pr_index: "0"
+    on_success: enqueue_current_pr
     on_failure: register_clone_failure
     note: >
       Queue mode only. Extracts the first PR's number from pr_order_file to initialize
-      context.current_pr_number before the queue wait loop. The agent advances
-      current_pr_index and updates current_pr_number in next_queue_pr_or_done
-      for subsequent iterations.
+      context.current_pr_number and sets current_pr_index = 0 before the sequential
+      enqueue loop.
+
+  enqueue_current_pr:
+    tool: run_cmd
+    with:
+      cmd: "gh pr merge '${{ context.current_pr_number }}' --squash --auto"
+      cwd: "${{ context.work_dir }}"
+      step_name: "enqueue_current_pr"
+    on_success: wait_queue_pr
+    on_failure: register_clone_failure
+    note: >
+      Queue mode only. Submits a single PR to the merge queue. Called once per PR
+      in the sequential enqueue loop: get_first_pr_number → enqueue_current_pr →
+      wait_queue_pr → (merged) → advance_queue_pr → enqueue_current_pr → ...
 
   wait_queue_pr:
     tool: wait_for_merge_queue
@@ -263,17 +256,22 @@ steps:
       queue_pr_state: "${{ result.pr_state }}"
     on_result:
       - when: "${{ result.pr_state }} == merged"
-        route: next_queue_pr_or_done
+        route: advance_queue_pr
+      - when: "${{ result.pr_state }} == ejected_ci_failure"
+        route: diagnose_queue_ci
       - when: "${{ result.pr_state }} == ejected"
         route: get_ejected_pr_branch
+      - when: "${{ result.pr_state }} == stalled"
+        route: reenroll_stalled_queue_pr
+      - when: "${{ result.pr_state }} == dropped_healthy"
+        route: reenter_queue
+      - when: "${{ result.pr_state }} == timeout"
+        route: register_clone_failure
       - route: register_clone_failure
     on_failure: register_clone_failure
     note: >
-      Queue mode only. The agent reads context.pr_order_file at context.current_pr_index
-      to get the current PR's number and appends it to the pr_number argument.
-      merged → advance to next PR or finish.
-      ejected → conflict resolution cycle (get_ejected_pr_branch → checkout → resolve → push → reenter).
-      timeout → register_clone_failure (900s budget = 15 min per PR).
+      Queue mode monitor. All 6 non-error PRState values are explicitly routed.
+      ejected_ci_failure must precede ejected (both match CLOSED state).
 
   get_ejected_pr_branch:
     tool: run_cmd
@@ -283,20 +281,31 @@ steps:
       step_name: "get_ejected_pr_branch"
     capture:
       ejected_pr_branch: "${{ result.stdout | trim }}"
-    on_success: checkout_ejected_pr
+    on_success: attempt_cheap_rebase
     on_failure: register_clone_failure
 
-  checkout_ejected_pr:
+  attempt_cheap_rebase:
     tool: run_cmd
     with:
       cmd: >
         git fetch origin '${{ context.ejected_pr_branch }}' &&
         git checkout '${{ context.ejected_pr_branch }}' &&
-        git pull origin '${{ context.ejected_pr_branch }}'
+        if git rebase origin/${{ inputs.base_branch }};
+        then echo "clean";
+        else git rebase --abort 2>/dev/null || true; echo "conflicts";
+        fi
       cwd: "${{ context.work_dir }}"
-      step_name: "checkout_ejected_pr"
-    on_success: resolve_ejected_conflicts
-    on_failure: register_clone_failure
+      step_name: "attempt_cheap_rebase"
+    on_result:
+      - when: "${{ result.stdout | trim }} == clean"
+        route: push_ejected_fix
+      - route: resolve_ejected_conflicts
+    on_failure: resolve_ejected_conflicts
+    note: >
+      Attempts a trivial rebase before invoking the full resolve-merge-conflicts skill.
+      Uses ejected_pr_branch captured by get_ejected_pr_branch. On clean rebase,
+      skips the skill and proceeds directly to push_ejected_fix. On conflict, aborts
+      the rebase and routes to resolve_ejected_conflicts for goal-aware resolution.
 
   resolve_ejected_conflicts:
     tool: run_skill
@@ -327,8 +336,22 @@ steps:
       remote_url: "${{ context.remote_url }}"
       branch: "${{ context.ejected_pr_branch }}"
       force: "true"
+    on_success: ci_watch_post_queue_fix
+    on_failure: register_clone_failure
+
+  ci_watch_post_queue_fix:
+    tool: wait_for_ci
+    with:
+      pr_number: "${{ context.current_pr_number }}"
+      cwd: "${{ context.work_dir }}"
+      remote_url: "${{ context.remote_url }}"
+      event: "push"
+      timeout_seconds: 600
     on_success: reenter_queue
     on_failure: register_clone_failure
+    note: >
+      Validates CI passes on the rebased branch before re-entering the merge queue.
+      Prevents re-enqueue of a broken branch that would be ejected again.
 
   reenter_queue:
     tool: run_cmd
@@ -342,19 +365,59 @@ steps:
       Re-submits the fixed PR to the merge queue after conflict resolution.
       Routes back to wait_queue_pr to continue monitoring.
 
-  next_queue_pr_or_done:
-    action: route
+  advance_queue_pr:
+    tool: run_cmd
+    with:
+      cmd: >
+        IDX=$(( ${{ context.current_pr_index }} + 1 )) &&
+        TOTAL=$(jq length '${{ context.pr_order_file }}') &&
+        if [ "$IDX" -lt "$TOTAL" ]; then
+          jq -r ".[$IDX].number" '${{ context.pr_order_file }}'
+        else
+          echo "done"
+        fi
+      cwd: "${{ context.work_dir }}"
+      step_name: "advance_queue_pr"
+    capture:
+      current_pr_number: "${{ result.stdout | trim }}"
+      current_pr_index: "${{ context.current_pr_index + 1 }}"
     on_result:
-      field: next
-      routes:
-        more_prs: wait_queue_pr
-        all_done: collect_artifacts
+      - when: "${{ result.stdout | trim }} == done"
+        route: collect_artifacts
+      - route: enqueue_current_pr
+    on_failure: register_clone_failure
     note: >
-      Queue mode routing only. Advance context.current_pr_index. If more PRs remain,
-      fetch the next PR's number from pr_order_file and route to wait_queue_pr.
-      When all PRs are merged, route to collect_artifacts.
-      In queue mode, integration_branch == base_branch — collect_artifacts proceeds
-      directly without push_integration_branch (there is no batch branch to push).
+      Advances the queue index and captures the next PR number at the recipe level.
+      The cmd outputs exactly the PR number (or "done"), so capture uses only | trim.
+      No agent-managed variable updates — the capture block enforces correctness.
+      Routes to enqueue_current_pr for the next PR or collect_artifacts when done.
+
+  diagnose_queue_ci:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:diagnose-ci '${{ context.current_pr_number }}'"
+      cwd: "${{ context.work_dir }}"
+      step_name: "diagnose_queue_ci"
+    on_success: register_clone_failure
+    on_failure: register_clone_failure
+    note: >
+      Best-effort CI diagnosis for ejected_ci_failure state. The PR was ejected
+      due to CI failure in the merge queue, not a conflict. After diagnosis,
+      routes to register_clone_failure — CI failures in queue mode are not
+      auto-recoverable without human intervention.
+
+  reenroll_stalled_queue_pr:
+    tool: toggle_auto_merge
+    with:
+      pr_number: "${{ context.current_pr_number }}"
+      target_branch: "${{ inputs.base_branch }}"
+      cwd: "${{ context.work_dir }}"
+    on_success: wait_queue_pr
+    on_failure: register_clone_failure
+    note: >
+      Uses the dedicated toggle_auto_merge tool (matching the proven pattern in
+      implementation.yaml's reenroll_stalled_pr) to re-enroll a stalled PR in the
+      merge queue. Routes back to wait_queue_pr to resume monitoring.
 
   create_integration_branch:
     tool: run_cmd

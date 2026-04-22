@@ -363,21 +363,6 @@ dataflow:
   - work_dir
   required: []
   produced: []
-- step: enqueue_all_prs
-  available:
-  - audit
-  - base_branch
-  - integration_branch
-  - merge_queue_data_path
-  - plans_dir
-  - pr_order_file
-  - queue_mode
-  - remote_url
-  - run_name
-  - source_dir
-  - work_dir
-  required: []
-  produced: []
 - step: get_first_pr_number
   available:
   - audit
@@ -393,11 +378,31 @@ dataflow:
   - work_dir
   required: []
   produced:
+  - current_pr_index
   - current_pr_number
+  - current_pr_index
+- step: enqueue_current_pr
+  available:
+  - audit
+  - base_branch
+  - current_pr_index
+  - current_pr_number
+  - integration_branch
+  - merge_queue_data_path
+  - plans_dir
+  - pr_order_file
+  - queue_mode
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced: []
 - step: wait_queue_pr
   available:
   - audit
   - base_branch
+  - current_pr_index
   - current_pr_number
   - integration_branch
   - merge_queue_data_path
@@ -415,6 +420,7 @@ dataflow:
   available:
   - audit
   - base_branch
+  - current_pr_index
   - current_pr_number
   - integration_branch
   - merge_queue_data_path
@@ -429,10 +435,11 @@ dataflow:
   required: []
   produced:
   - ejected_pr_branch
-- step: checkout_ejected_pr
+- step: attempt_cheap_rebase
   available:
   - audit
   - base_branch
+  - current_pr_index
   - current_pr_number
   - ejected_pr_branch
   - integration_branch
@@ -451,6 +458,7 @@ dataflow:
   available:
   - audit
   - base_branch
+  - current_pr_index
   - current_pr_number
   - ejected_pr_branch
   - integration_branch
@@ -471,6 +479,27 @@ dataflow:
   - audit
   - base_branch
   - conflict_escalation_required
+  - current_pr_index
+  - current_pr_number
+  - ejected_pr_branch
+  - integration_branch
+  - merge_queue_data_path
+  - plans_dir
+  - pr_order_file
+  - queue_mode
+  - queue_pr_state
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced: []
+- step: ci_watch_post_queue_fix
+  available:
+  - audit
+  - base_branch
+  - conflict_escalation_required
+  - current_pr_index
   - current_pr_number
   - ejected_pr_branch
   - integration_branch
@@ -490,6 +519,7 @@ dataflow:
   - audit
   - base_branch
   - conflict_escalation_required
+  - current_pr_index
   - current_pr_number
   - ejected_pr_branch
   - integration_branch
@@ -504,11 +534,55 @@ dataflow:
   - work_dir
   required: []
   produced: []
-- step: next_queue_pr_or_done
+- step: advance_queue_pr
   available:
   - audit
   - base_branch
   - conflict_escalation_required
+  - current_pr_index
+  - current_pr_number
+  - ejected_pr_branch
+  - integration_branch
+  - merge_queue_data_path
+  - plans_dir
+  - pr_order_file
+  - queue_mode
+  - queue_pr_state
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced:
+  - current_pr_index
+  - current_pr_number
+  - current_pr_index
+- step: diagnose_queue_ci
+  available:
+  - audit
+  - base_branch
+  - conflict_escalation_required
+  - current_pr_index
+  - current_pr_number
+  - ejected_pr_branch
+  - integration_branch
+  - merge_queue_data_path
+  - plans_dir
+  - pr_order_file
+  - queue_mode
+  - queue_pr_state
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced: []
+- step: reenroll_stalled_queue_pr
+  available:
+  - audit
+  - base_branch
+  - conflict_escalation_required
+  - current_pr_index
   - current_pr_number
   - ejected_pr_branch
   - integration_branch
@@ -528,6 +602,7 @@ dataflow:
   - audit
   - base_branch
   - conflict_escalation_required
+  - current_pr_index
   - current_pr_number
   - ejected_pr_branch
   - integration_branch
@@ -547,6 +622,7 @@ dataflow:
   - audit
   - base_branch
   - conflict_escalation_required
+  - current_pr_index
   - current_pr_number
   - ejected_pr_branch
   - integration_branch
@@ -566,6 +642,7 @@ dataflow:
   - audit
   - base_branch
   - conflict_escalation_required
+  - current_pr_index
   - current_pr_number
   - ejected_pr_branch
   - integration_branch
@@ -584,12 +661,14 @@ dataflow:
   - escalation_required
   - escalation_reason
   - task
+  - current_pr_index
   - current_pr_number
 - step: plan
   available:
   - audit
   - base_branch
   - conflict_escalation_required
+  - current_pr_index
   - current_pr_number
   - ejected_pr_branch
   - escalation_reason
@@ -614,6 +693,7 @@ dataflow:
   - audit
   - base_branch
   - conflict_escalation_required
+  - current_pr_index
   - current_pr_number
   - ejected_pr_branch
   - escalation_reason
@@ -639,6 +719,7 @@ dataflow:
   - audit
   - base_branch
   - conflict_escalation_required
+  - current_pr_index
   - current_pr_number
   - ejected_pr_branch
   - escalation_reason
@@ -666,6 +747,7 @@ dataflow:
   - audit
   - base_branch
   - conflict_escalation_required
+  - current_pr_index
   - current_pr_number
   - ejected_pr_branch
   - escalation_reason
@@ -695,6 +777,7 @@ dataflow:
   - audit
   - base_branch
   - conflict_escalation_required
+  - current_pr_index
   - current_pr_number
   - ejected_pr_branch
   - escalation_reason
@@ -721,6 +804,7 @@ dataflow:
   - audit
   - base_branch
   - conflict_escalation_required
+  - current_pr_index
   - current_pr_number
   - ejected_pr_branch
   - escalation_reason
@@ -747,6 +831,7 @@ dataflow:
   - audit
   - base_branch
   - conflict_escalation_required
+  - current_pr_index
   - current_pr_number
   - ejected_pr_branch
   - escalation_reason
@@ -775,6 +860,7 @@ dataflow:
   - base_branch
   - conflict_escalation_required
   - conflict_pr_number
+  - current_pr_index
   - current_pr_number
   - ejected_pr_branch
   - escalation_reason
@@ -802,6 +888,7 @@ dataflow:
   - base_branch
   - conflict_escalation_required
   - conflict_pr_number
+  - current_pr_index
   - current_pr_number
   - ejected_pr_branch
   - escalation_reason
@@ -829,6 +916,7 @@ dataflow:
   - base_branch
   - conflict_escalation_required
   - conflict_pr_number
+  - current_pr_index
   - current_pr_number
   - ejected_pr_branch
   - escalation_reason
@@ -857,6 +945,7 @@ dataflow:
   - base_branch
   - conflict_escalation_required
   - conflict_pr_number
+  - current_pr_index
   - current_pr_number
   - ejected_pr_branch
   - escalation_reason
@@ -884,6 +973,7 @@ dataflow:
   - base_branch
   - conflict_escalation_required
   - conflict_pr_number
+  - current_pr_index
   - current_pr_number
   - ejected_pr_branch
   - escalation_reason
@@ -911,6 +1001,7 @@ dataflow:
   - base_branch
   - conflict_escalation_required
   - conflict_pr_number
+  - current_pr_index
   - current_pr_number
   - ejected_pr_branch
   - escalation_reason
@@ -938,6 +1029,7 @@ dataflow:
   - base_branch
   - conflict_escalation_required
   - conflict_pr_number
+  - current_pr_index
   - current_pr_number
   - ejected_pr_branch
   - escalation_reason
@@ -965,6 +1057,7 @@ dataflow:
   - base_branch
   - conflict_escalation_required
   - conflict_pr_number
+  - current_pr_index
   - current_pr_number
   - ejected_pr_branch
   - escalation_reason
@@ -994,6 +1087,7 @@ dataflow:
   - base_branch
   - conflict_escalation_required
   - conflict_pr_number
+  - current_pr_index
   - current_pr_number
   - ejected_pr_branch
   - escalation_reason
@@ -1023,6 +1117,7 @@ dataflow:
   - base_branch
   - conflict_escalation_required
   - conflict_pr_number
+  - current_pr_index
   - current_pr_number
   - ejected_pr_branch
   - escalation_reason
@@ -1053,6 +1148,7 @@ dataflow:
   - base_branch
   - conflict_escalation_required
   - conflict_pr_number
+  - current_pr_index
   - current_pr_number
   - domain_partitions_path
   - ejected_pr_branch
@@ -1084,6 +1180,7 @@ dataflow:
   - base_branch
   - conflict_escalation_required
   - conflict_pr_number
+  - current_pr_index
   - current_pr_number
   - domain_partitions_path
   - ejected_pr_branch
@@ -1116,6 +1213,7 @@ dataflow:
   - base_branch
   - conflict_escalation_required
   - conflict_pr_number
+  - current_pr_index
   - current_pr_number
   - domain_partitions_path
   - ejected_pr_branch
@@ -1148,6 +1246,7 @@ dataflow:
   - base_branch
   - conflict_escalation_required
   - conflict_pr_number
+  - current_pr_index
   - current_pr_number
   - domain_partitions_path
   - ejected_pr_branch
@@ -1185,6 +1284,7 @@ dataflow:
   - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
+  - current_pr_index
   - current_pr_number
   - domain_partitions_path
   - ejected_pr_branch
@@ -1218,6 +1318,7 @@ dataflow:
   - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
+  - current_pr_index
   - current_pr_number
   - domain_partitions_path
   - ejected_pr_branch
@@ -1251,6 +1352,7 @@ dataflow:
   - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
+  - current_pr_index
   - current_pr_number
   - domain_partitions_path
   - ejected_pr_branch
@@ -1284,6 +1386,7 @@ dataflow:
   - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
+  - current_pr_index
   - current_pr_number
   - domain_partitions_path
   - ejected_pr_branch
@@ -1320,6 +1423,7 @@ dataflow:
   - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
+  - current_pr_index
   - current_pr_number
   - domain_partitions_path
   - ejected_pr_branch
@@ -1356,6 +1460,7 @@ dataflow:
   - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
+  - current_pr_index
   - current_pr_number
   - domain_partitions_path
   - ejected_pr_branch
@@ -1393,6 +1498,7 @@ dataflow:
   - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
+  - current_pr_index
   - current_pr_number
   - domain_partitions_path
   - ejected_pr_branch
@@ -1429,6 +1535,7 @@ dataflow:
   - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
+  - current_pr_index
   - current_pr_number
   - domain_partitions_path
   - ejected_pr_branch
@@ -1465,6 +1572,7 @@ dataflow:
   - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
+  - current_pr_index
   - current_pr_number
   - domain_partitions_path
   - ejected_pr_branch
@@ -1502,6 +1610,7 @@ dataflow:
   - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
+  - current_pr_index
   - current_pr_number
   - diagnosis_path
   - domain_partitions_path
@@ -1539,6 +1648,7 @@ dataflow:
   - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
+  - current_pr_index
   - current_pr_number
   - diagnosis_path
   - domain_partitions_path
@@ -1576,6 +1686,7 @@ dataflow:
   - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
+  - current_pr_index
   - current_pr_number
   - diagnosis_path
   - domain_partitions_path
@@ -1613,6 +1724,7 @@ dataflow:
   - conflict_escalation_reason
   - conflict_escalation_required
   - conflict_pr_number
+  - current_pr_index
   - current_pr_number
   - diagnosis_path
   - domain_partitions_path

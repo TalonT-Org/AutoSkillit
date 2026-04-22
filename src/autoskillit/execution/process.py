@@ -27,6 +27,7 @@ from autoskillit.core import (
     TerminationAction,
     TerminationReason,
     get_logger,
+    read_starttime_ticks,
 )
 from autoskillit.execution._process_io import create_temp_io, read_temp_output
 from autoskillit.execution._process_jsonl import (
@@ -274,8 +275,6 @@ async def run_managed_async(
                 if _target is not None and hasattr(_target, "starttime_ticks"):
                     _ticks = _target.starttime_ticks or 0
                 if _ticks == 0:
-                    from autoskillit.execution.linux_tracing import read_starttime_ticks
-
                     _ticks = read_starttime_ticks(_observed_pid) or 0
                 on_pid_resolved(_observed_pid, _ticks)
 

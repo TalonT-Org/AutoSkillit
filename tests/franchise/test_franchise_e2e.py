@@ -14,6 +14,7 @@ import signal
 import subprocess
 import threading
 import time
+from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -61,8 +62,6 @@ elif mode == "no_sentinel":
 elif mode == "sleep_then_exit":
     time.sleep(sleep_sec)
     text = _sentinel('{"success": true, "reason": ""}')
-elif mode == "failure_payload":
-    text = _sentinel('{"success": false, "reason": "test-failure-reason"}')
 else:
     text = ""
 
@@ -159,6 +158,7 @@ class FranchiseTestRunner:
             stdout_b, stderr_b = await asyncio.to_thread(lambda: proc.communicate(timeout=timeout))
         except subprocess.TimeoutExpired:
             await asyncio.to_thread(kill_process_tree, proc.pid)
+            await asyncio.to_thread(proc.wait)
             return SubprocessResult(
                 returncode=-9,
                 stdout="",
@@ -302,7 +302,9 @@ def _force_state_statuses(state_path: Path, overrides: dict[str, str]) -> None:
 
 
 @pytest.fixture
-def franchise_runtime(tmp_path: Path, monkeypatch: Any, tool_ctx: Any) -> Any:
+def franchise_runtime(
+    tmp_path: Path, monkeypatch: Any, tool_ctx: Any
+) -> Generator[FranchiseRuntime, None, None]:
     from autoskillit.execution.headless import DefaultHeadlessExecutor
     from tests.fakes import InMemoryRecipeRepository
 
@@ -683,25 +685,30 @@ async def test_orphan_l2_reaping(franchise_runtime: FranchiseRuntime, tmp_path: 
     orphan_ticks = read_starttime_ticks(orphan_pid) or 0
     boot_id = read_boot_id() or ""
 
-    state_path = tmp_path / "orphan-test-state.json"
-    write_initial_state(
-        state_path,
-        "test-campaign",
-        "test",
-        str(state_path),
-        [DispatchRecord(name="orphaned")],
-    )
-    _force_running_state(state_path, "orphaned", orphan_pid, orphan_ticks, boot_id)
+    try:
+        state_path = tmp_path / "orphan-test-state.json"
+        write_initial_state(
+            state_path,
+            "test-campaign",
+            "test",
+            str(state_path),
+            [DispatchRecord(name="orphaned")],
+        )
+        _force_running_state(state_path, "orphaned", orphan_pid, orphan_ticks, boot_id)
 
-    _reap_stale_dispatches(state_path, dry_run=False)
+        _reap_stale_dispatches(state_path, dry_run=False)
 
-    assert not psutil.pid_exists(orphan_pid) or _is_zombie(orphan_pid)
+        assert not psutil.pid_exists(orphan_pid) or _is_zombie(orphan_pid)
 
-    state = read_state(state_path)
-    assert state is not None
-    d = next(d for d in state.dispatches if d.name == "orphaned")
-    assert d.status == DispatchStatus.INTERRUPTED
-    assert d.reason == "reaped_orphan"
+        state = read_state(state_path)
+        assert state is not None
+        d = next(d for d in state.dispatches if d.name == "orphaned")
+        assert d.status == DispatchStatus.INTERRUPTED
+        assert d.reason == "reaped_orphan"
+    finally:
+        if orphan.poll() is None:
+            orphan.kill()
+            orphan.wait()
 
 
 @pytest.mark.anyio

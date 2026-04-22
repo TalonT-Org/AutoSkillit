@@ -1034,6 +1034,7 @@ class TestSkillResult:
             "exit_code",
             "kill_reason",
             "last_stop_reason",
+            "lifespan_started",
             "needs_retry",
             "retry_reason",
             "stderr",

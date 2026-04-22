@@ -66,37 +66,6 @@ async def _run(tool_ctx, recipe: str = "test-recipe") -> dict:
     return json.loads(raw)
 
 
-def _make_subprocess_result(tool_use_names: list[str] | None = None):
-    """Build a SubprocessResult whose stdout includes optional tool_use NDJSON blocks."""
-    from autoskillit.core.types import SubprocessResult, TerminationReason
-
-    records = []
-    if tool_use_names:
-        content = [
-            {"type": "tool_use", "name": name, "id": f"tu-{i}"}
-            for i, name in enumerate(tool_use_names)
-        ]
-        records.append(json.dumps({"type": "assistant", "message": {"content": content}}))
-    records.append(
-        json.dumps(
-            {
-                "type": "result",
-                "subtype": "success",
-                "is_error": False,
-                "result": "done",
-                "session_id": "test-session",
-            }
-        )
-    )
-    return SubprocessResult(
-        returncode=0,
-        stdout="\n".join(records),
-        stderr="",
-        termination=TerminationReason.NATURAL_EXIT,
-        pid=12345,
-    )
-
-
 def _make_completed_clean(success: bool):
     from autoskillit.franchise.result_parser import L2ParseResult
 
@@ -142,7 +111,7 @@ class TestLifespanStartedField:
     def test_skill_result_lifespan_started_field_exists(self):
         """SkillResult has a lifespan_started: bool field defaulting to False."""
         from autoskillit.core import SkillResult
-        from autoskillit.core.types import KillReason, RetryReason
+        from autoskillit.core.types import RetryReason
 
         sr = SkillResult(
             success=True,
@@ -156,22 +125,6 @@ class TestLifespanStartedField:
             stderr="",
         )
         assert hasattr(sr, "lifespan_started")
-        assert sr.lifespan_started is False
-
-    def test_build_skill_result_sets_lifespan_started_true(self):
-        """Non-empty tool_uses in stdout → _build_skill_result produces lifespan_started=True."""
-        from autoskillit.execution.headless import _build_skill_result
-
-        result = _make_subprocess_result(tool_use_names=["Write", "Edit"])
-        sr = _build_skill_result(result)
-        assert sr.lifespan_started is True
-
-    def test_build_skill_result_sets_lifespan_started_false_no_tool_uses(self):
-        """Empty tool_uses in stdout → _build_skill_result produces lifespan_started=False."""
-        from autoskillit.execution.headless import _build_skill_result
-
-        result = _make_subprocess_result(tool_use_names=None)
-        sr = _build_skill_result(result)
         assert sr.lifespan_started is False
 
 

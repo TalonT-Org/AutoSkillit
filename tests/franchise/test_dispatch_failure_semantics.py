@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-from unittest.mock import AsyncMock
 
 import pytest
 
@@ -249,7 +248,7 @@ class TestNoSentinelPath:
 
     @pytest.mark.anyio
     async def test_no_sentinel_clean_exit_is_not_success(self, tool_ctx, monkeypatch):
-        """success=True + exit_code=0 SkillResult but no_sentinel outcome → envelope.success=False."""
+        """no_sentinel outcome → envelope.success=False even when SkillResult.success=True."""
         import dataclasses
 
         from tests.fakes import _DEFAULT_SKILL_RESULT
@@ -305,10 +304,8 @@ class TestCompletedCleanPath:
         assert record["reason"] == ""
 
     @pytest.mark.anyio
-    async def test_completed_clean_failure_writes_reason_from_payload(
-        self, tool_ctx, monkeypatch
-    ):
-        """completed_clean with success=False and payload.reason → DispatchRecord.reason from payload."""
+    async def test_completed_clean_failure_writes_reason_from_payload(self, tool_ctx, monkeypatch):
+        """completed_clean success=False: payload.reason → DispatchRecord.reason."""
         _setup_dispatch(tool_ctx)
         monkeypatch.setattr(
             "autoskillit.franchise._api.parse_l2_result_block",

@@ -68,7 +68,7 @@ class TestExecuteClaudeHeadlessIdleEnv:
     async def test_idle_output_timeout_priority_chain(
         self, minimal_ctx, tmp_path: Path, monkeypatch
     ) -> None:
-        """Priority chain: per-step arg > AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT env > cfg.idle_output_timeout.
+        """Priority chain: per-step arg > AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT env > cfg.
 
         Level 1: per-step arg beats env and cfg.
         Level 2: env beats cfg when per-step arg is None.
@@ -132,9 +132,8 @@ class TestExecuteClaudeHeadlessIdleEnv:
 
         assert minimal_ctx.runner.call_args_list, "runner was never called"
         _, _, _, kwargs = minimal_ctx.runner.call_args_list[0]
-        assert kwargs.get("idle_output_timeout") is None, (
-            f"Expected idle_output_timeout=None when env=0, got {kwargs.get('idle_output_timeout')!r}"
-        )
+        actual = kwargs.get("idle_output_timeout")
+        assert actual is None, f"Expected idle_output_timeout=None when env=0, got {actual!r}"
 
 
 # ---------------------------------------------------------------------------

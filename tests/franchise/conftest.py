@@ -30,4 +30,4 @@ def _reset_server_state(monkeypatch):
     """
     from autoskillit.server import _state
 
-    monkeypatch.setattr(_state, "_ctx", _state._ctx)
+    monkeypatch.setattr(_state, "_ctx", None)

@@ -1097,7 +1097,6 @@ def test_wait_for_queue_routing_covers_every_pr_state(recipe_fixture, request) -
     if recipe_fixture == "pmp_recipe":
         pytest.xfail(
             reason="merge-prs.yaml queue routes incomplete — see rectify plan Part B",
-            strict=True,
         )
 
     # Find wait_for_merge_queue steps dynamically

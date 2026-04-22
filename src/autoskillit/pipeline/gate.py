@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-from autoskillit.core import GATED_TOOLS, UNGATED_TOOLS, KillReason, franchise_error  # noqa: F401
+from autoskillit.core import KillReason
 
 
 @dataclass(slots=True)

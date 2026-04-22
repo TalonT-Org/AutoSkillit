@@ -81,9 +81,7 @@ def test_features_status_detail(
 # ---------------------------------------------------------------------------
 
 
-def test_features_status_unknown(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_features_status_unknown(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """features status exits 1 for an unknown feature name."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(

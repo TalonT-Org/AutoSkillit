@@ -392,8 +392,8 @@ if not all(
     )
 
 # Guard: FEATURE_REGISTRY key must equal FeatureDef.name — checked at import time.
-if any(key != defn.name for key, defn in FEATURE_REGISTRY.items()):
-    _mismatches = {k: defn.name for k, defn in FEATURE_REGISTRY.items() if k != defn.name}
+_mismatches = {k: defn.name for k, defn in FEATURE_REGISTRY.items() if k != defn.name}
+if _mismatches:
     raise AssertionError(f"FEATURE_REGISTRY key/name mismatch: {_mismatches}")
 
 

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import ast
 import os
-import warnings
 from pathlib import Path
 from unittest.mock import patch
 
@@ -17,16 +16,21 @@ import pytest
 
 _TESTS_ROOT = Path(__file__).parent.parent
 
-# Files that MUST carry pytestmark feature("franchise")
-_FRANCHISE_FILE_MARKERS = [
-    "franchise/test_franchise.py",
-    "franchise/test_result_parser.py",
-    "franchise/test_state.py",
-    "server/test_tools_dispatch.py",
-    "cli/test_franchise_cli.py",
-    "cli/test_food_truck_prompt.py",
-    "cli/test_l3_orchestrator_prompt.py",
+# Auto-discover all test files in the franchise directory — self-maintaining
+_FRANCHISE_DIR_FILES = sorted((_TESTS_ROOT / "franchise").glob("test_*.py"))
+
+# Cross-directory franchise test files — require deliberate enumeration
+_FRANCHISE_CROSS_DIR_FILES = [
+    _TESTS_ROOT / "server" / "test_tools_dispatch.py",
+    _TESTS_ROOT / "cli" / "test_franchise_cli.py",
+    _TESTS_ROOT / "cli" / "test_food_truck_prompt.py",
+    _TESTS_ROOT / "cli" / "test_l3_orchestrator_prompt.py",
+    _TESTS_ROOT / "cli" / "test_reap.py",
+    _TESTS_ROOT / "cli" / "test_signal_guard.py",
 ]
+
+# Union: all files requiring pytestmark feature("franchise")
+_ALL_FRANCHISE_FILES = [*_FRANCHISE_DIR_FILES, *_FRANCHISE_CROSS_DIR_FILES]
 
 # Classes within mixed files that MUST carry @pytest.mark.feature("franchise")
 _FRANCHISE_CLASS_MARKERS: dict[str, set[str]] = {
@@ -85,11 +89,11 @@ def _class_has_feature_decorator(source: str, class_name: str, feature_name: str
 def test_franchise_test_files_carry_feature_marker():
     """Every franchise-specific test file must have feature('franchise') in its pytestmark."""
     missing = []
-    for rel in _FRANCHISE_FILE_MARKERS:
-        path = _TESTS_ROOT / rel
+    for path in _ALL_FRANCHISE_FILES:
+        rel = path.relative_to(_TESTS_ROOT)
         assert path.exists(), f"Expected test file not found: {path}"
         if not _pytestmark_has_feature(path.read_text(), "franchise"):
-            missing.append(rel)
+            missing.append(str(rel))
     assert not missing, (
         "These files are missing pytest.mark.feature('franchise') in pytestmark:\n"
         + "\n".join(f"  {r}" for r in missing)
@@ -117,13 +121,10 @@ def test_no_feature_marker_on_infrastructure_tests():
     unexpected = []
     for rel in _INFRASTRUCTURE_FILE_EXCLUSIONS:
         path = _TESTS_ROOT / rel
-        if not path.exists():
-            warnings.warn(
-                f"_INFRASTRUCTURE_FILE_EXCLUSIONS entry not found on disk: {rel} — "
-                "check for a typo; absence is not a violation but may indicate stale config.",
-                stacklevel=2,
-            )
-            continue
+        assert path.exists(), (
+            f"Infrastructure exclusion list references non-existent file: {rel}\n"
+            "Fix: update the path or remove the entry from _INFRASTRUCTURE_FILE_EXCLUSIONS."
+        )
         if _pytestmark_has_feature(path.read_text(), "franchise"):
             unexpected.append(rel)
     assert not unexpected, (

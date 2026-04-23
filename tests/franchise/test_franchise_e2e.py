@@ -23,7 +23,12 @@ import anyio
 import psutil
 import pytest
 
-pytestmark = [pytest.mark.layer("franchise"), pytest.mark.medium, pytest.mark.integration]
+pytestmark = [
+    pytest.mark.layer("franchise"),
+    pytest.mark.medium,
+    pytest.mark.integration,
+    pytest.mark.feature("franchise"),
+]
 
 
 # ---------------------------------------------------------------------------

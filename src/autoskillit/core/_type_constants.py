@@ -229,7 +229,7 @@ MUTATING_TOOLS: frozenset[str] = frozenset(
 
 _ALL_REGISTERED_TOOLS = GATED_TOOLS | FREE_RANGE_TOOLS | HEADLESS_TOOLS
 if not MUTATING_TOOLS <= _ALL_REGISTERED_TOOLS:
-    raise AssertionError(
+    raise RuntimeError(
         f"MUTATING_TOOLS contains names not in any tool registry: "
         f"{sorted(MUTATING_TOOLS - _ALL_REGISTERED_TOOLS)}"
     )

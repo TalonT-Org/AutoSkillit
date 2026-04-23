@@ -556,6 +556,53 @@ def test_other_skills_unaffected_by_franchise_feature(tmp_path: Path) -> None:
     )
 
 
+# ── Tests: cook session + feature-gate interaction ─────────────────────────
+
+
+def test_cook_session_bypasses_feature_gate(tmp_path: Path) -> None:
+    """Cook sessions see all skills regardless of feature flags."""
+    from tests._helpers import make_test_config
+
+    config = make_test_config(features={"franchise": False})
+    provider = SkillsDirectoryProvider()
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
+    session_path = mgr.init_session("cook-feat-gate", cook_session=True, config=config)
+    skill_names = {p.parent.name for p in session_path.glob(".claude/skills/*/SKILL.md")}
+    assert "make-campaign" in skill_names, (
+        "cook_session=True should bypass feature gates — "
+        "make-campaign must be available even when franchise is disabled"
+    )
+
+
+def test_cook_session_disabled_feature_tags_empty(tmp_path: Path) -> None:
+    """disabled_feature_tags is empty frozenset for cook sessions."""
+    from tests._helpers import make_test_config
+
+    config = make_test_config(features={"franchise": False})
+    provider = SkillsDirectoryProvider()
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
+    session_path = mgr.init_session("cook-tags-empty", cook_session=True, config=config)
+    # Verify via the integration effect: franchise-tagged skills are present
+    skill_names = {p.parent.name for p in session_path.glob(".claude/skills/*/SKILL.md")}
+    # If disabled_feature_tags were non-empty, franchise skills would be suppressed
+    # via _resolve_effective_disabled even without the _is_skill_disabled feature loop
+    assert "make-campaign" in skill_names
+
+
+def test_non_cook_session_still_suppresses_feature_gated_skills(tmp_path: Path) -> None:
+    """Non-cook sessions with franchise=False still suppress make-campaign."""
+    from tests._helpers import make_test_config
+
+    config = make_test_config(features={"franchise": False})
+    provider = SkillsDirectoryProvider()
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
+    session_path = mgr.init_session("non-cook-feat", cook_session=False, config=config)
+    skill_names = {p.parent.name for p in session_path.glob(".claude/skills/*/SKILL.md")}
+    assert "make-campaign" not in skill_names, (
+        "Non-cook session with franchise=False must suppress make-campaign"
+    )
+
+
 # ── Tests: _parse_activate_deps ─────────────────────────────────────────────
 
 

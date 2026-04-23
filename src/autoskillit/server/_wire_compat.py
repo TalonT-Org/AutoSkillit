@@ -24,9 +24,6 @@ if TYPE_CHECKING:
     from fastmcp.server.middleware import CallNext, MiddlewareContext
     from fastmcp.tools.tool import Tool
 
-# Fields stripped to avoid Claude Code #25081 tool-list rejection.
-# ONLY output_schema and title trigger the bug. annotations is preserved
-# because it carries readOnlyHint for parallel execution.
 _STRIPPED_FIELDS: dict[str, None] = {"output_schema": None, "title": None}
 
 

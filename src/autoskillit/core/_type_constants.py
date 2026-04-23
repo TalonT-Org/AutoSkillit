@@ -391,6 +391,11 @@ if not all(
         "Add the tag to the appropriate tool entry in TOOL_SUBSET_TAGS first."
     )
 
+# Guard: FEATURE_REGISTRY key must equal FeatureDef.name — checked at import time.
+_mismatches = {k: defn.name for k, defn in FEATURE_REGISTRY.items() if k != defn.name}
+if _mismatches:
+    raise AssertionError(f"FEATURE_REGISTRY key/name mismatch: {_mismatches}")
+
 
 # Canonical prefix required for all skill_command values passed to run_skill.
 # Enforced at the Claude Code hook boundary by skill_command_guard.py.

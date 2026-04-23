@@ -49,6 +49,8 @@ _LAYER_EXEMPT_STEMS: frozenset[str] = frozenset(
     {"version", "smoke_utils", "_llm_triage", "__init__", "__main__"}
 )
 
+_CORE_SRC = SRC_ROOT / "core"
+
 # ── REQ-ARCH layer enforcement rule descriptors ───────────────────────────────────
 LAYER_RULES: dict[str, RuleDescriptor] = {
     "REQ-ARCH-001": RuleDescriptor(
@@ -436,6 +438,31 @@ def test_layer_enforcement_detects_upward_import(tmp_path: Path) -> None:
                 if SUBPACKAGE_LAYERS.get(imported, 0) > 1:
                     violations.append(imported)
     assert violations  # must detect the upward import
+
+
+def test_l0_no_dynamic_internal_imports() -> None:
+    """L0 code must not dynamically import autoskillit subpackages."""
+    violations = []
+    for src_file in sorted(_CORE_SRC.glob("*.py")):
+        tree = ast.parse(src_file.read_text(), filename=str(src_file))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            is_import_module = (
+                isinstance(func, ast.Attribute) and func.attr == "import_module"
+            ) or (isinstance(func, ast.Name) and func.id == "import_module")
+            if not is_import_module or not node.args:
+                continue
+            arg = node.args[0]
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                if arg.value.startswith("autoskillit."):
+                    violations.append(
+                        f"{src_file.name}:{node.lineno}: importlib.import_module({arg.value!r})"
+                    )
+    assert not violations, (
+        "L0 (core/) must not dynamically import autoskillit subpackages:\n" + "\n".join(violations)
+    )
 
 
 # ── L1 Package Runtime Isolation Tests ────────────────────────────────────────

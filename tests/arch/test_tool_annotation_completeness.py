@@ -39,9 +39,7 @@ def _collect_missing_annotations(path: Path) -> list[tuple[str, int]]:
                 and dec.func.attr == "tool"
             ):
                 continue
-            has_annotations = any(
-                kw.arg == "annotations" for kw in dec.keywords
-            )
+            has_annotations = any(kw.arg == "annotations" for kw in dec.keywords)
             if not has_annotations:
                 missing.append((node.name, dec.lineno))
 

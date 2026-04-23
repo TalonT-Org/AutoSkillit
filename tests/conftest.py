@@ -1,5 +1,6 @@
 """Shared test fixtures for autoskillit."""
 
+import functools
 import os
 from pathlib import Path as _Path
 
@@ -357,15 +358,36 @@ def pytest_configure(config: pytest.Config) -> None:
         )
 
 
+@functools.lru_cache(maxsize=1)
+def _resolve_test_features() -> dict[str, bool]:
+    """Resolve feature flags for test collection via full config resolution.
+
+    Uses the same dynaconf chain as production: defaults.yaml → project config → env vars.
+    Returns empty dict on any failure (fail-open: individual features fall back to
+    FEATURE_REGISTRY[name].default_enabled).
+    """
+    try:
+        from pathlib import Path
+
+        from autoskillit.config.settings import load_config
+
+        cfg = load_config(Path.cwd())
+        return dict(cfg.features)
+    except Exception:
+        return {}
+
+
 def _is_test_feature_enabled(feature_name: str, *, env_val: str | None) -> bool:
     """Return True if feature_name is enabled for this test run.
 
     Resolution order:
     1. If AUTOSKILLIT_TEST_FEATURES is set (including empty string), parse it
-       as a comma-separated list of enabled feature names.  Only listed names
-       are enabled; all others are disabled.
-    2. If unset, fall back to FEATURE_REGISTRY[name].default_enabled.
-       Unknown feature names return True (fail-open: don't skip unrecognised names).
+       as a comma-separated whitelist.  Only listed names are enabled.
+    2. If unset, resolve via full config chain (defaults.yaml → project config
+       → env vars) using load_config().  This respects project-level overrides
+       like .autoskillit/config.yaml features.franchise: true.
+    3. If config resolution fails, fall back to FEATURE_REGISTRY[name].default_enabled.
+       Unknown feature names return True (fail-open).
 
     Args:
         feature_name: The feature name to check.
@@ -374,6 +396,11 @@ def _is_test_feature_enabled(feature_name: str, *, env_val: str | None) -> bool:
     if env_val is not None:
         enabled = {f.strip() for f in env_val.split(",") if f.strip()}
         return feature_name in enabled
+
+    resolved = _resolve_test_features()
+    if feature_name in resolved:
+        return resolved[feature_name]
+
     from autoskillit.core import FEATURE_REGISTRY
 
     defn = FEATURE_REGISTRY.get(feature_name)

@@ -386,12 +386,14 @@ class DefaultSessionSkillManager:
             effective_custom_tags = dict(config.subsets.custom_tags)
 
         packs_enabled: list[str] = [] if config is None else list(config.packs.enabled)
-        session_features: dict[str, bool] = config.features if config is not None else {}
-
-        from autoskillit.core import FEATURE_REGISTRY, is_feature_enabled  # noqa: PLC0415
+        session_features: dict[str, bool] = (
+            {name: True for name in FEATURE_REGISTRY}
+            if cook_session
+            else (config.features if config is not None else {})
+        )
 
         disabled_feature_tags: frozenset[str] = frozenset()
-        if config is not None:
+        if config is not None and not cook_session:
             for feature_name, feature_def in FEATURE_REGISTRY.items():
                 if not is_feature_enabled(feature_name, config.features):
                     disabled_feature_tags |= feature_def.tool_tags

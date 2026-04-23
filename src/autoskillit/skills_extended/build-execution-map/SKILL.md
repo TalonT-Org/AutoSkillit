@@ -68,7 +68,9 @@ Fall back to native Glob/Grep if the code-index MCP is unavailable.
 ### Step 1 — Fetch Issue Data (parallel subagents)
 
 Launch up to 8 parallel `sonnet` subagents, one per issue. Each subagent:
-1. Calls `gh issue view {N} --json number,title,body,labels`
+1. Calls `gh issue view {N} --json number,title,body,labels`. If the call fails (non-zero
+   exit — issue not found, auth error, network failure), the subagent must abort and surface
+   the error; do not return a partial or empty result.
 2. Analyzes the issue body to determine:
    - **`affected_files`**: File-level paths predicted to be modified (use code-index
      exploration of the codebase + issue body analysis — search for module names, function
@@ -82,7 +84,10 @@ Launch up to 8 parallel `sonnet` subagents, one per issue. Each subagent:
    { "number": 101, "title": "...", "recipe": "implementation", "affected_files": ["src/foo.py"], "depends_on": [] }
    ```
 
-Do not output any prose between subagent launches — immediately collect results when all subagents complete.
+Do not output any prose between subagent launches — immediately collect results when all
+subagents complete. **All subagents must succeed** before advancing to Step 2. If any
+subagent fails or returns no JSON block, abort the skill with the subagent's error message
+and the failing issue number; do not compute a partial overlap matrix.
 
 ### Step 2 — Build Overlap Matrix
 

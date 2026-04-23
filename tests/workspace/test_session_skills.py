@@ -482,6 +482,80 @@ def test_init_session_recipe_packs_enables_default_disabled(tmp_path: Path) -> N
     )
 
 
+# ── Tests: feature-gate skill filtering ─────────────────────────────────────
+
+
+def test_skill_disabled_when_feature_off(tmp_path: Path) -> None:
+    """make-campaign excluded from session skills when features.franchise=false."""
+    from tests._helpers import make_test_config
+
+    config = make_test_config(features={"franchise": False})
+    provider = SkillsDirectoryProvider()
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
+    session_path = mgr.init_session("test-franchise-off", cook_session=False, config=config)
+    skill_names = {p.parent.name for p in session_path.glob(".claude/skills/*/SKILL.md")}
+    assert "make-campaign" not in skill_names, (
+        "make-campaign must be excluded when franchise feature is disabled"
+    )
+
+
+def test_skill_enabled_when_feature_on(tmp_path: Path) -> None:
+    """make-campaign present in session skills when features.franchise=true."""
+    from tests._helpers import make_test_config
+
+    config = make_test_config(features={"franchise": True})
+    provider = SkillsDirectoryProvider()
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
+    session_path = mgr.init_session("test-franchise-on", cook_session=False, config=config)
+    skill_names = {p.parent.name for p in session_path.glob(".claude/skills/*/SKILL.md")}
+    assert "make-campaign" in skill_names, (
+        "make-campaign must be present when franchise feature is enabled"
+    )
+
+
+def test_skill_not_suppressed_when_no_features_config(tmp_path: Path) -> None:
+    """Feature-gated skills use default_enabled when config is None (no features dict)."""
+    provider = SkillsDirectoryProvider()
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
+    session_path = mgr.init_session("test-no-features-config", cook_session=False, config=None)
+    skill_names = {p.parent.name for p in session_path.glob(".claude/skills/*/SKILL.md")}
+    assert "make-campaign" in skill_names, (
+        "make-campaign must be present when no features config is provided "
+        "(franchise.default_enabled=True)"
+    )
+
+
+def test_other_skills_unaffected_by_franchise_feature(tmp_path: Path) -> None:
+    """Non-franchise skills unaffected when franchise feature is disabled."""
+    from tests._helpers import make_test_config
+
+    config_off = make_test_config(features={"franchise": False})
+    config_on = make_test_config(features={"franchise": True})
+    provider = SkillsDirectoryProvider()
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
+    session_off = mgr.init_session(
+        "test-others-unaffected-off", cook_session=False, config=config_off
+    )
+    session_on = mgr.init_session(
+        "test-others-unaffected-on", cook_session=False, config=config_on
+    )
+    skill_names_off = {p.parent.name for p in session_off.glob(".claude/skills/*/SKILL.md")}
+    skill_names_on = {p.parent.name for p in session_on.glob(".claude/skills/*/SKILL.md")}
+    assert "make-plan" in skill_names_off
+    assert "implement-worktree" in skill_names_off
+    # Count invariant: franchise=False removes exactly the franchise-category skills
+    assert skill_names_off.issubset(skill_names_on), (
+        "franchise=False must only remove skills, not introduce new suppressions"
+    )
+    suppressed = skill_names_on - skill_names_off
+    assert suppressed, "franchise=False must suppress at least one skill"
+    assert "make-campaign" in suppressed, "make-campaign must be in the suppressed set"
+    assert "make-plan" not in suppressed, "make-plan must not be suppressed by franchise=False"
+    assert "implement-worktree" not in suppressed, (
+        "implement-worktree must not be suppressed by franchise=False"
+    )
+
+
 # ── Tests: _parse_activate_deps ─────────────────────────────────────────────
 
 

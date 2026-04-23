@@ -106,21 +106,40 @@ def test_feature_depends_on_references_valid_features():
 
 
 def test_feature_skill_categories_match_real_skills():
-    """Every FeatureDef.skill_categories entry maps to at least one SKILL.md."""
+    """Every FeatureDef.skill_categories entry must map to a frontmatter category tag."""
+    import yaml
+
     from autoskillit.core._type_constants import FEATURE_REGISTRY
     from autoskillit.core.paths import pkg_root
 
     skills_dirs = [pkg_root() / "skills", pkg_root() / "skills_extended"]
-    # Build a set of skill directory names as proxy for categories
     all_category_tags: set[str] = set()
     for skills_dir in skills_dirs:
         if not skills_dir.exists():
             continue
         for skill_md in skills_dir.rglob("SKILL.md"):
-            all_category_tags.add(skill_md.parent.name)
+            try:
+                content = skill_md.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            if not content.startswith("---"):
+                continue
+            parts = content.split("---", 2)
+            if len(parts) < 3:
+                continue
+            try:
+                data = yaml.safe_load(parts[1]) or {}
+            except yaml.YAMLError:
+                continue
+            cats = data.get("categories", [])
+            if isinstance(cats, list):
+                all_category_tags.update(str(c) for c in cats)
 
     violations = [
-        f"{defn.name}.skill_categories contains {cat!r}: no matching SKILL.md found"
+        (
+            f"{defn.name}.skill_categories contains {cat!r}:"
+            " no skill declares this category in frontmatter"
+        )
         for defn in FEATURE_REGISTRY.values()
         for cat in defn.skill_categories
         if cat not in all_category_tags

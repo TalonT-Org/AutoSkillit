@@ -119,6 +119,19 @@ gh repo view --json nameWithOwner -q .nameWithOwner
 
 Save the diff to `{{AUTOSKILLIT_TEMP}}/review-research-pr/diff_{pr_number}.txt`. (relative to the current working directory)
 
+### Step 2.7: Compute Valid Line Ranges
+
+Parse hunk ranges from the diff saved in Step 2:
+
+```bash
+VALID_LINE_RANGES="{}"
+# Parse @@ +start,count @@ headers from the diff to build a JSON map of
+# {filepath: [[start, end], ...]} ranges.
+# If hunk_ranges_path was provided as a contract input, load from there instead.
+```
+
+`VALID_LINE_RANGES` is used in Step 4 to partition findings into postable and unpostable.
+
 ### Step 3: Run Parallel Audit Subagents
 
 Spawn parallel subagents (Task tool, model: sonnet) for each research audit dimension.
@@ -219,7 +232,15 @@ Subagent prompt template (all 8 dimensions):
 
 1. Collect all subagent JSON responses
 2. Deduplicate by `(file, line)` pairs — keep highest severity for each pair
-3. Bucket by actionability:
+3. Partition findings against `VALID_LINE_RANGES` (built in Step 2.7):
+   - `FILTERED_FINDINGS`: findings whose `(file, line)` falls within any hunk range.
+   - `UNPOSTABLE_FINDINGS`: findings whose `line` is not in any hunk range.
+     Log a warning for each. Critical-severity unpostable findings are posted as
+     file-level comments in Step 6. All unpostable findings appear in the Step 7 body.
+   - If `VALID_LINE_RANGES` is empty, all findings are `FILTERED_FINDINGS`.
+4. Apply verdict logic (Step 5) to ALL findings (`FILTERED_FINDINGS` + `UNPOSTABLE_FINDINGS`
+   combined), so unpostable findings still contribute to the verdict.
+5. Bucket by actionability (applied to combined findings):
    - `actionable_findings` — requires_decision=false AND severity in ("critical", "warning")
    - `decision_findings` — requires_decision=true (any severity)
    - `info_findings` — severity == "info" AND requires_decision=false
@@ -268,7 +289,7 @@ Build a proper JSON payload where each comment is a complete object, then post v
 
 ```bash
 # Build comments JSON array from findings
-COMMENTS_JSON=$(jq -n --argjson findings "$FINDINGS" '
+COMMENTS_JSON=$(jq -n --argjson findings "$FILTERED_FINDINGS" '
   $findings | map({
     path: .file,
     line: .line,
@@ -307,10 +328,40 @@ gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments \
   --field side="RIGHT" \
   --field commit_id="$COMMIT_ID" \
   --field body="[{finding.severity}] {finding.dimension}: {finding.message}"
+sleep 1  # Rate-limit discipline: 1s between mutating calls
 ```
 
 Individual POSTs are not atomic — one failure does not block others.
 If at least one per-finding comment succeeds, proceed to Step 7.
+
+**File-Level Comments for Critical Unpostable Findings:**
+
+After the batch review POST succeeds (or after Tier 1 individual posting completes),
+post file-level comments for each **critical-severity** finding in `UNPOSTABLE_FINDINGS`.
+These use the individual comments endpoint with `subject_type: "file"` — this parameter
+is NOT valid on the batch Reviews API `comments[]` array.
+
+```bash
+COMMIT_ID=$(gh pr view {pr_number} --json headRefOid -q .headRefOid)
+
+# For each CRITICAL finding in UNPOSTABLE_FINDINGS:
+# NOTE: Do NOT include a `line` field — `line` must be omitted (not set to null)
+# for subject_type: "file". The `gh api --field` syntax naturally omits unspecified
+# fields, so simply not including `--field line=...` is correct.
+gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments \
+  --method POST \
+  --field path="{finding.file}" \
+  --field subject_type="file" \
+  --field commit_id="$COMMIT_ID" \
+  --field body="[{finding.severity}] {finding.dimension} (L{finding.line} — outside diff hunk): {finding.message}"
+sleep 1  # Rate-limit discipline: 1s between mutating calls
+```
+
+Only critical-severity findings are posted as file-level comments to control API call volume.
+Warning and info unpostable findings appear in the Step 7 review body only.
+
+If a file-level POST fails, log the failure and continue — file-level comments are
+best-effort supplementary visibility. Do not fall through to Tier 1/Tier 2 for these.
 
 **Fallback Tier 2 — DEGRADED: Bullet-List Summary Dump (if all individual posts fail):**
 
@@ -348,11 +399,37 @@ After completing Step 6, you MUST state:
 # approved
 gh pr review {pr_number} --approve --body "AutoSkillit research review passed. No blocking issues found."
 
-# changes_requested
-gh pr review {pr_number} --request-changes --body "AutoSkillit research review found {N} blocking issues. See inline comments."
+# changes_requested / needs_human (with UNPOSTABLE_FINDINGS)
+# When UNPOSTABLE_FINDINGS is non-empty, append the "Outside Diff Range" section
+# to the verdict body. Build the body string dynamically.
+# Then post with the appropriate event flag:
+gh pr review {pr_number} --comment|--request-changes --body "$BODY"
+```
 
-# needs_human
-gh pr review {pr_number} --comment --body "AutoSkillit research review: uncertain trade-offs detected. {escalation_user_mention} Please review. See inline comments."
+**Building the Outside Diff Range body section:**
+
+When `UNPOSTABLE_FINDINGS` is non-empty, construct the body by appending the following
+section after the verdict one-liner. Group unpostable findings by file, format as a
+bullet list reusing the Tier 2 format (120-char message truncation).
+
+**TRUNCATION GUARD:** Cap the Outside Diff Range section at ~40,000 characters.
+The GitHub review body has a hard 65,536-char limit (HTTP 422 on overflow,
+no graceful degradation). Reserve headroom for the verdict line and formatting.
+If truncated, append: "...and N more findings. See file-level comments for
+critical items."
+
+Template for the appended section:
+
+```
+### ⚠️ Outside Diff Range
+
+These findings target lines not in the diff and could not be posted as inline comments:
+
+**path/to/file.py**
+- **L42** [critical/arch]: Finding message truncated to 120 chars
+
+**path/to/other.py**
+- **L99** [warning/security]: Finding message truncated to 120 chars
 ```
 
 ### Step 8: Write Summary and Emit Verdict

@@ -147,6 +147,11 @@ From **inline comments**, extract per comment:
 - `thread_node_id` — look up `comment_id_to_thread_id.get(id)` (may be `None` if lookup
   failed or thread was already resolved)
 
+**File-level comment guard:** If `line` is null (file-level comment posted by
+review-pr), skip this finding entirely — file-level comments have no code anchor and
+cannot be resolved by code changes. Record: `(path, null, reason="file-level comment — no
+line anchor")`. Do not add its `thread_node_id` to `addressed_thread_ids`.
+
 From **top-level reviews**, extract:
 - `state` — APPROVED, CHANGES_REQUESTED, COMMENTED
 - `body` — the review summary text (skip empty bodies and APPROVED state)
@@ -257,6 +262,7 @@ For findings where the classification map shows `verdict = REJECT` or `verdict =
   remain open for human decision.
 
 **Skip a finding if:**
+- The comment is a file-level comment (`line` is null) — these have no code anchor
 - The referenced file does not exist in the current branch
 - The finding references a line number that no longer exists (stale comment)
 - The fix would require a design decision beyond the reviewer's explicit guidance

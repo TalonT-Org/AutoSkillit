@@ -115,8 +115,7 @@ This pairwise file intersection is the same set-intersection algorithm used by
      group members
    - If all existing groups conflict, create a new group
 3. Mark each group as `parallel: true` if it contains more than one issue,
-   `parallel: false` if it contains exactly one issue or if all members have directed
-   dependency edges between them
+   `parallel: false` if it contains exactly one issue
 
 ### Step 5 — Topological Group Ordering
 

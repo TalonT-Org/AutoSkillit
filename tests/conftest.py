@@ -357,7 +357,7 @@ def pytest_configure(config: pytest.Config) -> None:
         )
 
 
-def _is_test_feature_enabled(feature_name: str) -> bool:
+def _is_test_feature_enabled(feature_name: str, *, env_val: str | None) -> bool:
     """Return True if feature_name is enabled for this test run.
 
     Resolution order:
@@ -366,8 +366,11 @@ def _is_test_feature_enabled(feature_name: str) -> bool:
        are enabled; all others are disabled.
     2. If unset, fall back to FEATURE_REGISTRY[name].default_enabled.
        Unknown feature names return True (fail-open: don't skip unrecognised names).
+
+    Args:
+        feature_name: The feature name to check.
+        env_val: Pre-read value of AUTOSKILLIT_TEST_FEATURES (pass ``None`` when unset).
     """
-    env_val = os.environ.get("AUTOSKILLIT_TEST_FEATURES")
     if env_val is not None:
         enabled = {f.strip() for f in env_val.split(",") if f.strip()}
         return feature_name in enabled
@@ -418,12 +421,20 @@ def pytest_collection_modifyitems(
                     )
 
     # Feature gate pass — orthogonal to layer/size, runs on every worker
+    _test_features_env = os.environ.get("AUTOSKILLIT_TEST_FEATURES")
     for item in items:
         marker = item.get_closest_marker("feature")
         if marker and marker.args:
             feature_name = marker.args[0]
-            if not _is_test_feature_enabled(feature_name):
-                env_display = os.environ.get("AUTOSKILLIT_TEST_FEATURES", "")
+            if not isinstance(feature_name, str):
+                warnings.warn(
+                    f"pytest.mark.feature() received a non-string argument {feature_name!r} "
+                    f"on {item.nodeid}; marker will be ignored.",
+                    stacklevel=1,
+                )
+                continue
+            if not _is_test_feature_enabled(feature_name, env_val=_test_features_env):
+                env_display = _test_features_env or ""
                 item.add_marker(
                     pytest.mark.skip(
                         reason=(

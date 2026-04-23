@@ -16,7 +16,7 @@ from autoskillit.franchise import (
 )
 from autoskillit.franchise.state import _SCHEMA_VERSION
 
-pytestmark = [pytest.mark.layer("franchise"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("franchise"), pytest.mark.small, pytest.mark.feature("franchise")]
 
 
 def _make_state(tmp_path: Path, dispatch_name: str = "a") -> Path:

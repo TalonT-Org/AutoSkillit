@@ -9,7 +9,7 @@ import pytest
 
 from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
 
-pytestmark = [pytest.mark.layer("franchise"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("franchise"), pytest.mark.small, pytest.mark.feature("franchise")]
 
 
 def _make_standard_recipe(name: str = "test-recipe"):

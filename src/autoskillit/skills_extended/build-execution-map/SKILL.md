@@ -139,6 +139,13 @@ This pairwise file intersection is the same set-intersection algorithm used by
 
 Compute timestamp `{YYYY-MM-DD_HHMMSS}` (current local time, second precision).
 
+Create the output directory before writing:
+```bash
+mkdir -p "$(pwd)/.autoskillit/temp/build-execution-map"
+```
+If directory creation fails (permission error, missing parent), abort with an explicit
+error message identifying the failed path — do not silently proceed.
+
 Write two files to `{{AUTOSKILLIT_TEMP}}/build-execution-map/` (relative to the current
 working directory):
 

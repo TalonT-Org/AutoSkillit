@@ -40,6 +40,7 @@ BUNDLED_SKILLS = [
     "audit-friction",
     "audit-impl",
     "audit-tests",
+    "build-execution-map",
     "bundle-local-report",
     "close-kitchen",
     "collapse-issues",
@@ -282,6 +283,7 @@ class TestSkillResolver:
     def test_file_producing_skills_have_output_guard(self) -> None:
         """File-producing skills must have a negative output constraint in NEVER block."""
         FILE_PRODUCING_SKILLS = {
+            "build-execution-map": ".autoskillit/temp/build-execution-map/",
             "investigate": ".autoskillit/temp/investigate/",
             "make-groups": ".autoskillit/temp/make-groups/",
             "make-plan": ".autoskillit/temp/make-plan/",
@@ -422,17 +424,17 @@ class TestSkillResolver:
         assert names == {"open-kitchen", "close-kitchen", "sous-chef"}
 
     def test_90_skills_in_skills_extended(self) -> None:
-        """skills_extended/ contains exactly 108 SKILL.md-carrying directories."""
+        """skills_extended/ contains exactly 109 SKILL.md-carrying directories."""
         skills = [
             d
             for d in bundled_skills_extended_dir().iterdir()
             if d.is_dir() and (d / "SKILL.md").is_file()
         ]
-        assert len(skills) == 108
+        assert len(skills) == 109
 
     def test_skill_resolver_list_all_total_count(self) -> None:
-        """list_all() returns 110 public skills (2 Tier-1 + 108 extended)."""
-        assert len(DefaultSkillResolver().list_all()) == 110
+        """list_all() returns 111 public skills (2 Tier-1 + 109 extended)."""
+        assert len(DefaultSkillResolver().list_all()) == 111
 
     def test_skill_resolver_resolve_extended_skill(self) -> None:
         """resolve() finds a skill living in skills_extended/ with BUNDLED_EXTENDED source."""

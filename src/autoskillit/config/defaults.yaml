@@ -246,6 +246,7 @@ skills:
     - troubleshoot-experiment
     - audit-claims
     - resolve-claims-review
+    - build-execution-map
 
 workspace:
   worktree_root: null   # null = auto-resolve to ../worktrees/ relative to project root

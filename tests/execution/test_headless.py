@@ -3384,6 +3384,8 @@ class TestOutputPathTokensDerivedFromContracts:
             "visualization_plan_path",
             "html_path",
             "resource_report",
+            "execution_map",
+            "execution_map_report",
         }
     )
 

@@ -137,3 +137,51 @@ def test_sous_chef_merge_phase_documents_queue_no_auto_path() -> None:
         "MERGE PHASE section must document the condition "
         "'queue_available == true and auto_merge_available == false'"
     )
+
+
+def _extract_multiple_issues_section(skill_md: str) -> str:
+    """Extract text from '## MULTIPLE ISSUES' up to the next top-level '## ' heading."""
+    lines = skill_md.splitlines()
+    in_section = False
+    extracted: list[str] = []
+    for line in lines:
+        if line.startswith("## MULTIPLE ISSUES"):
+            in_section = True
+            extracted.append(line)
+            continue
+        if in_section and line.startswith("## ") and "MULTIPLE ISSUES" not in line:
+            break
+        if in_section:
+            extracted.append(line)
+    return "\n".join(extracted)
+
+
+def test_sous_chef_invokes_execution_map_before_parallel_dispatch() -> None:
+    """MULTIPLE ISSUES section must invoke /autoskillit:build-execution-map before dispatch."""
+    skill_md = _sous_chef_text()
+    multiple_issues = _extract_multiple_issues_section(skill_md)
+    assert multiple_issues, "MULTIPLE ISSUES section not found in sous-chef/SKILL.md"
+    assert "/autoskillit:build-execution-map" in multiple_issues, (
+        "MULTIPLE ISSUES section must invoke /autoskillit:build-execution-map before "
+        "launching parallel pipelines"
+    )
+    # The invocation must come before launching pipelines
+    map_idx = multiple_issues.find("/autoskillit:build-execution-map")
+    pipeline_idx = multiple_issues.find("pipeline")
+    assert map_idx < pipeline_idx, (
+        "build-execution-map invocation must appear before parallel pipeline launch "
+        "in MULTIPLE ISSUES section"
+    )
+
+
+def test_sous_chef_group_merge_wait_before_next_group() -> None:
+    """Sous-chef must require merge-wait between execution map groups."""
+    skill_md = _sous_chef_text()
+    assert "Group N+1" in skill_md or "group N+1" in skill_md.lower(), (
+        "sous-chef SKILL.md must contain a Group N+1 merge-wait rule"
+    )
+    # Check the actual merge-wait language is present
+    lower = skill_md.lower()
+    assert "merge" in lower and ("wait" in lower or "before" in lower), (
+        "sous-chef SKILL.md must instruct that Group N+1 waits for Group N's PRs to merge"
+    )

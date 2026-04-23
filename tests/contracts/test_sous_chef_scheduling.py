@@ -129,3 +129,22 @@ def test_sous_chef_scheduling_section_placement() -> None:
     assert scheduling_pos > multiple_issues_pos, (
         "PARALLEL STEP SCHEDULING section must appear after MULTIPLE ISSUES section"
     )
+
+
+def test_sous_chef_execution_map_group_iteration() -> None:
+    """EXECUTION MAP section must contain instruction to iterate groups in topological order."""
+    text = _sous_chef_text()
+    assert "EXECUTION MAP" in text, (
+        "sous-chef SKILL.md must contain an EXECUTION MAP section for group dispatch"
+    )
+    # Find EXECUTION MAP section
+    exec_map_pos = text.find("EXECUTION MAP")
+    next_section = text.find("\n## ", exec_map_pos + 1)
+    section_text = text[exec_map_pos:next_section] if next_section != -1 else text[exec_map_pos:]
+    lower = section_text.lower()
+    assert "group" in lower and ("order" in lower or "iteration" in lower or "topolog" in lower), (
+        "EXECUTION MAP section must instruct iterating groups in topological order"
+    )
+    assert "merge" in lower and ("wait" in lower or "before" in lower or "mandatory" in lower), (
+        "EXECUTION MAP section must contain mandatory merge-wait rule between groups"
+    )

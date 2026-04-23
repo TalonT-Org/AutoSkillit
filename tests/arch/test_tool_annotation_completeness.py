@@ -37,6 +37,8 @@ def _collect_missing_annotations(path: Path) -> list[tuple[str, int]]:
                 isinstance(dec, ast.Call)
                 and isinstance(dec.func, ast.Attribute)
                 and dec.func.attr == "tool"
+                and isinstance(dec.func.value, ast.Name)
+                and dec.func.value.id == "mcp"
             ):
                 continue
             has_annotations = any(kw.arg == "annotations" for kw in dec.keywords)

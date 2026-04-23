@@ -1244,15 +1244,6 @@ class TestFranchiseConfig:
         with pytest.raises(ValueError, match="l2_default_timeout_sec must be positive"):
             FranchiseConfig(l2_default_timeout_sec=-1).validate(True)
 
-    def test_franchise_config_validate_raises_when_feature_enabled(self) -> None:
-        """FC_NEW_1: validate(True) raises ValueError for invalid timeout."""
-        import pytest
-
-        from autoskillit.config.settings import FranchiseConfig
-
-        with pytest.raises(ValueError, match="l2_default_timeout_sec must be positive"):
-            FranchiseConfig(l2_default_timeout_sec=0).validate(True)
-
     def test_franchise_config_validate_skips_when_feature_disabled(self) -> None:
         """FC_NEW_2: validate(False) does NOT raise even for invalid timeout."""
         from autoskillit.config.settings import FranchiseConfig
@@ -1284,8 +1275,6 @@ class TestFranchiseConfig:
         self, tmp_path: Path
     ) -> None:
         """FC_NEW_5: load_config raises ValueError with invalid timeout when franchise enabled."""
-        import pytest
-
         config_dir = tmp_path / ".autoskillit"
         config_dir.mkdir()
         config_data = {

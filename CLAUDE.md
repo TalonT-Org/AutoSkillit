@@ -281,6 +281,7 @@ generic_automation_mcp/
 │   ├── _update_checks.py    #   Unified startup update check: version/hook/source-drift signals, branch-aware dismissal
 │   ├── _serve_guard.py      #   Async signal-guarded MCP server bootstrap (extracted from app.py)
 │   ├── _franchise.py        #   franchise subcommand group: status --reap/--dry-run, run stub, signal guard; render_franchise_error()
+│   ├── _features.py         #   features subcommand group: list/status commands for feature gate inspection
 │   ├── _workspace.py        #   Workspace clean helpers
 │   └── app.py               #   CLI entry: serve, init, config, skills, recipes, doctor, update, etc.
 │

@@ -47,7 +47,7 @@ Space-separated issue numbers (required, minimum 2), plus optional flags:
 - Emit `execution_map` and `execution_map_report` tokens with absolute paths (use `$(pwd)` to resolve the working directory prefix)
 - Emit structured output tokens as the final lines of text output (plain text, no markdown decorators)
 - Include the full `overlap_matrix` in the JSON output for auditability
-- Validate that `depends_on` references only issue numbers present in the input set
+- Validate that `depends_on` references only issue numbers present in the input set; silently drop any out-of-set reference and emit a warning line in the markdown report
 - Anchor all output paths to the current working directory
 
 ## Workflow

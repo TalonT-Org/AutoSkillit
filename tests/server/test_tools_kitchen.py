@@ -1315,14 +1315,6 @@ async def test_redisable_subsets_includes_feature_tags() -> None:
     )
 
 
-def test_exclusive_feature_tools_fully_hidden() -> None:
-    """EXCLUSIVE_FEATURE_TOOLS is a dict (currently empty — structural test)."""
-    from autoskillit.core import EXCLUSIVE_FEATURE_TOOLS
-
-    assert isinstance(EXCLUSIVE_FEATURE_TOOLS, dict)
-    assert EXCLUSIVE_FEATURE_TOOLS == {}
-
-
 @pytest.mark.anyio
 async def test_redisable_subsets_does_not_disable_kitchen_core_tag() -> None:
     """_redisable_subsets must not pass kitchen-core to disable_components.

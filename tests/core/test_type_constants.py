@@ -149,10 +149,18 @@ def test_feature_reveal_tags_exists() -> None:
     assert "franchise" in FEATURE_REVEAL_TAGS
 
 
-def test_exclusive_feature_tools_exists() -> None:
-    from autoskillit.core import EXCLUSIVE_FEATURE_TOOLS
+def test_exclusive_feature_tools_removed() -> None:
+    """EXCLUSIVE_FEATURE_TOOLS was removed (issue #1150) — must not be importable."""
+    import autoskillit.core as core
 
-    assert isinstance(EXCLUSIVE_FEATURE_TOOLS, dict)
+    assert not hasattr(core, "EXCLUSIVE_FEATURE_TOOLS")
+
+
+def test_exclusive_feature_tools_not_in_all() -> None:
+    """EXCLUSIVE_FEATURE_TOOLS must not appear in _type_constants.__all__."""
+    from autoskillit.core import _type_constants
+
+    assert "EXCLUSIVE_FEATURE_TOOLS" not in _type_constants.__all__
 
 
 def test_franchise_default_enabled_is_false() -> None:

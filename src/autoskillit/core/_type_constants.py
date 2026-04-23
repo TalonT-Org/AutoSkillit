@@ -23,7 +23,6 @@ __all__ = [
     "HEADLESS_TOOLS",
     "FRANCHISE_TOOLS",
     "FEATURE_REVEAL_TAGS",
-    "EXCLUSIVE_FEATURE_TOOLS",
     "FREE_RANGE_TOOLS",
     "UNGATED_TOOLS",
     "MUTATING_TOOLS",
@@ -211,12 +210,6 @@ FRANCHISE_TOOLS: frozenset[str] = frozenset(
 # Tools with these tags AND a kitchen-core tag remain visible via the kitchen-core tag
 # (FastMCP union model: any enabled tag keeps the tool visible).
 FEATURE_REVEAL_TAGS: frozenset[str] = frozenset({"franchise"})
-
-# Maps tool_name → feature_tag for tools that are accessible ONLY via a feature tag
-# (no kitchen-core or other always-enabled tag). These tools must be explicitly suppressed
-# after open_kitchen when the feature is disabled.
-# Currently empty: all franchise tools also carry kitchen-core or clone tags.
-EXCLUSIVE_FEATURE_TOOLS: dict[str, str] = {}
 
 FRANCHISE_ERROR_CODES: frozenset[str] = frozenset(FranchiseErrorCode)
 

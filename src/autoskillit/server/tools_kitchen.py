@@ -246,6 +246,9 @@ async def _redisable_subsets(
 
     ``features`` defaults to ``None`` (treated as ``{}``, i.e. all features use
     ``FeatureDef.default_enabled``). Pass ``config.features`` from the call site.
+
+    For tools with ONLY a feature tag (no kitchen-core fallback), a per-tool
+    suppression constant and path is needed here once such tools exist.
     """
     # Pass 1: subset re-disable (existing)
     for subset in disabled:

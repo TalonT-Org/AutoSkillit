@@ -206,6 +206,7 @@ generic_automation_mcp/
 │   ├── rules_cmd.py
 │   ├── rules_contracts.py
 │   ├── rules_dataflow.py
+│   ├── rules_features.py
 │   ├── rules_fixing.py
 │   ├── rules_graph.py
 │   ├── rules_inputs.py

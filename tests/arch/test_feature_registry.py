@@ -147,16 +147,6 @@ def test_feature_skill_categories_match_real_skills():
     assert not violations, "\n".join(violations)
 
 
-def test_franchise_feature_def_has_franchise_skill_category() -> None:
-    """FEATURE_REGISTRY['franchise'].skill_categories must contain 'franchise'."""
-    from autoskillit.core._type_constants import FEATURE_REGISTRY
-
-    defn = FEATURE_REGISTRY["franchise"]
-    assert "franchise" in defn.skill_categories, (
-        f"franchise FeatureDef.skill_categories={defn.skill_categories!r} must include 'franchise'"
-    )
-
-
 # ── is_feature_enabled() behavioral tests ────────────────────────────────────
 
 

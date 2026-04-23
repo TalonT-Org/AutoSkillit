@@ -140,3 +140,16 @@ def test_recipe_pack_def_importable_from_core() -> None:
 
     assert isinstance(RECIPE_PACK_REGISTRY, dict)
     assert all(isinstance(v, RecipePackDef) for v in RECIPE_PACK_REGISTRY.values())
+
+
+def test_feature_reveal_tags_exists() -> None:
+    from autoskillit.core import FEATURE_REVEAL_TAGS
+
+    assert isinstance(FEATURE_REVEAL_TAGS, frozenset)
+    assert "franchise" in FEATURE_REVEAL_TAGS
+
+
+def test_exclusive_feature_tools_exists() -> None:
+    from autoskillit.core import EXCLUSIVE_FEATURE_TOOLS
+
+    assert isinstance(EXCLUSIVE_FEATURE_TOOLS, dict)

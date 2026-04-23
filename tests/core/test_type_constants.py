@@ -153,3 +153,17 @@ def test_exclusive_feature_tools_exists() -> None:
     from autoskillit.core import EXCLUSIVE_FEATURE_TOOLS
 
     assert isinstance(EXCLUSIVE_FEATURE_TOOLS, dict)
+
+
+def test_franchise_default_enabled_is_false() -> None:
+    """Franchise is gated off by default — enabled only via project config."""
+    from autoskillit.core import FEATURE_REGISTRY
+
+    assert FEATURE_REGISTRY["franchise"].default_enabled is False
+
+
+def test_is_feature_enabled_franchise_defaults_false() -> None:
+    """Without explicit config, franchise resolves to disabled."""
+    from autoskillit.core.feature_flags import is_feature_enabled
+
+    assert is_feature_enabled("franchise", {}) is False

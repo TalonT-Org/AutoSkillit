@@ -223,3 +223,24 @@ def test_minimal_ctx_provides_isolated_gate(minimal_ctx):
 
     assert isinstance(minimal_ctx.gate, DefaultGateState)
     assert minimal_ctx.gate.enabled is True
+
+
+def test_is_test_feature_enabled_reads_project_config(monkeypatch):
+    """When AUTOSKILLIT_TEST_FEATURES is unset, conftest resolves features via config."""
+    monkeypatch.delenv("AUTOSKILLIT_TEST_FEATURES", raising=False)
+    from tests.conftest import _is_test_feature_enabled, _resolve_test_features
+
+    _resolve_test_features.cache_clear()
+    result = _is_test_feature_enabled("franchise", env_val=None)
+    assert result is True
+
+
+def test_is_test_feature_enabled_dynaconf_env_overrides(monkeypatch):
+    """AUTOSKILLIT_FEATURES__FRANCHISE=false overrides project config in test resolution."""
+    monkeypatch.delenv("AUTOSKILLIT_TEST_FEATURES", raising=False)
+    monkeypatch.setenv("AUTOSKILLIT_FEATURES__FRANCHISE", "false")
+    from tests.conftest import _is_test_feature_enabled, _resolve_test_features
+
+    _resolve_test_features.cache_clear()
+    result = _is_test_feature_enabled("franchise", env_val=None)
+    assert result is False

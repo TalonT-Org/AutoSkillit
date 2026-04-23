@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import ast
 import os
+import warnings
 from pathlib import Path
 from unittest.mock import patch
 
@@ -33,7 +34,7 @@ _FRANCHISE_CLASS_MARKERS: dict[str, set[str]] = {
 }
 
 # Infrastructure files that must NOT have a feature("franchise") pytestmark
-_INFRASTRUCTURE_NO_MARKER = [
+_INFRASTRUCTURE_FILE_EXCLUSIONS = [
     "recipe/test_rules_campaign.py",
     "recipe/test_campaign_loader.py",
     "core/test_session_type.py",
@@ -114,10 +115,15 @@ def test_franchise_class_markers_present():
 def test_no_feature_marker_on_infrastructure_tests():
     """Infrastructure tests that are not franchise-exclusive must NOT carry a feature marker."""
     unexpected = []
-    for rel in _INFRASTRUCTURE_NO_MARKER:
+    for rel in _INFRASTRUCTURE_FILE_EXCLUSIONS:
         path = _TESTS_ROOT / rel
         if not path.exists():
-            continue  # File may not exist yet; absence is not a violation.
+            warnings.warn(
+                f"_INFRASTRUCTURE_FILE_EXCLUSIONS entry not found on disk: {rel} — "
+                "check for a typo; absence is not a violation but may indicate stale config.",
+                stacklevel=2,
+            )
+            continue
         if _pytestmark_has_feature(path.read_text(), "franchise"):
             unexpected.append(rel)
     assert not unexpected, (

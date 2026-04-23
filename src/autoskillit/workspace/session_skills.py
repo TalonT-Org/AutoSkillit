@@ -151,7 +151,7 @@ def _is_skill_disabled(
     skill_info: SkillInfo,
     disabled: list[str],
     custom_tags: dict[str, list[str]],
-    features: dict[str, bool] | None = None,
+    features: dict[str, bool],
 ) -> bool:
     """Return True if skill should be excluded due to a disabled subset.
 
@@ -161,7 +161,7 @@ def _is_skill_disabled(
 
     Feature-gate branch: for each feature in FEATURE_REGISTRY that is disabled
     in `features`, suppress any skill whose categories intersect the feature's
-    skill_categories.
+    skill_categories. An empty `features` dict uses each feature's default_enabled.
     """
     for tag in disabled:
         if tag in custom_tags:
@@ -170,11 +170,10 @@ def _is_skill_disabled(
         elif tag in skill_info.categories:
             return True
 
-    if features is not None:
-        for feat_name, feat_def in FEATURE_REGISTRY.items():
-            if not is_feature_enabled(feat_name, features):
-                if feat_def.skill_categories & skill_info.categories:
-                    return True
+    for feat_name, feat_def in FEATURE_REGISTRY.items():
+        if not is_feature_enabled(feat_name, features):
+            if feat_def.skill_categories & skill_info.categories:
+                return True
 
     return False
 
@@ -210,7 +209,7 @@ def _should_inject_skill(
     overrides: frozenset[str],
     effective_disabled: frozenset[str],
     effective_custom_tags: dict[str, list[str]],
-    features: dict[str, bool] | None = None,
+    features: dict[str, bool],
 ) -> bool:
     """Return True if this skill should be written to the ephemeral session dir.
 
@@ -383,7 +382,7 @@ class DefaultSessionSkillManager:
             effective_custom_tags = dict(config.subsets.custom_tags)
 
         packs_enabled: list[str] = [] if config is None else list(config.packs.enabled)
-        session_features: dict[str, bool] | None = config.features if config is not None else None
+        session_features: dict[str, bool] = config.features if config is not None else {}
 
         effective_disabled = _resolve_effective_disabled(
             explicit_disabled=explicit_disabled,

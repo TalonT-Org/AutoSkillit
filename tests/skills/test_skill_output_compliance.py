@@ -285,7 +285,7 @@ SKILL_CONTRACTS_PATH = pkg_root() / "recipe" / "skill_contracts.yaml"
 # Skills with path-capture contracts that must have their token instruction
 # in ## Critical Constraints (not only in ## Output or a late workflow step).
 PATH_CAPTURE_SKILLS: dict[str, list[str]] = {
-    "build-execution-map": ["execution_map"],
+    "build-execution-map": ["execution_map", "execution_map_report"],
     "make-plan": ["plan_path"],
     "rectify": ["plan_path"],
     "investigate": ["investigation_path"],

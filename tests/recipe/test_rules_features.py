@@ -23,7 +23,7 @@ def test_feature_gate_rule_fires_on_disabled_feature_tool() -> None:
     )
     ctx = make_validation_context(recipe, disabled_features=frozenset({"franchise"}))
     findings = [f for f in run_semantic_rules(ctx) if f.rule == "feature-gate-tool-reference"]
-    assert findings
+    assert findings, "expected feature-gate-tool-reference finding for disabled franchise tool"
     assert all(f.severity == Severity.ERROR for f in findings)
     assert any("franchise" in f.message for f in findings)
     assert any("dispatch_food_truck" in f.message for f in findings)
@@ -109,7 +109,7 @@ def test_feature_gate_rule_fires_on_disabled_feature_skill(monkeypatch) -> None:
         skill_category_map={"arch-lens-c4-container": frozenset({"arch-lens"})},
     )
     findings = [f for f in run_semantic_rules(ctx) if f.rule == "feature-gate-tool-reference"]
-    assert findings
+    assert findings, "expected feature-gate-tool-reference finding for disabled skill category"
     assert all(f.severity == Severity.ERROR for f in findings)
     assert any("test-skill-gate" in f.message for f in findings)
 
@@ -149,6 +149,7 @@ def test_feature_gate_rule_with_multiple_features(monkeypatch) -> None:
     findings = [f for f in run_semantic_rules(ctx) if f.rule == "feature-gate-tool-reference"]
 
     step_names = {f.step_name for f in findings}
+    assert len(step_names) == 2, f"expected exactly 2 flagged steps, got {step_names!r}"
     assert "franchise_step" in step_names, "franchise tool not flagged"
     assert "ci_step" in step_names, "ci tool not flagged"
     assert all(f.severity == Severity.ERROR for f in findings)

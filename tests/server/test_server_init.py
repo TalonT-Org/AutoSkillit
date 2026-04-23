@@ -455,19 +455,26 @@ def test_server_init_no_shebang() -> None:
 # Wire-format compliance (Claude Code #25081)
 # ---------------------------------------------------------------------------
 
-# Fields that Claude Code #25081 silently rejects on tools/list responses.
-# If any tool carries a non-None value for these fields, Claude Code drops
-# the ENTIRE tool list from that server.
-_REJECTED_FIELDS = {"outputSchema", "annotations"}
+# Fields the middleware strips to avoid Claude Code #25081 tool-list rejection.
+# Maps wire field name (camelCase) to the FastMCP Tool snake_case attribute name.
+# annotations is intentionally absent: it carries readOnlyHint and must be preserved.
+_STRIPPED_WIRE_FIELDS: dict[str, str] = {
+    "outputSchema": "output_schema",
+    "title": "title",
+}
 
 
 class TestWireFormatCompliance:
     """tools/list wire response must be compatible with Claude Code's MCP parser."""
 
     @pytest.mark.anyio
-    async def test_tools_list_contains_no_rejected_fields(self):
+    async def test_tools_list_contains_no_stripped_fields(self):
         """tools/list wire response must not contain fields that trigger
-        Claude Code #25081 (silent full-tool-list rejection)."""
+        Claude Code #25081 (silent full-tool-list rejection).
+
+        Only output_schema and title are stripped. annotations is preserved
+        because it carries readOnlyHint for parallel execution semantics.
+        """
         from fastmcp.client import Client
 
         from autoskillit.server import mcp
@@ -475,12 +482,10 @@ class TestWireFormatCompliance:
         async with Client(mcp) as client:
             tools = await client.list_tools()
         for tool in tools:
-            for field in _REJECTED_FIELDS:
-                # FastMCP Tool objects use snake_case attrs for camelCase wire fields
-                attr = "output_schema" if field == "outputSchema" else field
+            for wire_field, attr in _STRIPPED_WIRE_FIELDS.items():
                 value = getattr(tool, attr, None)
                 assert value is None, (
-                    f"Tool '{tool.name}' has non-None {field}={value!r}. "
+                    f"Tool '{tool.name}' has non-None {wire_field}={value!r}. "
                     f"Claude Code #25081 silently drops ALL tools when this field is present."
                 )
 
@@ -499,11 +504,11 @@ class TestClaudeCodeCompatMiddleware:
         tool = MagicMock()
         tool.name = "test_tool"
         tool.output_schema = {"type": "string"}
-        tool.annotations = None
+        tool.annotations = MagicMock(readOnlyHint=True)
         tool.model_copy.return_value = MagicMock(
             name="test_tool",
             output_schema=None,
-            annotations=None,
+            annotations=MagicMock(readOnlyHint=True),
             title=None,
         )
 
@@ -512,13 +517,13 @@ class TestClaudeCodeCompatMiddleware:
 
         result = await mw.on_list_tools(ctx, call_next)
         tool.model_copy.assert_called_once_with(
-            update={"output_schema": None, "annotations": None, "title": None},
+            update={"output_schema": None, "title": None},
         )
         assert result[0].output_schema is None
 
     @pytest.mark.anyio
-    async def test_middleware_strips_annotations(self):
-        """Middleware must strip annotations from every tool."""
+    async def test_middleware_preserves_annotations(self):
+        """Middleware must preserve annotations (including readOnlyHint) on every tool."""
         from unittest.mock import AsyncMock, MagicMock
 
         from autoskillit.server._wire_compat import ClaudeCodeCompatMiddleware
@@ -531,7 +536,7 @@ class TestClaudeCodeCompatMiddleware:
         tool.model_copy.return_value = MagicMock(
             name="test_tool",
             output_schema=None,
-            annotations=None,
+            annotations=MagicMock(readOnlyHint=True),
             title=None,
         )
 
@@ -539,11 +544,12 @@ class TestClaudeCodeCompatMiddleware:
         call_next = AsyncMock(return_value=[tool])
 
         result = await mw.on_list_tools(ctx, call_next)
-        assert result[0].annotations is None
+        assert result[0].annotations is not None
+        assert result[0].annotations.readOnlyHint is True
 
     @pytest.mark.anyio
     async def test_middleware_preserves_tool_identity(self):
-        """Middleware must not alter tool name, description, or inputSchema."""
+        """Middleware must not alter tool name, description, inputSchema, or annotations."""
         from unittest.mock import AsyncMock, MagicMock
 
         from autoskillit.server._wire_compat import ClaudeCodeCompatMiddleware
@@ -560,7 +566,7 @@ class TestClaudeCodeCompatMiddleware:
         copy_mock.description = "Does things"
         copy_mock.parameters = {"type": "object", "properties": {}}
         copy_mock.output_schema = None
-        copy_mock.annotations = None
+        copy_mock.annotations = MagicMock(readOnlyHint=True)
         copy_mock.title = None
         tool.model_copy.return_value = copy_mock
 
@@ -571,6 +577,7 @@ class TestClaudeCodeCompatMiddleware:
         assert result[0].name == "my_tool"
         assert result[0].description == "Does things"
         assert result[0].parameters == {"type": "object", "properties": {}}
+        assert result[0].annotations is not None
 
 
 class TestSessionTypeVisibility:

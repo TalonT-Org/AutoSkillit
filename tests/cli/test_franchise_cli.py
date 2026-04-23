@@ -24,6 +24,16 @@ from autoskillit.cli._franchise import franchise_status as _franchise_status
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium, pytest.mark.feature("franchise")]
 
 
+@pytest.fixture(autouse=True)
+def _franchise_config(tmp_path: Path) -> None:
+    """Ensure .autoskillit/config.yaml enables franchise so _require_franchise passes."""
+    cfg_dir = tmp_path / ".autoskillit"
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+    cfg_file = cfg_dir / "config.yaml"
+    if not cfg_file.exists():
+        cfg_file.write_text("features:\n  franchise: true\n")
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

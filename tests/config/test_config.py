@@ -1284,3 +1284,42 @@ class TestFranchiseConfig:
         (config_dir / "config.yaml").write_text(yaml.dump(config_data))
         with pytest.raises(ValueError, match="l2_default_timeout_sec must be positive"):
             load_config(tmp_path)
+
+
+def test_defaults_yaml_franchise_false() -> None:
+    """Package default has franchise disabled."""
+    import yaml
+
+    from autoskillit.core.paths import pkg_root
+
+    with open(pkg_root() / "config" / "defaults.yaml") as f:
+        data = yaml.safe_load(f)
+    assert data["features"]["franchise"] is False
+
+
+def test_project_config_has_franchise_override() -> None:
+    """Integration's project config enables franchise."""
+    from pathlib import Path
+
+    import yaml
+
+    config_path = Path(__file__).resolve().parents[2] / ".autoskillit" / "config.yaml"
+    if not config_path.exists():
+        pytest.skip("project config not present (clean clone or CI)")
+    with open(config_path) as f:
+        data = yaml.safe_load(f)
+    assert data.get("features", {}).get("franchise") is True
+
+
+def test_config_resolution_franchise_enabled_via_project_config() -> None:
+    """Full config resolution picks up project-level franchise override."""
+    from pathlib import Path
+
+    from autoskillit.config.settings import load_config
+    from autoskillit.core.feature_flags import is_feature_enabled
+
+    project_root = Path(__file__).resolve().parents[2]
+    if not (project_root / ".autoskillit" / "config.yaml").exists():
+        pytest.skip("project config not present (clean clone or CI)")
+    cfg = load_config(project_root)
+    assert is_feature_enabled("franchise", cfg.features) is True

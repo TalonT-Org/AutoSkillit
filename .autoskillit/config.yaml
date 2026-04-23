@@ -30,3 +30,6 @@ ci:
 
 github:
   default_repo: "TalonT-Org/AutoSkillit"
+
+features:
+  franchise: true  # Enable franchise on integration for active development

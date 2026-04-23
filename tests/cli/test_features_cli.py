@@ -75,7 +75,7 @@ def test_features_status_detail(
     assert "experimental" in out  # lifecycle
     tier_line = next(line for line in out.splitlines() if "Tier" in line)
     assert "1" in tier_line  # tier value on its own line
-    assert "true" in out  # enabled (default_enabled=True for franchise)
+    assert "false" in out  # disabled (default_enabled=False for franchise)
 
 
 # ---------------------------------------------------------------------------

@@ -370,7 +370,7 @@ FEATURE_REGISTRY: dict[str, FeatureDef] = {
         skill_categories=frozenset({"franchise"}),
         import_package="autoskillit.franchise",
         tier=1,
-        default_enabled=True,
+        default_enabled=False,
         since_version="0.9.51",
     ),
 }

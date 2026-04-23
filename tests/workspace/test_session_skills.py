@@ -513,15 +513,15 @@ def test_skill_enabled_when_feature_on(tmp_path: Path) -> None:
     )
 
 
-def test_skill_not_suppressed_when_no_features_config(tmp_path: Path) -> None:
+def test_skill_suppressed_when_no_features_config(tmp_path: Path) -> None:
     """Feature-gated skills use default_enabled when config is None (no features dict)."""
     provider = SkillsDirectoryProvider()
     mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
     session_path = mgr.init_session("test-no-features-config", cook_session=False, config=None)
     skill_names = {p.parent.name for p in session_path.glob(".claude/skills/*/SKILL.md")}
-    assert "make-campaign" in skill_names, (
-        "make-campaign must be present when no features config is provided "
-        "(franchise.default_enabled=True)"
+    assert "make-campaign" not in skill_names, (
+        "make-campaign must be absent when no features config is provided "
+        "(franchise.default_enabled=False)"
     )
 
 

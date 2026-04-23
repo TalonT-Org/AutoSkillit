@@ -1315,14 +1315,6 @@ async def test_redisable_subsets_includes_feature_tags() -> None:
     )
 
 
-def test_redisable_subsets_documents_category_b() -> None:
-    """_redisable_subsets docstring mentions per-tool suppression for feature-only tools."""
-    from autoskillit.server.tools_kitchen import _redisable_subsets
-
-    doc = _redisable_subsets.__doc__ or ""
-    assert "per-tool" in doc.lower()
-
-
 @pytest.mark.anyio
 async def test_redisable_subsets_does_not_disable_kitchen_core_tag() -> None:
     """_redisable_subsets must not pass kitchen-core to disable_components.

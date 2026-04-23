@@ -2250,8 +2250,8 @@ class TestGroupNFeatureGateDoctorChecks:
         }
         assert franchise_infra <= check_names
         franchise_results = [r for r in data["results"] if r["check"] in franchise_infra]
-        assert any(r["severity"] == "ok" for r in franchise_results), (
-            f"Expected at least one franchise check to have severity OK, "
+        assert all(r["severity"] in {"ok", "info"} for r in franchise_results), (
+            f"Expected all franchise checks to have non-error severity (ok/info), "
             f"got: {[(r['check'], r['severity']) for r in franchise_results]}"
         )
 

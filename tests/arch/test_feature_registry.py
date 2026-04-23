@@ -29,6 +29,14 @@ def test_feature_registry_keys_are_sorted():
     assert keys == sorted(keys), f"FEATURE_REGISTRY keys not sorted: {keys}"
 
 
+def test_feature_registry_key_name_consistency() -> None:
+    """FEATURE_REGISTRY key must equal FeatureDef.name for every entry."""
+    from autoskillit.core._type_constants import FEATURE_REGISTRY
+
+    mismatches = {k: defn.name for k, defn in FEATURE_REGISTRY.items() if k != defn.name}
+    assert not mismatches, f"FEATURE_REGISTRY key/name mismatch: {mismatches}"
+
+
 def test_feature_tool_tags_exist_in_subset_tags():
     """Every FeatureDef.tool_tags entry exists in TOOL_SUBSET_TAGS tag values."""
     from autoskillit.core._type_constants import FEATURE_REGISTRY, TOOL_SUBSET_TAGS

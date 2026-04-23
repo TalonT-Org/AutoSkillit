@@ -230,15 +230,40 @@ async def _open_kitchen_handler() -> str | None:
     return None
 
 
-async def _redisable_subsets(ctx: Context, disabled: list[str]) -> None:
-    """Re-disable subset-tagged tools after enabling kitchen.
+async def _redisable_subsets(
+    ctx: Context,
+    disabled: list[str],
+    features: dict[str, bool] | None = None,
+) -> None:
+    """Re-disable subset-tagged and feature-disabled tools after enabling kitchen.
 
-    REQ-VIS-008: FastMCP session rules override server rules; enable_components(kitchen)
-    would otherwise reveal dual-tagged tools (e.g. kitchen+github) that are server-disabled.
-    Later session rules win, so these disables correctly override the kitchen enable.
+    Pass 1 (existing): Re-disable config-disabled subset tags so dual-tagged tools
+    (e.g. kitchen+github) that are server-disabled are not accidentally revealed.
+
+    Pass 2 (new): For each feature disabled in config, suppress FEATURE_REVEAL_TAGS
+    that belong to that feature. Shared tools with kitchen-core retain visibility
+    via the kitchen-core tag (FastMCP union model).
+
+    ``features`` defaults to ``None`` (treated as ``{}``, i.e. all features use
+    ``FeatureDef.default_enabled``). Pass ``config.features`` from the call site.
     """
+    # Pass 1: subset re-disable (existing)
     for subset in disabled:
         await ctx.disable_components(tags={subset})
+
+    # Pass 2: feature gate — suppress feature-reveal tags for disabled features
+    from autoskillit.core import (  # noqa: PLC0415
+        FEATURE_REGISTRY,
+        FEATURE_REVEAL_TAGS,
+        is_feature_enabled,
+    )
+
+    _features = features or {}
+    for feature_name, feature_def in FEATURE_REGISTRY.items():
+        if not is_feature_enabled(feature_name, _features):
+            tags_to_suppress = FEATURE_REVEAL_TAGS & feature_def.tool_tags
+            for tag in tags_to_suppress:
+                await ctx.disable_components(tags={tag})
 
 
 def _close_kitchen_handler() -> None:
@@ -344,7 +369,7 @@ async def open_kitchen(
             return _kitchen_failure_envelope(exc, stage="enable_components")
 
         try:
-            await _redisable_subsets(ctx, disabled_subsets)
+            await _redisable_subsets(ctx, disabled_subsets, _get_ctx().config.features)
         except Exception as exc:
             logger.warning("open_kitchen_failure", stage="redisable_subsets", exc_info=True)
             return _kitchen_failure_envelope(exc, stage="redisable_subsets")

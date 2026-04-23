@@ -170,15 +170,16 @@ def _resolve_effective_disabled(
     pack_registry: dict[str, PackDef],
     packs_enabled: list[str],
     recipe_packs: frozenset[str] | None,
+    disabled_feature_tags: frozenset[str] | None = None,
 ) -> frozenset[str]:
     """Compute the merged effective disabled set from all visibility sources.
 
     Formula:
-      effective = (explicit_disabled ∪ default_disabled_packs)
+      effective = (explicit_disabled ∪ default_disabled_packs ∪ disabled_feature_tags)
                 − (packs_enabled ∪ recipe_packs)
 
-    Precedence: explicit_disabled always stays — it cannot be overridden by
-    packs_enabled or recipe_packs. Default-disabled packs CAN be overridden.
+    Precedence: explicit_disabled and disabled_feature_tags always stay.
+    Default-disabled packs CAN be overridden by packs_enabled/recipe_packs.
     """
     default_disabled = frozenset(
         tag for tag, pack_def in pack_registry.items() if not pack_def.default_enabled
@@ -186,8 +187,11 @@ def _resolve_effective_disabled(
     enabled = frozenset(packs_enabled) | (recipe_packs or frozenset())
     # Default-disabled packs that are not explicitly enabled
     default_disabled_effective = default_disabled - enabled
-    # Explicit disables always survive
-    return frozenset(explicit_disabled) | default_disabled_effective
+    return (
+        frozenset(explicit_disabled)
+        | default_disabled_effective
+        | (disabled_feature_tags or frozenset())
+    )
 
 
 def _should_inject_skill(
@@ -369,11 +373,20 @@ class DefaultSessionSkillManager:
 
         packs_enabled: list[str] = [] if config is None else list(config.packs.enabled)
 
+        from autoskillit.core import FEATURE_REGISTRY, is_feature_enabled  # noqa: PLC0415
+
+        disabled_feature_tags: frozenset[str] = frozenset()
+        if config is not None:
+            for feature_name, feature_def in FEATURE_REGISTRY.items():
+                if not is_feature_enabled(feature_name, config.features):
+                    disabled_feature_tags |= feature_def.tool_tags
+
         effective_disabled = _resolve_effective_disabled(
             explicit_disabled=explicit_disabled,
             pack_registry=PACK_REGISTRY,
             packs_enabled=packs_enabled,
             recipe_packs=recipe_packs,
+            disabled_feature_tags=disabled_feature_tags,
         )
 
         # Compute project-local overrides (REQ-OVR-001..004)

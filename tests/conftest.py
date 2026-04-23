@@ -380,7 +380,13 @@ def _resolve_test_features() -> dict[str, bool]:
         repo_root = Path(__file__).resolve().parent.parent
         cfg = load_config(repo_root)
         return dict(cfg.features)
-    except Exception:
+    except Exception as exc:
+        import warnings
+
+        warnings.warn(
+            f"Feature flag config resolution failed, falling back to defaults: {exc}",
+            stacklevel=1,
+        )
         return {}
 
 

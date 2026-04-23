@@ -126,7 +126,7 @@ Parse hunk ranges from the diff saved in Step 2:
 ```bash
 VALID_LINE_RANGES="{}"
 # Parse @@ +start,count @@ headers from the diff to build a JSON map of
-# {filepath: [[start, end], ...]} ranges. Same logic as review-pr Step 2.7.
+# {filepath: [[start, end], ...]} ranges.
 # If hunk_ranges_path was provided as a contract input, load from there instead.
 ```
 

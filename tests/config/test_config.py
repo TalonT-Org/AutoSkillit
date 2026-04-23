@@ -1304,6 +1304,8 @@ def test_project_config_has_franchise_override() -> None:
     import yaml
 
     config_path = Path(__file__).resolve().parents[2] / ".autoskillit" / "config.yaml"
+    if not config_path.exists():
+        pytest.skip("project config not present (clean clone or CI)")
     with open(config_path) as f:
         data = yaml.safe_load(f)
     assert data.get("features", {}).get("franchise") is True
@@ -1316,5 +1318,8 @@ def test_config_resolution_franchise_enabled_via_project_config() -> None:
     from autoskillit.config.settings import load_config
     from autoskillit.core.feature_flags import is_feature_enabled
 
-    cfg = load_config(Path(__file__).resolve().parents[2])
+    project_root = Path(__file__).resolve().parents[2]
+    if not (project_root / ".autoskillit" / "config.yaml").exists():
+        pytest.skip("project config not present (clean clone or CI)")
+    cfg = load_config(project_root)
     assert is_feature_enabled("franchise", cfg.features) is True

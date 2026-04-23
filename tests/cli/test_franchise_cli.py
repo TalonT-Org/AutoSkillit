@@ -21,7 +21,7 @@ from autoskillit.cli._franchise import franchise_list as _franchise_list
 from autoskillit.cli._franchise import franchise_run as _franchise_run
 from autoskillit.cli._franchise import franchise_status as _franchise_status
 
-pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium, pytest.mark.feature("franchise")]
 
 
 # ---------------------------------------------------------------------------

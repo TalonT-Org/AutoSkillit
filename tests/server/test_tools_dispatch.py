@@ -10,7 +10,7 @@ import pytest
 
 from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
 
-pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.medium, pytest.mark.feature("franchise")]
 
 # ---------------------------------------------------------------------------
 # Shared test helpers

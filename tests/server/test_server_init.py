@@ -580,6 +580,7 @@ class TestClaudeCodeCompatMiddleware:
         assert result[0].annotations is not None
 
 
+@pytest.mark.feature("franchise")
 class TestSessionTypeVisibility:
     """3-branch session-type tag visibility dispatch."""
 

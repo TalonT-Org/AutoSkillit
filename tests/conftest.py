@@ -375,7 +375,14 @@ def _is_test_feature_enabled(feature_name: str) -> bool:
 
     defn = FEATURE_REGISTRY.get(feature_name)
     if defn is None:
-        return True  # Fail-open: unrecognised feature names are not skipped.
+        import warnings
+
+        warnings.warn(
+            f"pytest.mark.feature({feature_name!r}) references an unknown feature; "
+            "fail-open assumed (test will run). Check for typos in the marker.",
+            stacklevel=4,
+        )
+        return True
     return defn.default_enabled
 
 

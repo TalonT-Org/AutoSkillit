@@ -609,7 +609,7 @@ class AutomationConfig:
         try:
             result.franchise.validate(is_feature_enabled("franchise", result.features))
         except ValueError as exc:
-            raise ValueError(f"franchise.l2_default_timeout_sec: {exc}") from exc
+            raise ValueError(f"franchise config: {exc}") from exc
         return result
 
 

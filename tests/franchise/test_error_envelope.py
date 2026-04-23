@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = [pytest.mark.layer("franchise"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("franchise"), pytest.mark.small, pytest.mark.feature("franchise")]
 
 SRC_ROOT = Path(__file__).parent.parent.parent / "src" / "autoskillit"
 

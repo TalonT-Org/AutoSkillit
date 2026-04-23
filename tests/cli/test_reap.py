@@ -15,7 +15,7 @@ from autoskillit.franchise import (
     write_initial_state,
 )
 
-pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.small, pytest.mark.feature("franchise")]
 
 BOOT_ID = "boot-abc-123"
 OTHER_BOOT_ID = "boot-xyz-999"

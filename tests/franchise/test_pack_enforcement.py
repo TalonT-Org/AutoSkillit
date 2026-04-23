@@ -15,7 +15,7 @@ from tests.franchise._helpers import (
     compute_food_truck_tool_surface,
 )
 
-pytestmark = [pytest.mark.layer("franchise"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("franchise"), pytest.mark.small, pytest.mark.feature("franchise")]
 
 # ---------------------------------------------------------------------------
 # Module-level constants — additional packs used only in this test module

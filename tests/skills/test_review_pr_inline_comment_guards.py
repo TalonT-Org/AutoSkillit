@@ -18,8 +18,37 @@ SKILL_PATH = (
     / "SKILL.md"
 )
 
-
 SKILL_TEXT = SKILL_PATH.read_text()
+
+RESEARCH_SKILL_PATH = (
+    Path(__file__).parent.parent.parent
+    / "src"
+    / "autoskillit"
+    / "skills_extended"
+    / "review-research-pr"
+    / "SKILL.md"
+)
+RESEARCH_SKILL_TEXT = RESEARCH_SKILL_PATH.read_text()
+
+RESOLVE_SKILL_PATH = (
+    Path(__file__).parent.parent.parent
+    / "src"
+    / "autoskillit"
+    / "skills_extended"
+    / "resolve-review"
+    / "SKILL.md"
+)
+RESOLVE_SKILL_TEXT = RESOLVE_SKILL_PATH.read_text()
+
+RESOLVE_RESEARCH_SKILL_PATH = (
+    Path(__file__).parent.parent.parent
+    / "src"
+    / "autoskillit"
+    / "skills_extended"
+    / "resolve-research-review"
+    / "SKILL.md"
+)
+RESOLVE_RESEARCH_SKILL_TEXT = RESOLVE_RESEARCH_SKILL_PATH.read_text()
 
 
 # --- Orchestrator behavioral guardrails ---
@@ -315,4 +344,150 @@ def test_review_pr_tier1_fallback_has_delay():
     tier1_section = skill_md[tier1_idx:tier2_idx] if tier2_idx >= 0 else skill_md[tier1_idx:]
     assert "sleep 1" in tier1_section or "sleep(1)" in tier1_section, (
         "Tier 1 fallback loop must include sleep 1 between individual POST calls"
+    )
+
+
+# --- Unpostable findings surfacing guards ---
+
+
+def test_step7_body_includes_outside_diff_range_section():
+    """Step 7 review body must include an 'Outside Diff Range' section for UNPOSTABLE_FINDINGS."""
+    text = SKILL_TEXT
+    step7_start = text.find("### Step 7")
+    step8_start = text.find("### Step 8")
+    assert step7_start != -1
+    assert step8_start != -1
+    step7_section = text[step7_start:step8_start]
+    assert "UNPOSTABLE_FINDINGS" in step7_section, (
+        "Step 7 must reference UNPOSTABLE_FINDINGS to surface out-of-hunk findings "
+        "in the review body."
+    )
+    assert "Outside Diff Range" in step7_section, (
+        "Step 7 must include an 'Outside Diff Range' section in the review body "
+        "for findings that could not be posted as inline comments."
+    )
+
+
+def test_step6_posts_file_level_comments_for_critical_unpostable():
+    """Step 6 must post file-level comments for critical-severity unpostable findings."""
+    text = SKILL_TEXT
+    step6_start = text.find("### Step 6")
+    step65_start = text.find("### Step 6.5")
+    assert step6_start != -1
+    assert step65_start != -1
+    step6_section = text[step6_start:step65_start]
+    assert "subject_type" in step6_section, (
+        "Step 6 must contain 'subject_type' for file-level comment posting."
+    )
+    file_idx = step6_section.find("subject_type")
+    nearby = step6_section[max(0, file_idx - 200) : file_idx + 200]
+    assert "file" in nearby, "Step 6 must use subject_type: 'file' for file-level comments."
+
+
+def test_step6_file_level_uses_individual_endpoint_not_batch():
+    """File-level comments must use the individual comments endpoint, not the batch reviews API."""
+    text = SKILL_TEXT
+    step6_start = text.find("### Step 6")
+    step65_start = text.find("### Step 6.5")
+    assert step6_start != -1
+    assert step65_start != -1
+    step6_section = text[step6_start:step65_start]
+    subject_idx = step6_section.find("subject_type")
+    assert subject_idx != -1, "subject_type must appear in Step 6"
+    file_level_section = step6_section[subject_idx - 500 : subject_idx + 500]
+    assert "pulls/{pr_number}/comments" in file_level_section, (
+        "File-level comments must use the individual /pulls/{N}/comments endpoint. "
+        "subject_type: 'file' is NOT valid on the batch Reviews API."
+    )
+
+
+def test_step6_file_level_has_rate_limit_delay():
+    """File-level comment posting must include sleep 1 for API rate-limit discipline."""
+    text = SKILL_TEXT
+    step6_start = text.find("### Step 6")
+    step65_start = text.find("### Step 6.5")
+    assert step6_start != -1
+    assert step65_start != -1
+    step6_section = text[step6_start:step65_start]
+    subject_idx = step6_section.find("subject_type")
+    assert subject_idx != -1
+    file_level_section = step6_section[subject_idx:]
+    assert "sleep 1" in file_level_section, (
+        "File-level comment posting must include 'sleep 1' between mutating API calls."
+    )
+
+
+def test_step1_5_skips_null_line_threads():
+    """Step 1.5 must skip threads where both line and originalLine are null (file-level threads)."""
+    text = SKILL_TEXT
+    step15_start = text.find("### Step 1.5")
+    step2_start = text.find("### Step 2")
+    assert step15_start != -1
+    assert step2_start != -1
+    step15_section = text[step15_start:step2_start]
+    lower = step15_section.lower()
+    assert "null" in lower and "skip" in lower, (
+        "Step 1.5 must contain guidance to skip threads with null line "
+        "(file-level comment threads from prior reviews)."
+    )
+
+
+def test_step4_documents_unpostable_feeds_step6_and_step7():
+    """Step 4 must document that UNPOSTABLE_FINDINGS feeds into both Step 6 and Step 7."""
+    text = SKILL_TEXT
+    step4_start = text.find("### Step 4")
+    step45_start = text.find("### Step 4.5")
+    assert step4_start != -1
+    assert step45_start != -1
+    step4_section = text[step4_start:step45_start]
+    assert "UNPOSTABLE_FINDINGS" in step4_section, "Step 4 must reference UNPOSTABLE_FINDINGS."
+    assert "Step 6" in step4_section and "Step 7" in step4_section, (
+        "Step 4 must document that UNPOSTABLE_FINDINGS feeds into both "
+        "Step 6 (file-level comments) and Step 7 (review body)."
+    )
+
+
+def test_review_research_pr_step7_includes_outside_diff_range():
+    """review-research-pr Step 7 must include 'Outside Diff Range' section."""
+    text = RESEARCH_SKILL_TEXT
+    step7_start = text.find("### Step 7")
+    step8_start = text.find("### Step 8")
+    assert step7_start != -1
+    assert step8_start != -1
+    step7_section = text[step7_start:step8_start]
+    assert "UNPOSTABLE_FINDINGS" in step7_section, (
+        "review-research-pr Step 7 must reference UNPOSTABLE_FINDINGS."
+    )
+    assert "Outside Diff Range" in step7_section, (
+        "review-research-pr Step 7 must include an 'Outside Diff Range' section."
+    )
+
+
+def test_resolve_review_handles_null_line_file_level_threads():
+    """resolve-review must handle null-line file-level comment threads gracefully."""
+    text = RESOLVE_SKILL_TEXT
+    step3_start = text.find("### Step 3")
+    step4_start = text.find("### Step 4")
+    assert step3_start != -1
+    assert step4_start != -1
+    step3_section = text[step3_start:step4_start]
+    lower = step3_section.lower()
+    assert "null" in lower and ("file-level" in lower or "file level" in lower), (
+        "resolve-review Step 3 must handle null-line file-level comment threads "
+        "by skipping them — they have no code anchor."
+    )
+
+
+def test_resolve_research_review_handles_null_line_file_level_threads():
+    """resolve-research-review must handle null-line file-level comment threads gracefully."""
+    text = RESOLVE_RESEARCH_SKILL_TEXT
+    step3_start = text.find("### Step 3")
+    step4_start = text.find("### Step 4")
+    assert step3_start != -1
+    assert step4_start != -1
+    step3_section = text[step3_start:step4_start]
+    lower = step3_section.lower()
+    assert "null" in lower and ("file-level" in lower or "file level" in lower), (
+        "resolve-research-review Step 3 must handle null-line file-level comment "
+        "threads by skipping them — they have no code anchor."
     )

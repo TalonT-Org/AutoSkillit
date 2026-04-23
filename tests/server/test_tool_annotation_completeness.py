@@ -98,12 +98,12 @@ class TestPostMiddlewareAnnotations:
                 registry_label = "MUTATING_TOOLS" if tool.name in MUTATING_TOOLS else "read-only"
                 violations.append(
                     f"  {tool.name!r}: readOnlyHint={actual_readonly!r} "
-                    f"but registry says {registry_label} (expected readOnlyHint={expected_readonly!r})"
+                    f"but registry says {registry_label} "
+                    f"(expected readOnlyHint={expected_readonly!r})"
                 )
 
         assert not violations, (
             "The following tools have readOnlyHint values that disagree with MUTATING_TOOLS.\n"
             "Either fix the @mcp.tool(annotations=...) decorator or update MUTATING_TOOLS "
-            "in src/autoskillit/core/_type_constants.py:\n\n"
-            + "\n".join(violations)
+            "in src/autoskillit/core/_type_constants.py:\n\n" + "\n".join(violations)
         )

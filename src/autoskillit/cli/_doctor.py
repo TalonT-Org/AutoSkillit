@@ -17,7 +17,13 @@ from autoskillit.cli._init_helpers import (
     _detect_secret_scanner,
 )
 from autoskillit.config import load_config
-from autoskillit.core import SESSION_TYPE_ENV_VAR, Severity, get_logger, pkg_root
+from autoskillit.core import (
+    SESSION_TYPE_ENV_VAR,
+    Severity,
+    get_logger,
+    is_feature_enabled,
+    pkg_root,
+)
 from autoskillit.execution import QUOTA_CACHE_SCHEMA_VERSION
 from autoskillit.hook_registry import (
     _count_hook_registry_drift,
@@ -932,8 +938,6 @@ def _check_feature_registry_consistency() -> DoctorResult:
 
 def run_doctor(*, output_json: bool = False) -> None:
     """Check project setup for common issues."""
-    from autoskillit.core import is_feature_enabled
-
     cfg = load_config(Path.cwd())
     results: list[DoctorResult] = []
 

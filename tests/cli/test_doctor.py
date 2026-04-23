@@ -215,6 +215,9 @@ class TestCLIDoctor:
         """doctor JSON includes entries for all core check names."""
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
+        cfg_dir = tmp_path / ".autoskillit"
+        cfg_dir.mkdir(parents=True, exist_ok=True)
+        (cfg_dir / "config.yaml").write_text("features:\n  franchise: true\n")
         cli.doctor(output_json=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)
@@ -2173,6 +2176,9 @@ class TestGroupMFranchiseDoctorChecks:
         monkeypatch.chdir(tmp_path)
         monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
         monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
+        cfg_dir = tmp_path / ".autoskillit"
+        cfg_dir.mkdir(parents=True, exist_ok=True)
+        (cfg_dir / "config.yaml").write_text("features:\n  franchise: true\n")
         cli.doctor(output_json=True)
         data = json.loads(capsys.readouterr().out)
         check_names = {r["check"] for r in data["results"]}

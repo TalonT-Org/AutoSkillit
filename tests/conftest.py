@@ -233,7 +233,7 @@ def minimal_ctx(tmp_path):
     from autoskillit.pipeline.tokens import DefaultTokenLog
 
     ctx = ToolContext(
-        config=AutomationConfig(),
+        config=AutomationConfig(features={"franchise": True}),
         audit=DefaultAuditLog(),
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
@@ -266,7 +266,11 @@ def tool_ctx(monkeypatch, tmp_path):
     from autoskillit.server._factory import make_context
 
     mock_runner = MockSubprocessRunner()
-    ctx = make_context(AutomationConfig(), runner=mock_runner, plugin_dir=str(tmp_path))
+    ctx = make_context(
+        AutomationConfig(features={"franchise": True}),
+        runner=mock_runner,
+        plugin_dir=str(tmp_path),
+    )
     ctx.gate = DefaultGateState(enabled=True)
     ctx.config.linux_tracing.log_dir = str(tmp_path / "session_logs")
     ctx.config.linux_tracing.tmpfs_path = str(tmp_path / "shm")

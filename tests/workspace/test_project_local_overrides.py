@@ -245,7 +245,8 @@ def test_init_session_cook_full_skill_set_invariant(tmp_path):
 
     # Config disables all known categories — cook should bypass this
     config = make_test_config(
-        subsets=make_subsetsconfig(disabled=["github", "audit", "arch-lens", "ci"])
+        subsets=make_subsetsconfig(disabled=["github", "audit", "arch-lens", "ci"]),
+        features={"franchise": True},
     )
     mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
     skills_dir = mgr.init_session(
@@ -309,6 +310,7 @@ def test_cook_session_retains_non_colliding_extended_skills(tmp_path):
         SkillsDirectoryProvider,
     )
     from autoskillit.workspace.skills import DefaultSkillResolver
+    from tests._helpers import make_test_config
 
     # Override exactly one extended skill
     project_dir = tmp_path / "project"
@@ -317,8 +319,11 @@ def test_cook_session_retains_non_colliding_extended_skills(tmp_path):
     override.mkdir(parents=True)
     (override / "SKILL.md").write_text("# custom")
 
+    config = make_test_config(features={"franchise": True})
     mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
-    skills_dir = mgr.init_session("sess-retain", cook_session=True, project_dir=project_dir)
+    skills_dir = mgr.init_session(
+        "sess-retain", cook_session=True, config=config, project_dir=project_dir
+    )
 
     resolver = DefaultSkillResolver()
     expected = {

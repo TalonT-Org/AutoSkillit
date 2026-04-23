@@ -782,8 +782,8 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "_compute_retry, and _normalize_subtype; lifespan_started heuristic added",
     ),
     "_doctor.py": (
-        1200,
-        "REQ-CNST-010-E4: doctor check registry — 26 sequential checks require inline logic; "
+        1300,
+        "REQ-CNST-010-E4: doctor check registry — 28 sequential checks require inline logic; "
         "splitting into sub-modules would obscure the check sequence and break the test "
         "filter cascade",
     ),

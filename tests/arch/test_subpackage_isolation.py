@@ -80,6 +80,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_terminal",  # cli/_terminal.py: _BASE_RESET = "".join(...) derived from _RESET_SPEC
         "hook_registry",  # hook_registry.py: HOOK_REGISTRY_HASH = compute_registry_hash(...)
         "_franchise",  # cli/_franchise.py: franchise_app = App(name="franchise", ...)
+        "_features",  # cli/_features.py: features_app = App(name="features", ...)
     }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
@@ -693,7 +694,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         _update_checks.py adds the unified update check orchestration.
         _update.py adds the first-class update subcommand implementation.
         _franchise.py adds franchise error envelope rendering for CLI consumers.
-        Exempt at 21 files.
+        _features.py adds feature gate inspection subcommand (list/status).
+        Exempt at 23 files.
       hooks/ — REQ-CNST-003-E6: hooks/ hosts one standalone script per hook event
         (PreToolUse, PostToolUse, SessionStart). Each script must remain a separate
         file so Claude Code can invoke it directly as a subprocess. pretty_output_hook.py
@@ -709,7 +711,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "recipe": 36,
         "execution": 26,
         "core": 24,
-        "cli": 22,
+        "cli": 23,
         "hooks": 22,
     }
     violations: list[str] = []

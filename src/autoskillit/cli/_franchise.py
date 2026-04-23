@@ -22,7 +22,7 @@ import anyio.abc
 import psutil
 from cyclopts import App, Parameter
 
-from autoskillit.core import TerminalColumn, get_logger
+from autoskillit.core import TerminalColumn, get_logger, is_feature_enabled
 from autoskillit.franchise import (
     DispatchStatus,
     mark_dispatch_interrupted,
@@ -31,7 +31,21 @@ from autoskillit.franchise import (
 
 _log = get_logger(__name__)
 
+
+def _require_franchise(cfg: AutomationConfig) -> None:
+    """Exit with clear message if franchise feature is not enabled."""
+    if not is_feature_enabled("franchise", cfg.features):
+        print(
+            "The 'franchise' feature is not enabled.\n"
+            "Enable it with: features.franchise: true in your config\n"
+            "Or set: AUTOSKILLIT_FEATURES__FRANCHISE=true",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
+
 if TYPE_CHECKING:
+    from autoskillit.config import AutomationConfig
     from autoskillit.franchise import CampaignState, DispatchRecord, ResumeDecision
     from autoskillit.recipe.schema import Recipe
 
@@ -599,6 +613,11 @@ def franchise_run(
         print("ERROR: 'claude' not found. Install: https://docs.anthropic.com/en/docs/claude-code")
         sys.exit(1)
 
+    from autoskillit.config import load_config
+
+    cfg = load_config(Path.cwd())
+    _require_franchise(cfg)
+
     from autoskillit.core import YAMLError
     from autoskillit.franchise import (
         DispatchRecord,
@@ -654,6 +673,11 @@ def franchise_run(
 @franchise_app.command(name="list")
 def franchise_list() -> None:
     """List available campaign recipes."""
+    from autoskillit.config import load_config
+
+    cfg = load_config(Path.cwd())
+    _require_franchise(cfg)
+
     from autoskillit.core import TerminalColumn, _render_terminal_table
     from autoskillit.recipe import list_campaign_recipes
 
@@ -682,6 +706,11 @@ def franchise_status(
     json_output: Annotated[bool, Parameter(name=["--json"])] = False,
 ) -> None:
     """Show franchise campaign status."""
+    from autoskillit.config import load_config
+
+    cfg = load_config(Path.cwd())
+    _require_franchise(cfg)
+
     franchise_dir = Path.cwd() / ".autoskillit" / "temp" / "franchise"
 
     if campaign_id is not None:

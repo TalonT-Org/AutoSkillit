@@ -61,10 +61,16 @@ def check_feature_gated_tools(ctx: ValidationContext) -> list[RuleFinding]:
 
     findings: list[RuleFinding] = []
 
+    # Hoist per-feature tool sets and category_map outside the step loop
+    feature_tools = {fdef: _tools_for_feature(fdef) for fdef in disabled_fdefs}
+    category_map = (
+        ctx.skill_category_map if ctx.skill_category_map is not None else _get_skill_category_map()
+    )
+
     for step_name, step in ctx.recipe.steps.items():
         for fdef in disabled_fdefs:
             # --- Tool check ---
-            if step.tool and step.tool in _tools_for_feature(fdef):
+            if step.tool and step.tool in feature_tools[fdef]:
                 findings.append(
                     RuleFinding(
                         rule="feature-gate-tool-reference",
@@ -82,15 +88,10 @@ def check_feature_gated_tools(ctx: ValidationContext) -> list[RuleFinding]:
             # --- Skill check (only when the feature gates skill categories) ---
             if step.tool not in SKILL_TOOLS or not fdef.skill_categories:
                 continue
-            skill_cmd = (step.with_args or {}).get("skill_command", "")
+            skill_cmd = (step.with_args or {}).get("skill_command") or ""
             skill_name = resolve_skill_name(skill_cmd)
             if skill_name is None:
                 continue
-            category_map = (
-                ctx.skill_category_map
-                if ctx.skill_category_map is not None
-                else _get_skill_category_map()
-            )
             categories = category_map.get(skill_name, frozenset())
             if categories & fdef.skill_categories:
                 findings.append(

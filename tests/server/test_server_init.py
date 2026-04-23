@@ -62,7 +62,7 @@ class TestKitchenVisibility:
 
         mock_ctx = AsyncMock()
 
-        await _redisable_subsets(mock_ctx, ["kitchen-core"])
+        await _redisable_subsets(mock_ctx, ["kitchen-core"], features={"franchise": True})
 
         mock_ctx.disable_components.assert_called_once_with(tags={"kitchen-core"})
 

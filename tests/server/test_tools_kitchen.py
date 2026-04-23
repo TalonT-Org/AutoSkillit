@@ -534,7 +534,9 @@ async def test_open_kitchen_no_redisable_when_empty(tmp_path, monkeypatch):
     mock_ctx = _make_mock_ctx()
     mock_ctx.enable_components = AsyncMock()
     mock_ctx.disable_components = AsyncMock()
-    mock_ctx.config = AutomationConfig(subsets=SubsetsConfig(disabled=[]))
+    mock_ctx.config = AutomationConfig(
+        subsets=SubsetsConfig(disabled=[]), features={"franchise": True}
+    )
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):

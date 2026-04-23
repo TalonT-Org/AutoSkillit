@@ -606,7 +606,10 @@ class AutomationConfig:
                 dict(feat) if isinstance(feat, dict) else {}
             ),
         )
-        result.franchise.validate(is_feature_enabled("franchise", result.features))
+        try:
+            result.franchise.validate(is_feature_enabled("franchise", result.features))
+        except ValueError as exc:
+            raise ValueError(f"franchise.l2_default_timeout_sec: {exc}") from exc
         return result
 
 

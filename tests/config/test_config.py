@@ -1233,7 +1233,7 @@ class TestFranchiseConfig:
         from autoskillit.config.settings import FranchiseConfig
 
         with pytest.raises(ValueError, match="l2_default_timeout_sec must be positive"):
-            FranchiseConfig(l2_default_timeout_sec=0)
+            FranchiseConfig(l2_default_timeout_sec=0).validate(True)
 
     def test_franchise_config_rejects_negative_timeout(self) -> None:
         """FranchiseConfig raises ValueError when l2_default_timeout_sec is negative."""
@@ -1242,4 +1242,45 @@ class TestFranchiseConfig:
         from autoskillit.config.settings import FranchiseConfig
 
         with pytest.raises(ValueError, match="l2_default_timeout_sec must be positive"):
-            FranchiseConfig(l2_default_timeout_sec=-1)
+            FranchiseConfig(l2_default_timeout_sec=-1).validate(True)
+
+    def test_franchise_config_validate_skips_when_feature_disabled(self) -> None:
+        """FC_NEW_2: validate(False) does NOT raise even for invalid timeout."""
+        from autoskillit.config.settings import FranchiseConfig
+
+        FranchiseConfig(l2_default_timeout_sec=0).validate(False)  # must not raise
+
+    def test_franchise_config_construction_no_longer_raises_for_invalid_timeout(self) -> None:
+        """FC_NEW_3: FranchiseConfig(l2_default_timeout_sec=0) constructs without raising."""
+        from autoskillit.config.settings import FranchiseConfig
+
+        cfg = FranchiseConfig(l2_default_timeout_sec=0)
+        assert cfg.l2_default_timeout_sec == 0
+
+    def test_load_config_franchise_invalid_timeout_skips_when_disabled(
+        self, tmp_path: Path
+    ) -> None:
+        """FC_NEW_4: load_config does NOT raise with invalid timeout when franchise disabled."""
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        config_data = {
+            "franchise": {"l2_default_timeout_sec": -1},
+            "features": {"franchise": False},
+        }
+        (config_dir / "config.yaml").write_text(yaml.dump(config_data))
+        cfg = load_config(tmp_path)  # must not raise
+        assert cfg.franchise.l2_default_timeout_sec == -1
+
+    def test_load_config_franchise_invalid_timeout_raises_when_enabled(
+        self, tmp_path: Path
+    ) -> None:
+        """FC_NEW_5: load_config raises ValueError with invalid timeout when franchise enabled."""
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        config_data = {
+            "franchise": {"l2_default_timeout_sec": -1},
+            "features": {"franchise": True},
+        }
+        (config_dir / "config.yaml").write_text(yaml.dump(config_data))
+        with pytest.raises(ValueError, match="l2_default_timeout_sec must be positive"):
+            load_config(tmp_path)

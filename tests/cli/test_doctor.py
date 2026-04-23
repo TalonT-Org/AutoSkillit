@@ -240,6 +240,8 @@ class TestCLIDoctor:
             "ambient_session_type_orchestrator",
             "ambient_session_type_franchise",
             "ambient_campaign_id",
+            "feature_dependencies",
+            "feature_registry_consistency",
             "sous_chef_bundled",
             "franchise_dispatch_guard_registered",
             "stale_franchise_state",
@@ -2186,3 +2188,192 @@ class TestGroupMFranchiseDoctorChecks:
             "campaign_manifest_clone_dests",
         }
         assert franchise_checks <= check_names
+
+
+class TestGroupNFeatureGateDoctorChecks:
+    """N1–N8: Feature-gate checks and FranchiseConfig conditional validation."""
+
+    # N1: Franchise checks skipped when feature disabled
+    def test_franchise_doctor_checks_skipped_when_disabled(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        from autoskillit.config import AutomationConfig
+
+        mock_cfg = AutomationConfig(features={"franchise": False})
+        monkeypatch.setattr("autoskillit.cli._doctor.load_config", lambda _: mock_cfg)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
+        monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
+        cli.doctor(output_json=True)
+        data = json.loads(capsys.readouterr().out)
+        check_names = {r["check"] for r in data["results"]}
+        franchise_infra = {
+            "sous_chef_bundled",
+            "franchise_dispatch_guard_registered",
+            "stale_franchise_state",
+            "campaign_onboarding_hint",
+            "campaign_manifest_clone_dests",
+        }
+        assert franchise_infra.isdisjoint(check_names), (
+            f"Franchise checks must be absent when feature is disabled, "
+            f"but found: {franchise_infra & check_names}"
+        )
+
+    # N2: Franchise checks run when feature enabled
+    def test_franchise_doctor_checks_run_when_enabled(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        from autoskillit.config import AutomationConfig
+
+        mock_cfg = AutomationConfig(features={"franchise": True})
+        monkeypatch.setattr("autoskillit.cli._doctor.load_config", lambda _: mock_cfg)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
+        monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
+        cli.doctor(output_json=True)
+        data = json.loads(capsys.readouterr().out)
+        check_names = {r["check"] for r in data["results"]}
+        franchise_infra = {
+            "sous_chef_bundled",
+            "franchise_dispatch_guard_registered",
+            "stale_franchise_state",
+            "campaign_onboarding_hint",
+            "campaign_manifest_clone_dests",
+        }
+        assert franchise_infra <= check_names
+        franchise_results = [r for r in data["results"] if r["check"] in franchise_infra]
+        assert all(r["severity"] in {"ok", "info"} for r in franchise_results), (
+            f"Expected all franchise checks to have non-error severity (ok/info), "
+            f"got: {[(r['check'], r['severity']) for r in franchise_results]}"
+        )
+
+    # N3: Ambient env checks always run even when franchise disabled
+    def test_ambient_env_checks_always_run_when_franchise_disabled(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        from autoskillit.config import AutomationConfig
+
+        mock_cfg = AutomationConfig(features={"franchise": False})
+        monkeypatch.setattr("autoskillit.cli._doctor.load_config", lambda _: mock_cfg)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
+        monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
+        cli.doctor(output_json=True)
+        data = json.loads(capsys.readouterr().out)
+        check_names = {r["check"] for r in data["results"]}
+        ambient_checks = {
+            "ambient_session_type_leaf",
+            "ambient_session_type_orchestrator",
+            "ambient_session_type_franchise",
+            "ambient_campaign_id",
+        }
+        assert ambient_checks <= check_names
+
+    # N4: Feature dependency check fires ERROR for unsatisfied dep
+    def test_feature_dependency_check_fires_on_unsatisfied_dep(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.cli._doctor import _check_feature_dependencies
+        from autoskillit.core import Severity
+        from autoskillit.core._type_constants import FeatureDef, FeatureLifecycle
+
+        fake_feature = FeatureDef(
+            name="test_feature",
+            lifecycle=FeatureLifecycle.EXPERIMENTAL,
+            description="test feature with dep",
+            tool_tags=frozenset(),
+            skill_categories=frozenset(),
+            import_package=None,
+            default_enabled=False,
+            depends_on=frozenset({"franchise"}),
+        )
+        monkeypatch.setattr(
+            "autoskillit.core.FEATURE_REGISTRY",
+            {"test_feature": fake_feature},
+        )
+        result = _check_feature_dependencies({"test_feature": True, "franchise": False})
+        assert result.severity == Severity.ERROR
+        assert "test_feature" in result.message
+        assert "franchise" in result.message
+
+    # N5: Feature dependency check passes when deps satisfied
+    def test_feature_dependency_check_passes_when_deps_satisfied(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.cli._doctor import _check_feature_dependencies
+        from autoskillit.core import Severity
+        from autoskillit.core._type_constants import FeatureDef, FeatureLifecycle
+
+        fake_feature = FeatureDef(
+            name="test_feature",
+            lifecycle=FeatureLifecycle.EXPERIMENTAL,
+            description="test feature with dep",
+            tool_tags=frozenset(),
+            skill_categories=frozenset(),
+            import_package=None,
+            default_enabled=False,
+            depends_on=frozenset({"franchise"}),
+        )
+        monkeypatch.setattr(
+            "autoskillit.core.FEATURE_REGISTRY",
+            {"test_feature": fake_feature},
+        )
+        result = _check_feature_dependencies({"test_feature": True, "franchise": True})
+        assert result.severity == Severity.OK
+        assert result.message == "All feature dependencies satisfied"
+
+    # N6: Feature dependency check passes with empty features
+    def test_feature_dependency_check_passes_with_empty_features(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.cli._doctor import _check_feature_dependencies
+        from autoskillit.core import Severity
+
+        monkeypatch.setattr("autoskillit.core.FEATURE_REGISTRY", {})
+        result = _check_feature_dependencies({})
+        assert result.severity == Severity.OK
+
+    # N7: Feature registry consistency passes for real registry
+    def test_feature_registry_consistency_passes(self) -> None:
+        from autoskillit.cli._doctor import _check_feature_registry_consistency
+        from autoskillit.core import Severity
+
+        result = _check_feature_registry_consistency()
+        assert result.severity == Severity.OK
+
+    # N8: Feature registry consistency errors on bad import
+    def test_feature_registry_consistency_errors_on_bad_import(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.cli._doctor import _check_feature_registry_consistency
+        from autoskillit.core import Severity
+        from autoskillit.core._type_constants import FeatureDef, FeatureLifecycle
+
+        bad_feature = FeatureDef(
+            name="bad_feature",
+            lifecycle=FeatureLifecycle.EXPERIMENTAL,
+            description="feature with bad import",
+            tool_tags=frozenset(),
+            skill_categories=frozenset(),
+            import_package="nonexistent.pkg",
+        )
+        monkeypatch.setattr(
+            "autoskillit.core.FEATURE_REGISTRY",
+            {"bad_feature": bad_feature},
+        )
+        result = _check_feature_registry_consistency()
+        assert result.severity == Severity.ERROR
+        assert "bad_feature" in result.message
+        assert "nonexistent.pkg" in result.message

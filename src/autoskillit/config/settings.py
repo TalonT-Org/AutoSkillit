@@ -25,6 +25,7 @@ from autoskillit.core import (
     OutputFormat,
     atomic_write,
     dump_yaml_str,
+    is_feature_enabled,
     load_yaml,
     pkg_root,
 )
@@ -290,7 +291,10 @@ class WorkspaceConfig:
 class FranchiseConfig:
     l2_default_timeout_sec: int = 3600
 
-    def __post_init__(self) -> None:
+    def validate(self, feature_enabled: bool) -> None:
+        """Validate only when the feature is active."""
+        if not feature_enabled:
+            return
         if self.l2_default_timeout_sec <= 0:
             raise ValueError(
                 f"l2_default_timeout_sec must be positive, got {self.l2_default_timeout_sec}"
@@ -450,7 +454,7 @@ class AutomationConfig:
         _wsc = _field_defaults(WorkspaceConfig)
         _fr = _field_defaults(FranchiseConfig)
 
-        return cls(
+        result = cls(
             test_check=TestCheckConfig(
                 command=list(val(tc, "command", _tc["command"])),
                 timeout=int(val(tc, "timeout", _tc["timeout"])),
@@ -602,6 +606,11 @@ class AutomationConfig:
                 dict(feat) if isinstance(feat, dict) else {}
             ),
         )
+        try:
+            result.franchise.validate(is_feature_enabled("franchise", result.features))
+        except ValueError as exc:
+            raise ValueError(f"franchise config: {exc}") from exc
+        return result
 
 
 def _build_config_schema() -> dict[str, frozenset[str]]:

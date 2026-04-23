@@ -43,7 +43,7 @@ Space-separated issue numbers (required, minimum 2), plus optional flags:
 **ALWAYS:**
 - Use parallel subagents (up to 8) for issue analysis in Step 1
 - Use `model: "sonnet"` for all subagents
-- Write both JSON and markdown report outputs
+- Write both JSON and markdown report outputs to `{{AUTOSKILLIT_TEMP}}/build-execution-map/`
 - Emit `execution_map` and `execution_map_report` tokens with absolute paths (use `$(pwd)` to resolve the working directory prefix)
 - Emit structured output tokens as the final lines of text output (plain text, no markdown decorators)
 - Include the full `overlap_matrix` in the JSON output for auditability
@@ -141,7 +141,7 @@ Compute timestamp `{YYYY-MM-DD_HHMMSS}` (current local time, second precision).
 
 Create the output directory before writing:
 ```bash
-mkdir -p "$(pwd)/.autoskillit/temp/build-execution-map"
+mkdir -p "{{AUTOSKILLIT_TEMP}}/build-execution-map"
 ```
 If directory creation fails (permission error, missing parent), abort with an explicit
 error message identifying the failed path — do not silently proceed.

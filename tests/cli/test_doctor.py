@@ -2249,6 +2249,11 @@ class TestGroupNFeatureGateDoctorChecks:
             "campaign_manifest_clone_dests",
         }
         assert franchise_infra <= check_names
+        franchise_results = [r for r in data["results"] if r["check"] in franchise_infra]
+        assert any(r["severity"] == "ok" for r in franchise_results), (
+            f"Expected at least one franchise check to have severity OK, "
+            f"got: {[(r['check'], r['severity']) for r in franchise_results]}"
+        )
 
     # N3: Ambient env checks always run even when franchise disabled
     def test_ambient_env_checks_always_run_when_franchise_disabled(
@@ -2327,12 +2332,16 @@ class TestGroupNFeatureGateDoctorChecks:
         )
         result = _check_feature_dependencies({"test_feature": True, "franchise": True})
         assert result.severity == Severity.OK
+        assert result.message == "All feature dependencies satisfied"
 
     # N6: Feature dependency check passes with empty features
-    def test_feature_dependency_check_passes_with_empty_features(self) -> None:
+    def test_feature_dependency_check_passes_with_empty_features(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         from autoskillit.cli._doctor import _check_feature_dependencies
         from autoskillit.core import Severity
 
+        monkeypatch.setattr("autoskillit.core.FEATURE_REGISTRY", {})
         result = _check_feature_dependencies({})
         assert result.severity == Severity.OK
 

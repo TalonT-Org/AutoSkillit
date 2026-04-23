@@ -55,8 +55,10 @@ Space-separated issue numbers (required, minimum 2), plus optional flags:
 ### Step 0 — Parse Arguments
 
 Accept issue numbers as space-separated or comma-separated values. Parse `--base-ref`
-if present (default: `main`). Require at least 2 issues — if only 1 is provided, emit
-a warning and write a trivial single-group map (single issue always gets `parallel: false`).
+if present (default: `main`). Validate the issue count:
+- **Zero issues**: abort immediately with `"Error: build-execution-map requires at least 1 issue number"` and exit non-zero.
+- **One issue**: emit a warning and write a trivial single-group map (single issue always gets `parallel: false`).
+- **Two or more issues**: proceed to Step 0.5.
 
 ### Step 0.5 — Code-Index Initialization
 

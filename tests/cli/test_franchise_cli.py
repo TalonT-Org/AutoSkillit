@@ -772,8 +772,10 @@ def test_franchise_run_exits_when_disabled(
     """franchise_run exits 1 when franchise feature is disabled via feature gate."""
     monkeypatch.chdir(tmp_path)
     _stub_guards(monkeypatch)
+    checked_features: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli._franchise.is_feature_enabled", lambda name, features: False
+        "autoskillit.cli._franchise.is_feature_enabled",
+        lambda name, features: checked_features.append(name) or False,
     )
     monkeypatch.setattr(
         "autoskillit.config.load_config", lambda path: type("C", (), {"features": {}})()
@@ -781,6 +783,7 @@ def test_franchise_run_exits_when_disabled(
     with pytest.raises(SystemExit) as exc_info:
         _franchise_run("any-campaign")
     assert exc_info.value.code == 1
+    assert "franchise" in checked_features
 
 
 # ---------------------------------------------------------------------------
@@ -793,8 +796,10 @@ def test_franchise_list_exits_when_disabled(
 ) -> None:
     """franchise_list exits 1 when franchise feature is disabled via feature gate."""
     monkeypatch.chdir(tmp_path)
+    checked_features: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli._franchise.is_feature_enabled", lambda name, features: False
+        "autoskillit.cli._franchise.is_feature_enabled",
+        lambda name, features: checked_features.append(name) or False,
     )
     monkeypatch.setattr(
         "autoskillit.config.load_config", lambda path: type("C", (), {"features": {}})()
@@ -802,6 +807,7 @@ def test_franchise_list_exits_when_disabled(
     with pytest.raises(SystemExit) as exc_info:
         _franchise_list()
     assert exc_info.value.code == 1
+    assert "franchise" in checked_features
 
 
 # ---------------------------------------------------------------------------
@@ -814,8 +820,10 @@ def test_franchise_status_exits_when_disabled(
 ) -> None:
     """franchise_status exits 1 when franchise feature is disabled via feature gate."""
     monkeypatch.chdir(tmp_path)
+    checked_features: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli._franchise.is_feature_enabled", lambda name, features: False
+        "autoskillit.cli._franchise.is_feature_enabled",
+        lambda name, features: checked_features.append(name) or False,
     )
     monkeypatch.setattr(
         "autoskillit.config.load_config", lambda path: type("C", (), {"features": {}})()
@@ -823,6 +831,7 @@ def test_franchise_status_exits_when_disabled(
     with pytest.raises(SystemExit) as exc_info:
         _franchise_status(None)
     assert exc_info.value.code == 1
+    assert "franchise" in checked_features
 
 
 # ---------------------------------------------------------------------------
@@ -831,7 +840,7 @@ def test_franchise_status_exits_when_disabled(
 
 
 def test_franchise_run_proceeds_when_enabled(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
 ) -> None:
     """franchise_run passes the feature guard and proceeds to campaign resolution."""
     _stub_guards(monkeypatch)
@@ -842,9 +851,10 @@ def test_franchise_run_proceeds_when_enabled(
     monkeypatch.setattr(
         "autoskillit.config.load_config", lambda path: type("C", (), {"features": {}})()
     )
-    # Campaign not found → exits 1 for campaign resolution, NOT the feature guard
-    # (guard passes, but campaign does not exist)
     with pytest.raises(SystemExit) as exc_info:
         _franchise_run("nonexistent-campaign")
-    # Would have exited at campaign resolution (not the feature guard)
     assert exc_info.value.code == 1
+    # Guard passed — exit must come from campaign resolution, not the feature gate
+    captured = capsys.readouterr()
+    assert "not enabled" not in captured.err
+    assert "not found" in captured.out.lower()

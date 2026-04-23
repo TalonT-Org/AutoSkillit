@@ -69,6 +69,7 @@ UNSPACED_OUTPUT_TOKEN = re.compile(
     r"integration_branch|pr_count|simple_count|needs_check_count|"
     r"ci_blocked_count|review_blocked_count|queue_mode|"
     r"failure_type|is_fixable|escalation_required|escalation_reason|"
+    r"execution_map|execution_map_report|group_count|"
     r"merged)=[^\s]",
     re.MULTILINE,
 )
@@ -102,6 +103,7 @@ def _get_skills_with_output_tokens() -> list[str]:
         r"integration_branch|pr_count|simple_count|needs_check_count|"
         r"ci_blocked_count|review_blocked_count|queue_mode|"
         r"failure_type|is_fixable|escalation_required|escalation_reason|"
+        r"execution_map|execution_map_report|group_count|"
         r"merged)\s*=\s*",
         re.MULTILINE,
     )
@@ -244,6 +246,9 @@ def test_output_path_tokens_synchronized() -> None:
             "resource_report",
             # make-campaign skill output (campaign recipe manifest path)
             "campaign_path",
+            # build-execution-map outputs (dependency-aware dispatch map)
+            "execution_map",
+            "execution_map_report",
         }
     )
 
@@ -280,6 +285,7 @@ SKILL_CONTRACTS_PATH = pkg_root() / "recipe" / "skill_contracts.yaml"
 # Skills with path-capture contracts that must have their token instruction
 # in ## Critical Constraints (not only in ## Output or a late workflow step).
 PATH_CAPTURE_SKILLS: dict[str, list[str]] = {
+    "build-execution-map": ["execution_map"],
     "make-plan": ["plan_path"],
     "rectify": ["plan_path"],
     "investigate": ["investigation_path"],

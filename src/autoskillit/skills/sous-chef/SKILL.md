@@ -134,8 +134,28 @@ Act on this list as follows:
 When the user provides **more than one issue or task** in a single request:
 
 1. **If the user says "parallel"** (or "run in parallel", "simultaneously", "at the
-   same time", "concurrently") → launch N independent pipeline sessions **immediately**.
-   No questions, no pushback, no alternative suggestions.
+   same time", "concurrently"):
+
+   a. **Build execution map first.** Call `run_skill` with `/autoskillit:build-execution-map`
+      passing all issue numbers. This produces an `execution_map` JSON artifact at the
+      emitted path.
+
+   b. **Read the execution map.** Parse the JSON to extract `groups` and `merge_order`.
+
+   c. **Dispatch groups in order.** For each group in ascending `group` number:
+      - If `parallel: true` → launch all issues in the group as independent pipeline
+        sessions simultaneously, using wavefront scheduling (PARALLEL STEP SCHEDULING rule).
+      - If `parallel: false` → run the group's issues one at a time in sequence.
+
+   d. **Merge-wait between groups.** Group N+1 must NOT begin cloning until ALL of
+      Group N's PRs have merged to the base branch. This ensures every group's clones
+      capture a base SHA that includes all prior groups' changes. Use the MERGE PHASE
+      rules to merge each group's PRs, following the `merge_order` from the map for
+      intra-group merge sequencing.
+
+   e. **Fallback.** If `build-execution-map` fails or returns an error, fall back to
+      launching all N pipelines immediately (current behavior). Do not block dispatch
+      on map failure.
 
 2. **If the user says "sequential"** (or "one at a time", "in order", "one by one") →
    run them one at a time without asking.
@@ -189,6 +209,26 @@ alongside a fast `run_cmd`, the fast step completes instantly but cannot trigger
 fast step for its pipeline until the entire batch (including the slow session) finishes.
 Draining all fast steps first ensures every pipeline arrives at the slow-step boundary
 simultaneously, after which all slow steps run in parallel and their wall-clock time overlaps.
+
+---
+
+## EXECUTION MAP — GROUP DISPATCH — MANDATORY
+
+When dispatching from an execution map:
+
+1. **Group iteration is outer loop.** The group number (1, 2, 3, ...) is the primary
+   ordering. Within each group, the wavefront scheduling rule governs step interleaving.
+
+2. **Merge-wait is mandatory between groups.** After all pipelines in Group N complete
+   (including their merge phase), verify all Group N PRs have merged to the base branch
+   before starting Group N+1. This prevents Group N+1 from cloning a stale base.
+
+3. **merge_order governs intra-group PR merge sequencing.** Within a parallel group,
+   merge PRs in the order specified by `merge_order` (not by completion time). This
+   minimizes merge conflicts by merging simpler changes first.
+
+4. **Single-issue groups skip wavefront.** If a group has `parallel: false` or contains
+   only one issue, run it as a single pipeline — no wavefront scheduling needed.
 
 ---
 

@@ -231,8 +231,11 @@ def test_is_test_feature_enabled_reads_project_config(monkeypatch):
     from tests.conftest import _is_test_feature_enabled, _resolve_test_features
 
     _resolve_test_features.cache_clear()
-    result = _is_test_feature_enabled("franchise", env_val=None)
-    assert result is True
+    try:
+        result = _is_test_feature_enabled("franchise", env_val=None)
+        assert result is True
+    finally:
+        _resolve_test_features.cache_clear()
 
 
 def test_is_test_feature_enabled_dynaconf_env_overrides(monkeypatch):
@@ -242,5 +245,8 @@ def test_is_test_feature_enabled_dynaconf_env_overrides(monkeypatch):
     from tests.conftest import _is_test_feature_enabled, _resolve_test_features
 
     _resolve_test_features.cache_clear()
-    result = _is_test_feature_enabled("franchise", env_val=None)
-    assert result is False
+    try:
+        result = _is_test_feature_enabled("franchise", env_val=None)
+        assert result is False
+    finally:
+        _resolve_test_features.cache_clear()

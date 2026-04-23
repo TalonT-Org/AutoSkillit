@@ -375,7 +375,10 @@ def _resolve_test_features() -> dict[str, bool]:
 
         from autoskillit.config.settings import load_config
 
-        cfg = load_config(Path.cwd())
+        # Anchor to repo root via this file's known location (tests/conftest.py)
+        # rather than Path.cwd(), which varies across IDE runners and monkeypatch.chdir.
+        repo_root = Path(__file__).resolve().parent.parent
+        cfg = load_config(repo_root)
         return dict(cfg.features)
     except Exception:
         return {}

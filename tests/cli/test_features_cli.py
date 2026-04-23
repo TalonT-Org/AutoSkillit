@@ -49,8 +49,9 @@ def test_features_list_shows_effective_state(
     features_list()
     out = capsys.readouterr().out
     # franchise row should show effective=false and source=config
-    assert "false" in out
-    assert "config" in out
+    franchise_line = next(line for line in out.splitlines() if "franchise" in line)
+    assert "false" in franchise_line
+    assert "config" in franchise_line
 
 
 # ---------------------------------------------------------------------------
@@ -72,7 +73,8 @@ def test_features_status_detail(
     out = capsys.readouterr().out
     assert "franchise" in out
     assert "experimental" in out  # lifecycle
-    assert "1" in out  # tier
+    tier_line = next(line for line in out.splitlines() if "Tier" in line)
+    assert "1" in tier_line  # tier value on its own line
     assert "true" in out  # enabled (default_enabled=True for franchise)
 
 

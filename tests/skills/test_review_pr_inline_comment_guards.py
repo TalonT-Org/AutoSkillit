@@ -379,9 +379,9 @@ def test_step6_posts_file_level_comments_for_critical_unpostable():
     assert "subject_type" in step6_section, (
         "Step 6 must contain 'subject_type' for file-level comment posting."
     )
-    file_idx = step6_section.find("subject_type")
-    nearby = step6_section[max(0, file_idx - 200) : file_idx + 200]
-    assert "file" in nearby, "Step 6 must use subject_type: 'file' for file-level comments."
+    assert 'subject_type: "file"' in step6_section or 'subject_type="file"' in step6_section, (
+        "Step 6 must use subject_type: 'file' for file-level comments."
+    )
 
 
 def test_step6_file_level_uses_individual_endpoint_not_batch():
@@ -418,7 +418,7 @@ def test_step6_file_level_has_rate_limit_delay():
 
 
 def test_step1_5_skips_null_line_threads():
-    """Step 1.5 must skip threads where both line and originalLine are null (file-level threads)."""
+    """Step 1.5 must skip threads with null line and originalLine."""
     text = SKILL_TEXT
     step15_start = text.find("### Step 1.5")
     step2_start = text.find("### Step 2")
@@ -444,6 +444,76 @@ def test_step4_documents_unpostable_feeds_step6_and_step7():
     assert "Step 6" in step4_section and "Step 7" in step4_section, (
         "Step 4 must document that UNPOSTABLE_FINDINGS feeds into both "
         "Step 6 (file-level comments) and Step 7 (review body)."
+    )
+
+
+def test_review_research_pr_step6_posts_file_level_comments():
+    """review-research-pr Step 6 must post file-level comments for critical unpostable findings."""
+    text = RESEARCH_SKILL_TEXT
+    step6_start = text.find("### Step 6")
+    step65_start = text.find("### Step 6.5")
+    assert step6_start != -1
+    assert step65_start != -1
+    step6_section = text[step6_start:step65_start]
+    assert "subject_type" in step6_section, (
+        "review-research-pr Step 6 must contain 'subject_type' for file-level comment posting."
+    )
+    assert 'subject_type: "file"' in step6_section or 'subject_type="file"' in step6_section, (
+        "review-research-pr Step 6 must use subject_type: 'file' for file-level comments."
+    )
+
+
+def test_review_research_pr_step6_uses_individual_endpoint():
+    """review-research-pr file-level comments must use the individual comments endpoint."""
+    text = RESEARCH_SKILL_TEXT
+    step6_start = text.find("### Step 6")
+    step65_start = text.find("### Step 6.5")
+    assert step6_start != -1
+    assert step65_start != -1
+    step6_section = text[step6_start:step65_start]
+    file_level_start = step6_section.find("File-Level Comments")
+    assert file_level_start != -1, (
+        "review-research-pr Step 6 must contain a 'File-Level Comments' section"
+    )
+    file_level_section = step6_section[file_level_start:]
+    assert "pulls/{pr_number}/comments" in file_level_section, (
+        "review-research-pr file-level comments must use the individual "
+        "/pulls/{N}/comments endpoint."
+    )
+
+
+def test_review_research_pr_step6_has_rate_limit_delay():
+    """review-research-pr file-level comment posting must include sleep 1."""
+    text = RESEARCH_SKILL_TEXT
+    step6_start = text.find("### Step 6")
+    step65_start = text.find("### Step 6.5")
+    assert step6_start != -1
+    assert step65_start != -1
+    step6_section = text[step6_start:step65_start]
+    file_level_start = step6_section.find("File-Level Comments")
+    assert file_level_start != -1
+    file_level_section = step6_section[file_level_start:]
+    assert "sleep 1" in file_level_section, (
+        "review-research-pr file-level comment posting must include 'sleep 1' "
+        "between mutating API calls."
+    )
+
+
+def test_review_research_pr_step6_critical_only():
+    """review-research-pr file-level comments must be limited to critical-severity findings."""
+    text = RESEARCH_SKILL_TEXT
+    step6_start = text.find("### Step 6")
+    step65_start = text.find("### Step 6.5")
+    assert step6_start != -1
+    assert step65_start != -1
+    step6_section = text[step6_start:step65_start]
+    file_level_start = step6_section.find("File-Level Comments")
+    assert file_level_start != -1
+    file_level_section = step6_section[file_level_start:]
+    lower = file_level_section.lower()
+    assert "critical" in lower, (
+        "review-research-pr file-level comments must be limited to "
+        "critical-severity findings only."
     )
 
 

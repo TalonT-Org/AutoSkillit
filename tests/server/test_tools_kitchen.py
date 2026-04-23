@@ -1315,12 +1315,12 @@ async def test_redisable_subsets_includes_feature_tags() -> None:
     )
 
 
-def test_exclusive_feature_tools_fully_hidden() -> None:
-    """EXCLUSIVE_FEATURE_TOOLS is a dict (currently empty — structural test)."""
-    from autoskillit.core import EXCLUSIVE_FEATURE_TOOLS
+def test_redisable_subsets_documents_category_b() -> None:
+    """_redisable_subsets docstring mentions per-tool suppression for feature-only tools."""
+    from autoskillit.server.tools_kitchen import _redisable_subsets
 
-    assert isinstance(EXCLUSIVE_FEATURE_TOOLS, dict)
-    assert EXCLUSIVE_FEATURE_TOOLS == {}
+    doc = _redisable_subsets.__doc__ or ""
+    assert "per-tool" in doc.lower()
 
 
 @pytest.mark.anyio

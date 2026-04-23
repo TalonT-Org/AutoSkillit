@@ -1322,11 +1322,12 @@ def test_exclusive_feature_tools_fully_hidden() -> None:
 
 
 @pytest.mark.anyio
-async def test_shared_tools_visible_post_kitchen_regardless() -> None:
-    """Disabling franchise tag must not affect tools with kitchen-core tag.
+async def test_redisable_subsets_does_not_disable_kitchen_core_tag() -> None:
+    """_redisable_subsets must not pass kitchen-core to disable_components.
 
     FastMCP union model: any enabled tag keeps the tool visible. Verifies that
-    kitchen-core tools (run_cmd, etc.) retain visibility after feature gate pass.
+    kitchen-core is not included in the suppressed tag sets so that tools with
+    the kitchen-core tag retain visibility after the feature gate pass.
     """
     from autoskillit.server.tools_kitchen import _redisable_subsets
 

@@ -131,6 +131,11 @@ Build two lists from the thread nodes. For each thread, resolve line via:
 outdated threads where new commits have shifted the diff anchor; `originalLine` is
 the stable fallback.
 
+If both `line` and `originalLine` are null (file-level comment thread from a prior review),
+skip this thread — do not add it to `prior_resolved_findings` or `prior_unresolved_findings`.
+File-level threads have no line anchor and must not suppress line-anchored findings via the
+±5 proximity match.
+
 **`prior_resolved_findings`** — threads where `isResolved=true` AND the first comment body
 contains `[critical]` or `[warning]` (autoskillit-posted finding):
 ```json
@@ -362,7 +367,11 @@ Subagent prompt template (dimension 7 — deletion_regression, only when `deleti
    - `FILTERED_FINDINGS`: findings whose `(file, line)` falls within any hunk range for
      that file. These are in-hunk and safe to post as inline comments in Step 6.
    - `UNPOSTABLE_FINDINGS`: findings whose `line` is not in any hunk range for their file.
-     Log a warning for each. These are included in the summary fallback body only.
+     Log a warning for each. These findings are surfaced via:
+     - Step 6: Critical-severity unpostable findings are posted as file-level comments
+       (subject_type: "file") on the individual comments endpoint.
+     - Step 7: All unpostable findings appear in the "Outside Diff Range" section of the
+       review body.
    - If `VALID_LINE_RANGES` is empty, all findings are `FILTERED_FINDINGS`.
 5. Apply verdict logic (Step 5) to ALL findings (`FILTERED_FINDINGS` + `UNPOSTABLE_FINDINGS`
    combined), so unpostable findings still contribute to the `changes_requested` verdict.
@@ -463,6 +472,35 @@ length check would always read 0 and falsely trigger Tier 1 fallback.
 `COMMENT` instead of `REQUEST_CHANGES`. GitHub does not allow a PR author to submit a
 `REQUEST_CHANGES` review on their own PR.
 
+**File-Level Comments for Critical Unpostable Findings:**
+
+After the batch review POST succeeds (or after Tier 1 individual posting completes),
+post file-level comments for each **critical-severity** finding in `UNPOSTABLE_FINDINGS`.
+These use the individual comments endpoint with `subject_type: "file"` — this parameter
+is NOT valid on the batch Reviews API `comments[]` array.
+
+```bash
+COMMIT_ID=$(gh pr view {pr_number} --json headRefOid -q .headRefOid)
+
+# For each CRITICAL finding in UNPOSTABLE_FINDINGS:
+# NOTE: Do NOT include a `line` field — `line` must be omitted (not set to null)
+# for subject_type: "file". The `gh api --field` syntax naturally omits unspecified
+# fields, so simply not including `--field line=...` is correct.
+gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments \
+  --method POST \
+  --field path="{finding.file}" \
+  --field subject_type="file" \
+  --field commit_id="$COMMIT_ID" \
+  --field body="[{finding.severity}] {finding.dimension} (L{finding.line} — outside diff hunk): {finding.message}"
+sleep 1  # Rate-limit discipline: 1s between mutating calls
+```
+
+Only critical-severity findings are posted as file-level comments to control API call volume.
+Warning and info unpostable findings appear in the Step 7 review body only.
+
+If a file-level POST fails, log the failure and continue — file-level comments are
+best-effort supplementary visibility. Do not fall through to Tier 1/Tier 2 for these.
+
 **Fallback Tier 1 — Individual Comments (if batch POST fails):**
 
 Attempt to post each finding from `FILTERED_FINDINGS` individually via:
@@ -535,14 +573,46 @@ Never reference local file paths (e.g., `{{AUTOSKILLIT_TEMP}}/...`, `summary_*.m
 # approved
 gh pr review {pr_number} --approve --body "AutoSkillit review passed. No blocking issues found."
 
-# approved_with_comments
+# approved_with_comments (no UNPOSTABLE_FINDINGS)
 gh pr review {pr_number} --comment --body "AutoSkillit review: warning-only findings detected. See inline comments — no blocking changes required."
 
-# changes_requested
-gh pr review {pr_number} --request-changes --body "AutoSkillit review found {N} blocking issues. See inline comments."
+# approved_with_comments (with UNPOSTABLE_FINDINGS)
+# changes_requested (with UNPOSTABLE_FINDINGS)
+# needs_human (with UNPOSTABLE_FINDINGS)
+#
+# When UNPOSTABLE_FINDINGS is non-empty, append the "Outside Diff Range" section
+# to the verdict body. Build the body string dynamically:
 
-# needs_human
-gh pr review {pr_number} --comment --body "AutoSkillit review: uncertain trade-offs detected. {escalation_user_mention} Please review. See inline comments."
+VERDICT_LINE="{verdict-specific one-liner from above}"
+
+OUTSIDE_SECTION=""
+if [ ${#UNPOSTABLE_FINDINGS[@]} -gt 0 ]; then
+  # Group unpostable findings by file, format as bullet list
+  # Reuse the Tier 2 bullet-list format (120-char message truncation)
+  # TRUNCATION GUARD: Cap the Outside Diff Range section at ~40,000 characters.
+  # The GitHub review body has a hard 65,536-char limit (HTTP 422 on overflow,
+  # no graceful degradation). Reserve headroom for the verdict line and formatting.
+  # If truncated, append: "...and N more findings. See file-level comments for
+  # critical items."
+  OUTSIDE_SECTION=$(cat <<'SECTION'
+
+### ⚠️ Outside Diff Range
+
+These findings target lines not in the diff and could not be posted as inline comments:
+
+**{file_path_1}**
+- **L{line}** [{severity}/{dimension}]: {message, truncated to 120 chars}
+
+**{file_path_2}**
+- **L{line}** [{severity}/{dimension}]: {message, truncated to 120 chars}
+SECTION
+)
+fi
+
+BODY="${VERDICT_LINE}${OUTSIDE_SECTION}"
+
+# Then post with the appropriate event flag:
+gh pr review {pr_number} {--approve|--comment|--request-changes} --body "$BODY"
 ```
 
 ### Step 8: Write Summary and Emit Verdict

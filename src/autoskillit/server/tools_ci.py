@@ -165,7 +165,7 @@ async def wait_for_ci(
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
-@mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": False})
 @track_response_size("set_commit_status")
 async def set_commit_status(
     sha: str,

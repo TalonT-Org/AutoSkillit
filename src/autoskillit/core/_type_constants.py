@@ -24,6 +24,7 @@ __all__ = [
     "FRANCHISE_TOOLS",
     "FREE_RANGE_TOOLS",
     "UNGATED_TOOLS",
+    "MUTATING_TOOLS",
     "PackDef",
     "PACK_REGISTRY",
     "RecipePackDef",
@@ -210,6 +211,28 @@ FREE_RANGE_TOOLS: frozenset[str] = frozenset(
 )
 
 UNGATED_TOOLS: frozenset[str] = FREE_RANGE_TOOLS
+
+# Tools that mutate shared state (GitHub, filesystem, cross-session resources).
+# readOnlyHint=False on wire. All other registered tools are read-only-hinted.
+# Consumed by: structural tests that cross-check decorator values.
+MUTATING_TOOLS: frozenset[str] = frozenset(
+    {
+        "toggle_auto_merge",
+        "wait_for_merge_queue",
+        "register_clone_status",
+        "batch_cleanup_clones",
+        "dispatch_food_truck",
+        "set_commit_status",
+        "disable_quota_guard",
+    }
+)
+
+_ALL_REGISTERED_TOOLS = GATED_TOOLS | FREE_RANGE_TOOLS | HEADLESS_TOOLS
+if not MUTATING_TOOLS <= _ALL_REGISTERED_TOOLS:
+    raise RuntimeError(
+        f"MUTATING_TOOLS contains names not in any tool registry: "
+        f"{sorted(MUTATING_TOOLS - _ALL_REGISTERED_TOOLS)}"
+    )
 
 
 class PackDef(NamedTuple):

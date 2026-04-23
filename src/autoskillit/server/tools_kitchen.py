@@ -519,7 +519,7 @@ async def close_kitchen(ctx: Context = CurrentContext()) -> str:
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
-@mcp.tool(tags={"autoskillit"})
+@mcp.tool(tags={"autoskillit"}, annotations={"readOnlyHint": False})
 @track_response_size("disable_quota_guard")
 async def disable_quota_guard() -> str:
     """Disable the quota guard for the remainder of this kitchen session.

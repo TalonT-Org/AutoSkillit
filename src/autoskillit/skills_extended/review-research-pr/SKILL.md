@@ -399,42 +399,37 @@ After completing Step 6, you MUST state:
 # approved
 gh pr review {pr_number} --approve --body "AutoSkillit research review passed. No blocking issues found."
 
-# changes_requested (with UNPOSTABLE_FINDINGS)
-# needs_human (with UNPOSTABLE_FINDINGS)
-#
+# changes_requested / needs_human (with UNPOSTABLE_FINDINGS)
 # When UNPOSTABLE_FINDINGS is non-empty, append the "Outside Diff Range" section
-# to the verdict body. Build the body string dynamically:
+# to the verdict body. Build the body string dynamically.
+# Then post with the appropriate event flag:
+gh pr review {pr_number} --comment|--request-changes --body "$BODY"
+```
 
-VERDICT_LINE="{verdict-specific one-liner from above}"
+**Building the Outside Diff Range body section:**
 
-OUTSIDE_SECTION=""
-if [ ${#UNPOSTABLE_FINDINGS[@]} -gt 0 ]; then
-  # Group unpostable findings by file, format as bullet list
-  # Reuse the Tier 2 bullet-list format (120-char message truncation)
-  # TRUNCATION GUARD: Cap the Outside Diff Range section at ~40,000 characters.
-  # The GitHub review body has a hard 65,536-char limit (HTTP 422 on overflow,
-  # no graceful degradation). Reserve headroom for the verdict line and formatting.
-  # If truncated, append: "...and N more findings. See file-level comments for
-  # critical items."
-  OUTSIDE_SECTION=$(cat <<'SECTION'
+When `UNPOSTABLE_FINDINGS` is non-empty, construct the body by appending the following
+section after the verdict one-liner. Group unpostable findings by file, format as a
+bullet list reusing the Tier 2 format (120-char message truncation).
 
+**TRUNCATION GUARD:** Cap the Outside Diff Range section at ~40,000 characters.
+The GitHub review body has a hard 65,536-char limit (HTTP 422 on overflow,
+no graceful degradation). Reserve headroom for the verdict line and formatting.
+If truncated, append: "...and N more findings. See file-level comments for
+critical items."
+
+Template for the appended section:
+
+```
 ### ⚠️ Outside Diff Range
 
 These findings target lines not in the diff and could not be posted as inline comments:
 
-**{file_path_1}**
-- **L{line}** [{severity}/{dimension}]: {message, truncated to 120 chars}
+**path/to/file.py**
+- **L42** [critical/arch]: Finding message truncated to 120 chars
 
-**{file_path_2}**
-- **L{line}** [{severity}/{dimension}]: {message, truncated to 120 chars}
-SECTION
-)
-fi
-
-BODY="${VERDICT_LINE}${OUTSIDE_SECTION}"
-
-# Then post with the appropriate event flag:
-gh pr review {pr_number} {--comment|--request-changes} --body "$BODY"
+**path/to/other.py**
+- **L99** [warning/security]: Finding message truncated to 120 chars
 ```
 
 ### Step 8: Write Summary and Emit Verdict

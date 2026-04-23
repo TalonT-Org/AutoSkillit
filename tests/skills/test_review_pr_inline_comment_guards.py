@@ -392,9 +392,9 @@ def test_step6_file_level_uses_individual_endpoint_not_batch():
     assert step6_start != -1
     assert step65_start != -1
     step6_section = text[step6_start:step65_start]
-    subject_idx = step6_section.find("subject_type")
-    assert subject_idx != -1, "subject_type must appear in Step 6"
-    file_level_section = step6_section[subject_idx - 500 : subject_idx + 500]
+    file_level_start = step6_section.find("File-Level Comments")
+    assert file_level_start != -1, "Step 6 must contain a 'File-Level Comments' section"
+    file_level_section = step6_section[file_level_start:]
     assert "pulls/{pr_number}/comments" in file_level_section, (
         "File-level comments must use the individual /pulls/{N}/comments endpoint. "
         "subject_type: 'file' is NOT valid on the batch Reviews API."

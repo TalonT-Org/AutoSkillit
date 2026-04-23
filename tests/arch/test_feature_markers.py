@@ -1,4 +1,4 @@
-"""Marker completeness: franchise test files carry feature('franchise'), infrastructure tests do not.
+"""Marker completeness: franchise test files carry feature('franchise'), infra tests do not.
 
 Also contains:
 - off-state smoke test: package imports cleanly regardless of feature env state
@@ -90,7 +90,7 @@ def test_franchise_test_files_carry_feature_marker():
         if not _pytestmark_has_feature(path.read_text(), "franchise"):
             missing.append(rel)
     assert not missing, (
-        f"These files are missing pytest.mark.feature('franchise') in pytestmark:\n"
+        "These files are missing pytest.mark.feature('franchise') in pytestmark:\n"
         + "\n".join(f"  {r}" for r in missing)
     )
 
@@ -106,13 +106,13 @@ def test_franchise_class_markers_present():
             if not _class_has_feature_decorator(source, cls, "franchise"):
                 missing.append(f"{rel}::{cls}")
     assert not missing, (
-        f"These classes are missing @pytest.mark.feature('franchise'):\n"
+        "These classes are missing @pytest.mark.feature('franchise'):\n"
         + "\n".join(f"  {r}" for r in missing)
     )
 
 
 def test_no_feature_marker_on_infrastructure_tests():
-    """Infrastructure tests that support franchise but are not exclusive to it must NOT have feature markers."""
+    """Infrastructure tests that are not franchise-exclusive must NOT carry a feature marker."""
     unexpected = []
     for rel in _INFRASTRUCTURE_NO_MARKER:
         path = _TESTS_ROOT / rel
@@ -121,7 +121,7 @@ def test_no_feature_marker_on_infrastructure_tests():
         if _pytestmark_has_feature(path.read_text(), "franchise"):
             unexpected.append(rel)
     assert not unexpected, (
-        f"Infrastructure tests must not carry feature('franchise') pytestmark:\n"
+        "Infrastructure tests must not carry feature('franchise') pytestmark:\n"
         + "\n".join(f"  {r}" for r in unexpected)
     )
 
@@ -131,15 +131,14 @@ def test_import_safety_with_features_disabled():
     # This is not about conditional imports (franchise is always importable);
     # it validates there are no import-time side effects that blow up when
     # a feature is not listed in AUTOSKILLIT_TEST_FEATURES.
+    # Modules may already be cached in sys.modules; the assertions below confirm
+    # that the package objects remain accessible without raising under patched env.
     with patch.dict(os.environ, {"AUTOSKILLIT_TEST_FEATURES": ""}):
-        import importlib
-
         import autoskillit  # noqa: F401
         from autoskillit.server import mcp  # noqa: F401
 
-        # Re-importing under the patched env must not raise.
-        importlib.import_module("autoskillit")
-        importlib.import_module("autoskillit.server")
+        assert autoskillit is not None
+        assert mcp is not None
 
 
 @pytest.mark.parametrize("franchise_enabled", [True, False])

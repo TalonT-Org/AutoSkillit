@@ -144,7 +144,7 @@ When the user provides **more than one issue or task** in a single request:
 
    c. **Dispatch groups in order.** For each group in ascending `group` number:
       - If `parallel: true` → launch all issues in the group as independent pipeline
-        sessions simultaneously, using wavefront scheduling (PARALLEL STEP SCHEDULING rule).
+        sessions simultaneously, using the wavefront scheduling rule (defined in the section below).
       - If `parallel: false` → run the group's issues one at a time in sequence.
 
    d. **Merge-wait between groups.** Group N+1 must NOT begin cloning until ALL of

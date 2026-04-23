@@ -66,7 +66,8 @@ def test_execution_map_always_block_requires_file_output() -> None:
     assert always_match is not None, "SKILL.md must have an **ALWAYS:** block"
     always_block = always_match.group(1)
     assert "build-execution-map" in always_block or "AUTOSKILLIT_TEMP" in text, (
-        "ALWAYS block or workflow must reference the .autoskillit/temp/build-execution-map/ output directory"
+        "ALWAYS block or workflow must reference the "
+        ".autoskillit/temp/build-execution-map/ output directory"
     )
 
 

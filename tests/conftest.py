@@ -357,6 +357,38 @@ def pytest_configure(config: pytest.Config) -> None:
         )
 
 
+def _is_test_feature_enabled(feature_name: str, *, env_val: str | None) -> bool:
+    """Return True if feature_name is enabled for this test run.
+
+    Resolution order:
+    1. If AUTOSKILLIT_TEST_FEATURES is set (including empty string), parse it
+       as a comma-separated list of enabled feature names.  Only listed names
+       are enabled; all others are disabled.
+    2. If unset, fall back to FEATURE_REGISTRY[name].default_enabled.
+       Unknown feature names return True (fail-open: don't skip unrecognised names).
+
+    Args:
+        feature_name: The feature name to check.
+        env_val: Pre-read value of AUTOSKILLIT_TEST_FEATURES (pass ``None`` when unset).
+    """
+    if env_val is not None:
+        enabled = {f.strip() for f in env_val.split(",") if f.strip()}
+        return feature_name in enabled
+    from autoskillit.core import FEATURE_REGISTRY
+
+    defn = FEATURE_REGISTRY.get(feature_name)
+    if defn is None:
+        import warnings
+
+        warnings.warn(
+            f"pytest.mark.feature({feature_name!r}) references an unknown feature; "
+            "fail-open assumed (test will run). Check for typos in the marker.",
+            stacklevel=4,
+        )
+        return True
+    return defn.default_enabled
+
+
 def pytest_collection_modifyitems(
     items: list[pytest.Item],
     config: pytest.Config,
@@ -387,6 +419,31 @@ def pytest_collection_modifyitems(
                         f"but lives in tests/{expected_dir}/",
                         stacklevel=1,
                     )
+
+    # Feature gate pass — orthogonal to layer/size, runs on every worker
+    _test_features_env = os.environ.get("AUTOSKILLIT_TEST_FEATURES")
+    for item in items:
+        marker = item.get_closest_marker("feature")
+        if marker and marker.args:
+            feature_name = marker.args[0]
+            if not isinstance(feature_name, str):
+                warnings.warn(
+                    f"pytest.mark.feature() received a non-string argument {feature_name!r} "
+                    f"on {item.nodeid}; marker will be ignored.",
+                    stacklevel=1,
+                )
+                continue
+            if not _is_test_feature_enabled(feature_name, env_val=_test_features_env):
+                env_display = _test_features_env or ""
+                item.add_marker(
+                    pytest.mark.skip(
+                        reason=(
+                            f"feature '{feature_name}' disabled"
+                            f" (AUTOSKILLIT_TEST_FEATURES='{env_display}'"
+                            f" does not include '{feature_name}')"
+                        )
+                    )
+                )
 
     scope: set[_Path] | None = config.stash.get(_scope_key, None)
     if scope is None:

@@ -9,7 +9,7 @@ import re
 
 import pytest
 
-pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.small, pytest.mark.feature("franchise")]
 
 # --- Fixtures ---
 

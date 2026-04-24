@@ -104,6 +104,45 @@ def _has_commit_guard_ancestor(
 
 
 @semantic_rule(
+    name="on-failure-silent-success-degradation",
+    description=(
+        "A run_cmd step that executes 'gh pr merge' must not route its on_failure "
+        "to register_clone_success. A failed merge means the PR was NOT merged; routing "
+        "to the success terminal silently reports the PR as done when it is not. "
+        "Cleanup steps (optional=True or named release_issue_*) are exempt."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_gh_pr_merge_silent_success_degradation(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_cmd":
+            continue
+        cmd = step.with_args.get("cmd", "")
+        if not isinstance(cmd, str) or "gh pr merge" not in cmd:
+            continue
+        # Exempt cleanup steps: optional=True or name starts with release_issue_
+        if step.optional or step_name.startswith("release_issue_"):
+            continue
+        if step.on_failure == "register_clone_success":
+            findings.append(
+                RuleFinding(
+                    rule="on-failure-silent-success-degradation",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' runs 'gh pr merge' but routes "
+                        f"on_failure to 'register_clone_success' (a success terminal). "
+                        f"A failed merge command means the PR was NOT merged. "
+                        f"Route on_failure to an escalation target such as "
+                        f"'release_issue_failure' or 'verify_queue_enrollment'."
+                    ),
+                )
+            )
+    return findings
+
+
+@semantic_rule(
     name="merge-without-commit-guard",
     description=(
         "A merge_worktree step has no commit_guard predecessor. Any path reaching "

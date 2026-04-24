@@ -55,10 +55,10 @@ class TestImplementationPipelineIssueUrl:
         assert "issue_title" in step.get("capture", {})
         assert "issue_slug" in step.get("capture", {})
 
-    def test_get_issue_title_between_set_merge_target_and_create_branch(self):
-        """get_issue_title must be positioned after set_merge_target, before create_branch."""
+    def test_get_issue_title_between_capture_base_sha_and_create_branch(self):
+        """get_issue_title must be positioned after capture_base_sha, before create_branch."""
         data = yaml.safe_load(_recipe_path("implementation").read_text())
-        assert data["steps"]["set_merge_target"]["on_success"] == "get_issue_title"
+        assert data["steps"]["capture_base_sha"]["on_success"] == "get_issue_title"
         assert data["steps"]["get_issue_title"]["on_success"] == "claim_issue"
 
     def test_create_branch_uses_slug_fallback(self):

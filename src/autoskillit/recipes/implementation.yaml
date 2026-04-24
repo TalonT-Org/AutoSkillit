@@ -115,35 +115,23 @@ steps:
   capture_base_sha:
     tool: run_cmd
     with:
-      cmd: "git -C ${{ context.work_dir }} rev-parse ${{ inputs.base_branch }}"
+      cmd: |
+        BASE_SHA=$(git -C ${{ context.work_dir }} rev-parse ${{ inputs.base_branch }}) &&
+        echo "base_sha=${BASE_SHA}" &&
+        echo "merge_target=${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
       step_name: "capture_base_sha"
     capture:
-      base_sha: "${{ result.stdout | trim }}"
-    on_success: set_merge_target
-    on_failure: escalate_stop
-    note: >
-      Capture the SHA of base_branch before any merge begins. A commit SHA names
-      a git object (not a ref), so it survives git branch -D unconditionally. This
-      SHA is passed to audit_impl as implementation_ref to diff the full
-      implementation against the pre-implementation state.
-
-  set_merge_target:
-    tool: run_cmd
-    with:
-      cmd: "printf '%s' '${{ inputs.base_branch }}'"
-      cwd: "${{ context.work_dir }}"
-      step_name: "set_merge_target"
-    capture:
-      merge_target: "${{ result.stdout }}"
+      base_sha: "${{ result.base_sha }}"
+      merge_target: "${{ result.merge_target }}"
     on_success: get_issue_title
     on_failure: escalate_stop
     note: >
-      Unconditionally sets merge_target to inputs.base_branch as a fallback.
-      In the standard flow (open_pr=true), the subsequent create_branch step
-      overrides merge_target with the feature branch name. When open_pr=false,
-      create_branch is skipped and this fallback stands. This eliminates the
-      undefined-context-variable gap that existed when create_branch was optional.
+      Captures two context variables in a single orchestrator turn:
+      (1) base_sha — the SHA of base_branch before any merge begins (survives
+      git branch -D; passed to audit_impl as implementation_ref);
+      (2) merge_target — unconditionally set to inputs.base_branch as a fallback
+      (overridden by create_branch when open_pr=true; used as-is when open_pr=false).
 
   get_issue_title:
     tool: get_issue_title

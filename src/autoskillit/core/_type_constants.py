@@ -304,6 +304,7 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     "wait_for_merge_queue": frozenset({"ci"}),
     "check_repo_merge_state": frozenset({"ci"}),
     "toggle_auto_merge": frozenset({"ci"}),
+    "enqueue_pr": frozenset({"ci"}),
     "get_ci_status": frozenset({"ci"}),
     # clone
     "clone_repo": frozenset({"clone"}),

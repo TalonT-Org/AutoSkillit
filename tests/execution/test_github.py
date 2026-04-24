@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from unittest.mock import AsyncMock, patch
 
@@ -775,7 +776,6 @@ async def test_swap_labels_replaces_atomically(httpx_mock):
         json=[{"name": "bug"}, {"name": "staged"}],
     )
     client = DefaultGitHubFetcher(token="tok")
-    import json as _json
 
     with patch("autoskillit.execution.github.asyncio.sleep", new_callable=AsyncMock):
         result = await client.swap_labels(
@@ -787,7 +787,7 @@ async def test_swap_labels_replaces_atomically(httpx_mock):
 
     requests = httpx_mock.get_requests()
     put_request = next(r for r in requests if r.method == "PUT")
-    body = _json.loads(put_request.content)
+    body = json.loads(put_request.content)
     assert set(body["labels"]) == {"bug", "staged"}
 
 
@@ -805,7 +805,6 @@ async def test_swap_labels_remove_only(httpx_mock):
         json=[{"name": "bug"}],
     )
     client = DefaultGitHubFetcher(token="tok")
-    import json as _json
 
     with patch("autoskillit.execution.github.asyncio.sleep", new_callable=AsyncMock):
         result = await client.swap_labels(
@@ -816,7 +815,7 @@ async def test_swap_labels_remove_only(httpx_mock):
 
     requests = httpx_mock.get_requests()
     put_request = next(r for r in requests if r.method == "PUT")
-    body = _json.loads(put_request.content)
+    body = json.loads(put_request.content)
     assert body["labels"] == ["bug"]
 
 

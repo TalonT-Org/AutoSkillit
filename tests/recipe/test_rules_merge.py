@@ -351,3 +351,75 @@ def test_bundled_recipes_have_no_silent_success_degradation(recipe_name: str) ->
     assert silent_success == [], (
         f"Silent success degradation found in {recipe_name}: {silent_success}"
     )
+
+
+# ---------------------------------------------------------------------------
+# release-issue-on-unconfirmed-merge rule tests
+# ---------------------------------------------------------------------------
+
+
+def test_rule_fires_when_release_issue_reachable_from_timeout() -> None:
+    """release_issue reachable from a merge-wait timeout exit → ERROR finding."""
+    recipe = _make_recipe(
+        {
+            "wait_queue": RecipeStep(
+                tool="wait_for_merge_queue",
+                with_args={},
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(
+                            route="release_timeout",
+                            when="result.pr_state == timeout",
+                        )
+                    ]
+                ),
+                on_success="done",
+                on_failure="release_timeout",
+            ),
+            "release_timeout": RecipeStep(
+                tool="release_issue",
+                with_args={"issue_url": "owner/repo#1"},
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    assert any(f.rule == "release-issue-on-unconfirmed-merge" for f in findings), (
+        f"Expected release-issue-on-unconfirmed-merge finding, got: {findings}"
+    )
+
+
+def test_rule_does_not_fire_when_register_clone_unconfirmed_used() -> None:
+    """Timeout routes to register_clone_status(status=unconfirmed) → no finding."""
+    recipe = _make_recipe(
+        {
+            "wait_queue": RecipeStep(
+                tool="wait_for_merge_queue",
+                with_args={},
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(
+                            route="register_unconf",
+                            when="result.pr_state == timeout",
+                        )
+                    ]
+                ),
+                on_success="done",
+                on_failure="register_unconf",
+            ),
+            "register_unconf": RecipeStep(
+                tool="register_clone_status",
+                with_args={"clone_path": "/some/path", "status": "unconfirmed"},
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    assert not any(f.rule == "release-issue-on-unconfirmed-merge" for f in findings), (
+        f"Unexpected release-issue-on-unconfirmed-merge finding: "
+        f"{[f for f in findings if f.rule == 'release-issue-on-unconfirmed-merge']}"
+    )

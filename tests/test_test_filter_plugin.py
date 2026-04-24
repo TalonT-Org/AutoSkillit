@@ -25,12 +25,15 @@ _filter_mode_key = pytest.StashKey[str | None]()
 _selected_count_key = pytest.StashKey[int | None]()
 _deselected_count_key = pytest.StashKey[int | None]()
 
+_worker_filter_counts = {}
+
 def pytest_addoption(parser):
     parser.addoption("--filter-mode", default=None,
                      choices=("none", "conservative", "aggressive"))
     parser.addoption("--filter-base-ref", default=None)
 
 def pytest_configure(config):
+    _worker_filter_counts.clear()
     config.stash[_scope_key] = None
     config.stash[_filter_mode_key] = None
     cli_mode = config.getoption("--filter-mode", default=None)
@@ -76,6 +79,12 @@ def pytest_collection_modifyitems(items, config):
 
 def pytest_sessionfinish(session, exitstatus):
     if hasattr(session.config, "workerinput"):
+        session.config.workeroutput["filter_selected"] = session.config.stash.get(
+            _selected_count_key, None
+        )
+        session.config.workeroutput["filter_deselected"] = session.config.stash.get(
+            _deselected_count_key, None
+        )
         return
     out_path = os.environ.get("AUTOSKILLIT_FILTER_STATS_FILE")
     if not out_path:
@@ -83,6 +92,10 @@ def pytest_sessionfinish(session, exitstatus):
     filter_mode = session.config.stash.get(_filter_mode_key, None)
     selected = session.config.stash.get(_selected_count_key, None)
     deselected = session.config.stash.get(_deselected_count_key, None)
+    if selected is None and _worker_filter_counts:
+        selected = _worker_filter_counts.get("selected")
+    if deselected is None and _worker_filter_counts:
+        deselected = _worker_filter_counts.get("deselected")
     if filter_mode is None:
         return
     Path(out_path).write_text(json.dumps({
@@ -90,6 +103,17 @@ def pytest_sessionfinish(session, exitstatus):
         "tests_selected": selected,
         "tests_deselected": deselected,
     }))
+
+@pytest.hookimpl(optionalhook=True)
+def pytest_testnodedown(node, error):
+    if _worker_filter_counts:
+        return
+    wo = getattr(node, "workeroutput", {})
+    selected = wo.get("filter_selected")
+    deselected = wo.get("filter_deselected")
+    if selected is not None or deselected is not None:
+        _worker_filter_counts["selected"] = selected
+        _worker_filter_counts["deselected"] = deselected
 
 def _is_under(path, parent):
     try:

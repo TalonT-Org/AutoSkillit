@@ -49,6 +49,11 @@ _filter_mode_key = pytest.StashKey[str | None]()
 _selected_count_key = pytest.StashKey[int | None]()
 _deselected_count_key = pytest.StashKey[int | None]()
 
+# Module-level accumulator for xdist worker-to-controller IPC.
+# Populated by pytest_testnodedown (controller); cleared by pytest_configure
+# at session start so in-process pytester reruns don't leak stale data.
+_worker_filter_counts: dict[str, int | None] = {}
+
 
 class TimeoutTier:
     """Centralized timeout tiers encoding xdist -n 4 budget math.
@@ -310,6 +315,9 @@ def pytest_configure(config: pytest.Config) -> None:
     """
     import warnings
 
+    # Reset xdist IPC accumulator so in-process pytester reruns don't leak counts.
+    _worker_filter_counts.clear()
+
     config.stash[_scope_key] = None
     config.stash[_filter_mode_key] = None
 
@@ -567,13 +575,28 @@ def pytest_collection_modifyitems(
 def pytest_sessionfinish(session, exitstatus):
     """Write filter stats sidecar for DefaultTestRunner consumption."""
     if hasattr(session.config, "workerinput"):
-        return  # xdist worker — only the controller writes the sidecar
+        # xdist worker: propagate counts to controller via workeroutput IPC channel.
+        # config.stash is process-local; the controller never sees stash writes from
+        # workers, so we must transfer the counts explicitly here.
+        session.config.workeroutput["filter_selected"] = session.config.stash.get(
+            _selected_count_key, None
+        )
+        session.config.workeroutput["filter_deselected"] = session.config.stash.get(
+            _deselected_count_key, None
+        )
+        return
     out_path = os.environ.get("AUTOSKILLIT_FILTER_STATS_FILE")
     if not out_path:
         return
     filter_mode = session.config.stash.get(_filter_mode_key, None)
     selected = session.config.stash.get(_selected_count_key, None)
     deselected = session.config.stash.get(_deselected_count_key, None)
+    # Under xdist the controller never runs pytest_collection_modifyitems, so the
+    # stash keys are None there. Fall back to counts aggregated by pytest_testnodedown.
+    if selected is None and _worker_filter_counts:
+        selected = _worker_filter_counts.get("selected")
+    if deselected is None and _worker_filter_counts:
+        deselected = _worker_filter_counts.get("deselected")
     if filter_mode is None:
         return
     import json
@@ -587,3 +610,22 @@ def pytest_sessionfinish(session, exitstatus):
             }
         )
     )
+
+
+@pytest.hookimpl(optionalhook=True)
+def pytest_testnodedown(node, error):
+    """Aggregate filter counts from the first xdist worker that reports.
+
+    Called on the controller process by xdist after each worker finishes.
+    We capture the first non-None report; all workers see the same test set
+    (collection and filtering happen per-worker before distribution), so any
+    single worker's counts are representative of the full session.
+    """
+    if _worker_filter_counts:
+        return  # already captured from the first reporting worker
+    wo = getattr(node, "workeroutput", {})
+    selected = wo.get("filter_selected")
+    deselected = wo.get("filter_deselected")
+    if selected is not None or deselected is not None:
+        _worker_filter_counts["selected"] = selected
+        _worker_filter_counts["deselected"] = deselected

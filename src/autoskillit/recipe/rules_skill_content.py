@@ -279,15 +279,6 @@ _GIT_GREP_BRE_RE: re.Pattern[str] = re.compile(r"--grep=[\"'].*\\\|")
     ),
 )
 def _check_no_grep_bre_alternation(ctx: ValidationContext) -> list[RuleFinding]:
-    """Flag bash blocks in SKILL.md that use grep \\| BRE alternation.
-
-    grep uses POSIX BRE where \\| is alternation. The Grep tool wraps ripgrep (ERE)
-    where | (bare) is alternation. Models copying \\| patterns from skill files into
-    Grep tool calls get silent 0-result failures.
-
-    Exclusion: --grep= arguments in git commands are legitimate BRE (different tool).
-    Fix: replace grep 'foo\\|bar' with rg 'foo|bar' in bash blocks.
-    """
     findings: list[RuleFinding] = []
     for step_name, step in ctx.recipe.steps.items():
         if step.tool != "run_skill":

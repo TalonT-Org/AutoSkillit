@@ -196,7 +196,7 @@ def _check_hook_registry_drift(
 
 
 def _check_hook_health(settings_path: Path) -> DoctorResult:
-    """Verify all deployed hook scripts exist on disk for all event types."""
+    """Verify all deployed hook scripts exist on disk for all event types (single scope)."""
     broken_hooks = find_broken_hook_scripts(settings_path)
     if broken_hooks:
         return DoctorResult(
@@ -205,6 +205,28 @@ def _check_hook_health(settings_path: Path) -> DoctorResult:
             message=f"Hook scripts not found: {', '.join(broken_hooks)}",
         )
     return DoctorResult(Severity.OK, "hook_health", "All hook scripts accessible")
+
+
+def _check_hook_health_all_scopes(project_root: Path | None = None) -> list[DoctorResult]:
+    """Verify all deployed hook scripts exist on disk across ALL scopes."""
+    from autoskillit.hook_registry import iter_all_scope_paths
+
+    results: list[DoctorResult] = []
+    for scope_label, settings_path in iter_all_scope_paths(project_root):
+        broken = find_broken_hook_scripts(settings_path)
+        if broken:
+            results.append(
+                DoctorResult(
+                    severity=Severity.ERROR,
+                    check="hook_health",
+                    message=f"[{scope_label}] Hook scripts not found: {', '.join(broken)}",
+                )
+            )
+    if not results:
+        results.append(
+            DoctorResult(Severity.OK, "hook_health", "All hook scripts accessible (all scopes)")
+        )
+    return results
 
 
 def _check_gitignore_completeness(project_dir: Path) -> DoctorResult:
@@ -1052,8 +1074,8 @@ def run_doctor(*, output_json: bool = False) -> None:
             )
         )
 
-    # Check 6: Hook executability — validates deployed scripts for all event types
-    results.append(_check_hook_health(_claude_settings_path("user")))
+    # Check 6: Hook executability — validates deployed scripts for all event types (all scopes)
+    results.extend(_check_hook_health_all_scopes(Path.cwd()))
 
     # Check 7: Hook registration in settings.json
     results.append(_check_hook_registration(_claude_settings_path("user")))

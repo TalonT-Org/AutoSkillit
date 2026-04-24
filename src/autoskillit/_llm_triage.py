@@ -129,7 +129,7 @@ async def _triage_batch(
         if result.termination == TerminationReason.TIMED_OUT:
             raise TimeoutError("triage_staleness batch timed out")
         session = parse_session_result(result.stdout)
-        if session.is_error or not session.result:
+        if session.is_error or session.needs_retry or not session.result:
             logger.warning(
                 "triage_staleness batch parse failed; treating all as meaningful",
                 batch=[i.skill for i in triageable],

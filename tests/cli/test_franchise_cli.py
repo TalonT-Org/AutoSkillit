@@ -912,10 +912,6 @@ def test_franchise_run_without_campaign_no_campaign_env_vars(
     assert "AUTOSKILLIT_CAMPAIGN_STATE_PATH" not in env
 
 
-def test_build_franchise_open_prompt_importable() -> None:
-    from autoskillit.cli._prompts import _build_franchise_open_prompt  # noqa: F401
-
-
 def test_build_franchise_open_prompt_instructs_open_kitchen() -> None:
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
     from autoskillit.cli._prompts import _build_franchise_open_prompt

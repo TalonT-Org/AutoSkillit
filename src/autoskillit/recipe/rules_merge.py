@@ -183,6 +183,7 @@ def _check_merge_without_commit_guard(ctx: ValidationContext) -> list[RuleFindin
 _TIMEOUT_CONDITION_RE = re.compile(r"timeout", re.IGNORECASE)
 _MERGE_WAIT_TOOLS = frozenset({"wait_for_merge_queue"})
 _DIRECT_WAIT_NAMES = re.compile(r"wait_for_(direct|immediate)_merge")
+_REGISTER_CLONE_UNCONFIRMED = "register_clone_unconfirmed"
 
 
 def _collect_timeout_exit_steps(ctx: ValidationContext) -> set[str]:
@@ -250,7 +251,8 @@ def _check_release_issue_on_unconfirmed_merge(ctx: ValidationContext) -> list[Ru
                         f"merge-wait timeout exit ({sorted(timeout_exits)}). "
                         f"Calling release_issue on a timeout path removes the in-progress label "
                         f"while the PR may still be queued. Replace with "
-                        f"register_clone_unconfirmed (status: unconfirmed) so the label is kept."
+                        f"{_REGISTER_CLONE_UNCONFIRMED} (status: unconfirmed) so the label"
+                        f" is kept."
                     ),
                 )
             )

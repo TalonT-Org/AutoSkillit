@@ -4,12 +4,12 @@ that would be silently broken if copied to the Grep tool's pattern parameter.
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import pytest
 
 from autoskillit.recipe._skill_placeholder_parser import extract_bash_blocks
+from autoskillit.recipe.rules_skill_content import _GIT_GREP_BRE_RE, _GREP_BRE_ALTERNATION_RE
 
 _REPO_ROOT = Path(__file__).parent.parent.parent
 _SKILL_DIRS = [
@@ -27,25 +27,9 @@ def _all_skill_dirs() -> list[Path]:
     return result
 
 
-# Regex that matches a standalone grep command line (not --grep= option) containing \|
-_GREP_BRE_ALTERNATION = re.compile(
-    r"""
-    (?<![=-])       # not preceded by = or - (excludes --grep=)
-    grep            # grep command
-    (?:\s+[-\w]+)*  # optional flags
-    \s+             # whitespace before pattern
-    (?:'[^']*\\\|[^']*'|"[^"]*\\\|[^"]*")  # quoted pattern containing \|
-    """,
-    re.VERBOSE,
-)
-
-# Detect --grep= patterns containing \| (legitimate BRE for git)
-_GIT_GREP_BRE = re.compile(r"--grep=[\"'].*\\\|")
-
-
 def _is_git_grep_bre(line: str) -> bool:
     """Return True if the \\| is inside a --grep= argument (git BRE context — allowed)."""
-    return bool(_GIT_GREP_BRE.search(line))
+    return bool(_GIT_GREP_BRE_RE.search(line))
 
 
 @pytest.mark.parametrize("skill_dir", _all_skill_dirs())
@@ -68,7 +52,7 @@ def test_no_grep_bre_alternation_in_bash_blocks(skill_dir: Path) -> None:
         for line in block.splitlines():
             if _is_git_grep_bre(line):
                 continue  # git --grep= BRE context: allowed
-            if _GREP_BRE_ALTERNATION.search(line):
+            if _GREP_BRE_ALTERNATION_RE.search(line):
                 violations.append(f"  Line: {line.strip()!r}")
     assert not violations, (
         f"{skill_md.relative_to(Path.cwd())} contains grep BRE \\| patterns in bash "

@@ -62,7 +62,6 @@ from autoskillit.execution.session import (
     _check_expected_patterns,
     _compute_outcome,
     _compute_success,
-    _normalize_subtype,
     _truncate,
     parse_session_result,
 )
@@ -807,7 +806,7 @@ def _build_skill_result(
     success = outcome == SessionOutcome.SUCCEEDED
     needs_retry = outcome == SessionOutcome.RETRIABLE
 
-    normalized_subtype = _normalize_subtype(session.subtype, outcome, session, completion_marker)
+    normalized_subtype = session.normalize_subtype(outcome, completion_marker)
 
     # For adjudicated_failure with write evidence, record as retriable in the audit so
     # the consecutive chain is intact for the budget guard inside the CONTRACT_RECOVERY gate.

@@ -390,7 +390,7 @@ def _is_only_version_changes_in_diff(
             check=True,
         )
         merge_base_sha = merge_base_result.stdout.strip()
-        if not merge_base_sha:
+        if not re.fullmatch(r"[0-9a-f]{40}", merge_base_sha):
             return False
 
         diff_result = subprocess.run(
@@ -656,8 +656,8 @@ def build_test_scope(
         if check_bucket_a_content_aware(changed_files, cwd, base_ref):
             return None
         # Exclude version-bump files that passed the content-aware check from classification.
-        # check_bucket_a_content_aware already verified these as version-string-only changes;
-        # no second git call is needed. Manifests intentionally omit pyproject.toml/uv.lock.
+        # Recomputes the same set as `version_hits` inside check_bucket_a_content_aware because
+        # that function returns bool; extracting the set here avoids changing its signature.
         version_bump_in_bucket_a = changed_files & _VERSION_BUMP_FILES & BUCKET_A_PATTERNS
         if version_bump_in_bucket_a:
             changed_files = changed_files - version_bump_in_bucket_a

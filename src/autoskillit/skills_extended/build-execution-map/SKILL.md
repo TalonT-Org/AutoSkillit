@@ -179,7 +179,7 @@ total_issues = {int}
       ]
     }
   ],
-  "merge_order": [1156, 1155, 1157],
+  "merge_order": [1155, 1156, 1157],
   "pairwise_assessments": [
     {
       "pair": [1155, 1156],

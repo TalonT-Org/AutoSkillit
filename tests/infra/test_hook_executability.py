@@ -115,11 +115,15 @@ def test_generate_hooks_json_session_start_no_matcher() -> None:
 
 
 # T-CROSS-2
-def test_generate_hooks_json_and_sync_produce_equivalent_entries(tmp_path) -> None:
+def test_generate_hooks_json_and_sync_produce_equivalent_entries(tmp_path, monkeypatch) -> None:
     """Both generation paths must produce structurally identical hook entries
     for every event type. Verifies that _build_hook_entry() is shared,
     preventing path A/B divergence.
     """
+    import autoskillit.cli._hooks as _hooks_mod
+
+    monkeypatch.setattr(_hooks_mod, "is_git_worktree", lambda path: False)
+
     from autoskillit.cli._hooks import _evict_stale_autoskillit_hooks, sync_hooks_to_settings
 
     settings = tmp_path / ".claude" / "settings.json"
@@ -166,7 +170,11 @@ def test_generated_hooks_json_embeds_registry_hash() -> None:
     assert h.get("_autoskillit_registry_hash") == HOOK_REGISTRY_HASH
 
 
-def test_synced_settings_json_embeds_registry_hash(tmp_path: Path) -> None:
+def test_synced_settings_json_embeds_registry_hash(tmp_path: Path, monkeypatch) -> None:
+    import autoskillit.cli._hooks as _hooks_mod
+
+    monkeypatch.setattr(_hooks_mod, "is_git_worktree", lambda path: False)
+
     from autoskillit.cli._hooks import sync_hooks_to_settings
     from autoskillit.hook_registry import HOOK_REGISTRY_HASH
 

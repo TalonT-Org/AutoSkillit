@@ -377,6 +377,88 @@ async def toggle_auto_merge(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "ci"}, annotations={"readOnlyHint": False})
+@track_response_size("enqueue_pr")
+async def enqueue_pr(
+    pr_number: int,
+    target_branch: str,
+    cwd: str,
+    auto_merge_available: bool,
+    repo: str = "",
+    remote_url: str = "",
+    step_name: str = "",
+    ctx: Context = CurrentContext(),
+) -> str:
+    """Enqueue a PR into the merge queue using the correct enrollment strategy.
+
+    Uses enablePullRequestAutoMerge when auto_merge_available=true,
+    enqueuePullRequest GraphQL mutation when auto_merge_available=false.
+
+    Args:
+        pr_number: PR number to enqueue.
+        target_branch: Branch the merge queue targets (e.g. "integration").
+        cwd: Working directory for git remote resolution when repo is not provided.
+        auto_merge_available: Whether the repository allows auto-merge.
+        repo: Optional "owner/name" string. Inferred from git remote if empty.
+        remote_url: Full GitHub remote URL. Parsed to owner/repo before inference.
+        step_name: Optional YAML step key for wall-clock timing accumulation.
+
+    Returns:
+        JSON: {"success": bool, "pr_number": int, "enrollment_method": str} on success,
+              {"success": false, "error": str} on failure.
+
+    Never raises.
+    """
+    if (gate := _require_enabled()) is not None:
+        return gate
+    try:
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(
+            tool="enqueue_pr", pr_number=pr_number, target_branch=target_branch
+        )
+        await _notify(
+            ctx,
+            "info",
+            f"Enrolling PR #{pr_number} in merge queue on {target_branch!r}",
+            "autoskillit.enqueue_pr",
+            extra={"pr_number": pr_number, "target_branch": target_branch},
+        )
+
+        from autoskillit.server import _get_ctx
+
+        tool_ctx = _get_ctx()
+
+        if tool_ctx.merge_queue_watcher is None:
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "merge_queue_watcher not configured (missing GITHUB_TOKEN?)",
+                }
+            )
+
+        resolved_repo = await infer_repo_from_remote(cwd, hint=remote_url or repo or None)
+
+        _start = time.monotonic()
+        try:
+            result = await tool_ctx.merge_queue_watcher.enqueue(
+                pr_number=pr_number,
+                target_branch=target_branch,
+                repo=resolved_repo or None,
+                cwd=cwd,
+                auto_merge_available=auto_merge_available,
+            )
+            return json.dumps(result)
+        except Exception as exc:
+            logger.error("enqueue_pr watcher error", exc_info=True)
+            return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+        finally:
+            if step_name:
+                tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
+    except Exception as exc:
+        logger.error("enqueue_pr unhandled exception", exc_info=True)
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+
+
+@mcp.tool(tags={"autoskillit", "kitchen", "ci"}, annotations={"readOnlyHint": False})
 @track_response_size("wait_for_merge_queue")
 async def wait_for_merge_queue(
     pr_number: int,
@@ -390,6 +472,7 @@ async def wait_for_merge_queue(
     max_stall_retries: int = 3,
     not_in_queue_confirmation_cycles: int = 2,
     max_inconclusive_retries: int = 5,
+    auto_merge_available: bool = True,
     step_name: str = "",
     ctx: Context = CurrentContext(),
 ) -> str:
@@ -415,13 +498,15 @@ async def wait_for_merge_queue(
                     queue exit and merged=true propagation (default 2).
         max_inconclusive_retries: Maximum NoPositiveSignal cycles (beyond the
                     confirmation window) before returning pr_state="timeout" (default 5).
+        auto_merge_available: Whether the repository allows auto-merge. When False,
+                    stall recovery uses enqueuePullRequest instead of toggle (default True).
         step_name: Optional YAML step key for wall-clock timing accumulation.
 
     Returns:
         JSON: {
             "success": bool,
             "pr_state": "merged"|"ejected"|"ejected_ci_failure"|"stalled"|
-                        "dropped_healthy"|"timeout"|"error",
+                        "dropped_healthy"|"not_enrolled"|"timeout"|"error",
             "reason": str,
             "stall_retries_attempted": int,
         }
@@ -432,6 +517,7 @@ async def wait_for_merge_queue(
           ejected_ci_failure — PR removed from queue because CI checks failed.
           stalled          — PR stuck in queue; max stall retries exhausted.
           dropped_healthy  — auto-merge disabled on a PR with no CI/conflict issues.
+          not_enrolled     — PR was never enrolled in the merge queue.
           timeout          — polling budget exhausted before a terminal state was reached.
           error            — watcher raised an unexpected exception.
 
@@ -482,6 +568,7 @@ async def wait_for_merge_queue(
                 max_stall_retries=max_stall_retries,
                 not_in_queue_confirmation_cycles=not_in_queue_confirmation_cycles,
                 max_inconclusive_retries=max_inconclusive_retries,
+                auto_merge_available=auto_merge_available,
             )
             return json.dumps(result)
         except Exception as exc:

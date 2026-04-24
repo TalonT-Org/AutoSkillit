@@ -451,6 +451,7 @@ class InMemoryMergeQueueWatcher(MergeQueueWatcher):
         self,
         wait_result: dict[str, Any] | None = None,
         toggle_result: dict[str, Any] | None = None,
+        enqueue_result: dict[str, Any] | None = None,
     ) -> None:
         self._wait_result = wait_result or {
             "success": True,
@@ -458,10 +459,17 @@ class InMemoryMergeQueueWatcher(MergeQueueWatcher):
             "reason": "PR merged",
         }
         self._toggle_result = toggle_result or {"success": True, "toggled": True}
+        self._enqueue_result = enqueue_result or {
+            "success": True,
+            "pr_number": 0,
+            "enrollment_method": "auto_merge",
+        }
         self.wait_calls: list[dict[str, Any]] = []
         self.toggle_calls: list[dict[str, Any]] = []
+        self.enqueue_calls: list[dict[str, Any]] = []
         self.wait_side_effect: Any | None = None
         self.toggle_side_effect: Any | None = None
+        self.enqueue_side_effect: Any | None = None
 
     async def wait(
         self,
@@ -475,6 +483,7 @@ class InMemoryMergeQueueWatcher(MergeQueueWatcher):
         max_stall_retries: int = 3,
         not_in_queue_confirmation_cycles: int = 2,
         max_inconclusive_retries: int = 5,
+        auto_merge_available: bool = True,
     ) -> dict[str, Any]:
         self.wait_calls.append(
             {
@@ -484,6 +493,7 @@ class InMemoryMergeQueueWatcher(MergeQueueWatcher):
                 "cwd": cwd,
                 "timeout_seconds": timeout_seconds,
                 "poll_interval": poll_interval,
+                "auto_merge_available": auto_merge_available,
             }
         )
         if self.wait_side_effect is not None:
@@ -508,6 +518,27 @@ class InMemoryMergeQueueWatcher(MergeQueueWatcher):
         if self.toggle_side_effect is not None:
             return _resolve_side_effect(self.toggle_side_effect)
         return self._toggle_result
+
+    async def enqueue(
+        self,
+        pr_number: int,
+        target_branch: str,
+        repo: str | None = None,
+        cwd: str = ".",
+        auto_merge_available: bool = True,
+    ) -> dict[str, Any]:
+        self.enqueue_calls.append(
+            {
+                "pr_number": pr_number,
+                "target_branch": target_branch,
+                "repo": repo,
+                "cwd": cwd,
+                "auto_merge_available": auto_merge_available,
+            }
+        )
+        if self.enqueue_side_effect is not None:
+            return _resolve_side_effect(self.enqueue_side_effect)
+        return self._enqueue_result
 
 
 # ---------------------------------------------------------------------------

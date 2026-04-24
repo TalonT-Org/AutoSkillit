@@ -528,7 +528,7 @@ steps:
     skip_when_false: "inputs.open_pr"
     note: >
       Extracts the integer PR number from the feature branch opened by compose_pr.
-      pr_number is required by the queue finale steps (enable_auto_merge, wait_for_queue).
+      pr_number is required by the queue finale steps (enqueue_to_queue, wait_for_queue).
 
   annotate_pr_diff:
     tool: run_python
@@ -779,45 +779,29 @@ steps:
     on_result:
       - when: "${{ inputs.auto_merge }} != 'true'"
         route: register_clone_success
-      - when: "${{ context.queue_available }} == true and ${{ context.merge_group_trigger }} == true and ${{ context.auto_merge_available }} == true"
-        route: enable_auto_merge
-      - when: "${{ context.queue_available }} == true and ${{ context.merge_group_trigger }} == true and ${{ context.auto_merge_available }} == false"
-        route: queue_enqueue_no_auto
+      - when: "${{ context.queue_available }} == true and ${{ context.merge_group_trigger }} == true"
+        route: enqueue_to_queue
       - when: "${{ context.auto_merge_available }} == true"
         route: direct_merge
       - route: immediate_merge
     skip_when_false: "inputs.open_pr"
 
-  enable_auto_merge:
-    tool: run_cmd
+  enqueue_to_queue:
+    tool: enqueue_pr
     with:
-      cmd: "gh pr merge '${{ context.pr_number }}' --squash --auto"
+      pr_number: "${{ context.pr_number }}"
+      target_branch: "${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
-      step_name: "enable_auto_merge"
+      auto_merge_available: "${{ context.auto_merge_available }}"
     on_success: wait_for_queue
     on_failure: verify_queue_enrollment
     skip_when_false: "inputs.open_pr"
     note: >
-      Submits the PR to the merge queue. On failure, probes the queue via
+      Submits the PR to the merge queue via the unified enqueue_pr tool.
+      The tool resolves the enrollment strategy internally based on
+      auto_merge_available. On failure, probes the queue via
       verify_queue_enrollment to distinguish a transient enqueue error from a
       PR that is already merged or still in queue.
-
-  queue_enqueue_no_auto:
-    tool: run_cmd
-    with:
-      cmd: "gh pr merge '${{ context.pr_number }}' --squash"
-      cwd: "${{ context.work_dir }}"
-      step_name: "queue_enqueue_no_auto"
-    on_success: wait_for_queue
-    on_failure: verify_queue_enrollment
-    skip_when_false: "inputs.open_pr"
-    note: >
-      Submits the PR to the merge queue when the target branch has a configured
-      merge queue but the repository disallows auto-merge (autoMergeAllowed=false).
-      Uses plain `gh pr merge --squash` (no --auto, which would be rejected by
-      GitHub's API auto-merge gate). GitHub intercepts the call and enqueues
-      the PR because the branch has a queue. On failure, probes the queue via
-      verify_queue_enrollment before escalating.
 
   verify_queue_enrollment:
     description: "Probe merge queue after enqueue command failure to determine actual state"
@@ -834,6 +818,8 @@ steps:
         route: release_issue_success
       - when: "${{ result.pr_state }} == ejected_ci_failure"
         route: diagnose_ci
+      - when: "${{ result.pr_state }} == not_enrolled"
+        route: release_issue_failure
       - when: "${{ result.pr_state }} == dropped_healthy"
         route: wait_for_queue
       - when: "${{ result.pr_state }} == ejected"
@@ -845,14 +831,14 @@ steps:
       - route: register_clone_unconfirmed
     on_failure: register_clone_unconfirmed
     note: >
-      Short probe (60s) after enable_auto_merge or queue_enqueue_no_auto failure.
-      If the PR is already merged, route to release_issue_success. If the queue
-      already confirms CI failure (ejected_ci_failure), route directly to
-      diagnose_ci — the PR is already ejected and the 900s wait_for_queue watch
-      would only confirm the same state before escalating. For other active queue
-      states (dropped_healthy, ejected, stalled), route to wait_for_queue for
-      full 900s authoritative watch. If the probe timed out or returned an
-      unexpected state, escalate via register_clone_unconfirmed.
+      Short probe (60s) after enqueue_to_queue failure. If the PR is already
+      merged, route to release_issue_success. If the queue already confirms CI
+      failure (ejected_ci_failure), route directly to diagnose_ci. If enrollment
+      was attempted but the PR never appeared in the queue (not_enrolled), route
+      to release_issue_failure — this is a repo configuration error. For other
+      active queue states (dropped_healthy, ejected, stalled), route to
+      wait_for_queue for full 900s authoritative watch. If the probe timed out
+      or returned an unexpected state, escalate via register_clone_unconfirmed.
 
   wait_for_queue:
     tool: wait_for_merge_queue
@@ -869,6 +855,8 @@ steps:
         route: release_issue_success
       - when: "${{ result.pr_state }} == ejected_ci_failure"
         route: diagnose_ci
+      - when: "${{ result.pr_state }} == not_enrolled"
+        route: release_issue_failure
       - when: "${{ result.pr_state }} == dropped_healthy"
         route: reenter_merge_queue_cheap
       - when: "${{ result.pr_state }} == ejected"
@@ -884,16 +872,18 @@ steps:
       Waits up to 15 minutes for the PR to merge through the queue.
       merged → release_issue_success to transition issue state then register_clone_success.
       ejected_ci_failure → diagnose_ci (CI failure; conflict resolution cannot fix this).
+      not_enrolled → release_issue_failure (enrollment failed; repo configuration error).
       ejected → conflict fix cycle then re-enter.
-      stalled → lightweight re-enrollment (disable then re-enable auto-merge).
+      stalled → lightweight re-enrollment via enqueue_pr.
       timeout → register_clone_unconfirmed (release claim without staged label; merge unconfirmed).
 
   reenroll_stalled_pr:
-    tool: toggle_auto_merge
+    tool: enqueue_pr
     with:
       pr_number: "${{ context.pr_number }}"
       target_branch: "${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
+      auto_merge_available: "${{ context.auto_merge_available }}"
     on_success: wait_for_queue
     on_failure: release_issue_failure
     skip_when_false: "inputs.open_pr"
@@ -973,11 +963,12 @@ steps:
       on CI failure. Prevents re-entering the merge queue with a broken manifest or code.
 
   reenter_merge_queue:
-    tool: run_cmd
+    tool: enqueue_pr
     with:
-      cmd: "gh pr merge '${{ context.pr_number }}' --squash --auto"
+      pr_number: "${{ context.pr_number }}"
+      target_branch: "${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
-      step_name: "reenter_merge_queue"
+      auto_merge_available: "${{ context.auto_merge_available }}"
     on_success: wait_for_queue
     on_failure: release_issue_failure
     skip_when_false: "inputs.open_pr"
@@ -986,11 +977,12 @@ steps:
       If re-entry fails, release_issue_failure preserves the clone for debugging.
 
   reenter_merge_queue_cheap:
-    tool: run_cmd
+    tool: enqueue_pr
     with:
-      cmd: "gh pr merge '${{ context.pr_number }}' --squash --auto"
+      pr_number: "${{ context.pr_number }}"
+      target_branch: "${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
-      step_name: "reenter_merge_queue_cheap"
+      auto_merge_available: "${{ context.auto_merge_available }}"
     on_success: wait_for_queue
     on_failure: release_issue_failure
     skip_when_false: "inputs.open_pr"

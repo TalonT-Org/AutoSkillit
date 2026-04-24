@@ -374,6 +374,7 @@ def test_pr_state_enum_members_are_locked():
         PRState.EJECTED_CI_FAILURE,
         PRState.STALLED,
         PRState.DROPPED_HEALTHY,
+        PRState.NOT_ENROLLED,
         PRState.TIMEOUT,
         PRState.ERROR,
     }

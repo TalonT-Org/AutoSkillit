@@ -50,6 +50,7 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "wait_for_merge_queue",
             "check_repo_merge_state",
             "toggle_auto_merge",
+            "enqueue_pr",
             "get_ci_status",
         ),
     ),

@@ -69,10 +69,10 @@ def test_merge_prs_route_by_queue_mode_is_route_action(pmp_recipe) -> None:
 
 
 def test_merge_prs_enqueue_current_pr_exists(pmp_recipe) -> None:
-    """enqueue_current_pr step must exist with tool=run_cmd."""
+    """enqueue_current_pr step must exist with tool=enqueue_pr."""
     assert "enqueue_current_pr" in pmp_recipe.steps
     step = pmp_recipe.steps["enqueue_current_pr"]
-    assert step.tool == "run_cmd"
+    assert step.tool == "enqueue_pr"
 
 
 def test_merge_prs_wait_queue_pr_exists(pmp_recipe) -> None:
@@ -150,12 +150,10 @@ def test_merge_prs_enqueue_current_pr_routes_to_wait(pmp_recipe) -> None:
 
 
 def test_merge_prs_enqueue_current_pr_references_single_pr(pmp_recipe) -> None:
-    """enqueue_current_pr cmd must reference context.current_pr_number (no batch loop)."""
+    """enqueue_current_pr must reference context.current_pr_number (no batch loop)."""
     step = pmp_recipe.steps["enqueue_current_pr"]
-    cmd = step.with_args.get("cmd", "")
-    assert "context.current_pr_number" in cmd
-    assert "while read" not in cmd
-    assert "jq -r '.[].number'" not in cmd
+    pr_number = step.with_args.get("pr_number", "")
+    assert "context.current_pr_number" in pr_number
 
 
 def test_merge_prs_get_first_pr_number_captures_pr_number(pmp_recipe) -> None:
@@ -296,10 +294,10 @@ def test_merge_prs_diagnose_queue_ci_exists(pmp_recipe) -> None:
 
 
 def test_merge_prs_reenroll_stalled_queue_pr_exists(pmp_recipe) -> None:
-    """reenroll_stalled_queue_pr step must exist with tool=toggle_auto_merge."""
+    """reenroll_stalled_queue_pr step must exist with tool=enqueue_pr."""
     assert "reenroll_stalled_queue_pr" in pmp_recipe.steps
     step = pmp_recipe.steps["reenroll_stalled_queue_pr"]
-    assert step.tool == "toggle_auto_merge"
+    assert step.tool == "enqueue_pr"
 
 
 def test_merge_prs_reenroll_stalled_routes_to_wait(pmp_recipe) -> None:
@@ -362,11 +360,11 @@ def test_implementation_route_queue_mode_is_route_action(impl_recipe) -> None:
     assert step.action == "route"
 
 
-def test_implementation_enable_auto_merge_is_run_cmd(impl_recipe) -> None:
-    """enable_auto_merge must use tool=run_cmd."""
-    assert "enable_auto_merge" in impl_recipe.steps
-    step = impl_recipe.steps["enable_auto_merge"]
-    assert step.tool == "run_cmd"
+def test_implementation_enqueue_to_queue_is_enqueue_pr(impl_recipe) -> None:
+    """enqueue_to_queue must use tool=enqueue_pr."""
+    assert "enqueue_to_queue" in impl_recipe.steps
+    step = impl_recipe.steps["enqueue_to_queue"]
+    assert step.tool == "enqueue_pr"
 
 
 def test_implementation_wait_for_queue_is_wait_for_merge_queue(impl_recipe) -> None:
@@ -437,7 +435,7 @@ def test_implementation_queue_finale_steps_all_have_skip_when_false(impl_recipe)
     finale_steps = [
         "check_repo_merge_state",
         "route_queue_mode",
-        "enable_auto_merge",
+        "enqueue_to_queue",
         "wait_for_queue",
         "queue_ejected_fix",
         "resolve_queue_merge_conflicts",
@@ -475,20 +473,19 @@ def test_implementation_compose_pr_routes_to_extract_pr_number(impl_recipe) -> N
 
 
 def test_implementation_route_queue_mode_requires_merge_group_trigger(impl_recipe) -> None:
-    """route_queue_mode must NOT route to enable_auto_merge without checking merge_group_trigger.
+    """route_queue_mode must NOT route to enqueue_to_queue without checking merge_group_trigger.
 
     Specifically, the conditions list must not contain a bare 'queue_available == true'
-    → enable_auto_merge without also requiring merge_group_trigger == true.
+    → enqueue_to_queue without also requiring merge_group_trigger == true.
     """
     step = impl_recipe.steps["route_queue_mode"]
     assert step.action == "route"
     conditions = step.on_result.conditions if step.on_result else []
-    # Find any condition that routes to enable_auto_merge
-    queue_conditions = [c for c in conditions if c.route == "enable_auto_merge"]
-    assert len(queue_conditions) == 1, "Exactly one condition must route to enable_auto_merge"
+    queue_conditions = [c for c in conditions if c.route == "enqueue_to_queue"]
+    assert len(queue_conditions) == 1, "Exactly one condition must route to enqueue_to_queue"
     cond_when = queue_conditions[0].when or ""
     assert "merge_group_trigger" in cond_when, (
-        "The enable_auto_merge route condition must reference merge_group_trigger "
+        "The enqueue_to_queue route condition must reference merge_group_trigger "
         "to prevent queue enrollment when the CI workflow lacks the trigger"
     )
 
@@ -529,11 +526,11 @@ def test_remediation_route_queue_mode_is_route_action(remed_recipe) -> None:
     assert step.action == "route"
 
 
-def test_remediation_enable_auto_merge_is_run_cmd(remed_recipe) -> None:
-    """enable_auto_merge must use tool=run_cmd."""
-    assert "enable_auto_merge" in remed_recipe.steps
-    step = remed_recipe.steps["enable_auto_merge"]
-    assert step.tool == "run_cmd"
+def test_remediation_enqueue_to_queue_is_enqueue_pr(remed_recipe) -> None:
+    """enqueue_to_queue must use tool=enqueue_pr."""
+    assert "enqueue_to_queue" in remed_recipe.steps
+    step = remed_recipe.steps["enqueue_to_queue"]
+    assert step.tool == "enqueue_pr"
 
 
 def test_remediation_wait_for_queue_is_wait_for_merge_queue(remed_recipe) -> None:
@@ -553,7 +550,7 @@ def test_remediation_queue_finale_steps_all_have_skip_when_false(remed_recipe) -
     finale_steps = [
         "check_repo_merge_state",
         "route_queue_mode",
-        "enable_auto_merge",
+        "enqueue_to_queue",
         "wait_for_queue",
         "queue_ejected_fix",
         "resolve_queue_merge_conflicts",
@@ -591,14 +588,10 @@ def test_remediation_compose_pr_routes_to_extract_pr_number(remed_recipe) -> Non
 
 
 def test_remediation_route_queue_mode_requires_merge_group_trigger(remed_recipe) -> None:
-    """route_queue_mode must NOT route to enable_auto_merge without checking merge_group_trigger.
-
-    Specifically, the conditions list must not contain a bare 'queue_available == true'
-    → enable_auto_merge without also requiring merge_group_trigger == true.
-    """
+    """route_queue_mode must NOT route to enqueue_to_queue without checking merge_group_trigger."""
     step = remed_recipe.steps["route_queue_mode"]
     conditions = step.on_result.conditions if step.on_result else []
-    queue_conditions = [c for c in conditions if c.route == "enable_auto_merge"]
+    queue_conditions = [c for c in conditions if c.route == "enqueue_to_queue"]
     assert len(queue_conditions) == 1
     cond_when = queue_conditions[0].when or ""
     assert "merge_group_trigger" in cond_when
@@ -612,14 +605,10 @@ def test_impl_groups_has_check_repo_merge_state(impl_groups_recipe) -> None:
 
 
 def test_impl_groups_route_queue_mode_requires_merge_group_trigger(impl_groups_recipe) -> None:
-    """route_queue_mode must NOT route to enable_auto_merge without checking merge_group_trigger.
-
-    Specifically, the conditions list must not contain a bare 'queue_available == true'
-    → enable_auto_merge without also requiring merge_group_trigger == true.
-    """
+    """route_queue_mode must NOT route to enqueue_to_queue without checking merge_group_trigger."""
     step = impl_groups_recipe.steps["route_queue_mode"]
     conditions = step.on_result.conditions if step.on_result else []
-    queue_conditions = [c for c in conditions if c.route == "enable_auto_merge"]
+    queue_conditions = [c for c in conditions if c.route == "enqueue_to_queue"]
     assert len(queue_conditions) == 1
     cond_when = queue_conditions[0].when or ""
     assert "merge_group_trigger" in cond_when
@@ -1112,36 +1101,17 @@ def test_wait_for_queue_ejected_ci_failure_precedes_ejected(recipe_fixture, requ
 # ---------------------------------------------------------------------------
 
 
-def test_route_queue_mode_queue_with_auto_routes_to_enable_auto_merge(any_recipe) -> None:
-    """queue+auto cell must route to enable_auto_merge."""
+def test_route_queue_mode_queue_routes_to_enqueue_to_queue(any_recipe) -> None:
+    """queue+merge_group_trigger cell must route to enqueue_to_queue (unified)."""
     step = any_recipe.steps["route_queue_mode"]
     cond = next(
         c
         for c in step.on_result.conditions
-        if c.when
-        and "queue_available" in c.when
-        and "merge_group_trigger" in c.when
-        and "auto_merge_available" in c.when
-        and "== true" in c.when.split("auto_merge_available")[1]
+        if c.when and "queue_available" in c.when and "merge_group_trigger" in c.when
     )
-    assert cond.route == "enable_auto_merge"
-
-
-def test_route_queue_mode_queue_without_auto_routes_to_queue_enqueue_no_auto(
-    any_recipe,
-) -> None:
-    """queue+no-auto cell must route to queue_enqueue_no_auto."""
-    step = any_recipe.steps["route_queue_mode"]
-    cond = next(
-        c
-        for c in step.on_result.conditions
-        if c.when
-        and "queue_available" in c.when
-        and "merge_group_trigger" in c.when
-        and "auto_merge_available" in c.when
-        and "== false" in c.when.split("auto_merge_available")[1]
-    )
-    assert cond.route == "queue_enqueue_no_auto"
+    assert cond.route == "enqueue_to_queue"
+    # The unified route must NOT split on auto_merge_available
+    assert "auto_merge_available" not in (cond.when or "")
 
 
 def test_route_queue_mode_no_queue_with_auto_routes_to_direct_merge(any_recipe) -> None:
@@ -1164,68 +1134,77 @@ def test_route_queue_mode_no_queue_no_auto_falls_through_to_immediate_merge(
     assert cond.route == "immediate_merge"
 
 
-def test_route_queue_mode_never_routes_to_enable_auto_merge_when_auto_unavailable(
-    any_recipe,
-) -> None:
-    """Every condition routing to enable_auto_merge must require auto_merge_available == true."""
+def test_enqueue_to_queue_route_count(any_recipe) -> None:
+    """Exactly one condition must route to enqueue_to_queue."""
     step = any_recipe.steps["route_queue_mode"]
-    for cond in step.on_result.conditions:
-        if cond.route == "enable_auto_merge":
-            assert cond.when is not None
-            assert "auto_merge_available" in cond.when
-            assert "}} == true" in cond.when.split("auto_merge_available")[1], (
-                "enable_auto_merge route must require auto_merge_available == true; "
-                f"got: {cond.when}"
-            )
-
-
-def test_enable_auto_merge_route_count(any_recipe) -> None:
-    """Exactly one condition must route to enable_auto_merge."""
-    step = any_recipe.steps["route_queue_mode"]
-    count = sum(1 for c in step.on_result.conditions if c.route == "enable_auto_merge")
-    assert count == 1, f"Expected exactly 1 enable_auto_merge route, got {count}"
+    count = sum(1 for c in step.on_result.conditions if c.route == "enqueue_to_queue")
+    assert count == 1, f"Expected exactly 1 enqueue_to_queue route, got {count}"
 
 
 # ---------------------------------------------------------------------------
-# New step: queue_enqueue_no_auto
+# Unified enrollment step: enqueue_to_queue (replaces enable_auto_merge + queue_enqueue_no_auto)
 # ---------------------------------------------------------------------------
 
 
-def test_queue_enqueue_no_auto_step_exists(any_recipe) -> None:
-    assert "queue_enqueue_no_auto" in any_recipe.steps
+def test_enqueue_to_queue_uses_enqueue_pr_tool(any_recipe) -> None:
+    """The unified enrollment step must use the enqueue_pr tool, not run_cmd."""
+    step = any_recipe.steps["enqueue_to_queue"]
+    assert step.tool == "enqueue_pr"
 
 
-def test_queue_enqueue_no_auto_is_run_cmd(any_recipe) -> None:
-    step = any_recipe.steps["queue_enqueue_no_auto"]
-    assert step.tool == "run_cmd"
+def test_enqueue_to_queue_passes_auto_merge_available(any_recipe) -> None:
+    """enqueue_to_queue must pass context.auto_merge_available to the tool."""
+    step = any_recipe.steps["enqueue_to_queue"]
+    assert "auto_merge_available" in (step.with_args or {})
+    assert "context.auto_merge_available" in (step.with_args or {}).get("auto_merge_available", "")
 
 
-def test_queue_enqueue_no_auto_uses_plain_squash(any_recipe) -> None:
-    """queue_enqueue_no_auto must use --squash without --auto."""
-    step = any_recipe.steps["queue_enqueue_no_auto"]
-    cmd = step.with_args.get("cmd", "")
-    assert "--squash" in cmd
-    assert "--auto" not in cmd
+def test_reenter_merge_queue_uses_enqueue_pr_tool(any_recipe) -> None:
+    """Re-entry after ejection must use enqueue_pr tool."""
+    step = any_recipe.steps["reenter_merge_queue"]
+    assert step.tool == "enqueue_pr"
 
 
-def test_queue_enqueue_no_auto_routes_to_wait_for_queue(any_recipe) -> None:
-    step = any_recipe.steps["queue_enqueue_no_auto"]
-    assert step.on_success == "wait_for_queue"
+def test_reenter_merge_queue_cheap_uses_enqueue_pr_tool(any_recipe) -> None:
+    """Re-entry after drop must use enqueue_pr tool."""
+    step = any_recipe.steps["reenter_merge_queue_cheap"]
+    assert step.tool == "enqueue_pr"
 
 
-def test_queue_enqueue_no_auto_failure_routes_to_verify_queue_enrollment(any_recipe) -> None:
-    step = any_recipe.steps["queue_enqueue_no_auto"]
-    assert step.on_failure == "verify_queue_enrollment"
+def test_reenroll_stalled_pr_uses_enqueue_pr_tool(any_recipe) -> None:
+    """Stall recovery must use enqueue_pr tool, not toggle_auto_merge."""
+    step = any_recipe.steps["reenroll_stalled_pr"]
+    assert step.tool == "enqueue_pr"
 
 
-def test_queue_enqueue_no_auto_skip_when_false(any_recipe) -> None:
-    step = any_recipe.steps["queue_enqueue_no_auto"]
-    assert step.skip_when_false == "inputs.open_pr"
+def test_no_gh_pr_merge_in_queue_enrollment_steps(any_recipe) -> None:
+    """Every enrollment step must use enqueue_pr (not run_cmd with gh pr merge)."""
+    enrollment_steps = [
+        "enqueue_to_queue",
+        "reenter_merge_queue",
+        "reenter_merge_queue_cheap",
+        "reenroll_stalled_pr",
+    ]
+    for step_name in enrollment_steps:
+        step = any_recipe.steps.get(step_name)
+        if step is None:
+            continue
+        assert step.tool == "enqueue_pr", (
+            f"{step_name} must use enqueue_pr tool, got {step.tool!r}"
+        )
+        if step.tool == "run_cmd":
+            cmd = step.with_args.get("cmd", "")
+            assert "gh pr merge" not in cmd, f"{step_name} must not use gh pr merge"
 
 
-def test_queue_enqueue_no_auto_step_name(any_recipe) -> None:
-    step = any_recipe.steps["queue_enqueue_no_auto"]
-    assert step.with_args["step_name"] == "queue_enqueue_no_auto"
+def test_no_enable_auto_merge_step_exists(any_recipe) -> None:
+    """enable_auto_merge step must be removed (replaced by enqueue_to_queue)."""
+    assert "enable_auto_merge" not in any_recipe.steps
+
+
+def test_no_queue_enqueue_no_auto_step_exists(any_recipe) -> None:
+    """queue_enqueue_no_auto step must be removed (merged into enqueue_to_queue)."""
+    assert "queue_enqueue_no_auto" not in any_recipe.steps
 
 
 # ---------------------------------------------------------------------------
@@ -1273,9 +1252,9 @@ def test_remediation_wait_for_queue_has_timeout_arm_and_release_timeout_fallback
 # ---------------------------------------------------------------------------
 
 
-def test_enable_auto_merge_failure_routes_to_verify_queue_enrollment(any_recipe) -> None:
-    """enable_auto_merge on_failure must route to verify_queue_enrollment."""
-    step = any_recipe.steps["enable_auto_merge"]
+def test_enqueue_to_queue_failure_routes_to_verify_queue_enrollment(any_recipe) -> None:
+    """enqueue_to_queue on_failure must route to verify_queue_enrollment."""
+    step = any_recipe.steps["enqueue_to_queue"]
     assert step.on_failure == "verify_queue_enrollment"
 
 
@@ -1345,7 +1324,9 @@ def test_wait_for_direct_merge_on_failure_routes_to_register_clone_unconfirmed(
 # T9: Full routing parity — every PRState covered (universal + family-specific)
 # ---------------------------------------------------------------------------
 
-_REQUIRED_PR_STATE_VALUES = frozenset(s.value for s in PRState if s != PRState.ERROR)
+_REQUIRED_PR_STATE_VALUES = frozenset(
+    s.value for s in PRState if s not in {PRState.ERROR, PRState.NOT_ENROLLED}
+)
 _PR_STATE_WHEN_RE = re.compile(r"\$\{\{\s*result\.pr_state\s*\}\}\s*==\s*(\w+)")
 
 
@@ -1480,3 +1461,59 @@ def test_auto_discovery_matches_known_queue_recipes() -> None:
         f"QUEUE_RECIPES mismatch — expected {sorted(expected)}, got {sorted(actual)}. "
         f"Missing: {sorted(expected - actual)}, Extra: {sorted(actual - expected)}"
     )
+
+
+# ---------------------------------------------------------------------------
+# merge-prs.yaml — Part B: expanded captures + unified enrollment
+# ---------------------------------------------------------------------------
+
+
+def test_merge_prs_check_repo_ci_event_captures_auto_merge_available(pmp_recipe) -> None:
+    """check_repo_ci_event must capture auto_merge_available (expanded captures)."""
+    step = pmp_recipe.steps["check_repo_ci_event"]
+    assert step.tool == "check_repo_merge_state"
+    assert "auto_merge_available" in (step.capture or {})
+
+
+def test_merge_prs_enqueue_current_pr_uses_enqueue_pr_tool(pmp_recipe) -> None:
+    """enqueue_current_pr must use enqueue_pr tool."""
+    step = pmp_recipe.steps["enqueue_current_pr"]
+    assert step.tool == "enqueue_pr"
+
+
+def test_merge_prs_reenter_queue_uses_enqueue_pr_tool(pmp_recipe) -> None:
+    """reenter_queue must use enqueue_pr tool."""
+    step = pmp_recipe.steps["reenter_queue"]
+    assert step.tool == "enqueue_pr"
+
+
+def test_merge_prs_reenroll_stalled_queue_pr_uses_enqueue_pr_tool(pmp_recipe) -> None:
+    """reenroll_stalled_queue_pr must use enqueue_pr tool."""
+    step = pmp_recipe.steps["reenroll_stalled_queue_pr"]
+    assert step.tool == "enqueue_pr"
+
+
+# ---------------------------------------------------------------------------
+# NOT_ENROLLED routing — all queue-capable recipes
+# ---------------------------------------------------------------------------
+
+
+def test_wait_for_queue_routes_not_enrolled(any_recipe) -> None:
+    """wait_for_queue must have an explicit routing arm for not_enrolled."""
+    step = any_recipe.steps["wait_for_queue"]
+    conditions = [c.when for c in step.on_result.conditions]
+    assert any("not_enrolled" in c for c in conditions if c)
+
+
+def test_verify_queue_enrollment_routes_not_enrolled(any_recipe) -> None:
+    """verify_queue_enrollment must route not_enrolled state."""
+    step = any_recipe.steps["verify_queue_enrollment"]
+    conditions = [c.when for c in step.on_result.conditions]
+    assert any("not_enrolled" in c for c in conditions if c)
+
+
+def test_merge_prs_wait_queue_pr_routes_not_enrolled(pmp_recipe) -> None:
+    """wait_queue_pr must have an explicit routing arm for not_enrolled."""
+    step = pmp_recipe.steps["wait_queue_pr"]
+    conditions = [c.when for c in step.on_result.conditions]
+    assert any("not_enrolled" in c for c in conditions if c)

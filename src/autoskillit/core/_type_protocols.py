@@ -483,6 +483,7 @@ class MergeQueueWatcher(Protocol):
         max_stall_retries: int = 3,
         not_in_queue_confirmation_cycles: int = 2,
         max_inconclusive_retries: int = 5,
+        auto_merge_available: bool = True,
     ) -> dict[str, Any]: ...
 
     async def toggle(
@@ -491,6 +492,15 @@ class MergeQueueWatcher(Protocol):
         target_branch: str,
         repo: str | None = None,
         cwd: str = ".",
+    ) -> dict[str, Any]: ...
+
+    async def enqueue(
+        self,
+        pr_number: int,
+        target_branch: str,
+        repo: str | None = None,
+        cwd: str = ".",
+        auto_merge_available: bool = True,
     ) -> dict[str, Any]: ...
 
 

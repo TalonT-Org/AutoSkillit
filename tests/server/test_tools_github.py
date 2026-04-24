@@ -196,9 +196,10 @@ def test_fetch_github_issue_docstring_is_role_scoped() -> None:
         "directive — it causes dispatcher sessions to fetch issues they don't need. "
         "See issue #1170."
     )
-    assert "downstream" in doc_lower or "routing" in doc_lower or "route" in doc_lower, (
-        "fetch_github_issue docstring must include role-aware guidance about "
-        "routing/downstream contexts where fetching is wasteful."
+    assert "dispatch_food_truck" in doc_lower or "ingredient" in doc_lower, (
+        "fetch_github_issue docstring must include role-aware guidance anchored on "
+        "'dispatch_food_truck' or 'ingredient' — generic routing words are too loose "
+        "to catch accidental docstring regression. See issue #1170."
     )
 
 

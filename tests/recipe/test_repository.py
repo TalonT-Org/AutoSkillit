@@ -196,16 +196,17 @@ def test_recipe_repository_protocol_find_return_type_is_recipe_info() -> None:
 
     If it returns Any, mypy cannot catch callers accessing Recipe-only attributes
     on the result — exactly the bug class this guard is designed to prevent.
+
+    Uses string inspection because from __future__ import annotations stores
+    annotations as strings at runtime.
     """
     import inspect
-    import typing
 
     from autoskillit.core._type_protocols import RecipeRepository
 
     sig = inspect.signature(RecipeRepository.find)
     ann = sig.return_annotation
-    type_args = typing.get_args(ann)
-    assert RecipeInfo in type_args, (
+    assert "RecipeInfo" in str(ann), (
         f"RecipeRepository.find() must return RecipeInfo | None. "
         f"Got: {ann!r}. "
         "Returning Any silences mypy on all callers and hides type boundary violations."

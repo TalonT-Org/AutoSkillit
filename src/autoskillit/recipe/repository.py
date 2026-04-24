@@ -6,7 +6,10 @@ import time
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from autoskillit.recipe.schema import RecipeInfo
 
 import autoskillit.recipe._api as _api
 from autoskillit.recipe.contracts import StaleItem, load_bundled_manifest
@@ -53,7 +56,7 @@ class DefaultRecipeRepository:
         self._cached_builtin_mtime = bm
         return result
 
-    def find(self, name: str, project_dir: Path) -> Any:
+    def find(self, name: str, project_dir: Path) -> RecipeInfo | None:
         result = self._get_list(project_dir)
         return next((r for r in result.items if r.name == name), None)
 

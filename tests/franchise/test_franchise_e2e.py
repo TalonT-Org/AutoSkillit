@@ -221,10 +221,16 @@ class FranchiseRuntime:
 
     def add_recipe(self, name: str) -> None:
         """Register a minimal standard recipe."""
-        from autoskillit.recipe.schema import Recipe, RecipeKind
+        from autoskillit.recipe.schema import RecipeInfo, RecipeSource
 
         self.recipes.add_recipe(
-            name, Recipe(name=name, description="test", ingredients={}, kind=RecipeKind.STANDARD)
+            name,
+            RecipeInfo(
+                name=name,
+                description="test",
+                source=RecipeSource.PROJECT,
+                path=Path(f"/fake/{name}.yaml"),
+            ),
         )
 
     async def dispatch(
@@ -339,6 +345,14 @@ def franchise_runtime(
         recipes=recipes,
         monkeypatch=monkeypatch,
     )
+
+    def _load_recipe_stub(path: Path) -> Any:
+        from autoskillit.recipe.schema import Recipe, RecipeKind
+
+        name = Path(path).stem
+        return Recipe(name=name, description="test", kind=RecipeKind.STANDARD, ingredients={})
+
+    monkeypatch.setattr("autoskillit.franchise._api.load_recipe", _load_recipe_stub)
 
     yield rt
 

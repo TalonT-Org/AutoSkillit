@@ -272,6 +272,14 @@ class InMemoryRecipeRepository(RecipeRepository):
     # -- test setup helpers --
 
     def add_recipe(self, name: str, data: Any) -> None:
+        from autoskillit.recipe.schema import RecipeInfo  # noqa: PLC0415
+
+        if not isinstance(data, RecipeInfo):
+            raise TypeError(
+                f"InMemoryRecipeRepository.add_recipe expects RecipeInfo, "
+                f"got {type(data).__name__}. "
+                "Production DefaultRecipeRepository.find() returns RecipeInfo, not Recipe."
+            )
         self._recipes[name] = data
 
     def set_validated(self, name: str, result: dict[str, Any]) -> None:

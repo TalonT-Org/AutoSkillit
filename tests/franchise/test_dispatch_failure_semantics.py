@@ -12,10 +12,17 @@ from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
 pytestmark = [pytest.mark.layer("franchise"), pytest.mark.small, pytest.mark.feature("franchise")]
 
 
-def _make_standard_recipe(name: str = "test-recipe"):
-    from autoskillit.recipe.schema import Recipe, RecipeKind
+def _make_recipe_info(name: str = "test-recipe"):
+    from pathlib import Path
 
-    return Recipe(name=name, description="test", ingredients={}, kind=RecipeKind.STANDARD)
+    from autoskillit.recipe.schema import RecipeInfo, RecipeSource
+
+    return RecipeInfo(
+        name=name,
+        description="test",
+        source=RecipeSource.PROJECT,
+        path=Path(f"/fake/{name}.yaml"),
+    )
 
 
 def _simple_prompt_builder(**kwargs) -> str:
@@ -36,13 +43,21 @@ async def _noop_quota_refresher(config, **kwargs) -> None:
     pass
 
 
-def _setup_dispatch(tool_ctx, recipe_name: str = "test-recipe"):
+def _setup_dispatch(tool_ctx, monkeypatch, recipe_name: str = "test-recipe"):
     """Wire tool_ctx for dispatch tests."""
+    from autoskillit.recipe.schema import Recipe, RecipeKind
+
     tool_ctx.franchise_lock = asyncio.Lock()
     repo = InMemoryRecipeRepository()
-    repo.add_recipe(recipe_name, _make_standard_recipe(recipe_name))
+    repo.add_recipe(recipe_name, _make_recipe_info(recipe_name))
     tool_ctx.recipes = repo
     tool_ctx.executor = InMemoryHeadlessExecutor()
+    monkeypatch.setattr(
+        "autoskillit.franchise._api.load_recipe",
+        lambda _path: Recipe(
+            name=recipe_name, description="test", kind=RecipeKind.STANDARD, ingredients={}
+        ),
+    )
 
 
 async def _run(tool_ctx, recipe: str = "test-recipe") -> dict:
@@ -117,7 +132,7 @@ class TestTimeoutPath:
 
         from tests.fakes import _DEFAULT_SKILL_RESULT
 
-        _setup_dispatch(tool_ctx)
+        _setup_dispatch(tool_ctx, monkeypatch)
         tool_ctx.executor = InMemoryHeadlessExecutor(
             default_result=dataclasses.replace(_DEFAULT_SKILL_RESULT, subtype="timeout")
         )
@@ -133,7 +148,7 @@ class TestTimeoutPath:
 
         from tests.fakes import _DEFAULT_SKILL_RESULT
 
-        _setup_dispatch(tool_ctx)
+        _setup_dispatch(tool_ctx, monkeypatch)
         tool_ctx.executor = InMemoryHeadlessExecutor(
             default_result=dataclasses.replace(_DEFAULT_SKILL_RESULT, subtype="timeout")
         )
@@ -151,7 +166,7 @@ class TestTimeoutPath:
 
         from tests.fakes import _DEFAULT_SKILL_RESULT
 
-        _setup_dispatch(tool_ctx)
+        _setup_dispatch(tool_ctx, monkeypatch)
         tool_ctx.executor = InMemoryHeadlessExecutor(
             default_result=dataclasses.replace(_DEFAULT_SKILL_RESULT, subtype="timeout")
         )
@@ -175,7 +190,7 @@ class TestTimeoutPath:
 
         from tests.fakes import _DEFAULT_SKILL_RESULT
 
-        _setup_dispatch(tool_ctx)
+        _setup_dispatch(tool_ctx, monkeypatch)
         tool_ctx.executor = InMemoryHeadlessExecutor(
             default_result=dataclasses.replace(
                 _DEFAULT_SKILL_RESULT,
@@ -198,7 +213,7 @@ class TestTimeoutPath:
 
         from tests.fakes import _DEFAULT_SKILL_RESULT
 
-        _setup_dispatch(tool_ctx)
+        _setup_dispatch(tool_ctx, monkeypatch)
         tool_ctx.executor = InMemoryHeadlessExecutor(
             default_result=dataclasses.replace(
                 _DEFAULT_SKILL_RESULT,
@@ -225,7 +240,7 @@ class TestNoSentinelPath:
         self, tool_ctx, monkeypatch
     ):
         """no_sentinel outcome → DispatchRecord.reason = 'l2_no_result_block'."""
-        _setup_dispatch(tool_ctx)
+        _setup_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
             "autoskillit.franchise._api.parse_l2_result_block",
             lambda **_: _make_no_sentinel(),
@@ -243,7 +258,7 @@ class TestNoSentinelPath:
 
         from tests.fakes import _DEFAULT_SKILL_RESULT
 
-        _setup_dispatch(tool_ctx)
+        _setup_dispatch(tool_ctx, monkeypatch)
         tool_ctx.executor = InMemoryHeadlessExecutor(
             default_result=dataclasses.replace(
                 _DEFAULT_SKILL_RESULT,
@@ -266,7 +281,7 @@ class TestCompletedDirtyPath:
         self, tool_ctx, monkeypatch
     ):
         """completed_dirty outcome → DispatchRecord.reason = 'l2_parse_failed'."""
-        _setup_dispatch(tool_ctx)
+        _setup_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
             "autoskillit.franchise._api.parse_l2_result_block",
             lambda **_: _make_completed_dirty(),
@@ -282,7 +297,7 @@ class TestCompletedCleanPath:
     @pytest.mark.anyio
     async def test_completed_clean_success_writes_empty_reason(self, tool_ctx, monkeypatch):
         """completed_clean with success=True → DispatchRecord.reason = ''."""
-        _setup_dispatch(tool_ctx)
+        _setup_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
             "autoskillit.franchise._api.parse_l2_result_block",
             lambda **_: _make_completed_clean(success=True),
@@ -296,7 +311,7 @@ class TestCompletedCleanPath:
     @pytest.mark.anyio
     async def test_completed_clean_failure_writes_reason_from_payload(self, tool_ctx, monkeypatch):
         """completed_clean success=False: payload.reason → DispatchRecord.reason."""
-        _setup_dispatch(tool_ctx)
+        _setup_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
             "autoskillit.franchise._api.parse_l2_result_block",
             lambda **_: _make_completed_clean(success=False, reason="my-failure-reason"),

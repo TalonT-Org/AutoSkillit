@@ -27,6 +27,8 @@ def _decision(result: dict | None) -> str:
 
 
 def _reason(result: dict | None) -> str:
+    if result is None:
+        return ""
     return result.get("hookSpecificOutput", {}).get("permissionDecisionReason", "")
 
 

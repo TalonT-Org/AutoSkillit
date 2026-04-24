@@ -102,7 +102,8 @@ Produce a per-pair assessment for each pair where a decision is needed:
 Constraints:
 - `confidence: "low"` requires `parallel_safe: false` (structural, not advisory)
 - Pairs that are obviously independent (completely different areas) don't need an assessment
-  entry — they default to `parallel_safe: true`
+  entry — they default to `parallel_safe: true`; when every pair is obviously independent,
+  `pairwise_assessments` is an empty array `[]` (this is valid output)
 - Natural language signals ("depends on #X", "can be parallel with #Y") are understood from
   issue context, not parsed by regex
 - Cross-references in "Files NOT to Change", code blocks, or diagnostic sections are context,

@@ -813,18 +813,37 @@ def test_no_src_module_exceeds_line_limit() -> None:
 
 
 def test_core_has_no_autoskillit_imports() -> None:
-    """REQ-CNST-004: core/ modules must not import from any autoskillit sub-package."""
+    """REQ-CNST-004: core/ modules must not import from any autoskillit sub-package.
+
+    TYPE_CHECKING-guarded imports are permitted — they are zero-runtime-cost annotations
+    that do not create actual import dependencies (same exemption as test_layer_enforcement.py).
+    """
     core_dir = SRC_ROOT / "core"
     assert core_dir.exists(), "core/ package must exist"
     violations: list[str] = []
     for py_file in core_dir.glob("*.py"):
         tree = ast.parse(py_file.read_text())
+        tc_lines: set[int] = set()
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.If)
+                and isinstance(node.test, ast.Name)
+                and node.test.id == "TYPE_CHECKING"
+            ):
+                for stmt in node.body:
+                    for child in ast.walk(stmt):
+                        if isinstance(child, ast.Import | ast.ImportFrom):
+                            tc_lines.add(child.lineno)
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.module:
+                if node.lineno in tc_lines:
+                    continue
                 parts = node.module.split(".")
                 if parts[0] == "autoskillit" and len(parts) > 1:
                     violations.append(f"core/{py_file.name}:{node.lineno}: imports {node.module}")
             elif isinstance(node, ast.Import):
+                if node.lineno in tc_lines:
+                    continue
                 for alias in node.names:
                     parts = alias.name.split(".")
                     if parts[0] == "autoskillit" and len(parts) > 1:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
@@ -17,8 +18,20 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.medium, pytest.mark.featu
 # ---------------------------------------------------------------------------
 
 
+def _make_recipe_info(name: str = "test-recipe"):
+    """Return a minimal RecipeInfo for InMemoryRecipeRepository."""
+    from autoskillit.recipe.schema import RecipeInfo, RecipeSource
+
+    return RecipeInfo(
+        name=name,
+        description="test",
+        source=RecipeSource.PROJECT,
+        path=Path(f"/fake/recipes/{name}.yaml"),
+    )
+
+
 def _make_standard_recipe(name: str = "test-recipe", ingredient_keys: list[str] | None = None):
-    """Return a minimal Recipe with kind=STANDARD."""
+    """Return a minimal Recipe with kind=STANDARD for use as load_recipe mock return value."""
     from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
 
     ingredients = {k: RecipeIngredient(description=k) for k in (ingredient_keys or [])}
@@ -114,8 +127,10 @@ class TestDispatchFoodTruckValidation:
 
         tool_ctx.franchise_lock = asyncio.Lock()
         repo = InMemoryRecipeRepository()
-        repo.add_recipe(
-            "campaign-recipe",
+        recipe_info = _make_recipe_info("campaign-recipe")
+        repo.add_recipe("campaign-recipe", recipe_info)
+        repo.add_full_recipe(
+            recipe_info.path,
             Recipe(name="campaign-recipe", description="test", kind=RecipeKind.CAMPAIGN),
         )
         tool_ctx.recipes = repo
@@ -143,7 +158,9 @@ class TestDispatchFoodTruckValidation:
 
         tool_ctx.franchise_lock = asyncio.Lock()
         repo = InMemoryRecipeRepository()
-        repo.add_recipe("test-recipe", _make_standard_recipe("test-recipe", ["task"]))
+        recipe_info = _make_recipe_info("test-recipe")
+        repo.add_recipe("test-recipe", recipe_info)
+        repo.add_full_recipe(recipe_info.path, _make_standard_recipe("test-recipe", ["task"]))
         tool_ctx.recipes = repo
         tool_ctx.executor = InMemoryHeadlessExecutor()
 
@@ -221,7 +238,9 @@ class TestDispatchFoodTruckValidation:
 
         tool_ctx.franchise_lock = asyncio.Lock()
         repo = InMemoryRecipeRepository()
-        repo.add_recipe("test-recipe", _make_standard_recipe("test-recipe"))
+        recipe_info = _make_recipe_info("test-recipe")
+        repo.add_recipe("test-recipe", recipe_info)
+        repo.add_full_recipe(recipe_info.path, _make_standard_recipe("test-recipe"))
         tool_ctx.recipes = repo
         tool_ctx.executor = None
 
@@ -241,6 +260,109 @@ class TestDispatchFoodTruckValidation:
         assert result["success"] is False
         assert result["error"] == "franchise_manifest_missing"
 
+    @pytest.mark.anyio
+    async def test_dispatch_recipe_info_kind_attribute_error_is_fixed(self, tool_ctx):
+        """find() returns RecipeInfo in production; dispatch must not crash on .kind.
+
+        Previously all dispatch tests stored Recipe objects in the fake, masking the
+        AttributeError. This test uses RecipeInfo (the actual production return type).
+        Before fix: recipe_obj.kind raises AttributeError → L2_STARTUP_OR_CRASH.
+        After fix: load_recipe upgrades RecipeInfo → Recipe before kind check.
+        """
+        from autoskillit.franchise._api import execute_dispatch
+        from autoskillit.recipe.schema import Recipe, RecipeInfo, RecipeKind, RecipeSource
+
+        tool_ctx.franchise_lock = asyncio.Lock()
+        tool_ctx.executor = None
+        repo = InMemoryRecipeRepository()
+        recipe_info = RecipeInfo(
+            name="test-recipe",
+            description="test",
+            source=RecipeSource.PROJECT,
+            path=Path("/fake/recipes/test-recipe.yaml"),
+        )
+        repo.add_recipe("test-recipe", recipe_info)
+        repo.add_full_recipe(
+            recipe_info.path,
+            Recipe(name="test-recipe", description="test", kind=RecipeKind.STANDARD),
+        )
+        tool_ctx.recipes = repo
+
+        result = json.loads(
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="run task",
+                ingredients=None,
+                dispatch_name=None,
+                timeout_sec=None,
+                prompt_builder=_simple_prompt_builder,
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
+            )
+        )
+
+        assert result.get("error") != "l2_startup_or_crash", (
+            "Expected structured validation error, not L2_STARTUP_OR_CRASH. "
+            "RecipeInfo.kind AttributeError is not fixed."
+        )
+
+    @pytest.mark.anyio
+    async def test_dispatch_recipe_info_ingredients_attribute_error_is_fixed(self, tool_ctx):
+        """find() returns RecipeInfo; ingredients validation must not crash on
+        recipe_obj.ingredients when non-empty ingredients are passed.
+
+        Before fix: recipe_obj.ingredients raises AttributeError → L2_STARTUP_OR_CRASH.
+        After fix: load_recipe upgrades RecipeInfo → Recipe; unknown ingredient detected.
+        """
+        from autoskillit.franchise._api import execute_dispatch
+        from autoskillit.recipe.schema import (
+            Recipe,
+            RecipeInfo,
+            RecipeIngredient,
+            RecipeKind,
+            RecipeSource,
+        )
+
+        tool_ctx.franchise_lock = asyncio.Lock()
+        tool_ctx.executor = None
+        repo = InMemoryRecipeRepository()
+        recipe_info = RecipeInfo(
+            name="test-recipe",
+            description="test",
+            source=RecipeSource.PROJECT,
+            path=Path("/fake/recipes/test-recipe.yaml"),
+        )
+        repo.add_recipe("test-recipe", recipe_info)
+        repo.add_full_recipe(
+            recipe_info.path,
+            Recipe(
+                name="test-recipe",
+                description="test",
+                kind=RecipeKind.STANDARD,
+                ingredients={"env": RecipeIngredient(description="env var")},
+            ),
+        )
+        tool_ctx.recipes = repo
+
+        result = json.loads(
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="run task",
+                ingredients={"unknown_key": "val"},
+                dispatch_name=None,
+                timeout_sec=None,
+                prompt_builder=_simple_prompt_builder,
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
+            )
+        )
+
+        assert result.get("error") == "franchise_unknown_ingredient", (
+            f"Expected franchise_unknown_ingredient error. Got: {result}"
+        )
+
 
 # ---------------------------------------------------------------------------
 # Class TestDispatchFoodTruckExecution — lock lifecycle, success, pid, quota, cleanup
@@ -248,11 +370,13 @@ class TestDispatchFoodTruckValidation:
 
 
 class TestDispatchFoodTruckExecution:
-    def _setup_standard_dispatch(self, tool_ctx):
+    def _setup_standard_dispatch(self, tool_ctx, monkeypatch):
         """Wire tool_ctx for a successful standard dispatch."""
         tool_ctx.franchise_lock = asyncio.Lock()
         repo = InMemoryRecipeRepository()
-        repo.add_recipe("test-recipe", _make_standard_recipe("test-recipe", ["task"]))
+        recipe_info = _make_recipe_info("test-recipe")
+        repo.add_recipe("test-recipe", recipe_info)
+        repo.add_full_recipe(recipe_info.path, _make_standard_recipe("test-recipe", ["task"]))
         tool_ctx.recipes = repo
         tool_ctx.executor = InMemoryHeadlessExecutor()
 
@@ -261,7 +385,7 @@ class TestDispatchFoodTruckExecution:
         """Lock released after successful dispatch."""
         from autoskillit.franchise._api import execute_dispatch
 
-        self._setup_standard_dispatch(tool_ctx)
+        self._setup_standard_dispatch(tool_ctx, monkeypatch)
 
         await execute_dispatch(
             tool_ctx=tool_ctx,
@@ -281,7 +405,7 @@ class TestDispatchFoodTruckExecution:
         """Lock released when executor raises."""
         from autoskillit.franchise._api import execute_dispatch
 
-        self._setup_standard_dispatch(tool_ctx)
+        self._setup_standard_dispatch(tool_ctx, monkeypatch)
         tool_ctx.executor.dispatch_food_truck = AsyncMock(
             side_effect=RuntimeError("executor crashed")
         )
@@ -307,7 +431,7 @@ class TestDispatchFoodTruckExecution:
         """Lock released on asyncio.CancelledError."""
         from autoskillit.franchise._api import execute_dispatch
 
-        self._setup_standard_dispatch(tool_ctx)
+        self._setup_standard_dispatch(tool_ctx, monkeypatch)
         tool_ctx.executor.dispatch_food_truck = AsyncMock(side_effect=asyncio.CancelledError())
 
         with pytest.raises(asyncio.CancelledError):
@@ -333,7 +457,7 @@ class TestDispatchFoodTruckExecution:
         from autoskillit.franchise.result_parser import L2ParseResult
         from tests.fakes import _DEFAULT_SKILL_RESULT
 
-        self._setup_standard_dispatch(tool_ctx)
+        self._setup_standard_dispatch(tool_ctx, monkeypatch)
         tool_ctx.executor = InMemoryHeadlessExecutor(
             default_result=dataclasses.replace(
                 _DEFAULT_SKILL_RESULT,
@@ -406,7 +530,7 @@ class TestDispatchFoodTruckExecution:
         from autoskillit.franchise._api import execute_dispatch
         from autoskillit.franchise.state import read_state
 
-        self._setup_standard_dispatch(tool_ctx)
+        self._setup_standard_dispatch(tool_ctx, monkeypatch)
 
         # Wrap dispatch_food_truck to invoke on_spawn before returning,
         # simulating the real headless executor calling the callback on process start.
@@ -442,7 +566,7 @@ class TestDispatchFoodTruckExecution:
         """After dispatch completes, quota cache is refreshed via background supervisor."""
         from autoskillit.franchise._api import execute_dispatch
 
-        self._setup_standard_dispatch(tool_ctx)
+        self._setup_standard_dispatch(tool_ctx, monkeypatch)
 
         submitted_labels: list[str] = []
 
@@ -472,7 +596,7 @@ class TestDispatchFoodTruckExecution:
         """Completed L2 session skill dir is cleaned up."""
         from autoskillit.franchise._api import execute_dispatch
 
-        self._setup_standard_dispatch(tool_ctx)
+        self._setup_standard_dispatch(tool_ctx, monkeypatch)
         import dataclasses
 
         from tests.fakes import _DEFAULT_SKILL_RESULT
@@ -507,11 +631,11 @@ class TestDispatchFoodTruckExecution:
         assert "l2-session-xyz" in cleanup_calls
 
     @pytest.mark.anyio
-    async def test_dispatch_food_truck_invalidates_quota_cache_file(self, tool_ctx):
+    async def test_dispatch_food_truck_invalidates_quota_cache_file(self, tool_ctx, monkeypatch):
         """After dispatch, cache_invalidator is called with the configured cache path."""
         from autoskillit.franchise._api import execute_dispatch
 
-        self._setup_standard_dispatch(tool_ctx)
+        self._setup_standard_dispatch(tool_ctx, monkeypatch)
 
         invalidate_calls: list[str] = []
 
@@ -546,7 +670,7 @@ class TestDispatchFoodTruckExecution:
         from autoskillit.franchise.result_parser import L2ParseResult
         from tests.fakes import _DEFAULT_SKILL_RESULT
 
-        self._setup_standard_dispatch(tool_ctx)
+        self._setup_standard_dispatch(tool_ctx, monkeypatch)
         tool_ctx.executor = InMemoryHeadlessExecutor(
             default_result=dataclasses.replace(
                 _DEFAULT_SKILL_RESULT,

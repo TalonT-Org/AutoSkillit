@@ -369,12 +369,6 @@ Flag duplicates (same name in different agents).
 
 ## Audit Workflow
 
-### Step 0: Initialize Code Index
-
-```
-mcp__code-index__set_project_path(path="{PROJECT_ROOT}")
-```
-
 ### Step 1: Launch Parallel Subagents
 
 Spawn subagents for each cohesion dimension. Each subagent MUST be instructed:

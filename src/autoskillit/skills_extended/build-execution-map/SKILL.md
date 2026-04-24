@@ -61,11 +61,6 @@ if present (default: `main`). Validate the issue count:
 - **One issue**: emit a warning and write a trivial single-group map (single issue always gets `parallel: false`).
 - **Two or more issues**: proceed to Step 0.5.
 
-### Step 0.5 — Code-Index Initialization
-
-Call `mcp__code-index__set_project_path` with the project root (current working directory).
-Fall back to native Glob/Grep if the code-index MCP is unavailable.
-
 ### Step 1 — Fetch Issue Data (parallel subagents)
 
 Launch up to 8 parallel `sonnet` subagents, one per issue. Each subagent:

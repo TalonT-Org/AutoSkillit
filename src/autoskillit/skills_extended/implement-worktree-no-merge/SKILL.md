@@ -132,16 +132,6 @@ execution layer scans `assistant_messages` for `worktree_path=` and surfaces
 it as a top-level field in the `run_skill` JSON response. The orchestrator
 reads this field directly without filesystem discovery heuristics.
 
-### Step 1.5: Initialize Code Index for Original Project
-
-Set the MCP code-index project path to the **original project directory** so Explore subagents can use code search tools:
-
-```
-mcp__code-index__set_project_path(path="{ORIGINAL_PROJECT_PATH}")
-```
-
-This must happen before Step 2 or any code-index search tools will fail with "Project path not set."
-
 ### Step 2: Deep System Understanding (Subagents)
 
 Before implementing ANY code, launch parallel Explore subagents to understand affected systems:
@@ -163,16 +153,6 @@ task install-worktree   # or equivalent for the project type
 **Why isolated env matters:** Installing packages without isolation overwrites the global state. When the worktree is deleted, CLI commands break with import errors.
 
 **All commands in Steps 4–5 must run from `${WORKTREE_PATH}`.** Use absolute paths to avoid CWD drift across Bash tool calls.
-
-### Step 3.5: Re-point Code Index to Worktree (REQUIRED)
-
-**CRITICAL:** After setting up the worktree environment, you **MUST** update the MCP code-index project path to the worktree:
-
-```
-mcp__code-index__set_project_path(path="${WORKTREE_PATH}")
-```
-
-**Failure to do this means code-index searches will return results from the original project, not your worktree.**
 
 ### Step 4: Implement Phase by Phase
 
@@ -237,14 +217,6 @@ branch_name = ${WORKTREE_NAME}
 created from the post-merge state of the base branch, not from Part N's base
 commit. This is a global sequencing rule — it applies even when operating
 off-recipe.
-
-### Step 6.5: Reset Code Index to Original Project (REQUIRED)
-
-**CRITICAL:** After completion, you **MUST** reset the MCP code-index project path back to the original project directory:
-
-```
-mcp__code-index__set_project_path(path="{ORIGINAL_PROJECT_PATH}")
-```
 
 ## Error Handling
 

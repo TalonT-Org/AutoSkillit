@@ -38,7 +38,6 @@ before routing to `resolve-failures`.
 - Block on missing `gh` CLI — write a minimal `failure_type=unknown` diagnosis instead
 
 **ALWAYS:**
-- Initialize code-index: call `set_project_path` to current cwd before any search
 - Write the diagnosis file before emitting output tokens
 - Emit the four output tokens (`diagnosis_path`, `failure_type`, `failure_subtype`, `is_fixable`) at the end of the response on their own lines
 
@@ -55,13 +54,7 @@ best-effort with whatever diagnosis was written (or none).
 
 ## Workflow
 
-### Step 1: Initialize Code Index
-
-```
-mcp__code-index__set_project_path(path=<cwd>)
-```
-
-### Step 2: Discover Run ID (if not provided)
+### Step 1: Discover Run ID (if not provided)
 
 If `run_id` is not provided as an argument (or is `-`), construct the `gh run list` command
 with any provided filters:

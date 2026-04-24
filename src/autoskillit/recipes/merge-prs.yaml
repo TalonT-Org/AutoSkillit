@@ -834,7 +834,7 @@ steps:
     tool: run_cmd
     with:
       cmd: >
-        git push origin ${{ context.integration_branch }} --force-with-lease &&
+        git push origin "${{ context.integration_branch }}" --force-with-lease &&
         PR_NUM="${{ context.review_pr_number }}" &&
         for i in $(seq 1 12); do
           STATUS=$(gh pr view "$PR_NUM" --json mergeable -q .mergeable);

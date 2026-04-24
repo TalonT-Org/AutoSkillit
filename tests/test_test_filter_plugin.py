@@ -25,7 +25,10 @@ _filter_mode_key = pytest.StashKey[str | None]()
 _selected_count_key = pytest.StashKey[int | None]()
 _deselected_count_key = pytest.StashKey[int | None]()
 
-_worker_filter_counts = {}
+# Module-level accumulator for xdist worker-to-controller IPC.
+# Populated by pytest_testnodedown (controller); cleared by pytest_configure
+# at session start so in-process pytester reruns don't leak stale data.
+_worker_filter_counts: dict[str, int | None] = {}
 
 def pytest_addoption(parser):
     parser.addoption("--filter-mode", default=None,
@@ -106,12 +109,14 @@ def pytest_sessionfinish(session, exitstatus):
 
 @pytest.hookimpl(optionalhook=True)
 def pytest_testnodedown(node, error):
+    # Aggregate filter counts from the first xdist worker that reports both
+    # selected and deselected counts as non-None (mirrors production conftest.py).
     if _worker_filter_counts:
         return
     wo = getattr(node, "workeroutput", {})
     selected = wo.get("filter_selected")
     deselected = wo.get("filter_deselected")
-    if selected is not None or deselected is not None:
+    if selected is not None and deselected is not None:
         _worker_filter_counts["selected"] = selected
         _worker_filter_counts["deselected"] = deselected
 
@@ -317,6 +322,10 @@ class TestConftestFilterPlugin:
         pytester.mkdir("subdir_a")
         (pytester.path / "subdir_a" / "test_in_scope.py").write_text("def test_ok(): pass\n")
         pytester.makepyfile(test_out_scope="def test_skip(): pass")
+        # Use out-of-process subprocess mode (not runpytest_inprocess): xdist spawns
+        # real worker subprocesses that communicate via workeroutput IPC, which cannot
+        # be exercised in-process.  Resource contention risk is low because pytester
+        # runs its own isolated pytest session in a temp directory.
         pytester.runpytest("-n", "2", "--filter-mode=conservative")
         assert sidecar.is_file(), "Sidecar file must be written by pytest_sessionfinish"
         data = json.loads(sidecar.read_text())

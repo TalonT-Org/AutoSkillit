@@ -1178,7 +1178,7 @@ def test_reenroll_stalled_pr_uses_enqueue_pr_tool(any_recipe) -> None:
 
 
 def test_no_gh_pr_merge_in_queue_enrollment_steps(any_recipe) -> None:
-    """No queue enrollment or re-entry step should contain 'gh pr merge' in its cmd."""
+    """Every enrollment step must use enqueue_pr (not run_cmd with gh pr merge)."""
     enrollment_steps = [
         "enqueue_to_queue",
         "reenter_merge_queue",
@@ -1187,7 +1187,12 @@ def test_no_gh_pr_merge_in_queue_enrollment_steps(any_recipe) -> None:
     ]
     for step_name in enrollment_steps:
         step = any_recipe.steps.get(step_name)
-        if step and step.tool == "run_cmd":
+        if step is None:
+            continue
+        assert step.tool == "enqueue_pr", (
+            f"{step_name} must use enqueue_pr tool, got {step.tool!r}"
+        )
+        if step.tool == "run_cmd":
             cmd = step.with_args.get("cmd", "")
             assert "gh pr merge" not in cmd, f"{step_name} must not use gh pr merge"
 

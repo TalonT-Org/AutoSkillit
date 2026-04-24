@@ -294,6 +294,25 @@ def test_sync_hooks_to_settings_is_idempotent(tmp_path):
     )
 
 
+# T-WT-1: sync_hooks_to_settings rejects worktree pkg_root
+def test_sync_hooks_rejects_worktree_pkg_root(tmp_path, monkeypatch):
+    """sync_hooks_to_settings must raise when pkg_root() is inside a git worktree."""
+    from autoskillit.cli._hooks import sync_hooks_to_settings
+
+    # Create a fake worktree: .git is a FILE (not dir) → is_git_worktree() returns True
+    fake_pkg = tmp_path / "worktree" / "src" / "autoskillit"
+    fake_pkg.mkdir(parents=True)
+    (tmp_path / "worktree" / ".git").write_text("gitdir: /some/main/.git/worktrees/wt")
+
+    monkeypatch.setattr("autoskillit.cli._hooks.pkg_root", lambda: fake_pkg)
+
+    settings_path = tmp_path / "settings.json"
+    settings_path.write_text("{}")
+
+    with pytest.raises(RuntimeError, match="worktree"):
+        sync_hooks_to_settings(settings_path)
+
+
 # T-CROSS-1
 def test_sync_hooks_to_settings_session_start_no_matcher(tmp_path):
     """sync_hooks_to_settings() must not emit 'matcher' key for SessionStart entries."""

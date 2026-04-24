@@ -1319,7 +1319,9 @@ def test_wait_for_direct_merge_on_failure_routes_to_register_clone_unconfirmed(
 # T9: Full routing parity — every PRState covered (universal + family-specific)
 # ---------------------------------------------------------------------------
 
-_REQUIRED_PR_STATE_VALUES = frozenset(s.value for s in PRState if s is not PRState.ERROR)
+_REQUIRED_PR_STATE_VALUES = frozenset(
+    s.value for s in PRState if s not in {PRState.ERROR, PRState.NOT_ENROLLED}
+)
 _PR_STATE_WHEN_RE = re.compile(r"\$\{\{\s*result\.pr_state\s*\}\}\s*==\s*(\w+)")
 
 

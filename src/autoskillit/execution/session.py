@@ -174,6 +174,60 @@ class ClaudeSessionResult:
             return RetryReason.RESUME
         return RetryReason.NONE
 
+    def normalize_subtype(self, outcome: SessionOutcome, completion_marker: str) -> str:
+        """Normalize subtype against the adjudicated outcome to eliminate contradictions.
+
+        Maps ``(outcome, completion_marker) → adjudicated subtype``.
+        Ensures ``subtype == "success"`` iff ``outcome == SUCCEEDED``.
+
+        Exhaustive match over CliSubtype ensures mypy flags any unhandled member
+        when the enum is extended.
+
+        Class 2 fix (upward normalization):
+          SUCCEEDED + error/diagnostic subtype → "success"
+
+        Class 1 fix (downward normalization):
+          non-SUCCEEDED + "success" → synthesized failure label based on why.
+
+        Return type is str (not CliSubtype) because downward normalization synthesizes
+        labels that are SkillResult-level subtypes, not CliSubtype members.
+        """
+        match self.subtype:
+            case CliSubtype.SUCCESS:
+                if outcome == SessionOutcome.SUCCEEDED:
+                    return self.subtype
+                # Downward normalization: success subtype but adjudicated failure/retriable
+                if not self.result.strip():
+                    return "empty_result"
+                if self._is_context_exhausted():
+                    return "context_exhausted"
+                if completion_marker and completion_marker not in self.result:
+                    return "missing_completion_marker"
+                return "adjudicated_failure"
+
+            case (
+                CliSubtype.UNKNOWN
+                | CliSubtype.EMPTY_OUTPUT
+                | CliSubtype.UNPARSEABLE
+                | CliSubtype.TIMEOUT
+                | CliSubtype.IDLE_STALL
+            ):
+                # Failure subtypes: upward normalize to "success" when adjudicated SUCCEEDED
+                if outcome == SessionOutcome.SUCCEEDED:
+                    return "success"
+                return self.subtype
+
+            case (
+                CliSubtype.ERROR_MAX_TURNS
+                | CliSubtype.ERROR_DURING_EXECUTION
+                | CliSubtype.CONTEXT_EXHAUSTION
+                | CliSubtype.INTERRUPTED
+            ):
+                return self.subtype
+
+            case _ as unreachable:
+                assert_never(unreachable)
+
     @property
     def session_complete(self) -> bool:
         """True when this session reached a normal completion state.
@@ -269,56 +323,6 @@ def extract_token_usage(stdout: str) -> dict[str, Any] | None:
 _KNOWN_RESULT_KEYS: frozenset[str] = frozenset(
     {"type", "subtype", "is_error", "result", "session_id", "errors", "usage"}
 )
-
-
-def _detect_flat_context_exhaustion(stdout: str) -> bool:
-    """Detect context exhaustion from a flat assistant JSONL record.
-
-    Claude Code CLI emits a flat (no 'message' wrapper) assistant record when
-    the context window is exhausted with is_error=False:
-
-        {"type": "assistant",
-         "content": [{"type": "text", "text": "Prompt is too long"}],
-         "output_tokens": 0, "input_tokens": 0, ...}
-
-    This record does NOT appear in session.result (stdout drain race) and is
-    NOT captured by the existing is_error-gated detection paths. Scanning the
-    raw NDJSON stream for this pattern makes detection race-resilient.
-
-    Returns True only when:
-    - record type is "assistant"
-    - record has no "message" key (flat structure)
-    - "output_tokens" at top level is 0
-    - at least one content text block contains CONTEXT_EXHAUSTION_MARKER
-    """
-    marker = CONTEXT_EXHAUSTION_MARKER
-    for line in stdout.strip().splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(obj, dict):
-            continue
-        if obj.get("type") != "assistant":
-            continue
-        if "message" in obj:
-            continue  # standard wrapped record — not the flat context-exhaustion format
-        if obj.get("output_tokens", -1) != 0:
-            continue
-        content = obj.get("content", [])
-        if not isinstance(content, list):
-            continue
-        if any(
-            isinstance(block, dict)
-            and block.get("type") == "text"
-            and marker in block.get("text", "").lower()
-            for block in content
-        ):
-            return True
-    return False
 
 
 @dataclass
@@ -887,66 +891,6 @@ def _compute_retry(
             # Wall-clock timeout: non-retriable (permanent infrastructure limit).
             logger.debug("compute_retry_result", termination="TIMED_OUT", needs_retry=False)
             return False, RetryReason.NONE
-
-        case _ as unreachable:
-            assert_never(unreachable)
-
-
-def _normalize_subtype(
-    raw_subtype: CliSubtype,
-    outcome: SessionOutcome,
-    session: ClaudeSessionResult,
-    completion_marker: str,
-) -> str:
-    """Normalize raw_subtype against the adjudicated outcome to eliminate contradictions.
-
-    Maps ``(raw_subtype, outcome, session, completion_marker) → adjudicated subtype``.
-    Ensures ``subtype == "success"`` iff ``outcome == SUCCEEDED``.
-
-    Exhaustive match over CliSubtype ensures mypy flags any unhandled member
-    when the enum is extended.
-
-    Class 2 fix (upward normalization):
-      SUCCEEDED + error/diagnostic subtype → "success"
-
-    Class 1 fix (downward normalization):
-      non-SUCCEEDED + "success" → synthesized failure label based on why.
-
-    Return type is str (not CliSubtype) because downward normalization synthesizes
-    labels that are SkillResult-level subtypes, not CliSubtype members.
-    """
-    match raw_subtype:
-        case CliSubtype.SUCCESS:
-            if outcome == SessionOutcome.SUCCEEDED:
-                return raw_subtype
-            # Downward normalization: success subtype but adjudicated failure/retriable
-            if not session.result.strip():
-                return "empty_result"
-            if session.jsonl_context_exhausted:
-                return "context_exhausted"
-            if completion_marker and completion_marker not in session.result:
-                return "missing_completion_marker"
-            return "adjudicated_failure"
-
-        case (
-            CliSubtype.UNKNOWN
-            | CliSubtype.EMPTY_OUTPUT
-            | CliSubtype.UNPARSEABLE
-            | CliSubtype.TIMEOUT
-            | CliSubtype.IDLE_STALL
-        ):
-            # Failure subtypes: upward normalize to "success" when adjudicated SUCCEEDED
-            if outcome == SessionOutcome.SUCCEEDED:
-                return "success"
-            return raw_subtype
-
-        case (
-            CliSubtype.ERROR_MAX_TURNS
-            | CliSubtype.ERROR_DURING_EXECUTION
-            | CliSubtype.CONTEXT_EXHAUSTION
-            | CliSubtype.INTERRUPTED
-        ):
-            return raw_subtype
 
         case _ as unreachable:
             assert_never(unreachable)

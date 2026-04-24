@@ -779,7 +779,8 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         1060,
         "REQ-CNST-010-E3: session adjudication pipeline — exhaustive match arms "
         "for TerminationReason require explicit IDLE_STALL arms in _compute_success, "
-        "_compute_retry, and _normalize_subtype; lifespan_started heuristic added",
+        "_compute_retry, and ClaudeSessionResult.normalize_subtype; "
+        "lifespan_started heuristic added",
     ),
     "_doctor.py": (
         1300,

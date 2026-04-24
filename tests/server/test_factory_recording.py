@@ -177,12 +177,13 @@ def test_replay_takes_precedence_over_record(monkeypatch, tmp_path):
     monkeypatch.setattr(
         _api_sim_claude, "make_scenario_recorder", mock_make_recorder, raising=False
     )
-    # Stabilize against xdist ordering: pre-trigger weakref.finalize atexit registration
-    # so the class-level _exitfunc hook doesn't slip through mock_atexit when this is
-    # the first weakref.finalize created in this worker process.
+    # Stabilize against xdist ordering: weakref.finalize auto-registers its _exitfunc
+    # with atexit.register exactly once per process (guarded by _registered_with_atexit).
+    # If this test runs first in an xdist worker, that registration slips through
+    # mock_atexit. Force the flag True before mocking so no stray call occurs.
     import weakref as _wrf
 
-    _wrf.finalize(object(), lambda: None)
+    _wrf.finalize._registered_with_atexit = True
 
     mock_atexit = Mock()
     monkeypatch.setattr("atexit.register", mock_atexit)

@@ -30,7 +30,7 @@ def main() -> None:
     if tool_name != "Grep":
         sys.exit(0)  # guard is Grep-specific
 
-    pattern = data.get("tool_input", {}).get("pattern", None)
+    pattern = (data.get("tool_input") or {}).get("pattern", None)
     if not isinstance(pattern, str) or _BRE_ALTERNATION not in pattern:
         sys.exit(0)  # no BRE alternation present — allow
 

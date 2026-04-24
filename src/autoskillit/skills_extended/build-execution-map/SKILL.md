@@ -13,9 +13,9 @@ hooks:
 
 # build-execution-map
 
-Analyze a set of GitHub issues for file-overlap and dependency relationships, then
-produce a structured execution map JSON artifact that partitions issues into
-topologically ordered dispatch groups.
+Analyze a set of GitHub issues for dependency relationships using AI-driven pairwise
+assessment, then produce a structured execution map JSON artifact that partitions issues
+into dependency-ordered dispatch groups.
 
 ## When to Use
 
@@ -35,19 +35,20 @@ Space-separated issue numbers (required, minimum 2), plus optional flags:
 **NEVER:**
 - Modify any source code files
 - Create files outside `{{AUTOSKILLIT_TEMP}}/build-execution-map/` directory (relative to the current working directory)
-- Skip the overlap matrix computation — every issue pair must be checked
 - Assume issues are independent without analysis
 - Launch implementation pipelines — this skill only produces the map
 - Use the `execution_map` or `execution_map_report` token names with unspaced `=` (always use `key = value` format)
+- Override the AI's parallelism judgment with mechanical rules
+- Assume issues conflict based solely on file-name overlap without reading the issue descriptions
 
 **ALWAYS:**
-- Use parallel subagents (up to 8) for issue analysis in Step 1
+- Use parallel subagents (up to 8) for issue fetching in Step 1
 - Use `model: "sonnet"` for all subagents
 - Write both JSON and markdown report outputs to `{{AUTOSKILLIT_TEMP}}/build-execution-map/`
 - Emit `execution_map` and `execution_map_report` tokens with absolute paths (use `$(pwd)` to resolve the working directory prefix)
 - Emit structured output tokens as the final lines of text output (plain text, no markdown decorators)
-- Include the full `overlap_matrix` in the JSON output for auditability
-- Validate that `depends_on` references only issue numbers present in the input set; silently drop any out-of-set reference and emit a warning line in the markdown report
+- Check the actual codebase when uncertain whether two issues' changes overlap
+- Capture per-pair reasoning in `pairwise_assessments` for auditability
 - Anchor all output paths to the current working directory
 
 ## Workflow
@@ -71,71 +72,59 @@ Launch up to 8 parallel `sonnet` subagents, one per issue. Each subagent:
 1. Calls `gh issue view {N} --json number,title,body,labels`. If the call fails (non-zero
    exit — issue not found, auth error, network failure), the subagent must abort and surface
    the error; do not return a partial or empty result.
-2. Analyzes the issue body to determine:
-   - **`affected_files`**: File-level paths predicted to be modified (use code-index
-     exploration of the codebase + issue body analysis — search for module names, function
-     names, and component names mentioned in the issue)
-   - **`depends_on`**: Explicit `#N` cross-references found in the issue body, filtered
-     to only those present in the current input issue set
-   - **`recipe`**: Route classification — `"implementation"` for new features/additions,
-     `"remediation"` for bug fixes/regressions
-3. Returns a structured JSON block:
-   ```json
-   { "number": 101, "title": "...", "recipe": "implementation", "affected_files": ["src/foo.py"], "depends_on": [] }
-   ```
+2. Returns raw issue data: `{"number": N, "title": "..."}` — no structured extraction of
+   `affected_files` or `depends_on`. The issue body is read directly by the parent in Step 2.
 
 Do not output any prose between subagent launches — immediately collect results when all
 subagents complete. **All subagents must succeed** before advancing to Step 2. If any
 subagent fails or returns no JSON block, abort the skill with the subagent's error message
-and the failing issue number; do not compute a partial overlap matrix.
+and the failing issue number.
 
-### Step 2 — Build Overlap Matrix
+### Step 2 — Assess Parallelism (AI-driven)
 
-For every pair of issues `(i, j)` where `i < j`:
-- Compute `shared_files = intersection(i.affected_files, j.affected_files)` using
-  pairwise file intersection (set intersection of the two `affected_files` lists)
-- Record pair as conflicting if `shared_files` is non-empty
+Read all issue descriptions holistically. For each pair with potential overlap (shared
+domain, cross-references, related concerns), determine whether the issues can be safely
+implemented in parallel.
 
-This pairwise file intersection is the same set-intersection algorithm used by
-`analyze-prs` Step 2, applied to predicted file sets instead of actual PR diffs
-(REQ-MAP-003).
+When uncertain, check the actual codebase: read files, inspect structure, use code-index
+tools (`get_file_summary`, `get_symbol_body`, `search_code_advanced`) or native Read/Grep.
 
-### Step 3 — Build Conflict Graph
+Produce a per-pair assessment for each pair where a decision is needed:
+```json
+{
+  "pair": [1155, 1156],
+  "parallel_safe": true,
+  "confidence": "high",
+  "reasoning": "#1156 modifies _build_l3_orchestrator_prompt() at lines 70-106. #1155 adds new function at end of file. Different symbols, non-adjacent."
+}
+```
 
-- Each issue is a node
-- Add an undirected edge between issues that share files (from Step 2 overlap matrix)
-- Add a directed edge for each explicit `depends_on` relationship
-- An issue pair has a conflict edge if: they share files OR one depends on the other
+Constraints:
+- `confidence: "low"` requires `parallel_safe: false` (structural, not advisory)
+- Pairs that are obviously independent (completely different areas) don't need an assessment
+  entry — they default to `parallel_safe: true`
+- Natural language signals ("depends on #X", "can be parallel with #Y") are understood from
+  issue context, not parsed by regex
+- Cross-references in "Files NOT to Change", code blocks, or diagnostic sections are context,
+  not dependency signals
 
-### Step 4 — Greedy Group Partitioning (Graph Coloring)
+### Step 3 — Assemble Groups and Merge Order
 
-1. Sort issues by edge count descending (most-conflicted first)
-2. For each issue in sorted order:
-   - Assign to the earliest group where the issue has no conflict edges with existing
-     group members
-   - If all existing groups conflict, create a new group
-3. Mark each group as `parallel: true` if it contains more than one issue,
-   `parallel: false` if it contains exactly one issue
+Using the pairwise assessments from Step 2, partition issues into dispatch groups:
+- Issues that are `parallel_safe` with all other group members go in the same group
+  (`parallel: true`)
+- Issues with conflicts or dependency order constraints go in separate groups, ordered by
+  dependency direction (the issue that others depend on goes first)
+- Groups with a single issue get `parallel: false`
 
-### Step 5 — Topological Group Ordering
+Merge order within parallel groups: determined by which changes are most foundational (the
+AI decides based on issue content — the issue whose changes are most likely to affect
+others merges last).
 
-1. Build a group-level DAG: group A has a directed edge to group B if any issue in A
-   is a `depends_on` target of any issue in B
-2. Topologically sort the group DAG using Kahn's algorithm (REQ-MAP-004)
-3. Assign group numbers 1, 2, 3, ... in topological order
-4. Guard: if the group DAG has a cycle (should not happen given per-issue acyclicity),
-   flatten all issues into sequential single-issue groups and emit a warning in the
-   report
+The `merge_order` list is the flattened sequence of issue numbers across groups in dispatch
+order.
 
-### Step 6 — Compute Merge Order
-
-1. Flatten groups in topological order
-2. Within each parallel group, order issues by: smallest `affected_files` count first
-   (merge simpler changes first to reduce conflict surface for later merges)
-3. The `merge_order` list in the output is the flattened sequence of issue numbers in
-   this order
-
-### Step 7 — Write Output
+### Step 4 — Write Output
 
 Compute timestamp `{YYYY-MM-DD_HHMMSS}` (current local time, second precision).
 
@@ -151,10 +140,10 @@ working directory):
 
 1. **`execution_map_{YYYY-MM-DD_HHMMSS}.json`** — full structured artifact (schema below)
 2. **`execution_map_report_{YYYY-MM-DD_HHMMSS}.md`** — human-readable summary including:
-   - Overlap matrix table (pair | shared files | conflict: yes/no)
+   - Pairwise assessment table (pair | parallel_safe | confidence | reasoning summary)
    - Group assignments table (group | parallel | issues)
    - Merge order list
-   - Any warnings (cycle detection, single-issue shortcut, etc.)
+   - Any warnings (single-issue shortcut, low-confidence overrides, etc.)
 
 Emit structured output tokens as the last lines of text output:
 ```
@@ -171,46 +160,32 @@ total_issues = {int}
   "generated_at": "ISO-8601",
   "base_ref": "main",
   "total_issues": 5,
-  "group_count": 3,
+  "group_count": 2,
   "groups": [
     {
       "group": 1,
       "parallel": true,
       "issues": [
-        {
-          "number": 101,
-          "title": "...",
-          "recipe": "implementation",
-          "affected_files": ["src/foo.py", "tests/test_foo.py"],
-          "depends_on": []
-        },
-        {
-          "number": 103,
-          "title": "...",
-          "recipe": "implementation",
-          "affected_files": ["src/bar.py"],
-          "depends_on": []
-        }
+        {"number": 1155, "title": "..."},
+        {"number": 1156, "title": "..."}
       ]
     },
     {
       "group": 2,
       "parallel": false,
       "issues": [
-        {
-          "number": 102,
-          "title": "...",
-          "recipe": "remediation",
-          "affected_files": ["src/foo.py", "src/baz.py"],
-          "depends_on": [101]
-        }
+        {"number": 1157, "title": "..."}
       ]
     }
   ],
-  "merge_order": [101, 103, 102],
-  "overlap_matrix": [
-    {"pair": [101, 102], "shared_files": ["src/foo.py"]},
-    {"pair": [101, 103], "shared_files": []}
+  "merge_order": [1156, 1155, 1157],
+  "pairwise_assessments": [
+    {
+      "pair": [1155, 1156],
+      "parallel_safe": true,
+      "confidence": "high",
+      "reasoning": "#1156 modifies _build_l3_orchestrator_prompt() at lines 70-106. #1155 adds new function at end of file. Different symbols, non-adjacent."
+    }
   ]
 }
 ```

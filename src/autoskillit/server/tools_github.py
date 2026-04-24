@@ -44,10 +44,14 @@ async def fetch_github_issue(
 ) -> str:
     """Retrieve a GitHub issue as a formatted Markdown string.
 
-    Use this tool automatically whenever you encounter a GitHub issue URL,
-    shorthand reference (owner/repo#number), or bare issue number (when
-    default_repo is configured). Do not ask the user to paste the issue
-    content manually.
+    Call this tool when your session's role requires reading and acting on
+    the full issue content — for example, when writing an implementation
+    plan, conducting an investigation, or generating a scope report.
+
+    Do NOT call this tool when your role is to route the issue URL downstream
+    as an ingredient (e.g. passing issue_url to dispatch_food_truck). The
+    downstream skill session will fetch the issue when it actually needs the
+    content; calling it here is wasteful and redundant.
 
     Returns JSON with: success, issue_number, title, url, state, labels,
     and content (Markdown). The content field is suitable for passing directly

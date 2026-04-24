@@ -182,6 +182,27 @@ def test_fetch_github_issue_in_gated_tools():
     assert "fetch_github_issue" not in UNGATED_TOOLS
 
 
+def test_fetch_github_issue_docstring_is_role_scoped() -> None:
+    """Docstring must not contain a blanket 'use automatically whenever' directive.
+
+    The old directive caused orchestrator sessions to fetch the issue before
+    dispatch_food_truck even when only routing the URL downstream as an ingredient,
+    wasting ~2K+ tokens per dispatch call.
+    """
+    doc = fetch_github_issue.__doc__ or ""
+    doc_lower = doc.lower()
+    assert "automatically whenever" not in doc_lower, (
+        "fetch_github_issue docstring must not contain blanket 'automatically whenever' "
+        "directive — it causes dispatcher sessions to fetch issues they don't need. "
+        "See issue #1170."
+    )
+    assert "dispatch_food_truck" in doc_lower or "ingredient" in doc_lower, (
+        "fetch_github_issue docstring must include role-aware guidance anchored on "
+        "'dispatch_food_truck' or 'ingredient' — generic routing words are too loose "
+        "to catch accidental docstring regression. See issue #1170."
+    )
+
+
 # ---------------------------------------------------------------------------
 # get_issue_title
 # ---------------------------------------------------------------------------

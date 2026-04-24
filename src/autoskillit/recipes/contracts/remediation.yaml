@@ -2033,7 +2033,7 @@ dataflow:
   - worktree_path
   produced:
   - conflict_escalation_required
-- step: release_issue_timeout
+- step: register_clone_unconfirmed
   available:
   - audit
   - auto_merge

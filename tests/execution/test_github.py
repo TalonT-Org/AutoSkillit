@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from unittest.mock import AsyncMock, patch
 
@@ -754,6 +755,68 @@ def test_parse_merge_queue_response_bad_node_skips_not_drops_rest():
     assert len(entries) == 2
     assert entries[0]["pr_number"] == 10
     assert entries[1]["pr_number"] == 30
+
+
+# ---------------------------------------------------------------------------
+# swap_labels
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_swap_labels_replaces_atomically(httpx_mock):
+    """swap_labels GETs current labels then PUTs the computed target set atomically."""
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo/issues/42/labels",
+        method="GET",
+        json=[{"name": "in-progress"}, {"name": "bug"}],
+    )
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo/issues/42/labels",
+        method="PUT",
+        json=[{"name": "bug"}, {"name": "staged"}],
+    )
+    client = DefaultGitHubFetcher(token="tok")
+
+    with patch("autoskillit.execution.github.asyncio.sleep", new_callable=AsyncMock):
+        result = await client.swap_labels(
+            "owner", "repo", 42, remove_labels=["in-progress"], add_labels=["staged"]
+        )
+
+    assert result["success"] is True
+    assert set(result["labels"]) == {"bug", "staged"}
+
+    requests = httpx_mock.get_requests()
+    put_request = next(r for r in requests if r.method == "PUT")
+    body = json.loads(put_request.content)
+    assert set(body["labels"]) == {"bug", "staged"}
+
+
+@pytest.mark.anyio
+async def test_swap_labels_remove_only(httpx_mock):
+    """swap_labels with empty add_labels removes the label and leaves the rest."""
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo/issues/42/labels",
+        method="GET",
+        json=[{"name": "in-progress"}, {"name": "bug"}],
+    )
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo/issues/42/labels",
+        method="PUT",
+        json=[{"name": "bug"}],
+    )
+    client = DefaultGitHubFetcher(token="tok")
+
+    with patch("autoskillit.execution.github.asyncio.sleep", new_callable=AsyncMock):
+        result = await client.swap_labels(
+            "owner", "repo", 42, remove_labels=["in-progress"], add_labels=[]
+        )
+
+    assert result["success"] is True
+
+    requests = httpx_mock.get_requests()
+    put_request = next(r for r in requests if r.method == "PUT")
+    body = json.loads(put_request.content)
+    assert body["labels"] == ["bug"]
 
 
 def test_parse_merge_queue_response_missing_position_sorts_last():

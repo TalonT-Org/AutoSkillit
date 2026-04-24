@@ -291,7 +291,7 @@ async def register_clone_status(
     step_name: str = "",
     ctx: Context = CurrentContext(),
 ) -> str:
-    """Register a clone path as 'success' or 'error' in the shared cleanup registry.
+    """Register a clone path in the shared cleanup registry.
 
     Called per-pipeline when defer_cleanup=true. Safe for parallel callers —
     clone_registry uses atomic writes.
@@ -301,7 +301,9 @@ async def register_clone_status(
 
     Args:
         clone_path: Absolute path to the clone directory to register.
-        status: Completion status — "success" (safe to delete) or "error" (preserve).
+        status: Completion status — "success" (safe to delete), "error" (preserve for
+                investigation), or "unconfirmed" (preserve; merge was attempted but not
+                yet confirmed — in-progress label is retained on the issue).
         registry_path: Absolute path to the shared registry file. Defaults to
                        .autoskillit/temp/clone-cleanup-registry.json in cwd.
         step_name: Optional YAML step key for wall-clock timing accumulation.
@@ -315,11 +317,13 @@ async def register_clone_status(
         structlog.contextvars.bind_contextvars(tool="register_clone_status", clone_path=clone_path)
         logger.info("register_clone_status", clone_path=clone_path, status=status)
 
-        if status not in ("success", "error"):
+        if status not in ("success", "error", "unconfirmed"):
             return json.dumps(
                 {
                     "registered": "false",
-                    "reason": f"Invalid status '{status}'. Must be 'success' or 'error'.",
+                    "reason": (
+                        f"Invalid status '{status}'. Must be 'success', 'error', or 'unconfirmed'."
+                    ),
                 }
             )
 
@@ -335,7 +339,13 @@ async def register_clone_status(
                 }
             )
         _start = time.monotonic()
-        typed_status: Literal["success", "error"] = "success" if status == "success" else "error"
+        typed_status: Literal["success", "error", "unconfirmed"] = (
+            "success"
+            if status == "success"
+            else "unconfirmed"
+            if status == "unconfirmed"
+            else "error"
+        )
         try:
             result = await asyncio.to_thread(
                 clone_registry.register_clone,

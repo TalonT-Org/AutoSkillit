@@ -319,6 +319,24 @@ class TestRegisterCloneStatusTool:
         # Registry file must not have been created
         assert not (tmp_path / "registry.json").exists()
 
+    @pytest.mark.anyio
+    async def test_register_clone_status_unconfirmed_accepted(self, tool_ctx, tmp_path):
+        """status='unconfirmed' is accepted: writes registry entry, returns registered=true."""
+        tool_ctx.kitchen_id = "kit-test"
+        registry_path = str(tmp_path / "registry.json")
+        result = json.loads(
+            await register_clone_status(
+                clone_path=str(tmp_path / "repo"),
+                status="unconfirmed",
+                registry_path=registry_path,
+            )
+        )
+        assert result["registered"] == "true"
+        # Verify the registry entry has status == "unconfirmed"
+        data = json.loads(Path(registry_path).read_text())
+        assert len(data["clones"]) == 1
+        assert data["clones"][0]["status"] == "unconfirmed"
+
 
 class TestBatchCleanupClonesTool:
     @pytest.mark.anyio

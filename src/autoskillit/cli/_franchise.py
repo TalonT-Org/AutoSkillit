@@ -387,10 +387,10 @@ async def _franchise_signal_guard(
         *,
         task_status: anyio.abc.TaskStatus = anyio.TASK_STATUS_IGNORED,
     ) -> None:
-        with anyio.open_signal_receiver(signal.SIGTERM, signal.SIGINT) as signals:
+        with anyio.open_signal_receiver(signal.SIGTERM, signal.SIGINT, signal.SIGHUP) as signals:
             task_status.started()
             async for sig in signals:
-                signame = "SIGINT" if sig == signal.SIGINT else "SIGTERM"
+                signame = sig.name
 
                 # Cancel the enclosing scope FIRST to unwind any in-flight dispatch
                 # coroutine before the cleanup writes state (prevents ordering races).

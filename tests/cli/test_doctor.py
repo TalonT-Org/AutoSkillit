@@ -1179,6 +1179,40 @@ def test_doctor_hook_health_checks_all_event_types(tmp_path: Path) -> None:
     assert "token_summary_hook" in result.message or "PostToolUse" in result.message
 
 
+# T-WT-3: _check_hook_health_all_scopes detects broken paths in project scope
+def test_check_hook_health_detects_broken_paths_in_project_scope(tmp_path: Path) -> None:
+    """_check_hook_health_all_scopes must detect broken hooks in project scope, not just user."""
+    from autoskillit.cli._doctor import _check_hook_health_all_scopes
+    from autoskillit.core import Severity
+
+    # Setup project-scope settings with a broken hook path
+    project_settings = tmp_path / ".claude" / "settings.json"
+    project_settings.parent.mkdir(parents=True)
+    project_settings.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "matcher": ".*",
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": "python3 /deleted/worktree/hooks/quota_guard.py",
+                                }
+                            ],
+                        }
+                    ]
+                }
+            }
+        )
+    )
+
+    results = _check_hook_health_all_scopes(tmp_path)
+    broken = [r for r in results if r.severity != Severity.OK]
+    assert broken, "Must detect broken hook paths in project scope"
+
+
 # T-DRIFT-1: _count_hook_registry_drift() detects orphaned hooks
 def test_count_hook_registry_drift_detects_orphaned_hooks(tmp_path: Path) -> None:
     """deployed − canonical must be counted and returned.

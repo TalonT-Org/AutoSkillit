@@ -34,6 +34,7 @@ A Claude Code plugin that orchestrates automated skill-driven workflows using he
   * **Grep tool uses ripgrep (ERE) syntax**: Use `|` for OR-alternation in Grep tool `pattern`
     arguments. `\|` is Bash grep BRE syntax — ripgrep treats it as a literal backslash-pipe
     and returns 0 results. Example: `Grep(pattern="foo|bar")` not `Grep(pattern="foo\|bar")`.
+  * **Worktree Init Prohibition**: Never run `autoskillit init` from within a git worktree. `sync_hooks_to_settings()` will raise `RuntimeError` if `pkg_root()` resolves to a worktree. Use `task install-worktree` for worktree setup — it does NOT call `init`.
 
 ### **3.2. File System**
 

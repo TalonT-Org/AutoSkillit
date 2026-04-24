@@ -377,8 +377,14 @@ class TestInstallCommand:
         """
         from autoskillit.core.paths import is_git_worktree, pkg_root
 
-        if is_git_worktree(pkg_root()):
-            pytest.skip("Cannot verify non-worktree install from a worktree environment")
+        # Check filesystem directly — the cli conftest patches is_git_worktree
+        # to return False, so we cannot rely on it for the skip guard.
+        pkg = pkg_root()
+        for ancestor in [pkg, *pkg.parents]:
+            if (ancestor / ".git").is_file():
+                pytest.skip("Cannot verify non-worktree install from a worktree environment")
+            if (ancestor / ".git").is_dir():
+                break
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         from autoskillit.cli._marketplace import _ensure_marketplace

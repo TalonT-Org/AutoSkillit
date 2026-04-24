@@ -64,6 +64,31 @@ def run_startup_drift_check() -> None:
         logger.exception("startup_drift_check_failed")
 
 
+def run_startup_hook_health_check() -> list[str]:
+    """Detect broken hook scripts across all settings scopes on MCP startup.
+
+    Called as a background task alongside run_startup_drift_check().
+    Returns list of broken hook commands. Any failure is logged and swallowed.
+    """
+    try:
+        from autoskillit.hook_registry import find_broken_hook_scripts, iter_all_scope_paths
+
+        broken: list[str] = []
+        for scope_label, settings_path in iter_all_scope_paths(None):
+            scope_broken = find_broken_hook_scripts(settings_path)
+            if scope_broken:
+                broken.extend(scope_broken)
+                logger.warning(
+                    "stale_hook_paths_detected",
+                    scope=scope_label,
+                    broken=scope_broken,
+                )
+        return broken
+    except Exception:
+        logger.exception("startup_hook_health_check_failed")
+        return []
+
+
 def _finalize_recorder() -> None:
     """Finalize the recording subprocess runner if one is active."""
     ctx = _get_ctx_or_none()
@@ -86,6 +111,12 @@ async def _run_retiring_sweep_async() -> None:
 
     loop = _asyncio.get_running_loop()
     await loop.run_in_executor(None, sweep_retiring_cache)
+
+
+async def _run_hook_health_check_async() -> None:
+    """Offload blocking hook health check to a thread."""
+    loop = _asyncio.get_running_loop()
+    await loop.run_in_executor(None, run_startup_hook_health_check)
 
 
 async def _run_deferred_init(ready_event: _asyncio.Event) -> None:
@@ -129,6 +160,9 @@ async def _autoskillit_lifespan(server: Any) -> Any:
         write_readiness_sentinel()
         bg_tasks.append(create_background_task(_run_drift_check_async(), label="drift_check"))
         bg_tasks.append(create_background_task(_run_retiring_sweep_async(), label="cache_sweep"))
+        bg_tasks.append(
+            create_background_task(_run_hook_health_check_async(), label="hook_health")
+        )
         bg_tasks.append(create_background_task(_run_deferred_init(event), label="deferred_init"))
         yield
     finally:

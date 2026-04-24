@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from autoskillit.core import atomic_write, pkg_root
+from autoskillit.core import atomic_write, is_git_worktree, pkg_root
 from autoskillit.hook_registry import (
     _build_hook_entry,
     _claude_settings_path,  # noqa: F401 — re-exported; cli/__init__ + _stale_check + _init_helpers import from here
@@ -56,7 +56,15 @@ def sync_hooks_to_settings(settings_path: Path) -> None:
     """
     from autoskillit.hook_registry import HOOK_REGISTRY_HASH
 
-    hooks_dir = pkg_root() / "hooks"
+    root = pkg_root()
+    if is_git_worktree(root):
+        raise RuntimeError(
+            f"Refusing to sync hooks: pkg_root() resolves to a git linked worktree "
+            f"({root}). Hook paths written from a transient worktree would become "
+            f"dangling after worktree deletion. Use 'task install-worktree' instead "
+            f"of 'autoskillit init' when working in a worktree."
+        )
+    hooks_dir = root / "hooks"
     data = _load_settings_data(settings_path)
     for hook_def in HOOK_REGISTRY:
         event_list: list[dict] = data.setdefault("hooks", {}).setdefault(hook_def.event_type, [])

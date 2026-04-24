@@ -109,6 +109,44 @@ async def test_lifespan_sets_startup_ready_event():
         _state._startup_ready = original
 
 
+# T-WT-4: MCP lifespan startup detects broken hooks
+def test_startup_broken_hook_detection(tmp_path: Path, monkeypatch) -> None:
+    """run_startup_hook_health_check must detect broken hook scripts across all scopes."""
+    import json as _json
+
+    from autoskillit.server._lifespan import run_startup_hook_health_check
+
+    user_settings = tmp_path / ".claude" / "settings.json"
+    user_settings.parent.mkdir(parents=True)
+    user_settings.write_text(
+        _json.dumps(
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "matcher": ".*",
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": "python3 /deleted/worktree/hooks/quota_guard.py",
+                                }
+                            ],
+                        }
+                    ]
+                }
+            }
+        )
+    )
+
+    monkeypatch.setattr(
+        "autoskillit.hook_registry.iter_all_scope_paths",
+        lambda project_root=None: iter([("user", user_settings)]),
+    )
+
+    broken = run_startup_hook_health_check()
+    assert broken  # must return non-empty list of broken hook paths
+
+
 def test_serve_startup_regenerates_on_hash_mismatch(tmp_path: Path, monkeypatch) -> None:
     """run_startup_drift_check() regenerates hooks.json when hash is mismatched."""
     import json as _json

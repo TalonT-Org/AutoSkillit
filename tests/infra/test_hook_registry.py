@@ -168,6 +168,37 @@ def test_find_broken_hook_scripts_flags_missing_autoskillit_script(tmp_path: Pat
     assert any("nonexistent_guard.py" in b for b in broken)
 
 
+# T-WT-5: find_broken_hook_scripts detects deleted worktree directory (regression gate)
+def test_find_broken_hook_scripts_detects_deleted_worktree_dir(tmp_path: Path) -> None:
+    """find_broken_hook_scripts must flag hooks where the entire directory tree is gone."""
+    deleted_worktree = "/tmp/deleted_worktree_12345/src/autoskillit/hooks"
+    settings = {
+        "hooks": {
+            "PreToolUse": [
+                {
+                    "matcher": ".*",
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": f"python3 {deleted_worktree}/quota_guard.py",
+                        },
+                        {
+                            "type": "command",
+                            "command": f"python3 {deleted_worktree}/branch_protection_guard.py",
+                        },
+                    ],
+                }
+            ]
+        }
+    }
+    settings_path = tmp_path / "settings.json"
+    settings_path.write_text(json.dumps(settings))
+
+    broken = find_broken_hook_scripts(settings_path)
+    assert len(broken) == 2
+    assert all(deleted_worktree in b for b in broken)
+
+
 def test_find_broken_hook_scripts_does_not_flag_user_python_scripts(tmp_path: Path) -> None:
     """A user's python3 script outside the autoskillit hooks dir must not be flagged."""
     user_script = "/home/user/my_custom_guard.py"

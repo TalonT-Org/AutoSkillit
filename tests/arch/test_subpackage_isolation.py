@@ -830,9 +830,10 @@ def test_core_has_no_autoskillit_imports() -> None:
                 and isinstance(node.test, ast.Name)
                 and node.test.id == "TYPE_CHECKING"
             ):
-                for child in ast.walk(node):
-                    if isinstance(child, ast.Import | ast.ImportFrom):
-                        tc_lines.add(child.lineno)
+                for stmt in node.body:
+                    for child in ast.walk(stmt):
+                        if isinstance(child, ast.Import | ast.ImportFrom):
+                            tc_lines.add(child.lineno)
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.module:
                 if node.lineno in tc_lines:

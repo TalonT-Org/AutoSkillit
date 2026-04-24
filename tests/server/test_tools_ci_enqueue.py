@@ -25,14 +25,10 @@ async def test_enqueue_pr_delegates_to_watcher_enqueue(tool_ctx):
     tool_ctx.merge_queue_watcher = watcher
 
     with patch(
-        "autoskillit.execution.remote_resolver.asyncio.create_subprocess_exec",
+        "autoskillit.server.tools_ci.infer_repo_from_remote",
         new_callable=AsyncMock,
-    ) as mock_exec:
-        proc_inst = AsyncMock()
-        proc_inst.communicate = AsyncMock(return_value=(b"owner/repo", b""))
-        proc_inst.returncode = 0
-        mock_exec.return_value = proc_inst
-
+        return_value="owner/repo",
+    ):
         from autoskillit.server.tools_ci import enqueue_pr
 
         raw = await enqueue_pr(

@@ -109,7 +109,9 @@ def _has_commit_guard_ancestor(
         "A run_cmd step that executes 'gh pr merge' must not route its on_failure "
         "to register_clone_success. A failed merge means the PR was NOT merged; routing "
         "to the success terminal silently reports the PR as done when it is not. "
-        "Cleanup steps (optional=True or named release_issue_*) are exempt."
+        "Cleanup steps are exempt: steps with optional=True, or steps whose name starts "
+        "with 'release_issue_' (all release_issue_* steps are terminal cleanup steps by "
+        "convention — they never perform primary merge work)."
     ),
     severity=Severity.ERROR,
 )
@@ -121,7 +123,8 @@ def _check_gh_pr_merge_silent_success_degradation(ctx: ValidationContext) -> lis
         cmd = step.with_args.get("cmd", "")
         if not isinstance(cmd, str) or "gh pr merge" not in cmd:
             continue
-        # Exempt cleanup steps: optional=True or name starts with release_issue_
+        # Exempt cleanup steps: optional=True, or name starts with release_issue_
+        # (release_issue_* steps are terminal cleanup steps by convention)
         if step.optional or step_name.startswith("release_issue_"):
             continue
         if step.on_failure == "register_clone_success":

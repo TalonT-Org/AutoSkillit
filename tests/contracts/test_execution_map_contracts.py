@@ -29,11 +29,13 @@ def test_execution_map_schema_has_required_fields() -> None:
     # Per-issue fields
     assert '"number"' in text, "Schema must document 'number' per issue"
     assert '"title"' in text, "Schema must document 'title' per issue"
-    assert '"recipe"' in text, "Schema must document 'recipe' per issue"
-    assert '"affected_files"' in text, "Schema must document 'affected_files' per issue"
-    assert '"depends_on"' in text, "Schema must document 'depends_on' per issue"
     # Group-level field
     assert '"group"' in text, "Schema must document 'group' integer per group"
+    # AI assessment fields
+    assert '"pairwise_assessments"' in text, "Schema must document 'pairwise_assessments' array"
+    assert '"parallel_safe"' in text, "Schema must document 'parallel_safe' per assessment"
+    assert '"confidence"' in text, "Schema must document 'confidence' per assessment"
+    assert '"reasoning"' in text, "Schema must document 'reasoning' per assessment"
 
 
 def test_execution_map_output_tokens_declared() -> None:
@@ -70,19 +72,18 @@ def test_execution_map_always_block_requires_file_output() -> None:
     )
 
 
-def test_execution_map_references_overlap_algorithm() -> None:
-    """SKILL.md must reference pairwise file intersection for overlap detection (REQ-MAP-003)."""
+def test_execution_map_references_ai_assessment() -> None:
+    """SKILL.md must reference AI-driven pairwise assessment for parallelism decisions."""
     text = _skill_md_text()
     lower = text.lower()
-    assert "pairwise" in lower or "intersection" in lower, (
-        "SKILL.md must reference pairwise file intersection for overlap detection (REQ-MAP-003)"
+    assert "pairwise" in lower, "SKILL.md must reference pairwise assessment"
+    assert "assessment" in lower or "parallel_safe" in lower, (
+        "SKILL.md must reference AI-driven assessment or parallel_safe field"
     )
 
 
-def test_execution_map_references_topological_ordering() -> None:
-    """SKILL.md must reference topological sort for group ordering (REQ-MAP-004)."""
+def test_execution_map_references_dependency_ordering() -> None:
+    """SKILL.md must reference dependency-based group ordering."""
     text = _skill_md_text()
     lower = text.lower()
-    assert "topological" in lower, (
-        "SKILL.md must reference topological sort for group ordering (REQ-MAP-004)"
-    )
+    assert "dependency" in lower, "SKILL.md must reference dependency-based group ordering"

@@ -66,7 +66,7 @@ def test_mcp_health_guard_dead_pid_injects_message(tmp_path: Path) -> None:
         }
     ]
     returncode, payload = _run_guard(
-        tmp_path, {}, tool_name="Read", kitchens=kitchens, cwd=tmp_path
+        tmp_path, {}, tool_name="Read", kitchens=kitchens, cwd=tmp_path, headless=False
     )
     assert returncode == 0
     hook_out = payload.get("hookSpecificOutput", {})

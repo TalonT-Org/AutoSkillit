@@ -209,7 +209,7 @@ def _check_ci_hardcoded_workflow(ctx: ValidationContext) -> list[RuleFinding]:
 
 _REQUIRED_MQ_PR_STATES: frozenset[str] = frozenset(s.value for s in PRState if s != PRState.ERROR)
 _PR_STATE_WHEN_RE = re.compile(r"\$\{\{\s*result\.pr_state\s*\}\}\s*==\s*(\w+)")
-_MQ_EXPECTED_FALLBACK = "release_issue_timeout"
+_MQ_EXPECTED_FALLBACK = "register_clone_unconfirmed"
 
 
 def _extract_mq_when_values(on_result: object) -> set[str]:
@@ -234,11 +234,11 @@ def _recipe_has_mq_routing_step(ctx: ValidationContext) -> bool:
     )
 
 
-def _recipe_uses_release_issue_timeout(ctx: ValidationContext) -> bool:
-    """Return True if this recipe family uses release_issue_timeout as its error escalation step.
+def _recipe_uses_register_clone_unconfirmed(ctx: ValidationContext) -> bool:
+    """Return True if this recipe family uses register_clone_unconfirmed as its timeout escalation step.
 
     Used only by Rule I8 (conformance targets) — implementation/remediation-family recipes
-    that define release_issue_timeout must route fallback and on_failure there.  Other
+    that define register_clone_unconfirmed must route fallback and on_failure there.  Other
     recipe families (e.g. merge-prs.yaml) route queue timeouts/errors differently and are
     exempt from target-specific conformance checks, but NOT from PRState completeness (I7).
     """
@@ -286,14 +286,14 @@ def _check_wait_for_merge_queue_routing_covers_all_pr_states(
     name="wait-for-merge-queue-routing-conforms-to-expected-targets",
     description=(
         "wait_for_merge_queue fallback and on_failure must both target "
-        "release_issue_timeout; prevents silent success routing on timeout/unknown states"
+        "register_clone_unconfirmed; prevents silent success routing on timeout/unknown states"
     ),
     severity=Severity.ERROR,
 )
 def _check_wait_for_merge_queue_routing_conforms_to_expected_targets(
     ctx: ValidationContext,
 ) -> list[RuleFinding]:
-    if not _recipe_uses_release_issue_timeout(ctx):
+    if not _recipe_uses_register_clone_unconfirmed(ctx):
         return []
     findings: list[RuleFinding] = []
     for step_name, step in ctx.recipe.steps.items():
@@ -314,7 +314,7 @@ def _check_wait_for_merge_queue_routing_conforms_to_expected_targets(
                             message=(
                                 f"Step {step_name!r} has fallback route {route!r} but "
                                 f"expected {_MQ_EXPECTED_FALLBACK!r}. The fallback must "
-                                f"route to release_issue_timeout so unrecognised states "
+                                f"route to register_clone_unconfirmed so unrecognised states "
                                 f"are escalated, not silently treated as success."
                             ),
                         )
@@ -329,7 +329,7 @@ def _check_wait_for_merge_queue_routing_conforms_to_expected_targets(
                     message=(
                         f"Step {step_name!r} has on_failure={step.on_failure!r} but "
                         f"expected {_MQ_EXPECTED_FALLBACK!r}. Tool errors must route "
-                        f"to release_issue_timeout, not a success-path step."
+                        f"to register_clone_unconfirmed, not a success-path step."
                     ),
                 )
             )

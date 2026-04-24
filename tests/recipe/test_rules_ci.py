@@ -375,7 +375,7 @@ _CONFORMANCE_RULE = "wait-for-merge-queue-routing-conforms-to-expected-targets"
 def _make_mq_conditions(
     *,
     exclude: set[str] | None = None,
-    fallback_route: str = "release_issue_timeout",
+    fallback_route: str = "register_clone_unconfirmed",
 ) -> list[StepResultCondition]:
     """Build a complete wait_for_merge_queue on_result conditions list.
 
@@ -403,8 +403,8 @@ def _make_mq_conditions(
 def _make_mq_step(
     *,
     exclude: set[str] | None = None,
-    fallback_route: str = "release_issue_timeout",
-    on_failure: str = "release_issue_timeout",
+    fallback_route: str = "register_clone_unconfirmed",
+    on_failure: str = "register_clone_unconfirmed",
 ) -> RecipeStep:
     return RecipeStep(
         tool="wait_for_merge_queue",
@@ -418,16 +418,16 @@ def _make_mq_step(
 def _make_mq_recipe(
     *,
     exclude: set[str] | None = None,
-    fallback_route: str = "release_issue_timeout",
-    on_failure: str = "release_issue_timeout",
+    fallback_route: str = "register_clone_unconfirmed",
+    on_failure: str = "register_clone_unconfirmed",
 ) -> Recipe:
-    """Build a recipe with release_issue_timeout (impl/remed family pattern)."""
+    """Build a recipe with register_clone_unconfirmed (impl/remed family pattern)."""
     return _make_recipe(
         {
             "wait_for_queue": _make_mq_step(
                 exclude=exclude, fallback_route=fallback_route, on_failure=on_failure
             ),
-            "release_issue_timeout": RecipeStep(action="stop", message="timeout"),
+            "register_clone_unconfirmed": RecipeStep(action="stop", message="timeout"),
             "done": RecipeStep(action="stop", message="done"),
         }
     )
@@ -439,7 +439,7 @@ def _make_mq_recipe_no_sentinel(
     fallback_route: str = "register_clone_failure",
     on_failure: str = "register_clone_failure",
 ) -> Recipe:
-    """Build a recipe WITHOUT release_issue_timeout (e.g. merge-prs family pattern)."""
+    """Build a recipe WITHOUT register_clone_unconfirmed (e.g. merge-prs family pattern)."""
     return _make_recipe(
         {
             "wait_for_queue": _make_mq_step(
@@ -504,17 +504,17 @@ def test_conformance_rule_clean_when_targets_correct() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Tool-presence scope gate tests (I7 fires without release_issue_timeout sentinel)
+# Tool-presence scope gate tests (I7 fires without register_clone_unconfirmed sentinel)
 # ---------------------------------------------------------------------------
 
 
-def test_coverage_rule_fires_without_release_issue_timeout_step() -> None:
-    """I7 must fire on recipes without release_issue_timeout if they have mq routing."""
+def test_coverage_rule_fires_without_register_clone_unconfirmed_step() -> None:
+    """I7 must fire on recipes without register_clone_unconfirmed if they have mq routing."""
     recipe = _make_mq_recipe_no_sentinel(exclude={"dropped_healthy", "stalled"})
     findings = run_semantic_rules(recipe)
     coverage_findings = [f for f in findings if f.rule == _COVERAGE_RULE]
     assert len(coverage_findings) >= 1, (
-        f"Expected coverage rule finding for recipe without release_issue_timeout, got: {findings}"
+        f"Expected coverage rule finding for recipe without register_clone_unconfirmed, got: {findings}"
     )
     assert coverage_findings[0].severity == Severity.ERROR
     assert "dropped_healthy" in coverage_findings[0].message
@@ -548,7 +548,7 @@ def test_coverage_rule_silent_for_non_queue_recipe() -> None:
 
 
 def test_conformance_rule_silent_without_sentinel() -> None:
-    """I8 must NOT fire on recipes without release_issue_timeout (family-specific rule)."""
+    """I8 must NOT fire on recipes without register_clone_unconfirmed (family-specific rule)."""
     recipe = _make_mq_recipe_no_sentinel(
         fallback_route="register_clone_failure",
         on_failure="register_clone_failure",

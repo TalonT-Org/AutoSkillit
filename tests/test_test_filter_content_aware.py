@@ -13,7 +13,6 @@ from tests._test_filter import (
     build_test_scope,
 )
 
-
 # ---------------------------------------------------------------------------
 # Content-Aware Bucket A Tests (T1)
 # ---------------------------------------------------------------------------
@@ -34,7 +33,7 @@ class TestCheckBucketAContentAware:
         mock_run = Mock(
             side_effect=[
                 subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout="abc123\n"
+                    args=[], returncode=0, stdout="deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n"
                 ),  # merge-base
                 subprocess.CompletedProcess(args=[], returncode=0, stdout=diff_output),  # diff
             ]
@@ -56,7 +55,9 @@ class TestCheckBucketAContentAware:
         )
         mock_run = Mock(
             side_effect=[
-                subprocess.CompletedProcess(args=[], returncode=0, stdout="abc123\n"),
+                subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout="deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n"
+                ),
                 subprocess.CompletedProcess(args=[], returncode=0, stdout=diff_output),
             ]
         )
@@ -78,7 +79,9 @@ class TestCheckBucketAContentAware:
         )
         mock_run = Mock(
             side_effect=[
-                subprocess.CompletedProcess(args=[], returncode=0, stdout="abc123\n"),
+                subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout="deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n"
+                ),
                 subprocess.CompletedProcess(args=[], returncode=0, stdout=diff_output),
             ]
         )
@@ -128,7 +131,9 @@ class TestCheckBucketAContentAware:
         )
         mock_run = Mock(
             side_effect=[
-                subprocess.CompletedProcess(args=[], returncode=0, stdout="abc123\n"),
+                subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout="deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n"
+                ),
                 subprocess.CompletedProcess(args=[], returncode=0, stdout=diff_output),
             ]
         )
@@ -158,7 +163,9 @@ class TestBuildTestScopeContentAware:
         )
         mock_run = Mock(
             side_effect=[
-                subprocess.CompletedProcess(args=[], returncode=0, stdout="abc123\n"),
+                subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout="deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n"
+                ),
                 subprocess.CompletedProcess(args=[], returncode=0, stdout=diff_output),
             ]
         )
@@ -171,6 +178,7 @@ class TestBuildTestScopeContentAware:
             base_ref="main",
         )
         assert result is not None  # filtered run, not full suite
+        assert result == {tests_root / d for d in ["arch", "contracts", "infra", "docs"]}
 
     def test_scope_pyproject_without_cwd_still_full_run(self, tmp_path: Path) -> None:
         """build_test_scope: pyproject.toml without cwd= still forces full run."""

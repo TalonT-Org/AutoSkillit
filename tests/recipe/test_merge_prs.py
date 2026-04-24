@@ -14,63 +14,53 @@ def recipe():
     return load_recipe(builtin_recipes_dir() / "merge-prs.yaml")
 
 
-def test_pmp_check_impl_plans_step_exists(recipe) -> None:
-    """check_impl_plans step must exist in the recipe."""
-    assert "check_impl_plans" in recipe.steps, (
-        "check_impl_plans step is missing — it gates audit_impl when no "
-        "implementation plans were generated"
+def test_pmp_collect_and_check_impl_plans_step_exists(recipe) -> None:
+    """collect_and_check_impl_plans step must exist in the recipe."""
+    assert "collect_and_check_impl_plans" in recipe.steps, (
+        "collect_and_check_impl_plans step is missing — it copies plan artifacts and gates "
+        "audit_impl when no implementation plans were generated"
     )
 
 
-def test_pmp_collect_artifacts_routes_to_check_impl_plans(recipe) -> None:
-    """collect_artifacts.on_success must route to check_impl_plans, not audit_impl."""
-    step = recipe.steps["collect_artifacts"]
-    assert step.on_success == "check_impl_plans", (
-        "collect_artifacts.on_success must route to check_impl_plans, not audit_impl — "
-        "the check step decides whether audit is meaningful"
-    )
-
-
-def test_pmp_collect_artifacts_failure_routes_to_check_impl_plans(recipe) -> None:
-    """collect_artifacts.on_failure must also route to check_impl_plans."""
-    step = recipe.steps["collect_artifacts"]
-    assert step.on_failure == "check_impl_plans", (
-        "collect_artifacts.on_failure must route to check_impl_plans "
-        "so the gate runs even when artifact copying fails"
-    )
-
-
-def test_pmp_check_impl_plans_is_run_cmd(recipe) -> None:
-    """check_impl_plans step must use the run_cmd tool."""
-    step = recipe.steps["check_impl_plans"]
+def test_pmp_collect_and_check_impl_plans_is_run_cmd(recipe) -> None:
+    """collect_and_check_impl_plans step must use the run_cmd tool."""
+    step = recipe.steps["collect_and_check_impl_plans"]
     assert step.tool == "run_cmd"
 
 
+def test_pmp_collect_and_check_impl_plans_cmd_contains_copy_and_count(recipe) -> None:
+    """collect_and_check_impl_plans cmd must contain both cp and wc -l operations."""
+    step = recipe.steps["collect_and_check_impl_plans"]
+    cmd = step.with_args.get("cmd", "")
+    assert "cp" in cmd, "cmd must contain a cp operation to copy plan files"
+    assert "wc -l" in cmd, "cmd must contain wc -l to count implementation plans"
+
+
 def test_pmp_check_impl_plans_excludes_pr_analysis_plan(recipe) -> None:
-    """check_impl_plans cmd must exclude pr_analysis_plan_*.md from its count.
+    """collect_and_check_impl_plans cmd must exclude pr_analysis_plan_*.md from its count.
 
     pr_analysis_plan_*.md is always written by analyze-prs and is not an
     implementation plan — including it would cause audit_impl to always run.
     """
-    step = recipe.steps["check_impl_plans"]
+    step = recipe.steps["collect_and_check_impl_plans"]
     cmd = step.with_args.get("cmd", "")
     assert "pr_analysis_plan" in cmd, (
-        "check_impl_plans must exclude pr_analysis_plan_*.md from its count — "
+        "collect_and_check_impl_plans must exclude pr_analysis_plan_*.md from its count — "
         "that file is always present and is not an implementation plan"
     )
 
 
 def test_pmp_check_impl_plans_routes_to_open_integration_pr_on_empty(recipe) -> None:
-    """check_impl_plans routes to compute_domain_partitions when no impl plans exist.
+    """collect_and_check_impl_plans routes to compute_domain_partitions when no impl plans exist.
 
     compute_domain_partitions is the pre-staging step before open_integration_pr.
     """
-    step = recipe.steps["check_impl_plans"]
-    assert step.on_result is not None, "check_impl_plans must use on_result routing"
+    step = recipe.steps["collect_and_check_impl_plans"]
+    assert step.on_result is not None, "collect_and_check_impl_plans must use on_result routing"
     conds = step.on_result.conditions
     routes = {c.route for c in conds}
     assert "compute_domain_partitions" in routes, (
-        "check_impl_plans must route to compute_domain_partitions when count is 0"
+        "collect_and_check_impl_plans must route to compute_domain_partitions when count is 0"
     )
     zero_conds = [c for c in conds if c.when is not None and "0" in (c.when or "")]
     assert any(c.route == "compute_domain_partitions" for c in zero_conds), (
@@ -79,14 +69,17 @@ def test_pmp_check_impl_plans_routes_to_open_integration_pr_on_empty(recipe) -> 
 
 
 def test_pmp_check_impl_plans_has_fallthrough_to_audit_impl(recipe) -> None:
-    """check_impl_plans fallthrough (when=None) must go to audit_impl."""
-    step = recipe.steps["check_impl_plans"]
+    """collect_and_check_impl_plans fallthrough (when=None) must go to audit_impl."""
+    step = recipe.steps["collect_and_check_impl_plans"]
     assert step.on_result is not None
     conds = step.on_result.conditions
     fallthrough = [c for c in conds if c.when is None]
-    assert len(fallthrough) == 1, "check_impl_plans must have exactly one fallthrough condition"
+    assert len(fallthrough) == 1, (
+        "collect_and_check_impl_plans must have exactly one fallthrough condition"
+    )
     assert fallthrough[0].route == "audit_impl", (
-        "check_impl_plans fallthrough must route to audit_impl when implementation plans exist"
+        "collect_and_check_impl_plans fallthrough must route to audit_impl when "
+        "implementation plans exist"
     )
 
 
@@ -443,42 +436,35 @@ def test_pmp_has_resolve_integration_conflicts_step(recipe) -> None:
 
 
 def test_pmp_resolve_integration_conflicts_routes_to_force_push(recipe) -> None:
-    """B9: resolve_integration_conflicts must route to force_push_after_rebase."""
+    """B9: resolve_integration_conflicts must route to force_push_and_wait_mergeability."""
     step = recipe.steps["resolve_integration_conflicts"]
     # Step uses on_result conditions; the default (no-when) bare route must route to force_push
     assert step.on_result is not None
     conditions = step.on_result.conditions
     default_routes = [c for c in conditions if c.when is None]
-    assert any(c.route == "force_push_after_rebase" for c in default_routes)
+    assert any(c.route == "force_push_and_wait_mergeability" for c in default_routes)
 
 
-def test_pmp_has_force_push_after_rebase_step(recipe) -> None:
-    """B10: force_push_after_rebase step must exist with run_cmd tool and --force-with-lease."""
-    assert "force_push_after_rebase" in recipe.steps
-    step = recipe.steps["force_push_after_rebase"]
+def test_pmp_has_force_push_and_wait_mergeability_step(recipe) -> None:
+    """B10: force_push_and_wait_mergeability must exist with run_cmd and --force-with-lease."""
+    assert "force_push_and_wait_mergeability" in recipe.steps
+    step = recipe.steps["force_push_and_wait_mergeability"]
     assert step.tool == "run_cmd"
     assert "--force-with-lease" in step.with_args.get("cmd", "")
 
 
-def test_pmp_force_push_after_rebase_routes_to_wait_for_post_rebase_mergeability(recipe) -> None:
-    """B23: force_push_after_rebase.on_success must route to wait_for_post_rebase_mergeability."""
-    step = recipe.steps["force_push_after_rebase"]
-    assert step.on_success == "wait_for_post_rebase_mergeability"
-
-
-def test_pmp_has_wait_for_post_rebase_mergeability_step(recipe) -> None:
-    """B24: wait_for_post_rebase_mergeability step must exist and use run_cmd tool."""
-    assert "wait_for_post_rebase_mergeability" in recipe.steps
-    step = recipe.steps["wait_for_post_rebase_mergeability"]
-    assert step.tool == "run_cmd"
-
-
-def test_pmp_wait_for_post_rebase_mergeability_routes_to_check_post_rebase(
+def test_pmp_force_push_and_wait_mergeability_routes_to_check_post_rebase(
     recipe,
 ) -> None:
-    """B25: wait_for_post_rebase_mergeability.on_success must route to check_mergeability_post_rebase."""  # noqa: E501
-    step = recipe.steps["wait_for_post_rebase_mergeability"]
+    """B25: force_push_and_wait_mergeability.on_success must route to check_mergeability_post_rebase."""  # noqa: E501
+    step = recipe.steps["force_push_and_wait_mergeability"]
     assert step.on_success == "check_mergeability_post_rebase"
+
+
+def test_pmp_force_push_and_wait_mergeability_on_failure(recipe) -> None:
+    """force_push_and_wait_mergeability.on_failure must route to register_clone_failure."""
+    step = recipe.steps["force_push_and_wait_mergeability"]
+    assert step.on_failure == "register_clone_failure"
 
 
 def test_pmp_has_check_mergeability_post_rebase_step(recipe) -> None:

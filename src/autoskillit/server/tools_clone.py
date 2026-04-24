@@ -321,7 +321,9 @@ async def register_clone_status(
             return json.dumps(
                 {
                     "registered": "false",
-                    "reason": f"Invalid status '{status}'. Must be 'success', 'error', or 'unconfirmed'.",
+                    "reason": (
+                        f"Invalid status '{status}'. Must be 'success', 'error', or 'unconfirmed'."
+                    ),
                 }
             )
 
@@ -337,7 +339,13 @@ async def register_clone_status(
                 }
             )
         _start = time.monotonic()
-        typed_status: Literal["success", "error", "unconfirmed"] = status if status in ("success", "error", "unconfirmed") else "error"
+        typed_status: Literal["success", "error", "unconfirmed"] = (
+            "success"
+            if status == "success"
+            else "unconfirmed"
+            if status == "unconfirmed"
+            else "error"
+        )
         try:
             result = await asyncio.to_thread(
                 clone_registry.register_clone,

@@ -514,7 +514,7 @@ def test_coverage_rule_fires_without_register_clone_unconfirmed_step() -> None:
     findings = run_semantic_rules(recipe)
     coverage_findings = [f for f in findings if f.rule == _COVERAGE_RULE]
     assert len(coverage_findings) >= 1, (
-        f"Expected coverage rule finding for recipe without register_clone_unconfirmed, got: {findings}"
+        f"Expected coverage finding (no sentinel step), got: {findings}"
     )
     assert coverage_findings[0].severity == Severity.ERROR
     assert "dropped_healthy" in coverage_findings[0].message

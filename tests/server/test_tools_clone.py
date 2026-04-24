@@ -321,7 +321,7 @@ class TestRegisterCloneStatusTool:
 
     @pytest.mark.anyio
     async def test_register_clone_status_unconfirmed_accepted(self, tool_ctx, tmp_path):
-        """register_clone_status status='unconfirmed' writes registry and returns registered=true."""
+        """status='unconfirmed' is accepted: writes registry entry, returns registered=true."""
         tool_ctx.kitchen_id = "kit-test"
         registry_path = str(tmp_path / "registry.json")
         result = json.loads(

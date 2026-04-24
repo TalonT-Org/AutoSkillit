@@ -235,7 +235,7 @@ def _recipe_has_mq_routing_step(ctx: ValidationContext) -> bool:
 
 
 def _recipe_uses_register_clone_unconfirmed(ctx: ValidationContext) -> bool:
-    """Return True if this recipe family uses register_clone_unconfirmed as its timeout escalation step.
+    """Return True if this recipe family uses register_clone_unconfirmed as timeout escalation.
 
     Used only by Rule I8 (conformance targets) — implementation/remediation-family recipes
     that define register_clone_unconfirmed must route fallback and on_failure there.  Other

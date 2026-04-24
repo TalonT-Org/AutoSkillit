@@ -1406,7 +1406,9 @@ def test_wait_for_queue_routing_covers_every_pr_state(recipe_fixture, request) -
 
 
 @pytest.mark.parametrize("recipe_fixture", RELEASE_TIMEOUT_RECIPES)
-def test_wait_for_queue_fallback_routes_to_register_clone_unconfirmed(recipe_fixture, request) -> None:
+def test_wait_for_queue_fallback_routes_to_register_clone_unconfirmed(
+    recipe_fixture, request
+) -> None:
     """wait_for_queue fallback (when=None) must route to register_clone_unconfirmed."""
     recipe = request.getfixturevalue(recipe_fixture)
     step = recipe.steps["wait_for_queue"]

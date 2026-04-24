@@ -15,7 +15,7 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 class TestReleaseIssueStagedLifecycle:
     @pytest.mark.anyio
     async def test_release_issue_non_default_branch_applies_staged(self, tool_ctx, monkeypatch):
-        """Non-default target_branch removes in-progress and applies staged label via swap_labels."""
+        """Non-default target_branch: swap_labels atomically removes in-progress, adds staged."""
         mock_client = AsyncMock()
         mock_client.ensure_label.return_value = {"success": True, "created": True}
         mock_client.swap_labels.return_value = {"success": True, "labels": ["bug", "staged"]}
@@ -227,7 +227,7 @@ class TestReleaseIssueStagedLifecycle:
 
     @pytest.mark.anyio
     async def test_release_issue_staged_uses_swap_labels(self, tool_ctx, monkeypatch):
-        """release_issue with target_branch uses swap_labels; remove_label and add_labels not called."""
+        """release_issue staged path: uses swap_labels; remove_label/add_labels not called."""
         mock_client = AsyncMock()
         mock_client.ensure_label.return_value = {"success": True, "created": True}
         mock_client.swap_labels.return_value = {"success": True, "labels": ["bug", "staged"]}

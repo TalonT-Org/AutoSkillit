@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-from unittest.mock import AsyncMock
+from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -240,6 +241,113 @@ class TestDispatchFoodTruckValidation:
         )
         assert result["success"] is False
         assert result["error"] == "franchise_manifest_missing"
+
+    @pytest.mark.anyio
+    async def test_dispatch_recipe_info_kind_attribute_error_is_fixed(self, tool_ctx):
+        """find() returns RecipeInfo in production; dispatch must not crash on .kind.
+
+        Previously all dispatch tests stored Recipe objects in the fake, masking the
+        AttributeError. This test uses RecipeInfo (the actual production return type).
+        Before fix: recipe_obj.kind raises AttributeError → L2_STARTUP_OR_CRASH.
+        After fix: load_recipe upgrades RecipeInfo → Recipe before kind check.
+        """
+        from autoskillit.franchise._api import execute_dispatch
+        from autoskillit.recipe.schema import Recipe, RecipeInfo, RecipeKind, RecipeSource
+
+        tool_ctx.franchise_lock = asyncio.Lock()
+        tool_ctx.executor = None
+        repo = InMemoryRecipeRepository()
+        recipe_info = RecipeInfo(
+            name="test-recipe",
+            description="test",
+            source=RecipeSource.PROJECT,
+            path=Path("/fake/recipes/test-recipe.yaml"),
+        )
+        repo.add_recipe("test-recipe", recipe_info)
+        tool_ctx.recipes = repo
+
+        with patch(
+            "autoskillit.franchise._api.load_recipe",
+            return_value=Recipe(name="test-recipe", description="test", kind=RecipeKind.STANDARD),
+        ):
+            result = json.loads(
+                await execute_dispatch(
+                    tool_ctx=tool_ctx,
+                    recipe="test-recipe",
+                    task="run task",
+                    ingredients=None,
+                    dispatch_name=None,
+                    timeout_sec=None,
+                    prompt_builder=_simple_prompt_builder,
+                    quota_checker=_no_sleep_quota_checker,
+                    quota_refresher=_noop_quota_refresher,
+                )
+            )
+
+        # Before fix: L2_STARTUP_OR_CRASH (AttributeError on RecipeInfo.kind)
+        # After fix: FRANCHISE_MANIFEST_MISSING (executor=None, kind check passed)
+        assert result.get("error") != "l2_startup_or_crash", (
+            "Expected structured validation error, not L2_STARTUP_OR_CRASH. "
+            "RecipeInfo.kind AttributeError is not fixed."
+        )
+
+    @pytest.mark.anyio
+    async def test_dispatch_recipe_info_ingredients_attribute_error_is_fixed(self, tool_ctx):
+        """find() returns RecipeInfo; ingredients validation must not crash on
+        recipe_obj.ingredients when non-empty ingredients are passed.
+
+        Before fix: recipe_obj.ingredients raises AttributeError → L2_STARTUP_OR_CRASH.
+        After fix: load_recipe upgrades RecipeInfo → Recipe; unknown ingredient detected.
+        """
+        from autoskillit.franchise._api import execute_dispatch
+        from autoskillit.recipe.schema import (
+            Recipe,
+            RecipeInfo,
+            RecipeIngredient,
+            RecipeKind,
+            RecipeSource,
+        )
+
+        tool_ctx.franchise_lock = asyncio.Lock()
+        tool_ctx.executor = None
+        repo = InMemoryRecipeRepository()
+        recipe_info = RecipeInfo(
+            name="test-recipe",
+            description="test",
+            source=RecipeSource.PROJECT,
+            path=Path("/fake/recipes/test-recipe.yaml"),
+        )
+        repo.add_recipe("test-recipe", recipe_info)
+        tool_ctx.recipes = repo
+
+        with patch(
+            "autoskillit.franchise._api.load_recipe",
+            return_value=Recipe(
+                name="test-recipe",
+                description="test",
+                kind=RecipeKind.STANDARD,
+                ingredients={"env": RecipeIngredient(description="env var")},
+            ),
+        ):
+            result = json.loads(
+                await execute_dispatch(
+                    tool_ctx=tool_ctx,
+                    recipe="test-recipe",
+                    task="run task",
+                    ingredients={"unknown_key": "val"},
+                    dispatch_name=None,
+                    timeout_sec=None,
+                    prompt_builder=_simple_prompt_builder,
+                    quota_checker=_no_sleep_quota_checker,
+                    quota_refresher=_noop_quota_refresher,
+                )
+            )
+
+        # Before fix: L2_STARTUP_OR_CRASH (AttributeError on RecipeInfo.ingredients)
+        # After fix: FRANCHISE_UNKNOWN_INGREDIENT (unknown_key not in recipe.ingredients)
+        assert result.get("error") == "franchise_unknown_ingredient", (
+            f"Expected franchise_unknown_ingredient error. Got: {result}"
+        )
 
 
 # ---------------------------------------------------------------------------

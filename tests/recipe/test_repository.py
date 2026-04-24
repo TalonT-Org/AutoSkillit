@@ -184,3 +184,42 @@ def test_list_all_delegates_to_api() -> None:
 
     assert result == expected
     mock_api.assert_called_once_with(project_dir=None)
+
+
+# ---------------------------------------------------------------------------
+# Protocol boundary enforcement
+# ---------------------------------------------------------------------------
+
+
+def test_recipe_repository_protocol_find_return_type_is_recipe_info() -> None:
+    """RecipeRepository.find() must declare RecipeInfo | None.
+
+    If it returns Any, mypy cannot catch callers accessing Recipe-only attributes
+    on the result — exactly the bug class this guard is designed to prevent.
+    """
+    import inspect
+    import typing
+
+    from autoskillit.core._type_protocols import RecipeRepository
+
+    sig = inspect.signature(RecipeRepository.find)
+    ann = sig.return_annotation
+    type_args = typing.get_args(ann)
+    assert RecipeInfo in type_args, (
+        f"RecipeRepository.find() must return RecipeInfo | None. "
+        f"Got: {ann!r}. "
+        "Returning Any silences mypy on all callers and hides type boundary violations."
+    )
+
+
+def test_in_memory_recipe_repo_rejects_recipe_objects() -> None:
+    """InMemoryRecipeRepository.add_recipe must only accept RecipeInfo objects.
+
+    Accepting Recipe objects masks the production type mismatch in all dispatch tests.
+    """
+    from autoskillit.recipe.schema import Recipe
+    from tests.fakes import InMemoryRecipeRepository
+
+    repo = InMemoryRecipeRepository()
+    with pytest.raises(TypeError, match="RecipeInfo"):
+        repo.add_recipe("x", Recipe(name="x", description="x"))

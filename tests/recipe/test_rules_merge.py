@@ -268,7 +268,7 @@ def test_multiple_merge_steps_each_checked_independently() -> None:
 
 
 # ---------------------------------------------------------------------------
-# on-failure-silent-success-degradation rule tests
+# gh-pr-merge-silent-success-routing rule tests
 # ---------------------------------------------------------------------------
 
 
@@ -316,7 +316,7 @@ def test_rule_fires_on_merge_cmd_failure_to_success_terminal() -> None:
     recipe = _make_gh_pr_merge_recipe(on_failure="register_clone_success")
     findings = run_semantic_rules(recipe)
     assert any(
-        f.rule == "on-failure-silent-success-degradation" and f.severity == Severity.ERROR
+        f.rule == "gh-pr-merge-silent-success-routing" and f.severity == Severity.ERROR
         for f in findings
     )
 
@@ -325,21 +325,21 @@ def test_rule_does_not_fire_on_optional_cleanup_step() -> None:
     """Cleanup steps (optional=True) are exempt from the silent-success-degradation rule."""
     recipe = _make_cleanup_gh_pr_merge_recipe()
     findings = run_semantic_rules(recipe)
-    assert not any(f.rule == "on-failure-silent-success-degradation" for f in findings)
+    assert not any(f.rule == "gh-pr-merge-silent-success-routing" for f in findings)
 
 
 def test_rule_does_not_fire_on_correct_escalation_routing() -> None:
     """A merge step routing on_failure to an escalation target produces no finding."""
     recipe = _make_gh_pr_merge_recipe(on_failure="release_issue_failure")
     findings = run_semantic_rules(recipe)
-    assert not any(f.rule == "on-failure-silent-success-degradation" for f in findings)
+    assert not any(f.rule == "gh-pr-merge-silent-success-routing" for f in findings)
 
 
 def test_rule_does_not_fire_on_verify_queue_enrollment_routing() -> None:
     """A merge step routing on_failure to verify_queue_enrollment produces no finding."""
     recipe = _make_gh_pr_merge_recipe(on_failure="verify_queue_enrollment")
     findings = run_semantic_rules(recipe)
-    assert not any(f.rule == "on-failure-silent-success-degradation" for f in findings)
+    assert not any(f.rule == "gh-pr-merge-silent-success-routing" for f in findings)
 
 
 @pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])
@@ -347,7 +347,7 @@ def test_bundled_recipes_have_no_silent_success_degradation(recipe_name: str) ->
     """No bundled recipe may have a merge step whose on_failure reaches a success terminal."""
     recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
     findings = run_semantic_rules(recipe)
-    silent_success = [f for f in findings if f.rule == "on-failure-silent-success-degradation"]
+    silent_success = [f for f in findings if f.rule == "gh-pr-merge-silent-success-routing"]
     assert silent_success == [], (
         f"Silent success degradation found in {recipe_name}: {silent_success}"
     )

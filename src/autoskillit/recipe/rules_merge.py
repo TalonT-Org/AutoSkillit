@@ -104,7 +104,7 @@ def _has_commit_guard_ancestor(
 
 
 @semantic_rule(
-    name="on-failure-silent-success-degradation",
+    name="gh-pr-merge-silent-success-routing",
     description=(
         "A run_cmd step that executes 'gh pr merge' must not route its on_failure "
         "to register_clone_success. A failed merge means the PR was NOT merged; routing "
@@ -127,7 +127,7 @@ def _check_gh_pr_merge_silent_success_degradation(ctx: ValidationContext) -> lis
         if step.on_failure == "register_clone_success":
             findings.append(
                 RuleFinding(
-                    rule="on-failure-silent-success-degradation",
+                    rule="gh-pr-merge-silent-success-routing",
                     severity=Severity.ERROR,
                     step_name=step_name,
                     message=(

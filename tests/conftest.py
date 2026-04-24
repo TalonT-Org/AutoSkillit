@@ -617,15 +617,18 @@ def pytest_testnodedown(node, error):
     """Aggregate filter counts from the first xdist worker that reports.
 
     Called on the controller process by xdist after each worker finishes.
-    We capture the first non-None report; all workers see the same test set
-    (collection and filtering happen per-worker before distribution), so any
-    single worker's counts are representative of the full session.
+    We capture the first worker that reports both counts as non-None; all workers
+    see the same test set under ``--dist load`` (collection and filtering happen
+    per-worker before distribution), so any single worker's counts are
+    representative of the full session.  Note: this assumption only holds under
+    ``--dist load``; under ``--dist loadscope`` or ``--dist loadfile`` different
+    workers process different subsets and counts may diverge.
     """
     if _worker_filter_counts:
         return  # already captured from the first reporting worker
     wo = getattr(node, "workeroutput", {})
     selected = wo.get("filter_selected")
     deselected = wo.get("filter_deselected")
-    if selected is not None or deselected is not None:
+    if selected is not None and deselected is not None:
         _worker_filter_counts["selected"] = selected
         _worker_filter_counts["deselected"] = deselected

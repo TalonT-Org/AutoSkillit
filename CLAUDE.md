@@ -31,6 +31,9 @@ A Claude Code plugin that orchestrates automated skill-driven workflows using he
   * **Version Bumps**: When bumping the package version, update `pyproject.toml` and run `task sync-plugin-version && uv lock`; then search tests for hardcoded version strings (e.g. `AUTOSKILLIT_INSTALLED_VERSION` monkeypatches) and update them.
   * **Run pre-commit before committing**: Always run `pre-commit run --all-files` before committing. Do not skip this step even when code appears clean — hooks auto-fix formatting and abort the commit, requiring re-stage and retry.
   * **Hook Renames**: Renaming a hook script under `src/autoskillit/hooks/` must update `HOOK_REGISTRY` in `hook_registry.py` AND add the old basename to `RETIRED_SCRIPT_BASENAMES` in the same commit. `test_no_retired_name_has_a_live_file` will fail otherwise.
+  * **Grep tool uses ripgrep (ERE) syntax**: Use `|` for OR-alternation in Grep tool `pattern`
+    arguments. `\|` is Bash grep BRE syntax — ripgrep treats it as a literal backslash-pipe
+    and returns 0 results. Example: `Grep(pattern="foo|bar")` not `Grep(pattern="foo\|bar")`.
 
 ### **3.2. File System**
 
@@ -38,23 +41,12 @@ A Claude Code plugin that orchestrates automated skill-driven workflows using he
   * **Do Not Add Root Files**: Never create new root files unless explicitly required.
   * **Never commit unless told to do so**
 
-### **3.3. Code Index MCP Usage**
-
-  * **Initialize before use**: Always call `set_project_path` with the project root as the first action in any session that will use code-index tools. Without this call, all code-index tools fail with "Project path not set" and cascade-cancel sibling parallel calls.
-  * **Index is locked to the main project root**: The `code-index` MCP server is indexed against the source repo and must never be redirected to a worktree or branch. Its value is for exploration before code changes — at that point any worktree is identical to main, so the index is accurate regardless of where you are working.
-  * **Prefer code-index tools over native search** when exploring the codebase: `find_files`, `search_code_advanced`, `get_file_summary`, `get_symbol_body` (includes `called_by` call graph).
-  * **Do not rely on code-index for code added or modified during a branch** — use Read/Grep directly for that.
-  * **Fall back to native Grep/Glob** for multiline patterns or paths outside the project root.
-  * **Grep tool uses ripgrep (ERE) syntax**: Use `|` for OR-alternation in Grep tool `pattern`
-    arguments. `\|` is Bash grep BRE syntax — ripgrep treats it as a literal backslash-pipe
-    and returns 0 results. Example: `Grep(pattern="foo|bar")` not `Grep(pattern="foo\|bar")`.
-
-### **3.4. CLAUDE.md Modifications**
+### **3.3. CLAUDE.md Modifications**
 
   * **Correcting existing content is permitted**: If you discover that CLAUDE.md contains inaccurate information (wrong file paths, stale names, incorrect tool attributions), you may correct it without being asked.
   * **Adding new content requires explicit instruction**: Never add new sections, bullet points, entries, or any new information to CLAUDE.md unless the user has explicitly asked you to update or extend it. Corrections to existing facts ≠ permission to expand scope.
 
-### **3.5. GitHub API Call Discipline**
+### **3.4. GitHub API Call Discipline**
 
   * **Batch inline review comments** via `POST /pulls/{N}/reviews` with `comments[]` array — never post comments individually unless the batch call fails.
   * **Batch GraphQL mutations** via aliases (N mutations in 1 request = 5 pts total, not N × 5 pts). Use for thread resolution, bulk PR queries, and any operation touching multiple entities.

@@ -62,25 +62,6 @@ def test_merge_pr_uses_generic_ci_check_name() -> None:
     )
 
 
-def test_code_index_examples_are_generic() -> None:
-    """No bundled SKILL.md may use src/autoskillit/ as a code-index path example."""
-    skills_with_violations: list[str] = []
-    for skill_dir in SKILLS_DIR.iterdir():
-        if not skill_dir.is_dir():
-            continue
-        skill_md = skill_dir / "SKILL.md"
-        if not skill_md.exists():
-            continue
-        content = skill_md.read_text()
-        # Check for the specific AutoSkillit path example in code-index instructions
-        if "src/autoskillit/execution/headless.py" in content:
-            skills_with_violations.append(skill_dir.name)
-    assert not skills_with_violations, (
-        f"These skills have AutoSkillit-specific code-index path examples: "
-        f"{skills_with_violations}. Replace with generic placeholders (REQ-GEN-004)."
-    )
-
-
 def test_scope_has_no_hardcoded_metrics_rs() -> None:
     """scope/SKILL.md must not reference the hardcoded src/metrics.rs path."""
     content = (SKILLS_EXTENDED_DIR / "scope" / "SKILL.md").read_text()

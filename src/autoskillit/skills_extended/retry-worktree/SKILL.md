@@ -138,16 +138,6 @@ Then assess what has been implemented:
    - Which phase is partially complete
    - Which phases haven't started
 
-### Step 1.5: Initialize Code Index for Worktree
-
-Set the MCP code-index project path to the worktree so code searches operate on the correct files:
-
-```
-mcp__code-index__set_project_path(path="{WORKTREE_PATH}")
-```
-
-This must happen before any code-index searches or Explore subagents.
-
 ### Step 2: Targeted Exploration (Only If Needed)
 
 Only explore systems related to the **remaining** phases. Do NOT re-explore already-completed work. Use Explore subagents for:
@@ -215,16 +205,6 @@ phases_implemented = ${PHASES_IMPLEMENTED}
 
 Where `PHASES_IMPLEMENTED` is the count from Step 3. If Step 3 was skipped entirely
 (all phases already complete), emit `phases_implemented = 0`.
-
-### Step 6.5: Reset Code Index to Original Project (REQUIRED)
-
-After worktree cleanup, reset the MCP code-index project path back to the original project directory:
-
-```
-mcp__code-index__set_project_path(path="{ORIGINAL_PROJECT_PATH}")
-```
-
-Failure to do this leaves code-index pointing at a deleted worktree path, breaking all subsequent code searches.
 
 ## Error Handling
 

@@ -75,25 +75,6 @@ fi
 If `pr_url` is missing or positional args are insufficient, abort with:
 `"Usage: /autoskillit:audit-claims <worktree_path> <base_branch> <pr_url>"`
 
-### Step 0.5 — Code-Index Initialization (required before any code-index tool call)
-
-Call `set_project_path` with the repo root where this skill was invoked (not a worktree path):
-
-```
-mcp__code-index__set_project_path(path="{PROJECT_ROOT}")
-```
-
-Code-index tools require **project-relative paths**. Always use paths like:
-
-    src/mypackage/core/module.py
-
-NOT absolute paths like:
-
-    /path/to/project/src/mypackage/core/module.py
-
-Agents launched via `run_skill` inherit no code-index state from the parent session — this
-call is mandatory at the start of every headless session that uses code-index tools.
-
 ### Step 1: Use the Explicit PR URL
 
 Parse `pr_number` from `pr_url` (last path segment).

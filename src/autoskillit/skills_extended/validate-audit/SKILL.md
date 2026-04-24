@@ -63,17 +63,6 @@ signal downstream processing.
 
 ## Workflow
 
-### Step 0 — Code-Index Initialization
-
-Call `set_project_path` with the repo root:
-
-```
-mcp__code-index__set_project_path(path="{PROJECT_ROOT}")
-```
-
-Use project-relative paths in all code-index queries (e.g., `src/autoskillit/pipeline/`).
-Fall back to native Grep/Glob if the code-index server is unavailable.
-
 ### Step 1 — Detect Audit Format and Parse Findings
 
 Read the audit report file. Detect its source by examining the document title or preamble:

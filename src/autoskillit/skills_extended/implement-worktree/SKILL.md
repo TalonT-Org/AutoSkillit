@@ -90,16 +90,6 @@ mkdir -p "{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_NAME}"
 echo "${CURRENT_BRANCH}" > "{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_NAME}/base-branch"
 ```
 
-### Step 1.5: Initialize Code Index for Original Project
-
-Set the MCP code-index project path to the **original project directory** so Explore subagents can use code search tools:
-
-```
-mcp__code-index__set_project_path(path="{ORIGINAL_PROJECT_PATH}")
-```
-
-This must happen before Step 2 or any code-index search tools will fail with "Project path not set."
-
 ### Step 2: Deep System Understanding (Subagents)
 
 Before implementing ANY code, launch parallel Explore subagents to understand affected systems:
@@ -121,16 +111,6 @@ task install-worktree   # or equivalent for the project type
 **Why isolated env matters:** Installing packages without isolation overwrites the global state. When the worktree is deleted, CLI commands break with import errors.
 
 **All commands in Steps 4–6 must run from `${WORKTREE_PATH}`.** Use absolute paths to avoid CWD drift across Bash tool calls.
-
-### Step 3.5: Re-point Code Index to Worktree (REQUIRED)
-
-**CRITICAL:** After setting up the worktree environment, you **MUST** update the MCP code-index project path to the worktree. This ensures all subsequent code searches operate on the worktree's files (which will diverge from the original as implementation proceeds):
-
-```
-mcp__code-index__set_project_path(path="${WORKTREE_PATH}")
-```
-
-**Failure to do this means code-index searches will return results from the original project, not your worktree — leading to confusion and incorrect file reads.**
 
 ### Step 4: Implement Phase by Phase
 
@@ -214,16 +194,6 @@ worktree_path = ${WORKTREE_PATH}
 branch_name = ${WORKTREE_NAME}
 base_branch = ${CURRENT_BRANCH}
 ```
-
-### Step 7.5: Reset Code Index to Original Project (REQUIRED)
-
-**CRITICAL:** After worktree cleanup, you **MUST** reset the MCP code-index project path back to the original project directory:
-
-```
-mcp__code-index__set_project_path(path="{ORIGINAL_PROJECT_PATH}")
-```
-
-**Failure to do this leaves code-index pointing at a deleted worktree path, breaking all subsequent code searches in any session.**
 
 ## Error Handling
 

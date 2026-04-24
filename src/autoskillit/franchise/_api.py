@@ -176,6 +176,7 @@ async def _run_dispatch(
     try:
         full_recipe = tool_ctx.recipes.load(recipe_obj.path)
     except Exception as exc:
+        logger.warning("load_recipe failed for '%s'", recipe, exc_info=True)
         return franchise_error(
             FranchiseErrorCode.FRANCHISE_RECIPE_NOT_FOUND,
             f"Recipe '{recipe}' could not be loaded: {exc}",

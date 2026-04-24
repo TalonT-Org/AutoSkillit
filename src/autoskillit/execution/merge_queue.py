@@ -653,6 +653,11 @@ class DefaultMergeQueueWatcher:
                 "error": f"Invalid repo format: {repo!r}. Expected 'owner/name'.",
             }
         owner, repo_name = repo.split("/", 1)
+        if not owner or not repo_name:
+            return {
+                "success": False,
+                "error": f"Invalid repo format: {repo!r}. Expected 'owner/name'.",
+            }
         try:
             state = await self._fetch_pr_and_queue_state(
                 pr_number, owner, repo_name, target_branch

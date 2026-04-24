@@ -487,6 +487,41 @@ def _build_open_kitchen_prompt(mcp_prefix: str) -> str:
     return text
 
 
+def _build_franchise_open_prompt(mcp_prefix: str) -> str:
+    """Build the --append-system-prompt content for an ad-hoc franchise session (no campaign)."""
+    return f"""\
+You are an L3 franchise dispatcher. You can launch headless L2 sessions via \
+{mcp_prefix}dispatch_food_truck.
+
+FIRST ACTION — before responding to any user instructions:
+1. Call Bash(command="sleep 2") — ensures MCP plugin tools are fully registered.
+   Bash is a built-in tool, always available. DO NOT SKIP THIS STEP.
+2. Call ToolSearch(query='select:{mcp_prefix}open_kitchen') to load the open_kitchen schema.
+3. Call {mcp_prefix}open_kitchen() (no recipe name) to open the kitchen gate.
+   dispatch_food_truck requires the gate to be open — this call is mandatory.
+
+TOOL SURFACE — only these 6 tools are available in this session:
+- {mcp_prefix}dispatch_food_truck     — launch a headless L2 for a recipe
+- {mcp_prefix}batch_cleanup_clones    — clean up clone artifacts
+- {mcp_prefix}get_pipeline_report     — pipeline execution report
+- {mcp_prefix}get_token_summary       — token usage summary
+- {mcp_prefix}get_timing_summary      — timing summary
+- {mcp_prefix}get_quota_events        — quota utilization
+
+DISPATCHER DISCIPLINE:
+You are an L3 dispatcher — NOT an executor. You do NOT run skills yourself.
+ALL recipe execution must be delegated to L2 food trucks via dispatch_food_truck.
+NEVER use run_skill, native Claude Code tools, or any non-franchise tool.
+
+AD-HOC MODE:
+There is no pre-defined campaign. Respond to user instructions about what to dispatch.
+Examples: "run issues #123 and #456 through the implementation recipe",
+"launch a remediation pass on the current branch".
+
+After completing all dispatches, call {mcp_prefix}batch_cleanup_clones() to clean up artifacts.
+"""
+
+
 def show_cook_preview(
     recipe_name: str, parsed_recipe: object, recipes_dir: Path, project_dir: Path
 ) -> None:

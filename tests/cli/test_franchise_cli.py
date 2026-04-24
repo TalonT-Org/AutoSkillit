@@ -868,3 +868,87 @@ def test_franchise_run_proceeds_when_enabled(
     captured = capsys.readouterr()
     assert "not enabled" not in captured.err
     assert "not found" in captured.out.lower()
+
+
+# ---------------------------------------------------------------------------
+# T_ADHOC. Ad-hoc franchise dispatch mode (campaign_name=None)
+# ---------------------------------------------------------------------------
+
+
+def test_franchise_run_without_campaign_name_launches_session(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """franchise_run(None) must launch an interactive session, not exit 1."""
+    _stub_guards(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    captured = _capture_subprocess(monkeypatch)
+    _franchise_run(None)
+    assert "AUTOSKILLIT_SESSION_TYPE" in captured["env"]
+    assert captured["env"]["AUTOSKILLIT_SESSION_TYPE"] == "franchise"
+
+
+def test_franchise_run_without_campaign_writes_no_state(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Ad-hoc franchise run must not create a state.json under .autoskillit/temp/franchise/."""
+    _stub_guards(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    _capture_subprocess(monkeypatch)
+    _franchise_run(None)
+    franchise_dir = tmp_path / ".autoskillit" / "temp" / "franchise"
+    assert not franchise_dir.exists() or not any(franchise_dir.rglob("state.json"))
+
+
+def test_franchise_run_without_campaign_no_campaign_env_vars(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Ad-hoc session must not set AUTOSKILLIT_CAMPAIGN_ID or AUTOSKILLIT_CAMPAIGN_STATE_PATH."""
+    _stub_guards(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    captured = _capture_subprocess(monkeypatch)
+    _franchise_run(None)
+    env = captured["env"]
+    assert "AUTOSKILLIT_CAMPAIGN_ID" not in env
+    assert "AUTOSKILLIT_CAMPAIGN_STATE_PATH" not in env
+
+
+def test_build_franchise_open_prompt_instructs_open_kitchen() -> None:
+    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.cli._prompts import _build_franchise_open_prompt
+
+    prompt = _build_franchise_open_prompt(DIRECT_PREFIX)
+    assert "open_kitchen" in prompt
+
+
+def test_build_franchise_open_prompt_references_dispatch_tool() -> None:
+    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.cli._prompts import _build_franchise_open_prompt
+
+    prompt = _build_franchise_open_prompt(DIRECT_PREFIX)
+    assert "dispatch_food_truck" in prompt
+
+
+def test_build_franchise_open_prompt_no_campaign_manifest() -> None:
+    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.cli._prompts import _build_franchise_open_prompt
+
+    prompt = _build_franchise_open_prompt(DIRECT_PREFIX)
+    assert "DISPATCH MANIFEST" not in prompt
+    assert "CAMPAIGN OVERVIEW" not in prompt
+    assert "CAMPAIGN DISCIPLINE" not in prompt
+
+
+def test_build_franchise_open_prompt_accepts_marketplace_prefix() -> None:
+    from autoskillit.cli._mcp_names import MARKETPLACE_PREFIX
+    from autoskillit.cli._prompts import _build_franchise_open_prompt
+
+    prompt = _build_franchise_open_prompt(MARKETPLACE_PREFIX)
+    assert MARKETPLACE_PREFIX + "open_kitchen" in prompt
+    assert MARKETPLACE_PREFIX + "dispatch_food_truck" in prompt
+
+
+def test_franchise_run_adhoc_still_rejects_claudecode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """CLAUDECODE guard fires even when campaign_name is None."""
+    monkeypatch.setenv("CLAUDECODE", "1")
+    with pytest.raises(SystemExit, match="1"):
+        _franchise_run(None)

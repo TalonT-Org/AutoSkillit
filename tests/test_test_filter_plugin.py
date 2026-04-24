@@ -25,12 +25,18 @@ _filter_mode_key = pytest.StashKey[str | None]()
 _selected_count_key = pytest.StashKey[int | None]()
 _deselected_count_key = pytest.StashKey[int | None]()
 
+# Module-level accumulator for xdist worker-to-controller IPC.
+# Populated by pytest_testnodedown (controller); cleared by pytest_configure
+# at session start so in-process pytester reruns don't leak stale data.
+_worker_filter_counts: dict[str, int | None] = {}
+
 def pytest_addoption(parser):
     parser.addoption("--filter-mode", default=None,
                      choices=("none", "conservative", "aggressive"))
     parser.addoption("--filter-base-ref", default=None)
 
 def pytest_configure(config):
+    _worker_filter_counts.clear()
     config.stash[_scope_key] = None
     config.stash[_filter_mode_key] = None
     cli_mode = config.getoption("--filter-mode", default=None)
@@ -76,6 +82,12 @@ def pytest_collection_modifyitems(items, config):
 
 def pytest_sessionfinish(session, exitstatus):
     if hasattr(session.config, "workerinput"):
+        session.config.workeroutput["filter_selected"] = session.config.stash.get(
+            _selected_count_key, None
+        )
+        session.config.workeroutput["filter_deselected"] = session.config.stash.get(
+            _deselected_count_key, None
+        )
         return
     out_path = os.environ.get("AUTOSKILLIT_FILTER_STATS_FILE")
     if not out_path:
@@ -83,6 +95,10 @@ def pytest_sessionfinish(session, exitstatus):
     filter_mode = session.config.stash.get(_filter_mode_key, None)
     selected = session.config.stash.get(_selected_count_key, None)
     deselected = session.config.stash.get(_deselected_count_key, None)
+    if selected is None and _worker_filter_counts:
+        selected = _worker_filter_counts.get("selected")
+    if deselected is None and _worker_filter_counts:
+        deselected = _worker_filter_counts.get("deselected")
     if filter_mode is None:
         return
     Path(out_path).write_text(json.dumps({
@@ -90,6 +106,22 @@ def pytest_sessionfinish(session, exitstatus):
         "tests_selected": selected,
         "tests_deselected": deselected,
     }))
+
+@pytest.hookimpl(optionalhook=True)
+def pytest_testnodedown(node, error):
+    '''Aggregate filter counts from the first xdist worker that reports.
+
+    Mirrors production conftest.py: captures the first worker that reports both
+    selected and deselected counts as non-None.
+    '''
+    if _worker_filter_counts:
+        return
+    wo = getattr(node, "workeroutput", {})
+    selected = wo.get("filter_selected")
+    deselected = wo.get("filter_deselected")
+    if selected is not None and deselected is not None:
+        _worker_filter_counts["selected"] = selected
+        _worker_filter_counts["deselected"] = deselected
 
 def _is_under(path, parent):
     try:
@@ -275,6 +307,39 @@ class TestConftestFilterPlugin:
         assert data["tests_selected"] == 2
         assert data["tests_deselected"] == 0
 
+    def test_conftest_writes_filter_sidecar_under_xdist(
+        self,
+        pytester: pytest.Pytester,
+        tmp_path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """pytest_sessionfinish writes integer counts under xdist (-n 2).
+
+        Regression test for the controller/worker stash split: under xdist
+        pytest_collection_modifyitems runs on workers while pytest_sessionfinish
+        runs on the controller, so the workeroutput IPC channel is required.
+        """
+        sidecar = tmp_path / "filter-stats.json"
+        monkeypatch.setenv("AUTOSKILLIT_FILTER_STATS_FILE", str(sidecar))
+        pytester.makeconftest(_CONFTEST_HOOKS_SOURCE)
+        pytester.mkdir("subdir_a")
+        (pytester.path / "subdir_a" / "test_in_scope.py").write_text("def test_ok(): pass\n")
+        pytester.makepyfile(test_out_scope="def test_skip(): pass")
+        # Use out-of-process subprocess mode (not runpytest_inprocess): xdist spawns
+        # real worker subprocesses that communicate via workeroutput IPC, which cannot
+        # be exercised in-process.  Resource contention risk is low because pytester
+        # runs its own isolated pytest session in a temp directory.
+        pytester.runpytest("-n", "2", "--filter-mode=conservative")
+        assert sidecar.is_file(), "Sidecar file must be written by pytest_sessionfinish"
+        data = json.loads(sidecar.read_text())
+        assert data["filter_mode"] == "conservative"
+        assert isinstance(data["tests_selected"], int), (
+            f"tests_selected must be int under xdist, got {data['tests_selected']!r}"
+        )
+        assert isinstance(data["tests_deselected"], int), (
+            f"tests_deselected must be int under xdist, got {data['tests_deselected']!r}"
+        )
+
 
 # ---------------------------------------------------------------------------
 # Shadow-diff verification tests (SD1)
@@ -320,3 +385,31 @@ class TestShadowDiff:
         """When filter selects nothing, all full IDs are missed."""
         full_ids = sorted(["tests/core/test_core.py::test_a", "tests/core/test_core.py::test_b"])
         assert self._missed(full_ids, []) == full_ids
+
+    def test_shadow_conftest_has_workeroutput_propagation(self) -> None:
+        """Shadow conftest must define pytest_testnodedown and workeroutput propagation.
+
+        Structural guard: ensures _CONFTEST_HOOKS_SOURCE stays in sync with the
+        production conftest's xdist IPC pathway. Without this guard the shadow could
+        silently lose the workeroutput mechanism, causing pytester-based xdist tests
+        to pass against stale shadow code that doesn't match production behavior.
+        """
+        import ast
+
+        tree = ast.parse(_CONFTEST_HOOKS_SOURCE)
+        func_names = {node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)}
+        assert "pytest_testnodedown" in func_names, (
+            "Shadow conftest is missing pytest_testnodedown hook — "
+            "xdist worker-to-controller propagation not present"
+        )
+        # Verify pytest_sessionfinish contains a workeroutput assignment
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name == "pytest_sessionfinish":
+                func_src = ast.unparse(node)
+                assert "workeroutput" in func_src, (
+                    "pytest_sessionfinish in shadow conftest must assign workeroutput — "
+                    "xdist IPC channel missing"
+                )
+                break
+        else:
+            raise AssertionError("pytest_sessionfinish not found in shadow conftest")

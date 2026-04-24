@@ -582,6 +582,41 @@ async def test_default_test_runner_populates_filter_stats_from_sidecar(tmp_path:
 
 
 @pytest.mark.anyio
+async def test_default_test_runner_null_sidecar_values_become_none(tmp_path: Path) -> None:
+    """run() maps JSON null for selected/deselected counts to None in TestResult.
+
+    Regression guard for the isinstance(ts, int) guard at testing.py:244-245.
+    When the sidecar contains null (as happens under xdist before the workeroutput
+    fix), DefaultTestRunner must return None — not crash or coerce to 0.
+    """
+    import json
+
+    sidecar_data = {
+        "filter_mode": "conservative",
+        "tests_selected": None,
+        "tests_deselected": None,
+    }
+
+    async def fake_runner(command, *, cwd, timeout, env, **kwargs):
+        sidecar_path = env.get("AUTOSKILLIT_FILTER_STATS_FILE")
+        assert sidecar_path, "AUTOSKILLIT_FILTER_STATS_FILE must be set in env"
+        Path(sidecar_path).write_text(json.dumps(sidecar_data))
+        return SubprocessResult(
+            returncode=0,
+            stdout="= 1 passed =\n",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+        )
+
+    tester = DefaultTestRunner(config=make_test_config(), runner=fake_runner)
+    result = await tester.run(tmp_path)
+    assert result.filter_mode == "conservative"
+    assert result.tests_selected is None
+    assert result.tests_deselected is None
+
+
+@pytest.mark.anyio
 async def test_default_test_runner_no_sidecar_means_no_filter_stats(tmp_path: Path) -> None:
     """run() leaves filter fields as None when no sidecar is written."""
     from tests.conftest import _make_result

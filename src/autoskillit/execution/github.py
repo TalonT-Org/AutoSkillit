@@ -498,11 +498,13 @@ class DefaultGitHubFetcher:
         remove_labels: list[str],
         add_labels: list[str],
     ) -> dict[str, Any]:
-        """Atomically swap labels on an issue via PUT (full replacement).
+        """Swap labels on an issue via GET-then-PUT (reduced-race replacement).
 
         Fetches the current label set, computes (current - remove_labels) | add_labels,
-        then PUTs the result. The PUT endpoint atomically replaces all labels in one
-        HTTP call, eliminating the gap window of the 3-step DELETE→POST→POST sequence.
+        then PUTs the result. The PUT endpoint replaces all labels in one HTTP call,
+        reducing the race window compared to DELETE→POST→POST, but is not truly atomic:
+        a concurrent writer between the GET (fetch) and PUT (replace) can silently
+        overwrite interleaved changes.
 
         Returns {success, labels}. Never raises.
         """

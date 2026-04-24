@@ -439,6 +439,15 @@ def _register_all(scope: str, project_dir: Path) -> None:
             "`cd` to a different directory first."
         )
 
+    if _core_paths.is_git_worktree(_core_paths.pkg_root()):
+        from autoskillit.cli.app import CliError
+
+        raise CliError(
+            "Refusing to run `autoskillit init` from a git linked worktree — "
+            "hook paths would be written from a transient pkg_root(). "
+            "Use `task install-worktree` instead."
+        )
+
     # Cross-scope sweep: evict stale hooks from all scopes before writing canonical entries.
     sweep_all_scopes_for_orphans(project_dir)
 

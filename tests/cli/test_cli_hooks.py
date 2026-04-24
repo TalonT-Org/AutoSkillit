@@ -299,12 +299,11 @@ def test_sync_hooks_rejects_worktree_pkg_root(tmp_path, monkeypatch):
     """sync_hooks_to_settings must raise when pkg_root() is inside a git worktree."""
     from autoskillit.cli._hooks import sync_hooks_to_settings
 
-    # Create a fake worktree: .git is a FILE (not dir) → is_git_worktree() returns True
     fake_pkg = tmp_path / "worktree" / "src" / "autoskillit"
     fake_pkg.mkdir(parents=True)
-    (tmp_path / "worktree" / ".git").write_text("gitdir: /some/main/.git/worktrees/wt")
 
     monkeypatch.setattr("autoskillit.cli._hooks.pkg_root", lambda: fake_pkg)
+    monkeypatch.setattr("autoskillit.cli._hooks.is_git_worktree", lambda path: True)
 
     settings_path = tmp_path / "settings.json"
     settings_path.write_text("{}")

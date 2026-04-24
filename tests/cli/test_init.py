@@ -815,9 +815,9 @@ def test_register_all_rejects_worktree_pkg_root(
 
     fake_pkg = tmp_path / "worktree" / "src" / "autoskillit"
     fake_pkg.mkdir(parents=True)
-    (tmp_path / "worktree" / ".git").write_text("gitdir: /some/main/.git/worktrees/wt")
 
     monkeypatch.setattr(_paths, "pkg_root", lambda: fake_pkg)
+    monkeypatch.setattr(_paths, "is_git_worktree", lambda path: True)
 
     project_dir = tmp_path / "user_project"
     project_dir.mkdir()

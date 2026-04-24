@@ -12,10 +12,17 @@ from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
 pytestmark = [pytest.mark.layer("franchise"), pytest.mark.small, pytest.mark.feature("franchise")]
 
 
-def _make_standard_recipe(name: str = "test-recipe"):
-    from autoskillit.recipe.schema import Recipe, RecipeKind
+def _make_recipe_info(name: str = "test-recipe"):
+    from pathlib import Path
 
-    return Recipe(name=name, description="test", ingredients={}, kind=RecipeKind.STANDARD)
+    from autoskillit.recipe.schema import RecipeInfo, RecipeSource
+
+    return RecipeInfo(
+        name=name,
+        description="test",
+        source=RecipeSource.PROJECT,
+        path=Path(f"/fake/{name}.yaml"),
+    )
 
 
 def _simple_prompt_builder(**kwargs) -> str:
@@ -36,10 +43,17 @@ async def _noop_quota_refresher(config, **kwargs) -> None:
     pass
 
 
-def _setup_dispatch(tool_ctx, recipe_name: str = "test-recipe"):
+def _setup_dispatch(tool_ctx, monkeypatch, recipe_name: str = "test-recipe"):
+    from autoskillit.recipe.schema import Recipe, RecipeKind
+
     tool_ctx.franchise_lock = asyncio.Lock()
     repo = InMemoryRecipeRepository()
-    repo.add_recipe(recipe_name, _make_standard_recipe(recipe_name))
+    recipe_info = _make_recipe_info(recipe_name)
+    repo.add_recipe(recipe_name, recipe_info)
+    repo.add_full_recipe(
+        recipe_info.path,
+        Recipe(name=recipe_name, description="test", kind=RecipeKind.STANDARD, ingredients={}),
+    )
     tool_ctx.recipes = repo
     tool_ctx.executor = InMemoryHeadlessExecutor()
 
@@ -126,7 +140,7 @@ class TestLifespanStartedInEnvelopes:
 
         from tests.fakes import _DEFAULT_SKILL_RESULT
 
-        _setup_dispatch(tool_ctx)
+        _setup_dispatch(tool_ctx, monkeypatch)
         tool_ctx.executor = InMemoryHeadlessExecutor(
             default_result=dataclasses.replace(
                 _DEFAULT_SKILL_RESULT,
@@ -148,7 +162,7 @@ class TestLifespanStartedInEnvelopes:
         self, tool_ctx, monkeypatch
     ):
         """no_sentinel envelope includes 'lifespan_started' field."""
-        _setup_dispatch(tool_ctx)
+        _setup_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
             "autoskillit.franchise._api.parse_l2_result_block",
             lambda **_: _make_no_sentinel(),
@@ -164,7 +178,7 @@ class TestLifespanStartedInEnvelopes:
         self, tool_ctx, monkeypatch
     ):
         """completed_dirty envelope includes 'lifespan_started' field."""
-        _setup_dispatch(tool_ctx)
+        _setup_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
             "autoskillit.franchise._api.parse_l2_result_block",
             lambda **_: _make_completed_dirty(),

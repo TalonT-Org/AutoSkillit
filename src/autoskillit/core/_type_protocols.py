@@ -8,13 +8,17 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Any, Literal, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from autoskillit.recipe.schema import Recipe, RecipeInfo
 
 from ._type_results import (
     CIRunScope,
     CleanupResult,
     CloneResult,
     FailureRecord,
+    LoadResult,
     SkillResult,
     TestResult,
     ValidatedAddDir,
@@ -237,9 +241,11 @@ class SupportsLogger(SupportsDebug, Protocol):
 class RecipeRepository(Protocol):
     """Protocol for recipe discovery and loading."""
 
-    def find(self, name: str, project_dir: Path) -> Any: ...
+    def find(self, name: str, project_dir: Path) -> RecipeInfo | None: ...
 
-    def list(self, project_dir: Path) -> Any: ...
+    def load(self, path: Path) -> Recipe: ...
+
+    def list(self, project_dir: Path) -> LoadResult[RecipeInfo]: ...
 
     def load_and_validate(
         self,

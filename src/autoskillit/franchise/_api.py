@@ -172,21 +172,31 @@ async def _run_dispatch(
             FranchiseErrorCode.FRANCHISE_RECIPE_NOT_FOUND,
             f"Recipe '{recipe}' not found.",
         )
-    if recipe_obj.kind != "standard":
+
+    try:
+        full_recipe = tool_ctx.recipes.load(recipe_obj.path)
+    except Exception as exc:
+        logger.warning("load_recipe failed for '%s'", recipe, exc_info=True)
+        return franchise_error(
+            FranchiseErrorCode.FRANCHISE_RECIPE_NOT_FOUND,
+            f"Recipe '{recipe}' could not be loaded: {exc}",
+        )
+
+    if full_recipe.kind != "standard":
         return franchise_error(
             FranchiseErrorCode.FRANCHISE_INVALID_RECIPE_KIND,
-            f"Recipe '{recipe}' has kind '{recipe_obj.kind}'. "
+            f"Recipe '{recipe}' has kind '{full_recipe.kind}'. "
             "Only standard recipes can be dispatched as food trucks.",
         )
 
     effective_ingredients = ingredients or {}
     if effective_ingredients:
-        unknown = set(effective_ingredients.keys()) - set(recipe_obj.ingredients.keys())
+        unknown = set(effective_ingredients.keys()) - set(full_recipe.ingredients.keys())
         if unknown:
             return franchise_error(
                 FranchiseErrorCode.FRANCHISE_UNKNOWN_INGREDIENT,
                 f"Unknown ingredient keys: {sorted(unknown)}. "
-                f"Valid keys: {sorted(recipe_obj.ingredients.keys())}",
+                f"Valid keys: {sorted(full_recipe.ingredients.keys())}",
             )
 
     quota_result = await quota_checker(tool_ctx.config.quota_guard)

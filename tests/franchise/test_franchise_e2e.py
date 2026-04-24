@@ -221,10 +221,18 @@ class FranchiseRuntime:
 
     def add_recipe(self, name: str) -> None:
         """Register a minimal standard recipe."""
-        from autoskillit.recipe.schema import Recipe, RecipeKind
+        from autoskillit.recipe.schema import Recipe, RecipeInfo, RecipeKind, RecipeSource
 
-        self.recipes.add_recipe(
-            name, Recipe(name=name, description="test", ingredients={}, kind=RecipeKind.STANDARD)
+        info = RecipeInfo(
+            name=name,
+            description="test",
+            source=RecipeSource.PROJECT,
+            path=Path(f"/fake/{name}.yaml"),
+        )
+        self.recipes.add_recipe(name, info)
+        self.recipes.add_full_recipe(
+            info.path,
+            Recipe(name=name, description="test", kind=RecipeKind.STANDARD, ingredients={}),
         )
 
     async def dispatch(
@@ -789,11 +797,20 @@ async def test_resume_after_l3_crash(franchise_runtime: FranchiseRuntime, tmp_pa
 @pytest.mark.anyio
 async def test_manifest_corrupted_yaml(franchise_runtime: FranchiseRuntime) -> None:
     """Recipe with wrong kind returns franchise_invalid_recipe_kind without spawning."""
-    from types import SimpleNamespace
+    from autoskillit.recipe.schema import Recipe, RecipeInfo, RecipeKind, RecipeSource
 
     rt = franchise_runtime
-    bad_recipe = SimpleNamespace(kind="campaign", ingredients={})
-    rt.recipes.add_recipe("bad-recipe", bad_recipe)
+    recipe_info = RecipeInfo(
+        name="bad-recipe",
+        description="bad",
+        source=RecipeSource.PROJECT,
+        path=Path("/fake/bad-recipe.yaml"),
+    )
+    rt.recipes.add_recipe("bad-recipe", recipe_info)
+    rt.recipes.add_full_recipe(
+        recipe_info.path,
+        Recipe(name="bad-recipe", description="bad", kind=RecipeKind.CAMPAIGN, ingredients={}),
+    )
 
     result = await rt.dispatch("bad-recipe")
     assert result["success"] is False

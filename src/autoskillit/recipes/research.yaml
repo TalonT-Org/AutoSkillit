@@ -689,18 +689,18 @@ steps:
         route: re_run_experiment
       - when: "${{ context.claims_needs_rerun }} == true"
         route: re_run_experiment
-      - route: re_push_research
+      - route: finalize_bundle
     note: >
       Merged escalation consumer replacing check_escalations. Triggers a single
       re_run_experiment if either review resolution or claims resolution flagged
       a rerun. When only design_flaw escalations exist (or none), routes directly
-      to push — design_flaw escalations are already posted as inline PR comments
+      to finalize_bundle — design_flaw escalations are already posted as inline PR comments
       by the resolve skills. Both context.review_needs_rerun and
       context.claims_needs_rerun may be absent if their respective resolution
       steps were never reached (e.g., no changes_requested verdict on that gate);
       the recipe engine evaluates absent context variables as empty string, so
       absent == true is always false and routes safely fall through to
-      re_push_research.
+      finalize_bundle.
 
   re_run_experiment:
     tool: run_skill
@@ -784,7 +784,7 @@ steps:
       cmd: "cd '${{ context.worktree_path }}' && git push"
       cwd: "${{ context.worktree_path }}"
       step_name: re_push_research
-    on_success: finalize_bundle
+    on_success: finalize_bundle_render
     on_failure: begin_archival
 
   # --- ARCHIVAL PHASE ---
@@ -840,7 +840,7 @@ steps:
       step_name: finalize_bundle
     capture:
       report_path_after_finalize: "${{ result.report_path_after_finalize }}"
-    on_success: finalize_bundle_render
+    on_success: re_push_research
     on_failure: begin_archival
     note: >
       Single compression point. Runs exactly once per recipe run. In pr mode: renames

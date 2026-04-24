@@ -329,7 +329,7 @@ class TestToolSurface:
         assert f"{DIRECT_PREFIX}run_skill" not in prompt
         # forbidden list still mentions close_kitchen and run_skill
         forbidden_idx = prompt.index("Explicitly FORBIDDEN")
-        forbidden_line = prompt[forbidden_idx : forbidden_idx + 120]
+        forbidden_line = prompt[forbidden_idx : prompt.index(chr(10), forbidden_idx)]
         assert "close_kitchen" in forbidden_line
         assert "run_skill" in forbidden_line
 
@@ -378,5 +378,5 @@ class TestL3StartupSequence:
     def test_open_kitchen_not_in_forbidden_list(self) -> None:
         prompt = _build()
         forbidden_idx = prompt.index("Explicitly FORBIDDEN")
-        forbidden_line = prompt[forbidden_idx : forbidden_idx + 120]
+        forbidden_line = prompt[forbidden_idx : prompt.index(chr(10), forbidden_idx)]
         assert "open_kitchen" not in forbidden_line

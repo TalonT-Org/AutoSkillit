@@ -338,8 +338,10 @@ def _launch_franchise_session(
         _run_interactive_session(prompt, extra_env=extra_env)
     else:
         # Campaign-driven mode: full orchestrator prompt with manifest and state
-        assert campaign_id is not None
-        assert state_path is not None
+        if campaign_id is None:
+            raise ValueError("campaign_id must not be None in campaign-driven mode")
+        if state_path is None:
+            raise ValueError("state_path must not be None in campaign-driven mode")
         from autoskillit.cli._prompts import _build_l3_orchestrator_prompt
         from autoskillit.core import dump_yaml_str
 

@@ -70,6 +70,12 @@ HOOK_REGISTRY: list[HookDef] = [
         scripts=["generated_file_write_guard.py"],
     ),
     HookDef(
+        matcher=r"Bash|Write|Edit|Read|Glob|Grep",
+        scripts=["mcp_health_guard.py"],
+        timeout_seconds=5,
+        session_scope="interactive_only",
+    ),
+    HookDef(
         matcher=r"mcp__.*autoskillit.*__(run_skill|run_cmd|run_python).*",
         scripts=["leaf_orchestration_guard.py"],
         session_scope="headless_only",

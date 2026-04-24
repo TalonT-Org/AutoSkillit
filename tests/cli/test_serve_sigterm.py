@@ -12,6 +12,7 @@ serve() must call anyio.run() and pass it an async coroutine function.
 
 from __future__ import annotations
 
+import ast
 import inspect
 from unittest.mock import MagicMock
 
@@ -51,4 +52,41 @@ def test_serve_uses_anyio_run_not_mcp_run(monkeypatch, tmp_path):
     # _serve_with_signal_guard is a local async closure — must be a coroutine function
     assert inspect.iscoroutinefunction(guard_fn), (
         f"Expected serve() to pass an async coroutine function to anyio.run(), got {guard_fn!r}"
+    )
+
+
+def test_sighup_in_serve_guard_signal_list() -> None:
+    """_serve_guard.py must pass signal.SIGHUP to open_signal_receiver (AST guard).
+
+    Sending a real SIGHUP in tests is unsafe — before SIGHUP is registered,
+    the default disposition terminates the process. AST analysis is safe for
+    both the pre- and post-implementation codebase.
+    """
+    from autoskillit.core.paths import pkg_root
+
+    src_path = pkg_root() / "cli" / "_serve_guard.py"
+    tree = ast.parse(src_path.read_text(encoding="utf-8"))
+
+    sighup_found = False
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not (isinstance(func, ast.Attribute) and func.attr == "open_signal_receiver"):
+            continue
+        for arg in node.args:
+            if (
+                isinstance(arg, ast.Attribute)
+                and arg.attr == "SIGHUP"
+                and isinstance(arg.value, ast.Name)
+                and arg.value.id == "signal"
+            ):
+                sighup_found = True
+                break
+        if sighup_found:
+            break
+
+    assert sighup_found, (
+        "signal.SIGHUP not found in anyio.open_signal_receiver() call in _serve_guard.py. "
+        "Terminal disconnects (SIGHUP) must trigger graceful shutdown."
     )

@@ -1,13 +1,13 @@
 # Hooks
 
-AutoSkillit registers 13 Claude Code hook scripts: 9 PreToolUse, 3 PostToolUse,
+AutoSkillit registers 14 Claude Code hook scripts: 10 PreToolUse, 3 PostToolUse,
 and 1 SessionStart. Every script is stdlib-only Python so it can run before the
 project virtualenv is on the path. Scripts live in `src/autoskillit/hooks/`
 and are bound to event types in `src/autoskillit/hook_registry.py` via the
 `HOOK_REGISTRY` list of `HookDef` entries; `generate_hooks_json()` then
 materializes the canonical `hooks.json` that Claude Code reads.
 
-## PreToolUse hooks (9)
+## PreToolUse hooks (10)
 
 ### `branch_protection_guard.py`
 **Guarded tools:** `merge_worktree`, `push_to_remote`
@@ -62,6 +62,13 @@ Denies `run_cmd` calls that perform editable installs without `--python
 Denies writes to generated files (`hooks.json`, `settings.json`). The hooks
 file must be regenerated through `generate_hooks_json()`, never edited by
 hand.
+
+### `mcp_health_guard.py`
+**Matched tools:** `Bash`, `Write`, `Edit`, `Read`, `Glob`, `Grep`
+Detects MCP server disconnection by reading `active_kitchens.json` and checking
+PID liveness. Injects informational message suggesting `/MCP` reconnection when
+all registered server PIDs for the project are dead. Never blocks tool execution.
+Interactive sessions only.
 
 ## PostToolUse hooks (3)
 

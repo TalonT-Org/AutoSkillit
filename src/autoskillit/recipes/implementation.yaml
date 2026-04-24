@@ -726,11 +726,12 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "enable_auto_merge"
     on_success: wait_for_queue
-    on_failure: register_clone_success
+    on_failure: verify_queue_enrollment
     skip_when_false: "inputs.open_pr"
     note: >
-      Submits the PR to the merge queue. On failure (PR not mergeable, already merged),
-      degrades to register_clone_success.
+      Submits the PR to the merge queue. On failure, probes the queue via
+      verify_queue_enrollment to distinguish a transient enqueue error from a
+      PR that is already merged or still in queue.
 
   queue_enqueue_no_auto:
     tool: run_cmd
@@ -739,16 +740,50 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "queue_enqueue_no_auto"
     on_success: wait_for_queue
-    on_failure: register_clone_success
+    on_failure: verify_queue_enrollment
     skip_when_false: "inputs.open_pr"
     note: >
       Submits the PR to the merge queue when the target branch has a configured
       merge queue but the repository disallows auto-merge (autoMergeAllowed=false).
       Uses plain `gh pr merge --squash` (no --auto, which would be rejected by
       GitHub's API auto-merge gate). GitHub intercepts the call and enqueues
-      the PR because the branch has a queue. Routes to wait_for_queue (the
-      shared queue waiter) — never to wait_for_immediate_merge, whose 5-minute
-      poll is too short for queue serialization.
+      the PR because the branch has a queue. On failure, probes the queue via
+      verify_queue_enrollment before escalating.
+
+  verify_queue_enrollment:
+    description: "Probe merge queue after enqueue command failure to determine actual state"
+    tool: wait_for_merge_queue
+    with:
+      pr_number: "${{ context.pr_number }}"
+      target_branch: "${{ inputs.base_branch }}"
+      cwd: "${{ context.work_dir }}"
+      remote_url: "${{ context.remote_url }}"
+      timeout_seconds: 60
+      poll_interval: 10
+    on_result:
+      - when: "${{ result.pr_state }} == merged"
+        route: release_issue_success
+      - when: "${{ result.pr_state }} == ejected_ci_failure"
+        route: diagnose_ci
+      - when: "${{ result.pr_state }} == dropped_healthy"
+        route: wait_for_queue
+      - when: "${{ result.pr_state }} == ejected"
+        route: wait_for_queue
+      - when: "${{ result.pr_state }} == stalled"
+        route: wait_for_queue
+      - when: "${{ result.pr_state }} == timeout"
+        route: release_issue_timeout
+      - route: release_issue_timeout
+    on_failure: release_issue_timeout
+    note: >
+      Short probe (60s) after enable_auto_merge or queue_enqueue_no_auto failure.
+      If the PR is already merged, route to release_issue_success. If the queue
+      already confirms CI failure (ejected_ci_failure), route directly to
+      diagnose_ci — the PR is already ejected and the 900s wait_for_queue watch
+      would only confirm the same state before escalating. For other active queue
+      states (dropped_healthy, ejected, stalled), route to wait_for_queue for
+      full 900s authoritative watch. If the probe timed out or returned an
+      unexpected state, escalate via release_issue_timeout.
 
   wait_for_queue:
     tool: wait_for_merge_queue
@@ -902,12 +937,13 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "direct_merge"
     on_success: wait_for_direct_merge
-    on_failure: register_clone_success
+    on_failure: release_issue_failure
     skip_when_false: "inputs.open_pr"
     note: >
       Enables GitHub native auto-merge for direct merge (no merge queue). GitHub
-      merges automatically once all required checks pass. On failure (PR already
-      merged, not mergeable), degrades gracefully to register_clone_success.
+      merges automatically once all required checks pass. On failure, escalates
+      via release_issue_failure so the issue claim is released and the pipeline
+      reports an error rather than silently succeeding.
 
   wait_for_direct_merge:
     tool: run_cmd
@@ -1010,13 +1046,14 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "immediate_merge"
     on_success: wait_for_immediate_merge
-    on_failure: register_clone_success
+    on_failure: release_issue_failure
     skip_when_false: "inputs.open_pr"
     note: >
       Merges the PR immediately using plain --squash when autoMergeAllowed=false.
       Unlike direct_merge, no --auto flag is used — GitHub executes the merge
-      synchronously rather than queueing it for when checks pass. On failure
-      (conflict or not-mergeable error from GitHub), degrades to register_clone_success.
+      synchronously rather than queueing it for when checks pass. On failure,
+      escalates via release_issue_failure so the issue claim is released and the
+      pipeline reports an error rather than silently succeeding.
 
   wait_for_immediate_merge:
     tool: run_cmd

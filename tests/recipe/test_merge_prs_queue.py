@@ -682,9 +682,9 @@ def test_direct_merge_routes_to_wait_for_direct_merge(any_recipe) -> None:
     assert step.on_success == "wait_for_direct_merge"
 
 
-def test_direct_merge_failure_routes_to_register_clone_success(any_recipe) -> None:
+def test_direct_merge_failure_routes_to_release_issue_failure(any_recipe) -> None:
     step = any_recipe.steps["direct_merge"]
-    assert step.on_failure == "register_clone_success"
+    assert step.on_failure == "release_issue_failure"
 
 
 def test_wait_for_direct_merge_step_exists(any_recipe) -> None:
@@ -838,9 +838,9 @@ def test_immediate_merge_routes_to_wait_for_immediate_merge(any_recipe) -> None:
     assert step.on_success == "wait_for_immediate_merge"
 
 
-def test_immediate_merge_failure_routes_to_register_clone_success(any_recipe) -> None:
+def test_immediate_merge_failure_routes_to_release_issue_failure(any_recipe) -> None:
     step = any_recipe.steps["immediate_merge"]
-    assert step.on_failure == "register_clone_success"
+    assert step.on_failure == "release_issue_failure"
 
 
 def test_wait_for_immediate_merge_step_exists(any_recipe) -> None:
@@ -1213,9 +1213,9 @@ def test_queue_enqueue_no_auto_routes_to_wait_for_queue(any_recipe) -> None:
     assert step.on_success == "wait_for_queue"
 
 
-def test_queue_enqueue_no_auto_failure_routes_to_register_clone_success(any_recipe) -> None:
+def test_queue_enqueue_no_auto_failure_routes_to_verify_queue_enrollment(any_recipe) -> None:
     step = any_recipe.steps["queue_enqueue_no_auto"]
-    assert step.on_failure == "register_clone_success"
+    assert step.on_failure == "verify_queue_enrollment"
 
 
 def test_queue_enqueue_no_auto_skip_when_false(any_recipe) -> None:
@@ -1265,6 +1265,79 @@ def test_remediation_wait_for_queue_has_timeout_arm_and_release_timeout_fallback
     assert step.on_failure == "release_issue_timeout", (
         f"remediation.yaml wait_for_queue on_failure must be release_issue_timeout, "
         f"got: {step.on_failure!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# T13: Merge step failure routing — silent success degradation guards
+# ---------------------------------------------------------------------------
+
+
+def test_enable_auto_merge_failure_routes_to_verify_queue_enrollment(any_recipe) -> None:
+    """enable_auto_merge on_failure must route to verify_queue_enrollment."""
+    step = any_recipe.steps["enable_auto_merge"]
+    assert step.on_failure == "verify_queue_enrollment"
+
+
+def test_verify_queue_enrollment_exists(any_recipe) -> None:
+    assert "verify_queue_enrollment" in any_recipe.steps
+
+
+def test_verify_queue_enrollment_uses_wait_for_merge_queue(any_recipe) -> None:
+    step = any_recipe.steps["verify_queue_enrollment"]
+    assert step.tool == "wait_for_merge_queue"
+
+
+def test_verify_queue_enrollment_on_failure_escalates(any_recipe) -> None:
+    step = any_recipe.steps["verify_queue_enrollment"]
+    assert step.on_failure == "release_issue_timeout"
+
+
+def test_verify_queue_enrollment_merged_routes_to_release_issue_success(any_recipe) -> None:
+    step = any_recipe.steps["verify_queue_enrollment"]
+    assert step.on_result is not None
+    merged_routes = [c.route for c in step.on_result.conditions if c.when and "merged" in c.when]
+    assert merged_routes == ["release_issue_success"]
+
+
+def test_verify_queue_enrollment_fallback_routes_to_release_issue_timeout(any_recipe) -> None:
+    step = any_recipe.steps["verify_queue_enrollment"]
+    assert step.on_result is not None
+    fallback = [c.route for c in step.on_result.conditions if c.when is None]
+    assert fallback == ["release_issue_timeout"]
+
+
+def test_verify_queue_enrollment_ejected_ci_failure_routes_directly_to_diagnose_ci(
+    any_recipe,
+) -> None:
+    """verify_queue_enrollment must route ejected_ci_failure directly to diagnose_ci.
+
+    A 60s probe that already confirmed CI failure should not feed into a 900s
+    wait_for_queue watch that would only route to diagnose_ci anyway.
+    """
+    step = any_recipe.steps["verify_queue_enrollment"]
+    assert step.on_result is not None
+    ejected_ci_routes = [
+        c.route
+        for c in step.on_result.conditions
+        if c.when is not None and "ejected_ci_failure" in c.when
+    ]
+    assert ejected_ci_routes == ["diagnose_ci"], (
+        f"verify_queue_enrollment must route ejected_ci_failure directly to diagnose_ci, "
+        f"got: {ejected_ci_routes}"
+    )
+
+
+@pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])
+def test_wait_for_direct_merge_on_failure_routes_to_release_issue_timeout(
+    recipe_name: str,
+) -> None:
+    """wait_for_direct_merge.on_failure must be release_issue_timeout in all three recipes."""
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    step = recipe.steps["wait_for_direct_merge"]
+    assert step.on_failure == "release_issue_timeout", (
+        f"{recipe_name}.yaml wait_for_direct_merge.on_failure must be "
+        f"'release_issue_timeout', got: {step.on_failure!r}"
     )
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.core import Severity
+from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.rules_merge import _RECOVERABLE_FAILED_STEPS
 from autoskillit.recipe.schema import Recipe, RecipeStep, StepResultCondition, StepResultRoute
@@ -264,3 +265,89 @@ def test_multiple_merge_steps_each_checked_independently() -> None:
     flagged = [f for f in findings if f.rule == "merge-routing-incomplete"]
     assert len(flagged) == 1
     assert flagged[0].step_name == "merge_bad"
+
+
+# ---------------------------------------------------------------------------
+# gh-pr-merge-silent-success-routing rule tests
+# ---------------------------------------------------------------------------
+
+
+def _make_gh_pr_merge_recipe(*, on_failure: str) -> Recipe:
+    """Minimal recipe with a critical gh-pr-merge run_cmd step."""
+    return _make_recipe(
+        {
+            "merge_pr": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "gh pr merge '123' --squash --auto", "cwd": "/tmp/work"},
+                on_success="done",
+                on_failure=on_failure,
+            ),
+            "register_clone_success": RecipeStep(action="stop", message="success"),
+            "release_issue_failure": RecipeStep(action="stop", message="failure"),
+            "verify_queue_enrollment": RecipeStep(
+                tool="wait_for_merge_queue",
+                with_args={},
+                on_failure="release_issue_failure",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+
+
+def _make_cleanup_gh_pr_merge_recipe() -> Recipe:
+    """Recipe with an optional cleanup step that uses gh pr merge — exempt from the rule."""
+    return _make_recipe(
+        {
+            "cleanup_merge": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "gh pr merge '123' --squash", "cwd": "/tmp/work"},
+                on_success="register_clone_success",
+                on_failure="register_clone_success",
+                optional=True,
+            ),
+            "register_clone_success": RecipeStep(action="stop", message="success"),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+
+
+def test_rule_fires_on_merge_cmd_failure_to_success_terminal() -> None:
+    """A gh-pr-merge step with on_failure=register_clone_success must produce an ERROR finding."""
+    recipe = _make_gh_pr_merge_recipe(on_failure="register_clone_success")
+    findings = run_semantic_rules(recipe)
+    assert any(
+        f.rule == "gh-pr-merge-silent-success-routing" and f.severity == Severity.ERROR
+        for f in findings
+    )
+
+
+def test_rule_does_not_fire_on_optional_cleanup_step() -> None:
+    """Cleanup steps (optional=True) are exempt from the silent-success-degradation rule."""
+    recipe = _make_cleanup_gh_pr_merge_recipe()
+    findings = run_semantic_rules(recipe)
+    assert not any(f.rule == "gh-pr-merge-silent-success-routing" for f in findings)
+
+
+def test_rule_does_not_fire_on_correct_escalation_routing() -> None:
+    """A merge step routing on_failure to an escalation target produces no finding."""
+    recipe = _make_gh_pr_merge_recipe(on_failure="release_issue_failure")
+    findings = run_semantic_rules(recipe)
+    assert not any(f.rule == "gh-pr-merge-silent-success-routing" for f in findings)
+
+
+def test_rule_does_not_fire_on_verify_queue_enrollment_routing() -> None:
+    """A merge step routing on_failure to verify_queue_enrollment produces no finding."""
+    recipe = _make_gh_pr_merge_recipe(on_failure="verify_queue_enrollment")
+    findings = run_semantic_rules(recipe)
+    assert not any(f.rule == "gh-pr-merge-silent-success-routing" for f in findings)
+
+
+@pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])
+def test_bundled_recipes_have_no_silent_success_degradation(recipe_name: str) -> None:
+    """No bundled recipe may have a merge step whose on_failure reaches a success terminal."""
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    findings = run_semantic_rules(recipe)
+    silent_success = [f for f in findings if f.rule == "gh-pr-merge-silent-success-routing"]
+    assert silent_success == [], (
+        f"Silent success degradation found in {recipe_name}: {silent_success}"
+    )

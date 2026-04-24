@@ -139,8 +139,8 @@ git log --diff-filter=D --oneline --follow -- {file_path} origin/${BASE_BRANCH} 
 
 # For each regressed symbol: find the commit that removed it
 git log --diff-filter=M --oneline -p -- {file_path} origin/${BASE_BRANCH} \
-  | grep -B20 "^-def {symbol_name}\|^-class {symbol_name}" \
-  | grep "^[0-9a-f]\{7,\}" \
+  | rg -B 20 "^-def {symbol_name}|^-class {symbol_name}" \
+  | rg "^[0-9a-f]{7,}" \
   | head -1
 ```
 

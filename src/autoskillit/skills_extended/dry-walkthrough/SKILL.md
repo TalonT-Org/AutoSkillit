@@ -150,7 +150,7 @@ This is a quick cross-reference sanity check — not a deep audit.
 3. For each matching commit, determine signal strength:
    - **Strong signal:** The plan proposes to add a function or class name that appears
      in the commit's diff as a deletion — check with:
-     `git show {hash} | grep "^-def \|^-class \|^-async def "` and compare against
+     `git show {hash} | rg "^-def |^-class |^-async def "` and compare against
      function/class names the plan introduces.
    - **Weak signal:** Same file touched + fix/revert keyword in message, but no
      symbol-level match.

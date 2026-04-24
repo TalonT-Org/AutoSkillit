@@ -70,6 +70,10 @@ HOOK_REGISTRY: list[HookDef] = [
         scripts=["generated_file_write_guard.py"],
     ),
     HookDef(
+        matcher=r"Grep",
+        scripts=["grep_pattern_lint_guard.py"],
+    ),
+    HookDef(
         matcher=r"Bash|Write|Edit|Read|Glob|Grep",
         scripts=["mcp_health_guard.py"],
         timeout_seconds=5,

@@ -632,3 +632,62 @@ def test_no_autoskillit_import_zero_findings_on_bundled_recipes() -> None:
         f"Expected zero findings for {_PKG_RULE_ID!r}, got {len(pkg_findings)}: "
         + "; ".join(f.message for f in pkg_findings)
     )
+
+
+# ---------------------------------------------------------------------------
+# grep-bre-alternation-in-skill tests
+# ---------------------------------------------------------------------------
+
+_BRE_RULE_ID = "grep-bre-alternation-in-skill"
+
+
+def test_grep_bre_alternation_is_flagged(tmp_path: Path) -> None:
+    """grep BRE \\| in a bash block must produce a rule finding."""
+    skill_dir = tmp_path / "test-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        textwrap.dedent(
+            """\
+            # test-skill
+
+            ### Step 1
+            ```bash
+            grep -in 'foo\\|bar' some_file.txt
+            ```
+            """
+        )
+    )
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(_make_recipe_for_skill("test-skill", {}))
+    recipe = load_recipe(recipe_path)
+    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+        findings = run_semantic_rules(recipe)
+    assert _BRE_RULE_ID in [f.rule for f in findings], (
+        "Expected rule to fire for grep BRE \\| pattern in bash block"
+    )
+
+
+def test_git_grep_bre_is_excluded(tmp_path: Path) -> None:
+    """git log --grep='foo\\|bar' must NOT produce a rule finding (BRE correct for git)."""
+    skill_dir = tmp_path / "test-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        textwrap.dedent(
+            """\
+            # test-skill
+
+            ### Step 1
+            ```bash
+            git log --oneline --grep="fix\\|revert" -- src/
+            ```
+            """
+        )
+    )
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(_make_recipe_for_skill("test-skill", {}))
+    recipe = load_recipe(recipe_path)
+    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+        findings = run_semantic_rules(recipe)
+    assert _BRE_RULE_ID not in [f.rule for f in findings], (
+        "Rule must not fire for --grep= BRE context (git uses BRE for --grep=)"
+    )

@@ -254,6 +254,85 @@ def _check_no_autoskillit_import(ctx: ValidationContext) -> list[RuleFinding]:
     return findings
 
 
+_GREP_BRE_ALTERNATION_RE: re.Pattern[str] = re.compile(
+    r"""
+    (?<![=-])       # not preceded by = or - (excludes --grep=)
+    grep            # grep command
+    (?:\s+[-\w]+)*  # optional flags
+    \s+             # whitespace before pattern
+    (?:'[^']*\\\|[^']*'|"[^"]*\\\|[^"]*")  # quoted pattern containing \|
+    """,
+    re.VERBOSE,
+)
+_GIT_GREP_BRE_RE: re.Pattern[str] = re.compile(r"--grep=[\"'].*\\\|")
+
+
+@semantic_rule(
+    name="grep-bre-alternation-in-skill",
+    severity=Severity.ERROR,
+    description=(
+        "A SKILL.md bash block uses grep with BRE \\| alternation. "
+        "The Grep tool wraps ripgrep (ERE) where | (bare) is alternation. "
+        "Models copying \\| from skill bash blocks into Grep tool calls get 0 results silently. "
+        "Fix: replace grep 'foo\\|bar' with rg 'foo|bar'. "
+        "Exception: --grep= arguments in git log/show commands are legitimate BRE."
+    ),
+)
+def _check_no_grep_bre_alternation(ctx: ValidationContext) -> list[RuleFinding]:
+    """Flag bash blocks in SKILL.md that use grep \\| BRE alternation.
+
+    grep uses POSIX BRE where \\| is alternation. The Grep tool wraps ripgrep (ERE)
+    where | (bare) is alternation. Models copying \\| patterns from skill files into
+    Grep tool calls get silent 0-result failures.
+
+    Exclusion: --grep= arguments in git commands are legitimate BRE (different tool).
+    Fix: replace grep 'foo\\|bar' with rg 'foo|bar' in bash blocks.
+    """
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        skill_cmd = step.with_args.get("skill_command", "")
+        if not skill_cmd:
+            continue
+        skill_name = resolve_skill_name(skill_cmd)
+        if skill_name is None:
+            continue
+        skill_md = _resolve_skill_md(skill_name)
+        if skill_md is None:
+            continue  # unknown-skill-command rule handles missing skills
+        try:
+            content = skill_md.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        bash_blocks = extract_bash_blocks(content)
+        if not bash_blocks:
+            continue
+        violations: list[str] = []
+        for block in bash_blocks:
+            for line in block.splitlines():
+                if _GIT_GREP_BRE_RE.search(line):
+                    continue  # git --grep= BRE context: allowed
+                if _GREP_BRE_ALTERNATION_RE.search(line):
+                    violations.append(line.strip())
+        if violations:
+            findings.append(
+                RuleFinding(
+                    rule="grep-bre-alternation-in-skill",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"Skill '{skill_name}' bash block uses grep BRE \\| alternation "
+                        f"in {len(violations)} line(s). The Grep tool wraps ripgrep (ERE) "
+                        f"where | (bare) is alternation — \\| silently returns 0 results. "
+                        f"Fix: replace grep 'foo\\|bar' with rg 'foo|bar'. "
+                        f"Violations: {violations!r}"
+                    ),
+                )
+            )
+    return findings
+
+
 _NO_MARKDOWN_DIRECTIVE_PATTERN: re.Pattern[str] = re.compile(
     r"no\s+markdown\s+format|plain\s+text.*token|literal\s+plain\s+text",
     re.IGNORECASE,

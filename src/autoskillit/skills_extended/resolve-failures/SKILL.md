@@ -99,30 +99,6 @@ Read the configured test command from `.autoskillit/config.yaml` (key: `test_che
    sibling parallel-call cancellations.
 4. Check for development environment in worktree, recreate if missing. Use the project's configured `worktree_setup.command`, or: `cd "${worktree_path}" && task install-worktree`
 
-### Step 0.3 — Code-Index Initialization (required before any code-index tool call)
-
-Call `set_project_path` with the repo root where this skill was invoked (not a worktree path):
-
-```
-mcp__code-index__set_project_path(path="{PROJECT_ROOT}")
-```
-
-Code-index tools require **project-relative paths**. Always use paths like:
-
-    src/<your_package>/some_module.py
-
-NOT absolute paths like:
-
-    /absolute/path/to/src/<your_package>/some_module.py
-
-> **Note:** Code-index tools (`find_files`, `search_code_advanced`, `get_file_summary`,
-> `get_symbol_body`) are only available when the `code-index` MCP server is configured.
-> If `set_project_path` returns an error, fall back to native `Glob` and `Grep` tools
-> for the same searches — they provide equivalent results without the code-index server.
-
-Agents launched via `run_skill` inherit no code-index state from the parent session — this
-call is mandatory at the start of every headless session that uses code-index tools.
-
 ### Step 0.5: Commit Uncommitted Files
 1. Run `git -C {worktree_path} status --porcelain`
 2. If output is non-empty (dirty tree):
@@ -130,20 +106,6 @@ call is mandatory at the start of every headless session that uses code-index to
    - Run `git -C {worktree_path} commit -m "chore: commit auto-generated files"`
    - Log: "Committed {N} uncommitted file(s) before test run"
 3. If output is empty: continue (worktree is clean)
-
-### Step 0.7: Switch Code-Index to Worktree
-
-Call `set_project_path` with the worktree path so all subsequent code-index
-queries (`find_files`, `search_code_advanced`, `get_file_summary`, `get_symbol_body`)
-return worktree-relative paths instead of source-repo paths:
-
-```
-mcp__code-index__set_project_path(path="{worktree_path}")
-```
-
-This prevents the model from being exposed to source-repo absolute paths during
-investigation and fixing. Note: code-index tools are read-only; this switch does not
-affect git operations, which always use `git -C {worktree_path}` explicitly.
 
 ### Step 1: Understand Context
 1. Read the plan file to understand what was implemented and why

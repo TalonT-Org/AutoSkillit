@@ -218,9 +218,7 @@ def _inject_cwd_anchor(skill_command: str, cwd: str, temp_dir_relpath: str | Non
         f"\n\nWORKING DIRECTORY ANCHOR: Your working directory is {cwd}. "
         f"All relative paths ({relpath}/, .autoskillit/, etc.) "
         f"MUST resolve against {cwd}. "
-        f"Do NOT use any other directory as a base for relative paths, regardless of "
-        f"what paths appear in code-index tool responses or set_project_path results. "
-        f"The code-index project path is for READ-ONLY exploration only."
+        f"Do NOT use any other directory as a base for relative paths."
     )
     return skill_command + directive
 

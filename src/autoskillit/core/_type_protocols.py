@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from autoskillit.recipe.schema import RecipeInfo
+    from autoskillit.recipe.schema import Recipe, RecipeInfo
 
 from ._type_results import (
     CIRunScope,
@@ -241,6 +241,8 @@ class RecipeRepository(Protocol):
     """Protocol for recipe discovery and loading."""
 
     def find(self, name: str, project_dir: Path) -> RecipeInfo | None: ...
+
+    def load(self, path: Path) -> Recipe: ...
 
     def list(self, project_dir: Path) -> Any: ...
 

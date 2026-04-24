@@ -264,12 +264,16 @@ class InMemoryRecipeRepository(RecipeRepository):
 
     def __init__(self) -> None:
         self._recipes: dict[str, Any] = {}
+        self._full_recipes: dict[Any, Any] = {}
         self._validated: dict[str, dict[str, Any]] = {}
         self._path_validated: dict[str, dict[str, Any]] = {}
         self._all_recipes: dict[str, Any] = {}
         self.calls: list[dict[str, Any]] = []
 
     # -- test setup helpers --
+
+    def add_full_recipe(self, path: Any, recipe: Any) -> None:
+        self._full_recipes[path] = recipe
 
     def add_recipe(self, name: str, data: Any) -> None:
         from autoskillit.recipe.schema import RecipeInfo  # noqa: PLC0415
@@ -296,6 +300,15 @@ class InMemoryRecipeRepository(RecipeRepository):
     def find(self, name: str, project_dir: Path) -> Any:
         self.calls.append({"method": "find", "name": name, "project_dir": project_dir})
         return self._recipes.get(name)
+
+    def load(self, path: Path) -> Any:
+        self.calls.append({"method": "load", "path": path})
+        if path in self._full_recipes:
+            return self._full_recipes[path]
+        raise FileNotFoundError(
+            f"No mocked full Recipe for path {path!r}. "
+            "Call add_full_recipe(path, recipe) in the test to configure it."
+        )
 
     def list(self, project_dir: Path) -> Any:
         self.calls.append({"method": "list", "project_dir": project_dir})

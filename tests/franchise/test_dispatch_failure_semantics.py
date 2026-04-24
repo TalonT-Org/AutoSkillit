@@ -49,15 +49,14 @@ def _setup_dispatch(tool_ctx, monkeypatch, recipe_name: str = "test-recipe"):
 
     tool_ctx.franchise_lock = asyncio.Lock()
     repo = InMemoryRecipeRepository()
-    repo.add_recipe(recipe_name, _make_recipe_info(recipe_name))
+    recipe_info = _make_recipe_info(recipe_name)
+    repo.add_recipe(recipe_name, recipe_info)
+    repo.add_full_recipe(
+        recipe_info.path,
+        Recipe(name=recipe_name, description="test", kind=RecipeKind.STANDARD, ingredients={}),
+    )
     tool_ctx.recipes = repo
     tool_ctx.executor = InMemoryHeadlessExecutor()
-    monkeypatch.setattr(
-        "autoskillit.franchise._api.load_recipe",
-        lambda _path: Recipe(
-            name=recipe_name, description="test", kind=RecipeKind.STANDARD, ingredients={}
-        ),
-    )
 
 
 async def _run(tool_ctx, recipe: str = "test-recipe") -> dict:

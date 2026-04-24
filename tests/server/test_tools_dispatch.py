@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -127,14 +127,13 @@ class TestDispatchFoodTruckValidation:
 
         tool_ctx.franchise_lock = asyncio.Lock()
         repo = InMemoryRecipeRepository()
-        repo.add_recipe("campaign-recipe", _make_recipe_info("campaign-recipe"))
-        tool_ctx.recipes = repo
-        monkeypatch.setattr(
-            "autoskillit.franchise._api.load_recipe",
-            lambda _path: Recipe(
-                name="campaign-recipe", description="test", kind=RecipeKind.CAMPAIGN
-            ),
+        recipe_info = _make_recipe_info("campaign-recipe")
+        repo.add_recipe("campaign-recipe", recipe_info)
+        repo.add_full_recipe(
+            recipe_info.path,
+            Recipe(name="campaign-recipe", description="test", kind=RecipeKind.CAMPAIGN),
         )
+        tool_ctx.recipes = repo
 
         result = json.loads(
             await execute_dispatch(
@@ -159,13 +158,11 @@ class TestDispatchFoodTruckValidation:
 
         tool_ctx.franchise_lock = asyncio.Lock()
         repo = InMemoryRecipeRepository()
-        repo.add_recipe("test-recipe", _make_recipe_info("test-recipe"))
+        recipe_info = _make_recipe_info("test-recipe")
+        repo.add_recipe("test-recipe", recipe_info)
+        repo.add_full_recipe(recipe_info.path, _make_standard_recipe("test-recipe", ["task"]))
         tool_ctx.recipes = repo
         tool_ctx.executor = InMemoryHeadlessExecutor()
-        monkeypatch.setattr(
-            "autoskillit.franchise._api.load_recipe",
-            lambda _path: _make_standard_recipe("test-recipe", ["task"]),
-        )
 
         result = json.loads(
             await execute_dispatch(
@@ -241,13 +238,11 @@ class TestDispatchFoodTruckValidation:
 
         tool_ctx.franchise_lock = asyncio.Lock()
         repo = InMemoryRecipeRepository()
-        repo.add_recipe("test-recipe", _make_recipe_info("test-recipe"))
+        recipe_info = _make_recipe_info("test-recipe")
+        repo.add_recipe("test-recipe", recipe_info)
+        repo.add_full_recipe(recipe_info.path, _make_standard_recipe("test-recipe"))
         tool_ctx.recipes = repo
         tool_ctx.executor = None
-        monkeypatch.setattr(
-            "autoskillit.franchise._api.load_recipe",
-            lambda _path: _make_standard_recipe("test-recipe"),
-        )
 
         result = json.loads(
             await execute_dispatch(
@@ -287,25 +282,25 @@ class TestDispatchFoodTruckValidation:
             path=Path("/fake/recipes/test-recipe.yaml"),
         )
         repo.add_recipe("test-recipe", recipe_info)
+        repo.add_full_recipe(
+            recipe_info.path,
+            Recipe(name="test-recipe", description="test", kind=RecipeKind.STANDARD),
+        )
         tool_ctx.recipes = repo
 
-        with patch(
-            "autoskillit.franchise._api.load_recipe",
-            return_value=Recipe(name="test-recipe", description="test", kind=RecipeKind.STANDARD),
-        ):
-            result = json.loads(
-                await execute_dispatch(
-                    tool_ctx=tool_ctx,
-                    recipe="test-recipe",
-                    task="run task",
-                    ingredients=None,
-                    dispatch_name=None,
-                    timeout_sec=None,
-                    prompt_builder=_simple_prompt_builder,
-                    quota_checker=_no_sleep_quota_checker,
-                    quota_refresher=_noop_quota_refresher,
-                )
+        result = json.loads(
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="run task",
+                ingredients=None,
+                dispatch_name=None,
+                timeout_sec=None,
+                prompt_builder=_simple_prompt_builder,
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
             )
+        )
 
         # Before fix: L2_STARTUP_OR_CRASH (AttributeError on RecipeInfo.kind)
         # After fix: FRANCHISE_MANIFEST_MISSING (executor=None, kind check passed)
@@ -341,30 +336,30 @@ class TestDispatchFoodTruckValidation:
             path=Path("/fake/recipes/test-recipe.yaml"),
         )
         repo.add_recipe("test-recipe", recipe_info)
-        tool_ctx.recipes = repo
-
-        with patch(
-            "autoskillit.franchise._api.load_recipe",
-            return_value=Recipe(
+        repo.add_full_recipe(
+            recipe_info.path,
+            Recipe(
                 name="test-recipe",
                 description="test",
                 kind=RecipeKind.STANDARD,
                 ingredients={"env": RecipeIngredient(description="env var")},
             ),
-        ):
-            result = json.loads(
-                await execute_dispatch(
-                    tool_ctx=tool_ctx,
-                    recipe="test-recipe",
-                    task="run task",
-                    ingredients={"unknown_key": "val"},
-                    dispatch_name=None,
-                    timeout_sec=None,
-                    prompt_builder=_simple_prompt_builder,
-                    quota_checker=_no_sleep_quota_checker,
-                    quota_refresher=_noop_quota_refresher,
-                )
+        )
+        tool_ctx.recipes = repo
+
+        result = json.loads(
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="run task",
+                ingredients={"unknown_key": "val"},
+                dispatch_name=None,
+                timeout_sec=None,
+                prompt_builder=_simple_prompt_builder,
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
             )
+        )
 
         # Before fix: L2_STARTUP_OR_CRASH (AttributeError on RecipeInfo.ingredients)
         # After fix: FRANCHISE_UNKNOWN_INGREDIENT (unknown_key not in recipe.ingredients)
@@ -383,13 +378,11 @@ class TestDispatchFoodTruckExecution:
         """Wire tool_ctx for a successful standard dispatch."""
         tool_ctx.franchise_lock = asyncio.Lock()
         repo = InMemoryRecipeRepository()
-        repo.add_recipe("test-recipe", _make_recipe_info("test-recipe"))
+        recipe_info = _make_recipe_info("test-recipe")
+        repo.add_recipe("test-recipe", recipe_info)
+        repo.add_full_recipe(recipe_info.path, _make_standard_recipe("test-recipe", ["task"]))
         tool_ctx.recipes = repo
         tool_ctx.executor = InMemoryHeadlessExecutor()
-        monkeypatch.setattr(
-            "autoskillit.franchise._api.load_recipe",
-            lambda _path: _make_standard_recipe("test-recipe", ["task"]),
-        )
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_releases_lock_on_success(self, tool_ctx, monkeypatch):

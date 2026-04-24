@@ -9,11 +9,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
-    from autoskillit.recipe.schema import RecipeInfo
+    from autoskillit.recipe.schema import Recipe, RecipeInfo
 
 import autoskillit.recipe._api as _api
 from autoskillit.recipe.contracts import StaleItem, load_bundled_manifest
-from autoskillit.recipe.io import builtin_recipes_dir, list_recipes
+from autoskillit.recipe.io import builtin_recipes_dir, list_recipes, load_recipe
 from autoskillit.recipe.staleness_cache import (
     StalenessEntry,
     compute_recipe_hash,
@@ -59,6 +59,9 @@ class DefaultRecipeRepository:
     def find(self, name: str, project_dir: Path) -> RecipeInfo | None:
         result = self._get_list(project_dir)
         return next((r for r in result.items if r.name == name), None)
+
+    def load(self, path: Path) -> Recipe:
+        return load_recipe(path)
 
     def list(self, project_dir: Path) -> Any:
         return self._get_list(project_dir)

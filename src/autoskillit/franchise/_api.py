@@ -173,10 +173,8 @@ async def _run_dispatch(
             f"Recipe '{recipe}' not found.",
         )
 
-    from autoskillit.recipe.io import load_recipe  # noqa: PLC0415
-
     try:
-        full_recipe = load_recipe(recipe_obj.path)
+        full_recipe = tool_ctx.recipes.load(recipe_obj.path)
     except Exception as exc:
         return franchise_error(
             FranchiseErrorCode.FRANCHISE_RECIPE_NOT_FOUND,

@@ -175,7 +175,10 @@ Run the project's code quality checks and test suite from the worktree.
 
 ```bash
 cd {WORKTREE_PATH} && pre-commit run --all-files
-cd {WORKTREE_PATH} && task test-all
+cd {WORKTREE_PATH} && \
+  AUTOSKILLIT_TEST_FILTER="${AUTOSKILLIT_TEST_FILTER:-conservative}" \
+  AUTOSKILLIT_TEST_BASE_REF="${BASE_BRANCH}" \
+  task test-all
 ```
 
 If tests fail, fix the issue and re-run.

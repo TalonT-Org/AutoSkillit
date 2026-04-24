@@ -8,6 +8,7 @@ import enum
 import fnmatch
 import json
 import logging
+import re
 import subprocess
 import warnings
 from pathlib import Path
@@ -47,6 +48,9 @@ BUCKET_A_PATTERNS: frozenset[str] = frozenset(
 )
 
 BUCKET_A_GLOBS: tuple[str, ...] = ("tests/*/conftest.py",)
+
+# Matches lines that only change a version string: -version = "0.9.x" / +version = "0.9.y"
+_VERSION_LINE_RE: re.Pattern[str] = re.compile(r'^[+-]version\s*=\s*"[^"]*"', re.IGNORECASE)
 
 ALWAYS_RUN_CONSERVATIVE: frozenset[str] = frozenset(
     {
@@ -365,6 +369,90 @@ def check_bucket_a(changed_files: set[str]) -> bool:
     return False
 
 
+def _is_only_version_changes_in_diff(
+    cwd: str | Path,
+    base_ref: str,
+    *paths: str,
+) -> bool:
+    """Return True if every added/removed line in the diff of *paths* is a version string.
+
+    Runs ``git merge-base HEAD base_ref`` then ``git diff --unified=0 <sha> -- *paths``.
+    Returns False on any git error (fail-open: caller treats files as Bucket A triggers).
+    Returns True if the diff is empty (no changes at all — version bump already absorbed).
+    """
+    try:
+        merge_base_result = subprocess.run(
+            ["git", "merge-base", "HEAD", base_ref],
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=True,
+        )
+        merge_base_sha = merge_base_result.stdout.strip()
+        if not merge_base_sha:
+            return False
+
+        diff_result = subprocess.run(
+            ["git", "diff", "--unified=0", merge_base_sha, "--", *paths],
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=True,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return False
+
+    for line in diff_result.stdout.splitlines():
+        if not (line.startswith("+") or line.startswith("-")):
+            continue
+        if line.startswith("+++") or line.startswith("---"):
+            continue
+        if not _VERSION_LINE_RE.match(line):
+            return False  # non-version change found — not a pure version bump
+
+    return True  # all diff lines are version strings (or diff is empty)
+
+
+# Files in BUCKET_A_PATTERNS that may produce false positives from CI version bumps.
+# These are given a content check before triggering a full run.
+_VERSION_BUMP_FILES: frozenset[str] = frozenset({"pyproject.toml", "uv.lock"})
+
+
+def check_bucket_a_content_aware(
+    changed_files: set[str],
+    cwd: str | Path,
+    base_ref: str,
+) -> bool:
+    """Content-aware Bucket A check that skips version-bump-only changes.
+
+    Identical to ``check_bucket_a`` except for ``pyproject.toml`` and ``uv.lock``:
+    if those files are present in *changed_files* but their entire diff consists only
+    of ``version = "..."`` line changes, they are NOT treated as Bucket A triggers.
+
+    Falls back to treating them as Bucket A triggers on any git failure (fail-open).
+
+    Other Bucket A patterns (conftest.py, _rules.py, etc.) are unaffected — they
+    still trigger a full run immediately without any git diff inspection.
+    """
+    # Fast path: check all non-version-bump patterns first (no git I/O)
+    non_version_files = changed_files - _VERSION_BUMP_FILES
+    if check_bucket_a(non_version_files):
+        return True
+
+    # Check version-bump-candidate files that are also in BUCKET_A_PATTERNS
+    version_hits = changed_files & _VERSION_BUMP_FILES & BUCKET_A_PATTERNS
+    if not version_hits:
+        return False  # no version-bump candidates hit Bucket A
+
+    # Content check: if every diff line is a version string, skip Bucket A
+    if _is_only_version_changes_in_diff(cwd, base_ref, *version_hits):
+        return False  # version-only bump — not a structural change
+
+    return True  # diff contains non-version changes → full run
+
+
 def load_manifest(path: str | Path) -> dict[str, Any] | None:
     """Load .autoskillit/test-filter-manifest.yaml, or None if absent."""
     import yaml
@@ -540,6 +628,8 @@ def build_test_scope(
     manifest: dict[str, Any] | None = None,
     tests_root: str | Path = "tests",
     coverage_map_path: str | Path | None = None,
+    cwd: str | Path | None = None,
+    base_ref: str | None = None,
 ) -> set[Path] | None:
     """Compute the set of test paths to run, or None for a full run.
 
@@ -562,8 +652,20 @@ def build_test_scope(
     if len(changed_files) > _LARGE_CHANGESET_THRESHOLD:
         return None
 
-    if check_bucket_a(changed_files):
-        return None
+    if cwd is not None and base_ref is not None:
+        if check_bucket_a_content_aware(changed_files, cwd, base_ref):
+            return None
+        # Exclude version-bump-only files from classification — they pass the content-aware
+        # Bucket A check but would otherwise hit the manifest-fallback full-run path.
+        # Manifests intentionally omit pyproject.toml/uv.lock (they're Bucket A files).
+        version_bump_candidates = changed_files & _VERSION_BUMP_FILES
+        if version_bump_candidates and _is_only_version_changes_in_diff(
+            cwd, base_ref, *version_bump_candidates
+        ):
+            changed_files = changed_files - version_bump_candidates
+    else:
+        if check_bucket_a(changed_files):
+            return None
 
     tests_root = Path(tests_root)
 

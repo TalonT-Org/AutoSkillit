@@ -1747,3 +1747,4 @@ class TestEnqueueMethod:
         assert result["success"] is True
         assert result["enrollment_method"] == "auto_merge"
         assert any("enablePullRequestAutoMerge" in b for b in posted_bodies)
+        assert not any("enqueuePullRequest" in b for b in posted_bodies)

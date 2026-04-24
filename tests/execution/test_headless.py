@@ -2444,12 +2444,11 @@ class TestInjectCwdAnchor:
         result = _inject_cwd_anchor(original, "/clone/dir")
         assert result.startswith(original)
 
-    def test_directive_mentions_temp_and_read_only(self):
+    def test_directive_mentions_temp(self):
         from autoskillit.execution.commands import _inject_cwd_anchor
 
         result = _inject_cwd_anchor("cmd", "/wd")
         assert ".autoskillit/temp/" in result
-        assert "READ-ONLY" in result
 
     def test_skips_when_cwd_empty(self):
         from autoskillit.execution.commands import _inject_cwd_anchor

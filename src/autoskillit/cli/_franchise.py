@@ -315,36 +315,54 @@ def _remove_clone_fn(path: str, _flag: str) -> dict[str, str]:
 
 
 def _launch_franchise_session(
-    campaign_recipe: Recipe,
-    campaign_id: str,
-    state_path: Path,
+    campaign_recipe: Recipe | None,
+    campaign_id: str | None,
+    state_path: Path | None,
     resume_metadata: ResumeDecision | None,
 ) -> None:
     """Build the L3 orchestrator prompt and launch an interactive franchise session."""
     from autoskillit.cli._mcp_names import detect_autoskillit_mcp_prefix
-    from autoskillit.cli._prompts import _build_l3_orchestrator_prompt
     from autoskillit.cli._session_launch import _run_interactive_session
-    from autoskillit.core import dump_yaml_str
 
     mcp_prefix = detect_autoskillit_mcp_prefix()
-    manifest_yaml = dump_yaml_str(
-        [dataclasses.asdict(d) for d in campaign_recipe.dispatches],
-        default_flow_style=False,
-        allow_unicode=True,
-    )
-    completed_dispatches = (
-        resume_metadata.completed_dispatches_block if resume_metadata is not None else ""
-    )
-    prompt = _build_l3_orchestrator_prompt(
-        campaign_recipe, manifest_yaml, completed_dispatches, mcp_prefix, campaign_id
-    )
-    extra_env: dict[str, str] = {
-        "AUTOSKILLIT_SESSION_TYPE": "franchise",
-        "AUTOSKILLIT_CAMPAIGN_ID": campaign_id,
-        "AUTOSKILLIT_CAMPAIGN_STATE_PATH": str(state_path),
-        "AUTOSKILLIT_HEADLESS": "0",
-    }
-    _run_interactive_session(prompt, extra_env=extra_env)
+
+    if campaign_recipe is None:
+        # Ad-hoc mode: no campaign, no state, bare kitchen open
+        from autoskillit.cli._prompts import _build_franchise_open_prompt
+
+        prompt = _build_franchise_open_prompt(mcp_prefix)
+        extra_env: dict[str, str] = {
+            "AUTOSKILLIT_SESSION_TYPE": "franchise",
+            "AUTOSKILLIT_HEADLESS": "0",
+        }
+        _run_interactive_session(prompt, extra_env=extra_env)
+    else:
+        # Campaign-driven mode: full orchestrator prompt with manifest and state
+        if campaign_id is None:
+            raise ValueError("campaign_id must not be None in campaign-driven mode")
+        if state_path is None:
+            raise ValueError("state_path must not be None in campaign-driven mode")
+        from autoskillit.cli._prompts import _build_l3_orchestrator_prompt
+        from autoskillit.core import dump_yaml_str
+
+        manifest_yaml = dump_yaml_str(
+            [dataclasses.asdict(d) for d in campaign_recipe.dispatches],
+            default_flow_style=False,
+            allow_unicode=True,
+        )
+        completed_dispatches = (
+            resume_metadata.completed_dispatches_block if resume_metadata is not None else ""
+        )
+        prompt = _build_l3_orchestrator_prompt(
+            campaign_recipe, manifest_yaml, completed_dispatches, mcp_prefix, campaign_id
+        )
+        extra_env = {
+            "AUTOSKILLIT_SESSION_TYPE": "franchise",
+            "AUTOSKILLIT_CAMPAIGN_ID": campaign_id,
+            "AUTOSKILLIT_CAMPAIGN_STATE_PATH": str(state_path),
+            "AUTOSKILLIT_HEADLESS": "0",
+        }
+        _run_interactive_session(prompt, extra_env=extra_env)
 
 
 @asynccontextmanager
@@ -597,7 +615,7 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
 
 @franchise_app.command(name="run")
 def franchise_run(
-    campaign_name: str,
+    campaign_name: str | None = None,
     *,
     resume_campaign: str | None = None,
 ) -> None:
@@ -617,6 +635,11 @@ def franchise_run(
 
     cfg = load_config(Path.cwd())
     _require_franchise(cfg)
+
+    # Ad-hoc mode: no campaign name supplied — launch bare franchise dispatcher
+    if campaign_name is None:
+        _launch_franchise_session(None, None, None, None)
+        return
 
     from autoskillit.core import YAMLError
     from autoskillit.franchise import (

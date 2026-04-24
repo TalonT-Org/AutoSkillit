@@ -70,11 +70,12 @@ def test_finalize_bundle_pr_mode(recipe):
 
 
 def test_finalize_bundle_runs_exactly_once_after_rerun(recipe):
-    """finalize_bundle is only reachable via re_push_research.on_success."""
-    # only entry point is re_push_research.on_success
-    re_push = recipe.steps["re_push_research"]
-    assert re_push.on_success == "finalize_bundle", (
-        "re_push_research.on_success must be finalize_bundle"
+    """finalize_bundle entry point is merge_escalations (not re_push_research)."""
+    # merge_escalations is the step that routes to finalize_bundle
+    merge = recipe.steps["merge_escalations"]
+    fallthrough_routes = [cond.route for cond in merge.on_result.conditions if cond.when is None]
+    assert "finalize_bundle" in fallthrough_routes, (
+        "merge_escalations fallthrough must reach finalize_bundle exactly once"
     )
     # test and retest do NOT route to finalize_bundle (they route to push_branch)
     assert recipe.steps["test"].on_success != "finalize_bundle"
@@ -83,4 +84,33 @@ def test_finalize_bundle_runs_exactly_once_after_rerun(recipe):
     stage_cmd = recipe.steps["stage_bundle"].with_args.get("cmd", "")
     assert "tar czf" not in stage_cmd and "tar -czf" not in stage_cmd, (
         "stage_bundle must not compress — only finalize_bundle may produce artifacts.tar.gz"
+    )
+
+
+def test_compression_commit_precedes_push(recipe):
+    """merge_escalations must route to finalize_bundle, not re_push_research."""
+    merge = recipe.steps["merge_escalations"]
+    # The fallthrough route (last on_result entry without a when-condition) must
+    # be finalize_bundle, not re_push_research.
+    fallthrough_routes = [cond.route for cond in merge.on_result.conditions if cond.when is None]
+    assert fallthrough_routes == ["finalize_bundle"], (
+        "merge_escalations fallthrough must route to finalize_bundle "
+        "so the compression commit is created before the push"
+    )
+
+
+def test_finalize_bundle_on_success_routes_to_re_push_research(recipe):
+    """finalize_bundle must push after committing — on_success must be re_push_research."""
+    step = recipe.steps["finalize_bundle"]
+    assert step.on_success == "re_push_research", (
+        "finalize_bundle.on_success must be re_push_research so the compression "
+        "commit is included in the push"
+    )
+
+
+def test_re_push_research_on_success_routes_to_finalize_bundle_render(recipe):
+    """re_push_research must advance to HTML rendering, not loop back to finalize_bundle."""
+    step = recipe.steps["re_push_research"]
+    assert step.on_success == "finalize_bundle_render", (
+        "re_push_research.on_success must be finalize_bundle_render"
     )

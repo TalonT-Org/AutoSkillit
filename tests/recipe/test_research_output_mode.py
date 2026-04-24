@@ -173,10 +173,14 @@ def test_finalize_bundle_preserves_html_in_local_mode(recipe):
 
 
 def test_finalize_bundle_render_always_runs(recipe):
-    """finalize_bundle.on_success must always be finalize_bundle_render (no skip)."""
+    """finalize_bundle_render is always reached via re_push_research."""
     fb = recipe.steps["finalize_bundle"]
-    assert fb.on_success == "finalize_bundle_render", (
-        "finalize_bundle.on_success must be finalize_bundle_render (always runs)"
+    assert fb.on_success == "re_push_research", (
+        "finalize_bundle.on_success must be re_push_research (push includes the commit)"
+    )
+    rpr = recipe.steps["re_push_research"]
+    assert rpr.on_success == "finalize_bundle_render", (
+        "re_push_research.on_success must be finalize_bundle_render (always runs)"
     )
     fbr = recipe.steps["finalize_bundle_render"]
     assert not getattr(fbr, "skip_when_false", None), (

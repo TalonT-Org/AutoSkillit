@@ -482,6 +482,16 @@ def test_rule_flags_auto_step_reachable_from_no_auto_route() -> None:
     assert "reenter" in flagged_steps
 
 
+@pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])
+def test_merge_enrollment_auto_consistency_passes_after_migration(recipe_name: str) -> None:
+    """After migration, no recipe should have --auto steps reachable from
+    auto_merge_available=false routing arms."""
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    findings = run_semantic_rules(recipe)
+    auto_findings = [f for f in findings if f.rule == "merge-enrollment-auto-consistency"]
+    assert auto_findings == [], f"{recipe_name}: {auto_findings}"
+
+
 def test_rule_passes_when_auto_steps_only_reachable_from_auto_route() -> None:
     """Steps using --auto that are only reachable from auto_merge_available=true
     routing conditions should not emit findings."""

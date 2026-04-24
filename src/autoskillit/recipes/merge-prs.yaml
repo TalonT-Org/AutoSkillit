@@ -117,6 +117,7 @@ steps:
       step_name: "check_repo_ci_event"
     capture:
       ci_event: "${{ result.ci_event }}"
+      auto_merge_available: "${{ result.auto_merge_available }}"
     on_success: check_integration_exists
     on_failure: check_integration_exists
     note: >
@@ -230,17 +231,19 @@ steps:
       context.current_pr_number before the sequential enqueue loop.
 
   enqueue_current_pr:
-    tool: run_cmd
+    tool: enqueue_pr
     with:
-      cmd: "gh pr merge '${{ context.current_pr_number }}' --squash --auto"
+      pr_number: "${{ context.current_pr_number }}"
+      target_branch: "${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
-      step_name: "enqueue_current_pr"
+      auto_merge_available: "${{ context.auto_merge_available }}"
     on_success: wait_queue_pr
     on_failure: register_clone_failure
     note: >
-      Queue mode only. Submits a single PR to the merge queue. Called once per PR
-      in the sequential enqueue loop: get_first_pr_number → enqueue_current_pr →
-      wait_queue_pr → (merged) → advance_queue_pr → enqueue_current_pr → ...
+      Queue mode only. Submits a single PR to the merge queue via the unified
+      enqueue_pr tool. Called once per PR in the sequential enqueue loop:
+      get_first_pr_number → enqueue_current_pr → wait_queue_pr → (merged) →
+      advance_queue_pr → enqueue_current_pr → ...
 
   wait_queue_pr:
     tool: wait_for_merge_queue
@@ -257,6 +260,8 @@ steps:
         route: advance_queue_pr
       - when: "${{ result.pr_state }} == ejected_ci_failure"
         route: diagnose_queue_ci
+      - when: "${{ result.pr_state }} == not_enrolled"
+        route: register_clone_failure
       - when: "${{ result.pr_state }} == ejected"
         route: get_ejected_pr_branch
       - when: "${{ result.pr_state }} == stalled"
@@ -353,11 +358,12 @@ steps:
       Uses context.ci_event captured from check_repo_ci_event upstream.
 
   reenter_queue:
-    tool: run_cmd
+    tool: enqueue_pr
     with:
-      cmd: "gh pr merge '${{ context.current_pr_number }}' --squash --auto"
+      pr_number: "${{ context.current_pr_number }}"
+      target_branch: "${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
-      step_name: "reenter_queue"
+      auto_merge_available: "${{ context.auto_merge_available }}"
     on_success: wait_queue_pr
     on_failure: register_clone_failure
     note: >
@@ -408,16 +414,16 @@ steps:
       auto-recoverable without human intervention.
 
   reenroll_stalled_queue_pr:
-    tool: toggle_auto_merge
+    tool: enqueue_pr
     with:
       pr_number: "${{ context.current_pr_number }}"
       target_branch: "${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
+      auto_merge_available: "${{ context.auto_merge_available }}"
     on_success: wait_queue_pr
     on_failure: register_clone_failure
     note: >
-      Uses the dedicated toggle_auto_merge tool (matching the proven pattern in
-      implementation.yaml's reenroll_stalled_pr) to re-enroll a stalled PR in the
+      Uses the unified enqueue_pr tool to re-enroll a stalled PR in the
       merge queue. Routes back to wait_queue_pr to resume monitoring.
 
   create_integration_branch:

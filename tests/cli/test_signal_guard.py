@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import os
 import signal as _signal
@@ -241,3 +242,77 @@ class TestSignalGuard:
         assert "guard_exited" in events
         # state_written happens inside the shielded section; guard_exited happens after
         assert events.index("state_written") < events.index("guard_exited")
+
+
+def test_sighup_in_franchise_signal_list() -> None:
+    """_franchise.py must pass signal.SIGHUP to open_signal_receiver (AST guard).
+
+    Sending a real SIGHUP in tests is unsafe — before SIGHUP is registered,
+    the default disposition terminates the process. AST analysis is safe for
+    both the pre- and post-implementation codebase.
+    """
+    from autoskillit.core.paths import pkg_root
+
+    src_path = pkg_root() / "cli" / "_franchise.py"
+    tree = ast.parse(src_path.read_text(encoding="utf-8"))
+
+    sighup_found = False
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not (isinstance(func, ast.Attribute) and func.attr == "open_signal_receiver"):
+            continue
+        for arg in node.args:
+            if (
+                isinstance(arg, ast.Attribute)
+                and arg.attr == "SIGHUP"
+                and isinstance(arg.value, ast.Name)
+                and arg.value.id == "signal"
+            ):
+                sighup_found = True
+                break
+
+    assert sighup_found, (
+        "signal.SIGHUP not found in anyio.open_signal_receiver() call in _franchise.py. "
+        "Terminal disconnects (SIGHUP) must trigger graceful shutdown."
+    )
+
+
+def test_franchise_signame_uses_sig_name_attribute() -> None:
+    """_franchise.py must use sig.name for signame, not a hardcoded ternary (AST guard).
+
+    Verifies that the old ``"SIGINT" if sig == signal.SIGINT else "SIGTERM"``
+    ternary has been replaced with ``sig.name`` so that SIGHUP and any future
+    signal additions are handled automatically without stale-mapping risk.
+
+    Sending a real SIGHUP to check the actual value at runtime would be unsafe,
+    so we use AST inspection instead.
+    """
+    from autoskillit.core.paths import pkg_root
+
+    src_path = pkg_root() / "cli" / "_franchise.py"
+    tree = ast.parse(src_path.read_text(encoding="utf-8"))
+
+    sig_name_attr_found = False
+    for node in ast.walk(tree):
+        # Look for: signame = sig.name (Assign with a target named "signame")
+        if not isinstance(node, ast.Assign):
+            continue
+        targets = node.targets
+        if not targets:
+            continue
+        target = targets[0]
+        if not (isinstance(target, ast.Name) and target.id == "signame"):
+            continue
+        # The value should be an attribute access `.name` on any expression
+        val = node.value
+        if isinstance(val, ast.Attribute) and val.attr == "name":
+            sig_name_attr_found = True
+            break
+
+    assert sig_name_attr_found, (
+        "signame assignment in _franchise.py does not use sig.name. "
+        "Replace the hardcoded ternary with `signame = sig.name` so that "
+        "SIGHUP and future signals are handled without manual mapping."
+    )

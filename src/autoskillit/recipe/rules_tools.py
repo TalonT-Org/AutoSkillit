@@ -101,6 +101,18 @@ _TOOL_PARAMS: dict[str, frozenset[str]] = {
             "max_stall_retries",
             "not_in_queue_confirmation_cycles",
             "max_inconclusive_retries",
+            "auto_merge_available",
+            "step_name",
+        }
+    ),
+    "enqueue_pr": frozenset(
+        {
+            "pr_number",
+            "target_branch",
+            "cwd",
+            "auto_merge_available",
+            "repo",
+            "remote_url",
             "step_name",
         }
     ),

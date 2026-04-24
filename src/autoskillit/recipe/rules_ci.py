@@ -207,7 +207,9 @@ def _check_ci_hardcoded_workflow(ctx: ValidationContext) -> list[RuleFinding]:
 # wait_for_merge_queue routing rules (I7 + I8)
 # ---------------------------------------------------------------------------
 
-_REQUIRED_MQ_PR_STATES: frozenset[str] = frozenset(s.value for s in PRState if s != PRState.ERROR)
+_REQUIRED_MQ_PR_STATES: frozenset[str] = frozenset(
+    s.value for s in PRState if s not in {PRState.ERROR, PRState.NOT_ENROLLED}
+)
 _PR_STATE_WHEN_RE = re.compile(r"\$\{\{\s*result\.pr_state\s*\}\}\s*==\s*(\w+)")
 _MQ_EXPECTED_FALLBACK = "register_clone_unconfirmed"
 

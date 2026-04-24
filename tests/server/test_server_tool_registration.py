@@ -32,7 +32,7 @@ class TestNoSkillsDirectoryProvider:
 
 
 class TestToolRegistration:
-    """All 44 tools are registered on the MCP server."""
+    """All 45 tools are registered on the MCP server."""
 
     @pytest.mark.anyio
     async def test_all_tools_exist(self, kitchen_enabled):
@@ -77,6 +77,7 @@ class TestToolRegistration:
             "wait_for_merge_queue",
             "check_repo_merge_state",
             "toggle_auto_merge",
+            "enqueue_pr",
             "get_ci_status",
             "open_kitchen",
             "close_kitchen",

@@ -1290,7 +1290,7 @@ def test_verify_queue_enrollment_uses_wait_for_merge_queue(any_recipe) -> None:
 
 def test_verify_queue_enrollment_on_failure_escalates(any_recipe) -> None:
     step = any_recipe.steps["verify_queue_enrollment"]
-    assert step.on_failure == "release_issue_failure"
+    assert step.on_failure == "release_issue_timeout"
 
 
 def test_verify_queue_enrollment_merged_routes_to_release_issue_success(any_recipe) -> None:
@@ -1300,11 +1300,11 @@ def test_verify_queue_enrollment_merged_routes_to_release_issue_success(any_reci
     assert merged_routes == ["release_issue_success"]
 
 
-def test_verify_queue_enrollment_fallback_routes_to_wait_for_queue(any_recipe) -> None:
+def test_verify_queue_enrollment_fallback_routes_to_release_issue_timeout(any_recipe) -> None:
     step = any_recipe.steps["verify_queue_enrollment"]
     assert step.on_result is not None
     fallback = [c.route for c in step.on_result.conditions if c.when is None]
-    assert fallback == ["wait_for_queue"]
+    assert fallback == ["release_issue_timeout"]
 
 
 @pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])

@@ -843,13 +843,24 @@ steps:
     on_result:
       - when: "${{ result.pr_state }} == merged"
         route: release_issue_success
-      - route: wait_for_queue
-    on_failure: release_issue_failure
+      - when: "${{ result.pr_state }} == ejected_ci_failure"
+        route: wait_for_queue
+      - when: "${{ result.pr_state }} == dropped_healthy"
+        route: wait_for_queue
+      - when: "${{ result.pr_state }} == ejected"
+        route: wait_for_queue
+      - when: "${{ result.pr_state }} == stalled"
+        route: wait_for_queue
+      - when: "${{ result.pr_state }} == timeout"
+        route: release_issue_timeout
+      - route: release_issue_timeout
+    on_failure: release_issue_timeout
     note: >
       Short probe (60s) after enable_auto_merge or queue_enqueue_no_auto failure.
       If the PR is already merged, route to release_issue_success. If in any
-      queue state, route to wait_for_queue for full 900s watch. If the probe
-      tool itself fails, escalate via release_issue_failure.
+      active queue state (ejected_ci_failure, dropped_healthy, ejected, stalled),
+      route to wait_for_queue for full 900s watch. If the probe timed out or
+      returned an unexpected state, escalate via release_issue_timeout.
 
   wait_for_queue:
     tool: wait_for_merge_queue

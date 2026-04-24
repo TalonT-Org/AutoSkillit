@@ -2007,7 +2007,7 @@ dataflow:
   - worktree_path
   required: []
   produced: []
-- step: release_issue_timeout
+- step: register_clone_unconfirmed
   available:
   - all_plan_paths
   - audit

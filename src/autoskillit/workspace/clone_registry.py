@@ -27,7 +27,7 @@ from autoskillit.core import (
 
 _log = get_logger(__name__)
 
-CloneStatus = Literal["success", "error"]
+CloneStatus = Literal["success", "error", "unconfirmed"]
 _DEFAULT_REGISTRY_NAME = "clone-cleanup-registry.json"
 
 

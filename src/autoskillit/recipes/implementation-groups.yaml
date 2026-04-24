@@ -852,9 +852,9 @@ steps:
       - when: "${{ result.pr_state }} == stalled"
         route: wait_for_queue
       - when: "${{ result.pr_state }} == timeout"
-        route: release_issue_timeout
-      - route: release_issue_timeout
-    on_failure: release_issue_timeout
+        route: register_clone_unconfirmed
+      - route: register_clone_unconfirmed
+    on_failure: register_clone_unconfirmed
     note: >
       Short probe (60s) after enable_auto_merge or queue_enqueue_no_auto failure.
       If the PR is already merged, route to release_issue_success. If the queue
@@ -863,7 +863,7 @@ steps:
       would only confirm the same state before escalating. For other active queue
       states (dropped_healthy, ejected, stalled), route to wait_for_queue for
       full 900s authoritative watch. If the probe timed out or returned an
-      unexpected state, escalate via release_issue_timeout.
+      unexpected state, escalate via register_clone_unconfirmed.
 
   wait_for_queue:
     tool: wait_for_merge_queue
@@ -887,9 +887,9 @@ steps:
       - when: "${{ result.pr_state }} == stalled"
         route: reenroll_stalled_pr
       - when: "${{ result.pr_state }} == timeout"
-        route: release_issue_timeout
-      - route: release_issue_timeout
-    on_failure: release_issue_timeout
+        route: register_clone_unconfirmed
+      - route: register_clone_unconfirmed
+    on_failure: register_clone_unconfirmed
     skip_when_false: "inputs.open_pr"
     note: >
       Waits up to 15 minutes for the PR to merge through the queue.
@@ -897,7 +897,7 @@ steps:
       ejected_ci_failure → diagnose_ci (CI failure; conflict resolution cannot fix this).
       ejected → conflict fix cycle then re-enter.
       stalled → lightweight re-enrollment (disable then re-enable auto-merge).
-      timeout → release_issue_timeout (release claim without staged label; merge unconfirmed).
+      timeout → register_clone_unconfirmed (release claim without staged label; merge unconfirmed).
 
   reenroll_stalled_pr:
     tool: toggle_auto_merge
@@ -1042,14 +1042,14 @@ steps:
         route: release_issue_success
       - when: "${{ result.stdout | trim }} == closed"
         route: direct_merge_conflict_fix
-      - route: release_issue_timeout
-    on_failure: release_issue_timeout
+      - route: register_clone_unconfirmed
+    on_failure: register_clone_unconfirmed
     skip_when_false: "inputs.open_pr"
     note: >
       Polls GitHub PR state every 10 s for up to 15 minutes (90 iterations).
       merged → release_issue_success (issue labelled, cleanup runs).
       closed → PR was closed (likely conflict) — route to conflict fix.
-      timeout / unexpected → release_issue_timeout.
+      timeout / unexpected → register_clone_unconfirmed.
 
   direct_merge_conflict_fix:
     tool: run_cmd
@@ -1152,8 +1152,8 @@ steps:
         route: release_issue_success
       - when: "${{ result.stdout | trim }} == closed"
         route: immediate_merge_conflict_fix
-      - route: release_issue_timeout
-    on_failure: release_issue_timeout
+      - route: register_clone_unconfirmed
+    on_failure: register_clone_unconfirmed
     skip_when_false: "inputs.open_pr"
     note: >
       Polls GitHub PR state every 10s for up to 5 minutes (30 iterations).
@@ -1161,7 +1161,7 @@ steps:
       synchronously — this poll is a confirmation window.
       merged → release_issue_success.
       closed → PR was rejected (stale base or conflict) — route to conflict fix.
-      timeout → release_issue_timeout.
+      timeout → register_clone_unconfirmed.
 
   immediate_merge_conflict_fix:
     tool: run_cmd
@@ -1231,20 +1231,20 @@ steps:
       Routes back to wait_for_immediate_merge to confirm completion.
       On failure, release_issue_failure preserves the clone for debugging.
 
-  release_issue_timeout:
-    description: "Release in-progress claim after queue timeout without applying staged label"
-    tool: release_issue
-    optional: true
-    skip_when_false: inputs.issue_url
+  register_clone_unconfirmed:
+    description: "Register clone as preserved — merge unconfirmed, in-progress label retained"
+    tool: register_clone_status
     with:
-      issue_url: ${{ inputs.issue_url }}
-    on_success: register_clone_success
-    on_failure: register_clone_success
+      clone_path: "${{ context.work_dir }}"
+      status: "unconfirmed"
+      step_name: register_clone_unconfirmed
+    on_success: done
+    on_failure: done
     note: >
-      Called when wait_for_merge_queue times out or errors. Releases the in-progress
-      claim without passing target_branch, so the staged label is not applied. The
-      merge is unconfirmed; a human must verify queue state independently.
-      Routes to register_clone_success so the pipeline completes cleanly.
+      Called when a merge-wait step times out before merge is confirmed.
+      Does NOT call release_issue — the in-progress label stays on the issue
+      so operators can see the PR is still actively queued. The clone is
+      preserved (status: unconfirmed) for human inspection.
 
   detect_ci_conflict:
     tool: run_cmd

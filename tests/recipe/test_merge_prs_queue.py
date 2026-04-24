@@ -990,7 +990,7 @@ def _discover_queue_recipe_fixtures() -> list[str]:
 
 QUEUE_RECIPES = _discover_queue_recipe_fixtures()
 
-# Family-specific list: impl/remed/impl_groups use release_issue_timeout as
+# Family-specific list: impl/remed/impl_groups use register_clone_unconfirmed as
 # their queue error escalation step.  Tests that assert step names or routing
 # targets specific to this family use this constant instead of QUEUE_RECIPES.
 RELEASE_TIMEOUT_RECIPES = ["impl_recipe", "remed_recipe", "impl_groups_recipe"]
@@ -998,13 +998,13 @@ RELEASE_TIMEOUT_RECIPES = ["impl_recipe", "remed_recipe", "impl_groups_recipe"]
 
 # ---------------------------------------------------------------------------
 # Gap 1 + Gap 6: ci_watch_post_queue_fix step + ejected_ci_failure routing
-# (applies to release_issue_timeout family only)
+# (applies to register_clone_unconfirmed family only)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("recipe_fixture", RELEASE_TIMEOUT_RECIPES)
 def test_ci_watch_post_queue_fix_exists(recipe_fixture, request):
-    """ci_watch_post_queue_fix step must exist in release_issue_timeout family recipes."""
+    """ci_watch_post_queue_fix step must exist in register_clone_unconfirmed family recipes."""
     recipe = request.getfixturevalue(recipe_fixture)
     assert "ci_watch_post_queue_fix" in recipe.steps, (
         f"ci_watch_post_queue_fix must be a step in {recipe_fixture}"
@@ -1242,28 +1242,28 @@ def test_remediation_wait_for_queue_has_timeout_arm_and_release_timeout_fallback
     assert step.on_result is not None, "wait_for_queue must have on_result"
     conditions = step.on_result.conditions
 
-    # Must have an explicit timeout arm routing to release_issue_timeout
+    # Must have an explicit timeout arm routing to register_clone_unconfirmed
     timeout_conditions = [
         c
         for c in conditions
-        if c.when is not None and "timeout" in c.when and c.route == "release_issue_timeout"
+        if c.when is not None and "timeout" in c.when and c.route == "register_clone_unconfirmed"
     ]
     assert timeout_conditions, (
         "remediation.yaml wait_for_queue must have explicit "
-        "'${{ result.pr_state }} == timeout -> release_issue_timeout' arm"
+        "'${{ result.pr_state }} == timeout -> register_clone_unconfirmed' arm"
     )
 
-    # Fallback (when=None) must route to release_issue_timeout, not register_clone_success
+    # Fallback (when=None) must route to register_clone_unconfirmed, not register_clone_success
     fallback_conditions = [c for c in conditions if c.when is None]
     assert fallback_conditions, "wait_for_queue must have a fallback condition (when=None)"
-    assert fallback_conditions[0].route == "release_issue_timeout", (
-        f"remediation.yaml wait_for_queue fallback must be release_issue_timeout, "
+    assert fallback_conditions[0].route == "register_clone_unconfirmed", (
+        f"remediation.yaml wait_for_queue fallback must be register_clone_unconfirmed, "
         f"got: {fallback_conditions[0].route!r}"
     )
 
-    # on_failure must route to release_issue_timeout, not register_clone_success
-    assert step.on_failure == "release_issue_timeout", (
-        f"remediation.yaml wait_for_queue on_failure must be release_issue_timeout, "
+    # on_failure must route to register_clone_unconfirmed, not register_clone_success
+    assert step.on_failure == "register_clone_unconfirmed", (
+        f"remediation.yaml wait_for_queue on_failure must be register_clone_unconfirmed, "
         f"got: {step.on_failure!r}"
     )
 
@@ -1290,7 +1290,7 @@ def test_verify_queue_enrollment_uses_wait_for_merge_queue(any_recipe) -> None:
 
 def test_verify_queue_enrollment_on_failure_escalates(any_recipe) -> None:
     step = any_recipe.steps["verify_queue_enrollment"]
-    assert step.on_failure == "release_issue_timeout"
+    assert step.on_failure == "register_clone_unconfirmed"
 
 
 def test_verify_queue_enrollment_merged_routes_to_release_issue_success(any_recipe) -> None:
@@ -1300,11 +1300,11 @@ def test_verify_queue_enrollment_merged_routes_to_release_issue_success(any_reci
     assert merged_routes == ["release_issue_success"]
 
 
-def test_verify_queue_enrollment_fallback_routes_to_release_issue_timeout(any_recipe) -> None:
+def test_verify_queue_enrollment_fallback_routes_to_register_clone_unconfirmed(any_recipe) -> None:
     step = any_recipe.steps["verify_queue_enrollment"]
     assert step.on_result is not None
     fallback = [c.route for c in step.on_result.conditions if c.when is None]
-    assert fallback == ["release_issue_timeout"]
+    assert fallback == ["register_clone_unconfirmed"]
 
 
 def test_verify_queue_enrollment_ejected_ci_failure_routes_directly_to_diagnose_ci(
@@ -1329,15 +1329,15 @@ def test_verify_queue_enrollment_ejected_ci_failure_routes_directly_to_diagnose_
 
 
 @pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])
-def test_wait_for_direct_merge_on_failure_routes_to_release_issue_timeout(
+def test_wait_for_direct_merge_on_failure_routes_to_register_clone_unconfirmed(
     recipe_name: str,
 ) -> None:
-    """wait_for_direct_merge.on_failure must be release_issue_timeout in all three recipes."""
+    """wait_for_direct_merge.on_failure must be register_clone_unconfirmed in all three recipes."""
     recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
     step = recipe.steps["wait_for_direct_merge"]
-    assert step.on_failure == "release_issue_timeout", (
+    assert step.on_failure == "register_clone_unconfirmed", (
         f"{recipe_name}.yaml wait_for_direct_merge.on_failure must be "
-        f"'release_issue_timeout', got: {step.on_failure!r}"
+        f"'register_clone_unconfirmed', got: {step.on_failure!r}"
     )
 
 
@@ -1401,13 +1401,15 @@ def test_wait_for_queue_routing_covers_every_pr_state(recipe_fixture, request) -
 
 # ---------------------------------------------------------------------------
 # T9 family-specific: fallback, on_failure, reenter_merge_queue_cheap
-# (release_issue_timeout family only)
+# (register_clone_unconfirmed family only)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("recipe_fixture", RELEASE_TIMEOUT_RECIPES)
-def test_wait_for_queue_fallback_routes_to_release_issue_timeout(recipe_fixture, request) -> None:
-    """wait_for_queue fallback (when=None) must route to release_issue_timeout."""
+def test_wait_for_queue_fallback_routes_to_register_clone_unconfirmed(
+    recipe_fixture, request
+) -> None:
+    """wait_for_queue fallback (when=None) must route to register_clone_unconfirmed."""
     recipe = request.getfixturevalue(recipe_fixture)
     step = recipe.steps["wait_for_queue"]
     assert step.on_result is not None
@@ -1415,21 +1417,21 @@ def test_wait_for_queue_fallback_routes_to_release_issue_timeout(recipe_fixture,
     assert fallback_conditions, (
         f"{recipe_fixture}: wait_for_queue.on_result must have a fallback condition"
     )
-    assert fallback_conditions[0].route == "release_issue_timeout", (
-        f"{recipe_fixture}: wait_for_queue fallback must route to release_issue_timeout, "
+    assert fallback_conditions[0].route == "register_clone_unconfirmed", (
+        f"{recipe_fixture}: wait_for_queue fallback must route to register_clone_unconfirmed, "
         f"got: {fallback_conditions[0].route!r}"
     )
 
 
 @pytest.mark.parametrize("recipe_fixture", RELEASE_TIMEOUT_RECIPES)
-def test_wait_for_queue_on_failure_routes_to_release_issue_timeout(
+def test_wait_for_queue_on_failure_routes_to_register_clone_unconfirmed(
     recipe_fixture, request
 ) -> None:
-    """wait_for_queue.on_failure must route to release_issue_timeout."""
+    """wait_for_queue.on_failure must route to register_clone_unconfirmed."""
     recipe = request.getfixturevalue(recipe_fixture)
     step = recipe.steps["wait_for_queue"]
-    assert step.on_failure == "release_issue_timeout", (
-        f"{recipe_fixture}: wait_for_queue on_failure must be release_issue_timeout, "
+    assert step.on_failure == "register_clone_unconfirmed", (
+        f"{recipe_fixture}: wait_for_queue on_failure must be register_clone_unconfirmed, "
         f"got: {step.on_failure!r}"
     )
 

@@ -527,21 +527,6 @@ async def release_issue(
         except ValueError as exc:
             return json.dumps({"success": False, "error": str(exc)})
 
-        result = await tool_ctx.github_client.remove_label(
-            owner, repo, issue_number, effective_label
-        )
-        if not result.get("success", False):
-            return json.dumps(
-                {
-                    "success": False,
-                    "error": result.get("error", "remove_label failed"),
-                    "issue_number": issue_number,
-                    "label": effective_label,
-                    "staged": False,
-                    "staged_label": None,
-                }
-            )
-
         # Determine if staging is needed
         promotion_target = tool_ctx.config.branching.promotion_target
         should_stage = target_branch is not None and target_branch != promotion_target
@@ -560,6 +545,7 @@ async def release_issue(
                     }
                 )
 
+            # Ensure the staged label definition exists in the repo (no label set mutation yet)
             ensure_result = await tool_ctx.github_client.ensure_label(
                 owner,
                 repo,
@@ -581,19 +567,42 @@ async def release_issue(
                     }
                 )
 
-            apply_result = await tool_ctx.github_client.add_labels(
-                owner, repo, issue_number, [effective_staged_label]
+            # Atomic swap: remove in-progress, add staged in one PUT
+            swap_result = await tool_ctx.github_client.swap_labels(
+                owner,
+                repo,
+                issue_number,
+                remove_labels=[effective_label],
+                add_labels=[effective_staged_label],
             )
-            if not apply_result.get("success"):
+            if not swap_result.get("success"):
                 return json.dumps(
                     {
                         "success": False,
                         "issue_number": issue_number,
                         "label": effective_label,
-                        "error": f"Failed to apply staged label: {apply_result.get('error', '?')}",
+                        "error": f"Failed to apply staged label: {swap_result.get('error', '?')}",
                     }
                 )
             staged = True
+        else:
+            # Just remove in-progress atomically (no staging)
+            swap_result = await tool_ctx.github_client.swap_labels(
+                owner,
+                repo,
+                issue_number,
+                remove_labels=[effective_label],
+                add_labels=[],
+            )
+            if not swap_result.get("success"):
+                return json.dumps(
+                    {
+                        "success": False,
+                        "issue_number": issue_number,
+                        "label": effective_label,
+                        "error": f"Failed to remove label: {swap_result.get('error', '?')}",
+                    }
+                )
 
         return json.dumps(
             {

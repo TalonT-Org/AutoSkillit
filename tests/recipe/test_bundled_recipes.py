@@ -2251,3 +2251,24 @@ def test_all_clone_recipes_use_context_cwd_after_clone(recipe_path: Path) -> Non
             assert not input_re.search(cwd), (
                 f"{recipe_path.stem}: step '{name}' uses inputs.* as cwd after clone: {cwd}"
             )
+
+
+# ---------------------------------------------------------------------------
+# release-issue-on-unconfirmed-merge guard for bundled recipes
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("recipe_name", ["implementation", "implementation-groups", "remediation"])
+def test_bundled_recipes_have_no_release_issue_on_unconfirmed_merge(recipe_name: str) -> None:
+    """No bundled recipe may route a merge-wait timeout exit to release_issue.
+
+    When wait_for_merge_queue (or equivalent) times out, the PR may still be
+    in the queue. Calling release_issue on that path removes the in-progress
+    label while the merge is still pending, leaving the issue visually unclaimed.
+    """
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    findings = run_semantic_rules(recipe)
+    violations = [f for f in findings if f.rule == "release-issue-on-unconfirmed-merge"]
+    assert violations == [], (
+        f"{recipe_name} has release-issue-on-unconfirmed-merge violations: {violations}"
+    )

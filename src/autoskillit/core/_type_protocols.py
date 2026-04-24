@@ -414,6 +414,15 @@ class GitHubFetcher(Protocol):
         label: str,
     ) -> dict[str, Any]: ...
 
+    async def swap_labels(
+        self,
+        owner: str,
+        repo: str,
+        issue_number: int,
+        remove_labels: list[str],
+        add_labels: list[str],
+    ) -> dict[str, Any]: ...
+
     async def ensure_label(
         self,
         owner: str,

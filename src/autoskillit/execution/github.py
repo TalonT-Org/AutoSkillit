@@ -490,6 +490,60 @@ class DefaultGitHubFetcher:
             return {"success": False, "error": f"Request error: {exc}"}
         return {"success": True}
 
+    async def swap_labels(
+        self,
+        owner: str,
+        repo: str,
+        issue_number: int,
+        remove_labels: list[str],
+        add_labels: list[str],
+    ) -> dict[str, Any]:
+        """Swap labels on an issue via GET-then-PUT (reduced-race replacement).
+
+        Fetches the current label set, computes (current - remove_labels) | add_labels,
+        then PUTs the result. The PUT endpoint replaces all labels in one HTTP call,
+        reducing the race window compared to DELETE→POST→POST, but is not truly atomic:
+        a concurrent writer between the GET (fetch) and PUT (replace) can silently
+        overwrite interleaved changes.
+
+        Returns {success, labels}. Never raises.
+        """
+        headers = self._headers()
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
+                # Step 1: GET current labels (read-only, no throttle needed)
+                get_resp = await client.get(
+                    f"https://api.github.com/repos/{owner}/{repo}/issues/{issue_number}/labels",
+                    headers=headers,
+                )
+                get_resp.raise_for_status()
+                current = {lbl["name"] for lbl in get_resp.json()}
+
+                # Step 2: Compute target set
+                remove_set = set(remove_labels)
+                add_set = set(add_labels)
+                target = sorted((current - remove_set) | add_set)
+
+                # Step 3: PUT atomically (throttle the single mutating call)
+                await self._throttle_mutating()
+                put_resp = await client.put(
+                    f"https://api.github.com/repos/{owner}/{repo}/issues/{issue_number}/labels",
+                    headers=headers,
+                    json={"labels": target},
+                )
+                put_resp.raise_for_status()
+                applied = [lbl["name"] for lbl in put_resp.json()]
+        except httpx.HTTPStatusError as exc:
+            _log.warning("github swap_labels http error", status=exc.response.status_code)
+            return {
+                "success": False,
+                "error": f"HTTP {exc.response.status_code}: {exc.response.text[:200]}",
+            }
+        except httpx.RequestError as exc:
+            _log.warning("github swap_labels request error", error=str(exc))
+            return {"success": False, "error": f"Request error: {exc}"}
+        return {"success": True, "labels": applied}
+
     async def ensure_label(
         self,
         owner: str,

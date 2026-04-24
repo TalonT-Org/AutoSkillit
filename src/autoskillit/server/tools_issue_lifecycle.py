@@ -581,7 +581,7 @@ async def release_issue(
                         "success": False,
                         "issue_number": issue_number,
                         "label": effective_label,
-                        "error": f"Failed to swap labels: {swap_result.get('error', '?')}",
+                        "error": f"Failed to apply staged label: {swap_result.get('error', '?')}",
                     }
                 )
             staged = True

@@ -1897,7 +1897,7 @@ class TestResearchRecipeStructure:
         for step_name in ("re_run_experiment", "re_generate_report", "re_test"):
             step = recipe.steps[step_name]
             assert step.on_failure in ("begin_archival", "re_push_research")
-        assert recipe.steps["re_push_research"].on_success == "finalize_bundle"
+        assert recipe.steps["re_push_research"].on_success == "finalize_bundle_render"
 
     def test_audit_claims_ingredient_default_false(self, recipe) -> None:
         assert "audit_claims" in recipe.ingredients
@@ -1955,7 +1955,7 @@ class TestResearchRecipeStructure:
         conditions = step.on_result.conditions
         # review_needs_rerun == true → re_run_experiment
         # claims_needs_rerun == true → re_run_experiment
-        # else → re_push_research
+        # else → finalize_bundle
         guarded = [c for c in conditions if c.when is not None]
         default = [c for c in conditions if c.when is None]
         assert len(guarded) == 2
@@ -1964,7 +1964,7 @@ class TestResearchRecipeStructure:
         assert any("review_needs_rerun" in c.when for c in guarded)
         assert any("claims_needs_rerun" in c.when for c in guarded)
         assert len(default) == 1
-        assert default[0].route == "re_push_research"
+        assert default[0].route == "finalize_bundle"
 
     def test_resolve_claims_review_step_exists(self, recipe) -> None:
         step = recipe.steps["resolve_claims_review"]
@@ -2085,16 +2085,16 @@ class TestResearchRecipeStructure:
                 f"{name}.on_failure must be research_complete for graceful degradation"
             )
 
-    def test_re_push_research_routes_to_finalize_bundle(self, recipe) -> None:
-        """re_push_research routes to finalize_bundle on success, begin_archival on failure."""
+    def test_re_push_research_routes_to_finalize_bundle_render(self, recipe) -> None:
+        """re_push_research routes to finalize_bundle_render on success."""
         step = recipe.steps["re_push_research"]
-        assert step.on_success == "finalize_bundle"
+        assert step.on_success == "finalize_bundle_render"
         assert step.on_failure == "begin_archival"
 
-    def test_finalize_bundle_routes_to_finalize_bundle_render(self, recipe) -> None:
-        """finalize_bundle on_success routes to finalize_bundle_render (not begin_archival)."""
+    def test_finalize_bundle_routes_to_re_push_research(self, recipe) -> None:
+        """finalize_bundle on_success routes to re_push_research (push includes the commit)."""
         step = recipe.steps["finalize_bundle"]
-        assert step.on_success == "finalize_bundle_render"
+        assert step.on_success == "re_push_research"
         assert step.on_failure == "begin_archival"
 
     def test_finalize_bundle_render_step_exists_and_routes(self, recipe) -> None:

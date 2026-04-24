@@ -330,6 +330,7 @@ class PRState(StrEnum):
     EJECTED_CI_FAILURE = "ejected_ci_failure"
     STALLED = "stalled"
     DROPPED_HEALTHY = "dropped_healthy"
+    NOT_ENROLLED = "not_enrolled"
     TIMEOUT = "timeout"
     ERROR = "error"
 

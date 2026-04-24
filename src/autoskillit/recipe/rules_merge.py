@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 
 from autoskillit.core import MergeFailedStep, Severity, get_logger
-from autoskillit.recipe._analysis import ValidationContext
+from autoskillit.recipe._analysis import ValidationContext, _bfs_reachable
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 logger = get_logger(__name__)
@@ -256,4 +256,65 @@ def _check_release_issue_on_unconfirmed_merge(ctx: ValidationContext) -> list[Ru
                     ),
                 )
             )
+    return findings
+
+
+# ---------------------------------------------------------------------------
+# merge-enrollment-auto-consistency rule
+# ---------------------------------------------------------------------------
+
+_AUTO_MERGE_FALSE_PATTERN = re.compile(
+    r"auto_merge_available\s*==\s*['\"]?false['\"]?", re.IGNORECASE
+)
+
+
+def _is_auto_flagged_step(step_name: str, ctx: ValidationContext) -> bool:
+    """Return True if step uses --auto in a gh pr merge command or calls toggle_auto_merge."""
+    step = ctx.recipe.steps.get(step_name)
+    if step is None:
+        return False
+    if step.tool == "run_cmd":
+        cmd = step.with_args.get("cmd", "")
+        if isinstance(cmd, str) and "gh pr merge" in cmd and "--auto" in cmd:
+            return True
+    if step.tool == "toggle_auto_merge":
+        return True
+    return False
+
+
+@semantic_rule(
+    name="merge-enrollment-auto-consistency",
+    description=(
+        "gh pr merge steps with --auto must not be reachable from auto_merge_available=false "
+        "routing arms. When auto_merge_available is false, --auto and toggle_auto_merge will "
+        "fail because the repository does not support enablePullRequestAutoMerge."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_merge_enrollment_auto_consistency(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+
+    no_auto_targets: set[str] = set()
+    for step_name, step in ctx.recipe.steps.items():
+        if step.on_result and step.on_result.conditions:
+            for cond in step.on_result.conditions:
+                if cond.when and _AUTO_MERGE_FALSE_PATTERN.search(cond.when):
+                    no_auto_targets.add(cond.route)
+
+    for target in no_auto_targets:
+        reachable = _bfs_reachable(ctx.step_graph, target) | {target}
+        for reached in reachable:
+            if _is_auto_flagged_step(reached, ctx):
+                findings.append(
+                    RuleFinding(
+                        rule="merge-enrollment-auto-consistency",
+                        severity=Severity.ERROR,
+                        step_name=reached,
+                        message=(
+                            f"Step '{reached}' uses --auto or toggle_auto_merge but is "
+                            f"reachable from an auto_merge_available=false routing arm "
+                            f"(via '{target}'). Use enqueue_pr instead."
+                        ),
+                    )
+                )
     return findings

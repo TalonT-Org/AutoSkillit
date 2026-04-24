@@ -697,17 +697,33 @@ class TestPendingCIGuard:
         This is the exact issue #802 failure mode: the old elimination classifier returned
         'ejected' for this state because no other gate matched. The new classifier returns
         DROPPED_HEALTHY via positive signal — auto_merge was cleared while the PR was healthy.
+        Requires prior enrollment evidence (auto_merge_present=True in cycle 1).
         """
         watcher = _make_watcher()
-        watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
-            return_value=_queue_state(
+        responses = [
+            _queue_state(
+                in_queue=False,
+                mergeable="MERGEABLE",
+                merge_state_status="CLEAN",
+                checks_state="SUCCESS",
+                auto_merge_present=True,
+            ),
+            _queue_state(
                 in_queue=False,
                 mergeable="MERGEABLE",
                 merge_state_status="CLEAN",
                 checks_state="SUCCESS",
                 auto_merge_present=False,
-            )
-        )
+            ),
+            _queue_state(
+                in_queue=False,
+                mergeable="MERGEABLE",
+                merge_state_status="CLEAN",
+                checks_state="SUCCESS",
+                auto_merge_present=False,
+            ),
+        ]
+        watcher._fetch_pr_and_queue_state = AsyncMock(side_effect=responses)  # type: ignore[method-assign]
         with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
             result = await watcher.wait(pr_number=1, target_branch="main", repo="owner/repo")
 
@@ -1256,7 +1272,7 @@ class TestClassifierImmunity:
             in_queue=False,
             auto_merge_present=False,
         )
-        result = _mq._classify_pr_state(state)
+        result = _mq._classify_pr_state(state, ever_enrolled=True)
         assert result.terminal == PRState.DROPPED_HEALTHY
 
     # --- T2: Positive-signal contract: EJECTED requires positive signal ---
@@ -1289,7 +1305,7 @@ class TestClassifierImmunity:
     def test_classifier_never_returns_ejected_without_positive_signal(self, state):
         """For ambiguous-but-healthy states, classifier must NOT return EJECTED."""
         try:
-            result = _mq._classify_pr_state(state)
+            result = _mq._classify_pr_state(state, ever_enrolled=True)
             assert result.terminal != PRState.EJECTED, (
                 f"Classifier returned EJECTED without a positive signal for state: {state}"
             )
@@ -1310,7 +1326,7 @@ class TestClassifierImmunity:
             in_queue=False,
         )
         with pytest.raises(ClassifierInconclusive) as exc_info:
-            _mq._classify_pr_state(state)
+            _mq._classify_pr_state(state, ever_enrolled=True)
         assert exc_info.value.state is state
         assert exc_info.value.reason
 
@@ -1371,7 +1387,7 @@ class TestClassifierImmunity:
         self, expected_terminal, state
     ):
         """Every classifier-reachable PRState terminal has at least one positive fixture."""
-        result = _mq._classify_pr_state(state)
+        result = _mq._classify_pr_state(state, ever_enrolled=True)
         assert result.terminal == expected_terminal
 
     # --- T5: Import-time schema round-trip guard ---
@@ -1532,3 +1548,202 @@ class TestMergeQueueVocabularyContract:
             f"Positive stall statuses not in KNOWN_MQ_MERGE_STATE_STATUSES: "
             f"{positive_stall_statuses - KNOWN_MQ_MERGE_STATE_STATUSES}"
         )
+
+
+# ---------------------------------------------------------------------------
+# PRState.NOT_ENROLLED enum value
+# ---------------------------------------------------------------------------
+
+
+class TestNotEnrolledState:
+    """Tests for the NOT_ENROLLED classifier state and enrollment tracking."""
+
+    def test_pr_state_has_not_enrolled(self):
+        """PRState must include NOT_ENROLLED value."""
+        assert hasattr(PRState, "NOT_ENROLLED")
+        assert PRState.NOT_ENROLLED == "not_enrolled"
+
+    def test_classifier_returns_not_enrolled_when_never_in_queue_and_healthy(self):
+        """A healthy PR with ever_enrolled=False must classify as NOT_ENROLLED."""
+        state = _queue_state(
+            merged=False,
+            state="OPEN",
+            mergeable="MERGEABLE",
+            merge_state_status="CLEAN",
+            checks_state="SUCCESS",
+            in_queue=False,
+            auto_merge_present=False,
+        )
+        result = _mq._classify_pr_state(state, ever_enrolled=False)
+        assert result.terminal == PRState.NOT_ENROLLED
+
+    def test_classifier_returns_dropped_healthy_only_when_ever_enrolled(self):
+        """DROPPED_HEALTHY requires ever_enrolled=True."""
+        state = _queue_state(
+            merged=False,
+            state="OPEN",
+            mergeable="MERGEABLE",
+            merge_state_status="CLEAN",
+            checks_state="SUCCESS",
+            in_queue=False,
+            auto_merge_present=False,
+        )
+        result = _mq._classify_pr_state(state, ever_enrolled=True)
+        assert result.terminal == PRState.DROPPED_HEALTHY
+
+    @pytest.mark.anyio
+    async def test_wait_tracks_ever_enrolled_from_in_queue(self):
+        """wait() sets ever_enrolled=True when in_queue=True is observed."""
+        watcher = _make_watcher()
+        responses = [
+            _queue_state(in_queue=True, queue_state="QUEUED"),
+            _queue_state(
+                in_queue=False,
+                auto_merge_present=False,
+                mergeable="MERGEABLE",
+                merge_state_status="CLEAN",
+                checks_state="SUCCESS",
+            ),
+            _queue_state(
+                in_queue=False,
+                auto_merge_present=False,
+                mergeable="MERGEABLE",
+                merge_state_status="CLEAN",
+                checks_state="SUCCESS",
+            ),
+        ]
+        watcher._fetch_pr_and_queue_state = AsyncMock(side_effect=responses)  # type: ignore[method-assign]
+        with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
+            result = await watcher.wait(
+                pr_number=42,
+                target_branch="main",
+                repo="owner/repo",
+                poll_interval=1,
+                not_in_queue_confirmation_cycles=2,
+            )
+        assert result["pr_state"] == "dropped_healthy"
+
+    @pytest.mark.anyio
+    async def test_wait_tracks_ever_enrolled_from_auto_merge_present(self):
+        """wait() sets ever_enrolled=True when auto_merge_present=True is observed."""
+        watcher = _make_watcher()
+        responses = [
+            _queue_state(in_queue=False, auto_merge_present=True),
+            _queue_state(
+                in_queue=False,
+                auto_merge_present=False,
+                mergeable="MERGEABLE",
+                merge_state_status="CLEAN",
+                checks_state="SUCCESS",
+            ),
+            _queue_state(
+                in_queue=False,
+                auto_merge_present=False,
+                mergeable="MERGEABLE",
+                merge_state_status="CLEAN",
+                checks_state="SUCCESS",
+            ),
+        ]
+        watcher._fetch_pr_and_queue_state = AsyncMock(side_effect=responses)  # type: ignore[method-assign]
+        with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
+            result = await watcher.wait(
+                pr_number=42,
+                target_branch="main",
+                repo="owner/repo",
+                poll_interval=1,
+                not_in_queue_confirmation_cycles=2,
+            )
+        assert result["pr_state"] == "dropped_healthy"
+
+    @pytest.mark.anyio
+    async def test_wait_returns_not_enrolled_when_enrollment_never_observed(self):
+        """wait() returns NOT_ENROLLED when healthy PR never shows enrollment evidence."""
+        watcher = _make_watcher()
+        healthy_state = _queue_state(
+            in_queue=False,
+            auto_merge_present=False,
+            mergeable="MERGEABLE",
+            merge_state_status="CLEAN",
+            checks_state="SUCCESS",
+        )
+        watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
+            return_value=healthy_state,
+        )
+        with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
+            result = await watcher.wait(
+                pr_number=42,
+                target_branch="main",
+                repo="owner/repo",
+                poll_interval=1,
+                not_in_queue_confirmation_cycles=2,
+            )
+        assert result["pr_state"] == "not_enrolled"
+        assert result["success"] is False
+
+
+# ---------------------------------------------------------------------------
+# enqueue() method tests
+# ---------------------------------------------------------------------------
+
+
+class TestEnqueueMethod:
+    """Tests for DefaultMergeQueueWatcher.enqueue() enrollment strategy."""
+
+    @pytest.mark.anyio
+    async def test_enqueue_uses_enqueue_pr_mutation_when_auto_merge_unavailable(self):
+        """When auto_merge_available=False, enqueue() must call enqueuePullRequest."""
+        watcher = _make_watcher()
+        watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
+            return_value=_queue_state(pr_node_id="PR_kwDO_test123"),
+        )
+        posted_bodies: list[str] = []
+
+        async def _mock_post(*args, **kwargs):
+            body = kwargs.get("json", {})
+            posted_bodies.append(body.get("query", ""))
+            return httpx.Response(
+                200,
+                json={"data": {"enqueuePullRequest": {"mergeQueueEntry": {"id": "MQE_1"}}}},
+                request=httpx.Request("POST", "http://x"),
+            )
+
+        watcher._client.post = _mock_post  # type: ignore[method-assign]
+        result = await watcher.enqueue(
+            pr_number=42,
+            target_branch="main",
+            repo="owner/repo",
+            auto_merge_available=False,
+        )
+        assert result["success"] is True
+        assert result["enrollment_method"] == "direct_enqueue"
+        assert any("enqueuePullRequest" in b for b in posted_bodies)
+        assert not any("enablePullRequestAutoMerge" in b for b in posted_bodies)
+
+    @pytest.mark.anyio
+    async def test_enqueue_uses_auto_merge_mutation_when_auto_merge_available(self):
+        """When auto_merge_available=True, enqueue() must call enablePullRequestAutoMerge."""
+        watcher = _make_watcher()
+        watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
+            return_value=_queue_state(pr_node_id="PR_kwDO_test123"),
+        )
+        posted_bodies: list[str] = []
+
+        async def _mock_post(*args, **kwargs):
+            body = kwargs.get("json", {})
+            posted_bodies.append(body.get("query", ""))
+            return httpx.Response(
+                200,
+                json={"data": {"enablePullRequestAutoMerge": {"pullRequest": {"number": 42}}}},
+                request=httpx.Request("POST", "http://x"),
+            )
+
+        watcher._client.post = _mock_post  # type: ignore[method-assign]
+        result = await watcher.enqueue(
+            pr_number=42,
+            target_branch="main",
+            repo="owner/repo",
+            auto_merge_available=True,
+        )
+        assert result["success"] is True
+        assert result["enrollment_method"] == "auto_merge"
+        assert any("enablePullRequestAutoMerge" in b for b in posted_bodies)

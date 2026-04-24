@@ -423,3 +423,102 @@ def test_rule_does_not_fire_when_register_clone_unconfirmed_used() -> None:
         f"Unexpected release-issue-on-unconfirmed-merge finding: "
         f"{[f for f in findings if f.rule == 'release-issue-on-unconfirmed-merge']}"
     )
+
+
+# ---------------------------------------------------------------------------
+# merge-enrollment-auto-consistency rule tests
+# ---------------------------------------------------------------------------
+
+
+def test_rule_flags_auto_step_reachable_from_no_auto_route() -> None:
+    """A gh pr merge --auto step reachable from an auto_merge_available=false
+    routing condition must emit a finding."""
+    recipe = _make_recipe(
+        {
+            "route_queue_mode": RecipeStep(
+                action="route",
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(
+                            route="enroll_with_auto",
+                            when="context.auto_merge_available == 'true'",
+                        ),
+                        StepResultCondition(
+                            route="enroll_no_auto",
+                            when="context.auto_merge_available == 'false'",
+                        ),
+                    ],
+                ),
+            ),
+            "enroll_with_auto": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "gh pr merge '42' --squash --auto", "cwd": "/tmp"},
+                on_success="wait_queue",
+            ),
+            "enroll_no_auto": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "gh pr merge '42' --squash", "cwd": "/tmp"},
+                on_success="wait_queue",
+                on_failure="reenter",
+            ),
+            "wait_queue": RecipeStep(
+                tool="wait_for_merge_queue",
+                with_args={},
+                on_success="done",
+                on_failure="reenter",
+            ),
+            "reenter": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "gh pr merge '42' --squash --auto", "cwd": "/tmp"},
+                on_success="wait_queue",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "merge-enrollment-auto-consistency"]
+    assert len(flagged) >= 1
+    flagged_steps = {f.step_name for f in flagged}
+    assert "reenter" in flagged_steps
+
+
+def test_rule_passes_when_auto_steps_only_reachable_from_auto_route() -> None:
+    """Steps using --auto that are only reachable from auto_merge_available=true
+    routing conditions should not emit findings."""
+    recipe = _make_recipe(
+        {
+            "route_queue_mode": RecipeStep(
+                action="route",
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(
+                            route="enroll_with_auto",
+                            when="context.auto_merge_available == 'true'",
+                        ),
+                        StepResultCondition(
+                            route="enroll_no_auto",
+                            when="context.auto_merge_available == 'false'",
+                        ),
+                    ],
+                ),
+            ),
+            "enroll_with_auto": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "gh pr merge '42' --squash --auto", "cwd": "/tmp"},
+                on_success="done",
+            ),
+            "enroll_no_auto": RecipeStep(
+                tool="enqueue_pr",
+                with_args={
+                    "pr_number": "42",
+                    "target_branch": "main",
+                    "auto_merge_available": "false",
+                },
+                on_success="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "merge-enrollment-auto-consistency"]
+    assert flagged == []

@@ -132,6 +132,14 @@ mutation EnableAutoMerge($prId: ID!, $mergeMethod: PullRequestMergeMethod!) {
 }
 """
 
+_MUTATION_ENQUEUE_PR = """
+mutation EnqueuePullRequest($prId: ID!) {
+  enqueuePullRequest(input: {pullRequestId: $prId}) {
+    mergeQueueEntry { id }
+  }
+}
+"""
+
 # Repo-level state query: consolidates three former run_cmd steps into one HTTP round-trip.
 # Distinct from _QUERY (PR-level + queue-entries); do not merge these constants.
 # Returns: mergeQueue presence, autoMergeAllowed flag, and workflow file texts for
@@ -210,8 +218,10 @@ def _is_positive_stall(state: PRFetchState) -> bool:
     }
 
 
-def _is_positive_dropped_healthy(state: PRFetchState) -> bool:
+def _is_positive_dropped_healthy(state: PRFetchState, *, ever_enrolled: bool) -> bool:
     """True when the PR is fully healthy but auto_merge was cleared externally."""
+    if not ever_enrolled:
+        return False
     return (
         state["state"] == "OPEN"
         and state["mergeable"] == "MERGEABLE"
@@ -222,7 +232,21 @@ def _is_positive_dropped_healthy(state: PRFetchState) -> bool:
     )
 
 
-def _classify_pr_state(state: PRFetchState) -> ClassificationResult:
+def _is_not_enrolled(state: PRFetchState, *, ever_enrolled: bool) -> bool:
+    """True when the PR is healthy but was never enrolled in the merge queue."""
+    if ever_enrolled:
+        return False
+    return (
+        state["state"] == "OPEN"
+        and state["mergeable"] == "MERGEABLE"
+        and state["merge_state_status"] == "CLEAN"
+        and state["checks_state"] in (None, "SUCCESS")
+        and state["auto_merge_present"] is False
+        and state["in_queue"] is False
+    )
+
+
+def _classify_pr_state(state: PRFetchState, *, ever_enrolled: bool) -> ClassificationResult:
     """Classify PR state using positive signals only — no fall-through to EJECTED.
 
     Every return originates from a direct positive signal. When no positive gate
@@ -231,6 +255,7 @@ def _classify_pr_state(state: PRFetchState) -> ClassificationResult:
 
     Args:
         state: Current PR fetch state snapshot.
+        ever_enrolled: Whether the PR was ever observed in the queue or with auto-merge.
 
     Returns:
         ClassificationResult with the matched terminal PRState.
@@ -256,8 +281,13 @@ def _classify_pr_state(state: PRFetchState) -> ClassificationResult:
     if state["mergeable"] == "CONFLICTING":
         return ClassificationResult(PRState.EJECTED, "conflicting changes prevent merge")
 
-    if _is_positive_dropped_healthy(state):
+    if _is_positive_dropped_healthy(state, ever_enrolled=ever_enrolled):
         return ClassificationResult(PRState.DROPPED_HEALTHY, "PR healthy but auto_merge cleared")
+
+    if _is_not_enrolled(state, ever_enrolled=ever_enrolled):
+        return ClassificationResult(
+            PRState.NOT_ENROLLED, "PR was never enrolled in the merge queue"
+        )
 
     if state["checks_state"] in {"PENDING", "EXPECTED"}:
         raise CIStillRunning(state, "checks still running")
@@ -317,6 +347,7 @@ class DefaultMergeQueueWatcher:
         max_stall_retries: int = 3,
         not_in_queue_confirmation_cycles: int = 2,
         max_inconclusive_retries: int = 5,
+        auto_merge_available: bool = True,
     ) -> dict[str, Any]:
         """Poll until PR is merged, ejected, stalled, dropped, or timeout expires.
 
@@ -337,6 +368,8 @@ class DefaultMergeQueueWatcher:
                 merged=true propagation (default 2).
             max_inconclusive_retries: Maximum NoPositiveSignal cycles (beyond the
                 confirmation window) before returning pr_state="timeout" (default 5).
+            auto_merge_available: Whether the repository allows auto-merge. When False,
+                stall recovery uses enqueuePullRequest instead of toggle.
 
         Returns:
             {
@@ -359,6 +392,7 @@ class DefaultMergeQueueWatcher:
         stall_retries_attempted: int = 0
         not_in_queue_cycles: int = 0
         inconclusive_count: int = 0
+        ever_enrolled: bool = False
 
         def _make_result(
             success: bool, pr_state: PRState, reason: str, ejection_cause: str = ""
@@ -383,6 +417,9 @@ class DefaultMergeQueueWatcher:
                 await asyncio.sleep(poll_interval)
                 continue
 
+            if state["in_queue"] or state["auto_merge_present"]:
+                ever_enrolled = True
+
             # In queue: reset window and continue
             if state["in_queue"]:
                 not_in_queue_cycles = 0
@@ -396,7 +433,7 @@ class DefaultMergeQueueWatcher:
 
             # Classify state using positive-signal gates
             try:
-                classification = _classify_pr_state(state)
+                classification = _classify_pr_state(state, ever_enrolled=ever_enrolled)
             except CIStillRunning:
                 await asyncio.sleep(poll_interval)
                 continue
@@ -450,7 +487,10 @@ class DefaultMergeQueueWatcher:
                         backoff=backoff,
                     )
                     try:
-                        await self._toggle_auto_merge(state["pr_node_id"])
+                        await self._toggle_auto_merge(
+                            state["pr_node_id"],
+                            auto_merge_available=auto_merge_available,
+                        )
                     except Exception:
                         _log.warning("toggle_auto_merge failed", exc_info=True)
                     stall_retries_attempted += 1
@@ -476,6 +516,11 @@ class DefaultMergeQueueWatcher:
 
             elif classification.terminal == PRState.DROPPED_HEALTHY:
                 return _make_result(False, PRState.DROPPED_HEALTHY, classification.reason)
+
+            elif classification.terminal == PRState.NOT_ENROLLED:
+                return _make_result(
+                    False, PRState.NOT_ENROLLED, "PR was never enrolled in the merge queue"
+                )
 
             else:
                 # Unreachable: _classify_pr_state never returns TIMEOUT or ERROR.
@@ -577,10 +622,83 @@ class DefaultMergeQueueWatcher:
             _log.warning("toggle_auto_merge failed", exc_info=True)
             return {"success": False, "error": f"toggle failed: {exc}"}
 
-    async def _toggle_auto_merge(self, pr_node_id: str) -> None:
-        """Disable then re-enable auto-merge via GraphQL mutations."""
+    async def _enqueue_direct(self, pr_node_id: str) -> None:
+        """Enqueue a PR directly via the enqueuePullRequest GraphQL mutation."""
         if not pr_node_id:
             raise ValueError("pr_node_id must be a non-empty string")
+        resp = await self._ensure_client().post(
+            _GRAPHQL_ENDPOINT,
+            json={"query": _MUTATION_ENQUEUE_PR, "variables": {"prId": pr_node_id}},
+        )
+        resp.raise_for_status()
+        body = resp.json()
+        if "errors" in body:
+            raise RuntimeError(f"GraphQL mutation error: {body['errors']}")
+
+    async def enqueue(
+        self,
+        pr_number: int,
+        target_branch: str,
+        repo: str | None = None,
+        cwd: str = ".",
+        auto_merge_available: bool = True,
+    ) -> dict[str, Any]:
+        """Enqueue a PR using the correct enrollment strategy.
+
+        When auto_merge_available is True, uses enablePullRequestAutoMerge.
+        When False, uses the enqueuePullRequest GraphQL mutation directly.
+        Never raises; returns a structured result dict.
+        """
+        if not repo or "/" not in repo:
+            return {
+                "success": False,
+                "error": f"Invalid repo format: {repo!r}. Expected 'owner/name'.",
+            }
+        owner, repo_name = repo.split("/", 1)
+        try:
+            state = await self._fetch_pr_and_queue_state(
+                pr_number, owner, repo_name, target_branch
+            )
+            pr_node_id = state["pr_node_id"]
+            if auto_merge_available:
+                client = self._ensure_client()
+                resp = await client.post(
+                    _GRAPHQL_ENDPOINT,
+                    json={
+                        "query": _MUTATION_ENABLE_AUTO_MERGE,
+                        "variables": {"prId": pr_node_id, "mergeMethod": "SQUASH"},
+                    },
+                )
+                resp.raise_for_status()
+                body = resp.json()
+                if "errors" in body:
+                    raise RuntimeError(f"GraphQL mutation error: {body['errors']}")
+                enrollment_method = "auto_merge"
+            else:
+                await self._enqueue_direct(pr_node_id)
+                enrollment_method = "direct_enqueue"
+            return {
+                "success": True,
+                "pr_number": pr_number,
+                "enrollment_method": enrollment_method,
+            }
+        except Exception as exc:
+            _log.warning("enqueue failed", exc_info=True)
+            return {"success": False, "error": f"enqueue failed: {exc}"}
+
+    async def _toggle_auto_merge(
+        self, pr_node_id: str, *, auto_merge_available: bool = True
+    ) -> None:
+        """Re-enroll a PR in the merge queue.
+
+        When auto_merge_available is True, uses the disable/re-enable toggle.
+        When False, uses enqueuePullRequest directly (skip toggle entirely).
+        """
+        if not pr_node_id:
+            raise ValueError("pr_node_id must be a non-empty string")
+        if not auto_merge_available:
+            await self._enqueue_direct(pr_node_id)
+            return
         mutations = [
             (_MUTATION_DISABLE_AUTO_MERGE, {"prId": pr_node_id}),
             (_MUTATION_ENABLE_AUTO_MERGE, {"prId": pr_node_id, "mergeMethod": "SQUASH"}),

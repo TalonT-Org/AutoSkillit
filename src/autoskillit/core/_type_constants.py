@@ -168,6 +168,7 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "wait_for_merge_queue",
         "check_repo_merge_state",
         "toggle_auto_merge",
+        "enqueue_pr",
         "create_unique_branch",
         "write_telemetry_files",
         "get_pr_reviews",
@@ -225,6 +226,7 @@ UNGATED_TOOLS: frozenset[str] = FREE_RANGE_TOOLS
 MUTATING_TOOLS: frozenset[str] = frozenset(
     {
         "toggle_auto_merge",
+        "enqueue_pr",
         "wait_for_merge_queue",
         "register_clone_status",
         "batch_cleanup_clones",

@@ -116,7 +116,7 @@ steps:
     tool: run_cmd
     with:
       cmd: |
-        BASE_SHA=$(git -C ${{ context.work_dir }} rev-parse ${{ inputs.base_branch }}) &&
+        BASE_SHA=$(git -C "${{ context.work_dir }}" rev-parse "${{ inputs.base_branch }}") &&
         echo "base_sha=${BASE_SHA}" &&
         echo "merge_target=${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
@@ -132,6 +132,7 @@ steps:
       git branch -D; passed to audit_impl as implementation_ref);
       (2) merge_target — unconditionally set to inputs.base_branch as a fallback
       (overridden by create_branch when open_pr=true; used as-is when open_pr=false).
+      Single-group implementation variant.
 
   get_issue_title:
     tool: get_issue_title

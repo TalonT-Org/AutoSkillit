@@ -86,7 +86,7 @@ steps:
     tool: run_cmd
     with:
       cmd: |
-        BASE_SHA=$(git -C ${{ context.work_dir }} rev-parse ${{ inputs.base_branch }}) &&
+        BASE_SHA=$(git -C "${{ context.work_dir }}" rev-parse "${{ inputs.base_branch }}") &&
         echo "base_sha=${BASE_SHA}" &&
         echo "merge_target=${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"

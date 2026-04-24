@@ -764,7 +764,7 @@ steps:
       - when: "${{ result.pr_state }} == merged"
         route: release_issue_success
       - when: "${{ result.pr_state }} == ejected_ci_failure"
-        route: wait_for_queue
+        route: diagnose_ci
       - when: "${{ result.pr_state }} == dropped_healthy"
         route: wait_for_queue
       - when: "${{ result.pr_state }} == ejected"
@@ -777,10 +777,13 @@ steps:
     on_failure: release_issue_timeout
     note: >
       Short probe (60s) after enable_auto_merge or queue_enqueue_no_auto failure.
-      If the PR is already merged, route to release_issue_success. If in any
-      active queue state (ejected_ci_failure, dropped_healthy, ejected, stalled),
-      route to wait_for_queue for full 900s watch. If the probe timed out or
-      returned an unexpected state, escalate via release_issue_timeout.
+      If the PR is already merged, route to release_issue_success. If the queue
+      already confirms CI failure (ejected_ci_failure), route directly to
+      diagnose_ci — the PR is already ejected and the 900s wait_for_queue watch
+      would only confirm the same state before escalating. For other active queue
+      states (dropped_healthy, ejected, stalled), route to wait_for_queue for
+      full 900s authoritative watch. If the probe timed out or returned an
+      unexpected state, escalate via release_issue_timeout.
 
   wait_for_queue:
     tool: wait_for_merge_queue

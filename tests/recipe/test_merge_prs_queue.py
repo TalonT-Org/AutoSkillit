@@ -1307,6 +1307,27 @@ def test_verify_queue_enrollment_fallback_routes_to_release_issue_timeout(any_re
     assert fallback == ["release_issue_timeout"]
 
 
+def test_verify_queue_enrollment_ejected_ci_failure_routes_directly_to_diagnose_ci(
+    any_recipe,
+) -> None:
+    """verify_queue_enrollment must route ejected_ci_failure directly to diagnose_ci.
+
+    A 60s probe that already confirmed CI failure should not feed into a 900s
+    wait_for_queue watch that would only route to diagnose_ci anyway.
+    """
+    step = any_recipe.steps["verify_queue_enrollment"]
+    assert step.on_result is not None
+    ejected_ci_routes = [
+        c.route
+        for c in step.on_result.conditions
+        if c.when is not None and "ejected_ci_failure" in c.when
+    ]
+    assert ejected_ci_routes == ["diagnose_ci"], (
+        f"verify_queue_enrollment must route ejected_ci_failure directly to diagnose_ci, "
+        f"got: {ejected_ci_routes}"
+    )
+
+
 @pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])
 def test_wait_for_direct_merge_on_failure_routes_to_release_issue_timeout(
     recipe_name: str,

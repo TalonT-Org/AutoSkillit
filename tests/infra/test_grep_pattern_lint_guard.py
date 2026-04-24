@@ -32,6 +32,7 @@ def _reason(result: dict | None) -> str:
 
 # --- Core deny cases ---
 
+
 def test_bre_alternation_single_is_denied():
     """Single \\| alternation operator must be denied."""
     result = _run_hook("Grep", r"foo\|bar")
@@ -51,6 +52,7 @@ def test_bre_alternation_in_complex_pattern_is_denied():
 
 
 # --- Allow cases ---
+
 
 def test_plain_pipe_alternation_is_allowed():
     """Bare | alternation (ripgrep ERE) must be allowed."""
@@ -72,6 +74,7 @@ def test_pattern_without_alternation_is_allowed():
 
 # --- Non-Grep tool passthrough ---
 
+
 def test_bash_tool_passthrough():
     """Hook must not fire for the Bash tool (guard is Grep-specific)."""
     result = _run_hook("Bash", r"grep 'foo\|bar'")
@@ -86,6 +89,7 @@ def test_read_tool_passthrough():
 
 # --- Deny message quality ---
 
+
 def test_deny_reason_includes_corrected_pattern():
     """permissionDecisionReason must include the corrected pattern with | replacing \\|."""
     result = _run_hook("Grep", r"foo\|bar")
@@ -97,7 +101,9 @@ def test_deny_reason_explains_ripgrep_syntax():
     """permissionDecisionReason must mention ripgrep or ERE/alternation context."""
     result = _run_hook("Grep", r"foo\|bar")
     reason = _reason(result)
-    assert "ripgrep" in reason.lower() or "alternation" in reason.lower() or "ere" in reason.lower()
+    assert (
+        "ripgrep" in reason.lower() or "alternation" in reason.lower() or "ere" in reason.lower()
+    )
 
 
 def test_deny_reason_for_multiple_replacements():
@@ -108,6 +114,7 @@ def test_deny_reason_for_multiple_replacements():
 
 
 # --- Malformed input fail-open ---
+
 
 def test_malformed_json_falls_through():
     """Non-JSON stdin must not crash — hook exits silently (allow)."""

@@ -45,6 +45,9 @@ A Claude Code plugin that orchestrates automated skill-driven workflows using he
   * **Prefer code-index tools over native search** when exploring the codebase: `find_files`, `search_code_advanced`, `get_file_summary`, `get_symbol_body` (includes `called_by` call graph).
   * **Do not rely on code-index for code added or modified during a branch** — use Read/Grep directly for that.
   * **Fall back to native Grep/Glob** for multiline patterns or paths outside the project root.
+  * **Grep tool uses ripgrep (ERE) syntax**: Use `|` for OR-alternation in Grep tool `pattern`
+    arguments. `\|` is Bash grep BRE syntax — ripgrep treats it as a literal backslash-pipe
+    and returns 0 results. Example: `Grep(pattern="foo|bar")` not `Grep(pattern="foo\|bar")`.
 
 ### **3.4. CLAUDE.md Modifications**
 
@@ -301,6 +304,7 @@ generic_automation_mcp/
 │   ├── unsafe_install_guard.py
 │   ├── pr_create_guard.py       #  Blocks gh pr create via run_cmd when kitchen is open
 │   ├── generated_file_write_guard.py
+│   ├── grep_pattern_lint_guard.py #  Denies Grep calls with \\| BRE alternation; returns corrected ERE pattern
 │   ├── mcp_health_guard.py  #   Detects MCP server disconnect via PID liveness; injects /MCP reconnect hint
 │   ├── leaf_orchestration_guard.py
 │   ├── franchise_dispatch_guard.py #  Blocks dispatch_food_truck from headless callers (L3→L3 recursion guard)

@@ -633,6 +633,22 @@ class DefaultMergeQueueWatcher:
         if "errors" in body:
             raise RuntimeError(f"GraphQL mutation error: {body['errors']}")
 
+    async def _enable_auto_merge_direct(self, pr_node_id: str) -> None:
+        """Enable auto-merge for a PR via the enablePullRequestAutoMerge mutation."""
+        if not pr_node_id:
+            raise ValueError("pr_node_id must be a non-empty string")
+        resp = await self._ensure_client().post(
+            _GRAPHQL_ENDPOINT,
+            json={
+                "query": _MUTATION_ENABLE_AUTO_MERGE,
+                "variables": {"prId": pr_node_id, "mergeMethod": "SQUASH"},
+            },
+        )
+        resp.raise_for_status()
+        body = resp.json()
+        if "errors" in body:
+            raise RuntimeError(f"GraphQL mutation error: {body['errors']}")
+
     async def enqueue(
         self,
         pr_number: int,
@@ -664,18 +680,7 @@ class DefaultMergeQueueWatcher:
             )
             pr_node_id = state["pr_node_id"]
             if auto_merge_available:
-                client = self._ensure_client()
-                resp = await client.post(
-                    _GRAPHQL_ENDPOINT,
-                    json={
-                        "query": _MUTATION_ENABLE_AUTO_MERGE,
-                        "variables": {"prId": pr_node_id, "mergeMethod": "SQUASH"},
-                    },
-                )
-                resp.raise_for_status()
-                body = resp.json()
-                if "errors" in body:
-                    raise RuntimeError(f"GraphQL mutation error: {body['errors']}")
+                await self._enable_auto_merge_direct(pr_node_id)
                 enrollment_method = "auto_merge"
             else:
                 await self._enqueue_direct(pr_node_id)
@@ -702,20 +707,20 @@ class DefaultMergeQueueWatcher:
         if not auto_merge_available:
             await self._enqueue_direct(pr_node_id)
             return
-        mutations = [
-            (_MUTATION_DISABLE_AUTO_MERGE, {"prId": pr_node_id}),
-            (_MUTATION_ENABLE_AUTO_MERGE, {"prId": pr_node_id, "mergeMethod": "SQUASH"}),
-        ]
-        for i, (mutation, variables) in enumerate(mutations):
-            resp = await self._ensure_client().post(
-                _GRAPHQL_ENDPOINT, json={"query": mutation, "variables": variables}
-            )
-            resp.raise_for_status()
-            body = resp.json()
-            if "errors" in body:
-                raise RuntimeError(f"GraphQL mutation error: {body['errors']}")
-            if i < len(mutations) - 1:
-                await asyncio.sleep(2)
+        # Disable then re-enable auto-merge.
+        resp = await self._ensure_client().post(
+            _GRAPHQL_ENDPOINT,
+            json={
+                "query": _MUTATION_DISABLE_AUTO_MERGE,
+                "variables": {"prId": pr_node_id},
+            },
+        )
+        resp.raise_for_status()
+        body = resp.json()
+        if "errors" in body:
+            raise RuntimeError(f"GraphQL mutation error: {body['errors']}")
+        await asyncio.sleep(2)
+        await self._enable_auto_merge_direct(pr_node_id)
 
 
 # ---------------------------------------------------------------------------

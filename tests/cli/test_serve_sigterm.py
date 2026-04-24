@@ -83,6 +83,8 @@ def test_sighup_in_serve_guard_signal_list() -> None:
             ):
                 sighup_found = True
                 break
+        if sighup_found:
+            break
 
     assert sighup_found, (
         "signal.SIGHUP not found in anyio.open_signal_receiver() call in _serve_guard.py. "

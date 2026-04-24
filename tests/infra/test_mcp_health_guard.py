@@ -48,10 +48,18 @@ def _run_guard(
 
 
 def _dead_pid(tmp_path: Path) -> int:
-    """Return a PID that is guaranteed to not be running."""
-    proc = subprocess.Popen([sys.executable, "-c", "pass"])
-    proc.wait()
-    return proc.pid
+    """Return a PID that is guaranteed to not be running.
+
+    Uses ``pid_max + 1`` — a value the Linux kernel can never assign — so no
+    PID-reuse race is possible regardless of xdist parallelism or process churn.
+    Falls back to spawn-and-reap on non-Linux platforms where ``/proc`` is absent.
+    """
+    try:
+        return int(Path("/proc/sys/kernel/pid_max").read_text()) + 1
+    except OSError:
+        proc = subprocess.Popen([sys.executable, "-c", "pass"])
+        proc.wait()
+        return proc.pid
 
 
 def test_mcp_health_guard_dead_pid_injects_message(tmp_path: Path) -> None:

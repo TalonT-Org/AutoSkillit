@@ -48,9 +48,11 @@ def _pid_alive(pid: int) -> bool:
 
 
 def main() -> None:
-    # Fail-open on malformed stdin
+    # Validate stdin is well-formed JSON; result intentionally discarded — this
+    # hook fires on every tool regardless of tool_name, so the payload content
+    # is not used.  Fail-open: malformed stdin exits cleanly rather than raising.
     try:
-        json.loads(sys.stdin.read())
+        _ = json.loads(sys.stdin.read())
     except (json.JSONDecodeError, ValueError, OSError):
         sys.exit(0)
 
@@ -70,7 +72,7 @@ def main() -> None:
     # Check if ANY matching PID is still alive
     for entry in matching:
         pid = entry.get("pid")
-        if isinstance(pid, int) and _pid_alive(pid):
+        if type(pid) is int and _pid_alive(pid):
             sys.exit(0)  # Server is alive — no disconnect
 
     # All matching PIDs are dead — server disconnected

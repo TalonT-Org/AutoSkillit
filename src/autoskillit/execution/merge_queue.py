@@ -518,9 +518,7 @@ class DefaultMergeQueueWatcher:
                 return _make_result(False, PRState.DROPPED_HEALTHY, classification.reason)
 
             elif classification.terminal == PRState.NOT_ENROLLED:
-                return _make_result(
-                    False, PRState.NOT_ENROLLED, "PR was never enrolled in the merge queue"
-                )
+                return _make_result(False, PRState.NOT_ENROLLED, classification.reason)
 
             else:
                 # Unreachable: _classify_pr_state never returns TIMEOUT or ERROR.

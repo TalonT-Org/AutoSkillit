@@ -655,14 +655,12 @@ def build_test_scope(
     if cwd is not None and base_ref is not None:
         if check_bucket_a_content_aware(changed_files, cwd, base_ref):
             return None
-        # Exclude version-bump-only files from classification — they pass the content-aware
-        # Bucket A check but would otherwise hit the manifest-fallback full-run path.
-        # Manifests intentionally omit pyproject.toml/uv.lock (they're Bucket A files).
-        version_bump_candidates = changed_files & _VERSION_BUMP_FILES
-        if version_bump_candidates and _is_only_version_changes_in_diff(
-            cwd, base_ref, *version_bump_candidates
-        ):
-            changed_files = changed_files - version_bump_candidates
+        # Exclude version-bump files that passed the content-aware check from classification.
+        # check_bucket_a_content_aware already verified these as version-string-only changes;
+        # no second git call is needed. Manifests intentionally omit pyproject.toml/uv.lock.
+        version_bump_in_bucket_a = changed_files & _VERSION_BUMP_FILES & BUCKET_A_PATTERNS
+        if version_bump_in_bucket_a:
+            changed_files = changed_files - version_bump_in_bucket_a
     else:
         if check_bucket_a(changed_files):
             return None

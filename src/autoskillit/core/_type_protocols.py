@@ -18,6 +18,7 @@ from ._type_results import (
     CleanupResult,
     CloneResult,
     FailureRecord,
+    LoadResult,
     SkillResult,
     TestResult,
     ValidatedAddDir,
@@ -244,7 +245,7 @@ class RecipeRepository(Protocol):
 
     def load(self, path: Path) -> Recipe: ...
 
-    def list(self, project_dir: Path) -> Any: ...
+    def list(self, project_dir: Path) -> LoadResult[RecipeInfo]: ...
 
     def load_and_validate(
         self,

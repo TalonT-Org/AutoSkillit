@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
+    from autoskillit.core import LoadResult
     from autoskillit.recipe.schema import Recipe, RecipeInfo
 
 import autoskillit.recipe._api as _api
@@ -34,12 +35,12 @@ class DefaultRecipeRepository:
     """Concrete RecipeRepository backed by list_recipes with in-memory mtime cache."""
 
     def __init__(self) -> None:
-        self._cached_list: Any | None = None
+        self._cached_list: LoadResult[RecipeInfo] | None = None
         self._cached_project_dir: Path | None = None
         self._cached_project_mtime: float = 0.0
         self._cached_builtin_mtime: float = 0.0
 
-    def _get_list(self, project_dir: Path) -> Any:
+    def _get_list(self, project_dir: Path) -> LoadResult[RecipeInfo]:
         pm = _dir_mtime(project_dir / ".autoskillit" / "recipes")
         bm = _dir_mtime(builtin_recipes_dir())
         if (
@@ -63,7 +64,7 @@ class DefaultRecipeRepository:
     def load(self, path: Path) -> Recipe:
         return load_recipe(path)
 
-    def list(self, project_dir: Path) -> Any:
+    def list(self, project_dir: Path) -> LoadResult[RecipeInfo]:
         return self._get_list(project_dir)
 
     def load_and_validate(

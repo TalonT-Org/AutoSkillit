@@ -342,6 +342,12 @@ def pytest_configure(config: pytest.Config) -> None:
         cli_base_ref = config.getoption("--filter-base-ref", default=None)
         changed = git_changed_files(config.rootpath, base_ref=cli_base_ref)
 
+        # Resolve the actual base_ref used (env fallback mirrors git_changed_files logic)
+        resolved_base_ref = cli_base_ref or os.environ.get(
+            "AUTOSKILLIT_TEST_BASE_REF",
+            os.environ.get("GITHUB_BASE_REF"),
+        )
+
         manifest = load_manifest(config.rootpath)
         coverage_map_path = config.rootpath / ".autoskillit" / "test-source-map.json"
 
@@ -351,6 +357,8 @@ def pytest_configure(config: pytest.Config) -> None:
             manifest=manifest,
             tests_root=config.rootpath / "tests",
             coverage_map_path=coverage_map_path,
+            cwd=config.rootpath,
+            base_ref=resolved_base_ref,
         )
         config.stash[_scope_key] = scope
         config.stash[_filter_mode_key] = mode.value

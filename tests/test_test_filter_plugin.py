@@ -109,8 +109,11 @@ def pytest_sessionfinish(session, exitstatus):
 
 @pytest.hookimpl(optionalhook=True)
 def pytest_testnodedown(node, error):
-    # Aggregate filter counts from the first xdist worker that reports both
-    # selected and deselected counts as non-None (mirrors production conftest.py).
+    '''Aggregate filter counts from the first xdist worker that reports.
+
+    Mirrors production conftest.py: captures the first worker that reports both
+    selected and deselected counts as non-None.
+    '''
     if _worker_filter_counts:
         return
     wo = getattr(node, "workeroutput", {})

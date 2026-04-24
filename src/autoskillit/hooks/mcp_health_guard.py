@@ -12,6 +12,7 @@ tries to use kitchen tools that no longer exist.
 
 Stdlib-only — runs under any Python interpreter without the autoskillit package.
 """
+
 from __future__ import annotations
 
 import json
@@ -61,10 +62,7 @@ def main() -> None:
     entries = _read_kitchens()
 
     # Filter to entries matching the current project
-    matching = [
-        e for e in entries
-        if isinstance(e, dict) and e.get("project_path") == cwd
-    ]
+    matching = [e for e in entries if isinstance(e, dict) and e.get("project_path") == cwd]
 
     if not matching:
         sys.exit(0)  # No kitchen registered for this project
@@ -76,17 +74,19 @@ def main() -> None:
             sys.exit(0)  # Server is alive — no disconnect
 
     # All matching PIDs are dead — server disconnected
-    payload = json.dumps({
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "message": (
-                "AutoSkillit MCP server appears disconnected — all registered "
-                "server PIDs for this project are dead. Kitchen state has been "
-                "lost. Ask the user to run /MCP to reconnect, then re-open "
-                "the kitchen with open_kitchen."
-            ),
+    payload = json.dumps(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "message": (
+                    "AutoSkillit MCP server appears disconnected — all registered "
+                    "server PIDs for this project are dead. Kitchen state has been "
+                    "lost. Ask the user to run /MCP to reconnect, then re-open "
+                    "the kitchen with open_kitchen."
+                ),
+            }
         }
-    })
+    )
     sys.stdout.write(payload + "\n")
     sys.exit(0)
 

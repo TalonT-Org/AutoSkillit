@@ -301,6 +301,7 @@ generic_automation_mcp/
 │   ├── unsafe_install_guard.py
 │   ├── pr_create_guard.py       #  Blocks gh pr create via run_cmd when kitchen is open
 │   ├── generated_file_write_guard.py
+│   ├── mcp_health_guard.py  #   Detects MCP server disconnect via PID liveness; injects /MCP reconnect hint
 │   ├── leaf_orchestration_guard.py
 │   ├── franchise_dispatch_guard.py #  Blocks dispatch_food_truck from headless callers (L3→L3 recursion guard)
 │   ├── pretty_output_hook.py #  Dispatch entrypoint for MCP JSON → Markdown-KV reformatter

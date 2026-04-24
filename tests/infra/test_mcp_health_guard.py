@@ -17,6 +17,7 @@ def _run_guard(
     tool_name: str = "Read",
     kitchens: list[dict] | None = None,
     cwd: Path | str | None = None,
+    headless: bool = False,
 ) -> tuple[int, dict]:
     """Run mcp_health_guard.py as a subprocess, return (returncode, parsed_stdout)."""
     hook_path = pkg_root() / "hooks" / "mcp_health_guard.py"
@@ -28,7 +29,11 @@ def _run_guard(
         (ak_dir / "active_kitchens.json").write_text(
             json.dumps({"kitchens": kitchens, "schema_version": 1})
         )
-    env = {**os.environ, "HOME": str(home), **env_extra}
+    env = {k: v for k, v in os.environ.items() if k != "AUTOSKILLIT_HEADLESS"}
+    env["HOME"] = str(home)
+    if headless:
+        env["AUTOSKILLIT_HEADLESS"] = "1"
+    env.update(env_extra)
     result = subprocess.run(
         [sys.executable, str(hook_path)],
         input=json.dumps({"tool_name": tool_name}),
@@ -107,10 +112,11 @@ def test_mcp_health_guard_headless_bypass(tmp_path: Path) -> None:
     ]
     returncode, payload = _run_guard(
         tmp_path,
-        {"AUTOSKILLIT_HEADLESS": "1"},
+        {},
         tool_name="Read",
         kitchens=kitchens,
         cwd=tmp_path,
+        headless=True,
     )
     assert returncode == 0
     assert payload == {}, f"Expected empty output in headless mode, got: {payload}"

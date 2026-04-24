@@ -712,7 +712,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "execution": 26,
         "core": 24,
         "cli": 23,
-        "hooks": 22,
+        "hooks": 23,
     }
     violations: list[str] = []
     for sub_dir in sorted(SRC_ROOT.iterdir()):

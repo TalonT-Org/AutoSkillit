@@ -302,8 +302,6 @@ class TestDispatchFoodTruckValidation:
             )
         )
 
-        # Before fix: L2_STARTUP_OR_CRASH (AttributeError on RecipeInfo.kind)
-        # After fix: FRANCHISE_MANIFEST_MISSING (executor=None, kind check passed)
         assert result.get("error") != "l2_startup_or_crash", (
             "Expected structured validation error, not L2_STARTUP_OR_CRASH. "
             "RecipeInfo.kind AttributeError is not fixed."
@@ -361,8 +359,6 @@ class TestDispatchFoodTruckValidation:
             )
         )
 
-        # Before fix: L2_STARTUP_OR_CRASH (AttributeError on RecipeInfo.ingredients)
-        # After fix: FRANCHISE_UNKNOWN_INGREDIENT (unknown_key not in recipe.ingredients)
         assert result.get("error") == "franchise_unknown_ingredient", (
             f"Expected franchise_unknown_ingredient error. Got: {result}"
         )

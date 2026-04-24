@@ -319,13 +319,19 @@ class TestToolSurface:
         ):
             assert f"{prefix}{tool}" in prompt, f"Missing tool: {prefix}{tool}"
 
-    def test_forbidden_tools_absent(self) -> None:
+    def test_startup_open_kitchen_callable_forbidden_close_and_run_skill(self) -> None:
+        """open_kitchen is callable (startup); close_kitchen and run_skill remain forbidden."""
         prompt = _build()
-        assert "open_kitchen" in prompt  # mentioned as forbidden
-        # It should appear only as FORBIDDEN, not as a callable
-        assert f"{DIRECT_PREFIX}open_kitchen" not in prompt
+        # open_kitchen appears as a callable at startup
+        assert f"{DIRECT_PREFIX}open_kitchen()" in prompt
+        # close_kitchen and run_skill are still forbidden (not callable)
         assert f"{DIRECT_PREFIX}close_kitchen" not in prompt
         assert f"{DIRECT_PREFIX}run_skill" not in prompt
+        # forbidden list still mentions close_kitchen and run_skill
+        forbidden_idx = prompt.index("Explicitly FORBIDDEN")
+        forbidden_line = prompt[forbidden_idx : forbidden_idx + 120]
+        assert "close_kitchen" in forbidden_line
+        assert "run_skill" in forbidden_line
 
     def test_uses_dispatch_food_truck_not_run_skill(self) -> None:
         prompt = _build()
@@ -335,19 +341,42 @@ class TestToolSurface:
         assert "dispatch through run_skill" not in prompt
 
 
-# --- K-13: TestNoL1L2Bootstrap ---
+# --- K-13: TestL3StartupSequence ---
 
 
-class TestNoL1L2Bootstrap:
-    def test_no_bash_sleep_bootstrap(self) -> None:
+class TestL3StartupSequence:
+    """K-13: L3 prompt must include a startup sequence to open the gate."""
+
+    def test_startup_sequence_section_present(self) -> None:
         prompt = _build()
-        assert 'Bash(command="sleep 2")' not in prompt
+        assert "STARTUP SEQUENCE" in prompt
 
-    def test_no_toolsearch_bootstrap(self) -> None:
+    def test_bash_sleep_present(self) -> None:
         prompt = _build()
-        assert "ToolSearch(query='select:" not in prompt
+        assert 'Bash(command="sleep 2")' in prompt
 
-    def test_no_open_kitchen_call(self) -> None:
+    def test_toolsearch_present(self) -> None:
         prompt = _build()
-        assert f"{DIRECT_PREFIX}open_kitchen(" not in prompt
-        assert f"{MARKETPLACE_PREFIX}open_kitchen(" not in prompt
+        assert "ToolSearch(query='select:" in prompt
+
+    def test_open_kitchen_callable_at_startup(self) -> None:
+        prompt = _build()
+        # open_kitchen must appear as a callable with the qualified prefix
+        assert f"{DIRECT_PREFIX}open_kitchen()" in prompt
+
+    @pytest.mark.parametrize("prefix", [DIRECT_PREFIX, MARKETPLACE_PREFIX])
+    def test_open_kitchen_callable_for_both_prefixes(self, prefix: str) -> None:
+        prompt = _build(mcp_prefix=prefix)
+        assert f"{prefix}open_kitchen()" in prompt
+
+    def test_startup_sequence_precedes_campaign_overview(self) -> None:
+        prompt = _build()
+        startup_idx = prompt.index("STARTUP SEQUENCE")
+        overview_idx = prompt.index("CAMPAIGN OVERVIEW")
+        assert startup_idx < overview_idx
+
+    def test_open_kitchen_not_in_forbidden_list(self) -> None:
+        prompt = _build()
+        forbidden_idx = prompt.index("Explicitly FORBIDDEN")
+        forbidden_line = prompt[forbidden_idx : forbidden_idx + 120]
+        assert "open_kitchen" not in forbidden_line

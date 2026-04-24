@@ -271,13 +271,13 @@ def test_merge_prs_advance_queue_pr_captures_pr_number(pmp_recipe) -> None:
 
 
 def test_merge_prs_advance_queue_pr_routing(pmp_recipe) -> None:
-    """advance_queue_pr routes to enqueue_current_pr (default) or collect_artifacts (done)."""
+    """advance_queue_pr routes to enqueue_current_pr (default) or collect_and_check_impl_plans."""
     step = pmp_recipe.steps["advance_queue_pr"]
     assert step.on_result is not None
     conditions = step.on_result.conditions
     done_routes = [c for c in conditions if c.when and "done" in c.when]
     assert done_routes, "must have a 'done' condition"
-    assert done_routes[0].route == "collect_artifacts"
+    assert done_routes[0].route == "collect_and_check_impl_plans"
     default_routes = [c for c in conditions if c.when is None]
     assert default_routes, "must have a default route"
     assert default_routes[0].route == "enqueue_current_pr"

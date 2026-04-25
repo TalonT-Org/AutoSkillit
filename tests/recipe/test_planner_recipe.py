@@ -16,7 +16,6 @@ def planner_recipe():
 
 
 def test_planner_recipe_loads(planner_recipe):
-    assert planner_recipe is not None
     assert planner_recipe.name == "planner"
 
 
@@ -86,10 +85,10 @@ def test_planner_recipe_autoskillit_version_is_current(planner_recipe):
 
 
 def test_planner_recipe_validate_routes_to_refine_on_fail(planner_recipe):
+    assert "validate" in planner_recipe.steps, "validate step must exist"
+    assert "check_verdict" in planner_recipe.steps, "check_verdict step must exist"
     refine_reachable = False
     for step_name in ["validate", "check_verdict"]:
-        if step_name not in planner_recipe.steps:
-            continue
         step = planner_recipe.steps[step_name]
         routes = []
         if step.on_result:
@@ -109,6 +108,4 @@ def test_planner_recipe_validation_has_no_errors(planner_recipe):
 
 def test_planner_recipe_contract_exists():
     contracts_dir = builtin_recipes_dir() / "contracts"
-    assert (contracts_dir / "planner.yaml").exists(), (
-        "Run: autoskillit recipes validate planner (or Step 2 of the plan)"
-    )
+    assert (contracts_dir / "planner.yaml").exists(), "Run: autoskillit recipes validate planner"

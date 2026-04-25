@@ -136,7 +136,7 @@ If candidates are found, display them with state annotations per candidate:
       {url}
 
 Options:
-  [1]–[{N}]  Add to / extend an existing issue
+  [1]–[{N}]  Add to / extend an existing issue   (only shown if extend-eligible candidates exist)
   C          Create a new issue anyway
 
 Your choice [C]:

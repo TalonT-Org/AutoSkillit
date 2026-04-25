@@ -913,6 +913,78 @@ class TestFleetAutoGateBoot:
         assert tool_ctx.gate.enabled is True  # gate stays open despite hook_config failure
 
     @pytest.mark.anyio
+    async def test_fleet_lifespan_auto_gate_fails_open_on_quota_cache_error(self, tool_ctx):
+        """Fleet auto-gate keeps gate open even when _prime_quota_cache() raises."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server._lifespan import _fleet_auto_gate_boot
+
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        tool_ctx.quota_refresh_task = None
+
+        with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+            with patch(
+                "autoskillit.server.helpers._prime_quota_cache",
+                new=AsyncMock(side_effect=RuntimeError("quota cache error")),
+            ):
+                with patch(
+                    "autoskillit.pipeline.create_background_task",
+                    return_value=MagicMock(),
+                ):
+                    with patch("autoskillit.core.register_active_kitchen"):
+                        await _fleet_auto_gate_boot(tool_ctx)
+
+        assert tool_ctx.gate.enabled is True  # gate stays open despite quota cache failure
+
+    @pytest.mark.anyio
+    async def test_fleet_lifespan_auto_gate_fails_open_on_background_task_error(self, tool_ctx):
+        """Fleet auto-gate keeps gate open even when create_background_task() raises."""
+        from unittest.mock import AsyncMock, patch
+
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server._lifespan import _fleet_auto_gate_boot
+
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        tool_ctx.quota_refresh_task = None
+
+        with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+            with patch("autoskillit.server.helpers._prime_quota_cache", new=AsyncMock()):
+                with patch(
+                    "autoskillit.pipeline.create_background_task",
+                    side_effect=RuntimeError("task creation error"),
+                ):
+                    with patch("autoskillit.core.register_active_kitchen"):
+                        await _fleet_auto_gate_boot(tool_ctx)
+
+        assert tool_ctx.gate.enabled is True  # gate stays open despite background task failure
+
+    @pytest.mark.anyio
+    async def test_fleet_lifespan_auto_gate_fails_open_on_registry_error(self, tool_ctx):
+        """Fleet auto-gate keeps gate open even when register_active_kitchen() raises."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server._lifespan import _fleet_auto_gate_boot
+
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        tool_ctx.quota_refresh_task = None
+
+        with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+            with patch("autoskillit.server.helpers._prime_quota_cache", new=AsyncMock()):
+                with patch(
+                    "autoskillit.pipeline.create_background_task",
+                    return_value=MagicMock(),
+                ):
+                    with patch(
+                        "autoskillit.core.register_active_kitchen",
+                        side_effect=OSError("registry write error"),
+                    ):
+                        await _fleet_auto_gate_boot(tool_ctx)
+
+        assert tool_ctx.gate.enabled is True  # gate stays open despite registry failure
+
+    @pytest.mark.anyio
     async def test_fleet_lifespan_auto_gate_logs_boot_event(self, tool_ctx):
         """fleet_auto_gate_boot emits structured log event."""
         from unittest.mock import AsyncMock, MagicMock, patch

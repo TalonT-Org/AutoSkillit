@@ -18,16 +18,19 @@ def consume_reload_sentinel(project_dir: Path) -> str | None:
     candidates = sorted(sentinel_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
     if not candidates:
         return None
+    for stale in candidates[1:]:
+        try:
+            stale.unlink(missing_ok=True)
+        except OSError:
+            pass
     sentinel = candidates[0]
-    session_id = ""
     try:
         data = json.loads(sentinel.read_text(encoding="utf-8"))
         session_id = data.get("session_id", "")
     except (OSError, json.JSONDecodeError, ValueError):
         return None
-    finally:
-        try:
-            sentinel.unlink(missing_ok=True)
-        except OSError:
-            pass
+    try:
+        sentinel.unlink(missing_ok=True)
+    except OSError:
+        pass
     return session_id or None

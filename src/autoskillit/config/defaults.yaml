@@ -225,6 +225,7 @@ skills:
     - planner-generate-phases
     - planner-elaborate-phase
     - planner-elaborate-assignment
+    - planner-elaborate-wp
     - reload-session
   tier3:
     - prepare-pr

@@ -33,7 +33,7 @@ def _check_unbounded_cycles(ctx: ValidationContext) -> list[RuleFinding]:
     def dfs(node: str, path: list[str]) -> None:
         visited.add(node)
         rec_stack.add(node)
-        for neighbor in graph.get(node, set()):
+        for neighbor in sorted(graph.get(node, set())):
             if neighbor not in recipe.steps:
                 continue  # dead reference — caught by validate_recipe
             if neighbor not in visited:

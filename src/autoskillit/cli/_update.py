@@ -34,7 +34,7 @@ def run_update_command(home: Path | None = None) -> None:
         **os.environ,
         "AUTOSKILLIT_SKIP_STALE_CHECK": "1",
         "AUTOSKILLIT_SKIP_UPDATE_CHECK": "1",
-        "AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK": "1",  # deprecated alias, kept for compat
+        "AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK": "1",
     }
 
     from autoskillit.core import any_kitchen_open

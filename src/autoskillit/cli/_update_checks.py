@@ -668,7 +668,7 @@ def run_update_checks(home: Path | None = None) -> None:
         or os.environ.get("CI")
         or os.environ.get("AUTOSKILLIT_SKIP_STALE_CHECK")
         or os.environ.get("AUTOSKILLIT_SKIP_UPDATE_CHECK")
-        or os.environ.get("AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK")  # deprecated alias
+        or os.environ.get("AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK")
         or not sys.stdin.isatty()
         or not sys.stdout.isatty()
     ):
@@ -683,7 +683,7 @@ def run_update_checks(home: Path | None = None) -> None:
         **os.environ,
         "AUTOSKILLIT_SKIP_STALE_CHECK": "1",
         "AUTOSKILLIT_SKIP_UPDATE_CHECK": "1",
-        "AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK": "1",  # deprecated alias, kept for compat
+        "AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK": "1",
     }
 
     info = detect_install()

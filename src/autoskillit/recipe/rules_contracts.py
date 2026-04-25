@@ -302,6 +302,17 @@ def _check_always_has_no_write_exit(ctx: ValidationContext) -> list[RuleFinding]
                         "could not read %s; skipping always-has-no-write-exit check",
                         skill_md,
                     )
+                    findings.append(
+                        RuleFinding(
+                            rule="always-has-no-write-exit",
+                            severity=Severity.WARNING,
+                            step_name=step_name,
+                            message=(
+                                f"Skill '{name}' SKILL.md at {skill_md} could not be read; "
+                                f"always-has-no-write-exit check was skipped for this step."
+                            ),
+                        )
+                    )
                     break
                 for phrase in _ALWAYS_WITH_NO_WRITE_EXIT_PHRASES:
                     if _re.search(phrase, content):

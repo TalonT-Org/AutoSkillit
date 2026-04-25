@@ -84,7 +84,11 @@ from autoskillit.execution.recording import (
     ScenarioReplayError,
     build_replay_runner,
 )
-from autoskillit.execution.remote_resolver import REMOTE_PRECEDENCE, resolve_remote_repo
+from autoskillit.execution.remote_resolver import (
+    REMOTE_PRECEDENCE,
+    resolve_remote_name,
+    resolve_remote_repo,
+)
 from autoskillit.execution.session import (
     ClaudeSessionResult,
     ContentState,
@@ -154,6 +158,7 @@ __all__ = [
     "fetch_repo_merge_state",
     # remote_resolver
     "REMOTE_PRECEDENCE",
+    "resolve_remote_name",
     "resolve_remote_repo",
     # diff_annotator
     "FilterResult",

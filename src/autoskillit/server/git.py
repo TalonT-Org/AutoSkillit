@@ -25,6 +25,9 @@ from autoskillit.core import (
     is_protected_branch,
     truncate_text,
 )
+from autoskillit.execution import (
+    resolve_remote_name,  # noqa: F401 — re-exported for server/tools_git.py
+)
 from autoskillit.server._editable_guard import scan_editable_installs_for_worktree
 from autoskillit.workspace import remove_git_worktree, remove_worktree_sidecar
 

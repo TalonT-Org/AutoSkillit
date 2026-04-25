@@ -216,6 +216,7 @@ generic_automation_mcp/
 │   ├── rules_tools.py
 │   ├── rules_verdict.py
 │   ├── rules_worktree.py     #   Semantic validation rule modules
+│   ├── _git_helpers.py      #   Shared git-remote regex (_GIT_REMOTE_COMMAND_RE, _LITERAL_ORIGIN_RE) for lint rules
 │   ├── _skill_placeholder_parser.py
 │   ├── identity.py          #   Recipe identity hashing — content and composite fingerprints
 │   ├── schema.py            #   Recipe, RecipeStep, DataFlowWarning

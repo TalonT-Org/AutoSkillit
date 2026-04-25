@@ -40,7 +40,7 @@ MCP-only — not user-invocable directly.
 - Apply fixes — this skill triages fixability only
 
 **ALWAYS:**
-- Exit 0 in all cases — resolution=revised and resolution=failed are both normal outcomes
+- Return cleanly in all cases — resolution=revised and resolution=failed are both normal outcomes
 - Emit revision_guidance ONLY when resolution=revised
 - Use model: "sonnet" for all subagents
 
@@ -60,8 +60,8 @@ abandoning the partial triage.
 
 1. Create `{{AUTOSKILLIT_TEMP}}/resolve-design-review/` if absent
 2. Parse two positional path arguments: `evaluation_dashboard_path`, `experiment_plan_path`
-   - If missing: print `"Error: missing required argument(s) — expected <evaluation_dashboard_path> <experiment_plan_path>"`, then emit `resolution=failed`, exit 0
-   - If file not found: print `"Error: file not found — {missing_path}"`, then emit `resolution=failed`, exit 0
+   - If missing: print `"Error: missing required argument(s) — expected <evaluation_dashboard_path> <experiment_plan_path>"`, then emit `resolution=failed`, and return
+   - If file not found: print `"Error: file not found — {missing_path}"`, then emit `resolution=failed`, and return
 3. Parse optional third argument: `prior_revision_guidance_path`
    - If present and file exists: read prior revision guidance for theme comparison
    - If absent or file not found: skip diminishing-return detection (first-round behavior)
@@ -129,7 +129,7 @@ When `goalposts_moving: true`, reclassify the finding from ADDRESSABLE to STRUCT
 with annotation: `"reclassified: goalposts-moving (prior theme: {prior_theme_match})"`.
 This ensures the fix-and-review cycle terminates for concerns that are not converging.
 
-Fallback: if no prior_revision_guidance_path is provided, skip this step entirely
+Fallback: if no prior_revision_guidance_path is provided, omit this step entirely
 (preserves current first-round behavior unchanged).
 
 ### Step 2: Apply Resolution Logic

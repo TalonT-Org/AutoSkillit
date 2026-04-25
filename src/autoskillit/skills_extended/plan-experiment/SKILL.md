@@ -81,7 +81,7 @@ Detect and read inputs:
 2. If a second path-like token is present and resolves to an existing file, read
    `{revision_guidance}`. Extract all revision instructions — these take priority over
    your initial analysis in Step 2. Note which sections of the plan need rework.
-   When absent or empty, skip this sub-step and proceed normally (first pass).
+   When absent or empty, omit this sub-step and proceed normally (first pass).
 
 ### Step 2 — Explore Feasibility
 
@@ -271,7 +271,7 @@ dependencies:
 - Run `pytest --collect-only` in the research directory to verify test discovery
 - Commit the test suite
 
-{Adapt phases as needed — not all experiments require all phases. Add or
+{Adapt phases as needed — experiments may not require every phase. Add or
 remove phases to match the specific experiment. Each phase should list the
 specific files to create and commands to run.}
 

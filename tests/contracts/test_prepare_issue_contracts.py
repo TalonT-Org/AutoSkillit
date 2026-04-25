@@ -378,3 +378,134 @@ def test_prepare_issue_no_issue_comment():
     assert "gh issue comment" not in text, (
         "Comment option must be removed; always edit the issue body"
     )
+
+
+# ---------------------------------------------------------------------------
+# STATE-AWARE DEDUP: Issue #402 — lifecycle-aware extend eligibility
+# ---------------------------------------------------------------------------
+
+
+def test_dedup_searches_all_states():
+    """Step 4 dedup must search all issue states, not only open."""
+    text = SKILL_MD.read_text()
+    dedup_start = text.find("### Step 4: Dedup Check")
+    assert dedup_start != -1, "Step 4 dedup section not found"
+    dedup_end = text.find("### Step 4a:", dedup_start)
+    dedup_section = text[dedup_start:dedup_end] if dedup_end != -1 else text[dedup_start:]
+    # --state open must not be the only state directive in the dedup section
+    assert "--state open" not in dedup_section, (
+        "Dedup search must not be limited to --state open; must use --state all "
+        "or a combined open+closed search to surface closed duplicate candidates"
+    )
+
+
+def test_dedup_gh_issue_list_includes_labels_field():
+    """gh issue list in Step 4 must request the labels field."""
+    text = SKILL_MD.read_text()
+    dedup_start = text.find("### Step 4: Dedup Check")
+    assert dedup_start != -1, "Step 4 dedup section not found"
+    dedup_end = text.find("### Step 4a:", dedup_start)
+    dedup_section = text[dedup_start:dedup_end] if dedup_end != -1 else text[dedup_start:]
+    assert "labels" in dedup_section, (
+        "gh issue list in Step 4 must include 'labels' in --json fields to enable "
+        "extend-eligibility classification"
+    )
+
+
+def test_dedup_gh_issue_list_includes_state_field():
+    """gh issue list in Step 4 must request the state field."""
+    text = SKILL_MD.read_text()
+    dedup_start = text.find("### Step 4: Dedup Check")
+    assert dedup_start != -1, "Step 4 dedup section not found"
+    dedup_end = text.find("### Step 4a:", dedup_start)
+    dedup_section = text[dedup_start:dedup_end] if dedup_end != -1 else text[dedup_start:]
+    # 'state' must appear as a JSON field name (not just in --state flag context)
+    assert ",state" in dedup_section or "state," in dedup_section or '"state"' in dedup_section, (
+        "gh issue list in Step 4 must include 'state' in --json fields"
+    )
+
+
+def test_dedup_informational_marker_documented():
+    """Step 4 dedup display must document the [—] marker for non-extend-eligible candidates."""
+    text = SKILL_MD.read_text()
+    dedup_start = text.find("### Step 4: Dedup Check")
+    assert dedup_start != -1, "Step 4 dedup section not found"
+    dedup_end = text.find("### Step 4a:", dedup_start)
+    dedup_section = text[dedup_start:dedup_end] if dedup_end != -1 else text[dedup_start:]
+    assert "[—]" in dedup_section, (
+        "Step 4 dedup display must include the [—] marker for informational-only "
+        "(non-extend-eligible) candidates"
+    )
+
+
+def test_dedup_extend_not_offered_for_in_progress():
+    """Step 4 must document that in-progress labeled issues are shown but not extend-eligible."""
+    text = SKILL_MD.read_text()
+    dedup_start = text.find("### Step 4: Dedup Check")
+    assert dedup_start != -1, "Step 4 dedup section not found"
+    dedup_end = text.find("### Step 4a:", dedup_start)
+    dedup_section = text[dedup_start:dedup_end] if dedup_end != -1 else text[dedup_start:]
+    assert "in-progress" in dedup_section, (
+        "Step 4 must document that issues with the in-progress label are shown "
+        "as dedup candidates but are not extend-eligible"
+    )
+
+
+def test_dedup_extend_not_offered_for_staged():
+    """Step 4 must document that staged labeled issues are shown but not extend-eligible."""
+    text = SKILL_MD.read_text()
+    dedup_start = text.find("### Step 4: Dedup Check")
+    assert dedup_start != -1, "Step 4 dedup section not found"
+    dedup_end = text.find("### Step 4a:", dedup_start)
+    dedup_section = text[dedup_start:dedup_end] if dedup_end != -1 else text[dedup_start:]
+    assert "staged" in dedup_section, (
+        "Step 4 must document that issues with the staged label are shown "
+        "as dedup candidates but are not extend-eligible"
+    )
+
+
+def test_dedup_extend_not_offered_for_closed():
+    """Step 4 must document that closed issues are shown but not extend-eligible."""
+    text = SKILL_MD.read_text()
+    dedup_start = text.find("### Step 4: Dedup Check")
+    assert dedup_start != -1, "Step 4 dedup section not found"
+    dedup_end = text.find("### Step 4a:", dedup_start)
+    dedup_section = text[dedup_start:dedup_end] if dedup_end != -1 else text[dedup_start:]
+    assert "closed" in dedup_section.lower(), (
+        "Step 4 must document that closed issues are shown as dedup candidates "
+        "but are not extend-eligible"
+    )
+
+
+def test_dedup_state_annotation_per_candidate():
+    """Step 4 candidate display must show a state annotation per candidate."""
+    text = SKILL_MD.read_text()
+    dedup_start = text.find("### Step 4: Dedup Check")
+    assert dedup_start != -1, "Step 4 dedup section not found"
+    dedup_end = text.find("### Step 4a:", dedup_start)
+    dedup_section = text[dedup_start:dedup_end] if dedup_end != -1 else text[dedup_start:]
+    # The display block must include state annotations like (open), (in-progress), etc.
+    has_annotation = (
+        "(open)" in dedup_section
+        or "(in-progress)" in dedup_section
+        or "(closed)" in dedup_section
+    )
+    assert has_annotation, (
+        "Step 4 candidate display must show per-candidate state annotations "
+        "such as (open), (in-progress), or (closed)"
+    )
+
+
+def test_dedup_closed_issues_stricter_relevance():
+    """Step 4 must document stricter relevance criteria for closed issue candidates."""
+    text = SKILL_MD.read_text()
+    dedup_start = text.find("### Step 4: Dedup Check")
+    assert dedup_start != -1, "Step 4 dedup section not found"
+    dedup_end = text.find("### Step 4a:", dedup_start)
+    dedup_section = text[dedup_start:dedup_end] if dedup_end != -1 else text[dedup_start:]
+    # Must reference stricter matching for closed issues
+    stricter_signals = ["stricter", "higher threshold", "multiple keyword", "2+", "two or more"]
+    assert any(s in dedup_section.lower() for s in stricter_signals), (
+        "Step 4 must document applying stricter relevance criteria for closed issue "
+        "candidates before showing them (e.g., require 2+ keyword set matches)"
+    )

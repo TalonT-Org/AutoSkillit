@@ -62,15 +62,14 @@ def main() -> None:
     if os.environ.get("AUTOSKILLIT_HEADLESS") == "1":
         session_type = os.environ.get("AUTOSKILLIT_SESSION_TYPE", "").lower()
 
-        if session_type == "franchise":
+        if session_type in ("franchise", "fleet"):
             payload = json.dumps(
                 {
                     "hookSpecificOutput": {
                         "hookEventName": "PreToolUse",
                         "permissionDecision": "deny",
                         "permissionDecisionReason": (
-                            "open_kitchen cannot be called from franchise sessions. "
-                            "Franchise sessions do not have a kitchen."
+                            f"open_kitchen cannot be called from {session_type!r} sessions."
                         ),
                     }
                 }
@@ -78,7 +77,7 @@ def main() -> None:
             sys.stdout.write(payload + "\n")
             sys.exit(0)
 
-        if session_type != "orchestrator":
+        if session_type not in ("orchestrator", "fleet"):
             # leaf, unset, or invalid — deny (fail-closed)
             payload = json.dumps(
                 {

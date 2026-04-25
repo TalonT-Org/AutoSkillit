@@ -262,3 +262,55 @@ def test_no_unregistered_feature_tag_on_tools():
         if tag not in known
     ]
     assert not violations, "\n".join(violations)
+
+
+# ── Fleet feature registry tests — T1 shims ──────────────────────────────────
+
+
+def test_fleet_in_feature_registry():
+    from autoskillit.core._type_constants import FEATURE_REGISTRY
+
+    assert "fleet" in FEATURE_REGISTRY
+
+
+def test_fleet_feature_def_name_matches_key():
+    from autoskillit.core._type_constants import FEATURE_REGISTRY
+
+    assert FEATURE_REGISTRY["fleet"].name == "fleet"
+
+
+def test_fleet_feature_tool_tags_in_tool_subset_tags():
+    from autoskillit.core._type_constants import FEATURE_REGISTRY, TOOL_SUBSET_TAGS
+
+    all_tags = set().union(*TOOL_SUBSET_TAGS.values())
+    for tag in FEATURE_REGISTRY["fleet"].tool_tags:
+        assert tag in all_tags, f"tag {tag!r} from fleet FeatureDef not in TOOL_SUBSET_TAGS"
+
+
+def test_fleet_feature_default_disabled():
+    from autoskillit.core._type_constants import FEATURE_REGISTRY
+
+    assert FEATURE_REGISTRY["fleet"].default_enabled is False
+
+
+def test_build_features_dict_accepts_fleet_key():
+    from autoskillit.config.settings import AutomationConfig
+
+    result = AutomationConfig._build_features_dict({"fleet": True})
+    assert result == {"fleet": True}
+
+
+def test_build_features_dict_franchise_alias_fires_when_franchise_not_in_registry(monkeypatch):
+    """Simulates post-T2 state: 'franchise' removed from FEATURE_REGISTRY."""
+    import autoskillit.config.settings as cfg_mod
+    import autoskillit.core._type_constants as tc
+
+    registry_without_franchise = {k: v for k, v in tc.FEATURE_REGISTRY.items() if k != "franchise"}
+    monkeypatch.setattr(tc, "FEATURE_REGISTRY", registry_without_franchise)
+    monkeypatch.setattr(cfg_mod, "FEATURE_REGISTRY", registry_without_franchise)
+
+    from autoskillit.config.settings import AutomationConfig
+
+    with pytest.warns(DeprecationWarning, match="franchise.*deprecated"):
+        result = AutomationConfig._build_features_dict({"franchise": True})
+    assert result == {"fleet": True}

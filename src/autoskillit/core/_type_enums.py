@@ -338,12 +338,14 @@ class PRState(StrEnum):
 class SessionType(StrEnum):
     """Tier discriminator for franchise session hierarchy.
 
-    FRANCHISE — top-level campaign coordinator
+    FRANCHISE — top-level campaign coordinator (deprecated alias for FLEET)
+    FLEET — top-level campaign coordinator (canonical name)
     ORCHESTRATOR — mid-tier recipe runner (interactive or headless)
     LEAF — bottom-tier single-task worker (headless test_check only)
     """
 
     FRANCHISE = "franchise"
+    FLEET = "fleet"
     ORCHESTRATOR = "orchestrator"
     LEAF = "leaf"
 
@@ -360,8 +362,17 @@ def session_type() -> SessionType:
     """
     raw = os.environ.get(_SESSION_TYPE_ENV_VAR, "")
     if raw:
+        raw_lower = raw.lower()
+        if raw_lower == "franchise":
+            warnings.warn(
+                f"{_SESSION_TYPE_ENV_VAR}={raw!r} is deprecated. "
+                "Use AUTOSKILLIT_SESSION_TYPE=fleet instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            return SessionType.FLEET
         try:
-            return SessionType(raw.lower())
+            return SessionType(raw_lower)
         except ValueError:
             warnings.warn(
                 f"Invalid {_SESSION_TYPE_ENV_VAR}={raw!r}, defaulting to LEAF. "

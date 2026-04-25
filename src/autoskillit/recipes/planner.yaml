@@ -228,7 +228,7 @@ steps:
   done:
     action: stop
     message: >
-      Planning complete. Plan artifacts written to {{AUTOSKILLIT_TEMP}}/planner/.
+      Planning complete. Plan: ${{ context.plan_path }} (JSON: ${{ context.plan_json_path }}).
       Use compile output to create GitHub issues and milestones.
 
   escalate_stop:

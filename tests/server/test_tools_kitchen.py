@@ -1358,3 +1358,26 @@ def test_kitchen_failure_envelope_hint_says_install_not_reinstall() -> None:
     msg = result["user_visible_message"]
     assert "autoskillit install" in msg
     assert "reinstall" not in msg
+
+
+# ---------------------------------------------------------------------------
+# T8 — _iter_display_categories feature gate
+# ---------------------------------------------------------------------------
+
+
+def test_display_categories_omits_fleet_when_disabled() -> None:
+    """Fleet category must not appear in _iter_display_categories output when fleet is disabled."""
+    from autoskillit.server.tools_kitchen import _iter_display_categories
+
+    cfg_features: dict[str, bool] = {"fleet": False}
+    categories = [name for name, _ in _iter_display_categories(cfg_features)]
+    assert "Fleet" not in categories
+
+
+def test_display_categories_includes_fleet_when_enabled() -> None:
+    """Fleet category must appear in _iter_display_categories output when fleet is enabled."""
+    from autoskillit.server.tools_kitchen import _iter_display_categories
+
+    cfg_features: dict[str, bool] = {"fleet": True}
+    categories = [name for name, _ in _iter_display_categories(cfg_features)]
+    assert "Fleet" in categories

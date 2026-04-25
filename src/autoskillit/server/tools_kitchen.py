@@ -19,13 +19,14 @@ from fastmcp.dependencies import CurrentContext
 from autoskillit import __version__
 from autoskillit.config import resolve_ingredient_defaults
 from autoskillit.core import (
+    FLEET_MENU_TOOLS,
     PIPELINE_FORBIDDEN_TOOLS,
     atomic_write,
     find_latest_session_id,
     get_logger,
+    is_feature_enabled,
     pkg_root,
 )
-from autoskillit.fleet import FLEET_MENU_TOOLS
 from autoskillit.pipeline import create_background_task
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
@@ -319,10 +320,20 @@ def get_recipe(name: str) -> str:
     return match.path.read_text()
 
 
-def _build_tool_category_listing() -> str:
+def _iter_display_categories(
+    features: dict[str, bool],
+) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    return tuple(
+        (name, tools)
+        for name, tools in _DISPLAY_CATEGORIES
+        if name != "Fleet" or is_feature_enabled("fleet", features)
+    )
+
+
+def _build_tool_category_listing(features: dict[str, bool]) -> str:
     """Return a formatted string listing all tool categories."""
     lines = []
-    for name, tools in _DISPLAY_CATEGORIES:
+    for name, tools in _iter_display_categories(features):
         lines.append(f"  {name}: {', '.join(tools)}")
     return "\n".join(lines)
 
@@ -388,7 +399,7 @@ async def open_kitchen(
             return _kitchen_failure_envelope(exc, stage="redisable_subsets")
 
         _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
-        _categories = _build_tool_category_listing()
+        _categories = _build_tool_category_listing(_get_ctx().config.features)
 
         if name is not None:
             tool_ctx = _get_ctx()

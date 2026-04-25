@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, get_logger, pkg_root
-from autoskillit.fleet import _build_food_truck_prompt, _build_l2_sous_chef_block
 from autoskillit.hooks import QUOTA_GUARD_DENY_TRIGGER, QUOTA_POST_WARNING_TRIGGER
 
 logger = get_logger(__name__)
@@ -18,11 +17,6 @@ if TYPE_CHECKING:
 
 # Sentinel returned by _resolve_recipe_input when the user selects option 0.
 _OPEN_KITCHEN_CHOICE: str = "__open_kitchen__"
-
-__all__ = [
-    "_build_food_truck_prompt",
-    "_build_l2_sous_chef_block",
-]
 
 
 def _read_full_sous_chef() -> str:

@@ -9,7 +9,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from autoskillit.cli._terminal import terminal_guard
-from autoskillit.fleet import FLEET_MENU_TOOLS
+from autoskillit.core import FLEET_MENU_TOOLS, is_feature_enabled
 
 _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Execution", ("run_cmd", "run_python", "run_skill")),
@@ -71,6 +71,16 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 
+def _iter_display_categories(
+    features: dict[str, bool],
+) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    return tuple(
+        (name, tools)
+        for name, tools in _DISPLAY_CATEGORIES
+        if name != "Fleet" or is_feature_enabled("fleet", features)
+    )
+
+
 def _run_cook_session(
     *,
     cmd: list[str],
@@ -120,9 +130,13 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
     _Y = "\x1b[33m" if color else ""
     _R = "\x1b[0m" if color else ""
 
+    from autoskillit.config import load_config  # noqa: PLC0415
+
+    config = load_config()
+
     print(f"{_B}{_C}AUTOSKILLIT {__version__}{_R} {_D}Kitchen open. All tools active.{_R}")
     skip = {"Telemetry & Diagnostics", "Kitchen"}
-    for name, tools in _DISPLAY_CATEGORIES:
+    for name, tools in _iter_display_categories(config.features):
         if name in skip:
             continue
         tool_list = f"{_D}, {_R}".join(f"{_G}{t}{_R}" for t in tools)
@@ -141,7 +155,6 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
 
     from autoskillit.cli._init_helpers import _is_plugin_installed
     from autoskillit.cli._onboarding import is_first_run, run_onboarding_menu
-    from autoskillit.config import load_config
     from autoskillit.core import configure_logging, pkg_root, resume_spec_from_cli
     from autoskillit.execution import build_interactive_cmd
 
@@ -159,7 +172,6 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
     ephemeral_root = resolve_ephemeral_root()
     session_mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), ephemeral_root)
     session_mgr.cleanup_stale()
-    config = load_config()
     skills_dir = session_mgr.init_session(
         session_id_local, cook_session=True, config=config, project_dir=project_dir
     )

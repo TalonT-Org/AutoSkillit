@@ -189,3 +189,20 @@ def test_fleet_dispatch_tools_constant_exists() -> None:
             "get_issue_title",
         }
     )
+
+
+def test_fleet_menu_tools_in_type_constants() -> None:
+    """FLEET_MENU_TOOLS must live in core._type_constants, not fleet.__init__."""
+    from autoskillit.core._type_constants import FLEET_MENU_TOOLS
+
+    assert isinstance(FLEET_MENU_TOOLS, tuple)
+    assert "dispatch_food_truck" in FLEET_MENU_TOOLS
+
+
+def test_fleet_menu_tools_not_in_fleet_init() -> None:
+    """FLEET_MENU_TOOLS must no longer be exported from fleet.__init__."""
+    import autoskillit.fleet as fleet_pkg
+
+    assert not hasattr(fleet_pkg, "FLEET_MENU_TOOLS"), (
+        "FLEET_MENU_TOOLS still lives in fleet.__init__; move it to core._type_constants"
+    )

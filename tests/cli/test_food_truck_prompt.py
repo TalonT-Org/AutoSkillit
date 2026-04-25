@@ -24,7 +24,7 @@ _L2_TIMEOUT = 3600
 
 
 def _get_prompt() -> str:
-    from autoskillit.cli._prompts import _build_food_truck_prompt
+    from autoskillit.fleet._prompts import _build_food_truck_prompt
 
     return _build_food_truck_prompt(
         recipe=_RECIPE,
@@ -38,7 +38,7 @@ def _get_prompt() -> str:
 
 
 def _get_sous_chef_block() -> str:
-    from autoskillit.cli._prompts import _build_l2_sous_chef_block
+    from autoskillit.fleet._prompts import _build_l2_sous_chef_block
 
     return _build_l2_sous_chef_block()
 

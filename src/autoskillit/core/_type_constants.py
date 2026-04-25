@@ -218,7 +218,7 @@ FEATURE_REVEAL_TAGS: frozenset[str] = frozenset({"franchise"})
 FRANCHISE_ERROR_CODES: frozenset[str] = frozenset(FranchiseErrorCode)
 
 FREE_RANGE_TOOLS: frozenset[str] = frozenset(
-    {"open_kitchen", "close_kitchen", "disable_quota_guard"}
+    {"open_kitchen", "close_kitchen", "disable_quota_guard", "reload_session"}
 )
 
 UNGATED_TOOLS: frozenset[str] = FREE_RANGE_TOOLS
@@ -236,6 +236,7 @@ MUTATING_TOOLS: frozenset[str] = frozenset(
         "dispatch_food_truck",
         "set_commit_status",
         "disable_quota_guard",
+        "reload_session",
     }
 )
 

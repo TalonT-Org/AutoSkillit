@@ -61,7 +61,21 @@ from .io import (
     temp_dir_display_str,
     write_versioned_json,
 )
-from .kitchen_state import sweep_stale_markers as sweep_stale_markers
+from .kitchen_state import (
+    KitchenMarker as KitchenMarker,
+)
+from .kitchen_state import (
+    get_state_dir as get_state_dir,
+)
+from .kitchen_state import (
+    is_marker_fresh as is_marker_fresh,
+)
+from .kitchen_state import (
+    read_marker as read_marker,
+)
+from .kitchen_state import (
+    sweep_stale_markers as sweep_stale_markers,
+)
 from .logging import (
     configure_logging,
     get_logger,
@@ -220,6 +234,10 @@ __all__ = [
     "configure_logging",
     "get_logger",
     # kitchen_state
+    "KitchenMarker",
+    "get_state_dir",
+    "is_marker_fresh",
+    "read_marker",
     "sweep_stale_markers",
     # readiness
     "cleanup_readiness_sentinel",

@@ -32,7 +32,7 @@ class TestNoSkillsDirectoryProvider:
 
 
 class TestToolRegistration:
-    """All 45 tools are registered on the MCP server."""
+    """All 47 tools are registered on the MCP server."""
 
     @pytest.mark.anyio
     async def test_all_tools_exist(self, kitchen_enabled):
@@ -91,6 +91,7 @@ class TestToolRegistration:
             "register_clone_status",
             "batch_cleanup_clones",
             "dispatch_food_truck",
+            "reload_session",
         }
         assert expected == tool_names
 

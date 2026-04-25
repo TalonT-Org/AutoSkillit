@@ -34,10 +34,9 @@ from autoskillit.cli._init_helpers import (
     _register_all,
 )
 from autoskillit.cli._prompts import _build_orchestrator_prompt, _get_ingredients_table
+from autoskillit.cli._session_launch import _launch_cook_session
 from autoskillit.core import (
-    NoResume,
     RecipeSource,
-    ResumeSpec,
     atomic_write,
     pkg_root,
     resume_spec_from_cli,
@@ -452,24 +451,6 @@ def recipes_render(name: str | None = None) -> None:
     print(diagram if diagram else f"No diagram. Run /render-recipe {name}")
 
 
-def _launch_cook_session(
-    system_prompt: str,
-    *,
-    initial_message: str | None = None,
-    extra_env: dict[str, str] | None = None,
-    resume_spec: ResumeSpec = NoResume(),
-) -> None:
-    """Launch an interactive Claude Code cook session with the given system prompt."""
-    from autoskillit.cli._session_launch import _run_interactive_session
-
-    _run_interactive_session(
-        system_prompt,
-        initial_message=initial_message,
-        extra_env=extra_env,
-        resume_spec=resume_spec,
-    )
-
-
 def _get_subsets_needed(recipe: Recipe, disabled_subsets: frozenset[str]) -> frozenset[str]:
     """Return the subset names from disabled_subsets that are actually referenced in recipe."""
     import re
@@ -621,6 +602,7 @@ def order(recipe: str | None = None, session_id: str | None = None, *, resume: b
                 _build_open_kitchen_prompt(mcp_prefix=mcp_prefix),
                 initial_message=greeting,
                 resume_spec=resume_spec,
+                project_dir=Path.cwd(),
             )
             return
         elif resolved is None:
@@ -737,6 +719,7 @@ def order(recipe: str | None = None, session_id: str | None = None, *, resume: b
         initial_message=greeting,
         extra_env=_extra_env if _extra_env else None,
         resume_spec=resume_spec,
+        project_dir=Path.cwd(),
     )
 
 

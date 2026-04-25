@@ -1543,8 +1543,7 @@ def test_no_hardcoded_origin_in_run_cmd_merge_prs(pmp_recipe) -> None:
     findings = run_semantic_rules(pmp_recipe)
     violations = [f for f in findings if f.rule == "hardcoded-origin-in-run-cmd"]
     assert violations == [], (
-        f"hardcoded-origin-in-run-cmd fired on merge-prs.yaml: "
-        f"{[v.step_name for v in violations]}"
+        f"hardcoded-origin-in-run-cmd fired on merge-prs.yaml: {[v.step_name for v in violations]}"
     )
 
 
@@ -1596,7 +1595,7 @@ def test_check_eject_limit_routes_to_get_ejected_pr_branch_in_merge_prs(pmp_reci
 
 
 def test_check_eject_limit_routes_to_register_clone_failure_in_merge_prs(pmp_recipe) -> None:
-    """check_eject_limit in merge-prs.yaml must route to register_clone_failure on limit exceeded."""
+    """check_eject_limit in merge-prs.yaml must route to register_clone_failure on limit."""
     step = pmp_recipe.steps["check_eject_limit"]
     conds = step.on_result.conditions
     limit_conds = [c for c in conds if c.when and "EJECT_LIMIT_EXCEEDED" in c.when]
@@ -1651,8 +1650,7 @@ def test_unbounded_cycle_severity_downgraded_by_eject_limit(any_recipe) -> None:
         f
         for f in cycle_findings
         if any(
-            kw in f.message
-            for kw in ("wait_for_queue", "queue_ejected_fix", "check_eject_limit")
+            kw in f.message for kw in ("wait_for_queue", "queue_ejected_fix", "check_eject_limit")
         )
     ]
     for finding in queue_cycle_findings:

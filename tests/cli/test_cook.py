@@ -1561,7 +1561,8 @@ class TestOrderResumeParsing:
         )
 
         with patch("autoskillit.cli.app._launch_cook_session"):
-            with pytest.raises(SystemExit):
+            with pytest.raises(SystemExit) as exc_info:
                 app(["order", "--resume", "4b581974-1f19-4aec-8405-78c5ede5e233"])
+            assert exc_info.value.code == 0
 
         assert find_called == [], "find_recipe_by_name must NOT be called on resume without recipe"

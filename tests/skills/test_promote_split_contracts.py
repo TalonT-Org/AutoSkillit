@@ -47,6 +47,18 @@ class TestPromoteToMainProjectLocal:
             "promote-to-main arch-lens loop must have anti-prose guard"
         )
 
+    def test_promote_to_main_outputs_pr_body_path_token(self) -> None:
+        """promote-to-main must emit pr_body_path (not report_path) structured output token."""
+        content = self._content()
+        assert "pr_body_path = " in content, (
+            "promote-to-main output section must declare 'pr_body_path' token "
+            "(pointing to pr_body_{timestamp}.md)"
+        )
+        assert "report_path = " not in content, (
+            "promote-to-main must not emit 'report_path'; that token is reserved "
+            "for review-promotion's analysis report"
+        )
+
 
 class TestReviewPromotionProjectLocal:
     def _content(self) -> str:

@@ -43,8 +43,8 @@ def _apply_session_type_visibility(
     _session = _resolve_session_type()
     _headless = os.environ.get(HEADLESS_ENV_VAR) == "1"
 
-    # Phase 1: session-type dispatch
     if _session is SessionType.FLEET or _session is SessionType.FRANCHISE:
+        # T1 shim: FLEET maps to "franchise" tags until T2 renames the tag set.
         mcp.enable(tags={"franchise"})
     elif _session is SessionType.ORCHESTRATOR and _headless:
         tool_tags = os.environ.get("AUTOSKILLIT_L2_TOOL_TAGS", "")

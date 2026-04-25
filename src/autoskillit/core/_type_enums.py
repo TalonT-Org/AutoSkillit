@@ -336,10 +336,10 @@ class PRState(StrEnum):
 
 
 class SessionType(StrEnum):
-    """Tier discriminator for franchise session hierarchy.
+    """Tier discriminator for fleet session hierarchy.
 
-    FRANCHISE — top-level campaign coordinator (deprecated alias for FLEET)
     FLEET — top-level campaign coordinator (canonical name)
+    FRANCHISE — top-level campaign coordinator (deprecated alias for FLEET)
     ORCHESTRATOR — mid-tier recipe runner (interactive or headless)
     LEAF — bottom-tier single-task worker (headless test_check only)
     """

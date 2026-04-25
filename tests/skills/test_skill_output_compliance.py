@@ -249,6 +249,8 @@ def test_output_path_tokens_synchronized() -> None:
             # build-execution-map outputs (dependency-aware dispatch map)
             "execution_map",
             "execution_map_report",
+            # planner-generate-phases output (planner recipe)
+            "phase_manifest_path",
         }
     )
 

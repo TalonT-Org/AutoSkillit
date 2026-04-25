@@ -3385,6 +3385,8 @@ class TestOutputPathTokensDerivedFromContracts:
             "resource_report",
             "execution_map",
             "execution_map_report",
+            # planner-generate-phases output (planner recipe)
+            "phase_manifest_path",
         }
     )
 

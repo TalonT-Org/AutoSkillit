@@ -112,6 +112,24 @@ class TestDispatchFoodTruckGates:
         assert result["success"] is False
         assert result["error"] == "fleet_parallel_refused"
 
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_refuses_when_fleet_feature_disabled(
+        self, tool_ctx, monkeypatch
+    ):
+        """features.fleet: false in config → fleet_feature_disabled, regardless of gate state."""
+        import dataclasses
+
+        from autoskillit.server.tools_execution import dispatch_food_truck
+
+        # Gate is open (fleet session already booted), env var absent
+        # Only config file has fleet disabled
+        monkeypatch.delenv("AUTOSKILLIT_FEATURES__FLEET", raising=False)
+        tool_ctx.config = dataclasses.replace(tool_ctx.config, features={"fleet": False})
+
+        result = json.loads(await dispatch_food_truck(recipe="r", task="t"))
+        assert result["success"] is False
+        assert result["error"] == "fleet_feature_disabled"
+
 
 # ---------------------------------------------------------------------------
 # Class TestDispatchFoodTruckValidation — recipe kind, ingredient keys, non-string values

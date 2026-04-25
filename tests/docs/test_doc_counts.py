@@ -252,9 +252,16 @@ def test_doctor_check_count_is_31() -> None:
     )
 
 
-def test_bundled_recipe_count_is_5() -> None:
+def test_bundled_recipe_count_is_6() -> None:
     recipes = _bundled_recipes()
-    expected = ["implementation", "implementation-groups", "merge-prs", "remediation", "research"]
+    expected = [
+        "implementation",
+        "implementation-groups",
+        "merge-prs",
+        "planner",
+        "remediation",
+        "research",
+    ]
     assert recipes == expected, f"Recipes drifted: {recipes}"
 
 
@@ -325,8 +332,8 @@ def test_installation_states_17_doctor_checks() -> None:
     _assert_doc_states_number(DOCS_DIR / "installation.md", "doctor checks", 17)
 
 
-def test_recipes_overview_states_5_recipes() -> None:
-    _assert_doc_states_number(DOCS_DIR / "recipes" / "overview.md", "bundled recipes", 5)
+def test_recipes_overview_states_6_recipes() -> None:
+    _assert_doc_states_number(DOCS_DIR / "recipes" / "overview.md", "bundled recipes", 6)
 
 
 def test_orchestration_states_11_retry_reasons() -> None:

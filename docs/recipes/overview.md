@@ -4,7 +4,7 @@ Recipes are YAML pipeline definitions that automate multi-step workflows. Each r
 
 ## Bundled Recipes
 
-AutoSkillit ships with 5 recipes:
+AutoSkillit ships with 6 bundled recipes:
 
 ### implementation
 
@@ -77,6 +77,21 @@ Consolidate multiple open PRs into a single integration branch and PR.
 |-----------|---------|-------------|
 | `base_branch` | *(auto-detect)* | Branch that all PRs target |
 | `audit` | `true` | Run quality audit on conflict resolutions |
+
+### planner
+
+Progressive decomposition pipeline. Analyzes a codebase, generates phases, elaborates assignments and work packages in iterative loops, reconciles dependencies, validates the dependency graph, and compiles a manifest ready for issue creation.
+
+**Flow:** init → analyze → [extract_domain?] → phases-loop → assignments-loop → wps-loop → reconcile → validate/refine → compile
+
+**When to use:** When you need to decompose a large task into a structured set of GitHub issues with a validated dependency graph. Produces per-WP issue markdown files and a plan manifest.
+
+**Key ingredients:**
+
+| Ingredient | Default | Description |
+|-----------|---------|-------------|
+| `task` | *(required)* | High-level task or feature description to decompose into a plan |
+| `source_dir` | *(required)* | Absolute path to the repository root to analyze |
 
 ### research
 

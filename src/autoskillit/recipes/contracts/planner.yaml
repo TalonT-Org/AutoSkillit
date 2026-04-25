@@ -1,0 +1,205 @@
+generated_at: '2026-04-25T14:21:41.844319+00:00'
+bundled_manifest_version: 0.1.0
+skill_hashes: {}
+skills:
+  planner-generate-phases:
+    inputs: []
+    outputs:
+    - name: phase_manifest_path
+      type: file_path
+    expected_output_patterns: []
+    pattern_examples: []
+dataflow:
+- step: init
+  available:
+  - source_dir
+  - task
+  required: []
+  produced: []
+- step: analyze
+  available:
+  - source_dir
+  - task
+  required: []
+  produced: []
+- step: extract_domain
+  available:
+  - source_dir
+  - task
+  required: []
+  produced: []
+- step: generate_phases
+  available:
+  - source_dir
+  - task
+  required: []
+  produced:
+  - phase_manifest_path
+- step: check_phases
+  available:
+  - phase_manifest_path
+  - source_dir
+  - task
+  required: []
+  produced:
+  - has_remaining
+  - current_item_path
+- step: elaborate_phase
+  available:
+  - current_item_path
+  - has_remaining
+  - phase_manifest_path
+  - source_dir
+  - task
+  required: []
+  produced: []
+- step: build_assignment_manifest
+  available:
+  - current_item_path
+  - has_remaining
+  - phase_manifest_path
+  - source_dir
+  - task
+  required: []
+  produced:
+  - assignment_manifest_path
+- step: check_assignments
+  available:
+  - assignment_manifest_path
+  - current_item_path
+  - has_remaining
+  - phase_manifest_path
+  - source_dir
+  - task
+  required: []
+  produced:
+  - has_remaining
+  - current_item_path
+- step: elaborate_assignment
+  available:
+  - assignment_manifest_path
+  - current_item_path
+  - has_remaining
+  - phase_manifest_path
+  - source_dir
+  - task
+  required: []
+  produced: []
+- step: build_wp_manifest
+  available:
+  - assignment_manifest_path
+  - current_item_path
+  - has_remaining
+  - phase_manifest_path
+  - source_dir
+  - task
+  required: []
+  produced:
+  - wp_manifest_path
+- step: check_wps
+  available:
+  - assignment_manifest_path
+  - current_item_path
+  - has_remaining
+  - phase_manifest_path
+  - source_dir
+  - task
+  - wp_manifest_path
+  required: []
+  produced:
+  - has_remaining
+  - current_item_path
+- step: elaborate_wp
+  available:
+  - assignment_manifest_path
+  - current_item_path
+  - has_remaining
+  - phase_manifest_path
+  - source_dir
+  - task
+  - wp_manifest_path
+  required: []
+  produced: []
+- step: reconcile_deps
+  available:
+  - assignment_manifest_path
+  - current_item_path
+  - has_remaining
+  - phase_manifest_path
+  - source_dir
+  - task
+  - wp_manifest_path
+  required: []
+  produced: []
+- step: validate
+  available:
+  - assignment_manifest_path
+  - current_item_path
+  - has_remaining
+  - phase_manifest_path
+  - source_dir
+  - task
+  - wp_manifest_path
+  required: []
+  produced:
+  - verdict
+- step: check_verdict
+  available:
+  - assignment_manifest_path
+  - current_item_path
+  - has_remaining
+  - phase_manifest_path
+  - source_dir
+  - task
+  - verdict
+  - wp_manifest_path
+  required: []
+  produced: []
+- step: refine
+  available:
+  - assignment_manifest_path
+  - current_item_path
+  - has_remaining
+  - phase_manifest_path
+  - source_dir
+  - task
+  - verdict
+  - wp_manifest_path
+  required: []
+  produced: []
+- step: compile
+  available:
+  - assignment_manifest_path
+  - current_item_path
+  - has_remaining
+  - phase_manifest_path
+  - source_dir
+  - task
+  - verdict
+  - wp_manifest_path
+  required: []
+  produced: []
+- step: done
+  available:
+  - assignment_manifest_path
+  - current_item_path
+  - has_remaining
+  - phase_manifest_path
+  - source_dir
+  - task
+  - verdict
+  - wp_manifest_path
+  required: []
+  produced: []
+- step: escalate_stop
+  available:
+  - assignment_manifest_path
+  - current_item_path
+  - has_remaining
+  - phase_manifest_path
+  - source_dir
+  - task
+  - verdict
+  - wp_manifest_path
+  required: []
+  produced: []

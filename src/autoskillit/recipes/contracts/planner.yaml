@@ -1,0 +1,244 @@
+generated_at: '2026-04-25T12:56:32.818283+00:00'
+bundled_manifest_version: 0.1.0
+skill_hashes: {}
+skills: {}
+dataflow:
+- step: init
+  available:
+  - source_dir
+  - task
+  required: []
+  produced: []
+- step: analyze
+  available:
+  - source_dir
+  - task
+  required: []
+  produced: []
+- step: extract_domain
+  available:
+  - source_dir
+  - task
+  required: []
+  produced: []
+- step: generate_phases
+  available:
+  - source_dir
+  - task
+  required: []
+  produced:
+  - phase_manifest_path
+  - phase_count
+- step: check_phases
+  available:
+  - phase_count
+  - phase_manifest_path
+  - source_dir
+  - task
+  required: []
+  produced:
+  - has_remaining
+  - current_item_path
+- step: elaborate_phase
+  available:
+  - current_item_path
+  - has_remaining
+  - phase_count
+  - phase_manifest_path
+  - source_dir
+  - task
+  required: []
+  produced: []
+- step: build_assignment_manifest
+  available:
+  - current_item_path
+  - has_remaining
+  - phase_count
+  - phase_manifest_path
+  - source_dir
+  - task
+  required: []
+  produced:
+  - assignment_manifest_path
+  - assignment_count
+- step: check_assignments
+  available:
+  - assignment_count
+  - assignment_manifest_path
+  - current_item_path
+  - has_remaining
+  - phase_count
+  - phase_manifest_path
+  - source_dir
+  - task
+  required: []
+  produced:
+  - has_remaining
+  - current_item_path
+- step: elaborate_assignment
+  available:
+  - assignment_count
+  - assignment_manifest_path
+  - current_item_path
+  - has_remaining
+  - phase_count
+  - phase_manifest_path
+  - source_dir
+  - task
+  required: []
+  produced: []
+- step: build_wp_manifest
+  available:
+  - assignment_count
+  - assignment_manifest_path
+  - current_item_path
+  - has_remaining
+  - phase_count
+  - phase_manifest_path
+  - source_dir
+  - task
+  required: []
+  produced:
+  - wp_manifest_path
+  - wp_count
+- step: check_wps
+  available:
+  - assignment_count
+  - assignment_manifest_path
+  - current_item_path
+  - has_remaining
+  - phase_count
+  - phase_manifest_path
+  - source_dir
+  - task
+  - wp_count
+  - wp_manifest_path
+  required: []
+  produced:
+  - has_remaining
+  - current_item_path
+- step: elaborate_wp
+  available:
+  - assignment_count
+  - assignment_manifest_path
+  - current_item_path
+  - has_remaining
+  - phase_count
+  - phase_manifest_path
+  - source_dir
+  - task
+  - wp_count
+  - wp_manifest_path
+  required: []
+  produced: []
+- step: reconcile_deps
+  available:
+  - assignment_count
+  - assignment_manifest_path
+  - current_item_path
+  - has_remaining
+  - phase_count
+  - phase_manifest_path
+  - source_dir
+  - task
+  - wp_count
+  - wp_manifest_path
+  required: []
+  produced:
+  - dep_graph_path
+- step: validate
+  available:
+  - assignment_count
+  - assignment_manifest_path
+  - current_item_path
+  - dep_graph_path
+  - has_remaining
+  - phase_count
+  - phase_manifest_path
+  - source_dir
+  - task
+  - wp_count
+  - wp_manifest_path
+  required: []
+  produced:
+  - verdict
+  - validation_path
+  - issue_count
+- step: check_verdict
+  available:
+  - assignment_count
+  - assignment_manifest_path
+  - current_item_path
+  - dep_graph_path
+  - has_remaining
+  - issue_count
+  - phase_count
+  - phase_manifest_path
+  - source_dir
+  - task
+  - validation_path
+  - verdict
+  - wp_count
+  - wp_manifest_path
+  required: []
+  produced: []
+- step: refine
+  available:
+  - assignment_count
+  - assignment_manifest_path
+  - current_item_path
+  - dep_graph_path
+  - has_remaining
+  - issue_count
+  - phase_count
+  - phase_manifest_path
+  - source_dir
+  - task
+  - validation_path
+  - verdict
+  - wp_count
+  - wp_manifest_path
+  required: []
+  produced: []
+- step: compile
+  available:
+  - assignment_count
+  - assignment_manifest_path
+  - current_item_path
+  - dep_graph_path
+  - has_remaining
+  - issue_count
+  - phase_count
+  - phase_manifest_path
+  - source_dir
+  - task
+  - validation_path
+  - verdict
+  - wp_count
+  - wp_manifest_path
+  required: []
+  produced:
+  - plan_path
+  - plan_json_path
+  - plan_parts
+- step: done
+  available:
+  - assignment_count
+  - assignment_manifest_path
+  - current_item_path
+  - dep_graph_path
+  - has_remaining
+  - issue_count
+  - phase_count
+  - phase_manifest_path
+  - plan_json_path
+  - plan_parts
+  - plan_path
+  - source_dir
+  - task
+  - validation_path
+  - verdict
+  - wp_count
+  - wp_manifest_path
+  required: []
+  produced: []

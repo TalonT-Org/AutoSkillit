@@ -121,7 +121,7 @@ Classify the issue into one of three categories:
 measurable outcome, contradictory claims):
 - Append a `## Triage Note` section to the issue body:
   ```bash
-  ENRICH_BODY_FILE="{{AUTOSKILLIT_TEMP}}/enrich-issues/triage_{N}_$(date +%s).md"
+  ENRICH_BODY_FILE="{{AUTOSKILLIT_TEMP}}/enrich-issues/enrich_{N}_$(date +%s).md"
   mkdir -p "$(dirname "$ENRICH_BODY_FILE")"
   gh issue view N --json body --jq '.body' > "$ENRICH_BODY_FILE"
   printf '\n\n---\n\n## Triage Note\n\nThis issue needs more detail before requirements can be generated. Consider: What is the expected outcome? What signals success? If the goal is unclear, relabeling to `recipe:remediation` may be appropriate for investigation first.\n' \
@@ -135,7 +135,7 @@ measurable outcome, contradictory claims):
 sub-features or mixes a bug fix with a new feature:
 - Append a `## Triage Note` section to the issue body:
   ```bash
-  ENRICH_BODY_FILE="{{AUTOSKILLIT_TEMP}}/enrich-issues/triage_{N}_$(date +%s).md"
+  ENRICH_BODY_FILE="{{AUTOSKILLIT_TEMP}}/enrich-issues/enrich_{N}_$(date +%s).md"
   mkdir -p "$(dirname "$ENRICH_BODY_FILE")"
   gh issue view N --json body --jq '.body' > "$ENRICH_BODY_FILE"
   printf '\n\n---\n\n## Triage Note\n\nThis issue mixes independent concerns. Consider running `/autoskillit:issue-splitter` to split it into focused sub-issues before enrichment.\n' \

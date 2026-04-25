@@ -1556,7 +1556,7 @@ class TestOrderResumeParsing:
 
         find_called = []
         monkeypatch.setattr(
-            "autoskillit.cli.app.find_recipe_by_name",
+            "autoskillit.recipe.find_recipe_by_name",
             lambda *a, **kw: find_called.append(a) or None,
         )
 

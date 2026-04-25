@@ -707,3 +707,45 @@ def test_git_remote_command_re_imported_from_git_helpers() -> None:
     # (identity check confirms it's an import, not a re-definition).
     assert _rsc._GIT_REMOTE_COMMAND_RE is _gh._GIT_REMOTE_COMMAND_RE
     assert _rsc._LITERAL_ORIGIN_RE is _gh._LITERAL_ORIGIN_RE
+
+
+# ---------------------------------------------------------------------------
+# T9: Bundled skill regression anchors — Part B SKILL.md fixes
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "skill_name,ingredients",
+    [
+        ("implement-worktree-no-merge", {"plan_path": "plan"}),
+        ("implement-experiment", {"plan_path": "plan"}),
+        ("merge-pr", {}),
+        ("review-pr", {}),
+        ("pipeline-summary", {}),
+    ],
+)
+def test_hardcoded_origin_does_not_fire_on_part_b_fixed_skills(
+    tmp_path: Path, skill_name: str, ingredients: dict
+) -> None:
+    """
+    Regression anchor: bundled skills fixed in Part B must NOT trigger hardcoded-origin-remote.
+
+    Uses SKILL_SEARCH_DIRS isolation so the test fails with a clear assertion error
+    (not an opaque ENOENT) if the skill is renamed.
+    """
+    from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
+
+    skill_info = DefaultSkillResolver().resolve(skill_name)
+    assert skill_info is not None, f"bundled {skill_name!r} skill not found"
+    skill_dir = tmp_path / skill_name
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_bytes(skill_info.path.read_bytes())
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(_make_recipe_for_skill(skill_name, ingredients))
+    recipe = load_recipe(recipe_path)
+    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+        findings = run_semantic_rules(recipe)
+    assert "hardcoded-origin-remote" not in [f.rule for f in findings], (
+        f"hardcoded-origin-remote fired on {skill_name!r} after Part B fix — "
+        "check that all literal 'origin' references in bash blocks have been replaced with $REMOTE"
+    )

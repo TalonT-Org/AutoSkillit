@@ -1517,3 +1517,146 @@ def test_merge_prs_wait_queue_pr_routes_not_enrolled(pmp_recipe) -> None:
     step = pmp_recipe.steps["wait_queue_pr"]
     conditions = [c.when for c in step.on_result.conditions]
     assert any("not_enrolled" in c for c in conditions if c)
+
+
+# ---------------------------------------------------------------------------
+# T6: No hardcoded 'origin' in run_cmd steps (REMOTE probe applied)
+# ---------------------------------------------------------------------------
+
+
+def test_no_hardcoded_origin_in_run_cmd_queue_capable(any_recipe) -> None:
+    """After REMOTE probe fix, run_semantic_rules must report zero hardcoded-origin-in-run-cmd."""
+    from autoskillit.recipe.validator import run_semantic_rules
+
+    findings = run_semantic_rules(any_recipe)
+    violations = [f for f in findings if f.rule == "hardcoded-origin-in-run-cmd"]
+    assert violations == [], (
+        f"hardcoded-origin-in-run-cmd fired on {any_recipe.name}: "
+        f"{[v.step_name for v in violations]}"
+    )
+
+
+def test_no_hardcoded_origin_in_run_cmd_merge_prs(pmp_recipe) -> None:
+    """merge-prs.yaml setup_remote suppresses hardcoded-origin-in-run-cmd recipe-wide."""
+    from autoskillit.recipe.validator import run_semantic_rules
+
+    findings = run_semantic_rules(pmp_recipe)
+    violations = [f for f in findings if f.rule == "hardcoded-origin-in-run-cmd"]
+    assert violations == [], (
+        f"hardcoded-origin-in-run-cmd fired on merge-prs.yaml: "
+        f"{[v.step_name for v in violations]}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# T7: check_eject_limit step exists with correct routing
+# ---------------------------------------------------------------------------
+
+
+def test_check_eject_limit_step_exists_in_queue_capable(any_recipe) -> None:
+    """check_eject_limit step must exist in each queue-capable recipe."""
+    assert "check_eject_limit" in any_recipe.steps, (
+        f"check_eject_limit step missing from {any_recipe.name}"
+    )
+
+
+def test_check_eject_limit_routes_to_queue_ejected_fix(any_recipe) -> None:
+    """check_eject_limit default route must point to queue_ejected_fix."""
+    step = any_recipe.steps["check_eject_limit"]
+    assert step.on_result is not None
+    conds = step.on_result.conditions
+    default_conds = [c for c in conds if c.when is None]
+    assert len(default_conds) == 1, "check_eject_limit must have exactly one default route"
+    assert default_conds[0].route == "queue_ejected_fix"
+
+
+def test_check_eject_limit_routes_to_failure_when_exceeded(any_recipe) -> None:
+    """check_eject_limit must route to release_issue_failure when EJECT_LIMIT_EXCEEDED."""
+    step = any_recipe.steps["check_eject_limit"]
+    assert step.on_result is not None
+    conds = step.on_result.conditions
+    limit_conds = [c for c in conds if c.when and "EJECT_LIMIT_EXCEEDED" in c.when]
+    assert len(limit_conds) == 1
+    assert limit_conds[0].route == "release_issue_failure"
+
+
+def test_check_eject_limit_step_exists_in_merge_prs(pmp_recipe) -> None:
+    """check_eject_limit step must exist in merge-prs.yaml."""
+    assert "check_eject_limit" in pmp_recipe.steps
+
+
+def test_check_eject_limit_routes_to_get_ejected_pr_branch_in_merge_prs(pmp_recipe) -> None:
+    """check_eject_limit default route in merge-prs.yaml must point to get_ejected_pr_branch."""
+    step = pmp_recipe.steps["check_eject_limit"]
+    assert step.on_result is not None
+    conds = step.on_result.conditions
+    default_conds = [c for c in conds if c.when is None]
+    assert len(default_conds) == 1
+    assert default_conds[0].route == "get_ejected_pr_branch"
+
+
+def test_check_eject_limit_routes_to_register_clone_failure_in_merge_prs(pmp_recipe) -> None:
+    """check_eject_limit in merge-prs.yaml must route to register_clone_failure on limit exceeded."""
+    step = pmp_recipe.steps["check_eject_limit"]
+    conds = step.on_result.conditions
+    limit_conds = [c for c in conds if c.when and "EJECT_LIMIT_EXCEEDED" in c.when]
+    assert len(limit_conds) == 1
+    assert limit_conds[0].route == "register_clone_failure"
+
+
+# ---------------------------------------------------------------------------
+# T8: check_eject_limit counter logic
+# ---------------------------------------------------------------------------
+
+
+def test_check_eject_limit_cmd_reads_writes_counter_file(any_recipe) -> None:
+    """check_eject_limit cmd must read/write a counter file under .autoskillit/temp/."""
+    step = any_recipe.steps["check_eject_limit"]
+    cmd = step.with_args.get("cmd", "")
+    assert "eject_count" in cmd, "cmd must reference the eject_count counter file"
+    assert ".autoskillit/temp/" in cmd, "counter file must be under .autoskillit/temp/"
+    assert "cat " in cmd, "cmd must read the counter with cat"
+
+
+def test_check_eject_limit_cmd_uses_limit_3(any_recipe) -> None:
+    """check_eject_limit cmd must cap at 3 ejections."""
+    step = any_recipe.steps["check_eject_limit"]
+    cmd = step.with_args.get("cmd", "")
+    assert "-gt 3" in cmd, "limit check must use -gt 3"
+
+
+def test_check_eject_limit_on_result_uses_exact_eq_match(any_recipe) -> None:
+    """check_eject_limit on_result must use exact == match (consistent with recipe patterns)."""
+    step = any_recipe.steps["check_eject_limit"]
+    assert step.on_result is not None
+    limit_conds = [
+        c for c in step.on_result.conditions if c.when and "EJECT_LIMIT_EXCEEDED" in c.when
+    ]
+    assert len(limit_conds) == 1
+    assert "==" in limit_conds[0].when, "predicate must use exact == match"
+
+
+def test_unbounded_cycle_severity_downgraded_by_eject_limit(any_recipe) -> None:
+    """After check_eject_limit, unbounded-cycle for queue ejection cycle must be at most WARNING.
+
+    check_eject_limit.on_failure routes to release_issue_failure (outside the cycle),
+    satisfying has_failure_exit in rules_graph.py → severity is downgraded from ERROR to WARNING.
+    """
+    from autoskillit.core.types import Severity
+    from autoskillit.recipe.validator import run_semantic_rules
+
+    findings = run_semantic_rules(any_recipe)
+    cycle_findings = [f for f in findings if f.rule == "unbounded-cycle"]
+    queue_cycle_findings = [
+        f
+        for f in cycle_findings
+        if any(
+            kw in f.message
+            for kw in ("wait_for_queue", "queue_ejected_fix", "check_eject_limit")
+        )
+    ]
+    for finding in queue_cycle_findings:
+        assert finding.severity != Severity.ERROR, (
+            f"unbounded-cycle for queue ejection must be WARNING after check_eject_limit, "
+            f"got ERROR on step {finding.step_name!r}: {finding.message[:120]}"
+        )

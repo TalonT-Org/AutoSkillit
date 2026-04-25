@@ -71,6 +71,53 @@ ALWAYS_RUN_AGGRESSIVE: frozenset[str] = frozenset(
 _LARGE_CHANGESET_THRESHOLD: int = 30
 
 # ---------------------------------------------------------------------------
+# core/ module-level cascade classification
+# ---------------------------------------------------------------------------
+
+_CORE_UNIVERSAL_MODULES: frozenset[str] = frozenset(
+    {
+        "io",
+        "logging",
+        "types",
+        "_type_constants",
+        "_type_protocols",
+        "_type_enums",
+        "_type_subprocess",
+        "_type_results",
+        "_type_resume",
+        "_type_helpers",
+    }
+)
+
+MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
+    "readiness": frozenset({"core", "server"}),
+    "feature_flags": frozenset({"core", "cli", "config", "server", "workspace"}),
+    "kitchen_state": frozenset({"core", "cli"}),
+    "branch_guard": frozenset({"core", "pipeline", "server", "workspace"}),
+    "_plugin_ids": frozenset({"core", "cli", "server"}),
+    "_terminal_table": frozenset({"core", "cli", "pipeline", "recipe"}),
+    "_linux_proc": frozenset({"core", "cli", "execution", "franchise"}),
+    "_plugin_cache": frozenset({"core", "cli", "server"}),
+    "github_url": frozenset({"core", "cli", "execution", "server"}),
+    "paths": frozenset(
+        {
+            "core",
+            "cli",
+            "config",
+            "execution",
+            "franchise",
+            "migration",
+            "recipe",
+            "server",
+            "workspace",
+        }
+    ),
+    "_claude_env": frozenset({"core", "execution"}),
+    "_version_snapshot": frozenset({"core", "execution"}),
+    "claude_conventions": frozenset({"core", "server", "workspace"}),
+}
+
+# ---------------------------------------------------------------------------
 # Layer cascade maps
 # ---------------------------------------------------------------------------
 
@@ -690,7 +737,15 @@ def build_test_scope(
             direct_test_files.add(f)
         elif f.startswith("src/") and f.endswith(".py"):
             pkg = _file_to_package(f)
-            if pkg and pkg in cascade_map:
+            if pkg == "core" and mode == FilterMode.CONSERVATIVE:
+                stem = Path(f).stem
+                if stem in _CORE_UNIVERSAL_MODULES or stem == "__init__":
+                    test_dirs.update(cascade_map["core"])
+                elif stem in MODULE_CASCADE_CORE:
+                    test_dirs.update(MODULE_CASCADE_CORE[stem])
+                else:
+                    test_dirs.update(cascade_map["core"])  # fail-open: unknown stem
+            elif pkg and pkg in cascade_map:
                 test_dirs.update(cascade_map[pkg])
             else:
                 return None
@@ -711,7 +766,15 @@ def build_test_scope(
             for f in expanded - changed_src_py:
                 if f.startswith("src/") and f.endswith(".py"):
                     pkg = _file_to_package(f)
-                    if pkg and pkg in cascade_map:
+                    if pkg == "core" and mode == FilterMode.CONSERVATIVE:
+                        stem = Path(f).stem
+                        if stem in _CORE_UNIVERSAL_MODULES or stem == "__init__":
+                            test_dirs.update(cascade_map["core"])
+                        elif stem in MODULE_CASCADE_CORE:
+                            test_dirs.update(MODULE_CASCADE_CORE[stem])
+                        else:
+                            test_dirs.update(cascade_map["core"])
+                    elif pkg and pkg in cascade_map:
                         test_dirs.update(cascade_map[pkg])
         except Exception:
             logging.getLogger(__name__).debug(  # noqa: TID251

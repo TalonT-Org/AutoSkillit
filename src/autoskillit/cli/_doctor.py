@@ -332,6 +332,13 @@ def _check_editable_install_source_exists() -> DoctorResult:
     )
 
 
+def _format_upgrade_cmd(info: object) -> str:
+    from autoskillit.cli._install_info import upgrade_command
+
+    cmd = upgrade_command(info)  # type: ignore[arg-type]
+    return " ".join(cmd) if cmd else "autoskillit update"
+
+
 def _check_stale_entry_points() -> DoctorResult:
     """Detect autoskillit binaries on PATH outside ~/.local/bin (stale/poisoned installs)."""
     check_name = "stale_entry_points"
@@ -356,11 +363,10 @@ def _check_stale_entry_points() -> DoctorResult:
         return DoctorResult(Severity.OK, check_name, "No stale autoskillit entry points found")
 
     stale_list = ", ".join(stale)
-    from autoskillit.cli._install_info import detect_install, upgrade_command
+    from autoskillit.cli._install_info import detect_install
 
     _info = detect_install()
-    _cmd = upgrade_command(_info)
-    _cmd_str = " ".join(_cmd) if _cmd else "autoskillit update"
+    _cmd_str = _format_upgrade_cmd(_info)
     return DoctorResult(
         Severity.WARNING,
         check_name,
@@ -425,7 +431,7 @@ def _check_source_version_drift(home: Path | None = None) -> DoctorResult:
     _home = home or Path.home()
 
     try:
-        from autoskillit.cli._install_info import InstallType, detect_install, upgrade_command
+        from autoskillit.cli._install_info import InstallType, detect_install
         from autoskillit.cli._update_checks import resolve_reference_sha
 
         info = detect_install()
@@ -457,8 +463,7 @@ def _check_source_version_drift(home: Path | None = None) -> DoctorResult:
 
         installed_short = (info.commit_id or "unknown")[:8]
         ref_short = ref_sha[:8]
-        _cmd = upgrade_command(info)
-        _cmd_str = " ".join(_cmd) if _cmd else "autoskillit update"
+        _cmd_str = _format_upgrade_cmd(info)
         return DoctorResult(
             Severity.WARNING,
             check_name,

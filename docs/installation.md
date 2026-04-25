@@ -67,7 +67,7 @@ projects need.
 
     autoskillit doctor
 
-Doctor runs 28 checks (23 numbered + 5 lettered sub-checks: `2b`, `2c`, `2d`, `4b`, `7b`); up to 33 with the franchise feature enabled.
+Doctor runs 28 checks (23 numbered + 5 lettered sub-checks: `2b`, `2c`, `2d`, `4b`, `7b`); up to 33 with the fleet feature enabled.
 Enumerated by `run_doctor` in `src/autoskillit/cli/_doctor.py`:
 
 | # | Check | What it verifies |
@@ -96,11 +96,11 @@ Enumerated by `run_doctor` in `src/autoskillit/cli/_doctor.py`:
 | 17 | Update dismissal state | Active update-prompt dismissal window and conditions, if any |
 | 18 | Ambient SESSION_TYPE=leaf | No stray `SESSION_TYPE=leaf` env var in interactive shell |
 | 19 | Ambient SESSION_TYPE=orchestrator | No stray `SESSION_TYPE=orchestrator` env var |
-| 20 | Ambient SESSION_TYPE=franchise | No stray `SESSION_TYPE=franchise` env var |
+| 20 | Ambient SESSION_TYPE=fleet | No stray `SESSION_TYPE=fleet` env var |
 | 21 | Ambient CAMPAIGN_ID | No stray `CAMPAIGN_ID` env var in interactive shell |
 | 22 | Feature dependency consistency | Enabled features satisfy their declared dependencies |
 | 23 | Feature registry import consistency | All feature gate modules import without errors |
-| 24–28 | Franchise infrastructure | Sous-chef skill, dispatch guard, stale state, onboarding, clone collisions (franchise feature only) |
+| 24–28 | Fleet infrastructure | Sous-chef skill, dispatch guard, stale state, onboarding, clone collisions (fleet feature only) |
 
 See **[Hooks](safety/hooks.md)** for what each PreToolUse / PostToolUse /
 SessionStart hook actually enforces.

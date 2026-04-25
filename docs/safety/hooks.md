@@ -49,7 +49,7 @@ operators may open the kitchen.
 ### `leaf_orchestration_guard.py`
 **Guarded tools:** `run_skill`, `run_cmd`, `run_python`
 Blocks orchestration tools from leaf-tier sessions. Enforces the tier
-invariant: orchestrator and franchise sessions may call orchestration tools;
+invariant: orchestrator and fleet sessions may call orchestration tools;
 leaf workers use native Claude Code tools only.
 
 ### `unsafe_install_guard.py`

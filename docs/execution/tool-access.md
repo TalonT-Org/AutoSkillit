@@ -201,11 +201,11 @@ GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`
 
 ---
 
-### KITCHEN — Franchise
+### KITCHEN — Fleet
 
 | Tool | Tags | Source File |
 |------|------|-------------|
-| `dispatch_food_truck` | AS, K, KC, franchise | `server/tools_execution.py` |
+| `dispatch_food_truck` | AS, K, KC, fleet | `server/tools_execution.py` |
 
 ---
 

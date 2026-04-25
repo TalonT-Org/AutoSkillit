@@ -82,7 +82,7 @@ Run health checks on your setup.
 **Flags:**
 - `--output-json` — Output results as JSON
 
-Runs 28 checks (up to 33 with franchise enabled) enumerated by `run_doctor` in
+Runs 28 checks (up to 33 with fleet enabled) enumerated by `run_doctor` in
 `cli/_doctor.py` — 23 numbered plus lettered sub-checks `2b`, `2c`, `2d`,
 `4b`, and `7b`. The checks cover stale MCP servers, plugin registration, PATH,
 project config, secrets placement, version consistency, hook health, hook

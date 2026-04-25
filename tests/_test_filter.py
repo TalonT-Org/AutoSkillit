@@ -68,6 +68,46 @@ ALWAYS_RUN_AGGRESSIVE: frozenset[str] = frozenset(
     }
 )
 
+# ---------------------------------------------------------------------------
+# Tiered always-run configuration (conservative mode)
+# ---------------------------------------------------------------------------
+
+# Structural infra files that run unconditionally regardless of trigger conditions.
+# These enforce cross-cutting registration, executability, and schema contracts.
+_INFRA_UNCONDITIONAL_FILES: frozenset[str] = frozenset(
+    {
+        "test_hook_executability.py",
+        "test_hook_registration_coverage.py",
+        "test_manifest_completeness.py",
+        "test_hook_registry.py",
+        "test_guard_coverage.py",
+        "test_session_scope_enforcement.py",
+        "test_filter_activation.py",
+        "test_schema_version_convention.py",
+        "test_release_sanity.py",
+    }
+)
+
+# Conditions that trigger inclusion of the full infra/ directory.
+_INFRA_HOOK_TRIGGER_PREFIX: str = "src/autoskillit/hooks/"
+_INFRA_CI_TRIGGER_PREFIX: str = ".github/"
+_INFRA_CI_TRIGGER_FILES: frozenset[str] = frozenset(
+    {
+        "pyproject.toml",
+        ".pre-commit-config.yaml",
+        "Taskfile.yml",
+    }
+)
+
+# Conditions that trigger inclusion of the docs/ directory.
+_DOCS_TRIGGER_PREFIX: str = "docs/"
+_DOCS_TRIGGER_FILES: frozenset[str] = frozenset({"README.md", "CLAUDE.md"})
+
+# Tier-1 unconditional always-run for conservative mode: arch+contracts only.
+# Decoupled from ALWAYS_RUN_AGGRESSIVE so future additions to that constant
+# cannot silently alter conservative behavior.
+_ALWAYS_RUN_CONSERVATIVE_UNCONDITIONAL: frozenset[str] = frozenset({"arch", "contracts"})
+
 _LARGE_CHANGESET_THRESHOLD: int = 30
 
 # ---------------------------------------------------------------------------
@@ -208,7 +248,6 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
         {
             "server",
             "cli",
-            "infra",
         }
     ),
     "cli": frozenset(
@@ -781,7 +820,31 @@ def build_test_scope(
                 "_expand_reexport_closure suppressed", exc_info=True
             )  # fail-open: expansion errors do not affect the computed scope
 
-    test_dirs.update(always_run)
+    if mode == FilterMode.CONSERVATIVE and changed_files:
+        # REQ-TIER-001: arch and contracts always unconditional
+        test_dirs.update(_ALWAYS_RUN_CONSERVATIVE_UNCONDITIONAL)
+
+        # REQ-TIER-002: docs gated on documentation file changes
+        if any(
+            f.startswith(_DOCS_TRIGGER_PREFIX) or f in _DOCS_TRIGGER_FILES for f in changed_files
+        ):
+            test_dirs.add("docs")
+        else:
+            direct_test_files.add(str(tests_root / "docs" / "test_doc_counts.py"))
+
+        # REQ-TIER-003: 9 structural infra files always; full infra dir only on trigger
+        for fname in _INFRA_UNCONDITIONAL_FILES:
+            direct_test_files.add(str(tests_root / "infra" / fname))
+        if any(
+            f.startswith(_INFRA_HOOK_TRIGGER_PREFIX)
+            or f.startswith(_INFRA_CI_TRIGGER_PREFIX)
+            or f in _INFRA_CI_TRIGGER_FILES
+            for f in changed_files
+        ):
+            test_dirs.add("infra")
+    else:
+        # REQ-TIER-004: fail-open for empty changeset; aggressive mode uses its own set
+        test_dirs.update(always_run)
 
     # Step 7: Aggressive mode file-level refinement via coverage oracle.
     # Only runs when mode is AGGRESSIVE and a coverage map path is provided.

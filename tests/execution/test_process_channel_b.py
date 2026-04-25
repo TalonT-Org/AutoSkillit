@@ -222,6 +222,9 @@ class TestChannelBDrainWait:
         drain wait times out — i.e. Channel A never confirmed stdout data.
         _phase1_timeout=120: must exceed outer timeout (60s) to prevent Phase 1 from
         firing STALE before the outer guard when subprocess startup is slow under load.
+        natural_exit_grace_seconds=0.1: script never exits naturally (time.sleep(3600)),
+        so shorten grace window to reduce total test time and avoid asyncio-waitpid
+        thread contention under CI load (default 3.0s grace + 3.0s kill = 6s total).
         """
         session_dir = tmp_path / "session"
         session_dir.mkdir()
@@ -235,6 +238,7 @@ class TestChannelBDrainWait:
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=0.1,
+            natural_exit_grace_seconds=0.1,
             _phase1_poll=0.01,
             _phase2_poll=0.05,
             _session_id_timeout=0.01,

@@ -1,4 +1,5 @@
 """Tests for diff-aware parametrized deselection — REQ-ARCH-004."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -52,9 +53,7 @@ class TestDeselectArchItems:
     def test_oneshot_always_selected(self) -> None:
         oneshot = _make_oneshot_item()
         param_item = _make_arch_item(_src("core/io.py"))
-        selected, deselected = deselect_arch_items(
-            [oneshot, param_item], set(), _ARCH_DIR
-        )
+        selected, deselected = deselect_arch_items([oneshot, param_item], set(), _ARCH_DIR)
         assert oneshot in selected
         assert param_item in deselected
 
@@ -74,6 +73,7 @@ class TestDeselectArchItems:
 class TestPytestCollectionModifyItemsHook:
     def test_filter_inactive_is_noop(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from tests.arch import conftest as arch_conftest
+
         monkeypatch.delenv("AUTOSKILLIT_TEST_FILTER", raising=False)
         items = [_make_arch_item(_src("core/io.py"))]
         original = list(items)
@@ -84,6 +84,7 @@ class TestPytestCollectionModifyItemsHook:
 
     def test_failopen_on_git_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from tests.arch import conftest as arch_conftest
+
         monkeypatch.setenv("AUTOSKILLIT_TEST_FILTER", "conservative")
         items = [_make_arch_item(_src("core/io.py"))]
         original = list(items)
@@ -97,14 +98,17 @@ class TestPytestCollectionModifyItemsHook:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from tests.arch import conftest as arch_conftest
+
         monkeypatch.setenv("AUTOSKILLIT_TEST_FILTER", "conservative")
         changed_rel = "src/autoskillit/core/io.py"
         changed = _src("core/io.py")
         unchanged = _src("core/paths.py")
-        items = [_make_arch_item(changed), _make_arch_item(unchanged)]
+        changed_item = _make_arch_item(changed)
+        unchanged_item = _make_arch_item(unchanged)
+        items = [changed_item, unchanged_item]
         mock_config = MagicMock()
         with patch.object(arch_conftest, "git_changed_files", return_value={changed_rel}):
             arch_conftest.pytest_collection_modifyitems(mock_config, items)
-        mock_config.hook.pytest_deselected.assert_called_once()
+        mock_config.hook.pytest_deselected.assert_called_once_with(items=[unchanged_item])
         assert len(items) == 1
         assert items[0].callspec.params["source_file"] == changed

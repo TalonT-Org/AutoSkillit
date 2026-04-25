@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import warnings
 from pathlib import Path
 
 import pytest
@@ -33,5 +34,9 @@ def pytest_collection_modifyitems(
         if deselected:
             config.hook.pytest_deselected(items=deselected)
             items[:] = selected
-    except Exception:
+    except Exception as exc:
+        warnings.warn(
+            f"arch deselection failed (fail-open): {exc!r}",
+            stacklevel=2,
+        )
         return

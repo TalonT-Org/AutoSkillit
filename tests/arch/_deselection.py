@@ -26,6 +26,9 @@ def deselect_arch_items(
             selected.append(item)
             continue
         source_file: Path = item.callspec.params["source_file"]
+        if not isinstance(source_file, Path):
+            selected.append(item)
+            continue
         if source_file.resolve() in changed_abs:
             selected.append(item)
         else:

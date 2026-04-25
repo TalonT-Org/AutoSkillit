@@ -50,7 +50,7 @@ and creates a comprehensive promotion PR.
 - Carry forward ALL `Closes #N`, `Fixes #N`, and `Resolves #N` references from merged PR bodies
 - Use `gh pr create --body-file` (never inline body via `--body`)
 - Grant every subagent explicit permission to spawn their own sub-subagents
-- `report_path` must be an absolute path (prepend CWD)
+- `pr_body_path` must be an absolute path (prepend CWD)
 
 ## Subagent Autonomy Grant
 
@@ -468,7 +468,7 @@ gh pr edit {pr_url} --add-label "promotion" 2>/dev/null || true
 Always emit these structured output tokens as the final lines:
 
 ```
-report_path = {absolute path to .autoskillit/temp/promote-to-main/pr_body_{timestamp}.md}
+pr_body_path = {absolute path to .autoskillit/temp/promote-to-main/pr_body_{timestamp}.md}
 pr_url = {pr_url, empty if dry-run or gh unavailable}
 verdict = {created|dry_run|preflight_failed}
 category_summary = {e.g., "14 fixes, 13 features, 3 infra"}

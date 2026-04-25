@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -223,3 +224,36 @@ def test_always_write_skill_with_documented_no_write_exit_flagged() -> None:
     assert any(
         "graceful" in p.lower() or "skip" in p.lower() for p in _ALWAYS_WITH_NO_WRITE_EXIT_PHRASES
     ), "Must detect graceful degradation phrases — the exact pattern in resolve-review Step 1"
+
+
+def test_unreadable_skill_md_emits_warning_finding(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """OSError reading SKILL.md must emit a WARNING finding, not a silent skip."""
+    skill_dir = tmp_path / "skills" / "fake-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("placeholder")
+
+    monkeypatch.setattr(_rc, "pkg_root", lambda: tmp_path)
+
+    recipe = _make_recipe_with_skill("/autoskillit:fake-skill")
+    contract = _make_contract(write_behavior="always")
+    original_read_text = Path.read_text
+
+    def fail_read_text(self: Path, *args: object, **kwargs: object) -> str:
+        if self.name == "SKILL.md":
+            raise OSError("permission denied")
+        return original_read_text(self, *args, **kwargs)  # type: ignore[arg-type]
+
+    with (
+        patch("autoskillit.recipe.rules_contracts.get_skill_contract", return_value=contract),
+        patch.object(Path, "read_text", fail_read_text),
+    ):
+        findings = run_semantic_rules(recipe)
+
+    relevant = [f for f in findings if f.rule == "always-has-no-write-exit"]
+    assert len(relevant) == 1
+    assert relevant[0].severity == Severity.WARNING
+    assert relevant[0].rule == "always-has-no-write-exit"
+    assert relevant[0].step_name == "test_step"
+    assert "fake-skill" in relevant[0].message

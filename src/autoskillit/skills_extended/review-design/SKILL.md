@@ -40,7 +40,7 @@ best available plan.
 - Proceed to Level 2, 3, or 4 analysis when any Level 1 finding is classified as
   STRUCTURAL (halt at fail-fast gate). ADDRESSABLE L1 criticals continue L2-L4.
 - Spawn SILENT (S) dimension subagents — they are not run and not mentioned in output
-- Exit non-zero — GO, REVISE, and STOP are all normal outcomes (exit 0 in all cases)
+- Exit non-zero — GO, REVISE, and STOP are all normal outcomes (return cleanly in all cases)
 - Include code snippets, shell commands, or specific tool invocations in findings or revision guidance — findings describe gaps and risks, not implementation instructions
 - Prescribe HOW to fix an issue — findings must describe WHAT is lacking or at risk; the fix is the plan author's responsibility
 
@@ -77,12 +77,12 @@ absent. The recipe routes to `on_context_limit`, abandoning the partial review.
 1. Create `{{AUTOSKILLIT_TEMP}}/review-design/` if absent.
 2. Extract `experiment_plan_path` from arguments (first path-like token starting with `/`,
    `./`, or `.autoskillit/`).
-   **Error handling:** If no path-like token is found in the arguments, emit
-   `verdict = STOP` with message "No experiment_plan_path provided" and exit 0 (per
+   **Error handling:** When no path-like token is present in the arguments, emit
+   `verdict = STOP` with message "No experiment_plan_path provided" and return (per
    the NEVER exit-non-zero constraint).
 3. Read the plan file.
    **Error handling:** If the file does not exist or is unreadable at the resolved path,
-   emit `verdict = STOP` with message "Plan file not found: {path}" and exit 0.
+   emit `verdict = STOP` with message "Plan file not found: {path}" and return.
 4. **Load the experiment type registry:**
    a. Locate bundled types dir: run
       `python -c "from autoskillit.core import pkg_root; print(pkg_root() / 'recipes' / 'experiment-types')"`
@@ -100,7 +100,7 @@ absent. The recipe routes to `on_context_limit`, abandoning the partial review.
      (zero LLM tokens). Return present fields and note which are missing.
      Record `source: frontmatter` for each extracted field.
      **Error handling:** If the YAML between `---` delimiters is malformed, treat all
-     fields as missing and fall through to Level 2 for all fields (graceful degradation).
+     fields as missing and fall through to Level 2 for all fields (fallback handling).
    - **Level 2 (LLM extraction)**: For each missing field, launch a targeted LLM
      extraction subagent against the corresponding prose section. All extractions are
      independent and run in parallel. Record `source: extracted` for each field from
@@ -218,7 +218,7 @@ If ANY Level 1 subagent returns a finding with `"severity": "critical"`:
 - Collect these as `stop_triggers`
 - Do not proceed to Level 2, 3, or 4 analysis
 - Do not start the red-team agent
-- Skip directly to Step 7 (Synthesis) with only L1 findings
+- Proceed directly to Step 7 (Synthesis) with only L1 findings
 - The verdict logic will produce STOP; halt and emit tokens
 
 **Subagent parse failure:** If a Level 1 subagent returns unparseable output (malformed

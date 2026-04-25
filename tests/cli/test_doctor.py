@@ -90,10 +90,16 @@ class TestCLIDoctor:
         (tmp_path / ".pre-commit-config.yaml").write_text(
             "repos:\n  - repo: dummy\n    hooks:\n      - id: gitleaks\n"
         )
-        # Create plugin cache directory for Check 2c
-        (tmp_path / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit").mkdir(
-            parents=True, exist_ok=True
+        # Create plugin cache directory for Check 2c + version_consistency plugin.json
+        import importlib.metadata
+
+        _cache_dir = (
+            tmp_path / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
         )
+        _cache_dir.mkdir(parents=True, exist_ok=True)
+        _plugin_json = _cache_dir / ".claude-plugin" / "plugin.json"
+        _plugin_json.parent.mkdir(parents=True, exist_ok=True)
+        _plugin_json.write_text(json.dumps({"version": importlib.metadata.version("autoskillit")}))
         # Create installed_plugins.json for Check 2d
         (tmp_path / ".claude" / "plugins" / "installed_plugins.json").write_text(
             json.dumps({"version": 2, "plugins": {"autoskillit@autoskillit-local": {}}})

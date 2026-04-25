@@ -10,12 +10,13 @@ nesting contract is defined in exactly one place.
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core import atomic_write, get_logger
+from autoskillit.core import atomic_write
 
-_log = get_logger(__name__)
+_log = logging.getLogger(__name__)  # noqa: TID251
 
 
 def _default_path() -> Path:

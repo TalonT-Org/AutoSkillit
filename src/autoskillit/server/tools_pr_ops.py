@@ -10,7 +10,7 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import get_logger
+from autoskillit.core import atomic_write, get_logger
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
     _notify,
@@ -73,7 +73,7 @@ async def _close_issues_sequentially(
                 temp_dir = Path(cwd) / ".autoskillit" / "temp" / "bulk-close-issues"
                 temp_dir.mkdir(parents=True, exist_ok=True)
                 temp_file = temp_dir / f"{num}_close_body.md"
-                temp_file.write_text(new_body, encoding="utf-8")
+                atomic_write(temp_file, new_body)
 
                 rc2, _, _ = await _run_subprocess(
                     ["gh", "issue", "edit", str(num), "--body-file", str(temp_file)],
@@ -95,6 +95,7 @@ async def _close_issues_sequentially(
             else:
                 failed.append(num)
         except Exception:
+            logger.warning("Failed to close issue %s", num, exc_info=True)
             failed.append(num)
     return closed, failed
 

@@ -180,12 +180,12 @@ gh label create "split" --force \
 gh issue edit {N} --add-label "split" [--repo {repo}]
 
 # Append ## Decomposed section to parent body
-SPLIT_BODY_FILE="{{AUTOSKILLIT_TEMP}}/issue-splitter/decomposed_{N}_{ts}.md"
+SPLIT_BODY_FILE="{{AUTOSKILLIT_TEMP}}/issue-splitter/decomposed_{N}_$(date +%s).md"
 mkdir -p "$(dirname "$SPLIT_BODY_FILE")"
 gh issue view {N} --json body --jq '.body' [--repo {repo}] > "$SPLIT_BODY_FILE"
 printf '\n\n---\n\n## Decomposed\n\nThis issue covers multiple concerns and has been decomposed into focused sub-issues:\n\n' \
   >> "$SPLIT_BODY_FILE"
-for sub in {sub-issue-links}; do
+for sub in $sub_issue_links; do
   printf '- %s\n' "$sub" >> "$SPLIT_BODY_FILE"
 done
 printf '\nThis issue remains open as a tracking issue.\n' >> "$SPLIT_BODY_FILE"

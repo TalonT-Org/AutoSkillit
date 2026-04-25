@@ -49,7 +49,7 @@ Spawn all concurrently with `model: "sonnet"`. Always spawn agents 1–3; spawn 
 
 1. **Domain Vocabulary** — Extract domain-specific terms, entity names, and verb patterns used in identifiers. Look for: class names, function names, docstrings, README files, ADR documents.
 
-2. **Existing Abstractions** — Identify base classes, protocols, ABCs, and reusable interfaces. Look for: `class * (Protocol)`, `ABC`, `@abstractmethod`, shared base types.
+2. **Existing Abstractions** — Identify base classes, protocols, ABCs, and reusable interfaces. Look for: `class * (Protocol)`, `ABC`, the `abstractmethod` decorator, shared base types.
 
 3. **Integration Points** — Identify external system boundaries, HTTP clients, database adapters, message queues. Look for: import of third-party HTTP/DB libraries, adapter classes, port/adapter naming.
 
@@ -63,4 +63,4 @@ Merge all agent outputs into a coherent `domain_knowledge.md` Markdown document 
 
 ### Step 4: Write output (non-fatal)
 
-Write to `{{AUTOSKILLIT_TEMP}}/planner/domain_knowledge.md`. If any step fails, log a warning to stdout and exit with code 0 — do not propagate the error to the recipe.
+Write to `{{AUTOSKILLIT_TEMP}}/planner/domain_knowledge.md` (relative to the current working directory). If any step fails, log a warning to stdout and exit with code 0 — do not propagate the error to the recipe.

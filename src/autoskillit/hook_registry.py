@@ -86,7 +86,7 @@ HOOK_REGISTRY: list[HookDef] = [
     ),
     HookDef(
         matcher=r"(mcp__.*autoskillit.*__)?dispatch_food_truck",
-        scripts=["franchise_dispatch_guard.py"],
+        scripts=["fleet_dispatch_guard.py"],
     ),
     HookDef(
         event_type="PostToolUse",
@@ -115,6 +115,7 @@ RETIRED_SCRIPT_BASENAMES: frozenset[str] = frozenset(
         "token_summary_appender.py",
         "session_start_reminder.py",
         "headless_orchestration_guard.py",
+        "franchise_dispatch_guard.py",
         # Append any future retired basenames here, atomically with the rename commit.
     }
 )

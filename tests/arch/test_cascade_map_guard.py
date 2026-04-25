@@ -6,6 +6,7 @@ reverse import graph.  Zero runtime cost — pure static analysis.
 from __future__ import annotations
 
 import ast
+import warnings
 from collections import defaultdict
 from pathlib import Path
 
@@ -34,11 +35,14 @@ def _build_core_reexport_map() -> dict[str, str]:
     """
     init_path = _SRC_ROOT / "core" / "__init__.py"
     if not init_path.exists():
-        return {}
+        pytest.skip(f"core/__init__.py not found at {init_path} — guard would pass vacuously")
     reexport_map: dict[str, str] = {}
     try:
         tree = ast.parse(init_path.read_text(encoding="utf-8"))
-    except SyntaxError:
+    except SyntaxError as exc:
+        warnings.warn(
+            f"SyntaxError parsing {init_path}: {exc} — re-export map is empty", stacklevel=2
+        )
         return {}
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.level == 1 and node.module:
@@ -65,7 +69,11 @@ def _build_package_reverse_graph() -> dict[str, set[str]]:
             continue
         try:
             tree = ast.parse(filepath.read_text(encoding="utf-8"))
-        except SyntaxError:
+        except SyntaxError as exc:
+            warnings.warn(
+                f"SyntaxError parsing {filepath}: {exc} — skipping file in package reverse graph",
+                stacklevel=2,
+            )
             continue
         for node in ast.walk(tree):
             if not (isinstance(node, ast.ImportFrom) and node.module):
@@ -94,7 +102,11 @@ def _build_module_reverse_graph() -> dict[str, set[str]]:
             continue
         try:
             tree = ast.parse(filepath.read_text(encoding="utf-8"))
-        except SyntaxError:
+        except SyntaxError as exc:
+            warnings.warn(
+                f"SyntaxError parsing {filepath}: {exc} — skipping file in module reverse graph",
+                stacklevel=2,
+            )
             continue
         for node in ast.walk(tree):
             if not (isinstance(node, ast.ImportFrom) and node.module):
@@ -155,9 +167,7 @@ class TestLayerCascadeConservativeGuard:
         graph = _build_package_reverse_graph()
         violations: dict[str, dict[str, list[str]]] = {}
         for pkg, declared in LAYER_CASCADE_CONSERVATIVE.items():
-            actual_all = graph.get(pkg, set())
-            # Exclude standalone test-file values (entries like "test_smoke_utils.py")
-            actual_pkgs = {c for c in actual_all if not c.endswith(".py")}
+            actual_pkgs = graph.get(pkg, set())
             missing = actual_pkgs - declared
             if missing:
                 violations[pkg] = {

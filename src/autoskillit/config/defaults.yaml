@@ -219,6 +219,9 @@ skills:
     - plan-visualization
     - stage-data
     - bundle-local-report
+    # planner
+    - planner-analyze
+    - planner-extract-domain
   tier3:
     - prepare-pr
     - compose-pr

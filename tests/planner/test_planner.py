@@ -15,3 +15,9 @@ def test_planner_all_exports_callables() -> None:
     from autoskillit.planner import __all__
 
     assert set(__all__) == {"check_remaining", "build_assignment_manifest", "build_wp_manifest"}
+
+
+def test_planner_feature_skill_categories() -> None:
+    from autoskillit.core._type_constants import FEATURE_REGISTRY
+
+    assert FEATURE_REGISTRY["planner"].skill_categories == frozenset({"planner"})

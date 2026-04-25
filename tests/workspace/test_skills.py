@@ -587,6 +587,16 @@ class TestSkillCategories:
             "make-campaign must retain 'orchestration-family' category"
         )
 
+    def test_planner_analyze_has_planner_category(self) -> None:
+        info = DefaultSkillResolver().resolve("planner-analyze")
+        assert info is not None
+        assert "planner" in info.categories
+
+    def test_planner_extract_domain_has_planner_category(self) -> None:
+        info = DefaultSkillResolver().resolve("planner-extract-domain")
+        assert info is not None
+        assert "planner" in info.categories
+
 
 RESEARCH_SKILL_NAMES = {
     "scope",

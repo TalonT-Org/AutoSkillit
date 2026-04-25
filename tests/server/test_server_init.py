@@ -917,6 +917,15 @@ class TestSessionTypeVisibility:
 class TestFleetAutoGateBoot:
     """Fleet lifespan auto-gate: _fleet_auto_gate_boot opens gate before first tool call."""
 
+    @pytest.fixture(autouse=True)
+    def _reset_mcp_visibility(self):
+        """Reset gated tag visibility on the shared mcp singleton before/after each test."""
+        from autoskillit.server import mcp
+
+        mcp.disable(tags={"fleet", "kitchen", "headless"})
+        yield
+        mcp.disable(tags={"fleet", "kitchen", "headless"})
+
     @pytest.mark.anyio
     async def test_fleet_lifespan_auto_opens_gate(self, tool_ctx):
         """Fleet session: gate is open after _fleet_auto_gate_boot() runs."""
@@ -1076,6 +1085,46 @@ class TestFleetAutoGateBoot:
             entry.get("event") == "fleet_auto_gate_boot" and entry.get("gate_state") == "open"
             for entry in logs
         )
+
+    @pytest.mark.anyio
+    async def test_fleet_auto_gate_boot_suppresses_fleet_tools_when_feature_disabled(
+        self, tool_ctx, monkeypatch
+    ):
+        """_fleet_auto_gate_boot with features.fleet: false → fleet MCP tags disabled."""
+        import dataclasses
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from fastmcp.client import Client
+
+        from autoskillit.core import FLEET_TOOLS
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server import mcp
+        from autoskillit.server._lifespan import _fleet_auto_gate_boot
+
+        # First enable fleet tag (as import-time phase 1 would)
+        mcp.enable(tags={"fleet"})
+
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        tool_ctx.quota_refresh_task = None
+        tool_ctx.config = dataclasses.replace(tool_ctx.config, features={"fleet": False})
+
+        monkeypatch.setattr("autoskillit.server._lifespan._get_ctx_or_none", lambda: tool_ctx)
+
+        with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+            with patch("autoskillit.server.helpers._prime_quota_cache", new=AsyncMock()):
+                with patch(
+                    "autoskillit.pipeline.create_background_task",
+                    return_value=MagicMock(),
+                ):
+                    with patch("autoskillit.core.register_active_kitchen"):
+                        await _fleet_auto_gate_boot(tool_ctx)
+
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
+        tool_names = {t.name for t in tools}
+        assert FLEET_TOOLS, "FLEET_TOOLS must not be empty — loop would pass vacuously"
+        for name in FLEET_TOOLS:
+            assert name not in tool_names, f"{name} should be hidden when fleet feature disabled"
 
 
 class TestFeatureGateVisibility:

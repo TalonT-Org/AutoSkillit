@@ -1,4 +1,4 @@
-"""Franchise per-recipe tool-surface enforcement tests.
+"""Fleet per-recipe tool-surface enforcement tests.
 
 Validates that food trucks launched for each bundled recipe see exactly the
 expected tool surface under the pack enforcement model: kitchen-core tools

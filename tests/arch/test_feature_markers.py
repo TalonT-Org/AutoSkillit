@@ -21,7 +21,7 @@ _FLEET_DIR_FILES = sorted((_TESTS_ROOT / "fleet").glob("test_*.py"))
 
 # Cross-directory fleet test files — require deliberate enumeration
 _FLEET_CROSS_DIR_FILES = [
-    _TESTS_ROOT / "cli" / "test_franchise_cli.py",
+    _TESTS_ROOT / "cli" / "test_fleet_cli.py",
     _TESTS_ROOT / "server" / "test_tools_dispatch.py",
     _TESTS_ROOT / "cli" / "test_food_truck_prompt.py",
     _TESTS_ROOT / "cli" / "test_l3_orchestrator_prompt.py",

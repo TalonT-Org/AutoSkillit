@@ -184,11 +184,11 @@ def test_interactive_session_reload_uses_named_resume(
 
 
 # ---------------------------------------------------------------------------
-# RL-6 — Franchise reload re-launches with same system_prompt, no --resume
+# RL-6 — Fleet reload re-launches with same system_prompt, no --resume
 # ---------------------------------------------------------------------------
 
 
-def test_franchise_reload_relaunches_without_resume(
+def test_fleet_reload_relaunches_without_resume(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from autoskillit.core import NoResume

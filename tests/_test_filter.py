@@ -136,7 +136,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "branch_guard": frozenset({"core", "pipeline", "server", "workspace"}),
     "_plugin_ids": frozenset({"core", "cli", "server"}),
     "_terminal_table": frozenset({"core", "cli", "pipeline", "recipe"}),
-    "_linux_proc": frozenset({"core", "cli", "execution", "franchise"}),
+    "_linux_proc": frozenset({"core", "cli", "execution", "fleet"}),
     "_plugin_cache": frozenset({"core", "cli", "server"}),
     "github_url": frozenset({"core", "cli", "execution", "server"}),
     "paths": frozenset(
@@ -145,7 +145,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
             "cli",
             "config",
             "execution",
-            "franchise",
+            "fleet",
             "migration",
             "recipe",
             "server",
@@ -172,7 +172,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "workspace",
             "recipe",
             "migration",
-            "franchise",
+            "fleet",
             "server",
             "cli",
             "hooks",
@@ -213,7 +213,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
         {
             "workspace",
             "recipe",
-            "franchise",
+            "fleet",
             "server",
             "cli",
             "skills",
@@ -236,9 +236,9 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server",
         }
     ),
-    "franchise": frozenset(
+    "fleet": frozenset(
         {
-            "franchise",
+            "fleet",
             "server",
             "cli",
         }
@@ -287,7 +287,7 @@ LAYER_CASCADE_AGGRESSIVE: dict[str, frozenset[str]] = {
     "workspace": frozenset({"workspace"}),
     "recipe": frozenset({"recipe"}),
     "migration": frozenset({"migration"}),
-    "franchise": frozenset({"franchise"}),
+    "fleet": frozenset({"fleet"}),
     "server": frozenset({"server"}),
     "cli": frozenset({"cli"}),
     "hooks": frozenset({"hooks"}),

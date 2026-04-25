@@ -829,7 +829,7 @@ class TestSessionTypeVisibility:
             assert name not in tool_names, f"{name} (kitchen) should be hidden for bridge"
 
     @pytest.mark.anyio
-    async def test_franchise_tag_reset_by_conftest(self, monkeypatch):
+    async def test_fleet_tag_reset_by_conftest(self, monkeypatch):
         from fastmcp.client import Client
 
         from autoskillit.server import mcp

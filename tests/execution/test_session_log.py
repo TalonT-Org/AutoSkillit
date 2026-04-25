@@ -1465,7 +1465,7 @@ def _make_sessions(tmp_path, count, start_mtime=1_000_000_000, campaign_id=""):
 
 
 def _make_state_file(project_dir, campaign_id, status):
-    """Create a franchise dispatch state file."""
+    """Create a fleet dispatch state file."""
     dispatches_dir = project_dir / ".autoskillit" / "temp" / "dispatches"
     dispatches_dir.mkdir(parents=True, exist_ok=True)
     state_path = dispatches_dir / "d1.json"

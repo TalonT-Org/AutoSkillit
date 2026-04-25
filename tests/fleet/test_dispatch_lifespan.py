@@ -1,4 +1,4 @@
-"""Group G (franchise part): lifespan_started surface + envelope propagation."""
+"""Group G (fleet part): lifespan_started surface + envelope propagation."""
 
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ async def _noop_quota_refresher(config, **kwargs) -> None:
 def _setup_dispatch(tool_ctx, monkeypatch, recipe_name: str = "test-recipe"):
     from autoskillit.recipe.schema import Recipe, RecipeKind
 
-    tool_ctx.franchise_lock = asyncio.Lock()
+    tool_ctx.fleet_lock = asyncio.Lock()
     repo = InMemoryRecipeRepository()
     recipe_info = _make_recipe_info(recipe_name)
     repo.add_recipe(recipe_name, recipe_info)

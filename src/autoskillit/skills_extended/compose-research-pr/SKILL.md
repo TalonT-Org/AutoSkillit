@@ -35,7 +35,7 @@ Does NOT invoke lens skills or other sub-skills.
 **NEVER:**
 - Invoke any sub-skills or slash commands during execution
 - Auto-merge or approve the PR — research PRs are for human review only
-- Fail the pipeline if `gh` is unavailable — emit `pr_url = ` (empty string) and exit 0
+- Fail the pipeline when `gh` is not accessible — emit `pr_url = ` (empty string) and return
 - Create files outside `{{AUTOSKILLIT_TEMP}}/compose-research-pr/` (relative to the current working directory)
 - Invent mermaid classDef colors — when embedding validated diagrams, include them verbatim.
   Using ONLY classDef styles from the mermaid skill when composing the PR body.
@@ -187,7 +187,7 @@ as your final output:
 pr_url = https://github.com/owner/repo/pull/N
 ```
 
-Where `pr_url` is the absolute GitHub PR URL, or an empty string if GitHub is unavailable:
+Where `pr_url` is the absolute GitHub PR URL, or an empty string when GitHub is not accessible:
 
 ```
 pr_url = 

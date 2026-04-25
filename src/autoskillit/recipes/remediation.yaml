@@ -446,7 +446,10 @@ steps:
       prep_path: "${{ result.prep_path }}"
       selected_lenses: "${{ result.selected_lenses }}"
       lens_context_paths: "${{ result.lens_context_paths }}"
-    on_success: run_arch_lenses
+    on_result:
+      - when: "${{ result.prep_path }}"
+        route: run_arch_lenses
+      - route: release_issue_failure
     on_failure: release_issue_failure
     on_context_limit: release_issue_failure
     optional: true

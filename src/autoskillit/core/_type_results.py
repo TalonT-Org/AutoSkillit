@@ -152,6 +152,7 @@ class SkillResult:
     cli_subtype: str = field(default="")
     write_path_warnings: list[str] = field(default_factory=list)
     write_call_count: int = 0
+    fs_writes_detected: bool = False
     order_id: str = ""
     kill_reason: KillReason = KillReason.NATURAL_EXIT
     """Why the subprocess was (or was not) killed after the race loop.

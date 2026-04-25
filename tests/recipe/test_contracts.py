@@ -629,15 +629,30 @@ def test_write_behavior_defaults_to_none() -> None:
 
 
 ALWAYS_WRITE_SKILLS = {
+    "build-execution-map",
+    "compose-pr",
+    "compose-research-pr",
+    "design-guards",
+    "diagnose-ci",
     "dry-walkthrough",
+    "generate-report",
+    "implement-experiment",
     "implement-worktree",
     "implement-worktree-no-merge",
-    "rectify",
+    "make-campaign",
     "make-plan",
+    "plan-experiment",
+    "plan-visualization",
+    "prepare-research-pr",
+    "rectify",
     "report-bug",
-    "design-guards",
+    "resolve-design-review",
+    "review-design",
+    "run-experiment",
+    "scope",
+    "stage-data",
+    "troubleshoot-experiment",
     "write-recipe",
-    "diagnose-ci",
 }
 
 
@@ -649,6 +664,21 @@ def test_every_always_write_skill_has_contract(skill_name: str) -> None:
     assert contract is not None, f"Skill '{skill_name}' missing from skill_contracts.yaml"
     assert contract.write_behavior == "always", (
         f"Skill '{skill_name}' expected write_behavior='always', got '{contract.write_behavior}'"
+    )
+
+
+def test_always_write_skills_matches_yaml() -> None:
+    """ALWAYS_WRITE_SKILLS test set must equal the set from skill_contracts.yaml."""
+    manifest = load_bundled_manifest()
+    yaml_always = {
+        name
+        for name, data in manifest.get("skills", {}).items()
+        if data.get("write_behavior") == "always"
+    }
+    assert ALWAYS_WRITE_SKILLS == yaml_always, (
+        f"ALWAYS_WRITE_SKILLS is out of sync with skill_contracts.yaml.\n"
+        f"In test but not YAML: {ALWAYS_WRITE_SKILLS - yaml_always}\n"
+        f"In YAML but not test: {yaml_always - ALWAYS_WRITE_SKILLS}"
     )
 
 
@@ -693,6 +723,24 @@ def test_every_conditional_write_skill_has_correct_contract(
 # ---------------------------------------------------------------------------
 # REQ-C4-02: DataFlowEntry rename
 # ---------------------------------------------------------------------------
+
+
+def test_prepare_pr_contract_is_conditional() -> None:
+    """prepare-pr must be conditional — it has a documented no-write exit path."""
+    manifest = load_bundled_manifest()
+    contract = get_skill_contract("prepare-pr", manifest)
+    assert contract is not None
+    assert contract.write_behavior == "conditional"
+    assert contract.write_expected_when
+
+
+def test_bundle_local_report_contract_is_conditional() -> None:
+    """bundle-local-report must be conditional — it has a documented no-write exit path."""
+    manifest = load_bundled_manifest()
+    contract = get_skill_contract("bundle-local-report", manifest)
+    assert contract is not None
+    assert contract.write_behavior == "conditional"
+    assert contract.write_expected_when
 
 
 def test_dataflow_entry_uppercase_f() -> None:

@@ -1,5 +1,6 @@
 """Structural integrity tests for the audit-feature-gates skill."""
 
+import re
 from pathlib import Path
 
 import yaml
@@ -22,10 +23,10 @@ def test_audit_feature_gates_skill_md_exists():
 
 def test_audit_feature_gates_skill_has_audit_category():
     source = _SKILL_FILE.read_text()
-    # Extract YAML frontmatter between --- delimiters
     parts = source.split("---", 2)
     assert len(parts) >= 3, "SKILL.md must have YAML frontmatter"
     fm = yaml.safe_load(parts[1])
+    assert isinstance(fm, dict), "SKILL.md frontmatter must parse to a dict"
     assert "audit" in fm.get("categories", []), "audit-feature-gates must have categories: [audit]"
 
 
@@ -58,8 +59,6 @@ def test_audit_feature_gates_output_path_declared():
 
 
 def test_full_audit_yaml_has_four_audit_chains():
-    import re
-
     source = _FULL_AUDIT.read_text()
     # Count distinct audit-* skill references in the run_audits step context
     audit_skill_calls = re.findall(
@@ -79,6 +78,6 @@ def test_full_audit_yaml_summary_mentions_four_audits():
 
 def test_validate_audit_recognizes_feature_gate_format():
     source = _VALIDATE_SKILL.read_text()
-    assert "audit-feature-gates" in source or "Feature Gate Audit" in source, (
-        "validate-audit SKILL.md must mention audit-feature-gates report format"
+    assert "Feature Gate Audit" in source, (
+        "validate-audit SKILL.md must contain 'Feature Gate Audit' abort-error string"
     )

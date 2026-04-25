@@ -452,9 +452,6 @@ def recipes_render(name: str | None = None) -> None:
     print(diagram if diagram else f"No diagram. Run /render-recipe {name}")
 
 
-_MAX_RELOADS = 10
-
-
 def _launch_cook_session(
     system_prompt: str,
     *,
@@ -467,9 +464,9 @@ def _launch_cook_session(
     from autoskillit.cli._session_launch import _run_interactive_session
     from autoskillit.core import NamedResume
 
+    _max_reloads = 10
     current_resume_spec = resume_spec
     _current_initial_message = initial_message
-    reload_count = 0
     seen_reload_ids: set[str] = set()
     while True:
         reload_id = _run_interactive_session(
@@ -481,16 +478,10 @@ def _launch_cook_session(
         )
         if reload_id is None:
             break
-        reload_count += 1
-        if reload_count >= _MAX_RELOADS:
-            raise SystemExit(
-                f"Reload limit exceeded ({_MAX_RELOADS} reloads). "
-                "Check session for infinite reload loop."
-            )
+        if len(seen_reload_ids) >= _max_reloads:
+            raise SystemExit(f"Too many reloads ({_max_reloads} max). Check for infinite loop.")
         if reload_id in seen_reload_ids:
-            raise SystemExit(
-                f"Repeated reload_id detected ({reload_id!r}). Possible infinite loop — aborting."
-            )
+            raise SystemExit(f"Repeated reload_id {reload_id!r} — aborting.")
         seen_reload_ids.add(reload_id)
         current_resume_spec = NamedResume(session_id=reload_id)
         _current_initial_message = None

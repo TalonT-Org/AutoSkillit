@@ -98,7 +98,7 @@ If no implicit deps are detected, write `added_backward_deps: {}`.
 
 Write to `{$1}/dep_graph.json`.
 
-### Step 5: Emit output token
+### Step 5: Emit output tokens
 
 ```
 dep_graph_path = <absolute path to dep_graph.json>

@@ -1,7 +1,7 @@
 """Campaign summary schema v1 — dataclasses, parser, and validator.
 
 Provides the structured contract for the campaign summary sentinel block
-emitted by L3 franchise sessions before exit.
+emitted by L3 fleet sessions before exit.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
-from autoskillit.core import FranchiseErrorCode
+from autoskillit.core import FleetErrorCode
 
 
 class CampaignSummaryStatus(StrEnum):
@@ -49,7 +49,7 @@ class SummaryErrorRecord:
     """One entry per failed dispatch."""
 
     dispatch_name: str
-    code: FranchiseErrorCode
+    code: FleetErrorCode
     message: str
     l2_session_id: str
 
@@ -176,7 +176,7 @@ def parse_campaign_summary(text: str, campaign_id: str) -> CampaignSummary | Non
         error_records = [
             SummaryErrorRecord(
                 dispatch_name=r["dispatch_name"],
-                code=FranchiseErrorCode(r["code"]),
+                code=FleetErrorCode(r["code"]),
                 message=r["message"],
                 l2_session_id=r["l2_session_id"],
             )

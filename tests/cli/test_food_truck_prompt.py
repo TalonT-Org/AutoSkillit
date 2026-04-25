@@ -9,7 +9,7 @@ import re
 
 import pytest
 
-pytestmark = [pytest.mark.layer("cli"), pytest.mark.small, pytest.mark.feature("franchise")]
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.small, pytest.mark.feature("fleet")]
 
 # --- Fixtures ---
 
@@ -85,9 +85,9 @@ class TestL2SousChefBlock:
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
     ) -> None:
         from autoskillit.cli import _prompts
-        from autoskillit.franchise import _prompts as _franchise_prompts
+        from autoskillit.fleet import _prompts as _fleet_prompts
 
-        monkeypatch.setattr(_franchise_prompts, "pkg_root", lambda: tmp_path)
+        monkeypatch.setattr(_fleet_prompts, "pkg_root", lambda: tmp_path)
         result = _prompts._build_l2_sous_chef_block()
         assert result == ""
 

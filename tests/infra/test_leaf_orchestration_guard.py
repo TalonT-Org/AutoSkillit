@@ -70,11 +70,11 @@ def test_guard_permits_orchestrator_tier():
     assert not out.strip()
 
 
-def test_guard_permits_franchise_tier():
+def test_guard_permits_fleet_tier():
     out = _run_guard(
         {"tool_name": "mcp__autoskillit__run_skill"},
         headless=True,
-        session_type="franchise",
+        session_type="fleet",
     )
     assert not out.strip()
 

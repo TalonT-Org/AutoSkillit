@@ -9,7 +9,7 @@ from autoskillit.core import (
     GATED_TOOLS,
     UNGATED_TOOLS,
     FailureRecord,
-    franchise_error,
+    fleet_error,
     is_protected_branch,
 )
 from autoskillit.pipeline.audit import (
@@ -59,7 +59,7 @@ __all__ = [
     "DefaultGateState",
     "GATED_TOOLS",
     "UNGATED_TOOLS",
-    "franchise_error",
+    "fleet_error",
     "gate_error_result",
     "headless_error_result",
     # telemetry_fmt

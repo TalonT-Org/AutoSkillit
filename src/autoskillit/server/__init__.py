@@ -6,7 +6,7 @@ imported. Each new session sees only the 4 free-range tools (open_kitchen, close
 disable_quota_guard, and reload_session).
 
 Startup tag visibility is determined by AUTOSKILLIT_SESSION_TYPE (3-branch dispatch):
-  FRANCHISE — franchise-tagged tools pre-revealed
+  FLEET — fleet-tagged tools pre-revealed
   ORCHESTRATOR + HEADLESS=1 — all kitchen-tagged tools pre-revealed
   LEAF + HEADLESS=1 — headless-tagged tools (test_check) pre-revealed
   ORCHESTRATOR/LEAF (interactive) — no pre-reveal; open_kitchen unlocks

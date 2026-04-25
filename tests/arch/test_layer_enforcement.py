@@ -39,7 +39,7 @@ SUBPACKAGE_LAYERS: dict[str, int] = {
     # Layer 2: domain services — may import from L0 and L1
     "recipe": 2,
     "migration": 2,
-    "franchise": 2,
+    "fleet": 2,
     # Layer 3: application layer — may import from L0–L2
     "server": 3,
     "cli": 3,
@@ -242,7 +242,7 @@ def test_gated_tools_call_require_enabled_first() -> None:
                         and _has_await_or_return(stmt)
                         and not _has_call_to(stmt, "_require_orchestrator_or_higher")
                         and not _has_call_to(stmt, "_require_orchestrator_exact")
-                        and not _has_call_to(stmt, "_require_franchise")
+                        and not _has_call_to(stmt, "_require_fleet")
                     ):
                         action_idx = i
 
@@ -637,7 +637,7 @@ def test_server_tools_import_only_allowed_packages() -> None:
     autoskillit.pipeline, autoskillit.config, and intra-package autoskillit.server.*.
     TYPE_CHECKING exempt.
     """
-    ALLOWED = {"core", "pipeline", "server", "config", "franchise"}
+    ALLOWED = {"core", "pipeline", "server", "config", "fleet"}
     tools_files = [
         p for p in _SOURCE_FILES if p.parent.name == "server" and p.stem.startswith("tools_")
     ]
@@ -1067,7 +1067,7 @@ def test_default_classes_only_instantiated_inside_factory_or_allowlist() -> None
         Path("server/_factory.py"): {"*"},  # Composition Root
         Path("cli/_workspace.py"): {"DefaultSubprocessRunner"},  # CLI worktree listing
         Path("cli/_cook.py"): {"DefaultSessionSkillManager"},  # interactive cook
-        Path("cli/_franchise.py"): {
+        Path("cli/_fleet.py"): {
             "DefaultSessionSkillManager",  # interactive cleanup
             "DefaultWorkspaceManager",  # signal guard cleanup
             "DefaultTokenLog",  # cross-check token diagnostic
@@ -1139,8 +1139,16 @@ _TEST_LAYER_ALLOWED: dict[str, frozenset[str]] = {
     "tests/planner": frozenset({"autoskillit.core", "autoskillit.planner"}),
     "tests/recipe": frozenset({"autoskillit.core", "autoskillit.recipe"}),
     "tests/migration": frozenset({"autoskillit.core", "autoskillit.migration"}),
-    "tests/franchise": frozenset(
-        {"autoskillit.core", "autoskillit.franchise", "autoskillit.recipe", "autoskillit.server"}
+    "tests/fleet": frozenset(
+        {
+            "autoskillit.core",
+            "autoskillit.fleet",
+            "autoskillit.recipe",
+            "autoskillit.server",
+            "autoskillit.config",
+            "autoskillit.pipeline",
+            "autoskillit.hook_registry",
+        }
     ),
     "tests/server": frozenset({"autoskillit"}),  # wildcard: any autoskillit.* import allowed
     "tests/cli": frozenset({"autoskillit"}),  # wildcard: any autoskillit.* import allowed
@@ -1177,12 +1185,8 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/recipe/test_review_loop_routing_integration.py": frozenset({"autoskillit.smoke_utils"}),
     # migration tests — migration engine integrates with execution.session
     "tests/migration/test_engine.py": frozenset({"autoskillit.execution"}),
-    # franchise E2E tests exercise full dispatch pipeline: DefaultHeadlessExecutor
-    # (execution layer) and _reap_stale_dispatches (cli layer) are required to wire
-    # the real executor and to test orphan reaping via the CLI-layer reap function.
-    "tests/franchise/test_franchise_e2e.py": frozenset(
-        {"autoskillit.execution", "autoskillit.cli"}
-    ),
+    # fleet e2e test exercises execution + cli layers end-to-end
+    "tests/fleet/test_franchise_e2e.py": frozenset({"autoskillit.execution", "autoskillit.cli"}),
 }
 
 

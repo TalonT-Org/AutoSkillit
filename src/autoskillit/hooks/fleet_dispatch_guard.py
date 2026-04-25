@@ -3,7 +3,7 @@
 
 Defense-in-depth: dispatch_food_truck must never be called from a headless
 session regardless of SESSION_TYPE. This closes L3→L3 recursion where a
-franchise session spawns another franchise session via dispatch.
+fleet session spawns another fleet session via dispatch.
 
 Interactive callers (cook with kitchen open) are always permitted.
 """
@@ -17,11 +17,11 @@ def main() -> None:
     try:
         data = json.loads(sys.stdin.read())
     except (json.JSONDecodeError, ValueError, OSError):
-        sys.stderr.write("franchise_dispatch_guard: malformed stdin — failing open\n")
+        sys.stderr.write("fleet_dispatch_guard: malformed stdin — failing open\n")
         sys.exit(0)  # fail-open on malformed input
 
     if not isinstance(data, dict):
-        sys.stderr.write("franchise_dispatch_guard: unexpected JSON root type — failing open\n")
+        sys.stderr.write("fleet_dispatch_guard: unexpected JSON root type — failing open\n")
         sys.exit(0)
 
     # Interactive sessions always pass

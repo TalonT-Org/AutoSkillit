@@ -23,7 +23,7 @@ _LAYER_DIRS: frozenset[str] = frozenset(
         "workspace",
         "recipe",
         "migration",
-        "franchise",
+        "fleet",
         "planner",
         "server",
         "cli",
@@ -36,7 +36,7 @@ _SIZE_DIRS: frozenset[str] = frozenset(
         "config",
         "core",
         "execution",
-        "franchise",
+        "fleet",
         "migration",
         "pipeline",
         "planner",
@@ -240,7 +240,7 @@ def minimal_ctx(tmp_path):
     from autoskillit.pipeline.tokens import DefaultTokenLog
 
     ctx = ToolContext(
-        config=AutomationConfig(features={"franchise": True}),
+        config=AutomationConfig(features={"fleet": True}),
         audit=DefaultAuditLog(),
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
@@ -274,7 +274,7 @@ def tool_ctx(monkeypatch, tmp_path):
 
     mock_runner = MockSubprocessRunner()
     ctx = make_context(
-        AutomationConfig(features={"franchise": True}),
+        AutomationConfig(features={"fleet": True}),
         runner=mock_runner,
         plugin_dir=str(tmp_path),
     )
@@ -416,7 +416,7 @@ def _is_test_feature_enabled(feature_name: str, *, env_val: str | None) -> bool:
        as a comma-separated whitelist.  Only listed names are enabled.
     2. If unset, resolve via full config chain (defaults.yaml → project config
        → env vars) using load_config().  This respects project-level overrides
-       like .autoskillit/config.yaml features.franchise: true.
+       like .autoskillit/config.yaml features.fleet: true.
     3. If config resolution fails, fall back to FEATURE_REGISTRY[name].default_enabled.
        Unknown feature names return True (fail-open).
 

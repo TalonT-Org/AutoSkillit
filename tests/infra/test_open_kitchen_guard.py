@@ -31,12 +31,10 @@ def test_open_kitchen_guard_denies_leaf_tier() -> None:
     assert "leaf" in response["hookSpecificOutput"]["permissionDecisionReason"].lower()
 
 
-def test_open_kitchen_guard_denies_franchise_tier() -> None:
-    response = _run_guard(
-        {"AUTOSKILLIT_HEADLESS": "1", "AUTOSKILLIT_SESSION_TYPE": "franchise"}, {}
-    )
+def test_open_kitchen_guard_denies_fleet_tier() -> None:
+    response = _run_guard({"AUTOSKILLIT_HEADLESS": "1", "AUTOSKILLIT_SESSION_TYPE": "fleet"}, {})
     assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "franchise" in response["hookSpecificOutput"]["permissionDecisionReason"].lower()
+    assert "fleet" in response["hookSpecificOutput"]["permissionDecisionReason"].lower()
 
 
 def test_open_kitchen_guard_permits_headless_orchestrator(tmp_path: Path) -> None:

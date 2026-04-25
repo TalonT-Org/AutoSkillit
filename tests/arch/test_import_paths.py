@@ -27,7 +27,7 @@ PACKAGES = frozenset(
         "planner",
         "recipe",
         "migration",
-        "franchise",
+        "fleet",
         "config",
         "server",
         "cli",
@@ -143,7 +143,7 @@ def test_req_imp_003_tools_import_namespace(path: Path) -> None:
             "autoskillit.pipeline",
             "autoskillit.server",
             "autoskillit.config",
-            "autoskillit.franchise",
+            "autoskillit.fleet",
         }
     )
     violations: list[str] = []

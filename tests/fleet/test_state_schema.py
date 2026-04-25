@@ -7,16 +7,16 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.franchise import (
+from autoskillit.fleet import (
     DispatchRecord,
     DispatchStatus,
     mark_dispatch_running,
     read_state,
     write_initial_state,
 )
-from autoskillit.franchise.state import _SCHEMA_VERSION
+from autoskillit.fleet.state import _SCHEMA_VERSION
 
-pytestmark = [pytest.mark.layer("franchise"), pytest.mark.small, pytest.mark.feature("franchise")]
+pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
 
 def _make_state(tmp_path: Path, dispatch_name: str = "a") -> Path:

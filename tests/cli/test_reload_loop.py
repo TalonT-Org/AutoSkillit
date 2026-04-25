@@ -210,14 +210,14 @@ def test_franchise_reload_relaunches_without_resume(
     )
     monkeypatch.setattr("autoskillit.cli.detect_autoskillit_mcp_prefix", lambda: "autoskillit")
     monkeypatch.setattr(
-        "autoskillit.cli._prompts._build_franchise_open_prompt",
+        "autoskillit.cli._prompts._build_fleet_open_prompt",
         lambda mcp_prefix: "test-prompt",
     )
     monkeypatch.chdir(tmp_path)
 
-    from autoskillit.cli._franchise import _launch_franchise_session
+    from autoskillit.cli._fleet import _launch_fleet_session
 
-    _launch_franchise_session(
+    _launch_fleet_session(
         campaign_recipe=None,
         campaign_id=None,
         state_path=None,

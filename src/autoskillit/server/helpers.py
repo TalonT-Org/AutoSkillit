@@ -184,19 +184,19 @@ def _require_orchestrator_or_higher(tool_name: str = "") -> str | None:
     """Return headless_error JSON if session is leaf-tier; None if permitted.
 
     Interactive sessions (HEADLESS not set) always pass.
-    Headless sessions must be orchestrator or franchise tier.
+    Headless sessions must be orchestrator or fleet tier.
     Fail-closed: unset/invalid SESSION_TYPE → LEAF → deny.
     """
     if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
         return None
 
     st = session_type()
-    if st in (SessionType.ORCHESTRATOR, SessionType.FRANCHISE, SessionType.FLEET):
+    if st in (SessionType.ORCHESTRATOR, SessionType.FLEET):
         return None
 
     msg = (
         f"{tool_name} cannot be called from leaf sessions. "
-        "Only orchestrator or franchise sessions may call this tool."
+        "Only orchestrator or fleet sessions may call this tool."
         if tool_name
         else None
     )
@@ -208,7 +208,7 @@ def _require_orchestrator_exact(tool_name: str = "") -> str | None:
 
     Interactive sessions (HEADLESS not set) always pass.
     Headless sessions must be exactly orchestrator tier.
-    Franchise and leaf tiers are denied.
+    Fleet and leaf tiers are denied.
     """
     if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
         return None
@@ -217,7 +217,7 @@ def _require_orchestrator_exact(tool_name: str = "") -> str | None:
     if st is SessionType.ORCHESTRATOR:
         return None
 
-    if st is SessionType.FRANCHISE or st is SessionType.FLEET:
+    if st is SessionType.FLEET:
         msg = (
             f"{tool_name} cannot be called from {st.value} sessions. "
             f"{st.value.capitalize()} sessions do not have a kitchen."
@@ -234,18 +234,17 @@ def _require_orchestrator_exact(tool_name: str = "") -> str | None:
     return headless_error_result(msg)
 
 
-def _require_franchise(tool_name: str = "") -> str | None:
-    """Return headless_error JSON if session is not franchise/fleet-tier; None if permitted.
+def _require_fleet(tool_name: str = "") -> str | None:
+    """Return headless_error JSON if session is not fleet-tier; None if permitted.
 
-    Permits both FRANCHISE and FLEET sessions (T1 union model).
-    No interactive bypass — fleet/franchise is a specific tier, not a headless guard.
+    No interactive bypass — fleet is a specific tier, not a headless guard.
     """
     st = session_type()
-    if st is SessionType.FRANCHISE or st is SessionType.FLEET:
+    if st is SessionType.FLEET:
         return None
 
     msg = (
-        f"{tool_name} requires a franchise session. Current session type is not franchise."
+        f"{tool_name} requires a fleet session. Current session type is not fleet."
         if tool_name
         else None
     )
@@ -540,7 +539,7 @@ def _build_hook_diagnostic_warning() -> str | None:
 def _get_food_truck_prompt_builder() -> Callable[..., str]:
     """Return the food truck prompt builder with mcp_prefix pre-bound."""
     from autoskillit.core import detect_autoskillit_mcp_prefix
-    from autoskillit.franchise import _build_food_truck_prompt
+    from autoskillit.fleet import _build_food_truck_prompt
 
     mcp_prefix = detect_autoskillit_mcp_prefix()
     return functools.partial(_build_food_truck_prompt, mcp_prefix=mcp_prefix)

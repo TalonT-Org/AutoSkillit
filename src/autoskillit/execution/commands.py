@@ -354,7 +354,7 @@ def build_food_truck_cmd(
     Parameters
     ----------
     orchestrator_prompt
-        Complete system prompt built by the franchise caller.
+        Complete system prompt built by the fleet caller.
     plugin_dir
         Path passed as ``--plugin-dir`` flag.
     cwd

@@ -8,7 +8,7 @@ pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
 
 def test_feature_gate_rule_fires_on_disabled_feature_tool() -> None:
-    """Severity.ERROR when recipe uses dispatch_food_truck with franchise disabled."""
+    """Severity.ERROR when recipe uses dispatch_food_truck with fleet disabled."""
     from autoskillit.core import Severity
     from autoskillit.recipe._analysis import make_validation_context
     from autoskillit.recipe.registry import run_semantic_rules
@@ -21,11 +21,11 @@ def test_feature_gate_rule_fires_on_disabled_feature_tool() -> None:
         kitchen_rules="k",
         steps={"s": RecipeStep(tool="dispatch_food_truck", with_args={})},
     )
-    ctx = make_validation_context(recipe, disabled_features=frozenset({"franchise"}))
+    ctx = make_validation_context(recipe, disabled_features=frozenset({"fleet"}))
     findings = [f for f in run_semantic_rules(ctx) if f.rule == "feature-gate-tool-reference"]
-    assert findings, "expected feature-gate-tool-reference finding for disabled franchise tool"
+    assert findings, "expected feature-gate-tool-reference finding for disabled fleet tool"
     assert all(f.severity == Severity.ERROR for f in findings)
-    assert any("franchise" in f.message for f in findings)
+    assert any("fleet" in f.message for f in findings)
     assert any("dispatch_food_truck" in f.message for f in findings)
 
 
@@ -48,7 +48,7 @@ def test_feature_gate_rule_passes_when_feature_enabled() -> None:
 
 
 def test_feature_gate_rule_ignores_non_feature_tools() -> None:
-    """run_cmd has no feature tags — no finding even when franchise is disabled."""
+    """run_cmd has no feature tags — no finding even when fleet is disabled."""
     from autoskillit.recipe._analysis import make_validation_context
     from autoskillit.recipe.registry import run_semantic_rules
     from autoskillit.recipe.schema import Recipe, RecipeStep
@@ -60,7 +60,7 @@ def test_feature_gate_rule_ignores_non_feature_tools() -> None:
         kitchen_rules="k",
         steps={"s": RecipeStep(tool="run_cmd", with_args={"cmd": "echo hi"})},
     )
-    ctx = make_validation_context(recipe, disabled_features=frozenset({"franchise"}))
+    ctx = make_validation_context(recipe, disabled_features=frozenset({"fleet"}))
     findings = [f for f in run_semantic_rules(ctx) if f.rule == "feature-gate-tool-reference"]
     assert not findings
 
@@ -139,17 +139,15 @@ def test_feature_gate_rule_with_multiple_features(monkeypatch) -> None:
         version="0.2.0",
         kitchen_rules="k",
         steps={
-            "franchise_step": RecipeStep(tool="dispatch_food_truck", with_args={}),
+            "fleet_step": RecipeStep(tool="dispatch_food_truck", with_args={}),
             "ci_step": RecipeStep(tool="wait_for_ci", with_args={}),
         },
     )
-    ctx = make_validation_context(
-        recipe, disabled_features=frozenset({"franchise", "test-ci-gate"})
-    )
+    ctx = make_validation_context(recipe, disabled_features=frozenset({"fleet", "test-ci-gate"}))
     findings = [f for f in run_semantic_rules(ctx) if f.rule == "feature-gate-tool-reference"]
 
     step_names = {f.step_name for f in findings}
     assert len(step_names) == 2, f"expected exactly 2 flagged steps, got {step_names!r}"
-    assert "franchise_step" in step_names, "franchise tool not flagged"
+    assert "fleet_step" in step_names, "fleet tool not flagged"
     assert "ci_step" in step_names, "ci tool not flagged"
     assert all(f.severity == Severity.ERROR for f in findings)

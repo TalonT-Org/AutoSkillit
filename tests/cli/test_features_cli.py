@@ -26,7 +26,7 @@ def test_features_list_shows_registry(
 
     features_list()
     out = capsys.readouterr().out
-    assert "franchise" in out
+    assert "fleet" in out
     assert "experimental" in out
 
 
@@ -42,16 +42,16 @@ def test_features_list_shows_effective_state(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
         "autoskillit.config.load_config",
-        lambda path: type("C", (), {"features": {"franchise": False}})(),
+        lambda path: type("C", (), {"features": {"fleet": False}})(),
     )
     from autoskillit.cli._features import features_list
 
     features_list()
     out = capsys.readouterr().out
-    # franchise row should show effective=false and source=config
-    franchise_line = next(line for line in out.splitlines() if "franchise" in line)
-    assert "false" in franchise_line
-    assert "config" in franchise_line
+    # fleet row should show effective=false and source=config
+    fleet_line = next(line for line in out.splitlines() if "fleet" in line)
+    assert "false" in fleet_line
+    assert "config" in fleet_line
 
 
 # ---------------------------------------------------------------------------
@@ -62,20 +62,20 @@ def test_features_list_shows_effective_state(
 def test_features_status_detail(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
 ) -> None:
-    """features status franchise shows all FeatureDef fields."""
+    """features status fleet shows all FeatureDef fields."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
         "autoskillit.config.load_config", lambda path: type("C", (), {"features": {}})()
     )
     from autoskillit.cli._features import features_status
 
-    features_status("franchise")
+    features_status("fleet")
     out = capsys.readouterr().out
-    assert "franchise" in out
+    assert "fleet" in out
     assert "experimental" in out  # lifecycle
     tier_line = next(line for line in out.splitlines() if "Tier" in line)
     assert "1" in tier_line  # tier value on its own line
-    assert "false" in out  # disabled (default_enabled=False for franchise)
+    assert "false" in out  # disabled (default_enabled=False for fleet)
 
 
 # ---------------------------------------------------------------------------

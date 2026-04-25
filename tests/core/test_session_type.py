@@ -14,15 +14,6 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 # ---------------------------------------------------------------------------
 
 
-def test_session_type_returns_franchise(monkeypatch):
-    from autoskillit.core import SessionType, session_type
-
-    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "franchise")
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", DeprecationWarning)
-        assert session_type() is SessionType.FLEET
-
-
 def test_session_type_returns_orchestrator(monkeypatch):
     from autoskillit.core import SessionType, session_type
 
@@ -98,13 +89,11 @@ def test_no_warning_when_both_unset(monkeypatch):
 
 def test_session_type_enum_values_match_constants():
     from autoskillit.core import (
-        SESSION_TYPE_FRANCHISE,
         SESSION_TYPE_LEAF,
         SESSION_TYPE_ORCHESTRATOR,
         SessionType,
     )
 
-    assert SessionType.FRANCHISE.value == SESSION_TYPE_FRANCHISE
     assert SessionType.ORCHESTRATOR.value == SESSION_TYPE_ORCHESTRATOR
     assert SessionType.LEAF.value == SESSION_TYPE_LEAF
 
@@ -134,11 +123,11 @@ def test_session_type_fleet_case_insensitive(monkeypatch):
     assert session_type() is SessionType.FLEET
 
 
-def test_session_type_franchise_alias_emits_deprecation_warning(monkeypatch):
+def test_session_type_invalid_session_type_emits_warning(monkeypatch):
     from autoskillit.core import session_type
 
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "franchise")
-    with pytest.warns(DeprecationWarning, match="deprecated.*fleet"):
+    with pytest.warns(DeprecationWarning, match="Invalid"):
         session_type()
 
 

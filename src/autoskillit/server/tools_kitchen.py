@@ -125,7 +125,7 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     ("Franchise", FRANCHISE_MENU_TOOLS),
-    ("Kitchen", ("open_kitchen", "close_kitchen", "disable_quota_guard")),
+    ("Kitchen", ("open_kitchen", "close_kitchen", "disable_quota_guard", "reload_session")),
 )
 
 
@@ -613,7 +613,7 @@ async def disable_quota_guard() -> str:
 
 def _find_session_id_for_reload(cwd: Path) -> str | None:
     """Return the session_id to use for reload; kitchen marker preferred, mtime fallback."""
-    from autoskillit.core.kitchen_state import get_state_dir, is_marker_fresh, read_marker
+    from autoskillit.core import get_state_dir, is_marker_fresh, read_marker
 
     state_dir = get_state_dir()
     if state_dir.is_dir():
@@ -662,5 +662,11 @@ async def reload_session() -> dict[str, str]:
 
     After calling this tool, run /exit to allow the parent process to detect the
     reload request and re-launch claude with --resume <session_id>.
+
+    Never raises.
     """
-    return _reload_session_handler()
+    try:
+        return _reload_session_handler()
+    except Exception as exc:
+        logger.error("reload_session unhandled exception", exc_info=True)
+        return {"status": "error", "error": f"{type(exc).__name__}: {exc}"}

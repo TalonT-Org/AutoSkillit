@@ -127,9 +127,7 @@ def test_reload_session_raises_when_no_session_id(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path / "empty"))
 
-    with patch(
-        "autoskillit.server.tools_kitchen.find_latest_session_id", return_value=None
-    ):
+    with patch("autoskillit.server.tools_kitchen.find_latest_session_id", return_value=None):
         from autoskillit.server.tools_kitchen import _reload_session_handler as reload_session
 
         with pytest.raises(ValueError, match="session ID"):

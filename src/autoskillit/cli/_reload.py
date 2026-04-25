@@ -15,9 +15,7 @@ def consume_reload_sentinel(project_dir: Path) -> str | None:
     sentinel_dir = _reload_sentinel_dir(project_dir)
     if not sentinel_dir.is_dir():
         return None
-    candidates = sorted(
-        sentinel_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True
-    )
+    candidates = sorted(sentinel_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
     if not candidates:
         return None
     sentinel = candidates[0]

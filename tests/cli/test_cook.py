@@ -1478,7 +1478,14 @@ class TestOrderResumeParsing:
 
         captured: dict = {}
 
-        def fake_launch(prompt, *, initial_message=None, extra_env=None, resume_spec=NoResume()):
+        def fake_launch(
+            prompt,
+            *,
+            initial_message=None,
+            extra_env=None,
+            resume_spec=NoResume(),
+            project_dir=None,
+        ):
             captured["resume_spec"] = resume_spec
 
         with (

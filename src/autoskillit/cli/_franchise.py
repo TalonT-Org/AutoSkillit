@@ -321,7 +321,7 @@ def _launch_franchise_session(
     resume_metadata: ResumeDecision | None,
 ) -> None:
     """Build the L3 orchestrator prompt and launch an interactive franchise session."""
-    from autoskillit.cli._mcp_names import detect_autoskillit_mcp_prefix
+    from autoskillit.cli import detect_autoskillit_mcp_prefix  # noqa: PLC0415
     from autoskillit.cli._session_launch import _run_interactive_session
 
     mcp_prefix = detect_autoskillit_mcp_prefix()

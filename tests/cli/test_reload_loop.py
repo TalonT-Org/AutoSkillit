@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
-from collections.abc import Mapping
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -137,6 +136,7 @@ def test_cook_reload_loop_uses_named_resume(
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(shutil, "which", lambda x: "/usr/bin/claude")
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda _prompt="": "")
     monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _: False)
     monkeypatch.setattr("autoskillit.cli._cook._run_cook_session", fake_run_cook_session)
@@ -196,7 +196,9 @@ def test_franchise_reload_relaunches_without_resume(
     call_count = [0]
     captured_resume_specs: list = []
 
-    def fake_run_interactive_session(prompt, *, extra_env=None, resume_spec=None, project_dir=None):
+    def fake_run_interactive_session(
+        prompt, *, extra_env=None, resume_spec=None, project_dir=None
+    ):
         call_count[0] += 1
         captured_resume_specs.append(resume_spec)
         if call_count[0] == 1:
@@ -206,9 +208,7 @@ def test_franchise_reload_relaunches_without_resume(
     monkeypatch.setattr(
         "autoskillit.cli._session_launch._run_interactive_session", fake_run_interactive_session
     )
-    monkeypatch.setattr(
-        "autoskillit.cli._mcp_names.detect_autoskillit_mcp_prefix", lambda: "autoskillit"
-    )
+    monkeypatch.setattr("autoskillit.cli.detect_autoskillit_mcp_prefix", lambda: "autoskillit")
     monkeypatch.setattr(
         "autoskillit.cli._prompts._build_franchise_open_prompt",
         lambda mcp_prefix: "test-prompt",

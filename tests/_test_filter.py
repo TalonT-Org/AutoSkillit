@@ -103,6 +103,11 @@ _INFRA_CI_TRIGGER_FILES: frozenset[str] = frozenset(
 _DOCS_TRIGGER_PREFIX: str = "docs/"
 _DOCS_TRIGGER_FILES: frozenset[str] = frozenset({"README.md", "CLAUDE.md"})
 
+# Tier-1 unconditional always-run for conservative mode: arch+contracts only.
+# Decoupled from ALWAYS_RUN_AGGRESSIVE so future additions to that constant
+# cannot silently alter conservative behavior.
+_ALWAYS_RUN_CONSERVATIVE_UNCONDITIONAL: frozenset[str] = frozenset({"arch", "contracts"})
+
 _LARGE_CHANGESET_THRESHOLD: int = 30
 
 # ---------------------------------------------------------------------------
@@ -817,7 +822,7 @@ def build_test_scope(
 
     if mode == FilterMode.CONSERVATIVE and changed_files:
         # REQ-TIER-001: arch and contracts always unconditional
-        test_dirs.update(ALWAYS_RUN_AGGRESSIVE)
+        test_dirs.update(_ALWAYS_RUN_CONSERVATIVE_UNCONDITIONAL)
 
         # REQ-TIER-002: docs gated on documentation file changes
         if any(

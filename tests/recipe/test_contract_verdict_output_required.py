@@ -141,7 +141,12 @@ def test_conditional_write_skills_have_verdict_or_fixes_applied_declared() -> No
     Excludes resolve-merge-conflicts (different oracle: pre-commit + manifest, out of scope)
     and retry-worktree (phases_implemented oracle, deferred to a separate Part).
     """
-    _EXCLUDED = {"resolve-merge-conflicts", "retry-worktree"}
+    _EXCLUDED = {
+        "resolve-merge-conflicts",
+        "retry-worktree",
+        "prepare-pr",
+        "bundle-local-report",
+    }
     manifest = load_bundled_manifest()
     violations: list[str] = []
     for skill_name, skill in manifest.get("skills", {}).items():

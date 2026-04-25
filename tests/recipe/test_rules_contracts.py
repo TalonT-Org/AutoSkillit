@@ -226,6 +226,46 @@ def test_always_write_skill_with_documented_no_write_exit_flagged() -> None:
     ), "Must detect graceful degradation phrases — the exact pattern in resolve-review Step 1"
 
 
+def test_template_args_do_not_skip_rule(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Skills with template ARGUMENTS (not template names) must be checked.
+
+    '${{' in skill_command arguments must NOT bypass contract rules.
+    Only '${{' in the skill NAME should bypass (handled by resolve_skill_name).
+    """
+    manifest = {
+        "version": "0.1.0",
+        "skills": {
+            "prepare-pr": {
+                "inputs": [],
+                "outputs": [{"name": "prep_path", "type": "file_path"}],
+                "expected_output_patterns": ["prep_path\\s*=\\s*/.+"],
+                "pattern_examples": ["prep_path = /tmp/prep.md"],
+                "write_behavior": "always",
+                "write_expected_when": [],
+            }
+        },
+    }
+    monkeypatch.setattr(_rc, "load_bundled_manifest", lambda: manifest)
+
+    recipe = _make_recipe_with_skill(
+        "/autoskillit:prepare-pr ${{ context.plan_path }} ${{ inputs.branch }}"
+    )
+
+    skill_dir = tmp_path / "skills_extended" / "prepare-pr"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "If context exhausted, emit prep_path = (empty) — graceful degradation."
+    )
+    monkeypatch.setattr(_rc, "pkg_root", lambda: tmp_path)
+
+    findings = run_semantic_rules(recipe)
+    exit_findings = [f for f in findings if f.rule == "always-has-no-write-exit"]
+    assert len(exit_findings) >= 1, (
+        "always-has-no-write-exit must fire on prepare-pr even when "
+        "skill_command contains template arguments"
+    )
+
+
 def test_unreadable_skill_md_emits_warning_finding(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -149,7 +149,7 @@ After finalizing the plan, determine which architecture lens best illustrates th
 | State Lifecycle | `/autoskillit:arch-lens-state-lifecycle` |
 | Deployment | `/autoskillit:arch-lens-deployment` |
 
-If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, skip the diagram step and proceed without the architectural diagram.
+If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, omit the diagram and proceed without the architectural diagram.
 
 **4d. Create the diagram following the loaded skill's instructions:**
 - Focus on the PROPOSED changes (use `newComponent` class for new elements)

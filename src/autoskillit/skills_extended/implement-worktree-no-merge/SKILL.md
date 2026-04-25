@@ -71,7 +71,7 @@ Correct orchestration on `needs_retry=true`:
    after the skill name for the first one that starts with `/`, `./`, `{{AUTOSKILLIT_TEMP}}/`,
    or `.autoskillit/` — that token is the plan path. Ignore any non-path words
    that appear before it (orchestrators sometimes prepend descriptive text such
-   as "the verified plan"). If no path-like token is found, treat the entire
+   as "the verified plan"). When no path-like token is present, treat the entire
    argument string as pasted plan content. Verify the resolved file exists before
    proceeding; if it does not, abort with:
    `"Plan file not found: {path}. Correct format: /autoskillit:implement-worktree-no-merge <plan_path>"`

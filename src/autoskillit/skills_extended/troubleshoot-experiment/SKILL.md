@@ -146,9 +146,9 @@ failure_type = {stale_timeout|context_exhaustion|build_failure|data_missing|envi
 is_fixable = {true|false}
 ```
 
-## Graceful Degradation
+## Degradation Handling
 
-If at any point session data is unavailable (missing `sessions.jsonl`, no matching
+When session data is not accessible (missing `sessions.jsonl`, no matching
 session, missing `summary.json`):
 - Set `failure_type = unknown`
 - Set `is_fixable = false`

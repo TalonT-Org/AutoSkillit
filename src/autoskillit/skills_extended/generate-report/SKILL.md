@@ -113,7 +113,7 @@ If `--output-mode local` AND `--issue-url {url}` is present:
    ```
    (Include a blank line after the blockquote before the title.)
 
-In pr mode: skip this step entirely — the PR body contains the issue link.
+In pr mode: omit this step entirely — the PR body contains the issue link.
 
 ### Step 2 — Determine Report Type
 
@@ -146,7 +146,7 @@ Based on the `--inconclusive` flag and the experiment results status:
 If `${RESEARCH_DIR}/visualization-plan.md` exists:
 
 1. Read `visualization-plan.md`. If it contains zero figure specs (empty plan),
-   skip all sub-steps and proceed to Step 3.
+   omit all sub-steps and proceed to Step 3.
 
 2. Identify the experiment's Docker image. The image tag is `research-{slug}` where
    `{slug}` is the experiment directory name. Verify the image exists:

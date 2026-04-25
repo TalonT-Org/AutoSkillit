@@ -149,6 +149,8 @@ Output: comma-separated slug list → `selected_lens_slugs`.
 
 ### Step 6: Write Context Files per Lens
 
+Use the Write tool (not Bash heredocs or cat) to create each context file.
+
 For each selected slug, write one context file to
 `{{AUTOSKILLIT_TEMP}}/prepare-pr/pr_arch_lens_context_{slug}_{ts}.md`:
 
@@ -179,6 +181,8 @@ Record absolute paths in `lens_context_paths` list (comma-separated).
 Read `## Summary` from each plan file. Store plan summaries for the prep file.
 
 ### Step 8: Write PR Prep File
+
+Use the Write tool (not Bash heredocs or cat) to create the prep file.
 
 Write PR prep file to `{{AUTOSKILLIT_TEMP}}/prepare-pr/pr_prep_{ts}.md`:
 

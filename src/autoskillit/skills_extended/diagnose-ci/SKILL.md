@@ -77,7 +77,7 @@ gh run list --branch {branch} --workflow {workflow} --event {event} --limit 1 --
 
 Parse the JSON to extract `databaseId` as `run_id`.
 
-If `gh` is unavailable or the command fails, skip to Step 5 (write minimal diagnosis).
+When `gh` is not accessible or the command fails, proceed to Step 5 (write minimal diagnosis).
 
 ### Step 3: Fetch Failure Summary
 
@@ -190,7 +190,7 @@ is_fixable = true|false
 
 ## gh Unavailable Fallback
 
-If `gh` is unavailable at any step, write a minimal diagnosis:
+When `gh` is not accessible at any step, write a minimal diagnosis:
 - `failure_type = unknown`
 - `failure_subtype = unknown`
 - `is_fixable = false`

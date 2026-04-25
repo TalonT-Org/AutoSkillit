@@ -37,7 +37,7 @@ decomposed PR flow (prepare → run_arch_lenses → compose).
 
 **NEVER:**
 - Invoke any sub-skills or slash commands
-- Fail the pipeline if `gh` is unavailable — emit `pr_url = ` (empty) and exit successfully
+- Fail the pipeline when `gh` is not accessible — emit `pr_url = ` (empty) and exit successfully
 - Create files outside `{{AUTOSKILLIT_TEMP}}/compose-pr/`
 - Invent mermaid classDef colors — when embedding validated diagrams, include them verbatim.
   Using ONLY classDef styles from the mermaid skill (no invented colors).
@@ -238,7 +238,7 @@ On success:
 pr_url = https://github.com/owner/repo/pull/N
 ```
 
-On graceful degradation (no `gh` or not authenticated):
+When `gh` is not available or not authenticated:
 ```
 pr_url = 
 ```

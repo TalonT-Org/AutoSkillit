@@ -451,7 +451,9 @@ skills:
     - "lens_context_paths\\s*=\\s*/.+"
     pattern_examples:
     - "prep_path = /abs/path/pr_prep_2026-04-07_120000.md\nselected_lenses = module-dependency,process-flow\nlens_context_paths = /abs/ctx1.md,/abs/ctx2.md\n%%ORDER_UP%%"
-    write_behavior: always
+    write_behavior: conditional
+    write_expected_when:
+    - "prep_path\\s*=\\s*/.+"
 
   compose-pr:
     inputs:
@@ -1759,7 +1761,9 @@ skills:
     - "html_path\\s*=\\s*\\S+"
     pattern_examples:
     - "html_path = /tmp/research/report.html\n%%ORDER_UP%%"
-    write_behavior: always
+    write_behavior: conditional
+    write_expected_when:
+    - "html_path\\s*=\\s*\\S+"
   planner-generate-phases:
     inputs: []
     outputs:

@@ -125,7 +125,7 @@ Before executing any hypothesis:
 
 This replaces the current behavior of silently marking missing-data hypotheses as N/A.
 When the plan declared acquisition steps for data and those steps did not produce the
-data, this is a pipeline failure — not a graceful degradation.
+data, this is a pipeline failure — not a pipeline-level degradation.
 
 ### Step 3 — Execute Experiment
 
@@ -200,7 +200,7 @@ blocked_hypotheses = H5: MERFISH data missing at temp/merfish_100k/ (acquisition
 ```
 
 This token is emitted ONLY when the pre-flight gate fails due to data declared in the
-Data Manifest being unavailable. It is NOT emitted during normal execution.
+Data Manifest being inaccessible. It is NOT emitted during normal execution.
 
 When `blocked_hypotheses` is emitted, `results_path` still points to the results file
 with `## Status: FAILED`.

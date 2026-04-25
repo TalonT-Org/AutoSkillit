@@ -55,7 +55,7 @@ CHANNEL_B_NO_STDOUT_SCRIPT = textwrap.dedent("""\
                   "content": "%%ORDER_UP%%"}}
         f.write(json.dumps(record) + "\\n")
         f.flush()
-    time.sleep(3600)
+    time.sleep(30)
 """)
 
 # Script that:
@@ -222,6 +222,8 @@ class TestChannelBDrainWait:
         drain wait times out — i.e. Channel A never confirmed stdout data.
         _phase1_timeout=120: must exceed outer timeout (60s) to prevent Phase 1 from
         firing STALE before the outer guard when subprocess startup is slow under load.
+        completion_drain_timeout=0.5: 0.1s was too tight under xdist -n 4 load; the
+        event loop may not process the drain callback before pytest-timeout fires.
         natural_exit_grace_seconds=0.1: script never exits naturally (time.sleep(3600)),
         so shorten grace window to reduce total test time and avoid asyncio-waitpid
         thread contention under CI load (default 3.0s grace + 3.0s kill = 6s total).
@@ -237,7 +239,7 @@ class TestChannelBDrainWait:
             timeout=TimeoutTier.CHANNEL_B,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
-            completion_drain_timeout=0.1,
+            completion_drain_timeout=0.5,
             natural_exit_grace_seconds=0.1,
             _phase1_poll=0.01,
             _phase2_poll=0.05,

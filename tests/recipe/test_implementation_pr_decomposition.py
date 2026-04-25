@@ -26,7 +26,9 @@ def test_implementation_recipe_has_three_pr_steps(recipe):
 
 def test_prepare_pr_routes_to_run_arch_lenses(recipe):
     step = recipe.steps["prepare_pr"]
-    assert step.on_success == "run_arch_lenses"
+    assert step.on_result is not None
+    routes = [c.route for c in step.on_result.conditions if c.when and "prep_path" in c.when]
+    assert "run_arch_lenses" in routes
 
 
 def test_run_arch_lenses_routes_to_compose_on_success(recipe):

@@ -113,7 +113,8 @@ def test_check_remaining_processing_becomes_failed_when_no_result(tmp_path):
     updated = json.loads(manifest_path.read_text())
     assert updated["items"][0]["status"] == "failed"
     assert result["has_remaining"] == "true"
-    assert result["current_item_path"] != ""
+    ctx = json.loads(Path(result["current_item_path"]).read_text())
+    assert ctx["id"] == "P1-A2"
 
 
 def test_check_remaining_all_done_returns_false(tmp_path):
@@ -214,7 +215,9 @@ def test_check_remaining_wp_backstop_rebuilds_missing_index_entry(tmp_path):
     output_dir = tmp_path / "out"
     output_dir.mkdir()
     wp_id = "P1-A1-WP1"
-    (output_dir / f"{wp_id}_result.json").write_text(json.dumps({"id": wp_id, "summary": "done"}))
+    (output_dir / f"{wp_id}_result.json").write_text(
+        json.dumps({"id": wp_id, "name": "First WP", "summary": "done"})
+    )
 
     # wp_index.json exists but is missing the entry for P1-A1-WP1
     wp_index_path = output_dir / "wp_index.json"
@@ -242,7 +245,7 @@ def test_check_remaining_wp_backstop_rebuilds_missing_index_entry(tmp_path):
     indexed_ids = {entry["id"] for entry in index}
     assert wp_id in indexed_ids
     entry = next(e for e in index if e["id"] == wp_id)
-    assert entry["name"] == ""
+    assert entry["name"] == "First WP"
     assert entry["summary"] == "done"
 
 
@@ -309,8 +312,7 @@ def test_build_assignment_manifest_ordering(tmp_path):
 
     manifest = json.loads(Path(result["manifest_path"]).read_text())
     ids = [item["id"] for item in manifest["items"]]
-    assert ids.index("P1-A1") < ids.index("P1-A2")
-    assert ids.index("P1-A2") < ids.index("P2-A1")
+    assert ids == ["P1-A1", "P1-A2", "P2-A1"]
 
 
 def test_build_assignment_manifest_empty_phases(tmp_path):
@@ -418,11 +420,7 @@ def test_build_wp_manifest_hierarchical_ids(tmp_path):
 
     manifest = json.loads(Path(result["manifest_path"]).read_text())
     ids = [item["id"] for item in manifest["items"]]
-    assert "P1-A1-WP1" in ids
-    assert "P1-A1-WP2" in ids
-    assert "P1-A2-WP1" in ids
-    assert ids.index("P1-A1-WP1") < ids.index("P1-A1-WP2")
-    assert ids.index("P1-A1-WP2") < ids.index("P1-A2-WP1")
+    assert ids == ["P1-A1-WP1", "P1-A1-WP2", "P1-A2-WP1"]
 
 
 def test_build_wp_manifest_wp_index_initialized(tmp_path):

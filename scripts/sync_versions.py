@@ -57,7 +57,14 @@ def _sync_recipe(path: Path, version: str, *, check: bool) -> tuple[bool, bool]:
         return True, True
     quoted = f'"{version}"'
     new_text = text[: m.start(2)] + quoted + text[m.end(2) :]
-    path.write_text(new_text, encoding="utf-8")
+    tmp = path.parent / (path.name + ".tmp")
+    try:
+        tmp.write_text(new_text, encoding="utf-8")
+        tmp.replace(path)
+    except Exception as e:
+        tmp.unlink(missing_ok=True)
+        print(f"Error updating {path}: {e}", file=sys.stderr)
+        return True, False
     return True, True
 
 

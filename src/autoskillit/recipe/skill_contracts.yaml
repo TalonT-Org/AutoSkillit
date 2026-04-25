@@ -1785,3 +1785,21 @@ callable_contracts:
     outputs:
     - name: merge_queue_data_path
       type: file_path
+  autoskillit.planner.check_remaining:
+    outputs:
+    - name: current_item_path
+      type: file_path
+    - name: has_remaining
+      type: str
+  autoskillit.planner.build_assignment_manifest:
+    outputs:
+    - name: manifest_path
+      type: file_path
+    - name: total_count
+      type: str
+  autoskillit.planner.build_wp_manifest:
+    outputs:
+    - name: manifest_path
+      type: file_path
+    - name: total_count
+      type: str

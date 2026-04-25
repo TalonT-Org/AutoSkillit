@@ -612,6 +612,11 @@ class TestSkillCategories:
         assert info is not None
         assert "planner" in info.categories
 
+    def test_planner_elaborate_wp_has_planner_category(self) -> None:
+        info = DefaultSkillResolver().resolve("planner-elaborate-wp")
+        assert info is not None
+        assert "planner" in info.categories
+
 
 RESEARCH_SKILL_NAMES = {
     "scope",

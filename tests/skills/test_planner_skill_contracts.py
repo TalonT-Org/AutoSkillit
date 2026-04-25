@@ -1,5 +1,5 @@
 import pytest
-from pathlib import Path
+
 from autoskillit.core.paths import pkg_root
 
 SKILLS_ROOT = pkg_root() / "skills_extended"
@@ -46,9 +46,7 @@ def test_refine_output_tokens() -> None:
     assert "refinement_complete" in content, (
         "planner-refine must document refinement_complete output token"
     )
-    assert "issues_fixed" in content, (
-        "planner-refine must document issues_fixed output token"
-    )
+    assert "issues_fixed" in content, "planner-refine must document issues_fixed output token"
 
 
 def test_reconcile_deps_reads_wp_index_only() -> None:
@@ -71,10 +69,6 @@ def test_refine_handles_all_finding_types() -> None:
 def test_skill_in_defaults_yaml_tier2(skill_name: str) -> None:
     import yaml
 
-    defaults = yaml.safe_load(
-        (pkg_root() / "config" / "defaults.yaml").read_text()
-    )
+    defaults = yaml.safe_load((pkg_root() / "config" / "defaults.yaml").read_text())
     tier2 = defaults["skills"]["tier2"]
-    assert skill_name in tier2, (
-        f"{skill_name} must appear in defaults.yaml skills.tier2"
-    )
+    assert skill_name in tier2, f"{skill_name} must appear in defaults.yaml skills.tier2"

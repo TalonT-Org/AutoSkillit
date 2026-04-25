@@ -294,9 +294,7 @@ def test_fleet_run_sets_session_type_franchise(
 # ---------------------------------------------------------------------------
 
 
-def test_fleet_run_writes_initial_state(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_fleet_run_writes_initial_state(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """state.json exists in franchise temp dir after launch."""
     _stub_guards(monkeypatch)
     monkeypatch.chdir(tmp_path)
@@ -418,9 +416,7 @@ def test_fleet_status_cleanup_calls_batch_delete(
 # ---------------------------------------------------------------------------
 
 
-def test_fleet_run_exit_code_passthrough(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_fleet_run_exit_code_passthrough(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """franchise run propagates subprocess exit code."""
     _stub_guards(monkeypatch)
     monkeypatch.chdir(tmp_path)
@@ -776,9 +772,7 @@ class TestFranchiseCLIRegistration:
 # ---------------------------------------------------------------------------
 
 
-def test_fleet_run_exits_when_disabled(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_fleet_run_exits_when_disabled(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """franchise_run exits 1 when franchise feature is disabled via feature gate."""
     monkeypatch.chdir(tmp_path)
     _stub_guards(monkeypatch)
@@ -801,9 +795,7 @@ def test_fleet_run_exits_when_disabled(
 # ---------------------------------------------------------------------------
 
 
-def test_fleet_list_exits_when_disabled(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_fleet_list_exits_when_disabled(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """franchise_list exits 1 when franchise feature is disabled via feature gate."""
     monkeypatch.chdir(tmp_path)
     checked_features: list[str] = []
@@ -825,9 +817,7 @@ def test_fleet_list_exits_when_disabled(
 # ---------------------------------------------------------------------------
 
 
-def test_fleet_status_exits_when_disabled(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_fleet_status_exits_when_disabled(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """fleet_status exits 1 when franchise feature is disabled via feature gate."""
     monkeypatch.chdir(tmp_path)
     checked_features: list[str] = []
@@ -855,9 +845,7 @@ def test_fleet_run_proceeds_when_enabled(
     """franchise_run passes the feature guard and proceeds to campaign resolution."""
     _stub_guards(monkeypatch)
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(
-        "autoskillit.cli._fleet.is_feature_enabled", lambda name, features: True
-    )
+    monkeypatch.setattr("autoskillit.cli._fleet.is_feature_enabled", lambda name, features: True)
     monkeypatch.setattr(
         "autoskillit.config.load_config", lambda path: type("C", (), {"features": {}})()
     )
@@ -884,7 +872,7 @@ def test_fleet_run_without_campaign_name_launches_session(
     captured = _capture_subprocess(monkeypatch)
     _fleet_run(None)
     assert "AUTOSKILLIT_SESSION_TYPE" in captured["env"]
-    assert captured["env"]["AUTOSKILLIT_SESSION_TYPE" in env and env["AUTOSKILLIT_SESSION_TYPE"] == "fleet""
+    assert captured["env"]["AUTOSKILLIT_SESSION_TYPE"] == "fleet"
 
 
 def test_fleet_run_without_campaign_writes_no_state(

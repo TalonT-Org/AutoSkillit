@@ -24,6 +24,7 @@ PACKAGES = frozenset(
         "pipeline",
         "execution",
         "workspace",
+        "planner",
         "recipe",
         "migration",
         "franchise",

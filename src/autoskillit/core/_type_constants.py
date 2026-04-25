@@ -369,6 +369,20 @@ FEATURE_REGISTRY: dict[str, FeatureDef] = {
         default_enabled=False,
         since_version="0.9.51",
     ),
+    "planner": FeatureDef(
+        name="planner",
+        lifecycle=FeatureLifecycle.EXPERIMENTAL,
+        description=(
+            "Progressive resolution planner — 3-pass sequential decomposition"
+            " into GitHub-issue-ready work packages"
+        ),
+        tool_tags=frozenset(),
+        skill_categories=frozenset(),
+        import_package="autoskillit.planner",
+        tier=1,
+        default_enabled=False,
+        since_version="0.9.119",
+    ),
 }
 
 RETIRED_FEATURES: frozenset[str] = frozenset()

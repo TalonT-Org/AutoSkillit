@@ -423,7 +423,7 @@ class TestSkillResolver:
         names = {d.name for d in bundled_skills_dir().iterdir() if d.is_dir()}
         assert names == {"open-kitchen", "close-kitchen", "sous-chef"}
 
-    def test_90_skills_in_skills_extended(self) -> None:
+    def test_111_skills_in_skills_extended(self) -> None:
         """skills_extended/ contains exactly 111 SKILL.md-carrying directories."""
         skills = [
             d

@@ -19,7 +19,11 @@ _VERSION_RE = re.compile(r'^autoskillit_version:\s*["\']?([^"\'#\s]+)')
 
 def _extract_recipe_version(path: Path) -> str | None:
     """Extract autoskillit_version from a recipe YAML via line scan."""
-    for line in path.read_text(encoding="utf-8").splitlines():
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    for line in text.splitlines():
         m = _VERSION_RE.match(line)
         if m:
             return m.group(1)

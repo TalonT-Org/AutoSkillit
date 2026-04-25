@@ -617,9 +617,14 @@ def _find_session_id_for_reload(cwd: Path) -> str | None:
 
     state_dir = get_state_dir()
     if state_dir.is_dir():
-        candidates = sorted(
-            state_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True
-        )
+
+        def _safe_mtime(p: Path) -> float:
+            try:
+                return p.stat().st_mtime
+            except OSError:
+                return 0.0
+
+        candidates = sorted(state_dir.glob("*.json"), key=_safe_mtime, reverse=True)
         for p in candidates:
             marker = read_marker(p.stem)
             if marker is not None and is_marker_fresh(marker):
@@ -654,7 +659,7 @@ def _reload_session_handler() -> dict[str, str]:
     }
 
 
-@mcp.tool(tags={"autoskillit"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit"}, annotations={"readOnlyHint": False})
 @track_response_size("reload_session")
 async def reload_session() -> dict[str, str]:
     """Signal the parent autoskillit process to reload this session with the full

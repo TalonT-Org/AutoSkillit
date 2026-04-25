@@ -135,20 +135,23 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
     is open before any tool call arrives. Fails open: any step failure is
     logged as a warning and does not abort gate activation.
     """
-    import os as _os  # noqa: PLC0415
-    from pathlib import Path  # noqa: PLC0415
-    from uuid import uuid4  # noqa: PLC0415
+    import os as _os
+    from pathlib import Path
+    from uuid import uuid4
 
-    from autoskillit.core import register_active_kitchen  # noqa: PLC0415
-    from autoskillit.pipeline import create_background_task  # noqa: PLC0415
-    from autoskillit.server.helpers import (  # noqa: PLC0415
+    from autoskillit.core import register_active_kitchen
+    from autoskillit.pipeline import create_background_task
+    from autoskillit.server.helpers import (
         _prime_quota_cache,
         _quota_refresh_loop,
     )
-    from autoskillit.server.tools_kitchen import _write_hook_config  # noqa: PLC0415
+    from autoskillit.server.tools_kitchen import _write_hook_config
 
     ctx.kitchen_id = str(uuid4())
     ctx.active_recipe_packs = frozenset()
+    if ctx.gate is None:
+        logger.warning("fleet_auto_gate_boot_no_gate")
+        return
     ctx.gate.enable()
     logger.info("fleet_auto_gate_boot", gate_state="open", kitchen_id=ctx.kitchen_id)
 
@@ -200,8 +203,8 @@ async def _autoskillit_lifespan(server: Any) -> Any:
     """
     bg_tasks: list[_asyncio.Task[None]] = []
     try:
-        from autoskillit.pipeline import create_background_task  # noqa: PLC0415
-        from autoskillit.server import _state  # noqa: PLC0415
+        from autoskillit.pipeline import create_background_task
+        from autoskillit.server import _state
 
         event = _asyncio.Event()
         _state._startup_ready = event
@@ -212,8 +215,8 @@ async def _autoskillit_lifespan(server: Any) -> Any:
             create_background_task(_run_hook_health_check_async(), label="hook_health")
         )
         bg_tasks.append(create_background_task(_run_deferred_init(event), label="deferred_init"))
-        from autoskillit.core import SessionType  # noqa: PLC0415
-        from autoskillit.core import session_type as _resolve_session_type  # noqa: PLC0415
+        from autoskillit.core import SessionType
+        from autoskillit.core import session_type as _resolve_session_type
 
         if _resolve_session_type() is SessionType.FLEET:
             _fleet_ctx = _get_ctx_or_none()

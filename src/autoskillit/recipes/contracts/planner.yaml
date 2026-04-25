@@ -1,4 +1,4 @@
-generated_at: '2026-04-25T14:17:49.768058+00:00'
+generated_at: '2026-04-25T14:21:41.844319+00:00'
 bundled_manifest_version: 0.1.0
 skill_hashes: {}
 skills:
@@ -178,17 +178,13 @@ dataflow:
   - verdict
   - wp_manifest_path
   required: []
-  produced:
-  - plan_path
-  - plan_json_path
+  produced: []
 - step: done
   available:
   - assignment_manifest_path
   - current_item_path
   - has_remaining
   - phase_manifest_path
-  - plan_json_path
-  - plan_path
   - source_dir
   - task
   - verdict
@@ -201,8 +197,6 @@ dataflow:
   - current_item_path
   - has_remaining
   - phase_manifest_path
-  - plan_json_path
-  - plan_path
   - source_dir
   - task
   - verdict

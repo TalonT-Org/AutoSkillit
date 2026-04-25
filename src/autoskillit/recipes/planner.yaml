@@ -219,16 +219,13 @@ steps:
       output_dir: "{{AUTOSKILLIT_TEMP}}/planner"
       task: "${{ inputs.task }}"
       source_dir: "${{ inputs.source_dir }}"
-    capture:
-      plan_path: "${{ result.plan_path }}"
-      plan_json_path: "${{ result.plan_json_path }}"
     on_success: done
     on_failure: escalate_stop
 
   done:
     action: stop
     message: >
-      Planning complete. Plan: ${{ context.plan_path }} (JSON: ${{ context.plan_json_path }}).
+      Planning complete. Plan artifacts written to {{AUTOSKILLIT_TEMP}}/planner/.
       Use compile output to create GitHub issues and milestones.
 
   escalate_stop:

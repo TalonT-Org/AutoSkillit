@@ -372,6 +372,7 @@ class DefaultGitHubFetcher:
                 "github update_issue_body http error",
                 status=exc.response.status_code,
                 issue=issue_number,
+                exc_info=True,
             )
             return {
                 "success": False,

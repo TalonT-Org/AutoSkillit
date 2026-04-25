@@ -151,3 +151,127 @@ def test_feature_gate_rule_with_multiple_features(monkeypatch) -> None:
     assert "fleet_step" in step_names, "fleet tool not flagged"
     assert "ci_step" in step_names, "ci tool not flagged"
     assert all(f.severity == Severity.ERROR for f in findings)
+
+
+def test_feature_gate_rule_fires_on_run_python_planner_callable() -> None:
+    """ERROR when run_python callable starts with planner import_package and planner disabled."""
+    from autoskillit.core import Severity
+    from autoskillit.recipe._analysis import make_validation_context
+    from autoskillit.recipe.registry import run_semantic_rules
+    from autoskillit.recipe.schema import Recipe, RecipeStep
+
+    recipe = Recipe(
+        name="r",
+        description="d",
+        version="0.2.0",
+        kitchen_rules="k",
+        steps={
+            "plan": RecipeStep(
+                tool="run_python",
+                with_args={"callable": "autoskillit.planner.validate_plan"},
+            )
+        },
+    )
+    ctx = make_validation_context(recipe, disabled_features=frozenset({"planner"}))
+    findings = [f for f in run_semantic_rules(ctx) if f.rule == "feature-gate-tool-reference"]
+    assert findings, "expected feature-gate-tool-reference finding for disabled planner callable"
+    assert all(f.severity == Severity.ERROR for f in findings)
+    assert any("planner" in f.message for f in findings)
+    assert any("plan" in f.step_name for f in findings)
+
+
+def test_feature_gate_rule_no_false_positive_run_python_non_feature_callable() -> None:
+    """No finding when run_python callable does not belong to any disabled feature."""
+    from autoskillit.recipe._analysis import make_validation_context
+    from autoskillit.recipe.registry import run_semantic_rules
+    from autoskillit.recipe.schema import Recipe, RecipeStep
+
+    recipe = Recipe(
+        name="r",
+        description="d",
+        version="0.2.0",
+        kitchen_rules="k",
+        steps={
+            "smoke": RecipeStep(
+                tool="run_python",
+                with_args={"callable": "autoskillit.smoke_utils.check_something"},
+            )
+        },
+    )
+    ctx = make_validation_context(recipe, disabled_features=frozenset({"planner"}))
+    findings = [f for f in run_semantic_rules(ctx) if f.rule == "feature-gate-tool-reference"]
+    assert not findings, f"unexpected finding for non-feature callable: {findings}"
+
+
+def test_feature_gate_rule_fires_on_sprint_planner_skill_when_planner_disabled() -> None:
+    """ERROR when recipe uses sprint-planner skill and planner feature is disabled."""
+    from autoskillit.core import Severity
+    from autoskillit.recipe._analysis import (
+        ValidationContext,
+        _build_step_graph,
+        analyze_dataflow,
+    )
+    from autoskillit.recipe.registry import run_semantic_rules
+    from autoskillit.recipe.schema import Recipe, RecipeStep
+
+    recipe = Recipe(
+        name="r",
+        description="d",
+        version="0.2.0",
+        kitchen_rules="k",
+        steps={
+            "plan": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/autoskillit:sprint-planner"},
+            )
+        },
+    )
+    step_graph = _build_step_graph(recipe)
+    ctx = ValidationContext(
+        recipe=recipe,
+        step_graph=step_graph,
+        dataflow=analyze_dataflow(recipe, step_graph=step_graph),
+        disabled_features=frozenset({"planner"}),
+        skill_category_map={"sprint-planner": frozenset({"planner"})},
+    )
+    findings = [f for f in run_semantic_rules(ctx) if f.rule == "feature-gate-tool-reference"]
+    assert findings, (
+        "expected feature-gate-tool-reference for sprint-planner when planner disabled"
+    )
+    assert all(f.severity == Severity.ERROR for f in findings)
+    assert any("planner" in f.message for f in findings)
+
+
+def test_feature_gate_run_python_no_finding_when_fdef_has_no_import_package(monkeypatch) -> None:
+    """No false positive when feature has no import_package (import_package=None)."""
+    import autoskillit.core._type_constants as _consts
+    from autoskillit.core import FeatureDef, FeatureLifecycle
+    from autoskillit.recipe._analysis import make_validation_context
+    from autoskillit.recipe.registry import run_semantic_rules
+    from autoskillit.recipe.schema import Recipe, RecipeStep
+
+    no_pkg_fdef = FeatureDef(
+        name="no-pkg-feature",
+        lifecycle=FeatureLifecycle.EXPERIMENTAL,
+        description="Feature with no import_package",
+        tool_tags=frozenset(),
+        skill_categories=frozenset(),
+        import_package=None,
+    )
+    monkeypatch.setitem(_consts.FEATURE_REGISTRY, "no-pkg-feature", no_pkg_fdef)
+
+    recipe = Recipe(
+        name="r",
+        description="d",
+        version="0.2.0",
+        kitchen_rules="k",
+        steps={
+            "s": RecipeStep(
+                tool="run_python",
+                with_args={"callable": "autoskillit.planner.validate_plan"},
+            )
+        },
+    )
+    ctx = make_validation_context(recipe, disabled_features=frozenset({"no-pkg-feature"}))
+    findings = [f for f in run_semantic_rules(ctx) if f.rule == "feature-gate-tool-reference"]
+    assert not findings, f"unexpected finding when import_package is None: {findings}"

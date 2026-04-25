@@ -1,6 +1,7 @@
 ---
 name: sprint-planner
 description: Select a focused, conflict-free sprint from an existing triage manifest. Use when orchestrating a sprint planning step that needs issue overlap analysis and sprint manifest production.
+categories: [planner]
 hooks:
   PreToolUse:
     - matcher: "*"

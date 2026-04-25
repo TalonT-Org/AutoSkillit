@@ -275,6 +275,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
     # Standalone modules (not subpackage directories)
     "planner": frozenset({"planner"}),
     "_llm_triage": frozenset({"test_llm_triage.py", "execution", "server", "recipe"}),
+    "_test_filter": frozenset({"arch", "infra", "contracts"}),
     "smoke_utils": frozenset({"test_smoke_utils.py", "recipe"}),
     "version": frozenset({"test_version.py", "server"}),
 }

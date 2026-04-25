@@ -262,12 +262,20 @@ async def _redisable_subsets(
         is_feature_enabled,
     )
 
+    # Union model: a tag is suppressed only when no enabled feature claims it.
+    # Multiple features may share the same tool_tag (e.g. franchise+fleet both
+    # use the "franchise" tag in T1); disabling one must not suppress the other.
     _features = features or {}
+    enabled_tags: set[str] = set()
+    disabled_tags: set[str] = set()
     for feature_name, feature_def in FEATURE_REGISTRY.items():
-        if not is_feature_enabled(feature_name, _features):
-            tags_to_suppress = FEATURE_REVEAL_TAGS & feature_def.tool_tags
-            for tag in tags_to_suppress:
-                await ctx.disable_components(tags={tag})
+        reveal = FEATURE_REVEAL_TAGS & feature_def.tool_tags
+        if is_feature_enabled(feature_name, _features):
+            enabled_tags |= reveal
+        else:
+            disabled_tags |= reveal
+    for tag in disabled_tags - enabled_tags:
+        await ctx.disable_components(tags={tag})
 
 
 def _close_kitchen_handler() -> None:

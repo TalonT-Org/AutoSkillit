@@ -123,3 +123,11 @@ def test_guard_fails_open_on_malformed_input():
     """Malformed stdin must not raise — hook exits 0 silently."""
     out = _run_guard({}, headless=True, raw_stdin="not-json")
     assert not out.strip()
+
+
+@pytest.mark.parametrize("tool_name", _ORCHESTRATION_TOOLS)
+def test_leaf_orchestration_guard_permits_fleet_session(tool_name):
+    response = _run_guard_headless(
+        {"tool_name": f"mcp__autoskillit__{tool_name}"}, session_type="fleet"
+    )
+    assert response == {}, f"Expected fleet to be permitted for {tool_name}"

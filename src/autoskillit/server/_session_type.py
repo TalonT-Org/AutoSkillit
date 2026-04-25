@@ -43,8 +43,8 @@ def _apply_session_type_visibility(
     _session = _resolve_session_type()
     _headless = os.environ.get(HEADLESS_ENV_VAR) == "1"
 
-    # Phase 1: session-type dispatch (unchanged)
-    if _session is SessionType.FRANCHISE:
+    if _session is SessionType.FLEET or _session is SessionType.FRANCHISE:
+        # T1 shim: FLEET maps to "franchise" tags until T2 renames the tag set.
         mcp.enable(tags={"franchise"})
     elif _session is SessionType.ORCHESTRATOR and _headless:
         tool_tags = os.environ.get("AUTOSKILLIT_L2_TOOL_TAGS", "")
@@ -75,13 +75,16 @@ def _apply_session_type_visibility(
         gate(mcp, _session)
 
 
-def _franchise_gate(mcp: FastMCP, session: SessionType) -> None:  # noqa: ARG001
-    """Disable franchise-tagged tools when the franchise feature is off.
+def _fleet_gate(mcp: FastMCP, session: SessionType) -> None:  # noqa: ARG001
+    """Disable fleet-tagged tools when the fleet/franchise feature is off.
 
-    Reads AUTOSKILLIT_FEATURES__FRANCHISE env var (dynaconf resolves
-    config.features.franchise → env AUTOSKILLIT_FEATURES__FRANCHISE).
+    Checks AUTOSKILLIT_FEATURES__FLEET first; falls back to
+    AUTOSKILLIT_FEATURES__FRANCHISE for backward compatibility.
+    FLEET value takes precedence when both are set.
     Safe to call at import time — no config or _ctx dependency.
     """
-    env_val = os.environ.get("AUTOSKILLIT_FEATURES__FRANCHISE", "").strip().lower()
-    if env_val in ("false", "0", "no"):
-        mcp.disable(tags=set(FEATURE_REVEAL_TAGS & FEATURE_REGISTRY["franchise"].tool_tags))
+    fleet_val = os.environ.get("AUTOSKILLIT_FEATURES__FLEET", "").strip().lower()
+    franchise_val = os.environ.get("AUTOSKILLIT_FEATURES__FRANCHISE", "").strip().lower()
+    active_val = fleet_val if fleet_val else franchise_val
+    if active_val in ("false", "0", "no"):
+        mcp.disable(tags=set(FEATURE_REVEAL_TAGS & FEATURE_REGISTRY["fleet"].tool_tags))

@@ -18,7 +18,9 @@ def test_session_type_returns_franchise(monkeypatch):
     from autoskillit.core import SessionType, session_type
 
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "franchise")
-    assert session_type() is SessionType.FRANCHISE
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        assert session_type() is SessionType.FLEET
 
 
 def test_session_type_returns_orchestrator(monkeypatch):
@@ -38,8 +40,8 @@ def test_session_type_returns_leaf(monkeypatch):
 def test_session_type_case_insensitive(monkeypatch):
     from autoskillit.core import SessionType, session_type
 
-    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "FRANCHISE")
-    assert session_type() is SessionType.FRANCHISE
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "ORCHESTRATOR")
+    assert session_type() is SessionType.ORCHESTRATOR
 
 
 def test_session_type_defaults_to_leaf_when_unset(monkeypatch):
@@ -111,3 +113,53 @@ def test_session_type_env_var_constant():
     from autoskillit.core import SESSION_TYPE_ENV_VAR
 
     assert SESSION_TYPE_ENV_VAR == "AUTOSKILLIT_SESSION_TYPE"
+
+
+# ---------------------------------------------------------------------------
+# Fleet alias tests — T1 shims
+# ---------------------------------------------------------------------------
+
+
+def test_session_type_returns_fleet(monkeypatch):
+    from autoskillit.core import SessionType, session_type
+
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+    assert session_type() is SessionType.FLEET
+
+
+def test_session_type_fleet_case_insensitive(monkeypatch):
+    from autoskillit.core import SessionType, session_type
+
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "FLEET")
+    assert session_type() is SessionType.FLEET
+
+
+def test_session_type_franchise_alias_emits_deprecation_warning(monkeypatch):
+    from autoskillit.core import session_type
+
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "franchise")
+    with pytest.warns(DeprecationWarning, match="deprecated.*fleet"):
+        session_type()
+
+
+def test_session_type_fleet_emits_no_warning(monkeypatch):
+    from autoskillit.core import SessionType, session_type
+
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        result = session_type()
+    assert result is SessionType.FLEET
+
+
+def test_session_type_enum_fleet_value():
+    from autoskillit.core import SessionType
+
+    assert SessionType.FLEET.value == "fleet"
+
+
+def test_session_type_fleet_constant_matches_enum():
+    from autoskillit.core import SessionType
+    from autoskillit.core._type_constants import SESSION_TYPE_FLEET
+
+    assert SessionType.FLEET.value == SESSION_TYPE_FLEET

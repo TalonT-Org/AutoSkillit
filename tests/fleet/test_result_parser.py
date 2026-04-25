@@ -1,4 +1,4 @@
-"""Tests for franchise.result_parser — L2 result block parsing."""
+"""Tests for fleet.result_parser — L2 result block parsing."""
 
 from __future__ import annotations
 

@@ -19,7 +19,7 @@ from autoskillit.fleet import (
     write_initial_state,
 )
 
-pytestmark = [pytest.mark.layer("cli"), pytest.mark.small, pytest.mark.feature("franchise")]
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.small, pytest.mark.feature("fleet")]
 
 BOOT_ID = "boot-sg-001"
 TICKS = 5000
@@ -245,7 +245,7 @@ class TestSignalGuard:
 
 
 def test_sighup_in_fleet_signal_list() -> None:
-    """_franchise.py must pass signal.SIGHUP to open_signal_receiver (AST guard).
+    """_fleet.py must pass signal.SIGHUP to open_signal_receiver (AST guard).
 
     Sending a real SIGHUP in tests is unsafe — before SIGHUP is registered,
     the default disposition terminates the process. AST analysis is safe for
@@ -274,13 +274,13 @@ def test_sighup_in_fleet_signal_list() -> None:
                 break
 
     assert sighup_found, (
-        "signal.SIGHUP not found in anyio.open_signal_receiver() call in _franchise.py. "
+        "signal.SIGHUP not found in anyio.open_signal_receiver() call in _fleet.py. "
         "Terminal disconnects (SIGHUP) must trigger graceful shutdown."
     )
 
 
 def test_fleet_signame_uses_sig_name_attribute() -> None:
-    """_franchise.py must use sig.name for signame, not a hardcoded ternary (AST guard).
+    """_fleet.py must use sig.name for signame, not a hardcoded ternary (AST guard).
 
     Verifies that the old ``"SIGINT" if sig == signal.SIGINT else "SIGTERM"``
     ternary has been replaced with ``sig.name`` so that SIGHUP and any future
@@ -312,7 +312,7 @@ def test_fleet_signame_uses_sig_name_attribute() -> None:
             break
 
     assert sig_name_attr_found, (
-        "signame assignment in _franchise.py does not use sig.name. "
+        "signame assignment in _fleet.py does not use sig.name. "
         "Replace the hardcoded ternary with `signame = sig.name` so that "
         "SIGHUP and future signals are handled without manual mapping."
     )

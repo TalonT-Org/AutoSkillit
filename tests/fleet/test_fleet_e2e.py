@@ -1,4 +1,4 @@
-"""Franchise Group O: end-to-end test suite for franchise dispatch loop.
+"""Fleet Group O: end-to-end test suite for fleet dispatch loop.
 
 Exercises the full execute_dispatch → DefaultHeadlessExecutor.dispatch_food_truck
 → build_food_truck_cmd → _execute_claude_headless pipeline, substituting only
@@ -37,7 +37,7 @@ pytestmark = [
 
 _SHIM_SCRIPT = """\
 #!/usr/bin/env python3
-\"\"\"Parameterized claude shim for franchise E2E tests.\"\"\"
+\"\"\"Parameterized claude shim for fleet E2E tests.\"\"\"
 import json
 import os
 import sys
@@ -116,14 +116,14 @@ async def _noop_quota_refresher(config: Any, **kwargs: Any) -> None:
 
 
 # ---------------------------------------------------------------------------
-# FranchiseTestRunner
+# FleetTestRunner
 # ---------------------------------------------------------------------------
 
 
-class FranchiseTestRunner:
+class FleetTestRunner:
     """SubprocessRunner-conforming runner that spawns real subprocesses.
 
-    Used by FranchiseRuntime to exercise the full dispatch pipeline with
+    Used by FleetRuntime to exercise the full dispatch pipeline with
     the claude shim binary, avoiding any mocking of the headless executor.
     """
 
@@ -186,14 +186,14 @@ class FranchiseTestRunner:
 
 
 # ---------------------------------------------------------------------------
-# FranchiseRuntime helper
+# FleetRuntime helper
 # ---------------------------------------------------------------------------
 
 
-class FranchiseRuntime:
-    """Test harness for end-to-end franchise dispatch tests.
+class FleetRuntime:
+    """Test harness for end-to-end fleet dispatch tests.
 
-    Wires FranchiseTestRunner into ToolContext, provides helper methods
+    Wires FleetTestRunner into ToolContext, provides helper methods
     for configuring shim behavior and reading per-dispatch state files.
     """
 
@@ -202,7 +202,7 @@ class FranchiseRuntime:
         tool_ctx: Any,
         dispatches_dir: Path,
         shim_dir: Path,
-        runner: FranchiseTestRunner,
+        runner: FleetTestRunner,
         recipes: Any,
         monkeypatch: Any,
     ) -> None:
@@ -310,14 +310,14 @@ def _force_state_statuses(state_path: Path, overrides: dict[str, str]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# franchise_runtime fixture (local — avoids conflict with test_pack_enforcement_e2e.py)
+# fleet_runtime fixture (local — avoids conflict with test_pack_enforcement_e2e.py)
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture
-def franchise_runtime(
+def fleet_runtime(
     tmp_path: Path, monkeypatch: Any, tool_ctx: Any
-) -> Generator[FranchiseRuntime, None, None]:
+) -> Generator[FleetRuntime, None, None]:
     from autoskillit.execution.headless import DefaultHeadlessExecutor
     from tests.fakes import InMemoryRecipeRepository
 
@@ -325,10 +325,10 @@ def franchise_runtime(
     _write_claude_shim(shim_dir)
     monkeypatch.setenv("PATH", f"{shim_dir}:{os.environ['PATH']}")
 
-    runner = FranchiseTestRunner()
+    runner = FleetTestRunner()
     tool_ctx.runner = runner
     tool_ctx.executor = DefaultHeadlessExecutor(tool_ctx)
-    tool_ctx.franchise_lock = asyncio.Lock()
+    tool_ctx.fleet_lock = asyncio.Lock()
     recipes = InMemoryRecipeRepository()
     tool_ctx.recipes = recipes
     tool_ctx.kitchen_id = uuid4().hex[:16]
@@ -339,7 +339,7 @@ def franchise_runtime(
 
     pre_children = {c.pid for c in psutil.Process(os.getpid()).children(recursive=True)}
 
-    rt = FranchiseRuntime(
+    rt = FleetRuntime(
         tool_ctx=tool_ctx,
         dispatches_dir=dispatches_dir,
         shim_dir=shim_dir,
@@ -378,9 +378,9 @@ def franchise_runtime(
 
 
 @pytest.mark.anyio
-async def test_two_dispatch_happy_path(franchise_runtime: FranchiseRuntime) -> None:
+async def test_two_dispatch_happy_path(fleet_runtime: FleetRuntime) -> None:
     """Full dispatch pipeline runs twice and both succeed."""
-    rt = franchise_runtime
+    rt = fleet_runtime
     rt.add_recipe("recipe-a")
     rt.add_recipe("recipe-b")
 
@@ -402,11 +402,11 @@ async def test_two_dispatch_happy_path(franchise_runtime: FranchiseRuntime) -> N
 
 
 @pytest.mark.anyio
-async def test_halt_on_first_failure_default(franchise_runtime: FranchiseRuntime) -> None:
+async def test_halt_on_first_failure_default(fleet_runtime: FleetRuntime) -> None:
     """Failure detection + campaign halt with continue_on_failure=False."""
     from autoskillit.fleet.state import DispatchStatus, resume_campaign_from_state
 
-    rt = franchise_runtime
+    rt = fleet_runtime
     rt.add_recipe("recipe-a")
 
     result = await rt.dispatch("recipe-a", shim_mode="exit_nonzero")
@@ -424,11 +424,11 @@ async def test_halt_on_first_failure_default(franchise_runtime: FranchiseRuntime
 
 
 @pytest.mark.anyio
-async def test_continue_on_failure_when_flagged(franchise_runtime: FranchiseRuntime) -> None:
+async def test_continue_on_failure_when_flagged(fleet_runtime: FleetRuntime) -> None:
     """continue_on_failure=True returns next_dispatch_name for the failed dispatch."""
     from autoskillit.fleet.state import DispatchStatus, resume_campaign_from_state
 
-    rt = franchise_runtime
+    rt = fleet_runtime
     rt.add_recipe("recipe-a")
     rt.add_recipe("recipe-b")
 
@@ -450,11 +450,11 @@ async def test_continue_on_failure_when_flagged(franchise_runtime: FranchiseRunt
 
 
 @pytest.mark.anyio
-async def test_malformed_l2_result_surfaces_warning(franchise_runtime: FranchiseRuntime) -> None:
+async def test_malformed_l2_result_surfaces_warning(fleet_runtime: FleetRuntime) -> None:
     """Malformed sentinel body produces l2_parse_failed failure with diagnostic fields."""
     from autoskillit.fleet.state import DispatchStatus
 
-    rt = franchise_runtime
+    rt = fleet_runtime
     rt.add_recipe("recipe-a")
 
     result = await rt.dispatch("recipe-a", shim_mode="malformed_sentinel")
@@ -471,12 +471,12 @@ async def test_malformed_l2_result_surfaces_warning(franchise_runtime: Franchise
 
 @pytest.mark.anyio
 async def test_l3_halts_on_missing_result_block_when_continue_on_failure_false(
-    franchise_runtime: FranchiseRuntime,
+    fleet_runtime: FleetRuntime,
 ) -> None:
-    """No-sentinel failure + continue_on_failure=False yields franchise_halted_on_failure."""
+    """No-sentinel failure + continue_on_failure=False yields fleet_halted_on_failure."""
     from autoskillit.fleet.state import DispatchStatus, resume_campaign_from_state
 
-    rt = franchise_runtime
+    rt = fleet_runtime
     rt.add_recipe("recipe-a")
 
     result = await rt.dispatch("recipe-a", shim_mode="no_sentinel")
@@ -502,10 +502,10 @@ async def test_l3_halts_on_missing_result_block_when_continue_on_failure_false(
 
 @pytest.mark.anyio
 async def test_parallel_dispatch_refused_mid_campaign(
-    franchise_runtime: FranchiseRuntime,
+    fleet_runtime: FleetRuntime,
 ) -> None:
-    """Lock guard rejects second concurrent dispatch with franchise_parallel_refused."""
-    rt = franchise_runtime
+    """Lock guard rejects second concurrent dispatch with fleet_parallel_refused."""
+    rt = fleet_runtime
     rt.add_recipe("slow-recipe")
 
     results: list[dict[str, Any] | None] = [None, None]
@@ -536,7 +536,7 @@ async def test_parallel_dispatch_refused_mid_campaign(
 
 @pytest.mark.anyio
 async def test_state_json_atomic_under_concurrent_read(
-    franchise_runtime: FranchiseRuntime, tmp_path: Path
+    fleet_runtime: FleetRuntime, tmp_path: Path
 ) -> None:
     """atomic_write guarantees readers never observe corrupted partial JSON."""
     from autoskillit.fleet.state import DispatchRecord, write_initial_state
@@ -571,9 +571,9 @@ async def test_state_json_atomic_under_concurrent_read(
 
 
 @pytest.mark.anyio
-async def test_ingredient_type_validation(franchise_runtime: FranchiseRuntime) -> None:
+async def test_ingredient_type_validation(fleet_runtime: FleetRuntime) -> None:
     """Non-string ingredient values are rejected before any subprocess is spawned."""
-    rt = franchise_runtime
+    rt = fleet_runtime
     rt.add_recipe("recipe-a")
 
     result = await rt.dispatch("recipe-a", ingredients={"key": 123})  # type: ignore[arg-type]
@@ -584,10 +584,10 @@ async def test_ingredient_type_validation(franchise_runtime: FranchiseRuntime) -
 
 @pytest.mark.anyio
 async def test_quota_exhausted_mid_campaign_sleeps_and_retries_once(
-    franchise_runtime: FranchiseRuntime,
+    fleet_runtime: FleetRuntime,
 ) -> None:
     """Quota sleep is honored before dispatch proceeds to completion."""
-    rt = franchise_runtime
+    rt = fleet_runtime
     rt.add_recipe("recipe-a")
 
     call_count = [0]
@@ -630,12 +630,12 @@ async def test_quota_exhausted_mid_campaign_sleeps_and_retries_once(
 
 @pytest.mark.anyio
 async def test_l2_killed_mid_dispatch_records_failure(
-    franchise_runtime: FranchiseRuntime,
+    fleet_runtime: FleetRuntime,
 ) -> None:
     """L2 process killed mid-dispatch produces l2_no_result_block failure (not crash)."""
     from autoskillit.fleet.state import DispatchStatus
 
-    rt = franchise_runtime
+    rt = fleet_runtime
     rt.add_recipe("sleepy-recipe")
 
     dispatch_result: dict[str, Any] | None = None
@@ -682,7 +682,7 @@ def _is_zombie(pid: int) -> bool:
 
 
 @pytest.mark.anyio
-async def test_orphan_l2_reaping(franchise_runtime: FranchiseRuntime, tmp_path: Path) -> None:
+async def test_orphan_l2_reaping(fleet_runtime: FleetRuntime, tmp_path: Path) -> None:
     """_reap_stale_dispatches kills a real orphan process and marks it interrupted."""
     from autoskillit.cli._fleet import _reap_stale_dispatches
     from autoskillit.core._linux_proc import read_boot_id, read_starttime_ticks
@@ -725,11 +725,11 @@ async def test_orphan_l2_reaping(franchise_runtime: FranchiseRuntime, tmp_path: 
 
 
 @pytest.mark.anyio
-async def test_l2_timeout_enforced(franchise_runtime: FranchiseRuntime) -> None:
-    """timeout_sec=1 kills a sleeping L2 process and returns l2_timeout franchise_error."""
+async def test_l2_timeout_enforced(fleet_runtime: FleetRuntime) -> None:
+    """timeout_sec=1 kills a sleeping L2 process and returns l2_timeout fleet_error."""
     from autoskillit.fleet.state import DispatchStatus
 
-    rt = franchise_runtime
+    rt = fleet_runtime
     rt.add_recipe("slow-recipe")
 
     result = await rt.dispatch(
@@ -761,7 +761,7 @@ async def test_l2_timeout_enforced(franchise_runtime: FranchiseRuntime) -> None:
 
 
 @pytest.mark.anyio
-async def test_resume_after_l3_crash(franchise_runtime: FranchiseRuntime, tmp_path: Path) -> None:
+async def test_resume_after_l3_crash(fleet_runtime: FleetRuntime, tmp_path: Path) -> None:
     """resume_campaign_from_state marks stale RUNNING as interrupted and returns next pending."""
     from autoskillit.fleet.state import (
         DispatchRecord,
@@ -795,11 +795,11 @@ async def test_resume_after_l3_crash(franchise_runtime: FranchiseRuntime, tmp_pa
 
 
 @pytest.mark.anyio
-async def test_manifest_corrupted_yaml(franchise_runtime: FranchiseRuntime) -> None:
-    """Recipe with wrong kind returns franchise_invalid_recipe_kind without spawning."""
+async def test_manifest_corrupted_yaml(fleet_runtime: FleetRuntime) -> None:
+    """Recipe with wrong kind returns fleet_invalid_recipe_kind without spawning."""
     from autoskillit.recipe.schema import Recipe, RecipeInfo, RecipeKind, RecipeSource
 
-    rt = franchise_runtime
+    rt = fleet_runtime
     recipe_info = RecipeInfo(
         name="bad-recipe",
         description="bad",
@@ -819,9 +819,7 @@ async def test_manifest_corrupted_yaml(franchise_runtime: FranchiseRuntime) -> N
 
 
 @pytest.mark.anyio
-async def test_manifest_mid_campaign_deletion(
-    franchise_runtime: FranchiseRuntime, tmp_path: Path
-) -> None:
+async def test_manifest_mid_campaign_deletion(fleet_runtime: FleetRuntime, tmp_path: Path) -> None:
     """resume_campaign_from_state returns None when state file is missing."""
     from autoskillit.fleet.state import (
         DispatchRecord,

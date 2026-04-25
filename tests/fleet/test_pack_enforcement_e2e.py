@@ -1,4 +1,4 @@
-"""Franchise per-recipe tool-surface e2e tests.
+"""Fleet per-recipe tool-surface e2e tests.
 
 Validates the tool surface using a real MCP server subprocess — no monkeypatching.
 Marked integration + medium to allow subprocess spawning.
@@ -21,7 +21,7 @@ pytestmark = [pytest.mark.layer("fleet"), pytest.mark.medium, pytest.mark.featur
 
 
 @pytest.fixture
-def franchise_runtime():
+def fleet_runtime():
     async def _get_surface(recipe_name: str) -> set[str]:
         from fastmcp.client import Client
         from fastmcp.client.transports import StdioTransport
@@ -58,10 +58,10 @@ def franchise_runtime():
 
 @pytest.mark.integration
 @pytest.mark.anyio
-async def test_implementation_food_truck_real_subprocess_tool_surface(franchise_runtime):
+async def test_implementation_food_truck_real_subprocess_tool_surface(fleet_runtime):
     from autoskillit.core import UNGATED_TOOLS
 
-    visible = await franchise_runtime("implementation")
+    visible = await fleet_runtime("implementation")
     expected = compute_food_truck_tool_surface("implementation")
 
     extras = visible - expected - UNGATED_TOOLS
@@ -72,10 +72,10 @@ async def test_implementation_food_truck_real_subprocess_tool_surface(franchise_
 
 @pytest.mark.integration
 @pytest.mark.anyio
-async def test_merge_prs_food_truck_real_subprocess_tool_surface(franchise_runtime):
+async def test_merge_prs_food_truck_real_subprocess_tool_surface(fleet_runtime):
     from autoskillit.core import UNGATED_TOOLS
 
-    visible = await franchise_runtime("merge-prs")
+    visible = await fleet_runtime("merge-prs")
     expected = compute_food_truck_tool_surface("merge-prs")
 
     extras = visible - expected - UNGATED_TOOLS

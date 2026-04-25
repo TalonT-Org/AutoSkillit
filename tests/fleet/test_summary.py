@@ -1,4 +1,4 @@
-"""Tests for franchise campaign summary schema v1.
+"""Tests for fleet campaign summary schema v1.
 
 Group S: CampaignSummary dataclasses, parse_campaign_summary, validate_campaign_summary,
 and serialize_campaign_summary.

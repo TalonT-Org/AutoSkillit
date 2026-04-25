@@ -319,6 +319,8 @@ def _launch_fleet_session(
     campaign_id: str | None,
     state_path: Path | None,
     resume_metadata: ResumeDecision | None,
+    *,
+    fleet_mode: str,
 ) -> None:
     """Build the L3 orchestrator prompt and launch an interactive fleet session."""
     from autoskillit.cli import detect_autoskillit_mcp_prefix  # noqa: PLC0415
@@ -337,6 +339,7 @@ def _launch_fleet_session(
         prompt = _build_fleet_open_prompt(mcp_prefix)
         extra_env: dict[str, str] = {
             "AUTOSKILLIT_SESSION_TYPE": "fleet",
+            "AUTOSKILLIT_FLEET_MODE": fleet_mode,
             "AUTOSKILLIT_HEADLESS": "0",
         }
         while True:
@@ -367,6 +370,7 @@ def _launch_fleet_session(
         )
         extra_env = {
             "AUTOSKILLIT_SESSION_TYPE": "fleet",
+            "AUTOSKILLIT_FLEET_MODE": fleet_mode,
             "AUTOSKILLIT_CAMPAIGN_ID": campaign_id,
             "AUTOSKILLIT_CAMPAIGN_STATE_PATH": str(state_path),
             "AUTOSKILLIT_HEADLESS": "0",
@@ -384,6 +388,7 @@ async def _fleet_signal_guard(
     state_path: Path,
     campaign_id: str,
     *,
+    campaign_name: str | None = None,
     cleanup_on_interrupt: bool = False,
 ) -> AsyncIterator[None]:
     """Async context manager that installs SIGINT/SIGTERM handlers.
@@ -487,10 +492,13 @@ async def _fleet_signal_guard(
                         except Exception:
                             _log.warning("signal_guard: workspace cleanup failed", exc_info=True)
 
-                    sys.stderr.write(
-                        f"Campaign {campaign_id} interrupted."
-                        f" Resume: autoskillit fleet run --resume {campaign_id}\n"
-                    )
+                    if campaign_name is not None:
+                        resume_cmd = (
+                            f"autoskillit fleet campaign {campaign_name} --resume {campaign_id}"
+                        )
+                    else:
+                        resume_cmd = f"autoskillit fleet campaign <name> --resume {campaign_id}"
+                    sys.stderr.write(f"Campaign {campaign_id} interrupted. Resume: {resume_cmd}\n")
                 return
 
     async with anyio.create_task_group() as tg:
@@ -627,19 +635,15 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
             fcntl.flock(_lock_fh, fcntl.LOCK_UN)
 
 
-@fleet_app.command(name="run")
-def fleet_run(
-    campaign_name: str | None = None,
-    *,
-    resume_campaign: str | None = None,
-) -> None:
-    """Launch an interactive Claude Code session to execute a campaign."""
+@fleet_app.command(name="dispatch")
+def fleet_dispatch() -> None:
+    """Launch a bare fleet dispatcher session (free-flow mode)."""
     if os.environ.get("CLAUDECODE"):
-        print("ERROR: 'fleet run' cannot run inside a Claude Code session.")
+        print("ERROR: 'fleet dispatch' cannot run inside a Claude Code session.")
         print("Run this command in a regular terminal.")
         sys.exit(1)
     if os.environ.get("AUTOSKILLIT_SESSION_TYPE") == "leaf":
-        print("ERROR: 'fleet run' cannot run inside a leaf session.")
+        print("ERROR: 'fleet dispatch' cannot run inside a leaf session.")
         sys.exit(1)
     if shutil.which("claude") is None:
         print("ERROR: 'claude' not found. Install: https://docs.anthropic.com/en/docs/claude-code")
@@ -650,10 +654,31 @@ def fleet_run(
     cfg = load_config(Path.cwd())
     _require_fleet(cfg)
 
-    # Ad-hoc mode: no campaign name supplied — launch bare fleet dispatcher
-    if campaign_name is None:
-        _launch_fleet_session(None, None, None, None)
-        return
+    _launch_fleet_session(None, None, None, None, fleet_mode="dispatch")
+
+
+@fleet_app.command(name="campaign")
+def fleet_campaign(
+    campaign_name: str,
+    *,
+    resume_campaign: Annotated[str | None, Parameter(name=["--resume"])] = None,
+) -> None:
+    """Launch an interactive Claude Code session to execute a named campaign."""
+    if os.environ.get("CLAUDECODE"):
+        print("ERROR: 'fleet campaign' cannot run inside a Claude Code session.")
+        print("Run this command in a regular terminal.")
+        sys.exit(1)
+    if os.environ.get("AUTOSKILLIT_SESSION_TYPE") == "leaf":
+        print("ERROR: 'fleet campaign' cannot run inside a leaf session.")
+        sys.exit(1)
+    if shutil.which("claude") is None:
+        print("ERROR: 'claude' not found. Install: https://docs.anthropic.com/en/docs/claude-code")
+        sys.exit(1)
+
+    from autoskillit.config import load_config
+
+    cfg = load_config(Path.cwd())
+    _require_fleet(cfg)
 
     from autoskillit.core import YAMLError
     from autoskillit.fleet import (
@@ -704,7 +729,7 @@ def fleet_run(
         dispatches = [DispatchRecord(name=d.name) for d in parsed.dispatches]
         write_initial_state(state_path, campaign_id, campaign_name, str(match.path), dispatches)
 
-    _launch_fleet_session(parsed, campaign_id, state_path, resume_metadata)
+    _launch_fleet_session(parsed, campaign_id, state_path, resume_metadata, fleet_mode="campaign")
 
 
 @fleet_app.command(name="list")

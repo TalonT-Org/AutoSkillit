@@ -17,8 +17,9 @@ from cyclopts import App
 if TYPE_CHECKING:
     from autoskillit.fleet import CampaignState
 
+from autoskillit.cli._fleet import fleet_campaign as _fleet_campaign
+from autoskillit.cli._fleet import fleet_dispatch as _fleet_dispatch
 from autoskillit.cli._fleet import fleet_list as _fleet_list
-from autoskillit.cli._fleet import fleet_run as _fleet_run
 from autoskillit.cli._fleet import fleet_status as _fleet_status
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium, pytest.mark.feature("fleet")]
@@ -220,11 +221,11 @@ def _mock_batch_delete(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
 # ---------------------------------------------------------------------------
 
 
-def test_fleet_run_rejects_inside_claude_session(monkeypatch: pytest.MonkeyPatch) -> None:
-    """fleet run exits 1 when CLAUDECODE env is set."""
+def test_fleet_dispatch_rejects_inside_claude_session(monkeypatch: pytest.MonkeyPatch) -> None:
+    """fleet dispatch exits 1 when CLAUDECODE env is set."""
     monkeypatch.setenv("CLAUDECODE", "1")
     with pytest.raises(SystemExit, match="1"):
-        _fleet_run("my-campaign")
+        _fleet_dispatch()
 
 
 # ---------------------------------------------------------------------------
@@ -232,12 +233,12 @@ def test_fleet_run_rejects_inside_claude_session(monkeypatch: pytest.MonkeyPatch
 # ---------------------------------------------------------------------------
 
 
-def test_fleet_run_rejects_leaf_session_type(monkeypatch: pytest.MonkeyPatch) -> None:
-    """fleet run exits 1 when ambient SESSION_TYPE is leaf."""
+def test_fleet_dispatch_rejects_leaf_session_type(monkeypatch: pytest.MonkeyPatch) -> None:
+    """fleet dispatch exits 1 when ambient SESSION_TYPE is leaf."""
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaf")
     monkeypatch.delenv("CLAUDECODE", raising=False)
     with pytest.raises(SystemExit, match="1"):
-        _fleet_run("my-campaign")
+        _fleet_dispatch()
 
 
 # ---------------------------------------------------------------------------
@@ -245,13 +246,13 @@ def test_fleet_run_rejects_leaf_session_type(monkeypatch: pytest.MonkeyPatch) ->
 # ---------------------------------------------------------------------------
 
 
-def test_fleet_run_exits_when_claude_missing(monkeypatch: pytest.MonkeyPatch) -> None:
-    """fleet run exits 1 when claude is not on PATH."""
+def test_fleet_dispatch_exits_when_claude_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """fleet dispatch exits 1 when claude is not on PATH."""
     monkeypatch.delenv("CLAUDECODE", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
     monkeypatch.setattr(shutil, "which", lambda _: None)
     with pytest.raises(SystemExit, match="1"):
-        _fleet_run("my-campaign")
+        _fleet_dispatch()
 
 
 # ---------------------------------------------------------------------------
@@ -266,7 +267,7 @@ def test_fleet_run_exits_when_campaign_not_found(
     monkeypatch.chdir(tmp_path)
     _stub_guards(monkeypatch)
     with pytest.raises(SystemExit, match="1"):
-        _fleet_run("nonexistent-campaign")
+        _fleet_campaign("nonexistent-campaign")
 
 
 # ---------------------------------------------------------------------------
@@ -282,11 +283,12 @@ def test_fleet_run_sets_session_type_fleet(
     monkeypatch.chdir(tmp_path)
     _stub_campaign_resolution(monkeypatch, tmp_path, "test-campaign")
     captured = _capture_subprocess(monkeypatch)
-    _fleet_run("test-campaign")
+    _fleet_campaign("test-campaign")
     env = captured["env"]
     assert "AUTOSKILLIT_SESSION_TYPE" in env and env["AUTOSKILLIT_SESSION_TYPE"] == "fleet"
     assert "AUTOSKILLIT_CAMPAIGN_ID" in env
     assert "AUTOSKILLIT_CAMPAIGN_STATE_PATH" in env
+    assert captured["env"].get("AUTOSKILLIT_FLEET_MODE") == "campaign"
 
 
 # ---------------------------------------------------------------------------
@@ -300,7 +302,7 @@ def test_fleet_run_writes_initial_state(monkeypatch: pytest.MonkeyPatch, tmp_pat
     monkeypatch.chdir(tmp_path)
     _stub_campaign_resolution(monkeypatch, tmp_path, "test-campaign")
     _capture_subprocess(monkeypatch)
-    _fleet_run("test-campaign")
+    _fleet_campaign("test-campaign")
     state_dirs = list((tmp_path / ".autoskillit" / "temp" / "fleet").iterdir())
     assert len(state_dirs) == 1
     state_file = state_dirs[0] / "state.json"
@@ -322,7 +324,7 @@ def test_fleet_run_resume_reads_existing_state(
     _setup_existing_campaign_state(tmp_path, campaign_id, "test-campaign")
     _stub_campaign_resolution(monkeypatch, tmp_path, "test-campaign")
     captured = _capture_subprocess(monkeypatch)
-    _fleet_run("test-campaign", resume_campaign=campaign_id)
+    _fleet_campaign("test-campaign", resume_campaign=campaign_id)
     assert captured["env"]["AUTOSKILLIT_CAMPAIGN_ID"] == campaign_id
 
 
@@ -428,7 +430,7 @@ def test_fleet_run_exit_code_passthrough(monkeypatch: pytest.MonkeyPatch, tmp_pa
         lambda *a, **kw: type("R", (), {"returncode": 2, "stdout": "", "stderr": ""})(),
     )
     with pytest.raises(SystemExit) as exc_info:
-        _fleet_run("test-campaign")
+        _fleet_campaign("test-campaign")
     assert exc_info.value.code == 2
 
 
@@ -766,14 +768,31 @@ class TestFleetCLIRegistration:
         assert "dry_run" in sig.parameters
         assert "reap" in sig.parameters
 
+    def test_fleet_dispatch_command_registered(self) -> None:
+        from autoskillit.cli._fleet import fleet_app
+
+        assert "dispatch" in _subcommand_names(fleet_app)
+
+    def test_fleet_campaign_command_registered(self) -> None:
+        from autoskillit.cli._fleet import fleet_app
+
+        assert "campaign" in _subcommand_names(fleet_app)
+
+    def test_fleet_run_command_not_registered(self) -> None:
+        from autoskillit.cli._fleet import fleet_app
+
+        assert "run" not in _subcommand_names(fleet_app)
+
 
 # ---------------------------------------------------------------------------
 # T_GUARD_1: fleet_run exits 1 when fleet feature disabled
 # ---------------------------------------------------------------------------
 
 
-def test_fleet_run_exits_when_disabled(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """fleet_run exits 1 when fleet feature is disabled via feature gate."""
+def test_fleet_dispatch_exits_when_disabled(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """fleet_dispatch exits 1 when fleet feature is disabled via feature gate."""
     monkeypatch.chdir(tmp_path)
     _stub_guards(monkeypatch)
     checked_features: list[str] = []
@@ -785,7 +804,27 @@ def test_fleet_run_exits_when_disabled(monkeypatch: pytest.MonkeyPatch, tmp_path
         "autoskillit.config.load_config", lambda path: type("C", (), {"features": {}})()
     )
     with pytest.raises(SystemExit) as exc_info:
-        _fleet_run("any-campaign")
+        _fleet_dispatch()
+    assert exc_info.value.code == 1
+    assert "fleet" in checked_features
+
+
+def test_fleet_campaign_exits_when_disabled(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """fleet_campaign exits 1 when fleet feature is disabled via feature gate."""
+    monkeypatch.chdir(tmp_path)
+    _stub_guards(monkeypatch)
+    checked_features: list[str] = []
+    monkeypatch.setattr(
+        "autoskillit.cli._fleet.is_feature_enabled",
+        lambda name, features: checked_features.append(name) or False,
+    )
+    monkeypatch.setattr(
+        "autoskillit.config.load_config", lambda path: type("C", (), {"features": {}})()
+    )
+    with pytest.raises(SystemExit) as exc_info:
+        _fleet_campaign("any-campaign")
     assert exc_info.value.code == 1
     assert "fleet" in checked_features
 
@@ -839,7 +878,7 @@ def test_fleet_status_exits_when_disabled(monkeypatch: pytest.MonkeyPatch, tmp_p
 # ---------------------------------------------------------------------------
 
 
-def test_fleet_run_proceeds_when_enabled(
+def test_fleet_dispatch_proceeds_when_enabled(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
 ) -> None:
     """fleet_run passes the feature guard and proceeds to campaign resolution."""
@@ -850,12 +889,11 @@ def test_fleet_run_proceeds_when_enabled(
         "autoskillit.config.load_config", lambda path: type("C", (), {"features": {}})()
     )
     with pytest.raises(SystemExit) as exc_info:
-        _fleet_run("nonexistent-campaign")
+        _fleet_dispatch()
     assert exc_info.value.code == 1
     # Guard passed — exit must come from campaign resolution, not the feature gate
     captured = capsys.readouterr()
     assert "not enabled" not in captured.err
-    assert "not found" in captured.out.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -863,38 +901,35 @@ def test_fleet_run_proceeds_when_enabled(
 # ---------------------------------------------------------------------------
 
 
-def test_fleet_run_without_campaign_name_launches_session(
+def test_fleet_dispatch_sets_fleet_mode_dispatch(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """fleet_run(None) must launch an interactive session, not exit 1."""
     _stub_guards(monkeypatch)
     monkeypatch.chdir(tmp_path)
     captured = _capture_subprocess(monkeypatch)
-    _fleet_run(None)
-    assert "AUTOSKILLIT_SESSION_TYPE" in captured["env"]
-    assert captured["env"]["AUTOSKILLIT_SESSION_TYPE"] == "fleet"
+    _fleet_dispatch()
+    assert captured["env"].get("AUTOSKILLIT_FLEET_MODE") == "dispatch"
 
 
-def test_fleet_run_without_campaign_writes_no_state(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_fleet_dispatch_writes_no_state(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Ad-hoc fleet run must not create a state.json under .autoskillit/temp/fleet/."""
     _stub_guards(monkeypatch)
     monkeypatch.chdir(tmp_path)
     _capture_subprocess(monkeypatch)
-    _fleet_run(None)
+    _fleet_dispatch()
     fleet_dir = tmp_path / ".autoskillit" / "temp" / "fleet"
     assert not fleet_dir.exists() or not any(fleet_dir.rglob("state.json"))
 
 
-def test_fleet_run_without_campaign_no_campaign_env_vars(
+def test_fleet_dispatch_no_campaign_env_vars(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Ad-hoc session must not set AUTOSKILLIT_CAMPAIGN_ID or AUTOSKILLIT_CAMPAIGN_STATE_PATH."""
     _stub_guards(monkeypatch)
     monkeypatch.chdir(tmp_path)
     captured = _capture_subprocess(monkeypatch)
-    _fleet_run(None)
+    _fleet_dispatch()
     env = captured["env"]
     assert "AUTOSKILLIT_CAMPAIGN_ID" not in env
     assert "AUTOSKILLIT_CAMPAIGN_STATE_PATH" not in env
@@ -935,8 +970,8 @@ def test_build_fleet_open_prompt_accepts_marketplace_prefix() -> None:
     assert MARKETPLACE_PREFIX + "dispatch_food_truck" in prompt
 
 
-def test_fleet_run_adhoc_still_rejects_claudecode(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fleet_dispatch_rejects_claudecode(monkeypatch: pytest.MonkeyPatch) -> None:
     """CLAUDECODE guard fires even when campaign_name is None."""
     monkeypatch.setenv("CLAUDECODE", "1")
     with pytest.raises(SystemExit, match="1"):
-        _fleet_run(None)
+        _fleet_dispatch()

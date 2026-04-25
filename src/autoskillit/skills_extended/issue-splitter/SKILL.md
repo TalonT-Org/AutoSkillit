@@ -179,16 +179,18 @@ gh label create "split" --force \
 # Label the parent as split
 gh issue edit {N} --add-label "split" [--repo {repo}]
 
-# Add tracking comment with cross-references
-gh issue comment {N} \
-  --body "## Split into sub-issues
-
-This issue covers multiple concerns and has been decomposed into focused sub-issues:
-
-{bullet list of sub-issue links with route labels}
-
-This issue remains open as a tracking issue." \
-  [--repo {repo}]
+# Append ## Decomposed section to parent body
+SPLIT_BODY_FILE="{{AUTOSKILLIT_TEMP}}/issue-splitter/decomposed_{N}_{ts}.md"
+mkdir -p "$(dirname "$SPLIT_BODY_FILE")"
+gh issue view {N} --json body --jq '.body' [--repo {repo}] > "$SPLIT_BODY_FILE"
+printf '\n\n---\n\n## Decomposed\n\nThis issue covers multiple concerns and has been decomposed into focused sub-issues:\n\n' \
+  >> "$SPLIT_BODY_FILE"
+for sub in {sub-issue-links}; do
+  printf '- %s\n' "$sub" >> "$SPLIT_BODY_FILE"
+done
+printf '\nThis issue remains open as a tracking issue.\n' >> "$SPLIT_BODY_FILE"
+gh issue edit {N} --body-file "$SPLIT_BODY_FILE" [--repo {repo}]
+sleep 1
 ```
 
 Do **not** close the parent — it serves as a tracking issue for all sub-issues.

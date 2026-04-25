@@ -739,3 +739,11 @@ def test_hardcoded_origin_does_not_fire_on_part_b_fixed_skills(
         f"hardcoded-origin-remote fired on {skill_name!r} after Part B fix — "
         "check that all literal 'origin' references in bash blocks have been replaced with $REMOTE"
     )
+
+
+def test_skill_no_issue_comments_rule_registered() -> None:
+    import autoskillit.recipe.rules_skill_content  # noqa: F401 — triggers decorator registration
+    from autoskillit.recipe.registry import _RULE_REGISTRY
+
+    rule_names = [r.name for r in _RULE_REGISTRY]
+    assert "skill-no-issue-comments" in rule_names

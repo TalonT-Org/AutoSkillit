@@ -716,8 +716,8 @@ async def test_report_bug_creates_github_issue_on_no_duplicate(tool_ctx, tmp_pat
 
 
 @pytest.mark.anyio
-async def test_report_bug_comments_on_duplicate_issue(tool_ctx, tmp_path):
-    """When a matching issue exists and error_context is new, add_comment is called."""
+async def test_report_bug_updates_duplicate_issue_body(tool_ctx, tmp_path):
+    """When a matching issue exists and error_context is new, update_issue_body is called."""
     tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
     tool_ctx.config.report_bug.github_filing = True
     tool_ctx.config.github.default_repo = "owner/repo"
@@ -743,7 +743,10 @@ async def test_report_bug_comments_on_duplicate_issue(tool_ctx, tmp_path):
             }
         ],
     }
-    mock_gh.add_comment.return_value = {"success": True, "comment_id": 55, "url": "u"}
+    mock_gh.update_issue_body.return_value = {
+        "success": True,
+        "issue_url": "https://github.com/owner/repo/issues/7",
+    }
     tool_ctx.github_client = mock_gh
 
     result = json.loads(
@@ -751,9 +754,9 @@ async def test_report_bug_comments_on_duplicate_issue(tool_ctx, tmp_path):
     )
 
     assert result["success"] is True
-    mock_gh.add_comment.assert_awaited_once()
+    mock_gh.update_issue_body.assert_awaited_once()
     assert result["github"]["duplicate"] is True
-    assert result["github"]["comment_added"] is True
+    assert result["github"]["body_updated"] is True
 
 
 @pytest.mark.anyio
@@ -787,8 +790,8 @@ async def test_report_bug_skips_comment_if_already_present(tool_ctx, tmp_path):
 
     result = json.loads(await report_bug(error_ctx, str(tmp_path), severity="blocking"))
 
-    mock_gh.add_comment.assert_not_awaited()
-    assert result["github"]["comment_added"] is False
+    mock_gh.update_issue_body.assert_not_awaited()
+    assert result["github"]["body_updated"] is False
 
 
 @pytest.mark.anyio

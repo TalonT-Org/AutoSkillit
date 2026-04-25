@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 
 import structlog
 from fastmcp import Context
@@ -56,13 +57,44 @@ async def _close_issues_sequentially(
     for i, num in enumerate(issue_numbers):
         if i > 0:
             await asyncio.sleep(1)
-        cmd = ["gh", "issue", "close", str(num)]
-        if comment:
-            cmd.extend(["--comment", comment])
-        rc, _, _ = await _run_subprocess(cmd, cwd=cwd, timeout=30)
-        if rc == 0:
-            closed.append(num)
-        else:
+        try:
+            if comment:
+                rc, body_out, _ = await _run_subprocess(
+                    ["gh", "issue", "view", str(num), "--json", "body", "--jq", ".body"],
+                    cwd=cwd,
+                    timeout=30,
+                )
+                if rc != 0:
+                    failed.append(num)
+                    continue
+                current_body = body_out.strip()
+                new_body = current_body + f"\n\n---\n\n## Closing Note\n\n{comment}"
+
+                temp_dir = Path(cwd) / ".autoskillit" / "temp" / "bulk-close-issues"
+                temp_dir.mkdir(parents=True, exist_ok=True)
+                temp_file = temp_dir / f"{num}_close_body.md"
+                temp_file.write_text(new_body, encoding="utf-8")
+
+                rc2, _, _ = await _run_subprocess(
+                    ["gh", "issue", "edit", str(num), "--body-file", str(temp_file)],
+                    cwd=cwd,
+                    timeout=30,
+                )
+                if rc2 != 0:
+                    failed.append(num)
+                    continue
+                await asyncio.sleep(1)
+
+            rc3, _, _ = await _run_subprocess(
+                ["gh", "issue", "close", str(num)],
+                cwd=cwd,
+                timeout=30,
+            )
+            if rc3 == 0:
+                closed.append(num)
+            else:
+                failed.append(num)
+        except Exception:
             failed.append(num)
     return closed, failed
 

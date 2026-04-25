@@ -273,7 +273,9 @@ def _make_mock_github(search_total: int, existing_body: str = "") -> MagicMock:
     client.create_issue = AsyncMock(
         return_value={"success": True, "url": "https://github.com/o/r/issues/99"}
     )
-    client.add_comment = AsyncMock(return_value={"success": True})
+    client.update_issue_body = AsyncMock(
+        return_value={"success": True, "issue_url": "https://github.com/o/r/issues/7"}
+    )
     return client
 
 
@@ -366,10 +368,10 @@ async def test_report_bug_includes_condensed_diagnostics_in_duplicate_comment(to
 
     await report_bug(error_context="Test error", cwd=str(tmp_path), severity="blocking")
 
-    _args = github_mock.add_comment.call_args
-    comment_body = _args.kwargs.get("body", _args.args[3])
-    assert "Session Diagnostics" in comment_body
-    assert "<details>" not in comment_body  # condensed — no details blocks
+    _args = github_mock.update_issue_body.call_args
+    new_body = _args.kwargs.get("new_body", _args.args[3])
+    assert "Session Diagnostics" in new_body
+    assert "<details>" not in new_body  # condensed — no details blocks
 
 
 @pytest.mark.anyio

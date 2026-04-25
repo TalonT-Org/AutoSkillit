@@ -388,3 +388,46 @@ def _check_output_section_no_markdown_directive(ctx: ValidationContext) -> list[
                 )
             )
     return findings
+
+
+_GH_ISSUE_COMMENT_RE = re.compile(r"\bgh\s+issue\s+comment\b")
+
+
+@semantic_rule(
+    name="skill-no-issue-comments",
+    description=(
+        "Skill content must not use 'gh issue comment'. "
+        "All issue updates belong in the body via 'gh issue edit --body-file'."
+    ),
+)
+def _check_no_gh_issue_comment(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        skill_cmd = step.with_args.get("skill_command", "")
+        skill_name = resolve_skill_name(skill_cmd)
+        if skill_name is None:
+            continue
+        skill_md = _resolve_skill_md(skill_name)
+        if skill_md is None:
+            continue
+        try:
+            content = skill_md.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for block in extract_bash_blocks(content):
+            if _GH_ISSUE_COMMENT_RE.search(block):
+                findings.append(
+                    RuleFinding(
+                        rule="skill-no-issue-comments",
+                        severity=Severity.ERROR,
+                        step_name=step_name,
+                        message=(
+                            f"Skill '{skill_name}' contains 'gh issue comment'. "
+                            "Use 'gh issue edit --body-file' instead."
+                        ),
+                    )
+                )
+                break
+    return findings

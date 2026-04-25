@@ -58,7 +58,7 @@ issues upfront, load recipe, execute session, collect result, report.
 - Positional (optional): path to triage manifest JSON
 - `--batch N` — only process batch N (default: process all batches in order)
 - `--dry-run` — print the processing plan and exit without launching any recipe sessions
-- `--comment` — post a GitHub comment on each issue at pickup and at completion
+- `--status-updates` — append body sections to each issue at pickup and at completion
 - `--merge-batch` — after each batch completes, run `analyze-prs` + `merge-pr` to merge
   the batch PRs into the integration branch before starting the next batch
 
@@ -70,7 +70,7 @@ Parse arguments:
 - If a positional path is given, use it as the manifest path.
 - `--batch N`: record the target batch number; process only that batch.
 - `--dry-run`: set dry_run flag; print plan then exit after Step 2.
-- `--comment`: set comment flag.
+- `--status-updates`: set status_updates flag.
 - `--merge-batch`: set merge_batch flag.
 
 ### Step 1: Locate and Read Manifest
@@ -188,10 +188,15 @@ Processing X issues:
 1. **Check pre_claimed_urls:** If `issue_url` is NOT in `pre_claimed_urls` → skip
    (excluded by upfront claim phase — another session holds it).
 
-2. **Optionally post pickup comment** (if `--comment` is active):
+2. **Optionally append pickup status to issue body** (if `--status-updates` is active):
    ```bash
-   gh issue comment {number} \
-     --body "Processing in batch {N} — recipe: \`{recipe}\`"
+   PROCESS_BODY_FILE="{{AUTOSKILLIT_TEMP}}/process-issues/status_{number}_{ts}.md"
+   mkdir -p "$(dirname "$PROCESS_BODY_FILE")"
+   gh issue view {number} --json body --jq '.body' > "$PROCESS_BODY_FILE"
+   printf '\n\n---\n\n## In Progress\n\nProcessing in batch %s — recipe: `%s`\n' \
+     "{N}" "{recipe}" >> "$PROCESS_BODY_FILE"
+   gh issue edit {number} --body-file "$PROCESS_BODY_FILE"
+   sleep 1
    ```
 
 3. **Determine recipe name and `run_name`:**
@@ -238,9 +243,15 @@ Processing X issues:
    - On success path (`done` step reached): `{issue_number, recipe, status: success, pr_url}`
    - On failure path (`escalate_stop` reached): `{issue_number, recipe, status: failure, error}`
 
-7. **Optionally post completion comment** (if `--comment` is active):
-   - Success: `"✅ Processing complete — PR: {pr_url}"`
-   - Failure: `"❌ Processing failed — manual intervention required"`
+7. **Optionally append completion status to issue body** (if `--status-updates` is active):
+   ```bash
+   gh issue view {number} --json body --jq '.body' > "$PROCESS_BODY_FILE"
+   printf '\n\n---\n\n## Status\n\n%s\n' \
+     "{✅ Processing complete — PR: {pr_url} | ❌ Processing failed — manual intervention required}" \
+     >> "$PROCESS_BODY_FILE"
+   gh issue edit {number} --body-file "$PROCESS_BODY_FILE"
+   sleep 1
+   ```
 
 **Fatal failure cleanup** — if any unrecoverable error occurs during recipe dispatch:
 ```

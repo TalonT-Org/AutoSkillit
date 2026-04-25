@@ -33,3 +33,15 @@ def test_enrich_issues_body_file_uses_autoskillit_temp():
         "enrich-issues must write issue body to {{AUTOSKILLIT_TEMP}}/enrich-issues/ "
         "before calling gh issue edit --body-file"
     )
+
+
+def test_enrich_issues_no_issue_comment():
+    text = SKILL_MD.read_text()
+    assert "gh issue comment" not in text, (
+        "Too-vague and mixed-concerns feedback must be appended to body, not posted as comments"
+    )
+
+
+def test_enrich_issues_triage_note_section():
+    text = SKILL_MD.read_text()
+    assert "## Triage Note" in text, "Must use ## Triage Note body section for skip-path feedback"

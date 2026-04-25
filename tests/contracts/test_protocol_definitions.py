@@ -8,6 +8,25 @@ from __future__ import annotations
 import inspect
 
 
+def test_github_fetcher_has_update_issue_body() -> None:
+    from autoskillit.core._type_protocols import GitHubFetcher
+
+    assert hasattr(GitHubFetcher, "update_issue_body")
+    sig = inspect.signature(GitHubFetcher.update_issue_body)
+    assert "owner" in sig.parameters
+    assert "repo" in sig.parameters
+    assert "issue_number" in sig.parameters
+    assert "new_body" in sig.parameters
+
+
+def test_github_fetcher_no_add_comment() -> None:
+    from autoskillit.core._type_protocols import GitHubFetcher
+
+    assert not hasattr(GitHubFetcher, "add_comment"), (
+        "add_comment must be removed after all call sites are migrated"
+    )
+
+
 def test_skill_lister_protocol_defined() -> None:
     """REQ-PROTO-007: SkillLister Protocol must live in
     core/_type_protocols.py and define a `list_all() -> list[Any]`

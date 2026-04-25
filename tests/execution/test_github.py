@@ -323,47 +323,50 @@ async def test_create_issue_request_error(httpx_mock):
 
 
 # ---------------------------------------------------------------------------
-# add_comment
+# update_issue_body
 # ---------------------------------------------------------------------------
 
-_COMMENT_JSON = {
-    "id": 99,
-    "html_url": "https://github.com/owner/repo/issues/7#issuecomment-99",
+_UPDATE_BODY_JSON = {
+    "number": 7,
+    "html_url": "https://github.com/owner/repo/issues/7",
+    "body": "updated body",
 }
 
 
 @pytest.mark.anyio
-async def test_add_comment_success(httpx_mock):
+async def test_update_issue_body_success(httpx_mock):
     httpx_mock.add_response(
-        url="https://api.github.com/repos/owner/repo/issues/7/comments",
-        method="POST",
-        json=_COMMENT_JSON,
+        url="https://api.github.com/repos/owner/repo/issues/7",
+        method="PATCH",
+        json=_UPDATE_BODY_JSON,
     )
     fetcher = DefaultGitHubFetcher(token="tok")
-    result = await fetcher.add_comment("owner", "repo", 7, "New occurrence details")
+    result = await fetcher.update_issue_body(
+        "owner", "repo", 7, "original body\n\n## New Occurrence\n\ndetails"
+    )
     assert result["success"] is True
-    assert result["comment_id"] == 99
+    assert result["issue_url"] == "https://github.com/owner/repo/issues/7"
 
 
 @pytest.mark.anyio
-async def test_add_comment_http_error(httpx_mock):
+async def test_update_issue_body_http_error(httpx_mock):
     httpx_mock.add_response(
-        url="https://api.github.com/repos/owner/repo/issues/7/comments",
-        method="POST",
+        url="https://api.github.com/repos/owner/repo/issues/7",
+        method="PATCH",
         status_code=404,
         json={"message": "Not Found"},
     )
     fetcher = DefaultGitHubFetcher(token="tok")
-    result = await fetcher.add_comment("owner", "repo", 7, "body")
+    result = await fetcher.update_issue_body("owner", "repo", 7, "new body")
     assert result["success"] is False
     assert "404" in result["error"]
 
 
 @pytest.mark.anyio
-async def test_add_comment_request_error(httpx_mock):
+async def test_update_issue_body_request_error(httpx_mock):
     httpx_mock.add_exception(httpx.ConnectError("down"))
     fetcher = DefaultGitHubFetcher(token="tok")
-    result = await fetcher.add_comment("owner", "repo", 7, "body")
+    result = await fetcher.update_issue_body("owner", "repo", 7, "new body")
     assert result["success"] is False
 
 
@@ -610,7 +613,7 @@ def test_default_github_fetcher_implements_full_protocol():
         "fetch_issue",
         "search_issues",
         "create_issue",
-        "add_comment",
+        "update_issue_body",
         "add_labels",
         "remove_label",
         "ensure_label",

@@ -388,12 +388,12 @@ class GitHubFetcher(Protocol):
         labels: list[str] | None = None,
     ) -> dict[str, Any]: ...
 
-    async def add_comment(
+    async def update_issue_body(
         self,
         owner: str,
         repo: str,
         issue_number: int,
-        body: str,
+        new_body: str,
     ) -> dict[str, Any]: ...
 
     async def fetch_title(self, issue_url: str) -> dict[str, object]: ...

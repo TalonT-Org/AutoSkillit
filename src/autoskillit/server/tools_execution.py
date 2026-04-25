@@ -440,8 +440,6 @@ async def dispatch_food_truck(
             )
 
         if os.environ.get("AUTOSKILLIT_HEADLESS") == "1":
-            from autoskillit.core import FleetErrorCode, fleet_error
-
             return fleet_error(
                 FleetErrorCode.FLEET_HARD_REFUSAL_HEADLESS,
                 "dispatch_food_truck cannot be called from headless sessions.",

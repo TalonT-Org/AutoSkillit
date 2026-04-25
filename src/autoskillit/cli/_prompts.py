@@ -491,7 +491,7 @@ def _build_fleet_dispatch_prompt(mcp_prefix: str) -> str:
     """Build the --append-system-prompt content for an ad-hoc fleet dispatcher session."""
     sous_chef_block = _build_l2_sous_chef_block()
     sous_chef_section = (
-        f"\n## SOUS-CHEF DISCIPLINE (L3 DISPATCH SUBSET)\n\n{sous_chef_block}\n"
+        f"\n## SOUS-CHEF DISCIPLINE (DISPATCH SUBSET)\n\n{sous_chef_block}\n"
         if sous_chef_block
         else ""
     )

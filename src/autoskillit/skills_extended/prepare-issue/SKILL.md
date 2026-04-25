@@ -92,41 +92,63 @@ gh repo view --json owner,name
 ### Step 4: Dedup Check (skip if `--issue N` provided)
 
 Extract multiple keyword sets from the description — individual key terms and 2–3 phrase
-combinations that capture the core topic. For each keyword set, search open issues:
+combinations that capture the core topic. For each keyword set, search all issues:
 
 ```bash
-gh issue list --state open --search "{keyword-set}" \
-    --json number,title,url,body --limit 10
+gh issue list --state all --search "{keyword-set}" \
+    --json number,title,url,body,labels,state --limit 15
 ```
 
-Run searches for each keyword set and deduplicate results by issue number. Collect all unique
-candidates.
+> `labels` is returned as an array of objects `[{"name": "..."}]` by `gh`.
+> Extract label names as a flat list when classifying eligibility.
 
-If candidates are found, display them all in a numbered list with number, title, and URL:
+Run searches for each keyword set and deduplicate results by issue number, tracking the
+`match_count` (number of keyword sets that matched) per candidate.
+
+After deduplication, apply a relevance gate to closed issues: include a closed issue as
+a candidate only if it was matched by **two or more** keyword sets. Open issues are
+included regardless of match count (same threshold as before). Discard single-match
+closed results — they are likely false positives.
+
+Classify each surviving candidate as **extend-eligible** or **informational-only**:
+
+| Condition | Classification |
+|-----------|---------------|
+| `state == open` AND no `in-progress` label AND no `staged` label | extend-eligible |
+| `state == open` AND has `in-progress` label | informational-only |
+| `state == open` AND has `staged` label | informational-only |
+| `state == closed` | informational-only |
+
+Assign sequential numbers `[1]`, `[2]`, … only to extend-eligible candidates.
+Informational-only candidates receive a `[—]` marker.
+
+If candidates are found, display them with state annotations per candidate:
 
 ```
-━━━ Possible Duplicates Found ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Found {N} open issue(s) that may be related:
-
-  [1] #{number} — {title}
+━━━ Possible Duplicates Found ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  [1] #{number} — {title}           (open)
       {url}
 
-  [2] #{number} — {title}
+  [—] #{number} — {title}           (in-progress)
       {url}
 
-  ...
+  [—] #{number} — {title}           (closed)
+      {url}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Options:
-  [1]–[{N}]  Add to / extend an existing issue (enter a number)
+  [1]–[{N}]  Add to / extend an existing issue
   C          Create a new issue anyway
 
 Your choice [C]:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
+
+If no extend-eligible candidates exist (all are informational-only), omit the `[N]`
+option entirely — only `C` appears.
 
 **If the user enters C (or presses Enter):** Continue to Step 4a.
 
-**If the user enters a number [1]–[N] (extend existing):**
+**If the user enters a number corresponding to an extend-eligible candidate (extend existing):**
 
 1. Fetch current body and append new context using a temp file to avoid shell injection:
    ```bash

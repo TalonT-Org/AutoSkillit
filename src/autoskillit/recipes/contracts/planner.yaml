@@ -1,7 +1,14 @@
-generated_at: '2026-04-25T13:10:17.209291+00:00'
+generated_at: '2026-04-25T14:13:26.989198+00:00'
 bundled_manifest_version: 0.1.0
 skill_hashes: {}
-skills: {}
+skills:
+  planner-generate-phases:
+    inputs: []
+    outputs:
+    - name: phase_manifest_path
+      type: file_path
+    expected_output_patterns: []
+    pattern_examples: []
 dataflow:
 - step: init
   available:
@@ -171,13 +178,17 @@ dataflow:
   - verdict
   - wp_manifest_path
   required: []
-  produced: []
+  produced:
+  - plan_path
+  - plan_json_path
 - step: done
   available:
   - assignment_manifest_path
   - current_item_path
   - has_remaining
   - phase_manifest_path
+  - plan_json_path
+  - plan_path
   - source_dir
   - task
   - verdict
@@ -190,6 +201,8 @@ dataflow:
   - current_item_path
   - has_remaining
   - phase_manifest_path
+  - plan_json_path
+  - plan_path
   - source_dir
   - task
   - verdict

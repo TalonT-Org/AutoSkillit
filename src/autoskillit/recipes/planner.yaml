@@ -66,7 +66,6 @@ steps:
         {{AUTOSKILLIT_TEMP}}/planner/analysis.json
         {{AUTOSKILLIT_TEMP}}/planner/domain_knowledge.md
       cwd: "${{ inputs.source_dir }}"
-    optional_context_refs: [domain_path]
     capture:
       phase_manifest_path: "${{ result.phase_manifest_path }}"
     on_success: check_phases
@@ -220,6 +219,9 @@ steps:
       output_dir: "{{AUTOSKILLIT_TEMP}}/planner"
       task: "${{ inputs.task }}"
       source_dir: "${{ inputs.source_dir }}"
+    capture:
+      plan_path: "${{ result.plan_path }}"
+      plan_json_path: "${{ result.plan_json_path }}"
     on_success: done
     on_failure: escalate_stop
 

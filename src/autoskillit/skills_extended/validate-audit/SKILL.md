@@ -71,9 +71,8 @@ Read the audit report file. Detect its source by examining the document title or
 - **audit-arch**: Title contains "Architectural Audit" or findings reference "Principle P{N}"
 - **audit-tests**: Title contains "Test Suite Audit" or findings reference issue categories
 - **audit-cohesion**: Title contains "Cohesion Audit" or findings reference "Dimension C{N}"
-- **audit-feature-gates**: H1 is `Feature Gate Audit`; H2 sections are `Config Projection`,
-  `Import Chain Integrity`, `Runtime Gate Consistency`, `Tool/Skill Tag Completeness`,
-  `Boundary Coupling`, `Test Marker Coverage`. BLOCK findings require code verification.
+- **audit-feature-gates**: Title contains "Feature Gate Audit" or findings reference
+  BLOCK/WARN/INFO severity badges. BLOCK findings require code verification.
   WARN findings check for intentional design exceptions. INFO findings accepted as-is.
 
 If none of the four patterns match, print:
@@ -89,7 +88,7 @@ For each finding, extract:
 - **Category** — the principle, issue category, dimension label, or gate dimension
 
 Collect all findings into a flat list. Record the source audit skill (`arch`, `tests`,
-`cohesion`, or `feature-gates`) for use in output filenames.
+`cohesion`, or `feature_gates`) for use in output filenames.
 
 ### Step 2 — Group into Thematic Batches
 
@@ -263,7 +262,7 @@ If the user confirms, pass the contested findings file path to `prepare-issue`.
 └── contested_findings_{source}_{YYYY-MM-DD_HHMMSS}.md  (when N_contested > 0)
 ```
 
-`{source}` is `arch`, `tests`, `cohesion`, or `feature-gates` based on the input report.
+`{source}` is `arch`, `tests`, `cohesion`, or `feature_gates` based on the input report.
 
 ## Related Skills
 

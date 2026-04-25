@@ -123,6 +123,7 @@ class TestDispatchFoodTruckValidation:
     async def test_dispatch_food_truck_rejects_non_standard_recipe(self, tool_ctx, monkeypatch):
         """Campaign recipe → franchise_invalid_recipe_kind error."""
         from autoskillit.franchise._api import execute_dispatch
+
         from autoskillit.recipe.schema import Recipe, RecipeKind
 
         tool_ctx.franchise_lock = asyncio.Lock()
@@ -270,6 +271,7 @@ class TestDispatchFoodTruckValidation:
         After fix: load_recipe upgrades RecipeInfo → Recipe before kind check.
         """
         from autoskillit.franchise._api import execute_dispatch
+
         from autoskillit.recipe.schema import Recipe, RecipeInfo, RecipeKind, RecipeSource
 
         tool_ctx.franchise_lock = asyncio.Lock()
@@ -316,6 +318,7 @@ class TestDispatchFoodTruckValidation:
         After fix: load_recipe upgrades RecipeInfo → Recipe; unknown ingredient detected.
         """
         from autoskillit.franchise._api import execute_dispatch
+
         from autoskillit.recipe.schema import (
             Recipe,
             RecipeInfo,
@@ -455,6 +458,7 @@ class TestDispatchFoodTruckExecution:
 
         from autoskillit.franchise._api import execute_dispatch
         from autoskillit.franchise.result_parser import L2ParseResult
+
         from tests.fakes import _DEFAULT_SKILL_RESULT
 
         self._setup_standard_dispatch(tool_ctx, monkeypatch)
@@ -668,6 +672,7 @@ class TestDispatchFoodTruckExecution:
 
         from autoskillit.franchise._api import execute_dispatch
         from autoskillit.franchise.result_parser import L2ParseResult
+
         from tests.fakes import _DEFAULT_SKILL_RESULT
 
         self._setup_standard_dispatch(tool_ctx, monkeypatch)

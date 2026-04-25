@@ -685,13 +685,14 @@ def _is_zombie(pid: int) -> bool:
 async def test_orphan_l2_reaping(franchise_runtime: FranchiseRuntime, tmp_path: Path) -> None:
     """_reap_stale_dispatches kills a real orphan process and marks it interrupted."""
     from autoskillit.cli._franchise import _reap_stale_dispatches
-    from autoskillit.core._linux_proc import read_boot_id, read_starttime_ticks
     from autoskillit.franchise.state import (
         DispatchRecord,
         DispatchStatus,
         read_state,
         write_initial_state,
     )
+
+    from autoskillit.core._linux_proc import read_boot_id, read_starttime_ticks
 
     orphan = subprocess.Popen(["sleep", "999"])
     orphan_pid = orphan.pid

@@ -11,7 +11,6 @@ from unittest.mock import MagicMock, patch
 
 import anyio
 import pytest
-
 from autoskillit.franchise import (
     DispatchRecord,
     DispatchStatus,

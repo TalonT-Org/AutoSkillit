@@ -62,7 +62,7 @@ def main() -> None:
     if os.environ.get("AUTOSKILLIT_HEADLESS") == "1":
         session_type = os.environ.get("AUTOSKILLIT_SESSION_TYPE", "").lower()
 
-        if session_type in ("franchise", "fleet"):
+        if session_type in ("fleet",):
             payload = json.dumps(
                 {
                     "hookSpecificOutput": {

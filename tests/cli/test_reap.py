@@ -7,7 +7,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
 from autoskillit.franchise import (
     DispatchRecord,
     DispatchStatus,

@@ -367,9 +367,7 @@ async def register_clone_status(
         return json.dumps({"registered": "false", "reason": f"{type(exc).__name__}: {exc}"})
 
 
-@mcp.tool(
-    tags={"autoskillit", "kitchen", "clone", "fleet"}, annotations={"readOnlyHint": False}
-)
+@mcp.tool(tags={"autoskillit", "kitchen", "clone", "fleet"}, annotations={"readOnlyHint": False})
 @track_response_size("batch_cleanup_clones")
 async def batch_cleanup_clones(
     registry_path: str = "",

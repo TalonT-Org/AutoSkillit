@@ -222,6 +222,9 @@ skills:
     # planner
     - planner-analyze
     - planner-extract-domain
+    - planner-generate-phases
+    - planner-elaborate-phase
+    - planner-elaborate-assignment
   tier3:
     - prepare-pr
     - compose-pr

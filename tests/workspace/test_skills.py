@@ -423,18 +423,18 @@ class TestSkillResolver:
         names = {d.name for d in bundled_skills_dir().iterdir() if d.is_dir()}
         assert names == {"open-kitchen", "close-kitchen", "sous-chef"}
 
-    def test_90_skills_in_skills_extended(self) -> None:
-        """skills_extended/ contains exactly 109 SKILL.md-carrying directories."""
+    def test_111_skills_in_skills_extended(self) -> None:
+        """skills_extended/ contains exactly 111 SKILL.md-carrying directories."""
         skills = [
             d
             for d in bundled_skills_extended_dir().iterdir()
             if d.is_dir() and (d / "SKILL.md").is_file()
         ]
-        assert len(skills) == 109
+        assert len(skills) == 111
 
     def test_skill_resolver_list_all_total_count(self) -> None:
-        """list_all() returns 111 public skills (2 Tier-1 + 109 extended)."""
-        assert len(DefaultSkillResolver().list_all()) == 111
+        """list_all() returns 113 public skills (2 Tier-1 + 111 extended)."""
+        assert len(DefaultSkillResolver().list_all()) == 113
 
     def test_skill_resolver_resolve_extended_skill(self) -> None:
         """resolve() finds a skill living in skills_extended/ with BUNDLED_EXTENDED source."""
@@ -586,6 +586,16 @@ class TestSkillCategories:
         assert "orchestration-family" in info.categories, (
             "make-campaign must retain 'orchestration-family' category"
         )
+
+    def test_planner_analyze_has_planner_category(self) -> None:
+        info = DefaultSkillResolver().resolve("planner-analyze")
+        assert info is not None
+        assert "planner" in info.categories
+
+    def test_planner_extract_domain_has_planner_category(self) -> None:
+        info = DefaultSkillResolver().resolve("planner-extract-domain")
+        assert info is not None
+        assert "planner" in info.categories
 
 
 RESEARCH_SKILL_NAMES = {

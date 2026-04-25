@@ -184,7 +184,8 @@ generic_automation_mcp/
 │   └── worktree.py
 │
 ├── planner/                 # L1
-│   └── __init__.py          #   Progressive resolution planner — __all__ = []
+│   ├── __init__.py          #   Progressive resolution planner — re-exports check_remaining, build_assignment_manifest, build_wp_manifest
+│   └── manifests.py         #   check_remaining, build_assignment_manifest, build_wp_manifest — manifest state machine callables
 │
 ├── recipe/                  # L2
 │   ├── __init__.py

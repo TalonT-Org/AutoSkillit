@@ -122,7 +122,8 @@ Run `gh auth status 2>/dev/null`. If exit code is non-zero or `gh` is not found:
 ### Step 5: Push Feature Branch
 ```bash
 cd {workspace}
-git push -u origin {feature_branch}
+REMOTE=$(git remote get-url upstream >/dev/null 2>&1 && echo upstream || echo origin)
+git push -u "$REMOTE" {feature_branch}
 ```
 If push fails (no remote, network issue), log the error and exit successfully.
 

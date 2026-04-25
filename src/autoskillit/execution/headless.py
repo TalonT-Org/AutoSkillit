@@ -210,7 +210,7 @@ def _synthesize_from_write_artifacts(
     synthesis is not possible (no matching file_path, no path-capture patterns, or pattern
     already satisfied).
     """
-    if write_call_count == 0 and not fs_writes_detected:
+    if write_call_count == 0:
         return None
 
     # Only synthesize for path-capture patterns (token_name\s*=\s*/.+).

@@ -724,7 +724,10 @@ steps:
   pre_resolve_rebase:
     tool: run_cmd
     with:
-      cmd: "git -C ${{ context.work_dir }} fetch origin && git -C ${{ context.work_dir }} rebase origin/${{ inputs.base_branch }}"
+      cmd: >
+        REMOTE=$(git -C ${{ context.work_dir }} remote get-url upstream >/dev/null 2>&1 && echo upstream || echo origin) &&
+        git -C ${{ context.work_dir }} fetch "$REMOTE" &&
+        git -C ${{ context.work_dir }} rebase "$REMOTE"/${{ inputs.base_branch }}
       step_name: "pre_resolve_rebase"
     retries: 1
     on_success: diagnose_ci
@@ -892,7 +895,8 @@ steps:
     tool: run_cmd
     with:
       cmd: >
-        if git fetch origin ${{ inputs.base_branch }} && git rebase origin/${{ inputs.base_branch }};
+        REMOTE=$(git remote get-url upstream >/dev/null 2>&1 && echo upstream || echo origin) &&
+        if git fetch "$REMOTE" ${{ inputs.base_branch }} && git rebase "$REMOTE"/${{ inputs.base_branch }};
         then echo 'clean';
         else git rebase --abort 2>/dev/null || true; echo 'conflicts';
         fi
@@ -1036,7 +1040,8 @@ steps:
     tool: run_cmd
     with:
       cmd: >
-        if git fetch origin ${{ inputs.base_branch }} && git rebase origin/${{ inputs.base_branch }};
+        REMOTE=$(git remote get-url upstream >/dev/null 2>&1 && echo upstream || echo origin) &&
+        if git fetch "$REMOTE" ${{ inputs.base_branch }} && git rebase "$REMOTE"/${{ inputs.base_branch }};
         then echo 'clean';
         else git rebase --abort 2>/dev/null || true; echo 'conflicts';
         fi
@@ -1148,7 +1153,8 @@ steps:
     tool: run_cmd
     with:
       cmd: >
-        if git fetch origin ${{ inputs.base_branch }} && git rebase origin/${{ inputs.base_branch }};
+        REMOTE=$(git remote get-url upstream >/dev/null 2>&1 && echo upstream || echo origin) &&
+        if git fetch "$REMOTE" ${{ inputs.base_branch }} && git rebase "$REMOTE"/${{ inputs.base_branch }};
         then echo 'clean';
         else git rebase --abort 2>/dev/null || true; echo 'conflicts';
         fi
@@ -1230,7 +1236,10 @@ steps:
   detect_ci_conflict:
     tool: run_cmd
     with:
-      cmd: "git fetch origin ${{ inputs.base_branch }} && ! git merge-base --is-ancestor origin/${{ inputs.base_branch }} HEAD"
+      cmd: >
+        REMOTE=$(git remote get-url upstream >/dev/null 2>&1 && echo upstream || echo origin) &&
+        git fetch "$REMOTE" ${{ inputs.base_branch }} &&
+        ! git merge-base --is-ancestor "$REMOTE"/${{ inputs.base_branch }} HEAD
       cwd: "${{ context.work_dir }}"
       step_name: "detect_ci_conflict"
     on_success: ci_conflict_fix

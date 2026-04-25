@@ -8,6 +8,8 @@ skill classified as write-expected via WriteBehaviorSpec.
 from __future__ import annotations
 
 import json
+import os
+from pathlib import Path
 
 import pytest
 
@@ -596,3 +598,109 @@ class TestExtractSkillName:
 
     def test_leading_whitespace(self) -> None:
         assert extract_skill_name("  /investigate error") == "investigate"
+
+
+class TestFilesystemWriteDetection:
+    """Filesystem-level write detection suppresses false positives."""
+
+    def test_bash_heredoc_write_not_counted_by_mcp(self) -> None:
+        """Bash tool_use blocks are not counted by write_call_count."""
+        stdout = _ndjson_with_tool_uses(["Bash"])
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:prepare-pr args",
+            write_behavior=WriteBehaviorSpec(mode="always"),
+        )
+        assert sr.write_call_count == 0
+
+    def test_fs_writes_detected_suppresses_zero_writes_gate(self) -> None:
+        """When fs_writes_detected=True, zero_writes gate must NOT fire
+        even when write_call_count == 0."""
+        stdout = _ndjson_with_tool_uses(["Bash"])
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:prepare-pr args",
+            write_behavior=WriteBehaviorSpec(mode="always"),
+            fs_writes_detected=True,
+        )
+        assert sr.success is True
+        assert sr.subtype != "zero_writes"
+        assert sr.fs_writes_detected is True
+
+    def test_fs_writes_detected_enables_contract_recovery(self) -> None:
+        """When fs_writes_detected=True, CONTRACT_RECOVERY gate must fire
+        for adjudicated_failure even when write_call_count == 0."""
+        result_record = {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": "done",
+            "session_id": "test-sess",
+        }
+        stdout = json.dumps(result_record)
+        sr_without_fs = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:prepare-pr args",
+            write_behavior=WriteBehaviorSpec(mode="always"),
+            expected_output_patterns=["prep_path\\s*=\\s*/.+"],
+            fs_writes_detected=False,
+        )
+        assert sr_without_fs.subtype == "adjudicated_failure"
+        assert sr_without_fs.needs_retry is False
+
+        sr_with_fs = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:prepare-pr args",
+            write_behavior=WriteBehaviorSpec(mode="always"),
+            expected_output_patterns=["prep_path\\s*=\\s*/.+"],
+            fs_writes_detected=True,
+        )
+        assert sr_with_fs.needs_retry is True
+        assert sr_with_fs.retry_reason == RetryReason.CONTRACT_RECOVERY
+
+    def test_fs_writes_false_no_suppression(self) -> None:
+        """When fs_writes_detected=False and write_call_count == 0,
+        zero_writes gate must fire as before."""
+        stdout = _ndjson_with_tool_uses(["Read", "Grep"])
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:make-plan task",
+            write_behavior=WriteBehaviorSpec(mode="always"),
+            fs_writes_detected=False,
+        )
+        assert sr.success is False
+        assert sr.subtype == "zero_writes"
+
+    def test_fs_writes_detected_in_to_json_excluded(self) -> None:
+        """fs_writes_detected must NOT appear in to_json() output."""
+        stdout = _ndjson_with_tool_uses(["Edit"])
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:make-plan task",
+            write_behavior=WriteBehaviorSpec(mode="always"),
+            fs_writes_detected=True,
+        )
+        json_data = json.loads(sr.to_json())
+        assert "fs_writes_detected" not in json_data
+
+
+class TestTempDirSnapshot:
+    """AUTOSKILLIT_TEMP snapshot detects Bash-created files."""
+
+    def test_snapshot_detects_new_file(self, tmp_path: Path) -> None:
+        """A file created between pre and post snapshot is detected."""
+        temp_dir = tmp_path / ".autoskillit" / "temp" / "prepare-pr"
+        temp_dir.mkdir(parents=True)
+        pre = {e.name for e in os.scandir(temp_dir)}
+        (temp_dir / "pr_prep_20260425.md").write_text("content")
+        post = {e.name for e in os.scandir(temp_dir)}
+        assert len(post - pre) > 0
+
+    def test_snapshot_empty_when_no_new_files(self, tmp_path: Path) -> None:
+        """No new files between snapshots yields empty diff."""
+        temp_dir = tmp_path / ".autoskillit" / "temp" / "prepare-pr"
+        temp_dir.mkdir(parents=True)
+        (temp_dir / "existing.md").write_text("content")
+        pre = {e.name for e in os.scandir(temp_dir)}
+        post = {e.name for e in os.scandir(temp_dir)}
+        assert post - pre == set()

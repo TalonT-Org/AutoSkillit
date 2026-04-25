@@ -695,6 +695,24 @@ def test_every_conditional_write_skill_has_correct_contract(
 # ---------------------------------------------------------------------------
 
 
+def test_prepare_pr_contract_is_conditional() -> None:
+    """prepare-pr must be conditional — it has a documented no-write exit path."""
+    manifest = load_bundled_manifest()
+    contract = get_skill_contract("prepare-pr", manifest)
+    assert contract is not None
+    assert contract.write_behavior == "conditional"
+    assert contract.write_expected_when
+
+
+def test_bundle_local_report_contract_is_conditional() -> None:
+    """bundle-local-report must be conditional — it has a documented no-write exit path."""
+    manifest = load_bundled_manifest()
+    contract = get_skill_contract("bundle-local-report", manifest)
+    assert contract is not None
+    assert contract.write_behavior == "conditional"
+    assert contract.write_expected_when
+
+
 def test_dataflow_entry_uppercase_f() -> None:
     """DataFlowEntry (uppercase F) must be importable; old DataflowEntry must be gone."""
     import autoskillit.recipe.contracts as m

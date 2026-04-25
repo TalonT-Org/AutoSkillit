@@ -37,8 +37,8 @@ from autoskillit.server.helpers import (
 logger = get_logger(__name__)
 
 _PURE_SLEEP_RE = re.compile(
-    r'^(?:python3?\s+-c\s+["\']import time;\s*time\.sleep\((\d+(?:\.\d+)?)\)["\']'
-    r"|sleep\s+(\d+(?:\.\d+)?))$"
+    r'^(?:python3?\s+-c\s+["\']import time;\s*time\.sleep\((?P<py_secs>\d+(?:\.\d+)?)\)["\']'
+    r"|sleep\s+(?P<sh_secs>\d+(?:\.\d+)?))$"
 )
 
 
@@ -85,7 +85,7 @@ async def run_cmd(
         try:
             m = _PURE_SLEEP_RE.match(cmd.strip())
             if m:
-                seconds = float(m.group(1) or m.group(2))
+                seconds = float(m.group("py_secs") or m.group("sh_secs"))
                 await asyncio.sleep(seconds)
                 return json.dumps({"success": True, "exit_code": 0, "stdout": "", "stderr": ""})
             _env: dict[str, str] | None = (

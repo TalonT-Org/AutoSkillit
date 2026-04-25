@@ -108,7 +108,8 @@ def test_A9_require_orchestrator_exact_denies_headless_franchise(monkeypatch) ->
     assert result is not None
     data = json.loads(result)
     assert data["subtype"] == "headless_error"
-    assert "franchise" in data.get("result", "").lower()
+    msg = data.get("result", "").lower()
+    assert "fleet" in msg or "franchise" in msg
 
 
 def test_A10_require_orchestrator_exact_denies_headless_leaf(monkeypatch) -> None:

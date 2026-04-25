@@ -200,8 +200,16 @@ class TestBuildTestScope:
             "skills",
         ]:
             assert expected in dir_names, f"{expected} missing from cascade"
-        for always in ["arch", "contracts", "infra", "docs"]:
-            assert always in dir_names, f"always-run {always} missing"
+        assert "arch" in dir_names, "arch always-run missing"
+        assert "contracts" in dir_names, "contracts always-run missing"
+        # infra and docs are not directories for a non-triggering change;
+        # 9 individual infra files appear in result via direct_test_files
+        result_names = {p.name for p in result}
+        from tests._test_filter import _INFRA_UNCONDITIONAL_FILES
+
+        for fname in _INFRA_UNCONDITIONAL_FILES:
+            assert fname in result_names, f"unconditional infra file {fname!r} missing"
+        assert "test_doc_counts.py" in result_names
 
     def test_scope_l1_execution_conservative(self, tmp_path: Path) -> None:
         tests_root = tmp_path / "tests"
@@ -278,7 +286,14 @@ class TestBuildTestScope:
         dir_names = {p.name for p in result}
         assert "server" in dir_names
         assert "cli" in dir_names
-        assert "infra" in dir_names
+        result_names = {p.name for p in result}
+        from tests._test_filter import _INFRA_UNCONDITIONAL_FILES
+
+        for fname in _INFRA_UNCONDITIONAL_FILES:
+            assert fname in result_names, f"unconditional infra file {fname!r} missing"
+        assert "infra" not in {p.name for p in result if (tests_root / p.name).is_dir()}, (
+            "full infra dir should not appear for pure server change"
+        )
 
     def test_scope_test_file_included_directly(self, tmp_path: Path) -> None:
         tests_root = tmp_path / "tests"
@@ -334,7 +349,15 @@ class TestBuildTestScope:
         )
         assert result is not None
         dir_names = {p.name for p in result}
-        assert dir_names == {"arch", "contracts", "infra", "docs"}
+        assert "arch" in dir_names
+        assert "contracts" in dir_names
+        assert "docs" in dir_names
+        assert "infra" not in dir_names  # docs change doesn't trigger full infra
+        result_names = {p.name for p in result}
+        from tests._test_filter import _INFRA_UNCONDITIONAL_FILES
+
+        for fname in _INFRA_UNCONDITIONAL_FILES:
+            assert fname in result_names
 
     def test_scope_none_mode_returns_none(self, tmp_path: Path) -> None:
         result = build_test_scope(

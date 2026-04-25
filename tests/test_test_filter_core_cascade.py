@@ -178,9 +178,16 @@ class TestBuildTestScopeCoreCascade:
             assert excluded not in dir_names, (
                 f"kitchen_state narrow cascade should not include {excluded}"
             )
-        # Always-run are still present
-        for always in ["arch", "contracts", "infra", "docs"]:
-            assert always in dir_names
+        # arch and contracts always present; infra/docs not as dirs for non-triggering change
+        assert "arch" in dir_names
+        assert "contracts" in dir_names
+        assert "infra" not in dir_names  # kitchen_state doesn't touch hooks/CI files
+        assert "docs" not in dir_names  # kitchen_state doesn't touch docs files
+        result_names = {p.name for p in result}
+        from tests._test_filter import _INFRA_UNCONDITIONAL_FILES
+
+        for fname in _INFRA_UNCONDITIONAL_FILES:
+            assert fname in result_names, f"unconditional infra file {fname!r} missing"
 
     def test_unknown_core_module_fails_open_to_full_cascade(self, tmp_path: Path) -> None:
         """An unknown core module stem → full cascade (fail-open, not None)."""

@@ -81,8 +81,11 @@ def _apply_session_type_visibility(
 def _fleet_gate(mcp: FastMCP, session: SessionType) -> None:  # noqa: ARG001
     """Disable fleet-tagged tools when the fleet feature is off.
 
-    Reads AUTOSKILLIT_FEATURES__FLEET env var.
-    Safe to call at import time — no config or _ctx dependency.
+    Intentionally reads only the AUTOSKILLIT_FEATURES__FLEET env var.
+    This function runs at import time before config is loaded, so the
+    config file is not available here. The deferred config-based check
+    is performed by _fleet_auto_gate_boot() in _lifespan.py once the
+    server context (ctx.config.features) is available.
     """
     fleet_val = os.environ.get("AUTOSKILLIT_FEATURES__FLEET", "").strip().lower()
     if fleet_val in ("false", "0", "no"):

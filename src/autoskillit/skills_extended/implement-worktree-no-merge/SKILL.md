@@ -101,14 +101,14 @@ WORKTREE_PATH="$(cd "${WORKTREE_PATH}" && pwd)"
 mkdir -p "{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_NAME}"
 echo "${CURRENT_BRANCH}" > "{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_NAME}/base-branch"
 # 2) Set git upstream tracking (requires remote tracking ref in local fetch cache)
-REMOTE=$(git remote get-url upstream >/dev/null 2>&1 && echo upstream || echo origin)
+REMOTE=$(git remote get-url upstream 2>/dev/null | grep -qv "^file://" && echo upstream || echo origin)
 if ! git fetch "$REMOTE" "${CURRENT_BRANCH}" 2>/dev/null; then
-    echo "NOTE: Branch '${CURRENT_BRANCH}' has no remote tracking ref on origin."
+    echo "NOTE: Branch '${CURRENT_BRANCH}' has no remote tracking ref on $REMOTE."
     echo "      merge_worktree will fail unless you push first: git push -u $REMOTE ${CURRENT_BRANCH}"
     echo "      Continuing — implementation will proceed, but the merge step will be blocked."
 fi
 if ! git -C "${WORKTREE_PATH}" branch --set-upstream-to="${REMOTE}/${CURRENT_BRANCH}" "${WORKTREE_NAME}" 2>/dev/null; then
-    echo "NOTE: Could not set upstream tracking for '${WORKTREE_NAME}' → 'origin/${CURRENT_BRANCH}'."
+    echo "NOTE: Could not set upstream tracking for '${WORKTREE_NAME}' → '$REMOTE/${CURRENT_BRANCH}'."
 fi
 ```
 

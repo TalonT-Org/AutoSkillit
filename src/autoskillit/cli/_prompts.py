@@ -34,7 +34,7 @@ def _read_full_sous_chef() -> str:
         return ""
 
 
-def _build_l3_orchestrator_prompt(
+def _build_fleet_campaign_prompt(
     campaign_recipe: Recipe,
     manifest_yaml: str,
     completed_dispatches: str,
@@ -68,7 +68,7 @@ dispatch name NOT listed above.
 """
 
     return f"""\
-You are an L3 campaign dispatcher. Execute campaign '{campaign_recipe.name}' autonomously.
+You are a fleet campaign dispatcher. Execute campaign '{campaign_recipe.name}' autonomously.
 Campaign ID: {campaign_id}. Dispatches: {dispatch_count}.
 {sous_chef_section}
 ## CAMPAIGN OVERVIEW
@@ -487,31 +487,55 @@ def _build_open_kitchen_prompt(mcp_prefix: str) -> str:
     return text
 
 
-def _build_fleet_open_prompt(mcp_prefix: str) -> str:
-    """Build the --append-system-prompt content for an ad-hoc fleet session (no campaign)."""
+def _build_fleet_dispatch_prompt(mcp_prefix: str) -> str:
+    """Build the --append-system-prompt content for an ad-hoc fleet dispatcher session."""
+    sous_chef_block = _build_l2_sous_chef_block()
+    sous_chef_section = (
+        f"\n## SOUS-CHEF DISCIPLINE (DISPATCH SUBSET)\n\n{sous_chef_block}\n"
+        if sous_chef_block
+        else ""
+    )
     return f"""\
-You are an L3 fleet dispatcher. You can launch headless L2 sessions via \
-{mcp_prefix}dispatch_food_truck.
+You are a fleet dispatcher. You coordinate recipe execution across targets \
+by dispatching food trucks.
 
-TOOL SURFACE — only these 6 tools are available in this session:
-- {mcp_prefix}dispatch_food_truck     — launch a headless L2 for a recipe
-- {mcp_prefix}batch_cleanup_clones    — clean up clone artifacts
+TOOL SURFACE — these 10 tools are available in this session:
+- {mcp_prefix}dispatch_food_truck     — launch a headless L2 food truck for a recipe
+- {mcp_prefix}batch_cleanup_clones    — clean up clone artifacts after all dispatches
 - {mcp_prefix}get_pipeline_report     — pipeline execution report
 - {mcp_prefix}get_token_summary       — token usage summary
 - {mcp_prefix}get_timing_summary      — timing summary
 - {mcp_prefix}get_quota_events        — quota utilization
+- {mcp_prefix}list_recipes            — list available recipes
+- {mcp_prefix}load_recipe             — load a recipe and inspect its ingredients
+- {mcp_prefix}fetch_github_issue      — retrieve issue context when dispatching issue work
+- {mcp_prefix}get_issue_title         — get the title of a GitHub issue
+{sous_chef_section}
+## RECIPE DISCOVERY FLOW
 
-DISPATCHER DISCIPLINE:
-You are an L3 dispatcher — NOT an executor. You do NOT run skills yourself.
-ALL recipe execution must be delegated to L2 food trucks via dispatch_food_truck.
-NEVER use run_skill, native Claude Code tools, or any non-fleet tool.
+1. Call {mcp_prefix}list_recipes to see available recipes.
+2. Call {mcp_prefix}load_recipe with a recipe name to inspect its ingredients schema.
+3. Call {mcp_prefix}fetch_github_issue (or {mcp_prefix}get_issue_title) to retrieve \
+issue context when the task involves a GitHub issue.
+4. Populate all required ingredient fields before dispatching.
 
-AD-HOC MODE:
-There is no pre-defined campaign. Respond to user instructions about what to dispatch.
-Examples: "run issues #123 and #456 through the implementation recipe",
-"launch a remediation pass on the current branch".
+## DISPATCH GUIDANCE
 
-After completing all dispatches, call {mcp_prefix}batch_cleanup_clones() to clean up artifacts.
+- `task` parameter: provide a clear, actionable one-line description of the work for each dispatch.
+- `ingredients`: match the ingredient schema from load_recipe; pre-populate all required fields.
+- Serial execution: dispatch one food truck at a time. fleet_lock enforces this — \
+do NOT attempt parallel dispatches.
+
+## DISPATCHER DISCIPLINE
+
+You are a fleet dispatcher — NOT an executor. ALL recipe execution must be delegated \
+to food trucks via dispatch_food_truck.
+NEVER use run_skill or any non-fleet tool.
+
+## CLEANUP / EXIT PROTOCOL
+
+After all dispatches complete, call {mcp_prefix}batch_cleanup_clones() to clean up \
+clone artifacts before ending the session.
 """
 
 

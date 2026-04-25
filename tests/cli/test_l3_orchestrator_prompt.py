@@ -47,7 +47,7 @@ def _make_recipe() -> Recipe:
 
 
 def _build(**overrides: object) -> str:
-    from autoskillit.cli._prompts import _build_l3_orchestrator_prompt
+    from autoskillit.cli._prompts import _build_fleet_campaign_prompt
 
     defaults: dict[str, object] = {
         "campaign_recipe": _make_recipe(),
@@ -58,7 +58,7 @@ def _build(**overrides: object) -> str:
         "max_quota_wait_sec": _MAX_QUOTA_WAIT,
     }
     defaults.update(overrides)
-    return _build_l3_orchestrator_prompt(**defaults)  # type: ignore[arg-type]
+    return _build_fleet_campaign_prompt(**defaults)  # type: ignore[arg-type]
 
 
 # --- K-1: TestL3PromptPlaceholders ---
@@ -362,3 +362,12 @@ class TestL3NoBootstrapSequence:
     def test_open_kitchen_not_callable_for_any_prefix(self, prefix: str) -> None:
         prompt = _build(mcp_prefix=prefix)
         assert f"{prefix}open_kitchen()" not in prompt
+
+
+# --- T8-12: TestFleetCampaignRoleText ---
+
+
+class TestFleetCampaignRoleText:
+    def test_role_identifies_as_fleet_campaign_dispatcher(self) -> None:
+        prompt = _build()
+        assert "fleet campaign dispatcher" in prompt

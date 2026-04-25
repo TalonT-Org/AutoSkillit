@@ -732,14 +732,7 @@ def _get_app() -> App:
 
 def _subcommand_names(app: App) -> set[str]:
     """Extract registered subcommand names from a cyclopts App."""
-    names: set[str] = set()
-    for meta in app._commands.values():  # type: ignore[attr-defined]
-        name = meta.name
-        if isinstance(name, tuple):
-            names.update(name)
-        elif isinstance(name, str):
-            names.add(name)
-    return names
+    return set(app._commands.keys())  # type: ignore[attr-defined]
 
 
 def _find_command(app: App, name: str) -> object:

@@ -873,11 +873,6 @@ class TestCheckPrMergeable:
         assert result["mergeable"] is True
 
 
-# ---------------------------------------------------------------------------
-# T3: classify_fix() remote resolution tests
-# ---------------------------------------------------------------------------
-
-
 class TestClassifyFixRemoteResolution:
     """T3: classify_fix resolves the remote via resolve_remote_name internally."""
 

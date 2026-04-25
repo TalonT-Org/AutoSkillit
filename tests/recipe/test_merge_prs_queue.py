@@ -1519,11 +1519,6 @@ def test_merge_prs_wait_queue_pr_routes_not_enrolled(pmp_recipe) -> None:
     assert any("not_enrolled" in c for c in conditions if c)
 
 
-# ---------------------------------------------------------------------------
-# T6: No hardcoded 'origin' in run_cmd steps (REMOTE probe applied)
-# ---------------------------------------------------------------------------
-
-
 def test_no_hardcoded_origin_in_run_cmd_queue_capable(any_recipe) -> None:
     """After REMOTE probe fix, run_semantic_rules must report zero hardcoded-origin-in-run-cmd."""
     from autoskillit.recipe.validator import run_semantic_rules
@@ -1545,11 +1540,6 @@ def test_no_hardcoded_origin_in_run_cmd_merge_prs(pmp_recipe) -> None:
     assert violations == [], (
         f"hardcoded-origin-in-run-cmd fired on merge-prs.yaml: {[v.step_name for v in violations]}"
     )
-
-
-# ---------------------------------------------------------------------------
-# T7: check_eject_limit step exists with correct routing
-# ---------------------------------------------------------------------------
 
 
 def test_check_eject_limit_step_exists_in_queue_capable(any_recipe) -> None:
@@ -1597,15 +1587,11 @@ def test_check_eject_limit_routes_to_get_ejected_pr_branch_in_merge_prs(pmp_reci
 def test_check_eject_limit_routes_to_register_clone_failure_in_merge_prs(pmp_recipe) -> None:
     """check_eject_limit in merge-prs.yaml must route to register_clone_failure on limit."""
     step = pmp_recipe.steps["check_eject_limit"]
+    assert step.on_result is not None
     conds = step.on_result.conditions
     limit_conds = [c for c in conds if c.when and "EJECT_LIMIT_EXCEEDED" in c.when]
     assert len(limit_conds) == 1
     assert limit_conds[0].route == "register_clone_failure"
-
-
-# ---------------------------------------------------------------------------
-# T8: check_eject_limit counter logic
-# ---------------------------------------------------------------------------
 
 
 def test_check_eject_limit_cmd_reads_writes_counter_file(any_recipe) -> None:
@@ -1653,6 +1639,9 @@ def test_unbounded_cycle_severity_downgraded_by_eject_limit(any_recipe) -> None:
             kw in f.message for kw in ("wait_for_queue", "queue_ejected_fix", "check_eject_limit")
         )
     ]
+    assert len(queue_cycle_findings) >= 1, (
+        "unbounded-cycle rule must fire for queue ejection cycle steps"
+    )
     for finding in queue_cycle_findings:
         assert finding.severity != Severity.ERROR, (
             f"unbounded-cycle for queue ejection must be WARNING after check_eject_limit, "

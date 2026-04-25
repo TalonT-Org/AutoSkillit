@@ -138,11 +138,6 @@ def test_find_rediscovery_no_warning_without_heuristic():
     assert all(f.rule != "run-cmd-find-rediscovery" for f in findings)
 
 
-# ---------------------------------------------------------------------------
-# T4: hardcoded-origin-in-run-cmd rule
-# ---------------------------------------------------------------------------
-
-
 def test_hardcoded_origin_in_run_cmd_fires_on_fetch_origin():
     """run_cmd with 'git fetch origin main' triggers the warning."""
     recipe = _make_recipe(

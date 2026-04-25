@@ -145,11 +145,6 @@ def test_resolve_remote_has_timeout_in_source() -> None:
     assert has_wait_for, "resolve_remote_repo should use asyncio.wait_for for timeout protection"
 
 
-# ---------------------------------------------------------------------------
-# resolve_remote_name() tests (T1)
-# ---------------------------------------------------------------------------
-
-
 @pytest.mark.anyio
 async def test_resolve_remote_name_upstream_exists(tmp_path: Path) -> None:
     """upstream remote with HTTPS URL → returns 'upstream'."""

@@ -806,11 +806,6 @@ class TestPerformMergeTargetBranchVerification:
         assert result["into_branch"] == "dev"
 
 
-# ---------------------------------------------------------------------------
-# T2: perform_merge() remote parameter tests
-# ---------------------------------------------------------------------------
-
-
 def _make_runner_for_fetch(fake_wt: str) -> MockSubprocessRunner:
     """Prepare a MockSubprocessRunner that succeeds through the dirty check then fails at fetch."""
     runner = MockSubprocessRunner()
@@ -835,8 +830,8 @@ async def test_perform_merge_uses_custom_remote(tmp_path):
     result = await perform_merge(fake_wt, "dev", remote="upstream", config=config, runner=runner)
 
     assert result["failed_step"] == MergeFailedStep.FETCH
-    fetch_cmd = runner.call_args_list[4][0]  # 5th call is the fetch
-    assert fetch_cmd == ["git", "fetch", "upstream"]
+    fetch_cmds = [cmd for cmd, *_ in runner.call_args_list if cmd[:2] == ["git", "fetch"]]
+    assert fetch_cmds == [["git", "fetch", "upstream"]]
 
 
 @pytest.mark.anyio
@@ -852,5 +847,5 @@ async def test_perform_merge_defaults_to_origin(tmp_path):
     result = await perform_merge(fake_wt, "dev", config=config, runner=runner)
 
     assert result["failed_step"] == MergeFailedStep.FETCH
-    fetch_cmd = runner.call_args_list[4][0]  # 5th call is the fetch
-    assert fetch_cmd == ["git", "fetch", "origin"]
+    fetch_cmds = [cmd for cmd, *_ in runner.call_args_list if cmd[:2] == ["git", "fetch"]]
+    assert fetch_cmds == [["git", "fetch", "origin"]]

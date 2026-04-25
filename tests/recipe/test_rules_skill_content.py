@@ -693,11 +693,6 @@ def test_git_grep_bre_is_excluded(tmp_path: Path) -> None:
     )
 
 
-# ---------------------------------------------------------------------------
-# T5: shared regex migration — _GIT_REMOTE_COMMAND_RE from _git_helpers
-# ---------------------------------------------------------------------------
-
-
 def test_git_remote_command_re_imported_from_git_helpers() -> None:
     """_GIT_REMOTE_COMMAND_RE must be imported from _git_helpers, not defined locally."""
     import autoskillit.recipe._git_helpers as _gh
@@ -707,11 +702,6 @@ def test_git_remote_command_re_imported_from_git_helpers() -> None:
     # (identity check confirms it's an import, not a re-definition).
     assert _rsc._GIT_REMOTE_COMMAND_RE is _gh._GIT_REMOTE_COMMAND_RE
     assert _rsc._LITERAL_ORIGIN_RE is _gh._LITERAL_ORIGIN_RE
-
-
-# ---------------------------------------------------------------------------
-# T9: Bundled skill regression anchors — Part B SKILL.md fixes
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(

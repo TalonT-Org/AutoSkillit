@@ -13,52 +13,63 @@ class TestCascadeNewEntries:
     """REQ-FILT-003: four new packages must not force a full test run."""
 
     @pytest.mark.parametrize(
-        "filepath,mode,dirs_to_create",
+        "filepath,mode,items_to_create,expected_in_result",
         [
             # Conservative: planner only touches its own tests
             (
                 "src/autoskillit/planner/__init__.py",
                 FilterMode.CONSERVATIVE,
                 ["planner"],
+                ["planner"],
             ),
-            # Conservative: _llm_triage cascades into execution/server/recipe
+            # Conservative: _llm_triage cascades into execution/server/recipe + direct test file
             (
                 "src/autoskillit/_llm_triage.py",
                 FilterMode.CONSERVATIVE,
-                ["execution", "server", "recipe"],
+                ["execution", "server", "recipe", "test_llm_triage.py"],
+                ["execution", "server", "recipe", "test_llm_triage.py"],
             ),
-            # Conservative: smoke_utils cascades into recipe
+            # Conservative: smoke_utils cascades into recipe + direct test file
             (
                 "src/autoskillit/smoke_utils.py",
                 FilterMode.CONSERVATIVE,
-                ["recipe"],
+                ["recipe", "test_smoke_utils.py"],
+                ["recipe", "test_smoke_utils.py"],
             ),
-            # Conservative: version cascades into server
+            # Conservative: version cascades into server + direct test file
             (
                 "src/autoskillit/version.py",
                 FilterMode.CONSERVATIVE,
-                ["server"],
+                ["server", "test_version.py"],
+                ["server", "test_version.py"],
             ),
-            # Aggressive: each package scoped to its own direct tests only
+            # Aggressive: planner scoped to its own tests directory
             (
                 "src/autoskillit/planner/__init__.py",
                 FilterMode.AGGRESSIVE,
                 ["planner"],
+                ["planner"],
             ),
+            # Aggressive: _llm_triage scoped to its direct test file
             (
                 "src/autoskillit/_llm_triage.py",
                 FilterMode.AGGRESSIVE,
-                [],
+                ["test_llm_triage.py"],
+                ["test_llm_triage.py"],
             ),
+            # Aggressive: smoke_utils scoped to its direct test file
             (
                 "src/autoskillit/smoke_utils.py",
                 FilterMode.AGGRESSIVE,
-                [],
+                ["test_smoke_utils.py"],
+                ["test_smoke_utils.py"],
             ),
+            # Aggressive: version scoped to its direct test file
             (
                 "src/autoskillit/version.py",
                 FilterMode.AGGRESSIVE,
-                [],
+                ["test_version.py"],
+                ["test_version.py"],
             ),
         ],
     )
@@ -67,11 +78,16 @@ class TestCascadeNewEntries:
         tmp_path: Path,
         filepath: str,
         mode: FilterMode,
-        dirs_to_create: list[str],
+        items_to_create: list[str],
+        expected_in_result: list[str],
     ) -> None:
         tests_root = tmp_path / "tests"
-        for d in dirs_to_create:
-            (tests_root / d).mkdir(parents=True, exist_ok=True)
+        tests_root.mkdir(parents=True, exist_ok=True)
+        for item in items_to_create:
+            if item.endswith(".py"):
+                (tests_root / item).touch()
+            else:
+                (tests_root / item).mkdir(parents=True, exist_ok=True)
 
         result = build_test_scope(
             changed_files={filepath},
@@ -83,3 +99,9 @@ class TestCascadeNewEntries:
             "cascade entry is missing from LAYER_CASCADE_"
             + ("CONSERVATIVE" if mode == FilterMode.CONSERVATIVE else "AGGRESSIVE")
         )
+        result_names = {p.name for p in result}
+        for expected in expected_in_result:
+            assert expected in result_names, (
+                f"{expected!r} not found in result scope {result_names!r} "
+                f"for {filepath} in {mode} mode"
+            )

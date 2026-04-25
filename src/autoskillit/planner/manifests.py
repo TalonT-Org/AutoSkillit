@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 
-def _build_index_entry(result_data: dict) -> dict:
+def _build_index_entry(result_data: dict[str, object]) -> dict[str, object]:
     return {
         "id": result_data.get("id", ""),
         "name": result_data.get("name", ""),
@@ -17,7 +17,14 @@ def _backstop_wp_index(item_id: str, result_path: Path, output_dir: Path) -> Non
     wp_index_path = output_dir / "wp_index.json"
     if not wp_index_path.exists():
         return
-    index = json.loads(wp_index_path.read_text())
+    try:
+        index = json.loads(wp_index_path.read_text())
+    except json.JSONDecodeError as exc:
+        raise json.JSONDecodeError(
+            f"Failed to parse {wp_index_path}: {exc.msg}", exc.doc, exc.pos
+        ) from exc
+    if not isinstance(index, list):
+        raise TypeError(f"Expected list in {wp_index_path}, got {type(index).__name__}")
     indexed_ids = {entry["id"] for entry in index}
     if item_id not in indexed_ids:
         result_data = json.loads(result_path.read_text())
@@ -28,12 +35,24 @@ def _backstop_wp_index(item_id: str, result_path: Path, output_dir: Path) -> Non
 
 
 def check_remaining(manifest_path: str, pass_name: str, output_dir: str) -> dict[str, str]:
-    from autoskillit.core import write_versioned_json  # noqa: PLC0415
+    from autoskillit.core import get_logger, write_versioned_json  # noqa: PLC0415
+
+    _logger = get_logger(__name__)
 
     manifest_file = Path(manifest_path)
     out_dir = Path(output_dir)
-    manifest = json.loads(manifest_file.read_text())
-    items = manifest["items"]
+    try:
+        manifest = json.loads(manifest_file.read_text())
+    except json.JSONDecodeError as exc:
+        raise json.JSONDecodeError(
+            f"Failed to parse {manifest_file}: {exc.msg}", exc.doc, exc.pos
+        ) from exc
+    items = manifest.get("items")
+    if not isinstance(items, list):
+        raise ValueError(
+            f"Manifest {manifest_file} missing or invalid 'items' field"
+            f" (got {type(items).__name__})"
+        )
 
     for item in items:
         if item["status"] == "processing":
@@ -44,6 +63,11 @@ def check_remaining(manifest_path: str, pass_name: str, output_dir: str) -> dict
                 if pass_name == "work_packages":
                     _backstop_wp_index(item["id"], result_path, out_dir)
             else:
+                _logger.warning(
+                    "check_remaining: no result file — marking failed",
+                    item_id=item["id"],
+                    result_path=str(result_path),
+                )
                 item["status"] = "failed"
 
     next_item = next((item for item in items if item["status"] == "pending"), None)
@@ -51,7 +75,9 @@ def check_remaining(manifest_path: str, pass_name: str, output_dir: str) -> dict
     if next_item is not None:
         next_item["status"] = "processing"
         prior_results = [
-            str(i["result_path"]) for i in items if i["status"] == "done" and i["result_path"]
+            str(i.get("result_path"))
+            for i in items
+            if i["status"] == "done" and i.get("result_path")
         ]
         context = {
             "id": next_item["id"],
@@ -77,10 +103,15 @@ def build_assignment_manifest(
     phases_path = Path(phases_dir)
     out_dir = Path(output_dir)
 
-    phase_files = list(phases_path.glob("*_result.json"))
+    phase_files = sorted(phases_path.glob("*_result.json"))
     parsed_phases = []
     for f in phase_files:
-        data = json.loads(f.read_text())
+        try:
+            data = json.loads(f.read_text())
+        except json.JSONDecodeError as exc:
+            raise json.JSONDecodeError(
+                f"Failed to parse {f}: {exc.msg}", exc.doc, exc.pos
+            ) from exc
         parsed_phases.append(data)
     parsed_phases.sort(key=lambda d: d.get("phase_number", 0))
 
@@ -119,7 +150,12 @@ def build_wp_manifest(assignments_dir: str, output_dir: str) -> dict[str, str]:
     assign_files = list(assign_path.glob("*_result.json"))
     parsed_assignments = []
     for f in assign_files:
-        data = json.loads(f.read_text())
+        try:
+            data = json.loads(f.read_text())
+        except json.JSONDecodeError as exc:
+            raise json.JSONDecodeError(
+                f"Failed to parse {f}: {exc.msg}", exc.doc, exc.pos
+            ) from exc
         parsed_assignments.append(data)
     parsed_assignments.sort(
         key=lambda d: (d.get("phase_number", 0), d.get("assignment_number", 0))

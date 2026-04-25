@@ -108,10 +108,12 @@ def test_check_remaining_processing_becomes_failed_when_no_result(tmp_path):
     manifest_path = tmp_path / "assignment_manifest.json"
     manifest_path.write_text(json.dumps(manifest))
 
-    check_remaining(str(manifest_path), "assignments", str(output_dir))
+    result = check_remaining(str(manifest_path), "assignments", str(output_dir))
 
     updated = json.loads(manifest_path.read_text())
     assert updated["items"][0]["status"] == "failed"
+    assert result["has_remaining"] == "true"
+    assert result["current_item_path"] != ""
 
 
 def test_check_remaining_all_done_returns_false(tmp_path):
@@ -239,6 +241,9 @@ def test_check_remaining_wp_backstop_rebuilds_missing_index_entry(tmp_path):
     index = json.loads(wp_index_path.read_text())
     indexed_ids = {entry["id"] for entry in index}
     assert wp_id in indexed_ids
+    entry = next(e for e in index if e["id"] == wp_id)
+    assert entry["name"] == ""
+    assert entry["summary"] == "done"
 
 
 def test_build_assignment_manifest_basic(tmp_path):

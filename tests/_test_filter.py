@@ -132,7 +132,7 @@ _CORE_UNIVERSAL_MODULES: frozenset[str] = frozenset(
 MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "readiness": frozenset({"core", "server"}),
     "feature_flags": frozenset({"core", "cli", "config", "server", "workspace"}),
-    "kitchen_state": frozenset({"core", "cli"}),
+    "kitchen_state": frozenset({"core", "cli", "server"}),
     "branch_guard": frozenset({"core", "pipeline", "server", "workspace"}),
     "_plugin_ids": frozenset({"core", "cli", "server"}),
     "_terminal_table": frozenset({"core", "cli", "pipeline", "recipe"}),
@@ -146,13 +146,14 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
             "config",
             "execution",
             "fleet",
+            "hook_registry",
             "migration",
             "recipe",
             "server",
             "workspace",
         }
     ),
-    "_claude_env": frozenset({"core", "execution"}),
+    "_claude_env": frozenset({"core", "execution", "_llm_triage"}),
     "_version_snapshot": frozenset({"core", "execution"}),
     "claude_conventions": frozenset({"core", "server", "workspace"}),
 }
@@ -177,12 +178,18 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "cli",
             "hooks",
             "skills",
+            "_llm_triage",
+            "_test_filter",
+            "hook_registry",
+            "planner",
+            "smoke_utils",
         }
     ),
     # L1
     "config": frozenset(
         {
             "config",
+            "execution",
             "pipeline",
             "workspace",
             "server",
@@ -199,6 +206,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "cli",
             "infra",
             "skills",
+            "_llm_triage",
+            "smoke_utils",
         }
     ),
     "pipeline": frozenset(
@@ -207,6 +216,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "execution",
             "server",
             "infra",
+            "cli",
+            "fleet",
         }
     ),
     "workspace": frozenset(
@@ -217,6 +228,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server",
             "cli",
             "skills",
+            "_llm_triage",
         }
     ),
     # L2
@@ -228,12 +240,17 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "cli",
             "infra",
             "skills",
+            "_llm_triage",
+            "core",
+            "hooks",
+            "migration",
         }
     ),
     "migration": frozenset(
         {
             "migration",
             "server",
+            "cli",
         }
     ),
     "fleet": frozenset(
@@ -253,6 +270,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
     "cli": frozenset(
         {
             "cli",
+            "__main__",
         }
     ),
     # Infra (non-layered)
@@ -261,6 +279,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "hooks",
             "infra",
             "cli",
+            "fleet",
+            "server",
         }
     ),
     "hook_registry": frozenset(
@@ -277,7 +297,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
     "_llm_triage": frozenset({"test_llm_triage.py", "execution", "server", "recipe"}),
     "_test_filter": frozenset({"arch", "infra", "contracts"}),
     "smoke_utils": frozenset({"test_smoke_utils.py", "recipe"}),
-    "version": frozenset({"test_version.py", "server"}),
+    "version": frozenset({"test_version.py", "server", "cli"}),
 }
 
 LAYER_CASCADE_AGGRESSIVE: dict[str, frozenset[str]] = {

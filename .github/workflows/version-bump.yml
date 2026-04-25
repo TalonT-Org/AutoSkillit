@@ -59,17 +59,8 @@ jobs:
           OLD_VERSION: ${{ steps.version.outputs.old }}
           NEW_VERSION: ${{ steps.version.outputs.new_main }}
 
-      - name: Update plugin.json (main)
-        run: |
-          python3 - <<'EOF'
-          import json, pathlib, os
-          p = pathlib.Path("src/autoskillit/.claude-plugin/plugin.json")
-          data = json.loads(p.read_text())
-          data["version"] = os.environ["NEW_VERSION"]
-          p.write_text(json.dumps(data, indent=2) + "\n")
-          EOF
-        env:
-          NEW_VERSION: ${{ steps.version.outputs.new_main }}
+      - name: Sync version artifacts (main)
+        run: python3 scripts/sync_versions.py
 
       - name: Configure git auth for private deps
         run: git config --global url."https://${{ secrets.GH_USER }}:${{ secrets.GH_PAT }}@github.com/TalonT-Org/".insteadOf "https://github.com/TalonT-Org/"
@@ -82,7 +73,7 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add pyproject.toml src/autoskillit/.claude-plugin/plugin.json uv.lock
+          git add pyproject.toml src/autoskillit/.claude-plugin/plugin.json src/autoskillit/recipes/ uv.lock
           if git diff --cached --quiet; then
             echo "Nothing to commit"
           else
@@ -132,17 +123,8 @@ jobs:
           OLD_VERSION: ${{ steps.int_version.outputs.old }}
           NEW_VERSION: ${{ steps.version.outputs.new_int }}
 
-      - name: Update plugin.json (integration)
-        run: |
-          python3 - <<'EOF'
-          import json, pathlib, os
-          p = pathlib.Path("src/autoskillit/.claude-plugin/plugin.json")
-          data = json.loads(p.read_text())
-          data["version"] = os.environ["NEW_VERSION"]
-          p.write_text(json.dumps(data, indent=2) + "\n")
-          EOF
-        env:
-          NEW_VERSION: ${{ steps.version.outputs.new_int }}
+      - name: Sync version artifacts (integration)
+        run: python3 scripts/sync_versions.py
 
       - name: Regenerate uv.lock (integration)
         run: uv lock
@@ -150,7 +132,7 @@ jobs:
       - name: Commit and push integration version bump
         run: |
           set -euo pipefail
-          git add pyproject.toml src/autoskillit/.claude-plugin/plugin.json uv.lock
+          git add pyproject.toml src/autoskillit/.claude-plugin/plugin.json src/autoskillit/recipes/ uv.lock
           if git diff --cached --quiet; then
             echo "Nothing to commit"
           else

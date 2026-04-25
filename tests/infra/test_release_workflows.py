@@ -136,6 +136,16 @@ class TestVersionBumpWorkflow:
         text = VERSION_BUMP_WORKFLOW.read_text()
         assert "plugin.json" in text
 
+    def test_version_bump_workflow_uses_sync_versions_script(self):
+        """The version-bump workflow must call the unified sync script."""
+        wf = _load(VERSION_BUMP_WORKFLOW)
+        job = next(iter(wf.get("jobs", {}).values()))
+        sync_step = _find_step(job, "sync version")
+        assert sync_step is not None, "version-bump.yml must have a 'Sync version artifacts' step"
+        assert "sync_versions" in sync_step.get("run", ""), (
+            "Sync step must call scripts/sync_versions.py"
+        )
+
     def test_uv_lock_is_regenerated(self):
         """Workflow must run uv lock."""
         text = VERSION_BUMP_WORKFLOW.read_text()
@@ -277,12 +287,16 @@ class TestPatchBumpIntegrationWorkflow:
         assert step is not None, "Workflow must have an 'Update pyproject.toml' step"
         assert "pyproject.toml" in step.get("run", ""), "Update step must reference pyproject.toml"
 
-    def test_plugin_json_is_updated(self):
+    def test_patch_bump_workflow_uses_sync_versions_script(self):
         wf = _load(PATCH_BUMP_INTEGRATION_WORKFLOW)
         job = next(iter(wf.get("jobs", {}).values()))
-        step = _find_step(job, "Update plugin.json")
-        assert step is not None, "Workflow must have an 'Update plugin.json' step"
-        assert "plugin.json" in step.get("run", ""), "Update step must reference plugin.json"
+        sync_step = _find_step(job, "sync version")
+        assert sync_step is not None, (
+            "patch-bump-integration.yml must have a 'Sync version artifacts' step"
+        )
+        assert "sync_versions" in sync_step.get("run", ""), (
+            "Sync step must call scripts/sync_versions.py"
+        )
 
     def test_uv_lock_is_regenerated(self):
         wf = _load(PATCH_BUMP_INTEGRATION_WORKFLOW)

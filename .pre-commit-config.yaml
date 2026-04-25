@@ -39,6 +39,13 @@ repos:
         files: ^(docs/|README\.md|src/autoskillit/skills/|src/autoskillit/recipes/|src/autoskillit/core/_type_constants\.py)
         pass_filenames: false
 
+      - id: check-version-consistency
+        name: Check version consistency across artifacts
+        language: system
+        entry: python scripts/sync_versions.py --check
+        files: '(pyproject\.toml|plugin\.json|recipes/.*\.yaml)$'
+        pass_filenames: false
+
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.30.0
     hooks:

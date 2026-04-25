@@ -191,10 +191,10 @@ tasks:
     cmds:
       - python scripts/check_doc_counts.py
 
-  sync-plugin-version:
-    desc: Sync plugin.json version from pyproject.toml
+  sync-versions:
+    desc: Sync all version-bearing files from pyproject.toml
     cmds:
-      - python scripts/sync_plugin_json.py
+      - python scripts/sync_versions.py
 
   sync-hooks-hash:
     desc: "Regenerate src/autoskillit/hooks/registry.sha256 from the live HOOK_REGISTRY"

@@ -68,7 +68,7 @@ For each feature, note: `name`, `lifecycle`, `import_package`, `tool_tags`, `ski
 
 **D1 — Config Projection** (subagent):
 
-For each feature in `FEATURE_REGISTRY`:
+For each feature in `FEATURE_REGISTRY`: do not output any prose between iterations — process all features and return findings as structured text only.
 - Parse `src/autoskillit/config/defaults.yaml` `features:` section
 - Parse `.autoskillit/config.yaml` `features:` section (if it exists)
 - Compute resolved state: `config_override ?? defaults ?? FeatureDef.default_enabled`
@@ -83,7 +83,7 @@ Return findings as structured text. Do NOT create any files.
 
 **D2 — Import Chain Integrity** (subagent):
 
-For each feature's `import_package`:
+For each feature's `import_package`: do not output any prose between iterations — return findings as structured text only.
 - Grep all `from {package} import` and `import {package}` across `src/` (excluding tests)
 - Classify each import site:
   - GUARDED: inside a function body, inside `if TYPE_CHECKING:`, or inside `if is_feature_enabled(...):`
@@ -97,7 +97,7 @@ Return findings as structured text. Do NOT create any files.
 
 **D3 — Runtime Gate Consistency** (subagent):
 
-For each feature:
+For each feature: do not output any prose between iterations — return findings as structured text only.
 - Find all `is_feature_enabled("{name}"` call sites across `src/`
 - Find all `AUTOSKILLIT_FEATURES__{NAME}` env-var reads (bypass paths)
 - FLAG (BLOCK): env-var gate without a corresponding `is_feature_enabled()` in the same code path
@@ -111,7 +111,7 @@ Return findings as structured text. Do NOT create any files.
 
 **D4 — Tool/Skill Tag Completeness** (subagent):
 
-For each feature:
+For each feature: do not output any prose between iterations — return findings as structured text only.
 - Cross-reference `feature_def.tool_tags` against `TOOL_SUBSET_TAGS` in `src/autoskillit/core/_type_constants.py`
 - Grep skill bodies in `src/autoskillit/skills_extended/` for feature-specific references
 - FLAG (WARN): skills with feature references in body but missing the feature's category in frontmatter
@@ -156,7 +156,8 @@ Return findings as structured text. Do NOT create any files.
 
 After all 6 subagents return, consolidate findings per dimension. Count BLOCK/WARN/INFO totals.
 
-Ensure `{{AUTOSKILLIT_TEMP}}/audit-feature-gates/` exists (`mkdir -p`).
+Ensure `{{AUTOSKILLIT_TEMP}}/audit-feature-gates/` exists (`mkdir -p`). All paths below are
+relative to the current working directory.
 
 Write report to:
 `{{AUTOSKILLIT_TEMP}}/audit-feature-gates/feature_gate_audit_{YYYY-MM-DD_HHMMSS}.md`

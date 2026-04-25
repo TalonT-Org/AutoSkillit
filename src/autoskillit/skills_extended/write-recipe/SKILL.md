@@ -223,7 +223,7 @@ These skills ship with the autoskillit plugin and are invoked as `/autoskillit:<
 analyze-prs, arch-lens-c4-container, arch-lens-concurrency, arch-lens-data-lineage, arch-lens-deployment,
 arch-lens-development, arch-lens-error-resilience, arch-lens-module-dependency, arch-lens-operational,
 arch-lens-process-flow, arch-lens-repository-access, arch-lens-scenarios, arch-lens-security, arch-lens-state-lifecycle,
-audit-arch, audit-bugs, audit-claims, audit-cohesion, audit-defense-standards, audit-friction, audit-impl, audit-tests,
+audit-arch, audit-bugs, audit-claims, audit-cohesion, audit-defense-standards, audit-feature-gates, audit-friction, audit-impl, audit-tests,
 build-execution-map, bundle-local-report, close-kitchen, collapse-issues, compose-pr, compose-research-pr, design-guards, diagnose-ci, dry-walkthrough, elaborate-phase,
 enrich-issues, exp-lens-benchmark-representativeness, exp-lens-causal-assumptions, exp-lens-comparator-construction,
 exp-lens-error-budget, exp-lens-estimand-clarity, exp-lens-exploratory-confirmatory, exp-lens-fair-comparison,

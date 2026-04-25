@@ -194,8 +194,10 @@ generic_automation_mcp/
 │   └── worktree.py
 │
 ├── planner/                 # L1
-│   ├── __init__.py          #   Progressive resolution planner — re-exports check_remaining, build_assignment_manifest, build_wp_manifest
-│   └── manifests.py         #   check_remaining, build_assignment_manifest, build_wp_manifest — manifest state machine callables
+│   ├── __init__.py          #   Progressive resolution planner — re-exports check_remaining, build_assignment_manifest, build_wp_manifest, validate_plan, compile_plan
+│   ├── manifests.py         #   check_remaining, build_assignment_manifest, build_wp_manifest — manifest state machine callables
+│   ├── validation.py        #   validate_plan — DAG cycle check, structural completeness, sizing bounds, duplicate-deliverable detection
+│   └── compiler.py          #   compile_plan — topological sort, issue body generation, milestone definitions, plan artifacts
 │
 ├── recipe/                  # L2
 │   ├── __init__.py

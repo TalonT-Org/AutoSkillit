@@ -67,7 +67,7 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     ("Franchise", FRANCHISE_MENU_TOOLS),
-    ("Kitchen", ("open_kitchen", "close_kitchen", "disable_quota_guard")),
+    ("Kitchen", ("open_kitchen", "close_kitchen", "disable_quota_guard", "reload_session")),
 )
 
 
@@ -78,10 +78,15 @@ def _run_cook_session(
     _first_run: bool,
     initial_prompt: str | None,
     project_dir: Path,
-) -> None:
-    """Run the cook subprocess and gate mark_onboarded on success."""
+) -> str | None:
+    """Run the cook subprocess; return session_id if a reload sentinel was written."""
+    from autoskillit.cli._reload import consume_reload_sentinel
+
     with terminal_guard():
         result = subprocess.run(cmd, env=env)
+    reload_session_id = consume_reload_sentinel(project_dir)
+    if reload_session_id is not None:
+        return reload_session_id
     if result.returncode == 0:
         if _first_run and initial_prompt is not None:
             from autoskillit.cli._onboarding import mark_onboarded
@@ -89,6 +94,7 @@ def _run_cook_session(
             mark_onboarded(project_dir)
     else:
         raise SystemExit(result.returncode)
+    return None
 
 
 def cook(*, resume: bool = False, session_id: str | None = None) -> None:
@@ -159,16 +165,36 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
     )
 
     plugin_dir = None if _is_plugin_installed() else pkg_root()
-    spec = build_interactive_cmd(
-        plugin_dir=plugin_dir,
-        add_dirs=[skills_dir],
-        initial_prompt=initial_prompt,
-        resume_spec=resume_spec,
-    )
-    _run_cook_session(
-        cmd=spec.cmd,
-        env=spec.env,
-        _first_run=_first_run,
-        initial_prompt=initial_prompt,
-        project_dir=project_dir,
-    )
+
+    current_resume_spec = resume_spec
+    _current_first_run = _first_run
+    _current_initial_prompt = initial_prompt
+
+    _max_reloads = 10
+    seen_reload_ids: set[str] = set()
+    while True:
+        spec = build_interactive_cmd(
+            plugin_dir=plugin_dir,
+            add_dirs=[skills_dir],
+            initial_prompt=_current_initial_prompt,
+            resume_spec=current_resume_spec,
+        )
+        reload_session_id = _run_cook_session(
+            cmd=spec.cmd,
+            env=spec.env,
+            _first_run=_current_first_run,
+            initial_prompt=_current_initial_prompt,
+            project_dir=project_dir,
+        )
+        if reload_session_id is None:
+            break
+        if len(seen_reload_ids) >= _max_reloads:
+            raise SystemExit(f"Too many reloads ({_max_reloads} max). Check for infinite loop.")
+        if reload_session_id in seen_reload_ids:
+            raise SystemExit(f"Repeated reload_id {reload_session_id!r} — aborting.")
+        seen_reload_ids.add(reload_session_id)
+        from autoskillit.core import NamedResume
+
+        current_resume_spec = NamedResume(session_id=reload_session_id)
+        _current_first_run = False
+        _current_initial_prompt = None

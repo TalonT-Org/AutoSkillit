@@ -1,14 +1,15 @@
 # MCP Tool Access Control
 
-AutoSkillit provides 46 MCP tools organized into three access levels that control which
+AutoSkillit provides 47 MCP tools organized into three access levels that control which
 session types can see each tool.
 
 ## Three Access Levels
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  FREE RANGE  (3 tools, always visible)                  │
-│  open_kitchen, close_kitchen, disable_quota_guard       │
+│  FREE RANGE  (4 tools, always visible)                  │
+│  open_kitchen, close_kitchen, disable_quota_guard,      │
+│  reload_session                                         │
 │  Always visible — no gating, no headless restriction    │
 ├─────────────────────────────────────────────────────────┤
 │  HEADLESS-TAGGED  (1 tool)                              │
@@ -85,7 +86,7 @@ missing kitchen visibility.
 
 ## Complete MCP Tool Access Control Map
 
-All 46 tools with their access level, tags, source file, and functional category.
+All 47 tools with their access level, tags, source file, and functional category.
 
 **Tag abbreviations**: AS = `autoskillit`, K = `kitchen`, HL = `headless`,
 GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`
@@ -99,6 +100,7 @@ GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`
 | `open_kitchen` | AS | `server/tools_kitchen.py` |
 | `close_kitchen` | AS | `server/tools_kitchen.py` |
 | `disable_quota_guard` | AS | `server/tools_kitchen.py` |
+| `reload_session` | AS | `server/tools_kitchen.py` |
 
 ---
 
@@ -207,7 +209,7 @@ GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`
 
 ---
 
-**Total: 45 tools** — 3 Free Range + 1 Headless + 42 Kitchen-tagged (of which 1, `test_check`, additionally carries the `headless` tag and is revealed inside headless sessions)
+**Total: 47 tools** — 4 Free Range + 43 Kitchen-tagged (of which 1, `test_check`, additionally carries the `headless` tag and is revealed inside headless sessions)
 
 For subset configuration that can hide functional-category tools, see
 [Subset Categories](../skills/subsets.md).

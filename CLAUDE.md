@@ -280,6 +280,7 @@ generic_automation_mcp/
 │   ├── _terminal_table.py   #   Re-export shim from core/_terminal_table
 │   ├── _cook.py             #   cook: ephemeral skill session launcher
 │   ├── _franchise.py        #   franchise sub-app: run, list, status campaign commands
+│   ├── _reload.py           #   consume_reload_sentinel: reload sentinel detection for re-launch loops
 │   ├── _session_launch.py   #   _run_interactive_session: shared interactive session launch prelude
 │   ├── _doctor.py           #   16 project setup checks
 │   ├── _hooks.py            #   PreToolUse hook registration helpers

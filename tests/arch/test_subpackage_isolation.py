@@ -711,7 +711,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "recipe": 38,
         "execution": 26,
         "core": 24,
-        "cli": 23,
+        "cli": 24,
         "hooks": 24,
     }
     violations: list[str] = []

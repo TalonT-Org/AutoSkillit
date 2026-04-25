@@ -194,6 +194,7 @@ _UNFORMATTED_TOOLS: frozenset[str] = frozenset(
         "register_clone_status",  # simple registered/error result
         "batch_cleanup_clones",  # bulk delete summary dict
         "dispatch_food_truck",  # JSON dispatch envelope, generic renders correctly
+        "reload_session",  # simple status dict, generic renders correctly
     }
 )
 

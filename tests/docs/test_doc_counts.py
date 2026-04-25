@@ -205,9 +205,9 @@ def test_kitchen_tagged_tool_count_is_43() -> None:
     )
 
 
-def test_free_range_tool_count_is_3() -> None:
-    assert _count_free_range_tools() == 3, (
-        f"Expected 3 free-range tools; found {_count_free_range_tools()}"
+def test_free_range_tool_count_is_4() -> None:
+    assert _count_free_range_tools() == 4, (
+        f"Expected 4 free-range tools; found {_count_free_range_tools()}"
     )
 
 
@@ -285,8 +285,8 @@ def _assert_doc_states_number(doc: Path, label: str, expected: int) -> None:
         DOCS_DIR / "execution" / "tool-access.md",
     ],
 )
-def test_docs_state_46_mcp_tools(doc_path: Path) -> None:
-    _assert_doc_states_number(doc_path, "MCP tools", 46)
+def test_docs_state_47_mcp_tools(doc_path: Path) -> None:
+    _assert_doc_states_number(doc_path, "MCP tools", 47)
 
 
 @pytest.mark.parametrize(
@@ -300,8 +300,8 @@ def test_docs_state_42_kitchen_tools(doc_path: Path) -> None:
     _assert_doc_states_number(doc_path, "kitchen tools", 42)
 
 
-def test_skill_visibility_states_116_skills() -> None:
-    _assert_doc_states_number(DOCS_DIR / "skills" / "visibility.md", "skills total", 116)
+def test_skill_visibility_states_117_skills() -> None:
+    _assert_doc_states_number(DOCS_DIR / "skills" / "visibility.md", "skills total", 117)
 
 
 def test_safety_hooks_states_14_hooks() -> None:

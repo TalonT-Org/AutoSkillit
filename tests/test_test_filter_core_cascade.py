@@ -48,7 +48,7 @@ class TestModuleCascadeCore:
             assert "core" in consumers, f"{stem} cascade missing 'core'"
 
     def test_kitchen_state_cascade(self) -> None:
-        assert MODULE_CASCADE_CORE["kitchen_state"] == frozenset({"core", "cli"})
+        assert MODULE_CASCADE_CORE["kitchen_state"] == frozenset({"core", "cli", "server"})
 
     def test_readiness_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["readiness"] == frozenset({"core", "server"})
@@ -154,7 +154,7 @@ class TestBuildTestScopeCoreCascade:
             assert pkg in dir_names
 
     def test_kitchen_state_narrow_cascade(self, tmp_path: Path) -> None:
-        """kitchen_state.py → only {core, cli} + always-run."""
+        """kitchen_state.py → only {core, cli, server} + always-run."""
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
             changed_files={"src/autoskillit/core/kitchen_state.py"},
@@ -165,6 +165,7 @@ class TestBuildTestScopeCoreCascade:
         dir_names = {p.name for p in result}
         assert "core" in dir_names
         assert "cli" in dir_names
+        assert "server" in dir_names
         # Must NOT include packages kitchen_state doesn't touch
         for excluded in [
             "execution",
@@ -172,7 +173,6 @@ class TestBuildTestScopeCoreCascade:
             "workspace",
             "recipe",
             "migration",
-            "server",
             "hooks",
         ]:
             assert excluded not in dir_names, (

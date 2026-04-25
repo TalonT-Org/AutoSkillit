@@ -598,12 +598,16 @@ class TestSessionTypeVisibility:
         """fleet + FLEET_MODE=dispatch reveals fleet tools + fleet-dispatch tools."""
         from fastmcp.client import Client
 
-        from autoskillit.core import FLEET_TOOLS, FREE_RANGE_TOOLS
-        from autoskillit.core._type_constants import FLEET_DISPATCH_TOOLS
+        from autoskillit.core import (
+            FLEET_DISPATCH_TOOLS,
+            FLEET_MODE_ENV_VAR,
+            FLEET_TOOLS,
+            FREE_RANGE_TOOLS,
+        )
         from autoskillit.server import _apply_session_type_visibility, mcp
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
-        monkeypatch.setenv("AUTOSKILLIT_FLEET_MODE", "dispatch")
+        monkeypatch.setenv(FLEET_MODE_ENV_VAR, "dispatch")
         _apply_session_type_visibility()
 
         async with Client(mcp) as client:
@@ -618,16 +622,16 @@ class TestSessionTypeVisibility:
         """fleet + FLEET_MODE=campaign (or absent) hides fleet-dispatch tools."""
         from fastmcp.client import Client
 
-        from autoskillit.core._type_constants import FLEET_DISPATCH_TOOLS
+        from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_MODE_ENV_VAR
         from autoskillit.server import _apply_session_type_visibility, mcp
 
         for mode_value in ("campaign", None):
             mcp.disable(tags={"fleet", "fleet-dispatch"})
             monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
             if mode_value is not None:
-                monkeypatch.setenv("AUTOSKILLIT_FLEET_MODE", mode_value)
+                monkeypatch.setenv(FLEET_MODE_ENV_VAR, mode_value)
             else:
-                monkeypatch.delenv("AUTOSKILLIT_FLEET_MODE", raising=False)
+                monkeypatch.delenv(FLEET_MODE_ENV_VAR, raising=False)
             _apply_session_type_visibility()
 
             async with Client(mcp) as client:
@@ -640,11 +644,11 @@ class TestSessionTypeVisibility:
     @pytest.mark.anyio
     async def test_fleet_dispatch_constant_matches_tagged_tools(self, monkeypatch):
         """FLEET_DISPATCH_TOOLS constant must exactly match tools tagged fleet-dispatch."""
-        from autoskillit.core._type_constants import FLEET_DISPATCH_TOOLS
+        from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_MODE_ENV_VAR
         from autoskillit.server import _apply_session_type_visibility, mcp
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
-        monkeypatch.setenv("AUTOSKILLIT_FLEET_MODE", "dispatch")
+        monkeypatch.setenv(FLEET_MODE_ENV_VAR, "dispatch")
         _apply_session_type_visibility()
 
         all_tools = {t.name: t for t in await mcp.list_tools()}

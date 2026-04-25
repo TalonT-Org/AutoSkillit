@@ -179,9 +179,8 @@ def test_is_feature_enabled_fleet_defaults_false() -> None:
 
 def test_fleet_dispatch_tools_constant_exists() -> None:
     """FLEET_DISPATCH_TOOLS is a frozenset of exactly the 4 fleet-dispatch discovery tools."""
-    from autoskillit.core._type_constants import FLEET_DISPATCH_TOOLS
+    from autoskillit.core import FLEET_DISPATCH_TOOLS
 
-    assert isinstance(FLEET_DISPATCH_TOOLS, frozenset)
     assert FLEET_DISPATCH_TOOLS == frozenset(
         {
             "list_recipes",

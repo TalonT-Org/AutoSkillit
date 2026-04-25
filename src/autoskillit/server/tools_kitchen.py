@@ -17,9 +17,8 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit import __version__
-from autoskillit.config import resolve_ingredient_defaults
+from autoskillit.config import iter_display_categories, resolve_ingredient_defaults
 from autoskillit.core import (
-    FLEET_MENU_TOOLS,
     PIPELINE_FORBIDDEN_TOOLS,
     atomic_write,
     find_latest_session_id,
@@ -68,66 +67,6 @@ def _kitchen_failure_envelope(
             "stage": stage,
         }
     )
-
-
-_DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("Execution", ("run_cmd", "run_python", "run_skill")),
-    ("Testing & Workspace", ("test_check", "reset_test_dir", "classify_fix", "reset_workspace")),
-    (
-        "Git Operations",
-        ("merge_worktree", "create_unique_branch", "check_pr_mergeable", "set_commit_status"),
-    ),
-    ("Recipes", ("migrate_recipe", "list_recipes", "load_recipe", "validate_recipe")),
-    (
-        "Clone & Remote",
-        (
-            "clone_repo",
-            "remove_clone",
-            "push_to_remote",
-            "register_clone_status",
-            "batch_cleanup_clones",
-        ),
-    ),
-    (
-        "GitHub",
-        (
-            "fetch_github_issue",
-            "get_issue_title",
-            "report_bug",
-            "prepare_issue",
-            "enrich_issues",
-            "claim_issue",
-            "release_issue",
-            "get_pr_reviews",
-            "bulk_close_issues",
-        ),
-    ),
-    (
-        "CI & Automation",
-        (
-            "wait_for_ci",
-            "wait_for_merge_queue",
-            "check_repo_merge_state",
-            "toggle_auto_merge",
-            "enqueue_pr",
-            "get_ci_status",
-        ),
-    ),
-    (
-        "Telemetry & Diagnostics",
-        (
-            "read_db",
-            "write_telemetry_files",
-            "kitchen_status",
-            "get_pipeline_report",
-            "get_token_summary",
-            "get_timing_summary",
-            "get_quota_events",
-        ),
-    ),
-    ("Fleet", FLEET_MENU_TOOLS),
-    ("Kitchen", ("open_kitchen", "close_kitchen", "disable_quota_guard", "reload_session")),
-)
 
 
 class QuotaGuardHookPayload(TypedDict):
@@ -263,7 +202,6 @@ async def _redisable_subsets(
     from autoskillit.core import (  # noqa: PLC0415
         FEATURE_REGISTRY,
         FEATURE_REVEAL_TAGS,
-        is_feature_enabled,
     )
 
     # Union model: a tag is suppressed only when no enabled feature claims it.
@@ -320,20 +258,10 @@ def get_recipe(name: str) -> str:
     return match.path.read_text()
 
 
-def _iter_display_categories(
-    features: dict[str, bool],
-) -> tuple[tuple[str, tuple[str, ...]], ...]:
-    return tuple(
-        (name, tools)
-        for name, tools in _DISPLAY_CATEGORIES
-        if name != "Fleet" or is_feature_enabled("fleet", features)
-    )
-
-
 def _build_tool_category_listing(features: dict[str, bool]) -> str:
     """Return a formatted string listing all tool categories."""
     lines = []
-    for name, tools in _iter_display_categories(features):
+    for name, tools in iter_display_categories(features):
         lines.append(f"  {name}: {', '.join(tools)}")
     return "\n".join(lines)
 

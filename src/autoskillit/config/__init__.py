@@ -5,7 +5,10 @@ either `from autoskillit.config import AutomationConfig` or the explicit
 `from autoskillit.config.settings import AutomationConfig`.
 """
 
-from autoskillit.config.ingredient_defaults import resolve_ingredient_defaults
+from autoskillit.config.ingredient_defaults import (
+    iter_display_categories,
+    resolve_ingredient_defaults,
+)
 from autoskillit.config.settings import (
     _SECRETS_ONLY_KEYS as _SECRETS_ONLY_KEYS,
 )
@@ -68,6 +71,7 @@ __all__ = [
     "TokenUsageConfig",
     "WorkspaceConfig",
     "WorktreeSetupConfig",
+    "iter_display_categories",
     "load_config",
     "resolve_ingredient_defaults",
     "validate_layer_keys",

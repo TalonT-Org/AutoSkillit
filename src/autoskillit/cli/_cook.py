@@ -9,76 +9,6 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from autoskillit.cli._terminal import terminal_guard
-from autoskillit.core import FLEET_MENU_TOOLS, is_feature_enabled
-
-_DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("Execution", ("run_cmd", "run_python", "run_skill")),
-    ("Testing & Workspace", ("test_check", "reset_test_dir", "classify_fix", "reset_workspace")),
-    (
-        "Git Operations",
-        ("merge_worktree", "create_unique_branch", "check_pr_mergeable", "set_commit_status"),
-    ),
-    ("Recipes", ("migrate_recipe", "list_recipes", "load_recipe", "validate_recipe")),
-    (
-        "Clone & Remote",
-        (
-            "clone_repo",
-            "remove_clone",
-            "push_to_remote",
-            "register_clone_status",
-            "batch_cleanup_clones",
-        ),
-    ),
-    (
-        "GitHub",
-        (
-            "fetch_github_issue",
-            "get_issue_title",
-            "report_bug",
-            "prepare_issue",
-            "enrich_issues",
-            "claim_issue",
-            "release_issue",
-            "get_pr_reviews",
-            "bulk_close_issues",
-        ),
-    ),
-    (
-        "CI & Automation",
-        (
-            "wait_for_ci",
-            "wait_for_merge_queue",
-            "check_repo_merge_state",
-            "toggle_auto_merge",
-            "enqueue_pr",
-            "get_ci_status",
-        ),
-    ),
-    (
-        "Telemetry & Diagnostics",
-        (
-            "read_db",
-            "write_telemetry_files",
-            "kitchen_status",
-            "get_pipeline_report",
-            "get_token_summary",
-            "get_timing_summary",
-            "get_quota_events",
-        ),
-    ),
-    ("Fleet", FLEET_MENU_TOOLS),
-    ("Kitchen", ("open_kitchen", "close_kitchen", "disable_quota_guard", "reload_session")),
-)
-
-
-def _iter_display_categories(
-    features: dict[str, bool],
-) -> tuple[tuple[str, tuple[str, ...]], ...]:
-    return tuple(
-        (name, tools)
-        for name, tools in _DISPLAY_CATEGORIES
-        if name != "Fleet" or is_feature_enabled("fleet", features)
-    )
 
 
 def _run_cook_session(
@@ -130,13 +60,13 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
     _Y = "\x1b[33m" if color else ""
     _R = "\x1b[0m" if color else ""
 
-    from autoskillit.config import load_config  # noqa: PLC0415
+    from autoskillit.config import iter_display_categories, load_config  # noqa: PLC0415
 
     config = load_config()
 
     print(f"{_B}{_C}AUTOSKILLIT {__version__}{_R} {_D}Kitchen open. All tools active.{_R}")
     skip = {"Telemetry & Diagnostics", "Kitchen"}
-    for name, tools in _iter_display_categories(config.features):
+    for name, tools in iter_display_categories(config.features):
         if name in skip:
             continue
         tool_list = f"{_D}, {_R}".join(f"{_G}{t}{_R}" for t in tools)

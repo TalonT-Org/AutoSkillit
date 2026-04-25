@@ -20,8 +20,31 @@ def test_planner_recipe_loads(planner_recipe):
     assert planner_recipe.name == "planner"
 
 
-def test_planner_recipe_has_19_steps(planner_recipe):
-    assert len(planner_recipe.steps) == 19
+def test_planner_recipe_has_required_steps(planner_recipe):
+    required_steps = {
+        "init",
+        "analyze",
+        "extract_domain",
+        "generate_phases",
+        "check_phases",
+        "elaborate_phase",
+        "build_assignment_manifest",
+        "check_assignments",
+        "elaborate_assignment",
+        "build_wp_manifest",
+        "check_wps",
+        "elaborate_wp",
+        "reconcile_deps",
+        "validate",
+        "check_verdict",
+        "refine",
+        "compile",
+        "done",
+        "escalate_stop",
+    }
+    assert required_steps <= planner_recipe.steps.keys(), (
+        f"Missing steps: {required_steps - planner_recipe.steps.keys()}"
+    )
 
 
 def test_planner_recipe_declares_requires_packs(planner_recipe):

@@ -395,6 +395,7 @@ class FleetErrorCode(StrEnum):
     FLEET_RECIPE_NOT_FOUND = "fleet_recipe_not_found"
     FLEET_INVALID_RECIPE_KIND = "fleet_invalid_recipe_kind"
     FLEET_HARD_REFUSAL_HEADLESS = "fleet_hard_refusal_headless"
+    FLEET_FEATURE_DISABLED = "fleet_feature_disabled"
     FLEET_MANIFEST_MISSING = "fleet_manifest_missing"
     FLEET_MANIFEST_CORRUPTED = "fleet_manifest_corrupted"
     FLEET_LOCK_NOT_INITIALIZED = "fleet_lock_not_initialized"

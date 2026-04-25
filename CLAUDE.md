@@ -246,7 +246,7 @@ generic_automation_mcp/
 │   ├── loader.py            #   Migration note discovery + version chaining
 │   └── store.py             #   FailureStore (JSON, atomic writes)
 │
-├── franchise/               # L2
+├── fleet/                   # L2
 │   ├── __init__.py          #   Re-exports: CampaignSummary, parse_campaign_summary, etc.
 │   ├── result_parser.py     #   L2 result block parser with Channel B JSONL fallback
 │   └── summary.py           #   Campaign summary schema v1: frozen dataclasses, sentinel parser, validator
@@ -279,7 +279,7 @@ generic_automation_mcp/
 │   ├── _terminal.py         #   terminal_guard() TTY restore
 │   ├── _terminal_table.py   #   Re-export shim from core/_terminal_table
 │   ├── _cook.py             #   cook: ephemeral skill session launcher
-│   ├── _franchise.py        #   franchise sub-app: run, list, status campaign commands
+│   ├── _fleet.py            #   fleet sub-app: run, list, status campaign commands
 │   ├── _reload.py           #   consume_reload_sentinel: reload sentinel detection for re-launch loops
 │   ├── _session_launch.py   #   _run_interactive_session: shared interactive session launch prelude
 │   ├── _doctor.py           #   16 project setup checks
@@ -295,7 +295,7 @@ generic_automation_mcp/
 │   ├── _update.py           #   run_update_command(): first-class upgrade path for `autoskillit update`
 │   ├── _update_checks.py    #   Unified startup update check: version/hook/source-drift signals, branch-aware dismissal
 │   ├── _serve_guard.py      #   Async signal-guarded MCP server bootstrap (extracted from app.py)
-│   ├── _franchise.py        #   franchise subcommand group: status --reap/--dry-run, run stub, signal guard; render_franchise_error()
+│   ├── _fleet.py            #   fleet subcommand group: status --reap/--dry-run, run stub, signal guard; render_fleet_error()
 │   ├── _features.py         #   features subcommand group: list/status commands for feature gate inspection
 │   ├── _workspace.py        #   Workspace clean helpers
 │   └── app.py               #   CLI entry: serve, init, config, skills, recipes, doctor, update, etc.
@@ -318,7 +318,7 @@ generic_automation_mcp/
 │   ├── grep_pattern_lint_guard.py #  Denies Grep calls with \\| BRE alternation; returns corrected ERE pattern
 │   ├── mcp_health_guard.py  #   Detects MCP server disconnect via PID liveness; injects /MCP reconnect hint
 │   ├── leaf_orchestration_guard.py
-│   ├── franchise_dispatch_guard.py #  Blocks dispatch_food_truck from headless callers (L3→L3 recursion guard)
+│   ├── fleet_dispatch_guard.py #  Blocks dispatch_food_truck from headless callers (L3→L3 recursion guard)
 │   ├── pretty_output_hook.py #  Dispatch entrypoint for MCP JSON → Markdown-KV reformatter
 │   ├── _fmt_primitives.py   #   Payload dataclasses, token formatter, pipeline-mode + short-name
 │   ├── _fmt_execution.py    #   run_skill, run_cmd, test_check, merge_worktree formatters

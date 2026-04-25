@@ -42,7 +42,7 @@ _INFRASTRUCTURE_FILE_EXCLUSIONS = [
     "recipe/test_rules_campaign.py",
     "recipe/test_campaign_loader.py",
     "core/test_session_type.py",
-    "infra/test_franchise_dispatch_guard.py",
+    "infra/test_fleet_dispatch_guard.py",
 ]
 
 
@@ -148,18 +148,18 @@ def test_import_safety_with_features_disabled():
         assert mcp is not None
 
 
-@pytest.mark.parametrize("franchise_enabled", [True, False])
+@pytest.mark.parametrize("fleet_enabled", [True, False])
 @pytest.mark.anyio
-async def test_tool_listing_matches_feature_state(franchise_enabled: bool, monkeypatch):
-    """MCP tool listing includes/excludes franchise tools based on session-type feature state."""
-    from autoskillit.core import FRANCHISE_TOOLS
+async def test_tool_listing_matches_feature_state(fleet_enabled: bool, monkeypatch):
+    """MCP tool listing includes/excludes fleet tools based on session-type feature state."""
+    from autoskillit.core import FLEET_TOOLS
     from autoskillit.server import _apply_session_type_visibility, mcp
 
     # Reset to known baseline: all gated tags disabled
-    mcp.disable(tags={"franchise", "kitchen", "headless"})
+    mcp.disable(tags={"fleet", "kitchen", "headless"})
 
-    if franchise_enabled:
-        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "franchise")
+    if fleet_enabled:
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
     else:
         monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
 
@@ -171,11 +171,11 @@ async def test_tool_listing_matches_feature_state(franchise_enabled: bool, monke
         tools = await client.list_tools()
     tool_names = {t.name for t in tools}
 
-    for name in FRANCHISE_TOOLS:
-        if franchise_enabled:
-            assert name in tool_names, f"{name} should be visible when franchise enabled"
+    for name in FLEET_TOOLS:
+        if fleet_enabled:
+            assert name in tool_names, f"{name} should be visible when fleet enabled"
         else:
-            assert name not in tool_names, f"{name} should be hidden when franchise disabled"
+            assert name not in tool_names, f"{name} should be hidden when fleet disabled"
 
     # Cleanup: restore baseline
-    mcp.disable(tags={"franchise", "kitchen", "headless"})
+    mcp.disable(tags={"fleet", "kitchen", "headless"})

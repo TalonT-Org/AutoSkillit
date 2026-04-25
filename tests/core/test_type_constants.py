@@ -146,7 +146,7 @@ def test_feature_reveal_tags_exists() -> None:
     from autoskillit.core import FEATURE_REVEAL_TAGS
 
     assert isinstance(FEATURE_REVEAL_TAGS, frozenset)
-    assert "franchise" in FEATURE_REVEAL_TAGS
+    assert "fleet" in FEATURE_REVEAL_TAGS
 
 
 def test_exclusive_feature_tools_removed() -> None:
@@ -163,15 +163,15 @@ def test_exclusive_feature_tools_not_in_all() -> None:
     assert "EXCLUSIVE_FEATURE_TOOLS" not in _type_constants.__all__
 
 
-def test_franchise_default_enabled_is_false() -> None:
-    """Franchise is gated off by default — enabled only via project config."""
+def test_fleet_default_enabled_is_false() -> None:
+    """Fleet is gated off by default — enabled only via project config."""
     from autoskillit.core import FEATURE_REGISTRY
 
-    assert FEATURE_REGISTRY["franchise"].default_enabled is False
+    assert FEATURE_REGISTRY["fleet"].default_enabled is False
 
 
-def test_is_feature_enabled_franchise_defaults_false() -> None:
-    """Without explicit config, franchise resolves to disabled."""
+def test_is_feature_enabled_fleet_defaults_false() -> None:
+    """Without explicit config, fleet resolves to disabled."""
     from autoskillit.core.feature_flags import is_feature_enabled
 
-    assert is_feature_enabled("franchise", {}) is False
+    assert is_feature_enabled("fleet", {}) is False

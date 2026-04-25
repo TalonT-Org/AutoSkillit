@@ -10,7 +10,7 @@ import pytest
 from autoskillit.cli._mcp_names import DIRECT_PREFIX, MARKETPLACE_PREFIX
 from autoskillit.recipe.schema import CampaignDispatch, Recipe, RecipeKind
 
-pytestmark = [pytest.mark.layer("cli"), pytest.mark.small, pytest.mark.feature("franchise")]
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.small, pytest.mark.feature("fleet")]
 
 # --- Constants ---
 
@@ -162,7 +162,7 @@ class TestCampaignDisciplineSection:
 
     def test_franchise_lock_mentioned(self) -> None:
         prompt = _build()
-        assert "franchise_lock" in prompt
+        assert "fleet_lock" in prompt
 
 
 # --- K-6: TestFailureRecoverySection ---
@@ -290,7 +290,7 @@ class TestCampaignSummaryContract:
 class TestProgressMarkers:
     def test_progress_marker_format(self) -> None:
         prompt = _build()
-        assert f"%%FRANCHISE_PROGRESS::{_CAMPAIGN_ID}::" in prompt
+        assert f"%%FLEET_PROGRESS::{_CAMPAIGN_ID}::" in prompt
 
     def test_all_state_transitions_listed(self) -> None:
         prompt = _build()

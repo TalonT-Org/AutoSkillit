@@ -260,9 +260,9 @@ workspace:
   runs_root: null       # null = auto-resolve to ../autoskillit-runs/ relative to project root
   temp_dir: .autoskillit/temp  # canonical default; override per-project or via AUTOSKILLIT_WORKSPACE__TEMP_DIR
 
-franchise:
+fleet:
   l2_default_timeout_sec: 3600
 
 features:
-  franchise: false  # Disabled by default; enabled via project config on integration
+  fleet: false  # Disabled by default; enabled via project config on integration
   planner: false  # EXPERIMENTAL — off by default

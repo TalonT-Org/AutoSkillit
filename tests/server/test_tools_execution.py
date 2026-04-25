@@ -966,7 +966,7 @@ class TestHeadlessGateEnforcement:
 
 
 class TestTierAwareGateEnforcement:
-    """T_TAGE: tier-aware guard permits orchestrator, denies leaf and franchise as appropriate."""
+    """T_TAGE: tier-aware guard permits orchestrator, denies leaf and fleet as appropriate."""
 
     @pytest.mark.anyio
     async def test_run_skill_permitted_for_orchestrator_tier(self, tool_ctx, monkeypatch):
@@ -991,24 +991,24 @@ class TestTierAwareGateEnforcement:
         assert result["subtype"] == "headless_error"
 
     @pytest.mark.anyio
-    async def test_open_kitchen_denied_for_franchise_tier(self, tool_ctx, monkeypatch):
-        """open_kitchen returns HeadlessDenied for franchise-tier sessions."""
+    async def test_open_kitchen_denied_for_fleet_tier(self, tool_ctx, monkeypatch):
+        """open_kitchen returns HeadlessDenied for fleet-tier sessions."""
         from autoskillit.server.tools_kitchen import open_kitchen
 
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "franchise")
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
         result = json.loads(await open_kitchen())
         assert result.get("error") == "HeadlessDenied"
         msg = result.get("user_visible_message", "").lower()
-        assert "fleet" in msg or "franchise" in msg
+        assert "fleet" in msg
 
     @pytest.mark.anyio
-    async def test_close_kitchen_denied_for_franchise_tier(self, tool_ctx, monkeypatch):
-        """close_kitchen returns headless_error for franchise-tier sessions."""
+    async def test_close_kitchen_denied_for_fleet_tier(self, tool_ctx, monkeypatch):
+        """close_kitchen returns headless_error for fleet-tier sessions."""
         from autoskillit.server.tools_kitchen import close_kitchen
 
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "franchise")
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
         result = json.loads(await close_kitchen())
         assert result["subtype"] == "headless_error"
 

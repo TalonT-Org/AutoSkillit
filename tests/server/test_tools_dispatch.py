@@ -11,7 +11,7 @@ import pytest
 
 from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
 
-pytestmark = [pytest.mark.layer("server"), pytest.mark.medium, pytest.mark.feature("franchise")]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.medium, pytest.mark.feature("fleet")]
 
 # ---------------------------------------------------------------------------
 # Shared test helpers
@@ -66,13 +66,13 @@ async def _noop_quota_refresher(config, **kwargs) -> None:
 class TestDispatchFoodTruckGates:
     @pytest.mark.anyio
     async def test_dispatch_food_truck_hard_refusal_headless(self, tool_ctx, monkeypatch):
-        """AUTOSKILLIT_HEADLESS=1 → franchise_hard_refusal_headless, regardless of SESSION_TYPE."""
+        """AUTOSKILLIT_HEADLESS=1 → fleet_hard_refusal_headless, regardless of SESSION_TYPE."""
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
         from autoskillit.server.tools_execution import dispatch_food_truck
 
         result = json.loads(await dispatch_food_truck(recipe="r", task="t"))
         assert result["success"] is False
-        assert result["error"] == "franchise_hard_refusal_headless"
+        assert result["error"] == "fleet_hard_refusal_headless"
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_requires_kitchen_open(self, tool_ctx, monkeypatch):
@@ -89,12 +89,12 @@ class TestDispatchFoodTruckGates:
     async def test_dispatch_food_truck_parallel_refused_when_locked(
         self, tool_ctx, monkeypatch, tmp_path
     ):
-        """franchise_lock.locked() == True → franchise_parallel_refused error."""
-        from autoskillit.franchise._api import execute_dispatch
+        """fleet_lock.locked() == True → fleet_parallel_refused error."""
+        from autoskillit.fleet._api import execute_dispatch
 
         lock = asyncio.Lock()
         await lock.acquire()  # lock it
-        tool_ctx.franchise_lock = lock
+        tool_ctx.fleet_lock = lock
 
         result = json.loads(
             await execute_dispatch(
@@ -110,7 +110,7 @@ class TestDispatchFoodTruckGates:
             )
         )
         assert result["success"] is False
-        assert result["error"] == "franchise_parallel_refused"
+        assert result["error"] == "fleet_parallel_refused"
 
 
 # ---------------------------------------------------------------------------
@@ -121,12 +121,12 @@ class TestDispatchFoodTruckGates:
 class TestDispatchFoodTruckValidation:
     @pytest.mark.anyio
     async def test_dispatch_food_truck_rejects_non_standard_recipe(self, tool_ctx, monkeypatch):
-        """Campaign recipe → franchise_invalid_recipe_kind error."""
-        from autoskillit.franchise._api import execute_dispatch
+        """Campaign recipe → fleet_invalid_recipe_kind error."""
+        from autoskillit.fleet._api import execute_dispatch
 
         from autoskillit.recipe.schema import Recipe, RecipeKind
 
-        tool_ctx.franchise_lock = asyncio.Lock()
+        tool_ctx.fleet_lock = asyncio.Lock()
         repo = InMemoryRecipeRepository()
         recipe_info = _make_recipe_info("campaign-recipe")
         repo.add_recipe("campaign-recipe", recipe_info)
@@ -150,14 +150,14 @@ class TestDispatchFoodTruckValidation:
             )
         )
         assert result["success"] is False
-        assert result["error"] == "franchise_invalid_recipe_kind"
+        assert result["error"] == "fleet_invalid_recipe_kind"
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_rejects_unknown_ingredients(self, tool_ctx, monkeypatch):
-        """Keys not in recipe.ingredients → franchise_unknown_ingredient error."""
-        from autoskillit.franchise._api import execute_dispatch
+        """Keys not in recipe.ingredients → fleet_unknown_ingredient error."""
+        from autoskillit.fleet._api import execute_dispatch
 
-        tool_ctx.franchise_lock = asyncio.Lock()
+        tool_ctx.fleet_lock = asyncio.Lock()
         repo = InMemoryRecipeRepository()
         recipe_info = _make_recipe_info("test-recipe")
         repo.add_recipe("test-recipe", recipe_info)
@@ -179,16 +179,16 @@ class TestDispatchFoodTruckValidation:
             )
         )
         assert result["success"] is False
-        assert result["error"] == "franchise_unknown_ingredient"
+        assert result["error"] == "fleet_unknown_ingredient"
         assert "unknown_key" in result["user_visible_message"]
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_rejects_non_string_values(self, tool_ctx, monkeypatch):
         """Non-string ingredient values rejected before lock acquisition."""
-        from autoskillit.franchise._api import execute_dispatch
+        from autoskillit.fleet._api import execute_dispatch
 
         lock = asyncio.Lock()
-        tool_ctx.franchise_lock = lock
+        tool_ctx.fleet_lock = lock
 
         result = json.loads(
             await execute_dispatch(
@@ -204,16 +204,16 @@ class TestDispatchFoodTruckValidation:
             )
         )
         assert result["success"] is False
-        assert result["error"] == "franchise_unknown_ingredient"
+        assert result["error"] == "fleet_unknown_ingredient"
         # Lock must not have been acquired
         assert not lock.locked()
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_no_recipes_configured(self, tool_ctx, monkeypatch):
-        """recipes=None → franchise_manifest_missing error."""
-        from autoskillit.franchise._api import execute_dispatch
+        """recipes=None → fleet_manifest_missing error."""
+        from autoskillit.fleet._api import execute_dispatch
 
-        tool_ctx.franchise_lock = asyncio.Lock()
+        tool_ctx.fleet_lock = asyncio.Lock()
         tool_ctx.recipes = None
 
         result = json.loads(
@@ -230,14 +230,14 @@ class TestDispatchFoodTruckValidation:
             )
         )
         assert result["success"] is False
-        assert result["error"] == "franchise_manifest_missing"
+        assert result["error"] == "fleet_manifest_missing"
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_no_executor_configured(self, tool_ctx, monkeypatch):
-        """executor=None → franchise_manifest_missing error."""
-        from autoskillit.franchise._api import execute_dispatch
+        """executor=None → fleet_manifest_missing error."""
+        from autoskillit.fleet._api import execute_dispatch
 
-        tool_ctx.franchise_lock = asyncio.Lock()
+        tool_ctx.fleet_lock = asyncio.Lock()
         repo = InMemoryRecipeRepository()
         recipe_info = _make_recipe_info("test-recipe")
         repo.add_recipe("test-recipe", recipe_info)
@@ -259,7 +259,7 @@ class TestDispatchFoodTruckValidation:
             )
         )
         assert result["success"] is False
-        assert result["error"] == "franchise_manifest_missing"
+        assert result["error"] == "fleet_manifest_missing"
 
     @pytest.mark.anyio
     async def test_dispatch_recipe_info_kind_attribute_error_is_fixed(self, tool_ctx):
@@ -270,11 +270,11 @@ class TestDispatchFoodTruckValidation:
         Before fix: recipe_obj.kind raises AttributeError → L2_STARTUP_OR_CRASH.
         After fix: load_recipe upgrades RecipeInfo → Recipe before kind check.
         """
-        from autoskillit.franchise._api import execute_dispatch
+        from autoskillit.fleet._api import execute_dispatch
 
         from autoskillit.recipe.schema import Recipe, RecipeInfo, RecipeKind, RecipeSource
 
-        tool_ctx.franchise_lock = asyncio.Lock()
+        tool_ctx.fleet_lock = asyncio.Lock()
         tool_ctx.executor = None
         repo = InMemoryRecipeRepository()
         recipe_info = RecipeInfo(
@@ -317,7 +317,7 @@ class TestDispatchFoodTruckValidation:
         Before fix: recipe_obj.ingredients raises AttributeError → L2_STARTUP_OR_CRASH.
         After fix: load_recipe upgrades RecipeInfo → Recipe; unknown ingredient detected.
         """
-        from autoskillit.franchise._api import execute_dispatch
+        from autoskillit.fleet._api import execute_dispatch
 
         from autoskillit.recipe.schema import (
             Recipe,
@@ -327,7 +327,7 @@ class TestDispatchFoodTruckValidation:
             RecipeSource,
         )
 
-        tool_ctx.franchise_lock = asyncio.Lock()
+        tool_ctx.fleet_lock = asyncio.Lock()
         tool_ctx.executor = None
         repo = InMemoryRecipeRepository()
         recipe_info = RecipeInfo(
@@ -362,8 +362,8 @@ class TestDispatchFoodTruckValidation:
             )
         )
 
-        assert result.get("error") == "franchise_unknown_ingredient", (
-            f"Expected franchise_unknown_ingredient error. Got: {result}"
+        assert result.get("error") == "fleet_unknown_ingredient", (
+            f"Expected fleet_unknown_ingredient error. Got: {result}"
         )
 
 
@@ -375,7 +375,7 @@ class TestDispatchFoodTruckValidation:
 class TestDispatchFoodTruckExecution:
     def _setup_standard_dispatch(self, tool_ctx, monkeypatch):
         """Wire tool_ctx for a successful standard dispatch."""
-        tool_ctx.franchise_lock = asyncio.Lock()
+        tool_ctx.fleet_lock = asyncio.Lock()
         repo = InMemoryRecipeRepository()
         recipe_info = _make_recipe_info("test-recipe")
         repo.add_recipe("test-recipe", recipe_info)
@@ -386,7 +386,7 @@ class TestDispatchFoodTruckExecution:
     @pytest.mark.anyio
     async def test_dispatch_food_truck_releases_lock_on_success(self, tool_ctx, monkeypatch):
         """Lock released after successful dispatch."""
-        from autoskillit.franchise._api import execute_dispatch
+        from autoskillit.fleet._api import execute_dispatch
 
         self._setup_standard_dispatch(tool_ctx, monkeypatch)
 
@@ -401,12 +401,12 @@ class TestDispatchFoodTruckExecution:
             quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
-        assert not tool_ctx.franchise_lock.locked()
+        assert not tool_ctx.fleet_lock.locked()
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_releases_lock_on_exception(self, tool_ctx, monkeypatch):
         """Lock released when executor raises."""
-        from autoskillit.franchise._api import execute_dispatch
+        from autoskillit.fleet._api import execute_dispatch
 
         self._setup_standard_dispatch(tool_ctx, monkeypatch)
         tool_ctx.executor.dispatch_food_truck = AsyncMock(
@@ -427,12 +427,12 @@ class TestDispatchFoodTruckExecution:
             )
         )
         assert result["success"] is False
-        assert not tool_ctx.franchise_lock.locked()
+        assert not tool_ctx.fleet_lock.locked()
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_releases_lock_on_cancellation(self, tool_ctx, monkeypatch):
         """Lock released on asyncio.CancelledError."""
-        from autoskillit.franchise._api import execute_dispatch
+        from autoskillit.fleet._api import execute_dispatch
 
         self._setup_standard_dispatch(tool_ctx, monkeypatch)
         tool_ctx.executor.dispatch_food_truck = AsyncMock(side_effect=asyncio.CancelledError())
@@ -449,15 +449,15 @@ class TestDispatchFoodTruckExecution:
                 quota_checker=_no_sleep_quota_checker,
                 quota_refresher=_noop_quota_refresher,
             )
-        assert not tool_ctx.franchise_lock.locked()
+        assert not tool_ctx.fleet_lock.locked()
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_success_envelope(self, tool_ctx, monkeypatch):
         """Returns envelope with success, dispatch_id, l2_payload, token_usage, l2_parse_source."""
         import dataclasses
 
-        from autoskillit.franchise._api import execute_dispatch
-        from autoskillit.franchise.result_parser import L2ParseResult
+        from autoskillit.fleet._api import execute_dispatch
+        from autoskillit.fleet.result_parser import L2ParseResult
 
         from tests.fakes import _DEFAULT_SKILL_RESULT
 
@@ -481,7 +481,7 @@ class TestDispatchFoodTruckExecution:
             source="stdout",
         )
         monkeypatch.setattr(
-            "autoskillit.franchise._api.parse_l2_result_block",
+            "autoskillit.fleet._api.parse_l2_result_block",
             lambda **_kwargs: canned_result,
         )
 
@@ -507,8 +507,8 @@ class TestDispatchFoodTruckExecution:
     @pytest.mark.anyio
     async def test_dispatch_food_truck_on_spawn_writes_pid(self, tool_ctx, monkeypatch):
         """on_spawn callback writes l2_pid into state.json via mark_dispatch_running."""
-        from autoskillit.franchise._api import _write_pid
-        from autoskillit.franchise.state import DispatchRecord, write_initial_state
+        from autoskillit.fleet._api import _write_pid
+        from autoskillit.fleet.state import DispatchRecord, write_initial_state
 
         state_path = tool_ctx.temp_dir / "dispatches" / "test-dispatch.json"
         state_path.parent.mkdir(parents=True, exist_ok=True)
@@ -531,8 +531,8 @@ class TestDispatchFoodTruckExecution:
     @pytest.mark.anyio
     async def test_dispatch_food_truck_passes_on_spawn_to_executor(self, tool_ctx, monkeypatch):
         """execute_dispatch passes an on_spawn that writes the PID to the state file."""
-        from autoskillit.franchise._api import execute_dispatch
-        from autoskillit.franchise.state import read_state
+        from autoskillit.fleet._api import execute_dispatch
+        from autoskillit.fleet.state import read_state
 
         self._setup_standard_dispatch(tool_ctx, monkeypatch)
 
@@ -568,7 +568,7 @@ class TestDispatchFoodTruckExecution:
     @pytest.mark.anyio
     async def test_dispatch_food_truck_invalidates_quota_cache(self, tool_ctx, monkeypatch):
         """After dispatch completes, quota cache is refreshed via background supervisor."""
-        from autoskillit.franchise._api import execute_dispatch
+        from autoskillit.fleet._api import execute_dispatch
 
         self._setup_standard_dispatch(tool_ctx, monkeypatch)
 
@@ -598,7 +598,7 @@ class TestDispatchFoodTruckExecution:
         self, tool_ctx, monkeypatch, tmp_path
     ):
         """Completed L2 session skill dir is cleaned up."""
-        from autoskillit.franchise._api import execute_dispatch
+        from autoskillit.fleet._api import execute_dispatch
 
         self._setup_standard_dispatch(tool_ctx, monkeypatch)
         import dataclasses
@@ -637,7 +637,7 @@ class TestDispatchFoodTruckExecution:
     @pytest.mark.anyio
     async def test_dispatch_food_truck_invalidates_quota_cache_file(self, tool_ctx, monkeypatch):
         """After dispatch, cache_invalidator is called with the configured cache path."""
-        from autoskillit.franchise._api import execute_dispatch
+        from autoskillit.fleet._api import execute_dispatch
 
         self._setup_standard_dispatch(tool_ctx, monkeypatch)
 
@@ -670,8 +670,8 @@ class TestDispatchFoodTruckExecution:
         import dataclasses
         import json
 
-        from autoskillit.franchise._api import execute_dispatch
-        from autoskillit.franchise.result_parser import L2ParseResult
+        from autoskillit.fleet._api import execute_dispatch
+        from autoskillit.fleet.result_parser import L2ParseResult
 
         from tests.fakes import _DEFAULT_SKILL_RESULT
 
@@ -684,7 +684,7 @@ class TestDispatchFoodTruckExecution:
             )
         )
         monkeypatch.setattr(
-            "autoskillit.franchise._api.parse_l2_result_block",
+            "autoskillit.fleet._api.parse_l2_result_block",
             lambda **_kwargs: L2ParseResult(
                 outcome="completed_clean",
                 payload={"success": True},

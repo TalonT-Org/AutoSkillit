@@ -84,6 +84,7 @@ async def resolve_remote_name(
     Falls back to "origin" if no remote qualifies.
     """
     for name in remotes:
+        proc = None
         try:
             proc = await asyncio.create_subprocess_exec(
                 "git",
@@ -102,5 +103,11 @@ async def resolve_remote_name(
                 continue
             return name
         except (TimeoutError, OSError):
+            if proc is not None and proc.returncode is None:
+                try:
+                    proc.kill()
+                    await proc.wait()
+                except OSError:
+                    pass
             continue
     return "origin"

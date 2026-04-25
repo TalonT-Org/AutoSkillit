@@ -106,10 +106,10 @@ echo "${CURRENT_BRANCH}" > "{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_NAME}/base
 # Set upstream tracking if possible:
 REMOTE=$(git remote get-url upstream >/dev/null 2>&1 && echo upstream || echo origin)
 if ! git fetch "$REMOTE" "${CURRENT_BRANCH}" 2>/dev/null; then
-    echo "NOTE: Branch '${CURRENT_BRANCH}' has no remote tracking ref on origin."
+    echo "NOTE: Branch '${CURRENT_BRANCH}' has no remote tracking ref on $REMOTE."
 fi
 if ! git -C "${WORKTREE_PATH}" branch --set-upstream-to="${REMOTE}/${CURRENT_BRANCH}" "${WORKTREE_NAME}" 2>/dev/null; then
-    echo "NOTE: Could not set upstream tracking for '${WORKTREE_NAME}' → 'origin/${CURRENT_BRANCH}'."
+    echo "NOTE: Could not set upstream tracking for '${WORKTREE_NAME}' → '$REMOTE/${CURRENT_BRANCH}'."
 fi
 ```
 

@@ -853,6 +853,7 @@ class TestFleetAutoGateBoot:
     @pytest.mark.anyio
     async def test_fleet_lifespan_auto_opens_gate(self, tool_ctx):
         """Fleet session: gate is open after _fleet_auto_gate_boot() runs."""
+        import os
         from unittest.mock import AsyncMock, MagicMock, patch
 
         from autoskillit.pipeline.gate import DefaultGateState
@@ -861,18 +862,30 @@ class TestFleetAutoGateBoot:
         tool_ctx.gate = DefaultGateState(enabled=False)
         tool_ctx.quota_refresh_task = None
 
-        with patch("autoskillit.server.tools_kitchen._write_hook_config"):
-            with patch("autoskillit.server.helpers._prime_quota_cache", new=AsyncMock()):
+        with patch(
+            "autoskillit.server.tools_kitchen._write_hook_config"
+        ) as mock_write_hook_config:
+            with patch(
+                "autoskillit.server.helpers._prime_quota_cache", new=AsyncMock()
+            ) as mock_prime_quota_cache:
                 with patch(
                     "autoskillit.pipeline.create_background_task",
                     return_value=MagicMock(),
-                ):
-                    with patch("autoskillit.core.register_active_kitchen"):
+                ) as mock_create_bg_task:
+                    with patch(
+                        "autoskillit.core.register_active_kitchen"
+                    ) as mock_register_kitchen:
                         await _fleet_auto_gate_boot(tool_ctx)
 
         assert tool_ctx.gate.enabled is True
         assert tool_ctx.kitchen_id is not None
         assert tool_ctx.active_recipe_packs == frozenset()
+        mock_write_hook_config.assert_called_once_with()
+        mock_prime_quota_cache.assert_awaited_once_with()
+        mock_create_bg_task.assert_called_once()
+        mock_register_kitchen.assert_called_once_with(
+            tool_ctx.kitchen_id, os.getpid(), str(Path.cwd())
+        )
 
     @pytest.mark.anyio
     async def test_fleet_lifespan_auto_gate_fails_open_on_hook_config_error(self, tool_ctx):

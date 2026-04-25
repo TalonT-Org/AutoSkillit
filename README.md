@@ -5,7 +5,7 @@
 AutoSkillit is a Claude Code plugin that runs YAML recipes through a two-tier
 orchestrator. Bundled recipes turn GitHub issues into merged PRs by chaining
 plan, dry-walkthrough, worktree, test, and PR-review skills against 42 MCP
-tools and 111 bundled skills.
+tools and 113 bundled skills.
 
 https://github.com/user-attachments/assets/bcd910c8-7269-46d6-a496-53b2cb24d212
 
@@ -33,8 +33,8 @@ autoskillit order implementation
 ## What it does
 
 Each bundled recipe is a sequenced graph of skill invocations. The orchestrator
-holds a kitchen of 40 kitchen-tagged MCP tools plus 2 free range tools (`open_kitchen`,
-`close_kitchen`), launches headless Claude sessions for the heavy work, and
+holds a kitchen of 42 kitchen-tagged MCP tools plus 3 free range tools (`open_kitchen`,
+`close_kitchen`, `disable_quota_guard`), launches headless Claude sessions for the heavy work, and
 routes verdicts through retry, merge, and review gates. The 5 bundled recipes
 are `implementation`, `implementation-groups`, `merge-prs`, `remediation`, and
 `research`.

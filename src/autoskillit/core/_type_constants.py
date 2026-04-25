@@ -390,7 +390,7 @@ FEATURE_REGISTRY: dict[str, FeatureDef] = {
             " into GitHub-issue-ready work packages"
         ),
         tool_tags=frozenset(),
-        skill_categories=frozenset(),
+        skill_categories=frozenset({"planner"}),
         import_package="autoskillit.planner",
         tier=1,
         default_enabled=False,

@@ -1,5 +1,7 @@
 import pytest
 
+pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
+
 
 def test_fleet_package_importable() -> None:
     from autoskillit.fleet import FLEET_MENU_TOOLS

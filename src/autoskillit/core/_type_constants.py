@@ -41,9 +41,12 @@ __all__ = [
     "SESSION_TYPE_ORCHESTRATOR",
     "SESSION_TYPE_LEAF",
     "HEADLESS_ENV_VAR",
+    "FLEET_MODE_ENV_VAR",
+    "FLEET_DISPATCH_MODE",
     "CAMPAIGN_ID_ENV_VAR",
     "DISPATCH_ID_ENV_VAR",
     "KITCHEN_SESSION_ID_ENV_VAR",
+    "FLEET_DISPATCH_TOOLS",
     "FLEET_ERROR_CODES",
     "FeatureDef",
     "FEATURE_REGISTRY",
@@ -62,6 +65,7 @@ SESSION_TYPE_LEAF: str = "leaf"
 HEADLESS_ENV_VAR: str = "AUTOSKILLIT_HEADLESS"
 CAMPAIGN_ID_ENV_VAR: str = "AUTOSKILLIT_CAMPAIGN_ID"
 FLEET_MODE_ENV_VAR: str = "AUTOSKILLIT_FLEET_MODE"
+FLEET_DISPATCH_MODE: str = "dispatch"
 DISPATCH_ID_ENV_VAR: str = "AUTOSKILLIT_DISPATCH_ID"
 KITCHEN_SESSION_ID_ENV_VAR: str = "AUTOSKILLIT_KITCHEN_SESSION_ID"
 
@@ -209,6 +213,15 @@ FLEET_TOOLS: frozenset[str] = frozenset(
     }
 )
 
+FLEET_DISPATCH_TOOLS: frozenset[str] = frozenset(
+    {
+        "list_recipes",
+        "load_recipe",
+        "fetch_github_issue",
+        "get_issue_title",
+    }
+)
+
 # Tags that are EXCLUSIVELY used for feature-gated visibility (not general kitchen tags).
 # When a feature is disabled, these tags are the ones suppressed via disable_components.
 # Tools with these tags AND a kitchen-core tag remain visible via the kitchen-core tag
@@ -290,8 +303,8 @@ RECIPE_PACK_TAGS: frozenset[str] = frozenset(RECIPE_PACK_REGISTRY.keys())
 # Tools with no functional category are absent from this map (empty intersection = no finding).
 TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     # github
-    "fetch_github_issue": frozenset({"github"}),
-    "get_issue_title": frozenset({"github"}),
+    "fetch_github_issue": frozenset({"github", "fleet-dispatch"}),
+    "get_issue_title": frozenset({"github", "fleet-dispatch"}),
     "report_bug": frozenset({"github"}),
     "prepare_issue": frozenset({"github"}),
     "enrich_issues": frozenset({"github"}),
@@ -330,8 +343,8 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     "reset_workspace": frozenset({"kitchen-core"}),
     "classify_fix": frozenset({"kitchen-core"}),
     # kitchen-core — recipe
-    "list_recipes": frozenset({"kitchen-core"}),
-    "load_recipe": frozenset({"kitchen-core"}),
+    "list_recipes": frozenset({"kitchen-core", "fleet-dispatch"}),
+    "load_recipe": frozenset({"kitchen-core", "fleet-dispatch"}),
     "validate_recipe": frozenset({"kitchen-core"}),
     "migrate_recipe": frozenset({"kitchen-core"}),
     # kitchen-core — status

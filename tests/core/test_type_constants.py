@@ -175,3 +175,17 @@ def test_is_feature_enabled_fleet_defaults_false() -> None:
     from autoskillit.core.feature_flags import is_feature_enabled
 
     assert is_feature_enabled("fleet", {}) is False
+
+
+def test_fleet_dispatch_tools_constant_exists() -> None:
+    """FLEET_DISPATCH_TOOLS is a frozenset of exactly the 4 fleet-dispatch discovery tools."""
+    from autoskillit.core import FLEET_DISPATCH_TOOLS
+
+    assert FLEET_DISPATCH_TOOLS == frozenset(
+        {
+            "list_recipes",
+            "load_recipe",
+            "fetch_github_issue",
+            "get_issue_title",
+        }
+    )

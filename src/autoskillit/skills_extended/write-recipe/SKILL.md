@@ -232,7 +232,7 @@ exp-lens-randomization-blocking, exp-lens-reproducibility-artifacts, exp-lens-se
 exp-lens-severity-testing, exp-lens-unit-interference, exp-lens-validity-threats, exp-lens-variance-stability,
 implement-experiment, implement-worktree, implement-worktree-no-merge, investigate, issue-splitter, make-arch-diag,
 make-campaign, make-experiment-diag, make-groups, make-plan, make-req, merge-pr, mermaid, migrate-recipes, open-integration-pr,
-open-kitchen, pipeline-summary, plan-experiment, plan-visualization, planner-analyze, planner-extract-domain, prepare-issue, prepare-pr, prepare-research-pr, process-issues, rectify, report-bug,
+open-kitchen, pipeline-summary, plan-experiment, plan-visualization, planner-analyze, planner-elaborate-assignment, planner-elaborate-phase, planner-extract-domain, planner-generate-phases, prepare-issue, prepare-pr, prepare-research-pr, process-issues, rectify, report-bug,
 resolve-claims-review, resolve-design-review, resolve-failures, resolve-merge-conflicts, resolve-research-review, resolve-review, retry-worktree, review-approach, review-design, review-pr, review-research-pr, run-experiment,
 scope, setup-project, smoke-task, sprint-planner, stage-data, triage-issues, troubleshoot-experiment,
 validate-audit, verify-diag,

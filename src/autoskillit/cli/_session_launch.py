@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from autoskillit.core import NamedResume, NoResume
+
 if TYPE_CHECKING:
     from autoskillit.core import ResumeSpec
 
@@ -53,3 +55,35 @@ def _run_interactive_session(
     if result.returncode != 0:
         sys.exit(result.returncode)
     return None
+
+
+def _launch_cook_session(
+    system_prompt: str,
+    *,
+    initial_message: str | None = None,
+    extra_env: dict[str, str] | None = None,
+    resume_spec: ResumeSpec = NoResume(),
+    project_dir: Path | None = None,
+) -> None:
+    """Launch an interactive Claude Code cook session with reload loop support."""
+    _max_reloads = 10
+    current_resume_spec = resume_spec
+    _current_initial_message = initial_message
+    seen_reload_ids: set[str] = set()
+    while True:
+        reload_id = _run_interactive_session(
+            system_prompt,
+            initial_message=_current_initial_message,
+            extra_env=extra_env,
+            resume_spec=current_resume_spec,
+            project_dir=project_dir,
+        )
+        if reload_id is None:
+            break
+        if len(seen_reload_ids) >= _max_reloads:
+            raise SystemExit(f"Too many reloads ({_max_reloads} max). Check for infinite loop.")
+        if reload_id in seen_reload_ids:
+            raise SystemExit(f"Repeated reload_id {reload_id!r} — aborting.")
+        seen_reload_ids.add(reload_id)
+        current_resume_spec = NamedResume(session_id=reload_id)
+        _current_initial_message = None

@@ -147,6 +147,13 @@ after significant architectural changes (new subpackages, major refactors).
 - **Partially covered functions**: Functions where some branches are untested
 - Exit code is always 0 (audit tool, not a gate)
 
+**Coverage oracle staleness guard:**
+`load_coverage_map()` (`tests/_test_filter.py:530`) returns `None` if `test-source-map.json`
+is older than 30 days. When this happens, Step 7 of the aggressive filter silently falls back
+to directory-level cascade — no error is raised. Refresh cadence:
+- Run `task coverage-audit` after any architectural change that adds or moves source files.
+- Run at least once per calendar month if using `AUTOSKILLIT_TEST_FILTER=aggressive` in CI.
+
 ```
 tests/
 ├── CLAUDE.md                            # xdist compatibility guidelines

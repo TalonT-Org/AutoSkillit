@@ -130,6 +130,7 @@ _COMMITTED_BY_DESIGN: frozenset[str] = frozenset(
     {
         "config.yaml",
         "recipes",
+        "test-source-map.json",
     }
 )
 

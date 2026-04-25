@@ -1016,7 +1016,7 @@ class TestFeatureGateVisibility:
             assert tool not in tool_names
 
     @pytest.mark.anyio
-    async def test_fleet_gate_backward_compat_franchise_env_var(self, monkeypatch):
+    async def test_fleet_gate_franchise_env_var_has_no_effect(self, monkeypatch):
         """AUTOSKILLIT_FEATURES__FRANCHISE=false is no longer honored (T2 removed backward compat).
 
         Only AUTOSKILLIT_FEATURES__FLEET controls fleet tool visibility.

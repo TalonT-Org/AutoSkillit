@@ -244,7 +244,7 @@ class TestSignalGuard:
         assert events.index("state_written") < events.index("guard_exited")
 
 
-def test_sighup_in_franchise_signal_list() -> None:
+def test_sighup_in_fleet_signal_list() -> None:
     """_franchise.py must pass signal.SIGHUP to open_signal_receiver (AST guard).
 
     Sending a real SIGHUP in tests is unsafe — before SIGHUP is registered,
@@ -279,7 +279,7 @@ def test_sighup_in_franchise_signal_list() -> None:
     )
 
 
-def test_franchise_signame_uses_sig_name_attribute() -> None:
+def test_fleet_signame_uses_sig_name_attribute() -> None:
     """_franchise.py must use sig.name for signame, not a hardcoded ternary (AST guard).
 
     Verifies that the old ``"SIGINT" if sig == signal.SIGINT else "SIGTERM"``

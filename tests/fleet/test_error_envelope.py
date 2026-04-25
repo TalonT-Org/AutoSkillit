@@ -16,8 +16,8 @@ pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature
 
 SRC_ROOT = Path(__file__).parent.parent.parent / "src" / "autoskillit"
 
-# Matches error code strings in the franchise/l2/dispatch/cleanup namespace
-_FRANCHISE_CODE_PATTERN = re.compile(r"^(fleet_|l2_|dispatch_|cleanup_)")
+# Matches error code strings in the fleet/l2/dispatch/cleanup namespace
+_FLEET_CODE_PATTERN = re.compile(r"^(fleet_|l2_|dispatch_|cleanup_)")
 
 
 class TestFleetErrorCodeEnum:
@@ -32,6 +32,7 @@ class TestFleetErrorCodeEnum:
             "fleet_hard_refusal_headless",
             "fleet_manifest_missing",
             "fleet_manifest_corrupted",
+            "fleet_lock_not_initialized",
             "l2_timeout",
             "l2_no_result_block",
             "l2_parse_failed",
@@ -148,7 +149,7 @@ class TestFleetErrorASTScan:
                 if not isinstance(value, ast.Constant):
                     continue
                 error_val = str(value.value)
-                if _FRANCHISE_CODE_PATTERN.match(error_val):
+                if _FLEET_CODE_PATTERN.match(error_val):
                     violations.append(
                         f"{path.name}:{node.lineno}: raw json.dumps with error={error_val!r}"
                     )

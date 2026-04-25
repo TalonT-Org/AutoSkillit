@@ -22,7 +22,7 @@ def test_fleet_error_code_class_exists() -> None:
     assert "fleet_parallel_refused" in FleetErrorCode._value2member_map_
 
 
-def test_franchise_error_code_class_gone() -> None:
+def test_fleet_error_code_class_gone() -> None:
     with pytest.raises(ImportError):
         from autoskillit.core import FranchiseErrorCode  # noqa: F401
 
@@ -39,31 +39,31 @@ def test_fleet_error_helper_exists() -> None:
     assert callable(fleet_error)
 
 
-def test_franchise_error_helper_gone() -> None:
+def test_fleet_error_helper_gone() -> None:
     with pytest.raises(ImportError):
         from autoskillit.core import franchise_error  # noqa: F401
 
 
 def test_feature_registry_fleet_tool_tags() -> None:
-    from autoskillit.core._type_constants import FEATURE_REGISTRY
+    from autoskillit.core import FEATURE_REGISTRY
 
     assert FEATURE_REGISTRY["fleet"].tool_tags == frozenset({"fleet"})
 
 
 def test_feature_registry_fleet_import_package() -> None:
-    from autoskillit.core._type_constants import FEATURE_REGISTRY
+    from autoskillit.core import FEATURE_REGISTRY
 
     assert FEATURE_REGISTRY["fleet"].import_package == "autoskillit.fleet"
 
 
 def test_feature_registry_franchise_entry_gone() -> None:
-    from autoskillit.core._type_constants import FEATURE_REGISTRY
+    from autoskillit.core import FEATURE_REGISTRY
 
     assert "franchise" not in FEATURE_REGISTRY
 
 
 def test_feature_reveal_tags_fleet() -> None:
-    from autoskillit.core._type_constants import FEATURE_REVEAL_TAGS
+    from autoskillit.core import FEATURE_REVEAL_TAGS
 
     assert FEATURE_REVEAL_TAGS == frozenset({"fleet"})
 

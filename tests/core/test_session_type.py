@@ -123,7 +123,7 @@ def test_session_type_fleet_case_insensitive(monkeypatch):
     assert session_type() is SessionType.FLEET
 
 
-def test_session_type_franchise_alias_emits_deprecation_warning(monkeypatch):
+def test_session_type_invalid_session_type_emits_warning(monkeypatch):
     from autoskillit.core import session_type
 
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "franchise")

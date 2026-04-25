@@ -397,6 +397,7 @@ class FleetErrorCode(StrEnum):
     FLEET_HARD_REFUSAL_HEADLESS = "fleet_hard_refusal_headless"
     FLEET_MANIFEST_MISSING = "fleet_manifest_missing"
     FLEET_MANIFEST_CORRUPTED = "fleet_manifest_corrupted"
+    FLEET_LOCK_NOT_INITIALIZED = "fleet_lock_not_initialized"
     L2_TIMEOUT = "l2_timeout"
     L2_NO_RESULT_BLOCK = "l2_no_result_block"
     L2_PARSE_FAILED = "l2_parse_failed"

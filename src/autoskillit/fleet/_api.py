@@ -105,7 +105,7 @@ async def execute_dispatch(
     lock = tool_ctx.fleet_lock
     if lock is None:
         return fleet_error(
-            FleetErrorCode.FLEET_MANIFEST_MISSING,
+            FleetErrorCode.FLEET_LOCK_NOT_INITIALIZED,
             "Fleet lock not initialized — open_kitchen with fleet mode.",
         )
     if lock.locked():

@@ -691,3 +691,19 @@ def test_git_grep_bre_is_excluded(tmp_path: Path) -> None:
     assert _BRE_RULE_ID not in [f.rule for f in findings], (
         "Rule must not fire for --grep= BRE context (git uses BRE for --grep=)"
     )
+
+
+# ---------------------------------------------------------------------------
+# T5: shared regex migration — _GIT_REMOTE_COMMAND_RE from _git_helpers
+# ---------------------------------------------------------------------------
+
+
+def test_git_remote_command_re_imported_from_git_helpers() -> None:
+    """_GIT_REMOTE_COMMAND_RE must be imported from _git_helpers, not defined locally."""
+    import autoskillit.recipe._git_helpers as _gh
+    import autoskillit.recipe.rules_skill_content as _rsc  # noqa: F401
+
+    # The regex object in rules_skill_content must be the same object as in _git_helpers
+    # (identity check confirms it's an import, not a re-definition).
+    assert _rsc._GIT_REMOTE_COMMAND_RE is _gh._GIT_REMOTE_COMMAND_RE
+    assert _rsc._LITERAL_ORIGIN_RE is _gh._LITERAL_ORIGIN_RE

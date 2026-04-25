@@ -93,10 +93,14 @@ class TestClassifyFix:
 
     @pytest.mark.anyio
     async def test_classify_fix_git_fetch_called_before_diff(self, tool_ctx, tmp_path):
-        """[FAILS NOW] git fetch must be issued before git diff."""
+        """git fetch must be issued before git diff."""
         tool_ctx.runner.push(_make_result(0, "", ""))  # fetch succeeds
         tool_ctx.runner.push(_make_result(0, "src/foo.py\n", ""))  # diff succeeds
-        await classify_fix(str(tmp_path), "main")
+        with patch(
+            "autoskillit.execution.remote_resolver.resolve_remote_name",
+            new=AsyncMock(return_value="origin"),
+        ):
+            await classify_fix(str(tmp_path), "main")
         assert tool_ctx.runner.call_args_list[0][0] == ["git", "fetch", "origin", "main"]
         assert tool_ctx.runner.call_args_list[1][0][0:3] == ["git", "diff", "--name-only"]
 
@@ -867,3 +871,46 @@ class TestCheckPrMergeable:
         call_cmd = tool_ctx.runner.call_args_list[-1][0]
         assert "-R" in call_cmd
         assert result["mergeable"] is True
+
+
+# ---------------------------------------------------------------------------
+# T3: classify_fix() remote resolution tests
+# ---------------------------------------------------------------------------
+
+
+class TestClassifyFixRemoteResolution:
+    """T3: classify_fix resolves the remote via resolve_remote_name internally."""
+
+    @pytest.mark.anyio
+    async def test_classify_fix_uses_upstream_when_available(self, tool_ctx, tmp_path):
+        """When resolve_remote_name returns 'upstream', fetch and diff use 'upstream'."""
+        tool_ctx.runner.push(_make_result(0, "", ""))  # fetch succeeds
+        tool_ctx.runner.push(_make_result(0, "src/foo.py\n", ""))  # diff succeeds
+
+        with patch(
+            "autoskillit.execution.remote_resolver.resolve_remote_name",
+            new=AsyncMock(return_value="upstream"),
+        ):
+            await classify_fix(str(tmp_path), "main")
+
+        fetch_cmd = tool_ctx.runner.call_args_list[0][0]
+        assert fetch_cmd == ["git", "fetch", "upstream", "main"]
+        diff_cmd = tool_ctx.runner.call_args_list[1][0]
+        assert "upstream/main...HEAD" in diff_cmd[-1]
+
+    @pytest.mark.anyio
+    async def test_classify_fix_falls_back_to_origin(self, tool_ctx, tmp_path):
+        """When resolve_remote_name returns 'origin', fetch and diff use 'origin'."""
+        tool_ctx.runner.push(_make_result(0, "", ""))  # fetch succeeds
+        tool_ctx.runner.push(_make_result(0, "src/bar.py\n", ""))  # diff succeeds
+
+        with patch(
+            "autoskillit.execution.remote_resolver.resolve_remote_name",
+            new=AsyncMock(return_value="origin"),
+        ):
+            await classify_fix(str(tmp_path), "main")
+
+        fetch_cmd = tool_ctx.runner.call_args_list[0][0]
+        assert fetch_cmd == ["git", "fetch", "origin", "main"]
+        diff_cmd = tool_ctx.runner.call_args_list[1][0]
+        assert "origin/main...HEAD" in diff_cmd[-1]

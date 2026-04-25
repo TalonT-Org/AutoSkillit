@@ -6,6 +6,7 @@ import re
 
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
+from autoskillit.recipe._git_helpers import _GIT_REMOTE_COMMAND_RE, _LITERAL_ORIGIN_RE
 from autoskillit.recipe.contracts import RESULT_CAPTURE_RE
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
@@ -91,4 +92,47 @@ def _check_run_cmd_find_rediscovery(ctx: ValidationContext) -> list[RuleFinding]
                     ),
                 )
             )
+    return findings
+
+
+@semantic_rule(
+    name="hardcoded-origin-in-run-cmd",
+    description="run_cmd step uses hardcoded 'origin' remote name",
+    severity=Severity.WARNING,
+)
+def _check_hardcoded_origin_in_run_cmd(ctx: ValidationContext) -> list[RuleFinding]:
+    has_set_url = any(
+        "git remote set-url origin" in (s.with_args or {}).get("cmd", "")
+        for s in ctx.recipe.steps.values()
+        if s.tool == "run_cmd"
+    )
+    if has_set_url:
+        return []
+
+    findings: list[RuleFinding] = []
+    for name, step in ctx.recipe.steps.items():
+        if step.tool != "run_cmd":
+            continue
+        cmd = (step.with_args or {}).get("cmd", "")
+        if not isinstance(cmd, str):
+            continue
+        for line in cmd.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            if _GIT_REMOTE_COMMAND_RE.search(stripped) and _LITERAL_ORIGIN_RE.search(stripped):
+                findings.append(
+                    RuleFinding(
+                        rule="hardcoded-origin-in-run-cmd",
+                        severity=Severity.WARNING,
+                        step_name=name,
+                        message=(
+                            f"Step '{name}' uses hardcoded 'origin' in a git command. "
+                            "In clone-isolated pipelines, origin is file://<clone_path>. "
+                            "Use: REMOTE=$(git remote get-url upstream >/dev/null 2>&1 "
+                            "&& echo upstream || echo origin)"
+                        ),
+                    )
+                )
+                break
     return findings

@@ -58,6 +58,7 @@ async def merge_worktree(
             extra={"worktree": worktree_path, "base": base_branch},
         )
 
+        from autoskillit.execution.remote_resolver import resolve_remote_name
         from autoskillit.server import _get_config, _get_ctx
         from autoskillit.server.git import perform_merge
 
@@ -65,10 +66,12 @@ async def merge_worktree(
         runner = tool_ctx.runner
         assert runner is not None, "No subprocess runner configured"
         _start = time.monotonic()
+        remote = await resolve_remote_name(worktree_path)
         try:
             result = await perform_merge(
                 worktree_path,
                 base_branch,
+                remote=remote,
                 config=_get_config(),
                 runner=runner,
                 tester=tool_ctx.tester,
@@ -146,14 +149,16 @@ async def classify_fix(
                 }
             )
 
+        from autoskillit.execution.remote_resolver import resolve_remote_name
         from autoskillit.server import _get_config, _get_ctx
         from autoskillit.server.git import _filter_changed_files
 
         tool_ctx = _get_ctx()
         _start = time.monotonic()
+        remote = await resolve_remote_name(worktree_path)
         try:
             fetch_rc, _, fetch_stderr = await _run_subprocess(
-                ["git", "fetch", "origin", base_branch],
+                ["git", "fetch", remote, base_branch],
                 cwd=worktree_path,
                 timeout=30,
             )
@@ -162,7 +167,7 @@ async def classify_fix(
                     {
                         "restart_scope": RestartScope.FULL_RESTART,
                         "reason": (
-                            f"git fetch origin {base_branch} failed — "
+                            f"git fetch {remote} {base_branch} failed — "
                             "remote-tracking ref may be stale. "
                             f"git error: {(fetch_stderr or '').strip()[:200]}"
                         ),
@@ -172,7 +177,7 @@ async def classify_fix(
                 )
 
             returncode, stdout, stderr = await _run_subprocess(
-                ["git", "diff", "--name-only", f"origin/{base_branch}...HEAD"],
+                ["git", "diff", "--name-only", f"{remote}/{base_branch}...HEAD"],
                 cwd=worktree_path,
                 timeout=30,
             )
@@ -193,7 +198,7 @@ async def classify_fix(
                     {
                         "restart_scope": RestartScope.FULL_RESTART,
                         "reason": (
-                            f"Cannot diff against origin/{base_branch}"
+                            f"Cannot diff against {remote}/{base_branch}"
                             f" — ref may not exist locally. "
                             f"git error: {stderr.strip()[:200]}"
                         ),

@@ -1,4 +1,4 @@
-"""Unit tests for execution.remote_resolver.resolve_remote_repo."""
+"""Unit tests for execution.remote_resolver.resolve_remote_repo and resolve_remote_name."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.execution import resolve_remote_repo
+from autoskillit.execution.remote_resolver import resolve_remote_name
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -142,3 +143,65 @@ def test_resolve_remote_has_timeout_in_source() -> None:
         for node in ast.walk(tree)
     )
     assert has_wait_for, "resolve_remote_repo should use asyncio.wait_for for timeout protection"
+
+
+# ---------------------------------------------------------------------------
+# resolve_remote_name() tests (T1)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_resolve_remote_name_upstream_exists(tmp_path: Path) -> None:
+    """upstream remote with HTTPS URL → returns 'upstream'."""
+    repo = _make_repo_with_remotes(
+        tmp_path,
+        origin="file:///local/clone/path",
+        upstream="https://github.com/org/repo.git",
+    )
+    result = await resolve_remote_name(str(repo))
+    assert result == "upstream"
+
+
+@pytest.mark.anyio
+async def test_resolve_remote_name_upstream_missing_falls_back_to_origin(tmp_path: Path) -> None:
+    """No upstream remote → falls back to 'origin'."""
+    repo = _make_repo_with_remotes(
+        tmp_path,
+        origin="https://github.com/org/repo.git",
+    )
+    result = await resolve_remote_name(str(repo))
+    assert result == "origin"
+
+
+@pytest.mark.anyio
+async def test_resolve_remote_name_upstream_is_file_url_falls_back_to_origin(
+    tmp_path: Path,
+) -> None:
+    """upstream has file:// URL (clone isolation) → rejected; falls back to 'origin'."""
+    repo = _make_repo_with_remotes(
+        tmp_path,
+        origin="https://github.com/org/repo.git",
+        upstream="file:///local/worktree/clone",
+    )
+    result = await resolve_remote_name(str(repo))
+    assert result == "origin"
+
+
+@pytest.mark.anyio
+async def test_resolve_remote_name_both_missing_returns_origin(tmp_path: Path) -> None:
+    """No remotes at all → safe default 'origin'."""
+    repo = _make_repo_with_remotes(tmp_path)
+    result = await resolve_remote_name(str(repo))
+    assert result == "origin"
+
+
+@pytest.mark.anyio
+async def test_resolve_remote_name_upstream_ssh_url(tmp_path: Path) -> None:
+    """upstream with SSH URL is valid (not file://) → returns 'upstream'."""
+    repo = _make_repo_with_remotes(
+        tmp_path,
+        origin="file:///local/clone",
+        upstream="git@github.com:org/repo.git",
+    )
+    result = await resolve_remote_name(str(repo))
+    assert result == "upstream"

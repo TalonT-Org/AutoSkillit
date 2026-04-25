@@ -804,3 +804,53 @@ class TestPerformMergeTargetBranchVerification:
         assert result["merge_succeeded"] is True
         # into_branch must match the verified branch from step 7.5
         assert result["into_branch"] == "dev"
+
+
+# ---------------------------------------------------------------------------
+# T2: perform_merge() remote parameter tests
+# ---------------------------------------------------------------------------
+
+
+def _make_runner_for_fetch(fake_wt: str) -> MockSubprocessRunner:
+    """Prepare a MockSubprocessRunner that succeeds through the dirty check then fails at fetch."""
+    runner = MockSubprocessRunner()
+    runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))  # rev-parse (worktree ok)
+    runner.push(_make_result(0, "feature-branch\n", ""))  # branch --show-current
+    runner.push(_make_result(0, "", ""))  # ls-files (no tracked generated files)
+    runner.push(_make_result(0, "", ""))  # status --porcelain (clean)
+    runner.push(_make_result(1, "", "fetch failed"))  # fetch → fail to stop early
+    return runner
+
+
+@pytest.mark.anyio
+async def test_perform_merge_uses_custom_remote(tmp_path):
+    """perform_merge(..., remote='upstream') must use 'upstream' in all git remote operations."""
+    from autoskillit.config import SafetyConfig
+    from autoskillit.server.git import perform_merge
+
+    fake_wt = str(tmp_path)
+    runner = _make_runner_for_fetch(fake_wt)
+    config = AutomationConfig(safety=SafetyConfig(test_gate_on_merge=False))
+
+    result = await perform_merge(fake_wt, "dev", remote="upstream", config=config, runner=runner)
+
+    assert result["failed_step"] == MergeFailedStep.FETCH
+    fetch_cmd = runner.call_args_list[4][0]  # 5th call is the fetch
+    assert fetch_cmd == ["git", "fetch", "upstream"]
+
+
+@pytest.mark.anyio
+async def test_perform_merge_defaults_to_origin(tmp_path):
+    """perform_merge() without remote kwarg uses 'origin' for backward compatibility."""
+    from autoskillit.config import SafetyConfig
+    from autoskillit.server.git import perform_merge
+
+    fake_wt = str(tmp_path)
+    runner = _make_runner_for_fetch(fake_wt)
+    config = AutomationConfig(safety=SafetyConfig(test_gate_on_merge=False))
+
+    result = await perform_merge(fake_wt, "dev", config=config, runner=runner)
+
+    assert result["failed_step"] == MergeFailedStep.FETCH
+    fetch_cmd = runner.call_args_list[4][0]  # 5th call is the fetch
+    assert fetch_cmd == ["git", "fetch", "origin"]

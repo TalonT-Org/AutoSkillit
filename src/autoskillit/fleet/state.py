@@ -1,6 +1,6 @@
 """Campaign state file management — DispatchRecord, atomic writes, resume algorithm.
 
-Provides the single-file state format for franchise campaign execution.
+Provides the single-file state format for fleet campaign execution.
 All writes use core.io.atomic_write for crash-safety (tmp + os.replace).
 """
 
@@ -269,7 +269,7 @@ def resume_campaign_from_state(
       2. Find first dispatch not in {success, skipped}.
       3. If running exists, mark it interrupted and continue from next.
       4. If failure exists and continue_on_failure=False, return None
-         with reason franchise_halted_on_failure (encoded via a sentinel).
+         with reason fleet_halted_on_failure (encoded via a sentinel).
       5. Return ResumeDecision with next_dispatch_name and completed block.
 
     Returns None if the state file is missing/corrupted. Returns a
@@ -292,7 +292,7 @@ def resume_campaign_from_state(
         if d.status == DispatchStatus.FAILURE and not continue_on_failure:
             return ResumeDecision(
                 next_dispatch_name="",
-                completed_dispatches_block="franchise_halted_on_failure",
+                completed_dispatches_block="fleet_halted_on_failure",
             )
 
     # Phase 3: build completed dispatches block and find next

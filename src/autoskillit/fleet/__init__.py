@@ -1,7 +1,7 @@
-"""Franchise sub-package: campaign dispatch orchestration.
+"""Fleet sub-package: campaign dispatch orchestration.
 
 Gateway exports per REQ-IMP-001 — consumers import from
-``autoskillit.franchise``, not from sub-modules.
+``autoskillit.fleet``, not from sub-modules.
 """
 
 from ._api import execute_dispatch
@@ -31,13 +31,13 @@ from .summary import (
     validate_campaign_summary,
 )
 
-# Tools that appear in the Franchise group in menu listings (cook + kitchen).
+# Tools that appear in the Fleet group in menu listings (cook + kitchen).
 # Both cli/_cook.py and server/tools_kitchen.py use this constant.
-FRANCHISE_MENU_TOOLS: tuple[str, ...] = ("dispatch_food_truck",)
+FLEET_MENU_TOOLS: tuple[str, ...] = ("dispatch_food_truck",)
 
 __all__ = [
     "execute_dispatch",
-    "FRANCHISE_MENU_TOOLS",
+    "FLEET_MENU_TOOLS",
     "_build_food_truck_prompt",
     "_build_l2_sous_chef_block",
     "L2ParseResult",

@@ -1,15 +1,11 @@
 """Tests for tiered conditional always-run logic (REQ-TIER-001 through REQ-TIER-005)."""
-import pytest
+
 from pathlib import Path
+
 from tests._test_filter import (
+    _INFRA_UNCONDITIONAL_FILES,
     FilterMode,
     build_test_scope,
-    _INFRA_UNCONDITIONAL_FILES,
-    _DOCS_TRIGGER_FILES,
-    _DOCS_TRIGGER_PREFIX,
-    _INFRA_HOOK_TRIGGER_PREFIX,
-    _INFRA_CI_TRIGGER_FILES,
-    _INFRA_CI_TRIGGER_PREFIX,
 )
 
 
@@ -21,9 +17,21 @@ def _make_tests_root(tmp_path: Path, dirs: list[str]) -> Path:
 
 
 ALL_DIRS = [
-    "core", "config", "execution", "pipeline", "workspace", "recipe",
-    "migration", "server", "cli", "hooks", "skills", "arch", "contracts",
-    "infra", "docs",
+    "core",
+    "config",
+    "execution",
+    "pipeline",
+    "workspace",
+    "recipe",
+    "migration",
+    "server",
+    "cli",
+    "hooks",
+    "skills",
+    "arch",
+    "contracts",
+    "infra",
+    "docs",
 ]
 
 

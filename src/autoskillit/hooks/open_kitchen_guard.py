@@ -77,7 +77,7 @@ def main() -> None:
             sys.stdout.write(payload + "\n")
             sys.exit(0)
 
-        if session_type not in ("orchestrator", "fleet"):
+        if session_type not in ("orchestrator",):
             # leaf, unset, or invalid — deny (fail-closed)
             payload = json.dumps(
                 {

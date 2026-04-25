@@ -1012,6 +1012,7 @@ class TestFeatureGateVisibility:
         async with Client(mcp) as client:
             tools = await client.list_tools()
         tool_names = {t.name for t in tools}
+        assert FRANCHISE_TOOLS
         for tool in FRANCHISE_TOOLS:
             assert tool not in tool_names
 
@@ -1032,6 +1033,7 @@ class TestFeatureGateVisibility:
         async with Client(mcp) as client:
             tools = await client.list_tools()
         tool_names = {t.name for t in tools}
+        assert FRANCHISE_TOOLS
         for tool in FRANCHISE_TOOLS:
             assert tool not in tool_names
 
@@ -1052,6 +1054,7 @@ class TestFeatureGateVisibility:
         async with Client(mcp) as client:
             tools = await client.list_tools()
         tool_names = {t.name for t in tools}
+        assert FRANCHISE_TOOLS
         for tool in FRANCHISE_TOOLS:
             assert tool in tool_names
 
@@ -1072,5 +1075,6 @@ class TestFeatureGateVisibility:
         async with Client(mcp) as client:
             tools = await client.list_tools()
         tool_names = {t.name for t in tools}
+        assert FRANCHISE_TOOLS
         for tool in FRANCHISE_TOOLS:
             assert tool in tool_names

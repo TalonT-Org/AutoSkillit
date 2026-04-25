@@ -218,8 +218,8 @@ def _require_orchestrator_exact(tool_name: str = "") -> str | None:
 
     if st is SessionType.FRANCHISE or st is SessionType.FLEET:
         msg = (
-            f"{tool_name} cannot be called from franchise sessions. "
-            "Franchise sessions do not have a kitchen."
+            f"{tool_name} cannot be called from {st.value} sessions. "
+            f"{st.value.capitalize()} sessions do not have a kitchen."
             if tool_name
             else None
         )
@@ -234,9 +234,10 @@ def _require_orchestrator_exact(tool_name: str = "") -> str | None:
 
 
 def _require_franchise(tool_name: str = "") -> str | None:
-    """Return headless_error JSON if session is not franchise-tier; None if permitted.
+    """Return headless_error JSON if session is not franchise/fleet-tier; None if permitted.
 
-    No interactive bypass — franchise is a specific tier, not a headless guard.
+    Permits both FRANCHISE and FLEET sessions (T1 union model).
+    No interactive bypass — fleet/franchise is a specific tier, not a headless guard.
     """
     st = session_type()
     if st is SessionType.FRANCHISE or st is SessionType.FLEET:

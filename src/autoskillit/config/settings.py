@@ -357,8 +357,8 @@ class AutomationConfig:
                 raise ConfigSchemaError(
                     f"Feature key must be a string, got {type(name).__name__!r}: {name!r}"
                 )
-            # Shim: "franchise" config key → "fleet" alias when franchise is absent from registry.
-            # Dormant in T1 (franchise still in FEATURE_REGISTRY); activates after T2 rename.
+            # Shim: "franchise" config key → "fleet" alias when "franchise" is not in the registry
+            # but "fleet" is. Guards the case where only one of the two keys exists at runtime.
             if (
                 name not in FEATURE_REGISTRY
                 and name == "franchise"

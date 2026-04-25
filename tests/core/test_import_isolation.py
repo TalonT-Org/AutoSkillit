@@ -5,6 +5,10 @@ from __future__ import annotations
 import subprocess
 import sys
 
+import pytest
+
+pytestmark = [pytest.mark.layer("core"), pytest.mark.medium]
+
 
 def _run_isolation_check(import_stmt: str) -> set[str]:
     """Return the set of autoskillit.fleet.* modules loaded after import_stmt runs."""

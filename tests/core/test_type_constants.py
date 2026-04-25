@@ -201,8 +201,19 @@ def test_fleet_menu_tools_in_type_constants() -> None:
 
 def test_fleet_menu_tools_not_in_fleet_init() -> None:
     """FLEET_MENU_TOOLS must no longer be exported from fleet.__init__."""
-    import autoskillit.fleet as fleet_pkg
+    import subprocess
+    import sys
 
-    assert not hasattr(fleet_pkg, "FLEET_MENU_TOOLS"), (
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import autoskillit.fleet as f; print(hasattr(f, 'FLEET_MENU_TOOLS'))",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, f"Subprocess failed:\n{result.stderr}"
+    assert result.stdout.strip() == "False", (
         "FLEET_MENU_TOOLS still lives in fleet.__init__; move it to core._type_constants"
     )

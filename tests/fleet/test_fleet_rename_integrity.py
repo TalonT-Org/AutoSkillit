@@ -4,7 +4,7 @@ pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature
 
 
 def test_fleet_package_importable() -> None:
-    from autoskillit.fleet import FLEET_MENU_TOOLS
+    from autoskillit.core import FLEET_MENU_TOOLS
 
     assert FLEET_MENU_TOOLS == ("dispatch_food_truck",)
 

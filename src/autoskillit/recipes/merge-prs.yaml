@@ -280,7 +280,7 @@ steps:
     tool: run_cmd
     with:
       cmd: >
-        COUNTER_FILE="${{ context.work_dir }}/.autoskillit/temp/eject_count" &&
+        COUNTER_FILE="${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/eject_count" &&
         mkdir -p "$(dirname "$COUNTER_FILE")" &&
         COUNT=$(cat "$COUNTER_FILE" 2>/dev/null || echo 0) &&
         COUNT=$((COUNT + 1)) &&

@@ -724,7 +724,7 @@ steps:
   pre_resolve_rebase:
     tool: run_cmd
     with:
-      cmd: >
+      cmd: |
         REMOTE=$(git -C ${{ context.work_dir }} remote get-url upstream >/dev/null 2>&1 && echo upstream || echo origin) &&
         git -C ${{ context.work_dir }} fetch "$REMOTE" &&
         git -C ${{ context.work_dir }} rebase "$REMOTE"/${{ inputs.base_branch }}
@@ -895,7 +895,7 @@ steps:
     tool: run_cmd
     with:
       cmd: >
-        COUNTER_FILE="${{ context.work_dir }}/.autoskillit/temp/eject_count" &&
+        COUNTER_FILE="${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/eject_count" &&
         mkdir -p "$(dirname "$COUNTER_FILE")" &&
         COUNT=$(cat "$COUNTER_FILE" 2>/dev/null || echo 0) &&
         COUNT=$((COUNT + 1)) &&
@@ -914,13 +914,13 @@ steps:
     on_failure: release_issue_failure
     note: >
       Circuit breaker for the queue ejection loop. Tracks ejection count in a
-      file-based counter under .autoskillit/temp/. After 3 ejections, routes
+      file-based counter under {{AUTOSKILLIT_TEMP}}/. After 3 ejections, routes
       to release_issue_failure to prevent infinite re-enqueue cycles.
 
   queue_ejected_fix:
     tool: run_cmd
     with:
-      cmd: >
+      cmd: |
         REMOTE=$(git remote get-url upstream >/dev/null 2>&1 && echo upstream || echo origin) &&
         if git fetch "$REMOTE" ${{ inputs.base_branch }} && git rebase "$REMOTE"/${{ inputs.base_branch }};
         then echo 'clean';
@@ -1065,7 +1065,7 @@ steps:
   direct_merge_conflict_fix:
     tool: run_cmd
     with:
-      cmd: >
+      cmd: |
         REMOTE=$(git remote get-url upstream >/dev/null 2>&1 && echo upstream || echo origin) &&
         if git fetch "$REMOTE" ${{ inputs.base_branch }} && git rebase "$REMOTE"/${{ inputs.base_branch }};
         then echo 'clean';
@@ -1178,7 +1178,7 @@ steps:
   immediate_merge_conflict_fix:
     tool: run_cmd
     with:
-      cmd: >
+      cmd: |
         REMOTE=$(git remote get-url upstream >/dev/null 2>&1 && echo upstream || echo origin) &&
         if git fetch "$REMOTE" ${{ inputs.base_branch }} && git rebase "$REMOTE"/${{ inputs.base_branch }};
         then echo 'clean';
@@ -1262,7 +1262,7 @@ steps:
   detect_ci_conflict:
     tool: run_cmd
     with:
-      cmd: >
+      cmd: |
         REMOTE=$(git remote get-url upstream >/dev/null 2>&1 && echo upstream || echo origin) &&
         git fetch "$REMOTE" ${{ inputs.base_branch }} &&
         ! git merge-base --is-ancestor "$REMOTE"/${{ inputs.base_branch }} HEAD

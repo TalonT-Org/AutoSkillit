@@ -258,3 +258,4 @@ franchise:
 
 features:
   franchise: false  # Disabled by default; enabled via project config on integration
+  planner: false  # EXPERIMENTAL — off by default

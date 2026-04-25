@@ -183,6 +183,9 @@ generic_automation_mcp/
 │   ├── skills.py            #   SkillResolver — bundled skill listing
 │   └── worktree.py
 │
+├── planner/                 # L1
+│   └── __init__.py          #   Progressive resolution planner — __all__ = []
+│
 ├── recipe/                  # L2
 │   ├── __init__.py
 │   ├── contracts.py         #   Contract card generation + staleness triage

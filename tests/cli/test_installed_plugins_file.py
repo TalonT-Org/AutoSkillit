@@ -83,3 +83,25 @@ def test_remove_is_noop_when_file_absent(tmp_path: Path) -> None:
     p = tmp_path / "no_file.json"
     InstalledPluginsFile(p).remove("autoskillit@autoskillit-local")  # should not raise
     assert not p.exists()
+
+
+def test_installed_plugins_read_logs_on_json_error(tmp_path: Path) -> None:
+    """_read() emits a WARNING log when installed_plugins.json contains invalid JSON."""
+    import logging
+
+    p = tmp_path / "installed_plugins.json"
+    p.write_text("{invalid json}")
+
+    # caplog is unreliable under xdist when structlog's autouse fixture intercepts the
+    # handler chain. Attach a handler directly to the specific logger instead.
+    captured: list[logging.LogRecord] = []
+    handler = logging.Handler()
+    handler.emit = captured.append  # type: ignore[assignment]
+    logger = logging.getLogger("autoskillit.cli._installed_plugins")  # noqa: TID251
+    logger.addHandler(handler)
+    try:
+        result = InstalledPluginsFile(p).get_plugins()
+    finally:
+        logger.removeHandler(handler)
+    assert result == {}
+    assert any("installed_plugins" in r.getMessage().lower() for r in captured)

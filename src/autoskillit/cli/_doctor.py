@@ -328,8 +328,15 @@ def _check_editable_install_source_exists() -> DoctorResult:
         Severity.ERROR,
         check_name,
         f"autoskillit is installed from a deleted directory: {src_path}. "
-        f"Fix: uv tool install --force autoskillit && autoskillit install",
+        f"Fix: restore the editable source directory or re-run installation.",
     )
+
+
+def _format_upgrade_cmd(info: object) -> str:
+    from autoskillit.cli._install_info import upgrade_command
+
+    cmd = upgrade_command(info)  # type: ignore[arg-type]
+    return " ".join(cmd) if cmd else "autoskillit update"
 
 
 def _check_stale_entry_points() -> DoctorResult:
@@ -356,12 +363,16 @@ def _check_stale_entry_points() -> DoctorResult:
         return DoctorResult(Severity.OK, check_name, "No stale autoskillit entry points found")
 
     stale_list = ", ".join(stale)
+    from autoskillit.cli._install_info import detect_install
+
+    _info = detect_install()
+    _cmd_str = _format_upgrade_cmd(_info)
     return DoctorResult(
         Severity.WARNING,
         check_name,
         f"Found autoskillit entry point(s) outside ~/.local/bin: {stale_list}. "
         f"These may be stale editable installs. "
-        f"Fix: uv tool install --force autoskillit && autoskillit install",
+        f"Fix: {_cmd_str} && autoskillit install",
     )
 
 
@@ -452,11 +463,12 @@ def _check_source_version_drift(home: Path | None = None) -> DoctorResult:
 
         installed_short = (info.commit_id or "unknown")[:8]
         ref_short = ref_sha[:8]
+        _cmd_str = _format_upgrade_cmd(info)
         return DoctorResult(
             Severity.WARNING,
             check_name,
             f"Source drift: installed={installed_short}, reference={ref_short}. "
-            f"Run the appropriate install command to update.",
+            f"Run: {_cmd_str} && autoskillit install",
         )
 
     except Exception:
@@ -1046,22 +1058,19 @@ def run_doctor(*, output_json: bool = False) -> None:
     # Check 4b: Config secrets placement
     results.append(_check_config_layers_for_secrets())
 
-    # Check 5: Version consistency — package version must match plugin.json
-    import importlib.metadata
-    import importlib.resources as _ir
+    # Check 5: Version consistency — cached plugin.json must match installed package
+    from autoskillit.version import version_info as _version_info
 
-    pkg_version = importlib.metadata.version("autoskillit")
-    plugin_json_path = Path(str(_ir.files("autoskillit"))) / ".claude-plugin" / "plugin.json"
-    try:
-        plugin_version = json.loads(plugin_json_path.read_text()).get("version")
-    except (json.JSONDecodeError, OSError):
-        plugin_version = None
-    if plugin_version == pkg_version:
+    _cache_plugin_dir = (
+        Path.home() / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
+    )
+    vi = _version_info(plugin_dir=str(_cache_plugin_dir))
+    if vi["match"]:
         results.append(
             DoctorResult(
                 Severity.OK,
                 "version_consistency",
-                f"Version {pkg_version} installed",
+                f"Version {vi['package_version']} — plugin cache is current",
             )
         )
     else:
@@ -1069,8 +1078,9 @@ def run_doctor(*, output_json: bool = False) -> None:
             DoctorResult(
                 Severity.WARNING,
                 "version_consistency",
-                f"Package version {pkg_version} does not match "
-                f"plugin.json {plugin_version!r}. Reinstall autoskillit to fix.",
+                f"Plugin cache version {vi['plugin_json_version']!r} does not match "
+                f"installed package {vi['package_version']!r}. "
+                f"Run 'autoskillit install' to sync.",
             )
         )
 

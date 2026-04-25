@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import io
 import json
+import subprocess
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -87,6 +88,7 @@ def _make_mock_client(
         ("CLAUDECODE", "1"),
         ("CI", "1"),
         ("AUTOSKILLIT_SKIP_STALE_CHECK", "1"),
+        ("AUTOSKILLIT_SKIP_UPDATE_CHECK", "1"),
         ("AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK", "1"),
     ],
 )
@@ -102,6 +104,7 @@ def test_run_update_checks_skips_on_guard_env_var(
         "CLAUDECODE",
         "CI",
         "AUTOSKILLIT_SKIP_STALE_CHECK",
+        "AUTOSKILLIT_SKIP_UPDATE_CHECK",
         "AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK",
     ]:
         if other != env_var:
@@ -124,6 +127,7 @@ def test_run_update_checks_skips_non_tty_stdin(
     monkeypatch.delenv("CLAUDECODE", raising=False)
     monkeypatch.delenv("CI", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_SKIP_STALE_CHECK", raising=False)
+    monkeypatch.delenv("AUTOSKILLIT_SKIP_UPDATE_CHECK", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK", raising=False)
     fake_stdin = io.StringIO()
     fake_stdout = io.StringIO()
@@ -144,6 +148,7 @@ def test_run_update_checks_skips_non_tty_stdout(
     monkeypatch.delenv("CLAUDECODE", raising=False)
     monkeypatch.delenv("CI", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_SKIP_STALE_CHECK", raising=False)
+    monkeypatch.delenv("AUTOSKILLIT_SKIP_UPDATE_CHECK", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK", raising=False)
 
     fake_stdin = MagicMock()
@@ -170,6 +175,7 @@ def test_run_update_checks_skips_local_and_unknown_install_types(
     monkeypatch.delenv("CLAUDECODE", raising=False)
     monkeypatch.delenv("CI", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_SKIP_STALE_CHECK", raising=False)
+    monkeypatch.delenv("AUTOSKILLIT_SKIP_UPDATE_CHECK", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_FORCE_UPDATE_CHECK", raising=False)
 
@@ -493,6 +499,7 @@ def _setup_run_checks(
     monkeypatch.delenv("CLAUDECODE", raising=False)
     monkeypatch.delenv("CI", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_SKIP_STALE_CHECK", raising=False)
+    monkeypatch.delenv("AUTOSKILLIT_SKIP_UPDATE_CHECK", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_FORCE_UPDATE_CHECK", raising=False)
 
@@ -651,7 +658,7 @@ def test_yes_runs_upgrade_command_from_install_info_not_hardcoded(
     run_calls: list[list[str]] = []
     monkeypatch.setattr(
         "autoskillit.cli._update_checks.subprocess.run",
-        lambda cmd, **kw: run_calls.append(list(cmd)),
+        lambda cmd, **kw: run_calls.append(list(cmd)) or subprocess.CompletedProcess(cmd, 0),
     )
     monkeypatch.setattr("autoskillit.cli._update_checks.terminal_guard", MagicMock())
     monkeypatch.setattr(
@@ -683,7 +690,7 @@ def test_yes_runs_autoskillit_install_after_upgrade_command(
     monkeypatch.setattr("autoskillit.cli._update_checks.terminal_guard", FakeTG)
     monkeypatch.setattr(
         "autoskillit.cli._update_checks.subprocess.run",
-        lambda cmd, **kw: run_calls.append(list(cmd)),
+        lambda cmd, **kw: run_calls.append(list(cmd)) or subprocess.CompletedProcess(cmd, 0),
     )
     monkeypatch.setattr(
         "autoskillit.cli._update_checks._verify_update_result", lambda *a, **kw: True
@@ -709,7 +716,9 @@ def test_yes_passes_skip_env_to_subprocess(
     monkeypatch.setattr("autoskillit.cli._update_checks.terminal_guard", FakeTG)
     monkeypatch.setattr(
         "autoskillit.cli._update_checks.subprocess.run",
-        lambda cmd, **kw: env_passed.append(kw.get("env", {})),
+        lambda cmd, **kw: (
+            env_passed.append(kw.get("env", {})) or subprocess.CompletedProcess(cmd, 0)
+        ),
     )
     monkeypatch.setattr(
         "autoskillit.cli._update_checks._verify_update_result", lambda *a, **kw: True
@@ -717,6 +726,7 @@ def test_yes_passes_skip_env_to_subprocess(
     run_update_checks(home=tmp_path)
     for env in env_passed:
         assert env.get("AUTOSKILLIT_SKIP_STALE_CHECK") == "1"
+        assert env.get("AUTOSKILLIT_SKIP_UPDATE_CHECK") == "1"
         assert env.get("AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK") == "1"
 
 
@@ -735,7 +745,10 @@ def test_yes_single_invocation_exits_without_any_other_prompt(
             return False
 
     monkeypatch.setattr("autoskillit.cli._update_checks.terminal_guard", FakeTG)
-    monkeypatch.setattr("autoskillit.cli._update_checks.subprocess.run", lambda *a, **kw: None)
+    monkeypatch.setattr(
+        "autoskillit.cli._update_checks.subprocess.run",
+        lambda *a, **kw: subprocess.CompletedProcess([], 0),
+    )
     monkeypatch.setattr(
         "autoskillit.cli._update_checks._verify_update_result", lambda *a, **kw: True
     )
@@ -1589,3 +1602,96 @@ def test_all_dismissed_signals_produce_no_interactive_prompt(
     assert "autoskillit update" in combined, (
         "All-dismissed signals must produce passive notification containing 'autoskillit update'"
     )
+
+
+# ---------------------------------------------------------------------------
+# T1 — _verify_update_result uses install-type-aware upgrade command
+# ---------------------------------------------------------------------------
+
+
+def test_verify_update_result_prints_git_vcs_stable_command(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    import importlib.metadata
+
+    from autoskillit.cli._update_checks import _verify_update_result
+
+    info = _make_stable_info()
+    with patch.object(importlib.metadata, "version", return_value="0.9.0"):
+        result = _verify_update_result(info, "0.9.0", "0.9.1", tmp_path, {})
+    assert result is False
+    out = capsys.readouterr().out
+    assert "uv tool upgrade autoskillit" in out
+    assert "autoskillit update" in out
+
+
+def test_verify_update_result_prints_git_vcs_integration_command(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    import importlib.metadata
+
+    from autoskillit.cli._update_checks import _verify_update_result
+
+    info = _make_integration_info()
+    with patch.object(importlib.metadata, "version", return_value="0.9.0"):
+        result = _verify_update_result(info, "0.9.0", "0.9.1", tmp_path, {})
+    assert result is False
+    out = capsys.readouterr().out
+    assert "git+" in out
+    assert "uv tool upgrade autoskillit" not in out
+
+
+# ---------------------------------------------------------------------------
+# T2 — _run_update_sequence warns when autoskillit install exits non-zero
+# ---------------------------------------------------------------------------
+
+
+def test_run_update_sequence_warns_on_install_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    from autoskillit.cli._update_checks import _run_update_sequence
+
+    class FakeTG:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    info = _make_stable_info()
+    upgrade_ok = subprocess.CompletedProcess([], returncode=0)
+    install_fail = subprocess.CompletedProcess([], returncode=1)
+    calls = iter([upgrade_ok, install_fail])
+    monkeypatch.setattr(
+        "autoskillit.cli._update_checks.subprocess.run", lambda *a, **kw: next(calls)
+    )
+    monkeypatch.setattr("autoskillit.cli._update_checks.terminal_guard", FakeTG)
+    monkeypatch.setattr(
+        "autoskillit.cli._update_checks._fetch_latest_version", lambda *a, **kw: "0.9.1"
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli._update_checks._verify_update_result", lambda *a, **kw: True
+    )
+    _run_update_sequence(info, "0.9.0", tmp_path, {}, {})
+    out = capsys.readouterr().out
+    assert "autoskillit install" in out
+    assert "stale" in out.lower()
+
+
+# ---------------------------------------------------------------------------
+# T6 — binary_snoozed is never written by _verify_update_result
+# ---------------------------------------------------------------------------
+
+
+def test_verify_update_result_does_not_write_binary_snoozed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import importlib.metadata
+
+    from autoskillit.cli._update_checks import _verify_update_result
+
+    info = _make_stable_info(commit_id="abc")
+    state: dict = {}
+    with patch.object(importlib.metadata, "version", return_value="0.9.0"):
+        _verify_update_result(info, "0.9.0", "0.9.1", tmp_path, state)
+    assert "binary_snoozed" not in state

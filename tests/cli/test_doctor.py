@@ -90,10 +90,16 @@ class TestCLIDoctor:
         (tmp_path / ".pre-commit-config.yaml").write_text(
             "repos:\n  - repo: dummy\n    hooks:\n      - id: gitleaks\n"
         )
-        # Create plugin cache directory for Check 2c
-        (tmp_path / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit").mkdir(
-            parents=True, exist_ok=True
+        # Create plugin cache directory for Check 2c + version_consistency plugin.json
+        import importlib.metadata
+
+        _cache_dir = (
+            tmp_path / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
         )
+        _cache_dir.mkdir(parents=True, exist_ok=True)
+        _plugin_json = _cache_dir / ".claude-plugin" / "plugin.json"
+        _plugin_json.parent.mkdir(parents=True, exist_ok=True)
+        _plugin_json.write_text(json.dumps({"version": importlib.metadata.version("autoskillit")}))
         # Create installed_plugins.json for Check 2d
         (tmp_path / ".claude" / "plugins" / "installed_plugins.json").write_text(
             json.dumps({"version": 2, "plugins": {"autoskillit@autoskillit-local": {}}})
@@ -197,11 +203,28 @@ class TestCLIDoctor:
         assert Severity.WARNING not in _NON_PROBLEM, "WARNING must not be in _NON_PROBLEM"
 
     def test_doctor_passes_when_versions_match(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+        request: pytest.FixtureRequest,
     ) -> None:
-        """doctor reports ok when plugin.json version matches package."""
+        """doctor reports ok when cached plugin.json version matches package."""
+        import importlib.metadata
+
+        pkg_version = importlib.metadata.version("autoskillit")
+        cache_dir = (
+            tmp_path / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
+        )
+        plugin_json = cache_dir / ".claude-plugin" / "plugin.json"
+        plugin_json.parent.mkdir(parents=True)
+        plugin_json.write_text(json.dumps({"version": pkg_version}))
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
+        from autoskillit.version import version_info as _vi
+
+        _vi.cache_clear()
+        request.addfinalizer(_vi.cache_clear)
         cli.doctor(output_json=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)
@@ -2417,3 +2440,94 @@ class TestGroupNFeatureGateDoctorChecks:
         assert result.severity == Severity.ERROR
         assert "bad_feature" in result.message
         assert "nonexistent.pkg" in result.message
+
+
+# ---------------------------------------------------------------------------
+# T3 — version_consistency reads cache dir, not source tree
+# ---------------------------------------------------------------------------
+
+
+def test_doctor_version_consistency_detects_stale_cache(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+    request: pytest.FixtureRequest,
+) -> None:
+    """Check 5 warns when the CACHED plugin.json version is behind the package."""
+    import importlib.metadata
+
+    from autoskillit.version import version_info as _vi
+
+    cache_dir = tmp_path / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
+    plugin_json = cache_dir / ".claude-plugin" / "plugin.json"
+    plugin_json.parent.mkdir(parents=True)
+    plugin_json.write_text('{"version": "0.8.0"}')
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(importlib.metadata, "version", lambda _: "0.9.0")
+    _vi.cache_clear()
+    request.addfinalizer(_vi.cache_clear)
+    cli.doctor(output_json=True)
+    data = json.loads(capsys.readouterr().out)
+    vc = next(r for r in data["results"] if r["check"] == "version_consistency")
+    assert vc["severity"] == "warning"
+    assert "autoskillit install" in vc["message"]
+
+
+def test_doctor_version_consistency_ok_when_cache_matches(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+    request: pytest.FixtureRequest,
+) -> None:
+    """Check 5 reports OK when cached plugin.json version matches the package."""
+    import importlib.metadata
+
+    from autoskillit.version import version_info as _vi
+
+    cache_dir = tmp_path / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
+    plugin_json = cache_dir / ".claude-plugin" / "plugin.json"
+    plugin_json.parent.mkdir(parents=True)
+    plugin_json.write_text('{"version": "0.9.0"}')
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(importlib.metadata, "version", lambda _: "0.9.0")
+    _vi.cache_clear()
+    request.addfinalizer(_vi.cache_clear)
+    cli.doctor(output_json=True)
+    data = json.loads(capsys.readouterr().out)
+    vc = next(r for r in data["results"] if r["check"] == "version_consistency")
+    assert vc["severity"] == "ok"
+
+
+# ---------------------------------------------------------------------------
+# T4 — _check_source_version_drift remediation uses specific upgrade command
+# ---------------------------------------------------------------------------
+
+
+def test_source_version_drift_remediation_contains_upgrade_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """_check_source_version_drift WARNING message contains the install-type-specific command."""
+    from autoskillit.cli._doctor import _check_source_version_drift
+    from autoskillit.cli._install_info import InstallInfo, InstallType
+    from autoskillit.core import Severity
+
+    info = InstallInfo(
+        install_type=InstallType.GIT_VCS,
+        commit_id="aaaa1111bbbb",
+        requested_revision="stable",
+        url="https://github.com/TalonT-Org/AutoSkillit.git",
+        editable_source=None,
+    )
+    monkeypatch.setattr("autoskillit.cli._install_info.detect_install", lambda: info)
+    monkeypatch.setattr(
+        "autoskillit.cli._update_checks.resolve_reference_sha",
+        lambda *a, **kw: "bbbb2222cccc",
+    )
+    result = _check_source_version_drift(home=tmp_path)
+    assert result.severity == Severity.WARNING
+    assert "uv tool upgrade autoskillit" in result.message
+    assert "appropriate" not in result.message

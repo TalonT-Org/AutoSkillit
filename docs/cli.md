@@ -25,7 +25,7 @@ Register AutoSkillit as a Claude Code plugin.
 3. Installs the plugin
 4. Syncs hooks to `settings.json`
 
-Run after every upgrade.
+Syncs hooks and plugin cache. Called automatically by `autoskillit update`.
 
 ---
 
@@ -82,14 +82,15 @@ Run health checks on your setup.
 **Flags:**
 - `--output-json` — Output results as JSON
 
-Runs 14 checks enumerated by `run_doctor` in `cli/_doctor.py` (12 numbered
-plus the lettered sub-checks `4b` *Config secrets placement* and `7b` *Hook
-registry drift*). The checks cover stale MCP servers, plugin registration,
-PATH, project config, secrets placement, version consistency, hook health,
-hook registration, hook registry drift, recipe version health, gitignore
-completeness, secret-scanning hook, editable install source, and stale entry
-points. See [installation.md](installation.md#post-install-verification) for
-the full table.
+Runs 28 checks (up to 33 with franchise enabled) enumerated by `run_doctor` in
+`cli/_doctor.py` — 23 numbered plus lettered sub-checks `2b`, `2c`, `2d`,
+`4b`, and `7b`. The checks cover stale MCP servers, plugin registration, PATH,
+project config, secrets placement, version consistency, hook health, hook
+registration, hook registry drift, recipe version health, gitignore
+completeness, secret-scanning hook, editable install source, stale entry
+points, source drift, quota cache schema, process state, install classification,
+update dismissal state, ambient env leaks, and feature gate consistency. See
+[installation.md](installation.md#post-install-verification) for the full table.
 
 ---
 

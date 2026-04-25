@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -262,13 +263,15 @@ def test_run_update_command_warns_on_install_failure(
 
     upgrade_ok = subprocess.CompletedProcess([], returncode=0)
     install_fail = subprocess.CompletedProcess([], returncode=1)
-    calls = iter([upgrade_ok, install_fail])
-    monkeypatch.setattr("autoskillit.cli._update.subprocess.run", lambda *a, **kw: next(calls))
+    mock_run = MagicMock(side_effect=[upgrade_ok, install_fail])
+    monkeypatch.setattr("autoskillit.cli._update.subprocess.run", mock_run)
     monkeypatch.setattr(
         "autoskillit.cli._update_checks._fetch_latest_version", lambda *a, **kw: "0.9.1"
     )
     import autoskillit as _pkg
 
+    # Simulate pre-update state: process-cached __version__ is stale (0.9.0),
+    # but post-install metadata already reflects the new version (0.9.1).
     monkeypatch.setattr(_pkg, "__version__", "0.9.0")
     import importlib.metadata
 

@@ -8,7 +8,10 @@ import importlib.resources as ir
 import json
 from pathlib import Path
 
-import yaml
+from autoskillit.core.io import load_yaml
+from autoskillit.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 @functools.lru_cache(maxsize=1)
@@ -34,8 +37,9 @@ def version_info(plugin_dir: Path | str | None = None) -> dict:
     if recipes_dir.is_dir():
         for recipe_path in sorted(recipes_dir.rglob("*.yaml")):
             try:
-                recipe_data = yaml.safe_load(recipe_path.read_text())
+                recipe_data = load_yaml(recipe_path)
             except Exception:
+                logger.warning("failed to parse recipe YAML", path=str(recipe_path), exc_info=True)
                 continue
             if not isinstance(recipe_data, dict):
                 continue

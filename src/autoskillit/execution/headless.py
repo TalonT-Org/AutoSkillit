@@ -38,6 +38,7 @@ from autoskillit.core import (
     WriteBehaviorSpec,
     claude_code_project_dir,
     collect_version_snapshot,
+    extract_skill_name,
     get_logger,
     is_git_worktree,
     load_yaml,
@@ -195,6 +196,7 @@ def _synthesize_from_write_artifacts(
     session: ClaudeSessionResult,
     expected_output_patterns: list[str],
     write_call_count: int,
+    fs_writes_detected: bool = False,
 ) -> ClaudeSessionResult | None:
     """Synthesize missing structured output tokens from Write/Edit tool_use file_path data.
 
@@ -208,7 +210,7 @@ def _synthesize_from_write_artifacts(
     synthesis is not possible (no matching file_path, no path-capture patterns, or pattern
     already satisfied).
     """
-    if write_call_count == 0:
+    if write_call_count == 0 and not fs_writes_detected:
         return None
 
     # Only synthesize for path-capture patterns (token_name\s*=\s*/.+).
@@ -554,6 +556,7 @@ def _build_skill_result(
     expected_output_patterns: Sequence[str] = (),
     cwd: str = "",
     write_behavior: WriteBehaviorSpec | None = None,
+    fs_writes_detected: bool = False,
 ) -> SkillResult:
     """Route SubprocessResult fields into the standard run_skill response."""
     branch = (
@@ -686,6 +689,7 @@ def _build_skill_result(
 
     # Moved earlier: needed by synthesis recovery step before _compute_outcome.
     write_call_count = sum(1 for t in session.tool_uses if t.get("name") in {"Write", "Edit"})
+    has_write_evidence = write_call_count >= 1 or fs_writes_detected
 
     # ── Channel B drain-race recovery ──────────────────────────────────────
     # When Channel B confirmed completion but stdout never received the
@@ -785,12 +789,12 @@ def _build_skill_result(
         # emitted it — synthesis would fabricate a token the agent did not produce.
         if (
             expected_output_patterns
-            and write_call_count >= 1
+            and has_write_evidence
             and result.channel_confirmation == ChannelConfirmation.UNMONITORED
             and not _check_expected_patterns(session.result.strip(), expected_output_patterns)
         ):
             artifact_recovered = _synthesize_from_write_artifacts(
-                session, list(expected_output_patterns), write_call_count
+                session, list(expected_output_patterns), write_call_count, fs_writes_detected
             )
             if artifact_recovered is not None:
                 session = artifact_recovered
@@ -818,7 +822,7 @@ def _build_skill_result(
         not success
         and not needs_retry
         and normalized_subtype == "adjudicated_failure"
-        and write_call_count >= 1
+        and has_write_evidence
     ):
         _audit_needs_retry = True
         _audit_retry_reason = RetryReason.CONTRACT_RECOVERY
@@ -877,6 +881,7 @@ def _build_skill_result(
             cli_subtype=session.subtype,
             write_path_warnings=write_path_warnings,
             write_call_count=write_call_count,
+            fs_writes_detected=fs_writes_detected,
             last_stop_reason=session.last_stop_reason,
             lifespan_started=session.lifespan_started,
         )
@@ -896,6 +901,7 @@ def _build_skill_result(
             cli_subtype=session.subtype,
             write_path_warnings=write_path_warnings,
             write_call_count=write_call_count,
+            fs_writes_detected=fs_writes_detected,
             kill_reason=result.kill_reason,
             last_stop_reason=session.last_stop_reason,
             lifespan_started=session.lifespan_started,
@@ -913,7 +919,7 @@ def _build_skill_result(
         not sr.success
         and not sr.needs_retry
         and sr.subtype == "adjudicated_failure"
-        and write_call_count >= 1
+        and has_write_evidence
     ):
         sr = dataclasses.replace(
             sr,
@@ -925,7 +931,7 @@ def _build_skill_result(
     # Zero-write gate: demote success to retriable failure when a write-expected
     # skill produced zero Edit/Write calls (silent degradation detection).
     # Write expectation is resolved from skill_contracts.yaml via WriteBehaviorSpec.
-    if sr.success and sr.write_call_count == 0 and write_behavior is not None:
+    if sr.success and not has_write_evidence and write_behavior is not None:
         write_expected = False
         if write_behavior.mode == "always":
             write_expected = True
@@ -972,6 +978,14 @@ def _derive_step_name_from_skill_command(skill_command: str) -> str:
     if ":" in token:
         token = token.rsplit(":", 1)[-1]
     return token
+
+
+def _resolve_skill_temp_dir(cwd: str, skill_command: str) -> Path | None:
+    """Resolve the skill-specific temp directory for fs write detection."""
+    name = extract_skill_name(skill_command)
+    if not name:
+        return None
+    return Path(cwd) / ".autoskillit" / "temp" / name
 
 
 async def _execute_claude_headless(
@@ -1044,6 +1058,11 @@ async def _execute_claude_headless(
         and not is_git_worktree(Path(cwd))
     ):
         _clone_snapshot = await snapshot_clone_state(cwd, runner)
+
+    _skill_temp_dir = _resolve_skill_temp_dir(cwd, skill_command)
+    _temp_snapshot_pre: set[str] = set()
+    if _skill_temp_dir and _skill_temp_dir.is_dir():
+        _temp_snapshot_pre = {e.name for e in os.scandir(_skill_temp_dir)}
 
     _result: SubprocessResult | None = None
     try:
@@ -1143,6 +1162,11 @@ async def _execute_claude_headless(
         _result, start_ts=_start_ts, end_ts=_end_ts, elapsed_seconds=_elapsed
     )
 
+    _fs_writes_detected = False
+    if _skill_temp_dir and _skill_temp_dir.is_dir():
+        _temp_snapshot_post = {e.name for e in os.scandir(_skill_temp_dir)}
+        _fs_writes_detected = bool(_temp_snapshot_post - _temp_snapshot_pre)
+
     audit_count_before = len(ctx.audit.get_report())
     skill_result = _build_skill_result(
         result,
@@ -1152,6 +1176,7 @@ async def _execute_claude_headless(
         expected_output_patterns=expected_output_patterns,
         cwd=cwd,
         write_behavior=write_behavior,
+        fs_writes_detected=_fs_writes_detected,
     )
 
     # CONTRACT NUDGE: lightweight resume recovery before full retry.

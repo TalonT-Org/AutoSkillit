@@ -203,7 +203,11 @@ class TestCLIDoctor:
         assert Severity.WARNING not in _NON_PROBLEM, "WARNING must not be in _NON_PROBLEM"
 
     def test_doctor_passes_when_versions_match(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+        request: pytest.FixtureRequest,
     ) -> None:
         """doctor reports ok when cached plugin.json version matches package."""
         import importlib.metadata
@@ -220,7 +224,7 @@ class TestCLIDoctor:
         from autoskillit.version import version_info as _vi
 
         _vi.cache_clear()
-        monkeypatch.addfinalizer(_vi.cache_clear)
+        request.addfinalizer(_vi.cache_clear)
         cli.doctor(output_json=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)
@@ -2444,7 +2448,10 @@ class TestGroupNFeatureGateDoctorChecks:
 
 
 def test_doctor_version_consistency_detects_stale_cache(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+    request: pytest.FixtureRequest,
 ) -> None:
     """Check 5 warns when the CACHED plugin.json version is behind the package."""
     import importlib.metadata
@@ -2460,7 +2467,7 @@ def test_doctor_version_consistency_detects_stale_cache(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(importlib.metadata, "version", lambda _: "0.9.0")
     _vi.cache_clear()
-    monkeypatch.addfinalizer(_vi.cache_clear)
+    request.addfinalizer(_vi.cache_clear)
     cli.doctor(output_json=True)
     data = json.loads(capsys.readouterr().out)
     vc = next(r for r in data["results"] if r["check"] == "version_consistency")
@@ -2469,7 +2476,10 @@ def test_doctor_version_consistency_detects_stale_cache(
 
 
 def test_doctor_version_consistency_ok_when_cache_matches(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+    request: pytest.FixtureRequest,
 ) -> None:
     """Check 5 reports OK when cached plugin.json version matches the package."""
     import importlib.metadata
@@ -2485,7 +2495,7 @@ def test_doctor_version_consistency_ok_when_cache_matches(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(importlib.metadata, "version", lambda _: "0.9.0")
     _vi.cache_clear()
-    monkeypatch.addfinalizer(_vi.cache_clear)
+    request.addfinalizer(_vi.cache_clear)
     cli.doctor(output_json=True)
     data = json.loads(capsys.readouterr().out)
     vc = next(r for r in data["results"] if r["check"] == "version_consistency")

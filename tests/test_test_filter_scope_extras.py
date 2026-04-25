@@ -1,4 +1,5 @@
 """Tests for file-level scope support in build_test_scope (AC3, AC4)."""
+
 from __future__ import annotations
 
 from pathlib import Path

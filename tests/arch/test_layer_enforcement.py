@@ -1185,6 +1185,8 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/recipe/test_review_loop_routing_integration.py": frozenset({"autoskillit.smoke_utils"}),
     # migration tests — migration engine integrates with execution.session
     "tests/migration/test_engine.py": frozenset({"autoskillit.execution"}),
+    # fleet e2e test exercises execution + cli layers end-to-end
+    "tests/fleet/test_franchise_e2e.py": frozenset({"autoskillit.execution", "autoskillit.cli"}),
 }
 
 

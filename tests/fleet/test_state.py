@@ -20,7 +20,7 @@ from autoskillit.fleet import (
     write_initial_state,
 )
 
-pytestmark = [pytest.mark.layer("franchise"), pytest.mark.small, pytest.mark.feature("franchise")]
+pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
 
 def _make_dispatches(*names: str) -> list[DispatchRecord]:

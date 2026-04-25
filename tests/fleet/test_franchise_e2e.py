@@ -24,10 +24,10 @@ import psutil
 import pytest
 
 pytestmark = [
-    pytest.mark.layer("franchise"),
+    pytest.mark.layer("fleet"),
     pytest.mark.medium,
     pytest.mark.integration,
-    pytest.mark.feature("franchise"),
+    pytest.mark.feature("fleet"),
 ]
 
 

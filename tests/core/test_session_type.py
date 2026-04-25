@@ -14,13 +14,6 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 # ---------------------------------------------------------------------------
 
 
-def test_session_type_returns_franchise(monkeypatch):
-    from autoskillit.core import SessionType, session_type
-
-    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
-    assert session_type() is SessionType.FLEET
-
-
 def test_session_type_returns_orchestrator(monkeypatch):
     from autoskillit.core import SessionType, session_type
 

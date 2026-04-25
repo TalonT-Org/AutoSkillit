@@ -21,12 +21,12 @@ from autoskillit.cli._fleet import fleet_list as _fleet_list
 from autoskillit.cli._fleet import fleet_run as _fleet_run
 from autoskillit.cli._fleet import fleet_status as _fleet_status
 
-pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium, pytest.mark.feature("franchise")]
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium, pytest.mark.feature("fleet")]
 
 
 @pytest.fixture(autouse=True)
-def _franchise_config(tmp_path: Path) -> None:
-    """Ensure .autoskillit/config.yaml enables franchise so _require_fleet passes."""
+def _fleet_config(tmp_path: Path) -> None:
+    """Ensure .autoskillit/config.yaml enables fleet so _require_fleet passes."""
     cfg_dir = tmp_path / ".autoskillit"
     cfg_dir.mkdir(parents=True, exist_ok=True)
     cfg_file = cfg_dir / "config.yaml"
@@ -274,7 +274,7 @@ def test_fleet_run_exits_when_campaign_not_found(
 # ---------------------------------------------------------------------------
 
 
-def test_fleet_run_sets_session_type_franchise(
+def test_fleet_run_sets_session_type_fleet(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Subprocess env includes AUTOSKILLIT_SESSION_TYPE=fleet."""
@@ -295,7 +295,7 @@ def test_fleet_run_sets_session_type_franchise(
 
 
 def test_fleet_run_writes_initial_state(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """state.json exists in franchise temp dir after launch."""
+    """state.json exists in fleet temp dir after launch."""
     _stub_guards(monkeypatch)
     monkeypatch.chdir(tmp_path)
     _stub_campaign_resolution(monkeypatch, tmp_path, "test-campaign")
@@ -745,7 +745,7 @@ def _find_command(app: App, name: str) -> object:
     return app._commands.get(name)  # type: ignore[attr-defined]
 
 
-class TestFranchiseCLIRegistration:
+class TestFleetCLIRegistration:
     def test_franchise_subcommand_registered(self) -> None:
         app = _get_app()
         names = _subcommand_names(app)
@@ -813,7 +813,7 @@ def test_fleet_list_exits_when_disabled(monkeypatch: pytest.MonkeyPatch, tmp_pat
 
 
 # ---------------------------------------------------------------------------
-# T_GUARD_3: fleet_status exits 1 when franchise feature disabled
+# T_GUARD_3: fleet_status exits 1 when fleet feature disabled
 # ---------------------------------------------------------------------------
 
 
@@ -878,13 +878,13 @@ def test_fleet_run_without_campaign_name_launches_session(
 def test_fleet_run_without_campaign_writes_no_state(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Ad-hoc franchise run must not create a state.json under .autoskillit/temp/fleet/."""
+    """Ad-hoc fleet run must not create a state.json under .autoskillit/temp/fleet/."""
     _stub_guards(monkeypatch)
     monkeypatch.chdir(tmp_path)
     _capture_subprocess(monkeypatch)
     _fleet_run(None)
-    franchise_dir = tmp_path / ".autoskillit" / "temp" / "fleet"
-    assert not franchise_dir.exists() or not any(franchise_dir.rglob("state.json"))
+    fleet_dir = tmp_path / ".autoskillit" / "temp" / "fleet"
+    assert not fleet_dir.exists() or not any(fleet_dir.rglob("state.json"))
 
 
 def test_fleet_run_without_campaign_no_campaign_env_vars(

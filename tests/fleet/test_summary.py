@@ -10,7 +10,7 @@ import json
 
 import pytest
 
-pytestmark = [pytest.mark.layer("franchise"), pytest.mark.small, pytest.mark.feature("franchise")]
+pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
 _VALID_CAMPAIGN_ID = "test-cid-123"
 

@@ -160,7 +160,7 @@ class TestCampaignDisciplineSection:
         prompt = _build()
         assert "cross-dispatch token aggregation" in prompt or "NO cross-dispatch" in prompt
 
-    def test_franchise_lock_mentioned(self) -> None:
+    def test_fleet_lock_mentioned(self) -> None:
         prompt = _build()
         assert "fleet_lock" in prompt
 

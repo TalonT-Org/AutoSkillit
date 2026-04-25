@@ -1,4 +1,4 @@
-"""Tests for franchise error envelope registry and constructor.
+"""Tests for fleet error envelope registry and constructor.
 
 Group R: FleetErrorCode enum, FLEET_ERROR_CODES frozenset, and fleet_error() helper.
 """
@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = [pytest.mark.layer("franchise"), pytest.mark.small, pytest.mark.feature("franchise")]
+pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
 SRC_ROOT = Path(__file__).parent.parent.parent / "src" / "autoskillit"
 
@@ -60,7 +60,7 @@ class TestFleetErrorCodeEnum:
         assert FleetErrorCode is not None
 
 
-class TestFranchiseErrorHelper:
+class TestFleetErrorHelper:
     def test_fleet_error_rejects_unregistered_code(self):
         from autoskillit.core import fleet_error
 
@@ -110,7 +110,7 @@ class TestFranchiseErrorHelper:
         assert pipeline.fleet_error is not None
 
 
-class TestFranchiseErrorASTScan:
+class TestFleetErrorASTScan:
     def _find_raw_fleet_error_dumps(self, path: Path) -> list[str]:
         """Find raw json.dumps({..., 'error': '<franchise_code>'}) calls in a file.
 
@@ -159,6 +159,6 @@ class TestFranchiseErrorASTScan:
         for f in sorted(SRC_ROOT.rglob("*.py")):
             all_violations.extend(self._find_raw_fleet_error_dumps(f))
         assert not all_violations, (
-            "Raw json.dumps franchise error patterns found. "
+            "Raw json.dumps fleet error patterns found. "
             "Use fleet_error() instead:\n" + "\n".join(all_violations)
         )

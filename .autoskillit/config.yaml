@@ -32,4 +32,4 @@ github:
   default_repo: "TalonT-Org/AutoSkillit"
 
 features:
-  fleet: true  # Enable franchise on integration for active development
+  fleet: true  # Enable fleet on integration for active development

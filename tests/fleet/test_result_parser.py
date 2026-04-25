@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = [pytest.mark.layer("franchise"), pytest.mark.small, pytest.mark.feature("franchise")]
+pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
 DISPATCH_ID = "aaaabbbb-cccc-dddd-eeee-ffffaaaabbbb"
 

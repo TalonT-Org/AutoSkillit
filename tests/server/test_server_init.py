@@ -594,7 +594,7 @@ class TestSessionTypeVisibility:
         mcp.disable(tags={"fleet", "kitchen", "headless"})
 
     @pytest.mark.anyio
-    async def test_franchise_enables_franchise_tag(self, monkeypatch):
+    async def test_fleet_enables_fleet_tag(self, monkeypatch):
         from fastmcp.client import Client
 
         from autoskillit.core import FLEET_TOOLS, GATED_TOOLS, HEADLESS_TOOLS
@@ -617,7 +617,7 @@ class TestSessionTypeVisibility:
             assert name not in tool_names, f"{name} should be hidden for fleet session"
 
     @pytest.mark.anyio
-    async def test_franchise_tools_retain_kitchen_tag(self, monkeypatch):
+    async def test_fleet_tools_retain_kitchen_tag(self, monkeypatch):
         """Fleet-tagged tools must still carry the kitchen tag."""
         from autoskillit.core import FLEET_TOOLS
         from autoskillit.server import _apply_session_type_visibility, mcp
@@ -634,7 +634,7 @@ class TestSessionTypeVisibility:
             assert "autoskillit" in tool.tags, f"{name} must retain autoskillit tag"
 
     @pytest.mark.anyio
-    async def test_franchise_tools_constant_matches_tagged_tools(self, monkeypatch):
+    async def test_fleet_tools_constant_matches_tagged_tools(self, monkeypatch):
         """FLEET_TOOLS constant matches exactly the tools with fleet tag."""
         from autoskillit.core import FLEET_TOOLS
         from autoskillit.server import _apply_session_type_visibility, mcp
@@ -859,7 +859,7 @@ class TestFeatureGateVisibility:
         mcp.disable(tags={"fleet", "kitchen", "headless"})
 
     @pytest.mark.anyio
-    async def test_franchise_tools_hidden_when_feature_disabled(self, monkeypatch):
+    async def test_fleet_tools_hidden_when_feature_disabled(self, monkeypatch):
         """SESSION_TYPE=fleet + AUTOSKILLIT_FEATURES__FLEET=false → no fleet tools."""
         from fastmcp.client import Client
 
@@ -883,7 +883,7 @@ class TestFeatureGateVisibility:
             )
 
     @pytest.mark.anyio
-    async def test_franchise_tools_visible_when_feature_enabled(self, monkeypatch):
+    async def test_fleet_tools_visible_when_feature_enabled(self, monkeypatch):
         """SESSION_TYPE=fleet with no override → fleet tools visible (default_enabled)."""
         from fastmcp.client import Client
 
@@ -907,7 +907,7 @@ class TestFeatureGateVisibility:
             )
 
     @pytest.mark.anyio
-    async def test_session_type_franchise_respects_gate(self, monkeypatch):
+    async def test_session_type_fleet_respects_gate(self, monkeypatch):
         """fleet session + feature disabled → no fleet tools, non-fleet hidden too."""
         from fastmcp.client import Client
 
@@ -1066,7 +1066,7 @@ class TestFeatureGateVisibility:
             assert tool in tool_names
 
     @pytest.mark.anyio
-    async def test_session_type_fleet_enables_franchise_tags(self, monkeypatch):
+    async def test_session_type_fleet_enables_fleet_tags(self, monkeypatch):
         """FLEET session activates fleet tool visibility (no feature gate needed)."""
         from fastmcp.client import Client
 

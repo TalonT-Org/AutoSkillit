@@ -11,9 +11,9 @@ import sys
 
 import pytest
 
-from tests.franchise._helpers import compute_food_truck_tool_surface
+from tests.fleet._helpers import compute_food_truck_tool_surface
 
-pytestmark = [pytest.mark.layer("franchise"), pytest.mark.medium, pytest.mark.feature("franchise")]
+pytestmark = [pytest.mark.layer("fleet"), pytest.mark.medium, pytest.mark.feature("fleet")]
 
 # ---------------------------------------------------------------------------
 # Fixture

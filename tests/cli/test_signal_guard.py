@@ -1,4 +1,4 @@
-"""Tests for _fleet_signal_guard in cli/_franchise.py (Group J)."""
+"""Tests for _fleet_signal_guard in cli/_fleet.py (Group J)."""
 
 from __future__ import annotations
 

@@ -141,7 +141,7 @@ note the scope mismatch but keep deliverables ≤ 5 — flag it in acceptance cr
 ### Step 7: Write WP result
 
 Write to `{{AUTOSKILLIT_TEMP}}/planner/work_packages/{id}_result.json`
-where `{id}` comes from the context file (e.g., `P1-A2-WP1`).
+(relative to the current working directory) where `{id}` comes from the context file (e.g., `P1-A2-WP1`).
 
 ```json
 {

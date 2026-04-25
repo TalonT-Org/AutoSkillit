@@ -24,12 +24,12 @@ details that become GitHub issues. Runs once per work package in its own headles
 
 ## Arguments
 
-- **$1** — Absolute path to the context file written by `check_remaining`
+- **$1** — Absolute path to the context file written by `check_remaining` (the skill runs in the recipe clone as the current working directory)
 
 ## Critical Constraints
 
 **NEVER:**
-- Omit any mandatory result field — all fields listed in Step 5 are required
+- Omit any mandatory result field — all fields listed in Step 6 are required
 - Write output outside `{{AUTOSKILLIT_TEMP}}/planner/work_packages/`
 - Exceed 5 deliverables — WPs must be completable in one implement-worktree session
 - Declare a `depends_on` pointing to a WP later in execution order (forward deps only)
@@ -141,7 +141,7 @@ note the scope mismatch but keep deliverables ≤ 5 — flag it in acceptance cr
 ### Step 7: Write WP result
 
 Write to `{{AUTOSKILLIT_TEMP}}/planner/work_packages/{id}_result.json`
-(relative to the current working directory) where `{id}` comes from the context file (e.g., `P1-A2-WP1`).
+where `{id}` comes from the context file (e.g., `P1-A2-WP1`).
 
 ```json
 {
@@ -181,7 +181,9 @@ There is a backstop in `check_remaining` that will add a minimal `{id, name, sum
 entry if this step is missed — but the backstop entry lacks `files_touched` and
 `apis_defined`, degrading sub-agent context quality for all remaining WPs.
 
-Read `wp_index_path`, parse the JSON array, append the new compact entry, write back:
+Read `wp_index_path`, parse the JSON array, append the new compact entry, write back.
+
+Set `result_path` to the exact path written in Step 7: `{{AUTOSKILLIT_TEMP}}/planner/work_packages/{id}_result.json`. Using any other value will break downstream `result_path` lookups in subsequent WP elaborations.
 
 ```json
 {

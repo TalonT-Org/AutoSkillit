@@ -368,7 +368,7 @@ async def register_clone_status(
 
 
 @mcp.tool(
-    tags={"autoskillit", "kitchen", "clone", "franchise"}, annotations={"readOnlyHint": False}
+    tags={"autoskillit", "kitchen", "clone", "fleet"}, annotations={"readOnlyHint": False}
 )
 @track_response_size("batch_cleanup_clones")
 async def batch_cleanup_clones(

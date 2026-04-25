@@ -19,7 +19,7 @@ from typing import Any
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
     MARKETPLACE_PREFIX,
-    FranchiseLock,
+    FleetLock,
     SubprocessRunner,
     WriteBehaviorSpec,
     detect_autoskillit_mcp_prefix,
@@ -134,7 +134,7 @@ def make_context(
     *,
     runner: SubprocessRunner | None = _UNSET,
     plugin_dir: str | None = _UNSET,
-    franchise_lock: FranchiseLock | None = None,
+    fleet_lock: FleetLock | None = None,
 ) -> ToolContext:
     """Create a fully-wired ToolContext with all 22 service fields populated.
 
@@ -154,7 +154,7 @@ def make_context(
                     Pass None explicitly to indicate the plugin is installed
                     (marketplace install; no --plugin-dir needed). When omitted
                     (sentinel), auto-detects via _check_plugin_installed().
-        franchise_lock: FranchiseLock implementation to inject. Defaults to
+        fleet_lock: FleetLock implementation to inject. Defaults to
                         asyncio.Lock() when None. Pass a custom implementation
                         in tests to substitute the lock without monkey-patching.
 
@@ -258,7 +258,7 @@ def make_context(
         session_skill_manager=session_mgr,
         skill_resolver=provider.resolver,
         quota_refresh_task=None,
-        franchise_lock=franchise_lock if franchise_lock is not None else asyncio.Lock(),
+        fleet_lock=fleet_lock if fleet_lock is not None else asyncio.Lock(),
     )
 
     def _resolve_output_patterns(skill_command: str) -> list[str]:

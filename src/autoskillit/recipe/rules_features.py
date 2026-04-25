@@ -78,7 +78,6 @@ def check_feature_gated_tools(ctx: ValidationContext) -> list[RuleFinding]:
                     )
                 )
 
-            # --- run_python callable check ---
             if (
                 step.tool == "run_python"
                 and fdef.import_package is not None

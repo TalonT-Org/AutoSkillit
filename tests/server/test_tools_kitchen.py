@@ -307,7 +307,8 @@ def test_close_kitchen_does_not_produce_gate_file(tmp_path, monkeypatch):
 @pytest.mark.anyio
 async def test_open_kitchen_includes_categorized_tool_listing(tmp_path, monkeypatch):
     """open_kitchen response contains static categorized tool groups from _DISPLAY_CATEGORIES."""
-    from autoskillit.server.tools_kitchen import _DISPLAY_CATEGORIES, open_kitchen
+    from autoskillit.config.ingredient_defaults import _DISPLAY_CATEGORIES
+    from autoskillit.server.tools_kitchen import open_kitchen
 
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
@@ -1366,18 +1367,18 @@ def test_kitchen_failure_envelope_hint_says_install_not_reinstall() -> None:
 
 
 def test_display_categories_omits_fleet_when_disabled() -> None:
-    """Fleet category must not appear in _iter_display_categories output when fleet is disabled."""
-    from autoskillit.server.tools_kitchen import _iter_display_categories
+    """Fleet category must not appear in iter_display_categories output when fleet is disabled."""
+    from autoskillit.config import iter_display_categories
 
     cfg_features: dict[str, bool] = {"fleet": False}
-    categories = [name for name, _ in _iter_display_categories(cfg_features)]
+    categories = [name for name, _ in iter_display_categories(cfg_features)]
     assert "Fleet" not in categories
 
 
 def test_display_categories_includes_fleet_when_enabled() -> None:
-    """Fleet category must appear in _iter_display_categories output when fleet is enabled."""
-    from autoskillit.server.tools_kitchen import _iter_display_categories
+    """Fleet category must appear in iter_display_categories output when fleet is enabled."""
+    from autoskillit.config import iter_display_categories
 
     cfg_features: dict[str, bool] = {"fleet": True}
-    categories = [name for name, _ in _iter_display_categories(cfg_features)]
+    categories = [name for name, _ in iter_display_categories(cfg_features)]
     assert "Fleet" in categories

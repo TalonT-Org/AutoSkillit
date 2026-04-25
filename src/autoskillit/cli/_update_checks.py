@@ -419,6 +419,7 @@ def _api_sha(rev: str, home: Path, *, network: bool = True) -> str | None:
 
 
 def _verify_update_result(
+    info: InstallInfo,
     current: str,
     latest: str,
     home: Path,
@@ -431,7 +432,6 @@ def _verify_update_result(
 
     Returns True if the version advanced (update succeeded).
     Returns False if the version is unchanged (update silently failed).
-    On False, writes a binary_snoozed record and prints an actionable warning.
     """
     import importlib.metadata
 
@@ -444,17 +444,17 @@ def _verify_update_result(
     if new_version != current:
         return True
 
-    state["binary_snoozed"] = {
-        "snoozed_at": datetime.now(UTC).isoformat(),
-        "attempted_version": latest,
-    }
-    _write_dismiss_state(home, state)
+    from autoskillit.cli._install_info import upgrade_command
+
+    cmd = upgrade_command(info)
+    cmd_str = " ".join(cmd) if cmd else "autoskillit update"
     print(
         f"\nUpdate attempted but version is still {current}. "
-        f"If you have an editable install, run:\n"
-        f"  uv pip install -e <project_dir>\n"
-        f"Or for a tool install:\n"
-        f"  uv tool upgrade autoskillit",
+        f"To upgrade, run:\n"
+        f"  autoskillit update\n"
+        f"Or manually:\n"
+        f"  {cmd_str}\n"
+        f"  autoskillit install",
         flush=True,
     )
     return False
@@ -625,8 +625,15 @@ def _run_update_sequence(
     )
     with terminal_guard():
         subprocess.run(cmd, check=False, env=skip_env)
-        subprocess.run(["autoskillit", "install"], check=False, env=skip_env)
-    _verify_update_result(current, latest, home, state)
+        install_result = subprocess.run(["autoskillit", "install"], check=False, env=skip_env)
+    if install_result.returncode != 0:
+        print(
+            "\nautoskillit install exited with an error. "
+            "Hooks and plugin cache may be stale. "
+            "Run 'autoskillit install' manually to fix.",
+            flush=True,
+        )
+    _verify_update_result(info, current, latest, home, state)
 
 
 # ---------------------------------------------------------------------------
@@ -642,7 +649,8 @@ def run_update_checks(home: Path | None = None) -> None:
     - ``CLAUDECODE=1`` — headless/MCP session
     - ``CI=1`` — generic CI environment
     - ``AUTOSKILLIT_SKIP_STALE_CHECK=1`` — explicit bypass
-    - ``AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK=1`` — explicit bypass
+    - ``AUTOSKILLIT_SKIP_UPDATE_CHECK=1`` — explicit bypass (preferred name)
+    - ``AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK=1`` — deprecated alias for the above
     - Non-TTY stdin or stdout
 
     Install types ``LOCAL_EDITABLE``, ``LOCAL_PATH``, and ``UNKNOWN`` are
@@ -652,7 +660,8 @@ def run_update_checks(home: Path | None = None) -> None:
         os.environ.get("CLAUDECODE")
         or os.environ.get("CI")
         or os.environ.get("AUTOSKILLIT_SKIP_STALE_CHECK")
-        or os.environ.get("AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK")
+        or os.environ.get("AUTOSKILLIT_SKIP_UPDATE_CHECK")
+        or os.environ.get("AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK")  # deprecated alias
         or not sys.stdin.isatty()
         or not sys.stdout.isatty()
     ):
@@ -666,7 +675,8 @@ def run_update_checks(home: Path | None = None) -> None:
     _skip_env: dict[str, str] = {
         **os.environ,
         "AUTOSKILLIT_SKIP_STALE_CHECK": "1",
-        "AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK": "1",
+        "AUTOSKILLIT_SKIP_UPDATE_CHECK": "1",
+        "AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK": "1",  # deprecated alias, kept for compat
     }
 
     info = detect_install()

@@ -33,7 +33,8 @@ def run_update_command(home: Path | None = None) -> None:
     _skip_env: dict[str, str] = {
         **os.environ,
         "AUTOSKILLIT_SKIP_STALE_CHECK": "1",
-        "AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK": "1",
+        "AUTOSKILLIT_SKIP_UPDATE_CHECK": "1",
+        "AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK": "1",  # deprecated alias, kept for compat
     }
 
     from autoskillit.core import any_kitchen_open
@@ -58,7 +59,14 @@ def run_update_command(home: Path | None = None) -> None:
 
     with terminal_guard():
         subprocess.run(cmd, check=False, env=_skip_env)
-        subprocess.run(["autoskillit", "install"], check=False, env=_skip_env)
+        install_result = subprocess.run(["autoskillit", "install"], check=False, env=_skip_env)
+    if install_result.returncode != 0:
+        print(
+            "\nautoskillit install exited with an error. "
+            "Hooks and plugin cache may be stale. "
+            "Run 'autoskillit install' manually to fix.",
+            flush=True,
+        )
 
     state = _read_dismiss_state(_home)
     target_branch = comparison_branch(info)
@@ -67,7 +75,7 @@ def run_update_command(home: Path | None = None) -> None:
         if target_branch is not None
         else current
     )
-    succeeded = _verify_update_result(current, latest, _home, state)
+    succeeded = _verify_update_result(info, current, latest, _home, state)
 
     if succeeded:
         # Clear any active dismissal state so prompts are fresh

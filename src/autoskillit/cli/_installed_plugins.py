@@ -13,7 +13,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core import atomic_write
+from autoskillit.core import atomic_write, get_logger
+
+_log = get_logger(__name__)
 
 
 def _default_path() -> Path:
@@ -38,7 +40,11 @@ class InstalledPluginsFile:
             return {}
         try:
             return json.loads(self._path.read_text())
-        except (json.JSONDecodeError, OSError):
+        except json.JSONDecodeError as exc:
+            _log.warning("installed_plugins.json is corrupt (%s): %s", self._path, exc)
+            return {}
+        except OSError as exc:
+            _log.warning("Could not read installed_plugins.json (%s): %s", self._path, exc)
             return {}
 
     def get_plugins(self) -> dict[str, Any]:

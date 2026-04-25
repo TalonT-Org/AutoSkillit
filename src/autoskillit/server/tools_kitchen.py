@@ -53,7 +53,8 @@ def _kitchen_failure_envelope(
     """
     msg = user_hint or (
         f"open_kitchen failed during {stage}: {type(exc).__name__}. "
-        f"Run 'autoskillit doctor' to diagnose, or reinstall if the failure persists."
+        f"Run 'autoskillit doctor' to diagnose, "
+        f"or run 'autoskillit install' if the failure persists."
     )
     return json.dumps(
         {

@@ -67,17 +67,20 @@ projects need.
 
     autoskillit doctor
 
-Doctor runs 17 checks (15 numbered + 2 lettered sub-checks `4b` and `7b`),
-enumerated by `run_doctor` in `src/autoskillit/cli/_doctor.py`:
+Doctor runs 28 checks (23 numbered + 5 lettered sub-checks: `2b`, `2c`, `2d`, `4b`, `7b`); up to 33 with the franchise feature enabled.
+Enumerated by `run_doctor` in `src/autoskillit/cli/_doctor.py`:
 
 | # | Check | What it verifies |
 |---|-------|------------------|
 | 1 | Stale MCP servers | No dead binaries or nonexistent paths in `~/.claude.json` |
 | 2 | MCP server registered | AutoSkillit MCP server is registered (direct entry or via plugin) |
+| 2b | Dual MCP registration | No duplicate direct + marketplace registration |
+| 2c | Plugin cache exists | `~/.claude/plugins/cache/autoskillit-local/` directory exists |
+| 2d | installed_plugins.json | AutoSkillit entry present in installed_plugins.json |
 | 3 | `autoskillit` on PATH | The CLI command is reachable |
 | 4 | Config exists | `.autoskillit/config.yaml` is present |
 | 4b | Config secrets placement | Secrets live in `.autoskillit/.secrets.yaml`, never in `config.yaml` |
-| 5 | Version consistency | Installed package version matches `plugin.json` |
+| 5 | Version consistency | Cached plugin.json version matches installed package version |
 | 6 | Hook executability | Deployed hook scripts exist and are executable for every event type |
 | 7 | Hook registration | Hooks are registered in `settings.json` |
 | 7b | Hook registry drift | Structural diff against `generate_hooks_json()` from `hook_registry.py` |
@@ -91,6 +94,13 @@ enumerated by `run_doctor` in `src/autoskillit/cli/_doctor.py`:
 | 15 | Claude process state | Reports D-state and CPU breakdown of running `claude` processes via `ps` |
 | 16 | Install classification | `direct_url.json` classifies the install type and requested revision |
 | 17 | Update dismissal state | Active update-prompt dismissal window and conditions, if any |
+| 18 | Ambient SESSION_TYPE=leaf | No stray `SESSION_TYPE=leaf` env var in interactive shell |
+| 19 | Ambient SESSION_TYPE=orchestrator | No stray `SESSION_TYPE=orchestrator` env var |
+| 20 | Ambient SESSION_TYPE=franchise | No stray `SESSION_TYPE=franchise` env var |
+| 21 | Ambient CAMPAIGN_ID | No stray `CAMPAIGN_ID` env var in interactive shell |
+| 22 | Feature dependency consistency | Enabled features satisfy their declared dependencies |
+| 23 | Feature registry import consistency | All feature gate modules import without errors |
+| 24–28 | Franchise infrastructure | Sous-chef skill, dispatch guard, stale state, onboarding, clone collisions (franchise feature only) |
 
 See **[Hooks](safety/hooks.md)** for what each PreToolUse / PostToolUse /
 SessionStart hook actually enforces.
@@ -141,7 +151,13 @@ If missing, run `autoskillit init` in your project directory.
 
 ### Upgrading
 
+The recommended upgrade path:
+
+    autoskillit update
+
+This fetches the latest version and runs `autoskillit install` automatically.
+
+For manual upgrades (fallback):
+
     uv tool install --force "git+https://github.com/TalonT-Org/AutoSkillit.git@stable"
     autoskillit install
-
-Always run `autoskillit install` after upgrading to sync the plugin cache and hooks.

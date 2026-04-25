@@ -83,3 +83,19 @@ def test_remove_is_noop_when_file_absent(tmp_path: Path) -> None:
     p = tmp_path / "no_file.json"
     InstalledPluginsFile(p).remove("autoskillit@autoskillit-local")  # should not raise
     assert not p.exists()
+
+
+def test_installed_plugins_read_logs_on_json_error(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """_read() emits a WARNING log when installed_plugins.json contains invalid JSON."""
+    import logging
+
+    p = tmp_path / "installed_plugins.json"
+    p.write_text("{invalid json}")
+
+    store = InstalledPluginsFile(p)
+    with caplog.at_level(logging.WARNING, logger="autoskillit.cli._installed_plugins"):
+        result = store.get_plugins()
+    assert result == {}
+    assert any("installed_plugins" in r.message.lower() for r in caplog.records)

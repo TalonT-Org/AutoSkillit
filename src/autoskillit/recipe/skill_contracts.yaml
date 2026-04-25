@@ -48,9 +48,7 @@ skills:
     pattern_examples:
     - "diagnosis_path = /tmp/diagnosis.md\nfailure_type = test\nfailure_subtype = deterministic\nis_fixable = true\n%%ORDER_UP%%"
     - "diagnosis_path = /tmp/diagnosis.md\nfailure_type = test\nfailure_subtype = flaky\nis_fixable = false\n%%ORDER_UP%%"
-    write_behavior: conditional
-    write_expected_when:
-    - "diagnosis_path\\s*=\\s*/.+"
+    write_behavior: always
   resolve-design-review:
     inputs:
     - name: evaluation_dashboard
@@ -185,9 +183,7 @@ skills:
     - "worktree_path\\s*=\\s*/.+"
     pattern_examples:
     - "worktree_path = /tmp/worktrees/impl-foo-20260316\n%%ORDER_UP%%"
-    write_behavior: conditional
-    write_expected_when:
-    - "worktree_path\\s*=\\s*/.+"
+    write_behavior: always
   investigate:
     inputs:
     - name: topic
@@ -285,9 +281,7 @@ skills:
     - "plan_path\\s*=\\s*/.+"
     pattern_examples:
     - "plan_path = /tmp/plan.md\n%%ORDER_UP%%"
-    write_behavior: conditional
-    write_expected_when:
-    - "plan_path\\s*=\\s*/.+"
+    write_behavior: always
   retry-worktree:
     inputs:
     - name: plan_path
@@ -486,9 +480,7 @@ skills:
     pattern_examples:
     - "pr_url = https://github.com/owner/repo/pull/42\n%%ORDER_UP%%"
     - "pr_url = \n%%ORDER_UP%%"
-    write_behavior: conditional
-    write_expected_when:
-    - "pr_url\\s*=\\s*https://"
+    write_behavior: always
 
   open-integration-pr:
     inputs:

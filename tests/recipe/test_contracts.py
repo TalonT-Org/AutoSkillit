@@ -630,17 +630,21 @@ def test_write_behavior_defaults_to_none() -> None:
 
 ALWAYS_WRITE_SKILLS = {
     "build-execution-map",
+    "compose-pr",
     "compose-research-pr",
     "design-guards",
+    "diagnose-ci",
     "dry-walkthrough",
     "generate-report",
     "implement-experiment",
     "implement-worktree",
+    "implement-worktree-no-merge",
     "make-campaign",
     "make-plan",
     "plan-experiment",
     "plan-visualization",
     "prepare-research-pr",
+    "rectify",
     "report-bug",
     "resolve-design-review",
     "review-design",
@@ -682,10 +686,6 @@ def test_always_write_skills_matches_yaml() -> None:
 # token indicates actual work was performed.
 CONDITIONAL_WRITE_SKILLS: dict[str, str] = {
     # skill_name → substring that must appear in write_expected_when patterns
-    "compose-pr": "pr_url",
-    "diagnose-ci": "diagnosis_path",
-    "implement-worktree-no-merge": "worktree_path",
-    "rectify": "plan_path",
     "resolve-failures": "verdict",
     "resolve-merge-conflicts": "conflict_report_path",
     "resolve-review": "verdict",

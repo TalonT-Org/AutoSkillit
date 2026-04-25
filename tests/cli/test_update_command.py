@@ -188,7 +188,7 @@ def test_update_verifies_version_advance_and_warns_on_failure(
     )
     run_update_command(home=tmp_path)
     combined = " ".join(printed)
-    assert "still" in combined or "unchanged" in combined or "still 0.7.77" in combined
+    assert "still 0.7.77" in combined
 
 
 def test_update_clears_dismissal_state_on_success(

@@ -1674,8 +1674,8 @@ def test_run_update_sequence_warns_on_install_failure(
     )
     _run_update_sequence(info, "0.9.0", tmp_path, {}, {})
     out = capsys.readouterr().out
-    assert "install" in out.lower()
-    assert "stale" in out.lower() or "autoskillit install" in out
+    assert "autoskillit install" in out
+    assert "stale" in out.lower()
 
 
 # ---------------------------------------------------------------------------

@@ -24,6 +24,7 @@ _LAYER_DIRS: frozenset[str] = frozenset(
         "recipe",
         "migration",
         "franchise",
+        "planner",
         "server",
         "cli",
     }
@@ -38,6 +39,7 @@ _SIZE_DIRS: frozenset[str] = frozenset(
         "franchise",
         "migration",
         "pipeline",
+        "planner",
         "recipe",
         "server",
         "workspace",

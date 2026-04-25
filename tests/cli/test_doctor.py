@@ -220,6 +220,7 @@ class TestCLIDoctor:
         from autoskillit.version import version_info as _vi
 
         _vi.cache_clear()
+        monkeypatch.addfinalizer(_vi.cache_clear)
         cli.doctor(output_json=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)
@@ -2459,6 +2460,7 @@ def test_doctor_version_consistency_detects_stale_cache(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(importlib.metadata, "version", lambda _: "0.9.0")
     _vi.cache_clear()
+    monkeypatch.addfinalizer(_vi.cache_clear)
     cli.doctor(output_json=True)
     data = json.loads(capsys.readouterr().out)
     vc = next(r for r in data["results"] if r["check"] == "version_consistency")
@@ -2483,6 +2485,7 @@ def test_doctor_version_consistency_ok_when_cache_matches(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(importlib.metadata, "version", lambda _: "0.9.0")
     _vi.cache_clear()
+    monkeypatch.addfinalizer(_vi.cache_clear)
     cli.doctor(output_json=True)
     data = json.loads(capsys.readouterr().out)
     vc = next(r for r in data["results"] if r["check"] == "version_consistency")

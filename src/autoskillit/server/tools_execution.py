@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
+import re
 import time
 from pathlib import Path
 
@@ -33,6 +35,11 @@ from autoskillit.server.helpers import (
 )
 
 logger = get_logger(__name__)
+
+_PURE_SLEEP_RE = re.compile(
+    r'^(?:python3?\s+-c\s+["\']import time;\s*time\.sleep\((\d+(?:\.\d+)?)\)["\']'
+    r"|sleep\s+(\d+(?:\.\d+)?))$"
+)
 
 
 def _is_absolute_path(path: str) -> bool:
@@ -76,6 +83,11 @@ async def run_cmd(
         tool_ctx = _get_ctx()
         _start = time.monotonic()
         try:
+            m = _PURE_SLEEP_RE.match(cmd.strip())
+            if m:
+                seconds = float(m.group(1) or m.group(2))
+                await asyncio.sleep(seconds)
+                return json.dumps({"success": True, "exit_code": 0, "stdout": "", "stderr": ""})
             _env: dict[str, str] | None = (
                 {**os.environ, SCENARIO_STEP_NAME_ENV: step_name} if step_name else None
             )

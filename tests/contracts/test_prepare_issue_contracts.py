@@ -371,3 +371,10 @@ def test_prepare_issue_no_tmp_paths():
         "prepare-issue uses /tmp/ path(s). All temp files must live in "
         "{{AUTOSKILLIT_TEMP}}/prepare-issue/ per project convention"
     )
+
+
+def test_prepare_issue_no_issue_comment():
+    text = SKILL_MD.read_text()
+    assert "gh issue comment" not in text, (
+        "Comment option must be removed; always edit the issue body"
+    )

@@ -128,14 +128,8 @@ Your choice [C]:
 
 **If the user enters a number [1]–[N] (extend existing):**
 
-1. Ask: *"Add your context as a comment or edit the issue body? [comment/edit, default: comment]"*
-2. If **comment** (default):
+1. Fetch current body and append new context using a temp file to avoid shell injection:
    ```bash
-   gh issue comment {selected_number} --body "{description as additional context}"
-   ```
-3. If **edit**:
-   ```bash
-   # Fetch current body and append new context using a temp file to avoid shell injection
    ts=$(date +%Y-%m-%d_%H%M%S)
    EDIT_BODY_FILE="{{AUTOSKILLIT_TEMP}}/prepare-issue/edit_body_${ts}.md"
    mkdir -p "{{AUTOSKILLIT_TEMP}}/prepare-issue"
@@ -143,12 +137,12 @@ Your choice [C]:
    printf '\n## Additional Context\n\n%s' "{description}" >> "${EDIT_BODY_FILE}"
    gh issue edit {selected_number} --body-file "${EDIT_BODY_FILE}"
    ```
-4. Set `issue_number = selected_number` (no new issue will be created).
-5. Fetch the updated issue for triage:
+2. Set `issue_number = selected_number` (no new issue will be created).
+3. Fetch the updated issue for triage:
    ```bash
    gh issue view {selected_number} --json number,title,body,labels,url
    ```
-6. **Continue to Step 6 (LLM Classification)** on this existing issue, then proceed through
+4. **Continue to Step 6 (LLM Classification)** on this existing issue, then proceed through
    Steps 7, 7a, 8, and 9 to apply labels and requirements. Emit the result block with the
    existing issue's number and URL, then exit.
 

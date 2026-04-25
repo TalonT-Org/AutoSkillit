@@ -500,14 +500,14 @@ async def _file_or_update_github_issue(
             issue_url: str = existing["html_url"]
             existing_body: str = existing.get("body", "") or ""
 
-            # Skip comment if the exact error_context is already in the issue body.
+            # Skip update if the exact error_context is already in the issue body.
             if error_context.strip() in existing_body:
                 logger.info(
-                    "report_bug duplicate skipped comment",
+                    "report_bug duplicate skipped update",
                     issue=issue_number,
                     reason="error_context already present",
                 )
-                return {"duplicate": True, "issue_url": issue_url, "comment_added": False}
+                return {"duplicate": True, "issue_url": issue_url, "body_updated": False}
 
             date_str = datetime.now(UTC).date().isoformat()
             diag_section = (
@@ -515,24 +515,26 @@ async def _file_or_update_github_issue(
                 if diag is not None
                 else ""
             )
-            comment_body = (
-                f"**New occurrence auto-reported on {date_str}**\n\n"
+            occurrence_section = (
+                f"\n\n---\n\n"
+                f"## New Occurrence — {date_str}\n\n"
                 f"**Error context:**\n```\n{error_context}\n```\n\n"
                 f"**Local report:** `{report_path}`"
                 f"{diag_section}"
             )
-            comment_result = await github_client.add_comment(
-                owner, repo, issue_number, comment_body
+            new_body = existing_body + occurrence_section
+            update_result = await github_client.update_issue_body(
+                owner, repo, issue_number, new_body
             )
             logger.info(
-                "report_bug commented on duplicate",
+                "report_bug updated duplicate body",
                 issue=issue_number,
-                comment_success=comment_result.get("success"),
+                update_success=update_result.get("success"),
             )
             return {
                 "duplicate": True,
                 "issue_url": issue_url,
-                "comment_added": comment_result.get("success", False),
+                "body_updated": update_result.get("success", False),
             }
 
         # No duplicate — create a new issue.

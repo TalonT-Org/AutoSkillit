@@ -119,24 +119,31 @@ Classify the issue into one of three categories:
 
 **Too vague** — cannot extract clear acceptance criteria (e.g., "improve X", no
 measurable outcome, contradictory claims):
-- Post a clarifying comment:
+- Append a `## Triage Note` section to the issue body:
   ```bash
-  gh issue comment N --body "This issue needs more detail before requirements
-  can be generated. Consider: What is the expected outcome? What signals success?
-  If the goal is unclear, relabeling to \`recipe:remediation\` may be appropriate
-  for investigation first."
+  ENRICH_BODY_FILE="{{AUTOSKILLIT_TEMP}}/enrich-issues/enrich_{N}_$(date +%s).md"
+  mkdir -p "$(dirname "$ENRICH_BODY_FILE")"
+  gh issue view N --json body --jq '.body' > "$ENRICH_BODY_FILE"
+  printf '\n\n---\n\n## Triage Note\n\nThis issue needs more detail before requirements can be generated. Consider: What is the expected outcome? What signals success? If the goal is unclear, relabeling to `recipe:remediation` may be appropriate for investigation first.\n' \
+    >> "$ENRICH_BODY_FILE"
+  gh issue edit N --body-file "$ENRICH_BODY_FILE"
+  sleep 1
   ```
-- Add to `skipped_too_vague`. Do not edit the issue body.
+- Add to `skipped_too_vague`.
 
 **Mixed concerns** — the issue describes two or more independently-completable
 sub-features or mixes a bug fix with a new feature:
-- Post a comment:
+- Append a `## Triage Note` section to the issue body:
   ```bash
-  gh issue comment N --body "This issue mixes independent concerns. Consider
-  running \`/autoskillit:issue-splitter\` to split it into focused sub-issues
-  before enrichment."
+  ENRICH_BODY_FILE="{{AUTOSKILLIT_TEMP}}/enrich-issues/enrich_{N}_$(date +%s).md"
+  mkdir -p "$(dirname "$ENRICH_BODY_FILE")"
+  gh issue view N --json body --jq '.body' > "$ENRICH_BODY_FILE"
+  printf '\n\n---\n\n## Triage Note\n\nThis issue mixes independent concerns. Consider running `/autoskillit:issue-splitter` to split it into focused sub-issues before enrichment.\n' \
+    >> "$ENRICH_BODY_FILE"
+  gh issue edit N --body-file "$ENRICH_BODY_FILE"
+  sleep 1
   ```
-- Add to `skipped_mixed_concerns`. Do not edit the issue body.
+- Add to `skipped_mixed_concerns`.
 
 **Well-defined** — a single, coherent goal with extractable acceptance criteria:
 - Proceed to requirement generation (Step 5d).

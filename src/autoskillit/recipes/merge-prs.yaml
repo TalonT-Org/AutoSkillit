@@ -263,7 +263,7 @@ steps:
       - when: "${{ result.pr_state }} == not_enrolled"
         route: register_clone_failure
       - when: "${{ result.pr_state }} == ejected"
-        route: get_ejected_pr_branch
+        route: check_eject_limit
       - when: "${{ result.pr_state }} == stalled"
         route: reenroll_stalled_queue_pr
       - when: "${{ result.pr_state }} == dropped_healthy"
@@ -275,6 +275,31 @@ steps:
     note: >
       Queue mode monitor. All 6 non-error PRState values are explicitly routed.
       ejected_ci_failure must precede ejected (both match CLOSED state).
+
+  check_eject_limit:
+    tool: run_cmd
+    with:
+      cmd: >
+        COUNTER_FILE="${{ context.work_dir }}/.autoskillit/temp/eject_count" &&
+        mkdir -p "$(dirname "$COUNTER_FILE")" &&
+        COUNT=$(cat "$COUNTER_FILE" 2>/dev/null || echo 0) &&
+        COUNT=$((COUNT + 1)) &&
+        echo "$COUNT" > "$COUNTER_FILE" &&
+        if [ "$COUNT" -gt 3 ]; then
+          echo "EJECT_LIMIT_EXCEEDED";
+        else
+          echo "EJECT_OK";
+        fi
+      cwd: "${{ context.work_dir }}"
+      step_name: "check_eject_limit"
+    on_result:
+      - when: "${{ result.stdout | trim }} == EJECT_LIMIT_EXCEEDED"
+        route: register_clone_failure
+      - route: get_ejected_pr_branch
+    on_failure: register_clone_failure
+    note: >
+      Circuit breaker for the queue ejection loop. After 3 ejections, routes
+      to register_clone_failure to prevent infinite re-enqueue cycles.
 
   get_ejected_pr_branch:
     tool: run_cmd

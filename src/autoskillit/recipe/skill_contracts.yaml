@@ -1760,6 +1760,10 @@ skills:
     pattern_examples:
     - "html_path = /tmp/research/report.html\n%%ORDER_UP%%"
     write_behavior: always
+  planner-generate-phases:
+    outputs:
+    - name: phase_manifest_path
+      type: file_path
 callable_contracts:
   autoskillit.smoke_utils.check_review_loop:
     outputs:

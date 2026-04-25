@@ -67,7 +67,7 @@ For each phase, generate:
 
 ### Step 3: Write phase results
 
-For each phase, write to `{{AUTOSKILLIT_TEMP}}/planner/phases/{phase_id}_result.json`:
+For each phase, write to `{{AUTOSKILLIT_TEMP}}/planner/phases/{phase_id}_result.json` (relative to the current working directory):
 
 ```json
 {

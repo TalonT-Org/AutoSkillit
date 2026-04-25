@@ -87,7 +87,7 @@ For each WP, define:
 
 ### Step 4: Write assignment result
 
-Write to `{{AUTOSKILLIT_TEMP}}/planner/assignments/{id}_result.json`:
+Write to `{{AUTOSKILLIT_TEMP}}/planner/assignments/{id}_result.json` (relative to the current working directory):
 ```json
 {
   "id": "P1-A2",

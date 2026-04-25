@@ -65,7 +65,7 @@ on any prior phase's deliverables?
 
 ### Step 3: Write phase result
 
-Write to `{{AUTOSKILLIT_TEMP}}/planner/phases/{id}_result.json`:
+Write to `{{AUTOSKILLIT_TEMP}}/planner/phases/{id}_result.json` (relative to the current working directory):
 ```json
 {
   "id": "P4",

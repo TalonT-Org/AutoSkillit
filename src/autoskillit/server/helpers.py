@@ -190,7 +190,7 @@ def _require_orchestrator_or_higher(tool_name: str = "") -> str | None:
         return None
 
     st = session_type()
-    if st in (SessionType.ORCHESTRATOR, SessionType.FRANCHISE):
+    if st in (SessionType.ORCHESTRATOR, SessionType.FRANCHISE, SessionType.FLEET):
         return None
 
     msg = (
@@ -216,7 +216,7 @@ def _require_orchestrator_exact(tool_name: str = "") -> str | None:
     if st is SessionType.ORCHESTRATOR:
         return None
 
-    if st is SessionType.FRANCHISE:
+    if st is SessionType.FRANCHISE or st is SessionType.FLEET:
         msg = (
             f"{tool_name} cannot be called from franchise sessions. "
             "Franchise sessions do not have a kitchen."
@@ -239,7 +239,7 @@ def _require_franchise(tool_name: str = "") -> str | None:
     No interactive bypass — franchise is a specific tier, not a headless guard.
     """
     st = session_type()
-    if st is SessionType.FRANCHISE:
+    if st is SessionType.FRANCHISE or st is SessionType.FLEET:
         return None
 
     msg = (

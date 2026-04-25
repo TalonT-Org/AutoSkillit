@@ -252,4 +252,5 @@ class TestRunCmdSleepInterception:
     @pytest.mark.anyio
     async def test_step_name_timing_recorded(self, tool_ctx):
         await run_cmd(cmd="sleep 0", cwd="/tmp", step_name="quota_wait")
+        assert len(tool_ctx.runner.call_args_list) == 0
         assert any(e["step_name"] == "quota_wait" for e in tool_ctx.timing_log.get_report())

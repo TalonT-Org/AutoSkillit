@@ -122,6 +122,7 @@ def dismissal_window(info: InstallInfo) -> timedelta:
     - ``integration`` / ``LOCAL_EDITABLE`` → ``timedelta(hours=12)``
     """
     rev = info.requested_revision or ""
+    # LOCAL_EDITABLE is reachable only via AUTOSKILLIT_FORCE_UPDATE_CHECK; not dead code.
     if rev == "integration" or info.install_type == InstallType.LOCAL_EDITABLE:
         return timedelta(hours=12)
     return timedelta(days=7)

@@ -73,6 +73,7 @@ AUTOSKILLIT_PRIVATE_ENV_VARS: frozenset[str] = frozenset(
     {
         "AUTOSKILLIT_HEADLESS",
         "AUTOSKILLIT_SKIP_STALE_CHECK",
+        "AUTOSKILLIT_SKIP_UPDATE_CHECK",
         "AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK",
         "AUTOSKILLIT_FORCE_UPDATE_CHECK",
         # Franchise tier vars — must not leak into user-code subprocesses

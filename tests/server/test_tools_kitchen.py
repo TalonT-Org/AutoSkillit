@@ -1344,3 +1344,17 @@ async def test_redisable_subsets_does_not_disable_kitchen_core_tag() -> None:
     assert not any("kitchen-core" in t for t in disabled_tags), (
         "kitchen-core tag must never be disabled by the feature gate pass"
     )
+
+
+# ---------------------------------------------------------------------------
+# T7 — _kitchen_failure_envelope default hint says autoskillit install not reinstall
+# ---------------------------------------------------------------------------
+
+
+def test_kitchen_failure_envelope_hint_says_install_not_reinstall() -> None:
+    from autoskillit.server.tools_kitchen import _kitchen_failure_envelope
+
+    result = json.loads(_kitchen_failure_envelope(exc=RuntimeError("x"), stage="test"))
+    msg = result["user_visible_message"]
+    assert "autoskillit install" in msg
+    assert "reinstall" not in msg

@@ -33,6 +33,7 @@ def run_update_command(home: Path | None = None) -> None:
     _skip_env: dict[str, str] = {
         **os.environ,
         "AUTOSKILLIT_SKIP_STALE_CHECK": "1",
+        "AUTOSKILLIT_SKIP_UPDATE_CHECK": "1",
         "AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK": "1",
     }
 
@@ -56,9 +57,19 @@ def run_update_command(home: Path | None = None) -> None:
 
     current: str = getattr(_pkg, "__version__", "0.0.0")
 
+    install_result: subprocess.CompletedProcess[bytes] = subprocess.CompletedProcess(
+        args=["autoskillit", "install"], returncode=0
+    )
     with terminal_guard():
         subprocess.run(cmd, check=False, env=_skip_env)
-        subprocess.run(["autoskillit", "install"], check=False, env=_skip_env)
+        install_result = subprocess.run(["autoskillit", "install"], check=False, env=_skip_env)
+    if install_result.returncode != 0:
+        print(
+            "\nautoskillit install exited with an error. "
+            "Hooks and plugin cache may be stale. "
+            "Run 'autoskillit install' manually to fix.",
+            flush=True,
+        )
 
     state = _read_dismiss_state(_home)
     target_branch = comparison_branch(info)
@@ -67,7 +78,7 @@ def run_update_command(home: Path | None = None) -> None:
         if target_branch is not None
         else current
     )
-    succeeded = _verify_update_result(current, latest, _home, state)
+    succeeded = _verify_update_result(info, current, latest, _home, state)
 
     if succeeded:
         # Clear any active dismissal state so prompts are fresh

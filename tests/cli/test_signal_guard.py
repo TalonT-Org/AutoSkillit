@@ -63,6 +63,7 @@ async def _run_signal_guard(
     sig: int,
     *,
     cleanup_on_interrupt: bool = False,
+    campaign_name: str | None = None,
 ) -> None:
     """Run the signal guard and fire a signal after it's armed."""
     from autoskillit.cli._fleet import _fleet_signal_guard
@@ -78,6 +79,7 @@ async def _run_signal_guard(
         async with _fleet_signal_guard(
             state_path,
             campaign_id,
+            campaign_name=campaign_name,
             cleanup_on_interrupt=cleanup_on_interrupt,
         ):
             await anyio.sleep(10)  # cancelled by signal guard
@@ -242,6 +244,25 @@ class TestSignalGuard:
         assert "guard_exited" in events
         # state_written happens inside the shielded section; guard_exited happens after
         assert events.index("state_written") < events.index("guard_exited")
+
+    async def test_signal_guard_resume_hint_includes_campaign_name(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        state_path, campaign_id = _make_running_state(tmp_path, l2_pid=0)
+        await _run_signal_guard(
+            state_path, campaign_id, _signal.SIGTERM, campaign_name="my-campaign"
+        )
+        captured = capsys.readouterr()
+        assert "fleet campaign my-campaign" in captured.err
+        assert campaign_id in captured.err
+
+    async def test_signal_guard_resume_hint_generic_when_no_campaign_name(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        state_path, campaign_id = _make_running_state(tmp_path, l2_pid=0)
+        await _run_signal_guard(state_path, campaign_id, _signal.SIGTERM)
+        captured = capsys.readouterr()
+        assert "fleet campaign <name>" in captured.err
 
 
 def test_sighup_in_fleet_signal_list() -> None:

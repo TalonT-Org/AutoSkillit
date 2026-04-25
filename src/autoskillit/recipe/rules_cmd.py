@@ -101,20 +101,14 @@ def _check_run_cmd_find_rediscovery(ctx: ValidationContext) -> list[RuleFinding]
     severity=Severity.WARNING,
 )
 def _check_hardcoded_origin_in_run_cmd(ctx: ValidationContext) -> list[RuleFinding]:
-    has_set_url = any(
-        "git remote set-url origin" in (s.with_args or {}).get("cmd", "")
-        for s in ctx.recipe.steps.values()
-        if s.tool == "run_cmd"
-    )
-    if has_set_url:
-        return []
-
     findings: list[RuleFinding] = []
     for name, step in ctx.recipe.steps.items():
         if step.tool != "run_cmd":
             continue
         cmd = (step.with_args or {}).get("cmd", "")
         if not isinstance(cmd, str):
+            continue
+        if "git remote set-url origin" in cmd:
             continue
         for line in cmd.splitlines():
             stripped = line.strip()
@@ -134,5 +128,4 @@ def _check_hardcoded_origin_in_run_cmd(ctx: ValidationContext) -> list[RuleFindi
                         ),
                     )
                 )
-                break
     return findings

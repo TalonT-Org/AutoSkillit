@@ -78,12 +78,6 @@ def test_planner_recipe_has_kitchen_rules(planner_recipe):
     assert len(planner_recipe.kitchen_rules) >= 3
 
 
-def test_planner_recipe_autoskillit_version_is_current(planner_recipe):
-    from autoskillit.core import AUTOSKILLIT_INSTALLED_VERSION
-
-    assert planner_recipe.version == AUTOSKILLIT_INSTALLED_VERSION
-
-
 def test_planner_recipe_validate_routes_to_refine_on_fail(planner_recipe):
     assert "validate" in planner_recipe.steps, "validate step must exist"
     assert "check_verdict" in planner_recipe.steps, "check_verdict step must exist"

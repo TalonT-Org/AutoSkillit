@@ -294,10 +294,6 @@ def test_test_source_map_is_committed():
     )
     data = json.loads(map_path.read_text(encoding="utf-8"))
     assert isinstance(data, dict)
-    assert len(data) >= 50, (
-        f"Coverage oracle map is too sparse: {len(data)} entries (expected ≥ 50). "
-        "Re-run 'task coverage-audit'."
-    )
 
 
 @pytest.mark.small
@@ -309,9 +305,13 @@ def test_load_coverage_map_reads_committed_file():
     from tests._test_filter import load_coverage_map
 
     map_path = Path(__file__).parent.parent.parent / ".autoskillit" / "test-source-map.json"
+    assert map_path.exists(), (
+        ".autoskillit/test-source-map.json is missing. "
+        "Run 'task coverage-audit' and commit the output to activate the coverage oracle."
+    )
     result = load_coverage_map(map_path)
     assert result is not None, (
-        "load_coverage_map() returned None — oracle file is missing or older than 30 days. "
+        "load_coverage_map() returned None — oracle file is older than 30 days or malformed. "
         "Run 'task coverage-audit' and commit the result."
     )
     assert len(result) >= 50, f"Oracle returned only {len(result)} entries"

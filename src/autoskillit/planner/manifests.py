@@ -22,13 +22,13 @@ def _backstop_wp_index(item_id: str, result_path: Path, output_dir: Path) -> Non
     if item_id not in indexed_ids:
         result_data = json.loads(result_path.read_text())
         index.append(_build_index_entry(result_data))
-        from autoskillit.core.io import atomic_write  # noqa: PLC0415
+        from autoskillit.core import atomic_write  # noqa: PLC0415
 
         atomic_write(wp_index_path, json.dumps(index, indent=2))
 
 
 def check_remaining(manifest_path: str, pass_name: str, output_dir: str) -> dict[str, str]:
-    from autoskillit.core.io import atomic_write  # noqa: PLC0415
+    from autoskillit.core import write_versioned_json  # noqa: PLC0415
 
     manifest_file = Path(manifest_path)
     out_dir = Path(output_dir)
@@ -61,18 +61,18 @@ def check_remaining(manifest_path: str, pass_name: str, output_dir: str) -> dict
             "wp_index_path": str(out_dir / "wp_index.json"),
         }
         context_path = out_dir / f"context_{next_item['id']}.json"
-        atomic_write(context_path, json.dumps(context, indent=2))
-        atomic_write(manifest_file, json.dumps(manifest, indent=2))
+        write_versioned_json(context_path, context, schema_version=1)
+        write_versioned_json(manifest_file, manifest, schema_version=1)
         return {"current_item_path": str(context_path), "has_remaining": "true"}
 
-    atomic_write(manifest_file, json.dumps(manifest, indent=2))
+    write_versioned_json(manifest_file, manifest, schema_version=1)
     return {"current_item_path": "", "has_remaining": "false"}
 
 
 def build_assignment_manifest(
     phases_dir: str, assignments_dir: str, output_dir: str
 ) -> dict[str, str]:
-    from autoskillit.core.io import atomic_write  # noqa: PLC0415
+    from autoskillit.core import write_versioned_json  # noqa: PLC0415
 
     phases_path = Path(phases_dir)
     out_dir = Path(output_dir)
@@ -106,12 +106,12 @@ def build_assignment_manifest(
         "items": items,
     }
     manifest_path = out_dir / "assignment_manifest.json"
-    atomic_write(manifest_path, json.dumps(manifest, indent=2))
+    write_versioned_json(manifest_path, manifest, schema_version=1)
     return {"manifest_path": str(manifest_path), "total_count": str(len(items))}
 
 
 def build_wp_manifest(assignments_dir: str, output_dir: str) -> dict[str, str]:
-    from autoskillit.core.io import atomic_write  # noqa: PLC0415
+    from autoskillit.core import atomic_write, write_versioned_json  # noqa: PLC0415
 
     assign_path = Path(assignments_dir)
     out_dir = Path(output_dir)
@@ -151,6 +151,6 @@ def build_wp_manifest(assignments_dir: str, output_dir: str) -> dict[str, str]:
         "items": items,
     }
     manifest_path = out_dir / "wp_manifest.json"
-    atomic_write(manifest_path, json.dumps(manifest, indent=2))
+    write_versioned_json(manifest_path, manifest, schema_version=1)
     atomic_write(out_dir / "wp_index.json", "[]")
     return {"manifest_path": str(manifest_path), "total_count": str(len(items))}

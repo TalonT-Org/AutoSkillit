@@ -222,6 +222,7 @@ def test_fleet_reload_relaunches_without_resume(
         campaign_id=None,
         state_path=None,
         resume_metadata=None,
+        fleet_mode="dispatch",
     )
 
     assert call_count[0] == 2

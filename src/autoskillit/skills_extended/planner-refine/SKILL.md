@@ -78,7 +78,7 @@ Read `$1`. Extract the `findings` array. Group by type:
 **Sizing violations** — split or merge:
 - WPs with >5 deliverables: split into two sibling WPs
   - Divide deliverables and `files_touched` between the two WPs (roughly equal split)
-  - Assign a suffix to the new WP ID (e.g., `P1-A2-WP3` → `P1-A2-WP3` + `P1-A2-WP3b`)
+  - Assign a suffix to the new WP IDs (e.g., `P1-A2-WP3` → `P1-A2-WP3a` + `P1-A2-WP3b`)
   - Add both to `wp_manifest.json` and append both compact entries to `wp_index.json`
   - Remove the original oversized WP from both artifacts
 - WPs with 0 deliverables: merge into the nearest sibling WP in the same assignment

@@ -1040,7 +1040,7 @@ class TestFeatureGateVisibility:
         assert FLEET_TOOLS
         for tool in FLEET_TOOLS:
             assert tool in tool_names, (
-                f"{tool} should still be visible: AUTOSKILLIT_FEATURES__FRANCHISE is no longer honored"
+                f"{tool} should still be visible: FRANCHISE env var is no longer honored"
             )
 
     @pytest.mark.anyio

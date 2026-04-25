@@ -46,7 +46,7 @@ def make_jsonl_file(tmp_path, messages: list[str]) -> Path:
 
 def test_clean_parse_from_stdout() -> None:
     """Parse valid JSON body between properly formed sentinels."""
-    from autoskillit.franchise.result_parser import parse_l2_result_block
+    from autoskillit.fleet.result_parser import parse_l2_result_block
 
     payload = {"success": True, "value": 42}
     stdout = make_stdout(json.dumps(payload))
@@ -61,7 +61,7 @@ def test_clean_parse_from_stdout() -> None:
 
 def test_last_occurrence_wins() -> None:
     """Parser must use the LAST occurrence of the sentinel block (rfind)."""
-    from autoskillit.franchise.result_parser import parse_l2_result_block
+    from autoskillit.fleet.result_parser import parse_l2_result_block
 
     first_payload = {"success": False, "value": "first"}
     second_payload = {"success": True, "value": "second"}
@@ -77,7 +77,7 @@ def test_last_occurrence_wins() -> None:
 
 def test_mismatched_dispatch_id_rejected() -> None:
     """Sentinels with a different UUID must not be matched."""
-    from autoskillit.franchise.result_parser import parse_l2_result_block
+    from autoskillit.fleet.result_parser import parse_l2_result_block
 
     wrong_id = "00000000-0000-0000-0000-000000000000"
     stdout = make_stdout(json.dumps({"success": True}), dispatch_id=wrong_id)
@@ -91,7 +91,7 @@ def test_mismatched_dispatch_id_rejected() -> None:
 
 def test_ansi_codes_stripped_before_scan() -> None:
     """ANSI escape sequences around sentinel markers are stripped before scanning."""
-    from autoskillit.franchise.result_parser import parse_l2_result_block
+    from autoskillit.fleet.result_parser import parse_l2_result_block
 
     payload = {"success": True, "ansi": "ok"}
     raw_open = f"\x1b[1m{_open()}\x1b[0m"
@@ -107,7 +107,7 @@ def test_ansi_codes_stripped_before_scan() -> None:
 
 def test_channel_b_fallback_recovers_truncated_stdout(tmp_path) -> None:
     """Channel B JSONL fallback recovers payload when stdout is truncated."""
-    from autoskillit.franchise.result_parser import parse_l2_result_block
+    from autoskillit.fleet.result_parser import parse_l2_result_block
 
     payload = {"success": True, "recovered": True}
     sentinel_text = f"{_open()}\n{json.dumps(payload)}\n{_close()}"
@@ -126,7 +126,7 @@ def test_channel_b_fallback_recovers_truncated_stdout(tmp_path) -> None:
 
 def test_empty_body_between_sentinels() -> None:
     """Opening and closing sentinels with no content yields completed_dirty."""
-    from autoskillit.franchise.result_parser import parse_l2_result_block
+    from autoskillit.fleet.result_parser import parse_l2_result_block
 
     stdout = f"prefix\n{_open()}\n{_close()}\nsuffix"
 
@@ -140,7 +140,7 @@ def test_empty_body_between_sentinels() -> None:
 
 def test_invalid_json_body() -> None:
     """Sentinels present but body is malformed JSON yields completed_dirty."""
-    from autoskillit.franchise.result_parser import parse_l2_result_block
+    from autoskillit.fleet.result_parser import parse_l2_result_block
 
     stdout = make_stdout("not valid json {{{")
 
@@ -153,7 +153,7 @@ def test_invalid_json_body() -> None:
 
 def test_no_sentinel_at_all() -> None:
     """Stdout with no sentinel markers and no JSONL path yields no_sentinel."""
-    from autoskillit.franchise.result_parser import parse_l2_result_block
+    from autoskillit.fleet.result_parser import parse_l2_result_block
 
     result = parse_l2_result_block(
         stdout="This output has absolutely no sentinel markers.",
@@ -167,7 +167,7 @@ def test_no_sentinel_at_all() -> None:
 
 def test_closing_before_opening_rejected() -> None:
     """Closing sentinel appearing before opening yields no_sentinel."""
-    from autoskillit.franchise.result_parser import parse_l2_result_block
+    from autoskillit.fleet.result_parser import parse_l2_result_block
 
     stdout = f"prefix\n{_close()}\nsome content\n{_open()}\nsuffix"
 
@@ -178,7 +178,7 @@ def test_closing_before_opening_rejected() -> None:
 
 def test_bare_sentinel_without_id_ignored() -> None:
     """A sentinel like ---l2-result--- (no ::dispatch_id) must not be matched."""
-    from autoskillit.franchise.result_parser import parse_l2_result_block
+    from autoskillit.fleet.result_parser import parse_l2_result_block
 
     stdout = "prefix\n---l2-result---\n{}\n---end-l2-result---\nsuffix"
 
@@ -189,7 +189,7 @@ def test_bare_sentinel_without_id_ignored() -> None:
 
 def test_multiple_occurrences_uses_last() -> None:
     """Three sentinel blocks — only the last payload is returned."""
-    from autoskillit.franchise.result_parser import parse_l2_result_block
+    from autoskillit.fleet.result_parser import parse_l2_result_block
 
     payloads = [
         {"order": 1, "success": False},
@@ -206,7 +206,7 @@ def test_multiple_occurrences_uses_last() -> None:
 
 def test_unicode_content_in_payload() -> None:
     """JSON body with Unicode characters (emoji, CJK) is preserved."""
-    from autoskillit.franchise.result_parser import parse_l2_result_block
+    from autoskillit.fleet.result_parser import parse_l2_result_block
 
     payload = {"success": True, "emoji": "🚀", "cjk": "日本語"}
     stdout = make_stdout(json.dumps(payload, ensure_ascii=False))
@@ -219,7 +219,7 @@ def test_unicode_content_in_payload() -> None:
 
 def test_nested_triple_dashes_in_json_value() -> None:
     """JSON body with --- sequences inside string values does not confuse the parser."""
-    from autoskillit.franchise.result_parser import parse_l2_result_block
+    from autoskillit.fleet.result_parser import parse_l2_result_block
 
     payload = {"success": True, "value": "---this has --- dashes --- in it---"}
     stdout = make_stdout(json.dumps(payload))
@@ -232,7 +232,7 @@ def test_nested_triple_dashes_in_json_value() -> None:
 
 def test_source_field_tracks_origin(tmp_path) -> None:
     """source field is 'stdout' when found in stdout, 'assistant_messages_jsonl' via JSONL."""
-    from autoskillit.franchise.result_parser import parse_l2_result_block
+    from autoskillit.fleet.result_parser import parse_l2_result_block
 
     payload = {"success": True}
 
@@ -256,7 +256,7 @@ def test_source_field_tracks_origin(tmp_path) -> None:
 
 def test_channel_b_jsonl_file_missing(tmp_path) -> None:
     """Non-existent assistant_messages_path yields no_sentinel gracefully."""
-    from autoskillit.franchise.result_parser import parse_l2_result_block
+    from autoskillit.fleet.result_parser import parse_l2_result_block
 
     missing_path = tmp_path / "does_not_exist.jsonl"
 
@@ -271,7 +271,7 @@ def test_channel_b_jsonl_file_missing(tmp_path) -> None:
 
 def test_channel_b_jsonl_empty_file(tmp_path) -> None:
     """Empty assistant_messages_path file yields no_sentinel."""
-    from autoskillit.franchise.result_parser import parse_l2_result_block
+    from autoskillit.fleet.result_parser import parse_l2_result_block
 
     empty_path = tmp_path / "empty.jsonl"
     empty_path.write_text("", encoding="utf-8")
@@ -287,7 +287,7 @@ def test_channel_b_jsonl_empty_file(tmp_path) -> None:
 
 def test_channel_b_jsonl_no_assistant_records(tmp_path) -> None:
     """JSONL with only system/result records (no assistant) yields no_sentinel."""
-    from autoskillit.franchise.result_parser import parse_l2_result_block
+    from autoskillit.fleet.result_parser import parse_l2_result_block
 
     path = tmp_path / "session.jsonl"
     records = [

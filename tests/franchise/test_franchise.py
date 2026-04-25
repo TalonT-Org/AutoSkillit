@@ -11,14 +11,14 @@ pytestmark = [pytest.mark.layer("franchise"), pytest.mark.small, pytest.mark.fea
 
 def test_franchise_package_importable() -> None:
     """franchise package can be imported without error."""
-    import autoskillit.franchise  # noqa: F401
+    import autoskillit.fleet  # noqa: F401
 
     # Verify gateway exports are accessible
-    from autoskillit.franchise import CampaignState, DispatchRecord, read_state  # noqa: F401
+    from autoskillit.fleet import CampaignState, DispatchRecord, read_state  # noqa: F401
 
 
 def test_asyncio_lock_satisfies_franchise_lock() -> None:
-    """asyncio.Lock() is a structural match for FranchiseLock at runtime.
+    """asyncio.Lock() is a structural match for FleetLock at runtime.
 
     isinstance() with @runtime_checkable only verifies that required attribute names
     are present — not signatures. The additional assertion confirms that acquire is
@@ -26,18 +26,18 @@ def test_asyncio_lock_satisfies_franchise_lock() -> None:
     """
     import asyncio
 
-    from autoskillit.core import FranchiseLock
+    from autoskillit.core import FleetLock
 
     lock = asyncio.Lock()
-    assert isinstance(lock, FranchiseLock)
+    assert isinstance(lock, FleetLock)
     assert inspect.iscoroutinefunction(lock.acquire)
 
 
 def test_franchise_lock_protocol_has_required_methods() -> None:
-    """FranchiseLock exposes locked, acquire, and release."""
-    from autoskillit.core import FranchiseLock
+    """FleetLock exposes locked, acquire, and release."""
+    from autoskillit.core import FleetLock
 
-    members = {name for name, _ in inspect.getmembers(FranchiseLock) if not name.startswith("_")}
+    members = {name for name, _ in inspect.getmembers(FleetLock) if not name.startswith("_")}
     assert {"locked", "acquire", "release"} <= members
 
 

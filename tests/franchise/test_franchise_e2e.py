@@ -248,7 +248,7 @@ class FranchiseRuntime:
         quota_checker: Any = None,
     ) -> dict[str, Any]:
         """Run execute_dispatch and return the parsed JSON envelope."""
-        from autoskillit.franchise._api import execute_dispatch
+        from autoskillit.fleet._api import execute_dispatch
 
         self.configure_shim(shim_mode, sleep_sec=sleep_sec)
         raw = await execute_dispatch(
@@ -270,7 +270,7 @@ class FranchiseRuntime:
 
     def read_dispatch_state(self, dispatch_id: str) -> Any:
         """Read per-dispatch CampaignState (or None if missing/corrupt)."""
-        from autoskillit.franchise.state import read_state
+        from autoskillit.fleet.state import read_state
 
         return read_state(self.dispatch_state_path(dispatch_id))
 
@@ -394,7 +394,7 @@ async def test_two_dispatch_happy_path(franchise_runtime: FranchiseRuntime) -> N
         state = rt.read_dispatch_state(result["dispatch_id"])
         assert state is not None
         d = state.dispatches[0]
-        from autoskillit.franchise.state import DispatchStatus
+        from autoskillit.fleet.state import DispatchStatus
 
         assert d.status == DispatchStatus.SUCCESS
         assert d.l2_pid > 0
@@ -404,7 +404,7 @@ async def test_two_dispatch_happy_path(franchise_runtime: FranchiseRuntime) -> N
 @pytest.mark.anyio
 async def test_halt_on_first_failure_default(franchise_runtime: FranchiseRuntime) -> None:
     """Failure detection + campaign halt with continue_on_failure=False."""
-    from autoskillit.franchise.state import DispatchStatus, resume_campaign_from_state
+    from autoskillit.fleet.state import DispatchStatus, resume_campaign_from_state
 
     rt = franchise_runtime
     rt.add_recipe("recipe-a")
@@ -426,7 +426,7 @@ async def test_halt_on_first_failure_default(franchise_runtime: FranchiseRuntime
 @pytest.mark.anyio
 async def test_continue_on_failure_when_flagged(franchise_runtime: FranchiseRuntime) -> None:
     """continue_on_failure=True returns next_dispatch_name for the failed dispatch."""
-    from autoskillit.franchise.state import DispatchStatus, resume_campaign_from_state
+    from autoskillit.fleet.state import DispatchStatus, resume_campaign_from_state
 
     rt = franchise_runtime
     rt.add_recipe("recipe-a")
@@ -452,7 +452,7 @@ async def test_continue_on_failure_when_flagged(franchise_runtime: FranchiseRunt
 @pytest.mark.anyio
 async def test_malformed_l2_result_surfaces_warning(franchise_runtime: FranchiseRuntime) -> None:
     """Malformed sentinel body produces l2_parse_failed failure with diagnostic fields."""
-    from autoskillit.franchise.state import DispatchStatus
+    from autoskillit.fleet.state import DispatchStatus
 
     rt = franchise_runtime
     rt.add_recipe("recipe-a")
@@ -474,7 +474,7 @@ async def test_l3_halts_on_missing_result_block_when_continue_on_failure_false(
     franchise_runtime: FranchiseRuntime,
 ) -> None:
     """No-sentinel failure + continue_on_failure=False yields franchise_halted_on_failure."""
-    from autoskillit.franchise.state import DispatchStatus, resume_campaign_from_state
+    from autoskillit.fleet.state import DispatchStatus, resume_campaign_from_state
 
     rt = franchise_runtime
     rt.add_recipe("recipe-a")
@@ -539,7 +539,7 @@ async def test_state_json_atomic_under_concurrent_read(
     franchise_runtime: FranchiseRuntime, tmp_path: Path
 ) -> None:
     """atomic_write guarantees readers never observe corrupted partial JSON."""
-    from autoskillit.franchise.state import DispatchRecord, write_initial_state
+    from autoskillit.fleet.state import DispatchRecord, write_initial_state
 
     state_path = tmp_path / "atomic-test-state.json"
     write_initial_state(state_path, "cid-0", "cn", str(state_path), [DispatchRecord(name="d0")])
@@ -633,7 +633,7 @@ async def test_l2_killed_mid_dispatch_records_failure(
     franchise_runtime: FranchiseRuntime,
 ) -> None:
     """L2 process killed mid-dispatch produces l2_no_result_block failure (not crash)."""
-    from autoskillit.franchise.state import DispatchStatus
+    from autoskillit.fleet.state import DispatchStatus
 
     rt = franchise_runtime
     rt.add_recipe("sleepy-recipe")
@@ -684,15 +684,14 @@ def _is_zombie(pid: int) -> bool:
 @pytest.mark.anyio
 async def test_orphan_l2_reaping(franchise_runtime: FranchiseRuntime, tmp_path: Path) -> None:
     """_reap_stale_dispatches kills a real orphan process and marks it interrupted."""
-    from autoskillit.cli._franchise import _reap_stale_dispatches
-    from autoskillit.franchise.state import (
+    from autoskillit.cli._fleet import _reap_stale_dispatches
+    from autoskillit.core._linux_proc import read_boot_id, read_starttime_ticks
+    from autoskillit.fleet.state import (
         DispatchRecord,
         DispatchStatus,
         read_state,
         write_initial_state,
     )
-
-    from autoskillit.core._linux_proc import read_boot_id, read_starttime_ticks
 
     orphan = subprocess.Popen(["sleep", "999"])
     orphan_pid = orphan.pid
@@ -728,7 +727,7 @@ async def test_orphan_l2_reaping(franchise_runtime: FranchiseRuntime, tmp_path: 
 @pytest.mark.anyio
 async def test_l2_timeout_enforced(franchise_runtime: FranchiseRuntime) -> None:
     """timeout_sec=1 kills a sleeping L2 process and returns l2_timeout franchise_error."""
-    from autoskillit.franchise.state import DispatchStatus
+    from autoskillit.fleet.state import DispatchStatus
 
     rt = franchise_runtime
     rt.add_recipe("slow-recipe")
@@ -764,7 +763,7 @@ async def test_l2_timeout_enforced(franchise_runtime: FranchiseRuntime) -> None:
 @pytest.mark.anyio
 async def test_resume_after_l3_crash(franchise_runtime: FranchiseRuntime, tmp_path: Path) -> None:
     """resume_campaign_from_state marks stale RUNNING as interrupted and returns next pending."""
-    from autoskillit.franchise.state import (
+    from autoskillit.fleet.state import (
         DispatchRecord,
         DispatchStatus,
         read_state,
@@ -824,7 +823,7 @@ async def test_manifest_mid_campaign_deletion(
     franchise_runtime: FranchiseRuntime, tmp_path: Path
 ) -> None:
     """resume_campaign_from_state returns None when state file is missing."""
-    from autoskillit.franchise.state import (
+    from autoskillit.fleet.state import (
         DispatchRecord,
         resume_campaign_from_state,
         write_initial_state,

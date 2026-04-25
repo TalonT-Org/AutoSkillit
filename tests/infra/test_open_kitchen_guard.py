@@ -32,9 +32,7 @@ def test_open_kitchen_guard_denies_leaf_tier() -> None:
 
 
 def test_open_kitchen_guard_denies_fleet_tier() -> None:
-    response = _run_guard(
-        {"AUTOSKILLIT_HEADLESS": "1", "AUTOSKILLIT_SESSION_TYPE": "fleet"}, {}
-    )
+    response = _run_guard({"AUTOSKILLIT_HEADLESS": "1", "AUTOSKILLIT_SESSION_TYPE": "fleet"}, {})
     assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert "fleet" in response["hookSpecificOutput"]["permissionDecisionReason"].lower()
 

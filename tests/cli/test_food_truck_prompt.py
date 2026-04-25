@@ -84,9 +84,8 @@ class TestL2SousChefBlock:
     def test_graceful_degradation(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
     ) -> None:
-        from autoskillit.fleet import _prompts as _fleet_prompts
-
         from autoskillit.cli import _prompts
+        from autoskillit.fleet import _prompts as _fleet_prompts
 
         monkeypatch.setattr(_fleet_prompts, "pkg_root", lambda: tmp_path)
         result = _prompts._build_l2_sous_chef_block()

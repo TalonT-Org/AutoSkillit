@@ -1,4 +1,4 @@
-"""Tests for _franchise_signal_guard in cli/_franchise.py (Group J)."""
+"""Tests for _fleet_signal_guard in cli/_franchise.py (Group J)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,8 @@ from unittest.mock import MagicMock, patch
 
 import anyio
 import pytest
-from autoskillit.franchise import (
+
+from autoskillit.fleet import (
     DispatchRecord,
     DispatchStatus,
     read_state,
@@ -64,7 +65,7 @@ async def _run_signal_guard(
     cleanup_on_interrupt: bool = False,
 ) -> None:
     """Run the signal guard and fire a signal after it's armed."""
-    from autoskillit.cli._franchise import _franchise_signal_guard
+    from autoskillit.cli._fleet import _fleet_signal_guard
 
     async with anyio.create_task_group() as tg:
 
@@ -74,7 +75,7 @@ async def _run_signal_guard(
 
         tg.start_soon(_fire_signal)
 
-        async with _franchise_signal_guard(
+        async with _fleet_signal_guard(
             state_path,
             campaign_id,
             cleanup_on_interrupt=cleanup_on_interrupt,
@@ -226,13 +227,13 @@ class TestSignalGuard:
 
         events: list[str] = []
 
-        from autoskillit.franchise import mark_dispatch_interrupted as _real_mark
+        from autoskillit.fleet import mark_dispatch_interrupted as _real_mark
 
         def tracking_mark(sp: Path, name: str, *, reason: str) -> None:
             events.append("state_written")
             _real_mark(sp, name, reason=reason)
 
-        with patch("autoskillit.cli._franchise.mark_dispatch_interrupted", tracking_mark):
+        with patch("autoskillit.cli._fleet.mark_dispatch_interrupted", tracking_mark):
             await _run_signal_guard(state_path, campaign_id, _signal.SIGTERM)
             events.append("guard_exited")
 
@@ -252,7 +253,7 @@ def test_sighup_in_franchise_signal_list() -> None:
     """
     from autoskillit.core.paths import pkg_root
 
-    src_path = pkg_root() / "cli" / "_franchise.py"
+    src_path = pkg_root() / "cli" / "_fleet.py"
     tree = ast.parse(src_path.read_text(encoding="utf-8"))
 
     sighup_found = False
@@ -290,7 +291,7 @@ def test_franchise_signame_uses_sig_name_attribute() -> None:
     """
     from autoskillit.core.paths import pkg_root
 
-    src_path = pkg_root() / "cli" / "_franchise.py"
+    src_path = pkg_root() / "cli" / "_fleet.py"
     tree = ast.parse(src_path.read_text(encoding="utf-8"))
 
     sig_name_attr_found = False

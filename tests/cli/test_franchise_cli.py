@@ -15,23 +15,23 @@ import pytest
 from cyclopts import App
 
 if TYPE_CHECKING:
-    from autoskillit.franchise import CampaignState
+    from autoskillit.fleet import CampaignState
 
-from autoskillit.cli._franchise import franchise_list as _franchise_list
-from autoskillit.cli._franchise import franchise_run as _franchise_run
-from autoskillit.cli._franchise import franchise_status as _franchise_status
+from autoskillit.cli._fleet import fleet_list as _fleet_list
+from autoskillit.cli._fleet import fleet_run as _fleet_run
+from autoskillit.cli._fleet import fleet_status as _fleet_status
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium, pytest.mark.feature("franchise")]
 
 
 @pytest.fixture(autouse=True)
 def _franchise_config(tmp_path: Path) -> None:
-    """Ensure .autoskillit/config.yaml enables franchise so _require_franchise passes."""
+    """Ensure .autoskillit/config.yaml enables franchise so _require_fleet passes."""
     cfg_dir = tmp_path / ".autoskillit"
     cfg_dir.mkdir(parents=True, exist_ok=True)
     cfg_file = cfg_dir / "config.yaml"
     if not cfg_file.exists():
-        cfg_file.write_text("features:\n  franchise: true\n")
+        cfg_file.write_text("features:\n  fleet: true\n")
 
 
 # ---------------------------------------------------------------------------
@@ -84,9 +84,9 @@ def _capture_subprocess(monkeypatch: pytest.MonkeyPatch) -> dict:
 
 def _setup_existing_campaign_state(tmp_path: Path, campaign_id: str, campaign_name: str) -> None:
     """Create a state.json for an existing campaign in tmp_path."""
-    from autoskillit.franchise import DispatchRecord, write_initial_state
+    from autoskillit.fleet import DispatchRecord, write_initial_state
 
-    state_dir = tmp_path / ".autoskillit" / "temp" / "franchise" / campaign_id
+    state_dir = tmp_path / ".autoskillit" / "temp" / "fleet" / campaign_id
     state_dir.mkdir(parents=True)
     dispatches = [DispatchRecord(name="dispatch-1")]
     write_initial_state(
@@ -102,9 +102,9 @@ def _setup_campaign_with_tokens(
     token_usage: dict | None = None,
 ) -> None:
     """Create a state.json with a succeeded dispatch and token usage."""
-    from autoskillit.franchise import DispatchRecord, DispatchStatus, write_initial_state
+    from autoskillit.fleet import DispatchRecord, DispatchStatus, write_initial_state
 
-    state_dir = tmp_path / ".autoskillit" / "temp" / "franchise" / campaign_id
+    state_dir = tmp_path / ".autoskillit" / "temp" / "fleet" / campaign_id
     state_dir.mkdir(parents=True)
     if token_usage is None:
         token_usage = {}
@@ -128,9 +128,9 @@ def _setup_campaign_with_status(
     tmp_path: Path, campaign_id: str, campaign_name: str, *, status: str
 ) -> None:
     """Create a state.json with a single dispatch at a given status."""
-    from autoskillit.franchise import DispatchRecord, DispatchStatus, write_initial_state
+    from autoskillit.fleet import DispatchRecord, DispatchStatus, write_initial_state
 
-    state_dir = tmp_path / ".autoskillit" / "temp" / "franchise" / campaign_id
+    state_dir = tmp_path / ".autoskillit" / "temp" / "fleet" / campaign_id
     state_dir.mkdir(parents=True)
     dispatches = [DispatchRecord(name="dispatch-1", status=DispatchStatus(status))]
     write_initial_state(
@@ -146,9 +146,9 @@ def _setup_campaign_with_sessions(
     dispatches: list[tuple[str, str, str]],
 ) -> None:
     """Create a state.json with dispatches that have l2_session_id set."""
-    from autoskillit.franchise import DispatchRecord, DispatchStatus, write_initial_state
+    from autoskillit.fleet import DispatchRecord, DispatchStatus, write_initial_state
 
-    state_dir = tmp_path / ".autoskillit" / "temp" / "franchise" / campaign_id
+    state_dir = tmp_path / ".autoskillit" / "temp" / "fleet" / campaign_id
     state_dir.mkdir(parents=True)
     records = [
         DispatchRecord(name=name, status=DispatchStatus(status), l2_session_id=session_id)
@@ -161,7 +161,7 @@ def _setup_campaign_with_sessions(
 
 def _make_state(*, statuses: list[str]) -> CampaignState:
     """Build an in-memory CampaignState for unit-testing _compute_exit_code."""
-    from autoskillit.franchise import CampaignState, DispatchRecord, DispatchStatus
+    from autoskillit.fleet import CampaignState, DispatchRecord, DispatchStatus
 
     dispatches = [
         DispatchRecord(name=f"d{i}", status=DispatchStatus(s)) for i, s in enumerate(statuses)
@@ -178,7 +178,7 @@ def _make_state(*, statuses: list[str]) -> CampaignState:
 
 def _make_state_with_tokens(*, input_total: int) -> CampaignState:
     """Build an in-memory CampaignState with known token totals."""
-    from autoskillit.franchise import CampaignState, DispatchRecord, DispatchStatus
+    from autoskillit.fleet import CampaignState, DispatchRecord, DispatchStatus
 
     dispatches = [
         DispatchRecord(
@@ -220,11 +220,11 @@ def _mock_batch_delete(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
 # ---------------------------------------------------------------------------
 
 
-def test_franchise_run_rejects_inside_claude_session(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fleet_run_rejects_inside_claude_session(monkeypatch: pytest.MonkeyPatch) -> None:
     """franchise run exits 1 when CLAUDECODE env is set."""
     monkeypatch.setenv("CLAUDECODE", "1")
     with pytest.raises(SystemExit, match="1"):
-        _franchise_run("my-campaign")
+        _fleet_run("my-campaign")
 
 
 # ---------------------------------------------------------------------------
@@ -232,12 +232,12 @@ def test_franchise_run_rejects_inside_claude_session(monkeypatch: pytest.MonkeyP
 # ---------------------------------------------------------------------------
 
 
-def test_franchise_run_rejects_leaf_session_type(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fleet_run_rejects_leaf_session_type(monkeypatch: pytest.MonkeyPatch) -> None:
     """franchise run exits 1 when ambient SESSION_TYPE is leaf."""
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaf")
     monkeypatch.delenv("CLAUDECODE", raising=False)
     with pytest.raises(SystemExit, match="1"):
-        _franchise_run("my-campaign")
+        _fleet_run("my-campaign")
 
 
 # ---------------------------------------------------------------------------
@@ -245,13 +245,13 @@ def test_franchise_run_rejects_leaf_session_type(monkeypatch: pytest.MonkeyPatch
 # ---------------------------------------------------------------------------
 
 
-def test_franchise_run_exits_when_claude_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fleet_run_exits_when_claude_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     """franchise run exits 1 when claude is not on PATH."""
     monkeypatch.delenv("CLAUDECODE", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
     monkeypatch.setattr(shutil, "which", lambda _: None)
     with pytest.raises(SystemExit, match="1"):
-        _franchise_run("my-campaign")
+        _fleet_run("my-campaign")
 
 
 # ---------------------------------------------------------------------------
@@ -259,14 +259,14 @@ def test_franchise_run_exits_when_claude_missing(monkeypatch: pytest.MonkeyPatch
 # ---------------------------------------------------------------------------
 
 
-def test_franchise_run_exits_when_campaign_not_found(
+def test_fleet_run_exits_when_campaign_not_found(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """franchise run exits 1 when campaign name doesn't resolve."""
     monkeypatch.chdir(tmp_path)
     _stub_guards(monkeypatch)
     with pytest.raises(SystemExit, match="1"):
-        _franchise_run("nonexistent-campaign")
+        _fleet_run("nonexistent-campaign")
 
 
 # ---------------------------------------------------------------------------
@@ -274,17 +274,17 @@ def test_franchise_run_exits_when_campaign_not_found(
 # ---------------------------------------------------------------------------
 
 
-def test_franchise_run_sets_session_type_franchise(
+def test_fleet_run_sets_session_type_franchise(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Subprocess env includes AUTOSKILLIT_SESSION_TYPE=franchise."""
+    """Subprocess env includes AUTOSKILLIT_SESSION_TYPE" in env and env["AUTOSKILLIT_SESSION_TYPE"] == "fleet"."""
     _stub_guards(monkeypatch)
     monkeypatch.chdir(tmp_path)
     _stub_campaign_resolution(monkeypatch, tmp_path, "test-campaign")
     captured = _capture_subprocess(monkeypatch)
-    _franchise_run("test-campaign")
+    _fleet_run("test-campaign")
     env = captured["env"]
-    assert env["AUTOSKILLIT_SESSION_TYPE"] == "franchise"
+    assert env["AUTOSKILLIT_SESSION_TYPE" in env and env["AUTOSKILLIT_SESSION_TYPE"] == "fleet""
     assert "AUTOSKILLIT_CAMPAIGN_ID" in env
     assert "AUTOSKILLIT_CAMPAIGN_STATE_PATH" in env
 
@@ -294,7 +294,7 @@ def test_franchise_run_sets_session_type_franchise(
 # ---------------------------------------------------------------------------
 
 
-def test_franchise_run_writes_initial_state(
+def test_fleet_run_writes_initial_state(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """state.json exists in franchise temp dir after launch."""
@@ -302,8 +302,8 @@ def test_franchise_run_writes_initial_state(
     monkeypatch.chdir(tmp_path)
     _stub_campaign_resolution(monkeypatch, tmp_path, "test-campaign")
     _capture_subprocess(monkeypatch)
-    _franchise_run("test-campaign")
-    state_dirs = list((tmp_path / ".autoskillit" / "temp" / "franchise").iterdir())
+    _fleet_run("test-campaign")
+    state_dirs = list((tmp_path / ".autoskillit" / "temp" / "fleet").iterdir())
     assert len(state_dirs) == 1
     state_file = state_dirs[0] / "state.json"
     assert state_file.exists()
@@ -314,7 +314,7 @@ def test_franchise_run_writes_initial_state(
 # ---------------------------------------------------------------------------
 
 
-def test_franchise_run_resume_reads_existing_state(
+def test_fleet_run_resume_reads_existing_state(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """--resume-campaign reuses existing campaign_id and passes completed block to prompt."""
@@ -324,7 +324,7 @@ def test_franchise_run_resume_reads_existing_state(
     _setup_existing_campaign_state(tmp_path, campaign_id, "test-campaign")
     _stub_campaign_resolution(monkeypatch, tmp_path, "test-campaign")
     captured = _capture_subprocess(monkeypatch)
-    _franchise_run("test-campaign", resume_campaign=campaign_id)
+    _fleet_run("test-campaign", resume_campaign=campaign_id)
     assert captured["env"]["AUTOSKILLIT_CAMPAIGN_ID"] == campaign_id
 
 
@@ -333,12 +333,12 @@ def test_franchise_run_resume_reads_existing_state(
 # ---------------------------------------------------------------------------
 
 
-def test_franchise_list_no_campaigns(
+def test_fleet_list_no_campaigns(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
 ) -> None:
     """franchise list prints 'No campaigns found' when directory is empty."""
     monkeypatch.chdir(tmp_path)
-    _franchise_list()
+    _fleet_list()
     assert "No campaigns found" in capsys.readouterr().out
 
 
@@ -347,13 +347,13 @@ def test_franchise_list_no_campaigns(
 # ---------------------------------------------------------------------------
 
 
-def test_franchise_list_shows_campaigns(
+def test_fleet_list_shows_campaigns(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
 ) -> None:
     """franchise list shows tabular campaign listing."""
     _setup_campaign_recipes(tmp_path, ["alpha", "beta"])
     monkeypatch.chdir(tmp_path)
-    _franchise_list()
+    _fleet_list()
     output = capsys.readouterr().out
     assert "alpha" in output
     assert "beta" in output
@@ -364,14 +364,14 @@ def test_franchise_list_shows_campaigns(
 # ---------------------------------------------------------------------------
 
 
-def test_franchise_status_shows_dispatches(
+def test_fleet_status_shows_dispatches(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
 ) -> None:
     """franchise status shows dispatch table from state.json."""
     _setup_existing_campaign_state(tmp_path, "abc123", "test-campaign")
     monkeypatch.chdir(tmp_path)
     with pytest.raises(SystemExit):
-        _franchise_status("abc123")
+        _fleet_status("abc123")
     output = capsys.readouterr().out
     assert "test-campaign" in output
 
@@ -381,14 +381,14 @@ def test_franchise_status_shows_dispatches(
 # ---------------------------------------------------------------------------
 
 
-def test_franchise_status_json_flag(
+def test_fleet_status_json_flag(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
 ) -> None:
     """--json produces valid JSON output with campaign_id."""
     _setup_existing_campaign_state(tmp_path, "abc123", "test-campaign")
     monkeypatch.chdir(tmp_path)
     with pytest.raises(SystemExit):
-        _franchise_status("abc123", json_output=True)
+        _fleet_status("abc123", json_output=True)
     output = capsys.readouterr().out
     data = json.loads(output)
     assert data["campaign_id"] == "abc123"
@@ -399,7 +399,7 @@ def test_franchise_status_json_flag(
 # ---------------------------------------------------------------------------
 
 
-def test_franchise_status_cleanup_calls_batch_delete(
+def test_fleet_status_cleanup_calls_batch_delete(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """--cleanup invokes clone_registry.batch_delete with owner filter."""
@@ -407,7 +407,7 @@ def test_franchise_status_cleanup_calls_batch_delete(
     monkeypatch.chdir(tmp_path)
     mock_delete = _mock_batch_delete(monkeypatch)
     with pytest.raises(SystemExit):
-        _franchise_status("abc123", cleanup=True)
+        _fleet_status("abc123", cleanup=True)
     assert mock_delete.called
     assert mock_delete.call_args.args[0] == ""
     assert mock_delete.call_args.kwargs.get("owner") == "abc123"
@@ -418,7 +418,7 @@ def test_franchise_status_cleanup_calls_batch_delete(
 # ---------------------------------------------------------------------------
 
 
-def test_franchise_run_exit_code_passthrough(
+def test_fleet_run_exit_code_passthrough(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """franchise run propagates subprocess exit code."""
@@ -432,7 +432,7 @@ def test_franchise_run_exit_code_passthrough(
         lambda *a, **kw: type("R", (), {"returncode": 2, "stdout": "", "stderr": ""})(),
     )
     with pytest.raises(SystemExit) as exc_info:
-        _franchise_run("test-campaign")
+        _fleet_run("test-campaign")
     assert exc_info.value.code == 2
 
 
@@ -441,13 +441,13 @@ def test_franchise_run_exit_code_passthrough(
 # ---------------------------------------------------------------------------
 
 
-def test_franchise_status_missing_campaign(
+def test_fleet_status_missing_campaign(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
 ) -> None:
     """franchise status exits 3 for unknown campaign_id."""
     monkeypatch.chdir(tmp_path)
     with pytest.raises(SystemExit, match="3"):
-        _franchise_status("nonexistent")
+        _fleet_status("nonexistent")
 
 
 # ---------------------------------------------------------------------------
@@ -455,14 +455,14 @@ def test_franchise_status_missing_campaign(
 # ---------------------------------------------------------------------------
 
 
-def test_franchise_status_table_columns(
+def test_fleet_status_table_columns(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
 ) -> None:
     """franchise status output contains all 8 header labels in order."""
     _setup_campaign_with_tokens(tmp_path, "cid01", "my-campaign")
     monkeypatch.chdir(tmp_path)
     with pytest.raises(SystemExit):
-        _franchise_status("cid01")
+        _fleet_status("cid01")
     out = capsys.readouterr().out
     assert out.index("NAME") < out.index("STATUS") < out.index("ELAPSED")
     assert out.index("INPUT") < out.index("OUTPUT") < out.index("CACHE_RD")
@@ -477,7 +477,7 @@ def test_franchise_status_table_columns(
 
 def test_status_numeric_columns_right_aligned() -> None:
     """Numeric column definitions use align='>'."""
-    from autoskillit.cli._franchise import _STATUS_COLUMNS
+    from autoskillit.cli._fleet import _STATUS_COLUMNS
 
     numeric_labels = {"ELAPSED", "INPUT", "OUTPUT", "CACHE_RD", "CACHE_WR"}
     for col in _STATUS_COLUMNS:
@@ -490,7 +490,7 @@ def test_status_numeric_columns_right_aligned() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_franchise_status_json_includes_totals(
+def test_fleet_status_json_includes_totals(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
 ) -> None:
     """--json output has totals key with summed token counts."""
@@ -507,7 +507,7 @@ def test_franchise_status_json_includes_totals(
     )
     monkeypatch.chdir(tmp_path)
     with pytest.raises(SystemExit):
-        _franchise_status("cid01", json_output=True)
+        _fleet_status("cid01", json_output=True)
     data = json.loads(capsys.readouterr().out)
     assert data["totals"]["input_tokens"] == 100
     assert data["totals"]["output_tokens"] == 50
@@ -520,14 +520,14 @@ def test_franchise_status_json_includes_totals(
 # ---------------------------------------------------------------------------
 
 
-def test_franchise_status_json_no_ansi(
+def test_fleet_status_json_no_ansi(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
 ) -> None:
     """--json output must not contain ANSI escape sequences."""
     _setup_existing_campaign_state(tmp_path, "cid01", "test")
     monkeypatch.chdir(tmp_path)
     with pytest.raises(SystemExit):
-        _franchise_status("cid01", json_output=True)
+        _fleet_status("cid01", json_output=True)
     out = capsys.readouterr().out
     assert "\x1b[" not in out
 
@@ -539,7 +539,7 @@ def test_franchise_status_json_no_ansi(
 
 def test_exit_code_all_success() -> None:
     """_compute_exit_code returns 0 when all dispatches succeed or skip."""
-    from autoskillit.cli._franchise import _compute_exit_code
+    from autoskillit.cli._fleet import _compute_exit_code
 
     state = _make_state(statuses=["success", "skipped", "success"])
     assert _compute_exit_code(state) == 0
@@ -553,7 +553,7 @@ def test_exit_code_all_success() -> None:
 @pytest.mark.parametrize("bad_status", ["failure", "interrupted", "refused", "released"])
 def test_exit_code_any_failure(bad_status: str) -> None:
     """_compute_exit_code returns 1 when any dispatch is in a failure-class status."""
-    from autoskillit.cli._franchise import _compute_exit_code
+    from autoskillit.cli._fleet import _compute_exit_code
 
     state = _make_state(statuses=["success", bad_status])
     assert _compute_exit_code(state) == 1
@@ -567,7 +567,7 @@ def test_exit_code_any_failure(bad_status: str) -> None:
 @pytest.mark.parametrize("progress_status", ["running", "pending"])
 def test_exit_code_in_progress(progress_status: str) -> None:
     """_compute_exit_code returns 2 when any dispatch is in-progress and none failed."""
-    from autoskillit.cli._franchise import _compute_exit_code
+    from autoskillit.cli._fleet import _compute_exit_code
 
     state = _make_state(statuses=["success", progress_status])
     assert _compute_exit_code(state) == 2
@@ -581,9 +581,9 @@ def test_exit_code_in_progress(progress_status: str) -> None:
 def test_exit_code_3_on_missing_state(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """franchise status exits 3 when state file is absent."""
     monkeypatch.chdir(tmp_path)
-    (tmp_path / ".autoskillit" / "temp" / "franchise" / "cid01").mkdir(parents=True)
+    (tmp_path / ".autoskillit" / "temp" / "fleet" / "cid01").mkdir(parents=True)
     with pytest.raises(SystemExit) as exc_info:
-        _franchise_status("cid01")
+        _fleet_status("cid01")
     assert exc_info.value.code == 3
 
 
@@ -596,7 +596,7 @@ def test_cross_check_warns_on_divergence(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
 ) -> None:
     """_cross_check_tokens emits a stderr warning when divergence exceeds 5%."""
-    from autoskillit.cli._franchise import _aggregate_totals, _cross_check_tokens
+    from autoskillit.cli._fleet import _aggregate_totals, _cross_check_tokens
 
     (tmp_path / "sessions.jsonl").write_text("")
     state = _make_state_with_tokens(input_total=10000)
@@ -635,7 +635,7 @@ def test_watch_exits_on_terminal_campaign(monkeypatch: pytest.MonkeyPatch, tmp_p
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("sys.stdin", io.StringIO(""))
     with pytest.raises(SystemExit) as exc_info:
-        _franchise_status("cid01", watch=True)
+        _fleet_status("cid01", watch=True)
     assert exc_info.value.code == 0
 
 
@@ -660,7 +660,7 @@ def test_cleanup_per_dispatch_session(monkeypatch: pytest.MonkeyPatch, tmp_path:
         lambda self, sid: cleanup_calls.append(sid) or True,
     )
     with pytest.raises(SystemExit):
-        _franchise_status("cid01", cleanup=True)
+        _fleet_status("cid01", cleanup=True)
     assert "sid-1" in cleanup_calls
     assert "sid-2" in cleanup_calls
 
@@ -678,7 +678,7 @@ def test_status_table_no_ansi_when_no_color(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("NO_COLOR", "1")
     with pytest.raises(SystemExit):
-        _franchise_status("cid01")
+        _fleet_status("cid01")
     out = capsys.readouterr().out
     assert "\x1b[" not in out
 
@@ -690,7 +690,7 @@ def test_status_table_no_ansi_when_no_color(
 
 def test_exit_code_failure_over_in_progress() -> None:
     """_compute_exit_code returns 1 (failure) when mixed with in-progress."""
-    from autoskillit.cli._franchise import _compute_exit_code
+    from autoskillit.cli._fleet import _compute_exit_code
 
     state = _make_state(statuses=["failure", "running"])
     assert _compute_exit_code(state) == 1
@@ -713,7 +713,7 @@ def test_status_table_shows_totals_row(
     )
     monkeypatch.chdir(tmp_path)
     with pytest.raises(SystemExit):
-        _franchise_status("cid01")
+        _fleet_status("cid01")
     out = capsys.readouterr().out
     assert "TOTAL" in out.upper()
     # Verify the humanized token values actually appear in the TOTAL row
@@ -753,20 +753,20 @@ class TestFranchiseCLIRegistration:
     def test_franchise_subcommand_registered(self) -> None:
         app = _get_app()
         names = _subcommand_names(app)
-        assert "franchise" in names
+        assert "fleet" in names
 
-    def test_franchise_status_accepts_reap_flag(self) -> None:
-        from autoskillit.cli._franchise import franchise_app
+    def test_fleet_status_accepts_reap_flag(self) -> None:
+        from autoskillit.cli._fleet import fleet_app
 
-        status_cmd = _find_command(franchise_app, "status")
+        status_cmd = _find_command(fleet_app, "status")
         assert status_cmd is not None, "franchise status command not found"
 
-    def test_franchise_status_accepts_dry_run_flag(self) -> None:
+    def test_fleet_status_accepts_dry_run_flag(self) -> None:
         import inspect
 
-        from autoskillit.cli._franchise import franchise_status
+        from autoskillit.cli._fleet import fleet_status
 
-        sig = inspect.signature(franchise_status)
+        sig = inspect.signature(fleet_status)
         assert "dry_run" in sig.parameters
         assert "reap" in sig.parameters
 
@@ -776,7 +776,7 @@ class TestFranchiseCLIRegistration:
 # ---------------------------------------------------------------------------
 
 
-def test_franchise_run_exits_when_disabled(
+def test_fleet_run_exits_when_disabled(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """franchise_run exits 1 when franchise feature is disabled via feature gate."""
@@ -784,16 +784,16 @@ def test_franchise_run_exits_when_disabled(
     _stub_guards(monkeypatch)
     checked_features: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli._franchise.is_feature_enabled",
+        "autoskillit.cli._fleet.is_feature_enabled",
         lambda name, features: checked_features.append(name) or False,
     )
     monkeypatch.setattr(
         "autoskillit.config.load_config", lambda path: type("C", (), {"features": {}})()
     )
     with pytest.raises(SystemExit) as exc_info:
-        _franchise_run("any-campaign")
+        _fleet_run("any-campaign")
     assert exc_info.value.code == 1
-    assert "franchise" in checked_features
+    assert "fleet" in checked_features
 
 
 # ---------------------------------------------------------------------------
@@ -801,47 +801,47 @@ def test_franchise_run_exits_when_disabled(
 # ---------------------------------------------------------------------------
 
 
-def test_franchise_list_exits_when_disabled(
+def test_fleet_list_exits_when_disabled(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """franchise_list exits 1 when franchise feature is disabled via feature gate."""
     monkeypatch.chdir(tmp_path)
     checked_features: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli._franchise.is_feature_enabled",
+        "autoskillit.cli._fleet.is_feature_enabled",
         lambda name, features: checked_features.append(name) or False,
     )
     monkeypatch.setattr(
         "autoskillit.config.load_config", lambda path: type("C", (), {"features": {}})()
     )
     with pytest.raises(SystemExit) as exc_info:
-        _franchise_list()
+        _fleet_list()
     assert exc_info.value.code == 1
-    assert "franchise" in checked_features
+    assert "fleet" in checked_features
 
 
 # ---------------------------------------------------------------------------
-# T_GUARD_3: franchise_status exits 1 when franchise feature disabled
+# T_GUARD_3: fleet_status exits 1 when franchise feature disabled
 # ---------------------------------------------------------------------------
 
 
-def test_franchise_status_exits_when_disabled(
+def test_fleet_status_exits_when_disabled(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """franchise_status exits 1 when franchise feature is disabled via feature gate."""
+    """fleet_status exits 1 when franchise feature is disabled via feature gate."""
     monkeypatch.chdir(tmp_path)
     checked_features: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli._franchise.is_feature_enabled",
+        "autoskillit.cli._fleet.is_feature_enabled",
         lambda name, features: checked_features.append(name) or False,
     )
     monkeypatch.setattr(
         "autoskillit.config.load_config", lambda path: type("C", (), {"features": {}})()
     )
     with pytest.raises(SystemExit) as exc_info:
-        _franchise_status(None)
+        _fleet_status(None)
     assert exc_info.value.code == 1
-    assert "franchise" in checked_features
+    assert "fleet" in checked_features
 
 
 # ---------------------------------------------------------------------------
@@ -849,20 +849,20 @@ def test_franchise_status_exits_when_disabled(
 # ---------------------------------------------------------------------------
 
 
-def test_franchise_run_proceeds_when_enabled(
+def test_fleet_run_proceeds_when_enabled(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
 ) -> None:
     """franchise_run passes the feature guard and proceeds to campaign resolution."""
     _stub_guards(monkeypatch)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
-        "autoskillit.cli._franchise.is_feature_enabled", lambda name, features: True
+        "autoskillit.cli._fleet.is_feature_enabled", lambda name, features: True
     )
     monkeypatch.setattr(
         "autoskillit.config.load_config", lambda path: type("C", (), {"features": {}})()
     )
     with pytest.raises(SystemExit) as exc_info:
-        _franchise_run("nonexistent-campaign")
+        _fleet_run("nonexistent-campaign")
     assert exc_info.value.code == 1
     # Guard passed — exit must come from campaign resolution, not the feature gate
     captured = capsys.readouterr()
@@ -875,38 +875,38 @@ def test_franchise_run_proceeds_when_enabled(
 # ---------------------------------------------------------------------------
 
 
-def test_franchise_run_without_campaign_name_launches_session(
+def test_fleet_run_without_campaign_name_launches_session(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """franchise_run(None) must launch an interactive session, not exit 1."""
     _stub_guards(monkeypatch)
     monkeypatch.chdir(tmp_path)
     captured = _capture_subprocess(monkeypatch)
-    _franchise_run(None)
+    _fleet_run(None)
     assert "AUTOSKILLIT_SESSION_TYPE" in captured["env"]
-    assert captured["env"]["AUTOSKILLIT_SESSION_TYPE"] == "franchise"
+    assert captured["env"]["AUTOSKILLIT_SESSION_TYPE" in env and env["AUTOSKILLIT_SESSION_TYPE"] == "fleet""
 
 
-def test_franchise_run_without_campaign_writes_no_state(
+def test_fleet_run_without_campaign_writes_no_state(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Ad-hoc franchise run must not create a state.json under .autoskillit/temp/franchise/."""
+    """Ad-hoc franchise run must not create a state.json under .autoskillit/temp/fleet/."""
     _stub_guards(monkeypatch)
     monkeypatch.chdir(tmp_path)
     _capture_subprocess(monkeypatch)
-    _franchise_run(None)
-    franchise_dir = tmp_path / ".autoskillit" / "temp" / "franchise"
+    _fleet_run(None)
+    franchise_dir = tmp_path / ".autoskillit" / "temp" / "fleet"
     assert not franchise_dir.exists() or not any(franchise_dir.rglob("state.json"))
 
 
-def test_franchise_run_without_campaign_no_campaign_env_vars(
+def test_fleet_run_without_campaign_no_campaign_env_vars(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Ad-hoc session must not set AUTOSKILLIT_CAMPAIGN_ID or AUTOSKILLIT_CAMPAIGN_STATE_PATH."""
     _stub_guards(monkeypatch)
     monkeypatch.chdir(tmp_path)
     captured = _capture_subprocess(monkeypatch)
-    _franchise_run(None)
+    _fleet_run(None)
     env = captured["env"]
     assert "AUTOSKILLIT_CAMPAIGN_ID" not in env
     assert "AUTOSKILLIT_CAMPAIGN_STATE_PATH" not in env
@@ -947,8 +947,8 @@ def test_build_franchise_open_prompt_accepts_marketplace_prefix() -> None:
     assert MARKETPLACE_PREFIX + "dispatch_food_truck" in prompt
 
 
-def test_franchise_run_adhoc_still_rejects_claudecode(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fleet_run_adhoc_still_rejects_claudecode(monkeypatch: pytest.MonkeyPatch) -> None:
     """CLAUDECODE guard fires even when campaign_name is None."""
     monkeypatch.setenv("CLAUDECODE", "1")
     with pytest.raises(SystemExit, match="1"):
-        _franchise_run(None)
+        _fleet_run(None)

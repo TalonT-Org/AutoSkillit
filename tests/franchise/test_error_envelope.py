@@ -1,6 +1,6 @@
 """Tests for franchise error envelope registry and constructor.
 
-Group R: FranchiseErrorCode enum, FRANCHISE_ERROR_CODES frozenset, and franchise_error() helper.
+Group R: FleetErrorCode enum, FLEET_ERROR_CODES frozenset, and fleet_error() helper.
 """
 
 from __future__ import annotations
@@ -17,21 +17,21 @@ pytestmark = [pytest.mark.layer("franchise"), pytest.mark.small, pytest.mark.fea
 SRC_ROOT = Path(__file__).parent.parent.parent / "src" / "autoskillit"
 
 # Matches error code strings in the franchise/l2/dispatch/cleanup namespace
-_FRANCHISE_CODE_PATTERN = re.compile(r"^(franchise_|l2_|dispatch_|cleanup_)")
+_FRANCHISE_CODE_PATTERN = re.compile(r"^(fleet_|l2_|dispatch_|cleanup_)")
 
 
-class TestFranchiseErrorCodeEnum:
-    def test_franchise_error_code_enum_has_expected_codes(self):
-        from autoskillit.core import FranchiseErrorCode
+class TestFleetErrorCodeEnum:
+    def test_fleet_error_code_enum_has_expected_codes(self):
+        from autoskillit.core import FleetErrorCode
 
         expected_values = {
-            "franchise_parallel_refused",
-            "franchise_unknown_ingredient",
-            "franchise_recipe_not_found",
-            "franchise_invalid_recipe_kind",
-            "franchise_hard_refusal_headless",
-            "franchise_manifest_missing",
-            "franchise_manifest_corrupted",
+            "fleet_parallel_refused",
+            "fleet_unknown_ingredient",
+            "fleet_recipe_not_found",
+            "fleet_invalid_recipe_kind",
+            "fleet_hard_refusal_headless",
+            "fleet_manifest_missing",
+            "fleet_manifest_corrupted",
             "l2_timeout",
             "l2_no_result_block",
             "l2_parse_failed",
@@ -40,55 +40,55 @@ class TestFranchiseErrorCodeEnum:
             "quota_exhausted",
             "cleanup_failed",
         }
-        assert {c.value for c in FranchiseErrorCode} == expected_values
+        assert {c.value for c in FleetErrorCode} == expected_values
 
-    def test_franchise_error_codes_frozenset_matches_enum(self):
-        from autoskillit.core import FRANCHISE_ERROR_CODES, FranchiseErrorCode
+    def test_fleet_error_codes_frozenset_matches_enum(self):
+        from autoskillit.core import FLEET_ERROR_CODES, FleetErrorCode
 
-        assert FRANCHISE_ERROR_CODES == frozenset(FranchiseErrorCode)
+        assert FLEET_ERROR_CODES == frozenset(FleetErrorCode)
 
-    def test_franchise_error_code_values_are_snake_case(self):
-        from autoskillit.core import FranchiseErrorCode
+    def test_fleet_error_code_values_are_snake_case(self):
+        from autoskillit.core import FleetErrorCode
 
         snake_case = re.compile(r"^[a-z][a-z0-9_]*$")
-        for code in FranchiseErrorCode:
+        for code in FleetErrorCode:
             assert snake_case.match(code.value), f"{code!r} is not snake_case"
 
-    def test_franchise_error_code_enum_re_exported_from_core(self):
-        from autoskillit.core import FranchiseErrorCode  # noqa: F401
+    def test_fleet_error_code_enum_re_exported_from_core(self):
+        from autoskillit.core import FleetErrorCode  # noqa: F401
 
-        assert FranchiseErrorCode is not None
+        assert FleetErrorCode is not None
 
 
 class TestFranchiseErrorHelper:
-    def test_franchise_error_rejects_unregistered_code(self):
-        from autoskillit.core import franchise_error
+    def test_fleet_error_rejects_unregistered_code(self):
+        from autoskillit.core import fleet_error
 
-        with pytest.raises(ValueError, match="Unregistered franchise error code"):
-            franchise_error("bogus_code", "msg")
+        with pytest.raises(ValueError, match="Unregistered fleet error code"):
+            fleet_error("bogus_code", "msg")
 
-    def test_franchise_error_returns_valid_json_envelope(self):
-        from autoskillit.core import FranchiseErrorCode, franchise_error
+    def test_fleet_error_returns_valid_json_envelope(self):
+        from autoskillit.core import FleetErrorCode, fleet_error
 
-        result = franchise_error(FranchiseErrorCode.L2_TIMEOUT, "timed out")
+        result = fleet_error(FleetErrorCode.L2_TIMEOUT, "timed out")
         data = json.loads(result)
         assert set(data.keys()) >= {"success", "error", "user_visible_message", "details"}
         assert data["success"] is False
         assert data["error"] == "l2_timeout"
         assert data["user_visible_message"] == "timed out"
 
-    def test_franchise_error_details_default_none(self):
-        from autoskillit.core import FranchiseErrorCode, franchise_error
+    def test_fleet_error_details_default_none(self):
+        from autoskillit.core import FleetErrorCode, fleet_error
 
-        result = json.loads(franchise_error(FranchiseErrorCode.L2_TIMEOUT, "msg"))
+        result = json.loads(fleet_error(FleetErrorCode.L2_TIMEOUT, "msg"))
         assert result["details"] is None
 
-    def test_franchise_error_details_json_serializable(self):
-        from autoskillit.core import FranchiseErrorCode, franchise_error
+    def test_fleet_error_details_json_serializable(self):
+        from autoskillit.core import FleetErrorCode, fleet_error
 
         result = json.loads(
-            franchise_error(
-                FranchiseErrorCode.L2_TIMEOUT,
+            fleet_error(
+                FleetErrorCode.L2_TIMEOUT,
                 "msg",
                 details={"key": [1, 2]},
             )
@@ -96,22 +96,22 @@ class TestFranchiseErrorHelper:
         assert result["details"] == {"key": [1, 2]}
 
         with pytest.raises(TypeError):
-            franchise_error(
-                FranchiseErrorCode.L2_TIMEOUT,
+            fleet_error(
+                FleetErrorCode.L2_TIMEOUT,
                 "msg",
                 details={"fn": lambda: 0},  # type: ignore[arg-type]
             )
 
-    def test_franchise_error_re_exported_from_pipeline(self):
+    def test_fleet_error_re_exported_from_pipeline(self):
         import importlib
 
         pipeline = importlib.import_module("autoskillit.pipeline")
-        assert hasattr(pipeline, "franchise_error")
-        assert pipeline.franchise_error is not None
+        assert hasattr(pipeline, "fleet_error")
+        assert pipeline.fleet_error is not None
 
 
 class TestFranchiseErrorASTScan:
-    def _find_raw_franchise_error_dumps(self, path: Path) -> list[str]:
+    def _find_raw_fleet_error_dumps(self, path: Path) -> list[str]:
         """Find raw json.dumps({..., 'error': '<franchise_code>'}) calls in a file.
 
         Returns a list of violation descriptions. Empty = clean.
@@ -154,11 +154,11 @@ class TestFranchiseErrorASTScan:
                     )
         return violations
 
-    def test_all_franchise_errors_use_registered_code(self):
+    def test_all_fleet_errors_use_registered_code(self):
         all_violations: list[str] = []
         for f in sorted(SRC_ROOT.rglob("*.py")):
-            all_violations.extend(self._find_raw_franchise_error_dumps(f))
+            all_violations.extend(self._find_raw_fleet_error_dumps(f))
         assert not all_violations, (
             "Raw json.dumps franchise error patterns found. "
-            "Use franchise_error() instead:\n" + "\n".join(all_violations)
+            "Use fleet_error() instead:\n" + "\n".join(all_violations)
         )

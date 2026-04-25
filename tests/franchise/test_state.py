@@ -9,7 +9,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from autoskillit.franchise import (
+
+from autoskillit.fleet import (
     DispatchRecord,
     DispatchStatus,
     append_dispatch_record,
@@ -137,7 +138,7 @@ class TestResumeRejectsHaltedOnFailure:
         decision = resume_campaign_from_state(sp, continue_on_failure=False)
         assert decision is not None
         assert decision.next_dispatch_name == ""
-        assert "franchise_halted_on_failure" in decision.completed_dispatches_block
+        assert "fleet_halted_on_failure" in decision.completed_dispatches_block
 
 
 class TestAtomicUnderConcurrentRead:

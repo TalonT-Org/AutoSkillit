@@ -21,10 +21,7 @@ _FRANCHISE_DIR_FILES = sorted((_TESTS_ROOT / "franchise").glob("test_*.py"))
 
 # Cross-directory franchise test files — require deliberate enumeration
 _FRANCHISE_CROSS_DIR_FILES = [
-    _TESTS_ROOT / "server" / "test_tools_dispatch.py",
     _TESTS_ROOT / "cli" / "test_franchise_cli.py",
-    _TESTS_ROOT / "cli" / "test_food_truck_prompt.py",
-    _TESTS_ROOT / "cli" / "test_l3_orchestrator_prompt.py",
     _TESTS_ROOT / "cli" / "test_reap.py",
     _TESTS_ROOT / "cli" / "test_signal_guard.py",
 ]
@@ -32,8 +29,18 @@ _FRANCHISE_CROSS_DIR_FILES = [
 # Union: all files requiring pytestmark feature("franchise")
 _ALL_FRANCHISE_FILES = [*_FRANCHISE_DIR_FILES, *_FRANCHISE_CROSS_DIR_FILES]
 
+# Cross-directory fleet test files — require deliberate enumeration
+_FLEET_CROSS_DIR_FILES = [
+    _TESTS_ROOT / "server" / "test_tools_dispatch.py",
+    _TESTS_ROOT / "cli" / "test_food_truck_prompt.py",
+    _TESTS_ROOT / "cli" / "test_l3_orchestrator_prompt.py",
+]
+
 # Classes within mixed files that MUST carry @pytest.mark.feature("franchise")
-_FRANCHISE_CLASS_MARKERS: dict[str, set[str]] = {
+_FRANCHISE_CLASS_MARKERS: dict[str, set[str]] = {}
+
+# Classes within mixed files that MUST carry @pytest.mark.feature("fleet")
+_FLEET_CLASS_MARKERS: dict[str, set[str]] = {
     "server/test_server_init.py": {"TestSessionTypeVisibility"},
 }
 
@@ -113,6 +120,35 @@ def test_franchise_class_markers_present():
     assert not missing, (
         "These classes are missing @pytest.mark.feature('franchise'):\n"
         + "\n".join(f"  {r}" for r in missing)
+    )
+
+
+def test_fleet_test_files_carry_feature_marker():
+    """Every fleet-specific cross-directory test file must have feature('fleet') in its pytestmark."""
+    missing = []
+    for path in _FLEET_CROSS_DIR_FILES:
+        rel = path.relative_to(_TESTS_ROOT)
+        assert path.exists(), f"Expected test file not found: {path}"
+        if not _pytestmark_has_feature(path.read_text(), "fleet"):
+            missing.append(str(rel))
+    assert not missing, (
+        "These files are missing pytest.mark.feature('fleet') in pytestmark:\n"
+        + "\n".join(f"  {r}" for r in missing)
+    )
+
+
+def test_fleet_class_markers_present():
+    """Specific test classes must carry @pytest.mark.feature('fleet') decorator."""
+    missing = []
+    for rel, class_names in _FLEET_CLASS_MARKERS.items():
+        path = _TESTS_ROOT / rel
+        assert path.exists(), f"Expected test file not found: {path}"
+        source = path.read_text()
+        for cls in class_names:
+            if not _class_has_feature_decorator(source, cls, "fleet"):
+                missing.append(f"{rel}::{cls}")
+    assert not missing, "These classes are missing @pytest.mark.feature('fleet'):\n" + "\n".join(
+        f"  {r}" for r in missing
     )
 
 

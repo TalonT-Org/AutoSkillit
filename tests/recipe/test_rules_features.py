@@ -143,9 +143,7 @@ def test_feature_gate_rule_with_multiple_features(monkeypatch) -> None:
             "ci_step": RecipeStep(tool="wait_for_ci", with_args={}),
         },
     )
-    ctx = make_validation_context(
-        recipe, disabled_features=frozenset({"fleet", "test-ci-gate"})
-    )
+    ctx = make_validation_context(recipe, disabled_features=frozenset({"fleet", "test-ci-gate"}))
     findings = [f for f in run_semantic_rules(ctx) if f.rule == "feature-gate-tool-reference"]
 
     step_names = {f.step_name for f in findings}

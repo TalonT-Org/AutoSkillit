@@ -691,3 +691,51 @@ def test_git_grep_bre_is_excluded(tmp_path: Path) -> None:
     assert _BRE_RULE_ID not in [f.rule for f in findings], (
         "Rule must not fire for --grep= BRE context (git uses BRE for --grep=)"
     )
+
+
+def test_git_remote_command_re_imported_from_git_helpers() -> None:
+    """_GIT_REMOTE_COMMAND_RE must be imported from _git_helpers, not defined locally."""
+    import autoskillit.recipe._git_helpers as _gh
+    import autoskillit.recipe.rules_skill_content as _rsc  # noqa: F401
+
+    # The regex object in rules_skill_content must be the same object as in _git_helpers
+    # (identity check confirms it's an import, not a re-definition).
+    assert _rsc._GIT_REMOTE_COMMAND_RE is _gh._GIT_REMOTE_COMMAND_RE
+    assert _rsc._LITERAL_ORIGIN_RE is _gh._LITERAL_ORIGIN_RE
+
+
+@pytest.mark.parametrize(
+    "skill_name,ingredients",
+    [
+        ("implement-worktree-no-merge", {"plan_path": "plan"}),
+        ("implement-experiment", {"plan_path": "plan"}),
+        ("merge-pr", {}),
+        ("review-pr", {}),
+        ("pipeline-summary", {}),
+    ],
+)
+def test_hardcoded_origin_does_not_fire_on_part_b_fixed_skills(
+    tmp_path: Path, skill_name: str, ingredients: dict
+) -> None:
+    """
+    Regression anchor: bundled skills fixed in Part B must NOT trigger hardcoded-origin-remote.
+
+    Uses SKILL_SEARCH_DIRS isolation so the test fails with a clear assertion error
+    (not an opaque ENOENT) if the skill is renamed.
+    """
+    from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
+
+    skill_info = DefaultSkillResolver().resolve(skill_name)
+    assert skill_info is not None, f"bundled {skill_name!r} skill not found"
+    skill_dir = tmp_path / skill_name
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_bytes(skill_info.path.read_bytes())
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(_make_recipe_for_skill(skill_name, ingredients))
+    recipe = load_recipe(recipe_path)
+    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+        findings = run_semantic_rules(recipe)
+    assert "hardcoded-origin-remote" not in [f.rule for f in findings], (
+        f"hardcoded-origin-remote fired on {skill_name!r} after Part B fix — "
+        "check that all literal 'origin' references in bash blocks have been replaced with $REMOTE"
+    )

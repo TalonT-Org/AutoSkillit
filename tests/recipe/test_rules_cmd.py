@@ -136,3 +136,100 @@ def test_find_rediscovery_no_warning_without_heuristic():
     )
     findings = run_semantic_rules(recipe)
     assert all(f.rule != "run-cmd-find-rediscovery" for f in findings)
+
+
+def test_hardcoded_origin_in_run_cmd_fires_on_fetch_origin():
+    """run_cmd with 'git fetch origin main' triggers the warning."""
+    recipe = _make_recipe(
+        {
+            "step_a": {
+                "tool": "run_cmd",
+                "with": {"cmd": "git fetch origin main && git rebase origin/main"},
+                "on_success": "END",
+            }
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    codes = [f.rule for f in findings]
+    assert "hardcoded-origin-in-run-cmd" in codes
+    finding = next(f for f in findings if f.rule == "hardcoded-origin-in-run-cmd")
+    assert "step_a" in finding.step_name
+    assert "origin" in finding.message
+
+
+def test_hardcoded_origin_in_run_cmd_clean_with_remote_var():
+    """run_cmd using $REMOTE instead of literal 'origin' does not trigger."""
+    recipe = _make_recipe(
+        {
+            "step_a": {
+                "tool": "run_cmd",
+                "with": {
+                    "cmd": (
+                        "REMOTE=$(git remote get-url upstream >/dev/null 2>&1 "
+                        "&& echo upstream || echo origin)\n"
+                        "git fetch $REMOTE main && git rebase $REMOTE/main"
+                    )
+                },
+                "on_success": "END",
+            }
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    assert all(f.rule != "hardcoded-origin-in-run-cmd" for f in findings)
+
+
+def test_hardcoded_origin_in_run_cmd_suppressed_by_set_url_step():
+    """Step containing 'git remote set-url origin' is not flagged; other steps still are."""
+    recipe = _make_recipe(
+        {
+            "step_setup": {
+                "tool": "run_cmd",
+                "with": {"cmd": "git remote set-url origin https://github.com/org/repo.git"},
+                "on_success": "step_fetch",
+            },
+            "step_fetch": {
+                "tool": "run_cmd",
+                "with": {"cmd": "git fetch origin main"},
+                "on_success": "END",
+            },
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    violations = [f for f in findings if f.rule == "hardcoded-origin-in-run-cmd"]
+    step_names = [v.step_name for v in violations]
+    assert "step_setup" not in step_names, "step with set-url origin must not be flagged"
+    assert "step_fetch" in step_names, (
+        "step without set-url using hardcoded origin must be flagged"
+    )
+
+
+def test_hardcoded_origin_in_run_cmd_fires_on_push_origin():
+    """run_cmd with 'git push origin main' triggers the warning (push is in the verb set)."""
+    recipe = _make_recipe(
+        {
+            "step_a": {
+                "tool": "run_cmd",
+                "with": {"cmd": "git push origin main"},
+                "on_success": "END",
+            }
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    codes = [f.rule for f in findings]
+    assert "hardcoded-origin-in-run-cmd" in codes
+
+
+def test_hardcoded_origin_in_run_cmd_fires_on_merge_base_origin():
+    """run_cmd with 'git merge-base origin/main HEAD' triggers the warning."""
+    recipe = _make_recipe(
+        {
+            "step_a": {
+                "tool": "run_cmd",
+                "with": {"cmd": "git merge-base origin/main HEAD"},
+                "on_success": "END",
+            }
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    codes = [f.rule for f in findings]
+    assert "hardcoded-origin-in-run-cmd" in codes

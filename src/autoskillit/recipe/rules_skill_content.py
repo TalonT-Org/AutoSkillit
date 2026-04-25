@@ -16,6 +16,7 @@ from autoskillit.core import Severity
 if TYPE_CHECKING:
     from autoskillit.core import SkillResolver
 from autoskillit.recipe._analysis import ValidationContext
+from autoskillit.recipe._git_helpers import _GIT_REMOTE_COMMAND_RE, _LITERAL_ORIGIN_RE
 from autoskillit.recipe._skill_placeholder_parser import (
     extract_bash_blocks,
     extract_bash_placeholders,
@@ -123,14 +124,6 @@ def _check_undefined_bash_placeholder(ctx: ValidationContext) -> list[RuleFindin
                 )
             )
     return findings
-
-
-_GIT_REMOTE_COMMAND_RE: re.Pattern[str] = re.compile(
-    r"\bgit\b.*?\b(?:fetch|rebase|log|show|rev-parse)\b"
-)
-# Matches literal 'origin' not immediately preceded by $, {, or - (i.e., not a shell
-# variable reference or shell default-value expression like ${REMOTE:-origin}).
-_LITERAL_ORIGIN_RE: re.Pattern[str] = re.compile(r"(?<!\$)(?<!\{)(?<!-)\borigin\b")
 
 
 def _has_hardcoded_origin_in_bash(bash_blocks: list[str]) -> bool:

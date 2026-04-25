@@ -184,11 +184,12 @@ MERGE_BASE=$(
 )
 
 # 3. Fetch the base branch locally to run git diff
-git fetch origin ${PR_BASE} 2>/dev/null
+REMOTE=$(git remote get-url upstream >/dev/null 2>&1 && echo upstream || echo origin)
+git fetch "$REMOTE" ${PR_BASE} 2>/dev/null
 
 # 4. Files deleted from base since branch point
 DELETED_FILES=$(
-  git diff --name-only --diff-filter=D ${MERGE_BASE} origin/${PR_BASE} 2>/dev/null
+  git diff --name-only --diff-filter=D ${MERGE_BASE} "$REMOTE"/${PR_BASE} 2>/dev/null
 )
 
 # 5. PR's changed files (from gh pr view, already available)
@@ -197,7 +198,7 @@ PR_FILES=$(gh pr view {pr_number} --json files -q '[.files[].path] | join(" ")' 
 # 6. Symbols removed from files this PR modifies
 if [ -n "$PR_FILES" ] && [ -n "$MERGE_BASE" ]; then
   DELETED_SYMBOLS=$(
-    git diff --diff-filter=M ${MERGE_BASE} origin/${PR_BASE} -- ${PR_FILES} 2>/dev/null \
+    git diff --diff-filter=M ${MERGE_BASE} "$REMOTE"/${PR_BASE} -- ${PR_FILES} 2>/dev/null \
       | grep '^-' \
       | grep -E '^-(def |class |async def )' \
       | sed 's/^-//' \

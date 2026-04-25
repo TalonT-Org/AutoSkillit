@@ -73,7 +73,8 @@ Extract:
 
 Fetch the PR branch locally:
 ```bash
-git fetch origin {pr_branch}:{pr_branch} 2>/dev/null || git fetch origin pull/{pr_number}/head:{pr_branch}
+REMOTE=$(git remote get-url upstream >/dev/null 2>&1 && echo upstream || echo origin)
+git fetch "$REMOTE" {pr_branch}:{pr_branch} 2>/dev/null || git fetch "$REMOTE" pull/{pr_number}/head:{pr_branch}
 ```
 
 ### Step 1.5: Deletion Regression Scan
@@ -86,18 +87,18 @@ deliberately deleted from the base branch after the PR's branch point.
 ```bash
 BASE_BRANCH=$(gh pr view {pr_number} --json baseRefName --jq '.baseRefName')
 # 1. Find the divergence point between this PR and the base branch
-MERGE_BASE=$(git merge-base origin/${BASE_BRANCH} origin/{pr_branch})
+MERGE_BASE=$(git merge-base ${REMOTE}/${BASE_BRANCH} ${REMOTE}/{pr_branch})
 
 # 2. Files deleted from base since the branch point
-DELETED_FILES=$(git diff --name-only --diff-filter=D ${MERGE_BASE} origin/${BASE_BRANCH})
+DELETED_FILES=$(git diff --name-only --diff-filter=D ${MERGE_BASE} ${REMOTE}/${BASE_BRANCH})
 
 # 3. Symbols (functions/classes) removed from files this PR modifies,
 #    relative to base (catches deletions in files that still exist)
-PR_FILES=$(git diff --name-only ${MERGE_BASE}...origin/{pr_branch})
+PR_FILES=$(git diff --name-only ${MERGE_BASE}...${REMOTE}/{pr_branch})
 if [ -n "$PR_FILES" ]; then
   DELETED_SYMBOLS=$(
     echo "$PR_FILES" | \
-    git diff --diff-filter=M ${MERGE_BASE} origin/${BASE_BRANCH} --pathspecs-from-file=- \
+    git diff --diff-filter=M ${MERGE_BASE} ${REMOTE}/${BASE_BRANCH} --pathspecs-from-file=- \
       | grep '^-' \
       | grep -E '^-(def |class |async def )' \
       | sed 's/^-//' \
@@ -108,7 +109,7 @@ else
 fi
 
 # 4. What the PR adds (relative to the merge base)
-PR_ADDITIONS=$(git diff ${MERGE_BASE}...origin/{pr_branch} | grep '^+' | grep -v '^+++')
+PR_ADDITIONS=$(git diff ${MERGE_BASE}...${REMOTE}/{pr_branch} | grep '^+' | grep -v '^+++')
 ```
 
 **Detect regressions:**
@@ -135,10 +136,10 @@ items must NOT be reintroduced in the implementation.
 
 ```bash
 # For each regressed file: find the commit that deleted it on base
-git log --diff-filter=D --oneline --follow -- {file_path} origin/${BASE_BRANCH} | head -1
+git log --diff-filter=D --oneline --follow -- {file_path} ${REMOTE}/${BASE_BRANCH} | head -1
 
 # For each regressed symbol: find the commit that removed it
-git log --diff-filter=M --oneline -p -- {file_path} origin/${BASE_BRANCH} \
+git log --diff-filter=M --oneline -p -- {file_path} ${REMOTE}/${BASE_BRANCH} \
   | rg -B 20 "^-def {symbol_name}|^-class {symbol_name}" \
   | rg "^[0-9a-f]{7,}" \
   | head -1
@@ -252,7 +253,7 @@ Before writing the conflict report, fetch the complete set of files changed on t
 
 ```bash
 # All files changed on the PR branch relative to the base
-git diff ${BASE_BRANCH}...origin/{pr_branch} --name-only
+git diff ${BASE_BRANCH}...${REMOTE}/{pr_branch} --name-only
 ```
 
 Classify each file into one of three categories:

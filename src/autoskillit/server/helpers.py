@@ -25,6 +25,7 @@ from autoskillit.execution import (
     fetch_repo_merge_state,  # noqa: F401 — re-exported for tools_ci.py
     invalidate_cache,  # noqa: F401 — re-exported for tools_execution.py dispatch
     resolve_log_dir,  # noqa: F401 — used by tools_github.py, tools_status.py
+    resolve_remote_name,  # noqa: F401 — re-exported for tools_git.py
     write_telemetry_clear_marker,  # noqa: F401 — used by tools_status.py
 )
 from autoskillit.hooks import _HOOK_CONFIG_PATH_COMPONENTS

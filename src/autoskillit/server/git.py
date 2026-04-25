@@ -127,6 +127,7 @@ async def perform_merge(
     worktree_path: str,
     base_branch: str,
     *,
+    remote: str = "origin",
     config: AutomationConfig,
     runner: SubprocessRunner,
     tester: TestRunner | None = None,
@@ -291,12 +292,10 @@ async def perform_merge(
             }
 
     # 5. Fetch
-    fetch_rc, _, fetch_stderr = await _run_git(
-        ["git", "fetch", "origin"], worktree_path, 60, runner
-    )
+    fetch_rc, _, fetch_stderr = await _run_git(["git", "fetch", remote], worktree_path, 60, runner)
     if fetch_rc != 0:
         return {
-            "error": "git fetch origin failed",
+            "error": f"git fetch {remote} failed",
             "failed_step": MergeFailedStep.FETCH,
             "state": MergeState.WORKTREE_INTACT,
             "stderr": truncate_text(fetch_stderr),
@@ -305,7 +304,7 @@ async def perform_merge(
 
     # 5.5. Verify base branch remote tracking ref exists
     ref_rc, _, _ = await _run_git(
-        ["git", "rev-parse", "--verify", f"refs/remotes/origin/{base_branch}"],
+        ["git", "rev-parse", "--verify", f"refs/remotes/{remote}/{base_branch}"],
         worktree_path,
         10,
         runner,
@@ -314,8 +313,8 @@ async def perform_merge(
         return {
             "error": (
                 f"Base branch '{base_branch}' has no remote tracking ref — "
-                f"push it to origin before running this pipeline: "
-                f"git push -u origin {base_branch}"
+                f"push it to {remote} before running this pipeline: "
+                f"git push -u {remote} {base_branch}"
             ),
             "failed_step": MergeFailedStep.PRE_REBASE_CHECK,
             "state": MergeState.WORKTREE_INTACT_BASE_NOT_PUBLISHED,
@@ -327,7 +326,7 @@ async def perform_merge(
     # Standard git rebase cannot replay merge commits and fails with a generic error.
     # Catch this early with a specific, actionable message.
     mc_rc, mc_out, _ = await _run_git(
-        ["git", "log", "--merges", "--oneline", f"origin/{base_branch}..HEAD"],
+        ["git", "log", "--merges", "--oneline", f"{remote}/{base_branch}..HEAD"],
         worktree_path,
         15,
         runner,
@@ -337,7 +336,7 @@ async def perform_merge(
         return {
             "error": (
                 f"Worktree branch contains {len(merge_list)} merge commit(s) not yet in "
-                f"origin/{base_branch}. Standard git rebase cannot replay merge commits. "
+                f"{remote}/{base_branch}. Standard git rebase cannot replay merge commits. "
                 "The conflict-resolution plan must use 'git cherry-pick' or "
                 "'git checkout <remote> -- <file>' to produce a linear commit history. "
                 "Route this failure to cleanup_failure — do NOT use run_cmd to bypass."
@@ -350,7 +349,7 @@ async def perform_merge(
 
     # 6. Rebase
     rc, _, rebase_stderr = await _run_git(
-        ["git", "rebase", "--autostash", f"origin/{base_branch}"], worktree_path, 120, runner
+        ["git", "rebase", "--autostash", f"{remote}/{base_branch}"], worktree_path, 120, runner
     )
     if rc != 0:
         abort_rc, _, abort_stderr = await _run_git(

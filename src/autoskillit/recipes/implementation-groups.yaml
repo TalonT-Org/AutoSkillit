@@ -724,7 +724,10 @@ steps:
   pre_resolve_rebase:
     tool: run_cmd
     with:
-      cmd: "git -C ${{ context.work_dir }} fetch origin && git -C ${{ context.work_dir }} rebase origin/${{ inputs.base_branch }}"
+      cmd: |
+        REMOTE=$(git -C ${{ context.work_dir }} remote get-url upstream 2>/dev/null | grep -qv "^file://" && echo upstream || echo origin) &&
+        git -C ${{ context.work_dir }} fetch "$REMOTE" &&
+        git -C ${{ context.work_dir }} rebase "$REMOTE"/${{ inputs.base_branch }}
       step_name: "pre_resolve_rebase"
     retries: 1
     on_success: diagnose_ci
@@ -860,7 +863,7 @@ steps:
       - when: "${{ result.pr_state }} == dropped_healthy"
         route: reenter_merge_queue_cheap
       - when: "${{ result.pr_state }} == ejected"
-        route: queue_ejected_fix
+        route: check_eject_limit
       - when: "${{ result.pr_state }} == stalled"
         route: reenroll_stalled_pr
       - when: "${{ result.pr_state }} == timeout"
@@ -888,11 +891,38 @@ steps:
     on_failure: release_issue_failure
     skip_when_false: "inputs.open_pr"
 
-  queue_ejected_fix:
+  check_eject_limit:
     tool: run_cmd
     with:
       cmd: >
-        if git fetch origin ${{ inputs.base_branch }} && git rebase origin/${{ inputs.base_branch }};
+        COUNTER_FILE="${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/eject_count" &&
+        mkdir -p "$(dirname "$COUNTER_FILE")" &&
+        COUNT=$(cat "$COUNTER_FILE" 2>/dev/null || echo 0) &&
+        COUNT=$((COUNT + 1)) &&
+        echo "$COUNT" > "$COUNTER_FILE" &&
+        if [ "$COUNT" -gt 3 ]; then
+          echo "EJECT_LIMIT_EXCEEDED";
+        else
+          echo "EJECT_OK";
+        fi
+      cwd: "${{ context.work_dir }}"
+      step_name: "check_eject_limit"
+    on_result:
+      - when: "${{ result.stdout | trim }} == EJECT_LIMIT_EXCEEDED"
+        route: release_issue_failure
+      - route: queue_ejected_fix
+    on_failure: release_issue_failure
+    note: >
+      Circuit breaker for the queue ejection loop. Tracks ejection count in a
+      file-based counter under {{AUTOSKILLIT_TEMP}}/. After 3 ejections, routes
+      to release_issue_failure to prevent infinite re-enqueue cycles.
+
+  queue_ejected_fix:
+    tool: run_cmd
+    with:
+      cmd: |
+        REMOTE=$(git remote get-url upstream 2>/dev/null | grep -qv "^file://" && echo upstream || echo origin) &&
+        if git fetch "$REMOTE" ${{ inputs.base_branch }} && git rebase "$REMOTE"/${{ inputs.base_branch }};
         then echo 'clean';
         else git rebase --abort 2>/dev/null || true; echo 'conflicts';
         fi
@@ -1035,8 +1065,9 @@ steps:
   direct_merge_conflict_fix:
     tool: run_cmd
     with:
-      cmd: >
-        if git fetch origin ${{ inputs.base_branch }} && git rebase origin/${{ inputs.base_branch }};
+      cmd: |
+        REMOTE=$(git remote get-url upstream 2>/dev/null | grep -qv "^file://" && echo upstream || echo origin) &&
+        if git fetch "$REMOTE" ${{ inputs.base_branch }} && git rebase "$REMOTE"/${{ inputs.base_branch }};
         then echo 'clean';
         else git rebase --abort 2>/dev/null || true; echo 'conflicts';
         fi
@@ -1147,8 +1178,9 @@ steps:
   immediate_merge_conflict_fix:
     tool: run_cmd
     with:
-      cmd: >
-        if git fetch origin ${{ inputs.base_branch }} && git rebase origin/${{ inputs.base_branch }};
+      cmd: |
+        REMOTE=$(git remote get-url upstream 2>/dev/null | grep -qv "^file://" && echo upstream || echo origin) &&
+        if git fetch "$REMOTE" ${{ inputs.base_branch }} && git rebase "$REMOTE"/${{ inputs.base_branch }};
         then echo 'clean';
         else git rebase --abort 2>/dev/null || true; echo 'conflicts';
         fi
@@ -1230,7 +1262,10 @@ steps:
   detect_ci_conflict:
     tool: run_cmd
     with:
-      cmd: "git fetch origin ${{ inputs.base_branch }} && ! git merge-base --is-ancestor origin/${{ inputs.base_branch }} HEAD"
+      cmd: |
+        REMOTE=$(git remote get-url upstream 2>/dev/null | grep -qv "^file://" && echo upstream || echo origin) &&
+        git fetch "$REMOTE" ${{ inputs.base_branch }} &&
+        ! git merge-base --is-ancestor "$REMOTE"/${{ inputs.base_branch }} HEAD
       cwd: "${{ context.work_dir }}"
       step_name: "detect_ci_conflict"
     on_success: ci_conflict_fix

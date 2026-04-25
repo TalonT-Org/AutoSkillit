@@ -70,3 +70,44 @@ async def resolve_remote_repo(
             _log.warning("Failed to get URL for remote %r in %r", remote, cwd, exc_info=True)
 
     return None
+
+
+async def resolve_remote_name(
+    cwd: str,
+    remotes: tuple[str, ...] = REMOTE_PRECEDENCE,
+) -> str:
+    """Return the git remote name to use for fetch/rebase operations.
+
+    Tries remotes in precedence order (upstream before origin).
+    Rejects file:// URLs — those indicate a clone-isolation origin
+    that should not be used for real git operations.
+    Falls back to "origin" if no remote qualifies.
+    """
+    for name in remotes:
+        proc = None
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "git",
+                "remote",
+                "get-url",
+                name,
+                cwd=cwd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=15.0)
+            if proc.returncode != 0:
+                continue
+            url = stdout.decode().strip()
+            if url.startswith("file://"):
+                continue
+            return name
+        except (TimeoutError, OSError):
+            if proc is not None and proc.returncode is None:
+                try:
+                    proc.kill()
+                    await proc.wait()
+                except OSError:
+                    pass
+            continue
+    return "origin"

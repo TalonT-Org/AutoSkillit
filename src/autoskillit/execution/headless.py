@@ -1062,7 +1062,10 @@ async def _execute_claude_headless(
     _skill_temp_dir = _resolve_skill_temp_dir(cwd, skill_command)
     _temp_snapshot_pre: set[str] = set()
     if _skill_temp_dir and _skill_temp_dir.is_dir():
-        _temp_snapshot_pre = {e.name for e in os.scandir(_skill_temp_dir)}
+        try:
+            _temp_snapshot_pre = {e.name for e in os.scandir(_skill_temp_dir)}
+        except OSError:
+            _temp_snapshot_pre = set()
 
     _result: SubprocessResult | None = None
     try:
@@ -1164,7 +1167,10 @@ async def _execute_claude_headless(
 
     _fs_writes_detected = False
     if _skill_temp_dir and _skill_temp_dir.is_dir():
-        _temp_snapshot_post = {e.name for e in os.scandir(_skill_temp_dir)}
+        try:
+            _temp_snapshot_post = {e.name for e in os.scandir(_skill_temp_dir)}
+        except OSError:
+            _temp_snapshot_post = set()
         _fs_writes_detected = bool(_temp_snapshot_post - _temp_snapshot_pre)
 
     audit_count_before = len(ctx.audit.get_report())

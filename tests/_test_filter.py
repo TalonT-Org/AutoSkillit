@@ -773,7 +773,7 @@ def build_test_scope(
                         elif stem in MODULE_CASCADE_CORE:
                             test_dirs.update(MODULE_CASCADE_CORE[stem])
                         else:
-                            test_dirs.update(cascade_map["core"])
+                            test_dirs.update(cascade_map["core"])  # fail-open: unknown stem
                     elif pkg and pkg in cascade_map:
                         test_dirs.update(cascade_map[pkg])
         except Exception:

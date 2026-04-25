@@ -32,6 +32,7 @@ steps:
   init:
     tool: run_cmd
     with:
+      step_name: "init"
       command: >
         mkdir -p
         {{AUTOSKILLIT_TEMP}}/planner/phases
@@ -39,22 +40,21 @@ steps:
         {{AUTOSKILLIT_TEMP}}/planner/work_packages
       cwd: "${{ inputs.source_dir }}"
     on_success: analyze
-    on_failure: escalate
+    on_failure: escalate_stop
 
   analyze:
     tool: run_skill
     with:
-      skill_command: "planner-analyze"
+      skill_command: "/autoskillit:planner-analyze"
       cwd: "${{ inputs.source_dir }}"
     on_success: extract_domain
-    on_failure: escalate
+    on_failure: escalate_stop
 
   extract_domain:
     tool: run_skill
     with:
-      skill_command: "planner-extract-domain _ _ {{AUTOSKILLIT_TEMP}}/planner/analysis.json"
+      skill_command: "/autoskillit:planner-extract-domain _ _ {{AUTOSKILLIT_TEMP}}/planner/analysis.json"
       cwd: "${{ inputs.source_dir }}"
-    optional: true
     on_success: generate_phases
     on_failure: generate_phases
 
@@ -62,16 +62,15 @@ steps:
     tool: run_skill
     with:
       skill_command: >
-        planner-generate-phases
+        /autoskillit:planner-generate-phases
         {{AUTOSKILLIT_TEMP}}/planner/analysis.json
         {{AUTOSKILLIT_TEMP}}/planner/domain_knowledge.md
       cwd: "${{ inputs.source_dir }}"
     optional_context_refs: [domain_path]
     capture:
       phase_manifest_path: "${{ result.phase_manifest_path }}"
-      phase_count: "${{ result.phase_count }}"
     on_success: check_phases
-    on_failure: escalate
+    on_failure: escalate_stop
 
   check_phases:
     tool: run_python
@@ -87,18 +86,18 @@ steps:
       - when: "${{ result.has_remaining }} == true"
         route: elaborate_phase
       - route: build_assignment_manifest
-    on_failure: escalate
+    on_failure: escalate_stop
 
   elaborate_phase:
     tool: run_skill
     with:
-      skill_command: "planner-elaborate-phase ${{ context.current_item_path }}"
+      skill_command: "/autoskillit:planner-elaborate-phase ${{ context.current_item_path }}"
       cwd: "${{ inputs.source_dir }}"
     optional_context_refs: [current_item_path]
     retries: 1
     on_success: check_phases
-    on_exhausted: escalate
-    on_failure: escalate
+    on_exhausted: escalate_stop
+    on_failure: escalate_stop
 
   build_assignment_manifest:
     tool: run_python
@@ -109,9 +108,8 @@ steps:
       output_dir: "{{AUTOSKILLIT_TEMP}}/planner"
     capture:
       assignment_manifest_path: "${{ result.manifest_path }}"
-      assignment_count: "${{ result.total_count }}"
     on_success: check_assignments
-    on_failure: escalate
+    on_failure: escalate_stop
 
   check_assignments:
     tool: run_python
@@ -127,16 +125,16 @@ steps:
       - when: "${{ result.has_remaining }} == true"
         route: elaborate_assignment
       - route: build_wp_manifest
-    on_failure: escalate
+    on_failure: escalate_stop
 
   elaborate_assignment:
     tool: run_skill
     with:
-      skill_command: "planner-elaborate-assignment ${{ context.current_item_path }}"
+      skill_command: "/autoskillit:planner-elaborate-assignment ${{ context.current_item_path }}"
       cwd: "${{ inputs.source_dir }}"
     optional_context_refs: [current_item_path]
     on_success: check_assignments
-    on_failure: escalate
+    on_failure: escalate_stop
 
   build_wp_manifest:
     tool: run_python
@@ -146,9 +144,8 @@ steps:
       output_dir: "{{AUTOSKILLIT_TEMP}}/planner"
     capture:
       wp_manifest_path: "${{ result.manifest_path }}"
-      wp_count: "${{ result.total_count }}"
     on_success: check_wps
-    on_failure: escalate
+    on_failure: escalate_stop
 
   check_wps:
     tool: run_python
@@ -164,29 +161,27 @@ steps:
       - when: "${{ result.has_remaining }} == true"
         route: elaborate_wp
       - route: reconcile_deps
-    on_failure: escalate
+    on_failure: escalate_stop
 
   elaborate_wp:
     tool: run_skill
     with:
-      skill_command: "planner-elaborate-wp ${{ context.current_item_path }}"
+      skill_command: "/autoskillit:planner-elaborate-wp ${{ context.current_item_path }}"
       cwd: "${{ inputs.source_dir }}"
     optional_context_refs: [current_item_path]
     retries: 2
     stale_threshold: 600
     on_success: check_wps
     on_exhausted: check_wps
-    on_failure: escalate
+    on_failure: escalate_stop
 
   reconcile_deps:
     tool: run_skill
     with:
-      skill_command: "planner-reconcile-deps {{AUTOSKILLIT_TEMP}}/planner"
+      skill_command: "/autoskillit:planner-reconcile-deps {{AUTOSKILLIT_TEMP}}/planner"
       cwd: "${{ inputs.source_dir }}"
-    capture:
-      dep_graph_path: "${{ result.dep_graph_path }}"
     on_success: validate
-    on_failure: escalate
+    on_failure: escalate_stop
 
   validate:
     tool: run_python
@@ -195,10 +190,8 @@ steps:
       output_dir: "{{AUTOSKILLIT_TEMP}}/planner"
     capture:
       verdict: "${{ result.verdict }}"
-      validation_path: "${{ result.validation_path }}"
-      issue_count: "${{ result.issue_count }}"
     on_success: check_verdict
-    on_failure: escalate
+    on_failure: escalate_stop
 
   check_verdict:
     action: route
@@ -211,14 +204,14 @@ steps:
     tool: run_skill
     with:
       skill_command: >
-        planner-refine
+        /autoskillit:planner-refine
         {{AUTOSKILLIT_TEMP}}/planner/validation.json
         {{AUTOSKILLIT_TEMP}}/planner
       cwd: "${{ inputs.source_dir }}"
     retries: 2
     on_success: validate
-    on_exhausted: escalate
-    on_failure: escalate
+    on_exhausted: escalate_stop
+    on_failure: escalate_stop
 
   compile:
     tool: run_python
@@ -227,12 +220,15 @@ steps:
       output_dir: "{{AUTOSKILLIT_TEMP}}/planner"
       task: "${{ inputs.task }}"
       source_dir: "${{ inputs.source_dir }}"
-    capture:
-      plan_path: "${{ result.plan_path }}"
-      plan_json_path: "${{ result.plan_json_path }}"
-      plan_parts: "${{ result.plan_parts }}"
     on_success: done
-    on_failure: escalate
+    on_failure: escalate_stop
 
   done:
     action: stop
+    message: >
+      Planning complete. Plan artifacts written to {{AUTOSKILLIT_TEMP}}/planner/.
+      Use compile output to create GitHub issues and milestones.
+
+  escalate_stop:
+    action: stop
+    message: "Planner pipeline failed — human intervention needed. Review the latest step output for details."

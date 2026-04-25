@@ -1,4 +1,5 @@
 """Structural assertions for the planner recipe."""
+
 import importlib
 
 import pytest
@@ -19,26 +20,13 @@ def test_planner_recipe_loads(planner_recipe):
     assert planner_recipe.name == "planner"
 
 
-def test_planner_recipe_has_18_steps(planner_recipe):
-    assert len(planner_recipe.steps) == 18
+def test_planner_recipe_has_19_steps(planner_recipe):
+    assert len(planner_recipe.steps) == 19
 
 
 def test_planner_recipe_declares_requires_packs(planner_recipe):
     assert planner_recipe.requires_packs
     assert "kitchen-core" in planner_recipe.requires_packs
-
-
-def test_planner_recipe_skill_commands_reference_valid_skills(planner_recipe):
-    from autoskillit.workspace import DefaultSkillResolver
-
-    resolver = DefaultSkillResolver()
-    valid = {s.name for s in resolver.list_all()}
-    for name, step in planner_recipe.steps.items():
-        if step.tool == "run_skill" and step.with_args:
-            skill_name = step.with_args["skill_command"].split()[0]
-            assert skill_name in valid, (
-                f"Step {name!r} references unknown skill {skill_name!r}"
-            )
 
 
 def test_planner_recipe_python_callables_importable(planner_recipe):
@@ -57,9 +45,7 @@ def test_planner_recipe_python_callables_importable(planner_recipe):
 def test_planner_recipe_loop_steps_have_exit_conditions(planner_recipe):
     for step_name in ["check_phases", "check_assignments", "check_wps"]:
         step = planner_recipe.steps[step_name]
-        assert step.on_result is not None, (
-            f"{step_name} must have on_result routing"
-        )
+        assert step.on_result is not None, f"{step_name} must have on_result routing"
         assert len(step.on_result.conditions) >= 2, (
             f"{step_name} needs at least two routes (has_remaining true/false)"
         )

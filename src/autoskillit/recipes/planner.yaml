@@ -132,7 +132,9 @@ steps:
       skill_command: "/autoskillit:planner-elaborate-assignment ${{ context.current_item_path }}"
       cwd: "${{ inputs.source_dir }}"
     optional_context_refs: [current_item_path]
+    retries: 1
     on_success: check_assignments
+    on_exhausted: escalate_stop
     on_failure: escalate_stop
 
   build_wp_manifest:

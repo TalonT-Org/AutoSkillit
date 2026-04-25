@@ -1,4 +1,9 @@
-"""Version health utilities (Layer 0)."""
+"""Version health utilities (Layer 0).
+
+Zero autoskillit imports — this module is importable before any other
+autoskillit subpackage.  YAML fields are extracted via regex to avoid
+depending on core/io.py (which would violate the L0 contract).
+"""
 
 from __future__ import annotations
 
@@ -6,12 +11,19 @@ import functools
 import importlib.metadata
 import importlib.resources as ir
 import json
+import re
 from pathlib import Path
 
-from autoskillit.core.io import load_yaml
-from autoskillit.core.logging import get_logger
+_VERSION_RE = re.compile(r'^autoskillit_version:\s*["\']?([^"\'#\s]+)')
 
-logger = get_logger(__name__)
+
+def _extract_recipe_version(path: Path) -> str | None:
+    """Extract autoskillit_version from a recipe YAML via line scan."""
+    for line in path.read_text(encoding="utf-8").splitlines():
+        m = _VERSION_RE.match(line)
+        if m:
+            return m.group(1)
+    return None
 
 
 @functools.lru_cache(maxsize=1)
@@ -36,14 +48,7 @@ def version_info(plugin_dir: Path | str | None = None) -> dict:
     recipes_dir = plugin_dir / "recipes"
     if recipes_dir.is_dir():
         for recipe_path in sorted(recipes_dir.rglob("*.yaml")):
-            try:
-                recipe_data = load_yaml(recipe_path)
-            except Exception:
-                logger.warning("failed to parse recipe YAML", path=str(recipe_path), exc_info=True)
-                continue
-            if not isinstance(recipe_data, dict):
-                continue
-            ver = recipe_data.get("autoskillit_version")
+            ver = _extract_recipe_version(recipe_path)
             if ver is not None and ver != package_version:
                 stale_recipes.append(str(recipe_path.relative_to(recipes_dir)))
 

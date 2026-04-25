@@ -128,6 +128,54 @@ async def _run_deferred_init(ready_event: _asyncio.Event) -> None:
         ready_event.set()
 
 
+async def _fleet_auto_gate_boot(ctx: Any) -> None:
+    """Auto-open the kitchen gate and prime quota/registry state for fleet sessions.
+
+    Called synchronously in _autoskillit_lifespan before yield, ensuring gate
+    is open before any tool call arrives. Fails open: any step failure is
+    logged as a warning and does not abort gate activation.
+    """
+    import os as _os  # noqa: PLC0415
+    from pathlib import Path  # noqa: PLC0415
+    from uuid import uuid4  # noqa: PLC0415
+
+    from autoskillit.core import register_active_kitchen  # noqa: PLC0415
+    from autoskillit.pipeline import create_background_task  # noqa: PLC0415
+    from autoskillit.server.helpers import (  # noqa: PLC0415
+        _prime_quota_cache,
+        _quota_refresh_loop,
+    )
+    from autoskillit.server.tools_kitchen import _write_hook_config  # noqa: PLC0415
+
+    ctx.kitchen_id = str(uuid4())
+    ctx.active_recipe_packs = frozenset()
+    ctx.gate.enable()
+    logger.info("fleet_auto_gate_boot", gate_state="open", kitchen_id=ctx.kitchen_id)
+
+    try:
+        _write_hook_config()
+    except Exception:
+        logger.warning("fleet_auto_gate_boot_write_hook_config_failed", exc_info=True)
+
+    try:
+        await _prime_quota_cache()
+    except Exception:
+        logger.warning("fleet_auto_gate_boot_prime_quota_cache_failed", exc_info=True)
+
+    try:
+        ctx.quota_refresh_task = create_background_task(
+            _quota_refresh_loop(ctx.config.quota_guard),
+            label="quota_refresh_loop",
+        )
+    except Exception:
+        logger.warning("fleet_auto_gate_boot_quota_refresh_failed", exc_info=True)
+
+    try:
+        register_active_kitchen(ctx.kitchen_id, _os.getpid(), str(Path.cwd()))
+    except Exception:
+        logger.warning("fleet_auto_gate_boot_registry_failed", exc_info=True)
+
+
 @asynccontextmanager
 async def _autoskillit_lifespan(server: Any) -> Any:
     """Server lifecycle: write readiness sentinel, yield, then finalize recording.
@@ -164,6 +212,13 @@ async def _autoskillit_lifespan(server: Any) -> Any:
             create_background_task(_run_hook_health_check_async(), label="hook_health")
         )
         bg_tasks.append(create_background_task(_run_deferred_init(event), label="deferred_init"))
+        from autoskillit.core import SessionType  # noqa: PLC0415
+        from autoskillit.core import session_type as _resolve_session_type  # noqa: PLC0415
+
+        if _resolve_session_type() is SessionType.FLEET:
+            _fleet_ctx = _get_ctx_or_none()
+            if _fleet_ctx is not None:
+                await _fleet_auto_gate_boot(_fleet_ctx)
         yield
     finally:
         for task in bg_tasks:

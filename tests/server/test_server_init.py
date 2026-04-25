@@ -846,6 +846,86 @@ class TestSessionTypeVisibility:
             assert name not in tool_names, f"{name} should be hidden after conftest reset"
 
 
+@pytest.mark.feature("fleet")
+class TestFleetAutoGateBoot:
+    """Fleet lifespan auto-gate: _fleet_auto_gate_boot opens gate before first tool call."""
+
+    @pytest.mark.anyio
+    async def test_fleet_lifespan_auto_opens_gate(self, tool_ctx):
+        """Fleet session: gate is open after _fleet_auto_gate_boot() runs."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server._lifespan import _fleet_auto_gate_boot
+
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        tool_ctx.quota_refresh_task = None
+
+        with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+            with patch("autoskillit.server.helpers._prime_quota_cache", new=AsyncMock()):
+                with patch(
+                    "autoskillit.pipeline.create_background_task",
+                    return_value=MagicMock(),
+                ):
+                    with patch("autoskillit.core.register_active_kitchen"):
+                        await _fleet_auto_gate_boot(tool_ctx)
+
+        assert tool_ctx.gate.enabled is True
+        assert tool_ctx.kitchen_id is not None
+        assert tool_ctx.active_recipe_packs == frozenset()
+
+    @pytest.mark.anyio
+    async def test_fleet_lifespan_auto_gate_fails_open_on_hook_config_error(self, tool_ctx):
+        """Fleet auto-gate keeps gate open even when _write_hook_config() raises."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server._lifespan import _fleet_auto_gate_boot
+
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        tool_ctx.quota_refresh_task = None
+
+        with patch(
+            "autoskillit.server.tools_kitchen._write_hook_config",
+            side_effect=OSError("disk full"),
+        ):
+            with patch("autoskillit.server.helpers._prime_quota_cache", new=AsyncMock()):
+                with patch(
+                    "autoskillit.pipeline.create_background_task",
+                    return_value=MagicMock(),
+                ):
+                    with patch("autoskillit.core.register_active_kitchen"):
+                        await _fleet_auto_gate_boot(tool_ctx)
+
+        assert tool_ctx.gate.enabled is True  # gate stays open despite hook_config failure
+
+    @pytest.mark.anyio
+    async def test_fleet_lifespan_auto_gate_logs_boot_event(self, tool_ctx):
+        """fleet_auto_gate_boot emits structured log event."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server._lifespan import _fleet_auto_gate_boot
+
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        tool_ctx.quota_refresh_task = None
+
+        with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+            with patch("autoskillit.server.helpers._prime_quota_cache", new=AsyncMock()):
+                with patch(
+                    "autoskillit.pipeline.create_background_task",
+                    return_value=MagicMock(),
+                ):
+                    with patch("autoskillit.core.register_active_kitchen"):
+                        with structlog.testing.capture_logs() as logs:
+                            await _fleet_auto_gate_boot(tool_ctx)
+
+        assert any(
+            entry.get("event") == "fleet_auto_gate_boot" and entry.get("gate_state") == "open"
+            for entry in logs
+        )
+
+
 class TestFeatureGateVisibility:
     """Feature gate override layer in _apply_session_type_visibility."""
 

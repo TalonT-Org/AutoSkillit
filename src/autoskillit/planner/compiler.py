@@ -117,7 +117,10 @@ def compile_plan(output_dir: str, task: str, source_dir: str) -> dict[str, str]:
 
     validation_path = root / "validation.json"
     if validation_path.exists():
-        validation = json.loads(validation_path.read_text())
+        try:
+            validation = json.loads(validation_path.read_text())
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"Malformed validation file {validation_path}: {exc}") from exc
         if validation.get("verdict") != "pass":
             _logger.warning(
                 "compile_plan called with non-passing validation",
@@ -127,7 +130,10 @@ def compile_plan(output_dir: str, task: str, source_dir: str) -> dict[str, str]:
     dep_graph: dict = {}
     dep_graph_path = root / "dep_graph.json"
     if dep_graph_path.exists():
-        dep_graph = json.loads(dep_graph_path.read_text())
+        try:
+            dep_graph = json.loads(dep_graph_path.read_text())
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"Malformed dep graph file {dep_graph_path}: {exc}") from exc
 
     _inject_forward_deps(wp_results, dep_graph)
 

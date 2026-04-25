@@ -27,8 +27,11 @@ def _load_assignment_results(root: Path) -> dict[str, dict]:
     if not assign_dir.exists():
         return results
     for f in sorted(assign_dir.glob("*_result.json")):
-        data = json.loads(f.read_text())
-        assign_id = f"P{data['phase_number']}-A{data['assignment_number']}"
+        try:
+            data = json.loads(f.read_text())
+            assign_id = f"P{data['phase_number']}-A{data['assignment_number']}"
+        except (json.JSONDecodeError, KeyError) as exc:
+            raise RuntimeError(f"Malformed assignment result file {f}: {exc}") from exc
         results[assign_id] = data
     return results
 
@@ -53,7 +56,10 @@ def _load_wp_manifest(root: Path) -> dict | None:
     manifest_path = root / "work_packages" / "wp_manifest.json"
     if not manifest_path.exists():
         return None
-    return json.loads(manifest_path.read_text())
+    try:
+        return json.loads(manifest_path.read_text())
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Malformed WP manifest file {manifest_path}: {exc}") from exc
 
 
 def _inject_backward_deps(wp_results: dict[str, dict], dep_graph: dict) -> None:
@@ -86,6 +92,9 @@ def _check_assignment_completeness(
     wp_pairs: set[tuple[int, int]] = set()
     for wp_id in wp_results:
         parts = wp_id.split("-")
+        if len(parts) < 2:
+            findings.append(f"WP {wp_id!r} has malformed id (expected PX-AY-WPZ)")
+            continue
         phase_num = int(parts[0][1:])
         assign_num = int(parts[1][1:])
         wp_pairs.add((phase_num, assign_num))
@@ -172,7 +181,10 @@ def validate_plan(output_dir: str) -> dict[str, str]:
 
     dep_graph_path = root / "dep_graph.json"
     if dep_graph_path.exists():
-        dep_graph = json.loads(dep_graph_path.read_text())
+        try:
+            dep_graph = json.loads(dep_graph_path.read_text())
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"Malformed dep graph file {dep_graph_path}: {exc}") from exc
         _inject_backward_deps(wp_results, dep_graph)
 
     findings: list[str] = []

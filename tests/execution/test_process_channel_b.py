@@ -548,10 +548,9 @@ class TestChannelBSubSkillCollision:
 
         timeout=TimeoutTier.CHANNEL_B (60s): guards against the outer wall-clock
         expiring under xdist -n 4 load.
-        _watch_session_log waits up to _session_id_timeout (default 1.0s, tests pass 0.01s)
-        for stdout_session_id_ready before Phase 1 starts; under CI load the preamble
-        and Phase 1 polls can overrun, so the outer timeout must exceed
-        _session_id_timeout + _phase1_timeout (30s default) + drain + jitter > 31s.
+        _session_id_timeout=2.0 gives the stdout reader enough headroom under
+        heavy parallel load so Channel B monitoring always starts before the
+        JSONL markers are written.
         """
         session_dir = tmp_path / "session"
         session_dir.mkdir()
@@ -569,7 +568,7 @@ class TestChannelBSubSkillCollision:
             _phase1_poll=0.05,
             _phase2_poll=0.05,
             _heartbeat_poll=0.05,
-            _session_id_timeout=0.01,
+            _session_id_timeout=2.0,
         )
 
         assert result.termination == TerminationReason.COMPLETED

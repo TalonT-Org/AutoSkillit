@@ -24,7 +24,7 @@ _L2_TIMEOUT = 3600
 
 
 def _get_prompt() -> str:
-    from autoskillit.cli._prompts import _build_food_truck_prompt
+    from autoskillit.fleet._prompts import _build_food_truck_prompt
 
     return _build_food_truck_prompt(
         recipe=_RECIPE,
@@ -38,7 +38,7 @@ def _get_prompt() -> str:
 
 
 def _get_sous_chef_block() -> str:
-    from autoskillit.cli._prompts import _build_l2_sous_chef_block
+    from autoskillit.fleet._prompts import _build_l2_sous_chef_block
 
     return _build_l2_sous_chef_block()
 
@@ -84,11 +84,10 @@ class TestL2SousChefBlock:
     def test_graceful_degradation(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
     ) -> None:
-        from autoskillit.cli import _prompts
         from autoskillit.fleet import _prompts as _fleet_prompts
 
         monkeypatch.setattr(_fleet_prompts, "pkg_root", lambda: tmp_path)
-        result = _prompts._build_l2_sous_chef_block()
+        result = _fleet_prompts._build_l2_sous_chef_block()
         assert result == ""
 
     def test_excludes_unretained_sections(self) -> None:

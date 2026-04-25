@@ -31,13 +31,8 @@ from .summary import (
     validate_campaign_summary,
 )
 
-# Tools that appear in the Fleet group in menu listings (cook + kitchen).
-# Both cli/_cook.py and server/tools_kitchen.py use this constant.
-FLEET_MENU_TOOLS: tuple[str, ...] = ("dispatch_food_truck",)
-
 __all__ = [
     "execute_dispatch",
-    "FLEET_MENU_TOOLS",
     "_build_food_truck_prompt",
     "_build_l2_sous_chef_block",
     "L2ParseResult",

@@ -17,8 +17,6 @@ from autoskillit.cli._init_helpers import _prompt_recipe_choice
 from autoskillit.cli._mcp_names import detect_autoskillit_mcp_prefix
 from autoskillit.cli._prompts import (
     _OPEN_KITCHEN_CHOICE,
-    _build_food_truck_prompt,
-    _build_l2_sous_chef_block,
     _build_open_kitchen_prompt,
     _build_orchestrator_prompt,
     _resolve_recipe_input,
@@ -56,8 +54,6 @@ from autoskillit.hook_registry import HookDriftResult
 __all__ = [
     "_OPEN_KITCHEN_CHOICE",
     "_is_plugin_installed",
-    "_build_food_truck_prompt",
-    "_build_l2_sous_chef_block",
     "_build_open_kitchen_prompt",
     "_build_orchestrator_prompt",
     "DoctorResult",

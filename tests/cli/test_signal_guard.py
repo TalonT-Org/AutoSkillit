@@ -235,7 +235,7 @@ class TestSignalGuard:
             events.append("state_written")
             _real_mark(sp, name, reason=reason)
 
-        with patch("autoskillit.cli._fleet.mark_dispatch_interrupted", tracking_mark):
+        with patch("autoskillit.fleet.mark_dispatch_interrupted", tracking_mark):
             await _run_signal_guard(state_path, campaign_id, _signal.SIGTERM)
             events.append("guard_exited")
 

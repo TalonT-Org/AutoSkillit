@@ -22,6 +22,7 @@ __all__ = [
     "GATED_TOOLS",
     "HEADLESS_TOOLS",
     "FLEET_TOOLS",
+    "FLEET_MENU_TOOLS",
     "FEATURE_REVEAL_TAGS",
     "FREE_RANGE_TOOLS",
     "UNGATED_TOOLS",
@@ -221,6 +222,10 @@ FLEET_DISPATCH_TOOLS: frozenset[str] = frozenset(
         "get_issue_title",
     }
 )
+
+# Tools that appear in the Fleet group in the cook menu and open_kitchen response.
+# Defined here (L0) so menu modules can import the constant without loading the fleet package.
+FLEET_MENU_TOOLS: tuple[str, ...] = ("dispatch_food_truck",)
 
 # Tags that are EXCLUSIVELY used for feature-gated visibility (not general kitchen tags).
 # When a feature is disabled, these tags are the ones suppressed via disable_components.

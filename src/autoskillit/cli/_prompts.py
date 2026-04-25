@@ -71,14 +71,6 @@ dispatch name NOT listed above.
 You are an L3 campaign dispatcher. Execute campaign '{campaign_recipe.name}' autonomously.
 Campaign ID: {campaign_id}. Dispatches: {dispatch_count}.
 {sous_chef_section}
-## STARTUP SEQUENCE
-
-1. Call Bash(command="sleep 2") — ensures MCP plugin tools are fully registered
-   before proceeding. Bash is a built-in tool, always available. DO NOT SKIP THIS STEP.
-2. Call ToolSearch(query='select:{mcp_prefix}open_kitchen') to load the schema.
-3. Call {mcp_prefix}open_kitchen() to open the kitchen gate and activate MCP tools.
-   This is required before dispatch_food_truck can execute.
-
 ## CAMPAIGN OVERVIEW
 
 - Name: {campaign_recipe.name}
@@ -111,7 +103,7 @@ Only these 6 tools are available in this session:
 - {mcp_prefix}get_timing_summary
 - {mcp_prefix}get_quota_events
 
-Explicitly FORBIDDEN: close_kitchen, run_skill, and all GitHub/CI tools.
+Explicitly FORBIDDEN: open_kitchen, close_kitchen, run_skill, and all GitHub/CI tools.
 Use ONLY {mcp_prefix}dispatch_food_truck to dispatch — never run_skill.
 
 ## FAILURE RECOVERY
@@ -500,13 +492,6 @@ def _build_fleet_open_prompt(mcp_prefix: str) -> str:
     return f"""\
 You are an L3 fleet dispatcher. You can launch headless L2 sessions via \
 {mcp_prefix}dispatch_food_truck.
-
-FIRST ACTION — before responding to any user instructions:
-1. Call Bash(command="sleep 2") — ensures MCP plugin tools are fully registered.
-   Bash is a built-in tool, always available. DO NOT SKIP THIS STEP.
-2. Call ToolSearch(query='select:{mcp_prefix}open_kitchen') to load the open_kitchen schema.
-3. Call {mcp_prefix}open_kitchen() (no recipe name) to open the kitchen gate.
-   dispatch_food_truck requires the gate to be open — this call is mandatory.
 
 TOOL SURFACE — only these 6 tools are available in this session:
 - {mcp_prefix}dispatch_food_truck     — launch a headless L2 for a recipe

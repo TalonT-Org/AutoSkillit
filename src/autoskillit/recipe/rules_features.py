@@ -78,6 +78,27 @@ def check_feature_gated_tools(ctx: ValidationContext) -> list[RuleFinding]:
                     )
                 )
 
+            # --- run_python callable check ---
+            if (
+                step.tool == "run_python"
+                and fdef.import_package is not None
+                and (step.with_args or {}).get("callable", "").startswith(fdef.import_package)
+            ):
+                findings.append(
+                    RuleFinding(
+                        rule="feature-gate-tool-reference",
+                        severity=Severity.ERROR,
+                        step_name=step_name,
+                        message=(
+                            f"step '{step_name}': run_python callable "
+                            f"'{(step.with_args or {}).get('callable', '')}' "
+                            f"belongs to disabled feature '{fdef.name}'. "
+                            f"Enable '{fdef.name}' in .autoskillit/config.yaml "
+                            f"features to use this callable."
+                        ),
+                    )
+                )
+
             # --- Skill check (only when the feature gates skill categories) ---
             if step.tool not in SKILL_TOOLS or not fdef.skill_categories:
                 continue

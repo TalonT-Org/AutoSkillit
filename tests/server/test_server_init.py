@@ -867,12 +867,12 @@ class TestFeatureGateVisibility:
         from autoskillit.server import mcp
         from autoskillit.server._session_type import (
             _apply_session_type_visibility,
-            _franchise_gate,
+            _fleet_gate,
         )
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "franchise")
         monkeypatch.setenv("AUTOSKILLIT_FEATURES__FRANCHISE", "false")
-        _apply_session_type_visibility(feature_gates=[_franchise_gate])
+        _apply_session_type_visibility(feature_gates=[_fleet_gate])
 
         async with Client(mcp) as client:
             tools = await client.list_tools()
@@ -891,12 +891,12 @@ class TestFeatureGateVisibility:
         from autoskillit.server import mcp
         from autoskillit.server._session_type import (
             _apply_session_type_visibility,
-            _franchise_gate,
+            _fleet_gate,
         )
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "franchise")
         monkeypatch.delenv("AUTOSKILLIT_FEATURES__FRANCHISE", raising=False)
-        _apply_session_type_visibility(feature_gates=[_franchise_gate])
+        _apply_session_type_visibility(feature_gates=[_fleet_gate])
 
         async with Client(mcp) as client:
             tools = await client.list_tools()
@@ -915,12 +915,12 @@ class TestFeatureGateVisibility:
         from autoskillit.server import mcp
         from autoskillit.server._session_type import (
             _apply_session_type_visibility,
-            _franchise_gate,
+            _fleet_gate,
         )
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "franchise")
         monkeypatch.setenv("AUTOSKILLIT_FEATURES__FRANCHISE", "false")
-        _apply_session_type_visibility(feature_gates=[_franchise_gate])
+        _apply_session_type_visibility(feature_gates=[_fleet_gate])
 
         async with Client(mcp) as client:
             tools = await client.list_tools()
@@ -994,3 +994,87 @@ class TestFeatureGateVisibility:
             assert name in tool_names, (
                 f"{name} should be visible with no-gate backward-compatible call"
             )
+
+    @pytest.mark.anyio
+    async def test_fleet_gate_disables_tools_via_fleet_env_var(self, monkeypatch):
+        """AUTOSKILLIT_FEATURES__FLEET=false disables franchise-tagged tools."""
+        from fastmcp.client import Client
+
+        from autoskillit.core import FRANCHISE_TOOLS
+        from autoskillit.server import mcp
+        from autoskillit.server._session_type import _apply_session_type_visibility, _fleet_gate
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+        monkeypatch.setenv("AUTOSKILLIT_FEATURES__FLEET", "false")
+        monkeypatch.delenv("AUTOSKILLIT_FEATURES__FRANCHISE", raising=False)
+        _apply_session_type_visibility(feature_gates=[_fleet_gate])
+
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
+        tool_names = {t.name for t in tools}
+        assert FRANCHISE_TOOLS
+        for tool in FRANCHISE_TOOLS:
+            assert tool not in tool_names
+
+    @pytest.mark.anyio
+    async def test_fleet_gate_backward_compat_franchise_env_var(self, monkeypatch):
+        """AUTOSKILLIT_FEATURES__FRANCHISE=false still disables tools (backward compat)."""
+        from fastmcp.client import Client
+
+        from autoskillit.core import FRANCHISE_TOOLS
+        from autoskillit.server import mcp
+        from autoskillit.server._session_type import _apply_session_type_visibility, _fleet_gate
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+        monkeypatch.setenv("AUTOSKILLIT_FEATURES__FRANCHISE", "false")
+        monkeypatch.delenv("AUTOSKILLIT_FEATURES__FLEET", raising=False)
+        _apply_session_type_visibility(feature_gates=[_fleet_gate])
+
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
+        tool_names = {t.name for t in tools}
+        assert FRANCHISE_TOOLS
+        for tool in FRANCHISE_TOOLS:
+            assert tool not in tool_names
+
+    @pytest.mark.anyio
+    async def test_fleet_gate_fleet_env_var_takes_precedence_over_franchise(self, monkeypatch):
+        """AUTOSKILLIT_FEATURES__FLEET=true wins over AUTOSKILLIT_FEATURES__FRANCHISE=false."""
+        from fastmcp.client import Client
+
+        from autoskillit.core import FRANCHISE_TOOLS
+        from autoskillit.server import mcp
+        from autoskillit.server._session_type import _apply_session_type_visibility, _fleet_gate
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+        monkeypatch.setenv("AUTOSKILLIT_FEATURES__FLEET", "true")
+        monkeypatch.setenv("AUTOSKILLIT_FEATURES__FRANCHISE", "false")
+        _apply_session_type_visibility(feature_gates=[_fleet_gate])
+
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
+        tool_names = {t.name for t in tools}
+        assert FRANCHISE_TOOLS
+        for tool in FRANCHISE_TOOLS:
+            assert tool in tool_names
+
+    @pytest.mark.anyio
+    async def test_session_type_fleet_enables_franchise_tags(self, monkeypatch):
+        """FLEET session activates franchise tool visibility (no feature gate needed)."""
+        from fastmcp.client import Client
+
+        from autoskillit.core import FRANCHISE_TOOLS
+        from autoskillit.server import mcp
+        from autoskillit.server._session_type import _apply_session_type_visibility
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.delenv("AUTOSKILLIT_FEATURES__FLEET", raising=False)
+        _apply_session_type_visibility()
+
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
+        tool_names = {t.name for t in tools}
+        assert FRANCHISE_TOOLS
+        for tool in FRANCHISE_TOOLS:
+            assert tool in tool_names

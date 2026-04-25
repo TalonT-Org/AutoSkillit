@@ -5,7 +5,7 @@ Leaf sessions (AUTOSKILLIT_SESSION_TYPE=leaf or unset in headless mode) must
 never call run_skill, run_cmd, or run_python. This is defense-in-depth over
 the in-handler gate check in each tool.
 
-Tier invariant: orchestrator and franchise tiers may call orchestration tools.
+Tier invariant: orchestrator, franchise, and fleet tiers may call orchestration tools.
 Leaf workers use native Claude Code tools only.
 """
 
@@ -28,7 +28,7 @@ def main() -> None:
 
     # Headless: resolve session type, fail-closed to leaf
     session_type = os.environ.get("AUTOSKILLIT_SESSION_TYPE", "").lower()
-    if session_type in ("orchestrator", "franchise"):
+    if session_type in ("orchestrator", "franchise", "fleet"):
         sys.exit(0)  # permitted tiers — not a leaf
     # leaf, unset, or invalid → deny below
 
@@ -45,7 +45,7 @@ def main() -> None:
                     "permissionDecision": "deny",
                     "permissionDecisionReason": (
                         f"{tool} cannot be called from leaf sessions. "
-                        "Only orchestrator or franchise sessions may call orchestration tools. "
+                        "Only orchestrator or fleet sessions may call orchestration tools. "
                         "Leaf workers use native Claude Code tools only."
                     ),
                 }

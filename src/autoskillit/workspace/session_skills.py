@@ -170,10 +170,17 @@ def _is_skill_disabled(
         elif tag in skill_info.categories:
             return True
 
+    # Union model: suppress a category only when ALL features that gate it are disabled.
+    enabled_cats: set[str] = set()
+    disabled_cats: set[str] = set()
     for feat_name, feat_def in FEATURE_REGISTRY.items():
-        if not is_feature_enabled(feat_name, features):
-            if feat_def.skill_categories & skill_info.categories:
-                return True
+        if is_feature_enabled(feat_name, features):
+            enabled_cats |= feat_def.skill_categories
+        else:
+            disabled_cats |= feat_def.skill_categories
+    for cat in disabled_cats - enabled_cats:
+        if cat in skill_info.categories:
+            return True
 
     return False
 
@@ -394,9 +401,14 @@ class DefaultSessionSkillManager:
 
         disabled_feature_tags: frozenset[str] = frozenset()
         if config is not None and not cook_session:
+            enabled_tool_tags: set[str] = set()
+            disabled_tool_tags: set[str] = set()
             for feature_name, feature_def in FEATURE_REGISTRY.items():
-                if not is_feature_enabled(feature_name, config.features):
-                    disabled_feature_tags |= feature_def.tool_tags
+                if is_feature_enabled(feature_name, config.features):
+                    enabled_tool_tags |= feature_def.tool_tags
+                else:
+                    disabled_tool_tags |= feature_def.tool_tags
+            disabled_feature_tags = frozenset(disabled_tool_tags - enabled_tool_tags)
 
         effective_disabled = _resolve_effective_disabled(
             explicit_disabled=explicit_disabled,

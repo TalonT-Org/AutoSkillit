@@ -163,3 +163,15 @@ def test_open_kitchen_guard_uses_campaign_namespace(tmp_path: Path, monkeypatch)
     _write_kitchen_marker("sess-test", "my-recipe")
     expected = tmp_path / ".autoskillit" / "temp" / "kitchen_state" / "camp-77" / "sess-test.json"
     assert expected.exists()
+
+
+def test_open_kitchen_guard_denies_fleet_headless() -> None:
+    response = _run_guard({"AUTOSKILLIT_HEADLESS": "1", "AUTOSKILLIT_SESSION_TYPE": "fleet"}, {})
+    assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_open_kitchen_guard_fleet_denial_has_specific_message() -> None:
+    """Fleet denial message must mention fleet or franchise, not the generic leaf message."""
+    response = _run_guard({"AUTOSKILLIT_HEADLESS": "1", "AUTOSKILLIT_SESSION_TYPE": "fleet"}, {})
+    reason = response["hookSpecificOutput"]["permissionDecisionReason"].lower()
+    assert "fleet" in reason or "franchise" in reason

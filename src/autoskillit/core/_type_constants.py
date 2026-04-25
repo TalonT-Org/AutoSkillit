@@ -37,6 +37,7 @@ __all__ = [
     "AUTOSKILLIT_SKILL_PREFIX",
     "RETIRED_READINESS_TOKENS",
     "SESSION_TYPE_ENV_VAR",
+    "SESSION_TYPE_FLEET",
     "SESSION_TYPE_FRANCHISE",
     "SESSION_TYPE_ORCHESTRATOR",
     "SESSION_TYPE_LEAF",
@@ -58,6 +59,7 @@ AUTOSKILLIT_INSTALLED_VERSION: str = version("autoskillit")
 SESSION_TYPE_ENV_VAR: str = "AUTOSKILLIT_SESSION_TYPE"
 SESSION_TYPE_FRANCHISE: str = "franchise"
 SESSION_TYPE_ORCHESTRATOR: str = "orchestrator"
+SESSION_TYPE_FLEET: str = "fleet"
 SESSION_TYPE_LEAF: str = "leaf"
 HEADLESS_ENV_VAR: str = "AUTOSKILLIT_HEADLESS"
 CAMPAIGN_ID_ENV_VAR: str = "AUTOSKILLIT_CAMPAIGN_ID"
@@ -358,6 +360,17 @@ class FeatureDef:
 
 
 FEATURE_REGISTRY: dict[str, FeatureDef] = {
+    "fleet": FeatureDef(
+        name="fleet",
+        lifecycle=FeatureLifecycle.EXPERIMENTAL,
+        description="L3 Fleet Orchestrator — campaign dispatch (canonical name for franchise)",
+        tool_tags=frozenset({"franchise"}),
+        skill_categories=frozenset({"franchise"}),
+        import_package="autoskillit.franchise",
+        tier=1,
+        default_enabled=False,
+        since_version="0.9.119",
+    ),
     "franchise": FeatureDef(
         name="franchise",
         lifecycle=FeatureLifecycle.EXPERIMENTAL,

@@ -15,6 +15,7 @@ import inspect
 import logging
 import os
 import tempfile
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -356,6 +357,19 @@ class AutomationConfig:
                 raise ConfigSchemaError(
                     f"Feature key must be a string, got {type(name).__name__!r}: {name!r}"
                 )
+            # Shim: "franchise" config key → "fleet" alias when "franchise" is not in the registry
+            # but "fleet" is. Guards the case where only one of the two keys exists at runtime.
+            if (
+                name not in FEATURE_REGISTRY
+                and name == "franchise"
+                and "fleet" in FEATURE_REGISTRY
+            ):
+                warnings.warn(
+                    "features.franchise is deprecated. Use features.fleet instead.",
+                    DeprecationWarning,
+                    stacklevel=3,
+                )
+                name = "fleet"
             if name not in FEATURE_REGISTRY:
                 known = sorted(FEATURE_REGISTRY.keys())
                 raise ConfigSchemaError(

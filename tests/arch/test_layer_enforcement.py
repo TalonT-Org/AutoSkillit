@@ -918,28 +918,22 @@ def test_hook_config_filename_and_dir_match_quota_check():
 
 
 def test_display_categories_sync() -> None:
-    """Both _DISPLAY_CATEGORIES copies cover all registered tools exactly."""
-    from autoskillit.cli._cook import _DISPLAY_CATEGORIES as cook_cats
+    """_DISPLAY_CATEGORIES canonical copy covers all registered tools exactly."""
+    from autoskillit.config.ingredient_defaults import _DISPLAY_CATEGORIES
     from autoskillit.core import FREE_RANGE_TOOLS, GATED_TOOLS, HEADLESS_TOOLS
-    from autoskillit.server.tools_kitchen import _DISPLAY_CATEGORIES as kitchen_cats
 
     all_registered = GATED_TOOLS | HEADLESS_TOOLS | FREE_RANGE_TOOLS
 
-    for label, cats in (("kitchen", kitchen_cats), ("cook", cook_cats)):
-        flat: list[str] = []
-        for _name, tools in cats:
-            flat.extend(tools)
-        as_set = set(flat)
-        assert len(flat) == len(as_set), f"Duplicates in {label} _DISPLAY_CATEGORIES"
-        assert as_set == all_registered, (
-            f"{label} _DISPLAY_CATEGORIES mismatch:\n"
-            f"  Missing: {all_registered - as_set}\n"
-            f"  Extra: {as_set - all_registered}"
-        )
-
-    kitchen_flat = {t for _, tools in kitchen_cats for t in tools}
-    cook_flat = {t for _, tools in cook_cats for t in tools}
-    assert kitchen_flat == cook_flat, "kitchen and cook _DISPLAY_CATEGORIES differ"
+    flat: list[str] = []
+    for _name, tools in _DISPLAY_CATEGORIES:
+        flat.extend(tools)
+    as_set = set(flat)
+    assert len(flat) == len(as_set), "Duplicates in _DISPLAY_CATEGORIES"
+    assert as_set == all_registered, (
+        f"_DISPLAY_CATEGORIES mismatch:\n"
+        f"  Missing: {all_registered - as_set}\n"
+        f"  Extra: {as_set - all_registered}"
+    )
 
 
 def test_tool_categories_not_in_core() -> None:
@@ -955,25 +949,23 @@ def test_tool_categories_not_in_core() -> None:
 
 def test_ci_tools_not_in_github_category() -> None:
     """CI tools must be in 'CI & Automation', not in 'GitHub'."""
-    from autoskillit.cli._cook import _DISPLAY_CATEGORIES as cook_cats
-    from autoskillit.server.tools_kitchen import _DISPLAY_CATEGORIES as kitchen_cats
+    from autoskillit.config.ingredient_defaults import _DISPLAY_CATEGORIES
 
     ci_tools = {"wait_for_ci", "wait_for_merge_queue", "toggle_auto_merge", "get_ci_status"}
 
-    for label, cats in (("kitchen", kitchen_cats), ("cook", cook_cats)):
-        github_tools: set[str] = set()
-        ci_cat_tools: set[str] = set()
-        for name, tools in cats:
-            if name == "GitHub":
-                github_tools = set(tools)
-            elif name == "CI & Automation":
-                ci_cat_tools = set(tools)
-        assert not (ci_tools & github_tools), (
-            f"{label}: CI tools found in GitHub category: {ci_tools & github_tools}"
-        )
-        assert ci_tools <= ci_cat_tools, (
-            f"{label}: CI tools missing from CI & Automation: {ci_tools - ci_cat_tools}"
-        )
+    github_tools: set[str] = set()
+    ci_cat_tools: set[str] = set()
+    for name, tools in _DISPLAY_CATEGORIES:
+        if name == "GitHub":
+            github_tools = set(tools)
+        elif name == "CI & Automation":
+            ci_cat_tools = set(tools)
+    assert not (ci_tools & github_tools), (
+        f"CI tools found in GitHub category: {ci_tools & github_tools}"
+    )
+    assert ci_tools <= ci_cat_tools, (
+        f"CI tools missing from CI & Automation: {ci_tools - ci_cat_tools}"
+    )
 
 
 def test_tool_subset_tags_match_decorators() -> None:

@@ -23,11 +23,6 @@ import psutil
 from cyclopts import App, Parameter
 
 from autoskillit.core import TerminalColumn, get_logger, is_feature_enabled
-from autoskillit.fleet import (
-    DispatchStatus,
-    mark_dispatch_interrupted,
-    read_state,
-)
 
 _log = get_logger(__name__)
 
@@ -49,22 +44,6 @@ if TYPE_CHECKING:
     from autoskillit.fleet import CampaignState, DispatchRecord, ResumeDecision
     from autoskillit.recipe.schema import Recipe
 
-_FAILURE_STATUSES = frozenset(
-    {
-        DispatchStatus.FAILURE,
-        DispatchStatus.INTERRUPTED,
-        DispatchStatus.REFUSED,
-        DispatchStatus.RELEASED,
-    }
-)
-
-_IN_PROGRESS_STATUSES = frozenset(
-    {
-        DispatchStatus.RUNNING,
-        DispatchStatus.PENDING,
-    }
-)
-
 _STATUS_COLUMNS = (
     TerminalColumn("NAME", 30, "<"),
     TerminalColumn("STATUS", 12, "<"),
@@ -82,8 +61,19 @@ def _compute_exit_code(state: CampaignState) -> int:
 
     0 = all success/skipped, 1 = any failure, 2 = any in-progress.
     """
-    has_failure = any(d.status in _FAILURE_STATUSES for d in state.dispatches)
-    has_in_progress = any(d.status in _IN_PROGRESS_STATUSES for d in state.dispatches)
+    from autoskillit.fleet import DispatchStatus  # noqa: PLC0415
+
+    _failure = frozenset(
+        {
+            DispatchStatus.FAILURE,
+            DispatchStatus.INTERRUPTED,
+            DispatchStatus.REFUSED,
+            DispatchStatus.RELEASED,
+        }
+    )
+    _in_progress = frozenset({DispatchStatus.RUNNING, DispatchStatus.PENDING})
+    has_failure = any(d.status in _failure for d in state.dispatches)
+    has_in_progress = any(d.status in _in_progress for d in state.dispatches)
     if has_failure:
         return 1
     if has_in_progress:
@@ -93,6 +83,8 @@ def _compute_exit_code(state: CampaignState) -> int:
 
 def _fmt_elapsed(dispatch: DispatchRecord) -> str:
     """Format dispatch elapsed time as human-readable string."""
+    from autoskillit.fleet import DispatchStatus  # noqa: PLC0415
+
     if dispatch.started_at <= 0:
         return "-"
     if dispatch.status == DispatchStatus.RUNNING:
@@ -239,13 +231,17 @@ def _watch_loop(state_path: Path) -> int:
     import termios
     import tty
 
+    from autoskillit.fleet import DispatchStatus, read_state  # noqa: PLC0415
+
+    _in_progress = frozenset({DispatchStatus.RUNNING, DispatchStatus.PENDING})
+
     state = read_state(state_path)
     if state is None:
         sys.stderr.write("ERROR: state file disappeared or corrupted\n")
         return 3
 
     # If campaign already terminal, render once and exit without needing a TTY
-    if all(d.status not in _IN_PROGRESS_STATUSES for d in state.dispatches):
+    if all(d.status not in _in_progress for d in state.dispatches):
         _render_status_display(state)
         print("\nAll dispatches complete.")
         return _compute_exit_code(state)
@@ -278,7 +274,7 @@ def _watch_loop(state_path: Path) -> int:
 
             prev_lines = _render_status_display(state)
 
-            if all(d.status not in _IN_PROGRESS_STATUSES for d in state.dispatches):
+            if all(d.status not in _in_progress for d in state.dispatches):
                 print("\nAll dispatches complete.")
                 return _compute_exit_code(state)
 
@@ -419,6 +415,11 @@ async def _fleet_signal_guard(
                 # operations (kill, state write) are not interrupted.
                 with anyio.CancelScope(shield=True):
                     from autoskillit.execution import async_kill_process_tree, read_starttime_ticks
+                    from autoskillit.fleet import (  # noqa: PLC0415
+                        DispatchStatus,
+                        mark_dispatch_interrupted,
+                        read_state,
+                    )
 
                     state = read_state(state_path)
                     if state is not None:
@@ -520,6 +521,11 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
     - Process alive + ticks mismatch → reaped_pid_recycled (no kill)
     """
     from autoskillit.execution import kill_process_tree, read_boot_id, read_starttime_ticks
+    from autoskillit.fleet import (  # noqa: PLC0415
+        DispatchStatus,
+        mark_dispatch_interrupted,
+        read_state,
+    )
 
     current_boot_id = read_boot_id()
 
@@ -772,6 +778,7 @@ def fleet_status(
 
     cfg = load_config(Path.cwd())
     _require_fleet(cfg)
+    from autoskillit.fleet import read_state  # noqa: PLC0415
 
     fleet_dir = Path.cwd() / ".autoskillit" / "temp" / "fleet"
 

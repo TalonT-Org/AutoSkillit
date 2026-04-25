@@ -1573,3 +1573,21 @@ class TestOrderResumeParsing:
             assert exc_info.value.code == 0
 
         assert find_called == [], "find_recipe_by_name must NOT be called on resume without recipe"
+
+
+def test_display_categories_omits_fleet_when_disabled() -> None:
+    """Fleet category must not appear in iter_display_categories output when fleet is disabled."""
+    from autoskillit.config import iter_display_categories
+
+    cfg_features: dict[str, bool] = {"fleet": False}
+    categories = [name for name, _ in iter_display_categories(cfg_features)]
+    assert "Fleet" not in categories
+
+
+def test_display_categories_includes_fleet_when_enabled() -> None:
+    """Fleet category must appear in iter_display_categories output when fleet is enabled."""
+    from autoskillit.config import iter_display_categories
+
+    cfg_features: dict[str, bool] = {"fleet": True}
+    categories = [name for name, _ in iter_display_categories(cfg_features)]
+    assert "Fleet" in categories

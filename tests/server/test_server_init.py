@@ -599,6 +599,7 @@ class TestSessionTypeVisibility:
         from fastmcp.client import Client
 
         from autoskillit.core import (
+            FLEET_DISPATCH_MODE,
             FLEET_DISPATCH_TOOLS,
             FLEET_MODE_ENV_VAR,
             FLEET_TOOLS,
@@ -607,7 +608,7 @@ class TestSessionTypeVisibility:
         from autoskillit.server import _apply_session_type_visibility, mcp
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
-        monkeypatch.setenv(FLEET_MODE_ENV_VAR, "dispatch")
+        monkeypatch.setenv(FLEET_MODE_ENV_VAR, FLEET_DISPATCH_MODE)
         _apply_session_type_visibility()
 
         async with Client(mcp) as client:
@@ -644,11 +645,11 @@ class TestSessionTypeVisibility:
     @pytest.mark.anyio
     async def test_fleet_dispatch_constant_matches_tagged_tools(self, monkeypatch):
         """FLEET_DISPATCH_TOOLS constant must exactly match tools tagged fleet-dispatch."""
-        from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_MODE_ENV_VAR
+        from autoskillit.core import FLEET_DISPATCH_MODE, FLEET_DISPATCH_TOOLS, FLEET_MODE_ENV_VAR
         from autoskillit.server import _apply_session_type_visibility, mcp
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
-        monkeypatch.setenv(FLEET_MODE_ENV_VAR, "dispatch")
+        monkeypatch.setenv(FLEET_MODE_ENV_VAR, FLEET_DISPATCH_MODE)
         _apply_session_type_visibility()
 
         all_tools = {t.name: t for t in await mcp.list_tools()}

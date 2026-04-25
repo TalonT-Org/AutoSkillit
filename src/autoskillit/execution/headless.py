@@ -689,7 +689,7 @@ def _build_skill_result(
 
     # Moved earlier: needed by synthesis recovery step before _compute_outcome.
     write_call_count = sum(1 for t in session.tool_uses if t.get("name") in {"Write", "Edit"})
-    has_write_evidence = write_call_count >= 1 or fs_writes_detected
+    _has_write_evidence = write_call_count >= 1 or fs_writes_detected
 
     # ── Channel B drain-race recovery ──────────────────────────────────────
     # When Channel B confirmed completion but stdout never received the
@@ -789,7 +789,7 @@ def _build_skill_result(
         # emitted it — synthesis would fabricate a token the agent did not produce.
         if (
             expected_output_patterns
-            and has_write_evidence
+            and _has_write_evidence
             and result.channel_confirmation == ChannelConfirmation.UNMONITORED
             and not _check_expected_patterns(session.result.strip(), expected_output_patterns)
         ):
@@ -822,7 +822,7 @@ def _build_skill_result(
         not success
         and not needs_retry
         and normalized_subtype == "adjudicated_failure"
-        and has_write_evidence
+        and _has_write_evidence
     ):
         _audit_needs_retry = True
         _audit_retry_reason = RetryReason.CONTRACT_RECOVERY
@@ -919,7 +919,7 @@ def _build_skill_result(
         not sr.success
         and not sr.needs_retry
         and sr.subtype == "adjudicated_failure"
-        and has_write_evidence
+        and _has_write_evidence
     ):
         sr = dataclasses.replace(
             sr,
@@ -931,7 +931,7 @@ def _build_skill_result(
     # Zero-write gate: demote success to retriable failure when a write-expected
     # skill produced zero Edit/Write calls (silent degradation detection).
     # Write expectation is resolved from skill_contracts.yaml via WriteBehaviorSpec.
-    if sr.success and not has_write_evidence and write_behavior is not None:
+    if sr.success and not _has_write_evidence and write_behavior is not None:
         write_expected = False
         if write_behavior.mode == "always":
             write_expected = True

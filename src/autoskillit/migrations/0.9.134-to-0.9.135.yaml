@@ -1,0 +1,25 @@
+from_version: "0.9.134"
+to_version: "0.9.135"
+description: >
+  Fleet restructure rename: features.franchise config key renamed to features.fleet.
+changes:
+  - id: features-franchise-to-fleet
+    description: >
+      The features.franchise config key has been renamed to features.fleet.
+      Any project config using features.franchise: true must be updated.
+    instruction: |
+      In your project's .autoskillit/config.yaml, replace:
+        features:
+          franchise: true
+      with:
+        features:
+          fleet: true
+      The old 'franchise' key is no longer recognized and will have no effect.
+    detect:
+      key: features.franchise
+    example_before: |
+      features:
+        franchise: true
+    example_after: |
+      features:
+        fleet: true

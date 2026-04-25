@@ -964,11 +964,19 @@ def test_build_fleet_dispatch_prompt_accepts_marketplace_prefix() -> None:
 
 
 def test_build_fleet_dispatch_prompt_lists_all_10_tools() -> None:
-    """Dispatch prompt must document all 10 tools (6 fleet + 4 dispatch)."""
+    """Dispatch prompt must enumerate all 10 tools in the TOOL SURFACE section."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
     from autoskillit.cli._prompts import _build_fleet_dispatch_prompt
 
     prompt = _build_fleet_dispatch_prompt(DIRECT_PREFIX)
+    assert "TOOL SURFACE" in prompt, "Expected TOOL SURFACE section in dispatch prompt"
+    tool_surface_start = prompt.index("TOOL SURFACE")
+    next_section = prompt.find("\n##", tool_surface_start + 1)
+    tool_surface = (
+        prompt[tool_surface_start:next_section]
+        if next_section != -1
+        else prompt[tool_surface_start:]
+    )
     for tool in (
         "dispatch_food_truck",
         "batch_cleanup_clones",
@@ -981,15 +989,25 @@ def test_build_fleet_dispatch_prompt_lists_all_10_tools() -> None:
         "fetch_github_issue",
         "get_issue_title",
     ):
-        assert tool in prompt, f"Expected tool {tool!r} in dispatch prompt"
+        assert tool in tool_surface, (
+            f"Expected tool {tool!r} in TOOL SURFACE section of dispatch prompt"
+        )
 
 
 def test_build_fleet_dispatch_prompt_includes_sous_chef_sections() -> None:
     """Dispatch prompt must include the 4 L2 sous-chef sections."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
     from autoskillit.cli._prompts import _build_fleet_dispatch_prompt
+    from autoskillit.fleet import _build_l2_sous_chef_block
 
+    sous_chef_block = _build_l2_sous_chef_block()
+    assert sous_chef_block, (
+        "sous-chef SKILL.md must be non-empty for section heading assertions to be meaningful"
+    )
     prompt = _build_fleet_dispatch_prompt(DIRECT_PREFIX)
+    assert "SOUS-CHEF DISCIPLINE" in prompt, (
+        "Expected SOUS-CHEF DISCIPLINE section in dispatch prompt"
+    )
     for section in (
         "CONTEXT LIMIT ROUTING",
         "STEP NAME IMMUTABILITY",

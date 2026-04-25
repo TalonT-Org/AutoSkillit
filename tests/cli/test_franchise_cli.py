@@ -277,14 +277,14 @@ def test_fleet_run_exits_when_campaign_not_found(
 def test_fleet_run_sets_session_type_franchise(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Subprocess env includes AUTOSKILLIT_SESSION_TYPE" in env and env["AUTOSKILLIT_SESSION_TYPE"] == "fleet"."""
+    """Subprocess env includes AUTOSKILLIT_SESSION_TYPE=fleet."""
     _stub_guards(monkeypatch)
     monkeypatch.chdir(tmp_path)
     _stub_campaign_resolution(monkeypatch, tmp_path, "test-campaign")
     captured = _capture_subprocess(monkeypatch)
     _fleet_run("test-campaign")
     env = captured["env"]
-    assert env["AUTOSKILLIT_SESSION_TYPE" in env and env["AUTOSKILLIT_SESSION_TYPE"] == "fleet""
+    assert "AUTOSKILLIT_SESSION_TYPE" in env and env["AUTOSKILLIT_SESSION_TYPE"] == "fleet"
     assert "AUTOSKILLIT_CAMPAIGN_ID" in env
     assert "AUTOSKILLIT_CAMPAIGN_STATE_PATH" in env
 

@@ -416,7 +416,7 @@ async def test_halt_on_first_failure_default(franchise_runtime: FranchiseRuntime
     decision = resume_campaign_from_state(state_path, continue_on_failure=False)
     assert decision is not None
     assert decision.next_dispatch_name == ""
-    assert decision.completed_dispatches_block == "franchise_halted_on_failure"
+    assert decision.completed_dispatches_block == "fleet_halted_on_failure"
 
     state = rt.read_dispatch_state(result["dispatch_id"])
     assert state is not None
@@ -492,7 +492,7 @@ async def test_l3_halts_on_missing_result_block_when_continue_on_failure_false(
     decision = resume_campaign_from_state(state_path, continue_on_failure=False)
     assert decision is not None
     assert decision.next_dispatch_name == ""
-    assert decision.completed_dispatches_block == "franchise_halted_on_failure"
+    assert decision.completed_dispatches_block == "fleet_halted_on_failure"
 
 
 # ---------------------------------------------------------------------------
@@ -530,7 +530,7 @@ async def test_parallel_dispatch_refused_mid_campaign(
     assert results[0]["success"] is True
 
     assert results[1] is not None
-    assert results[1]["error"] == "franchise_parallel_refused"
+    assert results[1]["error"] == "fleet_parallel_refused"
     assert results[1]["success"] is False
 
 
@@ -578,7 +578,7 @@ async def test_ingredient_type_validation(franchise_runtime: FranchiseRuntime) -
 
     result = await rt.dispatch("recipe-a", ingredients={"key": 123})  # type: ignore[arg-type]
     assert result["success"] is False
-    assert result["error"] == "franchise_unknown_ingredient"
+    assert result["error"] == "fleet_unknown_ingredient"
     assert rt.runner.call_count == 0
 
 
@@ -814,7 +814,7 @@ async def test_manifest_corrupted_yaml(franchise_runtime: FranchiseRuntime) -> N
 
     result = await rt.dispatch("bad-recipe")
     assert result["success"] is False
-    assert result["error"] == "franchise_invalid_recipe_kind"
+    assert result["error"] == "fleet_invalid_recipe_kind"
     assert rt.runner.call_count == 0
 
 

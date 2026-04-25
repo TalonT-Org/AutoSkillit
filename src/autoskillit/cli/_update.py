@@ -57,6 +57,9 @@ def run_update_command(home: Path | None = None) -> None:
 
     current: str = getattr(_pkg, "__version__", "0.0.0")
 
+    install_result: subprocess.CompletedProcess[bytes] = subprocess.CompletedProcess(
+        args=["autoskillit", "install"], returncode=0
+    )
     with terminal_guard():
         subprocess.run(cmd, check=False, env=_skip_env)
         install_result = subprocess.run(["autoskillit", "install"], check=False, env=_skip_env)

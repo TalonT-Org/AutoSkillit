@@ -623,6 +623,9 @@ def _run_update_sequence(
         if target_branch is not None
         else current
     )
+    install_result: subprocess.CompletedProcess[bytes] = subprocess.CompletedProcess(
+        args=["autoskillit", "install"], returncode=0
+    )
     with terminal_guard():
         subprocess.run(cmd, check=False, env=skip_env)
         install_result = subprocess.run(["autoskillit", "install"], check=False, env=skip_env)
@@ -633,7 +636,11 @@ def _run_update_sequence(
             "Run 'autoskillit install' manually to fix.",
             flush=True,
         )
-    _verify_update_result(info, current, latest, home, state)
+    succeeded = _verify_update_result(info, current, latest, home, state)
+    if succeeded:
+        state.pop("update_prompt", None)
+        state.pop("binary_snoozed", None)
+        _write_dismiss_state(home, state)
 
 
 # ---------------------------------------------------------------------------

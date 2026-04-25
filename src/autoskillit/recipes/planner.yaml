@@ -1,0 +1,235 @@
+name: planner
+autoskillit_version: "0.9.144"
+recipe_version: "1"
+description: |
+  Progressive decomposition pipeline. Analyzes a codebase, generates phases, elaborates
+  assignments and work packages in iterative loops, reconciles dependencies, validates the
+  dependency graph, and compiles a manifest ready for issue creation.
+summary: "init > analyze > [extract_domain?] > phases-loop > assignments-loop > wps-loop > reconcile > validate/refine > compile"
+
+requires_packs: [kitchen-core]
+categories: [planner]
+
+kitchen_rules:
+  - Never invoke native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Agent,
+    WebFetch, WebSearch, NotebookEdit) from the orchestrator. All codebase interaction
+    runs inside headless skill sessions.
+  - Route to on_failure or escalate_stop rather than attempting inline recovery.
+  - Each check_* step controls loop iteration. Do not call elaborate_* steps directly;
+    always go through the corresponding check_* step first.
+  - The refine/validate cycle is bounded by retries. If refine is exhausted, halt.
+
+ingredients:
+  task:
+    description: "High-level task or feature description to decompose into a plan."
+    required: true
+  source_dir:
+    description: "Absolute path to the repository root to analyze."
+    required: true
+
+steps:
+
+  init:
+    tool: run_cmd
+    with:
+      step_name: "init"
+      command: >
+        mkdir -p
+        {{AUTOSKILLIT_TEMP}}/planner/phases
+        {{AUTOSKILLIT_TEMP}}/planner/assignments
+        {{AUTOSKILLIT_TEMP}}/planner/work_packages
+      cwd: "${{ inputs.source_dir }}"
+    on_success: analyze
+    on_failure: escalate_stop
+
+  analyze:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:planner-analyze"
+      cwd: "${{ inputs.source_dir }}"
+    on_success: extract_domain
+    on_failure: escalate_stop
+
+  extract_domain:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:planner-extract-domain _ _ {{AUTOSKILLIT_TEMP}}/planner/analysis.json"
+      cwd: "${{ inputs.source_dir }}"
+    on_success: generate_phases
+    on_failure: generate_phases
+
+  generate_phases:
+    tool: run_skill
+    with:
+      skill_command: >
+        /autoskillit:planner-generate-phases
+        {{AUTOSKILLIT_TEMP}}/planner/analysis.json
+        {{AUTOSKILLIT_TEMP}}/planner/domain_knowledge.md
+      cwd: "${{ inputs.source_dir }}"
+    capture:
+      phase_manifest_path: "${{ result.phase_manifest_path }}"
+    on_success: check_phases
+    on_failure: escalate_stop
+
+  check_phases:
+    tool: run_python
+    with:
+      callable: "autoskillit.planner.check_remaining"
+      manifest_path: "${{ context.phase_manifest_path }}"
+      pass_name: "phases"
+      output_dir: "{{AUTOSKILLIT_TEMP}}/planner"
+    capture:
+      has_remaining: "${{ result.has_remaining }}"
+      current_item_path: "${{ result.current_item_path }}"
+    on_result:
+      - when: "${{ result.has_remaining }} == true"
+        route: elaborate_phase
+      - route: build_assignment_manifest
+    on_failure: escalate_stop
+
+  elaborate_phase:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:planner-elaborate-phase ${{ context.current_item_path }}"
+      cwd: "${{ inputs.source_dir }}"
+    optional_context_refs: [current_item_path]
+    retries: 1
+    on_success: check_phases
+    on_exhausted: escalate_stop
+    on_failure: escalate_stop
+
+  build_assignment_manifest:
+    tool: run_python
+    with:
+      callable: "autoskillit.planner.build_assignment_manifest"
+      phases_dir: "{{AUTOSKILLIT_TEMP}}/planner/phases"
+      assignments_dir: "{{AUTOSKILLIT_TEMP}}/planner/assignments"
+      output_dir: "{{AUTOSKILLIT_TEMP}}/planner"
+    capture:
+      assignment_manifest_path: "${{ result.manifest_path }}"
+    on_success: check_assignments
+    on_failure: escalate_stop
+
+  check_assignments:
+    tool: run_python
+    with:
+      callable: "autoskillit.planner.check_remaining"
+      manifest_path: "${{ context.assignment_manifest_path }}"
+      pass_name: "assignments"
+      output_dir: "{{AUTOSKILLIT_TEMP}}/planner"
+    capture:
+      has_remaining: "${{ result.has_remaining }}"
+      current_item_path: "${{ result.current_item_path }}"
+    on_result:
+      - when: "${{ result.has_remaining }} == true"
+        route: elaborate_assignment
+      - route: build_wp_manifest
+    on_failure: escalate_stop
+
+  elaborate_assignment:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:planner-elaborate-assignment ${{ context.current_item_path }}"
+      cwd: "${{ inputs.source_dir }}"
+    optional_context_refs: [current_item_path]
+    retries: 1
+    on_success: check_assignments
+    on_exhausted: escalate_stop
+    on_failure: escalate_stop
+
+  build_wp_manifest:
+    tool: run_python
+    with:
+      callable: "autoskillit.planner.build_wp_manifest"
+      assignments_dir: "{{AUTOSKILLIT_TEMP}}/planner/assignments"
+      output_dir: "{{AUTOSKILLIT_TEMP}}/planner"
+    capture:
+      wp_manifest_path: "${{ result.manifest_path }}"
+    on_success: check_wps
+    on_failure: escalate_stop
+
+  check_wps:
+    tool: run_python
+    with:
+      callable: "autoskillit.planner.check_remaining"
+      manifest_path: "${{ context.wp_manifest_path }}"
+      pass_name: "work_packages"
+      output_dir: "{{AUTOSKILLIT_TEMP}}/planner"
+    capture:
+      has_remaining: "${{ result.has_remaining }}"
+      current_item_path: "${{ result.current_item_path }}"
+    on_result:
+      - when: "${{ result.has_remaining }} == true"
+        route: elaborate_wp
+      - route: reconcile_deps
+    on_failure: escalate_stop
+
+  elaborate_wp:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:planner-elaborate-wp ${{ context.current_item_path }}"
+      cwd: "${{ inputs.source_dir }}"
+    optional_context_refs: [current_item_path]
+    retries: 2
+    stale_threshold: 600
+    on_success: check_wps
+    on_exhausted: check_wps
+    on_failure: escalate_stop
+
+  reconcile_deps:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:planner-reconcile-deps {{AUTOSKILLIT_TEMP}}/planner"
+      cwd: "${{ inputs.source_dir }}"
+    on_success: validate
+    on_failure: escalate_stop
+
+  validate:
+    tool: run_python
+    with:
+      callable: "autoskillit.planner.validate_plan"
+      output_dir: "{{AUTOSKILLIT_TEMP}}/planner"
+    capture:
+      verdict: "${{ result.verdict }}"
+    on_success: check_verdict
+    on_failure: escalate_stop
+
+  check_verdict:
+    action: route
+    on_result:
+      - when: "${{ context.verdict }} == fail"
+        route: refine
+      - route: compile
+
+  refine:
+    tool: run_skill
+    with:
+      skill_command: >
+        /autoskillit:planner-refine
+        {{AUTOSKILLIT_TEMP}}/planner/validation.json
+        {{AUTOSKILLIT_TEMP}}/planner
+      cwd: "${{ inputs.source_dir }}"
+    retries: 2
+    on_success: validate
+    on_exhausted: escalate_stop
+    on_failure: escalate_stop
+
+  compile:
+    tool: run_python
+    with:
+      callable: "autoskillit.planner.compile_plan"
+      output_dir: "{{AUTOSKILLIT_TEMP}}/planner"
+      task: "${{ inputs.task }}"
+      source_dir: "${{ inputs.source_dir }}"
+    on_success: done
+    on_failure: escalate_stop
+
+  done:
+    action: stop
+    message: >
+      Planning complete. Plan artifacts written to {{AUTOSKILLIT_TEMP}}/planner/.
+      Use compile output to create GitHub issues and milestones.
+
+  escalate_stop:
+    action: stop
+    message: "Planner pipeline failed — human intervention needed. Review the latest step output for details."

@@ -209,21 +209,21 @@ class TestRunCmdSleepInterception:
     @pytest.mark.anyio
     async def test_python_sleep_intercepted(self, tool_ctx):
         result = json.loads(
-            await run_cmd(cmd='python3 -c "import time; time.sleep(60)"', cwd="/tmp")
+            await run_cmd(cmd='python3 -c "import time; time.sleep(0)"', cwd="/tmp")
         )
         assert result == {"success": True, "exit_code": 0, "stdout": "", "stderr": ""}
         assert len(tool_ctx.runner.call_args_list) == 0
 
     @pytest.mark.anyio
     async def test_bare_sleep_intercepted(self, tool_ctx):
-        result = json.loads(await run_cmd(cmd="sleep 300", cwd="/tmp"))
+        result = json.loads(await run_cmd(cmd="sleep 0", cwd="/tmp"))
         assert result["success"] is True
         assert len(tool_ctx.runner.call_args_list) == 0
 
     @pytest.mark.anyio
     async def test_python3_single_quotes_intercepted(self, tool_ctx):
         result = json.loads(
-            await run_cmd(cmd="python3 -c 'import time; time.sleep(120)'", cwd="/tmp")
+            await run_cmd(cmd="python3 -c 'import time; time.sleep(0)'", cwd="/tmp")
         )
         assert result["success"] is True
         assert len(tool_ctx.runner.call_args_list) == 0
@@ -238,7 +238,7 @@ class TestRunCmdSleepInterception:
     @pytest.mark.anyio
     async def test_decimal_seconds_intercepted(self, tool_ctx):
         result = json.loads(
-            await run_cmd(cmd='python3 -c "import time; time.sleep(60.5)"', cwd="/tmp")
+            await run_cmd(cmd='python3 -c "import time; time.sleep(0.5)"', cwd="/tmp")
         )
         assert result["success"] is True
         assert len(tool_ctx.runner.call_args_list) == 0

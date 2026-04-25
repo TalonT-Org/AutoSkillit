@@ -1122,6 +1122,7 @@ class TestFleetAutoGateBoot:
         async with Client(mcp) as client:
             tools = await client.list_tools()
         tool_names = {t.name for t in tools}
+        assert FLEET_TOOLS, "FLEET_TOOLS must not be empty — loop would pass vacuously"
         for name in FLEET_TOOLS:
             assert name not in tool_names, f"{name} should be hidden when fleet feature disabled"
 

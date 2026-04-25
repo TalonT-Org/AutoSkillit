@@ -40,7 +40,7 @@ MCP-only — not user-invocable directly.
 - Apply fixes — this skill triages fixability only
 
 **ALWAYS:**
-- Return cleanly in all cases — resolution=revised and resolution=failed are both normal outcomes
+- Exit 0 in all cases — resolution=revised and resolution=failed are both normal outcomes
 - Emit revision_guidance ONLY when resolution=revised
 - Use model: "sonnet" for all subagents
 

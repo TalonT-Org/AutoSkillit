@@ -1,6 +1,9 @@
+from pathlib import Path
+
 import pytest
 import yaml
-from pathlib import Path
+
+pytestmark = [pytest.mark.layer("migration"), pytest.mark.small]
 
 MIGRATIONS_DIR = Path(__file__).parents[2] / "src" / "autoskillit" / "migrations"
 

@@ -10,7 +10,7 @@ from datetime import date
 from importlib.metadata import version
 from typing import NamedTuple
 
-from ._type_enums import FeatureLifecycle, FranchiseErrorCode
+from ._type_enums import FeatureLifecycle, FleetErrorCode
 
 __all__ = [
     "AUTOSKILLIT_INSTALLED_VERSION",
@@ -21,7 +21,7 @@ __all__ = [
     "SKILL_TOOLS",
     "GATED_TOOLS",
     "HEADLESS_TOOLS",
-    "FRANCHISE_TOOLS",
+    "FLEET_TOOLS",
     "FEATURE_REVEAL_TAGS",
     "FREE_RANGE_TOOLS",
     "UNGATED_TOOLS",
@@ -38,14 +38,13 @@ __all__ = [
     "RETIRED_READINESS_TOKENS",
     "SESSION_TYPE_ENV_VAR",
     "SESSION_TYPE_FLEET",
-    "SESSION_TYPE_FRANCHISE",
     "SESSION_TYPE_ORCHESTRATOR",
     "SESSION_TYPE_LEAF",
     "HEADLESS_ENV_VAR",
     "CAMPAIGN_ID_ENV_VAR",
     "DISPATCH_ID_ENV_VAR",
     "KITCHEN_SESSION_ID_ENV_VAR",
-    "FRANCHISE_ERROR_CODES",
+    "FLEET_ERROR_CODES",
     "FeatureDef",
     "FEATURE_REGISTRY",
     "RETIRED_FEATURES",
@@ -57,7 +56,6 @@ AUTOSKILLIT_INSTALLED_VERSION: str = version("autoskillit")
 # String aliases for consumers that cannot import SessionType StrEnum
 # (hook scripts, shell wrappers, env builders).
 SESSION_TYPE_ENV_VAR: str = "AUTOSKILLIT_SESSION_TYPE"
-SESSION_TYPE_FRANCHISE: str = "franchise"
 SESSION_TYPE_ORCHESTRATOR: str = "orchestrator"
 SESSION_TYPE_FLEET: str = "fleet"
 SESSION_TYPE_LEAF: str = "leaf"
@@ -76,7 +74,7 @@ AUTOSKILLIT_PRIVATE_ENV_VARS: frozenset[str] = frozenset(
         "AUTOSKILLIT_SKIP_UPDATE_CHECK",
         "AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK",
         "AUTOSKILLIT_FORCE_UPDATE_CHECK",
-        # Franchise tier vars — must not leak into user-code subprocesses
+        # Fleet tier vars — must not leak into user-code subprocesses
         "AUTOSKILLIT_SESSION_TYPE",
         "AUTOSKILLIT_CAMPAIGN_ID",
         "AUTOSKILLIT_DISPATCH_ID",
@@ -198,7 +196,7 @@ GATED_TOOLS: frozenset[str] = frozenset(
 
 HEADLESS_TOOLS: frozenset[str] = frozenset({"test_check"})
 
-FRANCHISE_TOOLS: frozenset[str] = frozenset(
+FLEET_TOOLS: frozenset[str] = frozenset(
     {
         "batch_cleanup_clones",
         "get_pipeline_report",
@@ -213,9 +211,9 @@ FRANCHISE_TOOLS: frozenset[str] = frozenset(
 # When a feature is disabled, these tags are the ones suppressed via disable_components.
 # Tools with these tags AND a kitchen-core tag remain visible via the kitchen-core tag
 # (FastMCP union model: any enabled tag keeps the tool visible).
-FEATURE_REVEAL_TAGS: frozenset[str] = frozenset({"franchise"})
+FEATURE_REVEAL_TAGS: frozenset[str] = frozenset({"fleet"})
 
-FRANCHISE_ERROR_CODES: frozenset[str] = frozenset(FranchiseErrorCode)
+FLEET_ERROR_CODES: frozenset[str] = frozenset(FleetErrorCode)
 
 FREE_RANGE_TOOLS: frozenset[str] = frozenset(
     {"open_kitchen", "close_kitchen", "disable_quota_guard", "reload_session"}
@@ -314,12 +312,12 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     "clone_repo": frozenset({"clone"}),
     "remove_clone": frozenset({"clone"}),
     "register_clone_status": frozenset({"clone"}),
-    "batch_cleanup_clones": frozenset({"clone", "franchise"}),
+    "batch_cleanup_clones": frozenset({"clone", "fleet"}),
     # kitchen-core — telemetry
-    "get_token_summary": frozenset({"kitchen-core", "telemetry", "franchise"}),
-    "get_timing_summary": frozenset({"kitchen-core", "telemetry", "franchise"}),
+    "get_token_summary": frozenset({"kitchen-core", "telemetry", "fleet"}),
+    "get_timing_summary": frozenset({"kitchen-core", "telemetry", "fleet"}),
     "write_telemetry_files": frozenset({"kitchen-core", "telemetry"}),
-    "get_quota_events": frozenset({"kitchen-core", "telemetry", "franchise"}),
+    "get_quota_events": frozenset({"kitchen-core", "telemetry", "fleet"}),
     # kitchen-core — execution
     "run_cmd": frozenset({"kitchen-core"}),
     "run_python": frozenset({"kitchen-core"}),
@@ -337,8 +335,8 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     # kitchen-core — status
     "kitchen_status": frozenset({"kitchen-core"}),
     "read_db": frozenset({"kitchen-core"}),
-    "get_pipeline_report": frozenset({"kitchen-core", "franchise"}),
-    "dispatch_food_truck": frozenset({"kitchen-core", "franchise"}),
+    "get_pipeline_report": frozenset({"kitchen-core", "fleet"}),
+    "dispatch_food_truck": frozenset({"kitchen-core", "fleet"}),
     # kitchen-core — git
     "merge_worktree": frozenset({"kitchen-core"}),
 }
@@ -365,24 +363,13 @@ FEATURE_REGISTRY: dict[str, FeatureDef] = {
     "fleet": FeatureDef(
         name="fleet",
         lifecycle=FeatureLifecycle.EXPERIMENTAL,
-        description="L3 Fleet Orchestrator — campaign dispatch (canonical name for franchise)",
-        tool_tags=frozenset({"franchise"}),
-        skill_categories=frozenset({"franchise"}),
-        import_package="autoskillit.franchise",
+        description="L3 Fleet Orchestrator — multi-session campaign dispatch",
+        tool_tags=frozenset({"fleet"}),
+        skill_categories=frozenset({"fleet"}),
+        import_package="autoskillit.fleet",
         tier=1,
         default_enabled=False,
         since_version="0.9.119",
-    ),
-    "franchise": FeatureDef(
-        name="franchise",
-        lifecycle=FeatureLifecycle.EXPERIMENTAL,
-        description="L3 Franchise Orchestrator — multi-session campaign dispatch",
-        tool_tags=frozenset({"franchise"}),
-        skill_categories=frozenset({"franchise"}),
-        import_package="autoskillit.franchise",
-        tier=1,
-        default_enabled=False,
-        since_version="0.9.51",
     ),
     "planner": FeatureDef(
         name="planner",

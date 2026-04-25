@@ -236,6 +236,7 @@ MUTATING_TOOLS: frozenset[str] = frozenset(
         "dispatch_food_truck",
         "set_commit_status",
         "disable_quota_guard",
+        "reload_session",
     }
 )
 

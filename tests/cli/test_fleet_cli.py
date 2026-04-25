@@ -872,7 +872,7 @@ def test_fleet_status_exits_when_disabled(monkeypatch: pytest.MonkeyPatch, tmp_p
 
 
 def test_fleet_dispatch_proceeds_when_enabled(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """fleet_dispatch passes the feature guard and proceeds to campaign resolution."""
     _stub_guards(monkeypatch)
@@ -881,12 +881,11 @@ def test_fleet_dispatch_proceeds_when_enabled(
     monkeypatch.setattr(
         "autoskillit.config.load_config", lambda path: type("C", (), {"features": {}})()
     )
-    with pytest.raises(SystemExit) as exc_info:
-        _fleet_dispatch()
-    assert exc_info.value.code == 1
-    # Guard passed — exit must come from campaign resolution, not the feature gate
-    captured = capsys.readouterr()
-    assert "not enabled" not in captured.err
+    captured = _capture_subprocess(monkeypatch)
+    _fleet_dispatch()
+    # Guard passed — subprocess was invoked with the fleet session environment
+    assert captured.get("cmd") is not None, "Expected fleet session subprocess to be invoked"
+    assert captured["env"].get("AUTOSKILLIT_FLEET_MODE") == "dispatch"
 
 
 # ---------------------------------------------------------------------------

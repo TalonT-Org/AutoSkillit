@@ -54,7 +54,7 @@ class TestSessionLogMonitor:
         )
 
         async def append_marker():
-            await anyio.sleep(1.0)
+            await anyio.sleep(0.5)
             with session_file.open("a") as f:
                 f.write(
                     json.dumps(
@@ -74,7 +74,12 @@ class TestSessionLogMonitor:
         async def _run_monitor() -> None:
             monitor_result.append(
                 await _session_log_monitor(
-                    log_dir, "%%AUTOSKILLIT_COMPLETE%%", stale_threshold=30, spawn_time=spawn_time
+                    log_dir,
+                    "%%AUTOSKILLIT_COMPLETE%%",
+                    stale_threshold=30,
+                    spawn_time=spawn_time,
+                    _phase1_poll=0.01,
+                    _phase2_poll=0.05,
                 )
             )
 

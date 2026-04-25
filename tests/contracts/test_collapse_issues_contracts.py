@@ -78,10 +78,18 @@ def test_max_group_flag_documented():
     assert "--max-group" in skill_text()
 
 
-def test_originals_closed_with_comment():
+def test_originals_superseded_body_edit():
     text = skill_text()
-    assert "gh issue comment" in text, "Must document closing comment on originals"
-    assert "gh issue close" in text, "Must document closing originals"
+    assert "## Superseded" in text, "Must append ## Superseded section to original body"
+    assert "gh issue edit" in text, "Must use gh issue edit to update original body"
+    assert "gh issue close" in text, "Must still close originals"
+
+
+def test_no_gh_issue_comment_in_collapse_issues():
+    text = skill_text()
+    assert "gh issue comment" not in text, (
+        "Must not post issue comments — all updates go to issue body"
+    )
 
 
 def test_combined_issue_references_originals():

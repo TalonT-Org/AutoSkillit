@@ -345,47 +345,46 @@ class DefaultGitHubFetcher:
             "url": data.get("html_url", ""),
         }
 
-    async def add_comment(
+    async def update_issue_body(
         self,
         owner: str,
         repo: str,
         issue_number: int,
-        body: str,
+        new_body: str,
     ) -> dict[str, Any]:
-        """Post a comment on an existing issue.
+        """PATCH an existing issue's body field.
 
-        Returns {success, comment_id, url}. Never raises.
+        Returns {success, issue_url}. Never raises.
         """
         await self._throttle_mutating()
         headers = self._headers()
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
-                resp = await client.post(
-                    f"https://api.github.com/repos/{owner}/{repo}/issues/{issue_number}/comments",
+                resp = await client.patch(
+                    f"https://api.github.com/repos/{owner}/{repo}/issues/{issue_number}",
                     headers=headers,
-                    json={"body": body},
+                    json={"body": new_body},
                 )
                 resp.raise_for_status()
                 data = resp.json()
         except httpx.HTTPStatusError as exc:
             _log.warning(
-                "github add_comment http error",
+                "github update_issue_body http error",
                 status=exc.response.status_code,
                 issue=issue_number,
+                exc_info=True,
             )
             return {
                 "success": False,
                 "error": f"HTTP {exc.response.status_code}: {exc.response.text[:200]}",
             }
         except httpx.RequestError as exc:
-            _log.warning("github add_comment request error", issue=issue_number, error=str(exc))
+            _log.warning(
+                "github update_issue_body request error", issue=issue_number, error=str(exc)
+            )
             return {"success": False, "error": f"Request error: {exc}"}
 
-        return {
-            "success": True,
-            "comment_id": data.get("id"),
-            "url": data.get("html_url", ""),
-        }
+        return {"success": True, "issue_url": data.get("html_url", "")}
 
     async def fetch_title(self, issue_url: str) -> dict[str, object]:
         """Fetch only the title and slug for a GitHub issue — no body, no comments.

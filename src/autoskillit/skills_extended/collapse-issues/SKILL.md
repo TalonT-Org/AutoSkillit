@@ -286,12 +286,15 @@ Capture the new issue number from the URL in stdout output.
 
 For each original issue that was collapsed (one by one, in order):
 
-**8a. Post closing comment:**
+**8a. Append ## Superseded section and update body:**
 
 ```bash
-gh issue comment {orig_number} \
-  --body "Collapsed into #{combined_number}: {combined_url}" \
-  [--repo {repo}]
+COLLAPSE_BODY_FILE="{{AUTOSKILLIT_TEMP}}/collapse-issues/supersede_{orig_number}_{ts}.md"
+mkdir -p "$(dirname "$COLLAPSE_BODY_FILE")"
+gh issue view {orig_number} --json body --jq '.body' [--repo {repo}] > "$COLLAPSE_BODY_FILE"
+printf '\n\n---\n\n## Superseded\n\nCollapsed into #%s: %s' \
+  "{combined_number}" "{combined_url}" >> "$COLLAPSE_BODY_FILE"
+gh issue edit {orig_number} --body-file "$COLLAPSE_BODY_FILE" [--repo {repo}]
 sleep 1  # Rate-limit discipline: 1s between mutating calls
 ```
 

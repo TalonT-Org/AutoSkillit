@@ -774,11 +774,17 @@ class TestBulkCloseIssues:
         assert result == {"closed": [], "failed": []}
 
     @pytest.mark.anyio
-    async def test_comment_flag_included_when_provided(self, tool_ctx):
+    async def test_comment_appended_to_body_when_provided(self, tool_ctx):
+        tool_ctx.runner.push(_make_result(0, "existing body", ""))
         tool_ctx.runner.push(_make_result(0, "", ""))
-        await bulk_close_issues([7], "Closed by pipeline.", ".")
-        call_cmd = tool_ctx.runner.call_args_list[-1][0]
-        assert "--comment" in call_cmd
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        result = json.loads(await bulk_close_issues([7], "Closed by pipeline.", "."))
+        all_cmds = [call[0] for call in tool_ctx.runner.call_args_list]
+        edit_calls = [cmd for cmd in all_cmds if "edit" in cmd]
+        assert any("--body-file" in cmd for cmd in edit_calls), (
+            "Expected gh issue edit --body-file call"
+        )
+        assert result["closed"] == [7]
 
     @pytest.mark.anyio
     async def test_gate_closed_returns_gate_error(self, tool_ctx):

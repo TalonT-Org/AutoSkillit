@@ -90,6 +90,12 @@ def test_process_issues_has_anti_improvisation_rule(skill_text: str) -> None:
     assert "run_cmd" in skill_text and "gh pr create" in skill_text
 
 
+def test_process_issues_no_issue_comment(skill_text: str) -> None:
+    assert "gh issue comment" not in skill_text, (
+        "--comment flag must be removed; status updates go to issue body"
+    )
+
+
 def test_prepare_pr_supports_run_name_title_prefix() -> None:
     """prepare-pr must derive [FEATURE]/[FIX] PR title prefix from run_name convention."""
     content = (bundled_skills_extended_dir() / "prepare-pr" / "SKILL.md").read_text()

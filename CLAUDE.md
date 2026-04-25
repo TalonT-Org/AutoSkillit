@@ -57,6 +57,16 @@ A Claude Code plugin that orchestrates automated skill-driven workflows using he
   * **Prefer GraphQL** for multi-entity reads — alias queries cost 1 point regardless of entity count.
   * **Never check response body for `comments` array length** after `POST /pulls/{N}/reviews` — GitHub does not echo back the comments array; HTTP 200 is the success signal.
 
+### **3.5. GitHub Issue Body is the Source of Truth**
+
+  * **Never use `gh issue comment`** to communicate issue status, triage feedback, tracking
+    info, or occurrence data. Comments are not read by downstream consumers and fragment the
+    record.
+  * **All issue content updates must use `gh issue edit --body-file`**: fetch the current
+    body, append the new section, write to `${{AUTOSKILLIT_TEMP}}`, then run
+    `gh issue edit {number} --body-file "$FILE"`.
+  * The `update_issue_body()` method on `GitHubFetcher` is the Python API equivalent.
+
 ## **4. Testing Guidelines**
 
 The project uses pytest with pytest-asyncio. Tests run in parallel via pytest-xdist (`-n 4`). All tests must be safe for parallel execution.

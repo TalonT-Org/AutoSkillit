@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from pathlib import Path
 
 import structlog
@@ -68,11 +69,13 @@ async def _close_issues_sequentially(
                     failed.append(num)
                     continue
                 current_body = body_out.strip()
+                if current_body == "null":
+                    current_body = ""
                 new_body = current_body + f"\n\n---\n\n## Closing Note\n\n{comment}"
 
                 temp_dir = Path(cwd) / ".autoskillit" / "temp" / "bulk-close-issues"
                 temp_dir.mkdir(parents=True, exist_ok=True)
-                temp_file = temp_dir / f"{num}_close_body.md"
+                temp_file = temp_dir / f"{num}_{int(time.time() * 1000)}_close_body.md"
                 atomic_write(temp_file, new_body)
 
                 rc2, _, _ = await _run_subprocess(

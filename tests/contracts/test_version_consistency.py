@@ -1,6 +1,7 @@
 """Cross-file version consistency tests.
 
-Ensures pyproject.toml, __init__.__version__, and plugin.json agree.
+Ensures pyproject.toml, __init__.__version__, plugin.json, and all
+bundled recipe autoskillit_version fields agree.
 """
 
 from __future__ import annotations
@@ -8,6 +9,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from unittest.mock import patch
+
+import yaml
 
 import autoskillit
 
@@ -51,6 +54,23 @@ class TestVersionConsistency:
         assert result1 == result2
         assert read_count == 1, f"plugin.json should be read once (got {read_count})"
         version_info.cache_clear()
+
+    def test_all_bundled_recipe_versions_match_installed(self):
+        recipes_dir = Path(autoskillit.__file__).parent / "recipes"
+        stale = {}
+        for recipe_path in sorted(recipes_dir.rglob("*.yaml")):
+            data = yaml.safe_load(recipe_path.read_text())
+            if not isinstance(data, dict):
+                continue
+            ver = data.get("autoskillit_version")
+            if ver is None:
+                continue
+            if ver != autoskillit.__version__:
+                stale[str(recipe_path.relative_to(recipes_dir))] = ver
+        assert not stale, (
+            f"Bundled recipe autoskillit_version fields are stale "
+            f"(expected {autoskillit.__version__}): {stale}"
+        )
 
     def test_marketplace_json_version_field(self, tmp_path, monkeypatch):
         import importlib as _importlib

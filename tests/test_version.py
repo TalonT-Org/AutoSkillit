@@ -18,7 +18,13 @@ class TestVersionInfo:
         from autoskillit.version import version_info
 
         info = version_info(plugin_dir=tmp_path)
-        assert set(info.keys()) == {"package_version", "plugin_json_version", "match"}
+        assert set(info.keys()) == {
+            "package_version",
+            "plugin_json_version",
+            "match",
+            "recipe_versions_match",
+            "stale_recipes",
+        }
 
     def test_missing_plugin_json(self, tmp_path):
         from autoskillit.version import version_info

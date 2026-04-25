@@ -97,7 +97,7 @@ class TestClassifyFix:
         tool_ctx.runner.push(_make_result(0, "", ""))  # fetch succeeds
         tool_ctx.runner.push(_make_result(0, "src/foo.py\n", ""))  # diff succeeds
         with patch(
-            "autoskillit.server.git.resolve_remote_name",
+            "autoskillit.server.helpers.resolve_remote_name",
             new=AsyncMock(return_value="origin"),
         ):
             await classify_fix(str(tmp_path), "main")
@@ -888,7 +888,7 @@ class TestClassifyFixRemoteResolution:
         tool_ctx.runner.push(_make_result(0, "src/foo.py\n", ""))  # diff succeeds
 
         with patch(
-            "autoskillit.server.git.resolve_remote_name",
+            "autoskillit.server.helpers.resolve_remote_name",
             new=AsyncMock(return_value="upstream"),
         ):
             await classify_fix(str(tmp_path), "main")
@@ -905,7 +905,7 @@ class TestClassifyFixRemoteResolution:
         tool_ctx.runner.push(_make_result(0, "src/bar.py\n", ""))  # diff succeeds
 
         with patch(
-            "autoskillit.server.git.resolve_remote_name",
+            "autoskillit.server.helpers.resolve_remote_name",
             new=AsyncMock(return_value="origin"),
         ):
             await classify_fix(str(tmp_path), "main")

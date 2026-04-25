@@ -59,7 +59,8 @@ async def merge_worktree(
         )
 
         from autoskillit.server import _get_config, _get_ctx
-        from autoskillit.server.git import perform_merge, resolve_remote_name
+        from autoskillit.server.git import perform_merge
+        from autoskillit.server.helpers import resolve_remote_name
 
         tool_ctx = _get_ctx()
         runner = tool_ctx.runner
@@ -149,7 +150,8 @@ async def classify_fix(
             )
 
         from autoskillit.server import _get_config, _get_ctx
-        from autoskillit.server.git import _filter_changed_files, resolve_remote_name
+        from autoskillit.server.git import _filter_changed_files
+        from autoskillit.server.helpers import resolve_remote_name
 
         tool_ctx = _get_ctx()
         _start = time.monotonic()

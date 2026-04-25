@@ -652,6 +652,21 @@ def test_every_always_write_skill_has_contract(skill_name: str) -> None:
     )
 
 
+def test_always_write_skills_matches_yaml() -> None:
+    """ALWAYS_WRITE_SKILLS test set must equal the set from skill_contracts.yaml."""
+    manifest = load_bundled_manifest()
+    yaml_always = {
+        name
+        for name, data in manifest.get("skills", {}).items()
+        if data.get("write_behavior") == "always"
+    }
+    assert ALWAYS_WRITE_SKILLS == yaml_always, (
+        f"ALWAYS_WRITE_SKILLS is out of sync with skill_contracts.yaml.\n"
+        f"In test but not YAML: {ALWAYS_WRITE_SKILLS - yaml_always}\n"
+        f"In YAML but not test: {yaml_always - ALWAYS_WRITE_SKILLS}"
+    )
+
+
 # Skills that write conditionally — write expected only when the completion
 # token indicates actual work was performed.
 CONDITIONAL_WRITE_SKILLS: dict[str, str] = {

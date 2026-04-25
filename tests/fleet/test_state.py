@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
-from autoskillit.franchise import (
+from autoskillit.fleet import (
     DispatchRecord,
     DispatchStatus,
     append_dispatch_record,
@@ -20,7 +20,7 @@ from autoskillit.franchise import (
     write_initial_state,
 )
 
-pytestmark = [pytest.mark.layer("franchise"), pytest.mark.small, pytest.mark.feature("franchise")]
+pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
 
 def _make_dispatches(*names: str) -> list[DispatchRecord]:
@@ -138,7 +138,7 @@ class TestResumeRejectsHaltedOnFailure:
         decision = resume_campaign_from_state(sp, continue_on_failure=False)
         assert decision is not None
         assert decision.next_dispatch_name == ""
-        assert "franchise_halted_on_failure" in decision.completed_dispatches_block
+        assert "fleet_halted_on_failure" in decision.completed_dispatches_block
 
 
 class TestAtomicUnderConcurrentRead:

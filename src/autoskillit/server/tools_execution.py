@@ -383,7 +383,7 @@ async def run_skill(
 
 
 @mcp.tool(
-    tags={"autoskillit", "kitchen", "kitchen-core", "franchise"},
+    tags={"autoskillit", "kitchen", "kitchen-core", "fleet"},
     annotations={"readOnlyHint": False},
 )
 @track_response_size("dispatch_food_truck")
@@ -414,13 +414,13 @@ async def dispatch_food_truck(
         return gate
     try:
         if os.environ.get("AUTOSKILLIT_HEADLESS") == "1":
-            from autoskillit.core import FranchiseErrorCode, franchise_error
+            from autoskillit.core import FleetErrorCode, fleet_error
 
-            return franchise_error(
-                FranchiseErrorCode.FRANCHISE_HARD_REFUSAL_HEADLESS,
+            return fleet_error(
+                FleetErrorCode.FLEET_HARD_REFUSAL_HEADLESS,
                 "dispatch_food_truck cannot be called from headless sessions.",
             )
-        from autoskillit.franchise import execute_dispatch
+        from autoskillit.fleet import execute_dispatch
         from autoskillit.server import _get_ctx
         from autoskillit.server.helpers import (
             _get_food_truck_prompt_builder,
@@ -444,9 +444,9 @@ async def dispatch_food_truck(
         )
     except Exception as exc:
         logger.error("dispatch_food_truck unhandled exception", exc_info=True)
-        from autoskillit.core import FranchiseErrorCode, franchise_error
+        from autoskillit.core import FleetErrorCode, fleet_error
 
-        return franchise_error(
-            FranchiseErrorCode.L2_STARTUP_OR_CRASH,
+        return fleet_error(
+            FleetErrorCode.L2_STARTUP_OR_CRASH,
             f"{type(exc).__name__}: {exc}",
         )

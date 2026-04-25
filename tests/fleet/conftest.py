@@ -17,7 +17,7 @@ def _reset_mcp_tags():
 
     mcp.disable(tags={"kitchen"})
     mcp.disable(tags={"headless"})
-    mcp.disable(tags={"franchise"})
+    mcp.disable(tags={"fleet"})
 
 
 @pytest.fixture(autouse=True)

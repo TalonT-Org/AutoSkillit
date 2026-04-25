@@ -300,17 +300,9 @@ def test_build_features_dict_accepts_fleet_key():
     assert result == {"fleet": True}
 
 
-def test_build_features_dict_franchise_alias_fires_when_franchise_not_in_registry(monkeypatch):
-    """Simulates post-T2 state: 'franchise' removed from FEATURE_REGISTRY."""
-    import autoskillit.config.settings as cfg_mod
-    import autoskillit.core._type_constants as tc
+def test_build_features_dict_franchise_raises_config_schema_error():
+    """T2: 'franchise' alias removed — _build_features_dict raises ConfigSchemaError."""
+    from autoskillit.config.settings import AutomationConfig, ConfigSchemaError
 
-    registry_without_franchise = {k: v for k, v in tc.FEATURE_REGISTRY.items() if k != "franchise"}
-    monkeypatch.setattr(tc, "FEATURE_REGISTRY", registry_without_franchise)
-    monkeypatch.setattr(cfg_mod, "FEATURE_REGISTRY", registry_without_franchise)
-
-    from autoskillit.config.settings import AutomationConfig
-
-    with pytest.warns(DeprecationWarning, match="franchise.*deprecated"):
-        result = AutomationConfig._build_features_dict({"franchise": True})
-    assert result == {"fleet": True}
+    with pytest.raises(ConfigSchemaError, match="franchise"):
+        AutomationConfig._build_features_dict({"franchise": True})

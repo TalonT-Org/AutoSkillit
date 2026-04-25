@@ -69,7 +69,7 @@ def _get_call_func_name(node: ast.Call) -> str | None:
 SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
     {
         "__init__",  # server/__init__.py: mcp = FastMCP(...)
-        "_franchise",  # cli/_franchise.py: franchise_app = App(...)
+        "_fleet",  # cli/_fleet.py: fleet_app = App(...)
         "app",  # cli/app.py: app = App(...), config_app = App(...), etc.
         "store",  # migration/store.py: defensive exemption for future module-level construction
         "validator",  # recipe/validator.py: defensive exemption for decorator-based rule registry
@@ -79,7 +79,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_update_checks",  # cli/_update_checks.py: window constants (see comment above)
         "_terminal",  # cli/_terminal.py: _BASE_RESET = "".join(...) derived from _RESET_SPEC
         "hook_registry",  # hook_registry.py: HOOK_REGISTRY_HASH = compute_registry_hash(...)
-        "_franchise",  # cli/_franchise.py: franchise_app = App(name="franchise", ...)
+        "_fleet",  # cli/_fleet.py: fleet_app = App(name="fleet", ...)
         "_features",  # cli/_features.py: features_app = App(name="features", ...)
     }
 )
@@ -693,7 +693,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         sessions. _install_info.py adds pure install classification + policy.
         _update_checks.py adds the unified update check orchestration.
         _update.py adds the first-class update subcommand implementation.
-        _franchise.py adds franchise error envelope rendering for CLI consumers.
+        _fleet.py adds fleet error envelope rendering for CLI consumers.
         _features.py adds feature gate inspection subcommand (list/status).
         Exempt at 23 files.
       hooks/ — REQ-CNST-003-E6: hooks/ hosts one standalone script per hook event

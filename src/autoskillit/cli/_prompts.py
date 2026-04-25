@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, get_logger, pkg_root
-from autoskillit.franchise import _build_food_truck_prompt, _build_l2_sous_chef_block
+from autoskillit.fleet import _build_food_truck_prompt, _build_l2_sous_chef_block
 from autoskillit.hooks import QUOTA_GUARD_DENY_TRIGGER, QUOTA_POST_WARNING_TRIGGER
 
 logger = get_logger(__name__)
@@ -98,7 +98,7 @@ The following manifest defines all dispatches for this campaign:
 ## CAMPAIGN DISCIPLINE
 
 Execute dispatches SEQUENTIALLY via {mcp_prefix}dispatch_food_truck. Do NOT attempt
-parallel dispatch — franchise_lock enforces serial execution and concurrent calls will fail.
+parallel dispatch — fleet_lock enforces serial execution and concurrent calls will fail.
 
 Each dispatch is an independent L2 session with its own kitchen context. There is NO
 cross-dispatch state sharing and NO cross-dispatch token aggregation.
@@ -124,7 +124,7 @@ When a dispatch call returns, evaluate the envelope and payload:
 
 On FAILURE:
 - If continue_on_failure={campaign_recipe.continue_on_failure} is true: mark dispatch failed,
-  emit the %%FRANCHISE_PROGRESS%% marker with state=failure, proceed to next dispatch.
+  emit the %%FLEET_PROGRESS%% marker with state=failure, proceed to next dispatch.
 - If continue_on_failure={campaign_recipe.continue_on_failure} is false: halt campaign
   immediately (proceed to INTERRUPT/CLEANUP).
 
@@ -179,7 +179,7 @@ Emit this EXACT block as your final output. No other text after the block.
   "error_records": [
     {{
       "dispatch_name": "<name>",
-      "code": "<franchise_error_code>",
+      "code": "<fleet_error_code>",
       "message": "<human_readable_error>",
       "l2_session_id": "<session_id>"
     }}
@@ -199,7 +199,7 @@ Fields:
 
 Emit at each dispatch state transition:
 
-%%FRANCHISE_PROGRESS::{campaign_id}::dispatch_<i>_of_<n>::<dispatch_id>::<state>%%
+%%FLEET_PROGRESS::{campaign_id}::dispatch_<i>_of_<n>::<dispatch_id>::<state>%%
 
 - <i>: 1-indexed dispatch position
 - <n>: total dispatch count ({dispatch_count})
@@ -495,10 +495,10 @@ def _build_open_kitchen_prompt(mcp_prefix: str) -> str:
     return text
 
 
-def _build_franchise_open_prompt(mcp_prefix: str) -> str:
-    """Build the --append-system-prompt content for an ad-hoc franchise session (no campaign)."""
+def _build_fleet_open_prompt(mcp_prefix: str) -> str:
+    """Build the --append-system-prompt content for an ad-hoc fleet session (no campaign)."""
     return f"""\
-You are an L3 franchise dispatcher. You can launch headless L2 sessions via \
+You are an L3 fleet dispatcher. You can launch headless L2 sessions via \
 {mcp_prefix}dispatch_food_truck.
 
 FIRST ACTION — before responding to any user instructions:
@@ -519,7 +519,7 @@ TOOL SURFACE — only these 6 tools are available in this session:
 DISPATCHER DISCIPLINE:
 You are an L3 dispatcher — NOT an executor. You do NOT run skills yourself.
 ALL recipe execution must be delegated to L2 food trucks via dispatch_food_truck.
-NEVER use run_skill, native Claude Code tools, or any non-franchise tool.
+NEVER use run_skill, native Claude Code tools, or any non-fleet tool.
 
 AD-HOC MODE:
 There is no pre-defined campaign. Respond to user instructions about what to dispatch.

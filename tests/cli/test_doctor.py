@@ -114,7 +114,7 @@ class TestCLIDoctor:
         settings_path = tmp_path / ".claude" / "settings.json"
         _evict_stale_autoskillit_hooks(settings_path)
         sync_hooks_to_settings(settings_path)
-        # Franchise checks: set SESSION_TYPE to a non-triggering value so ambient
+        # Fleet checks: set SESSION_TYPE to a non-triggering value so ambient
         # checks 18-20 all return OK, and stub check 23 directly so it returns OK
         # without touching canonical_script_basenames (shared with hook-registration check 4).
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "worker")
@@ -123,8 +123,8 @@ class TestCLIDoctor:
         from autoskillit.core import Severity
 
         monkeypatch.setattr(
-            "autoskillit.cli._doctor._check_franchise_dispatch_guard_registered",
-            lambda: DoctorResult(Severity.OK, "franchise_dispatch_guard_registered", "stubbed"),
+            "autoskillit.cli._doctor._check_fleet_dispatch_guard_registered",
+            lambda: DoctorResult(Severity.OK, "fleet_dispatch_guard_registered", "stubbed"),
         )
         local_bin = str(tmp_path / ".local" / "bin" / "autoskillit")
         with (
@@ -240,7 +240,7 @@ class TestCLIDoctor:
         monkeypatch.chdir(tmp_path)
         cfg_dir = tmp_path / ".autoskillit"
         cfg_dir.mkdir(parents=True, exist_ok=True)
-        (cfg_dir / "config.yaml").write_text("features:\n  franchise: true\n")
+        (cfg_dir / "config.yaml").write_text("features:\n  fleet: true\n")
         cli.doctor(output_json=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)
@@ -264,13 +264,13 @@ class TestCLIDoctor:
             "installed_plugins_entry",
             "ambient_session_type_leaf",
             "ambient_session_type_orchestrator",
-            "ambient_session_type_franchise",
+            "ambient_session_type_fleet",
             "ambient_campaign_id",
             "feature_dependencies",
             "feature_registry_consistency",
             "sous_chef_bundled",
-            "franchise_dispatch_guard_registered",
-            "stale_franchise_state",
+            "fleet_dispatch_guard_registered",
+            "stale_fleet_state",
             "campaign_onboarding_hint",
             "campaign_manifest_clone_dests",
         }
@@ -1939,7 +1939,7 @@ def test_check_installed_plugins_entry_flat_structure_is_warning(tmp_path: Path)
 
 
 class TestGroupMFranchiseDoctorChecks:
-    """Group M: Franchise doctor checks (ambient env detection + infra health + campaign ops)."""
+    """Group M: Fleet doctor checks (ambient env detection + infra health + campaign ops)."""
 
     # M1: SESSION_TYPE unset → OK (unset is normal; check only fires on explicit 'leaf')
     def test_check_ambient_session_type_leaf_ok_when_unset(
@@ -1987,19 +1987,17 @@ class TestGroupMFranchiseDoctorChecks:
         assert result.severity == Severity.WARNING
         assert "should only be set by autoskillit CLIs" in result.message
 
-    # M5: SESSION_TYPE=franchise → WARN from franchise check
-    def test_check_ambient_session_type_franchise_warns(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        from autoskillit.cli._doctor import _check_ambient_session_type_franchise
+    # M5: SESSION_TYPE=fleet → WARN from fleet check
+    def test_check_ambient_session_type_fleet_warns(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from autoskillit.cli._doctor import _check_ambient_session_type_fleet
         from autoskillit.core import Severity
 
-        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "franchise")
-        result = _check_ambient_session_type_franchise()
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+        result = _check_ambient_session_type_fleet()
         assert result.severity == Severity.WARNING
         assert "highest-privilege" in result.message
 
-    # M6: SESSION_TYPE unset → OK for orchestrator and franchise checks
+    # M6: SESSION_TYPE unset → OK for orchestrator and fleet checks
     def test_check_ambient_session_type_orchestrator_ok_when_unset(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -2010,14 +2008,14 @@ class TestGroupMFranchiseDoctorChecks:
         result = _check_ambient_session_type_orchestrator()
         assert result.severity == Severity.OK
 
-    def test_check_ambient_session_type_franchise_ok_when_unset(
+    def test_check_ambient_session_type_fleet_ok_when_unset(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from autoskillit.cli._doctor import _check_ambient_session_type_franchise
+        from autoskillit.cli._doctor import _check_ambient_session_type_fleet
         from autoskillit.core import Severity
 
         monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
-        result = _check_ambient_session_type_franchise()
+        result = _check_ambient_session_type_fleet()
         assert result.severity == Severity.OK
 
     # M7: CAMPAIGN_ID set → WARN
@@ -2064,56 +2062,56 @@ class TestGroupMFranchiseDoctorChecks:
         assert result.severity == Severity.ERROR
         assert "sous-chef" in result.message
 
-    # M11: franchise_dispatch_guard registered and exists → OK
-    def test_check_franchise_dispatch_guard_registered_ok(
+    # M11: fleet_dispatch_guard registered and exists → OK
+    def test_check_fleet_dispatch_guard_registered_ok(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from autoskillit.cli._doctor import _check_franchise_dispatch_guard_registered
+        from autoskillit.cli._doctor import _check_fleet_dispatch_guard_registered
         from autoskillit.core import Severity
 
         hooks_dir = tmp_path / "hooks"
         hooks_dir.mkdir()
-        (hooks_dir / "franchise_dispatch_guard.py").write_text("")
+        (hooks_dir / "fleet_dispatch_guard.py").write_text("")
         monkeypatch.setattr(
             "autoskillit.cli._doctor.canonical_script_basenames",
-            lambda: frozenset({"franchise_dispatch_guard.py"}),
+            lambda: frozenset({"fleet_dispatch_guard.py"}),
         )
         monkeypatch.setattr("autoskillit.hook_registry.HOOKS_DIR", hooks_dir)
-        result = _check_franchise_dispatch_guard_registered()
+        result = _check_fleet_dispatch_guard_registered()
         assert result.severity == Severity.OK
 
-    # M12: franchise_dispatch_guard not registered → ERROR
-    def test_check_franchise_dispatch_guard_registered_error(
+    # M12: fleet_dispatch_guard not registered → ERROR
+    def test_check_fleet_dispatch_guard_registered_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from autoskillit.cli._doctor import _check_franchise_dispatch_guard_registered
+        from autoskillit.cli._doctor import _check_fleet_dispatch_guard_registered
         from autoskillit.core import Severity
 
         monkeypatch.setattr(
             "autoskillit.cli._doctor.canonical_script_basenames",
             lambda: frozenset(),
         )
-        result = _check_franchise_dispatch_guard_registered()
+        result = _check_fleet_dispatch_guard_registered()
         assert result.severity == Severity.ERROR
         assert "sync-hooks" in result.message
 
     # M13: No state files → OK
-    def test_check_stale_franchise_state_ok_when_no_state(self, tmp_path: Path) -> None:
-        from autoskillit.cli._doctor import _check_stale_franchise_state
+    def test_check_stale_fleet_state_ok_when_no_state(self, tmp_path: Path) -> None:
+        from autoskillit.cli._doctor import _check_stale_fleet_state
         from autoskillit.core import Severity
 
-        result = _check_stale_franchise_state(project_dir=tmp_path)
+        result = _check_stale_fleet_state(project_dir=tmp_path)
         assert result.severity == Severity.OK
 
     # M14: State file with running dispatch and mtime > 7d → WARN
-    def test_check_stale_franchise_state_warns_on_stale(self, tmp_path: Path) -> None:
+    def test_check_stale_fleet_state_warns_on_stale(self, tmp_path: Path) -> None:
         import os
         import time
 
-        from autoskillit.cli._doctor import _check_stale_franchise_state
+        from autoskillit.cli._doctor import _check_stale_fleet_state
         from autoskillit.core import Severity
 
-        state_dir = tmp_path / ".autoskillit" / "temp" / "franchise" / "camp-1"
+        state_dir = tmp_path / ".autoskillit" / "temp" / "fleet" / "camp-1"
         state_dir.mkdir(parents=True)
         state_file = state_dir / "state.json"
         state_file.write_text(
@@ -2130,16 +2128,16 @@ class TestGroupMFranchiseDoctorChecks:
         )
         old_time = time.time() - (8 * 86400)
         os.utime(state_file, (old_time, old_time))
-        result = _check_stale_franchise_state(project_dir=tmp_path)
+        result = _check_stale_fleet_state(project_dir=tmp_path)
         assert result.severity == Severity.WARNING
         assert "camp-1" in result.message or "state.json" in result.message
 
     # M15: State file with running dispatch and mtime < 7d → OK
-    def test_check_stale_franchise_state_ok_when_fresh(self, tmp_path: Path) -> None:
-        from autoskillit.cli._doctor import _check_stale_franchise_state
+    def test_check_stale_fleet_state_ok_when_fresh(self, tmp_path: Path) -> None:
+        from autoskillit.cli._doctor import _check_stale_fleet_state
         from autoskillit.core import Severity
 
-        state_dir = tmp_path / ".autoskillit" / "temp" / "franchise" / "camp-1"
+        state_dir = tmp_path / ".autoskillit" / "temp" / "fleet" / "camp-1"
         state_dir.mkdir(parents=True)
         state_file = state_dir / "state.json"
         state_file.write_text(
@@ -2154,7 +2152,7 @@ class TestGroupMFranchiseDoctorChecks:
                 }
             )
         )
-        result = _check_stale_franchise_state(project_dir=tmp_path)
+        result = _check_stale_fleet_state(project_dir=tmp_path)
         assert result.severity == Severity.OK
 
     # M16: No campaigns/ dir → INFO onboarding hint
@@ -2223,7 +2221,7 @@ class TestGroupMFranchiseDoctorChecks:
         assert result.severity == Severity.OK
 
     # M20: All 9 new checks appear in doctor JSON output
-    def test_doctor_json_output_includes_franchise_checks(
+    def test_doctor_json_output_includes_fleet_checks(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
@@ -2235,29 +2233,29 @@ class TestGroupMFranchiseDoctorChecks:
         monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
         cfg_dir = tmp_path / ".autoskillit"
         cfg_dir.mkdir(parents=True, exist_ok=True)
-        (cfg_dir / "config.yaml").write_text("features:\n  franchise: true\n")
+        (cfg_dir / "config.yaml").write_text("features:\n  fleet: true\n")
         cli.doctor(output_json=True)
         data = json.loads(capsys.readouterr().out)
         check_names = {r["check"] for r in data["results"]}
-        franchise_checks = {
+        fleet_checks = {
             "ambient_session_type_leaf",
             "ambient_session_type_orchestrator",
-            "ambient_session_type_franchise",
+            "ambient_session_type_fleet",
             "ambient_campaign_id",
             "sous_chef_bundled",
-            "franchise_dispatch_guard_registered",
-            "stale_franchise_state",
+            "fleet_dispatch_guard_registered",
+            "stale_fleet_state",
             "campaign_onboarding_hint",
             "campaign_manifest_clone_dests",
         }
-        assert franchise_checks <= check_names
+        assert fleet_checks <= check_names
 
 
 class TestGroupNFeatureGateDoctorChecks:
-    """N1–N8: Feature-gate checks and FranchiseConfig conditional validation."""
+    """N1–N8: Feature-gate checks and FleetConfig conditional validation."""
 
-    # N1: Franchise checks skipped when feature disabled
-    def test_franchise_doctor_checks_skipped_when_disabled(
+    # N1: Fleet checks skipped when feature disabled
+    def test_fleet_doctor_checks_skipped_when_disabled(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
@@ -2265,7 +2263,7 @@ class TestGroupNFeatureGateDoctorChecks:
     ) -> None:
         from autoskillit.config import AutomationConfig
 
-        mock_cfg = AutomationConfig(features={"franchise": False})
+        mock_cfg = AutomationConfig(features={"fleet": False})
         monkeypatch.setattr("autoskillit.cli._doctor.load_config", lambda _: mock_cfg)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
@@ -2274,20 +2272,20 @@ class TestGroupNFeatureGateDoctorChecks:
         cli.doctor(output_json=True)
         data = json.loads(capsys.readouterr().out)
         check_names = {r["check"] for r in data["results"]}
-        franchise_infra = {
+        fleet_infra = {
             "sous_chef_bundled",
-            "franchise_dispatch_guard_registered",
-            "stale_franchise_state",
+            "fleet_dispatch_guard_registered",
+            "stale_fleet_state",
             "campaign_onboarding_hint",
             "campaign_manifest_clone_dests",
         }
-        assert franchise_infra.isdisjoint(check_names), (
-            f"Franchise checks must be absent when feature is disabled, "
-            f"but found: {franchise_infra & check_names}"
+        assert fleet_infra.isdisjoint(check_names), (
+            f"Fleet checks must be absent when feature is disabled, "
+            f"but found: {fleet_infra & check_names}"
         )
 
-    # N2: Franchise checks run when feature enabled
-    def test_franchise_doctor_checks_run_when_enabled(
+    # N2: Fleet checks run when feature enabled
+    def test_fleet_doctor_checks_run_when_enabled(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
@@ -2295,7 +2293,7 @@ class TestGroupNFeatureGateDoctorChecks:
     ) -> None:
         from autoskillit.config import AutomationConfig
 
-        mock_cfg = AutomationConfig(features={"franchise": True})
+        mock_cfg = AutomationConfig(features={"fleet": True})
         monkeypatch.setattr("autoskillit.cli._doctor.load_config", lambda _: mock_cfg)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
@@ -2304,22 +2302,22 @@ class TestGroupNFeatureGateDoctorChecks:
         cli.doctor(output_json=True)
         data = json.loads(capsys.readouterr().out)
         check_names = {r["check"] for r in data["results"]}
-        franchise_infra = {
+        fleet_infra = {
             "sous_chef_bundled",
-            "franchise_dispatch_guard_registered",
-            "stale_franchise_state",
+            "fleet_dispatch_guard_registered",
+            "stale_fleet_state",
             "campaign_onboarding_hint",
             "campaign_manifest_clone_dests",
         }
-        assert franchise_infra <= check_names
-        franchise_results = [r for r in data["results"] if r["check"] in franchise_infra]
-        assert all(r["severity"] in {"ok", "info"} for r in franchise_results), (
-            f"Expected all franchise checks to have non-error severity (ok/info), "
-            f"got: {[(r['check'], r['severity']) for r in franchise_results]}"
+        assert fleet_infra <= check_names
+        fleet_results = [r for r in data["results"] if r["check"] in fleet_infra]
+        assert all(r["severity"] in {"ok", "info"} for r in fleet_results), (
+            f"Expected all fleet checks to have non-error severity (ok/info), "
+            f"got: {[(r['check'], r['severity']) for r in fleet_results]}"
         )
 
-    # N3: Ambient env checks always run even when franchise disabled
-    def test_ambient_env_checks_always_run_when_franchise_disabled(
+    # N3: Ambient env checks always run even when fleet disabled
+    def test_ambient_env_checks_always_run_when_fleet_disabled(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
@@ -2327,7 +2325,7 @@ class TestGroupNFeatureGateDoctorChecks:
     ) -> None:
         from autoskillit.config import AutomationConfig
 
-        mock_cfg = AutomationConfig(features={"franchise": False})
+        mock_cfg = AutomationConfig(features={"fleet": False})
         monkeypatch.setattr("autoskillit.cli._doctor.load_config", lambda _: mock_cfg)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
@@ -2339,7 +2337,7 @@ class TestGroupNFeatureGateDoctorChecks:
         ambient_checks = {
             "ambient_session_type_leaf",
             "ambient_session_type_orchestrator",
-            "ambient_session_type_franchise",
+            "ambient_session_type_fleet",
             "ambient_campaign_id",
         }
         assert ambient_checks <= check_names

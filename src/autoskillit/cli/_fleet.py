@@ -1,4 +1,4 @@
-"""Franchise CLI sub-app: campaign management commands."""
+"""Fleet CLI sub-app: campaign management commands."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ import psutil
 from cyclopts import App, Parameter
 
 from autoskillit.core import TerminalColumn, get_logger, is_feature_enabled
-from autoskillit.franchise import (
+from autoskillit.fleet import (
     DispatchStatus,
     mark_dispatch_interrupted,
     read_state,
@@ -32,13 +32,13 @@ from autoskillit.franchise import (
 _log = get_logger(__name__)
 
 
-def _require_franchise(cfg: AutomationConfig) -> None:
-    """Exit with clear message if franchise feature is not enabled."""
-    if not is_feature_enabled("franchise", cfg.features):
+def _require_fleet(cfg: AutomationConfig) -> None:
+    """Exit with clear message if fleet feature is not enabled."""
+    if not is_feature_enabled("fleet", cfg.features):
         print(
-            "The 'franchise' feature is not enabled.\n"
-            "Enable it with: features.franchise: true in your config\n"
-            "Or set: AUTOSKILLIT_FEATURES__FRANCHISE=true",
+            "The 'fleet' feature is not enabled.\n"
+            "Enable it with: features.fleet: true in your config\n"
+            "Or set: AUTOSKILLIT_FEATURES__FLEET=true",
             file=sys.stderr,
         )
         raise SystemExit(1)
@@ -46,7 +46,7 @@ def _require_franchise(cfg: AutomationConfig) -> None:
 
 if TYPE_CHECKING:
     from autoskillit.config import AutomationConfig
-    from autoskillit.franchise import CampaignState, DispatchRecord, ResumeDecision
+    from autoskillit.fleet import CampaignState, DispatchRecord, ResumeDecision
     from autoskillit.recipe.schema import Recipe
 
 _FAILURE_STATUSES = frozenset(
@@ -234,7 +234,7 @@ def _render_status_display(state: CampaignState) -> int:
 
 
 def _watch_loop(state_path: Path) -> int:
-    """1 Hz polling loop for franchise status. Returns exit code."""
+    """1 Hz polling loop for fleet status. Returns exit code."""
     import select
     import termios
     import tty
@@ -301,7 +301,7 @@ def _watch_loop(state_path: Path) -> int:
             pass
 
 
-franchise_app = App(name="franchise", help="Campaign franchise management.")
+fleet_app = App(name="fleet", help="Campaign fleet management.")
 
 
 def _remove_clone_fn(path: str, _flag: str) -> dict[str, str]:
@@ -314,13 +314,13 @@ def _remove_clone_fn(path: str, _flag: str) -> dict[str, str]:
         return {"removed": "false", "reason": str(exc)}
 
 
-def _launch_franchise_session(
+def _launch_fleet_session(
     campaign_recipe: Recipe | None,
     campaign_id: str | None,
     state_path: Path | None,
     resume_metadata: ResumeDecision | None,
 ) -> None:
-    """Build the L3 orchestrator prompt and launch an interactive franchise session."""
+    """Build the L3 orchestrator prompt and launch an interactive fleet session."""
     from autoskillit.cli import detect_autoskillit_mcp_prefix  # noqa: PLC0415
     from autoskillit.cli._session_launch import _run_interactive_session
 
@@ -332,11 +332,11 @@ def _launch_franchise_session(
 
     if campaign_recipe is None:
         # Ad-hoc mode: no campaign, no state, bare kitchen open
-        from autoskillit.cli._prompts import _build_franchise_open_prompt
+        from autoskillit.cli._prompts import _build_fleet_open_prompt
 
-        prompt = _build_franchise_open_prompt(mcp_prefix)
+        prompt = _build_fleet_open_prompt(mcp_prefix)
         extra_env: dict[str, str] = {
-            "AUTOSKILLIT_SESSION_TYPE": "franchise",
+            "AUTOSKILLIT_SESSION_TYPE": "fleet",
             "AUTOSKILLIT_HEADLESS": "0",
         }
         while True:
@@ -366,7 +366,7 @@ def _launch_franchise_session(
             campaign_recipe, manifest_yaml, completed_dispatches, mcp_prefix, campaign_id
         )
         extra_env = {
-            "AUTOSKILLIT_SESSION_TYPE": "franchise",
+            "AUTOSKILLIT_SESSION_TYPE": "fleet",
             "AUTOSKILLIT_CAMPAIGN_ID": campaign_id,
             "AUTOSKILLIT_CAMPAIGN_STATE_PATH": str(state_path),
             "AUTOSKILLIT_HEADLESS": "0",
@@ -380,7 +380,7 @@ def _launch_franchise_session(
 
 
 @asynccontextmanager
-async def _franchise_signal_guard(
+async def _fleet_signal_guard(
     state_path: Path,
     campaign_id: str,
     *,
@@ -489,7 +489,7 @@ async def _franchise_signal_guard(
 
                     sys.stderr.write(
                         f"Campaign {campaign_id} interrupted."
-                        f" Resume: autoskillit franchise run --resume {campaign_id}\n"
+                        f" Resume: autoskillit fleet run --resume {campaign_id}\n"
                     )
                 return
 
@@ -627,19 +627,19 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
             fcntl.flock(_lock_fh, fcntl.LOCK_UN)
 
 
-@franchise_app.command(name="run")
-def franchise_run(
+@fleet_app.command(name="run")
+def fleet_run(
     campaign_name: str | None = None,
     *,
     resume_campaign: str | None = None,
 ) -> None:
     """Launch an interactive Claude Code session to execute a campaign."""
     if os.environ.get("CLAUDECODE"):
-        print("ERROR: 'franchise run' cannot run inside a Claude Code session.")
+        print("ERROR: 'fleet run' cannot run inside a Claude Code session.")
         print("Run this command in a regular terminal.")
         sys.exit(1)
     if os.environ.get("AUTOSKILLIT_SESSION_TYPE") == "leaf":
-        print("ERROR: 'franchise run' cannot run inside a leaf session.")
+        print("ERROR: 'fleet run' cannot run inside a leaf session.")
         sys.exit(1)
     if shutil.which("claude") is None:
         print("ERROR: 'claude' not found. Install: https://docs.anthropic.com/en/docs/claude-code")
@@ -648,15 +648,15 @@ def franchise_run(
     from autoskillit.config import load_config
 
     cfg = load_config(Path.cwd())
-    _require_franchise(cfg)
+    _require_fleet(cfg)
 
-    # Ad-hoc mode: no campaign name supplied — launch bare franchise dispatcher
+    # Ad-hoc mode: no campaign name supplied — launch bare fleet dispatcher
     if campaign_name is None:
-        _launch_franchise_session(None, None, None, None)
+        _launch_fleet_session(None, None, None, None)
         return
 
     from autoskillit.core import YAMLError
-    from autoskillit.franchise import (
+    from autoskillit.fleet import (
         DispatchRecord,
         resume_campaign_from_state,
         write_initial_state,
@@ -687,33 +687,33 @@ def franchise_run(
     resume_metadata: ResumeDecision | None = None
     campaign_id: str
     state_path: Path
-    franchise_dir = Path.cwd() / ".autoskillit" / "temp" / "franchise"
+    fleet_dir = Path.cwd() / ".autoskillit" / "temp" / "fleet"
 
     if resume_campaign is not None:
         campaign_id = resume_campaign
-        state_path = franchise_dir / campaign_id / "state.json"
+        state_path = fleet_dir / campaign_id / "state.json"
         resume_metadata = resume_campaign_from_state(state_path, parsed.continue_on_failure)
         if resume_metadata is None:
             print(f"ERROR: Campaign state not found or corrupted for '{campaign_id}'")
             sys.exit(1)
     else:
         campaign_id = uuid4().hex[:16]
-        state_dir = franchise_dir / campaign_id
+        state_dir = fleet_dir / campaign_id
         state_dir.mkdir(parents=True, exist_ok=True)
         state_path = state_dir / "state.json"
         dispatches = [DispatchRecord(name=d.name) for d in parsed.dispatches]
         write_initial_state(state_path, campaign_id, campaign_name, str(match.path), dispatches)
 
-    _launch_franchise_session(parsed, campaign_id, state_path, resume_metadata)
+    _launch_fleet_session(parsed, campaign_id, state_path, resume_metadata)
 
 
-@franchise_app.command(name="list")
-def franchise_list() -> None:
+@fleet_app.command(name="list")
+def fleet_list() -> None:
     """List available campaign recipes."""
     from autoskillit.config import load_config
 
     cfg = load_config(Path.cwd())
-    _require_franchise(cfg)
+    _require_fleet(cfg)
 
     from autoskillit.core import TerminalColumn, _render_terminal_table
     from autoskillit.recipe import list_campaign_recipes
@@ -732,8 +732,8 @@ def franchise_list() -> None:
     print(_render_terminal_table(columns, rows))
 
 
-@franchise_app.command(name="status")
-def franchise_status(
+@fleet_app.command(name="status")
+def fleet_status(
     campaign_id: str | None = None,
     *,
     cleanup: bool = False,
@@ -742,16 +742,16 @@ def franchise_status(
     watch: bool = False,
     json_output: Annotated[bool, Parameter(name=["--json"])] = False,
 ) -> None:
-    """Show franchise campaign status."""
+    """Show fleet campaign status."""
     from autoskillit.config import load_config
 
     cfg = load_config(Path.cwd())
-    _require_franchise(cfg)
+    _require_fleet(cfg)
 
-    franchise_dir = Path.cwd() / ".autoskillit" / "temp" / "franchise"
+    fleet_dir = Path.cwd() / ".autoskillit" / "temp" / "fleet"
 
     if campaign_id is not None:
-        state_path = franchise_dir / campaign_id / "state.json"
+        state_path = fleet_dir / campaign_id / "state.json"
         state = read_state(state_path)
         if state is None:
             print(f"ERROR: Campaign '{campaign_id}' not found or state corrupted.")
@@ -820,11 +820,11 @@ def franchise_status(
     else:
         from autoskillit.core import _render_terminal_table
 
-        if not franchise_dir.exists():
+        if not fleet_dir.exists():
             print("No campaigns found.")
             return
 
-        subdirs = [d for d in franchise_dir.iterdir() if d.is_dir()]
+        subdirs = [d for d in fleet_dir.iterdir() if d.is_dir()]
         if not subdirs:
             print("No campaigns found.")
             return
@@ -871,10 +871,10 @@ def franchise_status(
         print(_render_terminal_table(columns, rows_list))
 
 
-def render_franchise_error(envelope_json: str) -> int:
-    """Render a franchise error envelope to stderr.
+def render_fleet_error(envelope_json: str) -> int:
+    """Render a fleet error envelope to stderr.
 
-    Returns exit code: 3 for franchise envelope errors, 0 for non-error envelopes.
+    Returns exit code: 3 for fleet envelope errors, 0 for non-error envelopes.
     """
     try:
         data = json.loads(envelope_json)
@@ -884,7 +884,7 @@ def render_franchise_error(envelope_json: str) -> int:
         return 0
     msg = data.get("user_visible_message") or "unknown error"
     code = data.get("error", "")
-    sys.stderr.write(f"franchise error [{code}]: {msg}\n")
+    sys.stderr.write(f"fleet error [{code}]: {msg}\n")
     details = data.get("details")
     if details:
         sys.stderr.write(f"  details: {json.dumps(details)}\n")

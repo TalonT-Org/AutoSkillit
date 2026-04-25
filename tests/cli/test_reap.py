@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
-from autoskillit.franchise import (
+from autoskillit.fleet import (
     DispatchRecord,
     DispatchStatus,
     read_state,
@@ -51,7 +51,7 @@ def _make_running_state(
 
 
 def _reap(state_path: Path, *, dry_run: bool = False) -> None:
-    from autoskillit.cli._franchise import _reap_stale_dispatches
+    from autoskillit.cli._fleet import _reap_stale_dispatches
 
     _reap_stale_dispatches(state_path, dry_run=dry_run)
 

@@ -25,7 +25,7 @@ from autoskillit.core import (
     get_logger,
     pkg_root,
 )
-from autoskillit.franchise import FRANCHISE_MENU_TOOLS
+from autoskillit.fleet import FLEET_MENU_TOOLS
 from autoskillit.pipeline import create_background_task
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
@@ -124,7 +124,7 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "get_quota_events",
         ),
     ),
-    ("Franchise", FRANCHISE_MENU_TOOLS),
+    ("Fleet", FLEET_MENU_TOOLS),
     ("Kitchen", ("open_kitchen", "close_kitchen", "disable_quota_guard", "reload_session")),
 )
 
@@ -266,8 +266,6 @@ async def _redisable_subsets(
     )
 
     # Union model: a tag is suppressed only when no enabled feature claims it.
-    # Multiple features may share the same tool_tag (e.g. franchise+fleet both
-    # use the "franchise" tag in T1); disabling one must not suppress the other.
     _features = features or {}
     enabled_tags: set[str] = set()
     disabled_tags: set[str] = set()

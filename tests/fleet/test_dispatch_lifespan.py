@@ -9,7 +9,7 @@ import pytest
 
 from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
 
-pytestmark = [pytest.mark.layer("franchise"), pytest.mark.small, pytest.mark.feature("franchise")]
+pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
 
 def _make_recipe_info(name: str = "test-recipe"):
@@ -59,7 +59,7 @@ def _setup_dispatch(tool_ctx, monkeypatch, recipe_name: str = "test-recipe"):
 
 
 async def _run(tool_ctx, recipe: str = "test-recipe") -> dict:
-    from autoskillit.franchise._api import execute_dispatch
+    from autoskillit.fleet._api import execute_dispatch
 
     raw = await execute_dispatch(
         tool_ctx=tool_ctx,
@@ -76,7 +76,7 @@ async def _run(tool_ctx, recipe: str = "test-recipe") -> dict:
 
 
 def _make_completed_clean(success: bool):
-    from autoskillit.franchise.result_parser import L2ParseResult
+    from autoskillit.fleet.result_parser import L2ParseResult
 
     return L2ParseResult(
         outcome="completed_clean",
@@ -88,7 +88,7 @@ def _make_completed_clean(success: bool):
 
 
 def _make_no_sentinel():
-    from autoskillit.franchise.result_parser import L2ParseResult
+    from autoskillit.fleet.result_parser import L2ParseResult
 
     return L2ParseResult(
         outcome="no_sentinel",
@@ -100,7 +100,7 @@ def _make_no_sentinel():
 
 
 def _make_completed_dirty():
-    from autoskillit.franchise.result_parser import L2ParseResult
+    from autoskillit.fleet.result_parser import L2ParseResult
 
     return L2ParseResult(
         outcome="completed_dirty",
@@ -148,7 +148,7 @@ class TestLifespanStartedInEnvelopes:
             )
         )
         monkeypatch.setattr(
-            "autoskillit.franchise._api.parse_l2_result_block",
+            "autoskillit.fleet._api.parse_l2_result_block",
             lambda **_: _make_completed_clean(success=True),
         )
 
@@ -164,7 +164,7 @@ class TestLifespanStartedInEnvelopes:
         """no_sentinel envelope includes 'lifespan_started' field."""
         _setup_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
-            "autoskillit.franchise._api.parse_l2_result_block",
+            "autoskillit.fleet._api.parse_l2_result_block",
             lambda **_: _make_no_sentinel(),
         )
 
@@ -180,7 +180,7 @@ class TestLifespanStartedInEnvelopes:
         """completed_dirty envelope includes 'lifespan_started' field."""
         _setup_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
-            "autoskillit.franchise._api.parse_l2_result_block",
+            "autoskillit.fleet._api.parse_l2_result_block",
             lambda **_: _make_completed_dirty(),
         )
 

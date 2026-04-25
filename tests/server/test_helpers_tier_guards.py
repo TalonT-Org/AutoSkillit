@@ -30,9 +30,9 @@ def test_A2_require_orchestrator_or_higher_permits_headless_orchestrator(monkeyp
     assert _require_orchestrator_or_higher("run_cmd") is None
 
 
-def test_A3_require_orchestrator_or_higher_permits_headless_franchise(monkeypatch) -> None:
+def test_A3_require_orchestrator_or_higher_permits_headless_fleet(monkeypatch) -> None:
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "franchise")
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
     from autoskillit.server.helpers import _require_orchestrator_or_higher
 
     assert _require_orchestrator_or_higher("run_cmd") is None
@@ -99,9 +99,9 @@ def test_A8_require_orchestrator_exact_permits_headless_orchestrator(monkeypatch
     assert _require_orchestrator_exact("open_kitchen") is None
 
 
-def test_A9_require_orchestrator_exact_denies_headless_franchise(monkeypatch) -> None:
+def test_A9_require_orchestrator_exact_denies_headless_fleet(monkeypatch) -> None:
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "franchise")
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
     from autoskillit.server.helpers import _require_orchestrator_exact
 
     result = _require_orchestrator_exact("open_kitchen")
@@ -109,7 +109,7 @@ def test_A9_require_orchestrator_exact_denies_headless_franchise(monkeypatch) ->
     data = json.loads(result)
     assert data["subtype"] == "headless_error"
     msg = data.get("result", "").lower()
-    assert "fleet" in msg or "franchise" in msg
+    assert "fleet" in msg
 
 
 def test_A10_require_orchestrator_exact_denies_headless_leaf(monkeypatch) -> None:
@@ -124,35 +124,35 @@ def test_A10_require_orchestrator_exact_denies_headless_leaf(monkeypatch) -> Non
 
 
 # ---------------------------------------------------------------------------
-# _require_franchise
+# _require_fleet
 # ---------------------------------------------------------------------------
 
 
-def test_A11_require_franchise_permits_franchise_session(monkeypatch) -> None:
-    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "franchise")
-    from autoskillit.server.helpers import _require_franchise
+def test_A11_require_fleet_permits_fleet_session(monkeypatch) -> None:
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+    from autoskillit.server.helpers import _require_fleet
 
-    assert _require_franchise() is None
+    assert _require_fleet() is None
 
 
-def test_A12_require_franchise_denies_orchestrator(monkeypatch) -> None:
+def test_A12_require_fleet_denies_orchestrator(monkeypatch) -> None:
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
-    from autoskillit.server.helpers import _require_franchise
+    from autoskillit.server.helpers import _require_fleet
 
-    result = _require_franchise()
+    result = _require_fleet()
     assert result is not None
     data = json.loads(result)
     assert data["subtype"] == "headless_error"
 
 
-def test_A13_require_franchise_denies_interactive_no_session_type(monkeypatch) -> None:
+def test_A13_require_fleet_denies_interactive_no_session_type(monkeypatch) -> None:
     monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
-    from autoskillit.server.helpers import _require_franchise
+    from autoskillit.server.helpers import _require_fleet
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        result = _require_franchise()
+        result = _require_fleet()
     assert result is not None
     data = json.loads(result)
     assert data["subtype"] == "headless_error"

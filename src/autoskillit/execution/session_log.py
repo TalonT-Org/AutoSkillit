@@ -425,7 +425,7 @@ _TERMINAL_DISPATCH_STATUSES: frozenset[str] = frozenset(
 def _build_protected_campaign_ids(project_dir: Path) -> frozenset[str]:
     """Return campaign IDs with at least one non-terminal dispatch.
 
-    Reads franchise state files from ``{project_dir}/.autoskillit/temp/dispatches/``.
+    Reads fleet state files from ``{project_dir}/.autoskillit/temp/dispatches/``.
     A campaign is protected if any of its dispatch records has a status that is NOT
     in the terminal set ``{success, failure, skipped, released}``.
     Returns an empty frozenset on any error (missing dir, corrupt files, permission errors).
@@ -462,7 +462,7 @@ def _build_protected_campaign_ids(project_dir: Path) -> frozenset[str]:
 def _enforce_retention(log_root: Path, project_dir: str = "") -> None:
     """Delete oldest session directories if count exceeds _MAX_SESSIONS.
 
-    When ``project_dir`` is provided, reads franchise state files and ``meta.json``
+    When ``project_dir`` is provided, reads fleet state files and ``meta.json``
     sidecars to skip deletion of sessions belonging to active campaigns.
     """
     sessions_dir = log_root / "sessions"

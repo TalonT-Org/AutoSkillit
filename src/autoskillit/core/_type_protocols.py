@@ -47,7 +47,7 @@ __all__ = [
     "SkillLister",
     "SkillResolver",
     "BackgroundSupervisor",
-    "FranchiseLock",
+    "FleetLock",
     "QuotaRefreshTask",
     "TokenFactory",
     "SupportsLogger",
@@ -581,10 +581,10 @@ class QuotaRefreshTask(Protocol):
 
 
 @runtime_checkable
-class FranchiseLock(Protocol):
+class FleetLock(Protocol):
     """Protocol for a mutual-exclusion lock handle.
 
-    Satisfied by asyncio.Lock — used to type the franchise_lock field in
+    Satisfied by asyncio.Lock — used to type the fleet_lock field in
     ToolContext without leaking asyncio.Lock into the core layer.
     """
 

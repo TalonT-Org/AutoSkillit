@@ -1431,7 +1431,7 @@ class DefaultHeadlessExecutor:
     ) -> SkillResult:
         cfg = self._ctx.config
         resolved_model = _resolve_model(model, cfg)
-        franchise_cfg = cfg.franchise
+        fleet_cfg = cfg.fleet
 
         plugin_dir = self._ctx.plugin_dir
         if plugin_dir is None:
@@ -1462,9 +1462,7 @@ class DefaultHeadlessExecutor:
             output_format_value=cfg.run_skill.output_format.value,
         )
 
-        effective_timeout = (
-            timeout if timeout is not None else franchise_cfg.l2_default_timeout_sec
-        )
+        effective_timeout = timeout if timeout is not None else fleet_cfg.l2_default_timeout_sec
         effective_stale = (
             stale_threshold if stale_threshold is not None else cfg.run_skill.stale_threshold
         )

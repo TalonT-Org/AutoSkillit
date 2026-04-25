@@ -15,7 +15,6 @@ import inspect
 import logging
 import os
 import tempfile
-import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -289,7 +288,7 @@ class WorkspaceConfig:
 
 
 @dataclass
-class FranchiseConfig:
+class FleetConfig:
     l2_default_timeout_sec: int = 3600
 
     def validate(self, feature_enabled: bool) -> None:
@@ -338,7 +337,7 @@ class AutomationConfig:
     subsets: SubsetsConfig = field(default_factory=SubsetsConfig)
     packs: PacksConfig = field(default_factory=PacksConfig)
     workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
-    franchise: FranchiseConfig = field(default_factory=FranchiseConfig)
+    fleet: FleetConfig = field(default_factory=FleetConfig)
     features: dict[str, bool] = field(default_factory=dict)
 
     @staticmethod
@@ -357,19 +356,6 @@ class AutomationConfig:
                 raise ConfigSchemaError(
                     f"Feature key must be a string, got {type(name).__name__!r}: {name!r}"
                 )
-            # Shim: "franchise" config key → "fleet" alias when "franchise" is not in the registry
-            # but "fleet" is. Guards the case where only one of the two keys exists at runtime.
-            if (
-                name not in FEATURE_REGISTRY
-                and name == "franchise"
-                and "fleet" in FEATURE_REGISTRY
-            ):
-                warnings.warn(
-                    "features.franchise is deprecated. Use features.fleet instead.",
-                    DeprecationWarning,
-                    stacklevel=3,
-                )
-                name = "fleet"
             if name not in FEATURE_REGISTRY:
                 known = sorted(FEATURE_REGISTRY.keys())
                 raise ConfigSchemaError(
@@ -442,7 +428,7 @@ class AutomationConfig:
         _sub = sec("subsets")
         pk = sec("packs")
         ws_raw = sec("workspace")
-        fr = sec("franchise")
+        fr = sec("fleet")
         feat = sec("features")
 
         _tc = _field_defaults(TestCheckConfig)
@@ -466,7 +452,7 @@ class AutomationConfig:
         _ci = _field_defaults(CIConfig)
         _sk = _field_defaults(SkillsConfig)
         _wsc = _field_defaults(WorkspaceConfig)
-        _fr = _field_defaults(FranchiseConfig)
+        _fr = _field_defaults(FleetConfig)
 
         result = cls(
             test_check=TestCheckConfig(
@@ -611,7 +597,7 @@ class AutomationConfig:
                 runs_root=val(ws_raw, "runs_root", _wsc["runs_root"]) or None,
                 temp_dir=val(ws_raw, "temp_dir", _wsc["temp_dir"]) or None,
             ),
-            franchise=FranchiseConfig(
+            fleet=FleetConfig(
                 l2_default_timeout_sec=int(
                     val(fr, "l2_default_timeout_sec", _fr["l2_default_timeout_sec"])
                 ),
@@ -621,9 +607,9 @@ class AutomationConfig:
             ),
         )
         try:
-            result.franchise.validate(is_feature_enabled("franchise", result.features))
+            result.fleet.validate(is_feature_enabled("fleet", result.features))
         except ValueError as exc:
-            raise ValueError(f"franchise config: {exc}") from exc
+            raise ValueError(f"fleet config: {exc}") from exc
         return result
 
 

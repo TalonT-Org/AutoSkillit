@@ -232,21 +232,21 @@ def test_is_test_feature_enabled_reads_project_config(monkeypatch):
 
     _resolve_test_features.cache_clear()
     try:
-        result = _is_test_feature_enabled("franchise", env_val=None)
+        result = _is_test_feature_enabled("fleet", env_val=None)
         assert result is True
     finally:
         _resolve_test_features.cache_clear()
 
 
 def test_is_test_feature_enabled_dynaconf_env_overrides(monkeypatch):
-    """AUTOSKILLIT_FEATURES__FRANCHISE=false overrides project config in test resolution."""
+    """AUTOSKILLIT_FEATURES__FLEET=false overrides project config in test resolution."""
     monkeypatch.delenv("AUTOSKILLIT_TEST_FEATURES", raising=False)
-    monkeypatch.setenv("AUTOSKILLIT_FEATURES__FRANCHISE", "false")
+    monkeypatch.setenv("AUTOSKILLIT_FEATURES__FLEET", "false")
     from tests.conftest import _is_test_feature_enabled, _resolve_test_features
 
     _resolve_test_features.cache_clear()
     try:
-        result = _is_test_feature_enabled("franchise", env_val=None)
+        result = _is_test_feature_enabled("fleet", env_val=None)
         assert result is False
     finally:
         _resolve_test_features.cache_clear()

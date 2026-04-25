@@ -9,13 +9,13 @@ from __future__ import annotations
 
 import pytest
 
-from tests.franchise._helpers import (
+from tests.fleet._helpers import (
     KITCHEN_CORE_TOOLS,
     TOOLS_BY_PACK,
     compute_food_truck_tool_surface,
 )
 
-pytestmark = [pytest.mark.layer("franchise"), pytest.mark.small, pytest.mark.feature("franchise")]
+pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
 # ---------------------------------------------------------------------------
 # Module-level constants — additional packs used only in this test module

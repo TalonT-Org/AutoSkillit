@@ -1,4 +1,4 @@
-"""Franchise dispatch orchestration API."""
+"""Fleet dispatch orchestration API."""
 
 from __future__ import annotations
 
@@ -11,13 +11,13 @@ from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from autoskillit.core import (
-    FranchiseErrorCode,
+    FleetErrorCode,
     SkillResult,
     claude_code_log_path,
-    franchise_error,
+    fleet_error,
     get_logger,
 )
-from autoskillit.franchise.result_parser import parse_l2_result_block
+from autoskillit.fleet.result_parser import parse_l2_result_block
 
 if TYPE_CHECKING:
     from autoskillit.pipeline.context import ToolContext
@@ -34,7 +34,7 @@ def _write_pid(
 ) -> None:
     """on_spawn callback: atomically mark dispatch as running with l2_pid and identity fields."""
     from autoskillit.core import read_boot_id
-    from autoskillit.franchise.state import mark_dispatch_running
+    from autoskillit.fleet.state import mark_dispatch_running
 
     try:
         mark_dispatch_running(
@@ -97,20 +97,20 @@ async def execute_dispatch(
     if ingredients is not None:
         bad_vals = [k for k, v in ingredients.items() if not isinstance(v, str)]
         if bad_vals:
-            return franchise_error(
-                FranchiseErrorCode.FRANCHISE_UNKNOWN_INGREDIENT,
+            return fleet_error(
+                FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
                 f"Ingredient values must be strings. Non-string keys: {bad_vals}",
             )
 
-    lock = tool_ctx.franchise_lock
+    lock = tool_ctx.fleet_lock
     if lock is None:
-        return franchise_error(
-            FranchiseErrorCode.FRANCHISE_MANIFEST_MISSING,
-            "Franchise lock not initialized — open_kitchen with franchise mode.",
+        return fleet_error(
+            FleetErrorCode.FLEET_LOCK_NOT_INITIALIZED,
+            "Fleet lock not initialized — open_kitchen with fleet mode.",
         )
     if lock.locked():
-        return franchise_error(
-            FranchiseErrorCode.FRANCHISE_PARALLEL_REFUSED,
+        return fleet_error(
+            FleetErrorCode.FLEET_PARALLEL_REFUSED,
             "A dispatch is already in progress. Only one dispatch at a time.",
         )
 
@@ -132,8 +132,8 @@ async def execute_dispatch(
         raise
     except Exception as exc:
         logger.error("execute_dispatch failed", exc_info=True)
-        return franchise_error(
-            FranchiseErrorCode.L2_STARTUP_OR_CRASH,
+        return fleet_error(
+            FleetErrorCode.L2_STARTUP_OR_CRASH,
             f"{type(exc).__name__}: {exc}",
         )
     finally:
@@ -153,7 +153,7 @@ async def _run_dispatch(
     cache_invalidator: Callable[[str], None] | None = None,
 ) -> str:
     """Inner dispatch body — called after lock acquisition."""
-    from autoskillit.franchise.state import (
+    from autoskillit.fleet.state import (
         DispatchRecord,
         DispatchStatus,
         append_dispatch_record,
@@ -161,15 +161,15 @@ async def _run_dispatch(
     )
 
     if tool_ctx.recipes is None:
-        return franchise_error(
-            FranchiseErrorCode.FRANCHISE_MANIFEST_MISSING,
+        return fleet_error(
+            FleetErrorCode.FLEET_MANIFEST_MISSING,
             "Recipe repository not configured.",
         )
 
     recipe_obj = tool_ctx.recipes.find(recipe, tool_ctx.project_dir)
     if recipe_obj is None:
-        return franchise_error(
-            FranchiseErrorCode.FRANCHISE_RECIPE_NOT_FOUND,
+        return fleet_error(
+            FleetErrorCode.FLEET_RECIPE_NOT_FOUND,
             f"Recipe '{recipe}' not found.",
         )
 
@@ -177,14 +177,14 @@ async def _run_dispatch(
         full_recipe = tool_ctx.recipes.load(recipe_obj.path)
     except Exception as exc:
         logger.warning("load_recipe failed for '%s'", recipe, exc_info=True)
-        return franchise_error(
-            FranchiseErrorCode.FRANCHISE_RECIPE_NOT_FOUND,
+        return fleet_error(
+            FleetErrorCode.FLEET_RECIPE_NOT_FOUND,
             f"Recipe '{recipe}' could not be loaded: {exc}",
         )
 
     if full_recipe.kind != "standard":
-        return franchise_error(
-            FranchiseErrorCode.FRANCHISE_INVALID_RECIPE_KIND,
+        return fleet_error(
+            FleetErrorCode.FLEET_INVALID_RECIPE_KIND,
             f"Recipe '{recipe}' has kind '{full_recipe.kind}'. "
             "Only standard recipes can be dispatched as food trucks.",
         )
@@ -193,8 +193,8 @@ async def _run_dispatch(
     if effective_ingredients:
         unknown = set(effective_ingredients.keys()) - set(full_recipe.ingredients.keys())
         if unknown:
-            return franchise_error(
-                FranchiseErrorCode.FRANCHISE_UNKNOWN_INGREDIENT,
+            return fleet_error(
+                FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
                 f"Unknown ingredient keys: {sorted(unknown)}. "
                 f"Valid keys: {sorted(full_recipe.ingredients.keys())}",
             )
@@ -228,8 +228,8 @@ async def _run_dispatch(
     )
 
     if tool_ctx.executor is None:
-        return franchise_error(
-            FranchiseErrorCode.FRANCHISE_MANIFEST_MISSING,
+        return fleet_error(
+            FleetErrorCode.FLEET_MANIFEST_MISSING,
             "Executor not configured.",
         )
 
@@ -276,8 +276,8 @@ async def _run_dispatch(
             ),
         )
         _post_dispatch_cleanup(tool_ctx, skill_result, cache_invalidator, quota_refresher)
-        return franchise_error(
-            FranchiseErrorCode.L2_TIMEOUT,
+        return fleet_error(
+            FleetErrorCode.L2_TIMEOUT,
             f"L2 dispatch '{effective_name}' timed out",
             details={
                 "dispatch_id": dispatch_id,

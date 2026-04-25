@@ -1,4 +1,4 @@
-"""Tests for franchise_dispatch_guard.py PreToolUse hook."""
+"""Tests for fleet_dispatch_guard.py PreToolUse hook."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ def _run_guard(
     raw_stdin: str | None = None,
 ) -> str:
     """Run main() with the given event payload."""
-    from autoskillit.hooks.franchise_dispatch_guard import main
+    from autoskillit.hooks.fleet_dispatch_guard import main
 
     stdin_content = raw_stdin if raw_stdin is not None else json.dumps(tool_input)
     env_updates: dict[str, str] = {}
@@ -57,8 +57,8 @@ def test_guard_permits_interactive_caller():
 
 @pytest.mark.parametrize(
     "session_type",
-    ["orchestrator", "franchise", "leaf", None],
-    ids=["orchestrator", "franchise", "leaf", "unset"],
+    ["orchestrator", "fleet", "leaf", None],
+    ids=["orchestrator", "fleet", "leaf", "unset"],
 )
 def test_guard_denies_headless_regardless_of_session_type(session_type):
     out = _run_guard(
@@ -78,7 +78,7 @@ def test_guard_ignores_unrelated_tool():
     out = _run_guard(
         {"tool_name": "Bash"},
         headless=True,
-        session_type="franchise",
+        session_type="fleet",
     )
     assert not out.strip()
 

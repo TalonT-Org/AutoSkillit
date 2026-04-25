@@ -9,7 +9,7 @@ import pytest
 
 from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
 
-pytestmark = [pytest.mark.layer("franchise"), pytest.mark.small, pytest.mark.feature("franchise")]
+pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
 
 def _make_recipe_info(name: str = "test-recipe"):
@@ -60,7 +60,7 @@ def _setup_dispatch(tool_ctx, monkeypatch, recipe_name: str = "test-recipe"):
 
 
 async def _run(tool_ctx, recipe: str = "test-recipe") -> dict:
-    from autoskillit.franchise._api import execute_dispatch
+    from autoskillit.fleet._api import execute_dispatch
 
     raw = await execute_dispatch(
         tool_ctx=tool_ctx,
@@ -85,7 +85,7 @@ def _read_dispatch_record(tool_ctx) -> dict:
 
 
 def _make_no_sentinel():
-    from autoskillit.franchise.result_parser import L2ParseResult
+    from autoskillit.fleet.result_parser import L2ParseResult
 
     return L2ParseResult(
         outcome="no_sentinel",
@@ -97,7 +97,7 @@ def _make_no_sentinel():
 
 
 def _make_completed_dirty():
-    from autoskillit.franchise.result_parser import L2ParseResult
+    from autoskillit.fleet.result_parser import L2ParseResult
 
     return L2ParseResult(
         outcome="completed_dirty",
@@ -109,7 +109,7 @@ def _make_completed_dirty():
 
 
 def _make_completed_clean(success: bool, reason: str = ""):
-    from autoskillit.franchise.result_parser import L2ParseResult
+    from autoskillit.fleet.result_parser import L2ParseResult
 
     payload: dict = {"success": success}
     if reason:
@@ -174,7 +174,7 @@ class TestTimeoutPath:
             raise AssertionError("parse_l2_result_block called on timeout path")
 
         monkeypatch.setattr(
-            "autoskillit.franchise._api.parse_l2_result_block",
+            "autoskillit.fleet._api.parse_l2_result_block",
             _should_not_be_called,
         )
 
@@ -227,7 +227,7 @@ class TestTimeoutPath:
             parse_called.append(True)
             return _make_no_sentinel()
 
-        monkeypatch.setattr("autoskillit.franchise._api.parse_l2_result_block", _recording_parse)
+        monkeypatch.setattr("autoskillit.fleet._api.parse_l2_result_block", _recording_parse)
 
         await _run(tool_ctx)
         assert parse_called, "parse_l2_result_block was not called for idle_stall"
@@ -241,7 +241,7 @@ class TestNoSentinelPath:
         """no_sentinel outcome → DispatchRecord.reason = 'l2_no_result_block'."""
         _setup_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
-            "autoskillit.franchise._api.parse_l2_result_block",
+            "autoskillit.fleet._api.parse_l2_result_block",
             lambda **_: _make_no_sentinel(),
         )
 
@@ -266,7 +266,7 @@ class TestNoSentinelPath:
             )
         )
         monkeypatch.setattr(
-            "autoskillit.franchise._api.parse_l2_result_block",
+            "autoskillit.fleet._api.parse_l2_result_block",
             lambda **_: _make_no_sentinel(),
         )
 
@@ -282,7 +282,7 @@ class TestCompletedDirtyPath:
         """completed_dirty outcome → DispatchRecord.reason = 'l2_parse_failed'."""
         _setup_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
-            "autoskillit.franchise._api.parse_l2_result_block",
+            "autoskillit.fleet._api.parse_l2_result_block",
             lambda **_: _make_completed_dirty(),
         )
 
@@ -298,7 +298,7 @@ class TestCompletedCleanPath:
         """completed_clean with success=True → DispatchRecord.reason = ''."""
         _setup_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
-            "autoskillit.franchise._api.parse_l2_result_block",
+            "autoskillit.fleet._api.parse_l2_result_block",
             lambda **_: _make_completed_clean(success=True),
         )
 
@@ -312,7 +312,7 @@ class TestCompletedCleanPath:
         """completed_clean success=False: payload.reason → DispatchRecord.reason."""
         _setup_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
-            "autoskillit.franchise._api.parse_l2_result_block",
+            "autoskillit.fleet._api.parse_l2_result_block",
             lambda **_: _make_completed_clean(success=False, reason="my-failure-reason"),
         )
 

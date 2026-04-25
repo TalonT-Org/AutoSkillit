@@ -535,7 +535,7 @@ async def test_open_kitchen_no_redisable_when_empty(tmp_path, monkeypatch):
     mock_ctx.enable_components = AsyncMock()
     mock_ctx.disable_components = AsyncMock()
     mock_ctx.config = AutomationConfig(
-        subsets=SubsetsConfig(disabled=[]), features={"franchise": True}
+        subsets=SubsetsConfig(disabled=[]), features={"fleet": True}
     )
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
@@ -1301,17 +1301,17 @@ async def test_open_kitchen_degrades_gracefully_without_sous_chef(tmp_path, monk
 
 @pytest.mark.anyio
 async def test_redisable_subsets_includes_feature_tags() -> None:
-    """When franchise feature is disabled, _redisable_subsets disables franchise tag."""
+    """When fleet feature is disabled, _redisable_subsets disables fleet tag."""
     from autoskillit.server.tools_kitchen import _redisable_subsets
 
     mock_ctx = AsyncMock()
 
-    await _redisable_subsets(mock_ctx, [], features={"franchise": False})
+    await _redisable_subsets(mock_ctx, [], features={"fleet": False})
 
     calls = mock_ctx.disable_components.call_args_list
     disabled_tag_sets = [c.kwargs.get("tags", set()) for c in calls]
-    assert any("franchise" in tags for tags in disabled_tag_sets), (
-        "franchise tag must be disabled when franchise feature is off"
+    assert any("fleet" in tags for tags in disabled_tag_sets), (
+        "fleet tag must be disabled when fleet feature is off"
     )
 
 
@@ -1333,12 +1333,12 @@ async def test_redisable_subsets_does_not_disable_kitchen_core_tag() -> None:
 
     mock_ctx.disable_components.side_effect = capture_disable
 
-    # No subsets disabled, but franchise feature is explicitly disabled
-    await _redisable_subsets(mock_ctx, [], features={"franchise": False})
+    # No subsets disabled, but fleet feature is explicitly disabled
+    await _redisable_subsets(mock_ctx, [], features={"fleet": False})
 
-    # franchise tag should be disabled
-    assert any("franchise" in t for t in disabled_tags), (
-        "franchise tag must be suppressed when feature is off"
+    # fleet tag should be disabled
+    assert any("fleet" in t for t in disabled_tags), (
+        "fleet tag must be suppressed when feature is off"
     )
     # kitchen-core must NOT be in the disabled set (union model: still visible)
     assert not any("kitchen-core" in t for t in disabled_tags), (

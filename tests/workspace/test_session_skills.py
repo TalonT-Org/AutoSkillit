@@ -486,30 +486,30 @@ def test_init_session_recipe_packs_enables_default_disabled(tmp_path: Path) -> N
 
 
 def test_skill_disabled_when_feature_off(tmp_path: Path) -> None:
-    """make-campaign excluded from session skills when features.franchise=false."""
+    """make-campaign excluded from session skills when features.fleet=false."""
     from tests._helpers import make_test_config
 
-    config = make_test_config(features={"franchise": False})
+    config = make_test_config(features={"fleet": False})
     provider = SkillsDirectoryProvider()
     mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
-    session_path = mgr.init_session("test-franchise-off", cook_session=False, config=config)
+    session_path = mgr.init_session("test-fleet-off", cook_session=False, config=config)
     skill_names = {p.parent.name for p in session_path.glob(".claude/skills/*/SKILL.md")}
     assert "make-campaign" not in skill_names, (
-        "make-campaign must be excluded when franchise feature is disabled"
+        "make-campaign must be excluded when fleet feature is disabled"
     )
 
 
 def test_skill_enabled_when_feature_on(tmp_path: Path) -> None:
-    """make-campaign present in session skills when features.franchise=true."""
+    """make-campaign present in session skills when features.fleet=true."""
     from tests._helpers import make_test_config
 
-    config = make_test_config(features={"franchise": True})
+    config = make_test_config(features={"fleet": True})
     provider = SkillsDirectoryProvider()
     mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
-    session_path = mgr.init_session("test-franchise-on", cook_session=False, config=config)
+    session_path = mgr.init_session("test-fleet-on", cook_session=False, config=config)
     skill_names = {p.parent.name for p in session_path.glob(".claude/skills/*/SKILL.md")}
     assert "make-campaign" in skill_names, (
-        "make-campaign must be present when franchise feature is enabled"
+        "make-campaign must be present when fleet feature is enabled"
     )
 
 
@@ -521,16 +521,16 @@ def test_skill_suppressed_when_no_features_config(tmp_path: Path) -> None:
     skill_names = {p.parent.name for p in session_path.glob(".claude/skills/*/SKILL.md")}
     assert "make-campaign" not in skill_names, (
         "make-campaign must be absent when no features config is provided "
-        "(franchise.default_enabled=False)"
+        "(fleet.default_enabled=False)"
     )
 
 
-def test_other_skills_unaffected_by_franchise_feature(tmp_path: Path) -> None:
-    """Non-franchise skills unaffected when franchise feature is disabled."""
+def test_other_skills_unaffected_by_fleet_feature(tmp_path: Path) -> None:
+    """Non-fleet skills unaffected when fleet feature is disabled."""
     from tests._helpers import make_test_config
 
-    config_off = make_test_config(features={"franchise": False})
-    config_on = make_test_config(features={"franchise": True})
+    config_off = make_test_config(features={"fleet": False})
+    config_on = make_test_config(features={"fleet": True})
     provider = SkillsDirectoryProvider()
     mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
     session_off = mgr.init_session(
@@ -543,16 +543,16 @@ def test_other_skills_unaffected_by_franchise_feature(tmp_path: Path) -> None:
     skill_names_on = {p.parent.name for p in session_on.glob(".claude/skills/*/SKILL.md")}
     assert "make-plan" in skill_names_off
     assert "implement-worktree" in skill_names_off
-    # Count invariant: franchise=False removes exactly the franchise-category skills
+    # Count invariant: fleet=False removes exactly the fleet-category skills
     assert skill_names_off.issubset(skill_names_on), (
-        "franchise=False must only remove skills, not introduce new suppressions"
+        "fleet=False must only remove skills, not introduce new suppressions"
     )
     suppressed = skill_names_on - skill_names_off
-    assert suppressed, "franchise=False must suppress at least one skill"
+    assert suppressed, "fleet=False must suppress at least one skill"
     assert "make-campaign" in suppressed, "make-campaign must be in the suppressed set"
-    assert "make-plan" not in suppressed, "make-plan must not be suppressed by franchise=False"
+    assert "make-plan" not in suppressed, "make-plan must not be suppressed by fleet=False"
     assert "implement-worktree" not in suppressed, (
-        "implement-worktree must not be suppressed by franchise=False"
+        "implement-worktree must not be suppressed by fleet=False"
     )
 
 
@@ -563,14 +563,14 @@ def test_cook_session_bypasses_feature_gate(tmp_path: Path) -> None:
     """Cook sessions see all skills regardless of feature flags."""
     from tests._helpers import make_test_config
 
-    config = make_test_config(features={"franchise": False})
+    config = make_test_config(features={"fleet": False})
     provider = SkillsDirectoryProvider()
     mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
     session_path = mgr.init_session("cook-feat-gate", cook_session=True, config=config)
     skill_names = {p.parent.name for p in session_path.glob(".claude/skills/*/SKILL.md")}
     assert "make-campaign" in skill_names, (
         "cook_session=True should bypass feature gates — "
-        "make-campaign must be available even when franchise is disabled"
+        "make-campaign must be available even when fleet is disabled"
     )
 
 
@@ -578,28 +578,28 @@ def test_cook_session_disabled_feature_tags_empty(tmp_path: Path) -> None:
     """disabled_feature_tags is empty frozenset for cook sessions."""
     from tests._helpers import make_test_config
 
-    config = make_test_config(features={"franchise": False})
+    config = make_test_config(features={"fleet": False})
     provider = SkillsDirectoryProvider()
     mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
     session_path = mgr.init_session("cook-tags-empty", cook_session=True, config=config)
-    # Verify via the integration effect: franchise-tagged skills are present
+    # Verify via the integration effect: fleet-tagged skills are present
     skill_names = {p.parent.name for p in session_path.glob(".claude/skills/*/SKILL.md")}
-    # If disabled_feature_tags were non-empty, franchise skills would be suppressed
+    # If disabled_feature_tags were non-empty, fleet skills would be suppressed
     # via _resolve_effective_disabled even without the _is_skill_disabled feature loop
     assert "make-campaign" in skill_names
 
 
 def test_non_cook_session_still_suppresses_feature_gated_skills(tmp_path: Path) -> None:
-    """Non-cook sessions with franchise=False still suppress make-campaign."""
+    """Non-cook sessions with fleet=False still suppress make-campaign."""
     from tests._helpers import make_test_config
 
-    config = make_test_config(features={"franchise": False})
+    config = make_test_config(features={"fleet": False})
     provider = SkillsDirectoryProvider()
     mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
     session_path = mgr.init_session("non-cook-feat", cook_session=False, config=config)
     skill_names = {p.parent.name for p in session_path.glob(".claude/skills/*/SKILL.md")}
     assert "make-campaign" not in skill_names, (
-        "Non-cook session with franchise=False must suppress make-campaign"
+        "Non-cook session with fleet=False must suppress make-campaign"
     )
 
 
@@ -1173,6 +1173,6 @@ def test_resolve_effective_disabled_includes_feature_tags() -> None:
         pack_registry=PACK_REGISTRY,
         packs_enabled=[],
         recipe_packs=None,
-        disabled_feature_tags=frozenset({"franchise"}),
+        disabled_feature_tags=frozenset({"fleet"}),
     )
-    assert "franchise" in result
+    assert "fleet" in result

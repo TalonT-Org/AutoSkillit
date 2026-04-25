@@ -9,7 +9,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from autoskillit.cli._terminal import terminal_guard
-from autoskillit.franchise import FRANCHISE_MENU_TOOLS
+from autoskillit.fleet import FLEET_MENU_TOOLS
 
 _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Execution", ("run_cmd", "run_python", "run_skill")),
@@ -66,7 +66,7 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "get_quota_events",
         ),
     ),
-    ("Franchise", FRANCHISE_MENU_TOOLS),
+    ("Fleet", FLEET_MENU_TOOLS),
     ("Kitchen", ("open_kitchen", "close_kitchen", "disable_quota_guard", "reload_session")),
 )
 

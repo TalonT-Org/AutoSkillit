@@ -70,20 +70,48 @@ def _check_unbounded_cycles(ctx: ValidationContext) -> list[RuleFinding]:
                         and recipe.steps[s].tool in SKILL_TOOLS
                         and recipe.steps[s].on_exhausted not in cycle_set
                     ]
-                    success_stays_in_cycle = any(
-                        recipe.steps[s].on_success in cycle_set
-                        for s in retrying_steps
-                        if recipe.steps[s].on_success is not None
-                    )
+                    # Check whether any non-failure successor of the retrying step
+                    # stays within the cycle. Uses the step graph (which includes
+                    # on_result routes) rather than on_success alone, so steps that
+                    # route via on_result without an explicit on_success are handled.
+                    success_stays_in_cycle = False
+                    for _s in retrying_steps:
+                        _step = recipe.steps[_s]
+                        _fail_targets = {
+                            t
+                            for t in (
+                                _step.on_failure,
+                                _step.on_exhausted,
+                                _step.on_context_limit,
+                            )
+                            if t
+                        }
+                        if any(
+                            succ in cycle_set
+                            for succ in graph.get(_s, set())
+                            if succ not in _fail_targets
+                        ):
+                            success_stays_in_cycle = True
+                            break
                     if not success_stays_in_cycle:
                         # Success path exits the cycle — but does it loop back?
                         # BFS from exit targets to check if they can reach any
                         # cycle member through the step graph.
                         exit_targets: set[str] = set()
                         for _rs in retrying_steps:
-                            _os = recipe.steps[_rs].on_success
-                            if _os is not None and _os not in cycle_set:
-                                exit_targets.add(_os)
+                            _step_r = recipe.steps[_rs]
+                            _fail_targets_r = {
+                                t
+                                for t in (
+                                    _step_r.on_failure,
+                                    _step_r.on_exhausted,
+                                    _step_r.on_context_limit,
+                                )
+                                if t
+                            }
+                            for succ in graph.get(_rs, set()):
+                                if succ not in cycle_set and succ not in _fail_targets_r:
+                                    exit_targets.add(succ)
                         loops_back = False
                         visited_exit: set[str] = set()
                         frontier = exit_targets

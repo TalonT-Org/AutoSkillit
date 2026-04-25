@@ -686,14 +686,14 @@ def _check_installed_plugins_entry(
 
 
 def _check_ambient_session_type_leaf() -> DoctorResult:
-    """Detect ambient SESSION_TYPE=leaf — common env leakage from franchise subprocesses."""
+    """Detect ambient SESSION_TYPE=leaf — common env leakage from fleet subprocesses."""
     raw = os.environ.get(SESSION_TYPE_ENV_VAR, "")
     if raw.lower() == "leaf":
         return DoctorResult(
             Severity.WARNING,
             "ambient_session_type_leaf",
             "Ambient SESSION_TYPE=leaf detected. "
-            "Did you intend to set SESSION_TYPE=leaf? Franchise sessions should set "
+            "Did you intend to set SESSION_TYPE=leaf? Fleet sessions should set "
             "SESSION_TYPE=leaf only in launched subprocesses.",
         )
     return DoctorResult(
@@ -720,20 +720,20 @@ def _check_ambient_session_type_orchestrator() -> DoctorResult:
     )
 
 
-def _check_ambient_session_type_franchise() -> DoctorResult:
-    """Detect ambient SESSION_TYPE=franchise outside a franchise CLI session."""
+def _check_ambient_session_type_fleet() -> DoctorResult:
+    """Detect ambient SESSION_TYPE=fleet outside a fleet CLI session."""
     raw = os.environ.get(SESSION_TYPE_ENV_VAR, "")
-    if raw.lower() == "franchise":
+    if raw.lower() == "fleet":
         return DoctorResult(
             Severity.WARNING,
-            "ambient_session_type_franchise",
-            "Ambient SESSION_TYPE=franchise outside of a franchise CLI session "
+            "ambient_session_type_fleet",
+            "Ambient SESSION_TYPE=fleet outside of a fleet CLI session "
             "— highest-privilege env, suspicious.",
         )
     return DoctorResult(
         Severity.OK,
-        "ambient_session_type_franchise",
-        "No ambient franchise session type",
+        "ambient_session_type_fleet",
+        "No ambient fleet session type",
     )
 
 
@@ -769,44 +769,44 @@ def _check_sous_chef_bundled() -> DoctorResult:
     )
 
 
-def _check_franchise_dispatch_guard_registered() -> DoctorResult:
-    """Check that franchise dispatch guard is registered in HOOK_REGISTRY."""
+def _check_fleet_dispatch_guard_registered() -> DoctorResult:
+    """Check that fleet dispatch guard is registered in HOOK_REGISTRY."""
     from autoskillit.hook_registry import HOOKS_DIR
 
-    check_name = "franchise_dispatch_guard_registered"
-    if "franchise_dispatch_guard.py" not in canonical_script_basenames():
+    check_name = "fleet_dispatch_guard_registered"
+    if "fleet_dispatch_guard.py" not in canonical_script_basenames():
         return DoctorResult(
             Severity.ERROR,
             check_name,
-            "Franchise dispatch guard not registered in hooks.json. "
+            "Fleet dispatch guard not registered in hooks.json. "
             "Run: autoskillit config sync-hooks",
         )
-    if not (HOOKS_DIR / "franchise_dispatch_guard.py").is_file():
+    if not (HOOKS_DIR / "fleet_dispatch_guard.py").is_file():
         return DoctorResult(
             Severity.ERROR,
             check_name,
-            "Franchise dispatch guard registered but script file missing on disk. "
+            "Fleet dispatch guard registered but script file missing on disk. "
             "Run: autoskillit install",
         )
     return DoctorResult(
         Severity.OK,
         check_name,
-        "Franchise dispatch guard registered and accessible",
+        "Fleet dispatch guard registered and accessible",
     )
 
 
-def _check_stale_franchise_state(project_dir: Path | None = None) -> DoctorResult:
+def _check_stale_fleet_state(project_dir: Path | None = None) -> DoctorResult:
     """Check for stale campaign state files with running dispatches > 7 days old."""
     import time
 
     root = project_dir or Path.cwd()
-    franchise_dir = root / ".autoskillit" / "temp" / "franchise"
-    check_name = "stale_franchise_state"
-    if not franchise_dir.is_dir():
-        return DoctorResult(Severity.OK, check_name, "No franchise state directory")
+    fleet_dir = root / ".autoskillit" / "temp" / "fleet"
+    check_name = "stale_fleet_state"
+    if not fleet_dir.is_dir():
+        return DoctorResult(Severity.OK, check_name, "No fleet state directory")
     threshold = time.time() - (_STALE_THRESHOLD_DAYS * 86400)
     stale_paths: list[str] = []
-    for campaign_dir in franchise_dir.iterdir():
+    for campaign_dir in fleet_dir.iterdir():
         if not campaign_dir.is_dir():
             continue
         state_file = campaign_dir / "state.json"
@@ -828,9 +828,9 @@ def _check_stale_franchise_state(project_dir: Path | None = None) -> DoctorResul
             Severity.WARNING,
             check_name,
             f"Stale campaign state > {_STALE_THRESHOLD_DAYS} days: {paths_str}. "
-            f"Run: autoskillit franchise status <id> --reap",
+            f"Run: autoskillit fleet status <id> --reap",
         )
-    return DoctorResult(Severity.OK, check_name, "No stale franchise state files")
+    return DoctorResult(Severity.OK, check_name, "No stale fleet state files")
 
 
 def _check_campaign_onboarding_hint(project_dir: Path | None = None) -> DoctorResult:
@@ -1184,7 +1184,7 @@ def run_doctor(*, output_json: bool = False) -> None:
     # Check 17: Update-prompt dismissal state
     results.append(_check_update_dismissal_state())
 
-    # -- Franchise doctor checks (ambient env + infrastructure health) --
+    # -- Fleet doctor checks (ambient env + infrastructure health) --
 
     # Check 18: Ambient SESSION_TYPE=leaf leak detection
     results.append(_check_ambient_session_type_leaf())
@@ -1192,8 +1192,8 @@ def run_doctor(*, output_json: bool = False) -> None:
     # Check 19: Ambient SESSION_TYPE=orchestrator leak detection
     results.append(_check_ambient_session_type_orchestrator())
 
-    # Check 20: Ambient SESSION_TYPE=franchise leak detection
-    results.append(_check_ambient_session_type_franchise())
+    # Check 20: Ambient SESSION_TYPE=fleet leak detection
+    results.append(_check_ambient_session_type_fleet())
 
     # Check 21: Ambient CAMPAIGN_ID leak detection
     results.append(_check_ambient_campaign_id())
@@ -1204,16 +1204,16 @@ def run_doctor(*, output_json: bool = False) -> None:
     # Check 23: Feature registry import consistency
     results.append(_check_feature_registry_consistency())
 
-    # Checks 24–28: Franchise infrastructure — only when franchise feature is enabled
-    if is_feature_enabled("franchise", cfg.features):
+    # Checks 24–28: Fleet infrastructure — only when fleet feature is enabled
+    if is_feature_enabled("fleet", cfg.features):
         # Check 24: Sous-chef skill directory exists
         results.append(_check_sous_chef_bundled())
 
-        # Check 25: Franchise dispatch guard registered
-        results.append(_check_franchise_dispatch_guard_registered())
+        # Check 25: Fleet dispatch guard registered
+        results.append(_check_fleet_dispatch_guard_registered())
 
-        # Check 26: Stale franchise state (running > 7 days)
-        results.append(_check_stale_franchise_state())
+        # Check 26: Stale fleet state (running > 7 days)
+        results.append(_check_stale_fleet_state())
 
         # Check 27: Campaign onboarding hint
         results.append(_check_campaign_onboarding_hint())

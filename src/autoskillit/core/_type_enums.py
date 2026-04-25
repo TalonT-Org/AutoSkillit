@@ -29,7 +29,7 @@ __all__ = [
     "PRState",
     "SessionType",
     "session_type",
-    "FranchiseErrorCode",
+    "FleetErrorCode",
     "FeatureLifecycle",
 ]
 
@@ -338,13 +338,11 @@ class PRState(StrEnum):
 class SessionType(StrEnum):
     """Tier discriminator for fleet session hierarchy.
 
-    FLEET — top-level campaign coordinator (canonical name)
-    FRANCHISE — top-level campaign coordinator (deprecated alias for FLEET)
+    FLEET — top-level campaign coordinator
     ORCHESTRATOR — mid-tier recipe runner (interactive or headless)
     LEAF — bottom-tier single-task worker (headless test_check only)
     """
 
-    FRANCHISE = "franchise"
     FLEET = "fleet"
     ORCHESTRATOR = "orchestrator"
     LEAF = "leaf"
@@ -363,14 +361,6 @@ def session_type() -> SessionType:
     raw = os.environ.get(_SESSION_TYPE_ENV_VAR, "")
     if raw:
         raw_lower = raw.lower()
-        if raw_lower == "franchise":
-            warnings.warn(
-                f"{_SESSION_TYPE_ENV_VAR}={raw!r} is deprecated. "
-                "Use AUTOSKILLIT_SESSION_TYPE=fleet instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            return SessionType.FLEET
         try:
             return SessionType(raw_lower)
         except ValueError:
@@ -393,20 +383,21 @@ def session_type() -> SessionType:
 
 
 @unique
-class FranchiseErrorCode(StrEnum):
-    """Registered error codes for franchise dispatch failures.
+class FleetErrorCode(StrEnum):
+    """Registered error codes for fleet dispatch failures.
 
-    Every franchise error envelope must use one of these codes.
-    Unregistered codes are rejected by franchise_error() at runtime.
+    Every fleet error envelope must use one of these codes.
+    Unregistered codes are rejected by fleet_error() at runtime.
     """
 
-    FRANCHISE_PARALLEL_REFUSED = "franchise_parallel_refused"
-    FRANCHISE_UNKNOWN_INGREDIENT = "franchise_unknown_ingredient"
-    FRANCHISE_RECIPE_NOT_FOUND = "franchise_recipe_not_found"
-    FRANCHISE_INVALID_RECIPE_KIND = "franchise_invalid_recipe_kind"
-    FRANCHISE_HARD_REFUSAL_HEADLESS = "franchise_hard_refusal_headless"
-    FRANCHISE_MANIFEST_MISSING = "franchise_manifest_missing"
-    FRANCHISE_MANIFEST_CORRUPTED = "franchise_manifest_corrupted"
+    FLEET_PARALLEL_REFUSED = "fleet_parallel_refused"
+    FLEET_UNKNOWN_INGREDIENT = "fleet_unknown_ingredient"
+    FLEET_RECIPE_NOT_FOUND = "fleet_recipe_not_found"
+    FLEET_INVALID_RECIPE_KIND = "fleet_invalid_recipe_kind"
+    FLEET_HARD_REFUSAL_HEADLESS = "fleet_hard_refusal_headless"
+    FLEET_MANIFEST_MISSING = "fleet_manifest_missing"
+    FLEET_MANIFEST_CORRUPTED = "fleet_manifest_corrupted"
+    FLEET_LOCK_NOT_INITIALIZED = "fleet_lock_not_initialized"
     L2_TIMEOUT = "l2_timeout"
     L2_NO_RESULT_BLOCK = "l2_no_result_block"
     L2_PARSE_FAILED = "l2_parse_failed"

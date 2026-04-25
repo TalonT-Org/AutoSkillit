@@ -10,7 +10,7 @@ import json
 
 import pytest
 
-pytestmark = [pytest.mark.layer("franchise"), pytest.mark.small, pytest.mark.feature("franchise")]
+pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
 _VALID_CAMPAIGN_ID = "test-cid-123"
 
@@ -71,7 +71,7 @@ _VALID_SENTINEL_TEXT = _make_sentinel_text(_VALID_SUMMARY_DICT)
 
 class TestCampaignSummarySchema:
     def test_campaign_summary_schema_valid_example(self):
-        from autoskillit.franchise import CampaignSummary, parse_campaign_summary
+        from autoskillit.fleet import CampaignSummary, parse_campaign_summary
 
         result = parse_campaign_summary(_VALID_SENTINEL_TEXT, _VALID_CAMPAIGN_ID)
         assert result is not None
@@ -87,7 +87,7 @@ class TestCampaignSummarySchema:
         assert len(result.error_records) == 1
 
     def test_campaign_summary_rejects_aggregate_fields(self):
-        from autoskillit.franchise import validate_campaign_summary
+        from autoskillit.fleet import validate_campaign_summary
 
         data = {**_VALID_SUMMARY_DICT, "total_input_tokens": 999}
         errors = validate_campaign_summary(data)
@@ -102,7 +102,7 @@ class TestCampaignSummarySchema:
         assert any("total_duration" in e for e in errors3)
 
     def test_campaign_summary_status_enum_strict(self):
-        from autoskillit.franchise import CampaignSummaryStatus, validate_campaign_summary
+        from autoskillit.fleet import CampaignSummaryStatus, validate_campaign_summary
 
         assert set(m.value for m in CampaignSummaryStatus) == {"success", "failure", "skipped"}
         assert len(CampaignSummaryStatus) == 3
@@ -115,26 +115,26 @@ class TestCampaignSummarySchema:
     def test_per_dispatch_token_usage_exactly_4_keys(self):
         import dataclasses
 
-        from autoskillit.franchise import DispatchTokenUsage
+        from autoskillit.fleet import DispatchTokenUsage
 
         fields = {f.name for f in dataclasses.fields(DispatchTokenUsage)}
         assert fields == {"input", "output", "cache_read", "cache_creation"}
 
     def test_sentinel_anchored_to_campaign_id(self):
-        from autoskillit.franchise import parse_campaign_summary
+        from autoskillit.fleet import parse_campaign_summary
 
         result = parse_campaign_summary(_VALID_SENTINEL_TEXT, "wrong-id")
         assert result is None
 
     def test_sentinel_parse_missing_end_marker(self):
-        from autoskillit.franchise import parse_campaign_summary
+        from autoskillit.fleet import parse_campaign_summary
 
         text_no_end = f"---campaign-summary::{_VALID_CAMPAIGN_ID}---\n{{}}\n"
         result = parse_campaign_summary(text_no_end, _VALID_CAMPAIGN_ID)
         assert result is None
 
     def test_campaign_summary_schema_version_is_1(self):
-        from autoskillit.franchise import parse_campaign_summary, validate_campaign_summary
+        from autoskillit.fleet import parse_campaign_summary, validate_campaign_summary
 
         result = parse_campaign_summary(_VALID_SENTINEL_TEXT, _VALID_CAMPAIGN_ID)
         assert result is not None
@@ -145,7 +145,7 @@ class TestCampaignSummarySchema:
         assert any("schema_version" in e for e in errors)
 
     def test_campaign_summary_count_fields_required(self):
-        from autoskillit.franchise import validate_campaign_summary
+        from autoskillit.fleet import validate_campaign_summary
 
         for required_field in (
             "dispatch_count",
@@ -158,7 +158,7 @@ class TestCampaignSummarySchema:
             assert errors, f"Expected error for missing {required_field}"
 
     def test_campaign_summary_roundtrip(self):
-        from autoskillit.franchise import (
+        from autoskillit.fleet import (
             parse_campaign_summary,
             serialize_campaign_summary,
         )
@@ -178,7 +178,7 @@ class TestCampaignSummarySchema:
         assert restored.error_records[0].code == original.error_records[0].code
 
     def test_campaign_summary_error_records_have_code_field(self):
-        from autoskillit.franchise import SummaryErrorRecord, parse_campaign_summary
+        from autoskillit.fleet import SummaryErrorRecord, parse_campaign_summary
 
         result = parse_campaign_summary(_VALID_SENTINEL_TEXT, _VALID_CAMPAIGN_ID)
         assert result is not None
@@ -191,7 +191,7 @@ class TestCampaignSummarySchema:
         assert rec.l2_session_id == "sess-def"
 
     def test_campaign_summary_no_cross_dispatch_aggregates(self):
-        from autoskillit.franchise import validate_campaign_summary
+        from autoskillit.fleet import validate_campaign_summary
 
         for forbidden_key in ("total_anything", "total_cost", "total_tokens"):
             data = {**_VALID_SUMMARY_DICT, forbidden_key: 0}
@@ -201,7 +201,7 @@ class TestCampaignSummarySchema:
             )
 
     def test_parse_campaign_summary_malformed_json(self):
-        from autoskillit.franchise import parse_campaign_summary
+        from autoskillit.fleet import parse_campaign_summary
 
         text = (
             f"---campaign-summary::{_VALID_CAMPAIGN_ID}---\n"

@@ -1,6 +1,6 @@
 """Food truck prompt builder for L2 dispatch sessions.
 
-Moved from autoskillit.cli._prompts per TODO(franchise) note — this module
+Moved from autoskillit.cli._prompts — this module
 depends only on autoskillit.core and stdlib, making it importable from both
 the server and CLI layers without introducing cross-L3 coupling.
 """
@@ -204,7 +204,7 @@ Emit the sentinel block with:
   "reason": "quota_exhausted",
   "wait_seconds": <seconds_until_reset>
 
-The franchise dispatcher will schedule a retry after the wait period.
+The fleet dispatcher will schedule a retry after the wait period.
 Do NOT loop indefinitely on quota denials — if 3 consecutive quota
 denials occur with no successful run_skill between them, emit the
 quota_exhausted sentinel and exit.
@@ -248,6 +248,6 @@ Fields:
 - summary: One-line description of what happened
 
 The sentinel markers ---l2-result::{dispatch_id}--- and ---end-l2-result::{dispatch_id}---
-are parsed by the franchise dispatcher. The %%L2_DONE::{dispatch_id_short}%% marker
+are parsed by the fleet dispatcher. The %%L2_DONE::{dispatch_id_short}%% marker
 signals session completion to the process monitor.
 """

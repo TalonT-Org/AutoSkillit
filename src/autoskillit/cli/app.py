@@ -6,6 +6,7 @@ import dataclasses
 import json
 import os
 import random
+import re
 import sys
 from datetime import UTC
 from pathlib import Path
@@ -41,6 +42,8 @@ from autoskillit.core import (
     pkg_root,
     resume_spec_from_cli,
 )
+
+_UUID_RE = re.compile(r"^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$", re.IGNORECASE)
 
 app = App(
     name="autoskillit",
@@ -568,6 +571,21 @@ def order(recipe: str | None = None, session_id: str | None = None, *, resume: b
         sys.exit(1)
     _resume = resume or (session_id is not None)
     resume_spec = resume_spec_from_cli(resume=_resume, session_id=session_id)
+
+    if _resume and recipe is not None and session_id is None and _UUID_RE.match(recipe):
+        session_id = recipe
+        recipe = None
+        resume_spec = resume_spec_from_cli(resume=True, session_id=session_id)
+
+    if _resume and recipe is None:
+        from autoskillit.cli._prompts import _OPEN_KITCHEN_GREETINGS
+
+        _launch_cook_session(
+            "",
+            initial_message=random.choice(_OPEN_KITCHEN_GREETINGS),
+            resume_spec=resume_spec,
+        )
+        return
 
     mcp_prefix = detect_autoskillit_mcp_prefix()
 

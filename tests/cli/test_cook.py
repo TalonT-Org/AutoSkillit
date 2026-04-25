@@ -1498,3 +1498,71 @@ class TestOrderResumeParsing:
         assert captured["resume_spec"] == NamedResume(
             session_id="fa910a41-d1ca-4cae-b878-01028a0c7c1c"
         )
+
+    def test_order_resume_uuid_without_recipe_routes_correctly(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """order --resume <uuid> (no recipe name) reroutes UUID to session_id — REQ-CLI-003."""
+        from autoskillit.cli.app import app
+        from autoskillit.core import NamedResume, NoResume
+
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+
+        captured: dict = {}
+
+        def fake_launch(prompt, *, initial_message=None, extra_env=None, resume_spec=NoResume()):
+            captured["resume_spec"] = resume_spec
+
+        with patch("autoskillit.cli.app._launch_cook_session", side_effect=fake_launch):
+            with pytest.raises(SystemExit) as exc_info:
+                app(["order", "--resume", "4b581974-1f19-4aec-8405-78c5ede5e233"])
+            assert exc_info.value.code == 0
+
+        assert captured["resume_spec"] == NamedResume(
+            session_id="4b581974-1f19-4aec-8405-78c5ede5e233"
+        )
+
+    def test_order_bare_resume_skips_recipe_validation(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """order --resume (no uuid, no recipe) calls _launch_cook_session with BareResume."""
+        from autoskillit.cli.app import app
+        from autoskillit.core import BareResume, NoResume
+
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+
+        captured: dict = {}
+
+        def fake_launch(prompt, *, initial_message=None, extra_env=None, resume_spec=NoResume()):
+            captured["resume_spec"] = resume_spec
+
+        with patch("autoskillit.cli.app._launch_cook_session", side_effect=fake_launch):
+            with pytest.raises(SystemExit) as exc_info:
+                app(["order", "--resume"])
+            assert exc_info.value.code == 0
+
+        assert captured["resume_spec"] == BareResume()
+
+    def test_order_resume_uuid_does_not_validate_recipe(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """order --resume <uuid> bypasses find_recipe_by_name — UUID is not a recipe name."""
+        from autoskillit.cli.app import app
+
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+
+        find_called = []
+        monkeypatch.setattr(
+            "autoskillit.recipe.find_recipe_by_name",
+            lambda *a, **kw: find_called.append(a) or None,
+        )
+
+        with patch("autoskillit.cli.app._launch_cook_session"):
+            with pytest.raises(SystemExit) as exc_info:
+                app(["order", "--resume", "4b581974-1f19-4aec-8405-78c5ede5e233"])
+            assert exc_info.value.code == 0
+
+        assert find_called == [], "find_recipe_by_name must NOT be called on resume without recipe"

@@ -119,3 +119,55 @@ def test_run_interactive_session_no_plugin_dir_when_installed(
     captured = _capture_subprocess(monkeypatch)
     _run_interactive_session(system_prompt="test")
     assert ClaudeFlags.PLUGIN_DIR not in captured["cmd"]
+
+
+# ---------------------------------------------------------------------------
+# system prompt suppressed for resume sessions
+# ---------------------------------------------------------------------------
+
+
+def test_run_interactive_session_suppresses_system_prompt_on_named_resume(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_run_interactive_session omits --append-system-prompt when resume_spec is NamedResume."""
+    from autoskillit.core import NamedResume
+
+    _stub_plugin_installed(monkeypatch)
+    captured = _capture_subprocess(monkeypatch)
+    _run_interactive_session(
+        system_prompt="should-not-appear",
+        resume_spec=NamedResume(session_id="4b581974-1f19-4aec-8405-78c5ede5e233"),
+    )
+    assert ClaudeFlags.APPEND_SYSTEM_PROMPT not in captured["cmd"]
+
+
+def test_run_interactive_session_suppresses_system_prompt_on_bare_resume(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_run_interactive_session omits --append-system-prompt when resume_spec is BareResume."""
+    from autoskillit.core import BareResume
+
+    _stub_plugin_installed(monkeypatch)
+    captured = _capture_subprocess(monkeypatch)
+    _run_interactive_session(
+        system_prompt="should-not-appear",
+        resume_spec=BareResume(),
+    )
+    assert ClaudeFlags.APPEND_SYSTEM_PROMPT not in captured["cmd"]
+
+
+def test_run_interactive_session_appends_system_prompt_on_fresh_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_run_interactive_session appends --append-system-prompt for fresh (NoResume) sessions."""
+    from autoskillit.core import NoResume
+
+    _stub_plugin_installed(monkeypatch)
+    captured = _capture_subprocess(monkeypatch)
+    _run_interactive_session(
+        system_prompt="my-prompt",
+        resume_spec=NoResume(),
+    )
+    assert ClaudeFlags.APPEND_SYSTEM_PROMPT in captured["cmd"]
+    idx = captured["cmd"].index(ClaudeFlags.APPEND_SYSTEM_PROMPT)
+    assert captured["cmd"][idx + 1] == "my-prompt"

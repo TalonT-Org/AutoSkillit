@@ -295,6 +295,7 @@ class TestChannelBDrainWait:
             _phase2_poll=0.05,
             _heartbeat_poll=0.05,
             _session_id_timeout=0.01,
+            _phase1_timeout=120,
         )
         assert result.termination == TerminationReason.COMPLETED
         assert (

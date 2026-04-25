@@ -874,7 +874,7 @@ def test_fleet_status_exits_when_disabled(monkeypatch: pytest.MonkeyPatch, tmp_p
 def test_fleet_dispatch_proceeds_when_enabled(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
 ) -> None:
-    """fleet_run passes the feature guard and proceeds to campaign resolution."""
+    """fleet_dispatch passes the feature guard and proceeds to campaign resolution."""
     _stub_guards(monkeypatch)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("autoskillit.cli._fleet.is_feature_enabled", lambda name, features: True)
@@ -897,7 +897,7 @@ def test_fleet_dispatch_proceeds_when_enabled(
 def test_fleet_dispatch_sets_fleet_mode_dispatch(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """fleet_run(None) must launch an interactive session, not exit 1."""
+    """fleet_dispatch() must launch an interactive session, not exit 1."""
     _stub_guards(monkeypatch)
     monkeypatch.chdir(tmp_path)
     captured = _capture_subprocess(monkeypatch)
@@ -906,7 +906,7 @@ def test_fleet_dispatch_sets_fleet_mode_dispatch(
 
 
 def test_fleet_dispatch_writes_no_state(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """Ad-hoc fleet run must not create a state.json under .autoskillit/temp/fleet/."""
+    """fleet_dispatch must not create a state.json under .autoskillit/temp/fleet/."""
     _stub_guards(monkeypatch)
     monkeypatch.chdir(tmp_path)
     _capture_subprocess(monkeypatch)

@@ -12,8 +12,11 @@ _logger = get_logger(__name__)
 def _load_phase_results(root: Path) -> dict[str, dict]:
     results: dict[str, dict] = {}
     for f in sorted((root / "phases").glob("*_result.json")):
-        data = json.loads(f.read_text())
-        phase_id = f"P{data['phase_number']}"
+        try:
+            data = json.loads(f.read_text())
+            phase_id = f"P{data['phase_number']}"
+        except (json.JSONDecodeError, KeyError) as exc:
+            raise RuntimeError(f"Malformed phase result file {f}: {exc}") from exc
         results[phase_id] = data
     return results
 
@@ -38,8 +41,11 @@ def _load_wp_results(root: Path) -> dict[str, dict]:
     for f in sorted(wp_dir.glob("*_result.json")):
         if f.name in ("wp_manifest.json", "wp_index.json"):
             continue
-        data = json.loads(f.read_text())
-        results[data["id"]] = data
+        try:
+            data = json.loads(f.read_text())
+            results[data["id"]] = data
+        except (json.JSONDecodeError, KeyError) as exc:
+            raise RuntimeError(f"Malformed WP result file {f}: {exc}") from exc
     return results
 
 
@@ -153,7 +159,7 @@ def _check_failed_wps(wp_manifest: dict | None) -> list[str]:
     findings: list[str] = []
     for item in wp_manifest.get("items", []):
         if item.get("status") == "failed":
-            findings.append(f"WP {item['id']} has status 'failed'")
+            findings.append(f"WP {item.get('id', '<unknown>')} has status 'failed'")
     return findings
 
 

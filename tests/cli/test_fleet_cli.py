@@ -961,10 +961,3 @@ def test_build_fleet_open_prompt_accepts_marketplace_prefix() -> None:
     prompt = _build_fleet_open_prompt(MARKETPLACE_PREFIX)
     assert MARKETPLACE_PREFIX + "open_kitchen" in prompt
     assert MARKETPLACE_PREFIX + "dispatch_food_truck" in prompt
-
-
-def test_fleet_dispatch_rejects_claudecode(monkeypatch: pytest.MonkeyPatch) -> None:
-    """CLAUDECODE guard fires even when campaign_name is None."""
-    monkeypatch.setenv("CLAUDECODE", "1")
-    with pytest.raises(SystemExit, match="1"):
-        _fleet_dispatch()

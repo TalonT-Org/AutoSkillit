@@ -14,6 +14,8 @@ from autoskillit.core import (
     CATEGORY_TAGS,
     FEATURE_REGISTRY,
     FEATURE_REVEAL_TAGS,
+    FLEET_DISPATCH_MODE,
+    FLEET_MODE_ENV_VAR,
     HEADLESS_ENV_VAR,
     SessionType,
     get_logger,
@@ -45,6 +47,8 @@ def _apply_session_type_visibility(
 
     if _session is SessionType.FLEET:
         mcp.enable(tags={"fleet"})
+        if os.environ.get(FLEET_MODE_ENV_VAR) == FLEET_DISPATCH_MODE:
+            mcp.enable(tags={"fleet-dispatch"})
     elif _session is SessionType.ORCHESTRATOR and _headless:
         tool_tags = os.environ.get("AUTOSKILLIT_L2_TOOL_TAGS", "")
         if tool_tags:

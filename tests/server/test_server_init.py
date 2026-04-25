@@ -589,9 +589,76 @@ class TestSessionTypeVisibility:
         """Reset gated tag visibility on the shared mcp singleton before each test."""
         from autoskillit.server import mcp
 
-        mcp.disable(tags={"fleet", "kitchen", "headless"})
+        mcp.disable(tags={"fleet", "kitchen", "headless", "fleet-dispatch"})
         yield
-        mcp.disable(tags={"fleet", "kitchen", "headless"})
+        mcp.disable(tags={"fleet", "kitchen", "headless", "fleet-dispatch"})
+
+    @pytest.mark.anyio
+    async def test_fleet_dispatch_mode_enables_fleet_dispatch_tools(self, monkeypatch):
+        """fleet + FLEET_MODE=dispatch reveals fleet tools + fleet-dispatch tools."""
+        from fastmcp.client import Client
+
+        from autoskillit.core import (
+            FLEET_DISPATCH_MODE,
+            FLEET_DISPATCH_TOOLS,
+            FLEET_MODE_ENV_VAR,
+            FLEET_TOOLS,
+            FREE_RANGE_TOOLS,
+        )
+        from autoskillit.server import _apply_session_type_visibility, mcp
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+        monkeypatch.setenv(FLEET_MODE_ENV_VAR, FLEET_DISPATCH_MODE)
+        _apply_session_type_visibility()
+
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
+        visible = {t.name for t in tools}
+
+        expected = FLEET_TOOLS | FLEET_DISPATCH_TOOLS | FREE_RANGE_TOOLS
+        assert visible == expected
+
+    @pytest.mark.anyio
+    async def test_fleet_campaign_mode_hides_fleet_dispatch_tools(self, monkeypatch):
+        """fleet + FLEET_MODE=campaign (or absent) hides fleet-dispatch tools."""
+        from fastmcp.client import Client
+
+        from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_MODE_ENV_VAR
+        from autoskillit.server import _apply_session_type_visibility, mcp
+
+        for mode_value in ("campaign", None):
+            mcp.disable(tags={"fleet", "fleet-dispatch"})
+            monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+            if mode_value is not None:
+                monkeypatch.setenv(FLEET_MODE_ENV_VAR, mode_value)
+            else:
+                monkeypatch.delenv(FLEET_MODE_ENV_VAR, raising=False)
+            _apply_session_type_visibility()
+
+            async with Client(mcp) as client:
+                tools = await client.list_tools()
+            visible = {t.name for t in tools}
+            assert visible.isdisjoint(FLEET_DISPATCH_TOOLS), (
+                f"fleet-dispatch tools unexpectedly visible with FLEET_MODE={mode_value!r}"
+            )
+
+    @pytest.mark.anyio
+    async def test_fleet_dispatch_constant_matches_tagged_tools(self, monkeypatch):
+        """FLEET_DISPATCH_TOOLS constant must exactly match tools tagged fleet-dispatch."""
+        from autoskillit.core import FLEET_DISPATCH_MODE, FLEET_DISPATCH_TOOLS, FLEET_MODE_ENV_VAR
+        from autoskillit.server import _apply_session_type_visibility, mcp
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+        monkeypatch.setenv(FLEET_MODE_ENV_VAR, FLEET_DISPATCH_MODE)
+        _apply_session_type_visibility()
+
+        all_tools = {t.name: t for t in await mcp.list_tools()}
+        tagged = {name for name, t in all_tools.items() if "fleet-dispatch" in t.tags}
+        assert tagged == FLEET_DISPATCH_TOOLS, (
+            f"FLEET_DISPATCH_TOOLS constant out of sync. "
+            f"Extra in constant: {FLEET_DISPATCH_TOOLS - tagged}. "
+            f"Extra on server: {tagged - FLEET_DISPATCH_TOOLS}."
+        )
 
     @pytest.mark.anyio
     async def test_fleet_enables_fleet_tag(self, monkeypatch):

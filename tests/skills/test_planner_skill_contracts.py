@@ -1,4 +1,5 @@
 import pytest
+import yaml
 
 from autoskillit.core.paths import pkg_root
 
@@ -22,8 +23,6 @@ def test_skill_md_exists(skill_name: str) -> None:
 
 @pytest.mark.parametrize("skill_name", PLANNER_FINALIZATION_SKILLS)
 def test_skill_has_planner_category(skill_name: str) -> None:
-    import yaml
-
     content = (SKILLS_ROOT / skill_name / "SKILL.md").read_text()
     assert content.startswith("---"), f"{skill_name}: must start with YAML frontmatter"
     parts = content.split("---", 2)
@@ -52,7 +51,10 @@ def test_refine_output_tokens() -> None:
 def test_reconcile_deps_reads_wp_index_only() -> None:
     content = (SKILLS_ROOT / "planner-reconcile-deps" / "SKILL.md").read_text()
     assert "wp_index.json" in content
-    assert "sub-agent" not in content.lower() and "subagent" not in content.lower(), (
+    assert "sub-agent" not in content.lower(), (
+        "planner-reconcile-deps must be a single session — no sub-agents"
+    )
+    assert "subagent" not in content.lower(), (
         "planner-reconcile-deps must be a single session — no sub-agents"
     )
 
@@ -67,8 +69,6 @@ def test_refine_handles_all_finding_types() -> None:
 
 @pytest.mark.parametrize("skill_name", PLANNER_FINALIZATION_SKILLS)
 def test_skill_in_defaults_yaml_tier2(skill_name: str) -> None:
-    import yaml
-
     defaults = yaml.safe_load((pkg_root() / "config" / "defaults.yaml").read_text())
     tier2 = defaults["skills"]["tier2"]
     assert skill_name in tier2, f"{skill_name} must appear in defaults.yaml skills.tier2"

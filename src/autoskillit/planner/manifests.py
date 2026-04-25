@@ -4,6 +4,10 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+from autoskillit.core import atomic_write, get_logger, write_versioned_json
+
+_logger = get_logger(__name__)
+
 
 def _build_index_entry(result_data: dict[str, object]) -> dict[str, object]:
     return {
@@ -29,16 +33,10 @@ def _backstop_wp_index(item_id: str, result_path: Path, output_dir: Path) -> Non
     if item_id not in indexed_ids:
         result_data = json.loads(result_path.read_text())
         index.append(_build_index_entry(result_data))
-        from autoskillit.core import atomic_write  # noqa: PLC0415
-
         atomic_write(wp_index_path, json.dumps(index, indent=2))
 
 
 def check_remaining(manifest_path: str, pass_name: str, output_dir: str) -> dict[str, str]:
-    from autoskillit.core import get_logger, write_versioned_json  # noqa: PLC0415
-
-    _logger = get_logger(__name__)
-
     manifest_file = Path(manifest_path)
     out_dir = Path(output_dir)
     try:
@@ -98,7 +96,8 @@ def check_remaining(manifest_path: str, pass_name: str, output_dir: str) -> dict
 def build_assignment_manifest(
     phases_dir: str, assignments_dir: str, output_dir: str
 ) -> dict[str, str]:
-    from autoskillit.core import write_versioned_json  # noqa: PLC0415
+    if not phases_dir or not output_dir:
+        raise ValueError("phases_dir and output_dir must not be empty")
 
     phases_path = Path(phases_dir)
     out_dir = Path(output_dir)
@@ -112,6 +111,11 @@ def build_assignment_manifest(
             raise json.JSONDecodeError(
                 f"Failed to parse {f}: {exc.msg}", exc.doc, exc.pos
             ) from exc
+        pn = data.get("phase_number", 0)
+        if not isinstance(pn, int):
+            raise TypeError(
+                f"phase_number in {f} must be an integer, got {type(pn).__name__}: {pn!r}"
+            )
         parsed_phases.append(data)
     parsed_phases.sort(key=lambda d: d.get("phase_number", 0))
 
@@ -142,7 +146,8 @@ def build_assignment_manifest(
 
 
 def build_wp_manifest(assignments_dir: str, output_dir: str) -> dict[str, str]:
-    from autoskillit.core import atomic_write, write_versioned_json  # noqa: PLC0415
+    if not assignments_dir or not output_dir:
+        raise ValueError("assignments_dir and output_dir must not be empty")
 
     assign_path = Path(assignments_dir)
     out_dir = Path(output_dir)

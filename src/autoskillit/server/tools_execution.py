@@ -425,20 +425,20 @@ async def dispatch_food_truck(
     if (gate := _require_enabled()) is not None:
         return gate
 
-    # Feature guard: config authority check independent of MCP visibility state.
-    # Fleet sessions open the gate unconditionally at boot; this catch-all ensures
-    # dispatch_food_truck never executes when features.fleet is disabled in config.
-    from autoskillit.core import FleetErrorCode, fleet_error, is_feature_enabled
-    from autoskillit.server import _get_ctx as _get_ctx_for_feature_check
-
-    _feature_ctx = _get_ctx_for_feature_check()
-    if not is_feature_enabled("fleet", _feature_ctx.config.features):
-        return fleet_error(
-            FleetErrorCode.FLEET_FEATURE_DISABLED,
-            "Fleet feature is disabled in configuration. Set features.fleet: true to enable.",
-        )
-
     try:
+        # Feature guard: config authority check independent of MCP visibility state.
+        # Fleet sessions open the gate unconditionally at boot; this catch-all ensures
+        # dispatch_food_truck never executes when features.fleet is disabled in config.
+        from autoskillit.core import FleetErrorCode, fleet_error, is_feature_enabled
+        from autoskillit.server import _get_ctx as _get_ctx_for_feature_check
+
+        _feature_ctx = _get_ctx_for_feature_check()
+        if not is_feature_enabled("fleet", _feature_ctx.config.features):
+            return fleet_error(
+                FleetErrorCode.FLEET_FEATURE_DISABLED,
+                "Fleet feature is disabled in configuration. Set features.fleet: true to enable.",
+            )
+
         if os.environ.get("AUTOSKILLIT_HEADLESS") == "1":
             from autoskillit.core import FleetErrorCode, fleet_error
 

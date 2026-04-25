@@ -30,6 +30,7 @@ class TestFleetErrorCodeEnum:
             "fleet_recipe_not_found",
             "fleet_invalid_recipe_kind",
             "fleet_hard_refusal_headless",
+            "fleet_feature_disabled",
             "fleet_manifest_missing",
             "fleet_manifest_corrupted",
             "fleet_lock_not_initialized",

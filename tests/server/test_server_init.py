@@ -917,6 +917,15 @@ class TestSessionTypeVisibility:
 class TestFleetAutoGateBoot:
     """Fleet lifespan auto-gate: _fleet_auto_gate_boot opens gate before first tool call."""
 
+    @pytest.fixture(autouse=True)
+    def _reset_mcp_visibility(self):
+        """Reset gated tag visibility on the shared mcp singleton before/after each test."""
+        from autoskillit.server import mcp
+
+        mcp.disable(tags={"fleet", "kitchen", "headless"})
+        yield
+        mcp.disable(tags={"fleet", "kitchen", "headless"})
+
     @pytest.mark.anyio
     async def test_fleet_lifespan_auto_opens_gate(self, tool_ctx):
         """Fleet session: gate is open after _fleet_auto_gate_boot() runs."""

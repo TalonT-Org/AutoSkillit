@@ -179,7 +179,7 @@ def test_hardcoded_origin_in_run_cmd_clean_with_remote_var():
 
 
 def test_hardcoded_origin_in_run_cmd_suppressed_by_set_url_step():
-    """Recipe that rewrites origin via 'git remote set-url origin ...' is suppressed."""
+    """Step containing 'git remote set-url origin' is not flagged; other steps still are."""
     recipe = _make_recipe(
         {
             "step_setup": {
@@ -195,7 +195,12 @@ def test_hardcoded_origin_in_run_cmd_suppressed_by_set_url_step():
         }
     )
     findings = run_semantic_rules(recipe)
-    assert all(f.rule != "hardcoded-origin-in-run-cmd" for f in findings)
+    violations = [f for f in findings if f.rule == "hardcoded-origin-in-run-cmd"]
+    step_names = [v.step_name for v in violations]
+    assert "step_setup" not in step_names, "step with set-url origin must not be flagged"
+    assert "step_fetch" in step_names, (
+        "step without set-url using hardcoded origin must be flagged"
+    )
 
 
 def test_hardcoded_origin_in_run_cmd_fires_on_push_origin():

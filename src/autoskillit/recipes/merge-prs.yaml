@@ -130,7 +130,9 @@ steps:
   check_integration_exists:
     tool: run_cmd
     with:
-      cmd: "git ls-remote --exit-code --heads origin \"${{ inputs.base_branch }}\""
+      cmd: |
+        REMOTE=$(git remote get-url upstream 2>/dev/null | grep -qv "^file://" && echo upstream || echo origin)
+        git ls-remote --exit-code --heads "$REMOTE" "${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
       step_name: "check_integration_exists"
     on_success: fetch_merge_queue_data
@@ -157,7 +159,11 @@ steps:
   create_persistent_integration:
     tool: run_cmd
     with:
-      cmd: "DEFAULT_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||') && DEFAULT_BRANCH=${DEFAULT_BRANCH:-main} && git checkout \"$DEFAULT_BRANCH\" && git pull && git checkout -b '${{ inputs.base_branch }}' && git push origin '${{ inputs.base_branch }}'"
+      cmd: |
+        REMOTE=$(git remote get-url upstream 2>/dev/null | grep -qv "^file://" && echo upstream || echo origin)
+        DEFAULT_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||')
+        DEFAULT_BRANCH=${DEFAULT_BRANCH:-main}
+        git checkout "$DEFAULT_BRANCH" && git pull && git checkout -b '${{ inputs.base_branch }}' && git push "$REMOTE" '${{ inputs.base_branch }}'
       cwd: "${{ context.work_dir }}"
       step_name: "create_persistent_integration"
     on_success: fetch_merge_queue_data
@@ -315,10 +321,11 @@ steps:
   attempt_cheap_rebase:
     tool: run_cmd
     with:
-      cmd: >
-        git fetch origin '${{ context.ejected_pr_branch }}' &&
+      cmd: |
+        REMOTE=$(git remote get-url upstream 2>/dev/null | grep -qv "^file://" && echo upstream || echo origin)
+        git fetch "$REMOTE" '${{ context.ejected_pr_branch }}' &&
         git checkout '${{ context.ejected_pr_branch }}' &&
-        if git rebase origin/${{ inputs.base_branch }};
+        if git rebase "$REMOTE"/${{ inputs.base_branch }};
         then echo "clean";
         else git rebase --abort 2>/dev/null || true; echo "conflicts";
         fi
@@ -588,7 +595,9 @@ steps:
   push_worktree_branch:
     tool: run_cmd
     with:
-      cmd: "git push origin HEAD:${{ context.worktree_branch_name }} --force-with-lease"
+      cmd: |
+        REMOTE=$(git remote get-url upstream 2>/dev/null | grep -qv "^file://" && echo upstream || echo origin)
+        git push "$REMOTE" HEAD:${{ context.worktree_branch_name }} --force-with-lease
       cwd: "${{ context.worktree_path }}"
       step_name: "push_worktree_branch"
     on_success: create_conflict_pr
@@ -864,8 +873,9 @@ steps:
   force_push_and_wait_mergeability:
     tool: run_cmd
     with:
-      cmd: >
-        git push origin "${{ context.integration_branch }}" --force-with-lease &&
+      cmd: |
+        REMOTE=$(git remote get-url upstream 2>/dev/null | grep -qv "^file://" && echo upstream || echo origin)
+        git push "$REMOTE" "${{ context.integration_branch }}" --force-with-lease &&
         PR_NUM="${{ context.review_pr_number }}" &&
         for i in $(seq 1 12); do
           STATUS=$(gh pr view "$PR_NUM" --json mergeable -q .mergeable);

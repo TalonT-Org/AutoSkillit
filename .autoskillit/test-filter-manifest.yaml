@@ -95,6 +95,9 @@ tests/recipe/fixtures/*:
   - recipe/
 
 # Local .autoskillit/ config and state files
+.autoskillit/test-source-map.json:
+  - infra/
+
 .autoskillit/config.yaml:
   - infra/
 

@@ -900,37 +900,37 @@ def test_fleet_run_without_campaign_no_campaign_env_vars(
     assert "AUTOSKILLIT_CAMPAIGN_STATE_PATH" not in env
 
 
-def test_build_franchise_open_prompt_instructs_open_kitchen() -> None:
+def test_build_fleet_open_prompt_instructs_open_kitchen() -> None:
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli._prompts import _build_franchise_open_prompt
+    from autoskillit.cli._prompts import _build_fleet_open_prompt
 
-    prompt = _build_franchise_open_prompt(DIRECT_PREFIX)
+    prompt = _build_fleet_open_prompt(DIRECT_PREFIX)
     assert "open_kitchen" in prompt
 
 
-def test_build_franchise_open_prompt_references_dispatch_tool() -> None:
+def test_build_fleet_open_prompt_references_dispatch_tool() -> None:
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli._prompts import _build_franchise_open_prompt
+    from autoskillit.cli._prompts import _build_fleet_open_prompt
 
-    prompt = _build_franchise_open_prompt(DIRECT_PREFIX)
+    prompt = _build_fleet_open_prompt(DIRECT_PREFIX)
     assert "dispatch_food_truck" in prompt
 
 
-def test_build_franchise_open_prompt_no_campaign_manifest() -> None:
+def test_build_fleet_open_prompt_no_campaign_manifest() -> None:
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli._prompts import _build_franchise_open_prompt
+    from autoskillit.cli._prompts import _build_fleet_open_prompt
 
-    prompt = _build_franchise_open_prompt(DIRECT_PREFIX)
+    prompt = _build_fleet_open_prompt(DIRECT_PREFIX)
     assert "DISPATCH MANIFEST" not in prompt
     assert "CAMPAIGN OVERVIEW" not in prompt
     assert "CAMPAIGN DISCIPLINE" not in prompt
 
 
-def test_build_franchise_open_prompt_accepts_marketplace_prefix() -> None:
+def test_build_fleet_open_prompt_accepts_marketplace_prefix() -> None:
     from autoskillit.cli._mcp_names import MARKETPLACE_PREFIX
-    from autoskillit.cli._prompts import _build_franchise_open_prompt
+    from autoskillit.cli._prompts import _build_fleet_open_prompt
 
-    prompt = _build_franchise_open_prompt(MARKETPLACE_PREFIX)
+    prompt = _build_fleet_open_prompt(MARKETPLACE_PREFIX)
     assert MARKETPLACE_PREFIX + "open_kitchen" in prompt
     assert MARKETPLACE_PREFIX + "dispatch_food_truck" in prompt
 

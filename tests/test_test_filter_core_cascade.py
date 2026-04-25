@@ -4,21 +4,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from tests._test_filter import (
+    _CORE_UNIVERSAL_MODULES,
     MODULE_CASCADE_CORE,
     FilterMode,
-    _CORE_UNIVERSAL_MODULES,
     build_test_scope,
 )
 
 
 class TestCoreUniversalModules:
     """REQ-CORE-001: _CORE_UNIVERSAL_MODULES must exist and contain the right stems."""
-
-    def test_is_frozenset(self) -> None:
-        assert isinstance(_CORE_UNIVERSAL_MODULES, frozenset)
 
     def test_required_stems_present(self) -> None:
         required = {
@@ -42,9 +37,6 @@ class TestCoreUniversalModules:
 
 class TestModuleCascadeCore:
     """REQ-CORE-002: MODULE_CASCADE_CORE must exist with validated consumer sets."""
-
-    def test_is_dict(self) -> None:
-        assert isinstance(MODULE_CASCADE_CORE, dict)
 
     def test_all_values_are_frozensets(self) -> None:
         for stem, consumers in MODULE_CASCADE_CORE.items():
@@ -105,9 +97,22 @@ class TestBuildTestScopeCoreCascade:
         return tests_root
 
     ALL_DIRS = [
-        "core", "config", "execution", "pipeline", "workspace",
-        "recipe", "migration", "franchise", "server", "cli",
-        "hooks", "skills", "arch", "contracts", "infra", "docs",
+        "core",
+        "config",
+        "execution",
+        "pipeline",
+        "workspace",
+        "recipe",
+        "migration",
+        "franchise",
+        "server",
+        "cli",
+        "hooks",
+        "skills",
+        "arch",
+        "contracts",
+        "infra",
+        "docs",
     ]
 
     def test_universal_module_triggers_full_cascade(self, tmp_path: Path) -> None:
@@ -120,8 +125,19 @@ class TestBuildTestScopeCoreCascade:
         )
         assert result is not None
         dir_names = {p.name for p in result}
-        for pkg in ["core", "config", "execution", "pipeline", "workspace",
-                    "recipe", "migration", "server", "cli", "hooks", "skills"]:
+        for pkg in [
+            "core",
+            "config",
+            "execution",
+            "pipeline",
+            "workspace",
+            "recipe",
+            "migration",
+            "server",
+            "cli",
+            "hooks",
+            "skills",
+        ]:
             assert pkg in dir_names, f"universal io.py should cascade to {pkg}"
 
     def test_init_triggers_full_cascade(self, tmp_path: Path) -> None:
@@ -150,8 +166,15 @@ class TestBuildTestScopeCoreCascade:
         assert "core" in dir_names
         assert "cli" in dir_names
         # Must NOT include packages kitchen_state doesn't touch
-        for excluded in ["execution", "pipeline", "workspace", "recipe",
-                         "migration", "server", "hooks"]:
+        for excluded in [
+            "execution",
+            "pipeline",
+            "workspace",
+            "recipe",
+            "migration",
+            "server",
+            "hooks",
+        ]:
             assert excluded not in dir_names, (
                 f"kitchen_state narrow cascade should not include {excluded}"
             )
@@ -185,8 +208,16 @@ class TestBuildTestScopeCoreCascade:
         dir_names = {p.name for p in result}
         assert "core" in dir_names
         # AGGRESSIVE only maps core → core, no other dirs (except always-run)
-        for excluded in ["execution", "pipeline", "workspace", "recipe",
-                         "migration", "server", "cli", "hooks"]:
+        for excluded in [
+            "execution",
+            "pipeline",
+            "workspace",
+            "recipe",
+            "migration",
+            "server",
+            "cli",
+            "hooks",
+        ]:
             assert excluded not in dir_names
 
     def test_paths_cascade_includes_most_packages(self, tmp_path: Path) -> None:
@@ -199,8 +230,17 @@ class TestBuildTestScopeCoreCascade:
         )
         assert result is not None
         dir_names = {p.name for p in result}
-        for pkg in ["core", "cli", "config", "execution", "franchise",
-                    "migration", "recipe", "server", "workspace"]:
+        for pkg in [
+            "core",
+            "cli",
+            "config",
+            "execution",
+            "franchise",
+            "migration",
+            "recipe",
+            "server",
+            "workspace",
+        ]:
             assert pkg in dir_names
 
     def test_readiness_cascade_includes_only_server(self, tmp_path: Path) -> None:
@@ -215,6 +255,13 @@ class TestBuildTestScopeCoreCascade:
         dir_names = {p.name for p in result}
         assert "core" in dir_names
         assert "server" in dir_names
-        for excluded in ["execution", "pipeline", "workspace", "recipe",
-                         "migration", "cli", "hooks"]:
+        for excluded in [
+            "execution",
+            "pipeline",
+            "workspace",
+            "recipe",
+            "migration",
+            "cli",
+            "hooks",
+        ]:
             assert excluded not in dir_names

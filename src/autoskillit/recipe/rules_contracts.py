@@ -33,9 +33,6 @@ def _check_missing_output_patterns(ctx: ValidationContext) -> list[RuleFinding]:
             continue
 
         skill_cmd = step.with_args.get("skill_command", "")
-        if "${{" in skill_cmd:
-            continue
-
         name = resolve_skill_name(skill_cmd)
         if not name:
             continue
@@ -78,8 +75,6 @@ def _check_pattern_examples_match(ctx: ValidationContext) -> list[RuleFinding]:
         if step.tool != "run_skill":
             continue
         skill_cmd = step.with_args.get("skill_command", "")
-        if "${{" in skill_cmd:
-            continue
         name = resolve_skill_name(skill_cmd)
         if not name:
             continue
@@ -131,8 +126,6 @@ def _check_missing_pattern_examples(ctx: ValidationContext) -> list[RuleFinding]
         if step.tool != "run_skill":
             continue
         skill_cmd = step.with_args.get("skill_command", "")
-        if "${{" in skill_cmd:
-            continue
         name = resolve_skill_name(skill_cmd)
         if not name:
             continue
@@ -280,9 +273,6 @@ def _check_always_has_no_write_exit(ctx: ValidationContext) -> list[RuleFinding]
             continue
 
         skill_cmd = step.with_args.get("skill_command", "")
-        if "${{" in skill_cmd:
-            continue
-
         name = resolve_skill_name(skill_cmd)
         if not name:
             continue

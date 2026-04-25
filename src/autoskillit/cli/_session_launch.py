@@ -24,7 +24,7 @@ def _run_interactive_session(
         sys.exit(1)
     from autoskillit.cli._init_helpers import _is_plugin_installed
     from autoskillit.cli._terminal import terminal_guard
-    from autoskillit.core import ClaudeFlags, NoResume, pkg_root
+    from autoskillit.core import BareResume, ClaudeFlags, NamedResume, NoResume, pkg_root
     from autoskillit.execution import build_interactive_cmd
 
     spec = build_interactive_cmd(
@@ -33,13 +33,13 @@ def _run_interactive_session(
         env_extras=extra_env,
     )
     plugin_flags = [] if _is_plugin_installed() else [ClaudeFlags.PLUGIN_DIR, str(pkg_root())]
+    _is_resume = isinstance(resume_spec, (BareResume, NamedResume))
     cmd = [
         *spec.cmd,
         *plugin_flags,
         ClaudeFlags.TOOLS,
         "AskUserQuestion",
-        ClaudeFlags.APPEND_SYSTEM_PROMPT,
-        system_prompt,
+        *([] if _is_resume else [ClaudeFlags.APPEND_SYSTEM_PROMPT, system_prompt]),
     ]
     with terminal_guard():
         result = subprocess.run(cmd, env=spec.env)

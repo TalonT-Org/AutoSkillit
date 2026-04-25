@@ -14,7 +14,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Literal
 from uuid import uuid4
 
 import anyio
@@ -320,7 +320,7 @@ def _launch_fleet_session(
     state_path: Path | None,
     resume_metadata: ResumeDecision | None,
     *,
-    fleet_mode: str,
+    fleet_mode: Literal["dispatch", "campaign"],
 ) -> None:
     """Build the L3 orchestrator prompt and launch an interactive fleet session."""
     from autoskillit.cli import detect_autoskillit_mcp_prefix  # noqa: PLC0415

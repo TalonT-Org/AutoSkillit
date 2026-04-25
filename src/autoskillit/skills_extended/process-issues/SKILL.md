@@ -245,6 +245,8 @@ Processing X issues:
 
 7. **Optionally append completion status to issue body** (if `--status-updates` is active):
    ```bash
+   PROCESS_BODY_FILE="{{AUTOSKILLIT_TEMP}}/process-issues/status_{number}_$(date +%s).md"
+   mkdir -p "$(dirname "$PROCESS_BODY_FILE")"
    gh issue view {number} --json body --jq '.body' > "$PROCESS_BODY_FILE"
    printf '\n\n---\n\n## Status\n\n%s\n' \
      "{✅ Processing complete — PR: $pr_url | ❌ Processing failed — manual intervention required}" \

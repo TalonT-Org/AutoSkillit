@@ -1,5 +1,9 @@
 from pathlib import Path
 
+import pytest
+
+pytestmark = [pytest.mark.layer("docs"), pytest.mark.small]
+
 DOCS_ROOT = Path(__file__).parents[2] / "docs"
 
 

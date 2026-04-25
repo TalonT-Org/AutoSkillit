@@ -13,7 +13,10 @@ def test_fleet_rename_migration_note_exists():
     notes = list(MIGRATIONS_DIR.glob("*.yaml"))
     detect_keys = []
     for note_path in notes:
-        data = yaml.safe_load(note_path.read_text())
+        try:
+            data = yaml.safe_load(note_path.read_text())
+        except yaml.YAMLError as exc:
+            pytest.fail(f"Malformed YAML in {note_path.name}: {exc}")
         for change in data.get("changes", []):
             detect = change.get("detect", {})
             if detect.get("key") == "features.franchise":
@@ -28,7 +31,10 @@ def test_fleet_rename_migration_note_is_valid():
     """Migration note for fleet rename must have correct required fields."""
     notes = list(MIGRATIONS_DIR.glob("*.yaml"))
     for note_path in notes:
-        data = yaml.safe_load(note_path.read_text())
+        try:
+            data = yaml.safe_load(note_path.read_text())
+        except yaml.YAMLError as exc:
+            pytest.fail(f"Malformed YAML in {note_path.name}: {exc}")
         for change in data.get("changes", []):
             if change.get("detect", {}).get("key") == "features.franchise":
                 assert "instruction" in change, "Migration note missing 'instruction'"

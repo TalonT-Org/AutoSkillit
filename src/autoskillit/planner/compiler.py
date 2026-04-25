@@ -57,7 +57,12 @@ def _build_assignment_lookup(
 
 def _parse_wp_id(wp_id: str) -> tuple[int, int, int]:
     parts = wp_id.split("-")
-    return int(parts[0][1:]), int(parts[1][1:]), int(parts[2][2:])
+    if len(parts) != 3:
+        raise ValueError(f"Invalid WP id format (expected PX-AY-WPZ): {wp_id!r}")
+    try:
+        return int(parts[0][1:]), int(parts[1][1:]), int(parts[2][2:])
+    except (IndexError, ValueError) as exc:
+        raise ValueError(f"Invalid WP id format (expected PX-AY-WPZ): {wp_id!r}") from exc
 
 
 def _render_issue_body(wp: dict, phase: dict, assignment: dict) -> str:
@@ -137,7 +142,16 @@ def compile_plan(output_dir: str, task: str, source_dir: str) -> dict[str, str]:
     for wp_id in execution_order:
         wp = wp_results[wp_id]
         phase_num, assign_num, _ = _parse_wp_id(wp_id)
+        if phase_num not in phase_lookup:
+            raise RuntimeError(
+                f"WP {wp_id!r} references phase {phase_num} not in loaded phase results"
+            )
         phase = phase_lookup[phase_num]
+        if (phase_num, assign_num) not in assign_lookup:
+            raise RuntimeError(
+                f"WP {wp_id!r} references assignment P{phase_num}-A{assign_num}"
+                " not in loaded assignment results"
+            )
         assignment = assign_lookup[(phase_num, assign_num)]
         body = _render_issue_body(wp, phase, assignment)
         issue_path = issues_dir / f"{wp_id}_issue.md"
@@ -164,9 +178,7 @@ def compile_plan(output_dir: str, task: str, source_dir: str) -> dict[str, str]:
             if pn != phase_num:
                 continue
             wps_in_assign = [
-                wp_results[wid]
-                for wid in execution_order
-                if wp_results[wid].get("id", wid).startswith(f"P{pn}-A{an}-")
+                wp_results[wid] for wid in execution_order if wid.startswith(f"P{pn}-A{an}-")
             ]
             assignments_nested.append({**assign, "work_packages": wps_in_assign})
         phases_nested.append({**phase, "assignments": assignments_nested})

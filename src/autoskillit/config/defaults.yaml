@@ -226,6 +226,8 @@ skills:
     - planner-elaborate-phase
     - planner-elaborate-assignment
     - planner-elaborate-wp
+    - planner-reconcile-deps
+    - planner-refine
     - reload-session
   tier3:
     - prepare-pr

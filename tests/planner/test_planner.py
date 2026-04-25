@@ -14,7 +14,13 @@ def test_planner_package_importable() -> None:
 def test_planner_all_exports_callables() -> None:
     from autoskillit.planner import __all__
 
-    assert set(__all__) == {"check_remaining", "build_assignment_manifest", "build_wp_manifest"}
+    assert set(__all__) == {
+        "check_remaining",
+        "build_assignment_manifest",
+        "build_wp_manifest",
+        "validate_plan",
+        "compile_plan",
+    }
 
 
 def test_planner_feature_skill_categories() -> None:

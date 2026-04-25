@@ -1803,3 +1803,19 @@ callable_contracts:
       type: file_path
     - name: total_count
       type: str
+  autoskillit.planner.validate_plan:
+    outputs:
+    - name: verdict
+      type: str
+    - name: validation_path
+      type: file_path
+    - name: issue_count
+      type: str
+  autoskillit.planner.compile_plan:
+    outputs:
+    - name: plan_path
+      type: file_path
+    - name: plan_json_path
+      type: file_path
+    - name: plan_parts
+      type: str

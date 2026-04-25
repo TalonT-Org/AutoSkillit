@@ -334,9 +334,9 @@ def _launch_fleet_session(
 
     if campaign_recipe is None:
         # Ad-hoc mode: no campaign, no state, bare kitchen open
-        from autoskillit.cli._prompts import _build_fleet_open_prompt
+        from autoskillit.cli._prompts import _build_fleet_dispatch_prompt
 
-        prompt = _build_fleet_open_prompt(mcp_prefix)
+        prompt = _build_fleet_dispatch_prompt(mcp_prefix)
         extra_env: dict[str, str] = {
             "AUTOSKILLIT_SESSION_TYPE": "fleet",
             "AUTOSKILLIT_FLEET_MODE": fleet_mode,
@@ -354,7 +354,7 @@ def _launch_fleet_session(
             raise ValueError("campaign_id must not be None in campaign-driven mode")
         if state_path is None:
             raise ValueError("state_path must not be None in campaign-driven mode")
-        from autoskillit.cli._prompts import _build_l3_orchestrator_prompt
+        from autoskillit.cli._prompts import _build_fleet_campaign_prompt
         from autoskillit.core import dump_yaml_str
 
         manifest_yaml = dump_yaml_str(
@@ -365,7 +365,7 @@ def _launch_fleet_session(
         completed_dispatches = (
             resume_metadata.completed_dispatches_block if resume_metadata is not None else ""
         )
-        prompt = _build_l3_orchestrator_prompt(
+        prompt = _build_fleet_campaign_prompt(
             campaign_recipe, manifest_yaml, completed_dispatches, mcp_prefix, campaign_id
         )
         extra_env = {

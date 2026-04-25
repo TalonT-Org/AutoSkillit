@@ -56,9 +56,9 @@ to enumerate features.
 
 ### Step 0: Pre-flight — Enumerate Features
 
-Read `src/autoskillit/core/_type_constants.py`. Extract all entries from `FEATURE_REGISTRY`.
+Read `src/autoskillit/core/_type_constants.py`. Extract **all** entries from `FEATURE_REGISTRY` exhaustively — do not assume a fixed list.
 For each feature, note: `name`, `lifecycle`, `import_package`, `tool_tags`, `skill_categories`,
-`default_enabled`. Current known features: `fleet`, `planner`.
+`default_enabled`.
 
 ### Step 1: Launch 6 Parallel Subagents (SINGLE MESSAGE)
 
@@ -167,7 +167,7 @@ Report format:
 ```markdown
 # Feature Gate Audit
 
-**Date:** {YYYY-MM-DD HH:MM:SS}  **Features audited:** fleet, planner
+**Date:** {YYYY-MM-DD HH:MM:SS}  **Features audited:** {comma-separated list from FEATURE_REGISTRY}
 
 ## Config Projection
 

@@ -326,6 +326,10 @@ def _launch_franchise_session(
 
     mcp_prefix = detect_autoskillit_mcp_prefix()
 
+    from autoskillit.core import NoResume
+
+    project_dir = Path.cwd()
+
     if campaign_recipe is None:
         # Ad-hoc mode: no campaign, no state, bare kitchen open
         from autoskillit.cli._prompts import _build_franchise_open_prompt
@@ -335,7 +339,12 @@ def _launch_franchise_session(
             "AUTOSKILLIT_SESSION_TYPE": "franchise",
             "AUTOSKILLIT_HEADLESS": "0",
         }
-        _run_interactive_session(prompt, extra_env=extra_env)
+        while True:
+            reload_id = _run_interactive_session(
+                prompt, extra_env=extra_env, resume_spec=NoResume(), project_dir=project_dir
+            )
+            if reload_id is None:
+                break
     else:
         # Campaign-driven mode: full orchestrator prompt with manifest and state
         if campaign_id is None:
@@ -362,7 +371,12 @@ def _launch_franchise_session(
             "AUTOSKILLIT_CAMPAIGN_STATE_PATH": str(state_path),
             "AUTOSKILLIT_HEADLESS": "0",
         }
-        _run_interactive_session(prompt, extra_env=extra_env)
+        while True:
+            reload_id = _run_interactive_session(
+                prompt, extra_env=extra_env, resume_spec=NoResume(), project_dir=project_dir
+            )
+            if reload_id is None:
+                break
 
 
 @asynccontextmanager

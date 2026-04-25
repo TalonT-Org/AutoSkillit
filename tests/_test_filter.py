@@ -186,6 +186,11 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "docs",
         }
     ),
+    # Standalone modules (not subpackage directories)
+    "planner": frozenset({"planner"}),
+    "_llm_triage": frozenset({"test_llm_triage.py", "execution", "server", "recipe"}),
+    "smoke_utils": frozenset({"test_smoke_utils.py", "recipe"}),
+    "version": frozenset({"test_version.py", "server"}),
 }
 
 LAYER_CASCADE_AGGRESSIVE: dict[str, frozenset[str]] = {
@@ -201,6 +206,10 @@ LAYER_CASCADE_AGGRESSIVE: dict[str, frozenset[str]] = {
     "cli": frozenset({"cli"}),
     "hooks": frozenset({"hooks"}),
     "hook_registry": frozenset({"hooks"}),
+    "planner": frozenset({"planner"}),
+    "_llm_triage": frozenset({"test_llm_triage.py"}),
+    "smoke_utils": frozenset({"test_smoke_utils.py"}),
+    "version": frozenset({"test_version.py"}),
 }
 
 # ---------------------------------------------------------------------------

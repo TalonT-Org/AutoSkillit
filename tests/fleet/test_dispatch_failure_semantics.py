@@ -1,4 +1,4 @@
-"""Group F: Timeout + No-Result-Block failure semantics for franchise dispatch."""
+"""Group F: Timeout + No-Result-Block failure semantics for fleet dispatch."""
 
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ def _setup_dispatch(tool_ctx, monkeypatch, recipe_name: str = "test-recipe"):
     """Wire tool_ctx for dispatch tests."""
     from autoskillit.recipe.schema import Recipe, RecipeKind
 
-    tool_ctx.franchise_lock = asyncio.Lock()
+    tool_ctx.fleet_lock = asyncio.Lock()
     repo = InMemoryRecipeRepository()
     recipe_info = _make_recipe_info(recipe_name)
     repo.add_recipe(recipe_name, recipe_info)
@@ -125,8 +125,8 @@ def _make_completed_clean(success: bool, reason: str = ""):
 
 class TestTimeoutPath:
     @pytest.mark.anyio
-    async def test_timeout_returns_franchise_error_envelope(self, tool_ctx, monkeypatch):
-        """skill_result.subtype == 'timeout' → franchise_error envelope with error='l2_timeout'."""
+    async def test_timeout_returns_fleet_error_envelope(self, tool_ctx, monkeypatch):
+        """skill_result.subtype == 'timeout' → fleet_error envelope with error='l2_timeout'."""
         import dataclasses
 
         from tests.fakes import _DEFAULT_SKILL_RESULT

@@ -1,4 +1,4 @@
-"""Tests for franchise state module (Group J)."""
+"""Tests for fleet state module (Group J)."""
 
 from __future__ import annotations
 

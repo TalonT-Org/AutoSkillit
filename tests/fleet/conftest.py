@@ -1,4 +1,4 @@
-"""Shared fixtures for tests/franchise/."""
+"""Shared fixtures for tests/fleet/."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ def _reset_mcp_tags():
 
     The mcp singleton is process-global. Tests that call mcp.enable(tags={"kitchen"})
     or mcp.enable(tags={"headless"}) mutate shared state. This fixture ensures every
-    franchise test starts with all tags disabled — the same state as a fresh server import.
+    fleet test starts with all tags disabled — the same state as a fresh server import.
     """
     from autoskillit.server import mcp
 

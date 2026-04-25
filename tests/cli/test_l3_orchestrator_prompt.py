@@ -307,7 +307,7 @@ class TestProgressMarkers:
 
 class TestToolSurface:
     @pytest.mark.parametrize("prefix", [DIRECT_PREFIX, MARKETPLACE_PREFIX])
-    def test_six_franchise_tools_listed(self, prefix: str) -> None:
+    def test_six_fleet_tools_listed(self, prefix: str) -> None:
         prompt = _build(mcp_prefix=prefix)
         for tool in (
             "dispatch_food_truck",

@@ -1,4 +1,4 @@
-"""Shared helpers for tests/franchise/ test modules."""
+"""Shared helpers for tests/fleet/ test modules."""
 
 from __future__ import annotations
 

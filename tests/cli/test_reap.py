@@ -1,4 +1,4 @@
-"""Tests for _reap_stale_dispatches in cli/_franchise.py (Group J)."""
+"""Tests for _reap_stale_dispatches in cli/_fleet.py (Group J)."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from autoskillit.fleet import (
     write_initial_state,
 )
 
-pytestmark = [pytest.mark.layer("cli"), pytest.mark.small, pytest.mark.feature("franchise")]
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.small, pytest.mark.feature("fleet")]
 
 BOOT_ID = "boot-abc-123"
 OTHER_BOOT_ID = "boot-xyz-999"

@@ -381,3 +381,33 @@ def _check_wait_for_merge_queue_routing_conforms_to_expected_targets(
                 )
             )
     return findings
+
+
+@semantic_rule(
+    name="ci-event-literal-merge-group",
+    description=(
+        "Flags wait_for_ci steps that hardcode event='merge_group' — use context.ci_event instead"
+    ),
+    severity=Severity.ERROR,
+)
+def _check_ci_event_literal_merge_group(ctx: ValidationContext) -> list[RuleFinding]:
+    """Flag wait_for_ci steps that hardcode event='merge_group'."""
+    findings: list[RuleFinding] = []
+    for name, step in ctx.recipe.steps.items():
+        if step.tool != "wait_for_ci":
+            continue
+        event_value = (step.with_args or {}).get("event", "")
+        if event_value == "merge_group":
+            findings.append(
+                RuleFinding(
+                    rule="ci-event-literal-merge-group",
+                    severity=Severity.ERROR,
+                    step_name=name,
+                    message=(
+                        "wait_for_ci must not hardcode event='merge_group'. "
+                        "Use context.ci_event (which is 'push' or null) for pre-queue CI, "
+                        "or add a lifecycle-aware condition for in-queue CI."
+                    ),
+                )
+            )
+    return findings

@@ -87,13 +87,13 @@ def parse_sessions_from_summary_dir(log_root: pathlib.Path) -> Iterator[TurnSequ
         try:
             data = json.loads(summary_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
-            print(f"[tool_sequence_analysis] skipping {summary_path}: {exc}", file=sys.stderr)
+            sys.stderr.write(f"[tool_sequence_analysis] skipping {summary_path}: {exc}\n")
             continue
         turns = data.get("turn_tool_calls", [])
         if not isinstance(turns, list):
-            print(
-                f"[tool_sequence_analysis] skipping {summary_path}: turn_tool_calls is not a list",
-                file=sys.stderr,
+            sys.stderr.write(
+                f"[tool_sequence_analysis] skipping {summary_path}:"
+                " turn_tool_calls is not a list\n"
             )
             continue
         if not turns:

@@ -285,21 +285,25 @@ async def analyze_tool_sequences(
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    _valid_formats = {"table", "mermaid", "dot"}
-    if format not in _valid_formats:
-        return json.dumps(
-            {
-                "success": False,
-                "error": f"Invalid format '{format}'; must be one of {sorted(_valid_formats)}",
-            }
-        )
-    if top_n < 1:
-        return json.dumps({"success": False, "error": f"top_n must be >= 1, got {top_n}"})
-    if min_count < 1:
-        return json.dumps({"success": False, "error": f"min_count must be >= 1, got {min_count}"})
     try:
         structlog.contextvars.clear_contextvars()
         with structlog.contextvars.bound_contextvars(tool="analyze_tool_sequences"):
+            _valid_formats = {"table", "mermaid", "dot"}
+            if format not in _valid_formats:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "error": (
+                            f"Invalid format '{format}'; must be one of {sorted(_valid_formats)}"
+                        ),
+                    }
+                )
+            if top_n < 1:
+                return json.dumps({"success": False, "error": f"top_n must be >= 1, got {top_n}"})
+            if min_count < 1:
+                return json.dumps(
+                    {"success": False, "error": f"min_count must be >= 1, got {min_count}"}
+                )
             from autoskillit.core import (
                 compute_analysis,
                 filter_sessions_by_recipe,

@@ -1398,3 +1398,56 @@ def test_display_categories_includes_fleet_when_enabled() -> None:
     cfg_features: dict[str, bool] = {"fleet": True}
     categories = [name for name, _ in iter_display_categories(cfg_features)]
     assert "Fleet" in categories
+
+
+# ---------------------------------------------------------------------------
+# T5: close_kitchen cleans up review_gate_state.json
+# ---------------------------------------------------------------------------
+
+_REVIEW_GATE_STATE_RELPATH = (".autoskillit", "temp", "review_gate_state.json")
+
+
+# T5-1
+def test_close_kitchen_removes_review_gate_state(tmp_path, monkeypatch):
+    """_close_kitchen_handler() must remove review_gate_state.json when present."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+
+    # Write the state file before closing the kitchen
+    state_path = tmp_path.joinpath(*_REVIEW_GATE_STATE_RELPATH)
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(
+        json.dumps(
+            {
+                "gate": "LOOP_REQUIRED",
+                "review_verdict": "changes_requested",
+                "check_review_loop_called": False,
+                "pr_number": "1290",
+                "set_at": "2026-04-26T04:30:00+00:00",
+            }
+        )
+    )
+    assert state_path.exists(), "State file must exist before close_kitchen"
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            from autoskillit.server.tools_kitchen import _close_kitchen_handler
+
+            _close_kitchen_handler()
+
+    assert not state_path.exists(), "review_gate_state.json must be removed by close_kitchen"
+
+
+# T5-2
+def test_close_kitchen_no_review_gate_state_no_error(tmp_path, monkeypatch):
+    """_close_kitchen_handler() must not raise when review_gate_state.json is absent."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            from autoskillit.server.tools_kitchen import _close_kitchen_handler
+
+            _close_kitchen_handler()  # Must not raise
+
+    assert not tmp_path.joinpath(*_REVIEW_GATE_STATE_RELPATH).exists()

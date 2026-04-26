@@ -99,6 +99,15 @@ HOOK_REGISTRY: list[HookDef] = [
         scripts=["token_summary_hook.py", "quota_post_hook.py"],
     ),
     HookDef(
+        event_type="PostToolUse",
+        matcher=r"mcp__.*autoskillit.*__(run_skill|run_python).*",
+        scripts=["review_gate_post_hook.py"],
+    ),
+    HookDef(
+        matcher=r"mcp__.*autoskillit.*__(wait_for_ci|enqueue_pr)",
+        scripts=["review_loop_gate.py"],
+    ),
+    HookDef(
         event_type="SessionStart",
         scripts=["session_start_hook.py"],
     ),

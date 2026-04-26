@@ -447,6 +447,13 @@ every step at full fidelity regardless of session length.
 - When the ingredient evaluates to true, the step is MANDATORY.
 - A running optional step that returns `success: false` MUST follow `on_failure`.
 
+### 4. Anti-shortcut rule
+
+- Do not generalize from prior step outcomes. A step that returned a non-branching
+  result in a previous iteration may return a different result in the next. Every step
+  must execute on every issue — observed patterns from earlier issues do not make later
+  executions redundant.
+
 ---
 
 ## NARRATION SUPPRESSION — MANDATORY

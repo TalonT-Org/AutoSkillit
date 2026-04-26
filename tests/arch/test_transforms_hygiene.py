@@ -123,18 +123,19 @@ def test_every_conftest_reset_uses_canonical_tag_set():
         visitor = _ConfTestVisitor()
         visitor.visit(tree)
         for name, lineno, detail in visitor.findings:
+            rel = path.relative_to(_TESTS_ROOT)
             if detail.startswith("hardcoded-tags:"):
-                rel = path.relative_to(_TESTS_ROOT)
+                violations.append(f"{rel}:{lineno} fixture={name} {detail}")
+            elif detail == "disable-without-clear":
                 violations.append(f"{rel}:{lineno} fixture={name} {detail}")
 
-    assert not violations, (
-        "Conftest fixtures using hardcoded tag sets instead of ALL_VISIBILITY_TAGS:\n"
-        + "\n".join(f"  {v}" for v in violations)
+    assert not violations, "Conftest fixtures with tag hygiene violations:\n" + "\n".join(
+        f"  {v}" for v in violations
     )
 
 
 def test_root_conftest_has_transforms_cleanup():
-    """tests/conftest.py must have an autouse fixture with sys.modules-guarded _transforms cleanup."""
+    """Root conftest must have autouse fixture with sys.modules guard + _transforms cleanup."""
     source = (_TESTS_ROOT / "conftest.py").read_text()
     tree = ast.parse(source)
 

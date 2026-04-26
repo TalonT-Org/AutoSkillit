@@ -39,3 +39,23 @@ def test_skill_preambles_in_skills():
     """AC4: test_skill_preambles.py must live in tests/skills/."""
     assert (REPO_ROOT / "tests/skills/test_skill_preambles.py").is_file()
     assert not (REPO_ROOT / "tests/test_skill_preambles.py").is_file()
+
+
+def test_ci_filter_codepath_produces_scope():
+    """CI codepath: conservative mode + known source file -> non-None scope."""
+    from tests._test_filter import FilterMode, build_test_scope, load_manifest
+
+    manifest = load_manifest(REPO_ROOT)
+    scope = build_test_scope(
+        changed_files={"src/autoskillit/core/paths.py"},
+        mode=FilterMode.CONSERVATIVE,
+        manifest=manifest,
+        tests_root=REPO_ROOT / "tests",
+        cwd=REPO_ROOT,
+        base_ref="integration",
+    )
+    assert scope is not None, (
+        "build_test_scope must return a non-None scope for conservative mode "
+        "with a known source file — None means silent fallback to full run"
+    )
+    assert len(scope) > 0, "Scope must contain at least one test path"

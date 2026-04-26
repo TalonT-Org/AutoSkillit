@@ -167,3 +167,39 @@ def test_hook_registry_hash_changes_on_retired_mutation() -> None:
 
     mutated_retired = frozenset(RETIRED_SCRIPT_BASENAMES | {"extra_retired.py"})
     assert compute_registry_hash(HOOK_REGISTRY, mutated_retired) != HOOK_REGISTRY_HASH
+
+
+# T4-1
+def test_review_gate_post_hook_registered_in_hook_registry() -> None:
+    """review_gate_post_hook.py must be registered as a PostToolUse hook."""
+    post_scripts = {
+        s for hd in HOOK_REGISTRY if hd.event_type == "PostToolUse" for s in hd.scripts
+    }
+    assert "review_gate_post_hook.py" in post_scripts, (
+        "review_gate_post_hook.py must be registered as a PostToolUse hook in HOOK_REGISTRY"
+    )
+
+
+# T4-2
+def test_review_loop_gate_registered_in_hook_registry() -> None:
+    """review_loop_gate.py must be registered as a PreToolUse hook."""
+    pre_scripts = {s for hd in HOOK_REGISTRY if hd.event_type == "PreToolUse" for s in hd.scripts}
+    assert "review_loop_gate.py" in pre_scripts, (
+        "review_loop_gate.py must be registered as a PreToolUse hook in HOOK_REGISTRY"
+    )
+
+
+# T4-3
+def test_review_loop_gate_matcher_covers_wait_for_ci_and_enqueue_pr() -> None:
+    """review_loop_gate.py matcher must cover both wait_for_ci and enqueue_pr."""
+    import re
+
+    gate_entries = [
+        hd
+        for hd in HOOK_REGISTRY
+        if hd.event_type == "PreToolUse" and "review_loop_gate.py" in hd.scripts
+    ]
+    assert gate_entries, "No PreToolUse entry found for review_loop_gate.py"
+    matcher = gate_entries[0].matcher
+    assert re.search(r"wait_for_ci", matcher), f"Matcher must cover wait_for_ci; got: {matcher!r}"
+    assert re.search(r"enqueue_pr", matcher), f"Matcher must cover enqueue_pr; got: {matcher!r}"

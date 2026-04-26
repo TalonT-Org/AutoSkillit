@@ -550,10 +550,11 @@ skills:
         - needs_human
     expected_output_patterns:
     - "verdict\\s*=\\s*(approved|changes_requested|needs_human)"
+    - "%%REVIEW_GATE::(LOOP_REQUIRED|CLEAR)%%"
     pattern_examples:
-    - "verdict = approved\n%%ORDER_UP%%"
-    - "verdict = changes_requested\n%%ORDER_UP%%"
-    - "verdict = needs_human\n%%ORDER_UP%%"
+    - "verdict = approved\n%%REVIEW_GATE::CLEAR%%\n%%ORDER_UP%%"
+    - "verdict = changes_requested\n%%REVIEW_GATE::LOOP_REQUIRED%%\n%%ORDER_UP%%"
+    - "verdict = needs_human\n%%REVIEW_GATE::CLEAR%%\n%%ORDER_UP%%"
 
   arch-lens-c4-container:
     inputs:

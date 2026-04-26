@@ -57,7 +57,10 @@ def _assert_ci_steps(recipe) -> None:
     assert ci.tool == "wait_for_ci"
     assert ci.skip_when_false == "inputs.open_pr"
     assert ci.with_args.get("timeout_seconds") == 300
-    assert ci.on_success == "check_repo_merge_state"
+    assert ci.on_result is not None
+    result_routes = {c.route for c in ci.on_result.conditions}
+    assert "check_repo_merge_state" in result_routes
+    assert "handle_no_ci_runs" in result_routes
     assert ci.on_failure == "detect_ci_conflict"
     assert "release_issue_success" in recipe.steps
     assert "context.merge_target" in ci.with_args["branch"]
@@ -702,9 +705,11 @@ class TestImplementationGroupsStructure:
         )
 
     def test_ig_ci_watch_routes_to_check_repo_merge_state(self, recipe) -> None:
-        """REQ-C7-01: ci_watch.on_success must route to check_repo_merge_state (not release_issue_success)."""  # noqa: E501
+        """REQ-C7-01: ci_watch on_result success must route to check_repo_merge_state."""
         step = recipe.steps["ci_watch"]
-        assert step.on_success == "check_repo_merge_state", (
+        assert step.on_result is not None, "ci_watch must use on_result predicate routing"
+        result_routes = {c.route for c in step.on_result.conditions}
+        assert "check_repo_merge_state" in result_routes, (
             "ci_watch must route to check_repo_merge_state so the PR can enter the merge queue. "
             "Routing directly to release_issue_success skips the queue lifecycle entirely."
         )

@@ -6,6 +6,11 @@ from autoskillit.planner.manifests import (
     build_wp_manifest,
     check_remaining,
 )
+from autoskillit.planner.schema import (  # noqa: F401
+    ASSIGNMENT_REQUIRED_KEYS,
+    PHASE_REQUIRED_KEYS,
+    WP_REQUIRED_KEYS,
+)
 from autoskillit.planner.validation import validate_plan
 
 __all__ = [

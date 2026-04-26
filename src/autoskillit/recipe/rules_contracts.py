@@ -355,7 +355,7 @@ def _check_result_field_drift(ctx: ValidationContext) -> list[RuleFinding]:
     """
     # Deferred import: recipe/ must not import planner/ at module level (REQ-COMP-009).
     # planner/ is L1 and does not import recipe/, so no circular risk.
-    from autoskillit.planner.schema import (  # noqa: PLC0415
+    from autoskillit.planner import (  # noqa: PLC0415
         ASSIGNMENT_REQUIRED_KEYS,
         PHASE_REQUIRED_KEYS,
         WP_REQUIRED_KEYS,

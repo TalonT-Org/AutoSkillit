@@ -120,7 +120,7 @@ def build_assignment_manifest(
             ) from exc
         try:
             data = validate_phase_result(raw)
-        except ValueError as exc:
+        except (ValueError, KeyError) as exc:
             raise ValueError(f"Invalid phase result in {f}: {exc}") from exc
         parsed_phases.append(data)
     parsed_phases.sort(key=lambda d: d["phase_number"])

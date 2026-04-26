@@ -429,7 +429,7 @@ steps:
       and returning the next entry. Outputs the next PR number (or "done").
       The capture block sets current_pr_number at the recipe level — no agent-managed
       variable updates. Routes to get_next_pr_branch for proactive rebase, or
-      collect_artifacts when done.
+      collect_and_check_impl_plans when done.
 
   get_next_pr_branch:
     tool: run_cmd

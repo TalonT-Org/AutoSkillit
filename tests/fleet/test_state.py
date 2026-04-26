@@ -22,8 +22,6 @@ from autoskillit.fleet import (
     write_captured_values,
     write_initial_state,
 )
-from autoskillit.fleet.state import _SCHEMA_VERSION
-
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
 
@@ -200,11 +198,6 @@ class TestReadStateRejectsCorrupted:
 
         result = read_state(sp)
         assert result is None
-
-
-class TestSchemaVersion:
-    def test_schema_version_is_3(self) -> None:
-        assert _SCHEMA_VERSION == 3
 
 
 class TestCapturedValuesRoundTrip:

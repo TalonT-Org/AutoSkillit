@@ -1239,7 +1239,7 @@ class TestCLIOrder:
             cli.order()
 
         out = capsys.readouterr().out
-        numbered = re.findall(r"^\s+(\d+)\.", out, re.MULTILINE)
+        numbered = re.findall(r"^\s+([1-9]\d*)\.", out, re.MULTILINE)
         numbered_ints = [int(n) for n in numbered]
         assert numbered_ints == list(range(1, len(recipes) + 1))
 

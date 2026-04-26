@@ -421,7 +421,7 @@ def flush_session_log(
 
 def _enforce_retention(
     log_root: Path,
-    project_dir: str = "",
+    project_dir: str | None = None,
     get_protected_ids: Callable[[Path], frozenset[str]] | None = None,
 ) -> None:
     """Delete oldest session directories if count exceeds _MAX_SESSIONS.

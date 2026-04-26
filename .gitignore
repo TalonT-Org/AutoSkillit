@@ -9,6 +9,8 @@ temp/
 .mypy_cache/
 .pytest_cache/
 .coverage
+.testmondata
+.testmondata-journal
 
 *.code-workspace
 

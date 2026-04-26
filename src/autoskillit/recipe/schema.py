@@ -178,6 +178,7 @@ class RecipeInfo:
     content_hash: str = ""
     content: str | None = None  # raw YAML text; None when set via parse_recipe_metadata
     kind: RecipeKind = RecipeKind.STANDARD
+    experimental: bool = False
 
 
 @dataclass

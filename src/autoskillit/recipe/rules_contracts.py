@@ -13,9 +13,7 @@ from autoskillit.recipe.contracts import (
 )
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
-# Skill names covered by the result-field-drift rule. The actual frozensets are
-# loaded via deferred import inside _check_result_field_drift to keep recipe/
-# free of module-level planner/ imports (REQ-COMP-009).
+# Skill names covered by the result-field-drift rule.
 _RESULT_FIELD_DRIFT_SKILLS = frozenset(
     {
         "planner-generate-phases",

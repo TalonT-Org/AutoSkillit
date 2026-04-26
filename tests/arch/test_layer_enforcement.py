@@ -444,7 +444,7 @@ def test_layer_enforcement_detects_upward_import(tmp_path: Path) -> None:
 def test_l0_no_dynamic_internal_imports() -> None:
     """L0 code must not dynamically import autoskillit subpackages."""
     violations = []
-    for src_file in sorted(_CORE_SRC.glob("*.py")):
+    for src_file in sorted(_CORE_SRC.rglob("*.py")):
         tree = ast.parse(src_file.read_text(), filename=str(src_file))
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call):

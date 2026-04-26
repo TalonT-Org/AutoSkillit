@@ -62,6 +62,13 @@ class DefaultRecipeRepository:
         return next((r for r in result.items if r.name == name), None)
 
     def load(self, path: Path) -> Recipe:
+        """Load and parse the recipe at *path*.
+
+        Exceptions raised by :func:`load_recipe` (e.g. ``FileNotFoundError``,
+        ``yaml.YAMLError``, ``ValidationError``) are intentionally not wrapped —
+        thin delegation is the contract. Callers that need a uniform error type
+        should catch at the call site.
+        """
         return load_recipe(path)
 
     def list(self, project_dir: Path) -> LoadResult[RecipeInfo]:

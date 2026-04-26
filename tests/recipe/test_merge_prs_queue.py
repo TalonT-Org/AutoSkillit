@@ -333,9 +333,13 @@ def test_merge_prs_push_ejected_fix_routes_to_ci_watch(pmp_recipe) -> None:
 
 
 def test_merge_prs_ci_watch_routes_to_reenter(pmp_recipe) -> None:
-    """ci_watch_post_queue_fix.on_success must route to reenter_queue."""
+    """ci_watch_post_queue_fix on_result success must route to reenter_queue."""
     step = pmp_recipe.steps["ci_watch_post_queue_fix"]
-    assert step.on_success == "reenter_queue"
+    assert step.on_result is not None, "ci_watch_post_queue_fix must use on_result routing"
+    success_routes = [
+        c.route for c in step.on_result.conditions if c.when and "'success'" in c.when
+    ]
+    assert "reenter_queue" in success_routes
 
 
 # ---------------------------------------------------------------------------
@@ -557,9 +561,13 @@ def test_implementation_queue_finale_steps_all_have_skip_when_false(impl_recipe)
 def test_implementation_ci_watch_routes_to_check_repo_merge_state_on_success(
     impl_recipe,
 ) -> None:
-    """ci_watch.on_success must route to check_repo_merge_state."""
+    """ci_watch on_result success must route to check_repo_merge_state."""
     step = impl_recipe.steps["ci_watch"]
-    assert step.on_success == "check_repo_merge_state"
+    assert step.on_result is not None, "ci_watch must use on_result predicate routing"
+    success_routes = [
+        c.route for c in step.on_result.conditions if c.when and "'success'" in c.when
+    ]
+    assert "check_repo_merge_state" in success_routes
 
 
 def test_implementation_extract_pr_number_exists(impl_recipe) -> None:
@@ -672,9 +680,13 @@ def test_remediation_queue_finale_steps_all_have_skip_when_false(remed_recipe) -
 def test_remediation_ci_watch_routes_to_check_repo_merge_state_on_success(
     remed_recipe,
 ) -> None:
-    """ci_watch.on_success must route to check_repo_merge_state."""
+    """ci_watch on_result success must route to check_repo_merge_state."""
     step = remed_recipe.steps["ci_watch"]
-    assert step.on_success == "check_repo_merge_state"
+    assert step.on_result is not None, "ci_watch must use on_result predicate routing"
+    success_routes = [
+        c.route for c in step.on_result.conditions if c.when and "'success'" in c.when
+    ]
+    assert "check_repo_merge_state" in success_routes
 
 
 def test_remediation_extract_pr_number_exists(remed_recipe) -> None:
@@ -1115,14 +1127,20 @@ def test_re_push_queue_fix_routes_to_ci_watch_post_queue_fix(recipe_fixture, req
 
 @pytest.mark.parametrize("recipe_fixture", RELEASE_TIMEOUT_RECIPES)
 def test_ci_watch_post_queue_fix_routes_reenter_on_success(recipe_fixture, request):
-    """ci_watch_post_queue_fix.on_success must route to reenter_merge_queue."""
+    """ci_watch_post_queue_fix on_result success must route to reenter_merge_queue."""
     recipe = request.getfixturevalue(recipe_fixture)
     assert "ci_watch_post_queue_fix" in recipe.steps, (
         f"ci_watch_post_queue_fix must be a step in {recipe_fixture}"
     )
     step = recipe.steps["ci_watch_post_queue_fix"]
-    assert step.on_success == "reenter_merge_queue", (
-        f"ci_watch_post_queue_fix.on_success must be 'reenter_merge_queue' in {recipe_fixture}"
+    assert step.on_result is not None, (
+        f"ci_watch_post_queue_fix must use on_result routing in {recipe_fixture}"
+    )
+    success_routes = [
+        c.route for c in step.on_result.conditions if c.when and "'success'" in c.when
+    ]
+    assert "reenter_merge_queue" in success_routes, (
+        f"ci_watch_post_queue_fix on_result success must route to 'reenter_merge_queue' in {recipe_fixture}"
     )
 
 

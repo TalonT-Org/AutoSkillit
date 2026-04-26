@@ -337,7 +337,7 @@ class TestClaimReleaseGates:
                 f"{name}: release_issue_failure.on_failure should be register_clone_failure"
             )
 
-    def test_ci_watch_on_success_routing(self):
+    def test_ci_watch_on_result_routing(self):
         expected = {
             **{name: "check_repo_merge_state" for name in self.RECIPES_WITHOUT_RELEASE_SUCCESS},
             **{name: "release_issue_success" for name in self.RECIPES_WITH_RELEASE_SUCCESS},
@@ -347,9 +347,19 @@ class TestClaimReleaseGates:
         )
         for name, expected_route in expected.items():
             data = yaml.safe_load(_recipe_path(name).read_text())
-            assert data["steps"]["ci_watch"]["on_success"] == expected_route, (
-                f"{name}: ci_watch.on_success should be {expected_route!r}"
-            )
+            ci_step = data["steps"]["ci_watch"]
+            on_result = ci_step.get("on_result")
+            if on_result:
+                success_routes = [
+                    r["route"] for r in on_result if r.get("when", "").endswith("== 'success'")
+                ]
+                assert expected_route in success_routes, (
+                    f"{name}: ci_watch on_result success should route to {expected_route!r}"
+                )
+            else:
+                assert ci_step.get("on_success") == expected_route, (
+                    f"{name}: ci_watch.on_success should be {expected_route!r}"
+                )
 
     def test_claim_issue_with_args_contains_issue_url(self):
         """CC-F1: claim_issue.with_args must contain issue_url after parsing.

@@ -354,9 +354,11 @@ def test_ci_watch_pr_uses_integration_branch(recipe) -> None:
 
 
 def test_ci_watch_pr_routing(recipe) -> None:
-    """ci_watch_pr on_success -> register_clone_success; on_failure -> diagnose_ci."""
+    """ci_watch_pr on_result success -> register_clone_success; on_failure -> diagnose_ci."""
     step = recipe.steps["ci_watch_pr"]
-    assert step.on_success == "register_clone_success"
+    assert step.on_result is not None, "ci_watch_pr must use on_result predicate routing"
+    result_routes = {c.route for c in step.on_result.conditions}
+    assert "register_clone_success" in result_routes
     assert step.on_failure == "diagnose_ci"
 
 

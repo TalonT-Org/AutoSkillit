@@ -667,7 +667,12 @@ steps:
     capture:
       ci_conclusion: "${{ result.conclusion }}"
       ci_failed_jobs: "${{ result.failed_jobs }}"
-    on_success: check_repo_merge_state
+    on_result:
+      - when: "${{ result.conclusion }} == 'success'"
+        route: check_repo_merge_state
+      - when: "${{ result.conclusion }} == 'no_runs'"
+        route: handle_no_ci_runs
+      - route: detect_ci_conflict
     on_failure: detect_ci_conflict
     optional: true
     skip_when_false: "inputs.open_pr"
@@ -676,9 +681,29 @@ steps:
       using the wait_for_ci MCP tool (timeout: 300 s). Captures structured output
       (conclusion + failed job names) for downstream resolve_ci.
       Skipped when open_pr=false — no remote feature branch is opened in that mode.
-      On success, routes to check_repo_merge_state to determine if the PR should enter
-      the merge queue. On failure, routes to detect_ci_conflict which checks whether
-      the failure is caused by a stale base before falling through to diagnose_ci.
+      Routes on result.conclusion: success → check_repo_merge_state,
+      no_runs → handle_no_ci_runs (re-derive event + retry), failure → detect_ci_conflict.
+
+  handle_no_ci_runs:
+    tool: check_repo_merge_state
+    with:
+      branch: "${{ context.merge_target }}"
+      cwd: "${{ context.work_dir }}"
+      remote_url: "${{ context.remote_url }}"
+      step_name: "handle_no_ci_runs"
+    capture:
+      ci_event: "${{ result.ci_event }}"
+    on_success: ci_watch
+    on_failure: release_issue_failure
+    retries: 1
+    on_exhausted: release_issue_failure
+    note: >
+      Intercepts no_runs conclusion from wait_for_ci. Re-derives ci_event using
+      check_repo_merge_state (the original event may have been wrong for this
+      branch's workflow configuration) and retries ci_watch. retries: 1 bounds
+      the tool-call retry; if the re-derived ci_event still produces no_runs on
+      the next ci_watch iteration, the recipe engine's step-visit ceiling
+      terminates infinite cycles.
 
   check_repo_merge_state:
     tool: check_repo_merge_state
@@ -914,13 +939,19 @@ steps:
     capture:
       ci_conclusion: "${{ result.conclusion }}"
       ci_failed_jobs: "${{ result.failed_jobs }}"
-    on_success: reenter_merge_queue
+    on_result:
+      - when: "${{ result.conclusion }} == 'success'"
+        route: reenter_merge_queue
+      - when: "${{ result.conclusion }} == 'no_runs'"
+        route: release_issue_failure
+      - route: detect_ci_conflict
     on_failure: detect_ci_conflict
     skip_when_false: "inputs.open_pr"
     note: >
       Validates CI on the rebased feature branch after queue ejection fix and re-push.
-      Mirrors ci_watch: routes to reenter_merge_queue on CI pass, to detect_ci_conflict
-      on CI failure. Prevents re-entering the merge queue with a broken manifest or code.
+      Routes on result.conclusion: success → reenter_merge_queue,
+      no_runs → release_issue_failure (post-queue-fix is already a retry path),
+      failure → detect_ci_conflict.
 
   reenter_merge_queue:
     tool: enqueue_pr

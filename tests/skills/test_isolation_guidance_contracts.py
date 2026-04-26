@@ -30,10 +30,10 @@ def tests_claude_md_text() -> str:
 
 
 def test_make_plan_step1_reads_isolation_patterns(make_plan_text: str) -> None:
-    """make-plan Step 1 must instruct reading existing test isolation patterns
-    when the plan touches mutating methods on singleton or module-level objects."""
-    step1_idx = make_plan_text.find("**Understand related systems")
-    step2_idx = make_plan_text.find("**Explore and design approaches")
+    planning_steps_idx = make_plan_text.find("## Planning Steps")
+    assert planning_steps_idx != -1, "make-plan SKILL.md must have a '## Planning Steps' section"
+    step1_idx = make_plan_text.find("**Understand related systems", planning_steps_idx)
+    step2_idx = make_plan_text.find("**Explore and design approaches", planning_steps_idx)
     assert step1_idx != -1 and step2_idx != -1
     step1_section = make_plan_text[step1_idx:step2_idx]
     has_isolation_read = "isolation" in step1_section.lower() and (
@@ -49,10 +49,10 @@ def test_make_plan_step1_reads_isolation_patterns(make_plan_text: str) -> None:
 
 
 def test_make_plan_step3_isolation_contract(make_plan_text: str) -> None:
-    """make-plan Step 3 must require specifying the isolation strategy for tests
-    that mutate shared objects."""
-    step3_idx = make_plan_text.find("**Design tests first")
-    step4_idx = make_plan_text.find("**Evaluate approaches")
+    planning_steps_idx = make_plan_text.find("## Planning Steps")
+    assert planning_steps_idx != -1, "make-plan SKILL.md must have a '## Planning Steps' section"
+    step3_idx = make_plan_text.find("**Design tests first", planning_steps_idx)
+    step4_idx = make_plan_text.find("**Evaluate approaches", planning_steps_idx)
     assert step3_idx != -1 and step4_idx != -1
     step3_section = make_plan_text[step3_idx:step4_idx]
     has_isolation_contract = "isolation" in step3_section.lower() and (
@@ -65,10 +65,10 @@ def test_make_plan_step3_isolation_contract(make_plan_text: str) -> None:
 
 
 def test_make_plan_step3_incomplete_without_cleanup(make_plan_text: str) -> None:
-    """make-plan Step 3 must explicitly state that plans prescribing mutating shared
-    objects without specifying cleanup are incomplete."""
-    step3_idx = make_plan_text.find("**Design tests first")
-    step4_idx = make_plan_text.find("**Evaluate approaches")
+    planning_steps_idx = make_plan_text.find("## Planning Steps")
+    assert planning_steps_idx != -1, "make-plan SKILL.md must have a '## Planning Steps' section"
+    step3_idx = make_plan_text.find("**Design tests first", planning_steps_idx)
+    step4_idx = make_plan_text.find("**Evaluate approaches", planning_steps_idx)
     assert step3_idx != -1 and step4_idx != -1
     step3_section = make_plan_text[step3_idx:step4_idx]
     assert "incomplete" in step3_section.lower(), (
@@ -78,7 +78,6 @@ def test_make_plan_step3_incomplete_without_cleanup(make_plan_text: str) -> None
 
 
 def test_dry_walkthrough_step2_has_shared_state_check(dry_walkthrough_text: str) -> None:
-    """dry-walkthrough Step 2 checklist must include a check for shared state cleanup."""
     step2_idx = dry_walkthrough_text.find("### Step 2:")
     step3_idx = dry_walkthrough_text.find("### Step 3:")
     assert step2_idx != -1 and step3_idx != -1
@@ -103,8 +102,6 @@ def test_dry_walkthrough_step2_has_shared_state_check(dry_walkthrough_text: str)
 
 
 def test_dry_walkthrough_step2_mechanical_scan_instruction(dry_walkthrough_text: str) -> None:
-    """dry-walkthrough Step 2 shared-state check must give a mechanical scan instruction
-    (scan for method calls on module-scope objects)."""
     step2_idx = dry_walkthrough_text.find("### Step 2:")
     step3_idx = dry_walkthrough_text.find("### Step 3:")
     assert step2_idx != -1 and step3_idx != -1
@@ -118,23 +115,20 @@ def test_dry_walkthrough_step2_mechanical_scan_instruction(dry_walkthrough_text:
 
 
 def test_resolve_failures_accumulation_pattern_guidance(resolve_failures_text: str) -> None:
-    """resolve-failures flaky test section must describe the accumulation pattern
-    (grow-only state vs toggling state)."""
-    assert "accumulation-based" in resolve_failures_text.lower(), (
+    constraints_idx = resolve_failures_text.find("## Critical Constraints")
+    assert constraints_idx != -1, (
+        "resolve-failures SKILL.md must have a '## Critical Constraints' section"
+    )
+    assert "accumulation-based" in resolve_failures_text[constraints_idx:].lower(), (
         "resolve-failures must describe the 'accumulation-based' pattern — shared state "
         "growing unboundedly rather than toggling — as a distinct non-determinism cause"
     )
 
 
 def test_resolve_failures_inverse_method_warning(resolve_failures_text: str) -> None:
-    """resolve-failures must warn that inverse method calls (disable after enable)
-    do not reset accumulation-based state."""
     has_inverse_warning = (
         "inverse" in resolve_failures_text.lower() or "append" in resolve_failures_text.lower()
-    ) and (
-        "not" in resolve_failures_text.lower()
-        and ("reset" in resolve_failures_text.lower() or "undo" in resolve_failures_text.lower())
-    )
+    ) and "does not reset" in resolve_failures_text.lower()
     assert has_inverse_warning, (
         "resolve-failures must warn that calling an inverse method (e.g., disable() "
         "to undo enable()) does not reset accumulation-based state if the framework "
@@ -143,8 +137,6 @@ def test_resolve_failures_inverse_method_warning(resolve_failures_text: str) -> 
 
 
 def test_resolve_failures_full_reset_prescription(resolve_failures_text: str) -> None:
-    """resolve-failures must prescribe full reset (clear + restore) as the fix for
-    accumulation-based state leakage."""
     assert "clear the collection" in resolve_failures_text.lower(), (
         "resolve-failures must prescribe clearing the collection (full reset) "
         "as the fix for accumulation-based state leakage, not inverse operations"
@@ -152,7 +144,6 @@ def test_resolve_failures_full_reset_prescription(resolve_failures_text: str) ->
 
 
 def test_tests_claude_md_fastmcp_singleton_rule(tests_claude_md_text: str) -> None:
-    """tests/CLAUDE.md must document the FastMCP singleton visibility state rule."""
     assert "_transforms" in tests_claude_md_text, (
         "tests/CLAUDE.md must document the mcp._transforms accumulation behavior "
         "under the xdist compatibility section"
@@ -160,7 +151,6 @@ def test_tests_claude_md_fastmcp_singleton_rule(tests_claude_md_text: str) -> No
 
 
 def test_tests_claude_md_clear_restore_pattern(tests_claude_md_text: str) -> None:
-    """tests/CLAUDE.md must prescribe the clear+restore pattern for FastMCP tests."""
     has_clear_restore = "_transforms.clear()" in tests_claude_md_text and (
         "disable" in tests_claude_md_text or "baseline" in tests_claude_md_text
     )

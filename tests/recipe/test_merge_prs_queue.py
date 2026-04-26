@@ -1140,7 +1140,8 @@ def test_ci_watch_post_queue_fix_routes_reenter_on_success(recipe_fixture, reque
         c.route for c in step.on_result.conditions if c.when and "'success'" in c.when
     ]
     assert "reenter_merge_queue" in success_routes, (
-        f"ci_watch_post_queue_fix on_result success must route to 'reenter_merge_queue' in {recipe_fixture}"
+        f"ci_watch_post_queue_fix on_result success must route to 'reenter_merge_queue'"
+        f" in {recipe_fixture}"
     )
 
 

@@ -66,8 +66,11 @@ def sync_hooks_to_settings(settings_path: Path) -> None:
         )
     hooks_dir = root / "hooks"
     data = _load_settings_data(settings_path)
+    # Consolidate HookDef entries sharing the same (event_type, matcher) into a
+    # single settings.json entry so Claude Code sees no duplicate matchers.
+    groups: dict[tuple[str, str], dict] = {}
     for hook_def in HOOK_REGISTRY:
-        event_list: list[dict] = data.setdefault("hooks", {}).setdefault(hook_def.event_type, [])
+        key = (hook_def.event_type, hook_def.matcher)
         hooks_list = [
             {
                 "type": "command",
@@ -80,7 +83,13 @@ def sync_hooks_to_settings(settings_path: Path) -> None:
             }
             for script in hook_def.scripts
         ]
-        event_list.append(_build_hook_entry(hook_def, hooks_list))
+        if key not in groups:
+            groups[key] = _build_hook_entry(hook_def, hooks_list)
+        else:
+            groups[key]["hooks"].extend(hooks_list)
+    for (event_type, _), entry in groups.items():
+        event_list: list[dict] = data.setdefault("hooks", {}).setdefault(event_type, [])
+        event_list.append(entry)
     data["_autoskillit_registry_hash"] = HOOK_REGISTRY_HASH
     _write_settings_data(settings_path, data)
 

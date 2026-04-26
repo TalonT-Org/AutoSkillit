@@ -28,27 +28,36 @@ def _all_src_files() -> list[Path]:
 
 
 def _build_core_reexport_map() -> dict[str, str]:
-    """
-    Parse core/__init__.py relative imports to map re-exported names → submodule stem.
+    """Parse core/__init__.py (or .pyi stub) relative imports → submodule stem map.
 
     `from .feature_flags import is_feature_enabled` → {"is_feature_enabled": "feature_flags"}
+
+    When core/__init__.py uses PEP 562 lazy loading (no relative imports in .py),
+    the .pyi stub serves as the canonical source of re-export mappings.
     """
-    init_path = _SRC_ROOT / "core" / "__init__.py"
-    if not init_path.exists():
-        pytest.skip(f"core/__init__.py not found at {init_path} — guard would pass vacuously")
     reexport_map: dict[str, str] = {}
-    try:
-        tree = ast.parse(init_path.read_text(encoding="utf-8"))
-    except SyntaxError as exc:
-        warnings.warn(
-            f"SyntaxError parsing {init_path}: {exc} — re-export map is empty", stacklevel=2
+
+    for suffix in ("__init__.py", "__init__.pyi"):
+        path = _SRC_ROOT / "core" / suffix
+        if not path.exists():
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except SyntaxError as exc:
+            warnings.warn(f"SyntaxError parsing {path}: {exc} — skipping", stacklevel=2)
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.level == 1 and node.module:
+                stem = node.module
+                for alias in node.names:
+                    name = alias.asname if alias.asname else alias.name
+                    reexport_map[name] = stem
+
+    if not reexport_map:
+        pytest.skip(
+            "core/__init__.py and .pyi contain no relative imports — guard would pass vacuously"
         )
-        return {}
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.level == 1 and node.module:
-            stem = node.module
-            for alias in node.names:
-                reexport_map[alias.name] = stem
+
     return reexport_map
 
 

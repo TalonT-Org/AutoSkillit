@@ -530,6 +530,9 @@ def test_init_files_are_pure_facades() -> None:
         tree = ast.parse(source, filename=str(init_file))
         for node in tree.body:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                # PEP 562 protocol functions are allowed in lazy-loading facades
+                if node.name in ("__getattr__", "__dir__"):
+                    continue
                 violations.append(
                     f"  {_rel(init_file)}:{node.lineno}: defines {node.name!r} at module scope"
                 )

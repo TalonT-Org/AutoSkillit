@@ -169,7 +169,7 @@ def build_wp_manifest(assignments_dir: str, output_dir: str) -> dict[str, str]:
             ) from exc
         try:
             data = validate_assignment_result(raw)
-        except ValueError as exc:
+        except (ValueError, KeyError) as exc:
             raise ValueError(f"Invalid assignment result in {f}: {exc}") from exc
         parsed_assignments.append(data)
     parsed_assignments.sort(key=lambda d: (d["phase_number"], d["assignment_number"]))

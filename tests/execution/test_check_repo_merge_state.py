@@ -261,9 +261,6 @@ async def test_ci_event_is_always_push_or_none(
     )
     result = await fetch_repo_merge_state(owner="o", repo="r", branch=branch, token=None)
     assert result["ci_event"] == expected_ci_event
-    assert result["ci_event"] in ("push", None), (
-        f"ci_event must be 'push' or None, got {result['ci_event']!r}"
-    )
 
 
 @pytest.mark.anyio

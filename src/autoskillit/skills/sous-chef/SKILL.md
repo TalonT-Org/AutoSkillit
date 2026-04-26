@@ -349,7 +349,7 @@ For ad-hoc (off-recipe) merges:
 **Hidden ingredient — `sequential_queue`** (default `"false"`): Force the centralized
 `merge-prs` path even when `queue_available=true`. Use when batch-level review via an
 integration PR is required, or when cross-PR `audit_impl` is needed as a quality gate.
-The per-pipeline `review_pr` run before enqueue provides per-PR review coverage; the
+Each pipeline's per-PR review step before enqueue provides per-PR review coverage; the
 merge queue itself provides conflict safety. `sequential_queue` is only needed when
 consolidated batch-level review is explicitly required.
 

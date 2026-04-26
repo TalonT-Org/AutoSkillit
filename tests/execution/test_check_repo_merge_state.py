@@ -200,7 +200,7 @@ async def test_push_trigger_branch_filter_excludes_feature_branch(httpx_mock):
         branch="feature/impl-20260401-123456",
         token=None,
     )
-    assert result["ci_event"] != "push"
+    assert result["ci_event"] is None
 
 
 @pytest.mark.anyio

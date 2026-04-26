@@ -157,6 +157,7 @@ from .tool_sequence_analysis import (
     render_mermaid as render_mermaid,
 )
 from .types import (
+    ALL_VISIBILITY_TAGS,
     AUTOSKILLIT_INSTALLED_VERSION,
     AUTOSKILLIT_PRIVATE_ENV_VARS,
     AUTOSKILLIT_SKILL_PREFIX,
@@ -346,6 +347,7 @@ __all__ = [
     "RECIPE_PACK_TAGS",
     "CATEGORY_TAGS",
     "TOOL_SUBSET_TAGS",
+    "ALL_VISIBILITY_TAGS",
     "CONTEXT_EXHAUSTION_MARKER",
     "RETIRED_READINESS_TOKENS",
     "FEATURE_REGISTRY",

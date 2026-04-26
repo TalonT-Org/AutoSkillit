@@ -218,6 +218,25 @@ def _clear_skip_stale_check_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("AUTOSKILLIT_SKIP_STALE_CHECK", raising=False)
 
 
+@pytest.fixture(autouse=True)
+def _reset_mcp_visibility():
+    import sys
+
+    def _clear_transforms():
+        from autoskillit.core import ALL_VISIBILITY_TAGS
+        from autoskillit.server import mcp
+
+        mcp._transforms.clear()
+        for tag in sorted(ALL_VISIBILITY_TAGS):
+            mcp.disable(tags={tag})
+
+    if "autoskillit.server" in sys.modules:
+        _clear_transforms()
+    yield
+    if "autoskillit.server" in sys.modules:
+        _clear_transforms()
+
+
 @pytest.fixture(scope="function")
 def anyio_backend():
     """Lock all @pytest.mark.anyio tests to the asyncio backend."""

@@ -595,3 +595,117 @@ def test_conformance_rule_silent_without_sentinel() -> None:
     assert conformance_findings == [], (
         f"I8 should be silent for non-sentinel recipes, got: {conformance_findings}"
     )
+
+
+# ---------------------------------------------------------------------------
+# ci-no-runs-unguarded rule tests
+# ---------------------------------------------------------------------------
+
+_NO_RUNS_RULE = "ci-no-runs-unguarded"
+
+
+def test_ci_no_runs_unguarded_detects_bare_on_success() -> None:
+    """ci_watch with on_success -> merge step must be flagged as unguarded."""
+    wf = _make_workflow(
+        {
+            "ci_watch": {
+                "tool": "wait_for_ci",
+                "on_success": "merge_step",
+                "on_failure": "handle_failure",
+                "with": {"event": "${{ context.ci_event }}", "branch": "main"},
+            },
+            "merge_step": {"tool": "enqueue_pr"},
+            "handle_failure": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:diagnose-ci b - -"},
+            },
+        }
+    )
+    findings = run_semantic_rules(wf)
+    no_runs_findings = [f for f in findings if f.rule == _NO_RUNS_RULE]
+    assert len(no_runs_findings) == 1
+    assert no_runs_findings[0].severity == Severity.ERROR
+    assert no_runs_findings[0].step_name == "ci_watch"
+
+
+def test_ci_no_runs_unguarded_passes_with_on_result() -> None:
+    """ci_watch with on_result routing on conclusion is not flagged."""
+    wf = _make_workflow(
+        {
+            "ci_watch": {
+                "tool": "wait_for_ci",
+                "on_result": [
+                    {"when": "${{ result.conclusion }} == 'no_runs'", "route": "handle_no_runs"},
+                    {"when": "${{ result.conclusion }} == 'success'", "route": "merge_step"},
+                    {"route": "handle_failure"},
+                ],
+                "with": {"event": "${{ context.ci_event }}", "branch": "main"},
+            },
+            "merge_step": {"tool": "enqueue_pr"},
+            "handle_no_runs": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:diagnose-ci b - -"},
+            },
+            "handle_failure": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:diagnose-ci b - -"},
+            },
+        }
+    )
+    findings = run_semantic_rules(wf)
+    no_runs_findings = [f for f in findings if f.rule == _NO_RUNS_RULE]
+    assert len(no_runs_findings) == 0
+
+
+def test_ci_no_runs_unguarded_flags_on_result_without_no_runs_guard() -> None:
+    """on_result with only explicit when-conditions (no catch-all) still flags."""
+    wf = _make_workflow(
+        {
+            "ci_watch": {
+                "tool": "wait_for_ci",
+                "on_success": "merge_step",
+                "on_result": [
+                    {"when": "${{ result.conclusion }} == 'success'", "route": "merge_step"},
+                    {"when": "${{ result.conclusion }} == 'failure'", "route": "handle_failure"},
+                ],
+                "with": {"event": "${{ context.ci_event }}", "branch": "main"},
+            },
+            "merge_step": {"tool": "enqueue_pr"},
+            "handle_failure": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:diagnose-ci b - -"},
+            },
+        }
+    )
+    findings = run_semantic_rules(wf)
+    no_runs_findings = [f for f in findings if f.rule == _NO_RUNS_RULE]
+    assert len(no_runs_findings) == 1
+
+
+def test_ci_no_runs_unguarded_silent_for_non_ci_tools() -> None:
+    """Non-wait_for_ci steps with on_success are not flagged."""
+    wf = _make_workflow(
+        {
+            "run_tests": {
+                "tool": "run_cmd",
+                "on_success": "merge_step",
+                "with": {"cmd": "echo ok"},
+            },
+            "merge_step": {"tool": "enqueue_pr"},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    no_runs_findings = [f for f in findings if f.rule == _NO_RUNS_RULE]
+    assert len(no_runs_findings) == 0
+
+
+def test_bundled_recipes_no_runs_guarded() -> None:
+    """All bundled recipes with wait_for_ci must guard against no_runs."""
+    for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):
+        recipe = load_recipe(yaml_path)
+        findings = run_semantic_rules(recipe)
+        no_runs_findings = [f for f in findings if f.rule == _NO_RUNS_RULE]
+        assert len(no_runs_findings) == 0, (
+            f"Recipe '{yaml_path.stem}' has unguarded no_runs paths: "
+            + ", ".join(f.message for f in no_runs_findings)
+        )

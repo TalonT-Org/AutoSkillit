@@ -145,6 +145,47 @@ def _check_ci_failure_conflict_gate(ctx: ValidationContext) -> list[RuleFinding]
     return findings
 
 
+@semantic_rule(
+    name="ci-no-runs-unguarded",
+    description=(
+        "Flags wait_for_ci steps that use bare on_success routing without "
+        "on_result conditions that intercept conclusion='no_runs'"
+    ),
+    severity=Severity.ERROR,
+)
+def _check_ci_no_runs_unguarded(ctx: ValidationContext) -> list[RuleFinding]:
+    no_runs_re = re.compile(r"""==\s*['"]?no_runs['"]?""")
+    findings: list[RuleFinding] = []
+    for name, step in ctx.recipe.steps.items():
+        if step.tool != "wait_for_ci":
+            continue
+        has_no_runs_guard = False
+        if step.on_result and step.on_result.conditions:
+            has_explicit_no_runs = any(
+                c.when and no_runs_re.search(c.when) for c in step.on_result.conditions
+            )
+            has_catch_all = any(not c.when for c in step.on_result.conditions)
+            has_no_runs_guard = has_explicit_no_runs or has_catch_all
+        if has_no_runs_guard:
+            continue
+        if step.on_success or step.on_result:
+            target = step.on_success or "on_result routing"
+            findings.append(
+                RuleFinding(
+                    rule="ci-no-runs-unguarded",
+                    severity=Severity.ERROR,
+                    step_name=name,
+                    message=(
+                        f"Step '{name}' uses wait_for_ci without an on_result condition "
+                        "that intercepts conclusion='no_runs'. wait_for_ci returns "
+                        "conclusion='no_runs' on the success path — add on_result "
+                        f"conditions to intercept no_runs before routing to '{target}'."
+                    ),
+                )
+            )
+    return findings
+
+
 _CI_EVENT_SCOPE_TOOLS = {"wait_for_ci", "get_ci_status"}
 
 

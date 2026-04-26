@@ -35,33 +35,45 @@ def _reset_mcp_tags():
     and preventing orchestrator-path tests from leaking fleet-dispatch or
     kitchen-core enables into subsequent fleet visibility tests.
     """
+    from autoskillit.core import ALL_VISIBILITY_TAGS
     from autoskillit.server import mcp
 
-    _ALL_GATED = {"kitchen", "headless", "fleet", "fleet-dispatch", "kitchen-core"}
     mcp._transforms.clear()
-    for tag in _ALL_GATED:
+    for tag in sorted(ALL_VISIBILITY_TAGS):
         mcp.disable(tags={tag})
     yield
     mcp._transforms.clear()
-    for tag in _ALL_GATED:
+    for tag in sorted(ALL_VISIBILITY_TAGS):
         mcp.disable(tags={tag})
 
 
 @pytest.fixture()
 def kitchen_enabled():
     """Enable the kitchen tag on the MCP server for the duration of the test."""
+    from autoskillit.core import ALL_VISIBILITY_TAGS
     from autoskillit.server import mcp
 
+    mcp._transforms.clear()
+    for tag in sorted(ALL_VISIBILITY_TAGS):
+        mcp.disable(tags={tag})
     mcp.enable(tags={"kitchen"})
     yield
-    mcp.disable(tags={"kitchen"})
+    mcp._transforms.clear()
+    for tag in sorted(ALL_VISIBILITY_TAGS):
+        mcp.disable(tags={tag})
 
 
 @pytest.fixture()
 def headless_enabled():
     """Enable the headless tag on the MCP server for the duration of the test."""
+    from autoskillit.core import ALL_VISIBILITY_TAGS
     from autoskillit.server import mcp
 
+    mcp._transforms.clear()
+    for tag in sorted(ALL_VISIBILITY_TAGS):
+        mcp.disable(tags={tag})
     mcp.enable(tags={"headless"})
     yield
-    mcp.disable(tags={"headless"})
+    mcp._transforms.clear()
+    for tag in sorted(ALL_VISIBILITY_TAGS):
+        mcp.disable(tags={tag})

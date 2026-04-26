@@ -227,32 +227,33 @@ def test_import_safety_with_features_disabled():
 @pytest.mark.anyio
 async def test_tool_listing_matches_feature_state(fleet_enabled: bool, monkeypatch):
     """MCP tool listing includes/excludes fleet tools based on session-type feature state."""
-    from autoskillit.core import FLEET_TOOLS
+    from autoskillit.core import ALL_VISIBILITY_TAGS, FLEET_TOOLS
     from autoskillit.server import _apply_session_type_visibility, mcp
 
-    # Reset to known baseline: clear accumulated transforms, apply initial state
     mcp._transforms.clear()
-    mcp.disable(tags={"fleet", "kitchen", "headless"})
+    for tag in sorted(ALL_VISIBILITY_TAGS):
+        mcp.disable(tags={tag})
 
-    if fleet_enabled:
-        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
-    else:
-        monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
-
-    _apply_session_type_visibility()
-
-    from fastmcp.client import Client
-
-    async with Client(mcp) as client:
-        tools = await client.list_tools()
-    tool_names = {t.name for t in tools}
-
-    for name in FLEET_TOOLS:
+    try:
         if fleet_enabled:
-            assert name in tool_names, f"{name} should be visible when fleet enabled"
+            monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
         else:
-            assert name not in tool_names, f"{name} should be hidden when fleet disabled"
+            monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
 
-    # Cleanup: restore to import-time baseline
-    mcp._transforms.clear()
-    mcp.disable(tags={"kitchen"})
+        _apply_session_type_visibility()
+
+        from fastmcp.client import Client
+
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
+        tool_names = {t.name for t in tools}
+
+        for name in FLEET_TOOLS:
+            if fleet_enabled:
+                assert name in tool_names, f"{name} should be visible when fleet enabled"
+            else:
+                assert name not in tool_names, f"{name} should be hidden when fleet disabled"
+    finally:
+        mcp._transforms.clear()
+        for tag in sorted(ALL_VISIBILITY_TAGS):
+            mcp.disable(tags={tag})

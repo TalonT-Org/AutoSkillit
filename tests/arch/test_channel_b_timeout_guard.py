@@ -110,6 +110,36 @@ class TestChannelBTimeoutGuard:
             + "\n".join(violations)
         )
 
+    def test_all_channel_b_calls_have_explicit_phase1_timeout(self) -> None:
+        """Channel B tests must set _phase1_timeout >= 120 to prevent Phase 1 STALE."""
+        _phase1_minimum = 2 * TimeoutTier.CHANNEL_B  # 120
+        source = CHANNEL_B_TEST_FILE.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(CHANNEL_B_TEST_FILE))
+        calls = _extract_run_managed_async_calls(tree)
+        violations: list[str] = []
+
+        for func_name, lineno, kw_dict in calls:
+            if not _is_channel_b_call(kw_dict):
+                continue
+            if func_name in EXEMPTIONS:
+                continue
+
+            phase1_node = kw_dict.get("_phase1_timeout")
+            if phase1_node is None:
+                violations.append(
+                    f"  {func_name} (line {lineno}): missing _phase1_timeout= "
+                    f"(must be >= {_phase1_minimum})"
+                )
+            elif isinstance(phase1_node, ast.Constant) and phase1_node.value < _phase1_minimum:
+                violations.append(
+                    f"  {func_name} (line {lineno}): _phase1_timeout={phase1_node.value} "
+                    f"< {_phase1_minimum}"
+                )
+
+        assert not violations, (
+            "Channel B calls with missing/insufficient _phase1_timeout:\n" + "\n".join(violations)
+        )
+
     def test_timeout_tier_constants(self) -> None:
         """TimeoutTier values encode the documented budget math."""
         assert TimeoutTier.UNIT == 10

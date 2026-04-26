@@ -77,8 +77,8 @@ def main() -> None:
             }
             try:
                 _atomic_write(state_file, json.dumps(state))
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"review_gate_post_hook: failed to write gate state: {e}", file=sys.stderr)
             sys.exit(0)
 
         if _TAG_CLEAR in result_text:
@@ -102,8 +102,10 @@ def main() -> None:
                         if isinstance(args, dict) and args.get("pr_number"):
                             state["pr_number"] = str(args["pr_number"])
                         _atomic_write(state_file, json.dumps(state))
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(
+                        f"review_gate_post_hook: failed to update gate state: {e}", file=sys.stderr
+                    )
             sys.exit(0)
 
     sys.exit(0)

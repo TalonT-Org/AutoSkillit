@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
+from tests.fleet._helpers import _make_recipe_info as _fleet_make_recipe_info
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium, pytest.mark.feature("fleet")]
 
@@ -19,15 +20,7 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.medium, pytest.mark.featu
 
 
 def _make_recipe_info(name: str = "test-recipe"):
-    """Return a minimal RecipeInfo for InMemoryRecipeRepository."""
-    from autoskillit.recipe.schema import RecipeInfo, RecipeSource
-
-    return RecipeInfo(
-        name=name,
-        description="test",
-        source=RecipeSource.PROJECT,
-        path=Path(f"/fake/recipes/{name}.yaml"),
-    )
+    return _fleet_make_recipe_info(name, path_prefix="/fake/recipes/")
 
 
 def _make_standard_recipe(name: str = "test-recipe", ingredient_keys: list[str] | None = None):

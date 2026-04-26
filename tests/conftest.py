@@ -415,6 +415,12 @@ def _resolve_test_config() -> "AutomationConfig | None":
         return None
 
 
+@pytest.fixture(autouse=True)
+def _clear_resolve_test_config_cache():
+    yield
+    _resolve_test_config.cache_clear()
+
+
 def _is_test_feature_enabled(feature_name: str, *, env_val: str | None) -> bool:
     """Return True if feature_name is enabled for this test run.
 

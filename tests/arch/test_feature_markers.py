@@ -21,14 +21,16 @@ _TESTS_ROOT = Path(__file__).parent.parent
 _FLEET_DIR_FILES = sorted((_TESTS_ROOT / "fleet").glob("test_*.py"))
 
 # Cross-directory fleet test files — require deliberate enumeration
-_FLEET_CROSS_DIR_FILES = [
-    _TESTS_ROOT / "cli" / "test_fleet_cli.py",
-    _TESTS_ROOT / "server" / "test_tools_dispatch.py",
-    _TESTS_ROOT / "cli" / "test_food_truck_prompt.py",
-    _TESTS_ROOT / "cli" / "test_l3_orchestrator_prompt.py",
-    _TESTS_ROOT / "cli" / "test_reap.py",
-    _TESTS_ROOT / "cli" / "test_signal_guard.py",
-]
+_FLEET_CROSS_DIR_FILES: frozenset[Path] = frozenset(
+    [
+        _TESTS_ROOT / "cli" / "test_fleet_cli.py",
+        _TESTS_ROOT / "server" / "test_tools_dispatch.py",
+        _TESTS_ROOT / "cli" / "test_food_truck_prompt.py",
+        _TESTS_ROOT / "cli" / "test_l3_orchestrator_prompt.py",
+        _TESTS_ROOT / "cli" / "test_reap.py",
+        _TESTS_ROOT / "cli" / "test_signal_guard.py",
+    ]
+)
 
 # Union: all files requiring pytestmark feature("fleet")
 _ALL_FLEET_FILES = [*_FLEET_DIR_FILES, *_FLEET_CROSS_DIR_FILES]
@@ -204,6 +206,11 @@ def test_no_feature_marker_on_infrastructure_tests():
         "Infrastructure tests must not carry feature('fleet') pytestmark:\n"
         + "\n".join(f"  {r}" for r in unexpected)
     )
+
+
+def test_fleet_cross_dir_files_no_duplicates():
+    paths = list(_FLEET_CROSS_DIR_FILES)
+    assert len(paths) == len(set(paths)), "Duplicate paths in _FLEET_CROSS_DIR_FILES"
 
 
 def test_import_safety_with_features_disabled():

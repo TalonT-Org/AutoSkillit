@@ -29,3 +29,35 @@ def compute_food_truck_tool_surface(recipe_name: str) -> frozenset[str]:
     for pack in recipe.requires_packs or []:
         expected |= TOOLS_BY_PACK.get(pack, frozenset())
     return frozenset(expected)
+
+
+def _make_recipe_info(name: str = "test-recipe", path_prefix: str = "/fake/"):
+    from pathlib import Path
+
+    from autoskillit.recipe.schema import RecipeInfo, RecipeSource
+
+    return RecipeInfo(
+        name=name,
+        description="test",
+        source=RecipeSource.PROJECT,
+        path=Path(f"{path_prefix}{name}.yaml"),
+    )
+
+
+def _setup_dispatch(tool_ctx, monkeypatch, recipe_name: str = "test-recipe"):
+    """Wire tool_ctx for dispatch tests."""
+    import asyncio
+
+    from autoskillit.recipe.schema import Recipe, RecipeKind
+    from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
+
+    tool_ctx.fleet_lock = asyncio.Lock()
+    repo = InMemoryRecipeRepository()
+    recipe_info = _make_recipe_info(recipe_name)
+    repo.add_recipe(recipe_name, recipe_info)
+    repo.add_full_recipe(
+        recipe_info.path,
+        Recipe(name=recipe_name, description="test", kind=RecipeKind.STANDARD, ingredients={}),
+    )
+    tool_ctx.recipes = repo
+    tool_ctx.executor = InMemoryHeadlessExecutor()

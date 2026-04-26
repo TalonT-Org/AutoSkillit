@@ -424,3 +424,121 @@ def test_campaign_valid_passes_all_rules():
     assert not warning_findings, (
         f"Valid campaign must not have WARNING findings: {warning_findings}"
     )
+
+
+# ---------------------------------------------------------------------------
+# T32: dispatch-capture-keys-are-identifiers
+# ---------------------------------------------------------------------------
+
+
+def test_capture_key_must_be_identifier():
+    recipe = _campaign(
+        dispatches=[
+            CampaignDispatch(
+                name="phase-one",
+                recipe="implementation",
+                task="t",
+                capture={"bad-key": "${{ result.v }}"},
+            )
+        ]
+    )
+    findings = _findings(recipe, "dispatch-capture-keys-are-identifiers")
+    assert len(findings) == 1
+    assert findings[0].severity == Severity.ERROR
+
+
+# ---------------------------------------------------------------------------
+# T33: dispatch-capture-value-references-result
+# ---------------------------------------------------------------------------
+
+
+def test_capture_value_must_reference_result():
+    recipe = _campaign(
+        dispatches=[
+            CampaignDispatch(
+                name="phase-one",
+                recipe="implementation",
+                task="t",
+                capture={"k": "not_a_template"},
+            )
+        ]
+    )
+    findings = _findings(recipe, "dispatch-capture-value-references-result")
+    assert len(findings) == 1
+    assert findings[0].severity == Severity.ERROR
+
+
+# ---------------------------------------------------------------------------
+# T34: campaign-ingredient-refs-have-prior-capture (unresolvable ref)
+# ---------------------------------------------------------------------------
+
+
+def test_campaign_ingredient_ref_requires_prior_capture():
+    recipe = _campaign(
+        dispatches=[
+            CampaignDispatch(
+                name="phase-one",
+                recipe="implementation",
+                task="t",
+            ),
+            CampaignDispatch(
+                name="phase-two",
+                recipe="implementation",
+                task="t",
+                ingredients={"x": "${{ campaign.x }}"},
+                depends_on=["phase-one"],
+            ),
+        ]
+    )
+    findings = _findings(recipe, "campaign-ingredient-refs-have-prior-capture")
+    assert len(findings) == 1
+    assert findings[0].severity == Severity.ERROR
+
+
+# ---------------------------------------------------------------------------
+# T35: campaign-ingredient-refs-have-prior-capture (satisfied by ancestor)
+# ---------------------------------------------------------------------------
+
+
+def test_campaign_ingredient_ref_satisfied_by_ancestor():
+    recipe = _campaign(
+        dispatches=[
+            CampaignDispatch(
+                name="phase-one",
+                recipe="implementation",
+                task="t",
+                capture={"x": "${{ result.x }}"},
+            ),
+            CampaignDispatch(
+                name="phase-two",
+                recipe="implementation",
+                task="t",
+                ingredients={"x": "${{ campaign.x }}"},
+                depends_on=["phase-one"],
+            ),
+        ]
+    )
+    findings = _findings(recipe, "campaign-ingredient-refs-have-prior-capture")
+    assert findings == []
+
+
+# ---------------------------------------------------------------------------
+# T36: valid capture spec passes
+# ---------------------------------------------------------------------------
+
+
+def test_valid_capture_spec_passes():
+    recipe = _campaign(
+        dispatches=[
+            CampaignDispatch(
+                name="phase-one",
+                recipe="implementation",
+                task="t",
+                capture={"out_file": "${{ result.out_file }}"},
+            )
+        ]
+    )
+    capture_key_findings = _findings(recipe, "dispatch-capture-keys-are-identifiers")
+    capture_val_findings = _findings(recipe, "dispatch-capture-value-references-result")
+    assert capture_key_findings == []
+    assert capture_val_findings == []

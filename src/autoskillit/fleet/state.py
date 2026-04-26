@@ -346,7 +346,8 @@ def read_all_campaign_captures(
             all_success = all(d.get("status") == DispatchStatus.SUCCESS for d in dispatches)
             if all_success and dispatches:
                 result.update(caps)
-        except (json.JSONDecodeError, OSError):
+        except (json.JSONDecodeError, OSError) as exc:
+            _log.warning("read_all_campaign_captures: skipping %s: %s", path, exc)
             continue
     return result
 

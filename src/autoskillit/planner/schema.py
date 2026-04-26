@@ -56,7 +56,6 @@ def _slugify(name: str) -> str:
 def _parse_phase_number(data: dict[str, Any]) -> int:
     if "ordering" in data:
         return int(data["ordering"])
-    # Parse from id: "P3" → 3
     return int(str(data["id"])[1:])
 
 

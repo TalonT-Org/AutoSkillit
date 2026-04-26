@@ -44,16 +44,12 @@ def is_feature_enabled(
     defn = FEATURE_REGISTRY.get(name)
     if defn is None:
         raise KeyError(f"Unknown feature: {name!r}")
-    # Step 1: DISABLED is unconditional — cannot be overridden by any config
     if defn.lifecycle == FeatureLifecycle.DISABLED:
         return False
-    # Step 2: explicit per-feature entry always wins
     if name in features:
         return features[name]
-    # Step 3: blanket experimental enablement
     if experimental_enabled and defn.lifecycle == FeatureLifecycle.EXPERIMENTAL:
         return True
-    # Step 4: registry default
     return defn.default_enabled
 
 

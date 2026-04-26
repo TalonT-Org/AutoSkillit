@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from autoskillit.core import (
     CATEGORY_TAGS,
     FEATURE_REGISTRY,
+    FeatureLifecycle,
     OutputFormat,
     atomic_write,
     dump_yaml_str,
@@ -373,8 +374,6 @@ class AutomationConfig:
                     f"got {type(value).__name__!r}: {value!r}"
                 )
             if value is True:
-                from autoskillit.core import FeatureLifecycle
-
                 if FEATURE_REGISTRY[name].lifecycle == FeatureLifecycle.DISABLED:
                     raise ConfigSchemaError(
                         f"Feature {name!r} has lifecycle DISABLED"

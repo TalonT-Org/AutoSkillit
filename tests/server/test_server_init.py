@@ -602,8 +602,6 @@ class TestSessionTypeVisibility:
     @pytest.mark.anyio
     async def test_fleet_dispatch_mode_enables_fleet_dispatch_tools(self, monkeypatch):
         """fleet + FLEET_MODE=dispatch reveals fleet tools + fleet-dispatch tools."""
-        from fastmcp.client import Client
-
         from autoskillit.core import (
             FLEET_DISPATCH_MODE,
             FLEET_DISPATCH_TOOLS,
@@ -617,8 +615,7 @@ class TestSessionTypeVisibility:
         monkeypatch.setenv(FLEET_MODE_ENV_VAR, FLEET_DISPATCH_MODE)
         _apply_session_type_visibility()
 
-        async with Client(mcp) as client:
-            tools = await client.list_tools()
+        tools = list(await mcp.list_tools())
         visible = {t.name for t in tools}
 
         expected = FLEET_TOOLS | FLEET_DISPATCH_TOOLS | FREE_RANGE_TOOLS
@@ -627,8 +624,6 @@ class TestSessionTypeVisibility:
     @pytest.mark.anyio
     async def test_fleet_campaign_mode_hides_fleet_dispatch_tools(self, monkeypatch):
         """fleet + FLEET_MODE=campaign (or absent) hides fleet-dispatch tools."""
-        from fastmcp.client import Client
-
         from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_MODE_ENV_VAR
         from autoskillit.server import _apply_session_type_visibility, mcp
 
@@ -642,8 +637,7 @@ class TestSessionTypeVisibility:
                 monkeypatch.delenv(FLEET_MODE_ENV_VAR, raising=False)
             _apply_session_type_visibility()
 
-            async with Client(mcp) as client:
-                tools = await client.list_tools()
+            tools = list(await mcp.list_tools())
             visible = {t.name for t in tools}
             assert visible.isdisjoint(FLEET_DISPATCH_TOOLS), (
                 f"fleet-dispatch tools unexpectedly visible with FLEET_MODE={mode_value!r}"
@@ -669,17 +663,13 @@ class TestSessionTypeVisibility:
 
     @pytest.mark.anyio
     async def test_fleet_enables_fleet_tag(self, monkeypatch):
-        from fastmcp.client import Client
-
         from autoskillit.core import FLEET_TOOLS, GATED_TOOLS, HEADLESS_TOOLS
         from autoskillit.server import _apply_session_type_visibility, mcp
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
         _apply_session_type_visibility()
 
-        async with Client(mcp) as client:
-            tools = await client.list_tools()
-        tool_names = {t.name for t in tools}
+        tool_names = {t.name for t in await mcp.list_tools()}
 
         # Positive: fleet-tagged tools are visible
         for name in FLEET_TOOLS:
@@ -726,8 +716,6 @@ class TestSessionTypeVisibility:
 
     @pytest.mark.anyio
     async def test_orchestrator_headless_enables_kitchen_tag(self, monkeypatch):
-        from fastmcp.client import Client
-
         from autoskillit.core import GATED_TOOLS
         from autoskillit.server import _apply_session_type_visibility, mcp
 
@@ -735,16 +723,13 @@ class TestSessionTypeVisibility:
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
         _apply_session_type_visibility()
 
-        async with Client(mcp) as client:
-            tools = await client.list_tools()
+        tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
         for name in GATED_TOOLS:
             assert name in tool_names, f"{name} should be visible for orchestrator+headless"
 
     @pytest.mark.anyio
     async def test_orchestrator_interactive_no_pre_reveal(self, monkeypatch):
-        from fastmcp.client import Client
-
         from autoskillit.core import GATED_TOOLS, HEADLESS_TOOLS
         from autoskillit.server import _apply_session_type_visibility, mcp
 
@@ -752,8 +737,7 @@ class TestSessionTypeVisibility:
         monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
         _apply_session_type_visibility()
 
-        async with Client(mcp) as client:
-            tools = await client.list_tools()
+        tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
         for name in GATED_TOOLS:
             assert name not in tool_names, f"{name} should be hidden for orchestrator+interactive"
@@ -762,8 +746,6 @@ class TestSessionTypeVisibility:
 
     @pytest.mark.anyio
     async def test_leaf_headless_enables_headless_tag(self, monkeypatch):
-        from fastmcp.client import Client
-
         from autoskillit.core import GATED_TOOLS
         from autoskillit.server import _apply_session_type_visibility, mcp
 
@@ -771,8 +753,7 @@ class TestSessionTypeVisibility:
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
         _apply_session_type_visibility()
 
-        async with Client(mcp) as client:
-            tools = await client.list_tools()
+        tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
         assert "test_check" in tool_names, "test_check should be visible for leaf+headless"
         for name in GATED_TOOLS:
@@ -781,8 +762,6 @@ class TestSessionTypeVisibility:
     @pytest.mark.anyio
     async def test_food_truck_with_tool_tags_sees_kitchen_core_plus_declared(self, monkeypatch):
         """ORCHESTRATOR+HEADLESS with L2_TOOL_TAGS sees kitchen-core + github only."""
-        from fastmcp.client import Client
-
         from autoskillit.server import _apply_session_type_visibility, mcp
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
@@ -790,8 +769,7 @@ class TestSessionTypeVisibility:
         monkeypatch.setenv("AUTOSKILLIT_L2_TOOL_TAGS", "github")
         _apply_session_type_visibility()
 
-        async with Client(mcp) as client:
-            tools = await client.list_tools()
+        tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
 
         assert "run_cmd" in tool_names
@@ -804,8 +782,6 @@ class TestSessionTypeVisibility:
     @pytest.mark.anyio
     async def test_food_truck_with_multiple_packs(self, monkeypatch):
         """ORCHESTRATOR+HEADLESS with L2_TOOL_TAGS=github,ci sees both packs."""
-        from fastmcp.client import Client
-
         from autoskillit.server import _apply_session_type_visibility, mcp
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
@@ -813,8 +789,7 @@ class TestSessionTypeVisibility:
         monkeypatch.setenv("AUTOSKILLIT_L2_TOOL_TAGS", "github,ci")
         _apply_session_type_visibility()
 
-        async with Client(mcp) as client:
-            tools = await client.list_tools()
+        tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
 
         assert "fetch_github_issue" in tool_names
@@ -824,8 +799,6 @@ class TestSessionTypeVisibility:
     @pytest.mark.anyio
     async def test_food_truck_without_tool_tags_sees_full_kitchen(self, monkeypatch):
         """ORCHESTRATOR+HEADLESS without L2_TOOL_TAGS falls back to full kitchen."""
-        from fastmcp.client import Client
-
         from autoskillit.core import GATED_TOOLS
         from autoskillit.server import _apply_session_type_visibility, mcp
 
@@ -834,8 +807,7 @@ class TestSessionTypeVisibility:
         monkeypatch.delenv("AUTOSKILLIT_L2_TOOL_TAGS", raising=False)
         _apply_session_type_visibility()
 
-        async with Client(mcp) as client:
-            tools = await client.list_tools()
+        tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
 
         for name in GATED_TOOLS:
@@ -844,8 +816,6 @@ class TestSessionTypeVisibility:
     @pytest.mark.anyio
     async def test_cook_interactive_unaffected_by_tool_tags(self, monkeypatch):
         """Interactive ORCHESTRATOR (cook) ignores L2_TOOL_TAGS."""
-        from fastmcp.client import Client
-
         from autoskillit.core import GATED_TOOLS
         from autoskillit.server import _apply_session_type_visibility, mcp
 
@@ -854,8 +824,7 @@ class TestSessionTypeVisibility:
         monkeypatch.setenv("AUTOSKILLIT_L2_TOOL_TAGS", "github")
         _apply_session_type_visibility()
 
-        async with Client(mcp) as client:
-            tools = await client.list_tools()
+        tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
 
         for name in GATED_TOOLS:
@@ -863,8 +832,6 @@ class TestSessionTypeVisibility:
 
     @pytest.mark.anyio
     async def test_leaf_interactive_no_pre_reveal(self, monkeypatch):
-        from fastmcp.client import Client
-
         from autoskillit.core import GATED_TOOLS, HEADLESS_TOOLS
         from autoskillit.server import _apply_session_type_visibility, mcp
 
@@ -872,8 +839,7 @@ class TestSessionTypeVisibility:
         monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
         _apply_session_type_visibility()
 
-        async with Client(mcp) as client:
-            tools = await client.list_tools()
+        tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
         for name in GATED_TOOLS:
             assert name not in tool_names, f"{name} should be hidden for leaf+interactive"
@@ -884,8 +850,6 @@ class TestSessionTypeVisibility:
     async def test_transitional_bridge_enables_headless(self, monkeypatch):
         import warnings
 
-        from fastmcp.client import Client
-
         from autoskillit.core import GATED_TOOLS
         from autoskillit.server import _apply_session_type_visibility, mcp
 
@@ -895,8 +859,7 @@ class TestSessionTypeVisibility:
             warnings.simplefilter("ignore", DeprecationWarning)
             _apply_session_type_visibility()
 
-        async with Client(mcp) as client:
-            tools = await client.list_tools()
+        tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
         assert "test_check" in tool_names, "test_check should be visible for bridge HEADLESS=1"
         for name in GATED_TOOLS:
@@ -904,14 +867,11 @@ class TestSessionTypeVisibility:
 
     @pytest.mark.anyio
     async def test_fleet_tag_reset_by_conftest(self, monkeypatch):
-        from fastmcp.client import Client
-
         from autoskillit.server import mcp
 
         # The conftest _reset_mcp_tags fixture has already disabled the fleet tag.
         # Verify: no fleet-enabled state leaked from a previous test.
-        async with Client(mcp) as client:
-            tools = await client.list_tools()
+        tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
         # No kitchen tools should be visible — fleet tag was reset
         from autoskillit.core import GATED_TOOLS
@@ -1153,8 +1113,6 @@ class TestFeatureGateVisibility:
     @pytest.mark.anyio
     async def test_fleet_tools_hidden_when_feature_disabled(self, monkeypatch):
         """SESSION_TYPE=fleet + AUTOSKILLIT_FEATURES__FLEET=false → no fleet tools."""
-        from fastmcp.client import Client
-
         from autoskillit.core import FLEET_TOOLS
         from autoskillit.server import mcp
         from autoskillit.server._session_type import (
@@ -1166,8 +1124,7 @@ class TestFeatureGateVisibility:
         monkeypatch.setenv("AUTOSKILLIT_FEATURES__FLEET", "false")
         _apply_session_type_visibility(feature_gates=[_fleet_gate])
 
-        async with Client(mcp) as client:
-            tools = await client.list_tools()
+        tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
         for name in FLEET_TOOLS:
             assert name not in tool_names, (
@@ -1177,8 +1134,6 @@ class TestFeatureGateVisibility:
     @pytest.mark.anyio
     async def test_fleet_tools_visible_when_feature_enabled(self, monkeypatch):
         """SESSION_TYPE=fleet with no override → fleet tools visible (default_enabled)."""
-        from fastmcp.client import Client
-
         from autoskillit.core import FLEET_TOOLS
         from autoskillit.server import mcp
         from autoskillit.server._session_type import (
@@ -1190,8 +1145,7 @@ class TestFeatureGateVisibility:
         monkeypatch.delenv("AUTOSKILLIT_FEATURES__FLEET", raising=False)
         _apply_session_type_visibility(feature_gates=[_fleet_gate])
 
-        async with Client(mcp) as client:
-            tools = await client.list_tools()
+        tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
         for name in FLEET_TOOLS:
             assert name in tool_names, (
@@ -1201,8 +1155,6 @@ class TestFeatureGateVisibility:
     @pytest.mark.anyio
     async def test_session_type_fleet_respects_gate(self, monkeypatch):
         """fleet session + feature disabled → no fleet tools, non-fleet hidden too."""
-        from fastmcp.client import Client
-
         from autoskillit.core import FLEET_TOOLS, GATED_TOOLS
         from autoskillit.server import mcp
         from autoskillit.server._session_type import (
@@ -1214,8 +1166,7 @@ class TestFeatureGateVisibility:
         monkeypatch.setenv("AUTOSKILLIT_FEATURES__FLEET", "false")
         _apply_session_type_visibility(feature_gates=[_fleet_gate])
 
-        async with Client(mcp) as client:
-            tools = await client.list_tools()
+        tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
         # No fleet tool visible — gate neutralized the pre-reveal
         for name in FLEET_TOOLS:
@@ -1267,8 +1218,6 @@ class TestFeatureGateVisibility:
     @pytest.mark.anyio
     async def test_apply_session_type_visibility_accepts_no_gates(self, monkeypatch):
         """Backward compat: _apply_session_type_visibility() with no args behaves identically."""
-        from fastmcp.client import Client
-
         from autoskillit.core import FLEET_TOOLS
         from autoskillit.server import mcp
         from autoskillit.server._session_type import _apply_session_type_visibility
@@ -1278,8 +1227,7 @@ class TestFeatureGateVisibility:
         # Call with no feature_gates argument (backward-compatible call)
         _apply_session_type_visibility()
 
-        async with Client(mcp) as client:
-            tools = await client.list_tools()
+        tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
         # Phase 1 still works: fleet tools visible
         for name in FLEET_TOOLS:
@@ -1290,8 +1238,6 @@ class TestFeatureGateVisibility:
     @pytest.mark.anyio
     async def test_fleet_gate_disables_tools_via_fleet_env_var(self, monkeypatch):
         """AUTOSKILLIT_FEATURES__FLEET=false disables fleet-tagged tools."""
-        from fastmcp.client import Client
-
         from autoskillit.core import FLEET_TOOLS
         from autoskillit.server import mcp
         from autoskillit.server._session_type import _apply_session_type_visibility, _fleet_gate
@@ -1300,8 +1246,7 @@ class TestFeatureGateVisibility:
         monkeypatch.setenv("AUTOSKILLIT_FEATURES__FLEET", "false")
         _apply_session_type_visibility(feature_gates=[_fleet_gate])
 
-        async with Client(mcp) as client:
-            tools = await client.list_tools()
+        tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
         assert FLEET_TOOLS
         for tool in FLEET_TOOLS:
@@ -1314,8 +1259,6 @@ class TestFeatureGateVisibility:
         Only AUTOSKILLIT_FEATURES__FLEET controls fleet tool visibility.
         Setting the old FRANCHISE env var has no effect — tools remain visible.
         """
-        from fastmcp.client import Client
-
         from autoskillit.core import FLEET_TOOLS
         from autoskillit.server import mcp
         from autoskillit.server._session_type import _apply_session_type_visibility, _fleet_gate
@@ -1325,8 +1268,7 @@ class TestFeatureGateVisibility:
         monkeypatch.delenv("AUTOSKILLIT_FEATURES__FLEET", raising=False)
         _apply_session_type_visibility(feature_gates=[_fleet_gate])
 
-        async with Client(mcp) as client:
-            tools = await client.list_tools()
+        tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
         # AUTOSKILLIT_FEATURES__FRANCHISE is ignored — fleet tools remain visible
         assert FLEET_TOOLS
@@ -1338,8 +1280,6 @@ class TestFeatureGateVisibility:
     @pytest.mark.anyio
     async def test_fleet_gate_fleet_env_var_takes_precedence_over_franchise(self, monkeypatch):
         """AUTOSKILLIT_FEATURES__FLEET=true enables fleet tools; FRANCHISE env var is ignored."""
-        from fastmcp.client import Client
-
         from autoskillit.core import FLEET_TOOLS
         from autoskillit.server import mcp
         from autoskillit.server._session_type import _apply_session_type_visibility, _fleet_gate
@@ -1350,8 +1290,7 @@ class TestFeatureGateVisibility:
         monkeypatch.setenv("AUTOSKILLIT_FEATURES__FRANCHISE", "false")
         _apply_session_type_visibility(feature_gates=[_fleet_gate])
 
-        async with Client(mcp) as client:
-            tools = await client.list_tools()
+        tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
         assert FLEET_TOOLS
         for tool in FLEET_TOOLS:
@@ -1360,8 +1299,6 @@ class TestFeatureGateVisibility:
     @pytest.mark.anyio
     async def test_session_type_fleet_enables_fleet_tags(self, monkeypatch):
         """FLEET session activates fleet tool visibility (no feature gate needed)."""
-        from fastmcp.client import Client
-
         from autoskillit.core import FLEET_TOOLS
         from autoskillit.server import mcp
         from autoskillit.server._session_type import _apply_session_type_visibility
@@ -1371,8 +1308,7 @@ class TestFeatureGateVisibility:
         monkeypatch.delenv("AUTOSKILLIT_FEATURES__FLEET", raising=False)
         _apply_session_type_visibility()
 
-        async with Client(mcp) as client:
-            tools = await client.list_tools()
+        tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
         assert FLEET_TOOLS
         for tool in FLEET_TOOLS:

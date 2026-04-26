@@ -8,10 +8,7 @@ uses tag strings present in ALL_VISIBILITY_TAGS ∪ CATEGORY_TAGS.
 from __future__ import annotations
 
 import ast
-import textwrap
 from pathlib import Path
-
-import pytest
 
 _TESTS_ROOT = Path(__file__).parent.parent
 _SRC_ROOT = _TESTS_ROOT.parent / "src" / "autoskillit"
@@ -70,32 +67,34 @@ class _ConfTestVisitor(ast.NodeVisitor):
                 ):
                     has_clear = True
 
-                if node.func.attr == "disable" and any(
-                    kw.arg == "tags" for kw in node.keywords
-                ):
+                if node.func.attr == "disable" and any(kw.arg == "tags" for kw in node.keywords):
                     has_disable_with_tags_keyword = True
                     for kw in node.keywords:
                         if kw.arg != "tags":
                             continue
                         if isinstance(kw.value, ast.Set):
                             tag_vals = {
-                                elt.value
-                                for elt in kw.value.elts
-                                if isinstance(elt, ast.Constant)
+                                elt.value for elt in kw.value.elts if isinstance(elt, ast.Constant)
                             }
                             if tag_vals:
                                 self.findings.append(
-                                    (fixture_name, node.lineno, f"hardcoded-tags:{sorted(tag_vals)}")
+                                    (
+                                        fixture_name,
+                                        node.lineno,
+                                        f"hardcoded-tags:{sorted(tag_vals)}",
+                                    )
                                 )
 
         if is_fixture and has_disable_with_tags_keyword and not has_clear:
-            self.findings.append(
-                (fixture_name, 0, "disable-without-clear")
-            )
+            self.findings.append((fixture_name, 0, "disable-without-clear"))
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         is_fixture = any(
-            (isinstance(d, ast.Call) and isinstance(d.func, ast.Attribute) and d.func.attr == "fixture")
+            (
+                isinstance(d, ast.Call)
+                and isinstance(d.func, ast.Attribute)
+                and d.func.attr == "fixture"
+            )
             or (isinstance(d, ast.Attribute) and d.attr == "fixture")
             for d in node.decorator_list
         )
@@ -119,7 +118,6 @@ class _ConfTestVisitor(ast.NodeVisitor):
 
 def test_every_conftest_reset_uses_canonical_tag_set():
     """Conftest fixtures that disable tags must use ALL_VISIBILITY_TAGS, not hardcoded sets."""
-    from autoskillit.core import ALL_VISIBILITY_TAGS
 
     conftest_files = list(_TESTS_ROOT.rglob("conftest.py"))
     assert conftest_files, "No conftest.py files found"
@@ -223,8 +221,7 @@ def test_class_level_fixtures_use_canonical_tags():
 
     assert not violations, (
         "Class-level _reset_mcp_visibility fixtures with hardcoded tag sets "
-        "(must use ALL_VISIBILITY_TAGS):\n"
-        + "\n".join(f"  {v}" for v in violations)
+        "(must use ALL_VISIBILITY_TAGS):\n" + "\n".join(f"  {v}" for v in violations)
     )
 
 
@@ -245,7 +242,11 @@ def test_inline_transforms_clear_has_finally_guard():
                 continue
 
             is_fixture = any(
-                (isinstance(d, ast.Call) and isinstance(d.func, ast.Attribute) and d.func.attr == "fixture")
+                (
+                    isinstance(d, ast.Call)
+                    and isinstance(d.func, ast.Attribute)
+                    and d.func.attr == "fixture"
+                )
                 or (isinstance(d, ast.Attribute) and d.attr == "fixture")
                 for d in node.decorator_list
             )

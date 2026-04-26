@@ -54,6 +54,8 @@ def kitchen_enabled():
     from autoskillit.server import mcp
 
     mcp._transforms.clear()
+    for tag in sorted(ALL_VISIBILITY_TAGS):
+        mcp.disable(tags={tag})
     mcp.enable(tags={"kitchen"})
     yield
     mcp._transforms.clear()
@@ -68,6 +70,8 @@ def headless_enabled():
     from autoskillit.server import mcp
 
     mcp._transforms.clear()
+    for tag in sorted(ALL_VISIBILITY_TAGS):
+        mcp.disable(tags={tag})
     mcp.enable(tags={"headless"})
     yield
     mcp._transforms.clear()

@@ -189,6 +189,7 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "bulk_close_issues",
         "check_pr_mergeable",
         "set_commit_status",
+        "analyze_tool_sequences",
         # Formerly ungated — now kitchen-gated:
         "fetch_github_issue",
         "get_issue_title",
@@ -338,6 +339,7 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     "get_timing_summary": frozenset({"kitchen-core", "telemetry", "fleet"}),
     "write_telemetry_files": frozenset({"kitchen-core", "telemetry"}),
     "get_quota_events": frozenset({"kitchen-core", "telemetry", "fleet"}),
+    "analyze_tool_sequences": frozenset({"telemetry"}),
     # kitchen-core — execution
     "run_cmd": frozenset({"kitchen-core"}),
     "run_python": frozenset({"kitchen-core"}),

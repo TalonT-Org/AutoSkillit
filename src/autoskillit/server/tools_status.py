@@ -260,6 +260,78 @@ async def get_timing_summary(clear: bool = False, format: str = "json", order_id
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
+@mcp.tool(
+    tags={"autoskillit", "kitchen", "kitchen-core", "telemetry"},
+    annotations={"readOnlyHint": True},
+)
+@track_response_size("analyze_tool_sequences")
+async def analyze_tool_sequences(
+    recipe: str = "",
+    format: str = "table",
+    top_n: int = 20,
+    min_count: int = 1,
+) -> str:
+    """Analyze cross-session tool call sequences and return a DFG summary.
+
+    Args:
+        recipe: Filter to a specific recipe name (empty = all recipes).
+        format: Output format — "table", "mermaid", or "dot".
+        top_n: Limit rendering to top-N bigrams by frequency.
+        min_count: Exclude bigrams with count below this threshold.
+
+    Returns JSON with fields: session_count, recipe_count, top_bigrams,
+    top_ngrams, rendering (the formatted DFG string).
+    Never raises.
+    """
+    if (gate := _require_enabled()) is not None:
+        return gate
+    try:
+        structlog.contextvars.clear_contextvars()
+        with structlog.contextvars.bound_contextvars(tool="analyze_tool_sequences"):
+            from autoskillit.execution.tool_sequence_analysis import (
+                compute_analysis,
+                parse_sessions_from_summary_dir,
+                render_adjacency_table,
+                render_dot,
+                render_mermaid,
+            )
+
+            log_root = _get_log_root()
+            sessions = list(parse_sessions_from_summary_dir(log_root))
+            if recipe:
+                sessions = [s for s in sessions if s.recipe_name == recipe]
+            result = compute_analysis(sessions)
+            dfg = (
+                result.global_dfg
+                if not recipe
+                else result.by_recipe.get(recipe, result.global_dfg)
+            )
+
+            if format == "mermaid":
+                rendering = render_mermaid(dfg, min_count=min_count, top_n=top_n)
+            elif format == "dot":
+                rendering = render_dot(dfg, min_count=min_count, top_n=top_n)
+            else:
+                rendering = render_adjacency_table(dfg, top_n=top_n)
+
+            return json.dumps(
+                {
+                    "success": True,
+                    "session_count": result.session_count,
+                    "recipe_count": len(result.by_recipe),
+                    "top_bigrams": [
+                        {"from": a, "to": b, "count": c}
+                        for (a, b), c in dfg.bigrams.most_common(top_n)
+                        if c >= min_count
+                    ],
+                    "rendering": rendering,
+                }
+            )
+    except Exception as exc:
+        logger.error("analyze_tool_sequences unhandled exception", exc_info=True)
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+
+
 def _read_quota_events(log_root: Path, n: int) -> tuple[list[dict], int]:
     """Read the last n events from quota_events.jsonl (most recent first).
 

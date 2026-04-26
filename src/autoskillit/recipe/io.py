@@ -67,6 +67,14 @@ def load_recipe(path: Path, temp_dir_relpath: str = ".autoskillit/temp") -> Reci
     return recipe
 
 
+def _group_rank(r: RecipeInfo) -> int:
+    if r.experimental:
+        return 2
+    if r.source == RecipeSource.PROJECT:
+        return 0
+    return 1
+
+
 def list_recipes(
     project_dir: Path,
     exclude_kinds: frozenset[RecipeKind] = frozenset(),
@@ -84,7 +92,7 @@ def list_recipes(
 
     filtered = [r for r in items if r.kind not in exclude_kinds] if exclude_kinds else items
     return LoadResult(
-        items=sorted(filtered, key=lambda r: (r.source != RecipeSource.BUILTIN, r.name)),
+        items=sorted(filtered, key=lambda r: (_group_rank(r), r.name)),
         errors=errors,
     )
 
@@ -416,6 +424,7 @@ def _collect_recipes(
                             content_hash=_crh(f),
                             content=raw,
                             kind=recipe.kind,
+                            experimental=recipe.experimental,
                         )
                     )
             except Exception as exc:

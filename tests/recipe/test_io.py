@@ -488,24 +488,22 @@ class TestListRecipes:
         assert len(recipes) > 0
         assert all(r.source.value in ("project", "builtin") for r in recipes)
 
-    def test_list_recipes_bundled_appear_before_project(self, tmp_path: Path) -> None:
-        """Bundled recipes must appear before project recipes in list_recipes() output."""
+    def test_list_recipes_project_appear_before_bundled(self, tmp_path: Path) -> None:
+        """Project recipes must appear before bundled recipes in list_recipes() output."""
         recipes_dir = tmp_path / ".autoskillit" / "recipes"
         recipes_dir.mkdir(parents=True)
-        # Write a project recipe whose name would sort before bundled "implementation"
         (recipes_dir / "aardvark.yaml").write_text(
             "name: aardvark\ndescription: test\nsteps: {}\n"
         )
         result = list_recipes(tmp_path)
-        sources = [r.source for r in result.items]
-        # All BUILTIN items must precede all PROJECT items
-        seen_project = False
+        sources = [r.source for r in result.items if not r.experimental]
+        seen_builtin = False
         for source in sources:
-            if source == RecipeSource.PROJECT:
-                seen_project = True
-            elif source == RecipeSource.BUILTIN:
-                assert not seen_project, (
-                    "A BUILTIN recipe appeared after a PROJECT recipe — ordering is broken"
+            if source == RecipeSource.BUILTIN:
+                seen_builtin = True
+            elif source == RecipeSource.PROJECT:
+                assert not seen_builtin, (
+                    "A PROJECT recipe appeared after a BUILTIN recipe — ordering is broken"
                 )
 
     def test_list_recipes_alphabetical_within_bundled_tier(self, tmp_path: Path) -> None:
@@ -563,6 +561,79 @@ class TestListRecipes:
         kinds = {r.name: r.kind for r in result.items}
         assert kinds["std"] == RecipeKind.STANDARD
         assert kinds["camp"] == RecipeKind.CAMPAIGN
+
+    def test_recipe_info_experimental_field_false_by_default(self, tmp_path: Path) -> None:
+        """RecipeInfo.experimental must default to False for standard recipes."""
+        recipe_dir = tmp_path / ".autoskillit" / "recipes"
+        recipe_dir.mkdir(parents=True)
+        (recipe_dir / "plain.yaml").write_text("name: plain\ndescription: plain\nsteps: {}\n")
+        result = list_recipes(tmp_path)
+        r = next(r for r in result.items if r.name == "plain")
+        assert r.experimental is False
+
+    def test_recipe_info_experimental_field_true_when_set(self, tmp_path: Path) -> None:
+        """RecipeInfo.experimental must be True when YAML sets experimental: true."""
+        recipe_dir = tmp_path / ".autoskillit" / "recipes"
+        recipe_dir.mkdir(parents=True)
+        (recipe_dir / "research.yaml").write_text(
+            "name: research\ndescription: exp\nexperimental: true\nsteps: {}\n"
+        )
+        result = list_recipes(tmp_path)
+        r = next(r for r in result.items if r.name == "research")
+        assert r.experimental is True
+
+    def test_list_recipes_project_before_bundled_before_experimental(self, tmp_path: Path) -> None:
+        """list_recipes must order: PROJECT → BUILTIN-non-experimental → experimental."""
+        recipe_dir = tmp_path / ".autoskillit" / "recipes"
+        recipe_dir.mkdir(parents=True)
+        (recipe_dir / "proj.yaml").write_text("name: proj\ndescription: p\nsteps: {}\n")
+        (recipe_dir / "exp-proj.yaml").write_text(
+            "name: exp-proj\ndescription: ep\nexperimental: true\nsteps: {}\n"
+        )
+        result = list_recipes(tmp_path)
+        ranks = []
+        for r in result.items:
+            if r.experimental:
+                rank = 2
+            elif r.source == RecipeSource.PROJECT:
+                rank = 0
+            else:
+                rank = 1
+            if not ranks or ranks[-1] != rank:
+                ranks.append(rank)
+        assert ranks == sorted(ranks), f"Groups interleaved: {ranks}"
+        assert 0 in ranks and 1 in ranks
+        assert ranks.index(0) < ranks.index(1)
+        assert 2 in ranks
+        assert ranks[-1] == 2
+
+    def test_list_recipes_alphabetical_within_experimental_group(self, tmp_path: Path) -> None:
+        """Experimental recipes must be sorted alphabetically by name within their group."""
+        recipe_dir = tmp_path / ".autoskillit" / "recipes"
+        recipe_dir.mkdir(parents=True)
+        for name in ("zebra-exp", "apple-exp", "mango-exp"):
+            (recipe_dir / f"{name}.yaml").write_text(
+                f"name: {name}\ndescription: test\nexperimental: true\nsteps: {{}}\n"
+            )
+        result = list_recipes(tmp_path)
+        exp_names = [r.name for r in result.items if r.experimental]
+        assert exp_names == sorted(exp_names)
+
+    def test_list_recipes_bundled_experimental_sorted_last(self, tmp_path: Path) -> None:
+        """A BUILTIN recipe with experimental: true must appear after non-experimental builtins."""
+        result = list_recipes(tmp_path)
+        non_exp_builtin_indices = [
+            i
+            for i, r in enumerate(result.items)
+            if r.source == RecipeSource.BUILTIN and not r.experimental
+        ]
+        exp_builtin_indices = [
+            i
+            for i, r in enumerate(result.items)
+            if r.source == RecipeSource.BUILTIN and r.experimental
+        ]
+        if non_exp_builtin_indices and exp_builtin_indices:
+            assert max(non_exp_builtin_indices) < min(exp_builtin_indices)
 
 
 class TestBuiltinRecipesDir:

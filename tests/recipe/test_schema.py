@@ -464,3 +464,32 @@ def test_campaign_recipe_construction() -> None:
     assert r.requires_packs == []
     assert r.allowed_recipes == []
     assert r.categories == []
+
+
+def test_recipe_info_has_experimental_field() -> None:
+    """RecipeInfo must have an experimental field defaulting to False."""
+    from pathlib import Path
+
+    from autoskillit.core import RecipeSource
+    from autoskillit.recipe.schema import RecipeInfo
+
+    r = RecipeInfo(name="x", description="d", source=RecipeSource.BUILTIN, path=Path("/x.yaml"))
+    assert hasattr(r, "experimental")
+    assert r.experimental is False
+
+
+def test_recipe_info_experimental_can_be_set_true() -> None:
+    """RecipeInfo.experimental must be settable to True."""
+    from pathlib import Path
+
+    from autoskillit.core import RecipeSource
+    from autoskillit.recipe.schema import RecipeInfo
+
+    r = RecipeInfo(
+        name="x",
+        description="d",
+        source=RecipeSource.BUILTIN,
+        path=Path("/x.yaml"),
+        experimental=True,
+    )
+    assert r.experimental is True

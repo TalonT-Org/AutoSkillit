@@ -6,6 +6,7 @@ Never raises. All errors are returned as structured results.
 from __future__ import annotations
 
 import asyncio
+import fnmatch
 import random
 import re
 import time
@@ -15,6 +16,7 @@ from datetime import UTC, datetime
 from typing import Any, TypedDict, assert_never
 
 import httpx
+import yaml
 
 from autoskillit.core import PRState, get_logger
 from autoskillit.execution.github import github_headers
@@ -744,6 +746,45 @@ def _text_has_push_trigger(text: str) -> bool:
     return any(pat in text for pat in ("on: [push", "on: push", "push:"))
 
 
+def _push_trigger_applies_to_branch(text: str, branch: str) -> bool:
+    """Return True if the workflow push trigger fires for the given branch.
+
+    Parses the YAML to inspect push.branches / push.branches-ignore filters.
+    Falls back to presence-only heuristic on YAML parse failure (safe for
+    ambiguous/binary blobs). Supports GitHub's fnmatch-compatible glob patterns
+    (e.g. 'feature/**', 'release-*').
+    """
+    try:
+        parsed = yaml.safe_load(text)
+    except yaml.YAMLError:
+        return _text_has_push_trigger(text)
+
+    if not isinstance(parsed, dict):
+        return False
+
+    on_value = parsed.get("on")
+    if on_value == "push":
+        return True
+    if isinstance(on_value, list):
+        return "push" in on_value
+    if not isinstance(on_value, dict) or "push" not in on_value:
+        return False
+
+    push_cfg = on_value["push"]
+    if not isinstance(push_cfg, dict) or not push_cfg:
+        # push: null or push: {} — no branch filter, fires for all branches
+        return True
+
+    branches = push_cfg.get("branches")
+    branches_ignore = push_cfg.get("branches-ignore")
+
+    if branches is not None:
+        return any(fnmatch.fnmatch(branch, pat) for pat in branches)
+    if branches_ignore is not None:
+        return not any(fnmatch.fnmatch(branch, pat) for pat in branches_ignore)
+    return True
+
+
 _RATE_LIMIT_MAX_ATTEMPTS = 3
 _RATE_LIMIT_SECONDARY_MARKER = "secondary rate limit"
 
@@ -872,7 +913,7 @@ async def fetch_repo_merge_state(
                 continue  # binary or oversized blob — skip
             if "merge_group" in text:
                 merge_group_trigger = True
-            if _text_has_push_trigger(text):
+            if _push_trigger_applies_to_branch(text, branch):
                 has_push_trigger = True
 
     # Derive ci_event: prefer push for historical compatibility when both are present.

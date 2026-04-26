@@ -7,8 +7,9 @@ from pathlib import Path
 
 _ORDER_GREETING_PREFIXES = (
     "Today's special:",
-    "Kitchen's open!",
+    "Order up! Today's special:",
     "Order up! The kitchen",
+    "Kitchen's open!",
     "Table for one!",
     "Fresh off the menu",
     "Welcome to Good Burger, home of the Good Burger, can I take your order?",

@@ -828,8 +828,22 @@ def build_test_scope(
                     pkg = _file_to_package(f)
                     if pkg == "core" and mode == FilterMode.CONSERVATIVE:
                         stem = Path(f).stem
-                        if stem in _CORE_UNIVERSAL_MODULES or stem == "__init__":
+                        if stem in _CORE_UNIVERSAL_MODULES:
                             test_dirs.update(cascade_map["core"])
+                        elif stem == "__init__":
+                            core_cause_stems = {
+                                Path(c).stem
+                                for c in changed_src_py
+                                if _file_to_package(c) == "core" and Path(c).stem != "__init__"
+                            }
+                            if core_cause_stems and all(
+                                s in MODULE_CASCADE_CORE and s not in _CORE_UNIVERSAL_MODULES
+                                for s in core_cause_stems
+                            ):
+                                for s in core_cause_stems:
+                                    test_dirs.update(MODULE_CASCADE_CORE[s])
+                            else:
+                                test_dirs.update(cascade_map["core"])
                         elif stem in MODULE_CASCADE_CORE:
                             test_dirs.update(MODULE_CASCADE_CORE[stem])
                         else:

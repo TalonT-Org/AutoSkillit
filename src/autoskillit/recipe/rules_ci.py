@@ -160,9 +160,11 @@ def _check_ci_no_runs_unguarded(ctx: ValidationContext) -> list[RuleFinding]:
             continue
         has_no_runs_guard = False
         if step.on_result and step.on_result.conditions:
-            has_no_runs_guard = any(
+            has_explicit_no_runs = any(
                 c.when and "no_runs" in c.when for c in step.on_result.conditions
             )
+            has_catch_all = any(not c.when for c in step.on_result.conditions)
+            has_no_runs_guard = has_explicit_no_runs or has_catch_all
         if has_no_runs_guard:
             continue
         if step.on_success or step.on_result:

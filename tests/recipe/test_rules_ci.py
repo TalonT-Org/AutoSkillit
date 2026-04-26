@@ -658,7 +658,7 @@ def test_ci_no_runs_unguarded_passes_with_on_result() -> None:
 
 
 def test_ci_no_runs_unguarded_flags_on_result_without_no_runs_guard() -> None:
-    """on_result without a no_runs condition still flags if on_success is also set."""
+    """on_result with only explicit when-conditions (no catch-all) still flags."""
     wf = _make_workflow(
         {
             "ci_watch": {
@@ -666,7 +666,7 @@ def test_ci_no_runs_unguarded_flags_on_result_without_no_runs_guard() -> None:
                 "on_success": "merge_step",
                 "on_result": [
                     {"when": "${{ result.conclusion }} == 'success'", "route": "merge_step"},
-                    {"route": "handle_failure"},
+                    {"when": "${{ result.conclusion }} == 'failure'", "route": "handle_failure"},
                 ],
                 "with": {"event": "${{ context.ci_event }}", "branch": "main"},
             },

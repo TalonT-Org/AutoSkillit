@@ -1233,11 +1233,11 @@ async def test_sous_chef_discipline_injected_on_named_open_kitchen_path(tmp_path
     result = json.loads(result_str)
     assert result["success"] is True
     discipline = result["sous_chef_discipline"]
+    present = [s for s in SOUS_CHEF_MANDATORY_SECTIONS if s in discipline]
     for header in SOUS_CHEF_MANDATORY_SECTIONS:
         assert header in discipline, (
             f"sous_chef_discipline missing section: {header!r}. "
-            f"Only {len([s for s in SOUS_CHEF_MANDATORY_SECTIONS if s in discipline])}"
-            f" of {len(SOUS_CHEF_MANDATORY_SECTIONS)} sections present."
+            f"Only {len(present)} of {len(SOUS_CHEF_MANDATORY_SECTIONS)} sections present."
         )
 
 

@@ -488,12 +488,13 @@ steps:
       - route: push_rebased_next_pr
     on_failure: register_clone_failure
     retries: 1
-    on_exhausted: register_clone_failure
+    on_exhausted: enqueue_current_pr
     note: >
       Resolves git-level rebase conflicts between the next PR's branch and the current
-      base_branch HEAD. Identical pattern to resolve_ejected_conflicts but operates
-      proactively before queue submission. Unresolvable conflicts hard-stop at
-      register_clone_failure — falling through to enqueue would waste a CI queue cycle.
+      base_branch HEAD. Similar to resolve_ejected_conflicts but operates proactively
+      before queue submission. Unresolvable conflicts (escalation_required=true) hard-stop
+      at register_clone_failure. Retry exhaustion falls through to enqueue_current_pr —
+      speculative rebase failure must not abort the current PR's queue cycle.
 
   push_rebased_next_pr:
     tool: push_to_remote

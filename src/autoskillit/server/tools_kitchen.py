@@ -93,13 +93,7 @@ def _quota_guard_hook_payload(cfg: QuotaGuardConfig) -> QuotaGuardHookPayload:
 
 
 def _build_sous_chef_for_delivery(sc_text: str) -> str:
-    """Return the sous-chef content for delivery via the named-recipe open_kitchen path.
-
-    All callers receive the full SKILL.md text. L2 food trucks already have a
-    curated 4-section subset injected via their launch prompt; the full-text
-    delivery is harmless. L1 orchestrators and MCP-only callers have no other
-    delivery channel and require all sections.
-    """
+    """Return stripped sous-chef SKILL.md text for delivery via the named-recipe path."""
     return sc_text.strip()
 
 
@@ -421,7 +415,7 @@ async def open_kitchen(
                     _sc_content = _build_sous_chef_for_delivery(_sc_path.read_text())
                     if _sc_content:
                         result["sous_chef_discipline"] = _sc_content
-            except Exception:
+            except (OSError, UnicodeDecodeError):
                 logger.warning(
                     "open_kitchen_failure", stage="read_sous_chef_discipline", exc_info=True
                 )

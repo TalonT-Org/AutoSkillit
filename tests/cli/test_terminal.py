@@ -436,7 +436,7 @@ class TestCookTerminalGuard:
         )
         monkeypatch.setattr("autoskillit.cli._terminal.termios.error", termios.error)
         monkeypatch.setattr(
-            "subprocess.run",
+            "autoskillit.cli._cook.subprocess.run",
             lambda *a, **kw: (_ for _ in ()).throw(KeyboardInterrupt()),
         )
         monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/claude")
@@ -483,7 +483,7 @@ class TestCookTerminalGuard:
         monkeypatch.setattr("autoskillit.cli._terminal.termios.error", termios.error)
         monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: False)
         monkeypatch.setattr(
-            "subprocess.run",
+            "autoskillit.cli._session_launch.subprocess.run",
             lambda *a, **kw: (_ for _ in ()).throw(KeyboardInterrupt()),
         )
         monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/claude")

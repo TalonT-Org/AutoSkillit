@@ -7,7 +7,6 @@ sub-package __init__ files.
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING
 
 from autoskillit.core import (
     CATEGORY_TAGS,
@@ -18,9 +17,6 @@ from autoskillit.core import (
     get_logger,
 )
 from autoskillit.core import session_type as _resolve_session_type
-
-if TYPE_CHECKING:
-    pass
 
 _log = get_logger(__name__)
 

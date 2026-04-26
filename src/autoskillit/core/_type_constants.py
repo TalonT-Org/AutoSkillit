@@ -368,6 +368,8 @@ ALL_VISIBILITY_TAGS: frozenset[str] = frozenset(
     {"kitchen", "headless", "fleet", "fleet-dispatch", "kitchen-core"}
 )
 
+if not TOOL_SUBSET_TAGS:
+    raise RuntimeError("TOOL_SUBSET_TAGS is empty — cannot validate ALL_VISIBILITY_TAGS coverage")
 _all_tool_tags = {tag for tags in TOOL_SUBSET_TAGS.values() for tag in tags}
 _non_category_tool_tags = _all_tool_tags - CATEGORY_TAGS
 if not _non_category_tool_tags <= ALL_VISIBILITY_TAGS:

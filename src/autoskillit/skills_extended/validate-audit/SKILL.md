@@ -1,7 +1,7 @@
 ---
 name: validate-audit
 categories: [audit]
-description: Validate audit findings from audit-arch, audit-tests, or audit-cohesion against actual code, git history, and design intent using 9–10 parallel subagents. Removes contested findings, documents exceptions, adjusts severities. Use when user says "validate audit", "validate findings", "validate report", or "check audit results".
+description: Validate audit findings from audit-arch, audit-tests, audit-cohesion, or audit-feature-gates against actual code, git history, and design intent using 9–10 parallel subagents. Removes contested findings, documents exceptions, adjusts severities. Use when user says "validate audit", "validate findings", "validate report", or "check audit results".
 hooks:
   PreToolUse:
     - matcher: "*"
@@ -13,15 +13,15 @@ hooks:
 
 # Validate Audit Findings Skill
 
-Validate audit findings from `audit-arch`, `audit-tests`, or `audit-cohesion` against actual
-code, git history, and design intent using 9–10 parallel subagents. Contested findings are
-separated into their own file. The validated report carries a `validated: true` marker to
-signal downstream processing.
+Validate audit findings from `audit-arch`, `audit-tests`, `audit-cohesion`, or
+`audit-feature-gates` against actual code, git history, and design intent using 9–10 parallel
+subagents. Contested findings are separated into their own file. The validated report carries a
+`validated: true` marker to signal downstream processing.
 
 ## When to Use
 
 - User says "validate audit", "validate findings", "validate report", "check audit results"
-- After running `audit-arch`, `audit-tests`, or `audit-cohesion` to filter noise before acting
+- After running `audit-arch`, `audit-tests`, `audit-cohesion`, or `audit-feature-gates` to filter noise before acting
 
 ## Arguments
 
@@ -30,9 +30,10 @@ signal downstream processing.
 ```
 
 - `audit_report_path` — absolute path to an audit report produced by `audit-arch`,
-  `audit-tests`, or `audit-cohesion`. If omitted, use the most recent file under
-  `{{AUTOSKILLIT_TEMP}}/audit-arch/`, `{{AUTOSKILLIT_TEMP}}/audit-tests/`, or
-  `{{AUTOSKILLIT_TEMP}}/audit-cohesion/` (most recent mtime wins across all three).
+  `audit-tests`, `audit-cohesion`, or `audit-feature-gates`. If omitted, use the most
+  recent file under `{{AUTOSKILLIT_TEMP}}/audit-arch/`, `{{AUTOSKILLIT_TEMP}}/audit-tests/`,
+  `{{AUTOSKILLIT_TEMP}}/audit-cohesion/`, or `{{AUTOSKILLIT_TEMP}}/audit-feature-gates/`
+  (most recent mtime wins across all four).
   If no files exist under any of these directories, print an error message and exit
   with a non-zero status.
 
@@ -70,21 +71,24 @@ Read the audit report file. Detect its source by examining the document title or
 - **audit-arch**: Title contains "Architectural Audit" or findings reference "Principle P{N}"
 - **audit-tests**: Title contains "Test Suite Audit" or findings reference issue categories
 - **audit-cohesion**: Title contains "Cohesion Audit" or findings reference "Dimension C{N}"
+- **audit-feature-gates**: Title contains "Feature Gate Audit" or findings reference
+  BLOCK/WARN/INFO severity badges. BLOCK findings require code verification.
+  WARN findings check for intentional design exceptions. INFO findings accepted as-is.
 
-If none of the three patterns match, print:
-`"Error: unrecognized audit report format — expected title 'Architectural Audit', 'Test Suite Audit', or 'Cohesion Audit'. Aborting."`
+If none of the four patterns match, print:
+`"Error: unrecognized audit report format — expected title 'Architectural Audit', 'Test Suite Audit', 'Cohesion Audit', or 'Feature Gate Audit'. Aborting."`
 and exit with a non-zero status.
 
 For each finding, extract:
-- **ID** — principle/category/dimension label (e.g., P3, Category 1, C5) or a short slug
+- **ID** — principle/category/dimension label (e.g., P3, Category 1, C5, D2) or a short slug
 - **Text** — the full finding description
-- **Severity** — CRITICAL / HIGH / MEDIUM / LOW (arch, tests) or
-  STRONG/ADEQUATE/WEAK/FRACTURED (cohesion)
+- **Severity** — CRITICAL / HIGH / MEDIUM / LOW (arch, tests), STRONG/ADEQUATE/WEAK/FRACTURED
+  (cohesion), or BLOCK / WARN / INFO (feature-gates)
 - **Location** — `file:line` references, if present
-- **Category** — the principle, issue category, or dimension label
+- **Category** — the principle, issue category, dimension label, or gate dimension
 
-Collect all findings into a flat list. Record the source audit skill (`arch`, `tests`, or
-`cohesion`) for use in output filenames.
+Collect all findings into a flat list. Record the source audit skill (`arch`, `tests`,
+`cohesion`, or `feature_gates`) for use in output filenames.
 
 ### Step 2 — Group into Thematic Batches
 
@@ -258,11 +262,12 @@ If the user confirms, pass the contested findings file path to `prepare-issue`.
 └── contested_findings_{source}_{YYYY-MM-DD_HHMMSS}.md  (when N_contested > 0)
 ```
 
-`{source}` is `arch`, `tests`, or `cohesion` based on the input report.
+`{source}` is `arch`, `tests`, `cohesion`, or `feature_gates` based on the input report.
 
 ## Related Skills
 
 - `/autoskillit:audit-arch` — produces reports this skill validates
 - `/autoskillit:audit-tests` — produces reports this skill validates
 - `/autoskillit:audit-cohesion` — produces reports this skill validates
+- `/autoskillit:audit-feature-gates` — produces reports this skill validates
 - `/autoskillit:prepare-issue` — offered interactively for contested findings

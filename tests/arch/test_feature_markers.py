@@ -147,7 +147,8 @@ async def test_tool_listing_matches_feature_state(fleet_enabled: bool, monkeypat
     from autoskillit.core import FLEET_TOOLS
     from autoskillit.server import _apply_session_type_visibility, mcp
 
-    # Reset to known baseline: all gated tags disabled
+    # Reset to known baseline: clear accumulated transforms, apply initial state
+    mcp._transforms.clear()
     mcp.disable(tags={"fleet", "kitchen", "headless"})
 
     if fleet_enabled:
@@ -169,5 +170,6 @@ async def test_tool_listing_matches_feature_state(fleet_enabled: bool, monkeypat
         else:
             assert name not in tool_names, f"{name} should be hidden when fleet disabled"
 
-    # Cleanup: restore baseline
-    mcp.disable(tags={"fleet", "kitchen", "headless"})
+    # Cleanup: restore to import-time baseline
+    mcp._transforms.clear()
+    mcp.disable(tags={"kitchen"})

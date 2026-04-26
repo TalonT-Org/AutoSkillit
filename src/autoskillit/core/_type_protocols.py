@@ -51,6 +51,7 @@ __all__ = [
     "QuotaRefreshTask",
     "TokenFactory",
     "SupportsLogger",
+    "CampaignProtector",
 ]
 
 
@@ -610,3 +611,15 @@ class TokenFactory(Protocol):
     """
 
     def __call__(self) -> str | None: ...
+
+
+class CampaignProtector(Protocol):
+    """Protocol for resolving the set of protected campaign IDs for session retention.
+
+    Satisfied by any callable that accepts a project root Path and returns a frozenset
+    of campaign ID strings that should not be purged during log retention.
+    Set by make_context() on ToolContext; None in test ToolContext instances unless
+    explicitly provided.
+    """
+
+    def __call__(self, project_dir: Path) -> frozenset[str]: ...

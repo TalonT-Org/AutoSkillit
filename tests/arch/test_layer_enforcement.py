@@ -1181,6 +1181,8 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/migration/test_engine.py": frozenset({"autoskillit.execution"}),
     # fleet e2e test exercises execution + cli layers end-to-end
     "tests/fleet/test_fleet_e2e.py": frozenset({"autoskillit.execution", "autoskillit.cli"}),
+    # session_log tests verify callback injection into _enforce_retention — needs fleet.state
+    "tests/execution/test_session_log.py": frozenset({"autoskillit.fleet"}),
 }
 
 

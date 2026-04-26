@@ -13,6 +13,7 @@ import os
 import shutil
 import sys
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -98,6 +99,7 @@ def flush_session_log(
     campaign_id: str = "",
     dispatch_id: str = "",
     project_dir: str = "",
+    build_protected_campaign_ids: Callable[[Path], frozenset[str]] | None = None,
     session_id: str,
     pid: int,
     skill_command: str,
@@ -414,52 +416,18 @@ def flush_session_log(
         f.write(json.dumps(index_entry, sort_keys=True) + "\n")
 
     # Retention: keep at most _MAX_SESSIONS session directories
-    _enforce_retention(log_root, project_dir=project_dir)
+    _enforce_retention(
+        log_root,
+        project_dir=project_dir,
+        build_protected_campaign_ids=build_protected_campaign_ids,
+    )
 
 
-_TERMINAL_DISPATCH_STATUSES: frozenset[str] = frozenset(
-    {"success", "failure", "skipped", "released"}
-)
-
-
-def _build_protected_campaign_ids(project_dir: Path) -> frozenset[str]:
-    """Return campaign IDs with at least one non-terminal dispatch.
-
-    Reads fleet state files from ``{project_dir}/.autoskillit/temp/dispatches/``.
-    A campaign is protected if any of its dispatch records has a status that is NOT
-    in the terminal set ``{success, failure, skipped, released}``.
-    Returns an empty frozenset on any error (missing dir, corrupt files, permission errors).
-    """
-    try:
-        dispatches_dir = project_dir / ".autoskillit" / "temp" / "dispatches"
-        if not dispatches_dir.is_dir():
-            return frozenset()
-        protected: set[str] = set()
-        for state_file in dispatches_dir.glob("*.json"):
-            try:
-                data = json.loads(state_file.read_text(encoding="utf-8"))
-                cid = data.get("campaign_id", "")
-                if not cid:
-                    continue
-                dispatches = data.get("dispatches", [])
-                if not dispatches:
-                    # Campaign exists but has no dispatches yet — protect conservatively
-                    protected.add(cid)
-                    continue
-                for record in dispatches:
-                    status = record.get("status", "")
-                    if status not in _TERMINAL_DISPATCH_STATUSES:
-                        protected.add(cid)
-                        break
-            except (json.JSONDecodeError, OSError):
-                continue
-        return frozenset(protected)
-    except Exception:
-        logger.warning("campaign_ids_protection_error", exc_info=True)
-        return frozenset()
-
-
-def _enforce_retention(log_root: Path, project_dir: str = "") -> None:
+def _enforce_retention(
+    log_root: Path,
+    project_dir: str | None = None,
+    build_protected_campaign_ids: Callable[[Path], frozenset[str]] | None = None,
+) -> None:
     """Delete oldest session directories if count exceeds _MAX_SESSIONS.
 
     When ``project_dir`` is provided, reads fleet state files and ``meta.json``
@@ -477,7 +445,9 @@ def _enforce_retention(log_root: Path, project_dir: str = "") -> None:
     surviving_names = {d.name for d in dirs[len(dirs) - _MAX_SESSIONS :]}
 
     protected_ids = (
-        _build_protected_campaign_ids(Path(project_dir)) if project_dir else frozenset()
+        build_protected_campaign_ids(Path(project_dir))
+        if project_dir and build_protected_campaign_ids is not None
+        else frozenset()
     )
 
     for d in expired:

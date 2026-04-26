@@ -265,7 +265,7 @@ workspace:
   temp_dir: .autoskillit/temp  # canonical default; override per-project or via AUTOSKILLIT_WORKSPACE__TEMP_DIR
 
 fleet:
-  l2_default_timeout_sec: 3600
+  default_timeout_sec: 3600
 
 features:
   fleet: false  # Disabled by default; enabled via project config on integration

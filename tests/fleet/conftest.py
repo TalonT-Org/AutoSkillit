@@ -7,15 +7,15 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _reset_mcp_tags():
-    """Reset MCP tag visibility to default (kitchen disabled) before each test.
+    """Reset MCP tag visibility to default (all tags disabled) before each test.
 
     The mcp singleton is process-global. Each mcp.enable()/disable() call appends
     a Visibility transform to an internal list — the list never shrinks. Over a
     full test suite (11k+ tests), thousands of accumulated transforms can cause
     version-dependent ordering issues in FastMCP's "last match wins" evaluation.
 
-    Fix: truncate the transforms list back to a single entry matching the
-    server/__init__.py import-time state: ``mcp.disable(tags={"kitchen"})``.
+    Fix: truncate the transforms list and re-apply the baseline state by disabling
+    each tag in ALL_VISIBILITY_TAGS.
     """
     from autoskillit.core import ALL_VISIBILITY_TAGS
     from autoskillit.server import mcp

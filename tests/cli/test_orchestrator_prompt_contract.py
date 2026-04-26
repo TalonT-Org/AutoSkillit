@@ -91,15 +91,10 @@ class TestFirstActionAskUserQuestionProhibition:
         first_action_section = prompt[first_action_start:first_action_end]
         assert "DO NOT call AskUserQuestion" in first_action_section
 
-
-class TestOpenKitchenRetryOnUnavailable:
-    """FIRST ACTION must instruct the LLM to retry open_kitchen when MCP is not yet ready."""
-
-    def test_prompt_open_kitchen_retry_on_unavailable(self):
+    def test_first_action_instructs_retry_on_mcp_unavailable(self):
         """FIRST ACTION must contain a retry instruction for 'No such tool available'."""
-        from autoskillit.cli._prompts import _build_open_kitchen_prompt, _build_orchestrator_prompt
+        from autoskillit.cli._prompts import _build_orchestrator_prompt
 
-        # Orchestrator prompt: retry must be in FIRST ACTION section
         prompt = _build_orchestrator_prompt("demo", "mcp__autoskillit__")
         fa_start = prompt.index("FIRST ACTION")
         fa_end = prompt.find("During pipeline execution", fa_start)
@@ -116,7 +111,14 @@ class TestOpenKitchenRetryOnUnavailable:
         assert "ToolSearch" not in first_action, "Retry instruction must not reference ToolSearch"
         assert "sleep" not in first_action.lower(), "Retry instruction must not use sleep"
 
-        # Open-kitchen prompt: retry must appear before IMPORTANT section
+
+class TestOpenKitchenRetryOnUnavailable:
+    """open_kitchen prompt must instruct the LLM to retry when MCP is not yet ready."""
+
+    def test_open_kitchen_prompt_instructs_retry_on_mcp_unavailable(self):
+        """open_kitchen prompt must contain a retry instruction before IMPORTANT section."""
+        from autoskillit.cli._prompts import _build_open_kitchen_prompt
+
         ok_prompt = _build_open_kitchen_prompt("mcp__autoskillit__")
         first_section_end = ok_prompt.index("IMPORTANT — Orchestrator Discipline:")
         first_section = ok_prompt[:first_section_end]

@@ -103,3 +103,13 @@ def test_planner_recipe_validation_has_no_errors(planner_recipe):
 def test_planner_recipe_contract_exists():
     contracts_dir = builtin_recipes_dir() / "contracts"
     assert (contracts_dir / "planner.yaml").exists(), "Run: autoskillit recipes validate planner"
+
+
+def test_planner_recipe_extract_domain_uses_env_var(planner_recipe):
+    """extract_domain step must use PLANNER_ANALYSIS_FILE env-var, not positional $3."""
+    step = planner_recipe.steps["extract_domain"]
+    skill_cmd = step.with_args.get("skill_command", "")
+    assert "$3" not in skill_cmd, "Must not use positional $3"
+    assert "_ _" not in skill_cmd, "Must not have reserved-slot placeholders"
+    env = step.with_args.get("env", {})
+    assert "PLANNER_ANALYSIS_FILE" in env, "env must declare PLANNER_ANALYSIS_FILE"

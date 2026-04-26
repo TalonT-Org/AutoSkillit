@@ -22,9 +22,7 @@ Extract domain knowledge, naming conventions, and structural patterns specific t
 
 ## Arguments
 
-- **$1** — (unused, reserved)
-- **$2** — (unused, reserved)
-- **$3** — Absolute path to `analysis.json` produced by `planner-analyze`
+- **`PLANNER_ANALYSIS_FILE`** (env-var) — Absolute path to `analysis.json` produced by `planner-analyze`. Set by the recipe via the step's `env:` block.
 
 ## Critical Constraints
 
@@ -33,7 +31,7 @@ Extract domain knowledge, naming conventions, and structural patterns specific t
 - Abort the calling recipe on failure — log a warning and return gracefully
 
 **ALWAYS:**
-- Read the analysis file from argument $3 before spawning subagents
+- Read the analysis file from the path in the PLANNER_ANALYSIS_FILE environment variable before spawning subagents
 - Use Explore subagents for all file reads
 - Spawn subagents in parallel
 
@@ -41,7 +39,7 @@ Extract domain knowledge, naming conventions, and structural patterns specific t
 
 ### Step 1: Read analysis
 
-Read the `analysis.json` file from argument $3. Use its `language`, `framework`, `architecture_style`, and `key_patterns` fields to focus subagent queries.
+Read the `analysis.json` file from the path in the PLANNER_ANALYSIS_FILE environment variable. Use its `language`, `framework`, `architecture_style`, and `key_patterns` fields to focus subagent queries.
 
 ### Step 2: Launch 3–5 parallel Explore subagents
 

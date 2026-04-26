@@ -58,6 +58,7 @@ _PRINT_EXEMPT = frozenset(
     {
         "_cook.py",
         "_features.py",
+        "_session_picker.py",
         "_fleet.py",
         "_init_helpers.py",
         "_onboarding.py",

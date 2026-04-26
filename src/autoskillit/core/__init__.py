@@ -94,6 +94,18 @@ from .readiness import (
     readiness_sentinel_path,
     write_readiness_sentinel,
 )
+from .session_registry import (
+    bridge_claude_session_id as bridge_claude_session_id,
+)
+from .session_registry import (
+    read_registry as read_registry,
+)
+from .session_registry import (
+    registry_path as registry_path,
+)
+from .session_registry import (
+    write_registry_entry as write_registry_entry,
+)
 from .types import (
     AUTOSKILLIT_INSTALLED_VERSION,
     AUTOSKILLIT_PRIVATE_ENV_VARS,
@@ -115,6 +127,7 @@ from .types import (
     HEADLESS_ENV_VAR,
     HEADLESS_TOOLS,
     KITCHEN_SESSION_ID_ENV_VAR,
+    LAUNCH_ID_ENV_VAR,
     MUTATING_TOOLS,
     PACK_REGISTRY,
     PIPELINE_FORBIDDEN_TOOLS,
@@ -123,10 +136,12 @@ from .types import (
     RESERVED_LOG_RECORD_KEYS,
     RETIRED_FEATURES,
     RETIRED_READINESS_TOKENS,
+    SESSION_TYPE_COOK,
     SESSION_TYPE_ENV_VAR,
     SESSION_TYPE_FLEET,
     SESSION_TYPE_LEAF,
     SESSION_TYPE_ORCHESTRATOR,
+    SESSION_TYPE_ORDER,
     SKILL_COMMAND_PREFIX,
     SKILL_TOOLS,
     TOOL_SUBSET_TAGS,
@@ -243,6 +258,11 @@ __all__ = [
     "is_marker_fresh",
     "read_marker",
     "sweep_stale_markers",
+    # session_registry
+    "registry_path",
+    "read_registry",
+    "write_registry_entry",
+    "bridge_claude_session_id",
     # readiness
     "cleanup_readiness_sentinel",
     "readiness_sentinel_path",
@@ -339,6 +359,9 @@ __all__ = [
     "SESSION_TYPE_FLEET",
     "SESSION_TYPE_ORCHESTRATOR",
     "SESSION_TYPE_LEAF",
+    "SESSION_TYPE_COOK",
+    "SESSION_TYPE_ORDER",
+    "LAUNCH_ID_ENV_VAR",
     "HEADLESS_ENV_VAR",
     "FLEET_MODE_ENV_VAR",
     "FLEET_DISPATCH_MODE",

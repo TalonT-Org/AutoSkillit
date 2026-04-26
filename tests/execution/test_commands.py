@@ -8,6 +8,7 @@ import pytest
 
 from autoskillit.core import BareResume, ClaudeFlags, NamedResume, NoResume
 from autoskillit.execution.commands import (
+    _HEADLESS_EXCLUSIVE_VARS,
     _MAX_MCP_OUTPUT_TOKENS_VALUE,
     ClaudeHeadlessCmd,
     ClaudeInteractiveCmd,
@@ -638,3 +639,7 @@ def test_all_session_builders_inject_mcp_connection_nonblocking(builder_call) ->
     spec = builder_call()
     assert "MCP_CONNECTION_NONBLOCKING" in spec.env
     assert spec.env["MCP_CONNECTION_NONBLOCKING"] == "0"
+
+
+def test_launch_id_in_headless_exclusive_vars() -> None:
+    assert "AUTOSKILLIT_LAUNCH_ID" in _HEADLESS_EXCLUSIVE_VARS

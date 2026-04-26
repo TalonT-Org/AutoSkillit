@@ -138,7 +138,8 @@ generic_automation_mcp/
 │   ├── _plugin_ids.py       #   DIRECT_PREFIX, MARKETPLACE_PREFIX, detect_autoskillit_mcp_prefix (stdlib-only)
 │   ├── feature_flags.py     #   is_feature_enabled() — L0 feature gate resolution primitive
 │   ├── readiness.py         #   Filesystem readiness sentinel primitives for MCP server startup (L0)
-│   └── session_registry.py  #   Session registry: maps autoskillit launch IDs to Claude Code session UUIDs
+│   ├── session_registry.py  #   Session registry: maps autoskillit launch IDs to Claude Code session UUIDs
+│   └── tool_sequence_analysis.py #  Cross-session tool call sequence DFG analysis (stdlib-only, L0)
 │
 ├── config/                  # L1
 │   ├── __init__.py
@@ -300,6 +301,7 @@ generic_automation_mcp/
 │   ├── _features.py         #   features subcommand group: list/status commands for feature gate inspection
 │   ├── _workspace.py        #   Workspace clean helpers
 │   ├── _session_picker.py   #   Scoped resume picker: filters sessions by type (cook/order) via registry + heuristic
+│   ├── _sessions.py         #   sessions analyze CLI subcommand for cross-session DFG visualization
 │   └── app.py               #   CLI entry: serve, init, config, skills, recipes, doctor, update, etc.
 │
 ├── hooks/                   # Claude Code PreToolUse/PostToolUse/SessionStart scripts

@@ -1,6 +1,6 @@
 # MCP Tool Access Control
 
-AutoSkillit provides 47 MCP tools organized into three access levels that control which
+AutoSkillit provides 48 MCP tools organized into three access levels that control which
 session types can see each tool.
 
 ## Three Access Levels
@@ -65,7 +65,7 @@ Server startup sequence:
    → reveals test_check only (the sole headless-tagged tool)
 
 4. When open_kitchen is called:
-   ctx.enable_components(tags={"kitchen"})   → reveals all 43 kitchen tools
+   ctx.enable_components(tags={"kitchen"})   → reveals all 44 kitchen tools
    ctx.disable_components(tags={subset})     → re-hides each disabled subset
    (session-level enable overwrites server-level disable, so re-disabling is required)
 ```
@@ -86,7 +86,7 @@ missing kitchen visibility.
 
 ## Complete MCP Tool Access Control Map
 
-All 47 tools with their access level, tags, source file, and functional category.
+All 48 tools with their access level, tags, source file, and functional category.
 
 **Tag abbreviations**: AS = `autoskillit`, K = `kitchen`, HL = `headless`,
 GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`
@@ -209,7 +209,7 @@ GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`
 
 ---
 
-**Total: 47 tools** — 4 Free Range + 43 Kitchen-tagged (of which 1, `test_check`, additionally carries the `headless` tag and is revealed inside headless sessions)
+**Total: 48 tools** — 4 Free Range + 44 Kitchen-tagged (of which 1, `test_check`, additionally carries the `headless` tag and is revealed inside headless sessions)
 
 For subset configuration that can hide functional-category tools, see
 [Subset Categories](../skills/subsets.md).

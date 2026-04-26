@@ -70,6 +70,7 @@ _PRINT_EXEMPT = frozenset(
         "_doctor.py",
         "_marketplace.py",
         "_prompts.py",
+        "_sessions.py",
         "_workspace.py",
         "branch_protection_guard.py",
         "open_kitchen_guard.py",

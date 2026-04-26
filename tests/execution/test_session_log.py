@@ -1137,6 +1137,142 @@ def test_flush_session_log_summary_contains_per_turn_fields(tmp_path, monkeypatc
     assert summary["turn_timestamps"] == ["2026-04-15T07:00:00Z", "2026-04-15T07:00:05Z"]
 
 
+# turn_tool_calls
+
+
+def test_flush_session_log_summary_contains_turn_tool_calls(tmp_path, monkeypatch):
+    cb_log = tmp_path / "s.jsonl"
+    cb_log.write_text(
+        json.dumps(
+            {
+                "type": "assistant",
+                "requestId": "req-001",
+                "message": {
+                    "content": [
+                        {"type": "tool_use", "name": "ToolA"},
+                        {"type": "tool_use", "name": "ToolB"},
+                    ]
+                },
+            }
+        )
+        + "\n"
+    )
+    import autoskillit.execution.session_log as sl_mod
+
+    monkeypatch.setattr(sl_mod, "claude_code_log_path", lambda cwd, sid: cb_log)
+
+    flush_session_log(
+        log_dir=str(tmp_path),
+        cwd="/tmp",
+        session_id="s",
+        pid=1,
+        skill_command="test",
+        success=True,
+        subtype="completed",
+        exit_code=0,
+        start_ts="2026-04-15T07:00:00Z",
+        proc_snapshots=None,
+    )
+    summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
+    assert summary["turn_tool_calls"] == [["ToolA", "ToolB"]]
+
+
+def test_turn_tool_calls_capped_at_8_per_turn(tmp_path, monkeypatch):
+    tools = [{"type": "tool_use", "name": f"Tool{i}"} for i in range(10)]
+    cb_log = tmp_path / "s.jsonl"
+    cb_log.write_text(
+        json.dumps(
+            {
+                "type": "assistant",
+                "requestId": "req-001",
+                "message": {"content": tools},
+            }
+        )
+        + "\n"
+    )
+    import autoskillit.execution.session_log as sl_mod
+
+    monkeypatch.setattr(sl_mod, "claude_code_log_path", lambda cwd, sid: cb_log)
+    flush_session_log(
+        log_dir=str(tmp_path),
+        cwd="/tmp",
+        session_id="s",
+        pid=1,
+        skill_command="test",
+        success=True,
+        subtype="completed",
+        exit_code=0,
+        start_ts="2026-04-15T07:00:00Z",
+        proc_snapshots=None,
+    )
+    summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
+    assert len(summary["turn_tool_calls"][0]) == 8
+    assert summary["turn_tool_calls"][0] == [f"Tool{i}" for i in range(8)]
+
+
+def test_turn_tool_calls_empty_for_text_only_turn(tmp_path, monkeypatch):
+    cb_log = tmp_path / "s.jsonl"
+    cb_log.write_text(
+        json.dumps(
+            {
+                "type": "assistant",
+                "requestId": "req-001",
+                "message": {"content": [{"type": "text", "text": "hello"}]},
+            }
+        )
+        + "\n"
+    )
+    import autoskillit.execution.session_log as sl_mod
+
+    monkeypatch.setattr(sl_mod, "claude_code_log_path", lambda cwd, sid: cb_log)
+    flush_session_log(
+        log_dir=str(tmp_path),
+        cwd="/tmp",
+        session_id="s",
+        pid=1,
+        skill_command="test",
+        success=True,
+        subtype="completed",
+        exit_code=0,
+        start_ts="2026-04-15T07:00:00Z",
+        proc_snapshots=None,
+    )
+    summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
+    assert summary["turn_tool_calls"] == [[]]
+
+
+def test_turn_tool_calls_parallel_to_request_ids(tmp_path, monkeypatch):
+    records = [
+        json.dumps(
+            {
+                "type": "assistant",
+                "requestId": f"req-{i}",
+                "message": {"content": [{"type": "tool_use", "name": f"Tool{i}"}]},
+            }
+        )
+        for i in range(3)
+    ]
+    cb_log = tmp_path / "s.jsonl"
+    cb_log.write_text("\n".join(records) + "\n")
+    import autoskillit.execution.session_log as sl_mod
+
+    monkeypatch.setattr(sl_mod, "claude_code_log_path", lambda cwd, sid: cb_log)
+    flush_session_log(
+        log_dir=str(tmp_path),
+        cwd="/tmp",
+        session_id="s",
+        pid=1,
+        skill_command="test",
+        success=True,
+        subtype="completed",
+        exit_code=0,
+        start_ts="2026-04-15T07:00:00Z",
+        proc_snapshots=None,
+    )
+    summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
+    assert len(summary["turn_tool_calls"]) == len(summary["request_ids"]) == 3
+
+
 # ---------------------------------------------------------------------------
 # Silent gap, outcome anomaly, and exit snapshot tests
 # ---------------------------------------------------------------------------

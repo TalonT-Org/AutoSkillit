@@ -92,6 +92,7 @@ class TestToolRegistration:
             "batch_cleanup_clones",
             "dispatch_food_truck",
             "reload_session",
+            "analyze_tool_sequences",
         }
         assert expected == tool_names
 

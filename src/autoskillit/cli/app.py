@@ -17,6 +17,7 @@ import anyio
 from autoskillit.cli._features import features_app
 from autoskillit.cli._fleet import fleet_app
 from autoskillit.cli._serve_guard import serve_with_signal_guard
+from autoskillit.cli._sessions import sessions_app
 
 if TYPE_CHECKING:
     from autoskillit.recipe import Recipe, RecipeInfo
@@ -60,6 +61,7 @@ app.command(recipes_app)
 app.command(workspace_app)
 app.command(fleet_app)
 app.command(features_app)
+app.command(sessions_app)
 
 
 class CliError(Exception):

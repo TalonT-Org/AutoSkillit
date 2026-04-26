@@ -81,6 +81,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "hook_registry",  # hook_registry.py: HOOK_REGISTRY_HASH = compute_registry_hash(...)
         "_fleet",  # cli/_fleet.py: fleet_app = App(name="fleet", ...)
         "_features",  # cli/_features.py: features_app = App(name="features", ...)
+        "_sessions",  # cli/_sessions.py: sessions_app = App(name="sessions", ...)
     }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
@@ -688,7 +689,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         session_registry.py adds the stdlib-only session registry mapping
         autoskillit launch IDs to Claude Code session UUIDs for the scoped
         resume picker.
-        Exempt at 25 files.
+        tool_sequence_analysis.py adds the stdlib-only cross-session tool call
+        sequence DFG analysis (L0; must live in core/ to be importable by server/).
+        Exempt at 26 files.
       cli/ — REQ-CNST-003-E5: cli/ retains _terminal_table.py as a re-export shim
         for backward-compatible cli/ imports; canonical implementation lives in
         core/_terminal_table.py. Also contains _terminal.py — the terminal state
@@ -700,7 +703,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         _features.py adds feature gate inspection subcommand (list/status).
         _session_picker.py adds the scoped session resume picker that filters
         sessions by type (cook/order) using the session registry.
-        Exempt at 25 files.
+        _sessions.py adds the sessions analyze CLI subcommand for cross-session
+        tool call sequence diagnostics.
+        Exempt at 26 files.
       hooks/ — REQ-CNST-003-E6: hooks/ hosts one standalone script per hook event
         (PreToolUse, PostToolUse, SessionStart). Each script must remain a separate
         file so Claude Code can invoke it directly as a subprocess. pretty_output_hook.py
@@ -715,8 +720,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "server": 20,
         "recipe": 38,
         "execution": 26,
-        "core": 25,
-        "cli": 25,
+        "core": 26,
+        "cli": 26,
         "hooks": 24,
     }
     violations: list[str] = []

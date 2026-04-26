@@ -166,6 +166,7 @@ def flush_session_log(
 
     _cb_request_ids: list[str] = []
     _cb_turn_timestamps: list[str] = []
+    _cb_turn_tool_calls: list[list[str]] = []
     if cc_log and cc_log.exists():
         seen_request_ids: set[str] = set()
         try:
@@ -186,6 +187,17 @@ def flush_session_log(
                     _cb_request_ids.append(str(rid))
                     if ts:
                         _cb_turn_timestamps.append(str(ts))
+                    _message = rec.get("message")
+                    _content = _message.get("content", []) if isinstance(_message, dict) else []
+                    _tools = [
+                        str(blk["name"])
+                        for blk in _content
+                        if isinstance(blk, dict)
+                        and blk.get("type") == "tool_use"
+                        and isinstance(blk.get("name"), str)
+                        and blk["name"]
+                    ]
+                    _cb_turn_tool_calls.append(_tools[:8])
         except OSError:
             logger.debug("channel_b_log_read_error", path=cc_log_str, exc_info=True)
 
@@ -316,6 +328,7 @@ def flush_session_log(
         "last_stop_reason": last_stop_reason,
         "request_ids": _cb_request_ids,
         "turn_timestamps": _cb_turn_timestamps,
+        "turn_tool_calls": _cb_turn_tool_calls,
         "campaign_id": campaign_id,
         "dispatch_id": dispatch_id,
     }

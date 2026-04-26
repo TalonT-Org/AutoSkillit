@@ -53,8 +53,10 @@ steps:
   extract_domain:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:planner-extract-domain _ _ {{AUTOSKILLIT_TEMP}}/planner/analysis.json"
+      skill_command: "/autoskillit:planner-extract-domain"
       cwd: "${{ inputs.source_dir }}"
+      env:
+        PLANNER_ANALYSIS_FILE: "{{AUTOSKILLIT_TEMP}}/planner/analysis.json"
     on_success: generate_phases
     on_failure: generate_phases
 

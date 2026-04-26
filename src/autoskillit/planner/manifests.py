@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -61,12 +62,22 @@ def check_remaining(manifest_path: str, pass_name: str, output_dir: str) -> dict
                 if pass_name == "work_packages":
                     _backstop_wp_index(item["id"], result_path, out_dir)
             else:
-                _logger.warning(
-                    "check_remaining: no result file — marking failed",
-                    item_id=item["id"],
-                    result_path=str(result_path),
-                )
-                item["status"] = "failed"
+                for _attempt in range(2):
+                    time.sleep(1)
+                    if result_path.exists():
+                        break
+                else:
+                    _logger.warning(
+                        "check_remaining: no result file after retries — marking failed",
+                        item_id=item["id"],
+                        result_path=str(result_path),
+                    )
+                    item["status"] = "failed"
+                    continue
+                item["status"] = "done"
+                item["result_path"] = str(result_path)
+                if pass_name == "work_packages":
+                    _backstop_wp_index(item["id"], result_path, out_dir)
 
     next_item = next((item for item in items if item["status"] == "pending"), None)
 

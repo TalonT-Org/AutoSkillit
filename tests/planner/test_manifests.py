@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = [pytest.mark.layer("planner"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.feature("planner")]
 
 
 def test_check_remaining_pending_to_processing(tmp_path):

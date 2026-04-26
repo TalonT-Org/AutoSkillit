@@ -7,6 +7,7 @@ import re
 
 import pytest
 
+from autoskillit.server.tools_recipe import list_recipes as list_recipes_tool
 from autoskillit.server.tools_recipe import validate_recipe
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -451,6 +452,30 @@ async def test_validate_recipe_no_recipes_returns_error(tool_ctx, tmp_path):
     tool_ctx.recipes = None
     result = json.loads(await validate_recipe(script_path=str(tmp_path / "x.yaml")))
     assert result.get("valid") is False
+
+
+# T7: list_recipes MCP tool hides campaign when fleet disabled
+@pytest.mark.anyio
+@pytest.mark.feature("fleet")
+async def test_list_recipes_mcp_tool_hides_campaign_when_fleet_disabled(
+    tool_ctx, tmp_path, monkeypatch
+):
+    """list_recipes MCP tool must exclude campaign recipes when fleet feature is disabled."""
+    from pathlib import Path
+
+    recipe_dir = tmp_path / ".autoskillit" / "recipes"
+    recipe_dir.mkdir(parents=True)
+    (recipe_dir / "my-campaign.yaml").write_text(
+        "name: my-campaign\ndescription: test\nkind: campaign\nsteps: {}\n"
+    )
+    tool_ctx.config.features["fleet"] = False
+    monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+    raw = await list_recipes_tool()
+    result = json.loads(raw)
+    recipe_names = [r["name"] for r in result.get("recipes", [])]
+    assert "my-campaign" not in recipe_names, (
+        "Campaign recipe must not appear when fleet feature is disabled"
+    )
 
 
 # P5F2-T4  (import hygiene check)

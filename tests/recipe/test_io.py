@@ -17,6 +17,7 @@ from autoskillit.recipe.io import (
 )
 from autoskillit.recipe.schema import (
     Recipe,
+    RecipeKind,
     RecipeStep,
     StepResultRoute,
 )
@@ -528,6 +529,40 @@ class TestListRecipes:
         assert project_names == sorted(project_names), (
             f"Project recipes not in alphabetical order: {project_names}"
         )
+
+    def test_list_recipes_excludes_campaign_when_fleet_disabled(self, tmp_path: Path) -> None:
+        """list_recipes with exclude_kinds={CAMPAIGN} must omit campaign-kind recipes."""
+        recipe_dir = tmp_path / ".autoskillit" / "recipes"
+        recipe_dir.mkdir(parents=True)
+        (recipe_dir / "my-campaign.yaml").write_text(
+            "name: my-campaign\ndescription: test\nkind: campaign\nsteps: {}\n"
+        )
+        result = list_recipes(tmp_path, exclude_kinds=frozenset({RecipeKind.CAMPAIGN}))
+        assert all(r.kind != RecipeKind.CAMPAIGN for r in result.items)
+
+    def test_list_recipes_includes_campaign_when_fleet_enabled(self, tmp_path: Path) -> None:
+        """list_recipes with no exclusions must include campaign-kind recipes."""
+        recipe_dir = tmp_path / ".autoskillit" / "recipes"
+        recipe_dir.mkdir(parents=True)
+        (recipe_dir / "my-campaign.yaml").write_text(
+            "name: my-campaign\ndescription: test\nkind: campaign\nsteps: {}\n"
+        )
+        result = list_recipes(tmp_path)
+        names = [r.name for r in result.items]
+        assert "my-campaign" in names
+
+    def test_recipe_info_kind_field_populated(self, tmp_path: Path) -> None:
+        """RecipeInfo.kind must be populated from the YAML kind field."""
+        recipe_dir = tmp_path / ".autoskillit" / "recipes"
+        recipe_dir.mkdir(parents=True)
+        (recipe_dir / "std.yaml").write_text("name: std\ndescription: standard\nsteps: {}\n")
+        (recipe_dir / "camp.yaml").write_text(
+            "name: camp\ndescription: campaign\nkind: campaign\nsteps: {}\n"
+        )
+        result = list_recipes(tmp_path)
+        kinds = {r.name: r.kind for r in result.items}
+        assert kinds["std"] == RecipeKind.STANDARD
+        assert kinds["camp"] == RecipeKind.CAMPAIGN
 
 
 class TestBuiltinRecipesDir:

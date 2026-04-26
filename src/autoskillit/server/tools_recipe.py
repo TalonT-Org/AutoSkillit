@@ -55,7 +55,7 @@ async def list_recipes() -> str:
         tool_ctx = _get_ctx_or_none()
         if tool_ctx is None or tool_ctx.recipes is None:
             return json.dumps([])
-        result = tool_ctx.recipes.list_all(Path.cwd())
+        result = tool_ctx.recipes.list_all(Path.cwd(), features=tool_ctx.config.features)
         return json.dumps(result)
     except Exception:
         logger.error("list_recipes unhandled exception", exc_info=True)

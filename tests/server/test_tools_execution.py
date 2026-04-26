@@ -965,6 +965,7 @@ class TestHeadlessGateEnforcement:
         assert result["subtype"] == "headless_error"
 
 
+@pytest.mark.feature("fleet")
 class TestTierAwareGateEnforcement:
     """T_TAGE: tier-aware guard permits orchestrator, denies leaf and fleet as appropriate."""
 

@@ -55,7 +55,7 @@ class TestModuleCascadeCore:
 
     def test_feature_flags_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["feature_flags"] == frozenset(
-            {"core", "cli", "config", "server", "workspace"}
+            {"core", "cli", "config", "recipe", "server", "workspace"}
         )
 
     def test_branch_guard_cascade(self) -> None:

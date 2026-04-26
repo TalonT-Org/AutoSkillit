@@ -128,6 +128,7 @@ def test_A10_require_orchestrator_exact_denies_headless_leaf(monkeypatch) -> Non
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.feature("fleet")
 def test_A11_require_fleet_permits_fleet_session(monkeypatch) -> None:
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
     from autoskillit.server.helpers import _require_fleet
@@ -135,6 +136,7 @@ def test_A11_require_fleet_permits_fleet_session(monkeypatch) -> None:
     assert _require_fleet() is None
 
 
+@pytest.mark.feature("fleet")
 def test_A12_require_fleet_denies_orchestrator(monkeypatch) -> None:
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
     from autoskillit.server.helpers import _require_fleet
@@ -145,6 +147,7 @@ def test_A12_require_fleet_denies_orchestrator(monkeypatch) -> None:
     assert data["subtype"] == "headless_error"
 
 
+@pytest.mark.feature("fleet")
 def test_A13_require_fleet_denies_interactive_no_session_type(monkeypatch) -> None:
     monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)

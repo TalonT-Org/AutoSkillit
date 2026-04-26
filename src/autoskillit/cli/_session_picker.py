@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from autoskillit.core.paths import claude_code_project_dir
+
 _ORDER_GREETING_PREFIXES = (
     "Today's special:",
     "Order up! Today's special:",
@@ -33,8 +35,6 @@ def pick_session(session_type: str, project_dir: Path) -> str | None:
 
 def _load_sessions_index(project_dir: Path) -> list[dict]:
     """Load sessions-index.json, filtering out sidechain entries."""
-    from autoskillit.core import claude_code_project_dir
-
     index_path = claude_code_project_dir(str(project_dir)) / "sessions-index.json"
     try:
         entries: list[dict] = json.loads(index_path.read_text(encoding="utf-8"))
@@ -101,11 +101,15 @@ def _run_picker(sessions: list[dict], session_type: str, registry: dict[str, dic
         row = _format_session_row(entry, session_type, registry)
         print(f"  {i}. {row}")
 
+    from autoskillit.cli._timed_input import timed_prompt
+
     max_retries = 3
     for _ in range(max_retries):
         try:
-            raw = input(f"\nSelect [0-{len(sessions)}]: ").strip()
-        except (EOFError, KeyboardInterrupt):
+            raw = timed_prompt(
+                f"\nSelect [0-{len(sessions)}]: ", timeout=0, label="session picker"
+            )
+        except KeyboardInterrupt:
             return None
 
         if not raw:

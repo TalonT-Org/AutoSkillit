@@ -571,11 +571,8 @@ def order(recipe: str | None = None, session_id: str | None = None, *, resume: b
         from autoskillit.cli._session_picker import pick_session as _pick_session
 
         if isinstance(resume_spec, BareResume):
-            _selected = _pick_session("order", Path.cwd())
-            if _selected is not None:
-                resume_spec = NamedResume(session_id=_selected)
-            else:
-                resume_spec = NoResume()
+            _sel = _pick_session("order", Path.cwd())
+            resume_spec = NamedResume(session_id=_sel) if _sel else NoResume()
         _order_launch_id = uuid.uuid4().hex[:16]
         write_registry_entry(Path.cwd(), _order_launch_id, SESSION_TYPE_ORDER, None)
         _launch_cook_session(
@@ -739,12 +736,10 @@ def order(recipe: str | None = None, session_id: str | None = None, *, resume: b
     )
     if confirm.lower() in ("n", "no"):
         return
-
     greeting = random.choice(_COOK_GREETINGS).format(recipe_name=recipe)
     _order_launch_id = uuid.uuid4().hex[:16]
     write_registry_entry(Path.cwd(), _order_launch_id, SESSION_TYPE_ORDER, recipe)
-    _extra_env[SESSION_TYPE_ENV_VAR] = SESSION_TYPE_ORDER
-    _extra_env[LAUNCH_ID_ENV_VAR] = _order_launch_id
+    _extra_env |= {SESSION_TYPE_ENV_VAR: SESSION_TYPE_ORDER, LAUNCH_ID_ENV_VAR: _order_launch_id}
     _launch_cook_session(
         _build_orchestrator_prompt(recipe, mcp_prefix=mcp_prefix, ingredients_table=_itable),
         initial_message=greeting,

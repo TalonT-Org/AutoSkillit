@@ -1610,9 +1610,9 @@ class TestOrderResumeParsing:
     def test_order_bare_resume_skips_recipe_validation(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        """order --resume (no uuid, no recipe) calls _launch_cook_session with BareResume."""
+        """order --resume (no uuid, no recipe) calls _launch_cook_session; no recipe validation."""
         from autoskillit.cli.app import app
-        from autoskillit.core import BareResume, NoResume
+        from autoskillit.core import NoResume
 
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
@@ -1622,12 +1622,15 @@ class TestOrderResumeParsing:
         def fake_launch(prompt, *, initial_message=None, extra_env=None, resume_spec=NoResume()):
             captured["resume_spec"] = resume_spec
 
-        with patch("autoskillit.cli.app._launch_cook_session", side_effect=fake_launch):
+        with (
+            patch("autoskillit.cli.app._launch_cook_session", side_effect=fake_launch),
+            patch("autoskillit.cli._session_picker.pick_session", return_value=None),
+        ):
             with pytest.raises(SystemExit) as exc_info:
                 app(["order", "--resume"])
             assert exc_info.value.code == 0
 
-        assert captured["resume_spec"] == BareResume()
+        assert captured["resume_spec"] == NoResume()
 
     def test_order_resume_uuid_does_not_validate_recipe(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path

@@ -685,7 +685,10 @@ def test_no_subpackage_exceeds_10_files() -> None:
         cli/ import).
         feature_flags.py adds the L0 is_feature_enabled() primitive — must live
         in core/ to be importable by all layers without cross-layer violations.
-        Exempt at 24 files.
+        session_registry.py adds the stdlib-only session registry mapping
+        autoskillit launch IDs to Claude Code session UUIDs for the scoped
+        resume picker.
+        Exempt at 25 files.
       cli/ — REQ-CNST-003-E5: cli/ retains _terminal_table.py as a re-export shim
         for backward-compatible cli/ imports; canonical implementation lives in
         core/_terminal_table.py. Also contains _terminal.py — the terminal state
@@ -695,7 +698,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         _update.py adds the first-class update subcommand implementation.
         _fleet.py adds fleet error envelope rendering for CLI consumers.
         _features.py adds feature gate inspection subcommand (list/status).
-        Exempt at 23 files.
+        _session_picker.py adds the scoped session resume picker that filters
+        sessions by type (cook/order) using the session registry.
+        Exempt at 25 files.
       hooks/ — REQ-CNST-003-E6: hooks/ hosts one standalone script per hook event
         (PreToolUse, PostToolUse, SessionStart). Each script must remain a separate
         file so Claude Code can invoke it directly as a subprocess. pretty_output_hook.py
@@ -710,8 +715,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "server": 20,
         "recipe": 38,
         "execution": 26,
-        "core": 24,
-        "cli": 24,
+        "core": 25,
+        "cli": 25,
         "hooks": 24,
     }
     violations: list[str] = []

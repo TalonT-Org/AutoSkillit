@@ -358,7 +358,7 @@ class TestCookInteractive:
     def test_cook_resume_bare_flag_produces_bare_resume_and_skips_discovery(
         self, monkeypatch, tmp_path
     ):
-        """cook(resume=True) passes bare --resume; find_latest_session_id must not be called."""
+        """cook(resume=True) invokes picker; UUID from picker passed as --resume; no discovery."""
         from unittest.mock import MagicMock, patch
 
         fake_skills_dir = tmp_path / "skills"
@@ -376,6 +376,10 @@ class TestCookInteractive:
                 "autoskillit.core.find_latest_session_id",
                 side_effect=lambda *a, **kw: discovery_calls.append(1) or "latest",
             ),
+            patch(
+                "autoskillit.cli._session_picker.pick_session",
+                return_value="picker-uuid-abc",
+            ),
         ):
             import autoskillit.cli._cook as module
 
@@ -384,8 +388,8 @@ class TestCookInteractive:
         args = mock_run.call_args[0][0]
         assert "--resume" in args
         idx = args.index("--resume")
-        assert idx == len(args) - 1 or args[idx + 1].startswith("-"), (
-            "bare --resume must not be followed by a session ID"
+        assert args[idx + 1] == "picker-uuid-abc", (
+            "--resume must be followed by the UUID returned by pick_session"
         )
         assert not discovery_calls, "find_latest_session_id must not be called for bare --resume"
 
@@ -420,9 +424,9 @@ class TestCookInteractive:
         assert args[args.index("--resume") + 1] == "explicit-abc"
         assert not discovery_calls, "discovery must not be called when session_id is explicit"
 
-    # REQ-CLI-002 — bare --resume always emits --resume; Claude Code's picker handles empty history
-    def test_cook_resume_bare_flag_always_emits_resume(self, monkeypatch, tmp_path):
-        """cook(resume=True) always emits bare --resume; empty history is Claude Code's concern."""
+    # REQ-CLI-002 — when picker returns None (no sessions), cook launches a fresh session
+    def test_cook_resume_bare_flag_no_sessions_starts_fresh(self, monkeypatch, tmp_path):
+        """cook(resume=True) with picker returning None starts a fresh session (no --resume)."""
         from unittest.mock import MagicMock, patch
 
         fake_skills_dir = tmp_path / "skills"
@@ -435,16 +439,15 @@ class TestCookInteractive:
             patch("builtins.input", return_value=""),
             patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
             patch("subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
+            patch("autoskillit.cli._session_picker.pick_session", return_value=None),
         ):
             import autoskillit.cli._cook as module
 
             module.cook(resume=True)
 
         args = mock_run.call_args[0][0]
-        assert "--resume" in args
-        idx = args.index("--resume")
-        assert idx == len(args) - 1 or args[idx + 1].startswith("-"), (
-            "bare --resume must not be followed by a session ID"
+        assert "--resume" not in args, (
+            "when picker returns None (no sessions), cook must launch fresh (no --resume)"
         )
 
     # REQ-CLI-003

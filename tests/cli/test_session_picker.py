@@ -69,6 +69,7 @@ def test_pick_session_filters_cook(
         "autoskillit.cli._session_picker.claude_code_project_dir",
         lambda _: claude_dir,
     )
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda _prompt="": "1")
 
     result = pick_session("cook", project_dir)
@@ -103,6 +104,7 @@ def test_pick_session_filters_order(tmp_path: Path, monkeypatch: pytest.MonkeyPa
         "autoskillit.cli._session_picker.claude_code_project_dir",
         lambda _: claude_dir,
     )
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda _prompt="": "1")
 
     result = pick_session("order", project_dir)
@@ -153,6 +155,7 @@ def test_user_selects_numbered_session(monkeypatch: pytest.MonkeyPatch) -> None:
         {"sessionId": "uuid-2", "firstPrompt": "Fix the bug"},
     ]
     inputs = iter(["1"])
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
     result = _run_picker(sessions, "cook", {})
     assert result == "uuid-1"
@@ -160,6 +163,7 @@ def test_user_selects_numbered_session(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_user_selects_fresh_start(monkeypatch: pytest.MonkeyPatch) -> None:
     sessions = [{"sessionId": "uuid-1", "firstPrompt": "Hello"}]
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda _prompt="": "0")
     result = _run_picker(sessions, "cook", {})
     assert result is None
@@ -168,6 +172,7 @@ def test_user_selects_fresh_start(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_user_selects_out_of_range(monkeypatch: pytest.MonkeyPatch) -> None:
     sessions = [{"sessionId": "uuid-1", "firstPrompt": "Hello"}]
     inputs = iter(["99", "0"])
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
     result = _run_picker(sessions, "cook", {})
     assert result is None

@@ -9,6 +9,7 @@ import ast
 import warnings
 from collections import defaultdict
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
@@ -168,7 +169,10 @@ class TestLayerCascadeConservativeGuard:
         violations: dict[str, dict[str, list[str]]] = {}
         for pkg, declared in LAYER_CASCADE_CONSERVATIVE.items():
             actual_pkgs = graph.get(pkg, set())
-            missing = actual_pkgs - declared
+            declared_dirs = {d for d in declared if "/" not in d}
+            file_prefixes = {d.split("/", 1)[0] for d in declared if "/" in d}
+            covered = declared_dirs | file_prefixes
+            missing = actual_pkgs - covered
             if missing:
                 violations[pkg] = {
                     "declared": sorted(declared),
@@ -178,6 +182,52 @@ class TestLayerCascadeConservativeGuard:
         assert not violations, (
             "LAYER_CASCADE_CONSERVATIVE entries are too narrow — update tests/_test_filter.py:\n"
             + "\n".join(f"  {pkg}: add {v['missing']}" for pkg, v in sorted(violations.items()))
+        )
+
+
+class TestRecipeCascadeFragilityGuard:
+    """REQ-GUARD-004: File-level recipe cascade entries must cover all importers."""
+
+    _NARROWED_DIRS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "execution",
+            "infra",
+            "skills",
+            "core",
+        }
+    )
+
+    def test_no_recipe_importing_test_file_missing_from_cascade(self) -> None:
+        recipe_cascade = LAYER_CASCADE_CONSERVATIVE["recipe"]
+        declared_files: dict[str, set[str]] = {}
+        for entry in recipe_cascade:
+            if "/" in entry:
+                parts = entry.split("/", 1)
+                declared_files.setdefault(parts[0], set()).add(parts[1])
+
+        tests_root = Path(__file__).parent.parent
+        violations: list[str] = []
+        for dir_name in self._NARROWED_DIRS:
+            dir_path = tests_root / dir_name
+            if not dir_path.is_dir():
+                continue
+            for test_file in sorted(dir_path.glob("test_*.py")):
+                tree = ast.parse(test_file.read_text(encoding="utf-8"))
+                for node in ast.walk(tree):
+                    if (
+                        isinstance(node, ast.ImportFrom)
+                        and node.module
+                        and node.module.startswith("autoskillit.recipe")
+                    ):
+                        fname = test_file.name
+                        if fname not in declared_files.get(dir_name, set()):
+                            violations.append(f"{dir_name}/{fname}")
+                        break
+        assert not violations, (
+            "Test files import from autoskillit.recipe but are not in "
+            "LAYER_CASCADE_CONSERVATIVE['recipe'] file-level entries:\n"
+            + "\n".join(f"  {v}" for v in violations)
+            + "\nAdd them to the recipe cascade in tests/_test_filter.py."
         )
 
 

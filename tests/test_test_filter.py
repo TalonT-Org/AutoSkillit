@@ -249,18 +249,24 @@ class TestBuildTestScope:
 
     def test_scope_l2_recipe_conservative(self, tmp_path: Path) -> None:
         tests_root = tmp_path / "tests"
-        for d in [
-            "recipe",
-            "execution",
-            "server",
-            "cli",
-            "infra",
-            "skills",
-            "arch",
-            "contracts",
-            "docs",
-        ]:
+        for d in ["recipe", "server", "cli", "migration", "hooks", "arch", "contracts", "docs"]:
             (tests_root / d).mkdir(parents=True, exist_ok=True)
+        for f in [
+            "execution/test_headless.py",
+            "execution/test_zero_write_detection.py",
+            "infra/test_pretty_output.py",
+            "skills/test_skill_placeholder_contracts.py",
+            "skills/test_make_campaign_compliance.py",
+            "skills/test_review_design_guards.py",
+            "skills/test_skill_tool_syntax_contracts.py",
+            "core/test_type_constants.py",
+            "core/test_kitchen_state.py",
+            "core/test_session_registry.py",
+        ]:
+            p = tests_root / f
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.touch()
+        (tests_root / "test_llm_triage.py").touch()
 
         result = build_test_scope(
             changed_files={"src/autoskillit/recipe/schema.py"},
@@ -268,9 +274,19 @@ class TestBuildTestScope:
             tests_root=tests_root,
         )
         assert result is not None
-        dir_names = {p.name for p in result}
-        for expected in ["recipe", "execution", "server", "cli", "infra", "skills"]:
-            assert expected in dir_names, f"{expected} missing from cascade"
+        result_names = {p.name for p in result}
+        for expected in ["recipe", "server", "cli", "migration"]:
+            assert expected in result_names, f"{expected} missing"
+        for expected in [
+            "test_headless.py",
+            "test_zero_write_detection.py",
+            "test_pretty_output.py",
+            "test_skill_placeholder_contracts.py",
+        ]:
+            assert expected in result_names, f"{expected} missing"
+        assert "hooks" in result_names, "hooks missing"
+        for absent in ["execution", "infra", "skills", "core"]:
+            assert absent not in result_names, f"{absent} should not be a full directory"
 
     def test_scope_l3_server_conservative(self, tmp_path: Path) -> None:
         tests_root = tmp_path / "tests"

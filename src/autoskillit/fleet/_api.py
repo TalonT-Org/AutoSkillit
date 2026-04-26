@@ -19,13 +19,13 @@ from autoskillit.core import (
     get_logger,
 )
 from autoskillit.fleet.result_parser import parse_l2_result_block
-from autoskillit.recipe import CAMPAIGN_REF_RE
 
 if TYPE_CHECKING:
     from autoskillit.pipeline.context import ToolContext
 
 logger = get_logger(__name__)
 
+_CAMPAIGN_REF_RE = re.compile(r"\$\{\{\s*campaign\.(\w+)\s*\}\}")
 _RESULT_REF_RE = re.compile(r"^\$\{\{\s*result\.([\w-]+)\s*\}\}$")
 
 
@@ -71,7 +71,7 @@ def _interpolate_campaign_refs(
                 )
             return captured[ref]
 
-        out[k] = CAMPAIGN_REF_RE.sub(_replace, v)
+        out[k] = _CAMPAIGN_REF_RE.sub(_replace, v)
     return out
 
 
@@ -257,7 +257,7 @@ async def _run_dispatch(
     dispatches_dir = tool_ctx.temp_dir / "dispatches"
     accumulated_captures = read_all_campaign_captures(dispatches_dir, tool_ctx.kitchen_id)
 
-    _has_campaign_refs = any(CAMPAIGN_REF_RE.search(v) for v in effective_ingredients.values())
+    _has_campaign_refs = any(_CAMPAIGN_REF_RE.search(v) for v in effective_ingredients.values())
     if _has_campaign_refs:
         try:
             effective_ingredients = _interpolate_campaign_refs(

@@ -236,7 +236,6 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
         {
             "recipe",
             "execution",
-            "fleet",
             "server",
             "cli",
             "infra",

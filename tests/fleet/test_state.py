@@ -22,6 +22,7 @@ from autoskillit.fleet import (
     write_captured_values,
     write_initial_state,
 )
+
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
 

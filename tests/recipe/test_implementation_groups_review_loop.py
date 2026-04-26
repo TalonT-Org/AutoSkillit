@@ -52,7 +52,7 @@ def test_check_review_loop_has_on_failure(recipe) -> None:
     """check_review_loop must declare on_failure because it uses on_result
     (on-result-missing-failure-route semantic rule requires it)."""
     step = recipe.steps["check_review_loop"]
-    assert step.on_failure == "ci_watch"
+    assert step.on_failure == "check_repo_ci_event"
 
 
 # T_IG_LOOP5

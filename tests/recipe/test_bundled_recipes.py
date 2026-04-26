@@ -79,7 +79,7 @@ def _assert_ci_steps(recipe) -> None:
     assert "re_push" in recipe.steps
     re_push = recipe.steps["re_push"]
     assert re_push.tool == "push_to_remote"
-    assert re_push.on_success == "ci_watch"
+    assert re_push.on_success == "check_repo_ci_event"
     assert re_push.on_failure == "release_issue_failure"
 
 
@@ -1236,13 +1236,13 @@ class TestReviewPrRecipeIntegration:
         assert step.skip_when_false == "inputs.open_pr"
 
     def test_review_pr_routes_to_ci_watch_on_success(self, recipe: object) -> None:
-        """T_RP4: review_pr has on_result with catch-all route to ci_watch."""
+        """T_RP4: review_pr has on_result with catch-all route to check_repo_ci_event."""
         step = recipe.steps["review_pr"]  # type: ignore[attr-defined]
         assert step.on_result is not None
         default_conditions = [
             c for c in step.on_result.conditions if c.when is None or c.when == "true"
         ]
-        assert any(c.route == "ci_watch" for c in default_conditions)
+        assert any(c.route == "check_repo_ci_event" for c in default_conditions)
 
     def test_review_pr_captures_verdict(self, recipe: object) -> None:
         """T_RP4b: review_pr captures the verdict output as review_verdict to avoid clobber."""

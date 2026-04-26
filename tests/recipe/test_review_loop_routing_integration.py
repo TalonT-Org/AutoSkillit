@@ -48,7 +48,7 @@ def test_review_loop_routes_to_review_pr_after_resolve_cycle(recipe_name: str) -
 
 @pytest.mark.parametrize("recipe_name", RECIPE_NAMES)
 def test_review_loop_routes_to_ci_watch_at_max_iterations(recipe_name: str) -> None:
-    """When max_iterations is exhausted, routing must fall through to ci_watch."""
+    """When max_iterations is exhausted, routing must fall through to check_repo_ci_event."""
     result = check_review_loop(
         pr_number="42",
         cwd="/tmp",
@@ -67,10 +67,10 @@ def test_review_loop_routes_to_ci_watch_at_max_iterations(recipe_name: str) -> N
     for key, value in result.items():
         when_expr = when_expr.replace(f"${{{{ result.{key} }}}}", value)
 
-    # The first condition must NOT be satisfied — falls through to default ci_watch
+    # The first condition must NOT be satisfied — falls through to default check_repo_ci_event
     # when_expr becomes "true == true and true == false" — second clause is False
     assert not _eval_compound_condition(when_expr)
-    assert conditions[1].route == "ci_watch"
+    assert conditions[1].route == "check_repo_ci_event"
 
 
 @pytest.mark.parametrize("recipe_name", RECIPE_NAMES)

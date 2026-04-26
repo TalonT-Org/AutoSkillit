@@ -799,6 +799,8 @@ def _has_merge_group_trigger(text: str) -> bool:
         return "merge_group" in text
     if not isinstance(parsed, dict):
         return False
+    # PyYAML (YAML 1.1) parses the bare key `on` as boolean True.
+    # Accept both to be safe.
     on_value = parsed.get(True, parsed.get("on"))
     if on_value == "merge_group":
         return True

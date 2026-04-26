@@ -402,7 +402,7 @@ class DefaultSessionSkillManager:
             effective_custom_tags = dict(config.subsets.custom_tags)
 
         packs_enabled: list[str] = [] if config is None else list(config.packs.enabled)
-        from autoskillit.core._type_enums import FeatureLifecycle
+        from autoskillit.core import FeatureLifecycle
 
         session_features: dict[str, bool] = (
             {

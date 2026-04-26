@@ -1121,7 +1121,9 @@ class TestFleetAutoGateBoot:
                         with patch("autoskillit.core.register_active_kitchen"):
                             await _fleet_auto_gate_boot(tool_ctx)
 
-        mock_helper.assert_called_once_with(tool_ctx.config.features)
+        mock_helper.assert_called_once_with(
+            tool_ctx.config.features, experimental_enabled=tool_ctx.config.experimental_enabled
+        )
 
 
 @pytest.mark.feature("fleet")

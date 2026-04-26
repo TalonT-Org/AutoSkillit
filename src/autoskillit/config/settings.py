@@ -373,7 +373,7 @@ class AutomationConfig:
                     f"got {type(value).__name__!r}: {value!r}"
                 )
             if value is True:
-                from autoskillit.core._type_enums import FeatureLifecycle
+                from autoskillit.core import FeatureLifecycle
 
                 if FEATURE_REGISTRY[name].lifecycle == FeatureLifecycle.DISABLED:
                     raise ConfigSchemaError(

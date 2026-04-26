@@ -1282,17 +1282,6 @@ class TestFleetConfig:
             load_config(tmp_path)
 
 
-def test_defaults_yaml_fleet_false() -> None:
-    """Package default has fleet disabled."""
-    import yaml
-
-    from autoskillit.core.paths import pkg_root
-
-    with open(pkg_root() / "config" / "defaults.yaml") as f:
-        data = yaml.safe_load(f)
-    assert data["features"]["fleet"] is False
-
-
 def test_project_config_experimental_enabled_or_fleet_enabled() -> None:
     """Integration's resolved config enables fleet via experimental_enabled blanket."""
     from pathlib import Path

@@ -16,11 +16,11 @@ def features_list() -> None:
     from autoskillit.config import load_config
     from autoskillit.core import (
         FEATURE_REGISTRY,
+        FeatureLifecycle,
         TerminalColumn,
         _render_terminal_table,
         is_feature_enabled,
     )
-    from autoskillit.core._type_enums import FeatureLifecycle
 
     cfg = load_config(Path.cwd())
 
@@ -72,8 +72,7 @@ def features_list() -> None:
 def features_status(name: str) -> None:
     """Show detailed state for a single feature."""
     from autoskillit.config import load_config
-    from autoskillit.core import FEATURE_REGISTRY, is_feature_enabled
-    from autoskillit.core._type_enums import FeatureLifecycle
+    from autoskillit.core import FEATURE_REGISTRY, FeatureLifecycle, is_feature_enabled
 
     if name not in FEATURE_REGISTRY:
         known = sorted(FEATURE_REGISTRY.keys())

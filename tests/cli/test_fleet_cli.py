@@ -791,10 +791,13 @@ def test_fleet_dispatch_exits_when_disabled(
     checked_features: list[str] = []
     monkeypatch.setattr(
         "autoskillit.cli._fleet.is_feature_enabled",
-        lambda name, features: checked_features.append(name) or False,
+        lambda name, features, *, experimental_enabled=False: (
+            checked_features.append(name) or False
+        ),
     )
     monkeypatch.setattr(
-        "autoskillit.config.load_config", lambda path: type("C", (), {"features": {}})()
+        "autoskillit.config.load_config",
+        lambda path: type("C", (), {"features": {}, "experimental_enabled": False})(),
     )
     with pytest.raises(SystemExit) as exc_info:
         _fleet_dispatch()
@@ -811,10 +814,13 @@ def test_fleet_campaign_exits_when_disabled(
     checked_features: list[str] = []
     monkeypatch.setattr(
         "autoskillit.cli._fleet.is_feature_enabled",
-        lambda name, features: checked_features.append(name) or False,
+        lambda name, features, *, experimental_enabled=False: (
+            checked_features.append(name) or False
+        ),
     )
     monkeypatch.setattr(
-        "autoskillit.config.load_config", lambda path: type("C", (), {"features": {}})()
+        "autoskillit.config.load_config",
+        lambda path: type("C", (), {"features": {}, "experimental_enabled": False})(),
     )
     with pytest.raises(SystemExit) as exc_info:
         _fleet_campaign("any-campaign")
@@ -833,10 +839,13 @@ def test_fleet_list_exits_when_disabled(monkeypatch: pytest.MonkeyPatch, tmp_pat
     checked_features: list[str] = []
     monkeypatch.setattr(
         "autoskillit.cli._fleet.is_feature_enabled",
-        lambda name, features: checked_features.append(name) or False,
+        lambda name, features, *, experimental_enabled=False: (
+            checked_features.append(name) or False
+        ),
     )
     monkeypatch.setattr(
-        "autoskillit.config.load_config", lambda path: type("C", (), {"features": {}})()
+        "autoskillit.config.load_config",
+        lambda path: type("C", (), {"features": {}, "experimental_enabled": False})(),
     )
     with pytest.raises(SystemExit) as exc_info:
         _fleet_list()
@@ -855,10 +864,13 @@ def test_fleet_status_exits_when_disabled(monkeypatch: pytest.MonkeyPatch, tmp_p
     checked_features: list[str] = []
     monkeypatch.setattr(
         "autoskillit.cli._fleet.is_feature_enabled",
-        lambda name, features: checked_features.append(name) or False,
+        lambda name, features, *, experimental_enabled=False: (
+            checked_features.append(name) or False
+        ),
     )
     monkeypatch.setattr(
-        "autoskillit.config.load_config", lambda path: type("C", (), {"features": {}})()
+        "autoskillit.config.load_config",
+        lambda path: type("C", (), {"features": {}, "experimental_enabled": False})(),
     )
     with pytest.raises(SystemExit) as exc_info:
         _fleet_status(None)
@@ -877,9 +889,13 @@ def test_fleet_dispatch_proceeds_when_enabled(
     """fleet_dispatch passes the feature guard and proceeds to campaign resolution."""
     _stub_guards(monkeypatch)
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("autoskillit.cli._fleet.is_feature_enabled", lambda name, features: True)
     monkeypatch.setattr(
-        "autoskillit.config.load_config", lambda path: type("C", (), {"features": {}})()
+        "autoskillit.cli._fleet.is_feature_enabled",
+        lambda name, features, *, experimental_enabled=False: True,
+    )
+    monkeypatch.setattr(
+        "autoskillit.config.load_config",
+        lambda path: type("C", (), {"features": {}, "experimental_enabled": False})(),
     )
     captured = _capture_subprocess(monkeypatch)
     _fleet_dispatch()

@@ -1207,6 +1207,7 @@ def test_turn_tool_calls_capped_at_8_per_turn(tmp_path, monkeypatch):
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
     assert len(summary["turn_tool_calls"][0]) == 8
+    assert summary["turn_tool_calls"][0] == [f"Tool{i}" for i in range(8)]
 
 
 def test_turn_tool_calls_empty_for_text_only_turn(tmp_path, monkeypatch):
@@ -1238,12 +1239,6 @@ def test_turn_tool_calls_empty_for_text_only_turn(tmp_path, monkeypatch):
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
     assert summary["turn_tool_calls"] == [[]]
-
-
-def test_turn_tool_calls_absent_from_older_summary_handled_by_get(tmp_path):
-    # Validates caller contract: .get("turn_tool_calls", []) is safe on old summaries.
-    old_summary = {"session_id": "old", "success": True}
-    assert old_summary.get("turn_tool_calls", []) == []
 
 
 def test_turn_tool_calls_parallel_to_request_ids(tmp_path, monkeypatch):

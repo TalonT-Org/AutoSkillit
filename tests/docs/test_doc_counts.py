@@ -200,9 +200,8 @@ def _count_semantic_rule_files() -> int:
 
 
 def test_kitchen_tagged_tool_count_is_44() -> None:
-    assert _count_kitchen_tools() == 44, (
-        f"Expected 44 kitchen-tagged tools; found {_count_kitchen_tools()}"
-    )
+    count = _count_kitchen_tools()
+    assert count == 44, f"Expected 44 kitchen-tagged tools; found {count}"
 
 
 def test_free_range_tool_count_is_4() -> None:

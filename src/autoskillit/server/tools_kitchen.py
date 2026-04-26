@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict
@@ -93,14 +92,15 @@ def _quota_guard_hook_payload(cfg: QuotaGuardConfig) -> QuotaGuardHookPayload:
     }
 
 
-def _extract_sous_chef_discipline(sc_text: str) -> str:
-    """Extract the STEP EXECUTION IS NOT DISCRETIONARY section from sous-chef SKILL.md.
+def _build_sous_chef_for_delivery(sc_text: str) -> str:
+    """Return the sous-chef content for delivery via the named-recipe open_kitchen path.
 
-    Returns the matching section text, or an empty string if not found.
+    All callers receive the full SKILL.md text. L2 food trucks already have a
+    curated 4-section subset injected via their launch prompt; the full-text
+    delivery is harmless. L1 orchestrators and MCP-only callers have no other
+    delivery channel and require all sections.
     """
-    sections = re.split(r"(?=^## )", sc_text, flags=re.MULTILINE)
-    match = next((s for s in sections if "STEP EXECUTION IS NOT DISCRETIONARY" in s), "")
-    return match.strip()
+    return sc_text.strip()
 
 
 def _write_hook_config() -> None:
@@ -418,9 +418,9 @@ async def open_kitchen(
             _sc_path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
             try:
                 if _sc_path.exists():
-                    _discipline = _extract_sous_chef_discipline(_sc_path.read_text())
-                    if _discipline:
-                        result["sous_chef_discipline"] = _discipline
+                    _sc_content = _build_sous_chef_for_delivery(_sc_path.read_text())
+                    if _sc_content:
+                        result["sous_chef_discipline"] = _sc_content
             except Exception:
                 logger.warning(
                     "open_kitchen_failure", stage="read_sous_chef_discipline", exc_info=True

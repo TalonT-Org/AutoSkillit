@@ -99,6 +99,24 @@ class TestL2SousChefBlock:
         ):
             assert f"## {title}" not in block, f"Unretained section present: {title}"
 
+    def test_l2_sections_constant_matches_build_output(self) -> None:
+        from autoskillit.core._type_constants import (
+            SOUS_CHEF_L2_SECTIONS,
+            SOUS_CHEF_MANDATORY_SECTIONS,
+        )
+
+        block = _get_sous_chef_block()
+        for header in SOUS_CHEF_L2_SECTIONS:
+            assert header in block, (
+                f"_build_l2_sous_chef_block() missing L2 section: {header!r}. "
+                "Update SOUS_CHEF_L2_SECTIONS or the allowlist in fleet/_prompts.py."
+            )
+        extra = set(SOUS_CHEF_MANDATORY_SECTIONS) - set(SOUS_CHEF_L2_SECTIONS)
+        for header in extra:
+            assert header not in block, (
+                f"_build_l2_sous_chef_block() unexpectedly includes non-L2 section: {header!r}"
+            )
+
 
 # --- Group E-2: Placeholder Interpolation ---
 

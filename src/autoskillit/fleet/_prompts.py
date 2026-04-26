@@ -11,28 +11,17 @@ import json
 import re
 
 from autoskillit.core import get_logger, pkg_root
+from autoskillit.core._type_constants import SOUS_CHEF_L2_SECTIONS
 from autoskillit.hooks import QUOTA_GUARD_DENY_TRIGGER, QUOTA_POST_WARNING_TRIGGER
 
 logger = get_logger(__name__)
-
-# Sous-chef sections retained for L2 food truck prompts (allowlist).
-# All other sections are excluded — they describe L1 multi-dispatch patterns
-# that are structurally impossible in a single-dispatch L2 context.
-_L2_RETAINED_SECTIONS: frozenset[str] = frozenset(
-    {
-        "CONTEXT LIMIT ROUTING",
-        "STEP NAME IMMUTABILITY",
-        "MERGE PHASE",
-        "QUOTA WAIT PROTOCOL",
-    }
-)
 
 
 def _build_l2_sous_chef_block() -> str:
     """Extract the L2-relevant subset of sous-chef SKILL.md.
 
     Uses regex to split on ``## `` section headers and retains only sections
-    whose title starts with one of the _L2_RETAINED_SECTIONS prefixes.
+    whose title starts with one of the SOUS_CHEF_L2_SECTIONS prefixes.
     Returns empty string if SKILL.md is absent (graceful degradation).
     """
     path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
@@ -48,7 +37,7 @@ def _build_l2_sous_chef_block() -> str:
 
     retained: list[str] = []
     for section in sections:
-        for title in _L2_RETAINED_SECTIONS:
+        for title in SOUS_CHEF_L2_SECTIONS:
             if section.startswith(f"## {title}"):
                 retained.append(section.rstrip())
                 break

@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from autoskillit.config.settings import QuotaGuardConfig
+from autoskillit.core._type_constants import SOUS_CHEF_MANDATORY_SECTIONS
 from autoskillit.hooks._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -1232,15 +1233,12 @@ async def test_sous_chef_discipline_injected_on_named_open_kitchen_path(tmp_path
     result = json.loads(result_str)
     assert result["success"] is True
     discipline = result["sous_chef_discipline"]
-    assert "STEP EXECUTION IS NOT DISCRETIONARY" in discipline, (
-        "Named open_kitchen path must inject sous-chef discipline — "
-        "headless L2 sessions have no system prompt injection"
-    )
-    assert "NEVER skip a step because" in discipline
-    assert "on_context_limit routing" in discipline, (
-        "Discipline section must include context-ownership line so model does not "
-        "use context pressure as a rationalization for step-skipping"
-    )
+    for header in SOUS_CHEF_MANDATORY_SECTIONS:
+        assert header in discipline, (
+            f"sous_chef_discipline missing section: {header!r}. "
+            f"Only {len([s for s in SOUS_CHEF_MANDATORY_SECTIONS if s in discipline])}"
+            f" of {len(SOUS_CHEF_MANDATORY_SECTIONS)} sections present."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1265,10 +1263,10 @@ async def test_sous_chef_rules_injected_at_open_kitchen(tmp_path, monkeypatch):
 
     parsed = json.loads(result)
     content = parsed["content"]
-    assert "STEP EXECUTION IS NOT DISCRETIONARY" in content, (
-        "Path B open_kitchen must include sous-chef STEP EXECUTION discipline in response"
-    )
-    assert "NEVER skip a step because" in content
+    for header in SOUS_CHEF_MANDATORY_SECTIONS:
+        assert header in content, (
+            f"open_kitchen no-name response missing sous-chef section: {header!r}"
+        )
 
 
 @pytest.mark.anyio

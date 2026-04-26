@@ -87,7 +87,8 @@ Execute dispatches SEQUENTIALLY via {mcp_prefix}dispatch_food_truck. Do NOT atte
 parallel dispatch — fleet_lock enforces serial execution and concurrent calls will fail.
 
 Each dispatch is an independent L2 session with its own kitchen context. There is NO
-cross-dispatch state sharing and NO cross-dispatch token aggregation.
+cross-dispatch state sharing managed by you — the runtime handles it
+via capture:. There is NO cross-dispatch token aggregation.
 
 After startup, only these 6 tools should be used for all campaign operations:
 - {mcp_prefix}dispatch_food_truck
@@ -99,6 +100,28 @@ After startup, only these 6 tools should be used for all campaign operations:
 
 Explicitly FORBIDDEN: open_kitchen, close_kitchen, run_skill, and all GitHub/CI tools.
 Use ONLY {mcp_prefix}dispatch_food_truck to dispatch — never run_skill.
+
+## CAPTURE & DATA FLOW
+
+Some dispatches declare a `capture:` block and some use `${{{{ campaign.* }}}}` references
+in their `ingredients:`. The runtime handles all value extraction and interpolation
+automatically — you do not need to parse, store, or forward captured values yourself.
+
+Your only responsibility: pass the `capture` dict from the manifest YAML directly to
+`{mcp_prefix}dispatch_food_truck` on every call:
+
+```python
+dispatch_food_truck(
+    recipe="...",
+    task="...",
+    ingredients={{...}},       # may contain ${{{{ campaign.* }}}} — resolved by runtime
+    capture={{...}},            # copied verbatim from the dispatch manifest
+)
+```
+
+If a dispatch has no `capture:` field, pass `capture={{}}` or omit the parameter.
+The `${{{{ campaign.* }}}}` references in ingredients are resolved before the L2 session
+is started — the L2 agent always receives concrete values.
 
 ## FAILURE RECOVERY
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -13,6 +14,7 @@ from autoskillit.core import RecipeSource
 
 AUTOSKILLIT_VERSION_KEY: Final = "autoskillit_version"
 RECIPE_VERSION_KEY: Final = "recipe_version"
+CAMPAIGN_REF_RE: Final = re.compile(r"\$\{\{\s*campaign\.(\w+)\s*\}\}")
 
 
 class RecipeKind(StrEnum):
@@ -131,6 +133,7 @@ class CampaignDispatch:
         default_factory=dict
     )  # string-only: YAML pass-through key-value pairs, not structured RecipeIngredient objects
     depends_on: list[str] = field(default_factory=list)
+    capture: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass

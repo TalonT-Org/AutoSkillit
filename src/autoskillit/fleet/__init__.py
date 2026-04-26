@@ -17,8 +17,10 @@ from .state import (
     build_protected_campaign_ids,
     mark_dispatch_interrupted,
     mark_dispatch_running,
+    read_all_campaign_captures,
     read_state,
     resume_campaign_from_state,
+    write_captured_values,
     write_initial_state,
 )
 from .summary import (
@@ -60,7 +62,9 @@ __all__ = [
     "build_protected_campaign_ids",
     "mark_dispatch_interrupted",
     "mark_dispatch_running",
+    "read_all_campaign_captures",
     "read_state",
     "resume_campaign_from_state",
+    "write_captured_values",
     "write_initial_state",
 ]

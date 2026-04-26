@@ -63,8 +63,8 @@ class TestDispatchRecordSchemaV2:
         assert dispatch_raw["l2_starttime_ticks"] == 42
         assert dispatch_raw["l2_boot_id"] == "abc-boot"
 
-    def test_schema_version_is_2(self) -> None:
-        assert _SCHEMA_VERSION == 2
+    def test_schema_version_is_3(self) -> None:
+        assert _SCHEMA_VERSION == 3
 
     def test_read_state_handles_v1_without_ticks(self, tmp_path: Path) -> None:
         """read_state on a v1 file missing l2_starttime_ticks/l2_boot_id returns defaults."""

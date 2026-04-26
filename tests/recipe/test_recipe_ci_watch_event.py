@@ -1,4 +1,5 @@
-"""Structural tests: primary ci_watch steps must have event: and be preceded by ci_event derivation."""
+"""Structural tests: primary ci_watch steps must have event: and be preceded by
+ci_event derivation."""
 
 from __future__ import annotations
 

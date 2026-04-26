@@ -484,6 +484,8 @@ def _check_campaign_ingredient_refs_have_prior_capture(
             if ancestor:
                 available_captures.update(ancestor.capture.keys())
         for ing_key, ing_val in d.ingredients.items():
+            if not isinstance(ing_val, str):
+                continue
             for ref in _CAMPAIGN_REF_RE_RULES.findall(ing_val):
                 if ref not in available_captures:
                     findings.append(

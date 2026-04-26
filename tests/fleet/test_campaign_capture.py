@@ -151,13 +151,14 @@ def _setup_dispatch(tool_ctx, recipe_name: str = "test-recipe", ingredients: dic
 
 
 def _make_success_result(payload: dict):
-    import dataclasses
 
     from autoskillit.core.types import SkillResult
 
     body = json.dumps(payload)
     sentinel_id_placeholder = "PLACEHOLDER"
-    stdout = f"%%L2_DONE::{sentinel_id_placeholder}%%\n---l2-result---\n{body}\n---end-l2-result---"
+    stdout = (
+        f"%%L2_DONE::{sentinel_id_placeholder}%%\n---l2-result---\n{body}\n---end-l2-result---"
+    )
     return SkillResult(
         success=True,
         result=stdout,
@@ -181,11 +182,8 @@ def _read_state_file(tool_ctx) -> dict:
 @pytest.mark.anyio
 async def test_dispatch_captures_extracted_and_written_to_state(tool_ctx, monkeypatch):
     """After a successful dispatch with capture spec, state file has captured_values."""
-    import dataclasses
 
-    from autoskillit.core.types import SkillResult
     from autoskillit.fleet._api import execute_dispatch
-    from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
 
     _setup_dispatch(tool_ctx)
 
@@ -229,11 +227,10 @@ async def test_dispatch_captures_extracted_and_written_to_state(tool_ctx, monkey
 @pytest.mark.anyio
 async def test_dispatch_ingredients_interpolated_from_captured_values(tool_ctx, monkeypatch):
     """Prior captured_values in state file are resolved into ingredients before dispatch."""
-    import json as _json
 
     from autoskillit.fleet._api import execute_dispatch
     from autoskillit.fleet.result_parser import L2ParseResult
-    from autoskillit.fleet.state import write_initial_state, write_captured_values, DispatchRecord
+    from autoskillit.fleet.state import DispatchRecord, write_captured_values, write_initial_state
 
     # Pre-create a state file for the same campaign_id with captured_values
     campaign_id = tool_ctx.kitchen_id
@@ -248,6 +245,7 @@ async def test_dispatch_ingredients_interpolated_from_captured_values(tool_ctx, 
         dispatches=[DispatchRecord(name="prior-dispatch")],
     )
     from autoskillit.fleet.state import DispatchStatus, append_dispatch_record
+
     append_dispatch_record(
         prior_state_path,
         DispatchRecord(name="prior-dispatch", status=DispatchStatus.SUCCESS),

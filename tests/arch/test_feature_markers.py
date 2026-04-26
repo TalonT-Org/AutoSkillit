@@ -45,6 +45,9 @@ _FLEET_FUNC_MARKERS: dict[str, set[str]] = {
         "test_A12_require_fleet_denies_orchestrator",
         "test_A13_require_fleet_denies_interactive_no_session_type",
     },
+    "server/test_tools_recipe.py": {
+        "test_list_recipes_mcp_tool_hides_campaign_when_fleet_disabled",
+    },
 }
 
 # Auto-discover all test files in the planner directory — self-maintaining
@@ -103,7 +106,7 @@ def _func_has_feature_decorator(source: str, func_name: str, feature_name: str) 
     """Return True if func_name has @pytest.mark.feature(feature_name) in its decorator list."""
     tree = ast.parse(source)
     for node in ast.walk(tree):
-        if not isinstance(node, ast.FunctionDef) or node.name != func_name:
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or node.name != func_name:
             continue
         for dec in node.decorator_list:
             if (

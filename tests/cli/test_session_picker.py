@@ -49,7 +49,11 @@ def test_pick_session_filters_cook(
 
     entries = [
         {"sessionId": "cook-uuid-1", "firstPrompt": "What's the issue?", "isSidechain": False},
-        {"sessionId": "order-uuid-1", "firstPrompt": "Kitchen's open! Hello", "isSidechain": False},
+        {
+            "sessionId": "order-uuid-1",
+            "firstPrompt": "Kitchen's open! Hello",
+            "isSidechain": False,
+        },
     ]
     (claude_dir / "sessions-index.json").write_text(json.dumps(entries), encoding="utf-8")
 
@@ -71,9 +75,7 @@ def test_pick_session_filters_cook(
     assert result == "cook-uuid-1"
 
 
-def test_pick_session_filters_order(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_pick_session_filters_order(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     project_dir = tmp_path / "project"
     project_dir.mkdir()
     claude_dir = tmp_path / "claude"
@@ -81,7 +83,11 @@ def test_pick_session_filters_order(
 
     entries = [
         {"sessionId": "cook-uuid-1", "firstPrompt": "What's the issue?", "isSidechain": False},
-        {"sessionId": "order-uuid-1", "firstPrompt": "Kitchen's open! Hello", "isSidechain": False},
+        {
+            "sessionId": "order-uuid-1",
+            "firstPrompt": "Kitchen's open! Hello",
+            "isSidechain": False,
+        },
     ]
     (claude_dir / "sessions-index.json").write_text(json.dumps(entries), encoding="utf-8")
 
@@ -121,9 +127,7 @@ def test_greeting_heuristic_open_kitchen_order() -> None:
     assert result == "order"
 
 
-def test_sidechain_sessions_excluded(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_sidechain_sessions_excluded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     project_dir = tmp_path / "project"
     project_dir.mkdir()
     claude_dir = tmp_path / "claude"

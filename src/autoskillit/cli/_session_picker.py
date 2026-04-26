@@ -89,9 +89,7 @@ def _format_session_row(entry: dict, session_type: str, registry: dict[str, dict
     return "  ".join(p for p in parts if p)
 
 
-def _run_picker(
-    sessions: list[dict], session_type: str, registry: dict[str, dict]
-) -> str | None:
+def _run_picker(sessions: list[dict], session_type: str, registry: dict[str, dict]) -> str | None:
     """Print numbered list and prompt user for selection.
 
     Returns sessions[n-1]["sessionId"] on valid selection, None on 0.

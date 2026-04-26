@@ -59,21 +59,15 @@ def test_advisory_hooks_are_non_blocking() -> None:
     assert stdout.strip(), "Expected advisory output for a recipe YAML path"
     data = json.loads(stdout.strip())
     hook_out = data["hookSpecificOutput"]
-    assert "message" in hook_out, (
-        f"Expected 'message' key in hookSpecificOutput, got {hook_out!r}"
-    )
-    assert "permissionDecision" not in hook_out, (
-        "Advisory hook must not emit permissionDecision"
-    )
+    assert "message" in hook_out, f"Expected 'message' key in hookSpecificOutput, got {hook_out!r}"
+    assert "permissionDecision" not in hook_out, "Advisory hook must not emit permissionDecision"
 
 
 def test_advisory_map_skill_names_resolve() -> None:
     """Every skill name in SKILL_FILE_ADVISORY_MAP must resolve to a real skill."""
     resolver = DefaultSkillResolver()
     unresolvable = [
-        skill
-        for skill in SKILL_FILE_ADVISORY_MAP.values()
-        if resolver.resolve(skill) is None
+        skill for skill in SKILL_FILE_ADVISORY_MAP.values() if resolver.resolve(skill) is None
     ]
     assert not unresolvable, (
         f"SKILL_FILE_ADVISORY_MAP references unresolvable skill names: {unresolvable}"

@@ -19,6 +19,7 @@ from autoskillit.execution.session_log import (
     resolve_log_dir,
     write_telemetry_clear_marker,
 )
+from autoskillit.fleet.state import build_protected_campaign_ids
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -1534,6 +1535,7 @@ def test_retention_protects_active_campaign_sessions(tmp_path, monkeypatch):
         log_dir=str(tmp_path),
         cwd="/some/project",
         project_dir=str(project_dir),
+        get_protected_ids=build_protected_campaign_ids,
         session_id="session-0006",
         pid=12345,
         skill_command="/autoskillit:implement",
@@ -1600,6 +1602,7 @@ def test_retention_deletes_released_campaign_sessions(tmp_path, monkeypatch):
         log_dir=str(tmp_path),
         cwd="/some/project",
         project_dir=str(project_dir),
+        get_protected_ids=build_protected_campaign_ids,
         session_id="session-0006",
         pid=12345,
         skill_command="/autoskillit:implement",
@@ -1653,6 +1656,7 @@ def test_retention_preserves_index_for_protected(tmp_path, monkeypatch):
         log_dir=str(tmp_path),
         cwd="/some/project",
         project_dir=str(project_dir),
+        get_protected_ids=build_protected_campaign_ids,
         session_id="session-0006",
         pid=12345,
         skill_command="/autoskillit:implement",
@@ -1696,6 +1700,7 @@ def test_retention_handles_missing_meta_json(tmp_path, monkeypatch):
         log_dir=str(tmp_path),
         cwd="/some/project",
         project_dir=str(project_dir),
+        get_protected_ids=build_protected_campaign_ids,
         session_id="session-0006",
         pid=12345,
         skill_command="/autoskillit:implement",
@@ -1719,7 +1724,7 @@ def test_retention_handles_missing_franchise_state_dir(tmp_path, monkeypatch):
 
     project_dir = tmp_path / "project"
     project_dir.mkdir()
-    # No dispatches dir created — _build_protected_campaign_ids returns empty frozenset
+    # No dispatches dir created — build_protected_campaign_ids returns empty frozenset
     sessions_dir = tmp_path / "sessions"
     sessions_dir.mkdir(parents=True)
     index_path = tmp_path / "sessions.jsonl"
@@ -1741,6 +1746,7 @@ def test_retention_handles_missing_franchise_state_dir(tmp_path, monkeypatch):
         log_dir=str(tmp_path),
         cwd="/some/project",
         project_dir=str(project_dir),
+        get_protected_ids=build_protected_campaign_ids,
         session_id="session-0006",
         pid=12345,
         skill_command="/autoskillit:implement",
@@ -1785,6 +1791,7 @@ def test_retention_handles_corrupt_meta_json(tmp_path, monkeypatch):
         log_dir=str(tmp_path),
         cwd="/some/project",
         project_dir=str(project_dir),
+        get_protected_ids=build_protected_campaign_ids,
         session_id="session-0006",
         pid=12345,
         skill_command="/autoskillit:implement",
@@ -1798,3 +1805,96 @@ def test_retention_handles_corrupt_meta_json(tmp_path, monkeypatch):
     # Corrupt meta.json → not protected → deleted normally
     assert not (sessions_dir / "session-0000").exists()
     assert not (sessions_dir / "session-0001").exists()
+
+
+def test_session_log_removed_build_protected_function() -> None:
+    """SL_CB_1: _build_protected_campaign_ids must not exist on session_log module."""
+    import autoskillit.execution.session_log as sl_module
+
+    assert not hasattr(sl_module, "_build_protected_campaign_ids")
+
+
+def test_session_log_removed_terminal_statuses_constant() -> None:
+    """SL_CB_2: _TERMINAL_DISPATCH_STATUSES must not exist on session_log module."""
+    import autoskillit.execution.session_log as sl_module
+
+    assert not hasattr(sl_module, "_TERMINAL_DISPATCH_STATUSES")
+
+
+def test_retention_no_protection_when_callback_is_none(tmp_path: Path, monkeypatch) -> None:
+    """SL_CB_6: get_protected_ids=None with active campaign → no protection applied."""
+    import autoskillit.execution.session_log as sl_module
+
+    monkeypatch.setattr(sl_module, "_MAX_SESSIONS", 5)
+
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    _make_state_file(project_dir, "active-campaign", "running")
+
+    sessions_dir = tmp_path / "sessions"
+    sessions_dir.mkdir(parents=True)
+    index_path = tmp_path / "sessions.jsonl"
+
+    for i in range(6):
+        dir_name = f"session-{i:04d}"
+        d = sessions_dir / dir_name
+        d.mkdir()
+        os.utime(d, (1_000_000_000 + i, 1_000_000_000 + i))
+        if i < 2:
+            (d / "meta.json").write_text(
+                json.dumps({"campaign_id": "active-campaign", "dispatch_id": f"d{i}"})
+            )
+        with index_path.open("a") as f:
+            f.write(json.dumps({"session_id": dir_name, "dir_name": dir_name}) + "\n")
+
+    flush_session_log(
+        log_dir=str(tmp_path),
+        cwd="/some/project",
+        project_dir=str(project_dir),
+        get_protected_ids=None,
+        session_id="session-0006",
+        pid=12345,
+        skill_command="/autoskillit:implement",
+        success=True,
+        subtype="completed",
+        exit_code=0,
+        start_ts="2026-04-20T10:00:00+00:00",
+        proc_snapshots=None,
+    )
+
+    # No protection applied — oldest sessions deleted even though campaign is active
+    assert not (sessions_dir / "session-0000").exists()
+    assert not (sessions_dir / "session-0001").exists()
+
+
+def test_flush_session_log_passes_callback_to_enforce_retention(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """SL_CB_7: flush_session_log forwards get_protected_ids kwarg to _enforce_retention."""
+    import autoskillit.execution.session_log as sl_module
+
+    captured: list = []
+
+    def fake_enforce_retention(log_root, project_dir="", get_protected_ids=None) -> None:
+        captured.append(get_protected_ids)
+
+    monkeypatch.setattr(sl_module, "_enforce_retention", fake_enforce_retention)
+
+    sentinel = build_protected_campaign_ids
+    flush_session_log(
+        log_dir=str(tmp_path),
+        cwd="/some/project",
+        project_dir=str(tmp_path),
+        get_protected_ids=sentinel,
+        session_id="session-cb7",
+        pid=12345,
+        skill_command="/autoskillit:implement",
+        success=True,
+        subtype="completed",
+        exit_code=0,
+        start_ts="2026-04-20T10:00:00+00:00",
+        proc_snapshots=None,
+    )
+
+    assert len(captured) == 1
+    assert captured[0] is sentinel

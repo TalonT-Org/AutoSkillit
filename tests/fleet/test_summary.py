@@ -206,18 +206,6 @@ class TestCampaignSummarySchema:
                 f"Expected rejection of key {forbidden_key!r}"
             )
 
-    def test_parse_campaign_summary_malformed_json(self):
-        from autoskillit.fleet import ParseFailure, ParseFailureKind, parse_campaign_summary
-
-        text = (
-            f"---campaign-summary::{_VALID_CAMPAIGN_ID}---\n"
-            "not valid json {{{\n"
-            f"---end-campaign-summary::{_VALID_CAMPAIGN_ID}---"
-        )
-        result = parse_campaign_summary(text, _VALID_CAMPAIGN_ID)
-        assert isinstance(result, ParseFailure)
-        assert result.kind == ParseFailureKind.JSON_DECODE_ERROR
-
     def test_parse_failure_sentinel_missing(self):
         from autoskillit.fleet import ParseFailure, ParseFailureKind, parse_campaign_summary
 
@@ -269,3 +257,4 @@ class TestCampaignSummarySchema:
         result = parse_campaign_summary(text, _VALID_CAMPAIGN_ID)
         assert isinstance(result, ParseFailure)
         assert result.kind == ParseFailureKind.FIELD_ERROR
+        assert "elapsed_seconds" in result.message

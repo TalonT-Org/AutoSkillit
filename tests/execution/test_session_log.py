@@ -19,7 +19,7 @@ from autoskillit.execution.session_log import (
     resolve_log_dir,
     write_telemetry_clear_marker,
 )
-from autoskillit.fleet.state import build_protected_campaign_ids
+from autoskillit.fleet import build_protected_campaign_ids
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -1898,5 +1898,6 @@ def test_flush_session_log_passes_callback_to_enforce_retention(
         proc_snapshots=None,
     )
 
+    assert (tmp_path / "sessions.jsonl").exists()
     assert len(captured) == 1
     assert captured[0] is sentinel

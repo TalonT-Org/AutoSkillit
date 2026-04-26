@@ -96,7 +96,8 @@ class TestFirstActionAskUserQuestionProhibition:
         from autoskillit.cli._prompts import _build_orchestrator_prompt
 
         prompt = _build_orchestrator_prompt("demo", "mcp__autoskillit__")
-        fa_start = prompt.index("FIRST ACTION")
+        fa_start = prompt.find("FIRST ACTION")
+        assert fa_start != -1, "'FIRST ACTION' section not found in prompt"
         fa_end = prompt.find("During pipeline execution", fa_start)
         assert fa_end != -1, "'During pipeline execution' section not found after FIRST ACTION"
         first_action = prompt[fa_start:fa_end]
@@ -120,7 +121,10 @@ class TestOpenKitchenRetryOnUnavailable:
         from autoskillit.cli._prompts import _build_open_kitchen_prompt
 
         ok_prompt = _build_open_kitchen_prompt("mcp__autoskillit__")
-        first_section_end = ok_prompt.index("IMPORTANT — Orchestrator Discipline:")
+        first_section_end = ok_prompt.find("IMPORTANT \u2014 Orchestrator Discipline:")
+        assert first_section_end != -1, (
+            "'IMPORTANT \u2014 Orchestrator Discipline:' section not found in ok_prompt"
+        )
         first_section = ok_prompt[:first_section_end]
 
         assert "retry" in first_section.lower(), (

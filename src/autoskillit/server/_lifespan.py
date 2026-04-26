@@ -155,23 +155,12 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
     ctx.gate.enable()
     logger.info("fleet_auto_gate_boot", gate_state="open", kitchen_id=ctx.kitchen_id)
 
-    # Enforce config-based feature suppression immediately after gate open.
-    # Mirrors _redisable_subsets pass 2 without requiring a FastMCP Context.
-    # Must run at lifespan time so fleet tools are hidden before any tool call arrives.
     try:
-        from autoskillit.core import FEATURE_REGISTRY, FEATURE_REVEAL_TAGS, is_feature_enabled
+        from autoskillit.core import _collect_disabled_feature_tags
         from autoskillit.server import mcp as _mcp
 
         _features = ctx.config.features if ctx.config is not None else {}
-        _enabled_tags: set[str] = set()
-        _disabled_tags: set[str] = set()
-        for _feat_name, _feat_def in FEATURE_REGISTRY.items():
-            _reveal = FEATURE_REVEAL_TAGS & _feat_def.tool_tags
-            if is_feature_enabled(_feat_name, _features):
-                _enabled_tags |= _reveal
-            else:
-                _disabled_tags |= _reveal
-        for _tag in _disabled_tags - _enabled_tags:
+        for _tag in _collect_disabled_feature_tags(_features):
             _mcp.disable(tags={_tag})
     except Exception:
         logger.warning("fleet_auto_gate_boot_feature_suppression_failed", exc_info=True)

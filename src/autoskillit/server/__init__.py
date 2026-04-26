@@ -76,10 +76,7 @@ from autoskillit.server import (  # noqa: E402, F401
     tools_workspace,
 )
 from autoskillit.server._factory import make_context  # noqa: E402, F401
-from autoskillit.server._session_type import (  # noqa: E402, F401
-    _apply_session_type_visibility,
-    _fleet_gate,
-)
+from autoskillit.server._session_type import _apply_session_type_visibility  # noqa: E402, F401
 from autoskillit.server.tools_kitchen import _build_tool_category_listing  # noqa: E402, F401
 
 # Apply global visibility transform: all sessions start with kitchen tools hidden.
@@ -92,4 +89,4 @@ from autoskillit.server._wire_compat import ClaudeCodeCompatMiddleware  # noqa: 
 
 mcp.add_middleware(ClaudeCodeCompatMiddleware())
 
-_apply_session_type_visibility(feature_gates=[_fleet_gate])
+_apply_session_type_visibility()

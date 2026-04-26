@@ -41,7 +41,12 @@ from ._terminal_table import _render_terminal_table as _render_terminal_table
 from ._version_snapshot import collect_version_snapshot as collect_version_snapshot
 from .branch_guard import is_protected_branch
 from .claude_conventions import ClaudeDirectoryConventions, LayoutError, validate_add_dir
-from .feature_flags import is_feature_enabled as is_feature_enabled
+from .feature_flags import (
+    _collect_disabled_feature_tags as _collect_disabled_feature_tags,
+)
+from .feature_flags import (
+    is_feature_enabled as is_feature_enabled,
+)
 from .github_url import _parse_issue_ref as _parse_issue_ref
 from .github_url import normalize_owner_repo as normalize_owner_repo
 from .github_url import parse_github_repo as parse_github_repo
@@ -115,7 +120,6 @@ from .types import (
     CONTEXT_EXHAUSTION_MARKER,
     DISPATCH_ID_ENV_VAR,
     FEATURE_REGISTRY,
-    FEATURE_REVEAL_TAGS,
     FLEET_DISPATCH_MODE,
     FLEET_DISPATCH_TOOLS,
     FLEET_ERROR_CODES,
@@ -300,7 +304,6 @@ __all__ = [
     "CONTEXT_EXHAUSTION_MARKER",
     "RETIRED_READINESS_TOKENS",
     "FEATURE_REGISTRY",
-    "FEATURE_REVEAL_TAGS",
     "FLEET_DISPATCH_TOOLS",
     "FLEET_ERROR_CODES",
     "FLEET_MENU_TOOLS",

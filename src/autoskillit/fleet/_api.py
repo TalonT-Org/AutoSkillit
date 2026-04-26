@@ -258,7 +258,7 @@ async def _run_dispatch(
     accumulated_captures = read_all_campaign_captures(dispatches_dir, tool_ctx.kitchen_id)
 
     _has_campaign_refs = any(_CAMPAIGN_REF_RE.search(v) for v in effective_ingredients.values())
-    if _has_campaign_refs or accumulated_captures:
+    if _has_campaign_refs:
         try:
             effective_ingredients = _interpolate_campaign_refs(
                 effective_ingredients, accumulated_captures

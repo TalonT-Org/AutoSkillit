@@ -165,8 +165,9 @@ def test_no_subprocess_in_serve() -> None:
             break
     assert serve_func is not None, "serve() not found in app.py"
 
-    # Build import mapping: imported name → source file
+    # Build import mapping: call-site name → source file, plus original function name.
     import_map: dict[str, Path] = {}
+    import_name_map: dict[str, str] = {}  # call-site name -> original name in source module
     for node in ast.walk(app_tree):
         if isinstance(node, ast.ImportFrom) and node.module and node.names:
             parts = node.module.split(".")
@@ -176,6 +177,7 @@ def test_no_subprocess_in_serve() -> None:
                 for alias in node.names:
                     name = alias.asname or alias.name
                     import_map[name] = candidate
+                    import_name_map[name] = alias.name
 
     violations: list[str] = []
     for call in _iter_eager_calls(serve_func):
@@ -183,12 +185,13 @@ def test_no_subprocess_in_serve() -> None:
         if call_name not in import_map:
             continue
         module_path = import_map[call_name]
+        fn_name = import_name_map.get(call_name, call_name)
         module_src = module_path.read_text()
         module_tree = ast.parse(module_src)
         for fn_node in ast.walk(module_tree):
             if (
                 isinstance(fn_node, (ast.FunctionDef, ast.AsyncFunctionDef))
-                and fn_node.name == call_name
+                and fn_node.name == fn_name
             ):
                 for inner in _iter_eager_calls(fn_node):
                     inner_name = _get_call_name(inner)
@@ -242,6 +245,9 @@ def test_serve_pre_anyio_no_denylist_calls() -> None:
                     if _get_call_name(try_stmt.value) == "anyio.run":
                         anyio_idx = i
                         break
+        elif isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
+            if _get_call_name(stmt.value) == "anyio.run":
+                anyio_idx = i
         if anyio_idx is not None:
             break
     assert anyio_idx is not None, "anyio.run() not found in serve()"

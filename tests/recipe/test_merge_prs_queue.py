@@ -214,6 +214,109 @@ def test_merge_prs_checkout_ejected_pr_removed(pmp_recipe) -> None:
 
 
 # ---------------------------------------------------------------------------
+# merge-prs.yaml — Proactive rebase block (Test 1E)
+# ---------------------------------------------------------------------------
+
+
+def test_merge_prs_advance_queue_pr_fallthrough_routes_to_get_next_pr_branch(
+    pmp_recipe,
+) -> None:
+    step = pmp_recipe.steps["advance_queue_pr"]
+    fallback = [c for c in step.on_result.conditions if c.when is None]
+    assert fallback[0].route == "get_next_pr_branch"
+
+
+def test_merge_prs_get_next_pr_branch_exists(pmp_recipe) -> None:
+    assert "get_next_pr_branch" in pmp_recipe.steps
+    assert pmp_recipe.steps["get_next_pr_branch"].tool == "run_cmd"
+
+
+def test_merge_prs_get_next_pr_branch_cmd_fetches_headref(pmp_recipe) -> None:
+    cmd = pmp_recipe.steps["get_next_pr_branch"].with_args.get("cmd", "")
+    assert "gh pr view" in cmd
+    assert "headRefName" in cmd
+
+
+def test_merge_prs_get_next_pr_branch_captures_next_pr_branch(pmp_recipe) -> None:
+    step = pmp_recipe.steps["get_next_pr_branch"]
+    assert "next_pr_branch" in (step.capture or {})
+
+
+def test_merge_prs_get_next_pr_branch_on_success_routes_to_proactive_rebase(
+    pmp_recipe,
+) -> None:
+    assert pmp_recipe.steps["get_next_pr_branch"].on_success == "proactive_rebase_next_pr"
+
+
+def test_merge_prs_get_next_pr_branch_on_failure_routes_to_enqueue(pmp_recipe) -> None:
+    # Safety net: if gh pr view fails, fall through to enqueue as if no rebase happened
+    assert pmp_recipe.steps["get_next_pr_branch"].on_failure == "enqueue_current_pr"
+
+
+def test_merge_prs_proactive_rebase_next_pr_exists(pmp_recipe) -> None:
+    assert "proactive_rebase_next_pr" in pmp_recipe.steps
+    assert pmp_recipe.steps["proactive_rebase_next_pr"].tool == "run_cmd"
+
+
+def test_merge_prs_proactive_rebase_next_pr_cmd_uses_rebase(pmp_recipe) -> None:
+    cmd = pmp_recipe.steps["proactive_rebase_next_pr"].with_args.get("cmd", "")
+    assert "git rebase" in cmd
+    assert "clean" in cmd
+    assert "conflicts" in cmd
+
+
+def test_merge_prs_proactive_rebase_next_pr_routing(pmp_recipe) -> None:
+    step = pmp_recipe.steps["proactive_rebase_next_pr"]
+    conditions = step.on_result.conditions
+    clean_routes = [c for c in conditions if c.when and "clean" in c.when]
+    assert clean_routes[0].route == "push_rebased_next_pr"
+    fallback = [c for c in conditions if c.when is None]
+    assert fallback[0].route == "resolve_proactive_rebase_conflicts"
+
+
+def test_merge_prs_proactive_rebase_next_pr_on_failure_routes_to_enqueue(pmp_recipe) -> None:
+    # Safety net: git command errors fall through to enqueue (don't block the pipeline)
+    assert pmp_recipe.steps["proactive_rebase_next_pr"].on_failure == "enqueue_current_pr"
+
+
+def test_merge_prs_push_rebased_next_pr_exists(pmp_recipe) -> None:
+    step = pmp_recipe.steps["push_rebased_next_pr"]
+    assert step.tool == "push_to_remote"
+    assert step.with_args.get("force") == "true"
+
+
+def test_merge_prs_push_rebased_next_pr_routes_to_enqueue(pmp_recipe) -> None:
+    assert pmp_recipe.steps["push_rebased_next_pr"].on_success == "enqueue_current_pr"
+
+
+def test_merge_prs_push_rebased_next_pr_on_failure_routes_to_register_failure(
+    pmp_recipe,
+) -> None:
+    assert pmp_recipe.steps["push_rebased_next_pr"].on_failure == "register_clone_failure"
+
+
+def test_merge_prs_resolve_proactive_conflicts_exists(pmp_recipe) -> None:
+    step = pmp_recipe.steps["resolve_proactive_rebase_conflicts"]
+    assert step.tool == "run_skill"
+    assert "resolve-merge-conflicts" in step.with_args.get("skill_command", "")
+
+
+def test_merge_prs_resolve_proactive_conflicts_routing(pmp_recipe) -> None:
+    step = pmp_recipe.steps["resolve_proactive_rebase_conflicts"]
+    conditions = step.on_result.conditions
+    escalation_routes = [c for c in conditions if c.when and "escalation_required" in c.when]
+    assert escalation_routes[0].route == "register_clone_failure"
+    success_routes = [c for c in conditions if c.when is None]
+    assert success_routes[0].route == "push_rebased_next_pr"
+
+
+def test_merge_prs_resolve_proactive_conflicts_has_retries(pmp_recipe) -> None:
+    step = pmp_recipe.steps["resolve_proactive_rebase_conflicts"]
+    assert step.retries == 1
+    assert step.on_exhausted == "enqueue_current_pr"
+
+
+# ---------------------------------------------------------------------------
 # merge-prs.yaml — CI watch before reenter_queue (Test 1D)
 # ---------------------------------------------------------------------------
 
@@ -269,7 +372,7 @@ def test_merge_prs_advance_queue_pr_captures_pr_number(pmp_recipe) -> None:
 
 
 def test_merge_prs_advance_queue_pr_routing(pmp_recipe) -> None:
-    """advance_queue_pr routes to enqueue_current_pr (default) or collect_and_check_impl_plans."""
+    """advance_queue_pr routes to get_next_pr_branch (default) or collect_and_check_impl_plans."""
     step = pmp_recipe.steps["advance_queue_pr"]
     assert step.on_result is not None
     conditions = step.on_result.conditions
@@ -278,7 +381,7 @@ def test_merge_prs_advance_queue_pr_routing(pmp_recipe) -> None:
     assert done_routes[0].route == "collect_and_check_impl_plans"
     default_routes = [c for c in conditions if c.when is None]
     assert default_routes, "must have a default route"
-    assert default_routes[0].route == "enqueue_current_pr"
+    assert default_routes[0].route == "get_next_pr_branch"
 
 
 # ---------------------------------------------------------------------------

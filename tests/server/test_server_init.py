@@ -586,12 +586,18 @@ class TestSessionTypeVisibility:
 
     @pytest.fixture(autouse=True)
     def _reset_mcp_visibility(self):
-        """Reset gated tag visibility on the shared mcp singleton before each test."""
+        """Reset gated tag visibility on the shared mcp singleton before each test.
+
+        Clears the transforms list to prevent unbounded growth across the full
+        test suite, then applies the minimal initial state.
+        """
         from autoskillit.server import mcp
 
+        mcp._transforms.clear()
         mcp.disable(tags={"fleet", "kitchen", "headless", "fleet-dispatch"})
         yield
-        mcp.disable(tags={"fleet", "kitchen", "headless", "fleet-dispatch"})
+        mcp._transforms.clear()
+        mcp.disable(tags={"kitchen"})
 
     @pytest.mark.anyio
     async def test_fleet_dispatch_mode_enables_fleet_dispatch_tools(self, monkeypatch):
@@ -627,7 +633,8 @@ class TestSessionTypeVisibility:
         from autoskillit.server import _apply_session_type_visibility, mcp
 
         for mode_value in ("campaign", None):
-            mcp.disable(tags={"fleet", "fleet-dispatch"})
+            mcp._transforms.clear()
+            mcp.disable(tags={"fleet", "kitchen", "headless", "fleet-dispatch"})
             monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
             if mode_value is not None:
                 monkeypatch.setenv(FLEET_MODE_ENV_VAR, mode_value)
@@ -922,9 +929,11 @@ class TestFleetAutoGateBoot:
         """Reset gated tag visibility on the shared mcp singleton before/after each test."""
         from autoskillit.server import mcp
 
+        mcp._transforms.clear()
         mcp.disable(tags={"fleet", "kitchen", "headless"})
         yield
-        mcp.disable(tags={"fleet", "kitchen", "headless"})
+        mcp._transforms.clear()
+        mcp.disable(tags={"kitchen"})
 
     @pytest.mark.anyio
     async def test_fleet_lifespan_auto_opens_gate(self, tool_ctx):
@@ -1135,9 +1144,11 @@ class TestFeatureGateVisibility:
         """Reset gated tag visibility on the shared mcp singleton before each test."""
         from autoskillit.server import mcp
 
+        mcp._transforms.clear()
         mcp.disable(tags={"fleet", "kitchen", "headless"})
         yield
-        mcp.disable(tags={"fleet", "kitchen", "headless"})
+        mcp._transforms.clear()
+        mcp.disable(tags={"kitchen"})
 
     @pytest.mark.anyio
     async def test_fleet_tools_hidden_when_feature_disabled(self, monkeypatch):

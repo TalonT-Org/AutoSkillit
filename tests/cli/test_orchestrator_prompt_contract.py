@@ -93,26 +93,25 @@ class TestFirstActionAskUserQuestionProhibition:
 
 
 class TestFirstActionTimingResilience:
-    """FIRST ACTION step 0 must be a Bash sleep gate before ToolSearch and open_kitchen."""
+    """FIRST ACTION step 0 must be a ToolSearch readiness check before open_kitchen."""
 
-    def test_first_action_step0_is_bash_sleep_gate(self):
-        """Step 0 in FIRST ACTION must be a Bash sleep gate — not a direct open_kitchen
-        or ToolSearch call. The sleep ensures MCP plugin tools are registered."""
+    def test_first_action_step0_is_toolsearch_gate(self):
+        """Step 0 in FIRST ACTION must be a ToolSearch readiness check — not a bare Bash sleep."""
         prompt = _get_prompt()
         first_action_start = prompt.index("FIRST ACTION")
         first_action_end = prompt.index("During pipeline execution", first_action_start)
         first_action_section = prompt[first_action_start:first_action_end]
 
-        # Step 0 must be Bash sleep
+        # Step 0 must be ToolSearch
         step0_end = first_action_section.index("\n1.")
         step0 = first_action_section[:step0_end]
-        assert "Bash" in step0, "Step 0 must be a Bash sleep gate"
-        assert "sleep" in step0.lower(), "Step 0 must contain a sleep command"
+        assert "ToolSearch" in step0, "Step 0 must be a ToolSearch readiness check"
+        assert "open_kitchen" in step0, "Step 0 ToolSearch must target open_kitchen"
 
-        # Step 0 must not be conditional
-        step0_lower = step0.lower()
-        assert "if the session" not in step0_lower
-        assert "if deferred" not in step0_lower
+        # Step 0 must not open with a Bash call
+        assert not step0.lstrip().startswith("Bash"), (
+            "Step 0 must not begin with Bash — ToolSearch is the first instruction"
+        )
 
-        # ToolSearch must still appear in FIRST ACTION (as step 1)
+        # ToolSearch must still appear in FIRST ACTION
         assert "ToolSearch" in first_action_section

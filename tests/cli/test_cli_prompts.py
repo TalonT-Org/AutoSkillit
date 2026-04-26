@@ -590,7 +590,7 @@ def test_orchestrator_prompt_contains_skill_command_format_guidance():
     )
 
 
-def test_first_action_step0_is_bash_sleep():
+def test_first_action_step0_is_toolsearch():
     """Step 0 of FIRST ACTION must be a ToolSearch readiness check, not a bare Bash sleep."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
     from autoskillit.cli._prompts import _build_orchestrator_prompt
@@ -606,7 +606,7 @@ def test_first_action_step0_is_bash_sleep():
     assert "open_kitchen" in step0_text, "Step 0 ToolSearch must target open_kitchen"
 
 
-def test_first_action_bash_sleep_precedes_toolsearch():
+def test_first_action_toolsearch_precedes_bash_sleep():
     """ToolSearch must appear before Bash (conditional fallback) in FIRST ACTION."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
     from autoskillit.cli._prompts import _build_orchestrator_prompt
@@ -623,7 +623,7 @@ def test_first_action_bash_sleep_precedes_toolsearch():
     )
 
 
-def test_open_kitchen_prompt_has_bash_sleep_before_toolsearch():
+def test_open_kitchen_prompt_has_toolsearch_before_bash_sleep():
     """_build_open_kitchen_prompt must have ToolSearch before Bash (conditional fallback)."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
     from autoskillit.cli._prompts import _build_open_kitchen_prompt

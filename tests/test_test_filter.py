@@ -290,7 +290,7 @@ class TestBuildTestScope:
 
     def test_scope_l3_server_conservative(self, tmp_path: Path) -> None:
         tests_root = tmp_path / "tests"
-        for d in ["server", "cli", "infra", "arch", "contracts", "docs"]:
+        for d in ["server", "cli", "fleet", "infra", "arch", "contracts", "docs"]:
             (tests_root / d).mkdir(parents=True, exist_ok=True)
 
         result = build_test_scope(
@@ -302,6 +302,7 @@ class TestBuildTestScope:
         dir_names = {p.name for p in result}
         assert "server" in dir_names
         assert "cli" in dir_names
+        assert "fleet" in dir_names
         result_names = {p.name for p in result}
         from tests._test_filter import _INFRA_UNCONDITIONAL_FILES
 

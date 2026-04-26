@@ -185,3 +185,49 @@ def test_sous_chef_group_merge_wait_before_next_group() -> None:
     assert "merge" in lower and ("wait" in lower or "before" in lower), (
         "sous-chef SKILL.md must instruct that Group N+1 waits for Group N's PRs to merge"
     )
+
+
+def test_merge_phase_skips_merge_prs_for_queue_mode() -> None:
+    """MERGE PHASE must instruct the orchestrator NOT to invoke merge-prs
+    when queue_available=true (and sequential_queue is not set to true)."""
+    merge_phase = _extract_merge_phase_section(_sous_chef_text())
+
+    assert "queue_available" in merge_phase, (
+        "MERGE PHASE must mention queue_available to distinguish queue vs classic routing"
+    )
+    lower = merge_phase.lower()
+    assert any(
+        phrase in lower
+        for phrase in [
+            "do not invoke merge-prs",
+            "do not invoke `merge-prs`",
+            "skip merge-prs",
+            "skip `merge-prs`",
+            "not invoke merge-prs",
+            "not invoke `merge-prs`",
+        ]
+    ), "MERGE PHASE must explicitly say NOT to invoke merge-prs when queue_available=true"
+
+
+def test_merge_phase_documents_sequential_queue_override() -> None:
+    """MERGE PHASE must document the sequential_queue hidden ingredient as
+    a force-override that routes through merge-prs even for queue-mode repos."""
+    merge_phase = _extract_merge_phase_section(_sous_chef_text())
+
+    assert "sequential_queue" in merge_phase, (
+        "MERGE PHASE must document the sequential_queue hidden ingredient override"
+    )
+
+
+def test_merge_phase_preserves_merge_prs_for_non_queue_repos() -> None:
+    """MERGE PHASE must still route to merge-prs when queue_available=false
+    (the classic batch-branch path is unchanged)."""
+    merge_phase = _extract_merge_phase_section(_sous_chef_text())
+
+    lower = merge_phase.lower()
+    assert "merge-prs" in lower, (
+        "MERGE PHASE must still mention merge-prs for the queue_available=false classic path"
+    )
+    assert "queue_available" in lower and "false" in lower, (
+        "MERGE PHASE must distinguish queue_available=false as the condition for merge-prs"
+    )

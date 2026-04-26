@@ -30,16 +30,21 @@ def _reset_mcp_tags():
     full test suite (11k+ tests), thousands of accumulated transforms can cause
     version-dependent ordering issues in FastMCP's "last match wins" evaluation.
 
-    Fix: truncate the transforms list back to a single entry matching the
-    server/__init__.py import-time state: ``mcp.disable(tags={"kitchen"})``.
+    Fix: truncate the transforms list back to its fresh state, then explicitly
+    disable all gated tags — matching the server/__init__.py import-time baseline
+    and preventing orchestrator-path tests from leaking fleet-dispatch or
+    kitchen-core enables into subsequent fleet visibility tests.
     """
     from autoskillit.server import mcp
 
+    _ALL_GATED = {"kitchen", "headless", "fleet", "fleet-dispatch", "kitchen-core"}
     mcp._transforms.clear()
-    mcp.disable(tags={"kitchen"})
+    for tag in _ALL_GATED:
+        mcp.disable(tags={tag})
     yield
     mcp._transforms.clear()
-    mcp.disable(tags={"kitchen"})
+    for tag in _ALL_GATED:
+        mcp.disable(tags={tag})
 
 
 @pytest.fixture()

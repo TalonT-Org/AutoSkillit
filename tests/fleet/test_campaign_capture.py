@@ -175,7 +175,6 @@ def _make_success_result(payload: dict):
 
 def _read_state_file(tool_ctx) -> dict:
     state_files = list((tool_ctx.temp_dir / "dispatches").glob("*.json"))
-    assert len(state_files) == 1, f"Expected 1 state file, found {len(state_files)}"
     return json.loads(state_files[0].read_text())
 
 
@@ -220,6 +219,8 @@ async def test_dispatch_captures_extracted_and_written_to_state(tool_ctx, monkey
     result = json.loads(raw)
     assert result["success"] is True
 
+    dispatch_files = list((tool_ctx.temp_dir / "dispatches").glob("*.json"))
+    assert len(dispatch_files) == 1, f"Expected 1 state file, found {len(dispatch_files)}"
     state_data = _read_state_file(tool_ctx)
     assert state_data.get("captured_values") == {"out": "hello"}
 
@@ -285,6 +286,7 @@ async def test_dispatch_ingredients_interpolated_from_captured_values(tool_ctx, 
     )
 
     assert received_ingredients, "prompt_builder was not called"
+    assert len(received_ingredients) == 1
     assert received_ingredients[0].get("x") == "injected"
 
 

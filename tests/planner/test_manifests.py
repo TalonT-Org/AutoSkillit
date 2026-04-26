@@ -2,10 +2,28 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
 pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.feature("planner")]
+
+
+def _make_manifest(items: list[dict]) -> dict:
+    return {
+        "pass_name": "phases",
+        "created_at": "2026-04-24T00:00:00Z",
+        "items": [
+            {
+                "id": item["id"],
+                "name": item.get("name", item["id"]),
+                "status": item.get("status", "pending"),
+                "result_path": item.get("result_path", None),
+                "metadata": item.get("metadata", {}),
+            }
+            for item in items
+        ],
+    }
 
 
 def test_check_remaining_pending_to_processing(tmp_path):
@@ -108,13 +126,82 @@ def test_check_remaining_processing_becomes_failed_when_no_result(tmp_path):
     manifest_path = tmp_path / "assignment_manifest.json"
     manifest_path.write_text(json.dumps(manifest))
 
-    result = check_remaining(str(manifest_path), "assignments", str(output_dir))
+    with patch("time.sleep"):
+        result = check_remaining(str(manifest_path), "assignments", str(output_dir))
 
     updated = json.loads(manifest_path.read_text())
     assert updated["items"][0]["status"] == "failed"
     assert result["has_remaining"] == "true"
     ctx = json.loads(Path(result["current_item_path"]).read_text())
     assert ctx["id"] == "P1-A2"
+
+
+def test_check_remaining_processing_does_not_fail_on_first_miss(tmp_path):
+    """processing item: result_path.exists() returns False only on first call, True after.
+    Item must become done, not failed."""
+    from autoskillit.planner import check_remaining
+
+    manifest = _make_manifest([{"id": "A1", "status": "processing"}])
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest))
+    result_path = tmp_path / "A1_result.json"
+
+    call_count = 0
+    original_exists = Path.exists
+
+    def lagged_exists(self):
+        nonlocal call_count
+        if str(self) == str(result_path):
+            call_count += 1
+            if call_count == 1:
+                return False  # first check: FS lag
+            result_path.write_text('{"id":"A1","name":"","summary":""}')
+            return True
+        return original_exists(self)
+
+    with patch("time.sleep"), patch.object(Path, "exists", lagged_exists):
+        check_remaining(str(manifest_path), "phases", str(tmp_path))
+
+    updated = json.loads(manifest_path.read_text())
+    assert updated["items"][0]["status"] == "done"
+
+
+def test_check_remaining_processing_fails_after_all_retries_exhausted(tmp_path):
+    """processing item with no result file at all: must become failed after retries."""
+    from autoskillit.planner import check_remaining
+
+    manifest = _make_manifest(
+        [
+            {"id": "A1", "status": "processing"},
+            {"id": "A2", "status": "pending"},
+        ]
+    )
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest))
+    # No result file for A1
+
+    with patch("time.sleep") as mock_sleep:
+        check_remaining(str(manifest_path), "phases", str(tmp_path))
+
+    updated = json.loads(manifest_path.read_text())
+    items = {i["id"]: i for i in updated["items"]}
+    assert items["A1"]["status"] == "failed"
+    assert mock_sleep.call_count == 2  # one sleep per range(2) iteration
+
+
+def test_check_remaining_sleep_called_with_one_second(tmp_path):
+    """Each retry sleep must be exactly 1 second."""
+    from autoskillit.planner import check_remaining
+
+    manifest = _make_manifest([{"id": "A1", "status": "processing"}])
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest))
+
+    with patch("time.sleep") as mock_sleep:
+        check_remaining(str(manifest_path), "phases", str(tmp_path))
+
+    for call in mock_sleep.call_args_list:
+        assert call.args[0] == 1
 
 
 def test_check_remaining_all_done_returns_false(tmp_path):

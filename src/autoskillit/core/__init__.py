@@ -9,11 +9,13 @@ import lazy_loader as lazy
 
 __getattr__, __dir__, __all__ = lazy.attach_stub(__name__, __file__)
 
-_PRIVATE_REEXPORTS = frozenset({
-    "_InstallLock",
-    "_retire_old_versions",
-    "_collect_disabled_feature_tags",
-    "_AUTOSKILLIT_GITIGNORE_ENTRIES",
-    "_COMMITTED_BY_DESIGN",
-})
+_PRIVATE_REEXPORTS = frozenset(
+    {
+        "_InstallLock",
+        "_retire_old_versions",
+        "_collect_disabled_feature_tags",
+        "_AUTOSKILLIT_GITIGNORE_ENTRIES",
+        "_COMMITTED_BY_DESIGN",
+    }
+)
 __all__ = [n for n in __all__ if n not in _PRIVATE_REEXPORTS]

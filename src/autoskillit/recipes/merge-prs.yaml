@@ -383,12 +383,16 @@ steps:
       remote_url: "${{ context.remote_url }}"
       event: "${{ context.ci_event }}"
       timeout_seconds: 600
-    on_success: reenter_queue
+    on_result:
+      - when: "${{ result.conclusion }} == 'success'"
+        route: reenter_queue
+      - route: register_clone_failure
     on_failure: register_clone_failure
     note: >
       Validates CI passes on the rebased branch before re-entering the merge queue.
       Prevents re-enqueue of a broken branch that would be ejected again.
-      Uses context.ci_event captured from check_repo_ci_event upstream.
+      Routes on result.conclusion: success → reenter_queue,
+      no_runs/failure → register_clone_failure.
 
   reenter_queue:
     tool: enqueue_pr
@@ -721,13 +725,16 @@ steps:
       event: "${{ context.ci_event }}"
       timeout_seconds: 600
       cwd: "${{ context.work_dir }}"
-    on_success: merge_conflict_pr
+    on_result:
+      - when: "${{ result.conclusion }} == 'success'"
+        route: merge_conflict_pr
+      - route: register_clone_failure
     on_failure: register_clone_failure
     note: >
       Waits for CI to pass on the worktree branch before merging.
       600 second timeout matches the merge-pr skill poll timeout.
-      On CI failure, routes to register_clone_failure — no automated remediation
-      for conflict-resolution CI failures.
+      Routes on result.conclusion: success → merge_conflict_pr,
+      no_runs/failure → register_clone_failure.
 
   merge_conflict_pr:
     tool: run_cmd
@@ -1082,14 +1089,16 @@ steps:
       timeout_seconds: 300
       cwd: "${{ context.work_dir }}"
       pr_url: "${{ context.pr_url }}"
-    on_success: register_clone_success
+    on_result:
+      - when: "${{ result.conclusion }} == 'success'"
+        route: register_clone_success
+      - route: register_clone_failure
     on_failure: diagnose_ci
     note: >
       Waits for the GitHub Actions CI run on context.integration_branch to complete
-      using the wait_for_ci MCP tool (timeout: 300 s). CI failures here indicate the
-      integration branch has problems that the human reviewer should see. No automated
-      remediation; on failure, routes to diagnose_ci to capture logs before
-      register_clone_failure preserves the clone for manual inspection.
+      using the wait_for_ci MCP tool (timeout: 300 s). Routes on result.conclusion:
+      success → register_clone_success, no_runs/failure → register_clone_failure.
+      Tool-level failure routes to diagnose_ci for log capture.
 
   diagnose_ci:
     tool: run_skill

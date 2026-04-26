@@ -22,15 +22,10 @@ def _run_advisor(
     from autoskillit.hooks.recipe_write_advisor import main
 
     payload = json.dumps({"tool_name": tool_name, "tool_input": {"file_path": file_path}})
-    env_overrides: dict[str, str | None] = {"AUTOSKILLIT_HEADLESS": "1" if headless else None}
-    env_clean = {
-        k: v
-        for k, v in {
-            **os.environ,
-            **{k: v for k, v in env_overrides.items() if v is not None},
-        }.items()
-    }
-    if not headless:
+    env_clean = {**os.environ}
+    if headless:
+        env_clean["AUTOSKILLIT_HEADLESS"] = "1"
+    else:
         env_clean.pop("AUTOSKILLIT_HEADLESS", None)
     with (
         patch.dict(os.environ, env_clean, clear=True),

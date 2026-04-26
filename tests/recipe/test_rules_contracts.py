@@ -400,7 +400,7 @@ class TestResultFieldDriftRule:
         assert drift == []
 
     def test_skill_without_result_fields_in_contract_skipped(self) -> None:
-        """Skills not in _SKILL_RESULT_FIELD_SCHEMAS are ignored by the rule."""
+        """Skills not in _RESULT_FIELD_DRIFT_SKILLS are ignored by the rule."""
         recipe = _make_recipe_with_skill("/autoskillit:implement-worktree-no-merge")
         findings = run_semantic_rules(recipe)
         drift = [f for f in findings if f.rule == "result-field-drift"]

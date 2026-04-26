@@ -336,8 +336,22 @@ executes synchronously.
   reports `merge unconfirmed` even though the PR will eventually merge.
 
 For ad-hoc (off-recipe) merges:
-- If merging multiple PRs collected from parallel pipelines: route through the
-  `merge-prs` recipe for batch sequential merging.
+- When `queue_available=true` (and `sequential_queue` is not `"true"`): each pipeline's
+  implementation recipe handles its own enqueue via `route_queue_mode` →
+  `enqueue_to_queue` → `wait_for_queue`. Do NOT invoke `merge-prs`. The orchestrator's
+  natural parallel-batch join (waiting for all Group N `run_skill` invocations to
+  return) serves as the inter-group barrier — each pipeline only returns after
+  `wait_for_queue` reports `merged`, confirming its PR is in the base branch. Advance
+  to Group N+1 only after all Group N pipelines complete.
+- When `queue_available=false` OR `sequential_queue == "true"`: route through the
+  `merge-prs` recipe for batch sequential merging (unchanged behavior).
+
+**Hidden ingredient — `sequential_queue`** (default `"false"`): Force the centralized
+`merge-prs` path even when `queue_available=true`. Use when batch-level review via an
+integration PR is required, or when cross-PR `audit_impl` is needed as a quality gate.
+Each pipeline's per-PR review step before enqueue provides per-PR review coverage; the
+merge queue itself provides conflict safety. `sequential_queue` is only needed when
+consolidated batch-level review is explicitly required.
 
 ### 3. NEVER bypass recipe merge steps
 

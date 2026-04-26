@@ -714,7 +714,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         that are imported helpers — not standalone hook scripts — split out to
         keep pretty_output_hook.py under its line budget. ask_user_question_guard.py
         gates AskUserQuestion on kitchen-open state. grep_pattern_lint_guard.py adds
-        input-validation guard for Grep tool BRE pattern syntax. Exempt at 24 files.
+        input-validation guard for Grep tool BRE pattern syntax. review_gate_post_hook.py
+        and review_loop_gate.py add the review gate enforcement hooks. Exempt at 26 files.
     """
     EXEMPTIONS: dict[str, int] = {
         "server": 20,
@@ -722,7 +723,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "execution": 26,
         "core": 26,
         "cli": 26,
-        "hooks": 24,
+        "hooks": 26,
     }
     violations: list[str] = []
     for sub_dir in sorted(SRC_ROOT.iterdir()):

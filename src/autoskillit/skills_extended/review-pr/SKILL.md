@@ -608,14 +608,20 @@ Output the verdict as the final line:
 verdict = {approved|approved_with_comments|changes_requested|needs_human}
 ```
 
+Immediately after the verdict line, emit the review gate tag on a new line:
+
+- If `verdict = changes_requested`: emit `%%REVIEW_GATE::LOOP_REQUIRED%%`
+- If `verdict = approved` or `verdict = needs_human`: emit `%%REVIEW_GATE::CLEAR%%`
+- If `verdict = approved_with_comments`: do NOT emit a gate tag
+
 Exit 0 in all normal cases (approved, needs_human, changes_requested).
 Exit 1 only for unrecoverable tool-level errors.
 
 ## Output
 
-- `verdict=approved` — No blocking issues; CI can proceed
-- `verdict=approved_with_comments` — Warning-only findings; recipe routes to `resolve_review` but does not require a re-review cycle
-- `verdict=changes_requested` — Blocking issues found; recipe routes to `resolve_review`
-- `verdict=needs_human` — Uncertain trade-offs; human review requested via the authenticated GitHub user mention (derived at runtime)
+- `verdict=approved` → `%%REVIEW_GATE::CLEAR%%` — No blocking issues; CI can proceed
+- `verdict=approved_with_comments` — no gate tag — Warning-only findings; recipe routes to `resolve_review` but does not require a re-review cycle
+- `verdict=changes_requested` → `%%REVIEW_GATE::LOOP_REQUIRED%%` — Blocking issues found; recipe routes to `resolve_review`
+- `verdict=needs_human` → `%%REVIEW_GATE::CLEAR%%` — Uncertain trade-offs; human review requested via the authenticated GitHub user mention (derived at runtime)
 
 Summary written to: `{{AUTOSKILLIT_TEMP}}/review-pr/summary_{pr_number}_{timestamp}.md`

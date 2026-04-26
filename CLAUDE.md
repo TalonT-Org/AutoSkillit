@@ -323,6 +323,8 @@ generic_automation_mcp/
 │   ├── mcp_health_guard.py  #   Detects MCP server disconnect via PID liveness; injects /MCP reconnect hint
 │   ├── leaf_orchestration_guard.py
 │   ├── fleet_dispatch_guard.py #  Blocks dispatch_food_truck from headless callers (L3→L3 recursion guard)
+│   ├── review_gate_post_hook.py #  PostToolUse: writes/clears review_gate_state.json on run_skill gate tags and check_review_loop calls
+│   ├── review_loop_gate.py  #   PreToolUse: blocks wait_for_ci/enqueue_pr when LOOP_REQUIRED gate is active and check_review_loop not yet called
 │   ├── pretty_output_hook.py #  Dispatch entrypoint for MCP JSON → Markdown-KV reformatter
 │   ├── _fmt_primitives.py   #   Payload dataclasses, token formatter, pipeline-mode + short-name
 │   ├── _fmt_execution.py    #   run_skill, run_cmd, test_check, merge_worktree formatters

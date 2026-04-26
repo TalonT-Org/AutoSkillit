@@ -231,6 +231,11 @@ def _close_kitchen_handler() -> None:
         hook_cfg_path.unlink(missing_ok=True)
     except OSError:
         logger.warning("hook_config_remove_failed", path=str(hook_cfg_path))
+    review_gate_path = Path.cwd() / ".autoskillit" / "temp" / "review_gate_state.json"
+    try:
+        review_gate_path.unlink(missing_ok=True)
+    except OSError:
+        logger.warning("review_gate_state_remove_failed", path=str(review_gate_path))
 
 
 @mcp.resource("recipe://{name}")

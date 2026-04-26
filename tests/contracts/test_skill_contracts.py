@@ -175,3 +175,22 @@ def test_skill_contracts_yaml_includes_compose_research_pr(skills):
 def test_skill_contracts_yaml_open_research_pr_removed(skills):
     """open-research-pr must no longer be registered — it has been retired."""
     assert "open-research-pr" not in skills
+
+
+# T3-1
+def test_review_gate_loop_required_pattern_in_review_pr_contracts(skills):
+    """review-pr must have %%REVIEW_GATE::LOOP_REQUIRED%% pattern registered."""
+    _assert_skill_has_patterns(skills, "review-pr", "%%REVIEW_GATE::(LOOP_REQUIRED|CLEAR)%%")
+
+
+# T3-2
+def test_review_gate_clear_pattern_in_review_pr_contracts(skills):
+    """review-pr REVIEW_GATE pattern must cover both LOOP_REQUIRED and CLEAR tags."""
+    assert "review-pr" in skills
+    patterns = skills["review-pr"].get("expected_output_patterns", [])
+    gate_patterns = [p for p in patterns if "REVIEW_GATE" in p]
+    assert gate_patterns, "No REVIEW_GATE pattern found for review-pr"
+    combined = " ".join(gate_patterns)
+    assert "LOOP_REQUIRED" in combined and "CLEAR" in combined, (
+        f"REVIEW_GATE pattern must cover both tags; found: {gate_patterns}"
+    )

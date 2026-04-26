@@ -1205,7 +1205,7 @@ def run_doctor(*, output_json: bool = False) -> None:
     results.append(_check_feature_registry_consistency())
 
     # Checks 24–28: Fleet infrastructure — only when fleet feature is enabled
-    if is_feature_enabled("fleet", cfg.features):
+    if is_feature_enabled("fleet", cfg.features, experimental_enabled=cfg.experimental_enabled):
         # Check 24: Sous-chef skill directory exists
         results.append(_check_sous_chef_bundled())
 

@@ -170,10 +170,12 @@ def test_fleet_default_enabled_is_false() -> None:
 
 
 def test_is_feature_enabled_fleet_defaults_false() -> None:
-    """Without explicit config, fleet resolves to disabled."""
+    """Without explicit config, fleet resolves to disabled when experimental_enabled=False."""
     from autoskillit.core.feature_flags import is_feature_enabled
 
-    assert is_feature_enabled("fleet", {}) is False
+    assert is_feature_enabled("fleet", {}, experimental_enabled=False) is False
+    # fleet is EXPERIMENTAL, so blanket enables it
+    assert is_feature_enabled("fleet", {}, experimental_enabled=True) is True
 
 
 def test_fleet_dispatch_tools_constant_exists() -> None:

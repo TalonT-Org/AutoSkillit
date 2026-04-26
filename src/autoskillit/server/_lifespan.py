@@ -160,7 +160,8 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
         from autoskillit.server import mcp as _mcp
 
         _features = ctx.config.features if ctx.config is not None else {}
-        for _tag in _collect_disabled_feature_tags(_features):
+        _exp_enabled = ctx.config.experimental_enabled if ctx.config is not None else False
+        for _tag in _collect_disabled_feature_tags(_features, experimental_enabled=_exp_enabled):
             _mcp.disable(tags={_tag})
     except Exception:
         logger.warning("fleet_auto_gate_boot_feature_suppression_failed", exc_info=True)

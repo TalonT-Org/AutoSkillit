@@ -226,27 +226,79 @@ def test_minimal_ctx_provides_isolated_gate(minimal_ctx):
 
 
 def test_is_test_feature_enabled_reads_project_config(monkeypatch):
-    """When AUTOSKILLIT_TEST_FEATURES is unset, conftest resolves features via config."""
+    """When AUTOSKILLIT_TEST_FEATURES is unset, fleet resolves True via experimental_enabled."""
     monkeypatch.delenv("AUTOSKILLIT_TEST_FEATURES", raising=False)
-    from tests.conftest import _is_test_feature_enabled, _resolve_test_features
+    from tests.conftest import _is_test_feature_enabled, _resolve_test_config
 
-    _resolve_test_features.cache_clear()
+    _resolve_test_config.cache_clear()
     try:
         result = _is_test_feature_enabled("fleet", env_val=None)
         assert result is True
     finally:
-        _resolve_test_features.cache_clear()
+        _resolve_test_config.cache_clear()
 
 
 def test_is_test_feature_enabled_dynaconf_env_overrides(monkeypatch):
-    """AUTOSKILLIT_FEATURES__FLEET=false overrides project config in test resolution."""
+    """AUTOSKILLIT_FEATURES__FLEET=false overrides experimental_enabled in test resolution."""
     monkeypatch.delenv("AUTOSKILLIT_TEST_FEATURES", raising=False)
     monkeypatch.setenv("AUTOSKILLIT_FEATURES__FLEET", "false")
-    from tests.conftest import _is_test_feature_enabled, _resolve_test_features
+    from tests.conftest import _is_test_feature_enabled, _resolve_test_config
 
-    _resolve_test_features.cache_clear()
+    _resolve_test_config.cache_clear()
     try:
         result = _is_test_feature_enabled("fleet", env_val=None)
         assert result is False
     finally:
-        _resolve_test_features.cache_clear()
+        _resolve_test_config.cache_clear()
+
+
+def test_is_test_feature_enabled_respects_experimental_enabled(monkeypatch):
+    """EXPERIMENTAL feature resolves True via experimental_enabled=True in config."""
+    import autoskillit.core._type_constants as tc
+    from autoskillit.core._type_constants import FeatureDef
+    from autoskillit.core._type_enums import FeatureLifecycle
+    from tests.conftest import _is_test_feature_enabled, _resolve_test_config
+
+    monkeypatch.delenv("AUTOSKILLIT_TEST_FEATURES", raising=False)
+    exp_feat = FeatureDef(
+        name="conftest_test_exp",
+        lifecycle=FeatureLifecycle.EXPERIMENTAL,
+        description="test",
+        tool_tags=frozenset(),
+        skill_categories=frozenset(),
+        import_package=None,
+        default_enabled=False,
+    )
+    monkeypatch.setitem(tc.FEATURE_REGISTRY, "conftest_test_exp", exp_feat)
+    _resolve_test_config.cache_clear()
+    try:
+        # defaults.yaml has experimental_enabled=true, so EXPERIMENTAL features are enabled
+        result = _is_test_feature_enabled("conftest_test_exp", env_val=None)
+        assert result is True
+    finally:
+        _resolve_test_config.cache_clear()
+
+
+def test_is_test_feature_enabled_disabled_lifecycle_always_false(monkeypatch):
+    """_is_test_feature_enabled returns False for DISABLED feature regardless of config."""
+    import autoskillit.core._type_constants as tc
+    from autoskillit.core._type_constants import FeatureDef
+    from autoskillit.core._type_enums import FeatureLifecycle
+    from tests.conftest import _is_test_feature_enabled, _resolve_test_config
+
+    monkeypatch.delenv("AUTOSKILLIT_TEST_FEATURES", raising=False)
+    disabled_feat = FeatureDef(
+        name="conftest_test_disabled",
+        lifecycle=FeatureLifecycle.DISABLED,
+        description="disabled test",
+        tool_tags=frozenset(),
+        skill_categories=frozenset(),
+        import_package=None,
+    )
+    monkeypatch.setitem(tc.FEATURE_REGISTRY, "conftest_test_disabled", disabled_feat)
+    _resolve_test_config.cache_clear()
+    try:
+        result = _is_test_feature_enabled("conftest_test_disabled", env_val=None)
+        assert result is False
+    finally:
+        _resolve_test_config.cache_clear()

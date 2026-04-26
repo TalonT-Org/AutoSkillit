@@ -1282,33 +1282,8 @@ class TestFleetConfig:
             load_config(tmp_path)
 
 
-def test_defaults_yaml_fleet_false() -> None:
-    """Package default has fleet disabled."""
-    import yaml
-
-    from autoskillit.core.paths import pkg_root
-
-    with open(pkg_root() / "config" / "defaults.yaml") as f:
-        data = yaml.safe_load(f)
-    assert data["features"]["fleet"] is False
-
-
-def test_project_config_has_fleet_override() -> None:
-    """Integration's project config enables fleet."""
-    from pathlib import Path
-
-    import yaml
-
-    config_path = Path(__file__).resolve().parents[2] / ".autoskillit" / "config.yaml"
-    if not config_path.exists():
-        pytest.skip("project config not present (clean clone or CI)")
-    with open(config_path) as f:
-        data = yaml.safe_load(f)
-    assert data.get("features", {}).get("fleet") is True
-
-
-def test_config_resolution_fleet_enabled_via_project_config() -> None:
-    """Full config resolution picks up project-level fleet override."""
+def test_project_config_experimental_enabled_or_fleet_enabled() -> None:
+    """Integration's resolved config enables fleet via experimental_enabled blanket."""
     from pathlib import Path
 
     from autoskillit.config.settings import load_config
@@ -1318,4 +1293,25 @@ def test_config_resolution_fleet_enabled_via_project_config() -> None:
     if not (project_root / ".autoskillit" / "config.yaml").exists():
         pytest.skip("project config not present (clean clone or CI)")
     cfg = load_config(project_root)
-    assert is_feature_enabled("fleet", cfg.features) is True
+    assert (
+        is_feature_enabled("fleet", cfg.features, experimental_enabled=cfg.experimental_enabled)
+        is True
+    )
+
+
+def test_config_resolution_fleet_enabled_via_experimental() -> None:
+    """Full config resolution enables fleet via experimental_enabled=True from defaults."""
+    from pathlib import Path
+
+    from autoskillit.config.settings import load_config
+    from autoskillit.core.feature_flags import is_feature_enabled
+
+    project_root = Path(__file__).resolve().parents[2]
+    if not (project_root / ".autoskillit" / "config.yaml").exists():
+        pytest.skip("project config not present (clean clone or CI)")
+    cfg = load_config(project_root)
+    assert cfg.experimental_enabled is True
+    assert (
+        is_feature_enabled("fleet", cfg.features, experimental_enabled=cfg.experimental_enabled)
+        is True
+    )

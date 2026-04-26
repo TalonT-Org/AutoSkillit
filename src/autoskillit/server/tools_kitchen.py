@@ -178,6 +178,8 @@ async def _redisable_subsets(
     ctx: Context,
     disabled: list[str],
     features: dict[str, bool] | None = None,
+    *,
+    experimental_enabled: bool = False,
 ) -> None:
     """Re-disable subset-tagged and feature-disabled tools after enabling kitchen.
 
@@ -197,7 +199,9 @@ async def _redisable_subsets(
 
     # Pass 2: feature gate — suppress tool tags for disabled features
     _features = features or {}
-    for tag in _collect_disabled_feature_tags(_features):
+    for tag in _collect_disabled_feature_tags(
+        _features, experimental_enabled=experimental_enabled
+    ):
         await ctx.disable_components(tags={tag})
 
 
@@ -241,10 +245,14 @@ def get_recipe(name: str) -> str:
     return match.path.read_text()
 
 
-def _build_tool_category_listing(features: dict[str, bool]) -> str:
+def _build_tool_category_listing(
+    features: dict[str, bool], *, experimental_enabled: bool = False
+) -> str:
     """Return a formatted string listing all tool categories."""
     lines = []
-    for name, tools in iter_display_categories(features):
+    for name, tools in iter_display_categories(
+        features, experimental_enabled=experimental_enabled
+    ):
         lines.append(f"  {name}: {', '.join(tools)}")
     return "\n".join(lines)
 
@@ -304,13 +312,22 @@ async def open_kitchen(
             return _kitchen_failure_envelope(exc, stage="enable_components")
 
         try:
-            await _redisable_subsets(ctx, disabled_subsets, _get_ctx().config.features)
+            _kctx = _get_ctx()
+            await _redisable_subsets(
+                ctx,
+                disabled_subsets,
+                _kctx.config.features,
+                experimental_enabled=_kctx.config.experimental_enabled,
+            )
         except Exception as exc:
             logger.warning("open_kitchen_failure", stage="redisable_subsets", exc_info=True)
             return _kitchen_failure_envelope(exc, stage="redisable_subsets")
 
         _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
-        _categories = _build_tool_category_listing(_get_ctx().config.features)
+        _ctx = _get_ctx()
+        _categories = _build_tool_category_listing(
+            _ctx.config.features, experimental_enabled=_ctx.config.experimental_enabled
+        )
 
         if name is not None:
             tool_ctx = _get_ctx()

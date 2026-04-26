@@ -23,7 +23,6 @@ from autoskillit.cli._prompts import (
 )
 from autoskillit.cli.app import (
     _generate_config_yaml,
-    _is_plugin_installed,
     _prompt_test_command,
     app,
     config_app,
@@ -53,7 +52,6 @@ from autoskillit.hook_registry import HookDriftResult
 
 __all__ = [
     "_OPEN_KITCHEN_CHOICE",
-    "_is_plugin_installed",
     "_build_open_kitchen_prompt",
     "_build_orchestrator_prompt",
     "DoctorResult",

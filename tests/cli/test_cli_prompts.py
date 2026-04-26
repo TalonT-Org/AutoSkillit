@@ -710,8 +710,11 @@ def test_open_kitchen_prompt_toolsearch_has_retry_on_miss():
 
     prompt = _build_open_kitchen_prompt(mcp_prefix=DIRECT_PREFIX)
     ts_idx = prompt.index("ToolSearch")
-    ok_idx = prompt.index("open_kitchen", ts_idx + 1)
-    startup_section = prompt[ts_idx:ok_idx]
+    # "Then call" marks the end of the conditional block and the start of the actual call.
+    # We cannot use prompt.index("open_kitchen", ts_idx + 1) here because open_kitchen
+    # also appears inside the ToolSearch query string, giving a section that's too short.
+    then_idx = prompt.index("Then call", ts_idx)
+    startup_section = prompt[ts_idx:then_idx]
     lower = startup_section.lower()
     assert "sleep" in lower, "Open-kitchen startup must mention sleep as fallback"
     assert "retry" in lower or "again" in lower, (

@@ -451,9 +451,9 @@ steps:
     tool: run_cmd
     with:
       cmd: |
-        REMOTE=$(git remote get-url upstream 2>/dev/null | grep -qv "^file://" && echo upstream || echo origin)
+        REMOTE=$(git remote | grep -q "^upstream$" && echo upstream || echo origin)
         git fetch "$REMOTE" '${{ context.next_pr_branch }}' &&
-        git checkout '${{ context.next_pr_branch }}' &&
+        git checkout -B '${{ context.next_pr_branch }}' "$REMOTE"/'${{ context.next_pr_branch }}' &&
         if git rebase "$REMOTE"/${{ inputs.base_branch }};
         then echo "clean";
         else git rebase --abort 2>/dev/null || true; echo "conflicts";

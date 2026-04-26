@@ -288,8 +288,10 @@ async def analyze_tool_sequences(
     try:
         structlog.contextvars.clear_contextvars()
         with structlog.contextvars.bound_contextvars(tool="analyze_tool_sequences"):
-            from autoskillit.execution.tool_sequence_analysis import (
+            from autoskillit.core import (
                 compute_analysis,
+                filter_sessions_by_recipe,
+                format_top_bigrams,
                 parse_sessions_from_summary_dir,
                 render_adjacency_table,
                 render_dot,
@@ -299,7 +301,7 @@ async def analyze_tool_sequences(
             log_root = _get_log_root()
             sessions = list(parse_sessions_from_summary_dir(log_root))
             if recipe:
-                sessions = [s for s in sessions if s.recipe_name == recipe]
+                sessions = filter_sessions_by_recipe(sessions, recipe)
             result = compute_analysis(sessions)
             dfg = (
                 result.global_dfg
@@ -319,11 +321,7 @@ async def analyze_tool_sequences(
                     "success": True,
                     "session_count": result.session_count,
                     "recipe_count": len(result.by_recipe),
-                    "top_bigrams": [
-                        {"from": a, "to": b, "count": c}
-                        for (a, b), c in dfg.bigrams.most_common(top_n)
-                        if c >= min_count
-                    ],
+                    "top_bigrams": format_top_bigrams(dfg, top_n, min_count),
                     "rendering": rendering,
                 }
             )

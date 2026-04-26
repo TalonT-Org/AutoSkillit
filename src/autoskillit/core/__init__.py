@@ -111,6 +111,51 @@ from .session_registry import (
 from .session_registry import (
     write_registry_entry as write_registry_entry,
 )
+from .tool_sequence_analysis import (
+    DFG as DFG,
+)
+from .tool_sequence_analysis import (
+    AnalysisResult as AnalysisResult,
+)
+from .tool_sequence_analysis import (
+    GapStats as GapStats,
+)
+from .tool_sequence_analysis import (
+    TurnSequence as TurnSequence,
+)
+from .tool_sequence_analysis import (
+    build_dfg as build_dfg,
+)
+from .tool_sequence_analysis import (
+    build_dfg_by_recipe as build_dfg_by_recipe,
+)
+from .tool_sequence_analysis import (
+    compute_analysis as compute_analysis,
+)
+from .tool_sequence_analysis import (
+    compute_gap_stats as compute_gap_stats,
+)
+from .tool_sequence_analysis import (
+    filter_sessions_by_recipe as filter_sessions_by_recipe,
+)
+from .tool_sequence_analysis import (
+    format_top_bigrams as format_top_bigrams,
+)
+from .tool_sequence_analysis import (
+    parse_raw_cc_jsonl as parse_raw_cc_jsonl,
+)
+from .tool_sequence_analysis import (
+    parse_sessions_from_summary_dir as parse_sessions_from_summary_dir,
+)
+from .tool_sequence_analysis import (
+    render_adjacency_table as render_adjacency_table,
+)
+from .tool_sequence_analysis import (
+    render_dot as render_dot,
+)
+from .tool_sequence_analysis import (
+    render_mermaid as render_mermaid,
+)
 from .types import (
     AUTOSKILLIT_INSTALLED_VERSION,
     AUTOSKILLIT_PRIVATE_ENV_VARS,
@@ -413,4 +458,20 @@ __all__ = [
     "detect_autoskillit_mcp_prefix",
     # feature_flags
     "is_feature_enabled",
+    # tool_sequence_analysis
+    "AnalysisResult",
+    "DFG",
+    "GapStats",
+    "TurnSequence",
+    "build_dfg",
+    "build_dfg_by_recipe",
+    "compute_analysis",
+    "compute_gap_stats",
+    "filter_sessions_by_recipe",
+    "format_top_bigrams",
+    "parse_raw_cc_jsonl",
+    "parse_sessions_from_summary_dir",
+    "render_adjacency_table",
+    "render_dot",
+    "render_mermaid",
 ]

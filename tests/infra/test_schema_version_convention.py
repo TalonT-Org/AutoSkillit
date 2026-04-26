@@ -111,10 +111,10 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # core/io.py — write_versioned_json itself (the blessed helper) uses atomic_write+json.dumps
     ("src/autoskillit/core/io.py", 118),
     # session_log.py — summary dict, meta.json sidecar, token_usage dict, step_timing dict
-    ("src/autoskillit/execution/session_log.py", 337),
-    ("src/autoskillit/execution/session_log.py", 341),
-    ("src/autoskillit/execution/session_log.py", 363),
-    ("src/autoskillit/execution/session_log.py", 366),
+    ("src/autoskillit/execution/session_log.py", 350),
+    ("src/autoskillit/execution/session_log.py", 354),
+    ("src/autoskillit/execution/session_log.py", 376),
+    ("src/autoskillit/execution/session_log.py", 379),
     # migration/store.py — failure store dicts
     ("src/autoskillit/migration/store.py", 54),
     ("src/autoskillit/migration/store.py", 64),
@@ -130,7 +130,7 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/server/tools_kitchen.py", 123),
     ("src/autoskillit/server/tools_kitchen.py", 519),
     # tools_status.py — mcp_data dict
-    ("src/autoskillit/server/tools_status.py", 400),
+    ("src/autoskillit/server/tools_status.py", 470),
     # tools_github.py — bug report dict
     ("src/autoskillit/server/tools_github.py", 276),
     # _hooks.py — settings.json dict (co-owned with Claude CLI)

@@ -81,6 +81,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "hook_registry",  # hook_registry.py: HOOK_REGISTRY_HASH = compute_registry_hash(...)
         "_fleet",  # cli/_fleet.py: fleet_app = App(name="fleet", ...)
         "_features",  # cli/_features.py: features_app = App(name="features", ...)
+        "_sessions",  # cli/_sessions.py: sessions_app = App(name="sessions", ...)
     }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
@@ -700,7 +701,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         _features.py adds feature gate inspection subcommand (list/status).
         _session_picker.py adds the scoped session resume picker that filters
         sessions by type (cook/order) using the session registry.
-        Exempt at 25 files.
+        _sessions.py adds the sessions analyze CLI subcommand for cross-session
+        tool call sequence diagnostics.
+        Exempt at 26 files.
       hooks/ — REQ-CNST-003-E6: hooks/ hosts one standalone script per hook event
         (PreToolUse, PostToolUse, SessionStart). Each script must remain a separate
         file so Claude Code can invoke it directly as a subprocess. pretty_output_hook.py
@@ -716,7 +719,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "recipe": 38,
         "execution": 26,
         "core": 25,
-        "cli": 25,
+        "cli": 26,
         "hooks": 24,
     }
     violations: list[str] = []

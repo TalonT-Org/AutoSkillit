@@ -230,3 +230,25 @@ def render_dot(dfg: DFG, *, min_count: int = 1, top_n: int = 30) -> str:
         lines.append(f'    "{a}" -> "{b}" [label="{count}"];')
     lines.append("}")
     return "\n".join(lines)
+
+
+def filter_sessions_by_recipe(
+    sessions: Sequence[TurnSequence], recipe: str
+) -> list[TurnSequence]:
+    """Return sessions matching recipe_name == recipe."""
+    result = []
+    for s in sessions:
+        if s.recipe_name == recipe:
+            result.append(s)
+    return result
+
+
+def format_top_bigrams(
+    dfg: DFG, top_n: int, min_count: int
+) -> list[dict[str, object]]:
+    """Return top-N bigrams as a list of dicts for JSON serialization."""
+    result: list[dict[str, object]] = []
+    for (a, b), c in dfg.bigrams.most_common(top_n):
+        if c >= min_count:
+            result.append({"from": a, "to": b, "count": c})
+    return result

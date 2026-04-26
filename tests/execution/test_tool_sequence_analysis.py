@@ -6,10 +6,8 @@ from collections import Counter
 
 import pytest
 
-from autoskillit.execution.tool_sequence_analysis import (
-    AnalysisResult,
+from autoskillit.core.tool_sequence_analysis import (
     DFG,
-    GapStats,
     TurnSequence,
     build_dfg,
     build_dfg_by_recipe,
@@ -72,8 +70,16 @@ class TestParseRawCCJsonl:
 
     def test_skips_records_not_of_type_assistant(self, tmp_path: pathlib.Path) -> None:
         records = [
-            {"type": "user", "requestId": "r1", "message": {"content": [{"type": "tool_use", "name": "X"}]}},
-            {"type": "tool_result", "requestId": "r2", "message": {"content": [{"type": "tool_use", "name": "Y"}]}},
+            {
+                "type": "user",
+                "requestId": "r1",
+                "message": {"content": [{"type": "tool_use", "name": "X"}]},
+            },
+            {
+                "type": "tool_result",
+                "requestId": "r2",
+                "message": {"content": [{"type": "tool_use", "name": "Y"}]},
+            },
         ]
         log = tmp_path / "session.jsonl"
         log.write_text("\n".join(json.dumps(r) for r in records) + "\n")
@@ -104,11 +110,13 @@ class TestParseRawCCJsonl:
         assert result == []
 
     def test_malformed_json_line_skipped(self, tmp_path: pathlib.Path) -> None:
-        good = json.dumps({
-            "type": "assistant",
-            "requestId": "r1",
-            "message": {"content": [{"type": "tool_use", "name": "GoodTool"}]},
-        })
+        good = json.dumps(
+            {
+                "type": "assistant",
+                "requestId": "r1",
+                "message": {"content": [{"type": "tool_use", "name": "GoodTool"}]},
+            }
+        )
         log = tmp_path / "session.jsonl"
         log.write_text("NOT_JSON\n" + good + "\n")
         result = parse_raw_cc_jsonl(log)
@@ -184,7 +192,8 @@ class TestBuildDFGByRecipe:
     def test_global_aggregate_includes_all_sessions(self) -> None:
         s1 = TurnSequence(session_id="s1", recipe_name="lint", turns=[["A", "B"]])
         s2 = TurnSequence(session_id="s2", recipe_name="review", turns=[["C", "D"]])
-        from autoskillit.execution.tool_sequence_analysis import compute_analysis
+        from autoskillit.core.tool_sequence_analysis import compute_analysis
+
         result = compute_analysis([s1, s2])
         assert ("A", "B") in result.global_dfg.bigrams
         assert ("C", "D") in result.global_dfg.bigrams
@@ -255,7 +264,7 @@ class TestRenderAdjacencyTable:
         dfg = self._make_dfg(bigrams)
         output = render_adjacency_table(dfg, top_n=3)
         # header + sep + 3 data rows = 5 lines
-        data_lines = [l for l in output.splitlines() if l and not l.startswith("-")]
+        data_lines = [line for line in output.splitlines() if line and not line.startswith("-")]
         # subtract 1 for header
         assert len(data_lines) - 1 <= 3
 

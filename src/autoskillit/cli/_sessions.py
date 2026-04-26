@@ -21,17 +21,16 @@ def sessions_analyze(
     Reads all session summary.json files from the configured log directory
     and renders a Data Flow Graph of tool call transitions.
     """
-    import pathlib
-
-    from autoskillit.config.settings import load_config
-    from autoskillit.execution.session_log import resolve_log_dir
-    from autoskillit.execution.tool_sequence_analysis import (
+    from autoskillit.config import load_config
+    from autoskillit.core import (
+        atomic_write,
         compute_analysis,
         parse_sessions_from_summary_dir,
         render_adjacency_table,
         render_dot,
         render_mermaid,
     )
+    from autoskillit.execution import resolve_log_dir
 
     cfg = load_config()
     log_root = resolve_log_dir(cfg.linux_tracing.log_dir)
@@ -59,7 +58,9 @@ def sessions_analyze(
         rendered = render_adjacency_table(dfg, top_n=top)
 
     if output:
-        pathlib.Path(output).write_text(rendered, encoding="utf-8")
+        import pathlib
+
+        atomic_write(pathlib.Path(output), rendered)
         print(f"Written to {output}")
     else:
         print(rendered)

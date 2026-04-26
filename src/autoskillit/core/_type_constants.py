@@ -339,7 +339,7 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     "get_timing_summary": frozenset({"kitchen-core", "telemetry", "fleet"}),
     "write_telemetry_files": frozenset({"kitchen-core", "telemetry"}),
     "get_quota_events": frozenset({"kitchen-core", "telemetry", "fleet"}),
-    "analyze_tool_sequences": frozenset({"telemetry"}),
+    "analyze_tool_sequences": frozenset({"kitchen-core", "telemetry"}),
     # kitchen-core — execution
     "run_cmd": frozenset({"kitchen-core"}),
     "run_python": frozenset({"kitchen-core"}),

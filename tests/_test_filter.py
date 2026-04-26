@@ -235,15 +235,22 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
     "recipe": frozenset(
         {
             "recipe",
-            "execution",
             "server",
             "cli",
-            "infra",
-            "skills",
-            "_llm_triage",
-            "core",
-            "hooks",
             "migration",
+            "hooks",
+            "_llm_triage",
+            # File-level (narrowed from full directory):
+            "execution/test_headless.py",
+            "execution/test_zero_write_detection.py",
+            "infra/test_pretty_output.py",
+            "skills/test_skill_placeholder_contracts.py",
+            "skills/test_make_campaign_compliance.py",
+            "skills/test_review_design_guards.py",
+            "skills/test_skill_tool_syntax_contracts.py",
+            "core/test_type_constants.py",
+            "core/test_kitchen_state.py",
+            "core/test_session_registry.py",
         }
     ),
     "migration": frozenset(

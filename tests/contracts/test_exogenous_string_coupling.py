@@ -49,3 +49,24 @@ def test_quota_post_warning_trigger_coupled_to_sous_chef_skill():
         f"sous-chef SKILL.md must reference quota_post_hook.QUOTA_POST_WARNING_TRIGGER "
         f"({QUOTA_POST_WARNING_TRIGGER!r}) verbatim"
     )
+
+
+class TestPromptToolsWhitelistCoupling:
+    """FIRST ACTION must not reference native tools blocked by --tools AskUserQuestion."""
+
+    def test_first_action_references_no_blocked_native_tools(self):
+        """FIRST ACTION must not mention any PIPELINE_FORBIDDEN_TOOLS by name."""
+        from autoskillit.cli._mcp_names import DIRECT_PREFIX
+        from autoskillit.cli._prompts import _build_orchestrator_prompt
+        from autoskillit.core._type_constants import PIPELINE_FORBIDDEN_TOOLS
+
+        prompt = _build_orchestrator_prompt("test", mcp_prefix=DIRECT_PREFIX)
+        start = prompt.index("FIRST ACTION")
+        end = prompt.index("During pipeline execution", start)
+        first_action = prompt[start:end]
+
+        found = [t for t in PIPELINE_FORBIDDEN_TOOLS if t in first_action]
+        assert found == [], (
+            f"FIRST ACTION references forbidden native tools {found} that are blocked "
+            f"by --tools AskUserQuestion in _session_launch.py"
+        )

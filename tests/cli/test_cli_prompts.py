@@ -406,26 +406,6 @@ def test_orchestrator_prompt_contains_quota_routing():
     assert "QUOTA DENIAL ROUTING" in prompt
 
 
-def test_orchestrator_prompt_calls_toolsearch_unconditionally():
-    """Step 0 of FIRST ACTION must call ToolSearch unconditionally."""
-    from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli._prompts import _build_orchestrator_prompt
-
-    prompt = _build_orchestrator_prompt("my_recipe", mcp_prefix=DIRECT_PREFIX)
-    assert "ToolSearch" in prompt
-    assert "select:" in prompt
-    assert "open_kitchen" in prompt
-
-
-def test_open_kitchen_prompt_calls_toolsearch_unconditionally():
-    from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli._prompts import _build_open_kitchen_prompt
-
-    prompt = _build_open_kitchen_prompt(mcp_prefix=DIRECT_PREFIX)
-    assert "ToolSearch" in prompt
-    assert "open_kitchen" in prompt
-
-
 def test_orchestrator_prompt_has_no_server_startup_recovery_block():
     """SERVER-STARTUP RECOVERY block must be removed — it misdiagnoses schema deferral
     as server startup latency."""
@@ -443,8 +423,7 @@ def test_orchestrator_prompt_has_no_server_startup_recovery_block():
 
 
 def test_orchestrator_prompt_has_no_deferred_tool_recovery_conditional():
-    """The conditional DEFERRED-TOOL RECOVERY block must be removed — it is subsumed
-    by the unconditional ToolSearch step 0."""
+    """The conditional DEFERRED-TOOL RECOVERY block must not be present."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
     from autoskillit.cli._prompts import _build_orchestrator_prompt
 
@@ -452,53 +431,55 @@ def test_orchestrator_prompt_has_no_deferred_tool_recovery_conditional():
     assert "schemas NOT loaded — calling directly will fail" not in prompt
 
 
-def test_first_action_step0_calls_toolsearch_unconditionally():
-    """Step 0 is ToolSearch; Bash appears as conditional fallback in step 0."""
+def test_first_action_no_toolsearch_or_bash():
+    """FIRST ACTION must not reference ToolSearch or Bash."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
     from autoskillit.cli._prompts import _build_orchestrator_prompt
 
     prompt = _build_orchestrator_prompt("my_recipe", mcp_prefix=DIRECT_PREFIX)
-
     start = prompt.index("FIRST ACTION")
     end = prompt.index("During pipeline execution", start)
     first_action = prompt[start:end]
-
-    # Step 0 is now ToolSearch, not Bash sleep
-    step0_end = first_action.index("\n1.")
-    step0_text = first_action[:step0_end]
-    assert "ToolSearch" in step0_text, "Step 0 must be a ToolSearch readiness check"
-
-    # ToolSearch is still present in the FIRST ACTION section
-    assert "ToolSearch" in first_action
+    assert "ToolSearch" not in first_action
+    assert "Bash" not in first_action
+    assert "sleep" not in first_action.lower()
 
 
-def test_first_action_toolsearch_index_precedes_open_kitchen():
-    """Within FIRST ACTION step 0, ToolSearch must appear before open_kitchen."""
+def test_first_action_opens_with_open_kitchen():
+    """FIRST ACTION step 1 must call open_kitchen directly — no preamble step."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
     from autoskillit.cli._prompts import _build_orchestrator_prompt
 
     prompt = _build_orchestrator_prompt("my_recipe", mcp_prefix=DIRECT_PREFIX)
-
     start = prompt.index("FIRST ACTION")
     end = prompt.index("During pipeline execution", start)
     first_action = prompt[start:end]
+    assert "open_kitchen" in first_action
+    assert "\n0." not in first_action, "Step 0 must not exist — open_kitchen is step 1"
+    assert "\n1." in first_action
 
-    ts_idx = first_action.index("ToolSearch")
-    ok_idx = first_action.index("open_kitchen")
-    assert ts_idx < ok_idx, "ToolSearch must appear before open_kitchen in FIRST ACTION"
 
-
-def test_open_kitchen_prompt_has_bash_sleep_and_toolsearch():
-    """_build_open_kitchen_prompt must have Bash sleep and ToolSearch (Bash as fallback)."""
+def test_open_kitchen_prompt_no_toolsearch_or_bash():
+    """open_kitchen call instruction must not reference ToolSearch or Bash."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
     from autoskillit.cli._prompts import _build_open_kitchen_prompt
 
     prompt = _build_open_kitchen_prompt(mcp_prefix=DIRECT_PREFIX)
-    assert "Bash" in prompt, "Open kitchen prompt must include Bash sleep as conditional fallback"
-    assert "sleep" in prompt.lower()
-    assert "ToolSearch" in prompt
-    lower = prompt.lower()
-    assert "if the session's deferred-tool list" not in lower
+    # Scope to the call instruction before the discipline block
+    discipline_idx = prompt.index("IMPORTANT")
+    preamble = prompt[:discipline_idx]
+    assert "ToolSearch" not in preamble
+    assert "Bash" not in preamble
+    assert "sleep" not in preamble.lower()
+
+
+def test_open_kitchen_prompt_calls_open_kitchen_directly():
+    """_build_open_kitchen_prompt must instruct a direct open_kitchen call."""
+    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.cli._prompts import _build_open_kitchen_prompt
+
+    prompt = _build_open_kitchen_prompt(mcp_prefix=DIRECT_PREFIX)
+    assert "open_kitchen" in prompt
 
 
 def test_orchestrator_prompt_contains_anti_skip_rule():
@@ -587,138 +568,6 @@ def test_orchestrator_prompt_contains_skill_command_format_guidance():
     assert "SKILL_COMMAND FORMATTING" in prompt, (
         "Orchestrator prompt must contain a SKILL_COMMAND FORMATTING section. "
         "This prevents the LLM from adding markdown headers to skill_command values."
-    )
-
-
-def test_first_action_step0_is_toolsearch():
-    """Step 0 of FIRST ACTION must be a ToolSearch readiness check, not a bare Bash sleep."""
-    from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli._prompts import _build_orchestrator_prompt
-
-    prompt = _build_orchestrator_prompt("my_recipe", mcp_prefix=DIRECT_PREFIX)
-    start = prompt.index("FIRST ACTION")
-    end = prompt.index("During pipeline execution", start)
-    first_action = prompt[start:end]
-
-    step0_end = first_action.index("\n1.")
-    step0_text = first_action[:step0_end]
-    assert "ToolSearch" in step0_text, "Step 0 must call ToolSearch for open_kitchen schema"
-    assert "open_kitchen" in step0_text, "Step 0 ToolSearch must target open_kitchen"
-
-
-def test_first_action_toolsearch_precedes_bash_sleep():
-    """ToolSearch must appear before Bash (conditional fallback) in FIRST ACTION."""
-    from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli._prompts import _build_orchestrator_prompt
-
-    prompt = _build_orchestrator_prompt("my_recipe", mcp_prefix=DIRECT_PREFIX)
-    start = prompt.index("FIRST ACTION")
-    end = prompt.index("During pipeline execution", start)
-    first_action = prompt[start:end]
-
-    bash_idx = first_action.index("Bash")
-    ts_idx = first_action.index("ToolSearch")
-    assert ts_idx < bash_idx, (
-        "ToolSearch must appear before Bash (which is a conditional fallback)"
-    )
-
-
-def test_open_kitchen_prompt_has_toolsearch_before_bash_sleep():
-    """_build_open_kitchen_prompt must have ToolSearch before Bash (conditional fallback)."""
-    from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli._prompts import _build_open_kitchen_prompt
-
-    prompt = _build_open_kitchen_prompt(mcp_prefix=DIRECT_PREFIX)
-    assert "Bash" in prompt, "Open kitchen prompt must include Bash sleep as conditional fallback"
-    assert "sleep" in prompt.lower()
-    bash_idx = prompt.lower().index("bash")
-    ts_idx = prompt.index("ToolSearch")
-    assert ts_idx < bash_idx, "ToolSearch must precede Bash (which is a conditional fallback)"
-
-
-def test_first_action_step0_is_toolsearch_not_bash():
-    """Step 0 of FIRST ACTION must be ToolSearch, not a Bash sleep gate."""
-    from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli._prompts import _build_orchestrator_prompt
-
-    prompt = _build_orchestrator_prompt("my_recipe", mcp_prefix=DIRECT_PREFIX)
-    start = prompt.index("FIRST ACTION")
-    end = prompt.index("During pipeline execution", start)
-    first_action = prompt[start:end]
-
-    step0_end = first_action.index("\n1.")
-    step0_text = first_action[:step0_end]
-    assert "ToolSearch" in step0_text, "Step 0 must call ToolSearch for open_kitchen schema"
-    assert "open_kitchen" in step0_text, "Step 0 ToolSearch must target open_kitchen"
-    assert not step0_text.lstrip().startswith("Call Bash"), (
-        "Step 0 must not open with a Bash sleep — use ToolSearch-based readiness check"
-    )
-
-
-def test_first_action_step0_toolsearch_has_sleep_retry_fallback():
-    """When ToolSearch misses, step 0 must instruct: sleep 2, retry once."""
-    from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli._prompts import _build_orchestrator_prompt
-
-    prompt = _build_orchestrator_prompt("my_recipe", mcp_prefix=DIRECT_PREFIX)
-    start = prompt.index("FIRST ACTION")
-    step0_end = prompt.index("\n1.", start)
-    step0 = prompt[start:step0_end]
-
-    assert "sleep" in step0.lower(), "Step 0 must mention sleep as fallback on schema miss"
-    assert "retry" in step0.lower() or "again" in step0.lower(), (
-        "Step 0 must describe retrying ToolSearch after sleep"
-    )
-
-
-def test_first_action_step0_toolsearch_permanent_failure_reports_error():
-    """If ToolSearch still fails after retry, step 0 must instruct the LLM to report error."""
-    from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli._prompts import _build_orchestrator_prompt
-
-    prompt = _build_orchestrator_prompt("my_recipe", mcp_prefix=DIRECT_PREFIX)
-    start = prompt.index("FIRST ACTION")
-    step0_end = prompt.index("\n1.", start)
-    step0 = prompt[start:step0_end]
-
-    lower = step0.lower()
-    assert "error" in lower or "not ready" in lower or "unavailable" in lower, (
-        "Step 0 must instruct the LLM to report an error if ToolSearch fails after retry"
-    )
-    assert "end" in lower or "stop" in lower or "unavailable" in lower, (
-        "Step 0 must end the session on permanent ToolSearch failure, not proceed silently"
-    )
-
-
-def test_open_kitchen_prompt_step0_is_toolsearch_not_bash():
-    """_build_open_kitchen_prompt step 0 must be ToolSearch, not Bash sleep."""
-    from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli._prompts import _build_open_kitchen_prompt
-
-    prompt = _build_open_kitchen_prompt(mcp_prefix=DIRECT_PREFIX)
-    ts_idx = prompt.index("ToolSearch")
-    ok_idx = prompt.index("open_kitchen")
-    assert ts_idx < ok_idx, "ToolSearch must precede open_kitchen in open-kitchen prompt"
-    bash_idx = prompt.lower().index("bash")
-    assert ts_idx < bash_idx, "Bash sleep must come after ToolSearch as a conditional fallback"
-
-
-def test_open_kitchen_prompt_toolsearch_has_retry_on_miss():
-    """_build_open_kitchen_prompt must describe sleep-and-retry if ToolSearch misses."""
-    from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli._prompts import _build_open_kitchen_prompt
-
-    prompt = _build_open_kitchen_prompt(mcp_prefix=DIRECT_PREFIX)
-    ts_idx = prompt.index("ToolSearch")
-    # "Then call" marks the end of the conditional block and the start of the actual call.
-    # We cannot use prompt.index("open_kitchen", ts_idx + 1) here because open_kitchen
-    # also appears inside the ToolSearch query string, giving a section that's too short.
-    then_idx = prompt.index("Then call", ts_idx)
-    startup_section = prompt[ts_idx:then_idx]
-    lower = startup_section.lower()
-    assert "sleep" in lower, "Open-kitchen startup must mention sleep as fallback"
-    assert "retry" in lower or "again" in lower, (
-        "Open-kitchen startup must describe retrying ToolSearch after sleep"
     )
 
 

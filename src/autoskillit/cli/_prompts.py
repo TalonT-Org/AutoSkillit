@@ -311,12 +311,6 @@ def _build_orchestrator_prompt(
 You are a pipeline orchestrator. Execute the recipe '{recipe_name}' step-by-step.
 
 {_ing_section}FIRST ACTION — before prompting for any inputs:
-0. Call ToolSearch(query='select:{mcp_prefix}open_kitchen') to load its schema:
-   - If the schema IS returned: proceed to step 1 immediately.
-   - If the schema is NOT returned (tool not yet registered): call Bash(command="sleep 2"),
-     then retry ToolSearch(query='select:{mcp_prefix}open_kitchen') once.
-   - If still not returned after the retry: output
-     "MCP server not ready — open_kitchen schema unavailable after retry" and end the session.
 1. Call {mcp_prefix}open_kitchen(name='{recipe_name}') to activate pipeline tools and open
    the kitchen gate. open_kitchen is REQUIRED to enable all gated AutoSkillit tools —
    the ingredients table above (when present) is provided for reference only.
@@ -467,12 +461,8 @@ def _build_open_kitchen_prompt(mcp_prefix: str) -> str:
 
     _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
     text = (
-        f"Call ToolSearch(query='select:{mcp_prefix}open_kitchen') to check MCP readiness:\n"
-        f"- If the schema IS returned: proceed to call {mcp_prefix}open_kitchen immediately.\n"
-        f'- If NOT returned: call Bash(command="sleep 2"), then retry ToolSearch once.\n'
-        f"- If still not returned: output "
-        f'"MCP server not ready — open_kitchen unavailable after retry" and end the session.\n'
-        f"Then call {mcp_prefix}open_kitchen to open the AutoSkillit kitchen.\n\n"
+        f"Call {mcp_prefix}open_kitchen to open the AutoSkillit kitchen.\n"
+        f"DO NOT call any other tool before open_kitchen.\n\n"
         "IMPORTANT — Orchestrator Discipline:\n"
         f"NEVER use native Claude Code tools ({_forbidden_list}) "
         "in this session. All code reading, searching, editing, and "

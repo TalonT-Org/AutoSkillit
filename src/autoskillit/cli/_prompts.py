@@ -18,6 +18,13 @@ if TYPE_CHECKING:
 # Sentinel returned by _resolve_recipe_input when the user selects option 0.
 _OPEN_KITCHEN_CHOICE: str = "__open_kitchen__"
 
+# Shared retry instruction for both orchestrator and open-kitchen prompts.
+_MCP_RETRY_INSTRUCTION: str = (
+    'If open_kitchen returns "No such tool available", retry the call once immediately.\n'
+    'If the retry also fails, output "AutoSkillit MCP server did not start — ending session."'
+    " and end."
+)
+
 
 def _read_full_sous_chef() -> str:
     """Read the full sous-chef SKILL.md for L1/L3 injection."""
@@ -315,9 +322,7 @@ You are a pipeline orchestrator. Execute the recipe '{recipe_name}' step-by-step
    the kitchen gate. open_kitchen is REQUIRED to enable all gated AutoSkillit tools —
    the ingredients table above (when present) is provided for reference only.
    DO NOT call AskUserQuestion or any other tool before open_kitchen.
-   If open_kitchen returns "No such tool available", retry the call once immediately.
-   If the retry also fails, output "AutoSkillit MCP server did not start — ending
-   session." and end.
+   {_MCP_RETRY_INSTRUCTION.replace(chr(10), chr(10) + "   ")}
 2. The response contains a pre-formatted ingredients table
    between --- INGREDIENTS TABLE --- and --- END TABLE --- markers.
    Display it verbatim in your response — do not reformat or re-render it.
@@ -466,9 +471,7 @@ def _build_open_kitchen_prompt(mcp_prefix: str) -> str:
     text = (
         f"Call {mcp_prefix}open_kitchen to open the AutoSkillit kitchen.\n"
         f"DO NOT call any other tool before open_kitchen.\n"
-        'If open_kitchen returns "No such tool available", retry the call once immediately.\n'
-        'If the retry also fails, output "AutoSkillit MCP server did not start — ending session."'
-        " and end.\n\n"
+        f"{_MCP_RETRY_INSTRUCTION}\n\n"
         "IMPORTANT — Orchestrator Discipline:\n"
         f"NEVER use native Claude Code tools ({_forbidden_list}) "
         "in this session. All code reading, searching, editing, and "

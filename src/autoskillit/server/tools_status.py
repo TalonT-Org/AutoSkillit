@@ -280,11 +280,23 @@ async def analyze_tool_sequences(
         min_count: Exclude bigrams with count below this threshold.
 
     Returns JSON with fields: session_count, recipe_count, top_bigrams,
-    top_ngrams, rendering (the formatted DFG string).
+    rendering (the formatted DFG string).
     Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
+    _valid_formats = {"table", "mermaid", "dot"}
+    if format not in _valid_formats:
+        return json.dumps(
+            {
+                "success": False,
+                "error": f"Invalid format '{format}'; must be one of {sorted(_valid_formats)}",
+            }
+        )
+    if top_n < 1:
+        return json.dumps({"success": False, "error": f"top_n must be >= 1, got {top_n}"})
+    if min_count < 1:
+        return json.dumps({"success": False, "error": f"min_count must be >= 1, got {min_count}"})
     try:
         structlog.contextvars.clear_contextvars()
         with structlog.contextvars.bound_contextvars(tool="analyze_tool_sequences"):

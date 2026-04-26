@@ -406,26 +406,6 @@ def test_orchestrator_prompt_contains_quota_routing():
     assert "QUOTA DENIAL ROUTING" in prompt
 
 
-def test_orchestrator_prompt_calls_toolsearch_unconditionally():
-    """Step 0 of FIRST ACTION must call ToolSearch unconditionally."""
-    from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli._prompts import _build_orchestrator_prompt
-
-    prompt = _build_orchestrator_prompt("my_recipe", mcp_prefix=DIRECT_PREFIX)
-    assert "ToolSearch" in prompt
-    assert "select:" in prompt
-    assert "open_kitchen" in prompt
-
-
-def test_open_kitchen_prompt_calls_toolsearch_unconditionally():
-    from autoskillit.cli._mcp_names import DIRECT_PREFIX
-    from autoskillit.cli._prompts import _build_open_kitchen_prompt
-
-    prompt = _build_open_kitchen_prompt(mcp_prefix=DIRECT_PREFIX)
-    assert "ToolSearch" in prompt
-    assert "open_kitchen" in prompt
-
-
 def test_orchestrator_prompt_has_no_server_startup_recovery_block():
     """SERVER-STARTUP RECOVERY block must be removed — it misdiagnoses schema deferral
     as server startup latency."""

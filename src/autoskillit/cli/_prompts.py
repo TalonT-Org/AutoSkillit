@@ -462,7 +462,7 @@ def _build_open_kitchen_prompt(mcp_prefix: str) -> str:
     _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
     text = (
         f"Call {mcp_prefix}open_kitchen to open the AutoSkillit kitchen.\n"
-        f"DO NOT call Bash, ToolSearch, or any other tool before open_kitchen.\n\n"
+        f"DO NOT call any other tool before open_kitchen.\n\n"
         "IMPORTANT — Orchestrator Discipline:\n"
         f"NEVER use native Claude Code tools ({_forbidden_list}) "
         "in this session. All code reading, searching, editing, and "

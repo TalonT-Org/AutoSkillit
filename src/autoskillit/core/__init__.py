@@ -94,6 +94,12 @@ from .readiness import (
     readiness_sentinel_path,
     write_readiness_sentinel,
 )
+from .session_registry import (
+    bridge_claude_session_id as bridge_claude_session_id,
+    read_registry as read_registry,
+    registry_path as registry_path,
+    write_registry_entry as write_registry_entry,
+)
 from .types import (
     AUTOSKILLIT_INSTALLED_VERSION,
     AUTOSKILLIT_PRIVATE_ENV_VARS,
@@ -246,6 +252,11 @@ __all__ = [
     "is_marker_fresh",
     "read_marker",
     "sweep_stale_markers",
+    # session_registry
+    "registry_path",
+    "read_registry",
+    "write_registry_entry",
+    "bridge_claude_session_id",
     # readiness
     "cleanup_readiness_sentinel",
     "readiness_sentinel_path",

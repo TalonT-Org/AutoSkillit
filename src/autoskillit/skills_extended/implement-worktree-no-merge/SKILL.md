@@ -1,5 +1,6 @@
 ---
 name: implement-worktree-no-merge
+activate_deps: [write-recipe]
 description: Implement a plan in an isolated git worktree without merging, testing, or cleaning up. For MCP orchestration use — the orchestrator handles testing and merging separately.
 hooks:
   PreToolUse:

@@ -1,5 +1,6 @@
 ---
 name: implement-worktree
+activate_deps: [write-recipe]
 description: Implement a plan in an isolated git worktree. Use when user says "implement in worktree", "worktree implement", or "isolated implementation". Creates a worktree from current branch, explores affected systems with subagents, then implements phase by phase.
 hooks:
   PreToolUse:

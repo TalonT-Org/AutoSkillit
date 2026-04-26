@@ -238,18 +238,19 @@ def test_sync_hooks_to_settings_writes_all_registry_scripts(tmp_path):
 
     data = json.loads(settings.read_text())
 
-    # Verify PreToolUse entry count matches registry
-    pretooluse_registry_entries = [h for h in HOOK_REGISTRY if h.event_type == "PreToolUse"]
+    # Verify PreToolUse entry count matches unique (event_type, matcher) pairs.
+    # HookDef entries sharing a matcher are consolidated into one settings.json entry.
+    pretooluse_matchers = {h.matcher for h in HOOK_REGISTRY if h.event_type == "PreToolUse"}
     pretooluse = data["hooks"].get("PreToolUse", [])
-    assert len(pretooluse) == len(pretooluse_registry_entries), (
-        f"Expected {len(pretooluse_registry_entries)} PreToolUse entries, got {len(pretooluse)}"
+    assert len(pretooluse) == len(pretooluse_matchers), (
+        f"Expected {len(pretooluse_matchers)} PreToolUse entries, got {len(pretooluse)}"
     )
 
     # Verify PostToolUse entries exist
-    posttooluse_registry_entries = [h for h in HOOK_REGISTRY if h.event_type == "PostToolUse"]
+    posttooluse_matchers = {h.matcher for h in HOOK_REGISTRY if h.event_type == "PostToolUse"}
     posttooluse = data["hooks"].get("PostToolUse", [])
-    assert len(posttooluse) == len(posttooluse_registry_entries), (
-        f"Expected {len(posttooluse_registry_entries)} PostToolUse entries, got {len(posttooluse)}"
+    assert len(posttooluse) == len(posttooluse_matchers), (
+        f"Expected {len(posttooluse_matchers)} PostToolUse entries, got {len(posttooluse)}"
     )
 
     # All scripts from all event types must be present
@@ -280,8 +281,9 @@ def test_sync_hooks_to_settings_is_idempotent(tmp_path):
 
     data = json.loads(settings.read_text())
 
-    pretooluse_count = len([h for h in HOOK_REGISTRY if h.event_type == "PreToolUse"])
-    posttooluse_count = len([h for h in HOOK_REGISTRY if h.event_type == "PostToolUse"])
+    # HookDef entries sharing a matcher are consolidated into one settings.json entry.
+    pretooluse_count = len({h.matcher for h in HOOK_REGISTRY if h.event_type == "PreToolUse"})
+    posttooluse_count = len({h.matcher for h in HOOK_REGISTRY if h.event_type == "PostToolUse"})
 
     pretooluse = data["hooks"].get("PreToolUse", [])
     posttooluse = data["hooks"].get("PostToolUse", [])

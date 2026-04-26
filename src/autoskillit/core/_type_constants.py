@@ -55,6 +55,8 @@ __all__ = [
     "FeatureDef",
     "FEATURE_REGISTRY",
     "RETIRED_FEATURES",
+    "SKILL_FILE_ADVISORY_MAP",
+    "SKILL_ACTIVATE_DEPS_REQUIRED",
 ]
 
 AUTOSKILLIT_INSTALLED_VERSION: str = version("autoskillit")
@@ -457,3 +459,21 @@ RETIRED_READINESS_TOKENS: frozenset[str] = frozenset(
         "sigterm_handler_ready",
     }
 )
+
+# Maps file-path regex patterns to the advisory skill name to suggest when that
+# path is written or edited. Patterns are tried in order; first match wins.
+# Campaign paths must appear before the general recipe pattern.
+# Stdlib-only hooks inline a copy of the recipe-related subset; the contract
+# test test_hook_patterns_match_type_constants asserts they stay in sync.
+SKILL_FILE_ADVISORY_MAP: dict[str, str] = {
+    r"(?:\.autoskillit|src/autoskillit)/recipes/campaigns/.*\.ya?ml$": "make-campaign",
+    r"(?:\.autoskillit|src/autoskillit)/recipes/.*\.ya?ml$": "write-recipe",
+}
+
+# Pipeline skills that must declare specific activate_deps. Contract test
+# test_required_activate_deps_present enforces this invariant at CI time.
+SKILL_ACTIVATE_DEPS_REQUIRED: dict[str, frozenset[str]] = {
+    "make-plan": frozenset({"arch-lens", "write-recipe"}),
+    "implement-worktree": frozenset({"write-recipe"}),
+    "implement-worktree-no-merge": frozenset({"write-recipe"}),
+}

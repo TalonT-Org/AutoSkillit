@@ -70,6 +70,11 @@ HOOK_REGISTRY: list[HookDef] = [
         scripts=["generated_file_write_guard.py"],
     ),
     HookDef(
+        matcher=r"Write|Edit",
+        scripts=["recipe_write_advisor.py"],
+        session_scope="interactive_only",
+    ),
+    HookDef(
         matcher=r"Grep",
         scripts=["grep_pattern_lint_guard.py"],
     ),
@@ -186,9 +191,15 @@ def _build_hook_entry(hook_def: HookDef, hook_commands: list[dict]) -> dict:
 
 
 def generate_hooks_json() -> dict:
-    """Generate the hooks.json structure from HOOK_REGISTRY using absolute paths."""
-    by_event: dict[str, list] = {}
+    """Generate the hooks.json structure from HOOK_REGISTRY using absolute paths.
+
+    Multiple HookDef entries with the same (event_type, matcher) are consolidated
+    into a single settings.json entry so Claude Code sees no duplicate matchers.
+    """
+    # Preserve insertion order; merge scripts from same (event_type, matcher) key.
+    groups: dict[tuple[str, str], dict] = {}
     for hook_def in HOOK_REGISTRY:
+        key = (hook_def.event_type, hook_def.matcher)
         hook_commands = [
             {
                 "type": "command",
@@ -201,9 +212,14 @@ def generate_hooks_json() -> dict:
             }
             for script in hook_def.scripts
         ]
-        by_event.setdefault(hook_def.event_type, []).append(
-            _build_hook_entry(hook_def, hook_commands)
-        )
+        if key not in groups:
+            groups[key] = _build_hook_entry(hook_def, hook_commands)
+        else:
+            groups[key]["hooks"].extend(hook_commands)
+
+    by_event: dict[str, list] = {}
+    for (event_type, _), entry in groups.items():
+        by_event.setdefault(event_type, []).append(entry)
     return {"hooks": by_event, "_autoskillit_registry_hash": HOOK_REGISTRY_HASH}
 
 

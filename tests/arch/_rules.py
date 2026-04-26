@@ -78,6 +78,8 @@ _PRINT_EXEMPT = frozenset(
         "quota_guard.py",
         "quota_post_hook.py",
         "remove_clone_guard.py",
+        "review_gate_post_hook.py",
+        "review_loop_gate.py",
         "skill_cmd_guard.py",
         "skill_command_guard.py",
     }
@@ -93,6 +95,8 @@ _BROAD_EXCEPT_EXEMPT = frozenset(
         "quota_guard.py",
         "quota_post_hook.py",
         "remove_clone_guard.py",
+        "review_gate_post_hook.py",
+        "review_loop_gate.py",
         "session_start_hook.py",
         "skill_cmd_guard.py",
         "skill_command_guard.py",

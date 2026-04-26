@@ -26,13 +26,15 @@ def _write_state(tmp_dir, gate: str, called: bool, pr_number: str = "1290") -> N
     state_path = tmp_dir / _STATE_FILE_RELPATH
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(
-        json.dumps({
-            "gate": gate,
-            "review_verdict": "changes_requested",
-            "check_review_loop_called": called,
-            "pr_number": pr_number,
-            "set_at": "2026-04-26T04:30:00+00:00",
-        })
+        json.dumps(
+            {
+                "gate": gate,
+                "review_verdict": "changes_requested",
+                "check_review_loop_called": called,
+                "pr_number": pr_number,
+                "set_at": "2026-04-26T04:30:00+00:00",
+            }
+        )
     )
 
 

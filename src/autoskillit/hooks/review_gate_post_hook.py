@@ -7,7 +7,7 @@ import os
 import re
 import sys
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 _TAG_LOOP_REQUIRED = "%%REVIEW_GATE::LOOP_REQUIRED%%"
@@ -73,7 +73,7 @@ def main() -> None:
                 "review_verdict": "changes_requested",
                 "check_review_loop_called": False,
                 "pr_number": pr_number,
-                "set_at": datetime.now(timezone.utc).isoformat(),
+                "set_at": datetime.now(UTC).isoformat(),
             }
             try:
                 _atomic_write(state_file, json.dumps(state))

@@ -22,7 +22,7 @@ _STATE_FILE_RELPATH = (".autoskillit", "temp", "review_gate_state.json")
 
 def main() -> None:
     try:
-        data = json.loads(sys.stdin.read())
+        json.loads(sys.stdin.read())
     except Exception:
         sys.exit(0)
 
@@ -42,13 +42,15 @@ def main() -> None:
         sys.exit(0)
 
     print(
-        json.dumps({
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": _DENY_REASON,
+        json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": _DENY_REASON,
+                }
             }
-        })
+        )
     )
     sys.exit(0)
 

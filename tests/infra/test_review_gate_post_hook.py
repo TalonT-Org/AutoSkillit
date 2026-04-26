@@ -12,7 +12,6 @@ import contextlib
 import io
 import json
 import unittest.mock
-from pathlib import Path
 
 import pytest
 
@@ -33,10 +32,16 @@ def _build_run_skill_event(tool_response_text: str) -> dict:
     return {
         "tool_name": _TOOL_RUN_SKILL,
         "tool_input": {"skill_command": "/review-pr feat/1290 main", "cwd": "/tmp/work"},
-        "tool_response": json.dumps({"result": json.dumps({
-            "success": True,
-            "result": tool_response_text,
-        })}),
+        "tool_response": json.dumps(
+            {
+                "result": json.dumps(
+                    {
+                        "success": True,
+                        "result": tool_response_text,
+                    }
+                )
+            }
+        ),
     }
 
 
@@ -49,7 +54,9 @@ def _build_run_python_event(callable_name: str, args: dict | None = None) -> dic
     }
 
 
-def _run_hook(event: dict | None = None, raw_stdin: str | None = None, tmp_dir=None) -> tuple[str, int]:
+def _run_hook(
+    event: dict | None = None, raw_stdin: str | None = None, tmp_dir=None
+) -> tuple[str, int]:
     """Run review_gate_post_hook.main() and return (stdout, exit_code)."""
     from autoskillit.hooks.review_gate_post_hook import main  # noqa: PLC0415
 
@@ -101,9 +108,7 @@ def test_loop_required_tag_writes_state_file(tmp_path):
 
 def test_clear_tag_removes_state_file(tmp_path):
     """T2-2: State file unlinked when CLEAR tag detected."""
-    event = _build_run_skill_event(
-        f"verdict = approved\n{_TAG_CLEAR}\n%%ORDER_UP%%"
-    )
+    event = _build_run_skill_event(f"verdict = approved\n{_TAG_CLEAR}\n%%ORDER_UP%%")
     _run_hook(event, tmp_dir=tmp_path)
 
     state = _read_state(tmp_path)
@@ -120,13 +125,17 @@ def test_clear_tag_removes_existing_loop_required_state(tmp_path):
     # Pre-write existing state
     state_path = tmp_path / _STATE_FILE_RELPATH
     state_path.parent.mkdir(parents=True, exist_ok=True)
-    state_path.write_text(json.dumps({
-        "gate": "LOOP_REQUIRED",
-        "review_verdict": "changes_requested",
-        "check_review_loop_called": False,
-        "pr_number": "1290",
-        "set_at": "2026-04-26T04:30:00+00:00",
-    }))
+    state_path.write_text(
+        json.dumps(
+            {
+                "gate": "LOOP_REQUIRED",
+                "review_verdict": "changes_requested",
+                "check_review_loop_called": False,
+                "pr_number": "1290",
+                "set_at": "2026-04-26T04:30:00+00:00",
+            }
+        )
+    )
 
     event = _build_run_skill_event(f"verdict = approved\n{_TAG_CLEAR}\n%%ORDER_UP%%")
     _run_hook(event, tmp_dir=tmp_path)
@@ -143,13 +152,17 @@ def test_check_review_loop_callable_marks_called(tmp_path):
     """T2-4: Callable detection updates check_review_loop_called=True."""
     state_path = tmp_path / _STATE_FILE_RELPATH
     state_path.parent.mkdir(parents=True, exist_ok=True)
-    state_path.write_text(json.dumps({
-        "gate": "LOOP_REQUIRED",
-        "review_verdict": "changes_requested",
-        "check_review_loop_called": False,
-        "pr_number": "1290",
-        "set_at": "2026-04-26T04:30:00+00:00",
-    }))
+    state_path.write_text(
+        json.dumps(
+            {
+                "gate": "LOOP_REQUIRED",
+                "review_verdict": "changes_requested",
+                "check_review_loop_called": False,
+                "pr_number": "1290",
+                "set_at": "2026-04-26T04:30:00+00:00",
+            }
+        )
+    )
 
     event = _build_run_python_event(_CALLABLE_CHECK_REVIEW_LOOP)
     _run_hook(event, tmp_dir=tmp_path)
@@ -181,13 +194,15 @@ def test_non_review_loop_callable_does_not_change_state(tmp_path):
     """T2-6: Callable filtering — only check_review_loop triggers state update."""
     state_path = tmp_path / _STATE_FILE_RELPATH
     state_path.parent.mkdir(parents=True, exist_ok=True)
-    original_state = json.dumps({
-        "gate": "LOOP_REQUIRED",
-        "review_verdict": "changes_requested",
-        "check_review_loop_called": False,
-        "pr_number": "1290",
-        "set_at": "2026-04-26T04:30:00+00:00",
-    })
+    original_state = json.dumps(
+        {
+            "gate": "LOOP_REQUIRED",
+            "review_verdict": "changes_requested",
+            "check_review_loop_called": False,
+            "pr_number": "1290",
+            "set_at": "2026-04-26T04:30:00+00:00",
+        }
+    )
     state_path.write_text(original_state)
 
     event = _build_run_python_event(_CALLABLE_OTHER)
@@ -236,13 +251,17 @@ def test_pr_number_extracted_from_run_python_args(tmp_path):
     """T2-9: pr_number captured from check_review_loop args.pr_number."""
     state_path = tmp_path / _STATE_FILE_RELPATH
     state_path.parent.mkdir(parents=True, exist_ok=True)
-    state_path.write_text(json.dumps({
-        "gate": "LOOP_REQUIRED",
-        "review_verdict": "changes_requested",
-        "check_review_loop_called": False,
-        "pr_number": "",
-        "set_at": "2026-04-26T04:30:00+00:00",
-    }))
+    state_path.write_text(
+        json.dumps(
+            {
+                "gate": "LOOP_REQUIRED",
+                "review_verdict": "changes_requested",
+                "check_review_loop_called": False,
+                "pr_number": "",
+                "set_at": "2026-04-26T04:30:00+00:00",
+            }
+        )
+    )
 
     event = _build_run_python_event(
         _CALLABLE_CHECK_REVIEW_LOOP,

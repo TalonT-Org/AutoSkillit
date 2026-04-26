@@ -7,6 +7,7 @@ Replaces two mutable module-level singletons in server.py:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -132,6 +133,7 @@ class ToolContext:
     quota_refresh_task: QuotaRefreshTask | None = field(default=None)
     token_factory: TokenFactory | None = field(default=None)
     fleet_lock: FleetLock | None = field(default=None)
+    get_protected_campaign_ids: Callable[[Path], frozenset[str]] | None = field(default=None)
 
     def __post_init__(self) -> None:
         if self.background is None:

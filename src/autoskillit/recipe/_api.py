@@ -274,7 +274,7 @@ def list_all(
         {"recipes": list[{"name", "description", "summary"}]}
         Includes "errors" key when recipes fail to parse.
     """
-    from autoskillit.core.feature_flags import is_feature_enabled  # noqa: PLC0415
+    from autoskillit.core import is_feature_enabled  # noqa: PLC0415
     from autoskillit.recipe.schema import RecipeKind  # noqa: PLC0415
 
     _pdir = project_dir if project_dir is not None else Path.cwd()

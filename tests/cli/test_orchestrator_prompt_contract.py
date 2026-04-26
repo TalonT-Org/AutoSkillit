@@ -121,7 +121,8 @@ class TestOpenKitchenRetryOnUnavailable:
         first_section = ok_prompt[:first_section_end]
 
         assert "retry" in first_section.lower(), (
-            "_build_open_kitchen_prompt must contain a retry instruction for MCP tool unavailability"
+            "_build_open_kitchen_prompt must contain a retry instruction "
+            "for MCP tool unavailability"
         )
         assert "No such tool" in first_section or "unavailable" in first_section.lower(), (
             "_build_open_kitchen_prompt retry must reference 'No such tool' or 'unavailable'"

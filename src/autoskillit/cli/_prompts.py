@@ -315,6 +315,8 @@ You are a pipeline orchestrator. Execute the recipe '{recipe_name}' step-by-step
    the kitchen gate. open_kitchen is REQUIRED to enable all gated AutoSkillit tools —
    the ingredients table above (when present) is provided for reference only.
    DO NOT call AskUserQuestion or any other tool before open_kitchen.
+   If open_kitchen returns "No such tool available", retry the call once immediately.
+   If the retry also fails, output "AutoSkillit MCP server did not start — ending session." and end.
 2. The response contains a pre-formatted ingredients table
    between --- INGREDIENTS TABLE --- and --- END TABLE --- markers.
    Display it verbatim in your response — do not reformat or re-render it.
@@ -462,7 +464,9 @@ def _build_open_kitchen_prompt(mcp_prefix: str) -> str:
     _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
     text = (
         f"Call {mcp_prefix}open_kitchen to open the AutoSkillit kitchen.\n"
-        f"DO NOT call any other tool before open_kitchen.\n\n"
+        f"DO NOT call any other tool before open_kitchen.\n"
+        'If open_kitchen returns "No such tool available", retry the call once immediately.\n'
+        'If the retry also fails, output "AutoSkillit MCP server did not start — ending session." and end.\n\n'
         "IMPORTANT — Orchestrator Discipline:\n"
         f"NEVER use native Claude Code tools ({_forbidden_list}) "
         "in this session. All code reading, searching, editing, and "

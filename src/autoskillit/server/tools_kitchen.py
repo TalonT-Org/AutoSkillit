@@ -20,10 +20,10 @@ from autoskillit import __version__
 from autoskillit.config import iter_display_categories, resolve_ingredient_defaults
 from autoskillit.core import (
     PIPELINE_FORBIDDEN_TOOLS,
+    _collect_disabled_feature_tags,
     atomic_write,
     find_latest_session_id,
     get_logger,
-    is_feature_enabled,
     pkg_root,
 )
 from autoskillit.pipeline import create_background_task
@@ -184,37 +184,20 @@ async def _redisable_subsets(
     Pass 1 (existing): Re-disable config-disabled subset tags so dual-tagged tools
     (e.g. kitchen+github) that are server-disabled are not accidentally revealed.
 
-    Pass 2 (new): For each feature disabled in config, suppress FEATURE_REVEAL_TAGS
-    that belong to that feature. Shared tools with kitchen-core retain visibility
-    via the kitchen-core tag (FastMCP union model).
+    Pass 2: Suppress tool tags for disabled features via `_collect_disabled_feature_tags`.
+    Shared tools with kitchen-core retain visibility via the kitchen-core tag
+    (FastMCP union model).
 
     ``features`` defaults to ``None`` (treated as ``{}``, i.e. all features use
     ``FeatureDef.default_enabled``). Pass ``config.features`` from the call site.
-
-    For tools with ONLY a feature tag (no kitchen-core fallback), a per-tool
-    suppression constant and path is needed here once such tools exist.
     """
     # Pass 1: subset re-disable (existing)
     for subset in disabled:
         await ctx.disable_components(tags={subset})
 
-    # Pass 2: feature gate — suppress feature-reveal tags for disabled features
-    from autoskillit.core import (  # noqa: PLC0415
-        FEATURE_REGISTRY,
-        FEATURE_REVEAL_TAGS,
-    )
-
-    # Union model: a tag is suppressed only when no enabled feature claims it.
+    # Pass 2: feature gate — suppress tool tags for disabled features
     _features = features or {}
-    enabled_tags: set[str] = set()
-    disabled_tags: set[str] = set()
-    for feature_name, feature_def in FEATURE_REGISTRY.items():
-        reveal = FEATURE_REVEAL_TAGS & feature_def.tool_tags
-        if is_feature_enabled(feature_name, _features):
-            enabled_tags |= reveal
-        else:
-            disabled_tags |= reveal
-    for tag in disabled_tags - enabled_tags:
+    for tag in _collect_disabled_feature_tags(_features):
         await ctx.disable_components(tags={tag})
 
 

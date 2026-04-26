@@ -23,7 +23,6 @@ __all__ = [
     "HEADLESS_TOOLS",
     "FLEET_TOOLS",
     "FLEET_MENU_TOOLS",
-    "FEATURE_REVEAL_TAGS",
     "FREE_RANGE_TOOLS",
     "UNGATED_TOOLS",
     "MUTATING_TOOLS",
@@ -233,12 +232,6 @@ FLEET_DISPATCH_TOOLS: frozenset[str] = frozenset(
 # Tools that appear in the Fleet group in the cook menu and open_kitchen response.
 # Defined here (L0) so menu modules can import the constant without loading the fleet package.
 FLEET_MENU_TOOLS: tuple[str, ...] = ("dispatch_food_truck",)
-
-# Tags that are EXCLUSIVELY used for feature-gated visibility (not general kitchen tags).
-# When a feature is disabled, these tags are the ones suppressed via disable_components.
-# Tools with these tags AND a kitchen-core tag remain visible via the kitchen-core tag
-# (FastMCP union model: any enabled tag keeps the tool visible).
-FEATURE_REVEAL_TAGS: frozenset[str] = frozenset({"fleet"})
 
 FLEET_ERROR_CODES: frozenset[str] = frozenset(FleetErrorCode)
 

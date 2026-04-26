@@ -62,12 +62,6 @@ def test_feature_registry_franchise_entry_gone() -> None:
     assert "franchise" not in FEATURE_REGISTRY
 
 
-def test_feature_reveal_tags_fleet() -> None:
-    from autoskillit.core import FEATURE_REVEAL_TAGS
-
-    assert FEATURE_REVEAL_TAGS == frozenset({"fleet"})
-
-
 def test_session_type_no_franchise() -> None:
     from autoskillit.core._type_enums import SessionType
 

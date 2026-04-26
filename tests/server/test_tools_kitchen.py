@@ -1347,6 +1347,22 @@ async def test_redisable_subsets_does_not_disable_kitchen_core_tag() -> None:
     )
 
 
+@pytest.mark.anyio
+async def test_redisable_subsets_uses_shared_helper() -> None:
+    """_redisable_subsets delegates Pass 2 to _collect_disabled_feature_tags."""
+    from unittest.mock import AsyncMock, patch
+
+    from autoskillit.server.tools_kitchen import _redisable_subsets
+
+    mock_ctx = AsyncMock()
+
+    with patch("autoskillit.server.tools_kitchen._collect_disabled_feature_tags") as mock_h:
+        mock_h.return_value = frozenset({"fleet"})
+        await _redisable_subsets(mock_ctx, [], features={"fleet": False})
+
+    mock_h.assert_called_once_with({"fleet": False})
+
+
 # ---------------------------------------------------------------------------
 # T7 — _kitchen_failure_envelope default hint says autoskillit install not reinstall
 # ---------------------------------------------------------------------------

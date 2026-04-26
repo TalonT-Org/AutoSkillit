@@ -7,13 +7,9 @@ sub-package __init__ files.
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
-from typing import TYPE_CHECKING
 
 from autoskillit.core import (
     CATEGORY_TAGS,
-    FEATURE_REGISTRY,
-    FEATURE_REVEAL_TAGS,
     FLEET_DISPATCH_MODE,
     FLEET_MODE_ENV_VAR,
     HEADLESS_ENV_VAR,
@@ -22,23 +18,15 @@ from autoskillit.core import (
 )
 from autoskillit.core import session_type as _resolve_session_type
 
-if TYPE_CHECKING:
-    from fastmcp import FastMCP
-
 _log = get_logger(__name__)
 
-FeatureGate = Callable[["FastMCP", SessionType], None]
 
-
-def _apply_session_type_visibility(
-    *,
-    feature_gates: list[FeatureGate] | None = None,
-) -> None:
+def _apply_session_type_visibility() -> None:
     """Apply FastMCP tag visibility based on session type + HEADLESS.
 
-    Phase 1: session-type dispatch (existing logic, unchanged).
-    Phase 2: feature gates — always run after phase 1, structurally
-             enforcing feature gates as an override layer.
+    Session-type dispatch only — feature gate suppression is handled at lifespan
+    time by _fleet_auto_gate_boot (fleet sessions) and _redisable_subsets
+    (open_kitchen sessions) where the full config pipeline is available.
     """
     from autoskillit.server import mcp
 
@@ -72,21 +60,3 @@ def _apply_session_type_visibility(
         mcp.enable(tags={"headless"})
     # ORCHESTRATOR+interactive and LEAF+interactive: no pre-reveal.
     # Cook unlocks via open_kitchen (orchestrator) or stays minimal (leaf).
-
-    # Phase 2: feature gates — execute after phase 1 to enforce override semantics
-    for gate in feature_gates or []:
-        gate(mcp, _session)
-
-
-def _fleet_gate(mcp: FastMCP, session: SessionType) -> None:  # noqa: ARG001
-    """Disable fleet-tagged tools when the fleet feature is off.
-
-    Intentionally reads only the AUTOSKILLIT_FEATURES__FLEET env var.
-    This function runs at import time before config is loaded, so the
-    config file is not available here. The deferred config-based check
-    is performed by _fleet_auto_gate_boot() in _lifespan.py once the
-    server context (ctx.config.features) is available.
-    """
-    fleet_val = os.environ.get("AUTOSKILLIT_FEATURES__FLEET", "").strip().lower()
-    if fleet_val in ("false", "0", "no"):
-        mcp.disable(tags=set(FEATURE_REVEAL_TAGS & FEATURE_REGISTRY["fleet"].tool_tags))

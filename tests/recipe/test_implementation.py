@@ -56,12 +56,12 @@ def test_check_review_loop_on_result_routes_to_review_pr_when_had_blocking_and_n
 
 # T_IP_LOOP5
 def test_check_review_loop_on_result_default_routes_to_ci_watch(recipe) -> None:
-    """check_review_loop on_result routes to ci_watch as default (no blocking or max exceeded)."""
+    """check_review_loop on_result falls through to check_repo_ci_event when no blocking."""
     step = recipe.steps["check_review_loop"]
     assert step.on_result is not None
     default_conditions = [c for c in step.on_result.conditions if c.when is None]
     assert default_conditions, "No default (when=None) condition found"
-    assert default_conditions[0].route == "ci_watch"
+    assert default_conditions[0].route == "check_repo_ci_event"
 
 
 # T_IP_LOOP6
@@ -69,7 +69,7 @@ def test_check_review_loop_has_on_failure(recipe) -> None:
     """check_review_loop must declare on_failure because it uses on_result
     (on-result-missing-failure-route semantic rule requires it)."""
     step = recipe.steps["check_review_loop"]
-    assert step.on_failure == "ci_watch"
+    assert step.on_failure == "check_repo_ci_event"
 
 
 # T_IP_LOOP7

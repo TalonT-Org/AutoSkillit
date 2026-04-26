@@ -247,8 +247,45 @@ def test_ci_failure_no_on_failure_skips_rule() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_wait_for_ci_without_event_is_warning() -> None:
-    """wait_for_ci step with no event param should trigger ci-missing-event-scope."""
+def test_ci_missing_event_scope_is_error_severity() -> None:
+    """ci-missing-event-scope must be ERROR to prevent unscoped CI watch steps."""
+    recipe = _make_workflow(
+        steps={
+            "my_ci_watch": {
+                "tool": "wait_for_ci",
+                "with": {"branch": "main", "timeout_seconds": 300},
+            }
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    scope_findings = [f for f in findings if f.rule == "ci-missing-event-scope"]
+    assert scope_findings, "expected ci-missing-event-scope finding"
+    assert all(f.severity == Severity.ERROR for f in scope_findings), (
+        "ci-missing-event-scope must be ERROR, not WARNING"
+    )
+
+
+def test_ci_watch_with_event_produces_no_scope_finding() -> None:
+    """wait_for_ci with event: present must not trigger ci-missing-event-scope."""
+    recipe = _make_workflow(
+        steps={
+            "my_ci_watch": {
+                "tool": "wait_for_ci",
+                "with": {
+                    "branch": "main",
+                    "event": "${{ context.ci_event }}",
+                    "timeout_seconds": 300,
+                },
+            }
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    scope_findings = [f for f in findings if f.rule == "ci-missing-event-scope"]
+    assert not scope_findings
+
+
+def test_wait_for_ci_without_event_is_error() -> None:
+    """wait_for_ci step with no event param should trigger ci-missing-event-scope at ERROR."""
     recipe = _make_recipe(
         {
             "ci": RecipeStep(
@@ -263,7 +300,7 @@ def test_wait_for_ci_without_event_is_warning() -> None:
     findings = run_semantic_rules(recipe)
     event_findings = [f for f in findings if f.rule == "ci-missing-event-scope"]
     assert len(event_findings) == 1
-    assert event_findings[0].severity == Severity.WARNING
+    assert event_findings[0].severity == Severity.ERROR
 
 
 def test_wait_for_ci_with_event_is_clean() -> None:
@@ -284,8 +321,8 @@ def test_wait_for_ci_with_event_is_clean() -> None:
     assert event_findings == []
 
 
-def test_get_ci_status_without_event_is_warning() -> None:
-    """get_ci_status step with no event param should trigger ci-missing-event-scope."""
+def test_get_ci_status_without_event_is_error() -> None:
+    """get_ci_status step with no event param should trigger ci-missing-event-scope at ERROR."""
     recipe = _make_recipe(
         {
             "ci": RecipeStep(
@@ -300,7 +337,7 @@ def test_get_ci_status_without_event_is_warning() -> None:
     findings = run_semantic_rules(recipe)
     event_findings = [f for f in findings if f.rule == "ci-missing-event-scope"]
     assert len(event_findings) == 1
-    assert event_findings[0].severity == Severity.WARNING
+    assert event_findings[0].severity == Severity.ERROR
     assert "get_ci_status" in event_findings[0].message
 
 

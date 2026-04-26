@@ -89,7 +89,7 @@ parallel dispatch — fleet_lock enforces serial execution and concurrent calls 
 Each dispatch is an independent L2 session with its own kitchen context. There is NO
 cross-dispatch state sharing and NO cross-dispatch token aggregation.
 
-Only these 6 tools are available in this session:
+After startup, only these 6 tools should be used for all campaign operations:
 - {mcp_prefix}dispatch_food_truck
 - {mcp_prefix}batch_cleanup_clones
 - {mcp_prefix}get_pipeline_report
@@ -288,23 +288,24 @@ def _build_orchestrator_prompt(
 You are a pipeline orchestrator. Execute the recipe '{recipe_name}' step-by-step.
 
 {_ing_section}FIRST ACTION — before prompting for any inputs:
-0. Call Bash(command="sleep 2") — this ensures MCP plugin tools are fully registered
-   before proceeding. Bash is a built-in tool, always available. DO NOT SKIP THIS STEP.
-1. Call ToolSearch(query='select:{mcp_prefix}open_kitchen') to ensure its schema is loaded.
-   ToolSearch is a no-op if the schema is already loaded, but required if the tool appears
-   in Claude Code's deferred-tool list. Always call it — no conditional check needed.
-2. Call {mcp_prefix}open_kitchen(name='{recipe_name}') to activate pipeline tools and open
+0. Call ToolSearch(query='select:{mcp_prefix}open_kitchen') to load its schema:
+   - If the schema IS returned: proceed to step 1 immediately.
+   - If the schema is NOT returned (tool not yet registered): call Bash(command="sleep 2"),
+     then retry ToolSearch(query='select:{mcp_prefix}open_kitchen') once.
+   - If still not returned after the retry: output
+     "MCP server not ready — open_kitchen schema unavailable after retry" and end the session.
+1. Call {mcp_prefix}open_kitchen(name='{recipe_name}') to activate pipeline tools and open
    the kitchen gate. open_kitchen is REQUIRED to enable all gated AutoSkillit tools —
    the ingredients table above (when present) is provided for reference only.
    DO NOT call AskUserQuestion or any other tool before open_kitchen.
-3. The response contains a pre-formatted ingredients table
+2. The response contains a pre-formatted ingredients table
    between --- INGREDIENTS TABLE --- and --- END TABLE --- markers.
    Display it verbatim in your response — do not reformat or re-render it.
    Then ask for the required fields (marked with *). If the recipe has both
    a task and an issue_url ingredient, mention that a GitHub issue URL can
    be provided as the task. Keep it to one or two short sentences.
-4. Collect ingredient values conversationally from the user's response.
-5. Execute the pipeline steps.
+3. Collect ingredient values conversationally from the user's response.
+4. Execute the pipeline steps.
 
 During pipeline execution, only use AutoSkillit MCP tools:
 - Read, Grep, Glob (code investigation) — not used here because investigation
@@ -443,9 +444,11 @@ def _build_open_kitchen_prompt(mcp_prefix: str) -> str:
 
     _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
     text = (
-        f'Call Bash(command="sleep 2") first — this ensures MCP plugin tools are fully '
-        f"registered before proceeding. Bash is a built-in tool, always available.\n"
-        f"Then call ToolSearch(query='select:{mcp_prefix}open_kitchen') to load the schema.\n"
+        f"Call ToolSearch(query='select:{mcp_prefix}open_kitchen') to check MCP readiness:\n"
+        f"- If the schema IS returned: proceed to call {mcp_prefix}open_kitchen immediately.\n"
+        f'- If NOT returned: call Bash(command="sleep 2"), then retry ToolSearch once.\n'
+        f"- If still not returned: output "
+        f'"MCP server not ready — open_kitchen unavailable after retry" and end the session.\n'
         f"Then call {mcp_prefix}open_kitchen to open the AutoSkillit kitchen.\n\n"
         "IMPORTANT — Orchestrator Discipline:\n"
         f"NEVER use native Claude Code tools ({_forbidden_list}) "

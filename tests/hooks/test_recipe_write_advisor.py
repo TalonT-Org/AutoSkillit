@@ -10,7 +10,7 @@ import sys
 from autoskillit.core.paths import pkg_root
 
 
-def _run_hook(payload: dict, extra_env: dict[str, str] | None = None) -> tuple[int, str]:
+def _run_advisor(payload: dict, extra_env: dict[str, str] | None = None) -> tuple[int, str]:
     hook_path = pkg_root() / "hooks" / "recipe_write_advisor.py"
     env = {**os.environ, **(extra_env or {})}
     env.pop("AUTOSKILLIT_HEADLESS", None)
@@ -33,7 +33,7 @@ class TestRecipeWriteAdvisor:
             "tool_name": "Write",
             "tool_input": {"file_path": ".autoskillit/recipes/foo.yaml"},
         }
-        rc, stdout = _run_hook(payload)
+        rc, stdout = _run_advisor(payload)
         assert rc == 0
         assert stdout.strip(), "Expected advisory output for recipe YAML"
         data = json.loads(stdout.strip())
@@ -45,7 +45,7 @@ class TestRecipeWriteAdvisor:
             "tool_name": "Write",
             "tool_input": {"file_path": "/home/user/project/config.py"},
         }
-        rc, stdout = _run_hook(payload)
+        rc, stdout = _run_advisor(payload)
         assert rc == 0
         assert not stdout.strip()
 
@@ -55,7 +55,7 @@ class TestRecipeWriteAdvisor:
             "tool_name": "Write",
             "tool_input": {"file_path": ".autoskillit/recipes/campaigns/my_campaign.yaml"},
         }
-        rc, stdout = _run_hook(payload)
+        rc, stdout = _run_advisor(payload)
         assert rc == 0
         assert stdout.strip(), "Expected advisory output for campaign YAML"
         data = json.loads(stdout.strip())
@@ -69,7 +69,7 @@ class TestRecipeWriteAdvisor:
             "tool_name": "Write",
             "tool_input": {"file_path": ".autoskillit/recipes/foo.yaml"},
         }
-        rc, stdout = _run_hook(payload, extra_env={"AUTOSKILLIT_HEADLESS": "1"})
+        rc, stdout = _run_advisor(payload, extra_env={"AUTOSKILLIT_HEADLESS": "1"})
         assert rc == 0
         assert not stdout.strip(), "Advisory must be suppressed in headless sessions"
 
@@ -79,7 +79,7 @@ class TestRecipeWriteAdvisor:
             "tool_name": "Edit",
             "tool_input": {"file_path": "src/autoskillit/recipes/my_recipe.yaml"},
         }
-        rc, stdout = _run_hook(payload)
+        rc, stdout = _run_advisor(payload)
         assert rc == 0
         assert stdout.strip()
         data = json.loads(stdout.strip())
@@ -91,6 +91,6 @@ class TestRecipeWriteAdvisor:
             "tool_name": "Read",
             "tool_input": {"file_path": ".autoskillit/recipes/foo.yaml"},
         }
-        rc, stdout = _run_hook(payload)
+        rc, stdout = _run_advisor(payload)
         assert rc == 0
         assert not stdout.strip()

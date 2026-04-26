@@ -249,7 +249,7 @@ class TestBuildTestScope:
 
     def test_scope_l2_recipe_conservative(self, tmp_path: Path) -> None:
         tests_root = tmp_path / "tests"
-        for d in ["recipe", "server", "cli", "migration", "arch", "contracts", "docs"]:
+        for d in ["recipe", "server", "cli", "migration", "hooks", "arch", "contracts", "docs"]:
             (tests_root / d).mkdir(parents=True, exist_ok=True)
         for f in [
             "execution/test_headless.py",
@@ -284,7 +284,7 @@ class TestBuildTestScope:
             "test_skill_placeholder_contracts.py",
         ]:
             assert expected in result_names, f"{expected} missing"
-        assert "hooks" not in result_names
+        assert "hooks" in result_names, "hooks missing"
         for absent in ["execution", "infra", "skills", "core"]:
             assert absent not in result_names, f"{absent} should not be a full directory"
 

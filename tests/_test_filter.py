@@ -238,6 +238,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server",
             "cli",
             "migration",
+            "hooks",
             "_llm_triage",
             # File-level (narrowed from full directory):
             "execution/test_headless.py",

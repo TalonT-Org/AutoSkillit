@@ -218,3 +218,18 @@ def test_fleet_menu_tools_not_in_fleet_init() -> None:
     assert result.stdout.strip() == "False", (
         "FLEET_MENU_TOOLS still lives in fleet.__init__; move it to core._type_constants"
     )
+
+
+# ---------------------------------------------------------------------------
+# T1: FeatureDef has no redundant name field (Finding 3)
+# ---------------------------------------------------------------------------
+
+
+def test_feature_def_has_no_name_field() -> None:
+    """FeatureDef.name is redundant with the FEATURE_REGISTRY dict key and must not exist."""
+    import dataclasses
+
+    from autoskillit.core._type_constants import FeatureDef
+
+    field_names = {f.name for f in dataclasses.fields(FeatureDef)}
+    assert "name" not in field_names, "FeatureDef.name is redundant with FEATURE_REGISTRY dict key"

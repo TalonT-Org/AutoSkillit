@@ -24,8 +24,8 @@ import re
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import (
     ValidationContext,
-    _bfs_reachable,
     _bfs_with_facts,
+    bfs_reachable,
 )
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
@@ -61,7 +61,7 @@ def _find_capture_producers(ctx: ValidationContext, var: str) -> list[str]:
 
 def _ancestors(ctx: ValidationContext, step_name: str) -> set[str]:
     """Return all steps reachable via backward BFS from step_name (i.e. ancestors)."""
-    return _bfs_reachable(ctx.predecessors, step_name)
+    return bfs_reachable(ctx.predecessors, step_name)
 
 
 @semantic_rule(

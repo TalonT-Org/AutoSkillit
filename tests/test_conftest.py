@@ -261,7 +261,6 @@ def test_is_test_feature_enabled_respects_experimental_enabled(monkeypatch):
 
     monkeypatch.delenv("AUTOSKILLIT_TEST_FEATURES", raising=False)
     exp_feat = FeatureDef(
-        name="conftest_test_exp",
         lifecycle=FeatureLifecycle.EXPERIMENTAL,
         description="test",
         tool_tags=frozenset(),
@@ -288,7 +287,6 @@ def test_is_test_feature_enabled_disabled_lifecycle_always_false(monkeypatch):
 
     monkeypatch.delenv("AUTOSKILLIT_TEST_FEATURES", raising=False)
     disabled_feat = FeatureDef(
-        name="conftest_test_disabled",
         lifecycle=FeatureLifecycle.DISABLED,
         description="disabled test",
         tool_tags=frozenset(),

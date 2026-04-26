@@ -493,3 +493,32 @@ def test_recipe_info_experimental_can_be_set_true() -> None:
         experimental=True,
     )
     assert r.experimental is True
+
+
+# ---------------------------------------------------------------------------
+# T3: categories validation (Finding 5)
+# ---------------------------------------------------------------------------
+
+
+def test_recipe_rejects_unknown_category() -> None:
+    """Recipe.__post_init__ raises ValueError for unknown category values."""
+    from autoskillit.recipe.schema import Recipe
+
+    with pytest.raises(ValueError, match="Unknown categories"):
+        Recipe(name="x", description="d", categories=["no_such_category"])
+
+
+def test_recipe_accepts_valid_category() -> None:
+    """Recipe accepts a valid RECIPE_PACK_TAGS member in categories."""
+    from autoskillit.recipe.schema import Recipe
+
+    r = Recipe(name="x", description="d", categories=["implementation-family"])
+    assert r.categories == ["implementation-family"]
+
+
+def test_recipe_accepts_empty_categories() -> None:
+    """Recipe accepts an empty categories list."""
+    from autoskillit.recipe.schema import Recipe
+
+    r = Recipe(name="x", description="d", categories=[])
+    assert r.categories == []

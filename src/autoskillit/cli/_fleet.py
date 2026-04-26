@@ -653,9 +653,6 @@ def fleet_dispatch() -> None:
     if os.environ.get("AUTOSKILLIT_SESSION_TYPE") == "leaf":
         print("ERROR: 'fleet dispatch' cannot run inside a leaf session.")
         sys.exit(1)
-    if shutil.which("claude") is None:
-        print("ERROR: 'claude' not found. Install: https://docs.anthropic.com/en/docs/claude-code")
-        sys.exit(1)
 
     from autoskillit.config import load_config
 
@@ -678,9 +675,6 @@ def fleet_campaign(
         sys.exit(1)
     if os.environ.get("AUTOSKILLIT_SESSION_TYPE") == "leaf":
         print("ERROR: 'fleet campaign' cannot run inside a leaf session.")
-        sys.exit(1)
-    if shutil.which("claude") is None:
-        print("ERROR: 'claude' not found. Install: https://docs.anthropic.com/en/docs/claude-code")
         sys.exit(1)
 
     from autoskillit.config import load_config

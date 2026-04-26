@@ -79,7 +79,6 @@ def test_feature_gate_rule_fires_on_disabled_feature_skill(monkeypatch) -> None:
 
     # Inject a test feature with skill_categories into the registry
     test_fdef = FeatureDef(
-        name="test-skill-gate",
         lifecycle=FeatureLifecycle.EXPERIMENTAL,
         description="Test feature gating a skill category",
         tool_tags=frozenset(),
@@ -124,7 +123,6 @@ def test_feature_gate_rule_with_multiple_features(monkeypatch) -> None:
 
     # A second test feature that controls 'ci' tools
     test_ci_fdef = FeatureDef(
-        name="test-ci-gate",
         lifecycle=FeatureLifecycle.EXPERIMENTAL,
         description="Test feature gating ci tools",
         tool_tags=frozenset({"ci"}),
@@ -251,7 +249,6 @@ def test_feature_gate_run_python_no_finding_when_fdef_has_no_import_package(monk
     from autoskillit.recipe.schema import Recipe, RecipeStep
 
     no_pkg_fdef = FeatureDef(
-        name="no-pkg-feature",
         lifecycle=FeatureLifecycle.EXPERIMENTAL,
         description="Feature with no import_package",
         tool_tags=frozenset(),

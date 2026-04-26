@@ -393,7 +393,7 @@ def extract_blocks(
 # ---------------------------------------------------------------------------
 
 
-def _bfs_reachable(graph: dict[str, set[str]], start: str) -> set[str]:
+def bfs_reachable(graph: dict[str, set[str]], start: str) -> set[str]:
     """Return all step names reachable from ``start`` in the routing graph (excluding start)."""
     visited: set[str] = set()
     queue = list(graph.get(start, set()))
@@ -694,7 +694,7 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
             continue
 
         # BFS: collect all steps reachable from this step
-        reachable = _bfs_reachable(graph, step_name)
+        reachable = bfs_reachable(graph, step_name)
 
         # Collect all context.X references in reachable steps' with_args and
         # on_result condition when-expressions (route actions gate on context vars).

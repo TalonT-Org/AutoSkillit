@@ -456,6 +456,7 @@ async def test_validate_recipe_no_recipes_returns_error(tool_ctx, tmp_path):
 
 # T7: list_recipes MCP tool hides campaign when fleet disabled
 @pytest.mark.anyio
+@pytest.mark.feature("fleet")
 async def test_list_recipes_mcp_tool_hides_campaign_when_fleet_disabled(
     tool_ctx, tmp_path, monkeypatch
 ):

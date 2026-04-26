@@ -1621,7 +1621,7 @@ def test_stale_fetch_cache_after_install_detected_by_epoch(
         AUTOSKILLIT_INSTALLED_VERSION as _REAL_VERSION,
     )
 
-    old_version = "0.9.170"
+    old_version = "0.0.0-stale"
     assert old_version != _REAL_VERSION
 
     url = "https://api.github.com/repos/TalonT-Org/AutoSkillit/releases/latest"
@@ -2071,6 +2071,7 @@ def test_fetch_with_cache_epoch_check_contract(
 
     from autoskillit.core import AUTOSKILLIT_INSTALLED_VERSION
 
+    entry_kwargs = dict(entry_kwargs)
     cached_at_offset = entry_kwargs.pop("cached_at_offset", -1)
     url = "https://api.github.com/repos/TalonT-Org/AutoSkillit/releases/latest"
     entry: dict[str, Any] = {

@@ -231,4 +231,3 @@ def test_merge_phase_preserves_merge_prs_for_non_queue_repos() -> None:
     assert "queue_available" in lower and "false" in lower, (
         "MERGE PHASE must distinguish queue_available=false as the condition for merge-prs"
     )
-

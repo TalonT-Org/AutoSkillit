@@ -2001,19 +2001,22 @@ def test_full_lifecycle_install_clears_stale_cache_then_check_detects_new_versio
     from autoskillit.cli._update_checks import _binary_signal, invalidate_fetch_cache
     from autoskillit.core import AUTOSKILLIT_INSTALLED_VERSION
 
+    stale_version = "0.0.0-stale"
+    newer_version = "99.99.99"
+
     url = "https://api.github.com/repos/TalonT-Org/AutoSkillit/releases/latest"
     cache_data = {
         url: {
-            "body": {"tag_name": "v0.9.170"},
+            "body": {"tag_name": f"v{stale_version}"},
             "etag": '"old-etag"',
             "cached_at": time.time(),
-            "installed_version": "0.9.170",
+            "installed_version": stale_version,
         },
         "https://api.github.com/repos/TalonT-Org/AutoSkillit/git/refs/heads/integration": {
             "body": {"object": {"sha": "a" * 40}},
             "etag": '"ref-etag"',
             "cached_at": time.time(),
-            "installed_version": "0.9.170",
+            "installed_version": stale_version,
         },
     }
     cache_file = tmp_path / ".autoskillit" / "github_fetch_cache.json"
@@ -2025,7 +2028,7 @@ def test_full_lifecycle_install_clears_stale_cache_then_check_detects_new_versio
 
     mock_client = _make_mock_client(
         status_code=200,
-        json_body={"tag_name": "v0.9.175"},
+        json_body={"tag_name": f"v{newer_version}"},
         etag='"new-etag"',
     )
     info = _make_stable_info()
@@ -2033,7 +2036,7 @@ def test_full_lifecycle_install_clears_stale_cache_then_check_detects_new_versio
         signal = _binary_signal(info, tmp_path, AUTOSKILLIT_INSTALLED_VERSION)
 
     assert signal is not None, "Binary signal must fire after cache invalidation"
-    assert "0.9.175" in signal.message
+    assert newer_version in signal.message
 
 
 @pytest.mark.parametrize(

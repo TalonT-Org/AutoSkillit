@@ -212,14 +212,17 @@ class TestFileLevelCascadeDriftGuard:
                     continue
                 imported_pkgs: set[str] = set()
                 for node in ast.walk(tree):
-                    if (
-                        isinstance(node, ast.ImportFrom)
-                        and node.module
-                        and node.module.startswith("autoskillit.")
-                    ):
-                        parts = node.module.split(".")
-                        if len(parts) >= 2:
-                            imported_pkgs.add(parts[1])
+                    if isinstance(node, ast.ImportFrom) and node.module:
+                        if node.module.startswith("autoskillit."):
+                            parts = node.module.split(".")
+                            if len(parts) >= 2:
+                                imported_pkgs.add(parts[1])
+                    elif isinstance(node, ast.Import):
+                        for alias in node.names:
+                            if alias.name.startswith("autoskillit."):
+                                parts = alias.name.split(".")
+                                if len(parts) >= 2:
+                                    imported_pkgs.add(parts[1])
 
                 fname = test_file.name
                 for pkg, declared_files in pkg_map.items():
@@ -227,8 +230,9 @@ class TestFileLevelCascadeDriftGuard:
                         violations.append(f"{dir_name}/{fname} imports autoskillit.{pkg}")
 
         assert not violations, (
-            "Test files import from packages with file-level cascade entries "
-            "but are not declared in LAYER_CASCADE_CONSERVATIVE:\n"
+            "Test files import from packages in directories with partial "
+            "(file-level) cascade entries but are not declared in "
+            "LAYER_CASCADE_CONSERVATIVE:\n"
             + "\n".join(f"  {v}" for v in violations)
             + "\nAdd the missing file-level entries to tests/_test_filter.py."
         )

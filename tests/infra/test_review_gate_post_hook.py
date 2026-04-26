@@ -66,7 +66,9 @@ def _run_hook(
     exit_code = 0
     with contextlib.redirect_stdout(buf):
         with unittest.mock.patch("sys.stdin", io.StringIO(stdin_text)):
-            with unittest.mock.patch("pathlib.Path.cwd", return_value=tmp_dir):
+            with unittest.mock.patch(
+                "autoskillit.hooks.review_gate_post_hook.Path.cwd", return_value=tmp_dir
+            ):
                 try:
                     main()
                 except SystemExit as exc:

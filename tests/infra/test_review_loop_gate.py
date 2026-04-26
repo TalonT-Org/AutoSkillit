@@ -50,7 +50,9 @@ def _run_gate(tool_name: str, tmp_dir, raw_stdin: str | None = None) -> str:
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
         with unittest.mock.patch("sys.stdin", io.StringIO(stdin_content)):
-            with unittest.mock.patch("pathlib.Path.cwd", return_value=tmp_dir):
+            with unittest.mock.patch(
+                "autoskillit.hooks.review_loop_gate.Path.cwd", return_value=tmp_dir
+            ):
                 try:
                     main()
                 except SystemExit as exc:

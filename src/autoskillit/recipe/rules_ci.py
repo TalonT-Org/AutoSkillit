@@ -396,7 +396,7 @@ def _check_ci_event_literal_merge_group(ctx: ValidationContext) -> list[RuleFind
     for name, step in ctx.recipe.steps.items():
         if step.tool != "wait_for_ci":
             continue
-        event_value = (step.with_args or {}).get("event", "")
+        event_value = (step.with_args or {}).get("event")
         if event_value == "merge_group":
             findings.append(
                 RuleFinding(

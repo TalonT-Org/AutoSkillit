@@ -4,7 +4,7 @@ description: >
   parallelism, get user approval, then dispatch each approved issue to the
   parent recipe for implementation or remediation.
 summary: triage → sprint-plan → confirm → dispatch → report
-autoskillit_version: "0.9.162"
+autoskillit_version: "0.9.163"
 
 ingredients:
   source_dir:

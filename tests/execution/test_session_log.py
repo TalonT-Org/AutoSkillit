@@ -1535,7 +1535,7 @@ def test_retention_protects_active_campaign_sessions(tmp_path, monkeypatch):
         log_dir=str(tmp_path),
         cwd="/some/project",
         project_dir=str(project_dir),
-        get_protected_ids=build_protected_campaign_ids,
+        build_protected_campaign_ids=build_protected_campaign_ids,
         session_id="session-0006",
         pid=12345,
         skill_command="/autoskillit:implement",
@@ -1602,7 +1602,7 @@ def test_retention_deletes_released_campaign_sessions(tmp_path, monkeypatch):
         log_dir=str(tmp_path),
         cwd="/some/project",
         project_dir=str(project_dir),
-        get_protected_ids=build_protected_campaign_ids,
+        build_protected_campaign_ids=build_protected_campaign_ids,
         session_id="session-0006",
         pid=12345,
         skill_command="/autoskillit:implement",
@@ -1656,7 +1656,7 @@ def test_retention_preserves_index_for_protected(tmp_path, monkeypatch):
         log_dir=str(tmp_path),
         cwd="/some/project",
         project_dir=str(project_dir),
-        get_protected_ids=build_protected_campaign_ids,
+        build_protected_campaign_ids=build_protected_campaign_ids,
         session_id="session-0006",
         pid=12345,
         skill_command="/autoskillit:implement",
@@ -1700,7 +1700,7 @@ def test_retention_handles_missing_meta_json(tmp_path, monkeypatch):
         log_dir=str(tmp_path),
         cwd="/some/project",
         project_dir=str(project_dir),
-        get_protected_ids=build_protected_campaign_ids,
+        build_protected_campaign_ids=build_protected_campaign_ids,
         session_id="session-0006",
         pid=12345,
         skill_command="/autoskillit:implement",
@@ -1746,7 +1746,7 @@ def test_retention_handles_missing_franchise_state_dir(tmp_path, monkeypatch):
         log_dir=str(tmp_path),
         cwd="/some/project",
         project_dir=str(project_dir),
-        get_protected_ids=build_protected_campaign_ids,
+        build_protected_campaign_ids=build_protected_campaign_ids,
         session_id="session-0006",
         pid=12345,
         skill_command="/autoskillit:implement",
@@ -1791,7 +1791,7 @@ def test_retention_handles_corrupt_meta_json(tmp_path, monkeypatch):
         log_dir=str(tmp_path),
         cwd="/some/project",
         project_dir=str(project_dir),
-        get_protected_ids=build_protected_campaign_ids,
+        build_protected_campaign_ids=build_protected_campaign_ids,
         session_id="session-0006",
         pid=12345,
         skill_command="/autoskillit:implement",
@@ -1822,7 +1822,7 @@ def test_session_log_removed_terminal_statuses_constant() -> None:
 
 
 def test_retention_no_protection_when_callback_is_none(tmp_path: Path, monkeypatch) -> None:
-    """SL_CB_6: get_protected_ids=None with active campaign → no protection applied."""
+    """SL_CB_6: build_protected_campaign_ids=None with active campaign → no protection applied."""
     import autoskillit.execution.session_log as sl_module
 
     monkeypatch.setattr(sl_module, "_MAX_SESSIONS", 5)
@@ -1853,7 +1853,7 @@ def test_retention_no_protection_when_callback_is_none(tmp_path: Path, monkeypat
         log_dir=str(tmp_path),
         cwd="/some/project",
         project_dir=str(project_dir),
-        get_protected_ids=None,
+        build_protected_campaign_ids=None,
         session_id="session-0006",
         pid=12345,
         skill_command="/autoskillit:implement",
@@ -1872,13 +1872,15 @@ def test_retention_no_protection_when_callback_is_none(tmp_path: Path, monkeypat
 def test_flush_session_log_passes_callback_to_enforce_retention(
     tmp_path: Path, monkeypatch
 ) -> None:
-    """SL_CB_7: flush_session_log forwards get_protected_ids kwarg to _enforce_retention."""
+    """SL_CB_7: flush_session_log forwards build_protected_campaign_ids to _enforce_retention."""
     import autoskillit.execution.session_log as sl_module
 
     captured: list = []
 
-    def fake_enforce_retention(log_root, project_dir="", get_protected_ids=None) -> None:
-        captured.append(get_protected_ids)
+    def fake_enforce_retention(
+        log_root, project_dir="", build_protected_campaign_ids=None
+    ) -> None:
+        captured.append(build_protected_campaign_ids)
 
     monkeypatch.setattr(sl_module, "_enforce_retention", fake_enforce_retention)
 
@@ -1887,7 +1889,7 @@ def test_flush_session_log_passes_callback_to_enforce_retention(
         log_dir=str(tmp_path),
         cwd="/some/project",
         project_dir=str(tmp_path),
-        get_protected_ids=sentinel,
+        build_protected_campaign_ids=sentinel,
         session_id="session-cb7",
         pid=12345,
         skill_command="/autoskillit:implement",

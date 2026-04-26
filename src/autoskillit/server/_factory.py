@@ -289,7 +289,7 @@ def make_context(
         build_protected_campaign_ids,
     )  # lazy: avoids fleet init on server import
 
-    ctx.get_protected_campaign_ids = build_protected_campaign_ids
+    ctx.build_protected_campaign_ids = build_protected_campaign_ids
     ctx.executor = DefaultHeadlessExecutor(ctx)
     ctx.migrations = DefaultMigrationService(
         default_migration_engine(), run_headless=ctx.executor.run

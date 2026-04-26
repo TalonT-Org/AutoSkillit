@@ -99,7 +99,7 @@ def flush_session_log(
     campaign_id: str = "",
     dispatch_id: str = "",
     project_dir: str = "",
-    get_protected_ids: Callable[[Path], frozenset[str]] | None = None,
+    build_protected_campaign_ids: Callable[[Path], frozenset[str]] | None = None,
     session_id: str,
     pid: int,
     skill_command: str,
@@ -416,13 +416,17 @@ def flush_session_log(
         f.write(json.dumps(index_entry, sort_keys=True) + "\n")
 
     # Retention: keep at most _MAX_SESSIONS session directories
-    _enforce_retention(log_root, project_dir=project_dir, get_protected_ids=get_protected_ids)
+    _enforce_retention(
+        log_root,
+        project_dir=project_dir,
+        build_protected_campaign_ids=build_protected_campaign_ids,
+    )
 
 
 def _enforce_retention(
     log_root: Path,
     project_dir: str | None = None,
-    get_protected_ids: Callable[[Path], frozenset[str]] | None = None,
+    build_protected_campaign_ids: Callable[[Path], frozenset[str]] | None = None,
 ) -> None:
     """Delete oldest session directories if count exceeds _MAX_SESSIONS.
 
@@ -441,8 +445,8 @@ def _enforce_retention(
     surviving_names = {d.name for d in dirs[len(dirs) - _MAX_SESSIONS :]}
 
     protected_ids = (
-        get_protected_ids(Path(project_dir))
-        if project_dir and get_protected_ids is not None
+        build_protected_campaign_ids(Path(project_dir))
+        if project_dir and build_protected_campaign_ids is not None
         else frozenset()
     )
 

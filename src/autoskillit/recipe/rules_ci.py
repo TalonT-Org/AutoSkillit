@@ -150,8 +150,10 @@ _CI_EVENT_SCOPE_TOOLS = {"wait_for_ci", "get_ci_status"}
 
 @semantic_rule(
     name="ci-missing-event-scope",
-    description="CI tool step without event parameter risks cross-event confusion",
-    severity=Severity.WARNING,
+    description=(
+        "CI tool step without event parameter causes silent run exclusion on feature branches"
+    ),
+    severity=Severity.ERROR,
 )
 def _check_ci_missing_event_scope(ctx: ValidationContext) -> list[RuleFinding]:
     findings: list[RuleFinding] = []
@@ -162,13 +164,15 @@ def _check_ci_missing_event_scope(ctx: ValidationContext) -> list[RuleFinding]:
             findings.append(
                 RuleFinding(
                     rule="ci-missing-event-scope",
-                    severity=Severity.WARNING,
+                    severity=Severity.ERROR,
                     step_name=step_name,
                     message=(
                         f"Step '{step_name}' calls {step.tool} without an 'event' parameter. "
-                        f"Without event filtering, a passing pull_request run can mask a "
-                        f"failing push run. Add event: 'push' (or the appropriate trigger "
-                        f"event) to the step's with_args, or set ci.event in project config."
+                        f"On feature branches excluded from push triggers, the push-scoped "
+                        f"filter returns no runs even when pull_request CI is active, causing "
+                        f"no_runs timeout. Add event: '${{{{ context.ci_event }}}}' "
+                        f"(requires check_repo_ci_event to run first) "
+                        f"or set ci.event in project config."
                     ),
                 )
             )

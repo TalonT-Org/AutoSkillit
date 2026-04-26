@@ -10,8 +10,7 @@ from __future__ import annotations
 import json
 import re
 
-from autoskillit.core import get_logger, pkg_root
-from autoskillit.core._type_constants import SOUS_CHEF_L2_SECTIONS
+from autoskillit.core import SOUS_CHEF_L2_SECTIONS, get_logger, pkg_root
 from autoskillit.hooks import QUOTA_GUARD_DENY_TRIGGER, QUOTA_POST_WARNING_TRIGGER
 
 logger = get_logger(__name__)

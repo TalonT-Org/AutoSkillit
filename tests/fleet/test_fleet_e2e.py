@@ -434,7 +434,7 @@ async def test_continue_on_failure_when_flagged(fleet_runtime: FleetRuntime) -> 
 
     result_a = await rt.dispatch("recipe-a", shim_mode="no_sentinel")
     assert result_a["success"] is False
-    assert result_a["reason"] == "l2_no_result_block"
+    assert result_a["reason"] == "fleet_l2_no_result_block"
 
     state_path = rt.dispatch_state_path(result_a["dispatch_id"])
     decision = resume_campaign_from_state(state_path, continue_on_failure=True)
@@ -459,14 +459,14 @@ async def test_malformed_l2_result_surfaces_warning(fleet_runtime: FleetRuntime)
 
     result = await rt.dispatch("recipe-a", shim_mode="malformed_sentinel")
     assert result["success"] is False
-    assert result["reason"] == "l2_parse_failed"
+    assert result["reason"] == "fleet_l2_parse_failed"
     assert "l2_raw_body" in result
     assert "l2_parse_error" in result
 
     state = rt.read_dispatch_state(result["dispatch_id"])
     assert state is not None
     assert state.dispatches[0].status == DispatchStatus.FAILURE
-    assert state.dispatches[0].reason == "l2_parse_failed"
+    assert state.dispatches[0].reason == "fleet_l2_parse_failed"
 
 
 @pytest.mark.anyio
@@ -481,12 +481,12 @@ async def test_l3_halts_on_missing_result_block_when_continue_on_failure_false(
 
     result = await rt.dispatch("recipe-a", shim_mode="no_sentinel")
     assert result["success"] is False
-    assert result["reason"] == "l2_no_result_block"
+    assert result["reason"] == "fleet_l2_no_result_block"
 
     state = rt.read_dispatch_state(result["dispatch_id"])
     assert state is not None
     assert state.dispatches[0].status == DispatchStatus.FAILURE
-    assert state.dispatches[0].reason == "l2_no_result_block"
+    assert state.dispatches[0].reason == "fleet_l2_no_result_block"
 
     state_path = rt.dispatch_state_path(result["dispatch_id"])
     decision = resume_campaign_from_state(state_path, continue_on_failure=False)
@@ -661,12 +661,12 @@ async def test_l2_killed_mid_dispatch_records_failure(
 
     assert dispatch_result is not None
     assert dispatch_result["success"] is False
-    assert dispatch_result["reason"] == "l2_no_result_block"
+    assert dispatch_result["reason"] == "fleet_l2_no_result_block"
 
     state = rt.read_dispatch_state(dispatch_result["dispatch_id"])
     assert state is not None
     assert state.dispatches[0].status == DispatchStatus.FAILURE
-    assert state.dispatches[0].reason == "l2_no_result_block"
+    assert state.dispatches[0].reason == "fleet_l2_no_result_block"
 
     killed_pid = rt.runner.last_pid
     assert killed_pid > 0
@@ -740,7 +740,7 @@ async def test_l2_timeout_enforced(fleet_runtime: FleetRuntime) -> None:
     )
 
     assert result["success"] is False
-    assert result["error"] == "l2_timeout"
+    assert result["error"] == "fleet_l2_timeout"
     assert "details" in result
     assert "dispatch_id" in result["details"]
     assert "l2_session_id" in result["details"]
@@ -748,7 +748,7 @@ async def test_l2_timeout_enforced(fleet_runtime: FleetRuntime) -> None:
     state = rt.read_dispatch_state(result["details"]["dispatch_id"])
     assert state is not None
     assert state.dispatches[0].status == DispatchStatus.FAILURE
-    assert state.dispatches[0].reason == "l2_timeout"
+    assert state.dispatches[0].reason == "fleet_l2_timeout"
 
     killed_pid = rt.runner.last_pid
     assert killed_pid > 0

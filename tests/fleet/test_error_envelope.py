@@ -16,8 +16,8 @@ pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature
 
 SRC_ROOT = Path(__file__).parent.parent.parent / "src" / "autoskillit"
 
-# Matches error code strings in the fleet/l2/dispatch/cleanup namespace
-_FLEET_CODE_PATTERN = re.compile(r"^(fleet_|l2_|dispatch_|cleanup_)")
+# Matches error code strings in the fleet namespace
+_FLEET_CODE_PATTERN = re.compile(r"^fleet_")
 
 
 class TestFleetErrorCodeEnum:
@@ -34,13 +34,13 @@ class TestFleetErrorCodeEnum:
             "fleet_manifest_missing",
             "fleet_manifest_corrupted",
             "fleet_lock_not_initialized",
-            "l2_timeout",
-            "l2_no_result_block",
-            "l2_parse_failed",
-            "l2_startup_or_crash",
-            "dispatch_budget_exceeded",
-            "quota_exhausted",
-            "cleanup_failed",
+            "fleet_l2_timeout",
+            "fleet_l2_no_result_block",
+            "fleet_l2_parse_failed",
+            "fleet_l2_startup_or_crash",
+            "fleet_budget_exceeded",
+            "fleet_quota_exhausted",
+            "fleet_cleanup_failed",
         }
         assert {c.value for c in FleetErrorCode} == expected_values
 
@@ -61,6 +61,31 @@ class TestFleetErrorCodeEnum:
 
         assert FleetErrorCode is not None
 
+    def test_fleet_error_code_all_values_have_fleet_prefix(self):
+        from autoskillit.core import FleetErrorCode
+
+        for code in FleetErrorCode:
+            assert code.value.startswith("fleet_"), (
+                f"Code {code.name!r} has value {code.value!r} without fleet_ prefix"
+            )
+
+    def test_fleet_error_code_old_unprefixed_values_removed(self):
+        from autoskillit.core import FleetErrorCode
+
+        old_values = {
+            "l2_timeout",
+            "l2_no_result_block",
+            "l2_parse_failed",
+            "l2_startup_or_crash",
+            "dispatch_budget_exceeded",
+            "quota_exhausted",
+            "cleanup_failed",
+        }
+        current_values = {c.value for c in FleetErrorCode}
+        assert not (old_values & current_values), (
+            f"Old unprefixed values still present: {old_values & current_values}"
+        )
+
 
 class TestFleetErrorHelper:
     def test_fleet_error_rejects_unregistered_code(self):
@@ -72,17 +97,17 @@ class TestFleetErrorHelper:
     def test_fleet_error_returns_valid_json_envelope(self):
         from autoskillit.core import FleetErrorCode, fleet_error
 
-        result = fleet_error(FleetErrorCode.L2_TIMEOUT, "timed out")
+        result = fleet_error(FleetErrorCode.FLEET_L2_TIMEOUT, "timed out")
         data = json.loads(result)
         assert set(data.keys()) >= {"success", "error", "user_visible_message", "details"}
         assert data["success"] is False
-        assert data["error"] == "l2_timeout"
+        assert data["error"] == "fleet_l2_timeout"
         assert data["user_visible_message"] == "timed out"
 
     def test_fleet_error_details_default_none(self):
         from autoskillit.core import FleetErrorCode, fleet_error
 
-        result = json.loads(fleet_error(FleetErrorCode.L2_TIMEOUT, "msg"))
+        result = json.loads(fleet_error(FleetErrorCode.FLEET_L2_TIMEOUT, "msg"))
         assert result["details"] is None
 
     def test_fleet_error_details_json_serializable(self):
@@ -90,7 +115,7 @@ class TestFleetErrorHelper:
 
         result = json.loads(
             fleet_error(
-                FleetErrorCode.L2_TIMEOUT,
+                FleetErrorCode.FLEET_L2_TIMEOUT,
                 "msg",
                 details={"key": [1, 2]},
             )
@@ -99,7 +124,7 @@ class TestFleetErrorHelper:
 
         with pytest.raises(TypeError):
             fleet_error(
-                FleetErrorCode.L2_TIMEOUT,
+                FleetErrorCode.FLEET_L2_TIMEOUT,
                 "msg",
                 details={"fn": lambda: 0},  # type: ignore[arg-type]
             )

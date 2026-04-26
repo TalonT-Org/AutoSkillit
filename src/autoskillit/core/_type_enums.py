@@ -399,13 +399,13 @@ class FleetErrorCode(StrEnum):
     FLEET_MANIFEST_MISSING = "fleet_manifest_missing"
     FLEET_MANIFEST_CORRUPTED = "fleet_manifest_corrupted"
     FLEET_LOCK_NOT_INITIALIZED = "fleet_lock_not_initialized"
-    L2_TIMEOUT = "l2_timeout"
-    L2_NO_RESULT_BLOCK = "l2_no_result_block"
-    L2_PARSE_FAILED = "l2_parse_failed"
-    L2_STARTUP_OR_CRASH = "l2_startup_or_crash"
-    DISPATCH_BUDGET_EXCEEDED = "dispatch_budget_exceeded"
-    QUOTA_EXHAUSTED = "quota_exhausted"
-    CLEANUP_FAILED = "cleanup_failed"
+    FLEET_L2_TIMEOUT = "fleet_l2_timeout"
+    FLEET_L2_NO_RESULT_BLOCK = "fleet_l2_no_result_block"
+    FLEET_L2_PARSE_FAILED = "fleet_l2_parse_failed"
+    FLEET_L2_STARTUP_OR_CRASH = "fleet_l2_startup_or_crash"
+    FLEET_BUDGET_EXCEEDED = "fleet_budget_exceeded"
+    FLEET_QUOTA_EXHAUSTED = "fleet_quota_exhausted"
+    FLEET_CLEANUP_FAILED = "fleet_cleanup_failed"
 
 
 class FeatureLifecycle(StrEnum):

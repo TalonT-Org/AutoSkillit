@@ -320,8 +320,8 @@ class TestDispatchFoodTruckValidation:
             )
         )
 
-        assert result.get("error") != "l2_startup_or_crash", (
-            "Expected structured validation error, not L2_STARTUP_OR_CRASH. "
+        assert result.get("error") != "fleet_l2_startup_or_crash", (
+            "Expected structured validation error, not FLEET_L2_STARTUP_OR_CRASH. "
             "RecipeInfo.kind AttributeError is not fixed."
         )
 

@@ -471,6 +471,6 @@ async def dispatch_food_truck(
         from autoskillit.core import FleetErrorCode, fleet_error
 
         return fleet_error(
-            FleetErrorCode.L2_STARTUP_OR_CRASH,
+            FleetErrorCode.FLEET_L2_STARTUP_OR_CRASH,
             f"{type(exc).__name__}: {exc}",
         )

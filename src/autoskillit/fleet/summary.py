@@ -23,6 +23,20 @@ class CampaignSummaryStatus(StrEnum):
     SKIPPED = "skipped"
 
 
+class ParseFailureKind(StrEnum):
+    SENTINEL_MISSING = "sentinel_missing"
+    CAMPAIGN_ID_MISMATCH = "campaign_id_mismatch"
+    JSON_DECODE_ERROR = "json_decode_error"
+    SCHEMA_VALIDATION_ERROR = "schema_validation_error"
+    FIELD_ERROR = "field_error"
+
+
+@dataclass(frozen=True)
+class ParseFailure:
+    kind: ParseFailureKind
+    message: str
+
+
 @dataclass(frozen=True)
 class DispatchTokenUsage:
     """Per-dispatch token usage — exactly 4 fields, no extras."""
@@ -68,6 +82,8 @@ class CampaignSummary:
     per_dispatch: list[PerDispatchEntry]
     error_records: list[SummaryErrorRecord]
 
+
+CampaignParseResult = CampaignSummary | ParseFailure
 
 _SUMMARY_PATTERN = re.compile(
     r"---campaign-summary::(?P<cid>.+?)---[^\n]*\n"
@@ -137,26 +153,28 @@ def validate_campaign_summary(data: dict[str, Any]) -> list[str]:
     return errors
 
 
-def parse_campaign_summary(text: str, campaign_id: str) -> CampaignSummary | None:
+def parse_campaign_summary(text: str, campaign_id: str) -> CampaignParseResult:
     """Parse campaign summary from sentinel-wrapped text.
 
-    Returns None if:
-    - No matching sentinel markers for campaign_id
-    - Malformed JSON body
-    - Schema validation fails
+    Returns CampaignSummary on success, ParseFailure with a specific kind on any failure.
     """
     match = _SUMMARY_PATTERN.search(text)
     if match is None:
-        return None
+        return ParseFailure(
+            ParseFailureKind.SENTINEL_MISSING, "No campaign summary sentinel found"
+        )
     if match.group("cid") != campaign_id or match.group("cid_end") != campaign_id:
-        return None
+        return ParseFailure(
+            ParseFailureKind.CAMPAIGN_ID_MISMATCH,
+            f"Sentinel campaign_id {match.group('cid')!r} does not match expected {campaign_id!r}",
+        )
     try:
         data = json.loads(match.group("body"))
-    except json.JSONDecodeError:
-        return None
+    except json.JSONDecodeError as exc:
+        return ParseFailure(ParseFailureKind.JSON_DECODE_ERROR, str(exc))
     errors = validate_campaign_summary(data)
     if errors:
-        return None
+        return ParseFailure(ParseFailureKind.SCHEMA_VALIDATION_ERROR, "; ".join(errors))
     try:
         per_dispatch = [
             PerDispatchEntry(
@@ -193,8 +211,8 @@ def parse_campaign_summary(text: str, campaign_id: str) -> CampaignSummary | Non
             per_dispatch=per_dispatch,
             error_records=error_records,
         )
-    except (KeyError, TypeError, ValueError):
-        return None
+    except (KeyError, TypeError, ValueError) as exc:
+        return ParseFailure(ParseFailureKind.FIELD_ERROR, str(exc))
 
 
 def serialize_campaign_summary(summary: CampaignSummary) -> str:

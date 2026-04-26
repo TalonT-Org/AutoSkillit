@@ -1,0 +1,43 @@
+from_version: "0.9.158"
+to_version: "0.9.159"
+description: >
+  FleetErrorCode prefix rationalization: all error codes now use the fleet_ prefix.
+  Persisted campaign summary JSON containing error_records with old code values must
+  be updated.
+changes:
+  - id: fleet-error-code-prefix-normalization
+    description: >
+      FleetErrorCode enum members L2_*, DISPATCH_*, QUOTA_EXHAUSTED, and CLEANUP_FAILED
+      have been renamed to FLEET_L2_*, FLEET_BUDGET_EXCEEDED, FLEET_QUOTA_EXHAUSTED, and
+      FLEET_CLEANUP_FAILED respectively. Their string values changed from l2_*/dispatch_*/
+      quota_exhausted/cleanup_failed to fleet_l2_*/fleet_budget_exceeded/
+      fleet_quota_exhausted/fleet_cleanup_failed.
+    instruction: |
+      If you have persisted campaign summary JSON files (e.g. written by
+      serialize_campaign_summary), update any error_records[*].code values:
+        "l2_timeout"           -> "fleet_l2_timeout"
+        "l2_no_result_block"   -> "fleet_l2_no_result_block"
+        "l2_parse_failed"      -> "fleet_l2_parse_failed"
+        "l2_startup_or_crash"  -> "fleet_l2_startup_or_crash"
+        "dispatch_budget_exceeded" -> "fleet_budget_exceeded"
+        "quota_exhausted"      -> "fleet_quota_exhausted"
+        "cleanup_failed"       -> "fleet_cleanup_failed"
+
+      Any code using FleetErrorCode enum members by name must update:
+        FleetErrorCode.L2_TIMEOUT           -> FleetErrorCode.FLEET_L2_TIMEOUT
+        FleetErrorCode.L2_NO_RESULT_BLOCK   -> FleetErrorCode.FLEET_L2_NO_RESULT_BLOCK
+        FleetErrorCode.L2_PARSE_FAILED      -> FleetErrorCode.FLEET_L2_PARSE_FAILED
+        FleetErrorCode.L2_STARTUP_OR_CRASH  -> FleetErrorCode.FLEET_L2_STARTUP_OR_CRASH
+        FleetErrorCode.DISPATCH_BUDGET_EXCEEDED -> FleetErrorCode.FLEET_BUDGET_EXCEEDED
+        FleetErrorCode.QUOTA_EXHAUSTED      -> FleetErrorCode.FLEET_QUOTA_EXHAUSTED
+        FleetErrorCode.CLEANUP_FAILED       -> FleetErrorCode.FLEET_CLEANUP_FAILED
+    example_before: |
+      error_records:
+        - dispatch_name: "my-dispatch"
+          code: "l2_timeout"
+          message: "Timed out after 300s"
+    example_after: |
+      error_records:
+        - dispatch_name: "my-dispatch"
+          code: "fleet_l2_timeout"
+          message: "Timed out after 300s"

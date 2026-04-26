@@ -133,7 +133,7 @@ async def execute_dispatch(
     except Exception as exc:
         logger.error("execute_dispatch failed", exc_info=True)
         return fleet_error(
-            FleetErrorCode.L2_STARTUP_OR_CRASH,
+            FleetErrorCode.FLEET_L2_STARTUP_OR_CRASH,
             f"{type(exc).__name__}: {exc}",
         )
     finally:
@@ -269,7 +269,7 @@ async def _run_dispatch(
                 dispatch_id=dispatch_id,
                 l2_session_id=skill_result.session_id,
                 l2_pid=_l2_pid[0] if _l2_pid else 0,
-                reason="l2_timeout",
+                reason=FleetErrorCode.FLEET_L2_TIMEOUT,
                 token_usage=skill_result.token_usage or {},
                 started_at=started_at,
                 ended_at=ended_at,
@@ -277,7 +277,7 @@ async def _run_dispatch(
         )
         _post_dispatch_cleanup(tool_ctx, skill_result, cache_invalidator, quota_refresher)
         return fleet_error(
-            FleetErrorCode.L2_TIMEOUT,
+            FleetErrorCode.FLEET_L2_TIMEOUT,
             f"L2 dispatch '{effective_name}' timed out",
             details={
                 "dispatch_id": dispatch_id,
@@ -303,10 +303,10 @@ async def _run_dispatch(
         reason = parsed.payload.get("reason", "") if parsed.payload else ""
     elif parsed.outcome == "completed_dirty":
         final_status = DispatchStatus.FAILURE
-        reason = "l2_parse_failed"
+        reason = FleetErrorCode.FLEET_L2_PARSE_FAILED
     else:  # no_sentinel
         final_status = DispatchStatus.FAILURE
-        reason = "l2_no_result_block"
+        reason = FleetErrorCode.FLEET_L2_NO_RESULT_BLOCK
 
     append_dispatch_record(
         state_path,
@@ -346,7 +346,7 @@ async def _run_dispatch(
                 "dispatch_id": dispatch_id,
                 "l2_session_id": skill_result.session_id,
                 "l2_payload": None,
-                "reason": "l2_parse_failed",
+                "reason": FleetErrorCode.FLEET_L2_PARSE_FAILED,
                 "l2_raw_body": parsed.raw_body,
                 "l2_parse_error": parsed.parse_error,
                 "token_usage": skill_result.token_usage,
@@ -361,7 +361,7 @@ async def _run_dispatch(
                 "dispatch_id": dispatch_id,
                 "l2_session_id": skill_result.session_id,
                 "l2_payload": None,
-                "reason": "l2_no_result_block",
+                "reason": FleetErrorCode.FLEET_L2_NO_RESULT_BLOCK,
                 "l2_parse_source": parsed.source,
                 "token_usage": skill_result.token_usage,
                 "lifespan_started": skill_result.lifespan_started,

@@ -51,7 +51,7 @@ _VALID_SUMMARY_DICT: dict = {
     "error_records": [
         {
             "dispatch_name": "dispatch-2",
-            "code": "l2_timeout",
+            "code": "fleet_l2_timeout",
             "message": "Timed out after 300s",
             "l2_session_id": "sess-def",
         }
@@ -74,7 +74,6 @@ class TestCampaignSummarySchema:
         from autoskillit.fleet import CampaignSummary, parse_campaign_summary
 
         result = parse_campaign_summary(_VALID_SENTINEL_TEXT, _VALID_CAMPAIGN_ID)
-        assert result is not None
         assert isinstance(result, CampaignSummary)
         assert result.schema_version == 1
         assert result.campaign_id == _VALID_CAMPAIGN_ID
@@ -121,23 +120,29 @@ class TestCampaignSummarySchema:
         assert fields == {"input", "output", "cache_read", "cache_creation"}
 
     def test_sentinel_anchored_to_campaign_id(self):
-        from autoskillit.fleet import parse_campaign_summary
+        from autoskillit.fleet import ParseFailure, ParseFailureKind, parse_campaign_summary
 
         result = parse_campaign_summary(_VALID_SENTINEL_TEXT, "wrong-id")
-        assert result is None
+        assert isinstance(result, ParseFailure)
+        assert result.kind == ParseFailureKind.CAMPAIGN_ID_MISMATCH
 
     def test_sentinel_parse_missing_end_marker(self):
-        from autoskillit.fleet import parse_campaign_summary
+        from autoskillit.fleet import ParseFailure, ParseFailureKind, parse_campaign_summary
 
         text_no_end = f"---campaign-summary::{_VALID_CAMPAIGN_ID}---\n{{}}\n"
         result = parse_campaign_summary(text_no_end, _VALID_CAMPAIGN_ID)
-        assert result is None
+        assert isinstance(result, ParseFailure)
+        assert result.kind == ParseFailureKind.SENTINEL_MISSING
 
     def test_campaign_summary_schema_version_is_1(self):
-        from autoskillit.fleet import parse_campaign_summary, validate_campaign_summary
+        from autoskillit.fleet import (
+            CampaignSummary,
+            parse_campaign_summary,
+            validate_campaign_summary,
+        )
 
         result = parse_campaign_summary(_VALID_SENTINEL_TEXT, _VALID_CAMPAIGN_ID)
-        assert result is not None
+        assert isinstance(result, CampaignSummary)
         assert result.schema_version == 1
 
         data_v2 = {**_VALID_SUMMARY_DICT, "schema_version": 2}
@@ -159,15 +164,16 @@ class TestCampaignSummarySchema:
 
     def test_campaign_summary_roundtrip(self):
         from autoskillit.fleet import (
+            CampaignSummary,
             parse_campaign_summary,
             serialize_campaign_summary,
         )
 
         original = parse_campaign_summary(_VALID_SENTINEL_TEXT, _VALID_CAMPAIGN_ID)
-        assert original is not None
+        assert isinstance(original, CampaignSummary)
         text = serialize_campaign_summary(original)
         restored = parse_campaign_summary(text, _VALID_CAMPAIGN_ID)
-        assert restored is not None
+        assert isinstance(restored, CampaignSummary)
         assert restored.campaign_id == original.campaign_id
         assert restored.dispatch_count == original.dispatch_count
         assert restored.per_dispatch[0].name == original.per_dispatch[0].name
@@ -178,15 +184,15 @@ class TestCampaignSummarySchema:
         assert restored.error_records[0].code == original.error_records[0].code
 
     def test_campaign_summary_error_records_have_code_field(self):
-        from autoskillit.fleet import SummaryErrorRecord, parse_campaign_summary
+        from autoskillit.fleet import CampaignSummary, SummaryErrorRecord, parse_campaign_summary
 
         result = parse_campaign_summary(_VALID_SENTINEL_TEXT, _VALID_CAMPAIGN_ID)
-        assert result is not None
+        assert isinstance(result, CampaignSummary)
         assert len(result.error_records) == 1
         rec = result.error_records[0]
         assert isinstance(rec, SummaryErrorRecord)
         assert rec.dispatch_name == "dispatch-2"
-        assert rec.code == "l2_timeout"
+        assert rec.code == "fleet_l2_timeout"
         assert rec.message == "Timed out after 300s"
         assert rec.l2_session_id == "sess-def"
 
@@ -201,7 +207,7 @@ class TestCampaignSummarySchema:
             )
 
     def test_parse_campaign_summary_malformed_json(self):
-        from autoskillit.fleet import parse_campaign_summary
+        from autoskillit.fleet import ParseFailure, ParseFailureKind, parse_campaign_summary
 
         text = (
             f"---campaign-summary::{_VALID_CAMPAIGN_ID}---\n"
@@ -209,4 +215,57 @@ class TestCampaignSummarySchema:
             f"---end-campaign-summary::{_VALID_CAMPAIGN_ID}---"
         )
         result = parse_campaign_summary(text, _VALID_CAMPAIGN_ID)
-        assert result is None
+        assert isinstance(result, ParseFailure)
+        assert result.kind == ParseFailureKind.JSON_DECODE_ERROR
+
+    def test_parse_failure_sentinel_missing(self):
+        from autoskillit.fleet import ParseFailure, ParseFailureKind, parse_campaign_summary
+
+        result = parse_campaign_summary("no sentinel block here", _VALID_CAMPAIGN_ID)
+        assert isinstance(result, ParseFailure)
+        assert result.kind == ParseFailureKind.SENTINEL_MISSING
+        assert isinstance(result.message, str) and result.message
+
+    def test_parse_failure_campaign_id_mismatch(self):
+        from autoskillit.fleet import ParseFailure, ParseFailureKind, parse_campaign_summary
+
+        result = parse_campaign_summary(_VALID_SENTINEL_TEXT, "wrong-campaign-id")
+        assert isinstance(result, ParseFailure)
+        assert result.kind == ParseFailureKind.CAMPAIGN_ID_MISMATCH
+
+    def test_parse_failure_json_decode_error(self):
+        from autoskillit.fleet import ParseFailure, ParseFailureKind, parse_campaign_summary
+
+        text = (
+            f"---campaign-summary::{_VALID_CAMPAIGN_ID}---\n"
+            "not valid json {{{\n"
+            f"---end-campaign-summary::{_VALID_CAMPAIGN_ID}---"
+        )
+        result = parse_campaign_summary(text, _VALID_CAMPAIGN_ID)
+        assert isinstance(result, ParseFailure)
+        assert result.kind == ParseFailureKind.JSON_DECODE_ERROR
+
+    def test_parse_failure_schema_validation_error(self):
+        from autoskillit.fleet import ParseFailure, ParseFailureKind, parse_campaign_summary
+
+        bad_schema = {**_VALID_SUMMARY_DICT, "schema_version": 99}
+        text = _make_sentinel_text(bad_schema)
+        result = parse_campaign_summary(text, _VALID_CAMPAIGN_ID)
+        assert isinstance(result, ParseFailure)
+        assert result.kind == ParseFailureKind.SCHEMA_VALIDATION_ERROR
+
+    def test_parse_failure_field_error(self):
+        from autoskillit.fleet import ParseFailure, ParseFailureKind, parse_campaign_summary
+
+        bad_entry = {
+            "name": "d1",
+            "status": "success",
+            # elapsed_seconds omitted → KeyError
+            "token_usage": {"input": 1, "output": 1, "cache_read": 0, "cache_creation": 0},
+            "l2_session_id": "s",
+        }
+        data = {**_VALID_SUMMARY_DICT, "per_dispatch": [bad_entry]}
+        text = _make_sentinel_text(data)
+        result = parse_campaign_summary(text, _VALID_CAMPAIGN_ID)
+        assert isinstance(result, ParseFailure)
+        assert result.kind == ParseFailureKind.FIELD_ERROR

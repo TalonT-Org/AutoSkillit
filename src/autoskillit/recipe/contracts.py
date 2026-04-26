@@ -183,14 +183,19 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
     examples = skill_data.get("pattern_examples", [])
     write_behavior = skill_data.get("write_behavior")
     write_expected_when = skill_data.get("write_expected_when", [])
-    result_fields = [
-        ResultFieldSpec(
-            name=rf["name"],
-            type=rf["type"],
-            required=rf.get("required", True),
-        )
-        for rf in skill_data.get("result_fields", [])
-    ]
+    try:
+        result_fields = [
+            ResultFieldSpec(
+                name=rf["name"],
+                type=rf["type"],
+                required=rf.get("required", True),
+            )
+            for rf in skill_data.get("result_fields", [])
+        ]
+    except KeyError as exc:
+        raise KeyError(
+            f"Malformed result_fields entry for skill '{skill_name}': missing key {exc}"
+        ) from exc
     return SkillContract(
         inputs=inputs,
         outputs=outputs,

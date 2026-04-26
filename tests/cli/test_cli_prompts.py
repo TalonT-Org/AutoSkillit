@@ -460,14 +460,17 @@ def test_first_action_opens_with_open_kitchen():
 
 
 def test_open_kitchen_prompt_no_toolsearch_or_bash():
-    """_build_open_kitchen_prompt must not reference ToolSearch or Bash."""
+    """open_kitchen call instruction must not reference ToolSearch or Bash."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
     from autoskillit.cli._prompts import _build_open_kitchen_prompt
 
     prompt = _build_open_kitchen_prompt(mcp_prefix=DIRECT_PREFIX)
-    assert "ToolSearch" not in prompt
-    assert "Bash" not in prompt
-    assert "sleep" not in prompt.lower()
+    # Scope to the call instruction before the discipline block
+    discipline_idx = prompt.index("IMPORTANT")
+    preamble = prompt[:discipline_idx]
+    assert "ToolSearch" not in preamble
+    assert "Bash" not in preamble
+    assert "sleep" not in preamble.lower()
 
 
 def test_open_kitchen_prompt_calls_open_kitchen_directly():

@@ -72,11 +72,14 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
 
 def iter_display_categories(
     features: dict[str, bool],
+    *,
+    experimental_enabled: bool = False,
 ) -> tuple[tuple[str, tuple[str, ...]], ...]:
     return tuple(
         (name, tools)
         for name, tools in _DISPLAY_CATEGORIES
-        if name != "Fleet" or is_feature_enabled("fleet", features)
+        if name != "Fleet"
+        or is_feature_enabled("fleet", features, experimental_enabled=experimental_enabled)
     )
 
 

@@ -31,5 +31,3 @@ ci:
 github:
   default_repo: "TalonT-Org/AutoSkillit"
 
-features:
-  fleet: true  # Enable fleet on integration for active development

@@ -66,7 +66,9 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
 
     print(f"{_B}{_C}AUTOSKILLIT {__version__}{_R} {_D}Kitchen open. All tools active.{_R}")
     skip = {"Telemetry & Diagnostics", "Kitchen"}
-    for name, tools in iter_display_categories(config.features):
+    for name, tools in iter_display_categories(
+        config.features, experimental_enabled=config.experimental_enabled
+    ):
         if name in skip:
             continue
         tool_list = f"{_D}, {_R}".join(f"{_G}{t}{_R}" for t in tools)

@@ -411,11 +411,13 @@ class FleetErrorCode(StrEnum):
 class FeatureLifecycle(StrEnum):
     """Lifecycle stage of a registered feature gate.
 
-    EXPERIMENTAL — Off by default; explicit opt-in required via config or env var.
-    STABLE       — On by default; opt-out possible via config.
-    DEPRECATED   — Scheduled for removal; may be disabled without warning.
+    EXPERIMENTAL — On by default when experimental_enabled=True; disabled on main/stable.
+    STABLE       — On by default everywhere; opt-out via config.
+    DEPRECATED   — Scheduled for removal; follows default_enabled.
+    DISABLED     — Never enabled; config cannot override. For in-progress/unsafe features.
     """
 
     EXPERIMENTAL = "experimental"
     STABLE = "stable"
     DEPRECATED = "deprecated"
+    DISABLED = "disabled"

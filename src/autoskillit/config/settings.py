@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from autoskillit.core import (
     CATEGORY_TAGS,
     FEATURE_REGISTRY,
+    FeatureLifecycle,
     OutputFormat,
     atomic_write,
     dump_yaml_str,
@@ -339,17 +340,23 @@ class AutomationConfig:
     workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
     fleet: FleetConfig = field(default_factory=FleetConfig)
     features: dict[str, bool] = field(default_factory=dict)
+    experimental_enabled: bool = False
 
     @staticmethod
-    def _build_features_dict(raw: dict[str, Any]) -> dict[str, bool]:
+    def _build_features_dict(raw: dict[str, Any]) -> tuple[dict[str, bool], bool]:
         """Validate and coerce the features section from a raw config dict.
+
+        Returns (features_dict, experimental_enabled).
 
         Raises ConfigSchemaError for:
         - Unknown feature names (not in FEATURE_REGISTRY)
+        - Attempting to enable a DISABLED lifecycle feature
         - Dependency violations: enabling feature B without its required feature A
 
         Coerces all values to bool.
         """
+        raw = dict(raw)  # copy to avoid mutating caller's dict
+        experimental_enabled: bool = bool(raw.pop("experimental_enabled", False))
         result: dict[str, bool] = {}
         for name, value in raw.items():
             if not isinstance(name, str):
@@ -366,6 +373,12 @@ class AutomationConfig:
                     f"Feature {name!r} value must be a bool, "
                     f"got {type(value).__name__!r}: {value!r}"
                 )
+            if value is True:
+                if FEATURE_REGISTRY[name].lifecycle == FeatureLifecycle.DISABLED:
+                    raise ConfigSchemaError(
+                        f"Feature {name!r} has lifecycle DISABLED"
+                        " and cannot be explicitly enabled."
+                    )
             result[name] = value
 
         # Dependency validation
@@ -388,7 +401,7 @@ class AutomationConfig:
                         f"Enable {dep!r} first."
                     )
 
-        return result
+        return result, experimental_enabled
 
     @classmethod
     def from_dynaconf(cls, d: Dynaconf) -> AutomationConfig:
@@ -453,6 +466,10 @@ class AutomationConfig:
         _sk = _field_defaults(SkillsConfig)
         _wsc = _field_defaults(WorkspaceConfig)
         _fr = _field_defaults(FleetConfig)
+
+        _features_dict, _exp_enabled = AutomationConfig._build_features_dict(
+            dict(feat) if isinstance(feat, dict) else {}
+        )
 
         result = cls(
             test_check=TestCheckConfig(
@@ -602,12 +619,15 @@ class AutomationConfig:
                     val(fr, "default_timeout_sec", _fr["default_timeout_sec"])
                 ),
             ),
-            features=AutomationConfig._build_features_dict(
-                dict(feat) if isinstance(feat, dict) else {}
-            ),
+            features=_features_dict,
+            experimental_enabled=_exp_enabled,
         )
         try:
-            result.fleet.validate(is_feature_enabled("fleet", result.features))
+            result.fleet.validate(
+                is_feature_enabled(
+                    "fleet", result.features, experimental_enabled=result.experimental_enabled
+                )
+            )
         except ValueError as exc:
             raise ValueError(f"fleet config: {exc}") from exc
         return result
@@ -619,7 +639,12 @@ def _build_config_schema() -> dict[str, frozenset[str]]:
     for f in dataclasses.fields(AutomationConfig):
         # Special case: features is a dict[str, bool]; valid sub-keys come from FEATURE_REGISTRY
         if f.name == "features":
-            schema["features"] = frozenset(FEATURE_REGISTRY.keys())
+            schema["features"] = frozenset(FEATURE_REGISTRY.keys()) | frozenset(
+                {"experimental_enabled"}
+            )
+            continue
+        # Skip the scalar experimental_enabled field — it is handled under the features section
+        if f.name == "experimental_enabled":
             continue
         sub_type: type | None = None
         if f.default_factory is not dataclasses.MISSING:  # type: ignore[misc]

@@ -8,9 +8,15 @@ full AutomationConfig to keep core/ free of config/ imports.
 from __future__ import annotations
 
 from ._type_constants import FEATURE_REGISTRY
+from ._type_enums import FeatureLifecycle
 
 
-def is_feature_enabled(name: str, features: dict[str, bool]) -> bool:
+def is_feature_enabled(
+    name: str,
+    features: dict[str, bool],
+    *,
+    experimental_enabled: bool = False,
+) -> bool:
     """Check whether a named feature is enabled.
 
     Parameters
@@ -20,11 +26,15 @@ def is_feature_enabled(name: str, features: dict[str, bool]) -> bool:
     features:
         Resolved features dict from ``AutomationConfig.features``. Typically
         passed as ``config.features`` at call sites; never pass the full config.
+    experimental_enabled:
+        When True, all EXPERIMENTAL lifecycle features are enabled unless explicitly
+        overridden by a per-feature entry in ``features``.
 
     Returns
     -------
     bool
-        ``features[name]`` if the key is present; otherwise ``FeatureDef.default_enabled``.
+        Resolution order:
+        DISABLED hard-off → explicit override → experimental blanket → default_enabled.
 
     Raises
     ------
@@ -34,10 +44,20 @@ def is_feature_enabled(name: str, features: dict[str, bool]) -> bool:
     defn = FEATURE_REGISTRY.get(name)
     if defn is None:
         raise KeyError(f"Unknown feature: {name!r}")
-    return features.get(name, defn.default_enabled)
+    if defn.lifecycle == FeatureLifecycle.DISABLED:
+        return False
+    if name in features:
+        return features[name]
+    if experimental_enabled and defn.lifecycle == FeatureLifecycle.EXPERIMENTAL:
+        return True
+    return defn.default_enabled
 
 
-def _collect_disabled_feature_tags(features: dict[str, bool]) -> frozenset[str]:
+def _collect_disabled_feature_tags(
+    features: dict[str, bool],
+    *,
+    experimental_enabled: bool = False,
+) -> frozenset[str]:
     """Return feature tags that should be suppressed.
 
     Single source of truth used by _fleet_auto_gate_boot and _redisable_subsets.
@@ -48,7 +68,7 @@ def _collect_disabled_feature_tags(features: dict[str, bool]) -> frozenset[str]:
     for name, defn in FEATURE_REGISTRY.items():
         if not defn.tool_tags:
             continue
-        if is_feature_enabled(name, features):
+        if is_feature_enabled(name, features, experimental_enabled=experimental_enabled):
             enabled_tags |= defn.tool_tags
         else:
             disabled_tags |= defn.tool_tags

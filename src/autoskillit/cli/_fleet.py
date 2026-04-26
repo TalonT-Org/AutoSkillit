@@ -29,10 +29,12 @@ _log = get_logger(__name__)
 
 def _require_fleet(cfg: AutomationConfig) -> None:
     """Exit with clear message if fleet feature is not enabled."""
-    if not is_feature_enabled("fleet", cfg.features):
+    if not is_feature_enabled(
+        "fleet", cfg.features, experimental_enabled=cfg.experimental_enabled
+    ):
         print(
             "The 'fleet' feature is not enabled.\n"
-            "Enable it with: features.fleet: true in your config\n"
+            "Enable it with: features.experimental_enabled: true in your config\n"
             "Or set: AUTOSKILLIT_FEATURES__FLEET=true",
             file=sys.stderr,
         )

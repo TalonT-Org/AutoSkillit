@@ -11,13 +11,14 @@ import pytest
 
 
 def test_feature_lifecycle_enum_exists():
-    """FeatureLifecycle StrEnum exists with 3 members."""
+    """FeatureLifecycle StrEnum exists with 4 members."""
     from autoskillit.core._type_enums import FeatureLifecycle
 
     assert set(FeatureLifecycle) == {
         FeatureLifecycle.EXPERIMENTAL,
         FeatureLifecycle.STABLE,
         FeatureLifecycle.DEPRECATED,
+        FeatureLifecycle.DISABLED,
     }
 
 
@@ -159,25 +160,34 @@ def test_feature_skill_categories_match_real_skills():
 
 
 def test_is_feature_enabled_defaults():
-    """is_feature_enabled uses FeatureDef.default_enabled when key absent from dict."""
+    """is_feature_enabled uses FeatureDef.default_enabled when experimental_enabled=False."""
     from autoskillit.core._type_constants import FEATURE_REGISTRY
+    from autoskillit.core._type_enums import FeatureLifecycle
     from autoskillit.core.feature_flags import is_feature_enabled
 
     for name, defn in FEATURE_REGISTRY.items():
-        assert is_feature_enabled(name, {}) == defn.default_enabled, (
-            f"{name}: is_feature_enabled({name!r}, {{}}) should be {defn.default_enabled}"
+        expected = False if defn.lifecycle == FeatureLifecycle.DISABLED else defn.default_enabled
+        result = is_feature_enabled(name, {}, experimental_enabled=False)
+        assert result == expected, (
+            f"{name}: is_feature_enabled({name!r}, {{}}, experimental_enabled=False)"
+            f" should be {expected}"
         )
 
 
 def test_is_feature_enabled_override():
-    """is_feature_enabled respects explicit overrides in the features dict."""
+    """is_feature_enabled respects explicit overrides in the features dict (except DISABLED)."""
     from autoskillit.core._type_constants import FEATURE_REGISTRY
+    from autoskillit.core._type_enums import FeatureLifecycle
     from autoskillit.core.feature_flags import is_feature_enabled
 
     assert len(FEATURE_REGISTRY) > 0, "FEATURE_REGISTRY must not be empty"
-    for name in FEATURE_REGISTRY:
-        assert is_feature_enabled(name, {name: True}) is True
-        assert is_feature_enabled(name, {name: False}) is False
+    for name, defn in FEATURE_REGISTRY.items():
+        if defn.lifecycle == FeatureLifecycle.DISABLED:
+            assert is_feature_enabled(name, {name: True}) is False
+            assert is_feature_enabled(name, {name: False}) is False
+        else:
+            assert is_feature_enabled(name, {name: True}) is True
+            assert is_feature_enabled(name, {name: False}) is False
 
 
 def test_is_feature_enabled_unknown():
@@ -236,7 +246,8 @@ def test_config_dependency_validation(monkeypatch):
     with pytest.raises(ConfigSchemaError):
         AutomationConfig._build_features_dict({"test_dep_b": True, "test_dep_a": False})
     # B enabled with A → no error
-    AutomationConfig._build_features_dict({"test_dep_b": True, "test_dep_a": True})
+    result, _ = AutomationConfig._build_features_dict({"test_dep_b": True, "test_dep_a": True})
+    assert result["test_dep_b"] is True
 
 
 def test_no_unregistered_feature_tag_on_tools():
@@ -296,8 +307,9 @@ def test_fleet_feature_default_disabled():
 def test_build_features_dict_accepts_fleet_key():
     from autoskillit.config.settings import AutomationConfig
 
-    result = AutomationConfig._build_features_dict({"fleet": True})
+    result, exp_enabled = AutomationConfig._build_features_dict({"fleet": True})
     assert result == {"fleet": True}
+    assert exp_enabled is False
 
 
 def test_build_features_dict_franchise_raises_config_schema_error():
@@ -306,3 +318,171 @@ def test_build_features_dict_franchise_raises_config_schema_error():
 
     with pytest.raises(ConfigSchemaError, match="franchise"):
         AutomationConfig._build_features_dict({"franchise": True})
+
+
+# ── T1: DISABLED lifecycle ──────────────────────────────────────────────────
+
+
+def test_is_feature_enabled_disabled_lifecycle_always_false(monkeypatch):
+    """DISABLED lifecycle features return False regardless of config or experimental_enabled."""
+    import autoskillit.core._type_constants as tc
+    from autoskillit.core._type_constants import FeatureDef
+    from autoskillit.core._type_enums import FeatureLifecycle
+    from autoskillit.core.feature_flags import is_feature_enabled
+
+    disabled_def = FeatureDef(
+        name="test_disabled_feat",
+        lifecycle=FeatureLifecycle.DISABLED,
+        description="disabled test feature",
+        tool_tags=frozenset(),
+        skill_categories=frozenset(),
+        import_package=None,
+    )
+    monkeypatch.setitem(tc.FEATURE_REGISTRY, "test_disabled_feat", disabled_def)
+    assert is_feature_enabled("test_disabled_feat", {}, experimental_enabled=False) is False
+    assert (
+        is_feature_enabled(
+            "test_disabled_feat", {"test_disabled_feat": True}, experimental_enabled=True
+        )
+        is False
+    )
+
+
+def test_build_features_dict_rejects_enabling_disabled_feature(monkeypatch):
+    """_build_features_dict raises ConfigSchemaError if a DISABLED feature is set to True."""
+    import autoskillit.core._type_constants as tc
+    from autoskillit.config.settings import AutomationConfig, ConfigSchemaError
+    from autoskillit.core._type_constants import FeatureDef
+    from autoskillit.core._type_enums import FeatureLifecycle
+
+    disabled_def = FeatureDef(
+        name="test_cannot_enable",
+        lifecycle=FeatureLifecycle.DISABLED,
+        description="cannot enable",
+        tool_tags=frozenset(),
+        skill_categories=frozenset(),
+        import_package=None,
+    )
+    monkeypatch.setitem(tc.FEATURE_REGISTRY, "test_cannot_enable", disabled_def)
+    with pytest.raises(ConfigSchemaError, match="DISABLED"):
+        AutomationConfig._build_features_dict({"test_cannot_enable": True})
+    result, _ = AutomationConfig._build_features_dict({"test_cannot_enable": False})
+    assert result["test_cannot_enable"] is False
+
+
+# ── T2: experimental_enabled blanket toggle ────────────────────────────────
+
+
+def test_is_feature_enabled_experimental_blanket(monkeypatch):
+    """EXPERIMENTAL feature is True when experimental_enabled=True and no override."""
+    import autoskillit.core._type_constants as tc
+    from autoskillit.core._type_constants import FeatureDef
+    from autoskillit.core._type_enums import FeatureLifecycle
+    from autoskillit.core.feature_flags import is_feature_enabled
+
+    exp_def = FeatureDef(
+        name="test_exp_feat",
+        lifecycle=FeatureLifecycle.EXPERIMENTAL,
+        description="experimental",
+        tool_tags=frozenset(),
+        skill_categories=frozenset(),
+        import_package=None,
+        default_enabled=False,
+    )
+    monkeypatch.setitem(tc.FEATURE_REGISTRY, "test_exp_feat", exp_def)
+    assert is_feature_enabled("test_exp_feat", {}, experimental_enabled=False) is False
+    assert is_feature_enabled("test_exp_feat", {}, experimental_enabled=True) is True
+    assert (
+        is_feature_enabled("test_exp_feat", {"test_exp_feat": False}, experimental_enabled=True)
+        is False
+    )
+
+
+def test_is_feature_enabled_stable_unaffected_by_experimental_enabled(monkeypatch):
+    """experimental_enabled has no effect on STABLE features."""
+    import autoskillit.core._type_constants as tc
+    from autoskillit.core._type_constants import FeatureDef
+    from autoskillit.core._type_enums import FeatureLifecycle
+    from autoskillit.core.feature_flags import is_feature_enabled
+
+    stable_def = FeatureDef(
+        name="test_stable_feat",
+        lifecycle=FeatureLifecycle.STABLE,
+        description="stable",
+        tool_tags=frozenset(),
+        skill_categories=frozenset(),
+        import_package=None,
+        default_enabled=True,
+    )
+    monkeypatch.setitem(tc.FEATURE_REGISTRY, "test_stable_feat", stable_def)
+    assert is_feature_enabled("test_stable_feat", {}, experimental_enabled=True) is True
+    assert is_feature_enabled("test_stable_feat", {}, experimental_enabled=False) is True
+
+
+# ── T3: AutomationConfig.experimental_enabled field ────────────────────────
+
+
+def test_automation_config_experimental_enabled_field():
+    """AutomationConfig has experimental_enabled: bool defaulting to False."""
+    from autoskillit.config.settings import AutomationConfig
+
+    cfg = AutomationConfig()
+    assert hasattr(cfg, "experimental_enabled")
+    assert cfg.experimental_enabled is False
+
+
+def test_build_features_dict_extracts_experimental_enabled():
+    """_build_features_dict returns (dict, bool) and strips experimental_enabled from dict."""
+    from autoskillit.config.settings import AutomationConfig
+
+    result, exp_enabled = AutomationConfig._build_features_dict({"experimental_enabled": True})
+    assert exp_enabled is True
+    assert "experimental_enabled" not in result
+
+
+def test_build_features_dict_experimental_enabled_defaults_false():
+    """_build_features_dict returns experimental_enabled=False when key absent."""
+    from autoskillit.config.settings import AutomationConfig
+
+    result, exp_enabled = AutomationConfig._build_features_dict({})
+    assert exp_enabled is False
+    assert result == {}
+
+
+def test_build_config_schema_accepts_experimental_enabled():
+    """validate_layer_keys does not raise for features.experimental_enabled."""
+    from autoskillit.config.settings import validate_layer_keys
+
+    validate_layer_keys(
+        {"features": {"experimental_enabled": True}},
+        layer_path="test",
+        is_secrets_layer=False,
+    )
+
+
+# ── T4: defaults.yaml ships experimental_enabled: true ─────────────────────
+
+
+def test_defaults_yaml_has_experimental_enabled_true():
+    """Package defaults.yaml sets experimental_enabled=true; no per-feature entries."""
+    import yaml
+
+    from autoskillit.core.paths import pkg_root
+
+    defaults = yaml.safe_load((pkg_root() / "config" / "defaults.yaml").read_text())
+    features = defaults.get("features", {})
+    assert features.get("experimental_enabled") is True
+    assert "fleet" not in features, "fleet entry removed from defaults.yaml"
+    assert "planner" not in features, "planner entry removed from defaults.yaml"
+
+
+def test_load_config_integration_experimental_enabled(tmp_path):
+    """load_config resolves cfg.experimental_enabled=True from defaults.yaml."""
+    import os
+    from unittest.mock import patch
+
+    from autoskillit.config.settings import load_config
+
+    with patch.dict(os.environ, {}, clear=False):
+        cfg = load_config(tmp_path)
+    assert cfg.experimental_enabled is True

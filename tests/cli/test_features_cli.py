@@ -20,7 +20,8 @@ def test_features_list_shows_registry(
     """features list output includes all registered feature names and lifecycle values."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
-        "autoskillit.config.load_config", lambda path: type("C", (), {"features": {}})()
+        "autoskillit.config.load_config",
+        lambda path: type("C", (), {"features": {}, "experimental_enabled": False})(),
     )
     from autoskillit.cli._features import features_list
 
@@ -42,7 +43,9 @@ def test_features_list_shows_effective_state(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
         "autoskillit.config.load_config",
-        lambda path: type("C", (), {"features": {"fleet": False}})(),
+        lambda path: type(
+            "C", (), {"features": {"fleet": False}, "experimental_enabled": False}
+        )(),
     )
     from autoskillit.cli._features import features_list
 
@@ -65,7 +68,8 @@ def test_features_status_detail(
     """features status fleet shows all FeatureDef fields."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
-        "autoskillit.config.load_config", lambda path: type("C", (), {"features": {}})()
+        "autoskillit.config.load_config",
+        lambda path: type("C", (), {"features": {}, "experimental_enabled": False})(),
     )
     from autoskillit.cli._features import features_status
 
@@ -87,7 +91,8 @@ def test_features_status_unknown(monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     """features status exits 1 for an unknown feature name."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
-        "autoskillit.config.load_config", lambda path: type("C", (), {"features": {}})()
+        "autoskillit.config.load_config",
+        lambda path: type("C", (), {"features": {}, "experimental_enabled": False})(),
     )
     from autoskillit.cli._features import features_status
 

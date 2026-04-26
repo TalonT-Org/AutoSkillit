@@ -1360,7 +1360,7 @@ async def test_redisable_subsets_uses_shared_helper() -> None:
         mock_h.return_value = frozenset({"fleet"})
         await _redisable_subsets(mock_ctx, [], features={"fleet": False})
 
-    mock_h.assert_called_once_with({"fleet": False})
+    mock_h.assert_called_once_with({"fleet": False}, experimental_enabled=False)
 
 
 # ---------------------------------------------------------------------------

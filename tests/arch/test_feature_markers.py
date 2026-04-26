@@ -3,6 +3,7 @@
 Also contains:
 - off-state smoke test: package imports cleanly regardless of feature env state
 - visibility round-trip: MCP tool listing respects fleet feature state
+- generic marker test: all feature-dir test files carry appropriate feature markers
 """
 
 from __future__ import annotations
@@ -25,6 +26,8 @@ _FLEET_CROSS_DIR_FILES = [
     _TESTS_ROOT / "server" / "test_tools_dispatch.py",
     _TESTS_ROOT / "cli" / "test_food_truck_prompt.py",
     _TESTS_ROOT / "cli" / "test_l3_orchestrator_prompt.py",
+    _TESTS_ROOT / "cli" / "test_reap.py",
+    _TESTS_ROOT / "cli" / "test_signal_guard.py",
 ]
 
 # Union: all files requiring pytestmark feature("fleet")
@@ -49,9 +52,6 @@ _FLEET_FUNC_MARKERS: dict[str, set[str]] = {
         "test_list_recipes_mcp_tool_hides_campaign_when_fleet_disabled",
     },
 }
-
-# Auto-discover all test files in the planner directory — self-maintaining
-_PLANNER_DIR_FILES = sorted((_TESTS_ROOT / "planner").glob("test_*.py"))
 
 # Infrastructure files that must NOT have a feature("fleet") pytestmark
 _INFRASTRUCTURE_FILE_EXCLUSIONS = [
@@ -135,6 +135,30 @@ def test_fleet_test_files_carry_feature_marker():
     )
 
 
+def test_all_feature_dir_test_files_carry_feature_marker():
+    """For every feature in FEATURE_REGISTRY with a tests/{name}/ directory,
+    all test_*.py files carry pytest.mark.feature(name) in pytestmark."""
+    from autoskillit.core import FEATURE_REGISTRY
+
+    missing = []
+    checked_count = 0
+    for feat_name in FEATURE_REGISTRY:
+        feat_dir = _TESTS_ROOT / feat_name
+        if not feat_dir.is_dir():
+            continue
+        for path in sorted(feat_dir.glob("test_*.py")):
+            checked_count += 1
+            if not _pytestmark_has_feature(path.read_text(), feat_name):
+                missing.append(f"{path.relative_to(_TESTS_ROOT)} (feature={feat_name!r})")
+    assert checked_count > 0, (
+        "No feature test directories found — FEATURE_REGISTRY has no tests/{name}/ directories. "
+        "Add at least one feature directory under tests/ or update FEATURE_REGISTRY."
+    )
+    assert not missing, "Files missing pytest.mark.feature(name) in pytestmark:\n" + "\n".join(
+        f"  {r}" for r in missing
+    )
+
+
 def test_fleet_class_markers_present():
     """Specific test classes must carry @pytest.mark.feature('fleet') decorator."""
     missing = []
@@ -162,20 +186,6 @@ def test_fleet_func_markers_present():
                 missing.append(f"{rel}::{fn}")
     assert not missing, "These functions are missing @pytest.mark.feature('fleet'):\n" + "\n".join(
         f"  {r}" for r in missing
-    )
-
-
-def test_planner_test_files_carry_feature_marker():
-    """Every planner test file must have feature('planner') in its pytestmark."""
-    missing = []
-    for path in _PLANNER_DIR_FILES:
-        rel = path.relative_to(_TESTS_ROOT)
-        assert path.exists(), f"Expected planner test file not found: {path}"
-        if not _pytestmark_has_feature(path.read_text(), "planner"):
-            missing.append(str(rel))
-    assert not missing, (
-        "These files are missing pytest.mark.feature('planner') in pytestmark:\n"
-        + "\n".join(f"  {r}" for r in missing)
     )
 
 

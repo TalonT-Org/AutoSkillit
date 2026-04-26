@@ -152,6 +152,8 @@ def _is_skill_disabled(
     disabled: list[str],
     custom_tags: dict[str, list[str]],
     features: dict[str, bool],
+    *,
+    experimental_enabled: bool = False,
 ) -> bool:
     """Return True if skill should be excluded due to a disabled subset.
 
@@ -174,7 +176,7 @@ def _is_skill_disabled(
     enabled_cats: set[str] = set()
     disabled_cats: set[str] = set()
     for feat_name, feat_def in FEATURE_REGISTRY.items():
-        if is_feature_enabled(feat_name, features):
+        if is_feature_enabled(feat_name, features, experimental_enabled=experimental_enabled):
             enabled_cats |= feat_def.skill_categories
         else:
             disabled_cats |= feat_def.skill_categories
@@ -221,6 +223,7 @@ def _should_inject_skill(
     effective_disabled: frozenset[str],
     effective_custom_tags: dict[str, list[str]],
     features: dict[str, bool],
+    experimental_enabled: bool = False,
 ) -> bool:
     """Return True if this skill should be written to the ephemeral session dir.
 
@@ -235,7 +238,13 @@ def _should_inject_skill(
     if skill_info.name in overrides:
         return False
     # Apply effective filtering
-    if _is_skill_disabled(skill_info, list(effective_disabled), effective_custom_tags, features):
+    if _is_skill_disabled(
+        skill_info,
+        list(effective_disabled),
+        effective_custom_tags,
+        features,
+        experimental_enabled=experimental_enabled,
+    ):
         return False
     return True
 
@@ -393,8 +402,14 @@ class DefaultSessionSkillManager:
             effective_custom_tags = dict(config.subsets.custom_tags)
 
         packs_enabled: list[str] = [] if config is None else list(config.packs.enabled)
+        from autoskillit.core import FeatureLifecycle
+
         session_features: dict[str, bool] = (
-            {name: True for name in FEATURE_REGISTRY}
+            {
+                name: True
+                for name, defn in FEATURE_REGISTRY.items()
+                if defn.lifecycle != FeatureLifecycle.DISABLED
+            }
             if cook_session
             else (config.features if config is not None else {})
         )
@@ -404,7 +419,11 @@ class DefaultSessionSkillManager:
             enabled_tool_tags: set[str] = set()
             disabled_tool_tags: set[str] = set()
             for feature_name, feature_def in FEATURE_REGISTRY.items():
-                if is_feature_enabled(feature_name, config.features):
+                if is_feature_enabled(
+                    feature_name,
+                    config.features,
+                    experimental_enabled=config.experimental_enabled,
+                ):
                     enabled_tool_tags |= feature_def.tool_tags
                 else:
                     disabled_tool_tags |= feature_def.tool_tags
@@ -437,6 +456,11 @@ class DefaultSessionSkillManager:
                 effective_disabled=effective_disabled,
                 effective_custom_tags=effective_custom_tags,
                 features=session_features,
+                experimental_enabled=(
+                    config.experimental_enabled
+                    if config is not None and not cook_session
+                    else False
+                ),
             ):
                 if skill_info.source == SkillSource.BUNDLED:
                     _log.debug("init_session_plugin_dir_skip", skill=skill_info.name)

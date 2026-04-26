@@ -36,6 +36,10 @@ class ParseFailure:
     kind: ParseFailureKind
     message: str
 
+    def __post_init__(self) -> None:
+        if not self.message:
+            raise ValueError("ParseFailure.message must not be empty")
+
 
 @dataclass(frozen=True)
 class DispatchTokenUsage:
@@ -164,14 +168,18 @@ def parse_campaign_summary(text: str, campaign_id: str) -> CampaignParseResult:
             ParseFailureKind.SENTINEL_MISSING, "No campaign summary sentinel found"
         )
     if match.group("cid") != campaign_id or match.group("cid_end") != campaign_id:
+        cid, cid_end = match.group("cid"), match.group("cid_end")
         return ParseFailure(
             ParseFailureKind.CAMPAIGN_ID_MISMATCH,
-            f"Sentinel campaign_id {match.group('cid')!r} does not match expected {campaign_id!r}",
+            f"Sentinel ids {cid!r}/{cid_end!r} do not match expected {campaign_id!r}",
         )
     try:
         data = json.loads(match.group("body"))
     except json.JSONDecodeError as exc:
-        return ParseFailure(ParseFailureKind.JSON_DECODE_ERROR, str(exc))
+        return ParseFailure(
+            ParseFailureKind.JSON_DECODE_ERROR,
+            f"{exc.msg} (line {exc.lineno} col {exc.colno})",
+        )
     errors = validate_campaign_summary(data)
     if errors:
         return ParseFailure(ParseFailureKind.SCHEMA_VALIDATION_ERROR, "; ".join(errors))
@@ -212,7 +220,7 @@ def parse_campaign_summary(text: str, campaign_id: str) -> CampaignParseResult:
             error_records=error_records,
         )
     except (KeyError, TypeError, ValueError) as exc:
-        return ParseFailure(ParseFailureKind.FIELD_ERROR, str(exc))
+        return ParseFailure(ParseFailureKind.FIELD_ERROR, f"Field extraction failed: {exc}")
 
 
 def serialize_campaign_summary(summary: CampaignSummary) -> str:

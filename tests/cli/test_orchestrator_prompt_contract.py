@@ -102,7 +102,8 @@ class TestOpenKitchenRetryOnUnavailable:
         # Orchestrator prompt: retry must be in FIRST ACTION section
         prompt = _build_orchestrator_prompt("demo", "mcp__autoskillit__")
         fa_start = prompt.index("FIRST ACTION")
-        fa_end = prompt.index("During pipeline execution", fa_start)
+        fa_end = prompt.find("During pipeline execution", fa_start)
+        assert fa_end != -1, "'During pipeline execution' section not found after FIRST ACTION"
         first_action = prompt[fa_start:fa_end]
 
         assert "retry" in first_action.lower(), (

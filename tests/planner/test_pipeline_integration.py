@@ -103,10 +103,8 @@ def test_multi_phase_pipeline_end_to_end(tmp_path: Path) -> None:
         },
     )
 
-    # build_wp_manifest
     build_wp_manifest(str(assignments_dir), str(wp_dir))
 
-    # Write WP results
     _write_json(
         wp_dir / "P1-A1-WP1_result.json",
         make_wp_result("P1-A1-WP1", deliverables=["src/core.py"]),
@@ -116,11 +114,9 @@ def test_multi_phase_pipeline_end_to_end(tmp_path: Path) -> None:
         make_wp_result("P2-A1-WP1", deliverables=["src/app.py"], depends_on=["P1-A1-WP1"]),
     )
 
-    # validate_plan
     validate_result = validate_plan(str(tmp_path))
     assert validate_result["verdict"] == "pass", validate_result
 
-    # compile_plan
     compile_result = compile_plan(str(tmp_path), "integration test task", "/src")
 
     plan_path = Path(compile_result["plan_path"])

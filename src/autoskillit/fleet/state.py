@@ -273,13 +273,14 @@ def build_protected_campaign_ids(project_dir: Path) -> frozenset[str]:
     Reads fleet state files from ``{project_dir}/.autoskillit/temp/dispatches/``.
     A campaign is protected if any of its dispatch records has a status that is NOT
     in the terminal set {success, failure, skipped, released}.
-    Returns an empty frozenset on any error (missing dir, corrupt files, permission errors).
+    Returns partially-accumulated results on unexpected errors rather than empty
+    frozenset, so active campaigns processed before a failure are still protected.
     """
+    protected: set[str] = set()
     try:
         dispatches_dir = project_dir / ".autoskillit" / "temp" / "dispatches"
         if not dispatches_dir.is_dir():
             return frozenset()
-        protected: set[str] = set()
         for state_file in dispatches_dir.glob("*.json"):
             try:
                 data = json.loads(state_file.read_text(encoding="utf-8"))
@@ -300,7 +301,7 @@ def build_protected_campaign_ids(project_dir: Path) -> frozenset[str]:
         return frozenset(protected)
     except Exception:
         _log.warning("campaign_ids_protection_error", exc_info=True)
-        return frozenset()
+        return frozenset(protected)
 
 
 def resume_campaign_from_state(

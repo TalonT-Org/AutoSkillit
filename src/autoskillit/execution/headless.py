@@ -1101,6 +1101,7 @@ async def _execute_claude_headless(
                 campaign_id=campaign_id,
                 dispatch_id=dispatch_id,
                 project_dir=project_dir,
+                get_protected_ids=ctx.get_protected_campaign_ids,
                 session_id="",
                 pid=0,
                 skill_command=skill_command,
@@ -1140,6 +1141,7 @@ async def _execute_claude_headless(
                     campaign_id=campaign_id,
                     dispatch_id=dispatch_id,
                     project_dir=project_dir,
+                    get_protected_ids=ctx.get_protected_campaign_ids,
                     session_id="",
                     pid=0,
                     skill_command=skill_command,
@@ -1235,6 +1237,7 @@ async def _execute_claude_headless(
                 campaign_id=campaign_id,
                 dispatch_id=dispatch_id,
                 project_dir=project_dir,
+                get_protected_ids=ctx.get_protected_campaign_ids,
                 session_id=skill_result.session_id,
                 pid=result.pid,
                 skill_command=skill_command,
@@ -1493,7 +1496,7 @@ class DefaultHeadlessExecutor:
             output_format_value=cfg.run_skill.output_format.value,
         )
 
-        effective_timeout = timeout if timeout is not None else fleet_cfg.l2_default_timeout_sec
+        effective_timeout = timeout if timeout is not None else fleet_cfg.default_timeout_sec
         effective_stale = (
             stale_threshold if stale_threshold is not None else cfg.run_skill.stale_threshold
         )

@@ -289,15 +289,15 @@ class WorkspaceConfig:
 
 @dataclass
 class FleetConfig:
-    l2_default_timeout_sec: int = 3600
+    default_timeout_sec: int = 3600
 
     def validate(self, feature_enabled: bool) -> None:
         """Validate only when the feature is active."""
         if not feature_enabled:
             return
-        if self.l2_default_timeout_sec <= 0:
+        if self.default_timeout_sec <= 0:
             raise ValueError(
-                f"l2_default_timeout_sec must be positive, got {self.l2_default_timeout_sec}"
+                f"default_timeout_sec must be positive, got {self.default_timeout_sec}"
             )
 
 
@@ -598,8 +598,8 @@ class AutomationConfig:
                 temp_dir=val(ws_raw, "temp_dir", _wsc["temp_dir"]) or None,
             ),
             fleet=FleetConfig(
-                l2_default_timeout_sec=int(
-                    val(fr, "l2_default_timeout_sec", _fr["l2_default_timeout_sec"])
+                default_timeout_sec=int(
+                    val(fr, "default_timeout_sec", _fr["default_timeout_sec"])
                 ),
             ),
             features=AutomationConfig._build_features_dict(

@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from autoskillit.core import atomic_write, get_logger, write_versioned_json
+from autoskillit.planner.schema import validate_assignment_result, validate_phase_result
 
 _logger = get_logger(__name__)
 
@@ -112,23 +113,22 @@ def build_assignment_manifest(
     parsed_phases = []
     for f in phase_files:
         try:
-            data = json.loads(f.read_text())
+            raw = json.loads(f.read_text())
         except json.JSONDecodeError as exc:
             raise json.JSONDecodeError(
                 f"Failed to parse {f}: {exc.msg}", exc.doc, exc.pos
             ) from exc
-        pn = data.get("phase_number", 0)
-        if not isinstance(pn, int):
-            raise TypeError(
-                f"phase_number in {f} must be an integer, got {type(pn).__name__}: {pn!r}"
-            )
+        try:
+            data = validate_phase_result(raw)
+        except ValueError as exc:
+            raise ValueError(f"Invalid phase result in {f}: {exc}") from exc
         parsed_phases.append(data)
-    parsed_phases.sort(key=lambda d: d.get("phase_number", 0))
+    parsed_phases.sort(key=lambda d: d["phase_number"])
 
     items = []
     for phase_data in parsed_phases:
-        phase_number = phase_data.get("phase_number", 0)
-        assignments = phase_data.get("assignments", [])
+        phase_number = phase_data["phase_number"]
+        assignments = phase_data["assignments"]
         for seq, assignment in enumerate(assignments, start=1):
             item_id = f"P{phase_number}-A{seq}"
             items.append(
@@ -162,20 +162,22 @@ def build_wp_manifest(assignments_dir: str, output_dir: str) -> dict[str, str]:
     parsed_assignments = []
     for f in assign_files:
         try:
-            data = json.loads(f.read_text())
+            raw = json.loads(f.read_text())
         except json.JSONDecodeError as exc:
             raise json.JSONDecodeError(
                 f"Failed to parse {f}: {exc.msg}", exc.doc, exc.pos
             ) from exc
+        try:
+            data = validate_assignment_result(raw)
+        except ValueError as exc:
+            raise ValueError(f"Invalid assignment result in {f}: {exc}") from exc
         parsed_assignments.append(data)
-    parsed_assignments.sort(
-        key=lambda d: (d.get("phase_number", 0), d.get("assignment_number", 0))
-    )
+    parsed_assignments.sort(key=lambda d: (d["phase_number"], d["assignment_number"]))
 
     items = []
     for assign_data in parsed_assignments:
-        phase_number = assign_data.get("phase_number", 0)
-        assignment_number = assign_data.get("assignment_number", 0)
+        phase_number = assign_data["phase_number"]
+        assignment_number = assign_data["assignment_number"]
         work_packages = assign_data.get("proposed_work_packages", [])
         for wp_seq, wp in enumerate(work_packages, start=1):
             wp_id = f"P{phase_number}-A{assignment_number}-WP{wp_seq}"

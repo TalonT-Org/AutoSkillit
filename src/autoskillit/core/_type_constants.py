@@ -33,6 +33,7 @@ __all__ = [
     "RECIPE_PACK_TAGS",
     "CATEGORY_TAGS",
     "TOOL_SUBSET_TAGS",
+    "ALL_VISIBILITY_TAGS",
     "SKILL_COMMAND_PREFIX",
     "AUTOSKILLIT_SKILL_PREFIX",
     "RETIRED_READINESS_TOKENS",
@@ -362,6 +363,19 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     # kitchen-core — git
     "merge_worktree": frozenset({"kitchen-core"}),
 }
+
+ALL_VISIBILITY_TAGS: frozenset[str] = frozenset(
+    {"kitchen", "headless", "fleet", "fleet-dispatch", "kitchen-core"}
+)
+
+_all_tool_tags = {tag for tags in TOOL_SUBSET_TAGS.values() for tag in tags}
+_non_category_tool_tags = _all_tool_tags - CATEGORY_TAGS
+if not _non_category_tool_tags <= ALL_VISIBILITY_TAGS:
+    _missing = _non_category_tool_tags - ALL_VISIBILITY_TAGS
+    raise RuntimeError(
+        f"ALL_VISIBILITY_TAGS is missing non-category tags found in TOOL_SUBSET_TAGS: "
+        f"{sorted(_missing)}. Add the missing tags to ALL_VISIBILITY_TAGS."
+    )
 
 
 @dataclass(frozen=True)

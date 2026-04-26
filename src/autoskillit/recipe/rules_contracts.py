@@ -13,6 +13,18 @@ from autoskillit.recipe.contracts import (
 )
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
+# Skill names covered by the result-field-drift rule. The actual frozensets are
+# loaded via deferred import inside _check_result_field_drift to keep recipe/
+# free of module-level planner/ imports (REQ-COMP-009).
+_RESULT_FIELD_DRIFT_SKILLS = frozenset(
+    {
+        "planner-generate-phases",
+        "planner-elaborate-phase",
+        "planner-elaborate-assignment",
+        "planner-elaborate-wp",
+    }
+)
+
 logger = get_logger(__name__)
 
 
@@ -323,5 +335,79 @@ def _check_always_has_no_write_exit(ctx: ValidationContext) -> list[RuleFinding]
                         )
                         break  # one finding per step is enough
                 break
+
+    return findings
+
+
+@semantic_rule(
+    name="result-field-drift",
+    description=(
+        "result_fields declared in skill_contracts.yaml must match the TypedDict required keys "
+        "in planner/schema.py for planner skills that produce structured result files."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_result_field_drift(ctx: ValidationContext) -> list[RuleFinding]:
+    """Error when a skill's declared result_fields diverge from the canonical TypedDict keys.
+
+    Covers planner-generate-phases, elaborate-phase, elaborate-assignment, and elaborate-wp.
+    Comparison is one-directional: contract required fields vs TypedDict required keys.
+    """
+    # Deferred import: recipe/ must not import planner/ at module level (REQ-COMP-009).
+    # Importing from autoskillit.planner (the package, not a submodule) satisfies
+    # REQ-ARCH-001. planner/ is L1 and does not import recipe/, so no circular risk.
+    from autoskillit.planner import (  # noqa: PLC0415
+        ASSIGNMENT_REQUIRED_KEYS,
+        PHASE_REQUIRED_KEYS,
+        WP_REQUIRED_KEYS,
+    )
+
+    skill_schemas: dict[str, frozenset[str]] = {
+        "planner-generate-phases": PHASE_REQUIRED_KEYS,
+        "planner-elaborate-phase": PHASE_REQUIRED_KEYS,
+        "planner-elaborate-assignment": ASSIGNMENT_REQUIRED_KEYS,
+        "planner-elaborate-wp": WP_REQUIRED_KEYS,
+    }
+
+    findings: list[RuleFinding] = []
+    manifest = load_bundled_manifest()
+
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+
+        skill_cmd = step.with_args.get("skill_command", "")
+        name = resolve_skill_name(skill_cmd)
+        if not name or name not in skill_schemas:
+            continue
+
+        contract = get_skill_contract(name, manifest)
+        if contract is None or not contract.result_fields:
+            continue
+
+        expected_keys = skill_schemas[name]
+        declared_required = {rf.name for rf in contract.result_fields if rf.required}
+
+        added = declared_required - expected_keys
+        removed = expected_keys - declared_required
+
+        if added or removed:
+            parts: list[str] = []
+            if added:
+                parts.append(f"extra in contract: {sorted(added)}")
+            if removed:
+                parts.append(f"missing from contract: {sorted(removed)}")
+            findings.append(
+                RuleFinding(
+                    rule="result-field-drift",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"Skill '{name}' result_fields in skill_contracts.yaml diverge from "
+                        f"the TypedDict required keys in planner/schema.py — {'; '.join(parts)}. "
+                        f"Update result_fields to match the TypedDict definition."
+                    ),
+                )
+            )
 
     return findings

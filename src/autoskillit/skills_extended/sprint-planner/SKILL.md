@@ -65,4 +65,8 @@ array of objects with these fields:
 - `overlap_notes` (string — describe any overlap with other selected issues)
 
 After writing the file, output its absolute path as `sprint_manifest` so the recipe
-orchestrator can capture it.
+orchestrator can capture it. Emit the token on its own line in key=value format:
+
+```
+sprint_manifest = /path/to/sprint_manifest.json
+```

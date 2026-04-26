@@ -359,6 +359,12 @@ Print the structured result for pipeline capture:
 ---end-process-issues-result---
 ```
 
+Also emit the report path as a standalone structured token for recipe capture:
+
+```
+dispatch_results = {{AUTOSKILLIT_TEMP}}/process-issues/process_report_{ts}.md
+```
+
 ## Output Location
 
 ```

@@ -53,6 +53,13 @@ class SkillOutput:
     type: str
 
 
+@dataclasses.dataclass(frozen=True)
+class ResultFieldSpec:
+    name: str
+    type: str
+    required: bool = True
+
+
 @dataclasses.dataclass
 class SkillContract:
     inputs: list[SkillInput]
@@ -61,6 +68,7 @@ class SkillContract:
     pattern_examples: list[str] = dataclasses.field(default_factory=list)
     write_behavior: str | None = None
     write_expected_when: list[str] = dataclasses.field(default_factory=list)
+    result_fields: tuple[ResultFieldSpec, ...] = dataclasses.field(default_factory=tuple)
 
 
 @dataclasses.dataclass
@@ -175,6 +183,14 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
     examples = skill_data.get("pattern_examples", [])
     write_behavior = skill_data.get("write_behavior")
     write_expected_when = skill_data.get("write_expected_when", [])
+    result_fields = tuple(
+        ResultFieldSpec(
+            name=rf["name"],
+            type=rf["type"],
+            required=rf.get("required", True),
+        )
+        for rf in skill_data.get("result_fields", [])
+    )
     return SkillContract(
         inputs=inputs,
         outputs=outputs,
@@ -182,6 +198,7 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
         pattern_examples=examples,
         write_behavior=write_behavior,
         write_expected_when=write_expected_when,
+        result_fields=result_fields,
     )
 
 
@@ -398,9 +415,12 @@ def generate_recipe_card(
                     if contract.write_expected_when:
                         skill_entry["write_expected_when"] = contract.write_expected_when
                     skills[skill_name] = skill_entry
-                    if count_positional_args(skill_cmd) > 0:
-                        # Positional args used — can't verify named inputs by ref
+                    pos_arg_count = count_positional_args(skill_cmd)
+                    if pos_arg_count > 0:
+                        # Positional args used — can't verify named inputs by ref.
+                        # Record the count so downstream rules know args were supplied.
                         entry["required"] = []
+                        entry["positional_args"] = pos_arg_count
                     else:
                         # Named template refs only — flag required inputs not referenced
                         ctx_refs = extract_context_refs(step)

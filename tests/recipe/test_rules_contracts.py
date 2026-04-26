@@ -10,7 +10,7 @@ import pytest
 import autoskillit.recipe.rules_contracts as _rc
 from autoskillit.core.paths import pkg_root
 from autoskillit.core.types import Severity
-from autoskillit.recipe.contracts import SkillContract
+from autoskillit.recipe.contracts import ResultFieldSpec, SkillContract
 from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeStep
@@ -297,3 +297,118 @@ def test_unreadable_skill_md_emits_warning_finding(
     assert relevant[0].rule == "always-has-no-write-exit"
     assert relevant[0].step_name == "test_step"
     assert "fake-skill" in relevant[0].message
+
+
+# ---------------------------------------------------------------------------
+# result-field-drift tests
+# ---------------------------------------------------------------------------
+
+
+class TestResultFieldDriftRule:
+    def test_matching_result_fields_no_finding(self) -> None:
+        """result_fields that exactly match PHASE_REQUIRED_KEYS must not fire."""
+        recipe = _make_recipe_with_skill(
+            "/autoskillit:planner-generate-phases {{AUTOSKILLIT_TEMP}}/planner/analysis.json"
+        )
+        contract = SkillContract(
+            inputs=[],
+            outputs=[],
+            result_fields=(
+                ResultFieldSpec(name="id", type="str", required=True),
+                ResultFieldSpec(name="name", type="str", required=True),
+                ResultFieldSpec(name="ordering", type="int", required=True),
+            ),
+        )
+        with patch(
+            "autoskillit.recipe.rules_contracts.get_skill_contract",
+            return_value=contract,
+        ):
+            findings = run_semantic_rules(recipe)
+        drift = [f for f in findings if f.rule == "result-field-drift"]
+        assert drift == []
+
+    def test_extra_required_field_fires_error(self) -> None:
+        """A required field in result_fields that is NOT in the TypedDict fires ERROR."""
+        recipe = _make_recipe_with_skill(
+            "/autoskillit:planner-generate-phases {{AUTOSKILLIT_TEMP}}/planner/analysis.json"
+        )
+        contract = SkillContract(
+            inputs=[],
+            outputs=[],
+            result_fields=(
+                ResultFieldSpec(name="id", type="str", required=True),
+                ResultFieldSpec(name="name", type="str", required=True),
+                ResultFieldSpec(name="ordering", type="int", required=True),
+                ResultFieldSpec(name="phantom_field", type="str", required=True),
+            ),
+        )
+        with patch(
+            "autoskillit.recipe.rules_contracts.get_skill_contract",
+            return_value=contract,
+        ):
+            findings = run_semantic_rules(recipe)
+        drift = [f for f in findings if f.rule == "result-field-drift"]
+        assert len(drift) == 1
+        assert drift[0].severity == Severity.ERROR
+        assert "phantom_field" in drift[0].message
+        assert "extra in contract" in drift[0].message
+
+    def test_missing_required_field_fires_error(self) -> None:
+        """A TypedDict required key absent from result_fields fires ERROR."""
+        recipe = _make_recipe_with_skill(
+            "/autoskillit:planner-generate-phases {{AUTOSKILLIT_TEMP}}/planner/analysis.json"
+        )
+        contract = SkillContract(
+            inputs=[],
+            outputs=[],
+            result_fields=(
+                ResultFieldSpec(name="id", type="str", required=True),
+                # 'name' and 'ordering' are missing
+            ),
+        )
+        with patch(
+            "autoskillit.recipe.rules_contracts.get_skill_contract",
+            return_value=contract,
+        ):
+            findings = run_semantic_rules(recipe)
+        drift = [f for f in findings if f.rule == "result-field-drift"]
+        assert len(drift) == 1
+        assert drift[0].severity == Severity.ERROR
+        assert "missing from contract" in drift[0].message
+
+    def test_optional_extra_field_ignored(self) -> None:
+        """A field with required=False in result_fields that is not in the TypedDict is ignored."""
+        recipe = _make_recipe_with_skill(
+            "/autoskillit:planner-generate-phases {{AUTOSKILLIT_TEMP}}/planner/analysis.json"
+        )
+        contract = SkillContract(
+            inputs=[],
+            outputs=[],
+            result_fields=(
+                ResultFieldSpec(name="id", type="str", required=True),
+                ResultFieldSpec(name="name", type="str", required=True),
+                ResultFieldSpec(name="ordering", type="int", required=True),
+                ResultFieldSpec(name="optional_extra", type="str", required=False),
+            ),
+        )
+        with patch(
+            "autoskillit.recipe.rules_contracts.get_skill_contract",
+            return_value=contract,
+        ):
+            findings = run_semantic_rules(recipe)
+        drift = [f for f in findings if f.rule == "result-field-drift"]
+        assert drift == []
+
+    def test_skill_without_result_fields_in_contract_skipped(self) -> None:
+        """Skills not in _SKILL_RESULT_FIELD_SCHEMAS are ignored by the rule."""
+        recipe = _make_recipe_with_skill("/autoskillit:implement-worktree-no-merge")
+        findings = run_semantic_rules(recipe)
+        drift = [f for f in findings if f.rule == "result-field-drift"]
+        assert drift == []
+
+    def test_planner_recipe_has_no_result_field_drift(self) -> None:
+        """The bundled planner recipe must not trigger result-field-drift."""
+        recipe = load_recipe(pkg_root() / "recipes" / "planner.yaml")
+        findings = run_semantic_rules(recipe)
+        drift = [f for f in findings if f.rule == "result-field-drift"]
+        assert drift == [], f"result-field-drift fired on planner recipe: {drift}"

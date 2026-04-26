@@ -538,6 +538,8 @@ FILE_PRODUCING_SKILLS_WITH_CONTRACTS: list[str] = [
     "resolve-merge-conflicts",
     "retry-worktree",
     "review-pr",
+    "planner-generate-phases",
+    "sprint-planner",
     "arch-lens-c4-container",
     "arch-lens-concurrency",
     "arch-lens-data-lineage",
@@ -643,7 +645,9 @@ ALWAYS_WRITE_SKILLS = {
     "make-plan",
     "plan-experiment",
     "plan-visualization",
+    "planner-generate-phases",
     "prepare-research-pr",
+    "sprint-planner",
     "rectify",
     "report-bug",
     "resolve-design-review",
@@ -751,3 +755,50 @@ def test_dataflow_entry_uppercase_f() -> None:
     assert not hasattr(m, "DataflowEntry"), "DataflowEntry (lowercase f) must be removed"
     entry = DataFlowEntry(step="s", available=[], required=[], produced=[])
     assert entry.step == "s"
+
+
+def test_all_bundled_recipe_skills_in_master_manifest() -> None:
+    """T1d: every skill name used in a run_skill step across all bundled recipes must have
+    an entry in skill_contracts.yaml (dynamic/template skill names are excluded)."""
+    from autoskillit.recipe.contracts import resolve_skill_name
+    from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+
+    manifest = load_bundled_manifest()
+    registered_skills = set(manifest.get("skills", {}).keys())
+
+    recipes_dir = builtin_recipes_dir()
+    unregistered: list[str] = []
+
+    for recipe_path in sorted(recipes_dir.glob("*.yaml")):
+        recipe = load_recipe(recipe_path)
+        for step in recipe.steps.values():
+            if step.tool != "run_skill":
+                continue
+            skill_cmd = step.with_args.get("skill_command", "")
+            name = resolve_skill_name(skill_cmd)
+            if name is None:
+                continue  # dynamic skill name — can't validate statically
+            if name not in registered_skills:
+                unregistered.append(f"{recipe_path.name}:{name}")
+
+    assert not unregistered, (
+        f"Skills used in bundled recipes but missing from skill_contracts.yaml: "
+        f"{sorted(set(unregistered))}"
+    )
+
+
+def test_result_field_spec_roundtrip() -> None:
+    """ResultFieldSpec must be parseable from skill_contracts.yaml for planner-generate-phases."""
+    from autoskillit.recipe.contracts import ResultFieldSpec, get_skill_contract
+
+    manifest = load_bundled_manifest()
+    contract = get_skill_contract("planner-generate-phases", manifest)
+    assert contract is not None
+    assert len(contract.result_fields) == 3
+    required_names = {rf.name for rf in contract.result_fields if rf.required}
+    assert required_names == {"id", "name", "ordering"}, (
+        f"planner-generate-phases result_fields required names mismatch: {required_names}"
+    )
+    for rf in contract.result_fields:
+        assert isinstance(rf, ResultFieldSpec)
+        assert rf.required is True

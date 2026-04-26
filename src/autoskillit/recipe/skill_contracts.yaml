@@ -525,6 +525,17 @@ skills:
     pattern_examples:
     - "triage_report = .autoskillit/temp/triage-issues/triage_report_20260310_120000.md\n%%ORDER_UP%%"
 
+  sprint-planner:
+    inputs: []
+    outputs:
+    - name: sprint_manifest
+      type: file_path
+    expected_output_patterns:
+    - "sprint_manifest\\s*=\\s*\\S+"
+    pattern_examples:
+    - "sprint_manifest = /tmp/autoskillit/sprint-planner/sprint_manifest.json\n%%ORDER_UP%%"
+    write_behavior: always
+
   review-pr:
     inputs:
     - name: feature_branch
@@ -1147,7 +1158,9 @@ skills:
 
   prepare-issue:
     inputs: []
-    outputs: []
+    outputs:
+    - name: issue_url
+      type: str
     expected_output_patterns:
     - "---prepare-issue-result---"
     pattern_examples:
@@ -1188,7 +1201,9 @@ skills:
 
   process-issues:
     inputs: []
-    outputs: []
+    outputs:
+    - name: dispatch_results
+      type: str
     expected_output_patterns:
     - "---process-issues-result---"
     pattern_examples:
@@ -1765,11 +1780,47 @@ skills:
     write_behavior: conditional
     write_expected_when:
     - "html_path\\s*=\\s*\\S+"
+  planner-analyze:
+    inputs: []
+    outputs: []
+  planner-extract-domain:
+    inputs: []
+    outputs: []
   planner-generate-phases:
     inputs: []
     outputs:
     - name: phase_manifest_path
       type: file_path
+    result_fields:
+    - name: id
+      type: str
+      required: true
+    - name: name
+      type: str
+      required: true
+    - name: ordering
+      type: int
+      required: true
+    expected_output_patterns:
+    - "phase_manifest_path\\s*=\\s*\\S+"
+    pattern_examples:
+    - "phase_manifest_path = /tmp/autoskillit/planner/phases/phase_manifest.json\n%%ORDER_UP%%"
+    write_behavior: always
+  planner-elaborate-phase:
+    inputs: []
+    outputs: []
+  planner-elaborate-assignment:
+    inputs: []
+    outputs: []
+  planner-elaborate-wp:
+    inputs: []
+    outputs: []
+  planner-reconcile-deps:
+    inputs: []
+    outputs: []
+  planner-refine:
+    inputs: []
+    outputs: []
 callable_contracts:
   autoskillit.smoke_utils.check_review_loop:
     outputs:

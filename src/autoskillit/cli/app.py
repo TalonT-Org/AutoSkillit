@@ -29,7 +29,6 @@ from autoskillit.cli._init_helpers import (
     _MARKER_CONTENT,
     _check_secret_scanning,
     _generate_config_yaml,
-    _is_plugin_installed,
     _log_secret_scan_bypass,
     _prompt_test_command,
     _register_all,
@@ -131,8 +130,7 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
             ",".join(cfg.safety.protected_branches),
         )
 
-    plugin_dir: str | None = None if _is_plugin_installed() else str(pkg_root())
-    ctx = make_context(cfg, plugin_dir=plugin_dir)
+    ctx = make_context(cfg)
     _initialize(ctx)
 
     try:

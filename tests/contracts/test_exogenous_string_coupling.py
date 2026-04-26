@@ -7,6 +7,8 @@ drifts, these tests fail immediately — preventing silent recovery-path breakag
 
 from __future__ import annotations
 
+import re
+
 
 def test_quota_guard_deny_trigger_coupled_to_prompt():
     """QUOTA_GUARD_DENY_TRIGGER constant in quota_guard must appear verbatim
@@ -51,6 +53,32 @@ def test_quota_post_warning_trigger_coupled_to_sous_chef_skill():
     )
 
 
+class TestPromptToolReachability:
+    """Tools referenced in FIRST ACTION must be registered in the FastMCP app."""
+
+    def test_prompt_tool_reachability(self):
+        """Each MCP tool name in FIRST ACTION must exist in the FastMCP tool registry."""
+        from autoskillit.cli._prompts import _build_orchestrator_prompt
+        from autoskillit.core._type_constants import FREE_RANGE_TOOLS, GATED_TOOLS
+
+        registered_tools = {*GATED_TOOLS, *FREE_RANGE_TOOLS}
+
+        prompt = _build_orchestrator_prompt("test", "mcp__autoskillit__")
+        fa_start = prompt.index("FIRST ACTION")
+        fa_end = prompt.find("During pipeline execution", fa_start)
+        assert fa_end != -1, "'During pipeline execution' section not found after FIRST ACTION"
+        first_action = prompt[fa_start:fa_end]
+
+        tool_names = set(re.findall(r"mcp__autoskillit__(\w+)\(", first_action))
+        assert len(tool_names) > 0, "No MCP tool names found in FIRST ACTION"
+
+        unregistered = [t for t in tool_names if t not in registered_tools]
+        assert unregistered == [], (
+            f"FIRST ACTION references tool(s) not in the FastMCP registry: {unregistered}. "
+            f"Either add them to GATED_TOOLS/FREE_RANGE_TOOLS or remove from the prompt."
+        )
+
+
 class TestPromptToolsWhitelistCoupling:
     """FIRST ACTION must not reference native tools blocked by --tools AskUserQuestion."""
 
@@ -62,7 +90,8 @@ class TestPromptToolsWhitelistCoupling:
 
         prompt = _build_orchestrator_prompt("test", mcp_prefix=DIRECT_PREFIX)
         start = prompt.index("FIRST ACTION")
-        end = prompt.index("During pipeline execution", start)
+        end = prompt.find("During pipeline execution", start)
+        assert end != -1, "'During pipeline execution' section not found after FIRST ACTION"
         first_action = prompt[start:end]
 
         found = [t for t in PIPELINE_FORBIDDEN_TOOLS if t in first_action]

@@ -91,6 +91,50 @@ class TestFirstActionAskUserQuestionProhibition:
         first_action_section = prompt[first_action_start:first_action_end]
         assert "DO NOT call AskUserQuestion" in first_action_section
 
+    def test_first_action_instructs_retry_on_mcp_unavailable(self):
+        """FIRST ACTION must contain a retry instruction for 'No such tool available'."""
+        from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+        prompt = _build_orchestrator_prompt("demo", "mcp__autoskillit__")
+        fa_start = prompt.find("FIRST ACTION")
+        assert fa_start != -1, "'FIRST ACTION' section not found in prompt"
+        fa_end = prompt.find("During pipeline execution", fa_start)
+        assert fa_end != -1, "'During pipeline execution' section not found after FIRST ACTION"
+        first_action = prompt[fa_start:fa_end]
+
+        assert "retry" in first_action.lower(), (
+            "FIRST ACTION must contain a retry instruction for MCP tool unavailability"
+        )
+        assert "No such tool" in first_action or "unavailable" in first_action.lower(), (
+            "FIRST ACTION retry must reference 'No such tool' or 'unavailable'"
+        )
+        assert "Bash" not in first_action, "Retry instruction must not reference Bash"
+        assert "ToolSearch" not in first_action, "Retry instruction must not reference ToolSearch"
+        assert "sleep" not in first_action.lower(), "Retry instruction must not use sleep"
+
+
+class TestOpenKitchenRetryOnUnavailable:
+    """open_kitchen prompt must instruct the LLM to retry when MCP is not yet ready."""
+
+    def test_open_kitchen_prompt_instructs_retry_on_mcp_unavailable(self):
+        """open_kitchen prompt must contain a retry instruction before IMPORTANT section."""
+        from autoskillit.cli._prompts import _build_open_kitchen_prompt
+
+        ok_prompt = _build_open_kitchen_prompt("mcp__autoskillit__")
+        first_section_end = ok_prompt.find("IMPORTANT \u2014 Orchestrator Discipline:")
+        assert first_section_end != -1, (
+            "'IMPORTANT \u2014 Orchestrator Discipline:' section not found in ok_prompt"
+        )
+        first_section = ok_prompt[:first_section_end]
+
+        assert "retry" in first_section.lower(), (
+            "_build_open_kitchen_prompt must contain a retry instruction "
+            "for MCP tool unavailability"
+        )
+        assert "No such tool" in first_section or "unavailable" in first_section.lower(), (
+            "_build_open_kitchen_prompt retry must reference 'No such tool' or 'unavailable'"
+        )
+
 
 class TestFirstActionDirectOpenKitchen:
     """FIRST ACTION must call open_kitchen directly — no ToolSearch or Bash preamble."""

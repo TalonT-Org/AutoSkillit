@@ -23,7 +23,13 @@ def _run_advisor(
 
     payload = json.dumps({"tool_name": tool_name, "tool_input": {"file_path": file_path}})
     env_overrides: dict[str, str | None] = {"AUTOSKILLIT_HEADLESS": "1" if headless else None}
-    env_clean = {k: v for k, v in {**os.environ, **{k: v for k, v in env_overrides.items() if v is not None}}.items()}
+    env_clean = {
+        k: v
+        for k, v in {
+            **os.environ,
+            **{k: v for k, v in env_overrides.items() if v is not None},
+        }.items()
+    }
     if not headless:
         env_clean.pop("AUTOSKILLIT_HEADLESS", None)
     with (

@@ -1,5 +1,7 @@
 """Contract tests verifying shared mutable state isolation guidance exists in pipeline skills."""
+
 import pytest
+
 from autoskillit.core.paths import pkg_root
 
 
@@ -34,9 +36,10 @@ def test_make_plan_step1_reads_isolation_patterns(make_plan_text: str) -> None:
     step2_idx = make_plan_text.find("**Explore and design approaches")
     assert step1_idx != -1 and step2_idx != -1
     step1_section = make_plan_text[step1_idx:step2_idx]
-    has_isolation_read = (
-        "isolation" in step1_section.lower()
-        and ("singleton" in step1_section.lower() or "module-level" in step1_section.lower() or "mutating" in step1_section.lower())
+    has_isolation_read = "isolation" in step1_section.lower() and (
+        "singleton" in step1_section.lower()
+        or "module-level" in step1_section.lower()
+        or "mutating" in step1_section.lower()
     )
     assert has_isolation_read, (
         "make-plan Step 1 must instruct reading existing test isolation patterns "
@@ -52,9 +55,8 @@ def test_make_plan_step3_isolation_contract(make_plan_text: str) -> None:
     step4_idx = make_plan_text.find("**Evaluate approaches")
     assert step3_idx != -1 and step4_idx != -1
     step3_section = make_plan_text[step3_idx:step4_idx]
-    has_isolation_contract = (
-        "isolation" in step3_section.lower()
-        and ("cleanup" in step3_section.lower() or "reset" in step3_section.lower())
+    has_isolation_contract = "isolation" in step3_section.lower() and (
+        "cleanup" in step3_section.lower() or "reset" in step3_section.lower()
     )
     assert has_isolation_contract, (
         "make-plan Step 3 must include a test isolation contract requiring plans "
@@ -83,8 +85,16 @@ def test_dry_walkthrough_step2_has_shared_state_check(dry_walkthrough_text: str)
     step2_section = dry_walkthrough_text[step2_idx:step3_idx]
     has_shared_state = (
         "shared" in step2_section.lower()
-        and ("cleanup" in step2_section.lower() or "restore" in step2_section.lower() or "reset" in step2_section.lower())
-        and ("singleton" in step2_section.lower() or "module-scope" in step2_section.lower() or "mutating" in step2_section.lower())
+        and (
+            "cleanup" in step2_section.lower()
+            or "restore" in step2_section.lower()
+            or "reset" in step2_section.lower()
+        )
+        and (
+            "singleton" in step2_section.lower()
+            or "module-scope" in step2_section.lower()
+            or "mutating" in step2_section.lower()
+        )
     )
     assert has_shared_state, (
         "dry-walkthrough Step 2 checklist must include a check that verifies "
@@ -99,10 +109,7 @@ def test_dry_walkthrough_step2_mechanical_scan_instruction(dry_walkthrough_text:
     step3_idx = dry_walkthrough_text.find("### Step 3:")
     assert step2_idx != -1 and step3_idx != -1
     step2_section = dry_walkthrough_text[step2_idx:step3_idx]
-    has_mechanical = (
-        "scan" in step2_section.lower()
-        or "search" in step2_section.lower()
-    )
+    has_mechanical = "scan" in step2_section.lower() or "search" in step2_section.lower()
     assert has_mechanical, (
         "dry-walkthrough Step 2 shared-state check must include a mechanical scan "
         "instruction (e.g., 'scan the plan for method calls on module-scope objects') "
@@ -123,8 +130,7 @@ def test_resolve_failures_inverse_method_warning(resolve_failures_text: str) -> 
     """resolve-failures must warn that inverse method calls (disable after enable)
     do not reset accumulation-based state."""
     has_inverse_warning = (
-        "inverse" in resolve_failures_text.lower()
-        or "append" in resolve_failures_text.lower()
+        "inverse" in resolve_failures_text.lower() or "append" in resolve_failures_text.lower()
     ) and (
         "not" in resolve_failures_text.lower()
         and ("reset" in resolve_failures_text.lower() or "undo" in resolve_failures_text.lower())
@@ -155,9 +161,8 @@ def test_tests_claude_md_fastmcp_singleton_rule(tests_claude_md_text: str) -> No
 
 def test_tests_claude_md_clear_restore_pattern(tests_claude_md_text: str) -> None:
     """tests/CLAUDE.md must prescribe the clear+restore pattern for FastMCP tests."""
-    has_clear_restore = (
-        "_transforms.clear()" in tests_claude_md_text
-        and ("disable" in tests_claude_md_text or "baseline" in tests_claude_md_text)
+    has_clear_restore = "_transforms.clear()" in tests_claude_md_text and (
+        "disable" in tests_claude_md_text or "baseline" in tests_claude_md_text
     )
     assert has_clear_restore, (
         "tests/CLAUDE.md must prescribe the clear+restore pattern: "

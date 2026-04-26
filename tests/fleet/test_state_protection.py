@@ -9,7 +9,7 @@ import pytest
 
 from autoskillit.fleet.state import build_protected_campaign_ids
 
-pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("fleet"), pytest.mark.feature("fleet"), pytest.mark.small]
 
 
 def _write_dispatch_file(dispatches_dir: Path, filename: str, data: dict) -> None:

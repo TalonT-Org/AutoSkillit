@@ -1844,6 +1844,8 @@ def test_retention_no_protection_when_callback_is_none(tmp_path: Path, monkeypat
             (d / "meta.json").write_text(
                 json.dumps({"campaign_id": "active-campaign", "dispatch_id": f"d{i}"})
             )
+            # Reset mtime after meta.json write (writing a file bumps directory mtime)
+            os.utime(d, (1_000_000_000 + i, 1_000_000_000 + i))
         with index_path.open("a") as f:
             f.write(json.dumps({"session_id": dir_name, "dir_name": dir_name}) + "\n")
 

@@ -57,6 +57,22 @@ def _run_interactive_session(
     return None
 
 
+def _write_order_entry(project_dir: Path, recipe_name: str | None) -> dict[str, str]:
+    """Generate an order launch ID, write registry entry, return env extras dict."""
+    import uuid
+
+    from autoskillit.core import (
+        LAUNCH_ID_ENV_VAR,
+        SESSION_TYPE_ENV_VAR,
+        SESSION_TYPE_ORDER,
+        write_registry_entry,
+    )
+
+    lid = uuid.uuid4().hex[:16]
+    write_registry_entry(project_dir, lid, SESSION_TYPE_ORDER, recipe_name)
+    return {SESSION_TYPE_ENV_VAR: SESSION_TYPE_ORDER, LAUNCH_ID_ENV_VAR: lid}
+
+
 def _launch_cook_session(
     system_prompt: str,
     *,

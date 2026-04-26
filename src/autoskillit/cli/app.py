@@ -8,7 +8,6 @@ import os
 import random
 import re
 import sys
-import uuid
 from datetime import UTC
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
@@ -35,19 +34,12 @@ from autoskillit.cli._init_helpers import (
     _register_all,
 )
 from autoskillit.cli._prompts import _build_orchestrator_prompt, _get_ingredients_table
-from autoskillit.cli._session_launch import _launch_cook_session
+from autoskillit.cli._session_launch import _launch_cook_session, _write_order_entry
 from autoskillit.core import (
-    LAUNCH_ID_ENV_VAR,
-    SESSION_TYPE_ENV_VAR,
-    SESSION_TYPE_ORDER,
-    BareResume,
-    NamedResume,
-    NoResume,
     RecipeSource,
     atomic_write,
     pkg_root,
     resume_spec_from_cli,
-    write_registry_entry,
 )
 
 _UUID_RE = re.compile(r"^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$", re.IGNORECASE)
@@ -569,20 +561,16 @@ def order(recipe: str | None = None, session_id: str | None = None, *, resume: b
     if _resume and recipe is None:
         from autoskillit.cli._prompts import _OPEN_KITCHEN_GREETINGS
         from autoskillit.cli._session_picker import pick_session as _pick_session
+        from autoskillit.core import BareResume, NamedResume, NoResume
 
         if isinstance(resume_spec, BareResume):
             _sel = _pick_session("order", Path.cwd())
             resume_spec = NamedResume(session_id=_sel) if _sel else NoResume()
-        _order_launch_id = uuid.uuid4().hex[:16]
-        write_registry_entry(Path.cwd(), _order_launch_id, SESSION_TYPE_ORDER, None)
         _launch_cook_session(
             "",
             initial_message=random.choice(_OPEN_KITCHEN_GREETINGS),
             resume_spec=resume_spec,
-            extra_env={
-                SESSION_TYPE_ENV_VAR: SESSION_TYPE_ORDER,
-                LAUNCH_ID_ENV_VAR: _order_launch_id,
-            },
+            extra_env=_write_order_entry(Path.cwd(), None),
         )
         return
 
@@ -615,18 +603,12 @@ def order(recipe: str | None = None, session_id: str | None = None, *, resume: b
         if resolved is _OPEN_KITCHEN_CHOICE:
             from autoskillit.cli._prompts import _OPEN_KITCHEN_GREETINGS
 
-            greeting = random.choice(_OPEN_KITCHEN_GREETINGS)
-            _order_launch_id = uuid.uuid4().hex[:16]
-            write_registry_entry(Path.cwd(), _order_launch_id, SESSION_TYPE_ORDER, None)
             _launch_cook_session(
                 _build_open_kitchen_prompt(mcp_prefix=mcp_prefix),
-                initial_message=greeting,
+                initial_message=random.choice(_OPEN_KITCHEN_GREETINGS),
                 resume_spec=resume_spec,
                 project_dir=Path.cwd(),
-                extra_env={
-                    SESSION_TYPE_ENV_VAR: SESSION_TYPE_ORDER,
-                    LAUNCH_ID_ENV_VAR: _order_launch_id,
-                },
+                extra_env=_write_order_entry(Path.cwd(), None),
             )
             return
         elif resolved is None:
@@ -737,9 +719,7 @@ def order(recipe: str | None = None, session_id: str | None = None, *, resume: b
     if confirm.lower() in ("n", "no"):
         return
     greeting = random.choice(_COOK_GREETINGS).format(recipe_name=recipe)
-    _order_launch_id = uuid.uuid4().hex[:16]
-    write_registry_entry(Path.cwd(), _order_launch_id, SESSION_TYPE_ORDER, recipe)
-    _extra_env |= {SESSION_TYPE_ENV_VAR: SESSION_TYPE_ORDER, LAUNCH_ID_ENV_VAR: _order_launch_id}
+    _extra_env |= _write_order_entry(Path.cwd(), recipe)
     _launch_cook_session(
         _build_orchestrator_prompt(recipe, mcp_prefix=mcp_prefix, ingredients_table=_itable),
         initial_message=greeting,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from autoskillit.core.paths import claude_code_project_dir
+from autoskillit.core import claude_code_project_dir
 
 _ORDER_GREETING_PREFIXES = (
     "Today's special:",

@@ -379,3 +379,35 @@ as their CI passes.
 **Location:** GitHub → Repository Settings → Branches → Branch protection rules →
 select the integration ruleset → Merge queue → "Minimum entries to merge — wait X minutes".
 Set to `0`.
+
+## Feature Flags
+
+Features are gated by lifecycle state. The `features:` config section and
+`AUTOSKILLIT_FEATURES__*` env vars let you override individual features.
+
+### Lifecycle States
+
+| Lifecycle | Behavior | Can Override? |
+|-----------|----------|---------------|
+| STABLE | On everywhere | Yes — opt out via `features: {name: false}` |
+| EXPERIMENTAL | On when `experimental_enabled: true` (default on integration; off on main) | Yes — per-feature entry overrides blanket |
+| DEPRECATED | Follows `default_enabled`; may be removed without warning | Yes |
+| DISABLED | Always off; cannot be enabled | No — config entry setting `true` is rejected |
+
+### Blanket Toggle
+
+`experimental_enabled: true` in `defaults.yaml` means all `EXPERIMENTAL` features are
+active on integration, worktrees, and feature branches without any per-feature config.
+
+Main and stable branches commit `features: {experimental_enabled: false}` to opt out.
+
+### Per-Feature Override
+
+Any config layer can override an individual feature regardless of the blanket toggle:
+
+```yaml
+features:
+  planner: false    # disable planner even on integration
+```
+
+Env var takes highest priority: `AUTOSKILLIT_FEATURES__PLANNER=false`.

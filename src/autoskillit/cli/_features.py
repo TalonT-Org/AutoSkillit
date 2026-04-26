@@ -20,6 +20,7 @@ def features_list() -> None:
         _render_terminal_table,
         is_feature_enabled,
     )
+    from autoskillit.core._type_enums import FeatureLifecycle
 
     cfg = load_config(Path.cwd())
 
@@ -28,21 +29,38 @@ def features_list() -> None:
         TerminalColumn("TIER", 5, ">"),
         TerminalColumn("LIFECYCLE", 14, "<"),
         TerminalColumn("DEFAULT", 9, "<"),
-        TerminalColumn("EFFECTIVE", 10, "<"),
-        TerminalColumn("SOURCE", 10, "<"),
+        TerminalColumn("EFFECTIVE", 18, "<"),
+        TerminalColumn("SOURCE", 14, "<"),
     ]
 
     rows = []
     for name, defn in sorted(FEATURE_REGISTRY.items()):
-        effective = is_feature_enabled(name, cfg.features)
-        source = "config" if name in cfg.features else "default"
+        effective = is_feature_enabled(
+            name, cfg.features, experimental_enabled=cfg.experimental_enabled
+        )
+        if (
+            defn.lifecycle == FeatureLifecycle.EXPERIMENTAL
+            and effective
+            and name not in cfg.features
+        ):
+            effective_str = "on (experimental)"
+            source = "experimental"
+        elif name in cfg.features and not effective:
+            effective_str = "off (override)"
+            source = "config"
+        elif name in cfg.features:
+            effective_str = str(effective).lower()
+            source = "config"
+        else:
+            effective_str = str(effective).lower()
+            source = "default"
         rows.append(
             (
                 name,
                 str(defn.tier),
                 str(defn.lifecycle),
                 str(defn.default_enabled).lower(),
-                str(effective).lower(),
+                effective_str,
                 source,
             )
         )
@@ -55,6 +73,7 @@ def features_status(name: str) -> None:
     """Show detailed state for a single feature."""
     from autoskillit.config import load_config
     from autoskillit.core import FEATURE_REGISTRY, is_feature_enabled
+    from autoskillit.core._type_enums import FeatureLifecycle
 
     if name not in FEATURE_REGISTRY:
         known = sorted(FEATURE_REGISTRY.keys())
@@ -66,9 +85,16 @@ def features_status(name: str) -> None:
 
     defn = FEATURE_REGISTRY[name]
     cfg = load_config(Path.cwd())
-    effective = is_feature_enabled(name, cfg.features)
+    effective = is_feature_enabled(
+        name, cfg.features, experimental_enabled=cfg.experimental_enabled
+    )
 
-    source = "overridden by config" if name in cfg.features else "default"
+    if defn.lifecycle == FeatureLifecycle.EXPERIMENTAL and effective and name not in cfg.features:
+        source = "on by experimental_enabled blanket"
+    elif name in cfg.features:
+        source = "overridden by config"
+    else:
+        source = "default"
     enabled_str = f"{'true' if effective else 'false'} ({source})"
 
     tool_tags = ", ".join(sorted(defn.tool_tags)) if defn.tool_tags else "(none)"

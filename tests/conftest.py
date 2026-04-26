@@ -3,8 +3,12 @@
 import functools
 import os
 from pathlib import Path as _Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from autoskillit.config.settings import AutomationConfig
 
 from autoskillit.core.types import (
     ChannelConfirmation,
@@ -381,23 +385,25 @@ def pytest_configure(config: pytest.Config) -> None:
 
 
 @functools.lru_cache(maxsize=1)
-def _resolve_test_features() -> dict[str, bool]:
-    """Resolve feature flags for test collection via full config resolution.
+def _resolve_test_config() -> "AutomationConfig | None":
+    """Resolve full config for test collection via full config resolution.
 
     Uses the same dynaconf chain as production: defaults.yaml → project config → env vars.
-    Returns empty dict on any failure (fail-open: individual features fall back to
+    Returns None on any failure (fail-open: individual features fall back to
     FEATURE_REGISTRY[name].default_enabled).
     """
     try:
         from pathlib import Path
 
+        from autoskillit.config.settings import AutomationConfig as _AutomationConfig
         from autoskillit.config.settings import load_config
 
         # Anchor to repo root via this file's known location (tests/conftest.py)
         # rather than Path.cwd(), which varies across IDE runners and monkeypatch.chdir.
         repo_root = Path(__file__).resolve().parent.parent
         cfg = load_config(repo_root)
-        return dict(cfg.features)
+        assert isinstance(cfg, _AutomationConfig)
+        return cfg
     except Exception as exc:
         import warnings
 
@@ -405,7 +411,7 @@ def _resolve_test_features() -> dict[str, bool]:
             f"Feature flag config resolution failed, falling back to defaults: {exc}",
             stacklevel=1,
         )
-        return {}
+        return None
 
 
 def _is_test_feature_enabled(feature_name: str, *, env_val: str | None) -> bool:
@@ -415,8 +421,8 @@ def _is_test_feature_enabled(feature_name: str, *, env_val: str | None) -> bool:
     1. If AUTOSKILLIT_TEST_FEATURES is set (including empty string), parse it
        as a comma-separated whitelist.  Only listed names are enabled.
     2. If unset, resolve via full config chain (defaults.yaml → project config
-       → env vars) using load_config().  This respects project-level overrides
-       like .autoskillit/config.yaml features.fleet: true.
+       → env vars) using load_config().  This respects experimental_enabled and
+       per-feature config overrides.
     3. If config resolution fails, fall back to FEATURE_REGISTRY[name].default_enabled.
        Unknown feature names return True (fail-open).
 
@@ -428,11 +434,8 @@ def _is_test_feature_enabled(feature_name: str, *, env_val: str | None) -> bool:
         enabled = {f.strip() for f in env_val.split(",") if f.strip()}
         return feature_name in enabled
 
-    resolved = _resolve_test_features()
-    if feature_name in resolved:
-        return resolved[feature_name]
-
     from autoskillit.core import FEATURE_REGISTRY
+    from autoskillit.core.feature_flags import is_feature_enabled
 
     defn = FEATURE_REGISTRY.get(feature_name)
     if defn is None:
@@ -444,7 +447,14 @@ def _is_test_feature_enabled(feature_name: str, *, env_val: str | None) -> bool:
             stacklevel=4,
         )
         return True
-    return defn.default_enabled
+
+    cfg = _resolve_test_config()
+    if cfg is None:
+        return defn.default_enabled
+
+    return is_feature_enabled(
+        feature_name, cfg.features, experimental_enabled=cfg.experimental_enabled
+    )
 
 
 def pytest_collection_modifyitems(

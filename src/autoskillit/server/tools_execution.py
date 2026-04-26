@@ -437,10 +437,14 @@ async def dispatch_food_truck(
         from autoskillit.server import _get_ctx as _get_ctx_for_feature_check
 
         _feature_ctx = _get_ctx_for_feature_check()
-        if not is_feature_enabled("fleet", _feature_ctx.config.features):
+        if not is_feature_enabled(
+            "fleet",
+            _feature_ctx.config.features,
+            experimental_enabled=_feature_ctx.config.experimental_enabled,
+        ):
             return fleet_error(
                 FleetErrorCode.FLEET_FEATURE_DISABLED,
-                "Fleet feature is disabled in configuration. Set features.fleet: true to enable.",
+                "Fleet feature is disabled. Set features.experimental_enabled: true to enable.",
             )
 
         if os.environ.get("AUTOSKILLIT_HEADLESS") == "1":

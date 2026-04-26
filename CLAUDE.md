@@ -137,7 +137,8 @@ generic_automation_mcp/
 │   ├── _plugin_cache.py     #   Plugin cache lifecycle: retiring cache, install locking, kitchen registry
 │   ├── _plugin_ids.py       #   DIRECT_PREFIX, MARKETPLACE_PREFIX, detect_autoskillit_mcp_prefix (stdlib-only)
 │   ├── feature_flags.py     #   is_feature_enabled() — L0 feature gate resolution primitive
-│   └── readiness.py         #   Filesystem readiness sentinel primitives for MCP server startup (L0)
+│   ├── readiness.py         #   Filesystem readiness sentinel primitives for MCP server startup (L0)
+│   └── session_registry.py  #   Session registry: maps autoskillit launch IDs to Claude Code session UUIDs
 │
 ├── config/                  # L1
 │   ├── __init__.py
@@ -298,6 +299,7 @@ generic_automation_mcp/
 │   ├── _fleet.py            #   fleet subcommand group: status --reap/--dry-run, run stub, signal guard; render_fleet_error()
 │   ├── _features.py         #   features subcommand group: list/status commands for feature gate inspection
 │   ├── _workspace.py        #   Workspace clean helpers
+│   ├── _session_picker.py   #   Scoped resume picker: filters sessions by type (cook/order) via registry + heuristic
 │   └── app.py               #   CLI entry: serve, init, config, skills, recipes, doctor, update, etc.
 │
 ├── hooks/                   # Claude Code PreToolUse/PostToolUse/SessionStart scripts

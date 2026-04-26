@@ -63,3 +63,9 @@ def test_types_hub_line_count_under_threshold():
     types_path = paths.pkg_root() / "core" / "types.py"
     lines = types_path.read_text().splitlines()
     assert len(lines) < 200, f"types.py has {len(lines)} lines; expected re-export hub only"
+
+
+def test_launch_id_env_var_in_private_vars() -> None:
+    from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS, LAUNCH_ID_ENV_VAR
+
+    assert LAUNCH_ID_ENV_VAR in AUTOSKILLIT_PRIVATE_ENV_VARS

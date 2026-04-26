@@ -53,6 +53,41 @@ def _write_kitchen_marker(session_id: str, recipe_name: str | None) -> None:
         raise
 
 
+def _bridge_session_registry(session_id: str) -> None:
+    """Bridge AUTOSKILLIT_LAUNCH_ID to claude_session_id in the session registry."""
+    import tempfile
+    from pathlib import Path as _Path
+
+    launch_id = os.environ.get("AUTOSKILLIT_LAUNCH_ID", "")
+    if not launch_id or not session_id:
+        return
+
+    registry_file = _Path.cwd() / ".autoskillit" / "temp" / "session_registry.json"
+    try:
+        registry: dict = json.loads(registry_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+
+    if launch_id not in registry:
+        return
+
+    registry[launch_id]["claude_session_id"] = session_id
+
+    registry_file.parent.mkdir(parents=True, exist_ok=True)
+    content = json.dumps(registry)
+    fd, tmp = tempfile.mkstemp(dir=registry_file.parent, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+        os.replace(tmp, registry_file)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
 def main() -> None:
     try:
         data = json.loads(sys.stdin.read())
@@ -110,6 +145,13 @@ def main() -> None:
             recipe_name = tool_input.get("name") or None
         if session_id:
             _write_kitchen_marker(session_id, recipe_name)
+            try:
+                _bridge_session_registry(session_id)
+            except Exception as _bridge_err:
+                print(
+                    f"[open_kitchen_guard] registry bridge failed: {_bridge_err}",
+                    file=sys.stderr,
+                )
     except Exception as e:
         print(f"[open_kitchen_guard] marker write failed: {e}", file=sys.stderr)
         # Surface the failure so the user knows AskUserQuestion will be blocked

@@ -173,3 +173,65 @@ def test_open_kitchen_guard_fleet_denial_has_specific_message() -> None:
     response = _run_guard({"AUTOSKILLIT_HEADLESS": "1", "AUTOSKILLIT_SESSION_TYPE": "fleet"}, {})
     reason = response["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "fleet" in reason or "franchise" in reason
+
+
+def test_guard_bridges_launch_id_to_registry(tmp_path: Path) -> None:
+    """open_kitchen_guard bridges AUTOSKILLIT_LAUNCH_ID to claude_session_id in registry."""
+    from autoskillit.core.session_registry import read_registry, write_registry_entry
+
+    project_dir = tmp_path
+    write_registry_entry(project_dir, "abc", "cook", None)
+    assert read_registry(project_dir)["abc"]["claude_session_id"] is None
+
+    hook_path = pkg_root() / "hooks" / "open_kitchen_guard.py"
+    hook_input = {
+        "tool_name": "mcp__autoskillit__open_kitchen",
+        "tool_input": {},
+        "session_id": "claude-xyz",
+        "hook_event_name": "PreToolUse",
+    }
+    env_without_headless = {k: v for k, v in os.environ.items() if k != "AUTOSKILLIT_HEADLESS"}
+    env_without_headless["AUTOSKILLIT_LAUNCH_ID"] = "abc"
+    result = subprocess.run(
+        [sys.executable, str(hook_path)],
+        input=json.dumps(hook_input),
+        capture_output=True,
+        text=True,
+        env=env_without_headless,
+        cwd=str(project_dir),
+    )
+    assert result.returncode == 0, f"Hook failed: {result.stderr}"
+    registry = read_registry(project_dir)
+    assert registry["abc"]["claude_session_id"] == "claude-xyz"
+
+
+def test_guard_bridge_no_op_when_no_launch_id(tmp_path: Path) -> None:
+    """open_kitchen_guard bridge is a no-op when AUTOSKILLIT_LAUNCH_ID is not set."""
+    from autoskillit.core.session_registry import read_registry, write_registry_entry
+
+    project_dir = tmp_path
+    write_registry_entry(project_dir, "abc", "cook", None)
+
+    hook_path = pkg_root() / "hooks" / "open_kitchen_guard.py"
+    hook_input = {
+        "tool_name": "mcp__autoskillit__open_kitchen",
+        "tool_input": {},
+        "session_id": "claude-xyz",
+        "hook_event_name": "PreToolUse",
+    }
+    env_without = {
+        k: v
+        for k, v in os.environ.items()
+        if k not in ("AUTOSKILLIT_HEADLESS", "AUTOSKILLIT_LAUNCH_ID")
+    }
+    result = subprocess.run(
+        [sys.executable, str(hook_path)],
+        input=json.dumps(hook_input),
+        capture_output=True,
+        text=True,
+        env=env_without,
+        cwd=str(project_dir),
+    )
+    assert result.returncode == 0, f"Hook failed: {result.stderr}"
+    registry = read_registry(project_dir)
+    assert registry["abc"]["claude_session_id"] is None

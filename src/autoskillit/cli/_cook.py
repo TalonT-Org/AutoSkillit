@@ -85,7 +85,18 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
 
     from autoskillit.cli._init_helpers import _is_plugin_installed
     from autoskillit.cli._onboarding import is_first_run, run_onboarding_menu
-    from autoskillit.core import configure_logging, pkg_root, resume_spec_from_cli
+    from autoskillit.core import (
+        LAUNCH_ID_ENV_VAR,
+        SESSION_TYPE_COOK,
+        SESSION_TYPE_ENV_VAR,
+        BareResume,
+        NamedResume,
+        NoResume,
+        configure_logging,
+        pkg_root,
+        resume_spec_from_cli,
+        write_registry_entry,
+    )
     from autoskillit.execution import build_interactive_cmd
 
     configure_logging()
@@ -99,6 +110,7 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
         initial_prompt = run_onboarding_menu(project_dir, color=color)
 
     session_id_local = uuid.uuid4().hex[:16]
+    write_registry_entry(project_dir, session_id_local, SESSION_TYPE_COOK, None)
     ephemeral_root = resolve_ephemeral_root()
     session_mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), ephemeral_root)
     session_mgr.cleanup_stale()
@@ -107,6 +119,20 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
     )
 
     plugin_dir = None if _is_plugin_installed() else pkg_root()
+
+    if isinstance(resume_spec, BareResume):
+        from autoskillit.cli._session_picker import pick_session
+
+        selected_id = pick_session(SESSION_TYPE_COOK, project_dir)
+        if selected_id is not None:
+            resume_spec = NamedResume(session_id=selected_id)
+        else:
+            resume_spec = NoResume()
+
+    _cook_env_extras: dict[str, str] = {
+        SESSION_TYPE_ENV_VAR: SESSION_TYPE_COOK,
+        LAUNCH_ID_ENV_VAR: session_id_local,
+    }
 
     current_resume_spec = resume_spec
     _current_first_run = _first_run
@@ -120,6 +146,7 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
             add_dirs=[skills_dir],
             initial_prompt=_current_initial_prompt,
             resume_spec=current_resume_spec,
+            env_extras=_cook_env_extras,
         )
         reload_session_id = _run_cook_session(
             cmd=spec.cmd,
@@ -135,8 +162,6 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
         if reload_session_id in seen_reload_ids:
             raise SystemExit(f"Repeated reload_id {reload_session_id!r} — aborting.")
         seen_reload_ids.add(reload_session_id)
-        from autoskillit.core import NamedResume
-
         current_resume_spec = NamedResume(session_id=reload_session_id)
         _current_first_run = False
         _current_initial_prompt = None

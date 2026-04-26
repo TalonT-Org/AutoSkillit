@@ -47,6 +47,10 @@ _TEMP_PATH_WHITELIST: dict[str, str] = {
     # (<project_root>/.autoskillit/temp/dispatches/) to determine which campaign IDs
     # have active dispatches; owned by the fleet layer after the L1→L2 refactor.
     "fleet/state.py": "reads fleet dispatch state from canonical temp dir",
+    # Justification: stdlib-only L0 module (no autoskillit imports allowed); uses the
+    # canonical .autoskillit/temp path to locate session_registry.json, mirroring the
+    # same path construction used by kitchen_state.py and _hook_settings.py.
+    "core/session_registry.py": "stdlib-only L0 registry; cannot use resolve_temp_dir()",
     # Justification: docstring for _write_hook_config() references the canonical
     # hook config path so callers know where the file is written.
     "server/tools_kitchen.py": "docstring example",

@@ -1002,6 +1002,83 @@ class TestCLIOrder:
                 f"bare --resume must not be followed by a session ID, got: {next_tok!r}"
             )
 
+    @patch("autoskillit.cli.subprocess.run")
+    def test_order_bare_resume_no_recipe_invokes_picker(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """order(resume=True) with no recipe invokes pick_session for order sessions."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+        picker_calls: list = []
+
+        def fake_pick_session(session_type: str, project_dir) -> None:
+            picker_calls.append(session_type)
+            return None
+
+        with patch("autoskillit.cli._session_picker.pick_session", fake_pick_session):
+            with patch("autoskillit.core.write_registry_entry"):
+                cli.order(resume=True)
+
+        assert picker_calls == ["order"], f"Expected ['order'], got {picker_calls}"
+
+    @patch("autoskillit.cli.subprocess.run")
+    def test_order_launch_sets_session_type_order(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """order() passes AUTOSKILLIT_SESSION_TYPE=order to subprocess env."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "test-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+
+        with patch("autoskillit.core.write_registry_entry"):
+            cli.order("test-script")
+
+        env = mock_run.call_args[1].get("env") or {}
+        assert env.get("AUTOSKILLIT_SESSION_TYPE") == "order"
+
+    @patch("autoskillit.cli.subprocess.run")
+    def test_order_launch_sets_launch_id_env(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """order() passes AUTOSKILLIT_LAUNCH_ID in subprocess env."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "test-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+
+        with patch("autoskillit.core.write_registry_entry"):
+            cli.order("test-script")
+
+        env = mock_run.call_args[1].get("env") or {}
+        assert "AUTOSKILLIT_LAUNCH_ID" in env
+
 
 class TestOrderDisplayOwnership:
     """order() delegates recipe display to the Claude session via load_recipe."""
@@ -1533,9 +1610,9 @@ class TestOrderResumeParsing:
     def test_order_bare_resume_skips_recipe_validation(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        """order --resume (no uuid, no recipe) calls _launch_cook_session with BareResume."""
+        """order --resume (no uuid, no recipe) calls _launch_cook_session; no recipe validation."""
         from autoskillit.cli.app import app
-        from autoskillit.core import BareResume, NoResume
+        from autoskillit.core import NoResume
 
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
@@ -1545,12 +1622,15 @@ class TestOrderResumeParsing:
         def fake_launch(prompt, *, initial_message=None, extra_env=None, resume_spec=NoResume()):
             captured["resume_spec"] = resume_spec
 
-        with patch("autoskillit.cli.app._launch_cook_session", side_effect=fake_launch):
+        with (
+            patch("autoskillit.cli.app._launch_cook_session", side_effect=fake_launch),
+            patch("autoskillit.cli._session_picker.pick_session", return_value=None),
+        ):
             with pytest.raises(SystemExit) as exc_info:
                 app(["order", "--resume"])
             assert exc_info.value.code == 0
 
-        assert captured["resume_spec"] == BareResume()
+        assert captured["resume_spec"] == NoResume()
 
     def test_order_resume_uuid_does_not_validate_recipe(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path

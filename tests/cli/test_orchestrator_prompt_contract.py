@@ -92,26 +92,30 @@ class TestFirstActionAskUserQuestionProhibition:
         assert "DO NOT call AskUserQuestion" in first_action_section
 
 
-class TestFirstActionTimingResilience:
-    """FIRST ACTION step 0 must be a ToolSearch readiness check before open_kitchen."""
+class TestFirstActionDirectOpenKitchen:
+    """FIRST ACTION must call open_kitchen directly — no ToolSearch or Bash preamble."""
 
-    def test_first_action_step0_is_toolsearch_gate(self):
-        """Step 0 in FIRST ACTION must be a ToolSearch readiness check — not a bare Bash sleep."""
+    def test_first_action_no_step0(self):
+        """FIRST ACTION must not contain a step 0."""
         prompt = _get_prompt()
-        first_action_start = prompt.index("FIRST ACTION")
-        first_action_end = prompt.index("During pipeline execution", first_action_start)
-        first_action_section = prompt[first_action_start:first_action_end]
+        fa_start = prompt.index("FIRST ACTION")
+        fa_end = prompt.index("During pipeline execution", fa_start)
+        first_action = prompt[fa_start:fa_end]
+        assert "\n0." not in first_action
 
-        # Step 0 must be ToolSearch
-        step0_end = first_action_section.index("\n1.")
-        step0 = first_action_section[:step0_end]
-        assert "ToolSearch" in step0, "Step 0 must be a ToolSearch readiness check"
-        assert "open_kitchen" in step0, "Step 0 ToolSearch must target open_kitchen"
+    def test_first_action_no_toolsearch(self):
+        """FIRST ACTION must not reference ToolSearch."""
+        prompt = _get_prompt()
+        fa_start = prompt.index("FIRST ACTION")
+        fa_end = prompt.index("During pipeline execution", fa_start)
+        first_action = prompt[fa_start:fa_end]
+        assert "ToolSearch" not in first_action
 
-        # Step 0 must not open with a Bash call
-        assert not step0.lstrip().startswith("Bash"), (
-            "Step 0 must not begin with Bash — ToolSearch is the first instruction"
-        )
-
-        # ToolSearch must still appear in FIRST ACTION
-        assert "ToolSearch" in first_action_section
+    def test_first_action_no_bash_sleep(self):
+        """FIRST ACTION must not reference Bash or sleep."""
+        prompt = _get_prompt()
+        fa_start = prompt.index("FIRST ACTION")
+        fa_end = prompt.index("During pipeline execution", fa_start)
+        first_action = prompt[fa_start:fa_end]
+        assert "Bash" not in first_action
+        assert "sleep" not in first_action.lower()

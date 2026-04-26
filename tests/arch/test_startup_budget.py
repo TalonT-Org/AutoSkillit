@@ -103,17 +103,19 @@ def _iter_eager_calls(func_node: ast.FunctionDef) -> list[ast.Call]:
     return eager_calls
 
 
+def _get_serve_func() -> tuple[ast.FunctionDef, ast.Module]:
+    """Return (serve_func, parsed app.py Module) for the serve() function."""
+    app_src = (SRC / "cli" / "app.py").read_text()
+    app_tree = ast.parse(app_src)
+    for node in ast.walk(app_tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "serve":
+            return node, app_tree
+    raise AssertionError("serve() not found in app.py")
+
+
 def test_no_calls_between_initialize_and_anyio_run() -> None:
     """REQ-STARTUP-001: serve() must not call anything between _initialize() and anyio.run()."""
-    source = (SRC / "cli" / "app.py").read_text()
-    tree = ast.parse(source)
-
-    serve_func = None
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef) and node.name == "serve":
-            serve_func = node
-            break
-    assert serve_func is not None, "serve() not found in app.py"
+    serve_func, _ = _get_serve_func()
 
     # Find the indices of _initialize(...) and anyio.run(...) in the body
     init_idx = None
@@ -155,15 +157,7 @@ def test_no_subprocess_in_serve() -> None:
     Expr nodes — resolves direct call names one level deep via import analysis, and
     asserts no reachable function calls subprocess.*.
     """
-    app_src = (SRC / "cli" / "app.py").read_text()
-    app_tree = ast.parse(app_src)
-
-    serve_func = None
-    for node in ast.walk(app_tree):
-        if isinstance(node, ast.FunctionDef) and node.name == "serve":
-            serve_func = node
-            break
-    assert serve_func is not None, "serve() not found in app.py"
+    serve_func, app_tree = _get_serve_func()
 
     # Build import mapping: call-site name → source file, plus original function name.
     import_map: dict[str, Path] = {}
@@ -188,7 +182,7 @@ def test_no_subprocess_in_serve() -> None:
         fn_name = import_name_map.get(call_name, call_name)
         module_src = module_path.read_text()
         module_tree = ast.parse(module_src)
-        for fn_node in ast.walk(module_tree):
+        for fn_node in module_tree.body:
             if (
                 isinstance(fn_node, (ast.FunctionDef, ast.AsyncFunctionDef))
                 and fn_node.name == fn_name
@@ -227,15 +221,7 @@ def test_serve_pre_anyio_no_denylist_calls() -> None:
         }
     )
 
-    app_src = (SRC / "cli" / "app.py").read_text()
-    app_tree = ast.parse(app_src)
-
-    serve_func = None
-    for node in ast.walk(app_tree):
-        if isinstance(node, ast.FunctionDef) and node.name == "serve":
-            serve_func = node
-            break
-    assert serve_func is not None, "serve() not found in app.py"
+    serve_func, _ = _get_serve_func()
 
     anyio_idx = None
     for i, stmt in enumerate(serve_func.body):

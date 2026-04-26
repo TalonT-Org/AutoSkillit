@@ -456,3 +456,39 @@ def test_resolve_merge_conflicts_no_hardcoded_origin(skill_md: str) -> None:
         "in git commands. Use $REMOTE (resolved via upstream || origin fallback) instead.\n"
         "Violations:\n" + "\n".join(f"  {v}" for v in violations)
     )
+
+
+@pytest.fixture(scope="module")
+def step5_section(skill_md: str) -> str:
+    step5_idx = skill_md.find("### Step 5 —")
+    step5a_idx = skill_md.find("### Step 5a —", step5_idx)
+    assert step5_idx != -1, "Step 5 section must be present in SKILL.md"
+    assert step5a_idx != -1, "Step 5a section must follow Step 5"
+    return skill_md[step5_idx:step5a_idx]
+
+
+def test_resolve_merge_conflicts_step5_handles_version_consistency(step5_section: str) -> None:
+    """Step 5 must instruct running sync_versions.py when check-version-consistency fails."""
+    assert "sync_versions.py" in step5_section, (
+        "Step 5 must instruct running 'python3 scripts/sync_versions.py' "
+        "when check-version-consistency fails"
+    )
+
+
+def test_resolve_merge_conflicts_step5_handles_uv_lock(step5_section: str) -> None:
+    """Step 5 must instruct running 'uv lock' when uv-lock-check fails."""
+    # "uv lock --check" appears in Step 5a (manifest validation); require bare "uv lock"
+    # to appear in Step 5 as the fix command (not merely the check)
+    assert re.search(r"\buv lock\b(?!\s+--check)", step5_section), (
+        "Step 5 must instruct running 'uv lock' (without --check) "
+        "when uv-lock-check fails to regenerate the lock file"
+    )
+
+
+def test_resolve_merge_conflicts_step5_escalates_on_nonfixable_hooks(step5_section: str) -> None:
+    """Step 5 must escalate when pre-commit still fails after all auto-fixes are applied."""
+    assert "escalation_required" in step5_section, (
+        "Step 5 must escalate with escalation_required=true when pre-commit still fails "
+        "after all auto-fixes (ruff, sync_versions, uv lock) are applied — "
+        "remaining failures from non-fixable hooks (mypy, gitleaks) require manual remediation"
+    )

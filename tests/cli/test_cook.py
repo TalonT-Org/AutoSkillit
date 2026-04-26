@@ -1079,6 +1079,170 @@ class TestCLIOrder:
         env = mock_run.call_args[1].get("env") or {}
         assert "AUTOSKILLIT_LAUNCH_ID" in env
 
+    def test_order_picker_renders_family_recipes_header(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Picker must print 'Family Recipes' header when project recipes exist."""
+        from autoskillit.core import RecipeSource
+        from autoskillit.recipe.schema import RecipeInfo
+
+        project_recipe = RecipeInfo(
+            name="proj-recipe",
+            description="d",
+            source=RecipeSource.PROJECT,
+            path=tmp_path / "proj.yaml",
+            experimental=False,
+        )
+        monkeypatch.setattr(
+            "autoskillit.recipe.list_recipes",
+            lambda *a, **kw: type("R", (), {"items": [project_recipe]})(),
+        )
+        monkeypatch.setattr("autoskillit.cli._timed_input.timed_prompt", lambda *a, **kw: "0")
+        monkeypatch.chdir(tmp_path)
+
+        import autoskillit.cli.app as app_mod
+
+        with pytest.raises(SystemExit):
+            app_mod.order()
+
+        out = capsys.readouterr().out
+        assert "Family Recipes" in out
+
+    def test_order_picker_renders_bundled_recipes_header(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Picker must print 'Bundled Recipes' header when builtin recipes exist."""
+        from autoskillit.core import RecipeSource
+        from autoskillit.recipe.schema import RecipeInfo
+
+        builtin_recipe = RecipeInfo(
+            name="impl",
+            description="d",
+            source=RecipeSource.BUILTIN,
+            path=tmp_path / "impl.yaml",
+            experimental=False,
+        )
+        monkeypatch.setattr(
+            "autoskillit.recipe.list_recipes",
+            lambda *a, **kw: type("R", (), {"items": [builtin_recipe]})(),
+        )
+        monkeypatch.setattr("autoskillit.cli._timed_input.timed_prompt", lambda *a, **kw: "0")
+        monkeypatch.chdir(tmp_path)
+
+        import autoskillit.cli.app as app_mod
+
+        with pytest.raises(SystemExit):
+            app_mod.order()
+
+        out = capsys.readouterr().out
+        assert "Bundled Recipes" in out
+
+    def test_order_picker_renders_experimental_header(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Picker must print 'Experimental' header when experimental recipes exist."""
+        from autoskillit.core import RecipeSource
+        from autoskillit.recipe.schema import RecipeInfo
+
+        exp_recipe = RecipeInfo(
+            name="research",
+            description="d",
+            source=RecipeSource.BUILTIN,
+            path=tmp_path / "research.yaml",
+            experimental=True,
+        )
+        monkeypatch.setattr(
+            "autoskillit.recipe.list_recipes",
+            lambda *a, **kw: type("R", (), {"items": [exp_recipe]})(),
+        )
+        monkeypatch.setattr("autoskillit.cli._timed_input.timed_prompt", lambda *a, **kw: "0")
+        monkeypatch.chdir(tmp_path)
+
+        import autoskillit.cli.app as app_mod
+
+        with pytest.raises(SystemExit):
+            app_mod.order()
+
+        out = capsys.readouterr().out
+        assert "Experimental" in out
+
+    def test_order_picker_omits_empty_group_header(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Picker must not print 'Family Recipes' header when no project recipes exist."""
+        from autoskillit.core import RecipeSource
+        from autoskillit.recipe.schema import RecipeInfo
+
+        builtin_recipe = RecipeInfo(
+            name="impl",
+            description="d",
+            source=RecipeSource.BUILTIN,
+            path=tmp_path / "impl.yaml",
+            experimental=False,
+        )
+        monkeypatch.setattr(
+            "autoskillit.recipe.list_recipes",
+            lambda *a, **kw: type("R", (), {"items": [builtin_recipe]})(),
+        )
+        monkeypatch.setattr("autoskillit.cli._timed_input.timed_prompt", lambda *a, **kw: "0")
+        monkeypatch.chdir(tmp_path)
+
+        import autoskillit.cli.app as app_mod
+
+        with pytest.raises(SystemExit):
+            app_mod.order()
+
+        out = capsys.readouterr().out
+        assert "Family Recipes" not in out
+
+    def test_order_picker_contiguous_numbering_across_groups(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Picker numbering must be contiguous across all groups (1, 2, 3...)."""
+        import re
+
+        from autoskillit.core import RecipeSource
+        from autoskillit.recipe.schema import RecipeInfo
+
+        recipes = [
+            RecipeInfo(
+                name="proj-a",
+                description="d",
+                source=RecipeSource.PROJECT,
+                path=tmp_path / "a.yaml",
+                experimental=False,
+            ),
+            RecipeInfo(
+                name="impl",
+                description="d",
+                source=RecipeSource.BUILTIN,
+                path=tmp_path / "b.yaml",
+                experimental=False,
+            ),
+            RecipeInfo(
+                name="exp-r",
+                description="d",
+                source=RecipeSource.BUILTIN,
+                path=tmp_path / "c.yaml",
+                experimental=True,
+            ),
+        ]
+        monkeypatch.setattr(
+            "autoskillit.recipe.list_recipes", lambda *a, **kw: type("R", (), {"items": recipes})()
+        )
+        monkeypatch.setattr("autoskillit.cli._timed_input.timed_prompt", lambda *a, **kw: "0")
+        monkeypatch.chdir(tmp_path)
+
+        import autoskillit.cli.app as app_mod
+
+        with pytest.raises(SystemExit):
+            app_mod.order()
+
+        out = capsys.readouterr().out
+        numbered = re.findall(r"^\s+(\d+)\.", out, re.MULTILINE)
+        numbered_ints = [int(n) for n in numbered]
+        assert numbered_ints == list(range(1, len(recipes) + 1))
+
 
 class TestOrderDisplayOwnership:
     """order() delegates recipe display to the Claude session via load_recipe."""

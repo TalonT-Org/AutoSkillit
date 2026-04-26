@@ -241,3 +241,107 @@ tasks:
           -o src/autoskillit/assets/mermaid/mermaid.min.js
         echo "${VERSION}" > src/autoskillit/assets/mermaid/VERSION
         echo "Vendored mermaid ${VERSION} ($(wc -c < src/autoskillit/assets/mermaid/mermaid.min.js) bytes)"
+
+  testmon-build:
+    desc: Build .testmondata DB by running full suite with testmon (serial, no xdist)
+    deps: [install-worktree, _tmpdir-setup]
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      OMP_NUM_THREADS: "1"
+      TMPDIR: "{{.PYTEST_TMPDIR}}"
+      AUTOSKILLIT_TEST_FILTER: "none"
+    cmds:
+      - |
+        mkdir -p temp
+        echo "Building .testmondata (serial run — this will take a while)"
+        if [[ -d ".venv" ]]; then
+          PYTEST_CMD=".venv/bin/python -m pytest"
+        else
+          PYTEST_CMD="pytest"
+        fi
+
+        set -o pipefail
+        set +e
+        $PYTEST_CMD tests/ -q --tb=short --testmon \
+          -m "not smoke and not canary" \
+          --disable-warnings -o "addopts=" \
+          --basetemp={{.PYTEST_TMPDIR}} \
+          -o "cache_dir={{.PYTEST_CACHEDIR}}" \
+          2>&1 | tee "temp/testmon-build-$(date +%Y-%m-%d_%H%M%S).txt"
+        PYTEST_EXIT=$?
+        set +o pipefail
+        set -e
+
+        if [ -f ".testmondata" ]; then
+          SIZE=$(du -h .testmondata | cut -f1)
+          echo ""
+          echo ".testmondata built successfully: $SIZE"
+        else
+          echo ""
+          echo "WARNING: .testmondata was not created"
+        fi
+        exit $PYTEST_EXIT
+
+  testmon-run:
+    desc: Run tests incrementally with testmon selection (requires prior testmon-build)
+    deps: [install-worktree, _tmpdir-setup]
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      OMP_NUM_THREADS: "1"
+      TMPDIR: "{{.PYTEST_TMPDIR}}"
+      AUTOSKILLIT_TEST_FILTER: "none"
+    cmds:
+      - |
+        mkdir -p temp
+        if [ ! -f ".testmondata" ]; then
+          echo "ERROR: .testmondata not found. Run 'task testmon-build' first."
+          exit 1
+        fi
+
+        if [[ -d ".venv" ]]; then
+          PYTEST_CMD=".venv/bin/python -m pytest"
+        else
+          PYTEST_CMD="pytest"
+        fi
+
+        XDIST_FLAGS=""
+        if [ "${TESTMON_XDIST:-0}" = "1" ]; then
+          XDIST_FLAGS="-n 4"
+          echo "Running testmon with xdist (-n 4)"
+        else
+          echo "Running testmon serial (set TESTMON_XDIST=1 for parallel)"
+        fi
+
+        set -o pipefail
+        set +e
+        $PYTEST_CMD tests/ -q --tb=short --testmon $XDIST_FLAGS \
+          -m "not smoke and not canary" \
+          --disable-warnings -o "addopts=" \
+          --basetemp={{.PYTEST_TMPDIR}} \
+          -o "cache_dir={{.PYTEST_CACHEDIR}}" \
+          2>&1 | tee "temp/testmon-run-$(date +%Y-%m-%d_%H%M%S).txt"
+        PYTEST_EXIT=$?
+        set +o pipefail
+        set -e
+
+        exit $PYTEST_EXIT
+
+  testmon-benchmark:
+    desc: Compare testmon selection vs cascade selection for changed files
+    deps: [install-worktree]
+    cmds:
+      - |
+        if [ ! -f ".testmondata" ]; then
+          echo "ERROR: .testmondata not found. Run 'task testmon-build' first."
+          exit 1
+        fi
+
+        if [[ -d ".venv" ]]; then
+          PYTHON=".venv/bin/python"
+        else
+          PYTHON="python"
+        fi
+
+        $PYTHON scripts/benchmark-testmon.py \
+          --mode="${TESTMON_BENCH_MODE:-compare}" \
+          ${TESTMON_CHANGED_FILES:+--changed-files="$TESTMON_CHANGED_FILES"}

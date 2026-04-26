@@ -319,6 +319,16 @@ def test_merge_prs_captures_conflict_report_from_resolve_ejected(merge_prs_recip
     )
 
 
+def test_merge_prs_captures_conflict_report_from_resolve_proactive(
+    merge_prs_recipe: dict,
+) -> None:
+    step = merge_prs_recipe["steps"]["resolve_proactive_rebase_conflicts"]
+    capture_list = step.get("capture_list", {})
+    assert any("conflict_report_path" in v for v in capture_list.values()), (
+        "resolve_proactive_rebase_conflicts must accumulate conflict_report_path in capture_list"
+    )
+
+
 def test_open_integration_pr_embeds_conflict_resolution_decisions():
     """open-integration-pr SKILL.md must embed Conflict Resolution Decisions section."""
     skill_md_path = SKILLS_ROOT / "open-integration-pr" / "SKILL.md"

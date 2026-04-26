@@ -112,6 +112,7 @@ def test_merge_prs_has_no_loop_push_kitchen_rule():
         "push_integration_branch",
         "re_push_review_integration",  # authorized: re-pushes after review fixes
         "push_ejected_fix",  # authorized: pushes conflict-resolved ejected PR branch back
+        "push_rebased_next_pr",  # authorized: proactive rebase push before enqueue
     }
     assert not unexpected, (
         f"push_to_remote found in unexpected steps (loop pushes are prohibited): {unexpected}"

@@ -1,4 +1,4 @@
-generated_at: '2026-04-05T02:19:56.074977+00:00'
+generated_at: '2026-04-25T21:57:00.000000+00:00'
 bundled_manifest_version: 0.1.0
 skill_hashes: {}
 skills:
@@ -544,6 +544,88 @@ dataflow:
   required: []
   produced:
   - current_pr_number
+- step: get_next_pr_branch
+  available:
+  - audit
+  - base_branch
+  - conflict_escalation_required
+  - current_pr_number
+  - ejected_pr_branch
+  - integration_branch
+  - merge_queue_data_path
+  - plans_dir
+  - pr_order_file
+  - queue_mode
+  - queue_pr_state
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced:
+  - next_pr_branch
+- step: proactive_rebase_next_pr
+  available:
+  - audit
+  - base_branch
+  - conflict_escalation_required
+  - current_pr_number
+  - ejected_pr_branch
+  - integration_branch
+  - merge_queue_data_path
+  - next_pr_branch
+  - plans_dir
+  - pr_order_file
+  - queue_mode
+  - queue_pr_state
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced: []
+- step: resolve_proactive_rebase_conflicts
+  available:
+  - audit
+  - base_branch
+  - conflict_escalation_required
+  - current_pr_number
+  - ejected_pr_branch
+  - integration_branch
+  - merge_queue_data_path
+  - next_pr_branch
+  - plans_dir
+  - pr_order_file
+  - queue_mode
+  - queue_pr_state
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced:
+  - conflict_escalation_reason
+- step: push_rebased_next_pr
+  available:
+  - audit
+  - base_branch
+  - conflict_escalation_reason
+  - conflict_escalation_required
+  - current_pr_number
+  - ejected_pr_branch
+  - integration_branch
+  - merge_queue_data_path
+  - next_pr_branch
+  - plans_dir
+  - pr_order_file
+  - queue_mode
+  - queue_pr_state
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced: []
 - step: diagnose_queue_ci
   available:
   - audit

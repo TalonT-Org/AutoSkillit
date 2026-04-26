@@ -405,6 +405,7 @@ async def dispatch_food_truck(
     ingredients: dict[str, str] | None = None,
     dispatch_name: str | None = None,
     timeout_sec: int | None = None,
+    capture: dict[str, str] | None = None,
     ctx: Context = CurrentContext(),
 ) -> str:
     """Dispatch a single food truck L2 session for one recipe.
@@ -419,6 +420,9 @@ async def dispatch_food_truck(
         ingredients: Optional ingredient overrides (all values must be strings).
         dispatch_name: Optional display name for the dispatch record.
         timeout_sec: Optional L2 session timeout override in seconds.
+        capture: Optional dict mapping capture keys to "${{ result.field }}" templates.
+            Extracted values are persisted in the campaign context for downstream
+            dispatches to reference via "${{ campaign.key }}" in their ingredients.
 
     Never raises.
     """
@@ -465,6 +469,7 @@ async def dispatch_food_truck(
             quota_checker=check_and_sleep_if_needed,
             quota_refresher=_refresh_quota_cache,
             cache_invalidator=invalidate_cache,
+            capture=capture,
         )
     except Exception as exc:
         logger.error("dispatch_food_truck unhandled exception", exc_info=True)

@@ -296,6 +296,7 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
                     task=d.get("task", ""),
                     ingredients=d.get("ingredients") or {},
                     depends_on=d.get("depends_on") or [],
+                    capture=d.get("capture") or {},
                 )
             )
 

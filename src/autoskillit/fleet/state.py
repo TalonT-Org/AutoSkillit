@@ -17,7 +17,7 @@ from autoskillit.core import get_logger, write_versioned_json
 
 _log = get_logger(__name__)
 
-_SCHEMA_VERSION = 2
+_SCHEMA_VERSION = 3
 
 
 class DispatchStatus(StrEnum):
@@ -67,6 +67,7 @@ class CampaignState:
     manifest_path: str
     started_at: float
     dispatches: list[DispatchRecord] = field(default_factory=list)
+    captured_values: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -165,6 +166,7 @@ def read_state(state_path: Path) -> CampaignState | None:
             manifest_path=data["manifest_path"],
             started_at=data["started_at"],
             dispatches=dispatches,
+            captured_values=data.get("captured_values", {}),
         )
     except (KeyError, ValueError, TypeError) as exc:
         _log.warning("read_state: schema mismatch or corrupt payload in %s: %s", state_path, exc)
@@ -179,6 +181,7 @@ def _write_state(state_path: Path, state: CampaignState) -> None:
         "manifest_path": state.manifest_path,
         "started_at": state.started_at,
         "dispatches": [d.to_dict() for d in state.dispatches],
+        "captured_values": state.captured_values,
     }
     write_versioned_json(state_path, payload, schema_version=state.schema_version)
 
@@ -302,6 +305,50 @@ def build_protected_campaign_ids(project_dir: Path) -> frozenset[str]:
     except Exception:
         _log.warning("campaign_ids_protection_error", exc_info=True)
         return frozenset(protected)
+
+
+def write_captured_values(state_path: Path, captures: dict[str, str]) -> None:
+    """Atomically merge new captures into an existing state file.
+
+    Merges `captures` into the existing `captured_values` dict (new keys win).
+    No-op if state file is missing or corrupted (logs a warning).
+    """
+    state = read_state(state_path)
+    if state is None:
+        _log.warning("write_captured_values: state not found at %s", state_path)
+        return
+    state.captured_values = {**state.captured_values, **captures}
+    _write_state(state_path, state)
+
+
+def read_all_campaign_captures(
+    dispatches_dir: Path,
+    campaign_id: str,
+) -> dict[str, str]:
+    """Accumulate captured_values from all SUCCESS dispatches for a campaign.
+
+    Scans all *.json files in `dispatches_dir`. For each file matching
+    `campaign_id` where every dispatch record has status SUCCESS, merges
+    its `captured_values` into the result. Later files win on key collision.
+    """
+    result: dict[str, str] = {}
+    if not dispatches_dir.is_dir():
+        return result
+    for path in dispatches_dir.glob("*.json"):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if data.get("campaign_id") != campaign_id:
+                continue
+            caps = data.get("captured_values", {})
+            if not caps:
+                continue
+            dispatches = data.get("dispatches", [])
+            all_success = all(d.get("status") == DispatchStatus.SUCCESS for d in dispatches)
+            if all_success and dispatches:
+                result.update(caps)
+        except (json.JSONDecodeError, OSError):
+            continue
+    return result
 
 
 def resume_campaign_from_state(

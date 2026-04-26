@@ -393,6 +393,115 @@ def _check_campaign_task_non_empty(ctx: ValidationContext) -> list[RuleFinding]:
     return findings
 
 
+_IDENT_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+_RESULT_TEMPLATE_RE = re.compile(r"^\$\{\{\s*result\.[\w-]+\s*\}\}$")
+_CAMPAIGN_REF_RE_RULES = re.compile(r"\$\{\{\s*campaign\.(\w+)\s*\}\}")
+
+
+@semantic_rule(
+    name="dispatch-capture-keys-are-identifiers",
+    description="Capture keys must be valid Python identifiers",
+    severity=Severity.ERROR,
+)
+def _check_dispatch_capture_keys_are_identifiers(ctx: ValidationContext) -> list[RuleFinding]:
+    if ctx.recipe.kind != RecipeKind.CAMPAIGN:
+        return []
+    findings = []
+    for d in ctx.recipe.dispatches:
+        for key in d.capture:
+            if not _IDENT_RE.match(key):
+                findings.append(
+                    RuleFinding(
+                        rule="dispatch-capture-keys-are-identifiers",
+                        severity=Severity.ERROR,
+                        step_name="(top-level)",
+                        message=(
+                            f"Dispatch {d.name!r} capture key {key!r} is not a valid"
+                            " identifier. Use only letters, digits, and underscores"
+                            " (must start with letter or _)."
+                        ),
+                    )
+                )
+    return findings
+
+
+@semantic_rule(
+    name="dispatch-capture-value-references-result",
+    description="Capture values must use ${{ result.field }} syntax",
+    severity=Severity.ERROR,
+)
+def _check_dispatch_capture_value_references_result(ctx: ValidationContext) -> list[RuleFinding]:
+    if ctx.recipe.kind != RecipeKind.CAMPAIGN:
+        return []
+    findings = []
+    for d in ctx.recipe.dispatches:
+        for key, val in d.capture.items():
+            if not _RESULT_TEMPLATE_RE.match(val.strip()):
+                findings.append(
+                    RuleFinding(
+                        rule="dispatch-capture-value-references-result",
+                        severity=Severity.ERROR,
+                        step_name="(top-level)",
+                        message=(
+                            f"Dispatch {d.name!r} capture[{key!r}] value {val!r} must use "
+                            "${{ result.<field_name> }} syntax."
+                        ),
+                    )
+                )
+    return findings
+
+
+def _build_ancestors(name: str, adjacency: dict[str, list[str]]) -> set[str]:
+    """Transitive closure of depends_on for a given dispatch name."""
+    ancestors: set[str] = set()
+    queue = list(adjacency.get(name, []))
+    while queue:
+        dep = queue.pop()
+        if dep not in ancestors:
+            ancestors.add(dep)
+            queue.extend(adjacency.get(dep, []))
+    return ancestors
+
+
+@semantic_rule(
+    name="campaign-ingredient-refs-have-prior-capture",
+    description="${{ campaign.key }} in ingredients must be captured by an ancestor dispatch",
+    severity=Severity.ERROR,
+)
+def _check_campaign_ingredient_refs_have_prior_capture(
+    ctx: ValidationContext,
+) -> list[RuleFinding]:
+    if ctx.recipe.kind != RecipeKind.CAMPAIGN:
+        return []
+    adjacency = {d.name: list(d.depends_on) for d in ctx.recipe.dispatches}
+    dispatch_by_name = {d.name: d for d in ctx.recipe.dispatches}
+    findings = []
+    for d in ctx.recipe.dispatches:
+        ancestors = _build_ancestors(d.name, adjacency)
+        available_captures: set[str] = set()
+        for ancestor_name in ancestors:
+            ancestor = dispatch_by_name.get(ancestor_name)
+            if ancestor:
+                available_captures.update(ancestor.capture.keys())
+        for ing_key, ing_val in d.ingredients.items():
+            for ref in _CAMPAIGN_REF_RE_RULES.findall(ing_val):
+                if ref not in available_captures:
+                    findings.append(
+                        RuleFinding(
+                            rule="campaign-ingredient-refs-have-prior-capture",
+                            severity=Severity.ERROR,
+                            step_name="(top-level)",
+                            message=(
+                                f"Dispatch {d.name!r} ingredient {ing_key!r} references "
+                                f"${{{{ campaign.{ref} }}}} but no ancestor dispatch "
+                                f"(via depends_on) captures {ref!r}. "
+                                f"Available captured keys: {sorted(available_captures)}"
+                            ),
+                        )
+                    )
+    return findings
+
+
 @semantic_rule(
     name="autoskillit-version-compatible",
     description="Campaign recipe version requirement must be satisfied by installed version",

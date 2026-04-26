@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import errno
+import json
 import os
 import threading
 from pathlib import Path
@@ -15,10 +16,13 @@ from autoskillit.fleet import (
     DispatchStatus,
     append_dispatch_record,
     mark_dispatch_running,
+    read_all_campaign_captures,
     read_state,
     resume_campaign_from_state,
+    write_captured_values,
     write_initial_state,
 )
+from autoskillit.fleet.state import _SCHEMA_VERSION
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -39,7 +43,7 @@ class TestInitialState:
 
         state = read_state(sp)
         assert state is not None
-        assert state.schema_version == 2
+        assert state.schema_version == 3
         assert state.campaign_id == "cid-1"
         assert state.campaign_name == "my-campaign"
         assert state.manifest_path == "/m.yaml"
@@ -196,3 +200,71 @@ class TestReadStateRejectsCorrupted:
 
         result = read_state(sp)
         assert result is None
+
+
+class TestSchemaVersion:
+    def test_schema_version_is_3(self) -> None:
+        assert _SCHEMA_VERSION == 3
+
+
+class TestCapturedValuesRoundTrip:
+    def test_captured_values_round_trip(self, tmp_path: Path) -> None:
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("a"))
+        write_captured_values(sp, {"k": "v"})
+
+        state = read_state(sp)
+        assert state is not None
+        assert state.captured_values == {"k": "v"}
+
+
+class TestReadV2StateFileDefaultsCapturedValues:
+    def test_read_v2_state_file_defaults_captured_values(self, tmp_path: Path) -> None:
+        sp = _state_path(tmp_path)
+        sp.parent.mkdir(parents=True, exist_ok=True)
+        v2_data = {
+            "schema_version": 2,
+            "campaign_id": "cid",
+            "campaign_name": "camp",
+            "manifest_path": "/m.yaml",
+            "started_at": 0.0,
+            "dispatches": [],
+        }
+        sp.write_text(json.dumps(v2_data), encoding="utf-8")
+
+        state = read_state(sp)
+        assert state is not None
+        assert state.captured_values == {}
+
+
+class TestReadAllCampaignCaptures:
+    def test_read_all_campaign_captures_merges_across_dispatches(self, tmp_path: Path) -> None:
+        dispatches_dir = tmp_path / "dispatches"
+        dispatches_dir.mkdir()
+
+        for i, (key, val) in enumerate([("a", "1"), ("b", "2")]):
+            sp = dispatches_dir / f"state{i}.json"
+            write_initial_state(sp, "cid-merge", "camp", "/m.yaml", _make_dispatches(f"d{i}"))
+            append_dispatch_record(sp, DispatchRecord(name=f"d{i}", status=DispatchStatus.SUCCESS))
+            write_captured_values(sp, {key: val})
+
+        result = read_all_campaign_captures(dispatches_dir, "cid-merge")
+        assert result == {"a": "1", "b": "2"}
+
+    def test_read_all_campaign_captures_ignores_non_success_dispatches(
+        self, tmp_path: Path
+    ) -> None:
+        dispatches_dir = tmp_path / "dispatches"
+        dispatches_dir.mkdir()
+
+        sp = dispatches_dir / "failure.json"
+        write_initial_state(sp, "cid-fail", "camp", "/m.yaml", _make_dispatches("d1"))
+        append_dispatch_record(sp, DispatchRecord(name="d1", status=DispatchStatus.FAILURE))
+        write_captured_values(sp, {"k": "should-not-appear"})
+
+        result = read_all_campaign_captures(dispatches_dir, "cid-fail")
+        assert result == {}
+
+    def test_read_all_campaign_captures_empty_dir(self, tmp_path: Path) -> None:
+        result = read_all_campaign_captures(tmp_path / "nonexistent", "any-id")
+        assert result == {}

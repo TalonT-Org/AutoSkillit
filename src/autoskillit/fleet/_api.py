@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -23,6 +24,55 @@ if TYPE_CHECKING:
     from autoskillit.pipeline.context import ToolContext
 
 logger = get_logger(__name__)
+
+_CAMPAIGN_REF_RE = re.compile(r"\$\{\{\s*campaign\.(\w+)\s*\}\}")
+_RESULT_REF_RE = re.compile(r"^\$\{\{\s*result\.([\w-]+)\s*\}\}$")
+
+
+def _extract_captures(
+    capture_spec: dict[str, str],
+    payload: dict[str, object],
+) -> dict[str, str]:
+    """Extract captured values from an L2 result payload.
+
+    For each entry in `capture_spec` whose value matches ``${{ result.field }}``,
+    reads `payload[field]` and converts it to str. Missing payload keys are skipped.
+    """
+    result: dict[str, str] = {}
+    for key, template in capture_spec.items():
+        m = _RESULT_REF_RE.match(template.strip())
+        if m is None:
+            continue
+        field_name = m.group(1)
+        if field_name in payload:
+            result[key] = str(payload[field_name])
+    return result
+
+
+def _interpolate_campaign_refs(
+    ingredients: dict[str, str],
+    captured: dict[str, str],
+) -> dict[str, str]:
+    """Resolve ``${{ campaign.key }}`` references in ingredient values.
+
+    Raises ValueError if a campaign reference cannot be resolved.
+    Non-campaign values are returned unchanged.
+    """
+    out: dict[str, str] = {}
+    for k, v in ingredients.items():
+
+        def _replace(m: re.Match, _k: str = k) -> str:
+            ref = m.group(1)
+            if ref not in captured:
+                raise ValueError(
+                    f"Ingredient '{_k}' references ${{{{ campaign.{ref} }}}} "
+                    f"but '{ref}' has not been captured by any prior dispatch. "
+                    f"Available: {sorted(captured)}"
+                )
+            return captured[ref]
+
+        out[k] = _CAMPAIGN_REF_RE.sub(_replace, v)
+    return out
 
 
 def _write_pid(
@@ -88,6 +138,7 @@ async def execute_dispatch(
     quota_checker: Callable[..., Any],
     quota_refresher: Callable[..., Any],
     cache_invalidator: Callable[[str], None] | None = None,
+    capture: dict[str, str] | None = None,
 ) -> str:
     """Execute a single food truck dispatch.
 
@@ -127,6 +178,7 @@ async def execute_dispatch(
             quota_checker=quota_checker,
             quota_refresher=quota_refresher,
             cache_invalidator=cache_invalidator,
+            capture=capture,
         )
     except asyncio.CancelledError:
         raise
@@ -151,6 +203,7 @@ async def _run_dispatch(
     quota_checker: Callable[..., Any],
     quota_refresher: Callable[..., Any],
     cache_invalidator: Callable[[str], None] | None = None,
+    capture: dict[str, str] | None = None,
 ) -> str:
     """Inner dispatch body — called after lock acquisition."""
     from autoskillit.fleet.state import (
@@ -197,6 +250,23 @@ async def _run_dispatch(
                 FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
                 f"Unknown ingredient keys: {sorted(unknown)}. "
                 f"Valid keys: {sorted(full_recipe.ingredients.keys())}",
+            )
+
+    from autoskillit.fleet.state import read_all_campaign_captures  # noqa: PLC0415
+
+    dispatches_dir = tool_ctx.temp_dir / "dispatches"
+    accumulated_captures = read_all_campaign_captures(dispatches_dir, tool_ctx.kitchen_id)
+
+    _has_campaign_refs = any(_CAMPAIGN_REF_RE.search(v) for v in effective_ingredients.values())
+    if _has_campaign_refs or accumulated_captures:
+        try:
+            effective_ingredients = _interpolate_campaign_refs(
+                effective_ingredients, accumulated_captures
+            )
+        except ValueError as exc:
+            return fleet_error(
+                FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
+                str(exc),
             )
 
     quota_result = await quota_checker(tool_ctx.config.quota_guard)
@@ -322,6 +392,13 @@ async def _run_dispatch(
             ended_at=ended_at,
         ),
     )
+
+    if final_status == DispatchStatus.SUCCESS and capture and parsed.payload:
+        from autoskillit.fleet.state import write_captured_values  # noqa: PLC0415
+
+        extracted = _extract_captures(capture, parsed.payload)
+        if extracted:
+            write_captured_values(state_path, extracted)
 
     _post_dispatch_cleanup(tool_ctx, skill_result, cache_invalidator, quota_refresher)
 

@@ -154,6 +154,7 @@ def _check_ci_failure_conflict_gate(ctx: ValidationContext) -> list[RuleFinding]
     severity=Severity.ERROR,
 )
 def _check_ci_no_runs_unguarded(ctx: ValidationContext) -> list[RuleFinding]:
+    no_runs_re = re.compile(r"""==\s*['"]?no_runs['"]?""")
     findings: list[RuleFinding] = []
     for name, step in ctx.recipe.steps.items():
         if step.tool != "wait_for_ci":
@@ -161,7 +162,7 @@ def _check_ci_no_runs_unguarded(ctx: ValidationContext) -> list[RuleFinding]:
         has_no_runs_guard = False
         if step.on_result and step.on_result.conditions:
             has_explicit_no_runs = any(
-                c.when and "no_runs" in c.when for c in step.on_result.conditions
+                c.when and no_runs_re.search(c.when) for c in step.on_result.conditions
             )
             has_catch_all = any(not c.when for c in step.on_result.conditions)
             has_no_runs_guard = has_explicit_no_runs or has_catch_all

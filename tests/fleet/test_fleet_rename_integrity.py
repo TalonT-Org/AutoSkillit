@@ -62,10 +62,12 @@ def test_feature_registry_franchise_entry_gone() -> None:
     assert "franchise" not in FEATURE_REGISTRY
 
 
-def test_feature_reveal_tags_fleet() -> None:
-    from autoskillit.core import FEATURE_REVEAL_TAGS
+def test_feature_reveal_tags_fleet_removed() -> None:
+    """FEATURE_REVEAL_TAGS was removed in #1141 — this tombstone guards against re-introduction."""
+    import pytest
 
-    assert FEATURE_REVEAL_TAGS == frozenset({"fleet"})
+    with pytest.raises(ImportError):
+        from autoskillit.core import FEATURE_REVEAL_TAGS  # noqa: F401
 
 
 def test_session_type_no_franchise() -> None:

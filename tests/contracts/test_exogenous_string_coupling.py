@@ -65,7 +65,8 @@ class TestPromptToolReachability:
 
         prompt = _build_orchestrator_prompt("test", "mcp__autoskillit__")
         fa_start = prompt.index("FIRST ACTION")
-        fa_end = prompt.index("During pipeline execution", fa_start)
+        fa_end = prompt.find("During pipeline execution", fa_start)
+        assert fa_end != -1, "'During pipeline execution' section not found after FIRST ACTION"
         first_action = prompt[fa_start:fa_end]
 
         tool_names = set(re.findall(r"mcp__autoskillit__(\w+)\(", first_action))
@@ -89,7 +90,8 @@ class TestPromptToolsWhitelistCoupling:
 
         prompt = _build_orchestrator_prompt("test", mcp_prefix=DIRECT_PREFIX)
         start = prompt.index("FIRST ACTION")
-        end = prompt.index("During pipeline execution", start)
+        end = prompt.find("During pipeline execution", start)
+        assert end != -1, "'During pipeline execution' section not found after FIRST ACTION"
         first_action = prompt[start:end]
 
         found = [t for t in PIPELINE_FORBIDDEN_TOOLS if t in first_action]

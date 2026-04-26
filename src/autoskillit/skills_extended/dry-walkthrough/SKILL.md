@@ -102,6 +102,13 @@ For each phase, verify using subagents:
 6. Does this violate any project rules?
 7. Does the implmentation make sense given the reality of the current state of code?
 8. Is every new component, class, or function actually wired into the call chain? Nothing should be created but left unconnected.
+9. If the plan adds tests that call mutating methods on shared objects (singletons, global
+   registries, server instances), does the plan account for state restoration? Scan the
+   plan text for method calls on module-scope objects (e.g., enable(...), disable(...),
+   register(...), connect(...)). If found, verify the plan specifies cleanup. Inspect
+   the target test directory's existing isolation pattern (conftest autouse fixtures,
+   setup/teardown) and confirm the plan's new tests comply. If the plan prescribes
+   mutating shared state without specifying cleanup, flag it.
 ```
 
 ### Step 3: Check Cross-Phase Dependencies

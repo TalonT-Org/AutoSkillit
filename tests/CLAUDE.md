@@ -11,6 +11,15 @@ All tests run under `-n 4` (xdist default: `--dist load`). Every test must be sa
   not `tmp_path` itself. When `source_dir = tmp_path`, `clone_repo` places
   `autoskillit-runs/` at `tmp_path.parent` (worker-shared). Use `source_dir = tmp_path / "repo"`.
 
+**FastMCP singleton visibility state:** `mcp.enable(tags=...)` and `mcp.disable(tags=...)`
+append entries to `mcp._transforms` — a list that never shrinks. Calling `mcp.disable()`
+does NOT undo a previous `mcp.enable()`; it adds another entry. Tests that call either
+method must use the directory-level conftest autouse fixture which calls
+`mcp._transforms.clear()` and re-applies the baseline state (e.g.,
+`mcp.disable(tags={"kitchen"})`). New test classes that need their own enable/disable
+calls must add a class-level autouse fixture following the same clear+restore pattern.
+Never rely on inverse method calls for cleanup.
+
 ## Fixture Discipline
 
 - The `tool_ctx` fixture (conftest.py) provides a fully isolated `ToolContext` via

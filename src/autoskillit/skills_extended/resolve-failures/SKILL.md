@@ -50,6 +50,15 @@ timeouts, resource contention under parallel execution (pytest-xdist), and
 non-deterministic setup/teardown. Apply a stabilizing fix. Never classify a flaky test
 as unfixable. Never emit `ci_only_failure` for a test that is merely non-deterministic.
 
+When a test passes in isolation but fails in the full suite, check whether the test's
+shared dependencies (service objects, registries, caches, middleware stacks) accumulate
+state across calls — growing lists, maps, or registries rather than toggling flags,
+unless accumulation is the intended behavior (e.g., event logs, audit trails). Calling
+an inverse method (e.g., `disable()` to undo `enable()`) does not reset
+accumulation-based state if the framework appends rather than toggles; every call to
+either method appends a new entry. The fix for accumulation-based leakage is full reset:
+clear the collection, then re-apply the baseline state — not inverse operations.
+
 ## Context Limit Behavior
 
 When context is exhausted mid-execution, edits may be on disk but not committed.

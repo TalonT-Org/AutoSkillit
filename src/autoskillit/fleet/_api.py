@@ -19,7 +19,7 @@ from autoskillit.core import (
     get_logger,
 )
 from autoskillit.fleet.result_parser import parse_l2_result_block
-from autoskillit.recipe.schema import CAMPAIGN_REF_RE
+from autoskillit.recipe import CAMPAIGN_REF_RE
 
 if TYPE_CHECKING:
     from autoskillit.pipeline.context import ToolContext

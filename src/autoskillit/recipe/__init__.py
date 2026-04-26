@@ -78,6 +78,7 @@ from autoskillit.recipe.loader import parse_recipe_metadata  # noqa: E402
 from autoskillit.recipe.repository import DefaultRecipeRepository  # noqa: E402
 from autoskillit.recipe.schema import (  # noqa: E402
     AUTOSKILLIT_VERSION_KEY,
+    CAMPAIGN_REF_RE,
     CampaignDispatch,
     DataFlowReport,
     Recipe,
@@ -114,6 +115,7 @@ __all__ = [
     "RecipeIngredient",
     "RecipeStep",
     "AUTOSKILLIT_VERSION_KEY",
+    "CAMPAIGN_REF_RE",
     "StepResultCondition",
     "StepResultRoute",
     "DataFlowReport",

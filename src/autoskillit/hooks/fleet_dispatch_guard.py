@@ -24,7 +24,10 @@ def main() -> None:
         sys.stderr.write("fleet_dispatch_guard: unexpected JSON root type — failing open\n")
         sys.exit(0)
 
-    # Interactive sessions always pass
+    # AUTOSKILLIT_HEADLESS is the sole discriminator. Hook payload cross-check
+    # (session_type field) would add defence-in-depth against local env
+    # manipulation, but the attack surface is narrowly local and the env var
+    # is set by our own launcher — not user-supplied input.
     if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
         sys.exit(0)
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 
 from autoskillit.core import MergeFailedStep, Severity, get_logger
-from autoskillit.recipe._analysis import ValidationContext, _bfs_reachable
+from autoskillit.recipe._analysis import ValidationContext, bfs_reachable
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 logger = get_logger(__name__)
@@ -302,7 +302,7 @@ def _check_merge_enrollment_auto_consistency(ctx: ValidationContext) -> list[Rul
                     no_auto_targets.add(cond.route)
 
     for target in no_auto_targets:
-        reachable = _bfs_reachable(ctx.step_graph, target) | {target}
+        reachable = bfs_reachable(ctx.step_graph, target) | {target}
         for reached in reachable:
             if _is_auto_flagged_step(reached, ctx):
                 findings.append(

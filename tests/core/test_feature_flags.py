@@ -46,7 +46,6 @@ class TestCollectDisabledFeatureTags:
         from autoskillit.core.feature_flags import _collect_disabled_feature_tags
 
         fake_def = FeatureDef(
-            name="testgate",
             lifecycle=FeatureLifecycle.EXPERIMENTAL,
             description="Test-only gate",
             tool_tags=frozenset({"testgate-tool"}),
@@ -67,7 +66,6 @@ class TestCollectDisabledFeatureTags:
 
         shared_tag = frozenset({"shared-tag"})
         def_a = FeatureDef(
-            name="feat_a",
             lifecycle=FeatureLifecycle.EXPERIMENTAL,
             description="A",
             tool_tags=shared_tag,
@@ -76,7 +74,6 @@ class TestCollectDisabledFeatureTags:
             default_enabled=False,
         )
         def_b = FeatureDef(
-            name="feat_b",
             lifecycle=FeatureLifecycle.EXPERIMENTAL,
             description="B",
             tool_tags=shared_tag,

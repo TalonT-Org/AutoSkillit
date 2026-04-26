@@ -10,7 +10,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Final
 
-from autoskillit.core import RecipeSource
+from autoskillit.core import RECIPE_PACK_TAGS, RecipeSource
 
 AUTOSKILLIT_VERSION_KEY: Final = "autoskillit_version"
 RECIPE_VERSION_KEY: Final = "recipe_version"
@@ -150,10 +150,14 @@ class Recipe:
     composite_hash: str = ""
     experimental: bool = False
     requires_packs: list[str] = field(default_factory=list)
+    # Keys from PACK_REGISTRY (skill pack names, e.g. "fleet", "planner").
+    # Named 'requires_packs' (not 'requires_skill_packs') for brevity.
     kind: RecipeKind = RecipeKind.STANDARD
     categories: list[str] = field(default_factory=list)
     dispatches: list[CampaignDispatch] = field(default_factory=list)
     requires_recipe_packs: list[str] = field(default_factory=list)
+    # Keys from RECIPE_PACK_REGISTRY. Named 'requires_recipe_packs' to
+    # distinguish from 'requires_packs'; the asymmetry is intentional.
     allowed_recipes: list[str] = field(default_factory=list)
     continue_on_failure: bool = False
     # Populated by extract_blocks() during load; empty tuple for recipes with no block: anchors.
@@ -164,6 +168,11 @@ class Recipe:
         self.description = self.description.strip()
         self.summary = self.summary.strip()
         self.kitchen_rules = [rule.strip() for rule in self.kitchen_rules]
+        unknown_cats = set(self.categories) - RECIPE_PACK_TAGS
+        if unknown_cats:
+            raise ValueError(
+                f"Unknown categories {sorted(unknown_cats)!r}. Valid: {sorted(RECIPE_PACK_TAGS)}"
+            )
 
 
 @dataclass

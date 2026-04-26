@@ -24,9 +24,9 @@ def _tools_for_feature(fdef: FeatureDef) -> frozenset[str]:
     return frozenset(tool for tool, tags in TOOL_SUBSET_TAGS.items() if fdef.tool_tags & tags)
 
 
-def _get_disabled_feature_defs(ctx: ValidationContext) -> list[FeatureDef]:
-    """Return FeatureDef objects for all features named in ctx.disabled_features."""
-    return [fdef for name, fdef in FEATURE_REGISTRY.items() if name in ctx.disabled_features]
+def _get_disabled_feature_defs(ctx: ValidationContext) -> dict[str, FeatureDef]:
+    """Return {feature_name: FeatureDef} for all features named in ctx.disabled_features."""
+    return {name: fdef for name, fdef in FEATURE_REGISTRY.items() if name in ctx.disabled_features}
 
 
 def _get_skill_category_map(lister: SkillLister | None = None) -> dict[str, frozenset[str]]:
@@ -55,13 +55,13 @@ def check_feature_gated_tools(ctx: ValidationContext) -> list[RuleFinding]:
     findings: list[RuleFinding] = []
 
     # Hoist per-feature tool sets and category_map outside the step loop
-    feature_tools = {fdef: _tools_for_feature(fdef) for fdef in disabled_fdefs}
+    feature_tools = {fdef: _tools_for_feature(fdef) for fdef in disabled_fdefs.values()}
     category_map = (
         ctx.skill_category_map if ctx.skill_category_map is not None else _get_skill_category_map()
     )
 
     for step_name, step in ctx.recipe.steps.items():
-        for fdef in disabled_fdefs:
+        for fname, fdef in disabled_fdefs.items():
             # --- Tool check ---
             if step.tool and step.tool in feature_tools[fdef]:
                 findings.append(
@@ -71,8 +71,8 @@ def check_feature_gated_tools(ctx: ValidationContext) -> list[RuleFinding]:
                         step_name=step_name,
                         message=(
                             f"step '{step_name}': tool '{step.tool}' belongs to "
-                            f"disabled feature '{fdef.name}'. "
-                            f"Enable '{fdef.name}' in .autoskillit/config.yaml "
+                            f"disabled feature '{fname}'. "
+                            f"Enable '{fname}' in .autoskillit/config.yaml "
                             f"features to use this tool."
                         ),
                     )
@@ -91,8 +91,8 @@ def check_feature_gated_tools(ctx: ValidationContext) -> list[RuleFinding]:
                         message=(
                             f"step '{step_name}': run_python callable "
                             f"'{(step.with_args or {}).get('callable', '')}' "
-                            f"belongs to disabled feature '{fdef.name}'. "
-                            f"Enable '{fdef.name}' in .autoskillit/config.yaml "
+                            f"belongs to disabled feature '{fname}'. "
+                            f"Enable '{fname}' in .autoskillit/config.yaml "
                             f"features to use this callable."
                         ),
                     )
@@ -115,8 +115,8 @@ def check_feature_gated_tools(ctx: ValidationContext) -> list[RuleFinding]:
                         message=(
                             f"step '{step_name}': skill_command '{skill_cmd}' references "
                             f"skill '{skill_name}' which belongs to disabled feature "
-                            f"'{fdef.name}'. "
-                            f"Enable '{fdef.name}' in .autoskillit/config.yaml "
+                            f"'{fname}'. "
+                            f"Enable '{fname}' in .autoskillit/config.yaml "
                             f"features to use this skill."
                         ),
                     )

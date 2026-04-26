@@ -10,6 +10,7 @@ import os
 
 from autoskillit.core import (
     CATEGORY_TAGS,
+    FEATURE_REGISTRY,
     FLEET_DISPATCH_MODE,
     FLEET_MODE_ENV_VAR,
     HEADLESS_ENV_VAR,
@@ -19,6 +20,11 @@ from autoskillit.core import (
 from autoskillit.core import session_type as _resolve_session_type
 
 _log = get_logger(__name__)
+
+
+def _collect_fleet_tool_tags() -> frozenset[str]:
+    """Return the union of all tool_tags across FEATURE_REGISTRY entries."""
+    return frozenset().union(*(fdef.tool_tags for fdef in FEATURE_REGISTRY.values()))
 
 
 def _apply_session_type_visibility() -> None:
@@ -34,7 +40,9 @@ def _apply_session_type_visibility() -> None:
     _headless = os.environ.get(HEADLESS_ENV_VAR) == "1"
 
     if _session is SessionType.FLEET:
-        mcp.enable(tags={"fleet"})
+        fleet_tags = _collect_fleet_tool_tags()
+        if fleet_tags:
+            mcp.enable(tags=set(fleet_tags))
         if os.environ.get(FLEET_MODE_ENV_VAR) == FLEET_DISPATCH_MODE:
             mcp.enable(tags={"fleet-dispatch"})
     elif _session is SessionType.ORCHESTRATOR and _headless:

@@ -8,7 +8,7 @@ description: |
 summary: "init > analyze > [extract_domain?] > phases-loop > assignments-loop > wps-loop > reconcile > validate/refine > compile"
 
 requires_packs: [kitchen-core]
-categories: [planner]
+categories: [orchestration-family]
 
 kitchen_rules:
   - Never invoke native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Agent,

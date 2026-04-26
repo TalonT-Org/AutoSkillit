@@ -30,22 +30,14 @@ def test_feature_registry_keys_are_sorted():
     assert keys == sorted(keys), f"FEATURE_REGISTRY keys not sorted: {keys}"
 
 
-def test_feature_registry_key_name_consistency() -> None:
-    """FEATURE_REGISTRY key must equal FeatureDef.name for every entry."""
-    from autoskillit.core._type_constants import FEATURE_REGISTRY
-
-    mismatches = {k: defn.name for k, defn in FEATURE_REGISTRY.items() if k != defn.name}
-    assert not mismatches, f"FEATURE_REGISTRY key/name mismatch: {mismatches}"
-
-
 def test_feature_tool_tags_exist_in_subset_tags():
     """Every FeatureDef.tool_tags entry exists in TOOL_SUBSET_TAGS tag values."""
     from autoskillit.core._type_constants import FEATURE_REGISTRY, TOOL_SUBSET_TAGS
 
     all_tags = frozenset(tag for tags in TOOL_SUBSET_TAGS.values() for tag in tags)
     violations = [
-        f"{defn.name}.tool_tags contains {tag!r} not in TOOL_SUBSET_TAGS"
-        for defn in FEATURE_REGISTRY.values()
+        f"{k}.tool_tags contains {tag!r} not in TOOL_SUBSET_TAGS"
+        for k, defn in FEATURE_REGISTRY.items()
         for tag in defn.tool_tags
         if tag not in all_tags
     ]
@@ -57,13 +49,13 @@ def test_feature_import_package_exists():
     from autoskillit.core._type_constants import FEATURE_REGISTRY
 
     failures = []
-    for defn in FEATURE_REGISTRY.values():
+    for k, defn in FEATURE_REGISTRY.items():
         if defn.import_package is None:
             continue
         try:
             importlib.import_module(defn.import_package)
         except ImportError as e:
-            failures.append(f"{defn.name}.import_package={defn.import_package!r}: {e}")
+            failures.append(f"{k}.import_package={defn.import_package!r}: {e}")
     assert not failures, "\n".join(failures)
 
 
@@ -81,8 +73,8 @@ def test_stable_features_are_default_enabled():
     from autoskillit.core._type_enums import FeatureLifecycle
 
     violations = [
-        defn.name
-        for defn in FEATURE_REGISTRY.values()
+        k
+        for k, defn in FEATURE_REGISTRY.items()
         if defn.lifecycle == FeatureLifecycle.STABLE and not defn.default_enabled
     ]
     assert not violations, f"STABLE features must be default_enabled=True: {violations}"
@@ -94,8 +86,8 @@ def test_sunset_dates_not_expired():
 
     today = date.today()
     expired = [
-        f"{defn.name} (sunset={defn.sunset_date})"
-        for defn in FEATURE_REGISTRY.values()
+        f"{k} (sunset={defn.sunset_date})"
+        for k, defn in FEATURE_REGISTRY.items()
         if defn.sunset_date is not None and defn.sunset_date < today
     ]
     assert not expired, f"Features with expired sunset_date: {expired}"
@@ -106,8 +98,8 @@ def test_feature_depends_on_references_valid_features():
     from autoskillit.core._type_constants import FEATURE_REGISTRY
 
     violations = [
-        f"{defn.name}.depends_on contains unknown {dep!r}"
-        for defn in FEATURE_REGISTRY.values()
+        f"{k}.depends_on contains unknown {dep!r}"
+        for k, defn in FEATURE_REGISTRY.items()
         for dep in defn.depends_on
         if dep not in FEATURE_REGISTRY
     ]
@@ -145,11 +137,8 @@ def test_feature_skill_categories_match_real_skills():
                 all_category_tags.update(str(c) for c in cats)
 
     violations = [
-        (
-            f"{defn.name}.skill_categories contains {cat!r}:"
-            " no skill declares this category in frontmatter"
-        )
-        for defn in FEATURE_REGISTRY.values()
+        (f"{k}.skill_categories contains {cat!r}: no skill declares this category in frontmatter")
+        for k, defn in FEATURE_REGISTRY.items()
         for cat in defn.skill_categories
         if cat not in all_category_tags
     ]
@@ -222,7 +211,6 @@ def test_config_dependency_validation(monkeypatch):
 
     # Temporarily patch FEATURE_REGISTRY with a dep-requiring entry for this test
     dep_feature = FeatureDef(
-        name="test_dep_b",
         lifecycle=FeatureLifecycle.EXPERIMENTAL,
         description="test dep B",
         tool_tags=frozenset(),
@@ -231,7 +219,6 @@ def test_config_dependency_validation(monkeypatch):
         depends_on=frozenset({"test_dep_a"}),
     )
     dep_parent = FeatureDef(
-        name="test_dep_a",
         lifecycle=FeatureLifecycle.EXPERIMENTAL,
         description="test dep A",
         tool_tags=frozenset(),
@@ -284,12 +271,6 @@ def test_fleet_in_feature_registry():
     assert "fleet" in FEATURE_REGISTRY
 
 
-def test_fleet_feature_def_name_matches_key():
-    from autoskillit.core._type_constants import FEATURE_REGISTRY
-
-    assert FEATURE_REGISTRY["fleet"].name == "fleet"
-
-
 def test_fleet_feature_tool_tags_in_tool_subset_tags():
     from autoskillit.core._type_constants import FEATURE_REGISTRY, TOOL_SUBSET_TAGS
 
@@ -331,7 +312,6 @@ def test_is_feature_enabled_disabled_lifecycle_always_false(monkeypatch):
     from autoskillit.core.feature_flags import is_feature_enabled
 
     disabled_def = FeatureDef(
-        name="test_disabled_feat",
         lifecycle=FeatureLifecycle.DISABLED,
         description="disabled test feature",
         tool_tags=frozenset(),
@@ -356,7 +336,6 @@ def test_build_features_dict_rejects_enabling_disabled_feature(monkeypatch):
     from autoskillit.core._type_enums import FeatureLifecycle
 
     disabled_def = FeatureDef(
-        name="test_cannot_enable",
         lifecycle=FeatureLifecycle.DISABLED,
         description="cannot enable",
         tool_tags=frozenset(),
@@ -381,7 +360,6 @@ def test_is_feature_enabled_experimental_blanket(monkeypatch):
     from autoskillit.core.feature_flags import is_feature_enabled
 
     exp_def = FeatureDef(
-        name="test_exp_feat",
         lifecycle=FeatureLifecycle.EXPERIMENTAL,
         description="experimental",
         tool_tags=frozenset(),
@@ -406,7 +384,6 @@ def test_is_feature_enabled_stable_unaffected_by_experimental_enabled(monkeypatc
     from autoskillit.core.feature_flags import is_feature_enabled
 
     stable_def = FeatureDef(
-        name="test_stable_feat",
         lifecycle=FeatureLifecycle.STABLE,
         description="stable",
         tool_tags=frozenset(),

@@ -368,7 +368,6 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
 class FeatureDef:
     """Definition of a named feature gate."""
 
-    name: str
     lifecycle: FeatureLifecycle
     description: str
     tool_tags: frozenset[str]
@@ -383,7 +382,6 @@ class FeatureDef:
 
 FEATURE_REGISTRY: dict[str, FeatureDef] = {
     "fleet": FeatureDef(
-        name="fleet",
         lifecycle=FeatureLifecycle.EXPERIMENTAL,
         description="L3 Fleet Orchestrator — multi-session campaign dispatch",
         tool_tags=frozenset({"fleet"}),
@@ -394,7 +392,6 @@ FEATURE_REGISTRY: dict[str, FeatureDef] = {
         since_version="0.9.119",
     ),
     "planner": FeatureDef(
-        name="planner",
         lifecycle=FeatureLifecycle.EXPERIMENTAL,
         description=(
             "Progressive resolution planner — 3-pass sequential decomposition"
@@ -424,11 +421,6 @@ if not all(
         "FeatureDef.tool_tags contains a tag not present in TOOL_SUBSET_TAGS values. "
         "Add the tag to the appropriate tool entry in TOOL_SUBSET_TAGS first."
     )
-
-# Guard: FEATURE_REGISTRY key must equal FeatureDef.name — checked at import time.
-_mismatches = {k: defn.name for k, defn in FEATURE_REGISTRY.items() if k != defn.name}
-if _mismatches:
-    raise AssertionError(f"FEATURE_REGISTRY key/name mismatch: {_mismatches}")
 
 
 # Canonical prefix required for all skill_command values passed to run_skill.

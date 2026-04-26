@@ -2,27 +2,14 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 
 import pytest
 
-from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
+from tests.fakes import InMemoryHeadlessExecutor
+from tests.fleet._helpers import _setup_dispatch
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
-
-
-def _make_recipe_info(name: str = "test-recipe"):
-    from pathlib import Path
-
-    from autoskillit.recipe.schema import RecipeInfo, RecipeSource
-
-    return RecipeInfo(
-        name=name,
-        description="test",
-        source=RecipeSource.PROJECT,
-        path=Path(f"/fake/{name}.yaml"),
-    )
 
 
 def _simple_prompt_builder(**kwargs) -> str:
@@ -41,21 +28,6 @@ async def _no_sleep_quota_checker(config, **kwargs) -> dict:
 
 async def _noop_quota_refresher(config, **kwargs) -> None:
     pass
-
-
-def _setup_dispatch(tool_ctx, monkeypatch, recipe_name: str = "test-recipe"):
-    from autoskillit.recipe.schema import Recipe, RecipeKind
-
-    tool_ctx.fleet_lock = asyncio.Lock()
-    repo = InMemoryRecipeRepository()
-    recipe_info = _make_recipe_info(recipe_name)
-    repo.add_recipe(recipe_name, recipe_info)
-    repo.add_full_recipe(
-        recipe_info.path,
-        Recipe(name=recipe_name, description="test", kind=RecipeKind.STANDARD, ingredients={}),
-    )
-    tool_ctx.recipes = repo
-    tool_ctx.executor = InMemoryHeadlessExecutor()
 
 
 async def _run(tool_ctx, recipe: str = "test-recipe") -> dict:

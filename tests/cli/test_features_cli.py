@@ -29,6 +29,13 @@ def test_features_list_shows_registry(
     out = capsys.readouterr().out
     assert "fleet" in out
     assert "experimental" in out
+    assert "FEATURE" in out
+    assert "LIFECYCLE" in out
+    assert "EFFECTIVE" in out
+    fleet_line = next(
+        line for line in out.splitlines() if "fleet" in line and "FEATURE" not in line
+    )
+    assert len(fleet_line.split()) >= 6
 
 
 # ---------------------------------------------------------------------------

@@ -70,6 +70,11 @@ HOOK_REGISTRY: list[HookDef] = [
         scripts=["generated_file_write_guard.py"],
     ),
     HookDef(
+        matcher=r"Write|Edit",
+        scripts=["recipe_write_advisor.py"],
+        session_scope="interactive_only",
+    ),
+    HookDef(
         matcher=r"Grep",
         scripts=["grep_pattern_lint_guard.py"],
     ),

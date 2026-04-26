@@ -85,6 +85,7 @@ def _bridge_session_registry(session_id: str) -> None:
             os.unlink(tmp)
         except OSError:
             pass
+        raise
 
 
 def main() -> None:

@@ -17,13 +17,16 @@ def _reset_mcp_tags():
     Fix: truncate the transforms list back to a single entry matching the
     server/__init__.py import-time state: ``mcp.disable(tags={"kitchen"})``.
     """
+    from autoskillit.core import ALL_VISIBILITY_TAGS
     from autoskillit.server import mcp
 
     mcp._transforms.clear()
-    mcp.disable(tags={"kitchen"})
+    for tag in sorted(ALL_VISIBILITY_TAGS):
+        mcp.disable(tags={tag})
     yield
     mcp._transforms.clear()
-    mcp.disable(tags={"kitchen"})
+    for tag in sorted(ALL_VISIBILITY_TAGS):
+        mcp.disable(tags={tag})
 
 
 @pytest.fixture(autouse=True)

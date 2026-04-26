@@ -586,18 +586,17 @@ class TestSessionTypeVisibility:
 
     @pytest.fixture(autouse=True)
     def _reset_mcp_visibility(self):
-        """Reset gated tag visibility on the shared mcp singleton before each test.
-
-        Clears the transforms list to prevent unbounded growth across the full
-        test suite, then applies the minimal initial state.
-        """
+        """Reset gated tag visibility on the shared mcp singleton before each test."""
+        from autoskillit.core import ALL_VISIBILITY_TAGS
         from autoskillit.server import mcp
 
         mcp._transforms.clear()
-        mcp.disable(tags={"fleet", "kitchen", "headless", "fleet-dispatch"})
+        for tag in sorted(ALL_VISIBILITY_TAGS):
+            mcp.disable(tags={tag})
         yield
         mcp._transforms.clear()
-        mcp.disable(tags={"kitchen"})
+        for tag in sorted(ALL_VISIBILITY_TAGS):
+            mcp.disable(tags={tag})
 
     @pytest.mark.anyio
     async def test_fleet_dispatch_mode_enables_fleet_dispatch_tools(self, monkeypatch):
@@ -887,13 +886,16 @@ class TestFleetAutoGateBoot:
     @pytest.fixture(autouse=True)
     def _reset_mcp_visibility(self):
         """Reset gated tag visibility on the shared mcp singleton before/after each test."""
+        from autoskillit.core import ALL_VISIBILITY_TAGS
         from autoskillit.server import mcp
 
         mcp._transforms.clear()
-        mcp.disable(tags={"fleet", "kitchen", "headless"})
+        for tag in sorted(ALL_VISIBILITY_TAGS):
+            mcp.disable(tags={tag})
         yield
         mcp._transforms.clear()
-        mcp.disable(tags={"kitchen"})
+        for tag in sorted(ALL_VISIBILITY_TAGS):
+            mcp.disable(tags={tag})
 
     @pytest.mark.anyio
     async def test_fleet_lifespan_auto_opens_gate(self, tool_ctx):
@@ -1133,13 +1135,16 @@ class TestFeatureGateVisibility:
     @pytest.fixture(autouse=True)
     def _reset_mcp_visibility(self):
         """Reset gated tag visibility on the shared mcp singleton before each test."""
+        from autoskillit.core import ALL_VISIBILITY_TAGS
         from autoskillit.server import mcp
 
         mcp._transforms.clear()
-        mcp.disable(tags={"fleet", "kitchen", "headless"})
+        for tag in sorted(ALL_VISIBILITY_TAGS):
+            mcp.disable(tags={tag})
         yield
         mcp._transforms.clear()
-        mcp.disable(tags={"kitchen"})
+        for tag in sorted(ALL_VISIBILITY_TAGS):
+            mcp.disable(tags={tag})
 
     @pytest.mark.anyio
     async def test_fleet_tools_visible_when_feature_enabled(self, monkeypatch):

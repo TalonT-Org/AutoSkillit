@@ -1777,7 +1777,7 @@ def test_run_update_command_invalidates_fetch_cache(
     info = _make_stable_info()
     monkeypatch.setattr("autoskillit.cli._update.detect_install", lambda: info)
     monkeypatch.setattr("autoskillit.cli._update.terminal_guard", FakeTG)
-    monkeypatch.setattr("autoskillit.cli._update.any_kitchen_open", lambda: False)
+    monkeypatch.setattr("autoskillit.core.any_kitchen_open", lambda: False)
 
     upgrade_ok = subprocess.CompletedProcess([], returncode=0)
     install_ok = subprocess.CompletedProcess([], returncode=0)
@@ -2033,7 +2033,7 @@ def test_full_lifecycle_install_clears_stale_cache_then_check_detects_new_versio
         signal = _binary_signal(info, tmp_path, AUTOSKILLIT_INSTALLED_VERSION)
 
     assert signal is not None, "Binary signal must fire after cache invalidation"
-    assert "0.9.175" in signal.detail
+    assert "0.9.175" in signal.message
 
 
 @pytest.mark.parametrize(

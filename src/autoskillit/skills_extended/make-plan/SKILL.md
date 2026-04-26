@@ -66,7 +66,7 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 
 ## Planning Steps
 
-1. **Understand related systems and validate details** - Use subagents to study the architecture, how components work together, their purpose, patterns, and standards. Validate any details provided in the task description.
+1. **Understand related systems and validate details** - Use subagents to study the architecture, how components work together, their purpose, patterns, and standards. Validate any details provided in the task description. When the plan involves adding tests that call mutating methods on singleton or module-level objects (enable/disable, register/unregister, connect/disconnect), use a subagent to read the target test directory's existing isolation patterns (conftest fixtures, setup/teardown, beforeEach/afterEach) before proceeding to Step 3.
 
 2. **Explore and design approaches** - Use subagents to investigate different ways to solve the problem. Use subagents with web search to research modern solutions, approaches, designs, and architectures relevant to the problem. For each approach, focus on:
    - Does it solve the problem correctly?
@@ -75,6 +75,8 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
    - Is the design clean and understandable?
 
 3. **Design tests first** - For the chosen approach, define tests that capture the intended behavior. These tests should fail against the current codebase and pass once the implementation is complete. The implementation steps should be ordered to make these tests pass.
+
+   **Test isolation contract:** When the plan adds tests that call mutating methods on a singleton or module-level object, the plan must specify the isolation strategy — how state is reset between tests. Ensure new tests either inherit the existing isolation mechanism or explicitly define their own. Plans that prescribe calling mutating methods on shared objects without specifying cleanup are incomplete.
 
 4. **Evaluate approaches on technical merit only** - Use subagents to assess each approach. Evaluation criteria:
    - **Correctness**: Does it fully solve the stated problem?

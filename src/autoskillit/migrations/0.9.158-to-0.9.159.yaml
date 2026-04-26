@@ -7,7 +7,7 @@ description: >
 changes:
   - id: fleet-error-code-prefix-normalization
     description: >
-      FleetErrorCode enum members L2_*, DISPATCH_*, QUOTA_EXHAUSTED, and CLEANUP_FAILED
+      FleetErrorCode enum members L2_*, DISPATCH_BUDGET_EXCEEDED, QUOTA_EXHAUSTED, and CLEANUP_FAILED
       have been renamed to FLEET_L2_*, FLEET_BUDGET_EXCEEDED, FLEET_QUOTA_EXHAUSTED, and
       FLEET_CLEANUP_FAILED respectively. Their string values changed from l2_*/dispatch_*/
       quota_exhausted/cleanup_failed to fleet_l2_*/fleet_budget_exceeded/

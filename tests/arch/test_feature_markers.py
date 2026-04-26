@@ -141,13 +141,19 @@ def test_all_feature_dir_test_files_carry_feature_marker():
     from autoskillit.core import FEATURE_REGISTRY
 
     missing = []
+    checked_count = 0
     for feat_name in FEATURE_REGISTRY:
         feat_dir = _TESTS_ROOT / feat_name
         if not feat_dir.is_dir():
             continue
         for path in sorted(feat_dir.glob("test_*.py")):
+            checked_count += 1
             if not _pytestmark_has_feature(path.read_text(), feat_name):
                 missing.append(f"{path.relative_to(_TESTS_ROOT)} (feature={feat_name!r})")
+    assert checked_count > 0, (
+        "No feature test directories found — FEATURE_REGISTRY has no tests/{name}/ directories. "
+        "Add at least one feature directory under tests/ or update FEATURE_REGISTRY."
+    )
     assert not missing, "Files missing pytest.mark.feature(name) in pytestmark:\n" + "\n".join(
         f"  {r}" for r in missing
     )

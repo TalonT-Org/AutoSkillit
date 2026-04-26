@@ -402,7 +402,8 @@ def _resolve_test_config() -> "AutomationConfig | None":
         # rather than Path.cwd(), which varies across IDE runners and monkeypatch.chdir.
         repo_root = Path(__file__).resolve().parent.parent
         cfg = load_config(repo_root)
-        assert isinstance(cfg, _AutomationConfig)
+        if not isinstance(cfg, _AutomationConfig):
+            raise TypeError(f"load_config returned {type(cfg)!r}, expected AutomationConfig")
         return cfg
     except Exception as exc:
         import warnings

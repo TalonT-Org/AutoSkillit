@@ -183,7 +183,6 @@ def test_is_feature_enabled_override():
     assert len(FEATURE_REGISTRY) > 0, "FEATURE_REGISTRY must not be empty"
     for name, defn in FEATURE_REGISTRY.items():
         if defn.lifecycle == FeatureLifecycle.DISABLED:
-            # DISABLED cannot be enabled by any override
             assert is_feature_enabled(name, {name: True}) is False
             assert is_feature_enabled(name, {name: False}) is False
         else:
@@ -367,7 +366,6 @@ def test_build_features_dict_rejects_enabling_disabled_feature(monkeypatch):
     monkeypatch.setitem(tc.FEATURE_REGISTRY, "test_cannot_enable", disabled_def)
     with pytest.raises(ConfigSchemaError, match="DISABLED"):
         AutomationConfig._build_features_dict({"test_cannot_enable": True})
-    # Setting to False is fine
     result, _ = AutomationConfig._build_features_dict({"test_cannot_enable": False})
     assert result["test_cannot_enable"] is False
 

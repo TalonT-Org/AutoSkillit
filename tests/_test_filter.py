@@ -131,7 +131,7 @@ _CORE_UNIVERSAL_MODULES: frozenset[str] = frozenset(
 
 MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "readiness": frozenset({"core", "server"}),
-    "feature_flags": frozenset({"core", "cli", "config", "server", "workspace"}),
+    "feature_flags": frozenset({"core", "cli", "config", "recipe", "server", "workspace"}),
     "kitchen_state": frozenset({"core", "cli", "server"}),
     "branch_guard": frozenset({"core", "pipeline", "server", "workspace"}),
     "_plugin_ids": frozenset({"core", "cli", "server"}),

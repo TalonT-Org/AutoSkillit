@@ -67,7 +67,10 @@ def load_recipe(path: Path, temp_dir_relpath: str = ".autoskillit/temp") -> Reci
     return recipe
 
 
-def list_recipes(project_dir: Path) -> LoadResult[RecipeInfo]:
+def list_recipes(
+    project_dir: Path,
+    exclude_kinds: frozenset[RecipeKind] = frozenset(),
+) -> LoadResult[RecipeInfo]:
     """Find available recipes from project and built-in sources."""
     seen: set[str] = set()
     items: list[RecipeInfo] = []
@@ -79,8 +82,9 @@ def list_recipes(project_dir: Path) -> LoadResult[RecipeInfo]:
     builtin_dir = pkg_root() / "recipes"
     _collect_recipes(RecipeSource.BUILTIN, builtin_dir, seen, items, errors)
 
+    filtered = [r for r in items if r.kind not in exclude_kinds] if exclude_kinds else items
     return LoadResult(
-        items=sorted(items, key=lambda r: (r.source != RecipeSource.BUILTIN, r.name)),
+        items=sorted(filtered, key=lambda r: (r.source != RecipeSource.BUILTIN, r.name)),
         errors=errors,
     )
 
@@ -410,6 +414,7 @@ def _collect_recipes(
                             recipe_version=recipe.recipe_version,
                             content_hash=_crh(f),
                             content=raw,
+                            kind=recipe.kind,
                         )
                     )
             except Exception as exc:

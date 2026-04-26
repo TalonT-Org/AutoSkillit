@@ -9,7 +9,7 @@ import pytest
 
 from autoskillit.planner.validation import validate_plan
 
-pytestmark = [pytest.mark.layer("planner"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.feature("planner")]
 
 
 # ---------------------------------------------------------------------------

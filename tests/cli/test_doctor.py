@@ -1938,6 +1938,7 @@ def test_check_installed_plugins_entry_flat_structure_is_warning(tmp_path: Path)
     assert result.severity == Severity.WARNING
 
 
+@pytest.mark.feature("fleet")
 class TestGroupMFranchiseDoctorChecks:
     """Group M: Fleet doctor checks (ambient env detection + infra health + campaign ops)."""
 
@@ -2251,6 +2252,7 @@ class TestGroupMFranchiseDoctorChecks:
         assert fleet_checks <= check_names
 
 
+@pytest.mark.feature("fleet")
 class TestGroupNFeatureGateDoctorChecks:
     """N1–N8: Feature-gate checks and FleetConfig conditional validation."""
 

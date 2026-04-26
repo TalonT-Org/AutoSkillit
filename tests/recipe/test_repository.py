@@ -183,7 +183,7 @@ def test_list_all_delegates_to_api() -> None:
         result = repo.list_all()
 
     assert result == expected
-    mock_api.assert_called_once_with(project_dir=None)
+    mock_api.assert_called_once_with(project_dir=None, features=None)
 
 
 # ---------------------------------------------------------------------------

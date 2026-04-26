@@ -98,8 +98,13 @@ class DefaultRecipeRepository:
     ) -> dict[str, Any]:
         return _api.validate_from_path(script_path, temp_dir_relpath=temp_dir_relpath)
 
-    def list_all(self, project_dir: Any | None = None) -> dict[str, Any]:
-        return _api.list_all(project_dir=project_dir)
+    def list_all(
+        self,
+        project_dir: Any | None = None,
+        *,
+        features: dict[str, bool] | None = None,
+    ) -> dict[str, Any]:
+        return _api.list_all(project_dir=project_dir, features=features)
 
     async def apply_triage_gate(
         self,

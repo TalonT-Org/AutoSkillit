@@ -1096,6 +1096,7 @@ class TestFleetAutoGateBoot:
             assert name not in tool_names, f"{name} should be hidden when fleet feature disabled"
 
 
+@pytest.mark.feature("fleet")
 class TestFeatureGateVisibility:
     """Feature gate override layer in _apply_session_type_visibility."""
 

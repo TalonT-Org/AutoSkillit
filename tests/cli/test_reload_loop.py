@@ -188,6 +188,7 @@ def test_interactive_session_reload_uses_named_resume(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.feature("fleet")
 def test_fleet_reload_relaunches_without_resume(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

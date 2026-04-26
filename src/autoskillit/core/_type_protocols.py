@@ -263,7 +263,12 @@ class RecipeRepository(Protocol):
         self, script_path: Any, temp_dir_relpath: str = ".autoskillit/temp"
     ) -> dict[str, Any]: ...
 
-    def list_all(self, project_dir: Any | None = None) -> dict[str, Any]: ...
+    def list_all(
+        self,
+        project_dir: Any | None = None,
+        *,
+        features: dict[str, bool] | None = None,
+    ) -> dict[str, Any]: ...
 
     async def apply_triage_gate(
         self,

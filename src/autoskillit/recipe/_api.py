@@ -263,15 +263,25 @@ def format_recipe_list_response(result: LoadResult[RecipeInfo]) -> dict[str, obj
     return response
 
 
-def list_all(project_dir: Path | None = None) -> dict[str, Any]:
+def list_all(
+    project_dir: Path | None = None,
+    *,
+    features: dict[str, bool] | None = None,
+) -> dict[str, Any]:
     """List all recipes from project and built-in sources.
 
     Returns:
         {"recipes": list[{"name", "description", "summary"}]}
         Includes "errors" key when recipes fail to parse.
     """
+    from autoskillit.core import is_feature_enabled  # noqa: PLC0415
+    from autoskillit.recipe.schema import RecipeKind  # noqa: PLC0415
+
     _pdir = project_dir if project_dir is not None else Path.cwd()
-    result = list_recipes(_pdir)
+    _features = features or {}
+    fleet_enabled = is_feature_enabled("fleet", _features)
+    exclude_kinds = frozenset() if fleet_enabled else frozenset({RecipeKind.CAMPAIGN})
+    result = list_recipes(_pdir, exclude_kinds=exclude_kinds)
     return format_recipe_list_response(result)
 
 

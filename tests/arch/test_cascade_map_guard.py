@@ -1,5 +1,5 @@
 """
-REQ-GUARD-001..003: CI guard validating cascade maps against the AST-derived
+REQ-GUARD-001..003, 005: CI guard validating cascade maps against the AST-derived
 reverse import graph.  Zero runtime cost — pure static analysis.
 """
 
@@ -9,7 +9,6 @@ import ast
 import warnings
 from collections import defaultdict
 from pathlib import Path
-from typing import ClassVar
 
 import pytest
 
@@ -185,49 +184,68 @@ class TestLayerCascadeConservativeGuard:
         )
 
 
-class TestRecipeCascadeFragilityGuard:
-    """REQ-GUARD-004: File-level recipe cascade entries must cover all importers."""
+class TestFileLevelCascadeDriftGuard:
+    """REQ-GUARD-005: File-level cascade entries must cover all test-file importers."""
 
-    _NARROWED_DIRS: ClassVar[frozenset[str]] = frozenset(
-        {
-            "execution",
-            "infra",
-            "skills",
-            "core",
-        }
-    )
-
-    def test_no_recipe_importing_test_file_missing_from_cascade(self) -> None:
-        recipe_cascade = LAYER_CASCADE_CONSERVATIVE["recipe"]
-        declared_files: dict[str, set[str]] = {}
-        for entry in recipe_cascade:
-            if "/" in entry:
-                parts = entry.split("/", 1)
-                declared_files.setdefault(parts[0], set()).add(parts[1])
+    def test_no_importing_test_file_missing_from_file_level_entries(self) -> None:
+        by_dir: dict[str, dict[str, set[str]]] = {}
+        for pkg, cascade_set in LAYER_CASCADE_CONSERVATIVE.items():
+            dir_entries = {e for e in cascade_set if "/" not in e}
+            for entry in cascade_set:
+                if "/" not in entry:
+                    continue
+                dir_name, fname = entry.split("/", 1)
+                if dir_name not in dir_entries:
+                    by_dir.setdefault(dir_name, {}).setdefault(pkg, set()).add(fname)
 
         tests_root = Path(__file__).parent.parent
         violations: list[str] = []
-        for dir_name in self._NARROWED_DIRS:
+
+        for dir_name, pkg_map in sorted(by_dir.items()):
             dir_path = tests_root / dir_name
             if not dir_path.is_dir():
                 continue
             for test_file in sorted(dir_path.glob("test_*.py")):
-                tree = ast.parse(test_file.read_text(encoding="utf-8"))
+                try:
+                    tree = ast.parse(test_file.read_text(encoding="utf-8"))
+                except SyntaxError:
+                    continue
+                imported_pkgs: set[str] = set()
                 for node in ast.walk(tree):
                     if (
                         isinstance(node, ast.ImportFrom)
                         and node.module
-                        and node.module.startswith("autoskillit.recipe")
+                        and node.module.startswith("autoskillit.")
                     ):
-                        fname = test_file.name
-                        if fname not in declared_files.get(dir_name, set()):
-                            violations.append(f"{dir_name}/{fname}")
-                        break
+                        parts = node.module.split(".")
+                        if len(parts) >= 2:
+                            imported_pkgs.add(parts[1])
+
+                fname = test_file.name
+                for pkg, declared_files in pkg_map.items():
+                    if pkg in imported_pkgs and fname not in declared_files:
+                        violations.append(f"{dir_name}/{fname} imports autoskillit.{pkg}")
+
         assert not violations, (
-            "Test files import from autoskillit.recipe but are not in "
-            "LAYER_CASCADE_CONSERVATIVE['recipe'] file-level entries:\n"
+            "Test files import from packages with file-level cascade entries "
+            "but are not declared in LAYER_CASCADE_CONSERVATIVE:\n"
             + "\n".join(f"  {v}" for v in violations)
-            + "\nAdd them to the recipe cascade in tests/_test_filter.py."
+            + "\nAdd the missing file-level entries to tests/_test_filter.py."
+        )
+
+    def test_every_file_level_entry_references_existing_test(self) -> None:
+        tests_root = Path(__file__).parent.parent
+        stale: list[str] = []
+        for pkg, cascade_set in sorted(LAYER_CASCADE_CONSERVATIVE.items()):
+            for entry in sorted(cascade_set):
+                if "/" not in entry:
+                    continue
+                if not (tests_root / entry).is_file():
+                    stale.append(f"{pkg}: {entry} (not found at tests/{entry})")
+        assert not stale, (
+            "File-level cascade entries reference nonexistent test files:\n"
+            + "\n".join(f"  {s}" for s in stale)
+            + "\nRemove the stale entry or update the filename in tests/_test_filter.py."
         )
 
 

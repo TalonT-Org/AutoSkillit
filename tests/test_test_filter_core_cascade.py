@@ -335,9 +335,7 @@ class TestClosureCoreNarrowCascade:
             "migration",
             "hooks",
         ]:
-            assert excluded not in dir_names, (
-                f"narrow cascade should not include {excluded}"
-            )
+            assert excluded not in dir_names, f"narrow cascade should not include {excluded}"
 
     def test_closure_init_uses_union_for_multiple_modules(self, tmp_path: Path) -> None:
         """Multiple narrow causes → union of their MODULE_CASCADE_CORE entries."""
@@ -347,8 +345,7 @@ class TestClosureCoreNarrowCascade:
                 "kitchen_state.py": "",
                 "readiness.py": "",
                 "__init__.py": (
-                    "from .kitchen_state import KitchenState\n"
-                    "from .readiness import is_ready\n"
+                    "from .kitchen_state import KitchenState\nfrom .readiness import is_ready\n"
                 ),
             },
         )
@@ -373,13 +370,9 @@ class TestClosureCoreNarrowCascade:
             "migration",
             "hooks",
         ]:
-            assert excluded not in dir_names, (
-                f"union cascade should not include {excluded}"
-            )
+            assert excluded not in dir_names, f"union cascade should not include {excluded}"
 
-    def test_closure_init_falls_back_when_universal_cause_present(
-        self, tmp_path: Path
-    ) -> None:
+    def test_closure_init_falls_back_when_universal_cause_present(self, tmp_path: Path) -> None:
         """A universal cause among the core changes → full cascade (fail-open)."""
         tests_root = self._make_core_layout(
             tmp_path,
@@ -387,8 +380,7 @@ class TestClosureCoreNarrowCascade:
                 "io.py": "",
                 "kitchen_state.py": "",
                 "__init__.py": (
-                    "from .io import atomic_write\n"
-                    "from .kitchen_state import KitchenState\n"
+                    "from .io import atomic_write\nfrom .kitchen_state import KitchenState\n"
                 ),
             },
         )
@@ -446,9 +438,7 @@ class TestClosureCoreNarrowCascade:
 
         original_expand = tf_mod._expand_reexport_closure
 
-        def _patched_expand(
-            changed_src_files: set[str], src_root: str | Path
-        ) -> set[str]:
+        def _patched_expand(changed_src_files: set[str], src_root: str | Path) -> set[str]:
             result = original_expand(changed_src_files, src_root)
             result.add("src/autoskillit/core/__init__.py")
             return result

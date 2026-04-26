@@ -2353,7 +2353,6 @@ class TestGroupNFeatureGateDoctorChecks:
         from autoskillit.core._type_constants import FeatureDef, FeatureLifecycle
 
         fake_feature = FeatureDef(
-            name="test_feature",
             lifecycle=FeatureLifecycle.EXPERIMENTAL,
             description="test feature with dep",
             tool_tags=frozenset(),
@@ -2380,7 +2379,6 @@ class TestGroupNFeatureGateDoctorChecks:
         from autoskillit.core._type_constants import FeatureDef, FeatureLifecycle
 
         fake_feature = FeatureDef(
-            name="test_feature",
             lifecycle=FeatureLifecycle.EXPERIMENTAL,
             description="test feature with dep",
             tool_tags=frozenset(),
@@ -2425,7 +2423,6 @@ class TestGroupNFeatureGateDoctorChecks:
         from autoskillit.core._type_constants import FeatureDef, FeatureLifecycle
 
         bad_feature = FeatureDef(
-            name="bad_feature",
             lifecycle=FeatureLifecycle.EXPERIMENTAL,
             description="feature with bad import",
             tool_tags=frozenset(),

@@ -142,11 +142,10 @@ def test_recipe_pack_def_importable_from_core() -> None:
     assert all(isinstance(v, RecipePackDef) for v in RECIPE_PACK_REGISTRY.values())
 
 
-def test_feature_reveal_tags_exists() -> None:
-    from autoskillit.core import FEATURE_REVEAL_TAGS
-
-    assert isinstance(FEATURE_REVEAL_TAGS, frozenset)
-    assert "fleet" in FEATURE_REVEAL_TAGS
+def test_feature_reveal_tags_removed() -> None:
+    """FEATURE_REVEAL_TAGS was intentionally removed in #1141."""
+    with pytest.raises(ImportError):
+        from autoskillit.core import FEATURE_REVEAL_TAGS  # noqa: F401
 
 
 def test_exclusive_feature_tools_removed() -> None:

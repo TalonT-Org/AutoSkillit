@@ -35,3 +35,21 @@ def is_feature_enabled(name: str, features: dict[str, bool]) -> bool:
     if defn is None:
         raise KeyError(f"Unknown feature: {name!r}")
     return features.get(name, defn.default_enabled)
+
+
+def _collect_disabled_feature_tags(features: dict[str, bool]) -> frozenset[str]:
+    """Return feature tags that should be suppressed.
+
+    Single source of truth used by _fleet_auto_gate_boot and _redisable_subsets.
+    The registry is the sole authority on which tags belong to which feature.
+    """
+    enabled_tags: set[str] = set()
+    disabled_tags: set[str] = set()
+    for name, defn in FEATURE_REGISTRY.items():
+        if not defn.tool_tags:
+            continue
+        if is_feature_enabled(name, features):
+            enabled_tags |= defn.tool_tags
+        else:
+            disabled_tags |= defn.tool_tags
+    return frozenset(disabled_tags - enabled_tags)

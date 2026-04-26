@@ -1095,10 +1095,38 @@ class TestFleetAutoGateBoot:
         for name in FLEET_TOOLS:
             assert name not in tool_names, f"{name} should be hidden when fleet feature disabled"
 
+    @pytest.mark.anyio
+    async def test_fleet_auto_gate_boot_calls_shared_helper(self, tool_ctx, monkeypatch):
+        """_fleet_auto_gate_boot delegates to _collect_disabled_feature_tags, not inline logic."""
+        import dataclasses
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server._lifespan import _fleet_auto_gate_boot
+
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        tool_ctx.quota_refresh_task = None
+        tool_ctx.config = dataclasses.replace(tool_ctx.config, features={"fleet": False})
+
+        monkeypatch.setattr("autoskillit.server._lifespan._get_ctx_or_none", lambda: tool_ctx)
+
+        with patch("autoskillit.core._collect_disabled_feature_tags") as mock_helper:
+            mock_helper.return_value = frozenset({"fleet"})
+            with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+                with patch("autoskillit.server.helpers._prime_quota_cache", new=AsyncMock()):
+                    with patch(
+                        "autoskillit.pipeline.create_background_task",
+                        return_value=MagicMock(),
+                    ):
+                        with patch("autoskillit.core.register_active_kitchen"):
+                            await _fleet_auto_gate_boot(tool_ctx)
+
+        mock_helper.assert_called_once_with(tool_ctx.config.features)
+
 
 @pytest.mark.feature("fleet")
 class TestFeatureGateVisibility:
-    """Feature gate override layer in _apply_session_type_visibility."""
+    """Session-type dispatch in _apply_session_type_visibility (phase 1 only)."""
 
     @pytest.fixture(autouse=True)
     def _reset_mcp_visibility(self):
@@ -1112,190 +1140,30 @@ class TestFeatureGateVisibility:
         mcp.disable(tags={"kitchen"})
 
     @pytest.mark.anyio
-    async def test_fleet_tools_hidden_when_feature_disabled(self, monkeypatch):
-        """SESSION_TYPE=fleet + AUTOSKILLIT_FEATURES__FLEET=false → no fleet tools."""
-        from autoskillit.core import FLEET_TOOLS
-        from autoskillit.server import mcp
-        from autoskillit.server._session_type import (
-            _apply_session_type_visibility,
-            _fleet_gate,
-        )
-
-        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
-        monkeypatch.setenv("AUTOSKILLIT_FEATURES__FLEET", "false")
-        _apply_session_type_visibility(feature_gates=[_fleet_gate])
-
-        tools = list(await mcp.list_tools())
-        tool_names = {t.name for t in tools}
-        for name in FLEET_TOOLS:
-            assert name not in tool_names, (
-                f"{name} should be hidden when fleet feature is disabled"
-            )
-
-    @pytest.mark.anyio
     async def test_fleet_tools_visible_when_feature_enabled(self, monkeypatch):
-        """SESSION_TYPE=fleet with no override → fleet tools visible (default_enabled)."""
-        from autoskillit.core import FLEET_TOOLS
-        from autoskillit.server import mcp
-        from autoskillit.server._session_type import (
-            _apply_session_type_visibility,
-            _fleet_gate,
-        )
-
-        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
-        monkeypatch.delenv("AUTOSKILLIT_FEATURES__FLEET", raising=False)
-        _apply_session_type_visibility(feature_gates=[_fleet_gate])
-
-        tools = list(await mcp.list_tools())
-        tool_names = {t.name for t in tools}
-        for name in FLEET_TOOLS:
-            assert name in tool_names, (
-                f"{name} should be visible for fleet session when feature is enabled"
-            )
-
-    @pytest.mark.anyio
-    async def test_session_type_fleet_respects_gate(self, monkeypatch):
-        """fleet session + feature disabled → no fleet tools, non-fleet hidden too."""
-        from autoskillit.core import FLEET_TOOLS, GATED_TOOLS
-        from autoskillit.server import mcp
-        from autoskillit.server._session_type import (
-            _apply_session_type_visibility,
-            _fleet_gate,
-        )
-
-        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
-        monkeypatch.setenv("AUTOSKILLIT_FEATURES__FLEET", "false")
-        _apply_session_type_visibility(feature_gates=[_fleet_gate])
-
-        tools = list(await mcp.list_tools())
-        tool_names = {t.name for t in tools}
-        # No fleet tool visible — gate neutralized the pre-reveal
-        for name in FLEET_TOOLS:
-            assert name not in tool_names, f"{name} should be hidden after fleet gate override"
-        # Non-fleet kitchen tools also absent (only fleet was pre-revealed)
-        for name in GATED_TOOLS - FLEET_TOOLS:
-            assert name not in tool_names, (
-                f"{name} (non-fleet kitchen) should be hidden for fleet session"
-            )
-
-    def test_feature_gate_ordering(self, monkeypatch):
-        """Feature gates execute AFTER session-type dispatch (structural ordering test)."""
-        from unittest.mock import patch
-
-        from autoskillit.core import SessionType
-        from autoskillit.server._session_type import _apply_session_type_visibility
-
-        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
-
-        call_order: list[str] = []
-
-        # Monkeypatch mcp.enable to record dispatch happening
-        import autoskillit.server._session_type as st_mod
-
-        def recording_gate(mcp_instance, session: SessionType) -> None:
-            call_order.append("gate")
-
-        with patch.object(st_mod, "_resolve_session_type", return_value=SessionType.FLEET):
-            import autoskillit.server as server_mod
-
-            real_enable = server_mod.mcp.enable
-
-            def patched_enable(*, tags):
-                call_order.append("dispatch_enable")
-                return real_enable(tags=tags)
-
-            with patch.object(server_mod.mcp, "enable", patched_enable):
-                _apply_session_type_visibility(feature_gates=[recording_gate])
-
-        # Gate must be called, and after dispatch_enable
-        assert "gate" in call_order, "Gate was never called"
-        dispatch_idx = next((i for i, v in enumerate(call_order) if v == "dispatch_enable"), None)
-        gate_idx = next((i for i, v in enumerate(call_order) if v == "gate"), None)
-        assert dispatch_idx is not None, "Dispatch enable was never called"
-        assert gate_idx > dispatch_idx, (
-            f"Gate (idx={gate_idx}) must run AFTER dispatch (idx={dispatch_idx})"
-        )
-
-    @pytest.mark.anyio
-    async def test_apply_session_type_visibility_accepts_no_gates(self, monkeypatch):
-        """Backward compat: _apply_session_type_visibility() with no args behaves identically."""
+        """SESSION_TYPE=fleet → fleet tools visible (session-type dispatch only)."""
         from autoskillit.core import FLEET_TOOLS
         from autoskillit.server import mcp
         from autoskillit.server._session_type import _apply_session_type_visibility
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
-        monkeypatch.delenv("AUTOSKILLIT_FEATURES__FLEET", raising=False)
-        # Call with no feature_gates argument (backward-compatible call)
         _apply_session_type_visibility()
 
         tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
-        # Phase 1 still works: fleet tools visible
         for name in FLEET_TOOLS:
             assert name in tool_names, (
-                f"{name} should be visible with no-gate backward-compatible call"
+                f"{name} should be visible for fleet session (phase-1 reveal)"
             )
 
-    @pytest.mark.anyio
-    async def test_fleet_gate_disables_tools_via_fleet_env_var(self, monkeypatch):
-        """AUTOSKILLIT_FEATURES__FLEET=false disables fleet-tagged tools."""
-        from autoskillit.core import FLEET_TOOLS
-        from autoskillit.server import mcp
-        from autoskillit.server._session_type import _apply_session_type_visibility, _fleet_gate
+    def test_apply_session_type_visibility_sole_calling_convention(self):
+        """No feature_gates parameter exists — session-type dispatch only."""
+        import inspect
 
-        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
-        monkeypatch.setenv("AUTOSKILLIT_FEATURES__FLEET", "false")
-        _apply_session_type_visibility(feature_gates=[_fleet_gate])
+        from autoskillit.server._session_type import _apply_session_type_visibility
 
-        tools = list(await mcp.list_tools())
-        tool_names = {t.name for t in tools}
-        assert FLEET_TOOLS
-        for tool in FLEET_TOOLS:
-            assert tool not in tool_names
-
-    @pytest.mark.anyio
-    async def test_fleet_gate_franchise_env_var_has_no_effect(self, monkeypatch):
-        """AUTOSKILLIT_FEATURES__FRANCHISE=false is no longer honored (T2 removed backward compat).
-
-        Only AUTOSKILLIT_FEATURES__FLEET controls fleet tool visibility.
-        Setting the old FRANCHISE env var has no effect — tools remain visible.
-        """
-        from autoskillit.core import FLEET_TOOLS
-        from autoskillit.server import mcp
-        from autoskillit.server._session_type import _apply_session_type_visibility, _fleet_gate
-
-        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
-        monkeypatch.setenv("AUTOSKILLIT_FEATURES__FRANCHISE", "false")
-        monkeypatch.delenv("AUTOSKILLIT_FEATURES__FLEET", raising=False)
-        _apply_session_type_visibility(feature_gates=[_fleet_gate])
-
-        tools = list(await mcp.list_tools())
-        tool_names = {t.name for t in tools}
-        # AUTOSKILLIT_FEATURES__FRANCHISE is ignored — fleet tools remain visible
-        assert FLEET_TOOLS
-        for tool in FLEET_TOOLS:
-            assert tool in tool_names, (
-                f"{tool} should still be visible: FRANCHISE env var is no longer honored"
-            )
-
-    @pytest.mark.anyio
-    async def test_fleet_gate_fleet_env_var_takes_precedence_over_franchise(self, monkeypatch):
-        """AUTOSKILLIT_FEATURES__FLEET=true enables fleet tools; FRANCHISE env var is ignored."""
-        from autoskillit.core import FLEET_TOOLS
-        from autoskillit.server import mcp
-        from autoskillit.server._session_type import _apply_session_type_visibility, _fleet_gate
-
-        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
-        monkeypatch.setenv("AUTOSKILLIT_FEATURES__FLEET", "true")
-        # AUTOSKILLIT_FEATURES__FRANCHISE is no longer read; setting it has no effect
-        monkeypatch.setenv("AUTOSKILLIT_FEATURES__FRANCHISE", "false")
-        _apply_session_type_visibility(feature_gates=[_fleet_gate])
-
-        tools = list(await mcp.list_tools())
-        tool_names = {t.name for t in tools}
-        assert FLEET_TOOLS
-        for tool in FLEET_TOOLS:
-            assert tool in tool_names
+        sig = inspect.signature(_apply_session_type_visibility)
+        assert "feature_gates" not in sig.parameters
 
     @pytest.mark.anyio
     async def test_session_type_fleet_enables_fleet_tags(self, monkeypatch):
@@ -1306,7 +1174,6 @@ class TestFeatureGateVisibility:
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-        monkeypatch.delenv("AUTOSKILLIT_FEATURES__FLEET", raising=False)
         _apply_session_type_visibility()
 
         tools = list(await mcp.list_tools())

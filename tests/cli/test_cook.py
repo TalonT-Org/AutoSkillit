@@ -1098,12 +1098,12 @@ class TestCLIOrder:
             lambda *a, **kw: type("R", (), {"items": [project_recipe]})(),
         )
         monkeypatch.setattr("autoskillit.cli._timed_input.timed_prompt", lambda *a, **kw: "0")
+        monkeypatch.setattr(shutil, "which", lambda cmd: None)
+        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
 
-        import autoskillit.cli.app as app_mod
-
         with pytest.raises(SystemExit):
-            app_mod.order()
+            cli.order()
 
         out = capsys.readouterr().out
         assert "Family Recipes" in out
@@ -1127,12 +1127,12 @@ class TestCLIOrder:
             lambda *a, **kw: type("R", (), {"items": [builtin_recipe]})(),
         )
         monkeypatch.setattr("autoskillit.cli._timed_input.timed_prompt", lambda *a, **kw: "0")
+        monkeypatch.setattr(shutil, "which", lambda cmd: None)
+        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
 
-        import autoskillit.cli.app as app_mod
-
         with pytest.raises(SystemExit):
-            app_mod.order()
+            cli.order()
 
         out = capsys.readouterr().out
         assert "Bundled Recipes" in out
@@ -1156,12 +1156,12 @@ class TestCLIOrder:
             lambda *a, **kw: type("R", (), {"items": [exp_recipe]})(),
         )
         monkeypatch.setattr("autoskillit.cli._timed_input.timed_prompt", lambda *a, **kw: "0")
+        monkeypatch.setattr(shutil, "which", lambda cmd: None)
+        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
 
-        import autoskillit.cli.app as app_mod
-
         with pytest.raises(SystemExit):
-            app_mod.order()
+            cli.order()
 
         out = capsys.readouterr().out
         assert "Experimental" in out
@@ -1185,12 +1185,12 @@ class TestCLIOrder:
             lambda *a, **kw: type("R", (), {"items": [builtin_recipe]})(),
         )
         monkeypatch.setattr("autoskillit.cli._timed_input.timed_prompt", lambda *a, **kw: "0")
+        monkeypatch.setattr(shutil, "which", lambda cmd: None)
+        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
 
-        import autoskillit.cli.app as app_mod
-
         with pytest.raises(SystemExit):
-            app_mod.order()
+            cli.order()
 
         out = capsys.readouterr().out
         assert "Family Recipes" not in out
@@ -1231,12 +1231,12 @@ class TestCLIOrder:
             "autoskillit.recipe.list_recipes", lambda *a, **kw: type("R", (), {"items": recipes})()
         )
         monkeypatch.setattr("autoskillit.cli._timed_input.timed_prompt", lambda *a, **kw: "0")
+        monkeypatch.setattr(shutil, "which", lambda cmd: None)
+        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
 
-        import autoskillit.cli.app as app_mod
-
         with pytest.raises(SystemExit):
-            app_mod.order()
+            cli.order()
 
         out = capsys.readouterr().out
         numbered = re.findall(r"^\s+(\d+)\.", out, re.MULTILINE)

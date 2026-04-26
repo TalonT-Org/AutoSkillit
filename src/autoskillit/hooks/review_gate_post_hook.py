@@ -38,7 +38,7 @@ def _extract_run_skill_result(tool_response: str | dict) -> str:  # type: ignore
     try:
         outer = json.loads(tool_response) if isinstance(tool_response, str) else tool_response
         inner_str = outer["result"]
-        inner = json.loads(inner_str)
+        inner = json.loads(inner_str) if isinstance(inner_str, str) else inner_str
         return inner.get("result", "")
     except Exception:
         return ""

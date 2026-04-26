@@ -27,6 +27,7 @@ def run_update_command(home: Path | None = None) -> None:
         _read_dismiss_state,
         _verify_update_result,
         _write_dismiss_state,
+        invalidate_fetch_cache,
     )
 
     _home = home or Path.home()
@@ -85,4 +86,5 @@ def run_update_command(home: Path | None = None) -> None:
         state.pop("update_prompt", None)
         state.pop("binary_snoozed", None)
         _write_dismiss_state(_home, state)
+        invalidate_fetch_cache(_home)
         print("AutoSkillit updated successfully.", flush=True)

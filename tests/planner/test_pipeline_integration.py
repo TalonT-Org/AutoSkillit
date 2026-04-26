@@ -24,7 +24,12 @@ def _write_json(path: Path, data: object) -> None:
 
 def test_multi_phase_pipeline_end_to_end(tmp_path: Path) -> None:
     """Two-phase pipeline: SKILL.md-compliant data flows through every pipeline stage."""
-    from autoskillit.planner import build_assignment_manifest, build_wp_manifest, compile_plan, validate_plan
+    from autoskillit.planner import (
+        build_assignment_manifest,
+        build_wp_manifest,
+        compile_plan,
+        validate_plan,
+    )
 
     phases_dir = tmp_path / "phases"
     assignments_dir = tmp_path / "assignments"
@@ -70,7 +75,12 @@ def test_multi_phase_pipeline_end_to_end(tmp_path: Path) -> None:
             "goal": "Set up core modules",
             "technical_approach": "Direct implementation",
             "proposed_work_packages": [
-                {"id_suffix": "WP1", "name": "Core module", "scope": "core", "estimated_files": ["core.py"]}
+                {
+                    "id_suffix": "WP1",
+                    "name": "Core module",
+                    "scope": "core",
+                    "estimated_files": ["core.py"],
+                }
             ],
         },
     )
@@ -83,7 +93,12 @@ def test_multi_phase_pipeline_end_to_end(tmp_path: Path) -> None:
             "goal": "Build application layer",
             "technical_approach": "Build on core",
             "proposed_work_packages": [
-                {"id_suffix": "WP1", "name": "App module", "scope": "app", "estimated_files": ["app.py"]}
+                {
+                    "id_suffix": "WP1",
+                    "name": "App module",
+                    "scope": "app",
+                    "estimated_files": ["app.py"],
+                }
             ],
         },
     )

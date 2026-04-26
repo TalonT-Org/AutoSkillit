@@ -9,7 +9,9 @@ from autoskillit.planner.schema import (
 )
 
 
-def make_phase_result(phase_number: int, *, name: str = "Test Phase", **overrides: Any) -> dict[str, Any]:
+def make_phase_result(
+    phase_number: int, *, name: str = "Test Phase", **overrides: Any
+) -> dict[str, Any]:
     data: dict[str, Any] = {
         "id": f"P{phase_number}",
         "name": name,

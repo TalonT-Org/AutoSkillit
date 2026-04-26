@@ -182,7 +182,12 @@ def test_compile_plan_derives_name_slug_from_name(tmp_path: Path) -> None:
 
 
 def test_skill_output_through_full_pipeline(tmp_path: Path) -> None:
-    from autoskillit.planner import build_assignment_manifest, build_wp_manifest, compile_plan, validate_plan
+    from autoskillit.planner import (
+        build_assignment_manifest,
+        build_wp_manifest,
+        compile_plan,
+        validate_plan,
+    )
 
     phases_dir = tmp_path / "phases"
     phases_dir.mkdir()

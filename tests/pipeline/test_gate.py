@@ -52,6 +52,7 @@ def test_gated_tools_contains_expected_names():
         "register_clone_status",
         "batch_cleanup_clones",
         "dispatch_food_truck",
+        "analyze_tool_sequences",
     }
     assert GATED_TOOLS == expected
 

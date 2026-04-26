@@ -195,6 +195,7 @@ _UNFORMATTED_TOOLS: frozenset[str] = frozenset(
         "batch_cleanup_clones",  # bulk delete summary dict
         "dispatch_food_truck",  # JSON dispatch envelope, generic renders correctly
         "reload_session",  # simple status dict, generic renders correctly
+        "analyze_tool_sequences",  # DFG analysis result, generic renders correctly
     }
 )
 

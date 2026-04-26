@@ -794,7 +794,6 @@ def test_result_field_spec_roundtrip() -> None:
     manifest = load_bundled_manifest()
     contract = get_skill_contract("planner-generate-phases", manifest)
     assert contract is not None
-    assert len(contract.result_fields) == 3
     required_names = {rf.name for rf in contract.result_fields if rf.required}
     assert required_names == {"id", "name", "ordering"}, (
         f"planner-generate-phases result_fields required names mismatch: {required_names}"

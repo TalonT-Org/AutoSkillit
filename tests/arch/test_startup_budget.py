@@ -148,6 +148,120 @@ def test_no_calls_between_initialize_and_anyio_run() -> None:
     )
 
 
+def test_no_subprocess_in_serve() -> None:
+    """REQ-STARTUP-001: serve() must not invoke functions that eagerly call subprocess.
+
+    Scans the entire serve() body — including assignment statements, not just bare
+    Expr nodes — resolves direct call names one level deep via import analysis, and
+    asserts no reachable function calls subprocess.*.
+    """
+    app_src = (SRC / "cli" / "app.py").read_text()
+    app_tree = ast.parse(app_src)
+
+    serve_func = None
+    for node in ast.walk(app_tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "serve":
+            serve_func = node
+            break
+    assert serve_func is not None, "serve() not found in app.py"
+
+    # Build import mapping: imported name → source file
+    import_map: dict[str, Path] = {}
+    for node in ast.walk(app_tree):
+        if isinstance(node, ast.ImportFrom) and node.module and node.names:
+            parts = node.module.split(".")
+            rel_parts = parts[1:] if parts and parts[0] == "autoskillit" else parts
+            candidate = SRC.joinpath(*rel_parts).with_suffix(".py")
+            if candidate.exists():
+                for alias in node.names:
+                    name = alias.asname or alias.name
+                    import_map[name] = candidate
+
+    violations: list[str] = []
+    for call in _iter_eager_calls(serve_func):
+        call_name = _get_call_name(call)
+        if call_name not in import_map:
+            continue
+        module_path = import_map[call_name]
+        module_src = module_path.read_text()
+        module_tree = ast.parse(module_src)
+        for fn_node in ast.walk(module_tree):
+            if (
+                isinstance(fn_node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and fn_node.name == call_name
+            ):
+                for inner in _iter_eager_calls(fn_node):
+                    inner_name = _get_call_name(inner)
+                    if inner_name in FORBIDDEN_SUBPROCESS_CALLS:
+                        violations.append(
+                            f"serve() calls {call_name}() (line {call.lineno}), which calls "
+                            f"{inner_name}() (line {inner.lineno} in {module_path.name})"
+                        )
+                break
+
+    assert not violations, (
+        "serve() transitively uses subprocess on the MCP transport critical path "
+        "(REQ-STARTUP-001):\n"
+        + "\n".join(f"  {v}" for v in violations)
+        + "\nReplace with a filesystem-based alternative (e.g. _check_plugin_installed())."
+    )
+
+
+def test_serve_pre_anyio_no_denylist_calls() -> None:
+    """REQ-STARTUP-001: serve() must not call slow-function denylist before anyio.run().
+
+    Extends test_no_calls_between_initialize_and_anyio_run to cover the entire
+    pre-transport window, not just the post-_initialize gap.
+    """
+    _DENYLIST = frozenset(
+        {
+            "_is_plugin_installed",
+            "_gh_cli_token",
+            "subprocess.run",
+            "subprocess.Popen",
+            "subprocess.call",
+            "subprocess.check_output",
+        }
+    )
+
+    app_src = (SRC / "cli" / "app.py").read_text()
+    app_tree = ast.parse(app_src)
+
+    serve_func = None
+    for node in ast.walk(app_tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "serve":
+            serve_func = node
+            break
+    assert serve_func is not None, "serve() not found in app.py"
+
+    anyio_idx = None
+    for i, stmt in enumerate(serve_func.body):
+        if isinstance(stmt, ast.Try):
+            for try_stmt in stmt.body:
+                if isinstance(try_stmt, ast.Expr) and isinstance(try_stmt.value, ast.Call):
+                    if _get_call_name(try_stmt.value) == "anyio.run":
+                        anyio_idx = i
+                        break
+        if anyio_idx is not None:
+            break
+    assert anyio_idx is not None, "anyio.run() not found in serve()"
+
+    violations: list[str] = []
+    for stmt in serve_func.body[:anyio_idx]:
+        for node in ast.walk(stmt):
+            if isinstance(node, ast.Call):
+                name = _get_call_name(node)
+                if name in _DENYLIST:
+                    violations.append(f"{name}() at line {node.lineno}")
+
+    assert not violations, (
+        "serve() calls denylist function(s) before anyio.run() — violates REQ-STARTUP-001.\n"
+        "These block the MCP transport critical path:\n"
+        + "\n".join(f"  {v}" for v in violations)
+        + "\nReplace with a filesystem-based alternative (e.g. _check_plugin_installed())."
+    )
+
+
 def test_no_gh_cli_token_in_make_context() -> None:
     """REQ-STARTUP-001: make_context() must not call _gh_cli_token() eagerly.
 

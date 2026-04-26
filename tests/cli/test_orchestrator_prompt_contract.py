@@ -92,6 +92,42 @@ class TestFirstActionAskUserQuestionProhibition:
         assert "DO NOT call AskUserQuestion" in first_action_section
 
 
+class TestOpenKitchenRetryOnUnavailable:
+    """FIRST ACTION must instruct the LLM to retry open_kitchen when MCP is not yet ready."""
+
+    def test_prompt_open_kitchen_retry_on_unavailable(self):
+        """FIRST ACTION must contain a retry instruction for 'No such tool available'."""
+        from autoskillit.cli._prompts import _build_open_kitchen_prompt, _build_orchestrator_prompt
+
+        # Orchestrator prompt: retry must be in FIRST ACTION section
+        prompt = _build_orchestrator_prompt("demo", "mcp__autoskillit__")
+        fa_start = prompt.index("FIRST ACTION")
+        fa_end = prompt.index("During pipeline execution", fa_start)
+        first_action = prompt[fa_start:fa_end]
+
+        assert "retry" in first_action.lower(), (
+            "FIRST ACTION must contain a retry instruction for MCP tool unavailability"
+        )
+        assert "No such tool" in first_action or "unavailable" in first_action.lower(), (
+            "FIRST ACTION retry must reference 'No such tool' or 'unavailable'"
+        )
+        assert "Bash" not in first_action, "Retry instruction must not reference Bash"
+        assert "ToolSearch" not in first_action, "Retry instruction must not reference ToolSearch"
+        assert "sleep" not in first_action.lower(), "Retry instruction must not use sleep"
+
+        # Open-kitchen prompt: retry must appear before IMPORTANT section
+        ok_prompt = _build_open_kitchen_prompt("mcp__autoskillit__")
+        first_section_end = ok_prompt.index("IMPORTANT — Orchestrator Discipline:")
+        first_section = ok_prompt[:first_section_end]
+
+        assert "retry" in first_section.lower(), (
+            "_build_open_kitchen_prompt must contain a retry instruction for MCP tool unavailability"
+        )
+        assert "No such tool" in first_section or "unavailable" in first_section.lower(), (
+            "_build_open_kitchen_prompt retry must reference 'No such tool' or 'unavailable'"
+        )
+
+
 class TestFirstActionDirectOpenKitchen:
     """FIRST ACTION must call open_kitchen directly — no ToolSearch or Bash preamble."""
 

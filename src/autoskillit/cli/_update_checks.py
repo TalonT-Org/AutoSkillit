@@ -131,6 +131,14 @@ def _write_fetch_cache(home: Path, data: dict[str, Any]) -> None:
         logger.debug("Failed to write fetch cache", exc_info=False)
 
 
+def invalidate_fetch_cache(home: Path) -> None:
+    """Delete the GitHub fetch cache. Call after install/update."""
+    try:
+        _fetch_cache_path(home).unlink(missing_ok=True)
+    except OSError:
+        logger.debug("Failed to invalidate fetch cache", exc_info=True)
+
+
 def _scrub_auth(text: str) -> str:
     """Remove any GITHUB_TOKEN value or ``Bearer …`` token from a string."""
     if not text:
@@ -173,7 +181,8 @@ def _fetch_with_cache(url: str, *, home: Path, ttl: int | None = None) -> dict[s
         body = entry.get("body")
         if isinstance(cached_at, (int, float)) and isinstance(body, dict):
             if now - cached_at < effective_ttl:
-                return body
+                if entry.get("installed_version") == AUTOSKILLIT_INSTALLED_VERSION:
+                    return body
 
     headers: dict[str, str] = {
         "Accept": "application/vnd.github+json",
@@ -201,6 +210,7 @@ def _fetch_with_cache(url: str, *, home: Path, ttl: int | None = None) -> dict[s
                     "body": body,
                     "etag": entry.get("etag"),
                     "cached_at": now,
+                    "installed_version": AUTOSKILLIT_INSTALLED_VERSION,
                 }
                 _write_fetch_cache(home, cache)
                 return body
@@ -214,6 +224,7 @@ def _fetch_with_cache(url: str, *, home: Path, ttl: int | None = None) -> dict[s
                 "body": body,
                 "etag": etag,
                 "cached_at": now,
+                "installed_version": AUTOSKILLIT_INSTALLED_VERSION,
             }
             _write_fetch_cache(home, cache)
             return body
@@ -641,6 +652,7 @@ def _run_update_sequence(
         state.pop("update_prompt", None)
         state.pop("binary_snoozed", None)
         _write_dismiss_state(home, state)
+        invalidate_fetch_cache(home)
 
 
 # ---------------------------------------------------------------------------

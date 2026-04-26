@@ -61,8 +61,14 @@ def _parse_phase_number(data: dict[str, Any]) -> int:
 
 
 def _parse_assignment_numbers(data: dict[str, Any]) -> tuple[int, int]:
-    parts = str(data["id"]).split("-")
-    return int(parts[0][1:]), int(parts[1][1:])
+    raw_id = str(data["id"])
+    parts = raw_id.split("-")
+    if len(parts) < 2:
+        raise ValueError(f"Assignment id {raw_id!r} is missing '-' separator")
+    try:
+        return int(parts[0][1:]), int(parts[1][1:])
+    except ValueError:
+        raise ValueError(f"Assignment id {raw_id!r} has malformed numeric segment") from None
 
 
 def validate_phase_result(data: dict[str, Any]) -> dict[str, Any]:

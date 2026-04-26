@@ -9,14 +9,16 @@ make-arch-diag) and prevents future regressions where a SKILL.md body invokes
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 import pytest
 
+from autoskillit.core._type_constants import PACK_REGISTRY, SKILL_ACTIVATE_DEPS_REQUIRED
 from autoskillit.workspace.session_skills import (
     SkillsDirectoryProvider,
     compute_skill_closure,
 )
-from autoskillit.workspace.skills import bundled_skills_extended_dir
+from autoskillit.workspace.skills import bundled_skills_dir, bundled_skills_extended_dir
 
 _INVOCATION_PATTERNS = (
     re.compile(
@@ -26,11 +28,31 @@ _INVOCATION_PATTERNS = (
 )
 
 _FM_PATTERN = re.compile(r"^---\n(.*?)\n?---\n?(.*)", re.DOTALL)
+_ACTIVATE_DEPS_LINE_RE = re.compile(r"^activate_deps:\s*\[([^\]]*)\]", re.MULTILINE)
 
 
 def _strip_frontmatter(content: str) -> str:
     m = _FM_PATTERN.match(content)
     return m.group(2) if m else content
+
+
+def _get_activate_deps(skill_md: Path) -> list[str]:
+    """Parse activate_deps from a SKILL.md frontmatter (bracket list format)."""
+    content = skill_md.read_text()
+    m = _FM_PATTERN.match(content)
+    frontmatter = m.group(1) if m else content
+    deps_m = _ACTIVATE_DEPS_LINE_RE.search(frontmatter)
+    if not deps_m:
+        return []
+    return [d.strip() for d in deps_m.group(1).split(",") if d.strip()]
+
+
+def _find_skill_md(skill_name: str) -> Path | None:
+    for base in (bundled_skills_dir(), bundled_skills_extended_dir()):
+        candidate = base / skill_name / "SKILL.md"
+        if candidate.exists():
+            return candidate
+    return None
 
 
 @pytest.fixture(scope="module")
@@ -87,3 +109,52 @@ def test_all_skills_skill_tool_invocations_match_activate_deps(
                     f"but it is not in compute_skill_closure({skill_name!r})"
                 )
     assert not failures, "Undeclared Skill-tool invocations:\n" + "\n".join(failures)
+
+
+def test_required_activate_deps_present() -> None:
+    """For each (skill, required_deps) in SKILL_ACTIVATE_DEPS_REQUIRED, the skill's
+    SKILL.md must declare all required deps in activate_deps."""
+    failures: list[str] = []
+    for skill_name, required_deps in SKILL_ACTIVATE_DEPS_REQUIRED.items():
+        skill_md = _find_skill_md(skill_name)
+        if skill_md is None:
+            failures.append(f"{skill_name}: SKILL.md not found")
+            continue
+        declared = set(_get_activate_deps(skill_md))
+        for dep in sorted(required_deps):
+            if dep not in declared:
+                failures.append(
+                    f"{skill_name}/SKILL.md: SKILL_ACTIVATE_DEPS_REQUIRED requires "
+                    f"{dep!r} in activate_deps, but only {sorted(declared)!r} declared"
+                )
+    assert not failures, "Missing required activate_deps:\n" + "\n".join(failures)
+
+
+def test_all_activate_deps_resolve() -> None:
+    """Every name in any SKILL.md's activate_deps must resolve to a real skill or pack.
+
+    No silent drops — a typo in activate_deps is caught at CI time.
+    """
+    pack_keys = set(PACK_REGISTRY.keys())
+    resolver_cache: dict[str, bool] = {}
+
+    # Use a fresh provider resolver to check skill resolution
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    resolver = DefaultSkillResolver()
+
+    def _resolves(name: str) -> bool:
+        if name not in resolver_cache:
+            resolver_cache[name] = name in pack_keys or resolver.resolve(name) is not None
+        return resolver_cache[name]
+
+    failures: list[str] = []
+    for base in (bundled_skills_dir(), bundled_skills_extended_dir()):
+        for skill_md in sorted(base.glob("*/SKILL.md")):
+            for dep in _get_activate_deps(skill_md):
+                if not _resolves(dep):
+                    failures.append(
+                        f"{skill_md.parent.name}/SKILL.md: activate_deps contains "
+                        f"{dep!r} which does not resolve to a skill or pack"
+                    )
+    assert not failures, "Unresolvable activate_deps entries:\n" + "\n".join(failures)

@@ -7,7 +7,8 @@ lazily on first attribute access (PEP 562 via lazy-loader).
 
 import lazy_loader as lazy
 
-__getattr__, __dir__, __all__ = lazy.attach_stub(__name__, __file__)
+__getattr__, _dir, __all__ = lazy.attach_stub(__name__, __file__)
+del _dir  # replaced below so dir() reflects the filtered __all__
 
 _PRIVATE_REEXPORTS = frozenset(
     {
@@ -19,3 +20,7 @@ _PRIVATE_REEXPORTS = frozenset(
     }
 )
 __all__ = [n for n in __all__ if n not in _PRIVATE_REEXPORTS]
+
+
+def __dir__() -> list[str]:
+    return __all__

@@ -158,23 +158,25 @@ def _check_ci_no_runs_unguarded(ctx: ValidationContext) -> list[RuleFinding]:
     for name, step in ctx.recipe.steps.items():
         if step.tool != "wait_for_ci":
             continue
+        has_no_runs_guard = False
         if step.on_result and step.on_result.conditions:
             has_no_runs_guard = any(
                 c.when and "no_runs" in c.when for c in step.on_result.conditions
             )
-            if has_no_runs_guard:
-                continue
-        if step.on_success:
+        if has_no_runs_guard:
+            continue
+        if step.on_success or step.on_result:
+            target = step.on_success or "on_result routing"
             findings.append(
                 RuleFinding(
                     rule="ci-no-runs-unguarded",
                     severity=Severity.ERROR,
                     step_name=name,
                     message=(
-                        f"Step '{name}' uses wait_for_ci with bare on_success routing. "
-                        "wait_for_ci returns conclusion='no_runs' on the success path — "
-                        "add on_result conditions to intercept no_runs before routing "
-                        f"to '{step.on_success}'."
+                        f"Step '{name}' uses wait_for_ci without an on_result condition "
+                        "that intercepts conclusion='no_runs'. wait_for_ci returns "
+                        "conclusion='no_runs' on the success path — add on_result "
+                        f"conditions to intercept no_runs before routing to '{target}'."
                     ),
                 )
             )

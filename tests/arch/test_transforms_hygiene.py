@@ -40,14 +40,6 @@ class _ConfTestVisitor(ast.NodeVisitor):
     def __init__(self) -> None:
         self.findings: list[tuple[str, int, str]] = []
 
-    def _is_mcp_call(self, node: ast.expr, method: str) -> bool:
-        return (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr == method
-            and isinstance(node.func.value, ast.Attribute)
-        )
-
     def _check_fixture_body(
         self,
         stmts: list[ast.stmt],
@@ -165,9 +157,10 @@ def test_root_conftest_has_transforms_cleanup():
         if not is_autouse:
             continue
 
-        body_source = ast.dump(node)
-        has_sys_modules = "sys.modules" in source[node.col_offset :]
-        has_clear = "_transforms" in ast.dump(node) and "clear" in ast.dump(node)
+        func_source = ast.get_source_segment(source, node) or ""
+        has_sys_modules = "sys.modules" in func_source
+        node_dump = ast.dump(node)
+        has_clear = "_transforms" in node_dump and "clear" in node_dump
 
         if has_sys_modules and has_clear:
             found = True
@@ -264,7 +257,7 @@ def test_inline_transforms_clear_has_finally_guard():
                 ):
                     clear_calls.append(child.lineno)
 
-            if len(clear_calls) < 2:
+            if len(clear_calls) < 1:
                 continue
 
             has_try_finally = any(

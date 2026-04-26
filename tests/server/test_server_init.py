@@ -623,24 +623,30 @@ class TestSessionTypeVisibility:
     @pytest.mark.anyio
     async def test_fleet_campaign_mode_hides_fleet_dispatch_tools(self, monkeypatch):
         """fleet + FLEET_MODE=campaign (or absent) hides fleet-dispatch tools."""
-        from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_MODE_ENV_VAR
+        from autoskillit.core import ALL_VISIBILITY_TAGS, FLEET_DISPATCH_TOOLS, FLEET_MODE_ENV_VAR
         from autoskillit.server import _apply_session_type_visibility, mcp
 
         for mode_value in ("campaign", None):
             mcp._transforms.clear()
-            mcp.disable(tags={"fleet", "kitchen", "headless", "fleet-dispatch"})
-            monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
-            if mode_value is not None:
-                monkeypatch.setenv(FLEET_MODE_ENV_VAR, mode_value)
-            else:
-                monkeypatch.delenv(FLEET_MODE_ENV_VAR, raising=False)
-            _apply_session_type_visibility()
+            for tag in sorted(ALL_VISIBILITY_TAGS):
+                mcp.disable(tags={tag})
+            try:
+                monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+                if mode_value is not None:
+                    monkeypatch.setenv(FLEET_MODE_ENV_VAR, mode_value)
+                else:
+                    monkeypatch.delenv(FLEET_MODE_ENV_VAR, raising=False)
+                _apply_session_type_visibility()
 
-            tools = list(await mcp.list_tools())
-            visible = {t.name for t in tools}
-            assert visible.isdisjoint(FLEET_DISPATCH_TOOLS), (
-                f"fleet-dispatch tools unexpectedly visible with FLEET_MODE={mode_value!r}"
-            )
+                tools = list(await mcp.list_tools())
+                visible = {t.name for t in tools}
+                assert visible.isdisjoint(FLEET_DISPATCH_TOOLS), (
+                    f"fleet-dispatch tools unexpectedly visible with FLEET_MODE={mode_value!r}"
+                )
+            finally:
+                mcp._transforms.clear()
+                for tag in sorted(ALL_VISIBILITY_TAGS):
+                    mcp.disable(tags={tag})
 
     @pytest.mark.anyio
     async def test_fleet_dispatch_constant_matches_tagged_tools(self, monkeypatch):

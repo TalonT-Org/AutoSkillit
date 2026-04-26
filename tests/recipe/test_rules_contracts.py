@@ -313,11 +313,11 @@ class TestResultFieldDriftRule:
         contract = SkillContract(
             inputs=[],
             outputs=[],
-            result_fields=(
+            result_fields=[
                 ResultFieldSpec(name="id", type="str", required=True),
                 ResultFieldSpec(name="name", type="str", required=True),
                 ResultFieldSpec(name="ordering", type="int", required=True),
-            ),
+            ],
         )
         with patch(
             "autoskillit.recipe.rules_contracts.get_skill_contract",
@@ -335,12 +335,12 @@ class TestResultFieldDriftRule:
         contract = SkillContract(
             inputs=[],
             outputs=[],
-            result_fields=(
+            result_fields=[
                 ResultFieldSpec(name="id", type="str", required=True),
                 ResultFieldSpec(name="name", type="str", required=True),
                 ResultFieldSpec(name="ordering", type="int", required=True),
                 ResultFieldSpec(name="phantom_field", type="str", required=True),
-            ),
+            ],
         )
         with patch(
             "autoskillit.recipe.rules_contracts.get_skill_contract",
@@ -361,10 +361,10 @@ class TestResultFieldDriftRule:
         contract = SkillContract(
             inputs=[],
             outputs=[],
-            result_fields=(
+            result_fields=[
                 ResultFieldSpec(name="id", type="str", required=True),
                 # 'name' and 'ordering' are missing
-            ),
+            ],
         )
         with patch(
             "autoskillit.recipe.rules_contracts.get_skill_contract",
@@ -384,12 +384,12 @@ class TestResultFieldDriftRule:
         contract = SkillContract(
             inputs=[],
             outputs=[],
-            result_fields=(
+            result_fields=[
                 ResultFieldSpec(name="id", type="str", required=True),
                 ResultFieldSpec(name="name", type="str", required=True),
                 ResultFieldSpec(name="ordering", type="int", required=True),
                 ResultFieldSpec(name="optional_extra", type="str", required=False),
-            ),
+            ],
         )
         with patch(
             "autoskillit.recipe.rules_contracts.get_skill_contract",

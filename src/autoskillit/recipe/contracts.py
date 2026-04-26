@@ -68,7 +68,7 @@ class SkillContract:
     pattern_examples: list[str] = dataclasses.field(default_factory=list)
     write_behavior: str | None = None
     write_expected_when: list[str] = dataclasses.field(default_factory=list)
-    result_fields: tuple[ResultFieldSpec, ...] = dataclasses.field(default_factory=tuple)
+    result_fields: list[ResultFieldSpec] = dataclasses.field(default_factory=list)
 
 
 @dataclasses.dataclass
@@ -183,14 +183,14 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
     examples = skill_data.get("pattern_examples", [])
     write_behavior = skill_data.get("write_behavior")
     write_expected_when = skill_data.get("write_expected_when", [])
-    result_fields = tuple(
+    result_fields = [
         ResultFieldSpec(
             name=rf["name"],
             type=rf["type"],
             required=rf.get("required", True),
         )
         for rf in skill_data.get("result_fields", [])
-    )
+    ]
     return SkillContract(
         inputs=inputs,
         outputs=outputs,

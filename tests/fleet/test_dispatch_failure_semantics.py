@@ -138,7 +138,7 @@ class TestTimeoutPath:
 
         result = await _run(tool_ctx)
         assert result["success"] is False
-        assert result["error"] == "l2_timeout"
+        assert result["error"] == "fleet_l2_timeout"
 
     @pytest.mark.anyio
     async def test_timeout_writes_state_with_reason_l2_timeout(self, tool_ctx, monkeypatch):
@@ -156,7 +156,7 @@ class TestTimeoutPath:
 
         record = _read_dispatch_record(tool_ctx)
         assert record["status"] == "failure"
-        assert record["reason"] == "l2_timeout"
+        assert record["reason"] == "fleet_l2_timeout"
 
     @pytest.mark.anyio
     async def test_timeout_skips_parse_l2_result_block(self, tool_ctx, monkeypatch):
@@ -180,7 +180,7 @@ class TestTimeoutPath:
 
         # Should succeed (return l2_timeout error envelope) without raising
         result = await _run(tool_ctx)
-        assert result["error"] == "l2_timeout"
+        assert result["error"] == "fleet_l2_timeout"
 
     @pytest.mark.anyio
     async def test_timeout_envelope_includes_dispatch_metadata(self, tool_ctx, monkeypatch):
@@ -248,7 +248,7 @@ class TestNoSentinelPath:
         await _run(tool_ctx)
 
         record = _read_dispatch_record(tool_ctx)
-        assert record["reason"] == "l2_no_result_block"
+        assert record["reason"] == "fleet_l2_no_result_block"
 
     @pytest.mark.anyio
     async def test_no_sentinel_clean_exit_is_not_success(self, tool_ctx, monkeypatch):
@@ -289,7 +289,7 @@ class TestCompletedDirtyPath:
         await _run(tool_ctx)
 
         record = _read_dispatch_record(tool_ctx)
-        assert record["reason"] == "l2_parse_failed"
+        assert record["reason"] == "fleet_l2_parse_failed"
 
 
 class TestCompletedCleanPath:

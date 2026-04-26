@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import pathlib
 import statistics
+import sys
 from collections import Counter
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
@@ -85,9 +86,16 @@ def parse_sessions_from_summary_dir(log_root: pathlib.Path) -> Iterator[TurnSequ
     for summary_path in sorted(log_root.glob("sessions/*/summary.json")):
         try:
             data = json.loads(summary_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"[tool_sequence_analysis] skipping {summary_path}: {exc}", file=sys.stderr)
             continue
         turns = data.get("turn_tool_calls", [])
+        if not isinstance(turns, list):
+            print(
+                f"[tool_sequence_analysis] skipping {summary_path}: turn_tool_calls is not a list",
+                file=sys.stderr,
+            )
+            continue
         if not turns:
             continue
         yield TurnSequence(
@@ -129,6 +137,8 @@ def build_dfg(sessions: Sequence[TurnSequence]) -> DFG:
             for tool in turn:
                 # Check if any prior tool has been waiting for this tool
                 for prev_tool, prev_turn in last_seen.items():
+                    if prev_tool == tool:
+                        continue
                     pair = (prev_tool, tool)
                     gap = turn_idx - prev_turn
                     if gap > 0:
@@ -160,6 +170,8 @@ def compute_analysis(sessions: Sequence[TurnSequence]) -> AnalysisResult:
 
 def compute_gap_stats(gaps: list[int]) -> GapStats:
     """Compute median, p25, p75, max from a list of turn gaps."""
+    if not gaps:
+        return GapStats(0.0, 0.0, 0.0, 0)
     sorted_gaps = sorted(gaps)
     n = len(sorted_gaps)
     median = statistics.median(sorted_gaps)

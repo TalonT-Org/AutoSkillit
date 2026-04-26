@@ -186,7 +186,7 @@ def test_check_remaining_processing_fails_after_all_retries_exhausted(tmp_path):
     updated = json.loads(manifest_path.read_text())
     items = {i["id"]: i for i in updated["items"]}
     assert items["A1"]["status"] == "failed"
-    assert mock_sleep.call_count == 2  # 2 retries with 1s sleep each
+    assert mock_sleep.call_count == 2  # one sleep per range(2) iteration
 
 
 def test_check_remaining_sleep_called_with_one_second(tmp_path):

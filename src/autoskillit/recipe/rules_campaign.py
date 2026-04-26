@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from autoskillit.core import RECIPE_PACK_REGISTRY, Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
-from autoskillit.recipe.schema import CampaignDispatch, RecipeKind
+from autoskillit.recipe.schema import CAMPAIGN_REF_RE, CampaignDispatch, RecipeKind
 
 if TYPE_CHECKING:
     from autoskillit.recipe.schema import Recipe
@@ -395,7 +395,6 @@ def _check_campaign_task_non_empty(ctx: ValidationContext) -> list[RuleFinding]:
 
 _IDENT_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 _RESULT_TEMPLATE_RE = re.compile(r"^\$\{\{\s*result\.[\w-]+\s*\}\}$")
-_CAMPAIGN_REF_RE_RULES = re.compile(r"\$\{\{\s*campaign\.(\w+)\s*\}\}")
 
 
 @semantic_rule(
@@ -486,7 +485,7 @@ def _check_campaign_ingredient_refs_have_prior_capture(
         for ing_key, ing_val in d.ingredients.items():
             if not isinstance(ing_val, str):
                 continue
-            for ref in _CAMPAIGN_REF_RE_RULES.findall(ing_val):
+            for ref in CAMPAIGN_REF_RE.findall(ing_val):
                 if ref not in available_captures:
                     findings.append(
                         RuleFinding(

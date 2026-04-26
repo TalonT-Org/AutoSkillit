@@ -4,9 +4,9 @@ import json
 import pathlib
 import statistics
 from collections import Counter
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
 from itertools import islice
-from typing import Iterator, Sequence
 
 _TOOL_USE_CAP = 8
 _MAX_NGRAM_LEN = 5
@@ -43,9 +43,7 @@ class AnalysisResult:
     session_count: int
 
 
-def parse_raw_cc_jsonl(
-    jsonl_path: pathlib.Path, *, cap: int = _TOOL_USE_CAP
-) -> list[list[str]]:
+def parse_raw_cc_jsonl(jsonl_path: pathlib.Path, *, cap: int = _TOOL_USE_CAP) -> list[list[str]]:
     """Parse a Claude Code session JSONL into per-turn tool call lists."""
     result: list[list[str]] = []
     seen: set[str] = set()
@@ -191,11 +189,7 @@ def _safe_id(name: str) -> str:
 def render_mermaid(dfg: DFG, *, min_count: int = 1, top_n: int = 30) -> str:
     """Render bigram DFG as Mermaid flowchart LR. Returns the diagram string."""
     lines = ["flowchart LR"]
-    top = [
-        (pair, count)
-        for pair, count in dfg.bigrams.most_common(top_n)
-        if count >= min_count
-    ]
+    top = [(pair, count) for pair, count in dfg.bigrams.most_common(top_n) if count >= min_count]
     if not top:
         lines.append("    empty[No data]")
         return "\n".join(lines)
@@ -232,9 +226,7 @@ def render_dot(dfg: DFG, *, min_count: int = 1, top_n: int = 30) -> str:
     return "\n".join(lines)
 
 
-def filter_sessions_by_recipe(
-    sessions: Sequence[TurnSequence], recipe: str
-) -> list[TurnSequence]:
+def filter_sessions_by_recipe(sessions: Sequence[TurnSequence], recipe: str) -> list[TurnSequence]:
     """Return sessions matching recipe_name == recipe."""
     result = []
     for s in sessions:
@@ -243,9 +235,7 @@ def filter_sessions_by_recipe(
     return result
 
 
-def format_top_bigrams(
-    dfg: DFG, top_n: int, min_count: int
-) -> list[dict[str, object]]:
+def format_top_bigrams(dfg: DFG, top_n: int, min_count: int) -> list[dict[str, object]]:
     """Return top-N bigrams as a list of dicts for JSON serialization."""
     result: list[dict[str, object]] = []
     for (a, b), c in dfg.bigrams.most_common(top_n):

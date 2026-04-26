@@ -689,7 +689,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         session_registry.py adds the stdlib-only session registry mapping
         autoskillit launch IDs to Claude Code session UUIDs for the scoped
         resume picker.
-        Exempt at 25 files.
+        tool_sequence_analysis.py adds the stdlib-only cross-session tool call
+        sequence DFG analysis (L0; must live in core/ to be importable by server/).
+        Exempt at 26 files.
       cli/ — REQ-CNST-003-E5: cli/ retains _terminal_table.py as a re-export shim
         for backward-compatible cli/ imports; canonical implementation lives in
         core/_terminal_table.py. Also contains _terminal.py — the terminal state
@@ -718,7 +720,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "server": 20,
         "recipe": 38,
         "execution": 26,
-        "core": 25,
+        "core": 26,
         "cli": 26,
         "hooks": 24,
     }

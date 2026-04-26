@@ -80,7 +80,8 @@ def _collect_cascade_selection(changed_files: list[str]) -> set[str]:
         mode=mod.FilterMode.CONSERVATIVE,
     )
     if scope is None:
-        return set()
+        tests_dir = PROJECT_ROOT / "tests"
+        return {str(p.relative_to(tests_dir)) for p in tests_dir.rglob("test_*.py")}
     return {str(p.relative_to(PROJECT_ROOT / "tests")) for p in scope}
 
 
@@ -132,7 +133,7 @@ def _run_compare(changed_files: list[str]) -> int:
 
 
 def _run_overhead() -> int:
-    base_cmd = [*_pytest_cmd(), "tests/", "-q", "--co", "-n", "4", "-o", "addopts="]
+    base_cmd = [*_pytest_cmd(), "tests/", "-q", "--co", "-o", "addopts="]
     testmon_cmd = [*base_cmd, "--testmon"]
 
     print("Measuring collection overhead...")

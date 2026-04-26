@@ -16,9 +16,9 @@ from datetime import UTC, datetime
 from typing import Any, TypedDict, assert_never
 
 import httpx
-import yaml
 
 from autoskillit.core import PRState, get_logger
+from autoskillit.core.io import YAMLError, load_yaml
 from autoskillit.execution.github import github_headers
 
 _log = get_logger(__name__)
@@ -755,14 +755,16 @@ def _push_trigger_applies_to_branch(text: str, branch: str) -> bool:
     (e.g. 'feature/**', 'release-*').
     """
     try:
-        parsed = yaml.safe_load(text)
-    except yaml.YAMLError:
+        parsed = load_yaml(text)
+    except YAMLError:
         return _text_has_push_trigger(text)
 
     if not isinstance(parsed, dict):
         return False
 
-    on_value = parsed.get("on")
+    # PyYAML (YAML 1.1) parses the bare key `on` as boolean True.
+    # Accept both to be safe.
+    on_value = parsed.get(True, parsed.get("on"))
     if on_value == "push":
         return True
     if isinstance(on_value, list):

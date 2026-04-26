@@ -257,6 +257,52 @@ def append_dispatch_record(
 
 _COMPLETED_STATUSES = frozenset({DispatchStatus.SUCCESS, DispatchStatus.SKIPPED})
 
+_TERMINAL_DISPATCH_STATUSES: frozenset[str] = frozenset(
+    {
+        DispatchStatus.SUCCESS,
+        DispatchStatus.FAILURE,
+        DispatchStatus.SKIPPED,
+        DispatchStatus.RELEASED,
+    }
+)
+
+
+def build_protected_campaign_ids(project_dir: Path) -> frozenset[str]:
+    """Return campaign IDs with at least one non-terminal dispatch.
+
+    Reads fleet state files from ``{project_dir}/.autoskillit/temp/dispatches/``.
+    A campaign is protected if any of its dispatch records has a status that is NOT
+    in the terminal set {success, failure, skipped, released}.
+    Returns partially-accumulated results on unexpected errors rather than empty
+    frozenset, so active campaigns processed before a failure are still protected.
+    """
+    protected: set[str] = set()
+    try:
+        dispatches_dir = project_dir / ".autoskillit" / "temp" / "dispatches"
+        if not dispatches_dir.is_dir():
+            return frozenset()
+        for state_file in dispatches_dir.glob("*.json"):
+            try:
+                data = json.loads(state_file.read_text(encoding="utf-8"))
+                cid = data.get("campaign_id", "")
+                if not cid:
+                    continue
+                dispatches = data.get("dispatches", [])
+                if not dispatches:
+                    protected.add(cid)
+                    continue
+                for record in dispatches:
+                    status = record.get("status", "")
+                    if status not in _TERMINAL_DISPATCH_STATUSES:
+                        protected.add(cid)
+                        break
+            except (json.JSONDecodeError, OSError):
+                continue
+        return frozenset(protected)
+    except Exception:
+        _log.warning("campaign_ids_protection_error", exc_info=True)
+        return frozenset(protected)
+
 
 def resume_campaign_from_state(
     state_path: Path,

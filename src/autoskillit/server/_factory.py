@@ -285,6 +285,11 @@ def make_context(
     ctx.output_pattern_resolver = _resolve_output_patterns
     ctx.write_expected_resolver = _resolve_write_behavior
     ctx.token_factory = token_factory
+    from autoskillit.fleet import (
+        build_protected_campaign_ids,
+    )  # lazy: avoids fleet init on server import
+
+    ctx.build_protected_campaign_ids = build_protected_campaign_ids
     ctx.executor = DefaultHeadlessExecutor(ctx)
     ctx.migrations = DefaultMigrationService(
         default_migration_engine(), run_headless=ctx.executor.run

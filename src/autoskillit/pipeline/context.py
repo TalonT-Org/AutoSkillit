@@ -14,6 +14,7 @@ from autoskillit.config import AutomationConfig
 from autoskillit.core import (
     AuditLog,
     BackgroundSupervisor,
+    CampaignProtector,
     CIRunScope,
     CIWatcher,
     CloneManager,
@@ -132,6 +133,7 @@ class ToolContext:
     quota_refresh_task: QuotaRefreshTask | None = field(default=None)
     token_factory: TokenFactory | None = field(default=None)
     fleet_lock: FleetLock | None = field(default=None)
+    build_protected_campaign_ids: CampaignProtector | None = field(default=None)
 
     def __post_init__(self) -> None:
         if self.background is None:

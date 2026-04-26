@@ -43,10 +43,10 @@ _TEMP_PATH_WHITELIST: dict[str, str] = {
     # <project_root>/.autoskillit/temp/worktrees/<wt_name>/base-branch which is
     # written by implement-worktree skills and must match the canonical layout.
     "execution/testing.py": "sidecar path for worktree base branch detection",
-    # Justification: reads franchise dispatch state from the canonical temp dir
+    # Justification: reads fleet dispatch state files from the canonical temp dir
     # (<project_root>/.autoskillit/temp/dispatches/) to determine which campaign IDs
-    # have active dispatches; needed for retention protection in _build_protected_campaign_ids.
-    "execution/session_log.py": "reads franchise dispatch state from canonical temp dir",
+    # have active dispatches; owned by the fleet layer after the L1→L2 refactor.
+    "fleet/state.py": "reads fleet dispatch state from canonical temp dir",
     # Justification: docstring for _write_hook_config() references the canonical
     # hook config path so callers know where the file is written.
     "server/tools_kitchen.py": "docstring example",

@@ -133,9 +133,6 @@ install.sh:
 scripts/verify-test-filter.sh:
   - infra/
 
-scripts/benchmark-testmon.py:
-  - infra/
-
 # Source non-Python files
 src/autoskillit/.mcp.json:
   - server/

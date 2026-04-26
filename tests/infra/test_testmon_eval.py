@@ -54,6 +54,8 @@ def test_benchmark_compute_metrics():
     assert metrics["overlap"] == {"test_b.py", "test_c.py"}
     assert metrics["testmon_count"] == 3
     assert metrics["cascade_count"] == 4
+    assert metrics["overlap_count"] == 2
+    assert metrics["jaccard_similarity"] == 2 / 5
 
 
 def test_taskfile_has_testmon_tasks():

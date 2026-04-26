@@ -58,7 +58,6 @@ def _run_interactive_session(
 
 
 def _write_order_entry(project_dir: Path, recipe_name: str | None) -> dict[str, str]:
-    """Generate an order launch ID, write registry entry, return env extras dict."""
     import uuid
 
     from autoskillit.core import (

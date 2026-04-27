@@ -392,8 +392,28 @@ class DefaultCIWatcher:
                     attempt += 1
 
                 if found_run is None:
-                    _log.warning("ci_watcher_no_runs", branch=branch, repo=owner_repo)
-                    return {"run_id": None, "conclusion": "no_runs", "failed_jobs": []}
+                    poll_duration = time.monotonic() - (deadline - timeout_seconds)
+                    _log.warning(
+                        "ci_watcher_no_runs",
+                        branch=branch,
+                        repo=owner_repo,
+                        event=scope.event,
+                        workflow=scope.workflow,
+                        head_sha=scope.head_sha,
+                        poll_duration_s=round(poll_duration, 1),
+                    )
+                    return {
+                        "run_id": None,
+                        "conclusion": "no_runs",
+                        "failed_jobs": [],
+                        "branch": branch,
+                        "poll_duration_s": round(poll_duration, 1),
+                        "scope_used": {
+                            "event": scope.event,
+                            "workflow": scope.workflow,
+                            "head_sha": scope.head_sha,
+                        },
+                    }
 
                 # Phase 3: Wait for the found run to complete
                 run_id = found_run["id"]

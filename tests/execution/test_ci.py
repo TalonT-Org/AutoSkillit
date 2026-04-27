@@ -227,6 +227,31 @@ async def test_no_runs_at_all_returns_no_runs():
 
 
 @pytest.mark.anyio
+async def test_no_runs_includes_diagnostic_fields():
+    """no_runs return must include scope_used, branch, and poll_duration_s."""
+    watcher = DefaultCIWatcher(token="tok")
+    watcher._fetch_completed_runs = AsyncMock(return_value=[])  # type: ignore[method-assign]
+    watcher._fetch_active_runs = AsyncMock(return_value=[])  # type: ignore[method-assign]
+    watcher._fetch_failed_jobs = AsyncMock(return_value=[])  # type: ignore[method-assign]
+
+    with patch("autoskillit.execution.ci.asyncio.sleep", new_callable=AsyncMock):
+        result = await watcher.wait(
+            "feature-branch",
+            repo="owner/repo",
+            scope=CIRunScope(event="push", workflow="tests.yml"),
+            timeout_seconds=1,
+        )
+
+    assert result["conclusion"] == "no_runs"
+    assert "scope_used" in result, "no_runs must include scope_used for diagnostics"
+    assert result["scope_used"]["event"] == "push"
+    assert result["scope_used"]["workflow"] == "tests.yml"
+    assert result["branch"] == "feature-branch"
+    assert "poll_duration_s" in result
+    assert isinstance(result["poll_duration_s"], float)
+
+
+@pytest.mark.anyio
 async def test_timeout_exceeded():
     watcher = DefaultCIWatcher(token="tok")
     watcher._fetch_completed_runs = AsyncMock(return_value=[])  # type: ignore[method-assign]

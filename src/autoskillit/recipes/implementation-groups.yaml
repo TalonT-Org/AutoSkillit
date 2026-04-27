@@ -660,14 +660,32 @@ steps:
       step_name: "check_repo_ci_event"
     capture:
       ci_event: "${{ result.ci_event }}"
-    on_success: ci_watch
-    on_failure: ci_watch
+    on_success: check_pr_state
+    on_failure: check_pr_state
     skip_when_false: "inputs.open_pr"
     note: >
       Derives ci_event for the feature branch BEFORE ci_watch runs.
       Uses context.merge_target (feature branch) so push.branches filter
       is evaluated against the actual branch being pushed, not the base branch.
-      Non-blocking: on_failure routes to ci_watch with ci_event=null (match-any).
+      Non-blocking: on_failure routes to check_pr_state with ci_event=null (match-any).
+
+  check_pr_state:
+    tool: check_pr_mergeable
+    with:
+      pr_number: "${{ context.pr_number }}"
+      cwd: "${{ context.work_dir }}"
+    on_result:
+      - when: "${{ result.mergeable_status }} == 'CONFLICTING'"
+        route: detect_ci_conflict
+      - route: ci_watch
+    on_failure: ci_watch
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Pre-CI-watch gate: checks PR mergeable state before entering the CI
+      polling loop. CONFLICTING PRs cannot trigger pull_request workflows
+      (GitHub cannot create refs/pull/N/merge), so routing to ci_watch would
+      produce a guaranteed no_runs. Routes CONFLICTING to detect_ci_conflict
+      (which handles conflict resolution) and MERGEABLE/UNKNOWN to ci_watch.
 
   ci_watch:
     tool: wait_for_ci
@@ -729,7 +747,7 @@ steps:
       ci_loop_count: "${{ result.next_iteration }}"
     on_result:
       - when: "${{ result.max_exceeded }} == true"
-        route: escalate_stop_no_ci
+        route: trigger_ci_actively
       - route: ci_watch
     on_failure: escalate_stop_no_ci
     optional_context_refs:
@@ -737,8 +755,24 @@ steps:
     note: >
       Iteration guard for the ci_watch / handle_no_ci_runs cycle. Caps the
       loop at 2 iterations (initial + 1 retry after re-deriving ci_event).
-      On budget exhaustion, routes to escalate_stop_no_ci with targeted
-      diagnostic message instead of looping indefinitely.
+      On budget exhaustion, routes to trigger_ci_actively for one active
+      remediation attempt before escalating to escalate_stop_no_ci.
+
+  trigger_ci_actively:
+    tool: run_cmd
+    with:
+      cmd: "gh pr close ${{ context.pr_number }} && sleep 2 && gh pr reopen ${{ context.pr_number }}"
+      cwd: "${{ context.work_dir }}"
+    on_success: ci_watch
+    on_failure: escalate_stop_no_ci
+    retries: 1
+    on_exhausted: escalate_stop_no_ci
+    note: >
+      Active CI trigger remediation: closes and reopens the PR to force GitHub
+      webhook re-delivery. This re-creates the pull_request event and the
+      refs/pull/N/merge ref (if the PR is mergeable). Routes back to ci_watch
+      for one final attempt. If the close/reopen fails or the subsequent
+      ci_watch still returns no_runs, escalates to escalate_stop_no_ci.
 
   escalate_stop_no_ci:
     action: stop
@@ -965,9 +999,29 @@ steps:
       target_branch: "${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
       auto_merge_available: "${{ context.auto_merge_available }}"
-    on_success: wait_for_queue
+    on_success: check_stall_loop
     on_failure: release_issue_failure
     skip_when_false: "inputs.open_pr"
+
+  check_stall_loop:
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.check_loop_iteration"
+      current_iteration: "${{ context.stall_loop_count }}"
+      max_iterations: "3"
+    capture:
+      stall_loop_count: "${{ result.next_iteration }}"
+    on_result:
+      - when: "${{ result.max_exceeded }} == true"
+        route: register_clone_unconfirmed
+      - route: wait_for_queue
+    on_failure: register_clone_unconfirmed
+    optional_context_refs:
+      - stall_loop_count
+    note: >
+      Iteration guard for the wait_for_queue / reenroll_stalled_pr cycle.
+      Caps stall re-enrollment at 3 attempts. On budget exhaustion, routes
+      to register_clone_unconfirmed (merge outcome unconfirmed).
 
   check_eject_limit:
     tool: run_cmd

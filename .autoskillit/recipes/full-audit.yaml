@@ -137,8 +137,10 @@ steps:
         run_skill("/autoskillit:prepare-issue {ticket_body_cohesion_1_path}", step_name="issue_cohesion_1")
         ... (all ticket bodies across all audit types in a single message)
 
-      After each issue is created, post the validation summary as a comment:
-        gh issue comment {issue_number} --body-file {validation_summary_path}
+      After all issues are created, append the validation summary to each issue body
+      (sequentially): fetch the current body, verify it is non-empty, append a separator
+      and the validation summary content, write the combined text to a temp file, then run:
+        gh issue edit {issue_number} --body-file {combined_temp_file}
 
       Collect all issue URLs. If any ticket body issue creation fails, note it but continue.
       Route to escalate_stop ONLY if ALL ticket bodies across ALL audit types fail.

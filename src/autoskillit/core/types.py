@@ -16,6 +16,8 @@ from ._type_protocols import *  # noqa: F401, F403
 from ._type_protocols import __all__ as _protocols_all
 from ._type_results import *  # noqa: F401, F403
 from ._type_results import __all__ as _results_all
+from ._type_plugin_source import *  # noqa: F401, F403
+from ._type_plugin_source import __all__ as _plugin_source_all
 from ._type_resume import *  # noqa: F401, F403
 from ._type_resume import __all__ as _resume_all
 from ._type_subprocess import *  # noqa: F401, F403
@@ -25,6 +27,7 @@ __all__ = (
     _constants_all
     + _enums_all
     + _helpers_all
+    + _plugin_source_all
     + _protocols_all
     + _results_all
     + _resume_all

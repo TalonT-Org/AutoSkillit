@@ -381,7 +381,7 @@ def build_phase_wp_manifest(
         an = assign_data["assignment_number"]
         if pn not in phase_buckets:
             phase_buckets[pn] = {
-                "phase_name": assign_data.get("name", ""),
+                "phase_name": assign_data.get("phase_name", f"Phase {pn}"),
                 "phase_id": f"P{pn}",
                 "wp_ids": [],
                 "wp_names": [],

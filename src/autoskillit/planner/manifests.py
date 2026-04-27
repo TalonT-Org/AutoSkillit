@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -13,8 +14,11 @@ _logger = get_logger(__name__)
 
 
 def create_run_dir() -> dict[str, str]:
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    run_dir = Path(os.environ["AUTOSKILLIT_TEMP"]) / "planner" / f"run-{stamp}"
+    temp = os.environ.get("AUTOSKILLIT_TEMP")
+    if not temp:
+        raise RuntimeError("AUTOSKILLIT_TEMP must be set before calling create_run_dir()")
+    stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+    run_dir = Path(temp) / "planner" / f"run-{stamp}-{secrets.token_hex(4)}"
     for sub in ("phases", "assignments", "work_packages"):
         (run_dir / sub).mkdir(parents=True, exist_ok=True)
     return {"planner_dir": str(run_dir)}

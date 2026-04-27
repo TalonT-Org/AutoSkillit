@@ -252,7 +252,6 @@ class TestBuildTestScope:
         for d in ["recipe", "arch", "contracts", "docs"]:
             (tests_root / d).mkdir(parents=True, exist_ok=True)
         for f in [
-            # Server file-level entries (9 of 52 import autoskillit.recipe):
             "server/test_factory.py",
             "server/test_tools_load_recipe.py",
             "server/test_server_tool_registration.py",
@@ -262,18 +261,13 @@ class TestBuildTestScope:
             "server/test_tools_kitchen.py",
             "server/test_service_wrappers.py",
             "server/test_tools_list_recipes.py",
-            # CLI file-level entries (3 of 38 import autoskillit.recipe):
             "cli/test_cli_prompts.py",
             "cli/test_l3_orchestrator_prompt.py",
             "cli/test_cook.py",
-            # Execution file-level entries:
             "execution/test_zero_write_detection.py",
-            # Migration file-level entries:
             "migration/test_api.py",
             "migration/test_engine.py",
-            # Hooks file-level entries:
             "hooks/test_recipe_write_advisor.py",
-            # Other file-level entries:
             "infra/test_pretty_output.py",
             "skills/test_planner_skill_contracts.py",
             "skills/test_skill_placeholder_contracts.py",

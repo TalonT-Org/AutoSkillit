@@ -27,6 +27,7 @@ from autoskillit.core import (
     MergeQueueWatcher,
     MigrationService,
     OutputPatternResolver,
+    PluginSource,
     QuotaRefreshTask,
     RecipeRepository,
     SessionSkillManager,
@@ -59,8 +60,8 @@ class ToolContext:
     timing_log:           TimingLog — per-step wall-clock duration tracking
     response_log:         McpResponseLog — per-tool MCP response size tracking
     gate:                 GateState — enables/disables gated tools
-    plugin_dir:           Absolute path string to the autoskillit package directory, or None if
-                          the marketplace plugin is installed and `--plugin-dir` should be omitted.
+    plugin_source:        PluginSource — DirectInstall (dev/editable) or MarketplaceInstall.
+                          Encodes how autoskillit is loaded into Claude Code sessions.
     runner:               SubprocessRunner implementation (DefaultSubprocessRunner in production,
                           MockSubprocessRunner in tests)
     executor:             HeadlessExecutor — runs headless Claude Code sessions
@@ -98,7 +99,7 @@ class ToolContext:
     token_log: TokenLog
     timing_log: TimingLog
     gate: GateState
-    plugin_dir: str | None
+    plugin_source: PluginSource
     runner: SubprocessRunner | None
     # Always supply temp_dir explicitly when constructing ToolContext directly.
     # The default captures Path.cwd() at field-instantiation time, which is

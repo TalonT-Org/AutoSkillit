@@ -126,6 +126,7 @@ generic_automation_mcp/
 │   ├── _type_protocols.py   #   Protocols: GatePolicy, HeadlessExecutor, CIWatcher, etc.
 │   ├── _type_helpers.py
 │   ├── _type_resume.py      #   ResumeSpec discriminated union: NoResume, BareResume, NamedResume
+│   ├── _type_plugin_source.py #  PluginSource discriminated union: DirectInstall | MarketplaceInstall
 │   ├── _linux_proc.py       #   read_boot_id, read_starttime_ticks — Linux /proc helpers (L0)
 │   ├── _claude_env.py       #   IDE-scrubbing canonical env builder for claude subprocesses
 │   ├── _terminal_table.py   #   L0 color-agnostic terminal table primitive

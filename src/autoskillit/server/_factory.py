@@ -19,7 +19,10 @@ from typing import Any
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
     MARKETPLACE_PREFIX,
+    DirectInstall,
     FleetLock,
+    MarketplaceInstall,
+    PluginSource,
     SubprocessRunner,
     WriteBehaviorSpec,
     detect_autoskillit_mcp_prefix,
@@ -98,9 +101,16 @@ class TokenFactory:
         return self._resolved is not self._UNRESOLVED
 
 
-def _default_plugin_dir() -> str:
+def _default_plugin_dir() -> Path:
     """Resolve the autoskillit package root."""
-    return str(pkg_root())
+    return pkg_root()
+
+
+def _resolve_marketplace_cache_path() -> Path:
+    """Read the installPath for autoskillit from installed_plugins.json."""
+    from autoskillit.core import _get_autoskillit_install_path
+
+    return _get_autoskillit_install_path()
 
 
 def _gh_cli_token() -> str | None:
@@ -134,6 +144,7 @@ def make_context(
     *,
     runner: SubprocessRunner | None = _UNSET,
     plugin_dir: str | None = _UNSET,
+    plugin_source: PluginSource = _UNSET,
     fleet_lock: FleetLock | None = None,
 ) -> ToolContext:
     """Create a fully-wired ToolContext with all 22 service fields populated.
@@ -150,10 +161,13 @@ def make_context(
         runner: Subprocess runner implementation. Defaults to DefaultSubprocessRunner()
                 for production use. Pass runner=None explicitly to disable the
                 tester (useful in tests that don't need real subprocess execution).
-        plugin_dir: Absolute path to the autoskillit plugin directory.
-                    Pass None explicitly to indicate the plugin is installed
-                    (marketplace install; no --plugin-dir needed). When omitted
-                    (sentinel), auto-detects via _check_plugin_installed().
+        plugin_dir: Absolute path to the autoskillit plugin directory for a
+                    direct install. When omitted (sentinel), auto-detects via
+                    _check_plugin_installed(). When plugin_source is also provided,
+                    plugin_source takes precedence.
+        plugin_source: PluginSource override. When supplied, used directly
+                       without detection. For tests and CLI that construct
+                       install mode explicitly.
         fleet_lock: FleetLock implementation to inject. Defaults to
                         asyncio.Lock() when None. Pass a custom implementation
                         in tests to substitute the lock without monkey-patching.
@@ -219,11 +233,25 @@ def make_context(
         lambda: config.github.token or os.environ.get("GITHUB_TOKEN") or _gh_cli_token()
     )
 
-    resolved_dir = (
-        plugin_dir
-        if plugin_dir is not _UNSET
-        else (_default_plugin_dir() if not _check_plugin_installed() else None)
-    )
+    resolved_plugin_source: PluginSource
+    if plugin_source is not _UNSET:
+        resolved_plugin_source = plugin_source  # type: ignore[assignment]
+    elif plugin_dir is not _UNSET and isinstance(plugin_dir, (str, Path)):
+        resolved_plugin_source = DirectInstall(plugin_dir=Path(plugin_dir))
+    elif _check_plugin_installed():
+        try:
+            resolved_plugin_source = MarketplaceInstall(
+                cache_path=_resolve_marketplace_cache_path()
+            )
+        except (KeyError, ValueError) as exc:
+            logger.warning(
+                "marketplace install path unavailable (%s) — falling back to direct install",
+                exc,
+            )
+            resolved_plugin_source = DirectInstall(plugin_dir=_default_plugin_dir())
+    else:
+        resolved_plugin_source = DirectInstall(plugin_dir=_default_plugin_dir())
+    plugin_source = resolved_plugin_source
     gate = DefaultGateState(enabled=False)
 
     env_project_dir = os.environ.get("AUTOSKILLIT_PROJECT_DIR", "")
@@ -243,7 +271,7 @@ def make_context(
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=gate,
-        plugin_dir=resolved_dir,
+        plugin_source=plugin_source,
         runner=runner,
         temp_dir=temp_dir,
         project_dir=project_dir,

@@ -66,7 +66,10 @@ class TestRunSkillPluginDir:
         cmd = tool_ctx.runner.call_args_list[0][0]
         assert "--plugin-dir" in cmd
         plugin_dir_idx = cmd.index("--plugin-dir")
-        assert cmd[plugin_dir_idx + 1] == tool_ctx.plugin_dir
+        from autoskillit.core._type_plugin_source import DirectInstall
+
+        assert isinstance(tool_ctx.plugin_source, DirectInstall)
+        assert cmd[plugin_dir_idx + 1] == str(tool_ctx.plugin_source.plugin_dir)
         # --output-format and stream-json must be present
         assert "--output-format" in cmd
         assert cmd[cmd.index("--output-format") + 1] == "stream-json"

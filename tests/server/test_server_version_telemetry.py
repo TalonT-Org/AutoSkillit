@@ -38,24 +38,24 @@ class TestPluginMetadataExists:
 
 
 class TestPluginDirConstant:
-    """T6: tool_ctx.plugin_dir defaults to the package root directory."""
+    """T6: tool_ctx.plugin_source defaults to a DirectInstall for the package root."""
 
-    def test_plugin_dir_assignment_is_visible_via_get_ctx(self, tool_ctx):
-        """By default tool_ctx.plugin_dir is set to tmp_path by the fixture.
+    def test_plugin_source_assignment_is_visible_via_get_plugin_dir(self, tool_ctx):
+        """By default tool_ctx.plugin_source is set to DirectInstall(tmp_path) by the fixture.
 
         The real package dir is what the server uses at runtime (set by cli.py serve()).
-        This test verifies that the fixture wires plugin_dir through _ctx correctly.
+        This test verifies that the fixture wires plugin_source through _ctx correctly.
         """
         import autoskillit
+        from autoskillit.core._type_plugin_source import DirectInstall
+        from autoskillit.server._state import _get_plugin_dir
 
         # The real package dir is what the server sets at startup.
-        # We verify the attribute path works (tool_ctx.plugin_dir is accessible).
-        real_pkg_dir = str(Path(autoskillit.__file__).parent)
+        real_pkg_dir = Path(autoskillit.__file__).parent
         # tool_ctx uses tmp_path; set it to verify end-to-end wiring
-        tool_ctx.plugin_dir = real_pkg_dir
-        from autoskillit.server import _get_ctx
+        tool_ctx.plugin_source = DirectInstall(plugin_dir=real_pkg_dir)
 
-        assert _get_ctx().plugin_dir == real_pkg_dir
+        assert _get_plugin_dir() == str(real_pkg_dir)
 
 
 class TestVersionInfo:
@@ -73,6 +73,7 @@ class TestVersionInfo:
         assert info["match"] is True
 
     def test_version_info_detects_mismatch(self, tmp_path, tool_ctx):
+        from autoskillit.core._type_plugin_source import DirectInstall
         from autoskillit.server import version_info
 
         plugin_dir = tmp_path / ".claude-plugin"
@@ -80,16 +81,17 @@ class TestVersionInfo:
         (plugin_dir / "plugin.json").write_text(
             json.dumps({"name": "autoskillit", "version": "0.0.0"})
         )
-        tool_ctx.plugin_dir = str(tmp_path)
+        tool_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
         info = version_info()
         assert info["match"] is False
         assert info["package_version"] != info["plugin_json_version"]
         assert info["plugin_json_version"] == "0.0.0"
 
     def test_version_info_handles_missing_plugin_json(self, tmp_path, tool_ctx):
+        from autoskillit.core._type_plugin_source import DirectInstall
         from autoskillit.server import version_info
 
-        tool_ctx.plugin_dir = str(tmp_path)
+        tool_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
         info = version_info()
         assert info["plugin_json_version"] is None
         assert info["match"] is False

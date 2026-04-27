@@ -1339,14 +1339,13 @@ async def run_headless_core(
         skill_command=original_skill_command[:100],
         step_name=step_name or None,
     ):
-        effective_plugin_dir = ctx.plugin_dir
         resolved_model = _resolve_model(model, ctx.config)
         spec = build_leaf_headless_cmd(
             skill_command,
             cwd=cwd,
             completion_marker=effective_marker,
             model=resolved_model,
-            plugin_dir=effective_plugin_dir,
+            plugin_source=ctx.plugin_source,
             output_format_value=cfg.output_format.value,
             output_format_required_flags=cfg.output_format.required_cli_flags,
             add_dirs=add_dirs,
@@ -1364,7 +1363,7 @@ async def run_headless_core(
             resolved_model=resolved_model,
             timeout=effective_timeout,
             stale_threshold=effective_stale,
-            plugin_dir=str(effective_plugin_dir),
+            plugin_source=repr(ctx.plugin_source),
             add_dirs=list(add_dirs) if add_dirs else None,
         )
 
@@ -1467,12 +1466,6 @@ class DefaultHeadlessExecutor:
         resolved_model = _resolve_model(model, cfg)
         fleet_cfg = cfg.fleet
 
-        plugin_dir = self._ctx.plugin_dir
-        if plugin_dir is None:
-            raise ValueError(
-                "dispatch_food_truck requires a configured plugin_dir; ctx.plugin_dir is None"
-            )
-
         merged_extras: dict[str, str] = dict(env_extras) if env_extras else {}
         if requires_packs:
             if "AUTOSKILLIT_L2_TOOL_TAGS" in merged_extras:
@@ -1488,7 +1481,7 @@ class DefaultHeadlessExecutor:
 
         spec = build_food_truck_cmd(
             orchestrator_prompt=orchestrator_prompt,
-            plugin_dir=plugin_dir,
+            plugin_source=self._ctx.plugin_source,
             cwd=cwd,
             completion_marker=completion_marker,
             model=resolved_model,

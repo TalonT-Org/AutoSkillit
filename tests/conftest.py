@@ -256,6 +256,7 @@ def minimal_ctx(tmp_path):
     use tool_ctx instead.
     """
     from autoskillit.config import AutomationConfig
+    from autoskillit.core._type_plugin_source import DirectInstall
     from autoskillit.pipeline.audit import DefaultAuditLog
     from autoskillit.pipeline.context import ToolContext
     from autoskillit.pipeline.gate import DefaultGateState
@@ -268,7 +269,7 @@ def minimal_ctx(tmp_path):
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=DefaultGateState(enabled=True),
-        plugin_dir=None,
+        plugin_source=DirectInstall(plugin_dir=tmp_path),
         runner=None,
         temp_dir=tmp_path / ".autoskillit" / "temp",
     )
@@ -291,6 +292,7 @@ def tool_ctx(monkeypatch, tmp_path):
     migrations) are wired via make_context() so routing tests work correctly.
     """
     from autoskillit.config import AutomationConfig
+    from autoskillit.core._type_plugin_source import DirectInstall
     from autoskillit.pipeline.gate import DefaultGateState
     from autoskillit.server import _state
     from autoskillit.server._factory import make_context
@@ -299,7 +301,7 @@ def tool_ctx(monkeypatch, tmp_path):
     ctx = make_context(
         AutomationConfig(features={"fleet": True}),
         runner=mock_runner,
-        plugin_dir=str(tmp_path),
+        plugin_source=DirectInstall(plugin_dir=tmp_path),
     )
     ctx.gate = DefaultGateState(enabled=True)
     ctx.config.linux_tracing.log_dir = str(tmp_path / "session_logs")
@@ -307,6 +309,33 @@ def tool_ctx(monkeypatch, tmp_path):
     # Anchor temp_dir to tmp_path so server tools that read from ctx.temp_dir
     # (e.g. _apply_triage_gate's staleness cache) write under the per-test
     # tmp directory rather than the cwd captured at fixture-init time.
+    ctx.temp_dir = tmp_path / ".autoskillit" / "temp"
+    monkeypatch.setattr(_state, "_ctx", ctx)
+    monkeypatch.setattr(_state, "_startup_ready", None)
+    return ctx
+
+
+@pytest.fixture
+def tool_ctx_marketplace(monkeypatch, tmp_path):
+    """ToolContext simulating a marketplace install: plugin_source = MarketplaceInstall."""
+    from autoskillit.config import AutomationConfig
+    from autoskillit.core._type_plugin_source import MarketplaceInstall
+    from autoskillit.pipeline.gate import DefaultGateState
+    from autoskillit.server import _state
+    from autoskillit.server._factory import make_context
+
+    fake_cache = tmp_path / "marketplace_cache"
+    fake_cache.mkdir()
+
+    mock_runner = MockSubprocessRunner()
+    ctx = make_context(
+        AutomationConfig(features={"fleet": True}),
+        runner=mock_runner,
+        plugin_source=MarketplaceInstall(cache_path=fake_cache),
+    )
+    ctx.gate = DefaultGateState(enabled=True)
+    ctx.config.linux_tracing.log_dir = str(tmp_path / "session_logs")
+    ctx.config.linux_tracing.tmpfs_path = str(tmp_path / "shm")
     ctx.temp_dir = tmp_path / ".autoskillit" / "temp"
     monkeypatch.setattr(_state, "_ctx", ctx)
     monkeypatch.setattr(_state, "_startup_ready", None)

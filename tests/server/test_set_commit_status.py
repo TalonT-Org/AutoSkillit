@@ -181,7 +181,7 @@ async def test_set_commit_status_infers_repo_from_cwd(tool_ctx, monkeypatch):
 
 @pytest.mark.anyio
 async def test_set_commit_status_falls_back_to_plugin_dir_when_no_cwd(tool_ctx, monkeypatch):
-    """When neither repo nor cwd is provided, tool falls back to plugin_dir for inference."""
+    """When neither repo nor cwd is provided, tool falls back to plugin_source for inference."""
     infer_calls: list[str] = []
 
     async def fake_infer(cwd: str, hint: object = None) -> str:
@@ -195,7 +195,7 @@ async def test_set_commit_status_falls_back_to_plugin_dir_when_no_cwd(tool_ctx, 
         sha="abc003",
         state="pending",
         context="autoskillit/ai-review",
-        # neither repo nor cwd — falls back to tool_ctx.plugin_dir
+        # neither repo nor cwd — falls back to tool_ctx.plugin_source
     )
     result = json.loads(raw)
 

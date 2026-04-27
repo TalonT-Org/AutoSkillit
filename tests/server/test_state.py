@@ -16,8 +16,10 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 def _make_mock_ctx(tmp_path: Path) -> MagicMock:
     """Return a minimal mock ToolContext for _initialize tests."""
+    from autoskillit.core._type_plugin_source import MarketplaceInstall
+
     ctx = MagicMock()
-    ctx.plugin_dir = None
+    ctx.plugin_source = MarketplaceInstall(cache_path=tmp_path)
     # Provide a minimal linux_tracing config stub
     tracing_cfg = MagicMock()
     tracing_cfg.tmpfs_path = str(tmp_path / "tmpfs")

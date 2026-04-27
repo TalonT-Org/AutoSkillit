@@ -6,7 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import BareResume, ClaudeFlags, NamedResume, NoResume
+from autoskillit.core import (
+    BareResume,
+    ClaudeFlags,
+    DirectInstall,
+    MarketplaceInstall,
+    NamedResume,
+    NoResume,
+)
 from autoskillit.execution.commands import (
     _HEADLESS_EXCLUSIVE_VARS,
     _MAX_MCP_OUTPUT_TOKENS_VALUE,
@@ -108,13 +115,13 @@ class TestBuildInteractiveCmd:
 
 
 class TestBuildInteractiveCmdExtended:
-    def test_accepts_plugin_dir(self, tmp_path: Path) -> None:
-        """build_interactive_cmd with plugin_dir includes --plugin-dir flag."""
-        plugin_dir = Path(tmp_path)
-        result = build_interactive_cmd(plugin_dir=plugin_dir)
+    def test_accepts_plugin_source_direct_install(self, tmp_path: Path) -> None:
+        """build_interactive_cmd with DirectInstall includes --plugin-dir flag."""
+        plugin_source = DirectInstall(plugin_dir=tmp_path)
+        result = build_interactive_cmd(plugin_source=plugin_source)
         assert "--plugin-dir" in result.cmd
         idx = result.cmd.index("--plugin-dir")
-        assert result.cmd[idx + 1] == str(plugin_dir)
+        assert result.cmd[idx + 1] == str(tmp_path)
 
     def test_accepts_add_dirs(self, tmp_path: Path) -> None:
         """build_interactive_cmd with add_dirs includes --add-dir for each entry."""
@@ -122,8 +129,13 @@ class TestBuildInteractiveCmdExtended:
         result = build_interactive_cmd(add_dirs=[d1, d2])
         assert result.cmd.count("--add-dir") == 2
 
-    def test_plugin_dir_none_omits_flag(self) -> None:
-        """build_interactive_cmd with plugin_dir=None does not emit --plugin-dir."""
+    def test_marketplace_install_omits_plugin_dir_flag(self, tmp_path: Path) -> None:
+        """build_interactive_cmd with MarketplaceInstall does not emit --plugin-dir."""
+        result = build_interactive_cmd(plugin_source=MarketplaceInstall(cache_path=tmp_path))
+        assert "--plugin-dir" not in result.cmd
+
+    def test_no_plugin_source_omits_plugin_dir_flag(self) -> None:
+        """build_interactive_cmd with no plugin_source does not emit --plugin-dir."""
         result = build_interactive_cmd()
         assert "--plugin-dir" not in result.cmd
 
@@ -151,7 +163,7 @@ class TestBuildInteractiveCmdExtended:
 
         actual_cmd = mock_run.call_args[0][0]
         expected_prefix = build_interactive_cmd(
-            plugin_dir=pkg_root(), add_dirs=[fake_skills_dir]
+            plugin_source=DirectInstall(plugin_dir=pkg_root()), add_dirs=[fake_skills_dir]
         ).cmd
         assert actual_cmd == expected_prefix
 
@@ -218,9 +230,11 @@ class TestBuildHeadlessResumeCmd:
         result = build_headless_resume_cmd(resume_session_id="abc-123", prompt="Emit token")
         assert ClaudeFlags.PLUGIN_DIR not in result.cmd
 
-    def test_with_plugin_dir(self) -> None:
+    def test_with_plugin_source_direct_install(self) -> None:
         result = build_headless_resume_cmd(
-            resume_session_id="abc-123", prompt="Emit token", plugin_dir=Path("/tmp/plugin")
+            resume_session_id="abc-123",
+            prompt="Emit token",
+            plugin_source=DirectInstall(plugin_dir=Path("/tmp/plugin")),
         )
         assert ClaudeFlags.PLUGIN_DIR in result.cmd
         idx = result.cmd.index(ClaudeFlags.PLUGIN_DIR)
@@ -232,7 +246,7 @@ class TestBuildLeafHeadlessCmd:
         cwd="/repo",
         completion_marker="DONE",
         model=None,
-        plugin_dir="/plugins",
+        plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
         output_format_value="stream-json",
         output_format_required_flags=["--verbose"],
         add_dirs=[],
@@ -293,11 +307,16 @@ class TestBuildLeafHeadlessCmd:
         spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
         assert spec.env["CLAUDE_CODE_AUTO_CONNECT_IDE"] == "0"
 
-    def test_plugin_dir_present(self):
+    def test_plugin_source_direct_install_present(self):
         spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
         assert "--plugin-dir" in spec.cmd
         idx = spec.cmd.index("--plugin-dir")
         assert spec.cmd[idx + 1] == "/plugins"
+
+    def test_marketplace_install_omits_plugin_dir(self, tmp_path: Path):
+        params = {**self.BASE, "plugin_source": MarketplaceInstall(cache_path=tmp_path)}
+        spec = build_leaf_headless_cmd("/investigate foo", **params)
+        assert "--plugin-dir" not in spec.cmd
 
     def test_output_format_present(self):
         spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
@@ -434,7 +453,7 @@ class TestBuildLeafHeadlessCmd:
 class TestBuildFoodTruckCmd:
     BASE = dict(
         orchestrator_prompt="You are an L2 food truck orchestrator...",
-        plugin_dir="/plugins",
+        plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
         cwd="/repo",
         completion_marker="%%L2_DONE::abc12345%%",
         model=None,
@@ -485,6 +504,24 @@ class TestBuildFoodTruckCmd:
         assert ClaudeFlags.PLUGIN_DIR in spec.cmd
         idx = spec.cmd.index(ClaudeFlags.PLUGIN_DIR)
         assert spec.cmd[idx + 1] == "/plugins"
+
+    def test_build_food_truck_cmd_marketplace_uses_cache_path(self, tmp_path: Path):
+        """build_food_truck_cmd with MarketplaceInstall uses cache_path for --plugin-dir."""
+        cache = tmp_path / "marketplace_cache"
+        cache.mkdir()
+        cmd = build_food_truck_cmd(
+            **{**self.BASE, "plugin_source": MarketplaceInstall(cache_path=cache)}
+        )
+        idx = cmd.cmd.index("--plugin-dir")
+        assert cmd.cmd[idx + 1] == str(cache)
+
+    def test_build_food_truck_cmd_direct_uses_plugin_dir(self, tmp_path: Path):
+        """build_food_truck_cmd with DirectInstall uses plugin_dir for --plugin-dir."""
+        cmd = build_food_truck_cmd(
+            **{**self.BASE, "plugin_source": DirectInstall(plugin_dir=tmp_path)}
+        )
+        idx = cmd.cmd.index("--plugin-dir")
+        assert cmd.cmd[idx + 1] == str(tmp_path)
 
     def test_output_format_present(self):
         spec = build_food_truck_cmd(**self.BASE)
@@ -553,7 +590,7 @@ class TestBuildFoodTruckCmdPackTags:
         """env_extras containing AUTOSKILLIT_L2_TOOL_TAGS reaches subprocess env."""
         spec = build_food_truck_cmd(
             orchestrator_prompt="...",
-            plugin_dir="/plugins",
+            plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
             cwd="/repo",
             completion_marker="%%DONE%%",
             env_extras={"AUTOSKILLIT_L2_TOOL_TAGS": "github,ci,clone,telemetry"},
@@ -580,13 +617,13 @@ def test_headless_exclusive_vars_contains_max_mcp_output_tokens() -> None:
             cwd="/tmp",
             completion_marker="%%DONE%%",
             model=None,
-            plugin_dir=None,
+            plugin_source=None,
             output_format_value="stream-json",
         ),
         lambda: build_headless_resume_cmd(resume_session_id="abc", prompt="Emit"),
         lambda: build_food_truck_cmd(
             orchestrator_prompt="You are an L2 orchestrator",
-            plugin_dir="/plugins",
+            plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
             cwd="/tmp",
             completion_marker="%%DONE%%",
         ),
@@ -621,13 +658,13 @@ def test_interactive_cmd_env_has_mcp_connection_nonblocking() -> None:
             cwd="/tmp",
             completion_marker="%%DONE%%",
             model=None,
-            plugin_dir=None,
+            plugin_source=None,
             output_format_value="stream-json",
         ),
         lambda: build_headless_resume_cmd(resume_session_id="abc", prompt="Emit"),
         lambda: build_food_truck_cmd(
             orchestrator_prompt="You are an L2 orchestrator",
-            plugin_dir="/plugins",
+            plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
             cwd="/tmp",
             completion_marker="%%DONE%%",
         ),

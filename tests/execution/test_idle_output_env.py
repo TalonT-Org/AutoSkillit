@@ -171,7 +171,9 @@ class TestDispatchFoodTruckIdleEnvInjection:
             _fake_execute,
         )
 
-        minimal_ctx.plugin_dir = str(tmp_path / "plugin")
+        from autoskillit.core._type_plugin_source import DirectInstall
+
+        minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path / "plugin")
         executor = DefaultHeadlessExecutor(minimal_ctx)
         await executor.dispatch_food_truck(
             orchestrator_prompt="test",

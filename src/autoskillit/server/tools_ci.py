@@ -14,7 +14,7 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import CIRunScope, get_logger
+from autoskillit.core import CIRunScope, DirectInstall, MarketplaceInstall, get_logger
 from autoskillit.pipeline import ToolContext
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
@@ -231,7 +231,14 @@ async def set_commit_status(
         from autoskillit.server import _get_ctx
 
         tool_ctx = _get_ctx()
-        effective_cwd = cwd or tool_ctx.plugin_dir or "."
+        if cwd:
+            effective_cwd = cwd
+        else:
+            match tool_ctx.plugin_source:
+                case DirectInstall(plugin_dir=p):
+                    effective_cwd = str(p)
+                case MarketplaceInstall(cache_path=cp):
+                    effective_cwd = str(cp)
 
         # Resolve owner/repo if not provided
         owner_repo = repo

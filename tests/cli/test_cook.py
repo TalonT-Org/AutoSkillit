@@ -1195,6 +1195,36 @@ class TestCLIOrder:
         out = capsys.readouterr().out
         assert "Family Recipes" not in out
 
+    def test_order_picker_renders_bundled_add_ons_header(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Picker must print 'Bundled Add-ons' header for BUILTIN recipes with non-core packs."""
+        from autoskillit.core import RecipeSource
+        from autoskillit.recipe.schema import RecipeInfo
+
+        addon_recipe = RecipeInfo(
+            name="planner",
+            description="d",
+            source=RecipeSource.BUILTIN,
+            path=tmp_path / "planner.yaml",
+            experimental=False,
+            requires_packs=["kitchen-core"],
+        )
+        monkeypatch.setattr(
+            "autoskillit.recipe.list_recipes",
+            lambda *a, **kw: type("R", (), {"items": [addon_recipe]})(),
+        )
+        monkeypatch.setattr("autoskillit.cli._timed_input.timed_prompt", lambda *a, **kw: "0")
+        monkeypatch.setattr(shutil, "which", lambda cmd: None)
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+
+        with pytest.raises(SystemExit):
+            cli.order()
+
+        out = capsys.readouterr().out
+        assert "Bundled Add-ons" in out
+
     def test_order_picker_contiguous_numbering_across_groups(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:

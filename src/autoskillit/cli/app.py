@@ -574,23 +574,24 @@ def order(recipe: str | None = None, session_id: str | None = None, *, resume: b
             _build_open_kitchen_prompt,
             _resolve_recipe_input,
         )
+        from autoskillit.recipe.io import _group_rank
 
         available = list_recipes(Path.cwd()).items
         if not available:
             print("No recipes found. Run 'autoskillit recipes list' to check.")
             sys.exit(1)
-        _GROUP_HEADERS = {0: "Family Recipes", 1: "Bundled Recipes", 2: "Experimental"}
-
-        def _recipe_rank(r: object) -> int:
-            if r.experimental:  # type: ignore[attr-defined]
-                return 2
-            return 0 if r.source == RecipeSource.PROJECT else 1  # type: ignore[attr-defined]
+        _GROUP_HEADERS = {
+            0: "Bundled Recipes",
+            1: "Bundled Add-ons",
+            2: "Family Recipes",
+            3: "Experimental",
+        }
 
         print("Available recipes:")
         print("  0. Open kitchen (no recipe)")
         current_rank: int = -1
         for i, r in enumerate(available, 1):
-            rank = _recipe_rank(r)
+            rank = _group_rank(r)
             if rank != current_rank:
                 current_rank = rank
                 print(f"\n  {_GROUP_HEADERS[rank]}")

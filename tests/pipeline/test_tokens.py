@@ -669,7 +669,7 @@ class TestOrderIdScoping:
         assert report_186[0]["invocation_count"] == 1
 
     def test_unfiltered_report_aggregates_across_order_ids(self):
-        """A-2: same step name in two orders does not aggregate to one entry."""
+        """A-2: unfiltered report aggregates same step across orders into one entry."""
         log = DefaultTokenLog()
         log.record("plan", self._make_usage(), order_id="issue-185")
         log.record("plan", self._make_usage(), order_id="issue-186")

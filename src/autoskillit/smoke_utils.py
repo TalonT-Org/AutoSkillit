@@ -128,9 +128,15 @@ def check_loop_iteration(
     Designed to be called via run_python in a recipe step with on_result routing
     based on max_exceeded.
     """
-    iteration = int(current_iteration.strip()) if current_iteration.strip() else 0
+    try:
+        iteration = int(current_iteration.strip()) if current_iteration.strip() else 0
+    except ValueError as exc:
+        raise ValueError(f"current_iteration must be numeric, got: {current_iteration!r}") from exc
     next_iteration = iteration + 1
-    max_iter = int(max_iterations.strip()) if max_iterations.strip() else 2
+    try:
+        max_iter = int(max_iterations.strip()) if max_iterations.strip() else 2
+    except ValueError as exc:
+        raise ValueError(f"max_iterations must be numeric, got: {max_iterations!r}") from exc
     return {
         "next_iteration": str(next_iteration),
         "max_exceeded": "true" if next_iteration >= max_iter else "false",

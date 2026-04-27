@@ -121,12 +121,10 @@ class TestDoctorScriptHealth:
         )
 
     def _write_failures_json(self, tmp_path: Path, name: str, retries: int = 3) -> None:
-        import json as _json
-
         failures_path = tmp_path / ".autoskillit" / "temp" / "migrations" / "failures.json"
         failures_path.parent.mkdir(parents=True, exist_ok=True)
         failures_path.write_text(
-            _json.dumps(
+            json.dumps(
                 {
                     name: {
                         "name": name,

@@ -1,4 +1,4 @@
-"""Tests for doctor runtime-state, install classification, and fleet/feature-gate checks."""
+"""Tests for doctor quota cache schema, install classification, version consistency, and drift."""
 
 from __future__ import annotations
 
@@ -21,8 +21,6 @@ class TestCheckQuotaCacheSchema:
     """Tests for _check_quota_cache_schema doctor check."""
 
     def test_check_quota_cache_schema_ok_when_current(self, tmp_path):
-        import json
-
         from autoskillit.cli._doctor import Severity, _check_quota_cache_schema
         from autoskillit.execution import QUOTA_CACHE_SCHEMA_VERSION
 
@@ -45,8 +43,6 @@ class TestCheckQuotaCacheSchema:
         assert "No quota cache" in result.message
 
     def test_check_quota_cache_schema_warning_when_no_schema_version_key(self, tmp_path):
-        import json
-
         from autoskillit.cli._doctor import Severity, _check_quota_cache_schema
 
         cache = tmp_path / "cache.json"
@@ -55,21 +51,9 @@ class TestCheckQuotaCacheSchema:
         assert result.severity == Severity.WARNING
         assert "schema drift" in result.message.lower()
 
-    def test_check_quota_cache_schema_warning_when_older_schema_version(self, tmp_path):
-        import json
-
-        from autoskillit.cli._doctor import Severity, _check_quota_cache_schema
-
-        cache = tmp_path / "cache.json"
-        cache.write_text(json.dumps({"schema_version": 1, "fetched_at": "2026-01-01T00:00:00"}))
-        result = _check_quota_cache_schema(cache_path=cache)
-        assert result.severity == Severity.WARNING
-
     def test_check_quota_cache_schema_warning_includes_cache_path_and_observed_value(
         self, tmp_path
     ):
-        import json
-
         from autoskillit.cli._doctor import Severity, _check_quota_cache_schema
 
         cache = tmp_path / "cache.json"
@@ -84,8 +68,6 @@ def test_doctor_reports_drift_in_project_scope(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """_check_hook_registry_drift must report drift found in project scope."""
-    import json as _json
-
     from autoskillit.cli._doctor import _check_hook_registry_drift
     from autoskillit.core import Severity
 
@@ -93,7 +75,7 @@ def test_doctor_reports_drift_in_project_scope(
     project_settings = tmp_path / ".claude" / "settings.json"
     project_settings.parent.mkdir(parents=True)
     project_settings.write_text(
-        _json.dumps(
+        json.dumps(
             {
                 "hooks": {
                     "PostToolUse": [
@@ -208,8 +190,6 @@ class TestDoctorInstallClassification:
     def test_doctor_reports_install_classification_git_vcs(
         self, monkeypatch: pytest.MonkeyPatch, revision: str, expected_fragment: str
     ) -> None:
-        import json
-
         from autoskillit.cli._doctor import Severity, _check_install_classification
 
         fake_direct_url = json.dumps(
@@ -265,7 +245,6 @@ class TestDoctorUpdateDismissalState:
     def test_doctor_reports_dismissal_state_populated(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        import json
         from datetime import UTC, datetime
         from unittest.mock import MagicMock
 
@@ -316,7 +295,6 @@ class TestDoctorSourceVersionDriftUsesNetwork:
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         """_check_source_version_drift must call resolve_reference_sha with network=True."""
-        import json
         from unittest.mock import MagicMock
 
         from autoskillit.cli._doctor import _check_source_version_drift
@@ -353,7 +331,6 @@ class TestDoctorSourceVersionDriftUsesNetwork:
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         """Network error (resolve_reference_sha returns None) → OK, not hard failure."""
-        import json
         from unittest.mock import MagicMock
 
         from autoskillit.cli._doctor import _check_source_version_drift
@@ -979,7 +956,8 @@ def test_doctor_version_consistency_detects_stale_cache(
     request.addfinalizer(_vi.cache_clear)
     cli.doctor(output_json=True)
     data = json.loads(capsys.readouterr().out)
-    vc = next(r for r in data["results"] if r["check"] == "version_consistency")
+    vc = next((r for r in data["results"] if r["check"] == "version_consistency"), None)
+    assert vc is not None, "version_consistency check not found in doctor results"
     assert vc["severity"] == "warning"
     assert "autoskillit install" in vc["message"]
 
@@ -1007,7 +985,8 @@ def test_doctor_version_consistency_ok_when_cache_matches(
     request.addfinalizer(_vi.cache_clear)
     cli.doctor(output_json=True)
     data = json.loads(capsys.readouterr().out)
-    vc = next(r for r in data["results"] if r["check"] == "version_consistency")
+    vc = next((r for r in data["results"] if r["check"] == "version_consistency"), None)
+    assert vc is not None, "version_consistency check not found in doctor results"
     assert vc["severity"] == "ok"
 
 

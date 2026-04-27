@@ -4,6 +4,7 @@ wait_for_merge_queue (gated).
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from typing import Any, Literal
@@ -14,6 +15,7 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import CIRunScope, get_logger
+from autoskillit.execution.remote_resolver import resolve_remote_name
 from autoskillit.pipeline import ToolContext
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
@@ -709,22 +711,22 @@ async def _auto_trigger_ci(
     On any failure (merge conflict, push rejected, etc.) returns original
     no_runs result so the recipe routes to handle_no_ci_runs as fallback.
     """
-    # 1. Check PR mergeability — CONFLICTING means CI won't run even after push
     rc_m, out_m, _ = await _run_subprocess(
         ["gh", "pr", "view", branch, "--json", "mergeable"],
         cwd=cwd,
         timeout=15.0,
     )
-    if rc_m == 0:
-        try:
-            mergeable = json.loads(out_m).get("mergeable", "UNKNOWN")
-        except Exception:
-            logger.warning("auto_trigger: failed to parse gh pr view JSON", exc_info=True)
-            mergeable = "UNKNOWN"
-        if mergeable == "CONFLICTING":
-            return {**result, "conclusion": "merge_conflict", "triggered": False}
+    if rc_m != 0:
+        logger.warning("auto_trigger: gh pr view failed, cannot check mergeability", rc=rc_m)
+        return {**result, "conclusion": "gh_view_failed", "triggered": False}
+    try:
+        mergeable = json.loads(out_m).get("mergeable", "UNKNOWN")
+    except json.JSONDecodeError:
+        logger.warning("auto_trigger: failed to parse gh pr view JSON", exc_info=True)
+        mergeable = "UNKNOWN"
+    if mergeable == "CONFLICTING":
+        return {**result, "conclusion": "merge_conflict", "triggered": False}
 
-    # 2. Create empty commit to force webhook re-delivery
     rc_c, _, err_c = await _run_subprocess(
         ["git", "commit", "--allow-empty", "-m", "ci: trigger"],
         cwd=cwd,
@@ -734,28 +736,31 @@ async def _auto_trigger_ci(
         logger.warning("auto_trigger: empty commit failed", stderr=err_c)
         return result
 
-    # 3. Capture new HEAD SHA for scoped CI polling
     rc_sha, sha_out, _ = await _run_subprocess(["git", "rev-parse", "HEAD"], cwd=cwd, timeout=5.0)
     new_head_sha = (sha_out.strip() or None) if rc_sha == 0 else None
 
-    # 4. Force-push to trigger webhook delivery
+    remote_name = await resolve_remote_name(cwd)
     rc_p, _, err_p = await _run_subprocess(
-        ["git", "push", "--force-with-lease", "upstream", branch],
+        ["git", "push", "--force-with-lease", remote_name, branch],
         cwd=cwd,
         timeout=60.0,
     )
     if rc_p != 0:
         logger.warning("auto_trigger: push failed", stderr=err_p)
-        await _run_subprocess(["git", "reset", "--soft", "HEAD~1"], cwd=cwd, timeout=10.0)
+        rc_reset, _, _ = await _run_subprocess(
+            ["git", "reset", "--soft", "HEAD~1"], cwd=cwd, timeout=10.0
+        )
+        if rc_reset != 0:
+            logger.warning("auto_trigger: cleanup reset failed; branch may be diverged")
         return result
 
-    # 5. Re-poll CI with new SHA and fresh timeout
     new_scope = CIRunScope(
         workflow=scope.workflow,
         head_sha=new_head_sha,
         event=scope.event,
     )
-    assert tool_ctx.ci_watcher is not None
+    if tool_ctx.ci_watcher is None:
+        raise RuntimeError("auto_trigger: ci_watcher not configured on tool_ctx")
     try:
         triggered_result = await tool_ctx.ci_watcher.wait(
             branch,
@@ -767,6 +772,8 @@ async def _auto_trigger_ci(
         if new_head_sha:
             triggered_result = {**triggered_result, "head_sha": new_head_sha}
         return {**triggered_result, "triggered": True}
+    except asyncio.CancelledError:
+        raise
     except Exception:
         logger.error("auto_trigger: second CI poll failed", exc_info=True)
         return {**result, "conclusion": "auto_trigger_failed", "triggered": False}

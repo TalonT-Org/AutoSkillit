@@ -857,19 +857,17 @@ class TestWaitForCiAutoTrigger:
         assert result["failed_jobs"] == []
 
     @pytest.mark.anyio
-    async def test_auto_trigger_proceeds_on_gh_view_failure(self, tool_ctx):
-        watcher = InMemoryCIWatcher(wait_results=[_NO_RUNS, _SUCCESS])
+    async def test_auto_trigger_returns_gh_view_failed_on_gh_failure(self, tool_ctx):
+        watcher = InMemoryCIWatcher(wait_result=_NO_RUNS)
         tool_ctx.ci_watcher = watcher
         tool_ctx.runner.push(_sub(0, "abc123\n"))  # git rev-parse HEAD (initial)
         tool_ctx.runner.push(_sub(1))  # gh pr view — CLI failure (no PR)
-        tool_ctx.runner.push(_sub(0))  # git commit --allow-empty
-        tool_ctx.runner.push(_sub(0, "def456\n"))  # git rev-parse HEAD (new)
-        tool_ctx.runner.push(_sub(0))  # git push --force-with-lease
 
         result = json.loads(await wait_for_ci("branch", cwd="/repo", auto_trigger=True))
 
-        assert len(watcher.wait_calls) == 2
-        assert result["triggered"] is True
+        assert len(watcher.wait_calls) == 1
+        assert result["conclusion"] == "gh_view_failed"
+        assert result["triggered"] is False
 
     @pytest.mark.anyio
     async def test_auto_trigger_commit_failure_returns_no_runs(self, tool_ctx):
@@ -896,9 +894,14 @@ class TestWaitForCiAutoTrigger:
         tool_ctx.runner.push(_sub(0))  # git commit --allow-empty
         tool_ctx.runner.push(_sub(0, "def456\n"))  # git rev-parse HEAD (new)
         tool_ctx.runner.push(_sub(1, stderr="error: remote rejected"))  # git push fails
+        tool_ctx.runner.push(_sub(0))  # git reset --soft HEAD~1 (cleanup)
 
         result = json.loads(await wait_for_ci("branch", cwd="/repo", auto_trigger=True))
 
+        reset_cmd = tool_ctx.runner.call_args_list[-1][0]
+        assert reset_cmd == ["git", "reset", "--soft", "HEAD~1"], (
+            f"Expected reset, got: {reset_cmd}"
+        )
         assert len(watcher.wait_calls) == 1
         assert result["conclusion"] == "no_runs"
         assert "triggered" not in result

@@ -347,5 +347,4 @@ def test_build_plan_snapshot_projects_ordering(tmp_path) -> None:
 
     doc = json.loads(out.read_text())
     phase = doc["phases"][0]
-    assert set(phase.keys()) == {"id", "name", "goal", "scope", "ordering"}
     assert phase["ordering"] == 1

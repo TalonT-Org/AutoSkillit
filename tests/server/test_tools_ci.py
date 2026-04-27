@@ -823,10 +823,14 @@ class TestWaitForCiAutoTrigger:
     async def test_auto_trigger_fires_on_no_runs(self, tool_ctx):
         watcher = InMemoryCIWatcher(wait_results=[_NO_RUNS, _SUCCESS])
         tool_ctx.ci_watcher = watcher
-        tool_ctx.runner.push(_sub(0, "abc123\n"))  # git rev-parse HEAD (initial)
+        tool_ctx.runner.push(
+            _sub(0, "abc123\n")
+        )  # git rev-parse HEAD — wait_for_ci initial HEAD inference
         tool_ctx.runner.push(_sub(0, '{"mergeable":"MERGEABLE"}\n'))  # gh pr view
         tool_ctx.runner.push(_sub(0))  # git commit --allow-empty
-        tool_ctx.runner.push(_sub(0, "def456\n"))  # git rev-parse HEAD (new)
+        tool_ctx.runner.push(
+            _sub(0, "def456\n")
+        )  # git rev-parse HEAD — new HEAD after empty commit
         tool_ctx.runner.push(_sub(0))  # git push --force-with-lease
 
         result = json.loads(await wait_for_ci("feature-branch", cwd="/repo", auto_trigger=True))
@@ -849,6 +853,8 @@ class TestWaitForCiAutoTrigger:
         assert len(watcher.wait_calls) == 1
         assert result["conclusion"] == "merge_conflict"
         assert result["triggered"] is False
+        assert result["run_id"] is None
+        assert result["failed_jobs"] == []
 
     @pytest.mark.anyio
     async def test_auto_trigger_proceeds_on_gh_view_failure(self, tool_ctx):
@@ -898,15 +904,30 @@ class TestWaitForCiAutoTrigger:
         assert "triggered" not in result
 
     @pytest.mark.anyio
-    async def test_auto_trigger_result_includes_triggered_false_on_merge_conflict(self, tool_ctx):
+    async def test_auto_trigger_ci_poll_exception_returns_auto_trigger_failed(self, tool_ctx):
+        call_count_holder = [0]
+
+        def poll_raises_on_second_call() -> dict:
+            call_count_holder[0] += 1
+            if call_count_holder[0] >= 2:
+                raise RuntimeError("auto_trigger poll failed")
+            return _NO_RUNS
+
         watcher = InMemoryCIWatcher(wait_result=_NO_RUNS)
+        watcher.wait_side_effect = poll_raises_on_second_call
         tool_ctx.ci_watcher = watcher
-        tool_ctx.runner.push(_sub(0, "abc123\n"))
-        tool_ctx.runner.push(_sub(0, '{"mergeable":"CONFLICTING"}\n'))
+        tool_ctx.runner.push(
+            _sub(0, "abc123\n")
+        )  # git rev-parse HEAD — wait_for_ci initial HEAD inference
+        tool_ctx.runner.push(_sub(0, '{"mergeable":"MERGEABLE"}\n'))  # gh pr view
+        tool_ctx.runner.push(_sub(0))  # git commit --allow-empty
+        tool_ctx.runner.push(
+            _sub(0, "def456\n")
+        )  # git rev-parse HEAD — new HEAD after empty commit
+        tool_ctx.runner.push(_sub(0))  # git push --force-with-lease
 
         result = json.loads(await wait_for_ci("branch", cwd="/repo", auto_trigger=True))
 
-        assert result["conclusion"] == "merge_conflict"
+        assert len(watcher.wait_calls) == 2
+        assert result["conclusion"] == "auto_trigger_failed"
         assert result["triggered"] is False
-        assert result["run_id"] is None
-        assert result["failed_jobs"] == []

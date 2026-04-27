@@ -303,10 +303,7 @@ Analyze the issue title + body using in-context reasoning for all other inputs:
 Record: `route` (implementation|remediation), `issue_type` (bug|enhancement),
 `confidence` (high|low), `rationale` (one sentence).
 
-Note: The fallback row for large/ambiguous scope remains, but the audit-signal row above it now
-prevents validated reports from falling through to it. The `is_validated_report` shortcut is the
-primary guard; the table row is a secondary defense for cases where `is_validated_report` may
-not have been set (e.g., `--issue N` adoption of a pre-existing validated audit issue).
+Note: The audit-signal table row is a secondary defense for `--issue N` adoption of pre-existing validated audit issues where `is_validated_report` may not be set.
 
 ### Step 7: Confidence Gate
 

@@ -113,3 +113,24 @@ def test_planner_recipe_extract_domain_uses_env_var(planner_recipe):
     assert "_ _" not in skill_cmd, "Must not have reserved-slot placeholders"
     env = step.with_args.get("env", {})
     assert "PLANNER_ANALYSIS_FILE" in env, "env must declare PLANNER_ANALYSIS_FILE"
+
+
+def test_planner_init_captures_planner_dir(planner_recipe):
+    init_step = planner_recipe.steps["init"]
+    assert init_step.tool == "run_python"
+    assert init_step.with_args.get("callable") == "autoskillit.planner.create_run_dir"
+    assert "planner_dir" in (init_step.capture or {})
+
+
+def test_planner_steps_use_context_planner_dir():
+    import yaml
+
+    from autoskillit.recipe.io import builtin_recipes_dir
+
+    raw = yaml.safe_load((builtin_recipes_dir() / "planner.yaml").read_text())
+    raw_steps = raw.get("steps", {})
+    for step_name, step_dict in raw_steps.items():
+        step_str = str(step_dict)
+        assert "{{AUTOSKILLIT_TEMP}}/planner" not in step_str, (
+            f"Step '{step_name}' still references bare AUTOSKILLIT_TEMP/planner path"
+        )

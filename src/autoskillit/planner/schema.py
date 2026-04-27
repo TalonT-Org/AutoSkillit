@@ -57,6 +57,10 @@ class PlannerManifest(TypedDict):
     items: list[PlannerManifestItem]
 
 
+class RunDirResult(TypedDict):
+    planner_dir: str
+
+
 PHASE_REQUIRED_KEYS: frozenset[str] = frozenset({"id", "name", "ordering"})
 ASSIGNMENT_REQUIRED_KEYS: frozenset[str] = frozenset({"id", "name", "proposed_work_packages"})
 WP_REQUIRED_KEYS: frozenset[str] = frozenset({"id", "name", "deliverables"})

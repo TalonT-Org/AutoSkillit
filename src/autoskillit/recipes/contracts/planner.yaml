@@ -1,12 +1,12 @@
-generated_at: '2026-04-26T20:57:11.410246+00:00'
+generated_at: '2026-04-27T04:03:03.096931+00:00'
 bundled_manifest_version: 0.1.0
 skill_hashes:
-  planner-analyze: sha256:493f4753b98943dc593966ebb1e107b03446a41cec1017513cd81ac6051c1247
-  planner-extract-domain: sha256:94cd2bf02dbd1c0d8d28053d61dc18564be8ccdfbc861368b91326cbe4a785dd
-  planner-generate-phases: sha256:e1346c639aca2daa460b0342ea7e78fefe0729e47e91cdc8d5c8916370b070a3
-  planner-elaborate-phase: sha256:110a53c28b82d8f9d1fba1eb227f44f938b27660013cf176c6a402ca41438e87
-  planner-elaborate-assignment: sha256:683f1b24bf2d5e6d5c8447ad42083df2de3152ca48c197e333b9da77a7625345
-  planner-elaborate-wp: sha256:e19ab9995a24293124ecf8562b536121ca257c124c2b6b0d3169922e206b7997
+  planner-analyze: sha256:e9785980a9e68b849de28ffc90bfdcc2d31e7c4e1c75450db2d4384f9fd5d3d6
+  planner-extract-domain: sha256:a6cdccd877e0d7d46d44fe559100e0c7638e1534e34dc18d2b77c6b7681f2f90
+  planner-generate-phases: sha256:8c69291d11a254035aee782e739720790fbd99197828ca99a6729132bd33a8b0
+  planner-elaborate-phase: sha256:3c6bfc60d8ba26270529734c21e7571db3f8d907309b8ad106df0ede82eadff4
+  planner-elaborate-assignment: sha256:5b14748317b972deabaf41f6a6a71bb1de747105ac4466c32f0bbfae7e27df2b
+  planner-elaborate-wp: sha256:75d9e33fd3373080d39a7c09a3172d20362dcbff72c971b09ef68b410071557d
   planner-reconcile-deps: sha256:350fd62e7eade27ad11bf1bea7971e1fdb06aa3e8aec092b374fdc9fb5de0743
   planner-refine: sha256:83ccf798e0e641588d5d7f52f445ef77a974ae197a903499b87c030a1ce0ed9d
 skills:
@@ -28,7 +28,7 @@ skills:
     expected_output_patterns:
     - phase_manifest_path\s*=\s*\S+
     pattern_examples:
-    - 'phase_manifest_path = /tmp/autoskillit/planner/phases/phase_manifest.json
+    - 'phase_manifest_path = /tmp/autoskillit/planner/run-20260101-120000/phases/phase_manifest.json
 
       %%ORDER_UP%%'
     write_behavior: always
@@ -63,21 +63,25 @@ dataflow:
   - source_dir
   - task
   required: []
-  produced: []
+  produced:
+  - planner_dir
 - step: analyze
   available:
+  - planner_dir
   - source_dir
   - task
   required: []
   produced: []
 - step: extract_domain
   available:
+  - planner_dir
   - source_dir
   - task
   required: []
   produced: []
 - step: generate_phases
   available:
+  - planner_dir
   - source_dir
   - task
   required: []
@@ -87,6 +91,7 @@ dataflow:
 - step: check_phases
   available:
   - phase_manifest_path
+  - planner_dir
   - source_dir
   - task
   required: []
@@ -98,6 +103,7 @@ dataflow:
   - current_item_path
   - has_remaining
   - phase_manifest_path
+  - planner_dir
   - source_dir
   - task
   required: []
@@ -107,6 +113,7 @@ dataflow:
   - current_item_path
   - has_remaining
   - phase_manifest_path
+  - planner_dir
   - source_dir
   - task
   required: []
@@ -118,6 +125,7 @@ dataflow:
   - current_item_path
   - has_remaining
   - phase_manifest_path
+  - planner_dir
   - source_dir
   - task
   required: []
@@ -130,6 +138,7 @@ dataflow:
   - current_item_path
   - has_remaining
   - phase_manifest_path
+  - planner_dir
   - source_dir
   - task
   required: []
@@ -140,6 +149,7 @@ dataflow:
   - current_item_path
   - has_remaining
   - phase_manifest_path
+  - planner_dir
   - source_dir
   - task
   required: []
@@ -151,6 +161,7 @@ dataflow:
   - current_item_path
   - has_remaining
   - phase_manifest_path
+  - planner_dir
   - source_dir
   - task
   - wp_manifest_path
@@ -164,6 +175,7 @@ dataflow:
   - current_item_path
   - has_remaining
   - phase_manifest_path
+  - planner_dir
   - source_dir
   - task
   - wp_manifest_path
@@ -175,18 +187,19 @@ dataflow:
   - current_item_path
   - has_remaining
   - phase_manifest_path
+  - planner_dir
   - source_dir
   - task
   - wp_manifest_path
   required: []
   produced: []
-  positional_args: 1
 - step: validate
   available:
   - assignment_manifest_path
   - current_item_path
   - has_remaining
   - phase_manifest_path
+  - planner_dir
   - source_dir
   - task
   - wp_manifest_path
@@ -199,6 +212,7 @@ dataflow:
   - current_item_path
   - has_remaining
   - phase_manifest_path
+  - planner_dir
   - source_dir
   - task
   - verdict
@@ -211,19 +225,21 @@ dataflow:
   - current_item_path
   - has_remaining
   - phase_manifest_path
+  - planner_dir
   - source_dir
   - task
   - verdict
   - wp_manifest_path
   required: []
   produced: []
-  positional_args: 2
+  positional_args: 1
 - step: compile
   available:
   - assignment_manifest_path
   - current_item_path
   - has_remaining
   - phase_manifest_path
+  - planner_dir
   - source_dir
   - task
   - verdict
@@ -236,6 +252,7 @@ dataflow:
   - current_item_path
   - has_remaining
   - phase_manifest_path
+  - planner_dir
   - source_dir
   - task
   - verdict
@@ -248,6 +265,7 @@ dataflow:
   - current_item_path
   - has_remaining
   - phase_manifest_path
+  - planner_dir
   - source_dir
   - task
   - verdict

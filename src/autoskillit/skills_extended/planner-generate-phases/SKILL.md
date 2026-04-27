@@ -31,12 +31,12 @@ Pass 1 entry point. Read the analysis file (and optionally domain knowledge) and
 
 **NEVER:**
 - Produce fewer than 3 or more than 6 phases
-- Write output outside `{{AUTOSKILLIT_TEMP}}/planner/phases/`
+- Write output outside `$(dirname $1)/phases/`
 - Use freeform text instead of the required JSON schema
 
 **ALWAYS:**
-- Write `{{AUTOSKILLIT_TEMP}}/planner/phases/{phase_id}_result.json` for every phase
-- Write `{{AUTOSKILLIT_TEMP}}/planner/phases/phase_manifest.json` with every item status=`done`
+- Write `$(dirname $1)/phases/{phase_id}_result.json` for every phase
+- Write `$(dirname $1)/phases/phase_manifest.json` with every item status=`done`
 - Use sequential `ordering` values starting at 1
 - Emit `phase_manifest_path` and `phase_count` output tokens
 
@@ -67,7 +67,7 @@ For each phase, generate:
 
 ### Step 3: Write phase results
 
-For each phase, write to `{{AUTOSKILLIT_TEMP}}/planner/phases/{phase_id}_result.json` (relative to the current working directory):
+For each phase, write to `$(dirname $1)/phases/{phase_id}_result.json`:
 
 ```json
 {
@@ -87,7 +87,7 @@ The backend derives two additional fields at load time — do not write them:
 
 ### Step 4: Write phase manifest
 
-Write `{{AUTOSKILLIT_TEMP}}/planner/phases/phase_manifest.json`. Set every item's status to
+Write `$(dirname $1)/phases/phase_manifest.json`. Set every item's status to
 `done` (Pass 1 is coarse-grained enough to resolve in one shot; the elaborate loop exists
 only as a fallback). Set `result_path` to the absolute path of the corresponding result file.
 

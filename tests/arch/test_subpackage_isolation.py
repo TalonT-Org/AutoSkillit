@@ -705,7 +705,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         sessions by type (cook/order) using the session registry.
         _sessions.py adds the sessions analyze CLI subcommand for cross-session
         tool call sequence diagnostics.
-        Exempt at 26 files.
+        _restart.py adds the perform_restart() NoReturn contract for post-upgrade
+        process re-exec, keeping the restart logic isolated from update orchestration.
+        Exempt at 27 files.
       hooks/ — REQ-CNST-003-E6: hooks/ hosts one standalone script per hook event
         (PreToolUse, PostToolUse, SessionStart). Each script must remain a separate
         file so Claude Code can invoke it directly as a subprocess. pretty_output_hook.py
@@ -723,7 +725,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "recipe": 38,
         "execution": 26,
         "core": 26,
-        "cli": 26,
+        "cli": 27,
         "hooks": 27,
     }
     violations: list[str] = []

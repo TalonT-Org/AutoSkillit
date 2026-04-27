@@ -667,6 +667,7 @@ def test_yes_runs_upgrade_command_from_install_info_not_hardcoded(
     monkeypatch.setattr(
         "autoskillit.cli._update_checks._fetch_latest_version", lambda *a, **kw: "0.9.0"
     )
+    monkeypatch.setattr("autoskillit.cli._update_checks.perform_restart", lambda: None)
     expected_cmd = upgrade_command(info)
     run_update_checks(home=tmp_path)
     assert expected_cmd in run_calls, (
@@ -695,6 +696,7 @@ def test_yes_runs_autoskillit_install_after_upgrade_command(
     monkeypatch.setattr(
         "autoskillit.cli._update_checks._verify_update_result", lambda *a, **kw: True
     )
+    monkeypatch.setattr("autoskillit.cli._update_checks.perform_restart", lambda: None)
     run_update_checks(home=tmp_path)
     # ["autoskillit", "install"] must be among the calls
     assert any(cmd[:2] == ["autoskillit", "install"] for cmd in run_calls)
@@ -723,6 +725,7 @@ def test_yes_passes_skip_env_to_subprocess(
     monkeypatch.setattr(
         "autoskillit.cli._update_checks._verify_update_result", lambda *a, **kw: True
     )
+    monkeypatch.setattr("autoskillit.cli._update_checks.perform_restart", lambda: None)
     run_update_checks(home=tmp_path)
     for env in env_passed:
         assert env.get("AUTOSKILLIT_SKIP_STALE_CHECK") == "1"
@@ -752,6 +755,7 @@ def test_yes_single_invocation_exits_without_any_other_prompt(
     monkeypatch.setattr(
         "autoskillit.cli._update_checks._verify_update_result", lambda *a, **kw: True
     )
+    monkeypatch.setattr("autoskillit.cli._update_checks.perform_restart", lambda: None)
     run_update_checks(home=tmp_path)
     assert len(input_calls) == 1
 
@@ -1753,6 +1757,7 @@ def test_run_update_sequence_invalidates_fetch_cache(
     monkeypatch.setattr(
         "autoskillit.cli._update_checks._verify_update_result", lambda *a, **kw: True
     )
+    monkeypatch.setattr("autoskillit.cli._update_checks.perform_restart", lambda: None)
     _run_update_sequence(info, "0.9.0", tmp_path, {}, {})
     assert not cache_file.exists(), "Fetch cache must be deleted after successful update"
 
@@ -1794,6 +1799,7 @@ def test_run_update_command_invalidates_fetch_cache(
     monkeypatch.setattr(
         "autoskillit.cli._update_checks._fetch_latest_version", lambda *a, **kw: "0.9.1"
     )
+    monkeypatch.setattr("autoskillit.cli._update.perform_restart", lambda: None)
 
     run_update_command(home=tmp_path)
     assert not cache_file.exists(), "Fetch cache must be deleted after successful update command"
@@ -2189,6 +2195,7 @@ def test_run_update_sequence_warns_on_install_failure(
     monkeypatch.setattr(
         "autoskillit.cli._update_checks._verify_update_result", lambda *a, **kw: True
     )
+    monkeypatch.setattr("autoskillit.cli._update_checks.perform_restart", lambda: None)
     _run_update_sequence(info, "0.9.0", tmp_path, {}, {})
     out = capsys.readouterr().out
     assert "autoskillit install" in out
@@ -2198,6 +2205,46 @@ def test_run_update_sequence_warns_on_install_failure(
 # ---------------------------------------------------------------------------
 # T6 — binary_snoozed is never written by _verify_update_result
 # ---------------------------------------------------------------------------
+
+
+def test_run_update_sequence_restarts_on_success(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """After a successful upgrade, _run_update_sequence must call perform_restart."""
+    from autoskillit.cli._update_checks import _run_update_sequence
+
+    info = _make_stable_info()
+    upgrade_ok = subprocess.CompletedProcess([], returncode=0)
+    install_ok = subprocess.CompletedProcess([], returncode=0)
+    calls = iter([upgrade_ok, install_ok])
+    monkeypatch.setattr(
+        "autoskillit.cli._update_checks.subprocess.run", lambda *a, **kw: next(calls)
+    )
+
+    class FakeTG:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setattr("autoskillit.cli._update_checks.terminal_guard", FakeTG)
+    monkeypatch.setattr(
+        "autoskillit.cli._update_checks._fetch_latest_version", lambda *a, **kw: "0.9.1"
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli._update_checks._verify_update_result", lambda *a, **kw: True
+    )
+
+    restart_called: list[bool] = []
+    monkeypatch.setattr(
+        "autoskillit.cli._update_checks.perform_restart", lambda: restart_called.append(True)
+    )
+
+    _run_update_sequence(info, "0.9.0", tmp_path, {}, {})
+    assert restart_called, (
+        "_run_update_sequence must call perform_restart() after successful upgrade"
+    )
 
 
 def test_verify_update_result_does_not_write_binary_snoozed(

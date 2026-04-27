@@ -59,6 +59,7 @@ def _setup_run_update(
     import importlib.metadata
 
     monkeypatch.setattr(importlib.metadata, "version", lambda _name: new_version)
+    monkeypatch.setattr("autoskillit.cli._update.perform_restart", lambda: None)
     return run_calls
 
 
@@ -150,6 +151,7 @@ def test_update_passes_skip_env_to_subprocess(
     import importlib.metadata
 
     monkeypatch.setattr(importlib.metadata, "version", lambda _name: "0.9.0")
+    monkeypatch.setattr("autoskillit.cli._update.perform_restart", lambda: None)
     run_update_command(home=tmp_path)
 
     for env in env_passed:
@@ -228,6 +230,7 @@ def test_update_clears_dismissal_state_on_success(
     monkeypatch.setattr(importlib.metadata, "version", lambda _name: "0.9.0")
 
     monkeypatch.setattr("builtins.print", lambda *a, **kw: None)
+    monkeypatch.setattr("autoskillit.cli._update.perform_restart", lambda: None)
     run_update_command(home=tmp_path)
     state = _read_dismiss_state(tmp_path)
     assert "update_prompt" not in state
@@ -276,6 +279,45 @@ def test_run_update_command_warns_on_install_failure(
     import importlib.metadata
 
     monkeypatch.setattr(importlib.metadata, "version", lambda _: "0.9.1")
+    monkeypatch.setattr("autoskillit.cli._update.perform_restart", lambda: None)
     run_update_command(home=tmp_path)
     out = capsys.readouterr().out
     assert "autoskillit install" in out
+
+
+def test_run_update_command_restarts_on_success(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """After a successful upgrade, run_update_command must call perform_restart."""
+    from autoskillit.cli._update import run_update_command
+
+    info = _make_info(InstallType.GIT_VCS, revision="stable")
+    monkeypatch.setattr("autoskillit.cli._update.detect_install", lambda: info)
+    monkeypatch.setattr("autoskillit.cli._update.terminal_guard", FakeTG)
+    monkeypatch.setattr("autoskillit.core.any_kitchen_open", lambda: False)
+    monkeypatch.setattr(
+        "autoskillit.cli._update.subprocess.run",
+        lambda *a, **kw: subprocess.CompletedProcess([], 0),
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli._update_checks._fetch_latest_version", lambda *a, **kw: "0.9.1"
+    )
+
+    import autoskillit as _pkg
+
+    monkeypatch.setattr(_pkg, "__version__", "0.9.0")
+
+    import importlib.metadata
+
+    monkeypatch.setattr(importlib.metadata, "version", lambda _name: "0.9.1")
+    monkeypatch.setattr("builtins.print", lambda *a, **kw: None)
+
+    restart_called: list[bool] = []
+    monkeypatch.setattr(
+        "autoskillit.cli._update.perform_restart", lambda: restart_called.append(True)
+    )
+
+    run_update_command(home=tmp_path)
+    assert restart_called, (
+        "run_update_command must call perform_restart() after successful upgrade"
+    )

@@ -54,7 +54,9 @@ async def test_load_recipe_tool_accepts_overrides_param(tmp_path: Path) -> None:
     ):
         from autoskillit.server.tools_recipe import load_recipe as _load_recipe_tool
 
-        result_str = await _load_recipe_tool(name="test-recipe", overrides={"run_mode": "sequential"})
+        result_str = await _load_recipe_tool(
+            name="test-recipe", overrides={"run_mode": "sequential"}
+        )
         result = json.loads(result_str)
         assert "error" not in result
         assert result.get("valid") is True

@@ -35,9 +35,7 @@ def _make_recipe_with_sub_recipe(sub_recipe_name: str) -> Recipe:
 def test_unknown_sub_recipe_rule_fires() -> None:
     """unknown-sub-recipe finding when sub_recipe name not in available_sub_recipes."""
     recipe = _make_recipe_with_sub_recipe("nonexistent")
-    ctx = make_validation_context(
-        recipe, available_sub_recipes=frozenset({"other"})
-    )
+    ctx = make_validation_context(recipe, available_sub_recipes=frozenset({"other"}))
     findings = run_semantic_rules(ctx)
     unknown = [f for f in findings if f.rule == "unknown-sub-recipe"]
     assert unknown

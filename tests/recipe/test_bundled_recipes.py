@@ -93,8 +93,16 @@ def _assert_ci_steps(recipe) -> None:
     assert guard.on_result is not None
     guard_routes = {c.route for c in guard.on_result.conditions}
     assert "ci_watch" in guard_routes, "check_ci_loop must route back to ci_watch"
-    assert "trigger_ci_actively" in guard_routes, (
-        "check_ci_loop must route to trigger_ci_actively on budget exhaustion"
+    assert "check_active_trigger_loop" in guard_routes, (
+        "check_ci_loop must route to check_active_trigger_loop on budget exhaustion"
+    )
+    assert "check_active_trigger_loop" in recipe.steps, (
+        "check_active_trigger_loop guard step missing"
+    )
+    trigger_guard = recipe.steps["check_active_trigger_loop"]
+    trigger_guard_routes = {c.route for c in trigger_guard.on_result.conditions}
+    assert "trigger_ci_actively" in trigger_guard_routes, (
+        "check_active_trigger_loop must route to trigger_ci_actively"
     )
     assert "ci_loop_count" in guard.capture
     handle = recipe.steps["handle_no_ci_runs"]

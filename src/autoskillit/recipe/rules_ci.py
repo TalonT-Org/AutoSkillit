@@ -186,6 +186,48 @@ def _check_ci_no_runs_unguarded(ctx: ValidationContext) -> list[RuleFinding]:
     return findings
 
 
+@semantic_rule(
+    name="ci-timed-out-unguarded",
+    description=(
+        "Flags wait_for_ci steps whose on_result routing lacks an explicit "
+        "condition for conclusion='timed_out'. A catch-all arm is NOT "
+        "sufficient — timed_out means CI is still running, not failed."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_ci_timed_out_unguarded(ctx: ValidationContext) -> list[RuleFinding]:
+    timed_out_re = re.compile(r"""==\s*['"]?timed_out['"]?""")
+    findings: list[RuleFinding] = []
+    for name, step in ctx.recipe.steps.items():
+        if step.tool != "wait_for_ci":
+            continue
+        if not (step.on_success or step.on_result):
+            continue
+        has_explicit_timed_out = False
+        if step.on_result and step.on_result.conditions:
+            has_explicit_timed_out = any(
+                c.when and timed_out_re.search(c.when) for c in step.on_result.conditions
+            )
+        if has_explicit_timed_out:
+            continue
+        target = step.on_success or "on_result routing"
+        findings.append(
+            RuleFinding(
+                rule="ci-timed-out-unguarded",
+                severity=Severity.ERROR,
+                step_name=name,
+                message=(
+                    f"Step '{name}' uses wait_for_ci without an on_result condition "
+                    "that intercepts conclusion='timed_out'. timed_out means CI is "
+                    "still in progress — routing it through a catch-all to the CI "
+                    f"failure path is semantically wrong. Add an explicit timed_out "
+                    f"arm before '{target}'."
+                ),
+            )
+        )
+    return findings
+
+
 _CI_EVENT_SCOPE_TOOLS = {"wait_for_ci", "get_ci_status"}
 
 

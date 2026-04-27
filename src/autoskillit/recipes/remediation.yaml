@@ -684,6 +684,8 @@ steps:
         route: check_repo_merge_state
       - when: "${{ result.conclusion }} == 'no_runs'"
         route: handle_no_ci_runs
+      - when: "${{ result.conclusion }} == 'timed_out'"
+        route: ci_watch
       - route: detect_ci_conflict
     on_failure: detect_ci_conflict
     optional: true
@@ -695,7 +697,8 @@ steps:
       Skipped when open_pr=false — no remote feature branch is opened in that mode.
       Routes on result.conclusion: success → check_repo_merge_state,
       no_runs → handle_no_ci_runs (auto_trigger fires first: empty commit + force-push +
-      re-poll; handle_no_ci_runs reached only when push fails), failure → detect_ci_conflict.
+      re-poll; handle_no_ci_runs reached only when push fails),
+      timed_out → self (re-watch), failure → detect_ci_conflict.
 
   handle_no_ci_runs:
     tool: check_repo_merge_state
@@ -1032,7 +1035,7 @@ steps:
     with:
       branch: "${{ context.merge_target }}"
       event: "${{ context.ci_event }}"
-      timeout_seconds: 300
+      timeout_seconds: 600
       cwd: "${{ context.work_dir }}"
       remote_url: "${{ context.remote_url }}"
     capture:
@@ -1043,6 +1046,8 @@ steps:
         route: reenter_merge_queue
       - when: "${{ result.conclusion }} == 'no_runs'"
         route: release_issue_failure
+      - when: "${{ result.conclusion }} == 'timed_out'"
+        route: ci_watch_post_queue_fix
       - route: detect_ci_conflict
     on_failure: detect_ci_conflict
     skip_when_false: "inputs.open_pr"
@@ -1050,7 +1055,7 @@ steps:
       Validates CI on the rebased feature branch after queue ejection fix and re-push.
       Routes on result.conclusion: success → reenter_merge_queue,
       no_runs → release_issue_failure (post-queue-fix is already a retry path),
-      failure → detect_ci_conflict.
+      timed_out → self (re-watch), failure → detect_ci_conflict.
 
   reenter_merge_queue:
     tool: enqueue_pr

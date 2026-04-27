@@ -55,10 +55,22 @@ def _jobs_response(*jobs: tuple[str, str]) -> dict:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("attempt", range(10))
-def test_jittered_sleep_bounded(attempt: int) -> None:
-    val = _jittered_sleep(attempt)
-    assert 0 <= val <= 30  # cap is 30
+@pytest.mark.parametrize(
+    ("attempt", "expected_floor", "expected_ceiling"),
+    [
+        (0, 5, 10),
+        (1, 10, 20),
+        (2, 15, 30),
+        (3, 15, 30),
+        (9, 15, 30),
+    ],
+)
+def test_jittered_sleep_bounded(
+    attempt: int, expected_floor: float, expected_ceiling: float
+) -> None:
+    for _ in range(50):
+        val = _jittered_sleep(attempt)
+        assert expected_floor <= val <= expected_ceiling
 
 
 def test_jittered_sleep_variance():
@@ -269,6 +281,9 @@ async def test_timeout_exceeded():
     assert result["run_id"] == 666
     assert result["conclusion"] == "timed_out"
     assert result["failed_jobs"] == []
+    assert result["run_status"] == "in_progress"
+    assert "still in progress" in result["hint"]
+    assert "666" in result["hint"]
 
 
 @pytest.mark.anyio
@@ -298,9 +313,9 @@ async def test_exponential_backoff_with_jitter():
         result = await watcher.wait("main", repo="owner/repo", timeout_seconds=600)
 
     assert result["conclusion"] == "success"
-    # All sleep durations should be bounded by [0, 30]
+    # All sleep durations should respect backoff band floors (min 5s)
     for d in sleep_durations:
-        assert 0 <= d <= 30
+        assert 5 <= d <= 30
 
 
 @pytest.mark.anyio

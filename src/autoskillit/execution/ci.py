@@ -27,9 +27,8 @@ from autoskillit.execution.github import github_headers
 
 _log = get_logger(__name__)
 
-# Backoff schedule constants
-_BACKOFF_BASE = 5  # seconds
-_BACKOFF_CAP = 30  # seconds
+# Backoff schedule: (floor, ceiling) per attempt band.
+_BACKOFF_BANDS: tuple[tuple[int, int], ...] = ((5, 10), (10, 20), (15, 30))
 
 # All GitHub Actions check run conclusion values known to be returned by the REST API.
 # https://docs.github.com/en/rest/checks/runs
@@ -61,9 +60,9 @@ FAILED_CONCLUSIONS: frozenset[str] = frozenset(
 
 
 def _jittered_sleep(attempt: int) -> float:
-    """Compute full-jitter exponential backoff: random(0, min(cap, base * 2^attempt))."""
-    ceiling = min(_BACKOFF_CAP, _BACKOFF_BASE * (2**attempt))
-    return random.uniform(0, ceiling)
+    """Full-jitter exponential backoff with per-attempt floor bands."""
+    floor, ceiling = _BACKOFF_BANDS[min(attempt, len(_BACKOFF_BANDS) - 1)]
+    return random.uniform(floor, ceiling)
 
 
 def _validate_run_matches_scope(run: dict[str, Any], scope: CIRunScope) -> bool:
@@ -454,7 +453,16 @@ class DefaultCIWatcher:
                     attempt += 1
 
                 _log.warning("ci_watcher_timeout", run_id=run_id, timeout=timeout_seconds)
-                return {"run_id": run_id, "conclusion": "timed_out", "failed_jobs": []}
+                return {
+                    "run_id": run_id,
+                    "conclusion": "timed_out",
+                    "failed_jobs": [],
+                    "run_status": run_data.get("status", "in_progress"),
+                    "hint": (
+                        f"CI run {run_id} is still in progress (not failed). "
+                        "Call wait_for_ci again to continue watching."
+                    ),
+                }
 
         except httpx.HTTPStatusError as exc:
             _log.warning("ci_watcher_http_error", status=exc.response.status_code, branch=branch)

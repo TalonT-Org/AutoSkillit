@@ -77,6 +77,8 @@ def test_route_step_with_on_result_passes():
     """A route step with on_result should NOT fire route-step-requires-on-result."""
     from autoskillit.recipe.schema import StepResultCondition, StepResultRoute
 
+    # Pydantic accepts a pre-constructed StepResultRoute here even though _make_recipe
+    # calls RecipeStep(**v) — Pydantic's model validation accepts existing model instances.
     recipe = _make_recipe(
         {
             "gate": {

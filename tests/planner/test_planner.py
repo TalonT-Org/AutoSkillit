@@ -18,12 +18,9 @@ def test_planner_all_exports_callables() -> None:
     from autoskillit.planner import __all__
 
     assert set(__all__) == {
-        "check_remaining",
-        "build_assignment_manifest",
         "build_phase_assignment_manifest",
         "build_phase_wp_manifest",
         "build_pre_elab_snapshot",
-        "build_wp_manifest",
         "compile_plan",
         "create_run_dir",
         "expand_assignments",
@@ -45,6 +42,19 @@ def test_planner_all_exports_callables() -> None:
         "WPShort",
         "WPElaborated",
     }
+
+
+def test_sequential_state_machine_removed() -> None:
+    """Guard: sequential state machine functions must not exist in manifests."""
+    import autoskillit.planner.manifests as m
+
+    for name in (
+        "check_remaining",
+        "build_assignment_manifest",
+        "build_wp_manifest",
+        "_backstop_wp_index",
+    ):
+        assert not hasattr(m, name), f"{name} still exists — should have been removed"
 
 
 def test_create_run_dir_creates_timestamped_directory(tmp_path, monkeypatch) -> None:

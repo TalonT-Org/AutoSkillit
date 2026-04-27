@@ -7,6 +7,8 @@ templates, and enhanced report template fields.
 
 import pytest
 
+from tests.skills.conftest import _extract_step_section
+
 
 @pytest.fixture(scope="module")
 def deep_mode_section(skill_text: str) -> str:
@@ -16,23 +18,6 @@ def deep_mode_section(skill_text: str) -> str:
         pytest.fail("'## Deep Analysis Mode' section not found in investigate SKILL.md")
     # Find the next ## heading (not ###) after the section start
     search_from = start_idx + len("## Deep Analysis Mode")
-    next_h2 = -1
-    for i in range(search_from, len(skill_text) - 2):
-        if skill_text[i : i + 3] == "## " and skill_text[i - 1] == "\n":
-            next_h2 = i
-            break
-    if next_h2 != -1:
-        return skill_text[start_idx:next_h2]
-    return skill_text[start_idx:]
-
-
-@pytest.fixture(scope="module")
-def deep_workflow_section(skill_text: str) -> str:
-    """Extract ## Deep Analysis Mode Workflow section to end-of-file (or next ## at depth ≤ 2)."""
-    start_idx = skill_text.find("## Deep Analysis Mode Workflow")
-    if start_idx == -1:
-        pytest.fail("'## Deep Analysis Mode Workflow' not found in investigate SKILL.md")
-    search_from = start_idx + len("## Deep Analysis Mode Workflow")
     next_h2 = -1
     for i in range(search_from, len(skill_text) - 2):
         if skill_text[i : i + 3] == "## " and skill_text[i - 1] == "\n":
@@ -137,17 +122,6 @@ def test_deep_workflow_has_step(deep_workflow_section: str, step: str) -> None:
     assert f"### Step {step}" in deep_workflow_section, (
         f"Deep Analysis Mode Workflow must contain a '### Step {step}' heading"
     )
-
-
-def _extract_step_section(deep_workflow_section: str, step_name: str) -> str:
-    """Helper to extract the text of a specific D-step subsection."""
-    start = deep_workflow_section.find(f"### {step_name}")
-    if start == -1:
-        return ""
-    next_step = deep_workflow_section.find("### Step D", start + 1)
-    if next_step != -1:
-        return deep_workflow_section[start:next_step]
-    return deep_workflow_section[start:]
 
 
 def test_d1_batch_plan_proposal(deep_workflow_section: str) -> None:

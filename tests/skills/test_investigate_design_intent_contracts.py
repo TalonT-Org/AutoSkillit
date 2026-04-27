@@ -9,6 +9,7 @@ REQ-INTENT-002: Adversarial Breakage subagent — challenges removal/change reco
 import pytest
 
 from autoskillit.core.paths import pkg_root
+from tests.skills.conftest import _extract_step_section
 
 
 @pytest.fixture(scope="module")
@@ -25,21 +26,6 @@ def standard_workflow_section(skill_text: str) -> str:
     deep_start = skill_text.find("## Deep Analysis Mode Workflow", start + 1)
     if deep_start != -1:
         return skill_text[start:deep_start]
-    return skill_text[start:]
-
-
-@pytest.fixture(scope="module")
-def deep_workflow_section(skill_text: str) -> str:
-    start = skill_text.find("## Deep Analysis Mode Workflow")
-    if start == -1:
-        return ""
-    # Find next ## heading at depth 2
-    pos = start + len("## Deep Analysis Mode Workflow")
-    while pos < len(skill_text):
-        newline = skill_text.find("\n## ", pos)
-        if newline == -1:
-            return skill_text[start:]
-        return skill_text[start : newline + 1]
     return skill_text[start:]
 
 
@@ -78,17 +64,6 @@ def _strip_code_fences(text: str) -> str:
     return "\n".join(result)
 
 
-def _extract_step_section(deep_workflow_section: str, step_name: str) -> str:
-    """Helper to extract the text of a specific D-step subsection."""
-    start = deep_workflow_section.find(f"### {step_name}")
-    if start == -1:
-        return ""
-    next_step = deep_workflow_section.find("### Step D", start + 1)
-    if next_step != -1:
-        return deep_workflow_section[start:next_step]
-    return deep_workflow_section[start:]
-
-
 @pytest.fixture(scope="module")
 def d3_section(deep_workflow_section: str) -> str:
     return _extract_step_section(deep_workflow_section, "Step D3")
@@ -97,9 +72,6 @@ def d3_section(deep_workflow_section: str) -> str:
 @pytest.fixture(scope="module")
 def d5_section(deep_workflow_section: str) -> str:
     return _extract_step_section(deep_workflow_section, "Step D5")
-
-
-# ── REQ-INTENT-001: Design Intent Subagent (Standard Mode) ───────────────────
 
 
 def test_step2_has_design_intent_vector(step2_section: str) -> None:
@@ -170,12 +142,10 @@ def test_design_intent_section_positioned_after_similar_patterns(skill_text: str
     assert similar_pos < design_intent_pos, (
         "'## Design Intent Findings' must appear after '## Similar Patterns' in report template"
     )
+    assert historical_pos != -1, "'## Historical Context' must exist in report template"
     assert design_intent_pos < historical_pos, (
         "'## Design Intent Findings' must appear before '## Historical Context' in report template"
     )
-
-
-# ── REQ-INTENT-001: Design Intent Subagent (Deep Mode) ───────────────────────
 
 
 def test_d2_includes_design_intent_subagent(deep_workflow_section: str) -> None:
@@ -203,9 +173,6 @@ def test_d3_design_intent_redispatch(d3_section: str) -> None:
         "Step D3 must mention re-dispatching the Design Intent subagent"
         " for newly surfaced mechanisms"
     )
-
-
-# ── REQ-INTENT-002: Adversarial Breakage Analysis (Deep Mode Only) ────────────
 
 
 def test_d5_has_adversarial_breakage_subagent(d5_section: str) -> None:
@@ -269,9 +236,6 @@ def test_report_template_has_breakage_analysis_deep_mode(skill_text: str) -> Non
     )
 
 
-# ── Regression Guards ─────────────────────────────────────────────────────────
-
-
 def test_standard_mode_no_adversarial_breakage(standard_workflow_section: str) -> None:
     """Standard mode workflow instructions must NOT contain adversarial breakage content."""
     # Strip code fences: the Step 4 report template documents what deep mode output looks
@@ -291,9 +255,6 @@ def test_investigation_path_output_contract_unchanged(skill_text: str) -> None:
     assert "investigation_path = " in skill_text, (
         "SKILL.md must still contain 'investigation_path = ' structured output token"
     )
-
-
-# ── Subagent Templates ────────────────────────────────────────────────────────
 
 
 def test_design_intent_subagent_template_exists(skill_text: str) -> None:

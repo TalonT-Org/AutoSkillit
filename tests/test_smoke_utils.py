@@ -158,35 +158,30 @@ def test_crl_had_blocking_false_when_empty_verdict() -> None:
 # ---------------------------------------------------------------------------
 
 
-# T_SU_LI1
 def test_check_loop_iteration_first_call() -> None:
     """First iteration (empty string) → next=1, max_exceeded=false for max=2."""
     result = check_loop_iteration(current_iteration="", max_iterations="2")
     assert result == {"next_iteration": "1", "max_exceeded": "false"}
 
 
-# T_SU_LI2
 def test_check_loop_iteration_at_budget() -> None:
     """iteration=1, max=2 → next=2, max_exceeded=true."""
     result = check_loop_iteration(current_iteration="1", max_iterations="2")
     assert result == {"next_iteration": "2", "max_exceeded": "true"}
 
 
-# T_SU_LI3
 def test_check_loop_iteration_over_budget() -> None:
     """iteration=5, max=2 → max_exceeded=true."""
     result = check_loop_iteration(current_iteration="5", max_iterations="2")
     assert result == {"next_iteration": "6", "max_exceeded": "true"}
 
 
-# T_SU_LI4
 def test_check_loop_iteration_custom_max() -> None:
     """iteration=3, max=5 → next=4, max_exceeded=false."""
     result = check_loop_iteration(current_iteration="3", max_iterations="5")
     assert result == {"next_iteration": "4", "max_exceeded": "false"}
 
 
-# T_SU_LI5
 def test_check_loop_iteration_defaults() -> None:
     """No arguments → iteration=0, max=2 → next=1, max_exceeded=false."""
     result = check_loop_iteration()

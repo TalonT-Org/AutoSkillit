@@ -13,7 +13,7 @@ class PhaseResult(TypedDict):
     scope: list[str]
     ordering: int
     assignments_preview: list[str]
-    assignments: list[dict]
+    assignments: list[dict[str, Any]]
     relationship_notes: str
 
 
@@ -25,7 +25,7 @@ class AssignmentResult(TypedDict):
     phase_id: str
     goal: str
     technical_approach: str
-    proposed_work_packages: list[dict]
+    proposed_work_packages: list[dict[str, Any]]
 
 
 class WPResult(TypedDict):
@@ -73,7 +73,7 @@ class AssignmentElaborated(TypedDict):
     name: str
     goal: str
     technical_approach: str
-    proposed_work_packages: list[dict]
+    proposed_work_packages: list[dict[str, Any]]
     dependency_notes: str
     overlap_notes: str
 
@@ -111,9 +111,9 @@ class _PlanDocumentBase(TypedDict):
 
 
 class PlanDocument(_PlanDocumentBase, total=False):
-    phases: list[PhaseElaborated]
-    assignments: list[AssignmentElaborated]
-    work_packages: list[WPElaborated]
+    phases: list[PhaseShort | PhaseElaborated]
+    assignments: list[AssignmentShort | AssignmentElaborated]
+    work_packages: list[WPShort | WPElaborated]
 
 
 class PlannerManifestItem(TypedDict):

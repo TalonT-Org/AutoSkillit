@@ -14,8 +14,7 @@ def test_all_public_symbols_importable() -> None:
     failures: list[str] = []
     for symbol in core_module.__all__:
         try:
-            result = getattr(core_module, symbol)
-            assert result is not None or True  # trigger the lazy-load
+            getattr(core_module, symbol)
         except (ImportError, AttributeError) as exc:
             failures.append(f"{symbol}: {exc}")
     assert not failures, "Public API surface broken:\n" + "\n".join(failures)

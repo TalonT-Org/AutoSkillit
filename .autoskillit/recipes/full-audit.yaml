@@ -119,23 +119,31 @@ steps:
       cwd: "${{ inputs.workspace }}"
       step_name: "create_issues"
     note: >
-      PARALLEL ISSUE CREATION WAVE — For each validated audit report, fire a
-      run_skill call in a single message. Pass the validated report path as
-      the description argument:
+      PARALLEL ISSUE CREATION WAVE — validate-audit now splits each validated report
+      into per-ticket body files (ticket_body_{source}_{N}_{ts}.md) according to the
+      grouping manifest. Instead of passing validated_report_*.md directly, pass each
+      ticket body file to prepare-issue:
 
-      1. run_skill(skill_command="/autoskillit:prepare-issue {validated_tests_path}", cwd="${{ inputs.workspace }}", step_name="issue_tests")
-      2. run_skill(skill_command="/autoskillit:prepare-issue {validated_cohesion_path}", cwd="${{ inputs.workspace }}", step_name="issue_cohesion")
-      3. run_skill(skill_command="/autoskillit:prepare-issue {validated_arch_path}", cwd="${{ inputs.workspace }}", step_name="issue_arch")
-      4. run_skill(skill_command="/autoskillit:prepare-issue {validated_feature_gates_path}", cwd="${{ inputs.workspace }}", step_name="issue_feature_gates")
-      5. run_skill(skill_command="/autoskillit:prepare-issue {validated_docs_path}", cwd="${{ inputs.workspace }}", step_name="issue_docs")
+      For each audit type that succeeded in wave 2:
+        1. Discover the grouping manifest (grouping_manifest_{source}_{ts}.md) in the
+           validate-audit session output.
+        2. Read the manifest to get the list of ticket body file paths.
+        3. Fire one run_skill call per ticket body, ALL in a single message:
 
-      Skip issue creation for any validation that failed in wave 2.
-      The prepare-issue skill auto-detects the "validated: true" sentinel in
-      the report's first line and uses the audit-report input path (derives
-      title from H1 heading, strips artifact paths from body).
+      Example for tests audit with 3 ticket groups:
+        run_skill("/autoskillit:prepare-issue {ticket_body_tests_1_path}", step_name="issue_tests_1")
+        run_skill("/autoskillit:prepare-issue {ticket_body_tests_2_path}", step_name="issue_tests_2")
+        run_skill("/autoskillit:prepare-issue {ticket_body_tests_3_path}", step_name="issue_tests_3")
+        run_skill("/autoskillit:prepare-issue {ticket_body_cohesion_1_path}", step_name="issue_cohesion_1")
+        ... (all ticket bodies across all audit types in a single message)
 
-      Collect the issue URLs from each successful result.
-      If any issue creation fails, note it but continue with the others.
+      After all issues are created, append the validation summary to each issue body
+      (sequentially): fetch the current body, verify it is non-empty, append a separator
+      and the validation summary content, write the combined text to a temp file, then run:
+        gh issue edit {issue_number} --body-file {combined_temp_file}
+
+      Collect all issue URLs. If any ticket body issue creation fails, note it but continue.
+      Route to escalate_stop ONLY if ALL ticket bodies across ALL audit types fail.
     capture_list:
       issue_urls: "${{ result.issue_url }}"
     on_success: done

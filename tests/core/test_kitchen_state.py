@@ -79,7 +79,7 @@ def test_get_state_dir_namespaces_by_campaign_id(tmp_path, monkeypatch):
 
     monkeypatch.delenv("AUTOSKILLIT_STATE_DIR", raising=False)
     monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_ID", "camp-42")
-    monkeypatch.setattr(Path, "cwd", classmethod(lambda cls: tmp_path))
+    monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
     result = get_state_dir()
     assert result == tmp_path / ".autoskillit" / "temp" / "kitchen_state" / "camp-42"
 
@@ -99,7 +99,7 @@ def test_concurrent_campaigns_disjoint_dirs(tmp_path, monkeypatch):
     from autoskillit.core.kitchen_state import get_state_dir
 
     monkeypatch.delenv("AUTOSKILLIT_STATE_DIR", raising=False)
-    monkeypatch.setattr(Path, "cwd", classmethod(lambda cls: tmp_path))
+    monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
 
     monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_ID", "campaign-a")
     dir_a = get_state_dir()

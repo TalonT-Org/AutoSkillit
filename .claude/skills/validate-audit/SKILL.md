@@ -378,8 +378,10 @@ After both parallel subagents return:
 **From Cross-Validator:**
 - If status is `CROSS-VALIDATION PASSED`: proceed directly to Step 8.
 - If discrepancies found: for each discrepancy, re-read the relevant section of the validated
-  report and validation summary, apply the correction in-place (re-write the affected file
-  with the fix), and note the correction applied.
+  report and validation summary, write the corrected content to a `.tmp` file first, then
+  atomically move it over the original (to prevent partial-write corruption), and note the
+  correction applied. Limit to at most 3 correction passes; after 3 passes, record any
+  remaining discrepancies and continue to Step 8.
 - Corrections are writes to existing output files only — no new findings are introduced.
 
 **From Ticket Grouper:**

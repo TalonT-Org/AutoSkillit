@@ -123,6 +123,9 @@ def test_merge_tier_dir_globs_and_merges(tmp_path) -> None:
     result = merge_tier_dir(str(results_dir), str(out), "phases")
     assert result["item_count"] == "2"
     assert out.exists()
+    merged = json.loads(out.read_text())
+    merged_ids = {item["id"] for item in merged["phases"]}
+    assert merged_ids == {"P1", "P2"}
 
 
 def test_expand_assignments_creates_contexts(tmp_path) -> None:

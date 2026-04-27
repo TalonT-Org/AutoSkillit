@@ -47,6 +47,7 @@ class PhaseShort(TypedDict):
     name: str
     goal: str
     scope: list[str]
+    ordering: int
 
 
 class PhaseElaborated(TypedDict):

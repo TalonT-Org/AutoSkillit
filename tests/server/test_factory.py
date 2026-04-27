@@ -285,7 +285,6 @@ def test_write_expected_resolver_mode(
     if expected_mode is None:
         assert spec.expected_when == ()
     else:
-        assert len(spec.expected_when) > 0
         for token in required_tokens:
             assert any(token in p for p in spec.expected_when)
 

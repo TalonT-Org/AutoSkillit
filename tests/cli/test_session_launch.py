@@ -33,8 +33,11 @@ def _capture_subprocess(monkeypatch: pytest.MonkeyPatch) -> dict:
 
 
 def _stub_plugin_installed(monkeypatch: pytest.MonkeyPatch, *, installed: bool = True) -> None:
-    """Stub _is_plugin_installed to return the given value."""
-    monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: installed)
+    """Stub detect_autoskillit_mcp_prefix to simulate marketplace/direct install."""
+    from autoskillit.core._plugin_ids import DIRECT_PREFIX, MARKETPLACE_PREFIX
+
+    prefix = MARKETPLACE_PREFIX if installed else DIRECT_PREFIX
+    monkeypatch.setattr("autoskillit.core.detect_autoskillit_mcp_prefix", lambda: prefix)
 
 
 # ---------------------------------------------------------------------------
@@ -44,7 +47,7 @@ def _stub_plugin_installed(monkeypatch: pytest.MonkeyPatch, *, installed: bool =
 
 def test_run_interactive_session_passes_plugin_flags(monkeypatch: pytest.MonkeyPatch) -> None:
     """_run_interactive_session adds --plugin-dir when plugin not installed."""
-    monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: False)
+    _stub_plugin_installed(monkeypatch, installed=False)
     captured = _capture_subprocess(monkeypatch)
     _run_interactive_session(system_prompt="test")
     assert ClaudeFlags.PLUGIN_DIR in captured["cmd"]

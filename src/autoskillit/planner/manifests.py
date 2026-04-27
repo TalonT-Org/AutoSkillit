@@ -214,6 +214,60 @@ def build_assignment_manifest(
     return {"manifest_path": str(manifest_path), "total_count": str(len(items))}
 
 
+def build_phase_assignment_manifest(phases_dir: str, output_dir: str) -> dict[str, str]:
+    if not phases_dir or not output_dir:
+        raise ValueError("phases_dir and output_dir must not be empty")
+
+    phases_path = Path(phases_dir)
+    out_dir = Path(output_dir)
+    assign_dir = out_dir.resolve()
+
+    phase_files = sorted(phases_path.glob("*_result.json"))
+    parsed_phases = []
+    for f in phase_files:
+        try:
+            raw = json.loads(f.read_text())
+        except json.JSONDecodeError as exc:
+            raise json.JSONDecodeError(
+                f"Failed to parse {f}: {exc.msg}", exc.doc, exc.pos
+            ) from exc
+        try:
+            data = validate_phase_result(raw)
+        except (ValueError, KeyError) as exc:
+            raise ValueError(f"Invalid phase result in {f}: {exc}") from exc
+        parsed_phases.append(data)
+    parsed_phases.sort(key=lambda d: d["phase_number"])
+
+    items = []
+    for phase_data in parsed_phases:
+        assignments = phase_data.get("assignments", [])
+        items.append(
+            {
+                "id": phase_data["id"],
+                "name": phase_data.get("name", ""),
+                "status": "pending",
+                "result_path": None,
+                "metadata": {
+                    "assignment_count": len(assignments),
+                    "assignment_ids": [
+                        a.get("metadata", {}).get("id", "") or a.get("id", "") for a in assignments
+                    ],
+                    "assignment_names": [a.get("name", "") for a in assignments],
+                },
+            }
+        )
+
+    manifest = {
+        "pass_name": "phase_assignments",
+        "result_dir": str(assign_dir),
+        "created_at": datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "items": items,
+    }
+    manifest_path = assign_dir / "phase_assignment_manifest.json"
+    write_versioned_json(manifest_path, manifest, schema_version=1)
+    return {"manifest_path": str(manifest_path), "total_count": str(len(items))}
+
+
 def build_wp_manifest(
     assignments_dir: str, output_dir: str, work_packages_dir: str = ""
 ) -> dict[str, str]:

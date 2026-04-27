@@ -18,6 +18,7 @@ ALL_PLANNER_SKILLS = [
     "planner-generate-phases",
     "planner-elaborate-phase",
     "planner-elaborate-assignment",
+    "planner-elaborate-assignments",
     "planner-elaborate-wp",
     "planner-reconcile-deps",
     "planner-refine",
@@ -167,4 +168,38 @@ def test_elaborate_phase_contract_write_behavior_always() -> None:
 
     contracts = load_bundled_manifest()
     contract = contracts["skills"]["planner-elaborate-phase"]
+    assert contract.get("write_behavior") == "always"
+
+
+def test_elaborate_assignments_contract_declares_phase_result_dir() -> None:
+    """planner-elaborate-assignments must declare phase_assignments_result_dir output."""
+    from autoskillit.recipe.contracts import load_bundled_manifest
+
+    contracts = load_bundled_manifest()
+    contract = contracts["skills"]["planner-elaborate-assignments"]
+    output_names = [o["name"] for o in contract.get("outputs", [])]
+    assert "phase_assignments_result_dir" in output_names, (
+        "planner-elaborate-assignments must declare phase_assignments_result_dir output"
+    )
+
+
+def test_elaborate_assignments_contract_has_output_pattern() -> None:
+    """phase_assignments_result_dir must appear in expected_output_patterns."""
+    from autoskillit.recipe.contracts import load_bundled_manifest
+
+    contracts = load_bundled_manifest()
+    contract = contracts["skills"]["planner-elaborate-assignments"]
+    patterns = contract.get("expected_output_patterns", [])
+    assert any("phase_assignments_result_dir" in p for p in patterns), (
+        "planner-elaborate-assignments must have an expected_output_pattern"
+        " matching phase_assignments_result_dir"
+    )
+
+
+def test_elaborate_assignments_contract_write_behavior_always() -> None:
+    """planner-elaborate-assignments must declare write_behavior: always."""
+    from autoskillit.recipe.contracts import load_bundled_manifest
+
+    contracts = load_bundled_manifest()
+    contract = contracts["skills"]["planner-elaborate-assignments"]
     assert contract.get("write_behavior") == "always"

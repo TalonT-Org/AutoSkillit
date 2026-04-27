@@ -15,6 +15,7 @@ import pytest
 from tests._test_filter import (
     LAYER_CASCADE_CONSERVATIVE,
     MODULE_CASCADE_CORE,
+    MODULE_CASCADE_EXECUTION,
     _file_to_package,
 )
 
@@ -27,18 +28,18 @@ def _all_src_files() -> list[Path]:
     return sorted(_SRC_ROOT.rglob("*.py"))
 
 
-def _build_core_reexport_map() -> dict[str, str]:
-    """Parse core/__init__.py (or .pyi stub) relative imports → submodule stem map.
+def _build_reexport_map(pkg_name: str) -> dict[str, str]:
+    """Parse {pkg_name}/__init__.py (or .pyi stub) relative imports → submodule stem map.
 
     `from .feature_flags import is_feature_enabled` → {"is_feature_enabled": "feature_flags"}
 
-    When core/__init__.py uses PEP 562 lazy loading (no relative imports in .py),
+    When __init__.py uses PEP 562 lazy loading (no relative imports in .py),
     the .pyi stub serves as the canonical source of re-export mappings.
     """
     reexport_map: dict[str, str] = {}
 
     for suffix in ("__init__.py", "__init__.pyi"):
-        path = _SRC_ROOT / "core" / suffix
+        path = _SRC_ROOT / pkg_name / suffix
         if not path.exists():
             continue
         try:
@@ -53,11 +54,15 @@ def _build_core_reexport_map() -> dict[str, str]:
                     name = alias.asname if alias.asname else alias.name
                     reexport_map[name] = stem
 
+    return reexport_map
+
+
+def _build_core_reexport_map() -> dict[str, str]:
+    reexport_map = _build_reexport_map("core")
     if not reexport_map:
         pytest.skip(
             "core/__init__.py and .pyi contain no relative imports — guard would pass vacuously"
         )
-
     return reexport_map
 
 
@@ -93,17 +98,18 @@ def _build_package_reverse_graph() -> dict[str, set[str]]:
     return dict(graph)
 
 
-def _build_module_reverse_graph() -> dict[str, set[str]]:
+def _build_pkg_module_reverse_graph(
+    pkg_name: str, reexport_map: dict[str, str]
+) -> dict[str, set[str]]:
     """
-    REQ-GUARD-001 (module level, core submodules).
+    Build a reverse import graph for submodules of a given autoskillit package.
 
-    Tracks direct `from autoskillit.core.{stem} import ...` and
-    re-exported names `from autoskillit.core import {name}` resolved
-    through core/__init__.py.
+    Tracks direct `from autoskillit.{pkg_name}.{stem} import ...` and
+    re-exported names `from autoskillit.{pkg_name} import {name}` resolved
+    through {pkg_name}/__init__.py.
 
-    Returns {core_module_stem: set[consuming_pkg]}.
+    Returns {module_stem: set[consuming_pkg]}.
     """
-    core_reexports = _build_core_reexport_map()
     graph: defaultdict[str, set[str]] = defaultdict(set)
     for filepath in _all_src_files():
         consumer_pkg = _file_to_package(str(filepath))
@@ -123,16 +129,26 @@ def _build_module_reverse_graph() -> dict[str, set[str]]:
             parts = node.module.split(".")
             if parts[0] != "autoskillit":
                 continue
-            # Direct: from autoskillit.core.{stem} import ...
-            if len(parts) >= 3 and parts[1] == "core":
+            # Direct: from autoskillit.{pkg_name}.{stem} import ...
+            if len(parts) >= 3 and parts[1] == pkg_name:
                 graph[parts[2]].add(consumer_pkg)
-            # Via re-export: from autoskillit.core import {name}
-            elif len(parts) == 2 and parts[1] == "core":
+            # Via re-export: from autoskillit.{pkg_name} import {name}
+            elif len(parts) == 2 and parts[1] == pkg_name:
                 for alias in node.names:
-                    stem = core_reexports.get(alias.name)
+                    stem = reexport_map.get(alias.name)
                     if stem:
                         graph[stem].add(consumer_pkg)
     return dict(graph)
+
+
+def _build_module_reverse_graph() -> dict[str, set[str]]:
+    """REQ-GUARD-001 (module level, core). Returns {core_module_stem: set[consuming_pkg]}."""
+    return _build_pkg_module_reverse_graph("core", _build_core_reexport_map())
+
+
+def _build_execution_module_reverse_graph() -> dict[str, set[str]]:
+    """REQ-GUARD-001 (module level, execution). Returns {stem: set[consuming_pkg]}."""
+    return _build_pkg_module_reverse_graph("execution", _build_reexport_map("execution"))
 
 
 class TestModuleCascadeCoreGuard:
@@ -164,6 +180,45 @@ class TestModuleCascadeCoreGuard:
         assert not phantoms, (
             "MODULE_CASCADE_CORE contains stems with zero AST consumers — "
             "the source file may have been renamed or deleted:\n"
+            f"  {sorted(phantoms)}\n"
+            "Remove the stale entry or rename it to match the current module."
+        )
+
+
+class TestModuleCascadeExecutionGuard:
+    """
+    REQ-EXEC-004: Validate MODULE_CASCADE_EXECUTION against actual AST imports.
+    Mirrors TestModuleCascadeCoreGuard.
+    """
+
+    def test_module_cascade_execution_is_superset_of_ast_consumers(self) -> None:
+        graph = _build_execution_module_reverse_graph()
+        violations: dict[str, dict[str, list[str]]] = {}
+        for stem, declared in MODULE_CASCADE_EXECUTION.items():
+            actual = graph.get(stem, set())
+            missing = actual - declared
+            if missing:
+                violations[stem] = {
+                    "declared": sorted(declared),
+                    "actual": sorted(actual),
+                    "missing": sorted(missing),
+                }
+        assert not violations, (
+            "MODULE_CASCADE_EXECUTION entries are too narrow — update tests/_test_filter.py:\n"
+            + "\n".join(
+                f"  {stem}: add {v['missing']} (declared={v['declared']}, actual={v['actual']})"
+                for stem, v in sorted(violations.items())
+            )
+        )
+
+    def test_module_cascade_execution_has_no_phantom_stems(self) -> None:
+        exec_src = _SRC_ROOT / "execution"
+        phantoms = [
+            stem for stem in MODULE_CASCADE_EXECUTION if not (exec_src / f"{stem}.py").exists()
+        ]
+        assert not phantoms, (
+            "MODULE_CASCADE_EXECUTION contains stems with no matching source file — "
+            "the file may have been renamed or deleted:\n"
             f"  {sorted(phantoms)}\n"
             "Remove the stale entry or rename it to match the current module."
         )

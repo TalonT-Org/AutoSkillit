@@ -1,4 +1,4 @@
-"""Tests for headless_runner.py extracted helpers."""
+"""Tests for headless.py dispatch flow: food truck dispatch, pack injection, executor protocol."""
 
 import json
 from pathlib import Path

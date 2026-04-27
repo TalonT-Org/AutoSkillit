@@ -1,4 +1,4 @@
-"""Tests for headless_runner.py extracted helpers."""
+"""Tests for headless.py: _build_skill_result, path validation, synthesis, and contract gates."""
 
 import json
 
@@ -17,7 +17,7 @@ from autoskillit.execution.headless import (
 from autoskillit.execution.session import ClaudeSessionResult
 from autoskillit.pipeline.audit import DefaultAuditLog, FailureRecord
 from tests.conftest import _make_result
-from tests.execution.test_headless_core import _make_tool_use_line, _success_session_json
+from tests.execution.conftest import _make_tool_use_line, _success_session_json
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -408,11 +408,6 @@ class TestOutputPathTokensDerivedFromContracts:
         )
 
 
-# ---------------------------------------------------------------------------
-# T2: _synthesize_from_write_artifacts
-# ---------------------------------------------------------------------------
-
-
 @pytest.fixture
 def make_headless_session():
     """Build a ClaudeSessionResult with configurable result and tool_uses (parsed form)."""
@@ -530,11 +525,6 @@ class TestSynthesizeFromWriteArtifacts:
             "plan_path = /cwd/.autoskillit/temp/make-plan/task_plan_2026-01-01.md" in result.result
         )
         assert "arch_lens_selection" not in result.result
-
-
-# ---------------------------------------------------------------------------
-# T3: _build_skill_result integration — CONTRACT_RECOVERY gate
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture

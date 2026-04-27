@@ -1,4 +1,4 @@
-"""Tests for headless_runner.py extracted helpers."""
+"""Tests for headless.py synthesis helpers: output path extraction, validation, contamination."""
 
 import json
 
@@ -11,18 +11,9 @@ from autoskillit.core.types import (
     TerminationReason,
 )
 from autoskillit.execution.headless import _build_skill_result, _scan_jsonl_write_paths
-from tests.execution.test_headless_core import (
-    _make_tool_use_line,
-    _sr,
-    _success_session_json,
-)
+from tests.execution.conftest import _make_tool_use_line, _sr, _success_session_json
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
-
-
-# ---------------------------------------------------------------------------
-# Test: _extract_output_paths (Step 1b)
-# ---------------------------------------------------------------------------
 
 
 class TestExtractOutputPaths:
@@ -84,11 +75,6 @@ class TestExtractOutputPaths:
         assert result == {"plan_path": "/second/path"}
 
 
-# ---------------------------------------------------------------------------
-# Test: _validate_output_paths (Step 1c)
-# ---------------------------------------------------------------------------
-
-
 class TestValidateOutputPaths:
     def test_returns_none_when_all_paths_under_cwd(self):
         from autoskillit.execution.headless import _validate_output_paths
@@ -138,11 +124,6 @@ class TestValidateOutputPaths:
         assert "report_path" in result
 
 
-# ---------------------------------------------------------------------------
-# Test: _build_skill_result path contamination detection (Step 1d)
-# ---------------------------------------------------------------------------
-
-
 class TestBuildSkillResultPathContamination:
     @staticmethod
     def _assistant_ndjson(text: str) -> str:
@@ -185,7 +166,6 @@ class TestBuildSkillResultPathContamination:
         sr = _build_skill_result(result, cwd="/correct/clone")
         assert sr.retry_reason == RetryReason.PATH_CONTAMINATION
         assert sr.needs_retry is True
-        # Confirm it is NOT RESUME — routing must not go to on_context_limit
 
     def test_no_contamination_when_paths_under_cwd(self):
         """All output paths under cwd yields normal result."""
@@ -216,11 +196,6 @@ class TestBuildSkillResultPathContamination:
         result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
         sr = _build_skill_result(result, cwd="/clone/path")
         assert sr.success is True
-
-
-# ---------------------------------------------------------------------------
-# Test: run_headless_core passes cwd (Step 1f)
-# ---------------------------------------------------------------------------
 
 
 class TestRunHeadlessCorePassesCwd:

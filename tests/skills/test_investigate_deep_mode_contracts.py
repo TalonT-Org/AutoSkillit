@@ -7,15 +7,6 @@ templates, and enhanced report template fields.
 
 import pytest
 
-from autoskillit.core.paths import pkg_root
-
-
-@pytest.fixture(scope="module")
-def skill_text() -> str:
-    skill_path = pkg_root() / "skills_extended" / "investigate" / "SKILL.md"
-    assert skill_path.exists(), f"SKILL.md not found at {skill_path}"
-    return skill_path.read_text()
-
 
 @pytest.fixture(scope="module")
 def deep_mode_section(skill_text: str) -> str:
@@ -64,38 +55,7 @@ def standard_workflow_section(skill_text: str) -> str:
     return skill_text[start_idx:]
 
 
-@pytest.fixture(scope="module")
-def report_section(skill_text: str) -> str:
-    """Extract the Step 4: Write Report section text.
-
-    Uses the next top-level ``## `` heading that is NOT inside a fenced
-    code block as the boundary.
-    """
-    step_4_idx = skill_text.find("### Step 4:")
-    if step_4_idx == -1:
-        pytest.fail("Step 4 not found in investigate SKILL.md")
-    in_fence = False
-    lines = skill_text[step_4_idx:].split("\n")
-    for i, line in enumerate(lines):
-        if i == 0:
-            continue
-        if line.startswith("```"):
-            in_fence = not in_fence
-            continue
-        if not in_fence and line.startswith("## ") and not line.startswith("### "):
-            end_idx = step_4_idx + sum(len(prev) + 1 for prev in lines[:i])
-            return skill_text[step_4_idx:end_idx]
-    return skill_text[step_4_idx:]
-
-
 # ── Deep Mode Activation & Configuration ──────────────────────────────────────
-
-
-def test_deep_mode_section_exists(skill_text: str) -> None:
-    """'## Deep Analysis Mode' heading must be present in skill_text."""
-    assert "## Deep Analysis Mode" in skill_text, (
-        "investigate SKILL.md must contain a '## Deep Analysis Mode' section"
-    )
 
 
 def test_deep_mode_activation_via_depth_flag(deep_mode_section: str) -> None:
@@ -171,52 +131,11 @@ def test_standard_mode_confidence_levels_in_synthesis(standard_workflow_section:
 # ── Deep Workflow Steps D1–D6 ──────────────────────────────────────────────────
 
 
-def test_deep_workflow_section_exists(skill_text: str) -> None:
-    """'## Deep Analysis Mode Workflow' heading must be present."""
-    assert "## Deep Analysis Mode Workflow" in skill_text, (
-        "investigate SKILL.md must contain a '## Deep Analysis Mode Workflow' section"
-    )
-
-
-def test_deep_workflow_has_step_d1(deep_workflow_section: str) -> None:
-    """Deep workflow must contain Step D1 heading."""
-    assert "### Step D1" in deep_workflow_section, (
-        "Deep Analysis Mode Workflow must contain a '### Step D1' heading"
-    )
-
-
-def test_deep_workflow_has_step_d2(deep_workflow_section: str) -> None:
-    """Deep workflow must contain Step D2 heading."""
-    assert "### Step D2" in deep_workflow_section, (
-        "Deep Analysis Mode Workflow must contain a '### Step D2' heading"
-    )
-
-
-def test_deep_workflow_has_step_d3(deep_workflow_section: str) -> None:
-    """Deep workflow must contain Step D3 heading."""
-    assert "### Step D3" in deep_workflow_section, (
-        "Deep Analysis Mode Workflow must contain a '### Step D3' heading"
-    )
-
-
-def test_deep_workflow_has_step_d4(deep_workflow_section: str) -> None:
-    """Deep workflow must contain Step D4 heading."""
-    assert "### Step D4" in deep_workflow_section, (
-        "Deep Analysis Mode Workflow must contain a '### Step D4' heading"
-    )
-
-
-def test_deep_workflow_has_step_d5(deep_workflow_section: str) -> None:
-    """Deep workflow must contain Step D5 heading."""
-    assert "### Step D5" in deep_workflow_section, (
-        "Deep Analysis Mode Workflow must contain a '### Step D5' heading"
-    )
-
-
-def test_deep_workflow_has_step_d6(deep_workflow_section: str) -> None:
-    """Deep workflow must contain Step D6 heading."""
-    assert "### Step D6" in deep_workflow_section, (
-        "Deep Analysis Mode Workflow must contain a '### Step D6' heading"
+@pytest.mark.parametrize("step", ["D1", "D2", "D3", "D4", "D5", "D6"])
+def test_deep_workflow_has_step(deep_workflow_section: str, step: str) -> None:
+    """Deep workflow must contain each D-step heading."""
+    assert f"### Step {step}" in deep_workflow_section, (
+        f"Deep Analysis Mode Workflow must contain a '### Step {step}' heading"
     )
 
 
@@ -407,11 +326,7 @@ def test_report_no_auto_file_issues(skill_text: str) -> None:
     always_idx = skill_text.find("**ALWAYS:**", never_idx)
     never_block = skill_text[never_idx:always_idx] if always_idx != -1 else skill_text[never_idx:]
     has_issue = "issue" in never_block.lower()
-    has_prohibition = (
-        "never" in never_block.lower()
-        or "not" in never_block.lower()
-        or "automatically" in never_block.lower()
-    )
+    has_prohibition = "automatically" in never_block.lower()
     assert has_issue and has_prohibition, (
         "NEVER constraints must prohibit filing GitHub issues automatically"
     )

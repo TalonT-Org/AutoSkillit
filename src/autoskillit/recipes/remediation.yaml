@@ -743,7 +743,7 @@ steps:
     with:
       callable: "autoskillit.smoke_utils.check_loop_iteration"
       current_iteration: "${{ context.active_trigger_count }}"
-      max_iterations: "1"
+      max_iterations: "2"
     capture:
       active_trigger_count: "${{ result.next_iteration }}"
     on_result:

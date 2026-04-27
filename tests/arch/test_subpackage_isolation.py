@@ -663,6 +663,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         rules_reachability.py adds symbolic BFS reachability rules, bringing the count to 33.
         rules_fixing.py adds conditional-write-skill ungated-push detection,
         bringing the count to 34.
+        rules_temp_path.py adds the non-unique-output-path lint rule for output path
+        isolation enforcement, bringing the count to 39.
       execution/ — REQ-CNST-003-E3: execution/ decomposes process lifecycle into
         focused single-concern modules (_process_io, _process_kill, _process_race,
         etc.) that cannot be merged without re-introducing the coupling they isolate.
@@ -722,7 +724,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
     """
     EXEMPTIONS: dict[str, int] = {
         "server": 20,
-        "recipe": 38,
+        "recipe": 39,
         "execution": 26,
         "core": 26,
         "cli": 27,

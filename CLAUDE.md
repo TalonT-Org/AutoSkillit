@@ -231,6 +231,7 @@ generic_automation_mcp/
 │   ├── rules_recipe.py
 │   ├── rules_skill_content.py
 │   ├── rules_skills.py
+│   ├── rules_temp_path.py
 │   ├── rules_tools.py
 │   ├── rules_verdict.py
 │   ├── rules_worktree.py     #   Semantic validation rule modules

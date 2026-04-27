@@ -22,7 +22,7 @@ Detect language, framework, test infrastructure, project structure, and existing
 
 ## Arguments
 
-- **$1** — Absolute path to the run-scoped planner directory (e.g., `/path/to/.autoskillit/temp/planner/run-YYYYMMDD-HHMMSS`). Created by the `init` step.
+- **$1** — Absolute path to the run-scoped planner directory (e.g., `{{AUTOSKILLIT_TEMP}}/planner/run-YYYYMMDD-HHMMSS`). Created by the `init` step.
 
 ## Critical Constraints
 

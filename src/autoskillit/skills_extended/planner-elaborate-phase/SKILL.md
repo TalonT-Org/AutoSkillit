@@ -25,7 +25,7 @@ describing one phase and all prior phase results, then writes a complete phase r
 ## Arguments
 
 - **$1** — Absolute path to the context file written by `check_remaining`
-- **$2** — Absolute path to the run-scoped planner directory (e.g., `/path/to/.autoskillit/temp/planner/run-YYYYMMDD-HHMMSS`)
+- **$2** — Absolute path to the run-scoped planner directory (e.g., `{{AUTOSKILLIT_TEMP}}/planner/run-YYYYMMDD-HHMMSS`)
 
 ## Critical Constraints
 

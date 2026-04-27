@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pytest
+
+if TYPE_CHECKING:
+    from autoskillit.pipeline.timings import DefaultTimingLog
 
 
 @pytest.fixture(autouse=True)
@@ -79,9 +84,9 @@ def headless_enabled():
         mcp.disable(tags={tag})
 
 
-def assert_step_timed(timing_log, step_name: str) -> None:
+def assert_step_timed(timing_log: DefaultTimingLog, step_name: str) -> None:
     assert any(e["step_name"] == step_name for e in timing_log.get_report())
 
 
-def assert_no_timing(timing_log) -> None:
+def assert_no_timing(timing_log: DefaultTimingLog) -> None:
     assert timing_log.get_report() == []

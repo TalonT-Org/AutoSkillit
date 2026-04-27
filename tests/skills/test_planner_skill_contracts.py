@@ -137,7 +137,7 @@ def test_all_planner_skills_in_master_manifest(skill_name: str) -> None:
 
 
 def test_elaborate_phase_contract_declares_elab_result_path() -> None:
-    """planner-elaborate-phase must declare elab_result_path for capture_list accumulation (Issue 08)."""
+    """planner-elaborate-phase must declare elab_result_path for capture_list (Issue 08)."""
     from autoskillit.recipe.contracts import load_bundled_manifest
 
     contracts = load_bundled_manifest()
@@ -145,7 +145,7 @@ def test_elaborate_phase_contract_declares_elab_result_path() -> None:
     output_names = [o["name"] for o in contract.get("outputs", [])]
     assert "elab_result_path" in output_names, (
         "planner-elaborate-phase must declare elab_result_path output for "
-        "capture_list: phase_elab_paths in the parallel recipe step (Issue 08)"
+        "capture_list: elab_result_path in the parallel recipe step (Issue 08)"
     )
 
 
@@ -162,7 +162,7 @@ def test_elaborate_phase_contract_has_output_pattern() -> None:
 
 
 def test_elaborate_phase_contract_write_behavior_always() -> None:
-    """planner-elaborate-phase must declare write_behavior: always (it always writes a result file)."""
+    """planner-elaborate-phase must declare write_behavior: always."""
     from autoskillit.recipe.contracts import load_bundled_manifest
 
     contracts = load_bundled_manifest()

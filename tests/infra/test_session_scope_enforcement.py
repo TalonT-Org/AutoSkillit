@@ -73,11 +73,14 @@ def _scoped_guard_names() -> list[str]:
 
 
 def _find_test_file(guard_script: str) -> Path | None:
-    """Locate the test file for a guard script in tests/infra/."""
+    """Locate the test file for a guard script in tests/infra/ or tests/hooks/."""
     stem = Path(guard_script).stem  # e.g. "ask_user_question_guard"
     tests_infra = Path(__file__).resolve().parent
-    candidate = tests_infra / f"test_{stem}.py"
-    return candidate if candidate.exists() else None
+    for directory in (tests_infra, tests_infra.parent / "hooks"):
+        candidate = directory / f"test_{stem}.py"
+        if candidate.exists():
+            return candidate
+    return None
 
 
 @pytest.mark.parametrize("guard_script", _scoped_guard_names())
@@ -93,7 +96,11 @@ def test_scoped_guard_has_both_session_type_test_cases(guard_script: str) -> Non
         line for line in source.splitlines() if not line.lstrip().startswith("#")
     )
     has_headless_true = "headless=True" in code_lines or "AUTOSKILLIT_HEADLESS" in code_lines
-    has_headless_false = "headless=False" in code_lines
+    # Accept explicit headless=False OR the env-strip pattern used by subprocess-style hook tests
+    # (k != "AUTOSKILLIT_HEADLESS" strips the var to exercise the non-headless code path)
+    has_headless_false = (
+        "headless=False" in code_lines or '!= "AUTOSKILLIT_HEADLESS"' in code_lines
+    )
     assert has_headless_true, (
         f"{test_file.name} must test the headless=True path for scoped guard '{guard_script}'."
     )

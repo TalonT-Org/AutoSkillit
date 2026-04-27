@@ -1,7 +1,7 @@
 ---
 name: planner-elaborate-wp
 categories: [planner]
-description: Elaborate a single work package with sub-agent-filtered context awareness (Pass 3 loop body)
+description: Elaborate a single work package using direct codebase analysis (L0 worker for parallel WP elaboration)
 hooks:
   PreToolUse:
     - matcher: "*"
@@ -13,120 +13,74 @@ hooks:
 
 # planner-elaborate-wp
 
-Pass 3 loop body. Elaborates a single work package with full context awareness of prior
-WPs via sub-agent filtering of `wp_index.json`. Produces the file-level implementation
-details that become GitHub issues. Runs once per work package in its own headless session.
+L0 worker for parallel WP elaboration. Elaborates a single work package using direct
+codebase analysis (Grep/Glob/Read). Returns structured JSON to the L1 dispatcher — does
+NOT write files or spawn sub-agents.
 
 ## When to Use
 
-- Invoked by the planner recipe's Pass 3 loop when `check_remaining` returns `has_remaining: "true"`
-- One invocation per work package, sequentially in phase/assignment/WP order
+- Invoked by the L1 dispatcher (`planner-elaborate-wps`) as a headless L0 worker
+- One invocation per work package, potentially parallel within a phase
 
-## Arguments
+## Input
 
-- **$1** — Absolute path to the context file written by `check_remaining` (the skill runs in the recipe clone as the current working directory)
-- **$2** — Absolute path to the run-scoped planner directory (e.g., `{{AUTOSKILLIT_TEMP}}/planner/run-YYYYMMDD-HHMMSS`)
+The L0 worker receives all context via the prompt from the L1 dispatcher. No context file
+is read from disk. The prompt includes:
+
+- **WP metadata**: `id`, `name`, `scope`, `estimated_files`
+- **Sibling WPs** for this phase (short-form: `id`, `name`, `scope`) — for `depends_on` reference
+- **Assignment context**: `goal`, `technical_approach`
+- **Phase context**: `goal`, `scope`
 
 ## Critical Constraints
 
 **NEVER:**
-- Omit any mandatory result field — all fields listed in Step 6 are required
-- Write output outside `$2/work_packages/`
-- Exceed 5 deliverables — WPs must be completable in one implement-worktree session
-- Declare a `depends_on` pointing to a WP later in execution order (forward deps only)
-- Skip the `wp_index.json` append — this is a mandatory contract, not optional
+- Spawn sub-agents (you ARE the L0 worker)
+- Write files directly — return JSON, L1 writes
+- Exceed 5 deliverables per WP
+- Declare forward `depends_on` (backward only — reference sibling WP IDs earlier in order)
+- Append to `wp_index.json` (L1 handles indexing)
+- Emit `wp_result_path` tokens (L1 handles output tokens)
 
 **ALWAYS:**
-- Spawn sub-agents in parallel with `model: "sonnet"`
+- Use Grep/Glob/Read for codebase analysis
+- Return JSON between backtick fences (` ```json ` / ` ``` `)
+- Include all mandatory result fields
 - Bound deliverables to 1–5 files
-- Derive the output path from context `id` (never from a `result_path` field — it doesn't exist in context)
-- Append to `wp_index.json` before emitting the output token
-- Emit `wp_result_path` as the output token
 
 ## Workflow
 
-### Step 1: Read context file
+### Step 1: Parse input context
 
-Read the context file at $1:
-```json
-{
-  "id": "P1-A2-WP1",
-  "name": "Create session table migration",
-  "metadata": {
-    "scope": "Database migration and model for sessions",
-    "estimated_files": [
-      "src/db/migrations/002_sessions.py",
-      "src/db/models/session.py"
-    ]
-  },
-  "prior_results": [
-    "<path>/P1-A1-WP1_result.json",
-    "<path>/P1-A1-WP2_result.json"
-  ],
-  "wp_index_path": "<path>/wp_index.json"
-}
-```
+Extract WP metadata from the prompt:
+- `id` (e.g., `"P1-A2-WP1"`)
+- `name` (e.g., `"Create session table migration"`)
+- `scope` (e.g., `"Database migration and model for sessions"`)
+- `estimated_files` (e.g., `["src/db/migrations/002_sessions.py", "src/db/models/session.py"]`)
+- Sibling WPs (for backward dependency references)
+- Assignment/phase context (for goal alignment)
 
-### Step 2: Load wp_index.json
+### Step 2: Direct codebase analysis
 
-Read `wp_index_path`. This is a JSON array of compact entries for all prior WPs
-(~200 bytes each). At ~60 prior WPs this is ~12k tokens — scan the whole array.
+Scan the codebase using Grep, Glob, and Read:
 
-Each entry has: `id`, `name`, `summary`, `phase`, `assignment`, `files_touched`,
-`apis_defined`, `apis_consumed`, `depends_on`, `deliverables`, `result_path`.
+1. **File discovery**: Glob for files matching `estimated_files` paths. If files exist, read
+   them to understand current implementation. If they don't exist, identify the parent
+   directory and read neighboring files for patterns.
+2. **API analysis**: Grep for function signatures, class definitions, and imports in files
+   this WP will touch. Identify APIs consumed (imports from other modules) and APIs defined
+   (new public functions/classes).
+3. **Dependency detection**: Check sibling WPs for overlapping files or API contracts.
+   Reference only backward siblings (earlier in execution order) for `depends_on`.
 
-### Step 3: Decide complexity mode
+### Step 3: Elaborate the work package
 
-Use **deep mode** (5 sub-agents) when ANY of:
-- `metadata.estimated_files` has more than 3 files
-- The WP scope crosses module or service boundaries
-- Prior sub-agents in this session have found 4+ relevant WPs
+Produce a detailed elaboration with all mandatory fields:
 
-Use **standard mode** (3 sub-agents) otherwise.
-
-### Step 4: Spawn parallel sub-agents
-
-Launch all sub-agents concurrently with `model: "sonnet"`.
-
-**Standard (always 3):**
-
-1. **Dependency Scanner** — Scan the wp_index array for WPs that:
-   - Have `apis_defined` that match APIs this WP will consume
-   - Define data models or interfaces that this WP's scope requires
-   Report: list of relevant WP IDs and what they provide.
-
-2. **File Overlap Scanner** — Scan the wp_index array for WPs where:
-   - Any entry in `files_touched` or `deliverables` overlaps with this WP's `estimated_files`
-   Report: list of WP IDs that touch the same files; flag any potential conflicts.
-
-3. **Contract Scanner** — Scan the wp_index array for WPs that:
-   - Consume APIs or interfaces this WP will define (this WP must define them compatibly)
-   - Have `apis_consumed` entries relevant to this WP's domain
-   Report: list of WP IDs with API contracts this WP must satisfy.
-
-**Deep mode only (additional 2):**
-
-4. **Test Infrastructure Scanner** — Scan prior results (from `prior_results`) for:
-   - Shared test fixtures, base test classes, or test factories this WP can reuse
-   - Test utilities in files this WP will touch
-   Report: list of WP IDs with reusable test infrastructure.
-
-5. **Configuration Scanner** — Scan prior results for:
-   - Schema definitions, config patterns, or registry entries this WP depends on
-   Report: list of WP IDs that establish config/schema patterns this WP extends.
-
-### Step 5: Fetch full results for relevant WPs
-
-Union the WP ID lists from all sub-agents. This typically yields 3–5 IDs.
-For each relevant WP ID, read the full `_result.json` file via `result_path` from the
-wp_index entry. This gives ~15k tokens of targeted context regardless of total WP count.
-
-### Step 6: Elaborate the work package
-
-With the filtered context, produce a detailed elaboration:
-
+- **id**: The WP ID from input context
+- **name**: The WP name from input context
 - **goal**: One-paragraph precise goal statement
-- **summary**: One-line summary (≤120 chars) — used in plan.md and wp_index
+- **summary**: One-line summary (≤120 chars)
 - **technical_steps**: Ordered implementation steps with file-level specificity
 - **files_touched**: All files created or modified (superset of deliverables)
 - **apis_defined**: Function/class/interface names this WP introduces
@@ -139,10 +93,9 @@ With the filtered context, produce a detailed elaboration:
 `implement-worktree` session. If elaboration reveals the WP needs more than 5 files,
 note the scope mismatch but keep deliverables ≤ 5 — flag it in acceptance criteria.
 
-### Step 7: Write WP result
+### Step 4: Return structured JSON
 
-Write to `$2/work_packages/{id}_result.json`
-where `{id}` comes from the context file (e.g., `P1-A2-WP1`).
+Return the result as JSON between backtick fences. Do NOT write files.
 
 ```json
 {
@@ -167,43 +120,9 @@ where `{id}` comes from the context file (e.g., `P1-A2-WP1`).
     "src/db/models/session.py"
   ],
   "acceptance_criteria": [
-    "Migration runs with `alembic upgrade head` without error",
+    "Migration runs with alembic upgrade head without error",
     "SessionModel importable from src.db.models.session",
     "create() and get_by_token() pass unit tests"
   ]
 }
-```
-
-### Step 8: Append to wp_index.json — MANDATORY CONTRACT
-
-**This step is mandatory.** If the WP result is written but wp_index.json is not
-updated, every subsequent WP loses visibility into this WP's files and APIs.
-There is a backstop in `check_remaining` that will add a minimal `{id, name, summary}`
-entry if this step is missed — but the backstop entry lacks `files_touched` and
-`apis_defined`, degrading sub-agent context quality for all remaining WPs.
-
-Read `wp_index_path`, parse the JSON array, append the new compact entry, write back.
-
-Set `result_path` to the exact path written in Step 7: `$2/work_packages/{id}_result.json` where `$2` is the planner directory passed as the second argument. Using any other value will break downstream `result_path` lookups in subsequent WP elaborations.
-
-```json
-{
-  "id": "P1-A2-WP1",
-  "name": "Create session table migration",
-  "summary": "SQLite migration and ORM model for the sessions table",
-  "phase": "P1",
-  "assignment": "P1-A2",
-  "files_touched": ["src/db/migrations/002_sessions.py", "src/db/models/session.py"],
-  "apis_defined": ["SessionModel.create", "SessionModel.get_by_token"],
-  "apis_consumed": ["UserModel.get_by_id"],
-  "depends_on": ["P1-A1-WP1"],
-  "deliverables": ["src/db/migrations/002_sessions.py", "src/db/models/session.py"],
-  "result_path": "/absolute/path/to/P1-A2-WP1_result.json"
-}
-```
-
-### Step 9: Emit output token
-
-```
-wp_result_path = <absolute path to {id}_result.json>
 ```

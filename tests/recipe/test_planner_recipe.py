@@ -30,9 +30,10 @@ def test_planner_recipe_has_required_steps(planner_recipe):
         "build_phase_assignment_manifest",
         "check_phase_assignments",
         "elaborate_phase_assignments",
-        "build_wp_manifest",
-        "check_wps",
-        "elaborate_wp",
+        "build_phase_wp_manifest",
+        "check_phase_wps",
+        "elaborate_phase_wps",
+        "finalize_wp_manifest",
         "reconcile_deps",
         "validate",
         "check_verdict",
@@ -65,7 +66,7 @@ def test_planner_recipe_python_callables_importable(planner_recipe):
 
 
 def test_planner_recipe_loop_steps_have_exit_conditions(planner_recipe):
-    for step_name in ["check_phases", "check_phase_assignments", "check_wps"]:
+    for step_name in ["check_phases", "check_phase_assignments", "check_phase_wps"]:
         step = planner_recipe.steps[step_name]
         assert step.on_result is not None, f"{step_name} must have on_result routing"
         assert len(step.on_result.conditions) >= 2, (
@@ -141,4 +142,31 @@ def test_elaborate_phase_assignments_uses_planner_elaborate_assignments_skill(pl
     skill_cmd = step.with_args.get("skill_command", "")
     assert "planner-elaborate-assignments" in skill_cmd, (
         "elaborate_phase_assignments must invoke planner-elaborate-assignments skill"
+    )
+
+
+def test_planner_recipe_has_phase_wp_steps(planner_recipe):
+    expected = {
+        "build_phase_wp_manifest",
+        "check_phase_wps",
+        "elaborate_phase_wps",
+        "finalize_wp_manifest",
+    }
+    assert expected <= planner_recipe.steps.keys(), (
+        f"Missing phase-WP steps: {expected - planner_recipe.steps.keys()}"
+    )
+
+
+def test_planner_recipe_elaborate_phase_wps_uses_correct_skill(planner_recipe):
+    step = planner_recipe.steps["elaborate_phase_wps"]
+    skill_cmd = step.with_args.get("skill_command", "")
+    assert "planner-elaborate-wps" in skill_cmd, (
+        "elaborate_phase_wps must invoke planner-elaborate-wps skill"
+    )
+
+
+def test_planner_recipe_finalize_step_routes_to_reconcile(planner_recipe):
+    step = planner_recipe.steps["finalize_wp_manifest"]
+    assert step.on_success == "reconcile_deps", (
+        f"finalize_wp_manifest must route to reconcile_deps on success, got {step.on_success!r}"
     )

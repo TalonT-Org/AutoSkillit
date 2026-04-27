@@ -170,6 +170,18 @@ def _check_duplicate_deliverables(wp_results: dict[str, dict]) -> list[str]:
     return findings
 
 
+def _check_duplicate_files_touched(wp_results: dict[str, dict]) -> list[str]:
+    file_map: dict[str, list[str]] = {}
+    for wp_id, wp in wp_results.items():
+        for path in wp.get("files_touched", []):
+            file_map.setdefault(path, []).append(wp_id)
+    findings: list[str] = []
+    for path, owners in file_map.items():
+        if len(owners) > 1:
+            findings.append(f"File '{path}' touched by multiple WPs: {', '.join(sorted(owners))}")
+    return findings
+
+
 def _check_failed_wps(wp_manifest: dict | None) -> list[str]:
     if wp_manifest is None:
         return []
@@ -202,6 +214,7 @@ def validate_plan(output_dir: str) -> dict[str, str]:
     findings.extend(_check_dag_acyclic(wp_results))
     findings.extend(_check_sizing_bounds(wp_results))
     findings.extend(_check_duplicate_deliverables(wp_results))
+    findings.extend(_check_duplicate_files_touched(wp_results))
     findings.extend(_check_failed_wps(wp_manifest))
 
     verdict = "pass" if not findings else "fail"

@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from tests.planner.conftest import make_assignment_result, make_phase_result
+from tests.planner.conftest import make_assignment_result, make_phase_result, make_wp_result
 
 pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.feature("planner")]
 
@@ -780,3 +780,350 @@ def test_build_phase_assignment_manifest_items_start_pending(tmp_path):
     manifest = json.loads(Path(result["manifest_path"]).read_text())
     for item in manifest["items"]:
         assert item["status"] == "pending", f"item {item['id']} status was {item['status']!r}"
+
+
+# ---------------------------------------------------------------------------
+# build_phase_wp_manifest tests (T1–T7)
+# ---------------------------------------------------------------------------
+
+
+def test_build_phase_wp_manifest_groups_by_phase(tmp_path):
+    """T1: Two phases produce a manifest with exactly 2 items."""
+    from autoskillit.planner import build_phase_wp_manifest
+
+    assignments_dir = tmp_path / "assignments"
+    assignments_dir.mkdir()
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    (assignments_dir / "P1-A1_result.json").write_text(
+        json.dumps(
+            make_assignment_result(
+                1,
+                1,
+                proposed_work_packages=[
+                    {"name": "WP1", "scope": "s", "estimated_files": ["a.py"]},
+                    {"name": "WP2", "scope": "s", "estimated_files": ["b.py"]},
+                    {"name": "WP3", "scope": "s", "estimated_files": ["c.py"]},
+                ],
+            )
+        )
+    )
+    (assignments_dir / "P1-A2_result.json").write_text(
+        json.dumps(
+            make_assignment_result(
+                1,
+                2,
+                proposed_work_packages=[
+                    {"name": "WP1", "scope": "s", "estimated_files": ["d.py"]},
+                    {"name": "WP2", "scope": "s", "estimated_files": ["e.py"]},
+                    {"name": "WP3", "scope": "s", "estimated_files": ["f.py"]},
+                ],
+            )
+        )
+    )
+    (assignments_dir / "P2-A1_result.json").write_text(
+        json.dumps(
+            make_assignment_result(
+                2,
+                1,
+                proposed_work_packages=[
+                    {"name": "WP1", "scope": "s", "estimated_files": ["g.py"]},
+                    {"name": "WP2", "scope": "s", "estimated_files": ["h.py"]},
+                ],
+            )
+        )
+    )
+
+    result = build_phase_wp_manifest(str(assignments_dir), str(output_dir))
+
+    manifest = json.loads(Path(result["manifest_path"]).read_text())
+    assert len(manifest["items"]) == 2
+    item_ids = [i["id"] for i in manifest["items"]]
+    assert item_ids == ["P1", "P2"]
+
+
+def test_build_phase_wp_manifest_metadata_carries_wp_details(tmp_path):
+    """T2: Phase metadata contains wp_count, wp_ids, wp_names, wp_scopes, wp_estimated_files."""
+    from autoskillit.planner import build_phase_wp_manifest
+
+    assignments_dir = tmp_path / "assignments"
+    assignments_dir.mkdir()
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    (assignments_dir / "P1-A1_result.json").write_text(
+        json.dumps(
+            make_assignment_result(
+                1,
+                1,
+                proposed_work_packages=[
+                    {"name": "Alpha", "scope": "scope-a", "estimated_files": ["a.py"]},
+                    {"name": "Beta", "scope": "scope-b", "estimated_files": ["b.py", "c.py"]},
+                ],
+            )
+        )
+    )
+    (assignments_dir / "P1-A2_result.json").write_text(
+        json.dumps(
+            make_assignment_result(
+                1,
+                2,
+                proposed_work_packages=[
+                    {"name": "Gamma", "scope": "scope-c", "estimated_files": ["d.py"]},
+                ],
+            )
+        )
+    )
+
+    result = build_phase_wp_manifest(str(assignments_dir), str(output_dir))
+
+    manifest = json.loads(Path(result["manifest_path"]).read_text())
+    p1 = manifest["items"][0]
+    meta = p1["metadata"]
+    assert meta["wp_count"] == 3
+    assert meta["wp_ids"] == ["P1-A1-WP1", "P1-A1-WP2", "P1-A2-WP1"]
+    assert meta["wp_names"] == ["Alpha", "Beta", "Gamma"]
+    assert meta["wp_scopes"] == ["scope-a", "scope-b", "scope-c"]
+    assert meta["wp_estimated_files"] == [["a.py"], ["b.py", "c.py"], ["d.py"]]
+
+
+def test_build_phase_wp_manifest_pass_name_and_result_dir(tmp_path):
+    """T3: Manifest has pass_name 'phase_work_packages' and result_dir pointing to wp_sentinels."""
+    from autoskillit.planner import build_phase_wp_manifest
+
+    assignments_dir = tmp_path / "assignments"
+    assignments_dir.mkdir()
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    (assignments_dir / "P1-A1_result.json").write_text(
+        json.dumps(
+            make_assignment_result(
+                1,
+                1,
+                proposed_work_packages=[{"name": "WP1", "scope": "", "estimated_files": []}],
+            )
+        )
+    )
+
+    result = build_phase_wp_manifest(str(assignments_dir), str(output_dir))
+
+    manifest = json.loads(Path(result["manifest_path"]).read_text())
+    assert manifest["pass_name"] == "phase_work_packages"
+    assert "wp_sentinels" in manifest["result_dir"]
+    assert Path(manifest["result_dir"]).exists()
+
+
+def test_build_phase_wp_manifest_initializes_wp_index(tmp_path):
+    """T4: wp_index.json exists and contains [] after calling build_phase_wp_manifest."""
+    from autoskillit.planner import build_phase_wp_manifest
+
+    assignments_dir = tmp_path / "assignments"
+    assignments_dir.mkdir()
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    (assignments_dir / "P1-A1_result.json").write_text(
+        json.dumps(
+            make_assignment_result(
+                1,
+                1,
+                proposed_work_packages=[{"name": "WP1", "scope": "", "estimated_files": []}],
+            )
+        )
+    )
+
+    build_phase_wp_manifest(str(assignments_dir), str(output_dir))
+
+    wp_index = output_dir / "wp_index.json"
+    assert wp_index.exists()
+    assert json.loads(wp_index.read_text()) == []
+
+
+def test_build_phase_wp_manifest_sorts_by_phase_number(tmp_path):
+    """T5: Items are sorted by phase number regardless of input order."""
+    from autoskillit.planner import build_phase_wp_manifest
+
+    assignments_dir = tmp_path / "assignments"
+    assignments_dir.mkdir()
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    for pn in (3, 1, 2):
+        (assignments_dir / f"P{pn}-A1_result.json").write_text(
+            json.dumps(
+                make_assignment_result(
+                    pn,
+                    1,
+                    proposed_work_packages=[
+                        {"name": f"WP-P{pn}", "scope": "", "estimated_files": []}
+                    ],
+                )
+            )
+        )
+
+    result = build_phase_wp_manifest(str(assignments_dir), str(output_dir))
+
+    manifest = json.loads(Path(result["manifest_path"]).read_text())
+    ids = [i["id"] for i in manifest["items"]]
+    assert ids == ["P1", "P2", "P3"]
+
+
+def test_build_phase_wp_manifest_empty_assignments_dir(tmp_path):
+    """T6: Empty assignments directory produces manifest with items: []."""
+    from autoskillit.planner import build_phase_wp_manifest
+
+    assignments_dir = tmp_path / "assignments"
+    assignments_dir.mkdir()
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    result = build_phase_wp_manifest(str(assignments_dir), str(output_dir))
+
+    assert result["total_count"] == "0"
+    manifest = json.loads(Path(result["manifest_path"]).read_text())
+    assert manifest["items"] == []
+
+
+def test_build_phase_wp_manifest_creates_sentinel_dir(tmp_path):
+    """T7: The callable creates wp_sentinels/ directory."""
+    from autoskillit.planner import build_phase_wp_manifest
+
+    assignments_dir = tmp_path / "assignments"
+    assignments_dir.mkdir()
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    build_phase_wp_manifest(str(assignments_dir), str(output_dir))
+
+    sentinel_dir = output_dir / "work_packages" / "wp_sentinels"
+    assert sentinel_dir.is_dir()
+
+
+def test_check_remaining_phase_work_packages_no_backstop(tmp_path):
+    """T15: phase_work_packages pass_name does NOT call _backstop_wp_index."""
+    from autoskillit.planner import check_remaining
+
+    sentinel_dir = tmp_path / "sentinels"
+    sentinel_dir.mkdir()
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+    (sentinel_dir / "P1_result.json").write_text('{"ok": true}')
+
+    manifest = {
+        "pass_name": "phase_work_packages",
+        "result_dir": str(sentinel_dir),
+        "created_at": "2026-04-24T00:00:00Z",
+        "items": [
+            {
+                "id": "P1",
+                "name": "Phase 1",
+                "status": "processing",
+                "result_path": None,
+                "metadata": {},
+            },
+        ],
+    }
+    manifest_path = tmp_path / "phase_wp_manifest.json"
+    manifest_path.write_text(json.dumps(manifest))
+
+    with patch("autoskillit.planner.manifests._backstop_wp_index") as mock_backstop:
+        check_remaining(str(manifest_path), "phase_work_packages", str(output_dir))
+
+    mock_backstop.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# finalize_wp_manifest tests (T8–T11)
+# ---------------------------------------------------------------------------
+
+
+def test_finalize_wp_manifest_from_result_files(tmp_path):
+    """T8: 4 result files produce wp_manifest.json with 4 items, all status done."""
+    from autoskillit.planner import finalize_wp_manifest
+
+    wp_dir = tmp_path / "work_packages"
+    wp_dir.mkdir()
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    for i in range(1, 5):
+        wp_id = f"P1-A1-WP{i}"
+        (wp_dir / f"{wp_id}_result.json").write_text(json.dumps(make_wp_result(wp_id)))
+
+    result = finalize_wp_manifest(str(wp_dir), str(output_dir))
+
+    assert result["total_count"] == "4"
+    manifest = json.loads(Path(result["manifest_path"]).read_text())
+    assert len(manifest["items"]) == 4
+    for item in manifest["items"]:
+        assert item["status"] == "done"
+        assert item["result_path"]
+        assert item["id"]
+        assert item["name"]
+
+
+def test_finalize_wp_manifest_skips_non_result_files(tmp_path):
+    """T9: Non-result files (wp_manifest.json, wp_index.json, sentinel subdir) are skipped."""
+    from autoskillit.planner import finalize_wp_manifest
+
+    wp_dir = tmp_path / "work_packages"
+    wp_dir.mkdir()
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    wp_id = "P1-A1-WP1"
+    (wp_dir / f"{wp_id}_result.json").write_text(json.dumps(make_wp_result(wp_id)))
+    (wp_dir / "wp_manifest.json").write_text('{"pass_name": "old"}')
+    (wp_dir / "wp_index.json").write_text("[]")
+    sentinel_dir = wp_dir / "wp_sentinels"
+    sentinel_dir.mkdir()
+    (sentinel_dir / "P1_result.json").write_text('{"ok": true}')
+
+    result = finalize_wp_manifest(str(wp_dir), str(output_dir))
+
+    assert result["total_count"] == "1"
+    manifest = json.loads(Path(result["manifest_path"]).read_text())
+    assert len(manifest["items"]) == 1
+    assert manifest["items"][0]["id"] == wp_id
+
+
+def test_finalize_wp_manifest_empty_dir(tmp_path):
+    """T10: Empty work_packages/ produces manifest with items: []."""
+    from autoskillit.planner import finalize_wp_manifest
+
+    wp_dir = tmp_path / "work_packages"
+    wp_dir.mkdir()
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    result = finalize_wp_manifest(str(wp_dir), str(output_dir))
+
+    assert result["total_count"] == "0"
+    manifest = json.loads(Path(result["manifest_path"]).read_text())
+    assert manifest["items"] == []
+
+
+def test_finalize_wp_manifest_regenerates_wp_index(tmp_path):
+    """T11: wp_index.json is regenerated with compact entries sorted by WP ID."""
+    from autoskillit.planner import finalize_wp_manifest
+
+    wp_dir = tmp_path / "work_packages"
+    wp_dir.mkdir()
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    for wp_id in ("P2-A1-WP1", "P1-A1-WP1", "P1-A2-WP1"):
+        (wp_dir / f"{wp_id}_result.json").write_text(json.dumps(make_wp_result(wp_id)))
+
+    finalize_wp_manifest(str(wp_dir), str(output_dir))
+
+    index = json.loads((output_dir / "wp_index.json").read_text())
+    assert len(index) == 3
+    ids = [e["id"] for e in index]
+    assert ids == ["P1-A1-WP1", "P1-A2-WP1", "P2-A1-WP1"]
+    for entry in index:
+        assert "id" in entry
+        assert "name" in entry
+        assert "summary" in entry

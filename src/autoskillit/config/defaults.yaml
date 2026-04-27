@@ -226,6 +226,7 @@ skills:
     - planner-elaborate-assignment
     - planner-elaborate-assignments
     - planner-elaborate-wp
+    - planner-elaborate-wps
     - planner-reconcile-deps
     - planner-refine
     - planner-refine-assignments

@@ -75,7 +75,15 @@ def load_recipe(path: Path, temp_dir_relpath: str = ".autoskillit/temp") -> Reci
     return recipe
 
 
-def _group_rank(r: RecipeInfo) -> int:
+GROUP_LABELS: dict[int, str] = {
+    0: "Bundled Recipes",
+    1: "Bundled Add-ons",
+    2: "Family Recipes",
+    3: "Experimental",
+}
+
+
+def group_rank(r: RecipeInfo) -> int:
     if r.experimental:
         return 3
     if r.source == RecipeSource.PROJECT:
@@ -102,7 +110,7 @@ def list_recipes(
 
     filtered = [r for r in items if r.kind not in exclude_kinds] if exclude_kinds else items
     return LoadResult(
-        items=sorted(filtered, key=lambda r: (_group_rank(r), r.name)),
+        items=sorted(filtered, key=lambda r: (group_rank(r), r.name)),
         errors=errors,
     )
 

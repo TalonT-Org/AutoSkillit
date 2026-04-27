@@ -650,6 +650,7 @@ ALWAYS_WRITE_SKILLS = {
     "planner-generate-phases",
     "planner-refine-assignments",
     "planner-refine-phases",
+    "planner-refine-wps",
     "prepare-research-pr",
     "rectify",
     "report-bug",

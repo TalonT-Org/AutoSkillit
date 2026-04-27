@@ -3394,6 +3394,8 @@ class TestOutputPathTokensDerivedFromContracts:
             "refined_plan_path",
             # planner-refine-assignments output
             "refined_assignments_path",
+            # planner-refine-wps output
+            "refined_wps_path",
         }
     )
 

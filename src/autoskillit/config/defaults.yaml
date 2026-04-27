@@ -231,6 +231,7 @@ skills:
     - planner-refine
     - planner-refine-assignments
     - planner-refine-phases
+    - planner-refine-wps
     - reload-session
   tier3:
     - prepare-pr

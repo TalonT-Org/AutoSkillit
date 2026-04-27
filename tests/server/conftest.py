@@ -77,3 +77,11 @@ def headless_enabled():
     mcp._transforms.clear()
     for tag in sorted(ALL_VISIBILITY_TAGS):
         mcp.disable(tags={tag})
+
+
+def assert_step_timed(timing_log, step_name: str) -> None:
+    assert any(e["step_name"] == step_name for e in timing_log.get_report())
+
+
+def assert_no_timing(timing_log) -> None:
+    assert timing_log.get_report() == []

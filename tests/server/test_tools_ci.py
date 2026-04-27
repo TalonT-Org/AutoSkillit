@@ -17,6 +17,7 @@ from autoskillit.server.tools_ci import (
     wait_for_merge_queue,
 )
 from tests.fakes import InMemoryCIWatcher, InMemoryMergeQueueWatcher
+from tests.server.conftest import assert_no_timing, assert_step_timed
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -435,7 +436,7 @@ class TestWaitForCiTiming:
         )
         tool_ctx.ci_watcher = watcher
         await wait_for_ci("main", step_name="ci_wait")
-        assert any(e["step_name"] == "ci_wait" for e in tool_ctx.timing_log.get_report())
+        assert_step_timed(tool_ctx.timing_log, "ci_wait")
 
     @pytest.mark.anyio
     async def test_wait_for_ci_empty_step_name_skips_timing(self, tool_ctx):
@@ -444,7 +445,7 @@ class TestWaitForCiTiming:
         )
         tool_ctx.ci_watcher = watcher
         await wait_for_ci("main")
-        assert tool_ctx.timing_log.get_report() == []
+        assert_no_timing(tool_ctx.timing_log)
 
 
 class TestWaitForMergeQueueTiming:
@@ -469,7 +470,7 @@ class TestWaitForMergeQueueTiming:
             await wait_for_merge_queue(
                 pr_number=1, target_branch="main", cwd=".", step_name="mq_wait"
             )
-        assert any(e["step_name"] == "mq_wait" for e in tool_ctx.timing_log.get_report())
+        assert_step_timed(tool_ctx.timing_log, "mq_wait")
 
     @pytest.mark.anyio
     async def test_wait_for_merge_queue_empty_step_name_skips_timing(self, tool_ctx):
@@ -488,7 +489,7 @@ class TestWaitForMergeQueueTiming:
             proc_inst.returncode = 0
             mock_proc.return_value = proc_inst
             await wait_for_merge_queue(pr_number=1, target_branch="main", cwd=".")
-        assert tool_ctx.timing_log.get_report() == []
+        assert_no_timing(tool_ctx.timing_log)
 
 
 @pytest.mark.anyio

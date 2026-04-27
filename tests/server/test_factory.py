@@ -231,36 +231,6 @@ def test_output_patterns_nonempty_for_investigate() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
-# Write-expected resolver integration tests
-# ---------------------------------------------------------------------------
-
-
-def test_write_expected_resolver_wired_on_context() -> None:
-    """make_context() must wire a write_expected_resolver onto ToolContext."""
-    ctx = make_context(AutomationConfig(), runner=_runner())
-    assert ctx.write_expected_resolver is not None
-    spec = ctx.write_expected_resolver("/autoskillit:make-plan some task")
-    assert spec.mode == "always"
-
-
-def test_write_expected_resolver_unknown_skill() -> None:
-    """Unknown skills produce a WriteBehaviorSpec with mode=None."""
-    ctx = make_context(AutomationConfig(), runner=_runner())
-    assert ctx.write_expected_resolver is not None
-    spec = ctx.write_expected_resolver("/autoskillit:nonexistent-skill foo")
-    assert spec.mode is None
-
-
-def test_write_expected_resolver_conditional_skill() -> None:
-    """resolve-merge-conflicts produces mode='conditional' with patterns."""
-    ctx = make_context(AutomationConfig(), runner=_runner())
-    assert ctx.write_expected_resolver is not None
-    spec = ctx.write_expected_resolver("/autoskillit:resolve-merge-conflicts")
-    assert spec.mode == "conditional"
-    assert len(spec.expected_when) > 0
-
-
 @pytest.mark.parametrize(
     "invocation,expected_mode,required_tokens",
     [
@@ -299,6 +269,9 @@ def test_write_expected_resolver_conditional_skill() -> None:
             "conditional",
             ["verdict"],
         ),
+        ("/autoskillit:make-plan some task", "always", []),
+        ("/autoskillit:nonexistent-skill foo", None, []),
+        ("/autoskillit:resolve-merge-conflicts", "conditional", []),
     ],
 )
 def test_write_expected_resolver_mode(

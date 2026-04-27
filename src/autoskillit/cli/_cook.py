@@ -112,7 +112,6 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
     from autoskillit.core import (
         _AUTOSKILLIT_PLUGIN_KEY,
         LAUNCH_ID_ENV_VAR,
-        MARKETPLACE_PREFIX,
         SESSION_TYPE_COOK,
         SESSION_TYPE_ENV_VAR,
         BareResume,

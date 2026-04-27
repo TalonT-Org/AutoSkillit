@@ -408,9 +408,9 @@ def test_merge_prs_reenroll_stalled_queue_pr_exists(pmp_recipe) -> None:
 
 
 def test_merge_prs_reenroll_stalled_routes_to_wait(pmp_recipe) -> None:
-    """reenroll_stalled_queue_pr must route back to wait_queue_pr."""
+    """reenroll_stalled_queue_pr must route through the stall loop guard."""
     step = pmp_recipe.steps["reenroll_stalled_queue_pr"]
-    assert step.on_success == "wait_queue_pr"
+    assert step.on_success == "check_queue_stall_loop"
 
 
 def test_merge_prs_dropped_healthy_routes_to_reenter(pmp_recipe) -> None:

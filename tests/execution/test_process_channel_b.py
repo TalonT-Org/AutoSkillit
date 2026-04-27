@@ -55,7 +55,7 @@ CHANNEL_B_NO_STDOUT_SCRIPT = textwrap.dedent("""\
                   "content": "%%ORDER_UP%%"}}
         f.write(json.dumps(record) + "\\n")
         f.flush()
-    time.sleep(30)
+    time.sleep(300)
 """)
 
 # Script that:

@@ -51,6 +51,30 @@ def _check_unbounded_cycles(ctx: ValidationContext) -> list[RuleFinding]:
                 reported_cycles.add(cycle_key)
                 cycle_set = set(cycle_steps)
 
+                # Scoped to run_python only: shell-based (run_cmd) counters use external
+                # file state and are not structural bounds.
+                has_on_result_exit = False
+                for s in cycle_steps:
+                    if s not in recipe.steps:
+                        continue
+                    step = recipe.steps[s]
+                    if step.tool != "run_python" or step.on_result is None:
+                        continue
+                    targets: set[str] = set()
+                    if step.on_result.conditions:
+                        targets = {c.route for c in step.on_result.conditions}
+                    elif step.on_result.routes:
+                        targets = set(step.on_result.routes.values())
+                    routes_in = targets & cycle_set
+                    routes_out = targets - cycle_set
+                    if routes_in and routes_out:
+                        has_on_result_exit = True
+                        break
+
+                if has_on_result_exit:
+                    rec_stack.discard(node)
+                    return
+
                 has_retry_exit = any(
                     recipe.steps[s].retries > 0
                     and recipe.steps[s].tool in SKILL_TOOLS

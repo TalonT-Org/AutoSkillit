@@ -536,11 +536,32 @@ steps:
       target_branch: "${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
       auto_merge_available: "${{ context.auto_merge_available }}"
-    on_success: wait_queue_pr
+    on_success: check_queue_stall_loop
     on_failure: register_clone_failure
     note: >
       Uses the unified enqueue_pr tool to re-enroll a stalled PR in the
-      merge queue. Routes back to wait_queue_pr to resume monitoring.
+      merge queue. Routes back to check_queue_stall_loop (bounded iteration guard)
+      instead of directly to wait_queue_pr.
+
+  check_queue_stall_loop:
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.check_loop_iteration"
+      current_iteration: "${{ context.queue_stall_loop_count }}"
+      max_iterations: "3"
+    capture:
+      queue_stall_loop_count: "${{ result.next_iteration }}"
+    on_result:
+      - when: "${{ result.max_exceeded }} == true"
+        route: register_clone_failure
+      - route: wait_queue_pr
+    on_failure: register_clone_failure
+    optional_context_refs:
+      - queue_stall_loop_count
+    note: >
+      Iteration guard for the wait_queue_pr / reenroll_stalled_queue_pr cycle.
+      Caps stall re-enrollment at 3 attempts. On budget exhaustion, routes
+      to register_clone_failure (merge outcome unconfirmed).
 
   create_integration_branch:
     tool: run_cmd

@@ -85,6 +85,31 @@ def _assert_ci_steps(recipe) -> None:
     assert re_push.on_success == "check_repo_ci_event"
     assert re_push.on_failure == "release_issue_failure"
 
+    # check_ci_loop guard (loop bounding for ci_watch / handle_no_ci_runs cycle)
+    assert "check_ci_loop" in recipe.steps, "ci_watch cycle must have check_ci_loop guard"
+    guard = recipe.steps["check_ci_loop"]
+    assert guard.tool == "run_python"
+    assert "check_loop_iteration" in guard.with_args.get("callable", "")
+    assert guard.on_result is not None
+    guard_routes = {c.route for c in guard.on_result.conditions}
+    assert "ci_watch" in guard_routes, "check_ci_loop must route back to ci_watch"
+    assert "check_active_trigger_loop" in guard_routes, (
+        "check_ci_loop must route to check_active_trigger_loop on budget exhaustion"
+    )
+    assert "check_active_trigger_loop" in recipe.steps, (
+        "check_active_trigger_loop guard step missing"
+    )
+    trigger_guard = recipe.steps["check_active_trigger_loop"]
+    trigger_guard_routes = {c.route for c in trigger_guard.on_result.conditions}
+    assert "trigger_ci_actively" in trigger_guard_routes, (
+        "check_active_trigger_loop must route to trigger_ci_actively"
+    )
+    assert "ci_loop_count" in guard.capture
+    handle = recipe.steps["handle_no_ci_runs"]
+    assert handle.on_success == "check_ci_loop", (
+        "handle_no_ci_runs must route to check_ci_loop, not ci_watch"
+    )
+
 
 def test_every_bundled_recipe_declares_requires_packs() -> None:
     """All top-level bundled recipes must declare a non-empty requires_packs."""
@@ -93,6 +118,23 @@ def test_every_bundled_recipe_declares_requires_packs() -> None:
     for path in sorted(builtin_recipes_dir().glob("*.yaml")):
         recipe = load_recipe(path)
         assert recipe.requires_packs, f"{path.name} does not declare requires_packs"
+
+
+_CI_WATCH_CYCLE_STEPS = {"ci_watch", "handle_no_ci_runs", "check_ci_loop"}
+
+
+@pytest.mark.parametrize("recipe_name", ["remediation", "implementation", "implementation-groups"])
+def test_bundled_recipe_no_unbounded_cycle_findings(recipe_name: str) -> None:
+    """Pipeline recipes must have zero unbounded-cycle findings for the ci_watch cycle."""
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    findings = run_semantic_rules(recipe)
+    ci_watch_cycle_findings = [
+        f for f in findings if f.rule == "unbounded-cycle" and f.step_name in _CI_WATCH_CYCLE_STEPS
+    ]
+    assert ci_watch_cycle_findings == [], (
+        f"{recipe_name} has unbounded-cycle findings for ci_watch cycle: "
+        + "; ".join(f.message for f in ci_watch_cycle_findings)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -2276,4 +2318,70 @@ def test_bundled_recipes_have_no_release_issue_on_unconfirmed_merge(recipe_name:
     violations = [f for f in findings if f.rule == "release-issue-on-unconfirmed-merge"]
     assert violations == [], (
         f"{recipe_name} has release-issue-on-unconfirmed-merge violations: {violations}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Pre-CI-watch mergeable state check
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("recipe_name", ["remediation", "implementation", "implementation-groups"])
+def test_pre_ci_watch_mergeable_check_exists(recipe_name: str) -> None:
+    """A check_pr_state step must exist between check_repo_ci_event and ci_watch."""
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    assert "check_pr_state" in recipe.steps
+    pr_state = recipe.steps["check_pr_state"]
+    assert pr_state.tool == "check_pr_mergeable"
+    assert pr_state.on_result is not None
+    routes = {c.route for c in pr_state.on_result.conditions}
+    assert "ci_watch" in routes, "MERGEABLE must route to ci_watch"
+    conflicting_routes = {
+        c.route for c in pr_state.on_result.conditions if c.when and "CONFLICTING" in c.when
+    }
+    assert conflicting_routes, "CONFLICTING condition must be handled"
+    assert "ci_watch" not in conflicting_routes, "CONFLICTING must not route to ci_watch"
+    ci_event_step = recipe.steps["check_repo_ci_event"]
+    assert ci_event_step.on_success == "check_pr_state"
+
+
+# ---------------------------------------------------------------------------
+# Active CI trigger step
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("recipe_name", ["remediation", "implementation", "implementation-groups"])
+def test_active_ci_trigger_step_exists(recipe_name: str) -> None:
+    """escalate_stop_no_ci predecessor must attempt active CI trigger before stopping."""
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    assert "trigger_ci_actively" in recipe.steps
+    trigger = recipe.steps["trigger_ci_actively"]
+    assert trigger.tool == "run_cmd"
+    assert "check_ci_loop" in recipe.steps, "check_ci_loop step missing from recipe"
+    guard = recipe.steps["check_ci_loop"]
+    guard_routes = {c.route for c in guard.on_result.conditions}
+    assert "check_active_trigger_loop" in guard_routes
+    assert "check_active_trigger_loop" in recipe.steps, (
+        "check_active_trigger_loop guard step missing"
+    )
+    trigger_guard = recipe.steps["check_active_trigger_loop"]
+    trigger_guard_routes = {c.route for c in trigger_guard.on_result.conditions}
+    assert "trigger_ci_actively" in trigger_guard_routes
+
+
+# ---------------------------------------------------------------------------
+# Stall loop guard for reenroll_stalled_pr
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("recipe_name", ["remediation", "implementation", "implementation-groups"])
+def test_reenroll_stalled_pr_has_loop_guard(recipe_name: str) -> None:
+    """reenroll_stalled_pr cycle must have an iteration guard."""
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    reenroll = recipe.steps["reenroll_stalled_pr"]
+    assert reenroll.on_success != "wait_for_queue", (
+        "reenroll_stalled_pr must route through a loop guard, not directly to wait_for_queue"
+    )
+    assert reenroll.on_success == "check_stall_loop", (
+        f"reenroll_stalled_pr must route to check_stall_loop, got: {reenroll.on_success!r}"
     )

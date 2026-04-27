@@ -45,8 +45,8 @@ def test_check_repo_ci_event_step_exists_before_ci_watch(recipe_path: str) -> No
     assert "ci_event" in capture, (
         f"{recipe_path}: check_repo_ci_event must capture ci_event into context"
     )
-    assert early_step.get("on_success") == "ci_watch", (
-        f"{recipe_path}: check_repo_ci_event.on_success must be ci_watch"
+    assert early_step.get("on_success") in ("ci_watch", "check_pr_state"), (
+        f"{recipe_path}: check_repo_ci_event.on_success must route to ci_watch or check_pr_state"
     )
     assert early_step.get("on_failure") == "ci_watch", (
         f"{recipe_path}: check_repo_ci_event.on_failure must be ci_watch (non-blocking)"

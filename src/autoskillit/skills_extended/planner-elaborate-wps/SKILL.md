@@ -8,19 +8,19 @@ description: >
 
 # planner-elaborate-wps
 
-Pass 3 loop body. Receives one phase context from `check_remaining`, spawns one L0
+Pass 3 loop body. Receives one phase context file (written by `expand_wps`), spawns one L0
 subagent per WP in parallel using the native Agent/Task tool, collects results,
 and writes per-WP result files plus a phase sentinel file. The L1 (this skill)
 is the sole writer for this phase's WPs — no concurrent write races.
 
 ## When to Use
 
-- Invoked by the planner recipe's Pass 3 loop when `check_remaining` returns `has_remaining: "true"` for the `phase_work_packages` pass
+- Invoked by the planner recipe when the recipe dispatches parallel elaboration via `dispatch_items`
 - One invocation per phase; handles all WPs within the phase in a single session
 
 ## Arguments
 
-- **$1** — Absolute path to the context file written by `check_remaining` (contains `id=<phase_id>`, `metadata.wp_count`, `metadata.wp_ids`, `metadata.wp_names`, `metadata.wp_scopes`, `metadata.wp_estimated_files`, `prior_results`)
+- **$1** — Absolute path to the phase context file (written by `expand_wps`) (contains `id=<phase_id>`, `metadata.wp_count`, `metadata.wp_ids`, `metadata.wp_names`, `metadata.wp_scopes`, `metadata.wp_estimated_files`, `prior_results`)
 - **$2** — Absolute path to the run-scoped planner directory (e.g., `{{AUTOSKILLIT_TEMP}}/planner/run-YYYYMMDD-HHMMSS`)
 
 ## Critical Constraints
@@ -146,9 +146,8 @@ Finally, write the phase sentinel file to `$2/work_packages/wp_sentinels/{phase_
 ```
 
 > The sentinel path MUST be `$2/work_packages/wp_sentinels/{phase_id}_result.json`. The manifest's
-> `result_dir` points to `$2/work_packages/wp_sentinels/`, so `check_remaining` looks for
-> `{result_dir}/{phase_id}_result.json` to detect phase completion. Verify the path
-> before writing.
+> `result_dir` points to `$2/work_packages/wp_sentinels/`, and this path is used to detect
+> phase completion. Verify the path before writing.
 
 ### Step 7: Emit output token
 

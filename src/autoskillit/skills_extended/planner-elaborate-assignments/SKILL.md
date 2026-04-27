@@ -8,19 +8,19 @@ description: >
 
 # planner-elaborate-assignments
 
-Pass 2 loop body. Receives one phase context from `check_remaining`, spawns one L0
+Pass 2 loop body. Receives one phase context file (written by `expand_assignments`), spawns one L0
 subagent per assignment in parallel using the native Agent/Task tool, collects results,
 and writes per-assignment result files plus a phase sentinel file. The L1 (this skill)
 is the sole writer for this phase's assignments — no concurrent write races.
 
 ## When to Use
 
-- Invoked by the planner recipe's Pass 2 loop when `check_remaining` returns `has_remaining: "true"` for the `phase_assignments` pass
+- Invoked by the planner recipe when the recipe dispatches parallel elaboration via `dispatch_items`
 - One invocation per phase; handles all assignments within the phase in a single session
 
 ## Arguments
 
-- **$1** — Absolute path to the context file written by `check_remaining` (contains `id=<phase_id>`, `metadata.assignment_count`, `metadata.assignment_ids`, `metadata.assignment_names`, `prior_results`)
+- **$1** — Absolute path to the phase context file (written by `expand_assignments`) (contains `id=<phase_id>`, `metadata.assignment_count`, `metadata.assignment_ids`, `metadata.assignment_names`, `prior_results`)
 - **$2** — Absolute path to the run-scoped planner directory (e.g., `{{AUTOSKILLIT_TEMP}}/planner/run-YYYYMMDD-HHMMSS`)
 
 ## Critical Constraints
@@ -142,10 +142,9 @@ Finally, write the phase sentinel file to `$2/assignments/{phase_id}_result.json
 {"id": "<phase_id>", "status": "complete", "assignment_count": N, "failed_count": M}
 ```
 
-> ⚠️ The sentinel path MUST be `$2/assignments/{phase_id}_result.json`. The manifest's
-> `result_dir` points to `$2/assignments/`, so `check_remaining` looks for
-> `{result_dir}/{phase_id}_result.json` to detect phase completion. Verify the path
-> before writing.
+> The sentinel path MUST be `$2/assignments/{phase_id}_result.json`. The manifest's
+> `result_dir` points to `$2/assignments/`, and this path is used to detect phase
+> completion. Verify the path before writing.
 
 ### Step 7: Emit output token
 

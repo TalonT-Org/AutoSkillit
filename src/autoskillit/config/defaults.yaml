@@ -223,9 +223,7 @@ skills:
     - planner-extract-domain
     - planner-generate-phases
     - planner-elaborate-phase
-    - planner-elaborate-assignment
     - planner-elaborate-assignments
-    - planner-elaborate-wp
     - planner-elaborate-wps
     - planner-reconcile-deps
     - planner-refine

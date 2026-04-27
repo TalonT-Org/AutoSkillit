@@ -81,40 +81,42 @@ def test_skill_compliant_assignment_data_accepted_and_normalized(tmp_path: Path)
 
 
 # ---------------------------------------------------------------------------
-# 1c: build_assignment_manifest with SKILL.md field names produces correct items
+# 1c: expand_assignments with SKILL.md field names produces correct context files
 # ---------------------------------------------------------------------------
 
 
-def test_build_assignment_manifest_with_skill_md_field_names(tmp_path: Path) -> None:
-    from autoskillit.planner import build_assignment_manifest
-
-    phases_dir = tmp_path / "phases"
-    phases_dir.mkdir()
-    assignments_dir = tmp_path / "assignments"
-    assignments_dir.mkdir()
-    output_dir = tmp_path / "out"
-    output_dir.mkdir()
+def test_expand_assignments_with_skill_md_field_names(tmp_path: Path) -> None:
+    from autoskillit.planner import expand_assignments
 
     _write_json(
-        phases_dir / "P1_result.json",
+        tmp_path / "refined_plan.json",
         {
-            "id": "P1",
-            "name": "Phase One",
-            "ordering": 1,
-            "goal": "test",
-            "scope": [],
-            "relationship_notes": "",
-            "assignments_preview": ["First assignment", "Second assignment"],
+            "phases": [
+                {
+                    "id": "P1",
+                    "name": "Phase One",
+                    "ordering": 1,
+                    "goal": "test",
+                    "scope": [],
+                    "relationship_notes": "",
+                    "assignments_preview": [
+                        {"id": "P1-A1", "name": "First assignment"},
+                        {"id": "P1-A2", "name": "Second assignment"},
+                    ],
+                }
+            ]
         },
     )
 
-    result = build_assignment_manifest(str(phases_dir), str(assignments_dir), str(output_dir))
+    result = expand_assignments(str(tmp_path / "refined_plan.json"), str(tmp_path))
 
-    assert result["total_count"] == "2"
-    manifest = json.loads(Path(result["manifest_path"]).read_text())
-    assert len(manifest["items"]) == 2
-    assert manifest["items"][0]["id"] == "P1-A1"
-    assert manifest["items"][1]["id"] == "P1-A2"
+    item_ids = result["item_ids"].split(",")
+    assert item_ids == ["P1"]
+    context_paths = result["context_paths"].split(",")
+    assert len(context_paths) == 1
+    ctx = json.loads(Path(context_paths[0]).read_text())
+    assert ctx["id"] == "P1"
+    assert ctx["metadata"]["assignment_count"] == 2
 
 
 # ---------------------------------------------------------------------------
@@ -183,21 +185,15 @@ def test_compile_plan_derives_name_slug_from_name(tmp_path: Path) -> None:
 
 def test_skill_output_through_full_pipeline(tmp_path: Path) -> None:
     from autoskillit.planner import (
-        build_assignment_manifest,
-        build_wp_manifest,
         compile_plan,
+        expand_assignments,
+        expand_wps,
+        finalize_wp_manifest,
         validate_plan,
     )
 
-    phases_dir = tmp_path / "phases"
-    phases_dir.mkdir()
-    assignments_dir = tmp_path / "assignments"
-    assignments_dir.mkdir()
-    wp_dir = tmp_path / "work_packages"
-    wp_dir.mkdir()
-
     _write_json(
-        phases_dir / "P1_result.json",
+        tmp_path / "phases" / "P1_result.json",
         {
             "id": "P1",
             "name": "Foundation",
@@ -209,10 +205,27 @@ def test_skill_output_through_full_pipeline(tmp_path: Path) -> None:
         },
     )
 
-    build_assignment_manifest(str(phases_dir), str(assignments_dir), str(tmp_path))
+    _write_json(
+        tmp_path / "refined_plan.json",
+        {
+            "phases": [
+                {
+                    "id": "P1",
+                    "name": "Foundation",
+                    "ordering": 1,
+                    "assignments_preview": [
+                        {"id": "P1-A1", "name": "Schema design"},
+                        {"id": "P1-A2", "name": "Implementation"},
+                    ],
+                }
+            ]
+        },
+    )
+
+    expand_assignments(str(tmp_path / "refined_plan.json"), str(tmp_path))
 
     _write_json(
-        assignments_dir / "P1-A1_result.json",
+        tmp_path / "assignments" / "P1-A1_result.json",
         {
             "id": "P1-A1",
             "name": "Schema design",
@@ -230,7 +243,7 @@ def test_skill_output_through_full_pipeline(tmp_path: Path) -> None:
         },
     )
     _write_json(
-        assignments_dir / "P1-A2_result.json",
+        tmp_path / "assignments" / "P1-A2_result.json",
         {
             "id": "P1-A2",
             "name": "Implementation",
@@ -248,11 +261,39 @@ def test_skill_output_through_full_pipeline(tmp_path: Path) -> None:
         },
     )
 
-    build_wp_manifest(str(assignments_dir), str(wp_dir))
+    _write_json(
+        tmp_path / "refined_assignments.json",
+        {
+            "assignments": [
+                {
+                    "id": "P1-A1",
+                    "phase_id": "P1",
+                    "phase_name": "Foundation",
+                    "phase_number": 1,
+                    "assignment_number": 1,
+                    "proposed_work_packages": [
+                        {"id": "P1-A1-WP1", "name": "Schema module", "scope": "core"},
+                    ],
+                },
+                {
+                    "id": "P1-A2",
+                    "phase_id": "P1",
+                    "phase_name": "Foundation",
+                    "phase_number": 1,
+                    "assignment_number": 2,
+                    "proposed_work_packages": [
+                        {"id": "P1-A2-WP1", "name": "Implementation module", "scope": "core"},
+                    ],
+                },
+            ]
+        },
+    )
+
+    expand_wps(str(tmp_path / "refined_assignments.json"), str(tmp_path))
 
     for wp_id in ["P1-A1-WP1", "P1-A2-WP1"]:
         _write_json(
-            wp_dir / f"{wp_id}_result.json",
+            tmp_path / "work_packages" / f"{wp_id}_result.json",
             {
                 "id": wp_id,
                 "name": f"WP {wp_id}",
@@ -263,6 +304,8 @@ def test_skill_output_through_full_pipeline(tmp_path: Path) -> None:
                 "depends_on": [],
             },
         )
+
+    finalize_wp_manifest(str(tmp_path / "work_packages"), str(tmp_path))
 
     validate_result = validate_plan(str(tmp_path))
     assert validate_result["verdict"] == "pass"

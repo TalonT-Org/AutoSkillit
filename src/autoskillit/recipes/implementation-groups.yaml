@@ -747,7 +747,7 @@ steps:
       ci_loop_count: "${{ result.next_iteration }}"
     on_result:
       - when: "${{ result.max_exceeded }} == true"
-        route: trigger_ci_actively
+        route: check_active_trigger_loop
       - route: ci_watch
     on_failure: escalate_stop_no_ci
     optional_context_refs:
@@ -755,8 +755,28 @@ steps:
     note: >
       Iteration guard for the ci_watch / handle_no_ci_runs cycle. Caps the
       loop at 2 iterations (initial + 1 retry after re-deriving ci_event).
-      On budget exhaustion, routes to trigger_ci_actively for one active
-      remediation attempt before escalating to escalate_stop_no_ci.
+      On budget exhaustion, routes to check_active_trigger_loop which caps
+      the active trigger to a single attempt before escalating.
+
+  check_active_trigger_loop:
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.check_loop_iteration"
+      current_iteration: "${{ context.active_trigger_count }}"
+      max_iterations: "1"
+    capture:
+      active_trigger_count: "${{ result.next_iteration }}"
+    on_result:
+      - when: "${{ result.max_exceeded }} == true"
+        route: escalate_stop_no_ci
+      - route: trigger_ci_actively
+    on_failure: escalate_stop_no_ci
+    optional_context_refs:
+      - active_trigger_count
+    note: >
+      Bounds the trigger_ci_actively remediation to a single attempt. If
+      ci_watch still returns no_runs after the active trigger, escalates
+      to escalate_stop_no_ci rather than re-triggering indefinitely.
 
   trigger_ci_actively:
     tool: run_cmd

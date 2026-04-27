@@ -2349,9 +2349,16 @@ def test_active_ci_trigger_step_exists(recipe_name: str) -> None:
     assert "trigger_ci_actively" in recipe.steps
     trigger = recipe.steps["trigger_ci_actively"]
     assert trigger.tool == "run_cmd"
+    assert "check_ci_loop" in recipe.steps, "check_ci_loop step missing from recipe"
     guard = recipe.steps["check_ci_loop"]
     guard_routes = {c.route for c in guard.on_result.conditions}
-    assert "trigger_ci_actively" in guard_routes
+    assert "check_active_trigger_loop" in guard_routes
+    assert "check_active_trigger_loop" in recipe.steps, (
+        "check_active_trigger_loop guard step missing"
+    )
+    trigger_guard = recipe.steps["check_active_trigger_loop"]
+    trigger_guard_routes = {c.route for c in trigger_guard.on_result.conditions}
+    assert "trigger_ci_actively" in trigger_guard_routes
 
 
 # ---------------------------------------------------------------------------
@@ -2366,4 +2373,7 @@ def test_reenroll_stalled_pr_has_loop_guard(recipe_name: str) -> None:
     reenroll = recipe.steps["reenroll_stalled_pr"]
     assert reenroll.on_success != "wait_for_queue", (
         "reenroll_stalled_pr must route through a loop guard, not directly to wait_for_queue"
+    )
+    assert reenroll.on_success == "check_stall_loop", (
+        f"reenroll_stalled_pr must route to check_stall_loop, got: {reenroll.on_success!r}"
     )

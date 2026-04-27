@@ -51,23 +51,24 @@ def _check_unbounded_cycles(ctx: ValidationContext) -> list[RuleFinding]:
                 reported_cycles.add(cycle_key)
                 cycle_set = set(cycle_steps)
 
-                # Scoped to run_python only: shell-based (run_cmd) counters use external
-                # file state and are not structural bounds.
+                # Tools whose on_result conditions are structural (not external
+                # file state): run_python (counter-based) and wait_for_ci
+                # (API conclusion values guarantee eventual exit).
+                _STRUCTURAL_ON_RESULT_TOOLS = {"run_python", "wait_for_ci"}
                 has_on_result_exit = False
                 for s in cycle_steps:
                     if s not in recipe.steps:
                         continue
                     step = recipe.steps[s]
-                    if step.tool != "run_python" or step.on_result is None:
+                    if step.tool not in _STRUCTURAL_ON_RESULT_TOOLS or step.on_result is None:
                         continue
                     targets: set[str] = set()
                     if step.on_result.conditions:
                         targets = {c.route for c in step.on_result.conditions}
                     elif step.on_result.routes:
                         targets = set(step.on_result.routes.values())
-                    routes_in = targets & cycle_set
                     routes_out = targets - cycle_set
-                    if routes_in and routes_out:
+                    if routes_out:
                         has_on_result_exit = True
                         break
 

@@ -276,6 +276,8 @@ def build_wp_manifest(
         raise ValueError("assignments_dir and output_dir must not be empty")
 
     assign_path = Path(assignments_dir)
+    if not assign_path.is_dir():
+        raise FileNotFoundError(f"assignments_dir does not exist: {assign_path}")
     out_dir = Path(output_dir)
     wp_dir = (
         Path(work_packages_dir).resolve()
@@ -338,6 +340,8 @@ def build_phase_wp_manifest(
         raise ValueError("assignments_dir and output_dir must not be empty")
 
     assign_path = Path(assignments_dir)
+    if not assign_path.is_dir():
+        raise FileNotFoundError(f"assignments_dir does not exist: {assign_path}")
     out_dir = Path(output_dir)
     wp_dir = (
         Path(work_packages_dir).resolve()
@@ -420,6 +424,8 @@ def finalize_wp_manifest(work_packages_dir: str, output_dir: str) -> dict[str, s
         raise ValueError("work_packages_dir and output_dir must not be empty")
 
     wp_dir = Path(work_packages_dir)
+    if not wp_dir.is_dir():
+        raise FileNotFoundError(f"work_packages_dir does not exist: {wp_dir}")
     out_dir = Path(output_dir)
 
     result_files = sorted(wp_dir.glob("*_result.json"))

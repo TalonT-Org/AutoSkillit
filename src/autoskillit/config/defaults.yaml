@@ -183,6 +183,7 @@ skills:
     - audit-tests
     - audit-defense-standards
     - audit-bugs
+    - audit-docs
     - audit-feature-gates
     - audit-friction
     - make-req

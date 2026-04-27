@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.cli._mcp_names import DIRECT_PREFIX
+from autoskillit.core._plugin_ids import DIRECT_PREFIX
 from autoskillit.fleet._prompts import _build_food_truck_prompt
+
+pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
 
 def test_food_truck_prompt_documents_stop_action():

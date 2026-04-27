@@ -213,6 +213,7 @@ generic_automation_mcp/
 │   ├── registry.py          #   RuleFinding, RuleSpec, semantic_rule decorator
 │   ├── repository.py
 │   ├── _analysis.py         #   Step graph building + dataflow analysis
+│   ├── rules_actions.py     #   Action-type semantic rules (stop-step-has-no-routing, recipe-has-terminal-step, route-step-requires-on-result)
 │   ├── rules_blocks.py      #   Block-level budget rules (block-run-cmd-budget, etc.)
 │   ├── rules_bypass.py
 │   ├── rules_campaign.py

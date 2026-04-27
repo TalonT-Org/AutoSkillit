@@ -5,6 +5,7 @@ from __future__ import annotations
 from autoskillit.core import Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.schema import RecipeKind
 
 _logger = get_logger(__name__)
 
@@ -79,6 +80,8 @@ def _check_stop_step_message_quality(ctx: ValidationContext) -> list[RuleFinding
     severity=Severity.ERROR,
 )
 def _check_recipe_has_terminal_step(ctx: ValidationContext) -> list[RuleFinding]:
+    if ctx.recipe.kind == RecipeKind.CAMPAIGN:
+        return []
     has_stop = any(step.action == "stop" for step in ctx.recipe.steps.values())
     if not has_stop:
         return [

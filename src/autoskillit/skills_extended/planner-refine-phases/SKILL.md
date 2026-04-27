@@ -13,7 +13,7 @@ hooks:
 
 # planner-refine-phases
 
-L1 session that refines a `combined_plan.json` (a `PlanDocument` with all phases
+L1 session that refines a `combined_plan.json` (a `PlanDocument` with every phase
 in `PhaseElaborated` form) by spawning one L0 subagent per phase in parallel.
 Each L0 reviews its assigned phase in the context of all other phases and returns
 structured suggestions. L1 collects these suggestions, resolves inter-phase
@@ -27,7 +27,7 @@ conflicts, applies field-level edits to the plan, and writes `refined_plan.json`
 
 ## Arguments
 
-- **$1** — Absolute path to `combined_plan.json` (PlanDocument, all phases as PhaseElaborated)
+- **$1** — Absolute path to `combined_plan.json` (PlanDocument, every phase as PhaseElaborated)
 - **$2** — Absolute path to output directory for `refined_plan.json` (must exist under `{{AUTOSKILLIT_TEMP}}/planner/`)
 
 ## Critical Constraints

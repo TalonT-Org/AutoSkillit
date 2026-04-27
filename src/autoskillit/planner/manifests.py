@@ -7,6 +7,7 @@ import secrets
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TypedDict
 
 from autoskillit.core import atomic_write, get_logger, write_versioned_json
 from autoskillit.planner.schema import (
@@ -19,6 +20,16 @@ from autoskillit.planner.schema import (
 _logger = get_logger(__name__)
 
 _NATURAL_SORT_RE = re.compile(r"(\d+)")
+
+
+class _PhaseBucket(TypedDict):
+    id: str
+    name: str
+    wp_ids: list[str]
+    wp_names: list[str]
+    wp_scopes: list[str]
+    wp_estimated_files: list[list[str]]
+    wp_count: int
 
 
 def _natural_sort_key(s: str) -> list[int | str]:
@@ -479,3 +490,158 @@ def finalize_wp_manifest(work_packages_dir: str, output_dir: str) -> dict[str, s
     write_versioned_json(manifest_path, manifest, schema_version=1)
     atomic_write(out_dir / "wp_index.json", json.dumps(index_entries, indent=2))
     return {"manifest_path": str(manifest_path), "total_count": str(len(items))}
+
+
+def expand_assignments(
+    refined_plan_path: str, output_dir: str, **kwargs: object
+) -> dict[str, str]:
+    plan_file = Path(refined_plan_path)
+    try:
+        plan = json.loads(plan_file.read_text())
+    except json.JSONDecodeError as exc:
+        raise json.JSONDecodeError(
+            f"Failed to parse {plan_file}: {exc.msg}", exc.doc, exc.pos
+        ) from exc
+    phases = plan.get("phases", [])
+    assign_dir = Path(output_dir) / "assignments"
+    assign_dir.mkdir(parents=True, exist_ok=True)
+
+    items: list[dict[str, object]] = []
+    context_paths: list[str] = []
+    item_ids: list[str] = []
+    for phase in phases:
+        phase_id = phase["id"]
+        previews = phase.get("assignments_preview", [])
+        if not previews:
+            continue
+        assignment_ids = [a.get("id", "") for a in previews]
+        assignment_names = [a.get("name", "") for a in previews]
+        metadata = {
+            "assignment_count": len(previews),
+            "assignment_ids": assignment_ids,
+            "assignment_names": assignment_names,
+        }
+        items.append(
+            {
+                "id": phase_id,
+                "name": phase.get("name", ""),
+                "status": "pending",
+                "result_path": None,
+                "metadata": metadata,
+            }
+        )
+        context: dict[str, object] = {
+            "id": phase_id,
+            "name": phase.get("name", ""),
+            "metadata": metadata,
+            "prior_results": [],
+        }
+        ctx_path = assign_dir / f"context_{phase_id}.json"
+        write_versioned_json(ctx_path, context, schema_version=1)
+        context_paths.append(str(ctx_path))
+        item_ids.append(phase_id)
+
+    manifest = {
+        "pass_name": "phase_assignments",
+        "result_dir": str(assign_dir),
+        "created_at": datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "items": items,
+    }
+    manifest_path = assign_dir / "phase_assignment_manifest.json"
+    write_versioned_json(manifest_path, manifest, schema_version=1)
+    return {
+        "manifest_path": str(manifest_path),
+        "context_paths": ",".join(context_paths),
+        "item_ids": ",".join(item_ids),
+    }
+
+
+def expand_wps(refined_assignments_path: str, output_dir: str, **kwargs: object) -> dict[str, str]:
+    assignments_file = Path(refined_assignments_path)
+    try:
+        data = json.loads(assignments_file.read_text())
+    except json.JSONDecodeError as exc:
+        raise json.JSONDecodeError(
+            f"Failed to parse {assignments_file}: {exc.msg}", exc.doc, exc.pos
+        ) from exc
+    assignments = data.get("assignments", [])
+    out_dir = Path(output_dir)
+    wp_dir = out_dir / "work_packages"
+    wp_dir.mkdir(parents=True, exist_ok=True)
+
+    phase_buckets: dict[str, _PhaseBucket] = {}
+    for assign in assignments:
+        phase_id = assign.get("phase_id", "")
+        if not phase_id:
+            pn = assign.get("phase_number", 0)
+            phase_id = f"P{pn}"
+        if phase_id not in phase_buckets:
+            phase_buckets[phase_id] = _PhaseBucket(
+                id=phase_id,
+                name=assign.get("phase_name", f"Phase {phase_id}"),
+                wp_ids=[],
+                wp_names=[],
+                wp_scopes=[],
+                wp_estimated_files=[],
+                wp_count=0,
+            )
+        bucket = phase_buckets[phase_id]
+        wps = assign.get("proposed_work_packages", [])
+        for wp in wps:
+            wp_id = wp.get("id", "")
+            bucket["wp_ids"].append(wp_id)
+            bucket["wp_names"].append(wp.get("name", ""))
+            bucket["wp_scopes"].append(wp.get("scope", ""))
+            est = wp.get("estimated_files", [])
+            if not isinstance(est, list):
+                est = []
+            bucket["wp_estimated_files"].append(est)
+            bucket["wp_count"] += 1
+
+    items: list[dict[str, object]] = []
+    context_paths: list[str] = []
+    item_ids: list[str] = []
+    for phase_id in sorted(phase_buckets):
+        bucket = phase_buckets[phase_id]
+        metadata = {
+            "wp_count": bucket["wp_count"],
+            "wp_ids": bucket["wp_ids"],
+            "wp_names": bucket["wp_names"],
+            "wp_scopes": bucket["wp_scopes"],
+            "wp_estimated_files": bucket["wp_estimated_files"],
+        }
+        items.append(
+            {
+                "id": phase_id,
+                "name": bucket["name"],
+                "status": "pending",
+                "result_path": None,
+                "metadata": metadata,
+            }
+        )
+        context: dict[str, object] = {
+            "id": phase_id,
+            "name": bucket["name"],
+            "metadata": metadata,
+            "prior_results": [],
+            "wp_index_path": str(out_dir / "wp_index.json"),
+        }
+        ctx_path = wp_dir / f"context_{phase_id}.json"
+        write_versioned_json(ctx_path, context, schema_version=1)
+        context_paths.append(str(ctx_path))
+        item_ids.append(str(phase_id))
+
+    manifest = {
+        "pass_name": "phase_work_packages",
+        "result_dir": str(wp_dir),
+        "created_at": datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "items": items,
+    }
+    manifest_path = out_dir / "phase_wp_manifest.json"
+    write_versioned_json(manifest_path, manifest, schema_version=1)
+    atomic_write(out_dir / "wp_index.json", "[]")
+    return {
+        "manifest_path": str(manifest_path),
+        "context_paths": ",".join(context_paths),
+        "item_ids": ",".join(item_ids),
+    }

@@ -23,7 +23,9 @@ ALL_PLANNER_SKILLS = [
     "planner-elaborate-wps",
     "planner-reconcile-deps",
     "planner-refine",
+    "planner-refine-phases",
     "planner-refine-assignments",
+    "planner-refine-wps",
 ]
 
 

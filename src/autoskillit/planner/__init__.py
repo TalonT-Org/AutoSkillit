@@ -9,12 +9,15 @@ from autoskillit.planner.manifests import (
     build_wp_manifest,
     check_remaining,
     create_run_dir,
+    expand_assignments,
+    expand_wps,
     finalize_wp_manifest,
 )
 from autoskillit.planner.merge import (
     build_plan_snapshot,
     extract_item,
     merge_files,
+    merge_tier_dir,
     replace_item,
 )
 from autoskillit.planner.schema import (  # noqa: F401
@@ -42,11 +45,14 @@ __all__ = [
     "build_wp_manifest",
     "compile_plan",
     "create_run_dir",
+    "expand_assignments",
+    "expand_wps",
     "finalize_wp_manifest",
     "validate_plan",
     "PlannerManifest",
     "PlannerManifestItem",
     "merge_files",
+    "merge_tier_dir",
     "extract_item",
     "replace_item",
     "build_plan_snapshot",

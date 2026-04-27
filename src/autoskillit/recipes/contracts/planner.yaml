@@ -1,4 +1,4 @@
-generated_at: '2026-04-27T15:29:11.519072+00:00'
+generated_at: '2026-04-27T18:41:27.106723+00:00'
 bundled_manifest_version: 0.1.0
 skill_hashes: {}
 skills:
@@ -50,6 +50,26 @@ skills:
 
       %%ORDER_UP%%'
     write_behavior: always
+  planner-refine-phases:
+    inputs:
+    - name: combined_plan_path
+      type: file_path
+      required: true
+      recommended: false
+    - name: output_dir
+      type: directory_path
+      required: true
+      recommended: false
+    outputs:
+    - name: refined_plan_path
+      type: file_path
+    expected_output_patterns:
+    - refined_plan_path\s*=\s*\S+
+    pattern_examples:
+    - 'refined_plan_path = /tmp/autoskillit/planner/run-20260101-120000/refined_plan.json
+
+      %%ORDER_UP%%'
+    write_behavior: always
   planner-elaborate-assignments:
     inputs:
     - name: context_file
@@ -70,6 +90,30 @@ skills:
 
       %%ORDER_UP%%'
     write_behavior: always
+  planner-refine-assignments:
+    inputs:
+    - name: combined_assignments_path
+      type: file_path
+      required: true
+      recommended: false
+    - name: refined_plan_path
+      type: file_path
+      required: true
+      recommended: false
+    - name: output_dir
+      type: directory_path
+      required: true
+      recommended: false
+    outputs:
+    - name: refined_assignments_path
+      type: file_path
+    expected_output_patterns:
+    - refined_assignments_path\s*=\s*\S+
+    pattern_examples:
+    - 'refined_assignments_path = /tmp/autoskillit/planner/run-20260101-120000/refined_assignments.json
+
+      %%ORDER_UP%%'
+    write_behavior: always
   planner-elaborate-wps:
     inputs:
     - name: context_file
@@ -87,6 +131,34 @@ skills:
     - phase_wps_result_dir\s*=\s*\S+
     pattern_examples:
     - 'phase_wps_result_dir = /tmp/autoskillit/planner/run-20260101-120000/work_packages
+
+      %%ORDER_UP%%'
+    write_behavior: always
+  planner-refine-wps:
+    inputs:
+    - name: combined_wps_path
+      type: file_path
+      required: true
+      recommended: false
+    - name: refined_plan_path
+      type: file_path
+      required: true
+      recommended: false
+    - name: refined_assignments_path
+      type: file_path
+      required: true
+      recommended: false
+    - name: output_dir
+      type: directory_path
+      required: true
+      recommended: false
+    outputs:
+    - name: refined_wps_path
+      type: file_path
+    expected_output_patterns:
+    - refined_wps_path\s*=\s*\S+
+    pattern_examples:
+    - 'refined_wps_path = /tmp/autoskillit/planner/run-20260101-120000/refined_wps.json
 
       %%ORDER_UP%%'
     write_behavior: always
@@ -131,7 +203,7 @@ dataflow:
   produced:
   - phase_manifest_path
   positional_args: 2
-- step: build_pre_elab_snapshot
+- step: build_plan_snapshot
   available:
   - phase_manifest_path
   - planner_dir
@@ -139,237 +211,316 @@ dataflow:
   - task
   required: []
   produced:
-  - pre_elab_snapshot_path
-- step: check_phases
+  - plan_snapshot_path
+  - phase_ids
+- step: elaborate_phases
   available:
+  - phase_ids
   - phase_manifest_path
+  - plan_snapshot_path
   - planner_dir
-  - pre_elab_snapshot_path
+  - source_dir
+  - task
+  required: []
+  produced: []
+  positional_args: 2
+- step: merge_phases
+  available:
+  - phase_ids
+  - phase_manifest_path
+  - plan_snapshot_path
+  - planner_dir
   - source_dir
   - task
   required: []
   produced:
-  - has_remaining
-  - current_item_path
-  - current_item_id
-- step: elaborate_phase
+  - combined_phases_path
+- step: refine_phases
   available:
-  - current_item_id
-  - current_item_path
-  - has_remaining
+  - combined_phases_path
+  - phase_ids
   - phase_manifest_path
+  - plan_snapshot_path
   - planner_dir
-  - pre_elab_snapshot_path
+  - source_dir
+  - task
+  required:
+  - combined_plan_path
+  - output_dir
+  produced:
+  - refined_plan_path
+- step: expand_assignments
+  available:
+  - combined_phases_path
+  - phase_ids
+  - phase_manifest_path
+  - plan_snapshot_path
+  - planner_dir
+  - refined_plan_path
+  - source_dir
+  - task
+  required: []
+  produced:
+  - assignment_context_paths
+- step: elaborate_assignments
+  available:
+  - assignment_context_paths
+  - combined_phases_path
+  - phase_ids
+  - phase_manifest_path
+  - plan_snapshot_path
+  - planner_dir
+  - refined_plan_path
   - source_dir
   - task
   required: []
   produced: []
   positional_args: 1
-- step: build_phase_assignment_manifest
+- step: merge_assignments
   available:
-  - current_item_id
-  - current_item_path
-  - has_remaining
+  - assignment_context_paths
+  - combined_phases_path
+  - phase_ids
   - phase_manifest_path
+  - plan_snapshot_path
   - planner_dir
-  - pre_elab_snapshot_path
+  - refined_plan_path
   - source_dir
   - task
   required: []
   produced:
-  - phase_assignment_manifest
-- step: check_phase_assignments
+  - combined_assignments_path
+- step: refine_assignments
   available:
-  - current_item_id
-  - current_item_path
-  - has_remaining
-  - phase_assignment_manifest
+  - assignment_context_paths
+  - combined_assignments_path
+  - combined_phases_path
+  - phase_ids
   - phase_manifest_path
+  - plan_snapshot_path
   - planner_dir
-  - pre_elab_snapshot_path
-  - source_dir
-  - task
-  required: []
-  produced:
-  - has_remaining
-  - current_item_path
-  - current_item_id
-- step: elaborate_phase_assignments
-  available:
-  - current_item_id
-  - current_item_path
-  - has_remaining
-  - phase_assignment_manifest
-  - phase_manifest_path
-  - planner_dir
-  - pre_elab_snapshot_path
+  - refined_plan_path
   - source_dir
   - task
   required:
-  - context_file
-  produced: []
-- step: build_phase_wp_manifest
+  - output_dir
+  produced:
+  - refined_assignments_path
+- step: expand_wps
   available:
-  - current_item_id
-  - current_item_path
-  - has_remaining
-  - phase_assignment_manifest
+  - assignment_context_paths
+  - combined_assignments_path
+  - combined_phases_path
+  - phase_ids
   - phase_manifest_path
+  - plan_snapshot_path
   - planner_dir
-  - pre_elab_snapshot_path
+  - refined_assignments_path
+  - refined_plan_path
   - source_dir
   - task
   required: []
   produced:
-  - phase_wp_manifest_path
-- step: check_phase_wps
+  - wp_context_paths
+- step: elaborate_wps
   available:
-  - current_item_id
-  - current_item_path
-  - has_remaining
-  - phase_assignment_manifest
+  - assignment_context_paths
+  - combined_assignments_path
+  - combined_phases_path
+  - phase_ids
   - phase_manifest_path
-  - phase_wp_manifest_path
+  - plan_snapshot_path
   - planner_dir
-  - pre_elab_snapshot_path
+  - refined_assignments_path
+  - refined_plan_path
   - source_dir
   - task
+  - wp_context_paths
   required: []
-  produced:
-  - has_remaining
-  - current_item_path
-  - current_item_id
-- step: elaborate_phase_wps
-  available:
-  - current_item_id
-  - current_item_path
-  - has_remaining
-  - phase_assignment_manifest
-  - phase_manifest_path
-  - phase_wp_manifest_path
-  - planner_dir
-  - pre_elab_snapshot_path
-  - source_dir
-  - task
-  required:
-  - context_file
   produced: []
+  positional_args: 1
 - step: finalize_wp_manifest
   available:
-  - current_item_id
-  - current_item_path
-  - has_remaining
-  - phase_assignment_manifest
+  - assignment_context_paths
+  - combined_assignments_path
+  - combined_phases_path
+  - phase_ids
   - phase_manifest_path
-  - phase_wp_manifest_path
+  - plan_snapshot_path
   - planner_dir
-  - pre_elab_snapshot_path
+  - refined_assignments_path
+  - refined_plan_path
   - source_dir
   - task
+  - wp_context_paths
   required: []
   produced: []
-- step: reconcile_deps
+- step: merge_wps
   available:
-  - current_item_id
-  - current_item_path
-  - has_remaining
-  - phase_assignment_manifest
+  - assignment_context_paths
+  - combined_assignments_path
+  - combined_phases_path
+  - phase_ids
   - phase_manifest_path
-  - phase_wp_manifest_path
+  - plan_snapshot_path
   - planner_dir
-  - pre_elab_snapshot_path
+  - refined_assignments_path
+  - refined_plan_path
   - source_dir
   - task
+  - wp_context_paths
+  required: []
+  produced:
+  - combined_wps_path
+- step: refine_wps
+  available:
+  - assignment_context_paths
+  - combined_assignments_path
+  - combined_phases_path
+  - combined_wps_path
+  - phase_ids
+  - phase_manifest_path
+  - plan_snapshot_path
+  - planner_dir
+  - refined_assignments_path
+  - refined_plan_path
+  - source_dir
+  - task
+  - wp_context_paths
+  required:
+  - output_dir
+  produced:
+  - refined_wps_path
+- step: reconcile_deps
+  available:
+  - assignment_context_paths
+  - combined_assignments_path
+  - combined_phases_path
+  - combined_wps_path
+  - phase_ids
+  - phase_manifest_path
+  - plan_snapshot_path
+  - planner_dir
+  - refined_assignments_path
+  - refined_plan_path
+  - refined_wps_path
+  - source_dir
+  - task
+  - wp_context_paths
   required: []
   produced: []
 - step: validate
   available:
-  - current_item_id
-  - current_item_path
-  - has_remaining
-  - phase_assignment_manifest
+  - assignment_context_paths
+  - combined_assignments_path
+  - combined_phases_path
+  - combined_wps_path
+  - phase_ids
   - phase_manifest_path
-  - phase_wp_manifest_path
+  - plan_snapshot_path
   - planner_dir
-  - pre_elab_snapshot_path
+  - refined_assignments_path
+  - refined_plan_path
+  - refined_wps_path
   - source_dir
   - task
+  - wp_context_paths
   required: []
   produced:
   - verdict
 - step: check_verdict
   available:
-  - current_item_id
-  - current_item_path
-  - has_remaining
-  - phase_assignment_manifest
+  - assignment_context_paths
+  - combined_assignments_path
+  - combined_phases_path
+  - combined_wps_path
+  - phase_ids
   - phase_manifest_path
-  - phase_wp_manifest_path
+  - plan_snapshot_path
   - planner_dir
-  - pre_elab_snapshot_path
+  - refined_assignments_path
+  - refined_plan_path
+  - refined_wps_path
   - source_dir
   - task
   - verdict
+  - wp_context_paths
   required: []
   produced: []
 - step: refine
   available:
-  - current_item_id
-  - current_item_path
-  - has_remaining
-  - phase_assignment_manifest
+  - assignment_context_paths
+  - combined_assignments_path
+  - combined_phases_path
+  - combined_wps_path
+  - phase_ids
   - phase_manifest_path
-  - phase_wp_manifest_path
+  - plan_snapshot_path
   - planner_dir
-  - pre_elab_snapshot_path
+  - refined_assignments_path
+  - refined_plan_path
+  - refined_wps_path
   - source_dir
   - task
   - verdict
+  - wp_context_paths
   required: []
   produced: []
   positional_args: 1
 - step: compile
   available:
-  - current_item_id
-  - current_item_path
-  - has_remaining
-  - phase_assignment_manifest
+  - assignment_context_paths
+  - combined_assignments_path
+  - combined_phases_path
+  - combined_wps_path
+  - phase_ids
   - phase_manifest_path
-  - phase_wp_manifest_path
+  - plan_snapshot_path
   - planner_dir
-  - pre_elab_snapshot_path
+  - refined_assignments_path
+  - refined_plan_path
+  - refined_wps_path
   - source_dir
   - task
   - verdict
+  - wp_context_paths
   required: []
   produced: []
 - step: done
   available:
-  - current_item_id
-  - current_item_path
-  - has_remaining
-  - phase_assignment_manifest
+  - assignment_context_paths
+  - combined_assignments_path
+  - combined_phases_path
+  - combined_wps_path
+  - phase_ids
   - phase_manifest_path
-  - phase_wp_manifest_path
+  - plan_snapshot_path
   - planner_dir
-  - pre_elab_snapshot_path
+  - refined_assignments_path
+  - refined_plan_path
+  - refined_wps_path
   - source_dir
   - task
   - verdict
+  - wp_context_paths
   required: []
   produced: []
 - step: escalate_stop
   available:
-  - current_item_id
-  - current_item_path
-  - has_remaining
-  - phase_assignment_manifest
+  - assignment_context_paths
+  - combined_assignments_path
+  - combined_phases_path
+  - combined_wps_path
+  - phase_ids
   - phase_manifest_path
-  - phase_wp_manifest_path
+  - plan_snapshot_path
   - planner_dir
-  - pre_elab_snapshot_path
+  - refined_assignments_path
+  - refined_plan_path
+  - refined_wps_path
   - source_dir
   - task
   - verdict
+  - wp_context_paths
   required: []
   produced: []

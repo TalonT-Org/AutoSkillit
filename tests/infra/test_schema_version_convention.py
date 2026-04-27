@@ -154,9 +154,9 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/smoke_utils.py", 87),
     ("src/autoskillit/smoke_utils.py", 194),
     # planner/manifests.py — _backstop_wp_index: list payload (index is a list, not dict)
-    ("src/autoskillit/planner/manifests.py", 95),
+    ("src/autoskillit/planner/manifests.py", 106),
     # planner/manifests.py — finalize_wp_manifest: wp_index.json rebuild (list payload)
-    ("src/autoskillit/planner/manifests.py", 480),
+    ("src/autoskillit/planner/manifests.py", 491),
 }
 
 

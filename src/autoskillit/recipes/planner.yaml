@@ -69,8 +69,6 @@ steps:
         ${{ context.planner_dir }}/analysis.json
         ${{ context.planner_dir }}/domain_knowledge.md
       cwd: "${{ inputs.source_dir }}"
-    capture:
-      phase_manifest_path: "${{ result.phase_manifest_path }}"
     on_success: build_plan_snapshot
     on_failure: escalate_stop
 
@@ -95,6 +93,7 @@ steps:
     with:
       skill_command: "/autoskillit:planner-elaborate-phase ${{ context.plan_snapshot_path }} {phase_id} ${{ context.planner_dir }}/phases"
       cwd: "${{ inputs.source_dir }}"
+      dispatch_items: "${{ context.phase_ids }}"
     capture_list:
       elab_result_path: "${{ result.elab_result_path }}"
     on_success: merge_phases
@@ -139,9 +138,7 @@ steps:
       refined_plan_path: "${{ context.refined_plan_path }}"
       output_dir: "${{ context.planner_dir }}"
     capture:
-      phase_assignment_manifest: "${{ result.manifest_path }}"
       assignment_context_paths: "${{ result.context_paths }}"
-      assignment_item_ids: "${{ result.item_ids }}"
     on_success: elaborate_assignments
     on_failure: escalate_stop
 
@@ -150,6 +147,7 @@ steps:
     with:
       skill_command: "/autoskillit:planner-elaborate-assignments {context_path} ${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"
+      dispatch_items: "${{ context.assignment_context_paths }}"
     capture_list:
       phase_assignments_result_dir: "${{ result.phase_assignments_result_dir }}"
     on_success: merge_assignments
@@ -197,9 +195,7 @@ steps:
       refined_assignments_path: "${{ context.refined_assignments_path }}"
       output_dir: "${{ context.planner_dir }}"
     capture:
-      phase_wp_manifest_path: "${{ result.manifest_path }}"
       wp_context_paths: "${{ result.context_paths }}"
-      wp_item_ids: "${{ result.item_ids }}"
     on_success: elaborate_wps
     on_failure: escalate_stop
 
@@ -208,6 +204,7 @@ steps:
     with:
       skill_command: "/autoskillit:planner-elaborate-wps {context_path} ${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"
+      dispatch_items: "${{ context.wp_context_paths }}"
     capture_list:
       phase_wps_result_dir: "${{ result.phase_wps_result_dir }}"
     on_success: finalize_wp_manifest
@@ -251,8 +248,6 @@ steps:
         ${{ context.refined_assignments_path }}
         ${{ context.planner_dir }}
       cwd: "${{ inputs.source_dir }}"
-    capture:
-      refined_wps_path: "${{ result.refined_wps_path }}"
     on_success: reconcile_deps
     on_failure: escalate_stop
 

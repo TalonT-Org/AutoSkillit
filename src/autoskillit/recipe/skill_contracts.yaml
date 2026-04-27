@@ -1875,7 +1875,8 @@ skills:
       - "refined_plan_path\\s*=\\s*\\S+"
     pattern_examples:
       - "refined_plan_path = /tmp/autoskillit/planner/run-20260101-120000/refined_plan.json\n%%ORDER_UP%%"
-    write_behavior: always
+    write_behavior: conditional
+    write_expected_when: "refined_plan_path"
   planner-refine-assignments:
     inputs:
       - name: combined_assignments_path

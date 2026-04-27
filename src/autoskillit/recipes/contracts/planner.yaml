@@ -1,4 +1,4 @@
-generated_at: '2026-04-27T18:23:42.838886+00:00'
+generated_at: '2026-04-27T18:34:30.404009+00:00'
 bundled_manifest_version: 0.1.0
 skill_hashes: {}
 skills:
@@ -69,7 +69,8 @@ skills:
     - 'refined_plan_path = /tmp/autoskillit/planner/run-20260101-120000/refined_plan.json
 
       %%ORDER_UP%%'
-    write_behavior: always
+    write_behavior: conditional
+    write_expected_when: refined_plan_path
   planner-elaborate-assignments:
     inputs:
     - name: context_file
@@ -200,12 +201,10 @@ dataflow:
   - source_dir
   - task
   required: []
-  produced:
-  - phase_manifest_path
+  produced: []
   positional_args: 2
 - step: build_plan_snapshot
   available:
-  - phase_manifest_path
   - planner_dir
   - source_dir
   - task
@@ -216,7 +215,6 @@ dataflow:
 - step: elaborate_phases
   available:
   - phase_ids
-  - phase_manifest_path
   - plan_snapshot_path
   - planner_dir
   - source_dir
@@ -227,7 +225,6 @@ dataflow:
 - step: merge_phases
   available:
   - phase_ids
-  - phase_manifest_path
   - plan_snapshot_path
   - planner_dir
   - source_dir
@@ -239,7 +236,6 @@ dataflow:
   available:
   - combined_phases_path
   - phase_ids
-  - phase_manifest_path
   - plan_snapshot_path
   - planner_dir
   - source_dir
@@ -253,7 +249,6 @@ dataflow:
   available:
   - combined_phases_path
   - phase_ids
-  - phase_manifest_path
   - plan_snapshot_path
   - planner_dir
   - refined_plan_path
@@ -261,17 +256,12 @@ dataflow:
   - task
   required: []
   produced:
-  - phase_assignment_manifest
   - assignment_context_paths
-  - assignment_item_ids
 - step: elaborate_assignments
   available:
   - assignment_context_paths
-  - assignment_item_ids
   - combined_phases_path
-  - phase_assignment_manifest
   - phase_ids
-  - phase_manifest_path
   - plan_snapshot_path
   - planner_dir
   - refined_plan_path
@@ -283,11 +273,8 @@ dataflow:
 - step: merge_assignments
   available:
   - assignment_context_paths
-  - assignment_item_ids
   - combined_phases_path
-  - phase_assignment_manifest
   - phase_ids
-  - phase_manifest_path
   - plan_snapshot_path
   - planner_dir
   - refined_plan_path
@@ -299,12 +286,9 @@ dataflow:
 - step: refine_assignments
   available:
   - assignment_context_paths
-  - assignment_item_ids
   - combined_assignments_path
   - combined_phases_path
-  - phase_assignment_manifest
   - phase_ids
-  - phase_manifest_path
   - plan_snapshot_path
   - planner_dir
   - refined_plan_path
@@ -317,12 +301,9 @@ dataflow:
 - step: expand_wps
   available:
   - assignment_context_paths
-  - assignment_item_ids
   - combined_assignments_path
   - combined_phases_path
-  - phase_assignment_manifest
   - phase_ids
-  - phase_manifest_path
   - plan_snapshot_path
   - planner_dir
   - refined_assignments_path
@@ -331,19 +312,13 @@ dataflow:
   - task
   required: []
   produced:
-  - phase_wp_manifest_path
   - wp_context_paths
-  - wp_item_ids
 - step: elaborate_wps
   available:
   - assignment_context_paths
-  - assignment_item_ids
   - combined_assignments_path
   - combined_phases_path
-  - phase_assignment_manifest
   - phase_ids
-  - phase_manifest_path
-  - phase_wp_manifest_path
   - plan_snapshot_path
   - planner_dir
   - refined_assignments_path
@@ -351,20 +326,15 @@ dataflow:
   - source_dir
   - task
   - wp_context_paths
-  - wp_item_ids
   required: []
   produced: []
   positional_args: 1
 - step: finalize_wp_manifest
   available:
   - assignment_context_paths
-  - assignment_item_ids
   - combined_assignments_path
   - combined_phases_path
-  - phase_assignment_manifest
   - phase_ids
-  - phase_manifest_path
-  - phase_wp_manifest_path
   - plan_snapshot_path
   - planner_dir
   - refined_assignments_path
@@ -372,19 +342,14 @@ dataflow:
   - source_dir
   - task
   - wp_context_paths
-  - wp_item_ids
   required: []
   produced: []
 - step: merge_wps
   available:
   - assignment_context_paths
-  - assignment_item_ids
   - combined_assignments_path
   - combined_phases_path
-  - phase_assignment_manifest
   - phase_ids
-  - phase_manifest_path
-  - phase_wp_manifest_path
   - plan_snapshot_path
   - planner_dir
   - refined_assignments_path
@@ -392,21 +357,16 @@ dataflow:
   - source_dir
   - task
   - wp_context_paths
-  - wp_item_ids
   required: []
   produced:
   - combined_wps_path
 - step: refine_wps
   available:
   - assignment_context_paths
-  - assignment_item_ids
   - combined_assignments_path
   - combined_phases_path
   - combined_wps_path
-  - phase_assignment_manifest
   - phase_ids
-  - phase_manifest_path
-  - phase_wp_manifest_path
   - plan_snapshot_path
   - planner_dir
   - refined_assignments_path
@@ -414,169 +374,125 @@ dataflow:
   - source_dir
   - task
   - wp_context_paths
-  - wp_item_ids
   required:
   - output_dir
-  produced:
-  - refined_wps_path
+  produced: []
 - step: reconcile_deps
   available:
   - assignment_context_paths
-  - assignment_item_ids
   - combined_assignments_path
   - combined_phases_path
   - combined_wps_path
-  - phase_assignment_manifest
   - phase_ids
-  - phase_manifest_path
-  - phase_wp_manifest_path
   - plan_snapshot_path
   - planner_dir
   - refined_assignments_path
   - refined_plan_path
-  - refined_wps_path
   - source_dir
   - task
   - wp_context_paths
-  - wp_item_ids
   required: []
   produced: []
 - step: validate
   available:
   - assignment_context_paths
-  - assignment_item_ids
   - combined_assignments_path
   - combined_phases_path
   - combined_wps_path
-  - phase_assignment_manifest
   - phase_ids
-  - phase_manifest_path
-  - phase_wp_manifest_path
   - plan_snapshot_path
   - planner_dir
   - refined_assignments_path
   - refined_plan_path
-  - refined_wps_path
   - source_dir
   - task
   - wp_context_paths
-  - wp_item_ids
   required: []
   produced:
   - verdict
 - step: check_verdict
   available:
   - assignment_context_paths
-  - assignment_item_ids
   - combined_assignments_path
   - combined_phases_path
   - combined_wps_path
-  - phase_assignment_manifest
   - phase_ids
-  - phase_manifest_path
-  - phase_wp_manifest_path
   - plan_snapshot_path
   - planner_dir
   - refined_assignments_path
   - refined_plan_path
-  - refined_wps_path
   - source_dir
   - task
   - verdict
   - wp_context_paths
-  - wp_item_ids
   required: []
   produced: []
 - step: refine
   available:
   - assignment_context_paths
-  - assignment_item_ids
   - combined_assignments_path
   - combined_phases_path
   - combined_wps_path
-  - phase_assignment_manifest
   - phase_ids
-  - phase_manifest_path
-  - phase_wp_manifest_path
   - plan_snapshot_path
   - planner_dir
   - refined_assignments_path
   - refined_plan_path
-  - refined_wps_path
   - source_dir
   - task
   - verdict
   - wp_context_paths
-  - wp_item_ids
   required: []
   produced: []
   positional_args: 1
 - step: compile
   available:
   - assignment_context_paths
-  - assignment_item_ids
   - combined_assignments_path
   - combined_phases_path
   - combined_wps_path
-  - phase_assignment_manifest
   - phase_ids
-  - phase_manifest_path
-  - phase_wp_manifest_path
   - plan_snapshot_path
   - planner_dir
   - refined_assignments_path
   - refined_plan_path
-  - refined_wps_path
   - source_dir
   - task
   - verdict
   - wp_context_paths
-  - wp_item_ids
   required: []
   produced: []
 - step: done
   available:
   - assignment_context_paths
-  - assignment_item_ids
   - combined_assignments_path
   - combined_phases_path
   - combined_wps_path
-  - phase_assignment_manifest
   - phase_ids
-  - phase_manifest_path
-  - phase_wp_manifest_path
   - plan_snapshot_path
   - planner_dir
   - refined_assignments_path
   - refined_plan_path
-  - refined_wps_path
   - source_dir
   - task
   - verdict
   - wp_context_paths
-  - wp_item_ids
   required: []
   produced: []
 - step: escalate_stop
   available:
   - assignment_context_paths
-  - assignment_item_ids
   - combined_assignments_path
   - combined_phases_path
   - combined_wps_path
-  - phase_assignment_manifest
   - phase_ids
-  - phase_manifest_path
-  - phase_wp_manifest_path
   - plan_snapshot_path
   - planner_dir
   - refined_assignments_path
   - refined_plan_path
-  - refined_wps_path
   - source_dir
   - task
   - verdict
   - wp_context_paths
-  - wp_item_ids
   required: []
   produced: []

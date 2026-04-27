@@ -31,7 +31,7 @@ Grouping analysis is performed as in-context LLM reasoning. No parallel sessions
 - After `issue-splitter` has decomposed issues into focused sub-issues, to re-consolidate
   overly granular results
 - Invoked by `triage-issues` via the `--collapse` flag (Step 2c)
-- Directly by a user who wants to reduce issue count before an implementation sprint
+- Directly by a user who wants to reduce issue count before a batch implementation run
 - With `--dry-run` to preview what would be collapsed without mutating GitHub
 
 ## Arguments

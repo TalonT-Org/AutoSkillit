@@ -244,22 +244,6 @@ skills:
     - 'diagnosis_path = /tmp/diagnosis.md'
     write_behavior: always
 dataflow:
-- step: sprint_entry
-  available:
-  - audit
-  - auto_merge
-  - base_branch
-  - issue_url
-  - open_pr
-  - review_approach
-  - run_mode
-  - run_name
-  - source_dir
-  - sprint_mode
-  - task
-  - upfront_claimed
-  required: []
-  produced: []
 - step: clone
   available:
   - audit
@@ -271,7 +255,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   required: []
@@ -290,7 +273,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
@@ -310,7 +292,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
@@ -335,7 +316,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
@@ -359,7 +339,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
@@ -384,7 +363,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
@@ -409,7 +387,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
@@ -433,7 +410,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
@@ -460,7 +436,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
@@ -487,7 +462,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
@@ -515,7 +489,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
@@ -542,7 +515,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
@@ -574,7 +546,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
@@ -607,7 +578,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
@@ -637,7 +607,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
@@ -667,7 +636,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
@@ -699,7 +667,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
@@ -730,7 +697,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
@@ -762,7 +728,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
@@ -796,7 +761,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
@@ -828,7 +792,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
@@ -862,7 +825,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
@@ -896,7 +858,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - work_dir
@@ -931,7 +892,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -966,7 +926,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -1000,7 +959,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -1038,7 +996,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -1076,7 +1033,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -1115,7 +1071,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -1155,7 +1110,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -1194,7 +1148,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -1233,7 +1186,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -1274,7 +1226,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -1314,7 +1265,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -1357,7 +1307,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -1398,7 +1347,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -1439,7 +1387,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -1480,7 +1427,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -1521,7 +1467,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -1564,7 +1509,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -1605,7 +1549,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -1646,7 +1589,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -1687,7 +1629,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -1728,7 +1669,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -1771,7 +1711,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -1812,7 +1751,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -1853,7 +1791,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -1896,7 +1833,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -1939,7 +1875,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -1981,7 +1916,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -2023,7 +1957,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -2067,7 +2000,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -2109,7 +2041,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -2151,7 +2082,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -2193,7 +2123,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -2235,7 +2164,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -2277,7 +2205,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict
@@ -2319,7 +2246,6 @@ dataflow:
   - run_mode
   - run_name
   - source_dir
-  - sprint_mode
   - task
   - upfront_claimed
   - verdict

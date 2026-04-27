@@ -18,7 +18,7 @@ def deep_workflow_section(skill_text: str) -> str:
         pytest.fail("'## Deep Analysis Mode Workflow' not found in investigate SKILL.md")
     search_from = start_idx + len("## Deep Analysis Mode Workflow")
     next_h2 = -1
-    for i in range(search_from, len(skill_text) - 2):
+    for i in range(search_from, len(skill_text)):
         if skill_text[i : i + 3] == "## " and skill_text[i - 1] == "\n":
             next_h2 = i
             break
@@ -27,7 +27,7 @@ def deep_workflow_section(skill_text: str) -> str:
     return skill_text[start_idx:]
 
 
-def _extract_step_section(deep_workflow_section: str, step_name: str) -> str:
+def extract_step_section(deep_workflow_section: str, step_name: str) -> str:
     """Helper to extract the text of a specific D-step subsection."""
     start = deep_workflow_section.find(f"### {step_name}")
     if start == -1:

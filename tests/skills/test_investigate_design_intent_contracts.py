@@ -8,14 +8,7 @@ REQ-INTENT-002: Adversarial Breakage subagent — challenges removal/change reco
 
 import pytest
 
-from autoskillit.core.paths import pkg_root
-from tests.skills.conftest import _extract_step_section
-
-
-@pytest.fixture(scope="module")
-def skill_text() -> str:
-    path = pkg_root() / "skills_extended" / "investigate" / "SKILL.md"
-    return path.read_text()
+from tests.skills.conftest import extract_step_section
 
 
 @pytest.fixture(scope="module")
@@ -66,12 +59,12 @@ def _strip_code_fences(text: str) -> str:
 
 @pytest.fixture(scope="module")
 def d3_section(deep_workflow_section: str) -> str:
-    return _extract_step_section(deep_workflow_section, "Step D3")
+    return extract_step_section(deep_workflow_section, "Step D3")
 
 
 @pytest.fixture(scope="module")
 def d5_section(deep_workflow_section: str) -> str:
-    return _extract_step_section(deep_workflow_section, "Step D5")
+    return extract_step_section(deep_workflow_section, "Step D5")
 
 
 def test_step2_has_design_intent_vector(step2_section: str) -> None:
@@ -150,13 +143,13 @@ def test_design_intent_section_positioned_after_similar_patterns(skill_text: str
 
 def test_d2_includes_design_intent_subagent(deep_workflow_section: str) -> None:
     """Step D2 must mention Design Intent as a parallel subagent."""
-    d2 = _extract_step_section(deep_workflow_section, "Step D2")
+    d2 = extract_step_section(deep_workflow_section, "Step D2")
     assert "Design Intent" in d2, "Step D2 must include 'Design Intent' as a parallel subagent"
 
 
 def test_d2_minimum_subagents_increased(deep_workflow_section: str) -> None:
     """Step D2 must specify a minimum of 5 parallel subagents."""
-    d2 = _extract_step_section(deep_workflow_section, "Step D2")
+    d2 = extract_step_section(deep_workflow_section, "Step D2")
     has_minimum = "minimum" in d2.lower()
     has_five = "5" in d2
     assert has_minimum and has_five, (
@@ -216,8 +209,8 @@ def test_d5_breakage_checks_revert_patterns(d5_section: str) -> None:
 
 def test_d5_breakage_distinct_from_d4(deep_workflow_section: str) -> None:
     """D4 is epistemological (hypothesis); D5 breakage is consequentialist (recommendation)."""
-    d4 = _extract_step_section(deep_workflow_section, "Step D4")
-    d5 = _extract_step_section(deep_workflow_section, "Step D5")
+    d4 = extract_step_section(deep_workflow_section, "Step D4")
+    d5 = extract_step_section(deep_workflow_section, "Step D5")
     # D4: epistemological — about hypothesis/root cause
     d4_epistemic = "hypothesis" in d4.lower() or "root cause" in d4.lower()
     # D5: consequentialist — about recommendation and what breaks

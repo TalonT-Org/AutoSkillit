@@ -783,3 +783,130 @@ async def test_check_repo_merge_state_error_includes_http_status(tool_ctx, monke
     result = json.loads(await check_repo_merge_state(branch="main"))
     assert "http_status" in result
     assert result["http_status"] == 403
+
+
+# ---------------------------------------------------------------------------
+# wait_for_ci auto_trigger
+# ---------------------------------------------------------------------------
+
+_NO_RUNS = {"conclusion": "no_runs", "run_id": None, "failed_jobs": []}
+_SUCCESS = {"conclusion": "success", "run_id": 42, "failed_jobs": []}
+
+
+def _sub(returncode: int, stdout: str = "", stderr: str = "") -> SubprocessResult:
+    return SubprocessResult(
+        returncode=returncode,
+        stdout=stdout,
+        stderr=stderr,
+        termination=TerminationReason.NATURAL_EXIT,
+        pid=0,
+    )
+
+
+class TestWaitForCiAutoTrigger:
+    """wait_for_ci auto_trigger=True: active webhook recovery."""
+
+    @pytest.mark.anyio
+    async def test_auto_trigger_default_false_does_not_fire(self, tool_ctx):
+        watcher = InMemoryCIWatcher(wait_result=_NO_RUNS)
+        tool_ctx.ci_watcher = watcher
+        tool_ctx.runner.push(_sub(0, "abc123\n"))
+
+        result = json.loads(await wait_for_ci("branch", cwd="/repo"))
+
+        assert len(watcher.wait_calls) == 1
+        assert len(tool_ctx.runner.call_args_list) == 1
+        assert result["conclusion"] == "no_runs"
+        assert "triggered" not in result
+
+    @pytest.mark.anyio
+    async def test_auto_trigger_fires_on_no_runs(self, tool_ctx):
+        watcher = InMemoryCIWatcher(wait_results=[_NO_RUNS, _SUCCESS])
+        tool_ctx.ci_watcher = watcher
+        tool_ctx.runner.push(_sub(0, "abc123\n"))  # git rev-parse HEAD (initial)
+        tool_ctx.runner.push(_sub(0, '{"mergeable":"MERGEABLE"}\n'))  # gh pr view
+        tool_ctx.runner.push(_sub(0))  # git commit --allow-empty
+        tool_ctx.runner.push(_sub(0, "def456\n"))  # git rev-parse HEAD (new)
+        tool_ctx.runner.push(_sub(0))  # git push --force-with-lease
+
+        result = json.loads(await wait_for_ci("feature-branch", cwd="/repo", auto_trigger=True))
+
+        assert len(watcher.wait_calls) == 2
+        assert watcher.wait_calls[1]["scope"].head_sha == "def456"
+        assert result["conclusion"] == "success"
+        assert result["triggered"] is True
+        assert result["head_sha"] == "def456"
+
+    @pytest.mark.anyio
+    async def test_auto_trigger_skips_on_conflicting_pr(self, tool_ctx):
+        watcher = InMemoryCIWatcher(wait_result=_NO_RUNS)
+        tool_ctx.ci_watcher = watcher
+        tool_ctx.runner.push(_sub(0, "abc123\n"))  # git rev-parse HEAD
+        tool_ctx.runner.push(_sub(0, '{"mergeable":"CONFLICTING"}\n'))  # gh pr view
+
+        result = json.loads(await wait_for_ci("branch", cwd="/repo", auto_trigger=True))
+
+        assert len(watcher.wait_calls) == 1
+        assert result["conclusion"] == "merge_conflict"
+        assert result["triggered"] is False
+
+    @pytest.mark.anyio
+    async def test_auto_trigger_proceeds_on_gh_view_failure(self, tool_ctx):
+        watcher = InMemoryCIWatcher(wait_results=[_NO_RUNS, _SUCCESS])
+        tool_ctx.ci_watcher = watcher
+        tool_ctx.runner.push(_sub(0, "abc123\n"))  # git rev-parse HEAD (initial)
+        tool_ctx.runner.push(_sub(1))  # gh pr view — CLI failure (no PR)
+        tool_ctx.runner.push(_sub(0))  # git commit --allow-empty
+        tool_ctx.runner.push(_sub(0, "def456\n"))  # git rev-parse HEAD (new)
+        tool_ctx.runner.push(_sub(0))  # git push --force-with-lease
+
+        result = json.loads(await wait_for_ci("branch", cwd="/repo", auto_trigger=True))
+
+        assert len(watcher.wait_calls) == 2
+        assert result["triggered"] is True
+
+    @pytest.mark.anyio
+    async def test_auto_trigger_commit_failure_returns_no_runs(self, tool_ctx):
+        watcher = InMemoryCIWatcher(wait_result=_NO_RUNS)
+        tool_ctx.ci_watcher = watcher
+        tool_ctx.runner.push(_sub(0, "abc123\n"))  # git rev-parse HEAD
+        tool_ctx.runner.push(_sub(0, '{"mergeable":"MERGEABLE"}\n'))  # gh pr view
+        tool_ctx.runner.push(
+            _sub(128, stderr="error: pre-commit hook rejected commit")
+        )  # git commit fails
+
+        result = json.loads(await wait_for_ci("branch", cwd="/repo", auto_trigger=True))
+
+        assert len(watcher.wait_calls) == 1
+        assert result["conclusion"] == "no_runs"
+        assert "triggered" not in result
+
+    @pytest.mark.anyio
+    async def test_auto_trigger_push_failure_returns_no_runs(self, tool_ctx):
+        watcher = InMemoryCIWatcher(wait_result=_NO_RUNS)
+        tool_ctx.ci_watcher = watcher
+        tool_ctx.runner.push(_sub(0, "abc123\n"))  # git rev-parse HEAD
+        tool_ctx.runner.push(_sub(0, '{"mergeable":"MERGEABLE"}\n'))  # gh pr view
+        tool_ctx.runner.push(_sub(0))  # git commit --allow-empty
+        tool_ctx.runner.push(_sub(0, "def456\n"))  # git rev-parse HEAD (new)
+        tool_ctx.runner.push(_sub(1, stderr="error: remote rejected"))  # git push fails
+
+        result = json.loads(await wait_for_ci("branch", cwd="/repo", auto_trigger=True))
+
+        assert len(watcher.wait_calls) == 1
+        assert result["conclusion"] == "no_runs"
+        assert "triggered" not in result
+
+    @pytest.mark.anyio
+    async def test_auto_trigger_result_includes_triggered_false_on_merge_conflict(self, tool_ctx):
+        watcher = InMemoryCIWatcher(wait_result=_NO_RUNS)
+        tool_ctx.ci_watcher = watcher
+        tool_ctx.runner.push(_sub(0, "abc123\n"))
+        tool_ctx.runner.push(_sub(0, '{"mergeable":"CONFLICTING"}\n'))
+
+        result = json.loads(await wait_for_ci("branch", cwd="/repo", auto_trigger=True))
+
+        assert result["conclusion"] == "merge_conflict"
+        assert result["triggered"] is False
+        assert result["run_id"] is None
+        assert result["failed_jobs"] == []

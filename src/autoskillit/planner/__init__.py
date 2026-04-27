@@ -7,22 +7,46 @@ from autoskillit.planner.manifests import (
     check_remaining,
     create_run_dir,
 )
+from autoskillit.planner.merge import (
+    build_plan_snapshot,
+    extract_item,
+    merge_files,
+    replace_item,
+)
 from autoskillit.planner.schema import (  # noqa: F401
     ASSIGNMENT_REQUIRED_KEYS,
     PHASE_REQUIRED_KEYS,
     WP_REQUIRED_KEYS,
+    AssignmentElaborated,
+    AssignmentShort,
+    PhaseElaborated,
+    PhaseShort,
+    PlanDocument,
     PlannerManifest,
     PlannerManifestItem,
+    WPElaborated,
+    WPShort,
 )
 from autoskillit.planner.validation import validate_plan
 
 __all__ = [
+    "check_remaining",
     "build_assignment_manifest",
     "build_wp_manifest",
-    "check_remaining",
     "compile_plan",
     "create_run_dir",
+    "validate_plan",
     "PlannerManifest",
     "PlannerManifestItem",
-    "validate_plan",
+    "merge_files",
+    "extract_item",
+    "replace_item",
+    "build_plan_snapshot",
+    "PlanDocument",
+    "PhaseShort",
+    "PhaseElaborated",
+    "AssignmentShort",
+    "AssignmentElaborated",
+    "WPShort",
+    "WPElaborated",
 ]

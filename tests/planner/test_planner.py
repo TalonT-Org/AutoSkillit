@@ -25,6 +25,17 @@ def test_planner_all_exports_callables() -> None:
         "PlannerManifest",
         "PlannerManifestItem",
         "create_run_dir",
+        "merge_files",
+        "extract_item",
+        "replace_item",
+        "build_plan_snapshot",
+        "PlanDocument",
+        "PhaseShort",
+        "PhaseElaborated",
+        "AssignmentShort",
+        "AssignmentElaborated",
+        "WPShort",
+        "WPElaborated",
     }
 
 

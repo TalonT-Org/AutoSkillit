@@ -30,22 +30,19 @@ ingredients:
 steps:
 
   init:
-    tool: run_cmd
+    tool: run_python
     with:
       step_name: "init"
-      command: >
-        mkdir -p
-        {{AUTOSKILLIT_TEMP}}/planner/phases
-        {{AUTOSKILLIT_TEMP}}/planner/assignments
-        {{AUTOSKILLIT_TEMP}}/planner/work_packages
-      cwd: "${{ inputs.source_dir }}"
+      callable: "autoskillit.planner.create_run_dir"
+    capture:
+      planner_dir: "${{ result.planner_dir }}"
     on_success: analyze
     on_failure: escalate_stop
 
   analyze:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:planner-analyze"
+      skill_command: "/autoskillit:planner-analyze ${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"
     on_success: extract_domain
     on_failure: escalate_stop
@@ -56,7 +53,7 @@ steps:
       skill_command: "/autoskillit:planner-extract-domain"
       cwd: "${{ inputs.source_dir }}"
       env:
-        PLANNER_ANALYSIS_FILE: "{{AUTOSKILLIT_TEMP}}/planner/analysis.json"
+        PLANNER_ANALYSIS_FILE: "${{ context.planner_dir }}/analysis.json"
     on_success: generate_phases
     on_failure: generate_phases
 
@@ -65,8 +62,8 @@ steps:
     with:
       skill_command: >
         /autoskillit:planner-generate-phases
-        {{AUTOSKILLIT_TEMP}}/planner/analysis.json
-        {{AUTOSKILLIT_TEMP}}/planner/domain_knowledge.md
+        ${{ context.planner_dir }}/analysis.json
+        ${{ context.planner_dir }}/domain_knowledge.md
       cwd: "${{ inputs.source_dir }}"
     capture:
       phase_manifest_path: "${{ result.phase_manifest_path }}"
@@ -79,7 +76,7 @@ steps:
       callable: "autoskillit.planner.check_remaining"
       manifest_path: "${{ context.phase_manifest_path }}"
       pass_name: "phases"
-      output_dir: "{{AUTOSKILLIT_TEMP}}/planner"
+      output_dir: "${{ context.planner_dir }}"
     capture:
       has_remaining: "${{ result.has_remaining }}"
       current_item_path: "${{ result.current_item_path }}"
@@ -92,7 +89,7 @@ steps:
   elaborate_phase:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:planner-elaborate-phase ${{ context.current_item_path }}"
+      skill_command: "/autoskillit:planner-elaborate-phase ${{ context.current_item_path }} ${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"
     optional_context_refs: [current_item_path]
     retries: 1
@@ -104,9 +101,9 @@ steps:
     tool: run_python
     with:
       callable: "autoskillit.planner.build_assignment_manifest"
-      phases_dir: "{{AUTOSKILLIT_TEMP}}/planner/phases"
-      assignments_dir: "{{AUTOSKILLIT_TEMP}}/planner/assignments"
-      output_dir: "{{AUTOSKILLIT_TEMP}}/planner"
+      phases_dir: "${{ context.planner_dir }}/phases"
+      assignments_dir: "${{ context.planner_dir }}/assignments"
+      output_dir: "${{ context.planner_dir }}"
     capture:
       assignment_manifest_path: "${{ result.manifest_path }}"
     on_success: check_assignments
@@ -118,7 +115,7 @@ steps:
       callable: "autoskillit.planner.check_remaining"
       manifest_path: "${{ context.assignment_manifest_path }}"
       pass_name: "assignments"
-      output_dir: "{{AUTOSKILLIT_TEMP}}/planner"
+      output_dir: "${{ context.planner_dir }}"
     capture:
       has_remaining: "${{ result.has_remaining }}"
       current_item_path: "${{ result.current_item_path }}"
@@ -131,7 +128,7 @@ steps:
   elaborate_assignment:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:planner-elaborate-assignment ${{ context.current_item_path }}"
+      skill_command: "/autoskillit:planner-elaborate-assignment ${{ context.current_item_path }} ${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"
     optional_context_refs: [current_item_path]
     retries: 1
@@ -143,9 +140,9 @@ steps:
     tool: run_python
     with:
       callable: "autoskillit.planner.build_wp_manifest"
-      assignments_dir: "{{AUTOSKILLIT_TEMP}}/planner/assignments"
-      work_packages_dir: "{{AUTOSKILLIT_TEMP}}/planner/work_packages"
-      output_dir: "{{AUTOSKILLIT_TEMP}}/planner"
+      assignments_dir: "${{ context.planner_dir }}/assignments"
+      work_packages_dir: "${{ context.planner_dir }}/work_packages"
+      output_dir: "${{ context.planner_dir }}"
     capture:
       wp_manifest_path: "${{ result.manifest_path }}"
     on_success: check_wps
@@ -157,7 +154,7 @@ steps:
       callable: "autoskillit.planner.check_remaining"
       manifest_path: "${{ context.wp_manifest_path }}"
       pass_name: "work_packages"
-      output_dir: "{{AUTOSKILLIT_TEMP}}/planner"
+      output_dir: "${{ context.planner_dir }}"
     capture:
       has_remaining: "${{ result.has_remaining }}"
       current_item_path: "${{ result.current_item_path }}"
@@ -170,7 +167,7 @@ steps:
   elaborate_wp:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:planner-elaborate-wp ${{ context.current_item_path }}"
+      skill_command: "/autoskillit:planner-elaborate-wp ${{ context.current_item_path }} ${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"
     optional_context_refs: [current_item_path]
     retries: 2
@@ -182,7 +179,7 @@ steps:
   reconcile_deps:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:planner-reconcile-deps {{AUTOSKILLIT_TEMP}}/planner"
+      skill_command: "/autoskillit:planner-reconcile-deps ${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"
     on_success: validate
     on_failure: escalate_stop
@@ -191,7 +188,7 @@ steps:
     tool: run_python
     with:
       callable: "autoskillit.planner.validate_plan"
-      output_dir: "{{AUTOSKILLIT_TEMP}}/planner"
+      output_dir: "${{ context.planner_dir }}"
     capture:
       verdict: "${{ result.verdict }}"
     on_success: check_verdict
@@ -209,8 +206,8 @@ steps:
     with:
       skill_command: >
         /autoskillit:planner-refine
-        {{AUTOSKILLIT_TEMP}}/planner/validation.json
-        {{AUTOSKILLIT_TEMP}}/planner
+        ${{ context.planner_dir }}/validation.json
+        ${{ context.planner_dir }}
       cwd: "${{ inputs.source_dir }}"
     retries: 2
     on_success: validate
@@ -221,7 +218,7 @@ steps:
     tool: run_python
     with:
       callable: "autoskillit.planner.compile_plan"
-      output_dir: "{{AUTOSKILLIT_TEMP}}/planner"
+      output_dir: "${{ context.planner_dir }}"
       task: "${{ inputs.task }}"
       source_dir: "${{ inputs.source_dir }}"
     on_success: done
@@ -230,7 +227,7 @@ steps:
   done:
     action: stop
     message: >
-      Planning complete. Plan artifacts written to {{AUTOSKILLIT_TEMP}}/planner/.
+      Planning complete. Plan artifacts written to ${{ context.planner_dir }}/.
       Use compile output to create GitHub issues and milestones.
 
   escalate_stop:

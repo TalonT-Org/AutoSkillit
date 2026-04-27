@@ -40,6 +40,25 @@ No positional arguments. The skill prompts interactively for workflow details.
 - Call `validate_recipe` after saving and fix any errors
 - Use "recipe" terminology (not "skill script")
 
+## Output Path Isolation (Required)
+
+Every recipe that produces output files MUST scope its write destinations through a
+per-run context variable captured in the `init` step:
+
+- Use `init` to create a unique timestamped directory and capture its path as
+  `${{ context.work_dir }}`, `${{ context.planner_dir }}`, or similar.
+- All downstream steps reference their output directories via
+  `${{ context.<var> }}/subdir/` — never via bare `{{AUTOSKILLIT_TEMP}}/name/...`.
+- The `non-unique-output-path` lint rule (severity: ERROR) rejects any recipe step
+  that uses a bare `{{AUTOSKILLIT_TEMP}}/` path without a context-variable prefix.
+
+**Valid patterns:**
+- `${{ context.planner_dir }}/phases/` (run-scoped via captured unique dir)
+- `${{ context.work_dir }}/output/` (clone-scoped)
+
+**Invalid pattern (rejected by lint):**
+- `{{AUTOSKILLIT_TEMP}}/myrecipe/data/` (bare — shared across runs, causes stale artifacts)
+
 ## How Scripts Are Loaded
 
 Recipes have their own discovery and invocation mechanism — completely

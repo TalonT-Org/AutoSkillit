@@ -1793,7 +1793,7 @@ skills:
     expected_output_patterns:
     - "phase_manifest_path\\s*=\\s*\\S+"
     pattern_examples:
-    - "phase_manifest_path = /tmp/autoskillit/planner/phases/phase_manifest.json\n%%ORDER_UP%%"
+    - "phase_manifest_path = /tmp/autoskillit/planner/run-20260101-120000/phases/phase_manifest.json\n%%ORDER_UP%%"
     write_behavior: always
   planner-elaborate-phase:
     inputs: []

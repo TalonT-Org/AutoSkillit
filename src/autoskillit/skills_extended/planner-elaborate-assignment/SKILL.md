@@ -25,13 +25,14 @@ Produces the `proposed_work_packages` array — the critical bridge to Pass 3.
 ## Arguments
 
 - **$1** — Absolute path to the context file written by `check_remaining`
+- **$2** — Absolute path to the run-scoped planner directory (e.g., `{{AUTOSKILLIT_TEMP}}/planner/run-YYYYMMDD-HHMMSS`)
 
 ## Critical Constraints
 
 **NEVER:**
 - Omit `proposed_work_packages` from the result — it is mandatory
 - Use freeform strings in WP entries — every entry must have `id_suffix`, `name`, `scope`, `estimated_files`
-- Write output outside `{{AUTOSKILLIT_TEMP}}/planner/assignments/`
+- Write output outside `$2/assignments/`
 - Make `estimated_files` exhaustive — it is guidance, not a contract
 
 **ALWAYS:**
@@ -87,7 +88,7 @@ For each WP, define:
 
 ### Step 4: Write assignment result
 
-Write to `{{AUTOSKILLIT_TEMP}}/planner/assignments/{id}_result.json` (relative to the current working directory):
+Write to `$2/assignments/{id}_result.json`:
 ```json
 {
   "id": "P1-A2",

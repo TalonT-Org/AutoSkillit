@@ -1,14 +1,31 @@
 from __future__ import annotations
 
 import json
+import os
+import secrets
 import time
 from datetime import UTC, datetime
 from pathlib import Path
 
 from autoskillit.core import atomic_write, get_logger, write_versioned_json
-from autoskillit.planner.schema import validate_assignment_result, validate_phase_result
+from autoskillit.planner.schema import (
+    RunDirResult,
+    validate_assignment_result,
+    validate_phase_result,
+)
 
 _logger = get_logger(__name__)
+
+
+def create_run_dir() -> RunDirResult:
+    temp = os.environ.get("AUTOSKILLIT_TEMP")
+    if not temp:
+        raise RuntimeError("AUTOSKILLIT_TEMP must be set before calling create_run_dir()")
+    stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+    run_dir = Path(temp) / "planner" / f"run-{stamp}-{secrets.token_hex(4)}"
+    for sub in ("phases", "assignments", "work_packages"):
+        (run_dir / sub).mkdir(parents=True, exist_ok=True)
+    return RunDirResult(planner_dir=str(run_dir))
 
 
 def _build_index_entry(result_data: dict[str, object]) -> dict[str, object]:

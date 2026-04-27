@@ -57,6 +57,8 @@ __all__ = [
     "RETIRED_FEATURES",
     "SKILL_FILE_ADVISORY_MAP",
     "SKILL_ACTIVATE_DEPS_REQUIRED",
+    "SOUS_CHEF_MANDATORY_SECTIONS",
+    "SOUS_CHEF_L2_SECTIONS",
 ]
 
 AUTOSKILLIT_INSTALLED_VERSION: str = version("autoskillit")
@@ -477,3 +479,29 @@ SKILL_ACTIVATE_DEPS_REQUIRED: dict[str, frozenset[str]] = {
     "implement-worktree": frozenset({"write-recipe"}),
     "implement-worktree-no-merge": frozenset({"write-recipe"}),
 }
+
+# Single registration point: adding a section here surfaces any path that fails to deliver it.
+SOUS_CHEF_MANDATORY_SECTIONS: tuple[str, ...] = (
+    "MULTI-PART PLAN SEQUENCING",
+    "SKILL_COMMAND FORMATTING",
+    "CONTEXT LIMIT ROUTING",
+    "AUDIT-IMPL ACROSS MULTI-GROUP PIPELINES",
+    "READING AND ACTING ON `plan_parts=` OUTPUT",
+    "MULTIPLE ISSUES",
+    "PARALLEL STEP SCHEDULING",
+    "EXECUTION MAP — GROUP DISPATCH",
+    "STEP NAME IMMUTABILITY",
+    "MERGE PHASE",
+    "QUOTA WAIT PROTOCOL",
+    "STEP EXECUTION IS NOT DISCRETIONARY",
+    "NARRATION SUPPRESSION",
+)
+
+# Strict subset of SOUS_CHEF_MANDATORY_SECTIONS delivered to L2 food truck sessions.
+SOUS_CHEF_L2_SECTIONS: tuple[str, ...] = (
+    "CONTEXT LIMIT ROUTING",
+    "STEP NAME IMMUTABILITY",
+    "MERGE PHASE",
+    "QUOTA WAIT PROTOCOL",
+)
+assert set(SOUS_CHEF_L2_SECTIONS).issubset(set(SOUS_CHEF_MANDATORY_SECTIONS))

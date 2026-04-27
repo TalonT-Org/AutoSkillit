@@ -154,6 +154,8 @@ from .types import SESSION_TYPE_ORCHESTRATOR as SESSION_TYPE_ORCHESTRATOR
 from .types import SESSION_TYPE_ORDER as SESSION_TYPE_ORDER
 from .types import SKILL_COMMAND_PREFIX as SKILL_COMMAND_PREFIX
 from .types import SKILL_TOOLS as SKILL_TOOLS
+from .types import SOUS_CHEF_L2_SECTIONS as SOUS_CHEF_L2_SECTIONS
+from .types import SOUS_CHEF_MANDATORY_SECTIONS as SOUS_CHEF_MANDATORY_SECTIONS
 from .types import SessionOutcome as SessionOutcome
 from .types import SessionSkillManager as SessionSkillManager
 from .types import SessionType as SessionType

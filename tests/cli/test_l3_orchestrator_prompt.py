@@ -8,6 +8,7 @@ import pathlib
 import pytest
 
 from autoskillit.cli._mcp_names import DIRECT_PREFIX, MARKETPLACE_PREFIX
+from autoskillit.core._type_constants import SOUS_CHEF_MANDATORY_SECTIONS
 from autoskillit.recipe.schema import CampaignDispatch, Recipe, RecipeKind
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small, pytest.mark.feature("fleet")]
@@ -82,20 +83,7 @@ class TestL3PromptPlaceholders:
 class TestL3SousChefDiscipline:
     def test_full_sous_chef_appended(self) -> None:
         prompt = _build()
-        for header in (
-            "MULTI-PART PLAN SEQUENCING",
-            "SKILL_COMMAND FORMATTING",
-            "CONTEXT LIMIT ROUTING",
-            "AUDIT-IMPL ACROSS MULTI-GROUP PIPELINES",
-            "READING AND ACTING ON",
-            "MULTIPLE ISSUES",
-            "PARALLEL STEP SCHEDULING",
-            "STEP NAME IMMUTABILITY",
-            "MERGE PHASE",
-            "QUOTA WAIT PROTOCOL",
-            "STEP EXECUTION IS NOT DISCRETIONARY",
-            "NARRATION SUPPRESSION",
-        ):
+        for header in SOUS_CHEF_MANDATORY_SECTIONS:
             assert header in prompt, f"Missing sous-chef section: {header}"
 
     def test_graceful_degradation_on_missing_skill_md(

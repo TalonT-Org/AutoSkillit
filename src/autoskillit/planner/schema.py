@@ -47,7 +47,7 @@ class PlannerManifestItem(TypedDict):
     name: str
     status: str
     result_path: str | None
-    metadata: dict
+    metadata: dict[str, Any]
 
 
 class PlannerManifest(TypedDict):

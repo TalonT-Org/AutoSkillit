@@ -188,6 +188,7 @@ class RecipeInfo:
     content: str | None = None  # raw YAML text; None when set via parse_recipe_metadata
     kind: RecipeKind = RecipeKind.STANDARD
     experimental: bool = False
+    requires_packs: list[str] = field(default_factory=list)
 
 
 @dataclass

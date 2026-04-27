@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core.types import RecipeSource
+from autoskillit.core.types import CORE_PACKS, RecipeSource
 from autoskillit.recipe.io import (
     _parse_recipe,
     _parse_step,
@@ -488,30 +488,48 @@ class TestListRecipes:
         assert len(recipes) > 0
         assert all(r.source.value in ("project", "builtin") for r in recipes)
 
-    def test_list_recipes_project_appear_before_bundled(self, tmp_path: Path) -> None:
-        """Project recipes must appear before bundled recipes in list_recipes() output."""
+    def test_list_recipes_bundled_appear_before_project(self, tmp_path: Path) -> None:
+        """Non-experimental BUILTIN recipes must appear before PROJECT recipes."""
         recipes_dir = tmp_path / ".autoskillit" / "recipes"
         recipes_dir.mkdir(parents=True)
         (recipes_dir / "aardvark.yaml").write_text(
             "name: aardvark\ndescription: test\nsteps: {}\n"
         )
         result = list_recipes(tmp_path)
-        sources = [r.source for r in result.items if not r.experimental]
-        seen_builtin = False
-        for source in sources:
-            if source == RecipeSource.BUILTIN:
-                seen_builtin = True
-            elif source == RecipeSource.PROJECT:
-                assert not seen_builtin, (
-                    "A PROJECT recipe appeared after a BUILTIN recipe — ordering is broken"
+        non_exp = [r for r in result.items if not r.experimental]
+        seen_project = False
+        for r in non_exp:
+            if r.source == RecipeSource.PROJECT:
+                seen_project = True
+            elif r.source == RecipeSource.BUILTIN:
+                assert not seen_project, (
+                    "A BUILTIN recipe appeared after a PROJECT recipe — ordering is broken"
                 )
 
-    def test_list_recipes_alphabetical_within_bundled_tier(self, tmp_path: Path) -> None:
-        """Bundled recipes must be sorted alphabetically by name within their tier."""
+    def test_list_recipes_alphabetical_within_bundled_tiers(self, tmp_path: Path) -> None:
+        """Each bundled tier (core and add-on) must be alphabetically sorted within its tier."""
+        from autoskillit.core._type_constants import CORE_PACKS
+
         result = list_recipes(tmp_path)
-        builtin_names = [r.name for r in result.items if r.source == RecipeSource.BUILTIN]
-        assert builtin_names == sorted(builtin_names), (
-            f"Bundled recipes not in alphabetical order: {builtin_names}"
+        core_names = [
+            r.name
+            for r in result.items
+            if r.source == RecipeSource.BUILTIN
+            and not r.experimental
+            and all(p in CORE_PACKS for p in r.requires_packs)
+        ]
+        addon_names = [
+            r.name
+            for r in result.items
+            if r.source == RecipeSource.BUILTIN
+            and not r.experimental
+            and not all(p in CORE_PACKS for p in r.requires_packs)
+        ]
+        assert core_names == sorted(core_names), (
+            f"Core bundled recipes not in alphabetical order: {core_names}"
+        )
+        assert addon_names == sorted(addon_names), (
+            f"Add-on bundled recipes not in alphabetical order: {addon_names}"
         )
 
     def test_list_recipes_alphabetical_within_project_tier(self, tmp_path: Path) -> None:
@@ -582,8 +600,10 @@ class TestListRecipes:
         r = next(r for r in result.items if r.name == "research")
         assert r.experimental is True
 
-    def test_list_recipes_project_before_bundled_before_experimental(self, tmp_path: Path) -> None:
-        """list_recipes must order: PROJECT → BUILTIN-non-experimental → experimental."""
+    def test_list_recipes_bundled_before_family_before_experimental(self, tmp_path: Path) -> None:
+        """list_recipes must order: BUILTIN-non-experimental → PROJECT → experimental."""
+        from autoskillit.core._type_constants import CORE_PACKS
+
         recipe_dir = tmp_path / ".autoskillit" / "recipes"
         recipe_dir.mkdir(parents=True)
         (recipe_dir / "proj.yaml").write_text("name: proj\ndescription: p\nsteps: {}\n")
@@ -594,18 +614,19 @@ class TestListRecipes:
         ranks = []
         for r in result.items:
             if r.experimental:
-                rank = 2
+                rank = 3
             elif r.source == RecipeSource.PROJECT:
+                rank = 2
+            elif all(p in CORE_PACKS for p in r.requires_packs):
                 rank = 0
             else:
                 rank = 1
             if not ranks or ranks[-1] != rank:
                 ranks.append(rank)
         assert ranks == sorted(ranks), f"Groups interleaved: {ranks}"
-        assert 0 in ranks and 1 in ranks
-        assert ranks.index(0) < ranks.index(1)
-        assert 2 in ranks
-        assert ranks[-1] == 2
+        # experimental must be last
+        assert 3 in ranks
+        assert ranks[-1] == 3
 
     def test_list_recipes_alphabetical_within_experimental_group(self, tmp_path: Path) -> None:
         """Experimental recipes must be sorted alphabetically by name within their group."""
@@ -634,6 +655,50 @@ class TestListRecipes:
         ]
         if non_exp_builtin_indices and exp_builtin_indices:
             assert max(non_exp_builtin_indices) < min(exp_builtin_indices)
+
+    def test_recipe_info_has_requires_packs_field(self, tmp_path: Path) -> None:
+        """RecipeInfo must have a requires_packs field defaulting to empty list."""
+        from autoskillit.recipe.schema import RecipeInfo
+
+        r = RecipeInfo(
+            name="x", description="d", source=RecipeSource.BUILTIN, path=tmp_path / "x.yaml"
+        )
+        assert r.requires_packs == []
+
+    def test_requires_packs_forwarded_to_recipe_info(self, tmp_path: Path) -> None:
+        """_collect_recipes must populate RecipeInfo.requires_packs from YAML."""
+        recipe_dir = tmp_path / ".autoskillit" / "recipes"
+        recipe_dir.mkdir(parents=True)
+        (recipe_dir / "custom.yaml").write_text(
+            "name: custom\ndescription: d\nrequires_packs: [github, ci]\nsteps: {}\n"
+        )
+        result = list_recipes(tmp_path)
+        r = next(r for r in result.items if r.name == "custom")
+        assert r.requires_packs == ["github", "ci"]
+
+    def test_core_bundled_before_addon_bundled(self, tmp_path: Path) -> None:
+        """Core bundled recipes (CORE_PACKS only) must sort before add-on bundled recipes."""
+        result = list_recipes(tmp_path)
+        core_indices = [
+            i
+            for i, r in enumerate(result.items)
+            if r.source == RecipeSource.BUILTIN
+            and not r.experimental
+            and r.requires_packs
+            and all(p in CORE_PACKS for p in r.requires_packs)
+        ]
+        addon_indices = [
+            i
+            for i, r in enumerate(result.items)
+            if r.source == RecipeSource.BUILTIN
+            and not r.experimental
+            and r.requires_packs
+            and not all(p in CORE_PACKS for p in r.requires_packs)
+        ]
+        if core_indices and addon_indices:
+            assert max(core_indices) < min(addon_indices), (
+                "Core bundled recipes must appear before add-on bundled recipes"
+            )
 
 
 class TestBuiltinRecipesDir:

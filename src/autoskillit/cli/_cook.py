@@ -13,15 +13,7 @@ from autoskillit.cli._terminal import terminal_guard
 
 def _print_recipes_list() -> None:
     """Print available recipes grouped by category to stdout."""
-    from autoskillit.core import RecipeSource
-    from autoskillit.recipe import list_recipes
-
-    _GROUP_LABELS = {0: "Family Recipes", 1: "Bundled Recipes", 2: "Experimental"}
-
-    def _rank(r: object) -> int:
-        if r.experimental:  # type: ignore[attr-defined]
-            return 2
-        return 0 if r.source == RecipeSource.PROJECT else 1  # type: ignore[attr-defined]
+    from autoskillit.recipe import GROUP_LABELS, group_rank, list_recipes
 
     recipes = list_recipes(Path.cwd()).items
     if not recipes:
@@ -32,10 +24,10 @@ def _print_recipes_list() -> None:
     src_w = max(len(r.source) for r in recipes)
     current_rank = -1
     for r in recipes:
-        rank = _rank(r)
+        rank = group_rank(r)
         if rank != current_rank:
             current_rank = rank
-            print(f"\n{_GROUP_LABELS[rank]}")
+            print(f"\n{GROUP_LABELS.get(rank, str(rank))}")
             print(f"{'NAME':<{name_w}}  {'SOURCE':<{src_w}}  DESCRIPTION")
             print(f"{'-' * name_w}  {'-' * src_w}  {'-' * 11}")
         print(f"{r.name:<{name_w}}  {r.source:<{src_w}}  {r.description}")

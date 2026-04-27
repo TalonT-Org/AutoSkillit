@@ -1121,6 +1121,7 @@ class TestCLIOrder:
             source=RecipeSource.BUILTIN,
             path=tmp_path / "impl.yaml",
             experimental=False,
+            requires_packs=["github"],
         )
         monkeypatch.setattr(
             "autoskillit.recipe.list_recipes",

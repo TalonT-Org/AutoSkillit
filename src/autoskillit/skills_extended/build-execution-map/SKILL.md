@@ -27,8 +27,9 @@ into dependency-ordered dispatch groups.
 
 Space-separated issue numbers (required, minimum 2), plus optional flags:
 - `--base-ref <branch>` — base branch to compare against (default: `main`)
+- `--assess-review-approach` — assess whether each issue would benefit from a review-approach research pass before implementation (default: inactive)
 
-**Example:** `101 103 102 --base-ref main`
+**Example:** `101 103 102 --base-ref main --assess-review-approach`
 
 ## Critical Constraints
 
@@ -56,7 +57,9 @@ Space-separated issue numbers (required, minimum 2), plus optional flags:
 ### Step 0 — Parse Arguments
 
 Accept issue numbers as space-separated or comma-separated values. Parse `--base-ref`
-if present (default: `main`). Validate the issue count:
+if present (default: `main`). Parse `--assess-review-approach` if present (default:
+inactive). When this flag is active, Step 2 will additionally assess each issue for
+review-approach benefit. Validate the issue count:
 - **Zero issues**: abort immediately with `"Error: build-execution-map requires at least 1 issue number"` and exit non-zero.
 - **One issue**: emit a warning and write a trivial single-group map (single issue always gets `parallel: false`).
 - **Two or more issues**: proceed to Step 0.5.
@@ -104,6 +107,43 @@ Constraints:
 - Cross-references in "Files NOT to Change", code blocks, or diagnostic sections are context,
   not dependency signals
 
+#### Review-Approach Benefit Assessment (conditional)
+
+When `--assess-review-approach` is active, perform an additional assessment for each issue
+after the pairwise parallelism analysis. This assessment determines whether the issue would
+meaningfully benefit from a `review-approach` research pass before implementation.
+
+**First**, read the `review-approach` skill definition at
+`src/autoskillit/skills_extended/review-approach/SKILL.md` to ground your understanding of
+what that skill actually provides — external web research on modern solutions, approaches,
+and trade-offs. Do not rely on a hardcoded heuristic list; use the skill definition as the
+primary reference for what review-approach offers.
+
+**Then**, for each issue, evaluate whether the problem domain would benefit from that research:
+
+Signals that review-approach would benefit:
+- Issue involves integrating an unfamiliar external library or API
+- Issue proposes a design decision with multiple viable architectural approaches
+- Issue references emerging patterns, standards, or technologies the codebase hasn't used
+- Issue body contains open questions about *how* to approach the problem
+- Issue requires understanding trade-offs between competing solutions
+
+Signals that review-approach is NOT needed:
+- Issue is a well-scoped bug fix with a clear root cause
+- Issue is internal refactoring following established codebase patterns
+- Issue adds a feature using patterns already present in the codebase
+- Issue is a documentation update or configuration change
+- Issue body already contains a fully specified implementation approach
+
+These heuristics are illustrative. Use judgment informed by the actual `review-approach`
+SKILL.md to decide each issue.
+
+For each issue, produce:
+- `review_approach_recommended`: `true` if the issue would benefit, `false` otherwise
+- `review_approach_reasoning`: one-sentence explanation of why or why not
+
+When `--assess-review-approach` is NOT active, omit these fields entirely from the output.
+
 ### Step 3 — Assemble Groups and Merge Order
 
 Using the pairwise assessments from Step 2, partition issues into dispatch groups:
@@ -140,6 +180,8 @@ working directory):
    - Group assignments table (group | parallel | issues)
    - Merge order list
    - Any warnings (single-issue shortcut, low-confidence overrides, etc.)
+   - Review-approach recommendations table (issue | recommended | reasoning) — only when
+     `--assess-review-approach` is active
 
 Emit structured output tokens as the last lines of text output:
 ```
@@ -147,7 +189,14 @@ execution_map = {absolute_path_to_json}
 execution_map_report = {absolute_path_to_report}
 group_count = {int}
 total_issues = {int}
+review_approach_candidates = {comma-separated issue numbers}
 ```
+
+The `review_approach_candidates` token is conditional: emit it only when
+`--assess-review-approach` is active AND at least one issue has
+`review_approach_recommended: true`. The value is a comma-separated list of issue numbers
+(e.g., `1155,1158`). When no issues are recommended or the flag is inactive, omit this
+token entirely.
 
 ## Output JSON Schema
 
@@ -185,3 +234,16 @@ total_issues = {int}
   ]
 }
 ```
+
+When `--assess-review-approach` is active, each issue object gains two additional fields:
+
+```json
+{
+  "number": 1155,
+  "title": "...",
+  "review_approach_recommended": true,
+  "review_approach_reasoning": "Issue proposes a new caching layer with multiple viable strategies. External research would surface current best practices and library maturity."
+}
+```
+
+When the flag is inactive, these fields are omitted entirely (not set to defaults).

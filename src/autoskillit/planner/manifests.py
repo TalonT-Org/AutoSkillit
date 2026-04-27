@@ -308,6 +308,9 @@ def build_wp_manifest(
         work_packages = assign_data.get("proposed_work_packages", [])
         for wp_seq, wp in enumerate(work_packages, start=1):
             wp_id = f"P{phase_number}-A{assignment_number}-WP{wp_seq}"
+            est_files = wp.get("estimated_files", [])
+            if not isinstance(est_files, list):
+                est_files = []
             items.append(
                 {
                     "id": wp_id,
@@ -316,7 +319,7 @@ def build_wp_manifest(
                     "result_path": None,
                     "metadata": {
                         "scope": wp.get("scope", ""),
-                        "estimated_files": wp.get("estimated_files", []),
+                        "estimated_files": est_files,
                     },
                 }
             )
@@ -383,7 +386,10 @@ def build_phase_wp_manifest(
             phase_buckets[pn]["wp_ids"].append(wp_id)
             phase_buckets[pn]["wp_names"].append(wp.get("name", ""))
             phase_buckets[pn]["wp_scopes"].append(wp.get("scope", ""))
-            phase_buckets[pn]["wp_estimated_files"].append(wp.get("estimated_files", []))
+            est_files = wp.get("estimated_files", [])
+            if not isinstance(est_files, list):
+                est_files = []
+            phase_buckets[pn]["wp_estimated_files"].append(est_files)
 
     items = []
     for pn in sorted(phase_buckets):

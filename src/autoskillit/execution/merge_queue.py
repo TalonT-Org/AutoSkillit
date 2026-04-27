@@ -13,7 +13,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, TypedDict, assert_never
+from typing import Any, Literal, TypedDict, assert_never
 
 import httpx
 
@@ -786,6 +786,31 @@ def _push_trigger_applies_to_branch(text: str, branch: str) -> bool:
     return True
 
 
+def _has_merge_group_trigger(text: str) -> bool:
+    """Return True if the workflow declares a merge_group trigger.
+
+    Parses YAML to inspect the on: key rather than relying on substring
+    matching, which can false-positive on comments or shell strings.
+    Falls back to substring heuristic on YAML parse failure.
+    """
+    try:
+        parsed = load_yaml(text)
+    except YAMLError:
+        return "merge_group" in text
+    if not isinstance(parsed, dict):
+        return False
+    # PyYAML (YAML 1.1) parses the bare key `on` as boolean True.
+    # Accept both to be safe.
+    on_value = parsed.get(True, parsed.get("on"))
+    if on_value == "merge_group":
+        return True
+    if isinstance(on_value, list):
+        return "merge_group" in on_value
+    if isinstance(on_value, dict):
+        return "merge_group" in on_value
+    return False
+
+
 _RATE_LIMIT_MAX_ATTEMPTS = 3
 _RATE_LIMIT_SECONDARY_MARKER = "secondary rate limit"
 
@@ -835,10 +860,9 @@ async def fetch_repo_merge_state(
     - ``merge_group_trigger``: at least one CI workflow declares the
       ``merge_group`` event trigger (bool).
     - ``auto_merge_available``: the repository has auto-merge enabled (bool).
-    - ``ci_event``: the recommended CI event to poll — ``"push"`` when any
-      workflow declares a push trigger, ``"merge_group"`` when only merge_group
-      triggers are found, or ``None`` when no push/merge_group triggers exist
-      (ci.py scope.event=None matches any trigger).
+    - ``ci_event``: ``"push"`` when any workflow declares a push trigger
+      that fires for the given branch, or ``None`` otherwise (match-any —
+      ci.py scope.event=None lets head_sha provide correctness).
 
     Null-handling:
     - ``mergeQueue is null`` → ``queue_available: False``  (no queue)
@@ -912,18 +936,12 @@ async def fetch_repo_merge_state(
             text = blob.get("text")
             if text is None:
                 continue  # binary or oversized blob — skip
-            if "merge_group" in text:
+            if _has_merge_group_trigger(text):
                 merge_group_trigger = True
             if _push_trigger_applies_to_branch(text, branch):
                 has_push_trigger = True
 
-    # Derive ci_event: prefer push for historical compatibility when both are present.
-    if has_push_trigger:
-        ci_event: str | None = "push"
-    elif merge_group_trigger:
-        ci_event = "merge_group"
-    else:
-        ci_event = None  # schedule-only or workflow_dispatch-only: match any
+    ci_event: Literal["push"] | None = "push" if has_push_trigger else None
 
     return {
         "queue_available": queue_available,

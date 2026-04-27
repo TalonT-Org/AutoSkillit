@@ -1,8 +1,11 @@
-"""Unit tests for _push_trigger_applies_to_branch — the branch-aware push trigger parser."""
+"""Unit tests for _push_trigger_applies_to_branch and _has_merge_group_trigger."""
 
 import pytest
 
-from autoskillit.execution.merge_queue import _push_trigger_applies_to_branch
+from autoskillit.execution.merge_queue import (
+    _has_merge_group_trigger,
+    _push_trigger_applies_to_branch,
+)
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -58,3 +61,37 @@ def test_no_push_trigger_returns_false():
 def test_yaml_parse_failure_falls_back_to_heuristic_safe():
     # Invalid YAML that doesn't contain any push trigger substrings
     assert _push_trigger_applies_to_branch(": [\n", "main") is False
+
+
+# ---------------------------------------------------------------------------
+# _has_merge_group_trigger tests
+# ---------------------------------------------------------------------------
+
+
+def test_merge_group_in_on_list():
+    assert _has_merge_group_trigger("on: [push, merge_group]") is True
+
+
+def test_merge_group_as_dict_key():
+    assert _has_merge_group_trigger("on:\n  merge_group:\n  push:") is True
+
+
+def test_merge_group_scalar():
+    assert _has_merge_group_trigger("on: merge_group") is True
+
+
+def test_no_merge_group_trigger():
+    assert _has_merge_group_trigger("on: [push, pull_request]") is False
+
+
+def test_merge_group_in_comment_only():
+    assert _has_merge_group_trigger("# merge_group\non: push") is False
+
+
+def test_merge_group_in_shell_string():
+    text = "on: push\njobs:\n  test:\n    steps:\n      - run: echo merge_group"
+    assert _has_merge_group_trigger(text) is False
+
+
+def test_yaml_parse_failure_falls_back_to_heuristic():
+    assert _has_merge_group_trigger("{invalid yaml merge_group") is True

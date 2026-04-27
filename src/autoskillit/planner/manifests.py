@@ -54,9 +54,17 @@ def check_remaining(manifest_path: str, pass_name: str, output_dir: str) -> dict
             f" (got {type(items).__name__})"
         )
 
+    result_dir_str = manifest.get("result_dir")
+    if not result_dir_str:
+        raise ValueError(
+            f"Manifest at {manifest_file} is missing required 'result_dir' field. "
+            f"Re-run build_assignment_manifest or build_wp_manifest to regenerate."
+        )
+    result_dir = Path(result_dir_str)
+
     for item in items:
         if item["status"] == "processing":
-            result_path = out_dir / f"{item['id']}_result.json"
+            result_path = result_dir / f"{item['id']}_result.json"
             if not result_path.exists():
                 for _attempt in range(2):
                     time.sleep(1)
@@ -103,11 +111,12 @@ def check_remaining(manifest_path: str, pass_name: str, output_dir: str) -> dict
 def build_assignment_manifest(
     phases_dir: str, assignments_dir: str, output_dir: str
 ) -> dict[str, str]:
-    if not phases_dir or not output_dir:
-        raise ValueError("phases_dir and output_dir must not be empty")
+    if not phases_dir or not assignments_dir or not output_dir:
+        raise ValueError("phases_dir, assignments_dir, and output_dir must not be empty")
 
     phases_path = Path(phases_dir)
     out_dir = Path(output_dir)
+    assign_dir = Path(assignments_dir).resolve()
 
     phase_files = sorted(phases_path.glob("*_result.json"))
     parsed_phases = []
@@ -143,6 +152,7 @@ def build_assignment_manifest(
 
     manifest = {
         "pass_name": "assignments",
+        "result_dir": str(assign_dir),
         "created_at": datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "items": items,
     }
@@ -151,12 +161,15 @@ def build_assignment_manifest(
     return {"manifest_path": str(manifest_path), "total_count": str(len(items))}
 
 
-def build_wp_manifest(assignments_dir: str, output_dir: str) -> dict[str, str]:
+def build_wp_manifest(
+    assignments_dir: str, output_dir: str, work_packages_dir: str = ""
+) -> dict[str, str]:
     if not assignments_dir or not output_dir:
         raise ValueError("assignments_dir and output_dir must not be empty")
 
     assign_path = Path(assignments_dir)
     out_dir = Path(output_dir)
+    wp_dir = Path(work_packages_dir).resolve() if work_packages_dir else out_dir / "work_packages"
 
     assign_files = list(assign_path.glob("*_result.json"))
     parsed_assignments = []
@@ -196,6 +209,7 @@ def build_wp_manifest(assignments_dir: str, output_dir: str) -> dict[str, str]:
 
     manifest = {
         "pass_name": "work_packages",
+        "result_dir": str(wp_dir),
         "created_at": datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "items": items,
     }

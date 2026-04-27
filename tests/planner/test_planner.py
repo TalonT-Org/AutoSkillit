@@ -20,6 +20,8 @@ def test_planner_all_exports_callables() -> None:
         "build_wp_manifest",
         "validate_plan",
         "compile_plan",
+        "PlannerManifest",
+        "PlannerManifestItem",
     }
 
 

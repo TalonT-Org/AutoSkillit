@@ -719,3 +719,35 @@ class TestDispatchFoodTruckExecution:
 
         result = json.loads(result_json)
         assert result["success"] is True
+
+
+@pytest.mark.anyio
+async def test_dispatch_food_truck_marketplace_install_succeeds(tool_ctx_marketplace, monkeypatch):
+    """dispatch_food_truck does not raise when plugin_source is MarketplaceInstall.
+
+    This test was impossible before the fix — it would raise ValueError.
+    """
+    from autoskillit.fleet._api import execute_dispatch
+
+    tool_ctx_marketplace.fleet_lock = asyncio.Lock()
+    repo = InMemoryRecipeRepository()
+    recipe_info = _make_recipe_info("test-recipe")
+    repo.add_recipe("test-recipe", recipe_info)
+    repo.add_full_recipe(recipe_info.path, _make_standard_recipe("test-recipe", ["task"]))
+    tool_ctx_marketplace.recipes = repo
+    tool_ctx_marketplace.executor = InMemoryHeadlessExecutor()
+
+    result = json.loads(
+        await execute_dispatch(
+            tool_ctx=tool_ctx_marketplace,
+            recipe="test-recipe",
+            task="t",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+        )
+    )
+    assert result["success"] is True

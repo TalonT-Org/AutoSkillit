@@ -9,6 +9,7 @@ import pytest
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import GitHubFetcher
+from autoskillit.core._type_plugin_source import DirectInstall
 from autoskillit.pipeline.audit import DefaultAuditLog, FailureRecord
 from autoskillit.pipeline.context import ToolContext
 from autoskillit.pipeline.gate import DefaultGateState
@@ -26,11 +27,12 @@ def test_tool_context_fields_accessible(tmp_path):
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=DefaultGateState(enabled=True),
-        plugin_dir=str(tmp_path),
+        plugin_source=DirectInstall(plugin_dir=tmp_path),
         runner=None,
     )
     assert ctx.gate.enabled is True
-    assert ctx.plugin_dir == str(tmp_path)
+    assert isinstance(ctx.plugin_source, DirectInstall)
+    assert ctx.plugin_source.plugin_dir == tmp_path
 
 
 def test_tool_context_audit_isolation():
@@ -41,7 +43,7 @@ def test_tool_context_audit_isolation():
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=DefaultGateState(),
-        plugin_dir="/a",
+        plugin_source=DirectInstall(plugin_dir=Path("/a")),
         runner=None,
     )
     ctx_b = ToolContext(
@@ -50,7 +52,7 @@ def test_tool_context_audit_isolation():
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=DefaultGateState(),
-        plugin_dir="/b",
+        plugin_source=DirectInstall(plugin_dir=Path("/b")),
         runner=None,
     )
     ctx_a.audit.record_failure(
@@ -76,7 +78,7 @@ def test_gate_state_replacement():
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=DefaultGateState(enabled=False),
-        plugin_dir="/x",
+        plugin_source=DirectInstall(plugin_dir=Path("/x")),
         runner=None,
     )
     assert ctx.gate.enabled is False
@@ -92,7 +94,7 @@ def test_toolcontext_new_optional_fields_default_none(tmp_path):
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=DefaultGateState(enabled=True),
-        plugin_dir=str(tmp_path),
+        plugin_source=DirectInstall(plugin_dir=tmp_path),
         runner=None,
     )
     assert ctx.executor is None
@@ -184,14 +186,13 @@ def test_recipe_repository_protocol_has_rich_methods() -> None:
 
 def _make_ctx(tmp_path: Path) -> ToolContext:
     """Helper: minimal ToolContext with no optional fields."""
-    plugin_dir = str(tmp_path)
     return ToolContext(
         config=AutomationConfig(),
         audit=DefaultAuditLog(),
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=DefaultGateState(enabled=True),
-        plugin_dir=plugin_dir,
+        plugin_source=DirectInstall(plugin_dir=tmp_path),
         runner=None,
     )
 
@@ -242,7 +243,7 @@ async def test_toolcontext_default_background_wired_with_audit(tmp_path):
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=DefaultGateState(),
-        plugin_dir=str(tmp_path),
+        plugin_source=DirectInstall(plugin_dir=tmp_path),
         runner=None,
     )
     assert isinstance(ctx.background, DefaultBackgroundSupervisor)

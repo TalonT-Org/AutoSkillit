@@ -20,7 +20,10 @@ class DirectInstall:
 
 @dataclass(frozen=True)
 class MarketplaceInstall:
-    """Plugin loaded via Claude marketplace. cache_path is the installPath from installed_plugins.json."""
+    """Plugin loaded via Claude marketplace.
+
+    cache_path is the installPath field from installed_plugins.json.
+    """
 
     cache_path: Path
 

@@ -460,23 +460,37 @@ def test_gh_cli_token_not_called_during_make_context(monkeypatch):
     assert gh_calls == [], f"_gh_cli_token() called during make_context: {gh_calls}"
 
 
-def test_make_context_sets_plugin_dir_none_when_plugin_installed(
-    monkeypatch: pytest.MonkeyPatch,
+def test_make_context_marketplace_install_yields_marketplace_plugin_source(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """make_context() sets plugin_dir=None when marketplace plugin is installed."""
+    """make_context() with a marketplace-detected install produces MarketplaceInstall."""
+    from autoskillit.core._type_plugin_source import MarketplaceInstall
+
+    fake_cache = tmp_path / "cache" / "autoskillit-local" / "autoskillit" / "1.0.0"
+    fake_cache.mkdir(parents=True)
+
     monkeypatch.setattr("autoskillit.server._factory._check_plugin_installed", lambda: True)
+    monkeypatch.setattr(
+        "autoskillit.server._factory._resolve_marketplace_cache_path",
+        lambda: fake_cache,
+    )
+
     ctx = make_context(AutomationConfig(), runner=None)
-    assert ctx.plugin_dir is None
+    assert isinstance(ctx.plugin_source, MarketplaceInstall)
+    assert ctx.plugin_source.cache_path == fake_cache
 
 
-def test_make_context_sets_plugin_dir_when_plugin_not_installed(
-    monkeypatch: pytest.MonkeyPatch,
+def test_make_context_direct_install_yields_direct_plugin_source(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """make_context() sets plugin_dir to package root when plugin is not installed."""
+    """make_context() with a direct install produces DirectInstall with pkg_root."""
+    from autoskillit.core._type_plugin_source import DirectInstall
+
     monkeypatch.setattr("autoskillit.server._factory._check_plugin_installed", lambda: False)
-    ctx = make_context(AutomationConfig(), runner=None)
-    assert ctx.plugin_dir is not None
-    assert ctx.plugin_dir != ""
+
+    ctx = make_context(AutomationConfig(), runner=None, plugin_dir=str(tmp_path))
+    assert isinstance(ctx.plugin_source, DirectInstall)
+    assert ctx.plugin_source.plugin_dir == tmp_path
 
 
 def test_make_context_sets_token_factory(tmp_path):

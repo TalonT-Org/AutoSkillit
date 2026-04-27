@@ -19,7 +19,7 @@ def _has_pytestmark_cli(path: Path) -> bool:
             for target in node.targets:
                 if isinstance(target, ast.Name) and target.id == "pytestmark":
                     src = ast.unparse(node.value)
-                    return 'layer("cli")' in src
+                    return 'layer("cli")' in src or "layer('cli')" in src
     return False
 
 

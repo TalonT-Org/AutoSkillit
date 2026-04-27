@@ -42,9 +42,7 @@ def test_remediation_depth_ingredient_defaults_to_standard(remediation_recipe: R
 def test_remediation_depth_ingredient_is_string_type(remediation_recipe: Recipe) -> None:
     """The depth ingredient description must reference depth or mode."""
     ing = remediation_recipe.ingredients["depth"]
-    assert ing.description is not None, (
-        "remediation.yaml depth ingredient must have a description"
-    )
+    assert ing.description is not None, "remediation.yaml depth ingredient must have a description"
     desc_lower = ing.description.lower()
     assert "depth" in desc_lower or "mode" in desc_lower, (
         "remediation.yaml depth ingredient description must contain 'depth' or 'mode'"
@@ -92,6 +90,5 @@ def test_remediation_investigate_step_has_on_context_limit(remediation_recipe: R
         "release_issue_failure when the deep mode session exhausts context"
     )
     assert step.on_context_limit == "release_issue_failure", (
-        "remediation.yaml investigate step on_context_limit must route to "
-        "'release_issue_failure'"
+        "remediation.yaml investigate step on_context_limit must route to 'release_issue_failure'"
     )

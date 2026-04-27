@@ -225,9 +225,9 @@ steps:
 
   investigate:
     tool: run_skill
+    model: "${{ 'opus[1m]' if inputs.depth == 'deep' else 'sonnet' }}"
     with:
       skill_command: "/autoskillit:investigate ${{ '--depth deep ' if inputs.depth == 'deep' else '' }}${{ inputs.task }}"
-      model: "${{ 'opus[1m]' if inputs.depth == 'deep' else 'sonnet' }}"
       cwd: "${{ context.work_dir }}"
       step_name: "investigate"
       issue_url: "${{ inputs.issue_url }}"

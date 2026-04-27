@@ -154,7 +154,7 @@ After subagents complete, consolidate into structured findings:
 4. **Data Flow**: How data moves through the system
 5. **Test Gap Analysis**: Why tests didn't catch this
 6. **Similar Patterns**: How similar issues are handled elsewhere
-7. **Historical Context**: Whether this root cause has been investigated or fixed before (populated by Step 3.5)
+7. **Historical Context**: Whether this root cause has been investigated or fixed before (populated by the historical recurrence check below)
 8. **External Research**: Relevant findings from web search (if applicable)
 9. **Scope Boundary**: What was investigated vs. what remains unexplored
 10. **Confidence Levels**: Per-finding confidence — SUPPORTED (direct code evidence or experimental confirmation), UNSUPPORTED (contradicted by evidence), NEEDS-EVIDENCE (theoretical reasoning, not yet confirmed)

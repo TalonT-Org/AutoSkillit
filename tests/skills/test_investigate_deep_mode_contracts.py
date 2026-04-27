@@ -351,9 +351,7 @@ def test_d5_single_recommendation(deep_workflow_section: str) -> None:
 def test_d6_post_report_validation(deep_workflow_section: str) -> None:
     """Step D6 must describe post-report validation."""
     d6 = _extract_step_section(deep_workflow_section, "Step D6")
-    assert "validation" in d6.lower(), (
-        "Step D6 must describe post-report 'validation'"
-    )
+    assert "validation" in d6.lower(), "Step D6 must describe post-report 'validation'"
 
 
 def test_d6_independent_validators(deep_workflow_section: str) -> None:
@@ -409,7 +407,11 @@ def test_report_no_auto_file_issues(skill_text: str) -> None:
     always_idx = skill_text.find("**ALWAYS:**", never_idx)
     never_block = skill_text[never_idx:always_idx] if always_idx != -1 else skill_text[never_idx:]
     has_issue = "issue" in never_block.lower()
-    has_prohibition = "never" in never_block.lower() or "not" in never_block.lower() or "automatically" in never_block.lower()
+    has_prohibition = (
+        "never" in never_block.lower()
+        or "not" in never_block.lower()
+        or "automatically" in never_block.lower()
+    )
     assert has_issue and has_prohibition, (
         "NEVER constraints must prohibit filing GitHub issues automatically"
     )

@@ -152,7 +152,7 @@ class TestSkillMdPresence:
 
     def test_skill_md_has_per_phase_dispatch(self, skill_md: str) -> None:
         """SKILL.md must document per-phase dispatch (not per-WP)."""
-        assert "per phase" in skill_md.lower() or "per PHASE" in skill_md, (
+        assert "per phase" in skill_md.lower(), (
             "SKILL.md must document per-phase L0 dispatch — "
             "distinguishes from per-WP dispatch pattern."
         )

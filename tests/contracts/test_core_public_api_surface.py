@@ -8,7 +8,7 @@ pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
 
 def test_all_public_symbols_importable() -> None:
-    """Every symbol in autoskillit.core.__all__ must be importable via 'from autoskillit.core import X'."""
+    """Every symbol in autoskillit.core.__all__ must be importable via the public gateway."""
     import autoskillit.core as core_module
 
     failures: list[str] = []

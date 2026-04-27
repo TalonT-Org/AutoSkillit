@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import importlib
 import sys
-from unittest.mock import patch
 
 import pytest
 
@@ -12,7 +12,8 @@ pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 def test_main_does_not_call_app_after_update_restart(monkeypatch: pytest.MonkeyPatch) -> None:
     """main() must not call app() when run_update_checks triggers a process exit."""
-    import autoskillit.cli.app as app_module
+
+    app_module = importlib.import_module("autoskillit.cli.app")
 
     app_called: list[bool] = []
     monkeypatch.setattr(app_module, "app", lambda: app_called.append(True))

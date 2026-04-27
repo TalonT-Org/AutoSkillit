@@ -29,9 +29,9 @@ def test_perform_restart_sets_skip_env_and_execs() -> None:
             except SystemExit:
                 pass
 
-    assert os.environ.get("AUTOSKILLIT_SKIP_UPDATE_CHECK") == "1"
-    assert captured["exe"] == sys.executable
-    assert captured["args"] == [sys.executable] + sys.argv
+        assert os.environ.get("AUTOSKILLIT_SKIP_UPDATE_CHECK") == "1"
+        assert captured["exe"] == sys.executable
+        assert captured["args"] == [sys.executable] + sys.argv
 
 
 def test_perform_restart_is_noreturn_typed() -> None:

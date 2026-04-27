@@ -27,9 +27,9 @@ def test_planner_recipe_has_required_steps(planner_recipe):
         "generate_phases",
         "check_phases",
         "elaborate_phase",
-        "build_assignment_manifest",
-        "check_assignments",
-        "elaborate_assignment",
+        "build_phase_assignment_manifest",
+        "check_phase_assignments",
+        "elaborate_phase_assignments",
         "build_wp_manifest",
         "check_wps",
         "elaborate_wp",
@@ -65,7 +65,7 @@ def test_planner_recipe_python_callables_importable(planner_recipe):
 
 
 def test_planner_recipe_loop_steps_have_exit_conditions(planner_recipe):
-    for step_name in ["check_phases", "check_assignments", "check_wps"]:
+    for step_name in ["check_phases", "check_phase_assignments", "check_wps"]:
         step = planner_recipe.steps[step_name]
         assert step.on_result is not None, f"{step_name} must have on_result routing"
         assert len(step.on_result.conditions) >= 2, (
@@ -134,3 +134,11 @@ def test_planner_steps_use_context_planner_dir():
         assert "{{AUTOSKILLIT_TEMP}}/planner" not in step_str, (
             f"Step '{step_name}' still references bare AUTOSKILLIT_TEMP/planner path"
         )
+
+
+def test_elaborate_phase_assignments_uses_planner_elaborate_assignments_skill(planner_recipe):
+    step = planner_recipe.steps["elaborate_phase_assignments"]
+    skill_cmd = step.with_args.get("skill_command", "")
+    assert "planner-elaborate-assignments" in skill_cmd, (
+        "elaborate_phase_assignments must invoke planner-elaborate-assignments skill"
+    )

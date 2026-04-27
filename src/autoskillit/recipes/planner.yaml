@@ -95,7 +95,7 @@ steps:
     on_result:
       - when: "${{ result.has_remaining }} == true"
         route: elaborate_phase
-      - route: build_assignment_manifest
+      - route: build_phase_assignment_manifest
     on_failure: escalate_stop
 
   elaborate_phase:
@@ -111,42 +111,43 @@ steps:
     on_exhausted: escalate_stop
     on_failure: escalate_stop
 
-  build_assignment_manifest:
+  build_phase_assignment_manifest:
     tool: run_python
     with:
-      callable: "autoskillit.planner.build_assignment_manifest"
+      callable: "autoskillit.planner.build_phase_assignment_manifest"
       phases_dir: "${{ context.planner_dir }}/phases"
-      assignments_dir: "${{ context.planner_dir }}/assignments"
-      output_dir: "${{ context.planner_dir }}"
+      output_dir: "${{ context.planner_dir }}/assignments"
     capture:
-      assignment_manifest_path: "${{ result.manifest_path }}"
-    on_success: check_assignments
+      phase_assignment_manifest: "${{ result.manifest_path }}"
+      phase_assignment_total: "${{ result.total_count }}"
+    on_success: check_phase_assignments
     on_failure: escalate_stop
 
-  check_assignments:
+  check_phase_assignments:
     tool: run_python
     with:
       callable: "autoskillit.planner.check_remaining"
-      manifest_path: "${{ context.assignment_manifest_path }}"
-      pass_name: "assignments"
-      output_dir: "${{ context.planner_dir }}"
+      manifest_path: "${{ context.phase_assignment_manifest }}"
+      pass_name: "phase_assignments"
+      output_dir: "${{ context.planner_dir }}/assignments"
     capture:
       has_remaining: "${{ result.has_remaining }}"
       current_item_path: "${{ result.current_item_path }}"
+      current_item_id: "${{ result.current_item_id }}"
     on_result:
       - when: "${{ result.has_remaining }} == true"
-        route: elaborate_assignment
+        route: elaborate_phase_assignments
       - route: build_wp_manifest
     on_failure: escalate_stop
 
-  elaborate_assignment:
+  elaborate_phase_assignments:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:planner-elaborate-assignment ${{ context.current_item_path }} ${{ context.planner_dir }}"
+      skill_command: "/autoskillit:planner-elaborate-assignments ${{ context.current_item_path }} ${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"
     optional_context_refs: [current_item_path]
     retries: 1
-    on_success: check_assignments
+    on_success: check_phase_assignments
     on_exhausted: escalate_stop
     on_failure: escalate_stop
 

@@ -158,6 +158,107 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "claude_conventions": frozenset({"core", "server", "workspace"}),
 }
 
+# Narrow per-module cascade for execution/. Modules not listed here fall through
+# to LAYER_CASCADE_CONSERVATIVE["execution"] (fail-open).
+MODULE_CASCADE_EXECUTION: dict[str, frozenset[str]] = {
+    # --- Narrowest: imports only within tests/execution/ ---
+    "anomaly_detection": frozenset({"execution"}),
+    "clone_guard": frozenset({"execution"}),
+    "_headless_scan": frozenset({"execution"}),
+    "_process_io": frozenset({"execution"}),
+    "_process_jsonl": frozenset({"execution"}),
+    "_process_monitor": frozenset({"execution"}),
+    "_process_pty": frozenset({"execution"}),
+    "_process_race": frozenset({"execution"}),
+    # --- Medium: execution + specific file-level consumers ---
+    "ci": frozenset({"execution"}),
+    "merge_queue": frozenset({"execution"}),
+    "diff_annotator": frozenset({"execution", "test_smoke_utils.py"}),
+    "pr_analysis": frozenset({"execution", "test_smoke_utils.py"}),
+    "testing": frozenset(
+        {
+            "execution",
+            "server/test_factory.py",
+            "server/test_server_tool_registration.py",
+            "contracts/test_protocol_satisfaction.py",
+        }
+    ),
+    "db": frozenset(
+        {
+            "execution",
+            "server/test_factory.py",
+            "contracts/test_l1_packages.py",
+            "contracts/test_protocol_satisfaction.py",
+            "contracts/test_package_gateways.py",
+        }
+    ),
+    "recording": frozenset(
+        {
+            "execution",
+            "server/test_factory_recording.py",
+            "server/test_state.py",
+            "server/test_lifespan.py",
+            "server/test_tools_run_cmd_unit.py",
+        }
+    ),
+    "github": frozenset(
+        {
+            "execution",
+            "server/test_factory.py",
+            "server/test_tools_status.py",
+        }
+    ),
+    "remote_resolver": frozenset(
+        {
+            "execution",
+            "server/test_tools_ci.py",
+            "workspace/test_clone_ci_contract.py",
+        }
+    ),
+    "session": frozenset(
+        {
+            "execution",
+            "server",
+            "migration/test_engine.py",
+            "test_llm_triage.py",
+        }
+    ),
+    "quota": frozenset({"execution", "server", "cli/test_doctor.py"}),
+    "session_log": frozenset(
+        {
+            "execution",
+            "server",
+            "cli",
+            "infra/test_quota_check.py",
+        }
+    ),
+    "linux_tracing": frozenset(
+        {
+            "execution",
+            "cli",
+            "fleet/test_fleet_e2e.py",
+        }
+    ),
+    "_process_kill": frozenset(
+        {
+            "execution",
+            "cli",
+            "fleet/test_fleet_e2e.py",
+        }
+    ),
+    "commands": frozenset(
+        {
+            "execution",
+            "server/test_tools_execution.py",
+            "cli/test_cook.py",
+            "cli/test_cook_interactive.py",
+            "cli/test_cook_env_scrub.py",
+            "cli/test_reload_loop.py",
+        }
+    ),
+    # headless and process are NOT listed — they fall through to cascade_map["execution"]
+}
+
 # ---------------------------------------------------------------------------
 # Layer cascade maps
 # ---------------------------------------------------------------------------
@@ -814,6 +915,14 @@ def build_test_scope(
                     test_dirs.update(MODULE_CASCADE_CORE[stem])
                 else:
                     test_dirs.update(cascade_map["core"])  # fail-open: unknown stem
+            elif pkg == "execution" and mode == FilterMode.CONSERVATIVE:
+                stem = Path(f).stem
+                if stem in MODULE_CASCADE_EXECUTION:
+                    test_dirs.update(MODULE_CASCADE_EXECUTION[stem])
+                else:
+                    test_dirs.update(
+                        cascade_map["execution"]
+                    )  # fail-open: headless, process, unknown
             elif pkg and pkg in cascade_map:
                 test_dirs.update(cascade_map[pkg])
             else:
@@ -857,6 +966,26 @@ def build_test_scope(
                             test_dirs.update(MODULE_CASCADE_CORE[stem])
                         else:
                             test_dirs.update(cascade_map["core"])  # fail-open: unknown stem
+                    elif pkg == "execution" and mode == FilterMode.CONSERVATIVE:
+                        stem = Path(f).stem
+                        if stem == "__init__":
+                            exec_cause_stems = {
+                                Path(c).stem
+                                for c in changed_src_py
+                                if _file_to_package(c) == "execution"
+                                and Path(c).stem != "__init__"
+                            }
+                            if exec_cause_stems and all(
+                                s in MODULE_CASCADE_EXECUTION for s in exec_cause_stems
+                            ):
+                                for s in exec_cause_stems:
+                                    test_dirs.update(MODULE_CASCADE_EXECUTION[s])
+                            else:
+                                test_dirs.update(cascade_map["execution"])  # fail-open
+                        elif stem in MODULE_CASCADE_EXECUTION:
+                            test_dirs.update(MODULE_CASCADE_EXECUTION[stem])
+                        else:
+                            test_dirs.update(cascade_map["execution"])  # fail-open
                     elif pkg and pkg in cascade_map:
                         test_dirs.update(cascade_map[pkg])
         except Exception:

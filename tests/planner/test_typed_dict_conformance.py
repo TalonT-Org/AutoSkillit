@@ -139,7 +139,6 @@ def test_validate_phase_result_slugifies_name(name: str, expected_slug: str) -> 
 
 
 def test_phase_short_includes_ordering() -> None:
-    """PhaseShort snapshot field set must include ordering for worker sequencing."""
     import typing
 
     hints = typing.get_type_hints(PhaseShort)

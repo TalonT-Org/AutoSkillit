@@ -25,15 +25,19 @@ def test_planner_recipe_has_required_steps(planner_recipe):
         "analyze",
         "extract_domain",
         "generate_phases",
-        "check_phases",
-        "elaborate_phase",
-        "build_phase_assignment_manifest",
-        "check_phase_assignments",
-        "elaborate_phase_assignments",
-        "build_phase_wp_manifest",
-        "check_phase_wps",
-        "elaborate_phase_wps",
+        "build_plan_snapshot",
+        "elaborate_phases",
+        "merge_phases",
+        "refine_phases",
+        "expand_assignments",
+        "elaborate_assignments",
+        "merge_assignments",
+        "refine_assignments",
+        "expand_wps",
+        "elaborate_wps",
         "finalize_wp_manifest",
+        "merge_wps",
+        "refine_wps",
         "reconcile_deps",
         "validate",
         "check_verdict",
@@ -63,15 +67,6 @@ def test_planner_recipe_python_callables_importable(planner_recipe):
             assert hasattr(mod, func_name), (
                 f"Step {name!r} callable {callable_path!r} not importable"
             )
-
-
-def test_planner_recipe_loop_steps_have_exit_conditions(planner_recipe):
-    for step_name in ["check_phases", "check_phase_assignments", "check_phase_wps"]:
-        step = planner_recipe.steps[step_name]
-        assert step.on_result is not None, f"{step_name} must have on_result routing"
-        assert len(step.on_result.conditions) >= 2, (
-            f"{step_name} needs at least two routes (has_remaining true/false)"
-        )
 
 
 def test_planner_recipe_has_kitchen_rules(planner_recipe):
@@ -107,7 +102,6 @@ def test_planner_recipe_contract_exists():
 
 
 def test_planner_recipe_extract_domain_uses_env_var(planner_recipe):
-    """extract_domain step must use PLANNER_ANALYSIS_FILE env-var, not positional $3."""
     step = planner_recipe.steps["extract_domain"]
     skill_cmd = step.with_args.get("skill_command", "")
     assert "$3" not in skill_cmd, "Must not use positional $3"
@@ -137,19 +131,20 @@ def test_planner_steps_use_context_planner_dir():
         )
 
 
-def test_elaborate_phase_assignments_uses_planner_elaborate_assignments_skill(planner_recipe):
-    step = planner_recipe.steps["elaborate_phase_assignments"]
+def test_elaborate_assignments_uses_planner_elaborate_assignments_skill(planner_recipe):
+    step = planner_recipe.steps["elaborate_assignments"]
     skill_cmd = step.with_args.get("skill_command", "")
     assert "planner-elaborate-assignments" in skill_cmd, (
-        "elaborate_phase_assignments must invoke planner-elaborate-assignments skill"
+        "elaborate_assignments must invoke planner-elaborate-assignments skill"
     )
 
 
 def test_planner_recipe_has_phase_wp_steps(planner_recipe):
     expected = {
-        "build_phase_wp_manifest",
-        "check_phase_wps",
-        "elaborate_phase_wps",
+        "expand_wps",
+        "elaborate_wps",
+        "merge_wps",
+        "refine_wps",
         "finalize_wp_manifest",
     }
     assert expected <= planner_recipe.steps.keys(), (
@@ -157,16 +152,82 @@ def test_planner_recipe_has_phase_wp_steps(planner_recipe):
     )
 
 
-def test_planner_recipe_elaborate_phase_wps_uses_correct_skill(planner_recipe):
-    step = planner_recipe.steps["elaborate_phase_wps"]
+def test_planner_recipe_elaborate_wps_uses_correct_skill(planner_recipe):
+    step = planner_recipe.steps["elaborate_wps"]
     skill_cmd = step.with_args.get("skill_command", "")
     assert "planner-elaborate-wps" in skill_cmd, (
-        "elaborate_phase_wps must invoke planner-elaborate-wps skill"
+        "elaborate_wps must invoke planner-elaborate-wps skill"
     )
 
 
-def test_planner_recipe_finalize_step_routes_to_reconcile(planner_recipe):
+def test_planner_recipe_finalize_step_routes_to_merge_wps(planner_recipe):
     step = planner_recipe.steps["finalize_wp_manifest"]
-    assert step.on_success == "reconcile_deps", (
-        f"finalize_wp_manifest must route to reconcile_deps on success, got {step.on_success!r}"
+    assert step.on_success == "merge_wps", (
+        f"finalize_wp_manifest must route to merge_wps on success, got {step.on_success!r}"
     )
+
+
+# --- T2: Parallel dispatch pattern tests ---
+
+
+def test_elaborate_phases_uses_capture_list(planner_recipe):
+    step = planner_recipe.steps["elaborate_phases"]
+    assert step.capture_list, "elaborate_phases must use capture_list for parallel accumulation"
+    assert "elab_result_path" in step.capture_list
+
+
+def test_elaborate_assignments_uses_capture_list(planner_recipe):
+    step = planner_recipe.steps["elaborate_assignments"]
+    assert step.capture_list
+    assert "phase_assignments_result_dir" in step.capture_list
+
+
+def test_elaborate_wps_uses_capture_list(planner_recipe):
+    step = planner_recipe.steps["elaborate_wps"]
+    assert step.capture_list
+    assert "phase_wps_result_dir" in step.capture_list
+
+
+def test_parallel_elaborate_steps_have_dispatch_note(planner_recipe):
+    for step_name in ("elaborate_phases", "elaborate_assignments", "elaborate_wps"):
+        step = planner_recipe.steps[step_name]
+        assert step.note, f"{step_name} must have a note for parallel dispatch instructions"
+        assert "parallel" in step.note.lower(), f"{step_name} note must mention parallel dispatch"
+
+
+# --- T3: No sequential loops ---
+
+
+def test_no_check_remaining_loops(planner_recipe):
+    for name, step in planner_recipe.steps.items():
+        if step.tool == "run_python" and step.with_args.get("callable", ""):
+            assert "check_remaining" not in step.with_args["callable"], (
+                f"Step {name} still uses check_remaining — recipe should use parallel dispatch"
+            )
+
+
+# --- T4: Refine tier steps wired ---
+
+
+@pytest.mark.parametrize(
+    "step_name,skill_name",
+    [
+        ("refine_phases", "planner-refine-phases"),
+        ("refine_assignments", "planner-refine-assignments"),
+        ("refine_wps", "planner-refine-wps"),
+    ],
+)
+def test_refine_tier_steps_use_correct_skills(planner_recipe, step_name, skill_name):
+    step = planner_recipe.steps[step_name]
+    assert step.tool == "run_skill"
+    assert skill_name in step.with_args.get("skill_command", "")
+
+
+# --- T5: Merge steps use merge_tier_dir ---
+
+
+@pytest.mark.parametrize("step_name", ["merge_phases", "merge_assignments", "merge_wps"])
+def test_merge_steps_use_merge_tier_dir(planner_recipe, step_name):
+    step = planner_recipe.steps[step_name]
+    assert step.tool == "run_python"
+    assert step.with_args.get("callable") == "autoskillit.planner.merge.merge_tier_dir"

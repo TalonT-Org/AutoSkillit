@@ -1998,3 +1998,35 @@ callable_contracts:
       type: file_path
     - name: phase_ids
       type: str
+  autoskillit.planner.merge.merge_tier_dir:
+    outputs:
+    - name: merged_path
+      type: file_path
+    - name: item_count
+      type: str
+  autoskillit.planner.create_run_dir:
+    outputs:
+    - name: planner_dir
+      type: directory_path
+  autoskillit.planner.finalize_wp_manifest:
+    outputs:
+    - name: manifest_path
+      type: file_path
+    - name: total_count
+      type: str
+  autoskillit.planner.expand_assignments:
+    outputs:
+    - name: manifest_path
+      type: file_path
+    - name: context_paths
+      type: str
+    - name: item_ids
+      type: str
+  autoskillit.planner.expand_wps:
+    outputs:
+    - name: manifest_path
+      type: file_path
+    - name: context_paths
+      type: str
+    - name: item_ids
+      type: str

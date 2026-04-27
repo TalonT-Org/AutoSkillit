@@ -149,6 +149,26 @@ def replace_item(
     return {"replaced_id": item_id, "updated_path": str(source_path)}
 
 
+def merge_tier_dir(
+    results_dir: str,
+    output_path: str,
+    key: str,
+    task: str = "",
+    source_dir: str = "",
+    **kwargs: Any,
+) -> dict[str, Any]:
+    paths = sorted(Path(results_dir).glob("*_result.json"))
+    if not paths:
+        raise ValueError(f"No *_result.json files found in {results_dir}")
+    return merge_files(
+        file_paths=[str(p) for p in paths],
+        output_path=output_path,
+        key=key,
+        task=task,
+        source_dir=source_dir,
+    )
+
+
 def build_plan_snapshot(
     phases_dir: str,
     output_path: str,

@@ -48,7 +48,7 @@ from autoskillit.recipe.io import (
 from autoskillit.recipe.io import (
     load_recipe as _load_recipe_from_path,
 )
-from autoskillit.recipe.schema import StepResultCondition, StepResultRoute
+from autoskillit.recipe.schema import Recipe, StepResultCondition, StepResultRoute
 from autoskillit.recipe.validator import (
     build_quality_dict,
     compute_recipe_validity,
@@ -165,6 +165,7 @@ class LoadRecipeResult(TypedDict, total=False):
     greeting: str
     ingredients_table: str
     orchestration_rules: str
+    stop_step_semantics: str
     content_hash: str
     composite_hash: str
     recipe_version: str | None
@@ -533,8 +534,30 @@ def validate_from_path(
     }
 
 
-def _build_orchestration_rules() -> str:
-    return (
+def _build_stop_step_semantics(recipe: Recipe) -> str:
+    stop_steps = {name: step for name, step in recipe.steps.items() if step.action == "stop"}
+    if not stop_steps:
+        return ""
+    names = ", ".join(f"'{n}'" for n in stop_steps)
+    lines = [
+        "ACTION: STOP STEP SEMANTICS:",
+        f"- Steps {names} are terminal stop steps.",
+        "- When routed to a stop step, display its message and TERMINATE immediately.",
+        "- Do NOT call any MCP tools after a stop step.",
+        "- Do NOT attempt recovery, error reporting, or off-recipe actions.",
+        "- A stop step is an INTENTIONAL terminus — the recipe author designed this as"
+        " the endpoint.",
+    ]
+    for name, step in stop_steps.items():
+        if step.message:
+            lines.append(f"  Stop step '{name}' message: {step.message!r}")
+    return "\n".join(lines)
+
+
+def _build_orchestration_rules(
+    recipe: Recipe | None = None, stop_semantics: str | None = None
+) -> str:
+    parts = [
         "STEP EXECUTION IS NOT DISCRETIONARY:\n"
         "You MUST execute every step the pipeline routes you to. "
         "The ONLY mechanism for skipping a step is skip_when_false evaluating to false. "
@@ -543,7 +566,19 @@ def _build_orchestration_rules() -> str:
         "the step unnecessary. NEVER replace recipe steps with manual tool calls. "
         "Consequence: skipping PR review steps results in unreviewed code, missing "
         "diff annotations, and no architectural lens analysis."
+    ]
+    if recipe is not None:
+        sem = stop_semantics if stop_semantics is not None else _build_stop_step_semantics(recipe)
+        if sem:
+            parts.append(sem)
+    parts.append(
+        "ACTION: ROUTE STEP SEMANTICS:\n"
+        '- When you reach a step with action: "route", evaluate the step\'s on_result\n'
+        "  conditions against captured context variables. Route to the matching target.\n"
+        "- Do NOT call any MCP tools for this step type — routing evaluation IS the step.\n"
+        "- If no on_result condition matches and on_failure is defined, follow on_failure."
     )
+    return "\n\n".join(parts)
 
 
 def load_and_validate(
@@ -778,7 +813,15 @@ def load_and_validate(
         result["requires_packs"] = _serving_recipe.requires_packs
     if ing_table:
         result["ingredients_table"] = ing_table
-    result["orchestration_rules"] = _build_orchestration_rules()
+    # Compute once; reused by both fields to avoid a second traversal of recipe.steps.
+    # Two delivery paths are intentional: orchestration_rules embeds the text for Channel A
+    # (open_kitchen response / system prompt); stop_step_semantics is a dedicated field for
+    # Channel B consumers (load_recipe docstring injection) that need the text in isolation.
+    _stop_semantics = _build_stop_step_semantics(recipe) if recipe else ""
+    result["orchestration_rules"] = _build_orchestration_rules(
+        recipe, stop_semantics=_stop_semantics
+    )
+    result["stop_step_semantics"] = _stop_semantics
     result["content_hash"] = recipe.content_hash if recipe else ""
     result["composite_hash"] = recipe.composite_hash if recipe else ""
     result["recipe_version"] = recipe.recipe_version if recipe else None

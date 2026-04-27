@@ -601,6 +601,45 @@ def test_campaign_prompt_tool_claim_has_after_startup_qualifier():
     )
 
 
+def test_orchestrator_prompt_documents_stop_action():
+    """The orchestrator system prompt must explain how to handle action:stop steps."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("my-recipe", mcp_prefix=DIRECT_PREFIX)
+    assert 'action: "stop"' in prompt or "action: stop" in prompt
+    assert "TERMINATE" in prompt.upper() or "terminate" in prompt
+    assert "message" in prompt
+
+
+def test_orchestrator_prompt_documents_route_action():
+    """The orchestrator system prompt must explain how to handle action:route steps."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("my-recipe", mcp_prefix=DIRECT_PREFIX)
+    assert 'action: "route"' in prompt or "action: route" in prompt
+    assert "on_result" in prompt
+    assert "Do NOT call any MCP tool" in prompt or "no tool call" in prompt.lower()
+
+
+def test_orchestrator_prompt_contains_hook_denial_compliance():
+    """The orchestrator prompt must teach the model that ALL hook denials are mandatory."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("my-recipe", mcp_prefix=DIRECT_PREFIX)
+    assert "HOOK DENIAL" in prompt.upper()
+    assert "MANDATORY" in prompt.upper() or "mandatory" in prompt
+    assert "permissionDecision" in prompt or "deny" in prompt.lower()
+
+
+@pytest.mark.parametrize("action_type", ["stop", "confirm", "route"])
+def test_orchestrator_prompt_documents_all_action_types(action_type):
+    """Every recognized action type must have explicit behavioral semantics."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("my-recipe", mcp_prefix=DIRECT_PREFIX)
+    assert f'action: "{action_type}"' in prompt or f"action: {action_type}" in prompt
+
+
 def test_campaign_prompt_tool_list_still_enumerates_six_tools():
     """The 6 operational tools must still be listed in the campaign prompt after the fix."""
     from unittest.mock import MagicMock

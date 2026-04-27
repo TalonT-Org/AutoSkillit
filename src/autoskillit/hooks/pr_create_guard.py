@@ -14,6 +14,8 @@ import shlex
 import sys
 from pathlib import Path
 
+PR_CREATE_DENY_TRIGGER: str = "PR creation via run_cmd is prohibited"
+
 # Shell-separator tokens that introduce a new subcommand.
 _SHELL_OPS = frozenset({"&&", "||", ";", "!", "|", "("})
 

@@ -18,6 +18,8 @@ import json
 import subprocess
 import sys
 
+REMOVE_CLONE_DENY_TRIGGER: str = "Clone at"
+
 
 def _git(clone_path: str, *args: str, timeout: int = 10) -> tuple[int, str]:
     """Run a git command in clone_path. Returns (returncode, stdout.strip())."""

@@ -216,3 +216,45 @@ def test_find_broken_hook_scripts_does_not_flag_user_python_scripts(tmp_path: Pa
     )
     broken = find_broken_hook_scripts(settings)
     assert broken == []
+
+
+# Hooks excluded from the deny-trigger requirement: purely advisory (non-blocking)
+# or auto-correcting (not a hard deny).
+_ADVISORY_HOOKS: frozenset[str] = frozenset(
+    {
+        "recipe_write_advisor.py",
+        "grep_pattern_lint_guard.py",
+        "mcp_health_guard.py",
+    }
+)
+
+
+def test_deny_path_pretooluse_hooks_export_deny_trigger() -> None:
+    """Every non-advisory PreToolUse hook with a deny path must export a *_DENY_TRIGGER constant.
+
+    This structural test ensures that prompt builders can reference deny triggers
+    programmatically rather than hardcoding strings. New hooks added to HOOK_REGISTRY
+    must include a DENY_TRIGGER constant or be added to _ADVISORY_HOOKS above.
+    """
+    import importlib
+
+    deny_path_scripts: set[str] = set()
+    for hook_def in HOOK_REGISTRY:
+        if hook_def.event_type != "PreToolUse":
+            continue
+        for script in hook_def.scripts:
+            if script not in _ADVISORY_HOOKS:
+                deny_path_scripts.add(script)
+
+    missing: list[str] = []
+    for script in sorted(deny_path_scripts):
+        module_name = script.removesuffix(".py")
+        module = importlib.import_module(f"autoskillit.hooks.{module_name}")
+        has_trigger = any(name.endswith("_DENY_TRIGGER") for name in dir(module))
+        if not has_trigger:
+            missing.append(script)
+
+    assert not missing, (
+        f"These PreToolUse hooks have no *_DENY_TRIGGER constant: {missing}. "
+        "Add a DENY_TRIGGER constant or add the hook to _ADVISORY_HOOKS if it is non-blocking."
+    )

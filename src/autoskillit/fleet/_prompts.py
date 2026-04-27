@@ -92,6 +92,18 @@ H3 — AUTO-ACCEPT CONFIRM STEPS:
   Route to the step's on_success target without calling AskUserQuestion.
   Headless sessions have no human operator to prompt.
 
+H3b — STOP STEP SEMANTICS:
+  When you reach a step with action: "stop", the pipeline is TERMINATED.
+  Display the step's message in the sentinel block. Do NOT call any MCP tools.
+  Do NOT attempt recovery, error reporting, or off-recipe actions after a stop step.
+  A stop step is an INTENTIONAL terminus — the recipe author designed this as the endpoint.
+
+H3c — ROUTE STEP SEMANTICS:
+  When you reach a step with action: "route", evaluate the step's on_result
+  conditions against captured context variables. Route to the matching target.
+  Do NOT call any MCP tools for this step type — routing evaluation IS the step.
+  If no on_result condition matches and on_failure is defined, follow on_failure.
+
 H4 — AskUserQuestion PERMITTED (AUTO-ACCEPTS):
   AskUserQuestion calls are permitted in this session. In the headless environment,
   they auto-accept with the first option. Use them only when a recipe step requires
@@ -152,6 +164,21 @@ STEP EXECUTION IS NOT DISCRETIONARY:
   looks simple, or you judge the step unnecessary.
 - The ONLY mechanism for skipping a step is skip_when_false evaluating to false.
   When skip_when_false evaluates to true (or is absent), the step is MANDATORY.
+
+HOOK DENIAL COMPLIANCE — ALL HOOKS:
+- When a PreToolUse hook DENIES a tool call (permissionDecision: "deny"), the denial
+  is a MANDATORY directive, not a suggestion. You MUST comply immediately.
+- Read the permissionDecisionReason carefully — it contains the required corrective action.
+- NEVER retry the denied tool call without first completing the corrective action.
+- NEVER ignore, work around, or reason past a hook denial.
+- Hook denials are structural enforcement of recipe/pipeline contracts.
+- After completing the corrective action specified in the deny reason, you may retry
+  the original tool call.
+
+SPECIFIC HOOK DENIAL PATTERNS:
+- "QUOTA WAIT REQUIRED": Temporary — sleep and retry (see QUOTA DENIAL ROUTING below).
+- "REVIEW LOOP REQUIRED": Call check_review_loop before retrying wait_for_ci/enqueue_pr.
+- All other denials: Follow the corrective instruction in the deny reason text.
 
 QUOTA DENIAL ROUTING — run_skill only (check BEFORE on_failure):
 - When a PreToolUse hook DENIES run_skill with "{QUOTA_GUARD_DENY_TRIGGER}":

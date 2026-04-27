@@ -7,6 +7,7 @@ from autoskillit.core import get_logger
 _logger = get_logger(__name__)
 
 # Rule registration — import triggers @semantic_rule registration.
+from autoskillit.recipe import rules_actions as _rules_actions  # noqa: E402 F401
 from autoskillit.recipe import rules_blocks as _rules_blocks  # noqa: E402 F401
 from autoskillit.recipe import rules_bypass as _rules_bypass  # noqa: E402 F401
 from autoskillit.recipe import rules_campaign as _rules_campaign  # noqa: E402 F401

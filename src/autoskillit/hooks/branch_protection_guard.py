@@ -13,6 +13,8 @@ import json
 import os
 import sys
 
+BRANCH_PROTECTION_DENY_TRIGGER: str = "Branch '"
+
 
 def main() -> None:
     raw = sys.stdin.read().strip()

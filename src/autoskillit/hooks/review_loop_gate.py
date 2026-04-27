@@ -6,6 +6,8 @@ import json
 import sys
 from pathlib import Path
 
+REVIEW_LOOP_DENY_TRIGGER: str = "REVIEW LOOP REQUIRED"
+
 _DENY_REASON = (
     "REVIEW LOOP REQUIRED: review_pr returned changes_requested and "
     "resolve_review applied fixes, but check_review_loop was not called. "

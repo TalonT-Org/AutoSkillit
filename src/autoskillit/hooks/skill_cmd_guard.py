@@ -37,6 +37,8 @@ import sys
 # headless session constructs an invalid path and fails with "not found".
 # This set must match exactly the skills whose SKILL.md files carry
 # path-detection instructions (verified by TestPathArgSkillsContract).
+SKILL_CMD_DENY_TRIGGER: str = "skill_command format error for"
+
 PATH_ARG_SKILLS: frozenset[str] = frozenset(
     {
         "implement-worktree-no-merge",

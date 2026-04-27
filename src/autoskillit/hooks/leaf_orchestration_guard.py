@@ -13,6 +13,8 @@ import json
 import os
 import sys
 
+LEAF_ORCHESTRATION_DENY_TRIGGER: str = "cannot be called from leaf sessions"
+
 _ORCHESTRATION_TOOLS: frozenset[str] = frozenset({"run_skill", "run_cmd", "run_python"})
 
 

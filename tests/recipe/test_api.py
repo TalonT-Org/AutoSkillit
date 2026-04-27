@@ -564,6 +564,21 @@ class TestFormatIngredientsTableGfmWidthCap:
                 )
 
 
+def test_orchestration_rules_include_stop_step_semantics():
+    """orchestration_rules includes stop-step semantics when recipe has stop steps."""
+    from autoskillit.recipe._api import _build_orchestration_rules
+    from autoskillit.recipe.schema import Recipe, RecipeStep
+
+    recipe = Recipe(
+        name="test",
+        description="test",
+        steps={"done": RecipeStep(action="stop", message="Pipeline complete.")},
+    )
+    rules = _build_orchestration_rules(recipe)
+    assert "ACTION: STOP" in rules.upper() or "action: stop" in rules
+    assert "done" in rules
+
+
 def test_build_ingredient_rows_resolved_overrides_literal_default():
     """T1: config-resolved value wins over a non-empty YAML literal default."""
     from autoskillit.recipe._api import build_ingredient_rows

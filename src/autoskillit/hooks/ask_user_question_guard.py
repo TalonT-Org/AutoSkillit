@@ -16,6 +16,8 @@ import sys
 from datetime import UTC
 from pathlib import Path
 
+ASK_USER_QUESTION_DENY_TRIGGER: str = "AskUserQuestion is not available in headless sessions"
+
 
 def _get_marker_path(session_id: str) -> Path:
     override = os.environ.get("AUTOSKILLIT_STATE_DIR")

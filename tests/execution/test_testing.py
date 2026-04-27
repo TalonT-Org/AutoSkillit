@@ -795,9 +795,7 @@ async def test_multi_command_single_entry_equivalent(tmp_path: Path) -> None:
 
 
 def test_commands_and_command_mutual_exclusion() -> None:
-    from autoskillit.config.settings import ConfigSchemaError
-
-    with pytest.raises(ConfigSchemaError):
+    with pytest.raises(ValueError, match="mutually exclusive"):
         make_test_check_config(
             command=["cargo", "test"],
             commands=[["cargo", "test"], ["task", "e2e"]],

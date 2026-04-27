@@ -14,7 +14,7 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import CIRunScope, get_logger
-from autoskillit.pipeline.context import ToolContext
+from autoskillit.pipeline import ToolContext
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
     _notify,

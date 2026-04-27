@@ -42,6 +42,80 @@ class WPResult(TypedDict):
     acceptance_criteria: list[str]
 
 
+class PhaseShort(TypedDict):
+    id: str
+    name: str
+    goal: str
+    scope: list[str]
+
+
+class PhaseElaborated(TypedDict):
+    id: str
+    name: str
+    goal: str
+    scope: list[str]
+    technical_approach: str
+    relationship_notes: str
+    assignments_preview: list[str]
+    ordering: int
+
+
+class AssignmentShort(TypedDict):
+    id: str
+    phase_id: str
+    name: str
+    goal: str
+
+
+class AssignmentElaborated(TypedDict):
+    id: str
+    phase_id: str
+    name: str
+    goal: str
+    technical_approach: str
+    proposed_work_packages: list[dict]
+    dependency_notes: str
+    overlap_notes: str
+
+
+class WPShort(TypedDict):
+    id: str
+    assignment_id: str
+    phase_id: str
+    name: str
+    scope: str
+    estimated_files: list[str]
+
+
+class WPElaborated(TypedDict):
+    id: str
+    assignment_id: str
+    phase_id: str
+    name: str
+    scope: str
+    estimated_files: list[str]
+    goal: str
+    summary: str
+    technical_steps: list[str]
+    files_touched: list[str]
+    apis_defined: list[str]
+    apis_consumed: list[str]
+    depends_on: list[str]
+    deliverables: list[str]
+    acceptance_criteria: list[str]
+
+
+class _PlanDocumentBase(TypedDict):
+    task: str
+    source_dir: str
+
+
+class PlanDocument(_PlanDocumentBase, total=False):
+    phases: list[PhaseElaborated]
+    assignments: list[AssignmentElaborated]
+    work_packages: list[WPElaborated]
+
+
 class PlannerManifestItem(TypedDict):
     id: str
     name: str

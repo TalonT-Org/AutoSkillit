@@ -1780,6 +1780,8 @@ skills:
     outputs:
     - name: phase_manifest_path
       type: file_path
+    - name: phase_ids
+      type: str
     result_fields:
     - name: id
       type: str
@@ -1868,4 +1870,26 @@ callable_contracts:
     - name: plan_json_path
       type: file_path
     - name: plan_parts
+      type: str
+  autoskillit.planner.merge.merge_files:
+    outputs:
+    - name: merged_path
+      type: file_path
+    - name: item_count
+      type: str
+  autoskillit.planner.merge.extract_item:
+    outputs:
+    - name: extracted_path
+      type: file_path
+  autoskillit.planner.merge.replace_item:
+    outputs:
+    - name: updated_path
+      type: file_path
+    - name: replaced_id
+      type: str
+  autoskillit.planner.merge.build_plan_snapshot:
+    outputs:
+    - name: snapshot_path
+      type: file_path
+    - name: phase_ids
       type: str

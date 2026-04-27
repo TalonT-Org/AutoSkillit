@@ -7,22 +7,50 @@ from autoskillit.planner.manifests import (
     check_remaining,
     create_run_dir,
 )
+from autoskillit.planner.merge import (
+    build_plan_snapshot,
+    extract_item,
+    merge_files,
+    replace_item,
+)
 from autoskillit.planner.schema import (  # noqa: F401
     ASSIGNMENT_REQUIRED_KEYS,
     PHASE_REQUIRED_KEYS,
     WP_REQUIRED_KEYS,
+    AssignmentElaborated,
+    AssignmentShort,
+    PhaseElaborated,
+    PhaseShort,
+    PlanDocument,
     PlannerManifest,
     PlannerManifestItem,
+    WPElaborated,
+    WPShort,
 )
 from autoskillit.planner.validation import validate_plan
 
 __all__ = [
+    # Existing manifest/compile/validate callables
+    "check_remaining",
     "build_assignment_manifest",
     "build_wp_manifest",
-    "check_remaining",
     "compile_plan",
     "create_run_dir",
+    "validate_plan",
+    # Existing TypedDicts
     "PlannerManifest",
     "PlannerManifestItem",
-    "validate_plan",
+    # New merge callables (Issue 01)
+    "merge_files",
+    "extract_item",
+    "replace_item",
+    "build_plan_snapshot",
+    # New interchange TypedDicts (Issue 01)
+    "PlanDocument",
+    "PhaseShort",
+    "PhaseElaborated",
+    "AssignmentShort",
+    "AssignmentElaborated",
+    "WPShort",
+    "WPElaborated",
 ]

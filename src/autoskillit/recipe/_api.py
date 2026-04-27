@@ -554,7 +554,9 @@ def _build_stop_step_semantics(recipe: Recipe) -> str:
     return "\n".join(lines)
 
 
-def _build_orchestration_rules(recipe: Recipe | None = None) -> str:
+def _build_orchestration_rules(
+    recipe: Recipe | None = None, stop_semantics: str | None = None
+) -> str:
     parts = [
         "STEP EXECUTION IS NOT DISCRETIONARY:\n"
         "You MUST execute every step the pipeline routes you to. "
@@ -566,9 +568,9 @@ def _build_orchestration_rules(recipe: Recipe | None = None) -> str:
         "diff annotations, and no architectural lens analysis."
     ]
     if recipe is not None:
-        stop_semantics = _build_stop_step_semantics(recipe)
-        if stop_semantics:
-            parts.append(stop_semantics)
+        sem = stop_semantics if stop_semantics is not None else _build_stop_step_semantics(recipe)
+        if sem:
+            parts.append(sem)
     parts.append(
         "ACTION: ROUTE STEP SEMANTICS:\n"
         '- When you reach a step with action: "route", evaluate the step\'s on_result\n'
@@ -811,8 +813,15 @@ def load_and_validate(
         result["requires_packs"] = _serving_recipe.requires_packs
     if ing_table:
         result["ingredients_table"] = ing_table
-    result["orchestration_rules"] = _build_orchestration_rules(recipe)
-    result["stop_step_semantics"] = _build_stop_step_semantics(recipe) if recipe else ""
+    # Compute once; reused by both fields to avoid a second traversal of recipe.steps.
+    # Two delivery paths are intentional: orchestration_rules embeds the text for Channel A
+    # (open_kitchen response / system prompt); stop_step_semantics is a dedicated field for
+    # Channel B consumers (load_recipe docstring injection) that need the text in isolation.
+    _stop_semantics = _build_stop_step_semantics(recipe) if recipe else ""
+    result["orchestration_rules"] = _build_orchestration_rules(
+        recipe, stop_semantics=_stop_semantics
+    )
+    result["stop_step_semantics"] = _stop_semantics
     result["content_hash"] = recipe.content_hash if recipe else ""
     result["composite_hash"] = recipe.composite_hash if recipe else ""
     result["recipe_version"] = recipe.recipe_version if recipe else None

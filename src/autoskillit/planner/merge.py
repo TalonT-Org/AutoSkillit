@@ -118,7 +118,12 @@ def replace_item(
     replacement_path: str,
     **kwargs: Any,
 ) -> dict[str, Any]:
-    replacement: dict[str, Any] = json.loads(Path(replacement_path).read_text())
+    try:
+        replacement: dict[str, Any] = json.loads(Path(replacement_path).read_text())
+    except FileNotFoundError:
+        raise ValueError(f"Replacement file not found: {replacement_path}") from None
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid JSON in {replacement_path}: {exc}") from exc
     src = Path(source_path)
 
     found = False

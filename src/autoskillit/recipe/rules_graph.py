@@ -15,6 +15,8 @@ from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 logger = get_logger(__name__)
 
+_STRUCTURAL_ON_RESULT_TOOLS = {"run_python", "wait_for_ci"}
+
 
 @semantic_rule(
     name="unbounded-cycle",
@@ -51,10 +53,6 @@ def _check_unbounded_cycles(ctx: ValidationContext) -> list[RuleFinding]:
                 reported_cycles.add(cycle_key)
                 cycle_set = set(cycle_steps)
 
-                # Tools whose on_result conditions are structural (not external
-                # file state): run_python (counter-based) and wait_for_ci
-                # (API conclusion values guarantee eventual exit).
-                _STRUCTURAL_ON_RESULT_TOOLS = {"run_python", "wait_for_ci"}
                 has_on_result_exit = False
                 for s in cycle_steps:
                     if s not in recipe.steps:

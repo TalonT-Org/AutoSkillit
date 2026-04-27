@@ -82,6 +82,24 @@ class TestNonUniqueOutputPath:
         findings = run_semantic_rules(wf)
         assert not any(f.rule == "non-unique-output-path" for f in findings)
 
+    def test_bare_temp_path_in_list_arg_errors(self) -> None:
+        wf = _make_workflow(
+            {
+                "list_step": {
+                    "tool": "run_python",
+                    "with": {
+                        "callable": "some.callable",
+                        "paths": ["{{AUTOSKILLIT_TEMP}}/planner/out.json"],
+                    },
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = run_semantic_rules(wf)
+        errors = [f for f in findings if f.rule == "non-unique-output-path"]
+        assert any(f.severity == Severity.ERROR and f.step_name == "list_step" for f in errors)
+
     def test_message_field_not_flagged(self) -> None:
         wf = _make_workflow(
             {

@@ -25,6 +25,10 @@ def _iter_path_values(step: RecipeStep) -> Iterator[tuple[str, str]]:
                     yield f"env.{env_key}", env_val
         elif isinstance(val, str):
             yield key, val
+        elif isinstance(val, list):
+            for i, item in enumerate(val):
+                if isinstance(item, str):
+                    yield f"{key}[{i}]", item
 
 
 @semantic_rule(

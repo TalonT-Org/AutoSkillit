@@ -67,6 +67,17 @@ steps:
       cwd: "${{ inputs.source_dir }}"
     capture:
       phase_manifest_path: "${{ result.phase_manifest_path }}"
+    on_success: build_pre_elab_snapshot
+    on_failure: escalate_stop
+
+  build_pre_elab_snapshot:
+    tool: run_python
+    with:
+      callable: "autoskillit.planner.build_pre_elab_snapshot"
+      manifest_path: "${{ context.phase_manifest_path }}"
+      output_dir: "${{ context.planner_dir }}"
+    capture:
+      pre_elab_snapshot_path: "${{ result.snapshot_path }}"
     on_success: check_phases
     on_failure: escalate_stop
 
@@ -80,6 +91,7 @@ steps:
     capture:
       has_remaining: "${{ result.has_remaining }}"
       current_item_path: "${{ result.current_item_path }}"
+      current_item_id: "${{ result.current_item_id }}"
     on_result:
       - when: "${{ result.has_remaining }} == true"
         route: elaborate_phase
@@ -89,9 +101,9 @@ steps:
   elaborate_phase:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:planner-elaborate-phase ${{ context.current_item_path }} ${{ context.planner_dir }}"
+      skill_command: "/autoskillit:planner-elaborate-phase ${{ context.pre_elab_snapshot_path }} ${{ context.current_item_id }} ${{ context.planner_dir }}/phases"
       cwd: "${{ inputs.source_dir }}"
-    optional_context_refs: [current_item_path]
+    optional_context_refs: [current_item_id]
     capture_list:
       elab_result_path: "${{ result.elab_result_path }}"
     retries: 1

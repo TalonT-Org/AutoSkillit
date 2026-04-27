@@ -228,6 +228,7 @@ provided (adopting an existing issue) or when `--dry-run` is active.
      in_exception && /^---$/ { in_exception=0; next }
      in_exception && /^## / { in_exception=0 }
      !in_exception
+     END { in_exception=0 }
    ' "${ISSUE_BODY_FILE}" > "${ISSUE_BODY_FILE}.tmp" \
      && mv "${ISSUE_BODY_FILE}.tmp" "${ISSUE_BODY_FILE}"
    ```

@@ -122,11 +122,13 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
         NoResume,
         _get_autoskillit_install_path,
         configure_logging,
-        detect_autoskillit_mcp_prefix,
+        get_logger,
         pkg_root,
         resume_spec_from_cli,
         write_registry_entry,
     )
+
+    logger = get_logger(__name__)
     from autoskillit.execution import build_interactive_cmd
 
     configure_logging()
@@ -150,7 +152,14 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
 
     plugin_source: MarketplaceInstall | DirectInstall
     if InstalledPluginsFile().contains(_AUTOSKILLIT_PLUGIN_KEY):
-        plugin_source = MarketplaceInstall(cache_path=_get_autoskillit_install_path())
+        try:
+            plugin_source = MarketplaceInstall(cache_path=_get_autoskillit_install_path())
+        except (KeyError, ValueError) as exc:
+            logger.warning(
+                "marketplace install path unavailable (%s) — falling back to direct install",
+                exc,
+            )
+            plugin_source = DirectInstall(plugin_dir=pkg_root())
     else:
         plugin_source = DirectInstall(plugin_dir=pkg_root())
 

@@ -4,26 +4,58 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
-import tests._test_filter as tf_mod
 from tests._test_filter import (
     MODULE_CASCADE_EXECUTION,
     FilterMode,
     build_test_scope,
 )
 
+_ALL_DIRS = [
+    "core",
+    "config",
+    "execution",
+    "pipeline",
+    "workspace",
+    "recipe",
+    "migration",
+    "fleet",
+    "server",
+    "cli",
+    "hooks",
+    "skills",
+    "arch",
+    "contracts",
+    "infra",
+    "docs",
+]
+
 
 def test_all_entries_present() -> None:
-    """All 23 documented module stems are present in MODULE_CASCADE_EXECUTION."""
+    """All documented module stems are present in MODULE_CASCADE_EXECUTION."""
     expected = {
-        "anomaly_detection", "clone_guard", "_headless_scan",
-        "_process_io", "_process_jsonl", "_process_monitor",
-        "_process_pty", "_process_race",
-        "ci", "merge_queue",
-        "diff_annotator", "pr_analysis", "testing", "db",
-        "recording", "github", "remote_resolver", "session",
-        "quota", "session_log", "linux_tracing", "_process_kill", "commands",
+        "anomaly_detection",
+        "clone_guard",
+        "_headless_scan",
+        "_process_io",
+        "_process_jsonl",
+        "_process_monitor",
+        "_process_pty",
+        "_process_race",
+        "ci",
+        "merge_queue",
+        "diff_annotator",
+        "pr_analysis",
+        "testing",
+        "db",
+        "recording",
+        "github",
+        "remote_resolver",
+        "session",
+        "quota",
+        "session_log",
+        "linux_tracing",
+        "_process_kill",
+        "commands",
     }
     assert expected <= set(MODULE_CASCADE_EXECUTION.keys())
 
@@ -31,24 +63,7 @@ def test_all_entries_present() -> None:
 class TestBuildTestScopeExecutionCascade:
     """Routing via MODULE_CASCADE_EXECUTION in build_test_scope (CONSERVATIVE mode)."""
 
-    ALL_DIRS = [
-        "core",
-        "config",
-        "execution",
-        "pipeline",
-        "workspace",
-        "recipe",
-        "migration",
-        "fleet",
-        "server",
-        "cli",
-        "hooks",
-        "skills",
-        "arch",
-        "contracts",
-        "infra",
-        "docs",
-    ]
+    ALL_DIRS = _ALL_DIRS
 
     def _make_tests_root(self, tmp_path: Path, dirs: list[str]) -> Path:
         tests_root = tmp_path / "tests"
@@ -124,9 +139,7 @@ class TestBuildTestScopeExecutionCascade:
         # LAYER_CASCADE_CONSERVATIVE["execution"] includes execution, core, workspace,
         # migration, server, cli, infra, skills
         for pkg in ["execution", "server", "cli", "workspace"]:
-            assert pkg in dir_names, (
-                f"fail-open cascade for headless.py should include {pkg}"
-            )
+            assert pkg in dir_names, f"fail-open cascade for headless.py should include {pkg}"
 
     def test_medium_scope_module_ci(self, tmp_path: Path) -> None:
         """ci.py → frozenset({"execution"}) (its MODULE_CASCADE_EXECUTION entry)."""
@@ -140,9 +153,7 @@ class TestBuildTestScopeExecutionCascade:
         dir_names = {p.name for p in result}
         assert "execution" in dir_names
         for excluded in ["core", "cli", "server", "workspace", "migration"]:
-            assert excluded not in dir_names, (
-                f"ci narrow cascade should not include {excluded}"
-            )
+            assert excluded not in dir_names, f"ci narrow cascade should not include {excluded}"
 
     def test_recording_medium_scope_includes_server_files(self, tmp_path: Path) -> None:
         """recording.py entry includes specific server/ test files."""
@@ -184,24 +195,7 @@ class TestBuildTestScopeExecutionCascade:
 class TestClosureExecutionNarrowCascade:
     """__init__.py closure expansion for execution package."""
 
-    ALL_DIRS = [
-        "core",
-        "config",
-        "execution",
-        "pipeline",
-        "workspace",
-        "recipe",
-        "migration",
-        "fleet",
-        "server",
-        "cli",
-        "hooks",
-        "skills",
-        "arch",
-        "contracts",
-        "infra",
-        "docs",
-    ]
+    ALL_DIRS = _ALL_DIRS
 
     def _make_execution_layout(self, tmp_path: Path, modules: dict[str, str]) -> Path:
         exec_dir = tmp_path / "src" / "autoskillit" / "execution"
@@ -267,9 +261,7 @@ class TestClosureExecutionNarrowCascade:
         dir_names = {p.name for p in result}
         # headless is not in MODULE_CASCADE_EXECUTION → fail-open → full execution cascade
         for pkg in ["execution", "server", "cli"]:
-            assert pkg in dir_names, (
-                f"mixed-cause closure fallback should include {pkg}"
-            )
+            assert pkg in dir_names, f"mixed-cause closure fallback should include {pkg}"
 
     def test_init_closure_all_narrow_causes_union(self, tmp_path: Path) -> None:
         """
@@ -282,8 +274,7 @@ class TestClosureExecutionNarrowCascade:
                 "ci.py": "",
                 "merge_queue.py": "",
                 "__init__.py": (
-                    "from .ci import CIWatcher\n"
-                    "from .merge_queue import MergeQueueWatcher\n"
+                    "from .ci import CIWatcher\nfrom .merge_queue import MergeQueueWatcher\n"
                 ),
             },
         )

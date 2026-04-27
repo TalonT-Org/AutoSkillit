@@ -24,7 +24,7 @@ def _make_parent_recipe(
         description="Main recipe",
         ingredients={
             "flag_mode": RecipeIngredient(
-                description="Enable sprint mode", default=gate_default, hidden=True
+                description="Enable flag mode", default=gate_default, hidden=True
             ),
             "task": RecipeIngredient(description="Task description", required=True),
         },
@@ -44,34 +44,6 @@ def _make_parent_recipe(
             ),
         },
         kitchen_rules=["no native tools"],
-    )
-
-
-def _make_sub_recipe() -> Recipe:
-    """A simple sub-recipe with two steps."""
-    return Recipe(
-        name="test-sub",
-        description="Sprint setup prefix",
-        ingredients={
-            "sprint_branch": RecipeIngredient(description="Branch to use", default="main"),
-        },
-        steps={
-            "check_sprint": RecipeStep(
-                tool="run_cmd",
-                with_args={"cmd": "git status"},
-                on_success="setup_sprint",
-                on_failure="escalate",
-                on_exhausted="escalate",
-            ),
-            "setup_sprint": RecipeStep(
-                tool="run_cmd",
-                with_args={"cmd": "echo ready"},
-                on_success="done",
-                on_failure="escalate",
-                on_exhausted="escalate",
-            ),
-        },
-        kitchen_rules=["no native tools in sub-recipe"],
     )
 
 
@@ -168,9 +140,9 @@ def test_merged_step_done_routes_to_on_success(tmp_path: Path) -> None:
     parent = _make_parent_recipe(on_success="clone")
     active, _ = _build_active_recipe(parent, {"flag_mode": "true"}, tmp_path)
     # The sub-recipe step's on_success (was "done") should now route to parent's on_success
-    sprint_step = next((s for name, s in active.steps.items() if "check_sprint" in name), None)
-    assert sprint_step is not None
-    assert sprint_step.on_success == "clone"
+    merged_step = next((s for name, s in active.steps.items() if "check_sprint" in name), None)
+    assert merged_step is not None
+    assert merged_step.on_success == "clone"
 
 
 def test_merged_step_escalate_routes_to_on_failure(tmp_path: Path) -> None:
@@ -194,9 +166,9 @@ def test_merged_step_escalate_routes_to_on_failure(tmp_path: Path) -> None:
 
     parent = _make_parent_recipe(on_failure="escalate")
     active, _ = _build_active_recipe(parent, {"flag_mode": "true"}, tmp_path)
-    sprint_step = next((s for name, s in active.steps.items() if "check_sprint" in name), None)
-    assert sprint_step is not None
-    assert sprint_step.on_failure == "escalate"
+    merged_step = next((s for name, s in active.steps.items() if "check_sprint" in name), None)
+    assert merged_step is not None
+    assert merged_step.on_failure == "escalate"
 
 
 def test_merged_ingredients_include_sub_recipe_ingredients(tmp_path: Path) -> None:

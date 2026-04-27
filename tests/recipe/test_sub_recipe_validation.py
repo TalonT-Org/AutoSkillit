@@ -23,7 +23,7 @@ def _make_parent_recipe(
         description="Test",
         ingredients={
             "flag_mode": RecipeIngredient(
-                description="Enable sprint", default=gate_default, hidden=True
+                description="Enable flag mode", default=gate_default, hidden=True
             ),
         },
         steps={

@@ -83,12 +83,12 @@ Read the audit report file. Detect its source by examining the document title or
   | INFO | LOW |
 
   Verdict rules by finding type:
-  - **BLOCK (D2, D3)**: require code verification at the cited `file:line` — confirm the
-    unguarded import or missing gate actually exists.
+  - **BLOCK (D2, D3, D4)**: require code verification at the cited `file:line` — confirm the
+    unguarded import, missing gate, or unguarded tool handler actually exists.
   - **WARN (D2–D6)**: check for intentional design exceptions documented in comments or ADRs.
   - **INFO (D1, D5 table rows)**: accepted as-is unless the table value contradicts the actual
     code (verify by reading the config/constants file directly).
-  - **D1/D5 table rows without `file:line`**: place in cross-cutting batch; validate by reading
+  - **D1/D5 table rows**: always place in cross-cutting batch; validate by reading
     the config source file named in the table row.
 
 If none of the four patterns match, print:
@@ -122,7 +122,7 @@ by the top-level package touched (e.g., `pipeline/`, `execution/`, `server/`, `c
 The Config Projection (D1) and Boundary Coupling (D5) dimensions produce inventory/coupling
 tables rather than single-finding lines. For these dimensions:
 - Treat each table row as an individual finding.
-- Place all D1 and D5 findings in the "cross-cutting" batch (they lack `file:line` anchors).
+- Place all D1 and D5 findings in the "cross-cutting" batch (their inventory tables span multiple files rather than single code locations).
 - Code validation agents for cross-cutting findings must verify D1/D5 rows by reading the
   referenced config source or constants file directly (e.g., `_type_constants.py` for
   FEATURE_REGISTRY entries, `config/defaults.yaml` for config projection values).

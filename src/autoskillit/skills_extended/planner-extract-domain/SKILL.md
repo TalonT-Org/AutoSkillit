@@ -61,4 +61,4 @@ Merge all agent outputs into a coherent `domain_knowledge.md` Markdown document 
 
 ### Step 4: Write output (non-fatal)
 
-Write to `{{AUTOSKILLIT_TEMP}}/planner/domain_knowledge.md` (relative to the current working directory). If any step fails, log a warning to stdout and exit with code 0 — do not propagate the error to the recipe.
+Write to `$(dirname $PLANNER_ANALYSIS_FILE)/domain_knowledge.md`. If any step fails, log a warning to stdout and exit with code 0 — do not propagate the error to the recipe.

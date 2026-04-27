@@ -42,7 +42,7 @@ steps:
   analyze:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:planner-analyze"
+      skill_command: "/autoskillit:planner-analyze ${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"
     on_success: extract_domain
     on_failure: escalate_stop

@@ -22,13 +22,13 @@ Detect language, framework, test infrastructure, project structure, and existing
 
 ## Arguments
 
-No positional arguments. Reads the target project from the current working directory.
+- **$1** — Absolute path to the run-scoped planner directory (e.g., `/path/to/.autoskillit/temp/planner/run-YYYYMMDD-HHMMSS`). Created by the `init` step.
 
 ## Critical Constraints
 
 **NEVER:**
 - Modify any target project files
-- Write output outside `{{AUTOSKILLIT_TEMP}}/planner/`
+- Write analysis.json outside `$1/`
 
 **ALWAYS:**
 - Use Explore subagents for all file reads
@@ -55,7 +55,7 @@ Merge all four agent outputs into a single `analysis.json` document matching the
 
 ### Step 3: Write output
 
-Write to `{{AUTOSKILLIT_TEMP}}/planner/analysis.json`. Create the directory if it does not exist.
+Write to `$1/analysis.json`. The directory was created by the `init` step.
 
 ## Output Schema
 

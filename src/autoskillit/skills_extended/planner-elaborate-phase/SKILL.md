@@ -25,17 +25,18 @@ describing one phase and all prior phase results, then writes a complete phase r
 ## Arguments
 
 - **$1** — Absolute path to the context file written by `check_remaining`
+- **$2** — Absolute path to the run-scoped planner directory (e.g., `/path/to/.autoskillit/temp/planner/run-YYYYMMDD-HHMMSS`)
 
 ## Critical Constraints
 
 **NEVER:**
-- Write output outside `{{AUTOSKILLIT_TEMP}}/planner/phases/`
+- Write output outside `$2/phases/`
 - Omit `relationship_notes` from the result
 
 **ALWAYS:**
 - Read all prior phase results listed in the context file before writing
 - Set `relationship_notes` based on actual dependencies identified in prior results
-- Write the result to `{{AUTOSKILLIT_TEMP}}/planner/phases/{id}_result.json` where `{id}` comes from the context file (the context file does NOT contain a `result_path` field)
+- Write the result to `$2/phases/{id}_result.json` where `{id}` comes from the context file (the context file does NOT contain a `result_path` field)
 - Emit `phase_result_path` output token
 
 ## Workflow
@@ -65,7 +66,7 @@ on any prior phase's deliverables?
 
 ### Step 3: Write phase result
 
-Write to `{{AUTOSKILLIT_TEMP}}/planner/phases/{id}_result.json` (relative to the current working directory):
+Write to `$2/phases/{id}_result.json`:
 ```json
 {
   "id": "P4",

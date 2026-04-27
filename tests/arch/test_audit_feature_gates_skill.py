@@ -101,9 +101,7 @@ def test_audit_feature_gates_block_warn_file_line_mandate():
     """BLOCK and WARN findings must require file:line references."""
     source = _SKILL_FILE.read_text()
     lower = source.lower()
-    has_file_line_mandate = (
-        "file:line" in lower and ("block" in lower or "warn" in lower)
-    )
+    has_file_line_mandate = "file:line" in lower and ("block" in lower or "warn" in lower)
     assert has_file_line_mandate, (
         "audit-feature-gates must mandate file:line references on BLOCK and WARN findings "
         "so validate-audit subagents can verify them against actual code"

@@ -536,13 +536,15 @@ def test_step6_validated_report_shortcut_to_implementation():
     step6_pos = text.find("### Step 6")
     assert step6_pos != -1, "Step 6 not found"
     step7_pos = text.find("### Step 7", step6_pos)
-    step6_section = text[step6_pos:step7_pos] if step7_pos != -1 else text[step6_pos:step6_pos + 2000]
+    step6_section = (
+        text[step6_pos:step7_pos] if step7_pos != -1 else text[step6_pos : step6_pos + 2000]
+    )
     assert "is_validated_report" in step6_section, (
         "Step 6 must check is_validated_report and short-circuit to implementation route"
     )
     # Must reference implementation in the validated-report shortcut, not only remediation
     shortcut_idx = step6_section.find("is_validated_report")
-    post_shortcut = step6_section[shortcut_idx:shortcut_idx + 600]
+    post_shortcut = step6_section[shortcut_idx : shortcut_idx + 600]
     assert "implementation" in post_shortcut, (
         "Step 6 is_validated_report shortcut must assign route=implementation"
     )
@@ -554,7 +556,9 @@ def test_step6_heuristic_table_has_audit_signal_row():
     step6_pos = text.find("### Step 6")
     assert step6_pos != -1, "Step 6 not found"
     step7_pos = text.find("### Step 7", step6_pos)
-    step6_section = text[step6_pos:step7_pos] if step7_pos != -1 else text[step6_pos:step6_pos + 2000]
+    step6_section = (
+        text[step6_pos:step7_pos] if step7_pos != -1 else text[step6_pos : step6_pos + 2000]
+    )
     # Either the shortcut or an explicit audit row must map validated reports to implementation
     has_audit_implementation_signal = (
         "audit" in step6_section.lower() and "implementation" in step6_section

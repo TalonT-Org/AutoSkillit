@@ -60,8 +60,8 @@ _LITERAL = ".autoskillit/temp"
 
 
 def _src_root() -> Path:
-    # tests/test_python_no_hardcoded_temp.py → repo root
-    return Path(__file__).resolve().parent.parent / "src" / "autoskillit"
+    # tests/arch/test_python_no_hardcoded_temp.py → repo root
+    return Path(__file__).resolve().parent.parent.parent / "src" / "autoskillit"
 
 
 def test_no_hardcoded_temp_path_in_python_outside_resolver() -> None:

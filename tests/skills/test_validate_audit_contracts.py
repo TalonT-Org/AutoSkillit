@@ -72,3 +72,31 @@ class TestValidateAuditContent:
     # T-VAL-015
     def test_history_research_agent(self) -> None:
         assert "history research agent" in _skill_text().lower()
+
+
+class TestValidateAuditNewSteps:
+    # T-VAL-016
+    def test_cross_validation_subagent_is_read_only(self) -> None:
+        text = _skill_text().lower()
+        assert "cross-valid" in text  # "cross-validator" or "cross-validation"
+        assert "read-only" in text
+
+    # T-VAL-017
+    def test_ticket_grouping_manifest_with_finding_ids(self) -> None:
+        text = _skill_text().lower()
+        assert "grouping manifest" in text
+        assert "finding id" in text or "finding ids" in text
+
+    # T-VAL-018
+    def test_validation_summary_separate_file(self) -> None:
+        assert "validation_summary_" in _skill_text()
+
+    # T-VAL-019
+    def test_validated_findings_contains_only_valid(self) -> None:
+        text = _skill_text()
+        # Must explicitly exclude exception-warranted findings from the validated report body
+        assert (
+            "do NOT include VALID BUT EXCEPTION WARRANTED" in text
+            or "exception-warranted findings go exclusively" in text.lower()
+            or "exception-warranted findings must not appear" in text.lower()
+        )

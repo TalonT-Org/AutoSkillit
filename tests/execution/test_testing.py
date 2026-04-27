@@ -741,9 +741,21 @@ async def test_multi_command_second_fails(tmp_path: Path) -> None:
 
 
 @pytest.mark.anyio
-async def test_multi_command_timeout_ceiling(tmp_path: Path) -> None:
+async def test_multi_command_timeout_ceiling(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import autoskillit.execution.testing as testing_mod
     from tests.conftest import _make_result
     from tests.fakes import MockSubprocessRunner
+
+    # Simulate 3 seconds elapsed between start and the second command's remaining check.
+    # monotonic() call sequence: start, loop1-remaining, loop2-remaining, elapsed
+    _times = iter([0.0, 0.0, 3.0, 3.0])
+    monkeypatch.setattr(
+        testing_mod,
+        "time",
+        type("_FakeTime", (), {"monotonic": staticmethod(lambda: next(_times))})(),
+    )
 
     runner = MockSubprocessRunner()
     runner.push(_make_result(returncode=0, stdout="cmd1"))
@@ -757,7 +769,9 @@ async def test_multi_command_timeout_ceiling(tmp_path: Path) -> None:
     await DefaultTestRunner(cfg, runner).run(tmp_path)
     t1 = runner.call_args_list[0][2]
     t2 = runner.call_args_list[1][2]
-    assert t2 <= t1
+    assert t1 == pytest.approx(10.0)
+    assert t2 == pytest.approx(7.0)
+    assert t2 < t1
 
 
 @pytest.mark.anyio

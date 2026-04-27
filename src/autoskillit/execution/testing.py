@@ -201,7 +201,7 @@ class DefaultTestRunner:
         self._runner = runner
 
     async def run(self, cwd: Path) -> TestResult:
-        effective_commands = self._config.test_check.commands or [self._config.test_check.command]
+        effective_commands = self._config.test_check.effective_commands
         timeout = float(self._config.test_check.timeout)
         env = build_sanitized_env()
 
@@ -266,8 +266,13 @@ class DefaultTestRunner:
             Path(sidecar_path).unlink(missing_ok=True)
 
         combined_stdout = "\n".join(stdout_parts)
-        final_returncode = last_result.returncode if last_result is not None else 1
-        final_stderr = last_result.stderr if last_result is not None else ""
+        if last_result is not None:
+            final_returncode = last_result.returncode
+            final_stderr = last_result.stderr
+        else:
+            final_returncode = 1
+            final_stderr = "timeout exhausted before first command could run"
+            logger.warning("test_runner_timeout_before_first_command", timeout=timeout)
 
         passed = check_test_passed(final_returncode, combined_stdout, final_stderr)
         return TestResult(

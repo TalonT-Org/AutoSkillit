@@ -36,6 +36,7 @@ from autoskillit.cli._install_info import (
     dismissal_window,
     upgrade_command,
 )
+from autoskillit.cli._restart import perform_restart
 from autoskillit.cli._terminal import terminal_guard
 from autoskillit.core import AUTOSKILLIT_INSTALLED_VERSION, atomic_write, get_logger
 from autoskillit.hook_registry import _count_hook_registry_drift
@@ -653,6 +654,7 @@ def _run_update_sequence(
         state.pop("binary_snoozed", None)
         _write_dismiss_state(home, state)
         invalidate_fetch_cache(home)
+        perform_restart()
 
 
 # ---------------------------------------------------------------------------

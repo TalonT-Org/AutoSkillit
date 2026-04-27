@@ -12,6 +12,7 @@ import subprocess
 from pathlib import Path
 
 from autoskillit.cli._install_info import comparison_branch, detect_install, upgrade_command
+from autoskillit.cli._restart import perform_restart
 from autoskillit.cli._terminal import terminal_guard
 
 
@@ -88,3 +89,4 @@ def run_update_command(home: Path | None = None) -> None:
         _write_dismiss_state(_home, state)
         invalidate_fetch_cache(_home)
         print("AutoSkillit updated successfully.", flush=True)
+        perform_restart()

@@ -146,9 +146,9 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # _marketplace.py — hooks.json (co-owned)
     ("src/autoskillit/cli/_marketplace.py", 172),
     # _update_checks.py — dismissal state file
-    ("src/autoskillit/cli/_update_checks.py", 102),
+    ("src/autoskillit/cli/_update_checks.py", 103),
     # _update_checks.py — fetch cache
-    ("src/autoskillit/cli/_update_checks.py", 129),
+    ("src/autoskillit/cli/_update_checks.py", 130),
     # smoke_utils.py — domain partitions dict, hunk ranges list, merge queue list
     ("src/autoskillit/smoke_utils.py", 57),
     ("src/autoskillit/smoke_utils.py", 87),

@@ -255,6 +255,8 @@ def test_output_path_tokens_synchronized() -> None:
             "elab_result_path",
             # planner-refine-phases output
             "refined_plan_path",
+            # planner-refine-assignments output
+            "refined_assignments_path",
         }
     )
 

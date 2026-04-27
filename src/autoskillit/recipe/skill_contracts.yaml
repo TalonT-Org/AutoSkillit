@@ -1860,6 +1860,25 @@ skills:
     pattern_examples:
       - "refined_plan_path = /tmp/autoskillit/planner/run-20260101-120000/refined_plan.json\n%%ORDER_UP%%"
     write_behavior: always
+  planner-refine-assignments:
+    inputs:
+      - name: combined_assignments_path
+        type: file_path
+        required: true
+      - name: refined_plan_path
+        type: file_path
+        required: true
+      - name: output_dir
+        type: directory_path
+        required: true
+    outputs:
+      - name: refined_assignments_path
+        type: file_path
+    expected_output_patterns:
+      - "refined_assignments_path\\s*=\\s*\\S+"
+    pattern_examples:
+      - "refined_assignments_path = /tmp/autoskillit/planner/run-20260101-120000/refined_assignments.json\n%%ORDER_UP%%"
+    write_behavior: always
 callable_contracts:
   autoskillit.smoke_utils.check_review_loop:
     outputs:

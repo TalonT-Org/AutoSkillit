@@ -22,6 +22,7 @@ ALL_PLANNER_SKILLS = [
     "planner-elaborate-wp",
     "planner-reconcile-deps",
     "planner-refine",
+    "planner-refine-assignments",
 ]
 
 

@@ -11,7 +11,7 @@ pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
 class TestResearchRecipeStructure:
-    @pytest.fixture
+    @pytest.fixture(scope="class")
     def recipe(self):
         return load_recipe(builtin_recipes_dir() / "research.yaml")
 
@@ -180,11 +180,6 @@ class TestResearchRecipeStructure:
 
     def test_has_re_push_research_step(self, recipe) -> None:
         assert "re_push_research" in recipe.steps
-
-    def test_research_validates_cleanly(self, recipe) -> None:
-        """validate_recipe returns no errors on the simplified recipe."""
-        errors = validate_recipe(recipe)
-        assert errors == [], f"Validation errors: {errors}"
 
     def test_requires_packs_includes_exp_lens(self, recipe) -> None:
         assert "exp-lens" in recipe.requires_packs

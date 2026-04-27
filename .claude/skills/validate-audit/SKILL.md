@@ -441,14 +441,16 @@ On Y or empty input, write all files. After writing, offer:
 > Run `/autoskillit:prepare-issue` for each ticket group? [Y/n]
 
 On Y, call `prepare-issue` for each ticket body file (in parallel). After issue creation,
-post the validation summary as a comment on each created issue:
-```bash
-gh issue comment {issue_number} --body-file {validation_summary_path}
-```
+append the validation summary to each created issue body using `gh issue edit --body-file`:
+fetch the current issue body, append a horizontal rule and the validation summary content,
+write the combined text to a temp file, then run `gh issue edit {issue_number} --body-file`
+with that temp file. Do NOT use `gh issue comment`.
 
 ---
 
 ## Output Location
+
+All output files are written relative to the current working directory under `{{AUTOSKILLIT_TEMP}}/validate-audit/`:
 
 ```
 {{AUTOSKILLIT_TEMP}}/validate-audit/

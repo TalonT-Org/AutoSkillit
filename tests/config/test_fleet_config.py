@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from autoskillit.config import AutomationConfig, load_config
+from autoskillit.config import AutomationConfig, FleetConfig, load_config
 
 pytestmark = [pytest.mark.layer("config"), pytest.mark.small]
 
@@ -15,8 +15,6 @@ pytestmark = [pytest.mark.layer("config"), pytest.mark.small]
 class TestFleetConfig:
     def test_automation_config_has_fleet_field(self) -> None:
         """AutomationConfig exposes fleet as a FleetConfig."""
-        from autoskillit.config.settings import AutomationConfig, FleetConfig
-
         cfg = AutomationConfig()
         assert isinstance(cfg.fleet, FleetConfig)
         assert cfg.fleet.default_timeout_sec == 3600
@@ -28,6 +26,10 @@ class TestFleetConfig:
         from autoskillit.core.paths import pkg_root
 
         defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
+        assert "fleet" in defaults, "defaults.yaml missing 'fleet' section"
+        assert "default_timeout_sec" in defaults["fleet"], (
+            "defaults.yaml['fleet'] missing 'default_timeout_sec'"
+        )
         yaml_val = defaults["fleet"]["default_timeout_sec"]
         assert FleetConfig().default_timeout_sec == yaml_val
 
@@ -67,8 +69,6 @@ class TestFleetConfig:
 
     def test_fleet_config_rejects_zero_timeout(self) -> None:
         """FleetConfig raises ValueError when default_timeout_sec is zero."""
-        import pytest
-
         from autoskillit.config.settings import FleetConfig
 
         with pytest.raises(ValueError, match="default_timeout_sec must be positive"):
@@ -76,8 +76,6 @@ class TestFleetConfig:
 
     def test_fleet_config_rejects_negative_timeout(self) -> None:
         """FleetConfig raises ValueError when default_timeout_sec is negative."""
-        import pytest
-
         from autoskillit.config.settings import FleetConfig
 
         with pytest.raises(ValueError, match="default_timeout_sec must be positive"):
@@ -119,23 +117,6 @@ class TestFleetConfig:
         (config_dir / "config.yaml").write_text(yaml.dump(config_data))
         with pytest.raises(ValueError, match="default_timeout_sec must be positive"):
             load_config(tmp_path)
-
-
-def test_project_config_experimental_enabled_or_fleet_enabled() -> None:
-    """Integration's resolved config enables fleet via experimental_enabled blanket."""
-    from pathlib import Path
-
-    from autoskillit.config.settings import load_config
-    from autoskillit.core.feature_flags import is_feature_enabled
-
-    project_root = Path(__file__).resolve().parents[2]
-    if not (project_root / ".autoskillit" / "config.yaml").exists():
-        pytest.skip("project config not present (clean clone or CI)")
-    cfg = load_config(project_root)
-    assert (
-        is_feature_enabled("fleet", cfg.features, experimental_enabled=cfg.experimental_enabled)
-        is True
-    )
 
 
 def test_config_resolution_fleet_enabled_via_experimental() -> None:

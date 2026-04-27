@@ -19,8 +19,6 @@ class TestSkillsConfig:
 
     def test_skills_config_tier_duplication_raises(self) -> None:
         """Skill in multiple tiers raises ValueError at construction (REQ-TIER-009)."""
-        import pytest
-
         from autoskillit.config.settings import SkillsConfig
 
         with pytest.raises(ValueError, match="multiple tiers"):
@@ -48,7 +46,7 @@ class TestSkillsConfig:
         """load_config() produces an AutomationConfig with tier assignments from defaults."""
         from autoskillit.config import load_config
 
-        cfg = load_config(tmp_path / "settings.toml")
+        cfg = load_config(tmp_path)
         assert "open-kitchen" in cfg.skills.tier1
         assert "make-plan" in cfg.skills.tier2
         assert "compose-pr" in cfg.skills.tier3

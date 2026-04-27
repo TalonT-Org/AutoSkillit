@@ -1801,10 +1801,13 @@ skills:
     inputs:
       - name: plan_snapshot_path
         type: file_path
+        required: true
       - name: target_phase_id
         type: str
+        required: true
       - name: output_dir
         type: directory_path
+        required: true
     outputs:
       - name: elab_result_path
         type: file_path

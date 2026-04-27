@@ -92,6 +92,8 @@ steps:
       skill_command: "/autoskillit:planner-elaborate-phase ${{ context.current_item_path }} ${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"
     optional_context_refs: [current_item_path]
+    capture:
+      elab_result_path: "${{ result.elab_result_path }}"
     retries: 1
     on_success: check_phases
     on_exhausted: escalate_stop

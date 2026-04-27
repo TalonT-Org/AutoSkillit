@@ -14,7 +14,7 @@ hooks:
 # planner-elaborate-phase
 
 Standalone parallel worker for Phase Pass 1. Each instance receives the full plan
-snapshot (all phases in short-form) and a target phase ID. It explores the codebase
+snapshot (each phase in condensed form) and a target phase ID. It explores the codebase
 independently and writes a single elaborated phase result. No dependency on
 `check_remaining` or any shared state machine.
 
@@ -26,7 +26,7 @@ independently and writes a single elaborated phase result. No dependency on
 
 ## Arguments
 
-- **$1** — Absolute path to `plan_snapshot.json` (all phases as `PhaseShort`)
+- **$1** — Absolute path to `plan_snapshot.json` (every phase as a `PhaseShort` entry)
 - **$2** — Phase ID to elaborate (e.g., `"P3"`)
 - **$3** — Absolute path to output directory (result written here)
 

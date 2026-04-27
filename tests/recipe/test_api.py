@@ -718,3 +718,5 @@ def test_path_mtime_ns_exists_and_old_helpers_removed() -> None:
     assert hasattr(api, "_path_mtime_ns"), "_path_mtime_ns must exist"
     assert not hasattr(api, "_file_mtime_ns"), "_file_mtime_ns must be removed"
     assert not hasattr(api, "_dir_mtime_ns"), "_dir_mtime_ns must be removed"
+    assert callable(api._path_mtime_ns), "_path_mtime_ns must be callable"
+    assert isinstance(api._path_mtime_ns(Path(".")), int), "_path_mtime_ns must return int"

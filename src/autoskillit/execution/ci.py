@@ -457,7 +457,7 @@ class DefaultCIWatcher:
                     "run_id": run_id,
                     "conclusion": "timed_out",
                     "failed_jobs": [],
-                    "run_status": "in_progress",
+                    "run_status": run_data.get("status", "in_progress"),
                     "hint": (
                         f"CI run {run_id} is still in progress (not failed). "
                         "Call wait_for_ci again to continue watching."

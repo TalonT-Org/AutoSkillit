@@ -47,7 +47,7 @@ cross-assignment WP ownership conflicts, applies field-level edits, and writes
 - Validate each L0 response for `assignment_id`, `changes` (array), `dependency_corrections` (array), `wp_proposal_adjustments` (array)
 - Log `WARNING` to stdout for any L0 response that fails validation (skip that assignment)
 - Log `CRITICAL` to stdout for any L0 subagent that fails entirely (proceed with N-1)
-- When two assignments propose WPs covering the same files, assign ownership to the earlier assignment_id by default (e.g. `P1-A1` beats `P1-A2`); log each resolution
+- When two assignments propose WPs covering the same files, assign ownership to the numerically earlier assignment_id using natural sort on numeric suffixes (e.g. `P1-A1` beats `P1-A2`; `P1-A2` beats `P1-A10`); log each resolution
 - Emit: `refined_assignments_path = <absolute path to refined_assignments.json>`
 
 ## Workflow
@@ -57,6 +57,10 @@ cross-assignment WP ownership conflicts, applies field-level edits, and writes
 Read `$1` (combined_assignments.json). Parse as a `PlanDocument`. Extract all
 assignment IDs from `assignments[*].id`. Fail immediately (exit non-zero) if
 `assignments` is empty or the file is malformed — do not proceed to spawn L0s.
+The failure message must include the file path and the parse/validation error string:
+```
+FATAL: failed to parse {path}: {error_detail}
+```
 
 Read `$2` (refined_plan.json). Build a map `phase_id → PhaseElaborated` for L0 context.
 
@@ -117,7 +121,12 @@ For each L0 response:
 - `dependency_corrections` must be a valid JSON array (may be empty `[]`)
 - `wp_proposal_adjustments` must be a valid JSON array (may be empty `[]`)
 
-On validation failure:
+On `assignment_id` mismatch (field present but does not match expected ID):
+```
+WARNING: L0 response assignment_id mismatch — expected {expected}, got {actual} — skipping
+```
+
+On other validation failure (field absent or array invalid):
 ```
 WARNING: L0 response for {assignment_id} failed validation — skipping
 ```
@@ -132,7 +141,8 @@ CRITICAL: L0 for {assignment_id} failed — proceeding with N-1 suggestions
 Collect all `wp_proposal_adjustments` from validated L0 responses. Group by the
 set of files each WP proposal covers (use `estimated_files` from the elaborated WP).
 When two assignments both claim a file set: assign ownership to the assignment with
-the lexicographically earlier `assignment_id` (e.g. `P1-A1` beats `P1-A2`).
+the numerically earlier `assignment_id` using natural sort on numeric suffixes
+(e.g. `P1-A1` beats `P1-A2`; `P1-A2` beats `P1-A10`).
 Log each resolution:
 ```
 WP CONFLICT: {assignment_id_A} vs {assignment_id_B} — {field} assigned to {winner}

@@ -831,6 +831,9 @@ class TestWaitForCiAutoTrigger:
         tool_ctx.runner.push(
             _sub(0, "def456\n")
         )  # git rev-parse HEAD — new HEAD after empty commit
+        tool_ctx.runner.push(
+            _sub(0, "https://github.com/org/repo\n")
+        )  # git remote get-url upstream
         tool_ctx.runner.push(_sub(0))  # git push --force-with-lease
 
         result = json.loads(await wait_for_ci("feature-branch", cwd="/repo", auto_trigger=True))
@@ -893,6 +896,9 @@ class TestWaitForCiAutoTrigger:
         tool_ctx.runner.push(_sub(0, '{"mergeable":"MERGEABLE"}\n'))  # gh pr view
         tool_ctx.runner.push(_sub(0))  # git commit --allow-empty
         tool_ctx.runner.push(_sub(0, "def456\n"))  # git rev-parse HEAD (new)
+        tool_ctx.runner.push(
+            _sub(0, "https://github.com/org/repo\n")
+        )  # git remote get-url upstream
         tool_ctx.runner.push(_sub(1, stderr="error: remote rejected"))  # git push fails
         tool_ctx.runner.push(_sub(0))  # git reset --soft HEAD~1 (cleanup)
 
@@ -927,6 +933,9 @@ class TestWaitForCiAutoTrigger:
         tool_ctx.runner.push(
             _sub(0, "def456\n")
         )  # git rev-parse HEAD — new HEAD after empty commit
+        tool_ctx.runner.push(
+            _sub(0, "https://github.com/org/repo\n")
+        )  # git remote get-url upstream
         tool_ctx.runner.push(_sub(0))  # git push --force-with-lease
 
         result = json.loads(await wait_for_ci("branch", cwd="/repo", auto_trigger=True))

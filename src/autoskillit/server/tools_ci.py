@@ -15,7 +15,6 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import CIRunScope, get_logger
-from autoskillit.execution.remote_resolver import resolve_remote_name
 from autoskillit.pipeline import ToolContext
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
@@ -739,7 +738,14 @@ async def _auto_trigger_ci(
     rc_sha, sha_out, _ = await _run_subprocess(["git", "rev-parse", "HEAD"], cwd=cwd, timeout=5.0)
     new_head_sha = (sha_out.strip() or None) if rc_sha == 0 else None
 
-    remote_name = await resolve_remote_name(cwd)
+    remote_name = "origin"
+    for _candidate in ("upstream", "origin"):
+        rc_r, url_r, _ = await _run_subprocess(
+            ["git", "remote", "get-url", _candidate], cwd=cwd, timeout=5.0
+        )
+        if rc_r == 0 and not url_r.strip().startswith("file://"):
+            remote_name = _candidate
+            break
     rc_p, _, err_p = await _run_subprocess(
         ["git", "push", "--force-with-lease", remote_name, branch],
         cwd=cwd,

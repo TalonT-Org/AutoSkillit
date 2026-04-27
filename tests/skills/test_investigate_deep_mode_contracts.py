@@ -7,6 +7,8 @@ templates, and enhanced report template fields.
 
 import pytest
 
+from tests.skills.conftest import extract_step_section
+
 
 @pytest.fixture(scope="module")
 def deep_mode_section(skill_text: str) -> str:
@@ -16,23 +18,6 @@ def deep_mode_section(skill_text: str) -> str:
         pytest.fail("'## Deep Analysis Mode' section not found in investigate SKILL.md")
     # Find the next ## heading (not ###) after the section start
     search_from = start_idx + len("## Deep Analysis Mode")
-    next_h2 = -1
-    for i in range(search_from, len(skill_text) - 2):
-        if skill_text[i : i + 3] == "## " and skill_text[i - 1] == "\n":
-            next_h2 = i
-            break
-    if next_h2 != -1:
-        return skill_text[start_idx:next_h2]
-    return skill_text[start_idx:]
-
-
-@pytest.fixture(scope="module")
-def deep_workflow_section(skill_text: str) -> str:
-    """Extract ## Deep Analysis Mode Workflow section to end-of-file (or next ## at depth ≤ 2)."""
-    start_idx = skill_text.find("## Deep Analysis Mode Workflow")
-    if start_idx == -1:
-        pytest.fail("'## Deep Analysis Mode Workflow' not found in investigate SKILL.md")
-    search_from = start_idx + len("## Deep Analysis Mode Workflow")
     next_h2 = -1
     for i in range(search_from, len(skill_text) - 2):
         if skill_text[i : i + 3] == "## " and skill_text[i - 1] == "\n":
@@ -139,20 +124,9 @@ def test_deep_workflow_has_step(deep_workflow_section: str, step: str) -> None:
     )
 
 
-def _extract_step_section(deep_workflow_section: str, step_name: str) -> str:
-    """Helper to extract the text of a specific D-step subsection."""
-    start = deep_workflow_section.find(f"### {step_name}")
-    if start == -1:
-        return ""
-    next_step = deep_workflow_section.find("### Step D", start + 1)
-    if next_step != -1:
-        return deep_workflow_section[start:next_step]
-    return deep_workflow_section[start:]
-
-
 def test_d1_batch_plan_proposal(deep_workflow_section: str) -> None:
     """Step D1 must describe proposing a batch plan."""
-    d1 = _extract_step_section(deep_workflow_section, "Step D1")
+    d1 = extract_step_section(deep_workflow_section, "Step D1")
     has_batch_plan = "batch plan" in d1.lower()
     has_proposed = "Proposed investigation plan" in d1
     assert has_batch_plan or has_proposed, (
@@ -162,7 +136,7 @@ def test_d1_batch_plan_proposal(deep_workflow_section: str) -> None:
 
 def test_d1_headless_auto_approve(deep_workflow_section: str) -> None:
     """Step D1 must reference AUTOSKILLIT_HEADLESS for auto-approve."""
-    d1 = _extract_step_section(deep_workflow_section, "Step D1")
+    d1 = extract_step_section(deep_workflow_section, "Step D1")
     assert "AUTOSKILLIT_HEADLESS" in d1, (
         "Step D1 must reference 'AUTOSKILLIT_HEADLESS' environment variable for "
         "headless auto-approval of the batch plan"
@@ -170,18 +144,18 @@ def test_d1_headless_auto_approve(deep_workflow_section: str) -> None:
 
 
 def test_d2_broad_exploration_minimum_subagents(deep_workflow_section: str) -> None:
-    """Step D2 must specify a minimum of 4 parallel subagents."""
-    d2 = _extract_step_section(deep_workflow_section, "Step D2")
+    """Step D2 must specify a minimum of 5 parallel subagents."""
+    d2 = extract_step_section(deep_workflow_section, "Step D2")
     has_minimum = "minimum" in d2.lower()
-    has_four = "4" in d2
-    assert has_minimum and has_four, (
-        "Step D2 must specify a 'minimum' of '4' parallel subagents for broad exploration"
+    has_five = "5" in d2
+    assert has_minimum and has_five, (
+        "Step D2 must specify a 'minimum' of '5' parallel subagents for broad exploration"
     )
 
 
 def test_d2_inter_batch_synthesis(deep_workflow_section: str) -> None:
     """Step D2 must describe inter-batch synthesis."""
-    d2 = _extract_step_section(deep_workflow_section, "Step D2")
+    d2 = extract_step_section(deep_workflow_section, "Step D2")
     assert "inter-batch synthesis" in d2.lower(), (
         "Step D2 must describe 'inter-batch synthesis' after Batch 1 completes"
     )
@@ -189,7 +163,7 @@ def test_d2_inter_batch_synthesis(deep_workflow_section: str) -> None:
 
 def test_d2_historical_recurrence_parallel(deep_workflow_section: str) -> None:
     """Step D2 must reference Step 3.5 or historical check running in parallel."""
-    d2 = _extract_step_section(deep_workflow_section, "Step D2")
+    d2 = extract_step_section(deep_workflow_section, "Step D2")
     has_35 = "3.5" in d2
     has_historical = "historical" in d2.lower()
     assert has_35 or has_historical, (
@@ -199,7 +173,7 @@ def test_d2_historical_recurrence_parallel(deep_workflow_section: str) -> None:
 
 def test_d3_mandatory_web_research(deep_workflow_section: str) -> None:
     """Step D3 must require web research in each batch."""
-    d3 = _extract_step_section(deep_workflow_section, "Step D3")
+    d3 = extract_step_section(deep_workflow_section, "Step D3")
     assert "web research" in d3.lower(), (
         "Step D3 must describe mandatory 'web research' in each deepening batch"
     )
@@ -207,7 +181,7 @@ def test_d3_mandatory_web_research(deep_workflow_section: str) -> None:
 
 def test_d3_mandatory_code_exploration(deep_workflow_section: str) -> None:
     """Step D3 must require code exploration in each batch."""
-    d3 = _extract_step_section(deep_workflow_section, "Step D3")
+    d3 = extract_step_section(deep_workflow_section, "Step D3")
     has_code_exploration = "code exploration" in d3.lower()
     has_local_code = "local code" in d3.lower()
     assert has_code_exploration or has_local_code, (
@@ -218,7 +192,7 @@ def test_d3_mandatory_code_exploration(deep_workflow_section: str) -> None:
 
 def test_d3_early_termination(deep_workflow_section: str) -> None:
     """Step D3 must describe early termination conditions."""
-    d3 = _extract_step_section(deep_workflow_section, "Step D3")
+    d3 = extract_step_section(deep_workflow_section, "Step D3")
     assert "early termination" in d3.lower(), (
         "Step D3 must describe 'early termination' conditions for when all findings "
         "are SUPPORTED and no new leads emerge"
@@ -227,7 +201,7 @@ def test_d3_early_termination(deep_workflow_section: str) -> None:
 
 def test_d4_challenge_round_adversarial(deep_workflow_section: str) -> None:
     """Step D4 must describe an adversarial subagent."""
-    d4 = _extract_step_section(deep_workflow_section, "Step D4")
+    d4 = extract_step_section(deep_workflow_section, "Step D4")
     assert "adversarial" in d4.lower(), (
         "Step D4 must describe an 'adversarial' subagent for the challenge round"
     )
@@ -235,7 +209,7 @@ def test_d4_challenge_round_adversarial(deep_workflow_section: str) -> None:
 
 def test_d4_needs_evidence_trigger(deep_workflow_section: str) -> None:
     """Step D4 must be triggered by NEEDS-EVIDENCE findings."""
-    d4 = _extract_step_section(deep_workflow_section, "Step D4")
+    d4 = extract_step_section(deep_workflow_section, "Step D4")
     assert "NEEDS-EVIDENCE" in d4, (
         "Step D4 must specify that it fires when a finding is marked 'NEEDS-EVIDENCE'"
     )
@@ -243,7 +217,7 @@ def test_d4_needs_evidence_trigger(deep_workflow_section: str) -> None:
 
 def test_d4_prior_fix_falsifiability(deep_workflow_section: str) -> None:
     """Step D4 must reference prior fix falsifiability check."""
-    d4 = _extract_step_section(deep_workflow_section, "Step D4")
+    d4 = extract_step_section(deep_workflow_section, "Step D4")
     has_falsifiability = "falsifiability" in d4.lower()
     has_prior_fix = "prior fix" in d4.lower()
     assert has_falsifiability or has_prior_fix, (
@@ -253,7 +227,7 @@ def test_d4_prior_fix_falsifiability(deep_workflow_section: str) -> None:
 
 def test_d5_blast_radius(deep_workflow_section: str) -> None:
     """Step D5 must describe blast radius analysis."""
-    d5 = _extract_step_section(deep_workflow_section, "Step D5")
+    d5 = extract_step_section(deep_workflow_section, "Step D5")
     assert "blast radius" in d5.lower(), (
         "Step D5 must describe 'blast radius' analysis for candidate solutions"
     )
@@ -261,7 +235,7 @@ def test_d5_blast_radius(deep_workflow_section: str) -> None:
 
 def test_d5_single_recommendation(deep_workflow_section: str) -> None:
     """Step D5 must converge to a single recommendation."""
-    d5 = _extract_step_section(deep_workflow_section, "Step D5")
+    d5 = extract_step_section(deep_workflow_section, "Step D5")
     assert "single recommendation" in d5.lower(), (
         "Step D5 must converge to a 'single recommendation' after blast radius analysis"
     )
@@ -269,13 +243,13 @@ def test_d5_single_recommendation(deep_workflow_section: str) -> None:
 
 def test_d6_post_report_validation(deep_workflow_section: str) -> None:
     """Step D6 must describe post-report validation."""
-    d6 = _extract_step_section(deep_workflow_section, "Step D6")
+    d6 = extract_step_section(deep_workflow_section, "Step D6")
     assert "validation" in d6.lower(), "Step D6 must describe post-report 'validation'"
 
 
 def test_d6_independent_validators(deep_workflow_section: str) -> None:
     """Step D6 must specify 2 or 3 independent validators."""
-    d6 = _extract_step_section(deep_workflow_section, "Step D6")
+    d6 = extract_step_section(deep_workflow_section, "Step D6")
     has_count = "2" in d6 or "3" in d6
     has_validator = "validator" in d6.lower()
     assert has_count and has_validator, (
@@ -285,7 +259,7 @@ def test_d6_independent_validators(deep_workflow_section: str) -> None:
 
 def test_d6_factual_accuracy_check(deep_workflow_section: str) -> None:
     """Step D6 must include a factual accuracy check."""
-    d6 = _extract_step_section(deep_workflow_section, "Step D6")
+    d6 = extract_step_section(deep_workflow_section, "Step D6")
     assert "factual accuracy" in d6.lower(), (
         "Step D6 must include a 'factual accuracy' validator role"
     )

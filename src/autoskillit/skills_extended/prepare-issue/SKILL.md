@@ -220,6 +220,16 @@ provided (adopting an existing issue) or when `--dry-run` is active.
    awk '/^## Findings with Exceptions/{skip=1} skip && /^---/{skip=0; next} !skip' \
      "${ISSUE_BODY_FILE}" > "${ISSUE_BODY_FILE}.tmp" \
      && mv "${ISSUE_BODY_FILE}.tmp" "${ISSUE_BODY_FILE}"
+
+   # Defensive strip: remove any finding detail section that contains an exception note
+   # (guards against exception-warranted findings leaking inline into ## Validated Findings)
+   awk '
+     /^\*\*Exception note:\*\*/ { in_exception=1; next }
+     in_exception && /^---$/ { in_exception=0; next }
+     in_exception && /^## / { in_exception=0 }
+     !in_exception
+   ' "${ISSUE_BODY_FILE}" > "${ISSUE_BODY_FILE}.tmp" \
+     && mv "${ISSUE_BODY_FILE}.tmp" "${ISSUE_BODY_FILE}"
    ```
 
    **What each transform removes:**
@@ -231,6 +241,7 @@ provided (adopting an existing issue) or when `--dry-run` is active.
    - `| **Contested:** N` and `| **Exception warranted:** N` — count segments from the
      `**Findings processed:**` summary line; leaves `**Findings processed:** {total} | **Valid:** {N}`
    - `## Findings with Exceptions` through next `---` — the entire exception-findings section
+   - `**Exception note:**` blocks — exception-warranted finding detail sections (defense-in-depth; upstream validate-audit now excludes these, but strip is retained for robustness)
 
 3. Call `gh issue create` using the temp file:
 

@@ -427,7 +427,7 @@ class TestSkillResolver:
         assert names == {"open-kitchen", "close-kitchen", "sous-chef"}
 
     def test_119_skills_in_skills_extended(self) -> None:
-        """skills_extended/ contains exactly 121 SKILL.md-carrying directories."""
+        """skills_extended/ contains exactly 123 SKILL.md-carrying directories."""
         skills = [
             d
             for d in bundled_skills_extended_dir().iterdir()
@@ -436,7 +436,7 @@ class TestSkillResolver:
         assert len(skills) == 123
 
     def test_skill_resolver_list_all_total_count(self) -> None:
-        """list_all() returns 123 public skills (2 Tier-1 + 121 extended)."""
+        """list_all() returns 125 public skills (2 Tier-1 + 123 extended)."""
         assert len(DefaultSkillResolver().list_all()) == 125
 
     def test_skill_resolver_resolve_extended_skill(self) -> None:

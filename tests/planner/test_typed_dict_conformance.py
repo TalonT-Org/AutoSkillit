@@ -10,6 +10,7 @@ from autoskillit.planner.schema import (
     WP_REQUIRED_KEYS,
     AssignmentResult,
     PhaseResult,
+    PhaseShort,
     WPResult,
     validate_assignment_result,
     validate_phase_result,
@@ -135,3 +136,12 @@ def test_validate_assignment_result_parses_id(
 def test_validate_phase_result_slugifies_name(name: str, expected_slug: str) -> None:
     result = validate_phase_result({"id": "P1", "name": name, "ordering": 1})
     assert result["name_slug"] == expected_slug
+
+
+def test_phase_short_includes_ordering() -> None:
+    """PhaseShort snapshot field set must include ordering for worker sequencing."""
+    import typing
+
+    hints = typing.get_type_hints(PhaseShort)
+    assert "ordering" in hints, "PhaseShort must include ordering per Issue 02 spec"
+    assert hints["ordering"] is int

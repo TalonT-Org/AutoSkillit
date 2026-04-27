@@ -300,7 +300,7 @@ def test_build_plan_snapshot_produces_phase_ids(tmp_path):
 
 
 def test_build_plan_snapshot_writes_short_form_only(tmp_path):
-    """Snapshot phases contain only PhaseShort fields: id, name, goal, scope."""
+    """Snapshot phases contain only PhaseShort fields: id, name, goal, scope, ordering."""
     phases_dir = tmp_path / "phases"
     phases_dir.mkdir()
     r = {
@@ -324,4 +324,28 @@ def test_build_plan_snapshot_writes_short_form_only(tmp_path):
     assert data["source_dir"] == "/s"
     assert data["schema_version"] == 1
     phase = data["phases"][0]
-    assert set(phase.keys()) == {"id", "name", "goal", "scope"}
+    assert set(phase.keys()) == {"id", "name", "goal", "scope", "ordering"}
+
+
+def test_build_plan_snapshot_projects_ordering(tmp_path) -> None:
+    """Snapshot items must include ordering so parallel workers can reason about phase sequence."""
+    phases_dir = tmp_path / "phases"
+    phases_dir.mkdir()
+    result = {
+        "id": "P1",
+        "name": "Foundation",
+        "goal": "Setup base",
+        "scope": ["core"],
+        "ordering": 1,
+        "assignments_preview": [],
+        "relationship_notes": "",
+    }
+    (phases_dir / "P1_result.json").write_text(json.dumps(result))
+    out = tmp_path / "snapshot.json"
+
+    build_plan_snapshot(str(phases_dir), str(out), task="test", source_dir="/src")
+
+    doc = json.loads(out.read_text())
+    phase = doc["phases"][0]
+    assert set(phase.keys()) == {"id", "name", "goal", "scope", "ordering"}
+    assert phase["ordering"] == 1

@@ -1798,8 +1798,21 @@ skills:
     - "phase_manifest_path = /tmp/autoskillit/planner/run-20260101-120000/phases/phase_manifest.json\n%%ORDER_UP%%"
     write_behavior: always
   planner-elaborate-phase:
-    inputs: []
-    outputs: []
+    inputs:
+      - name: plan_snapshot_path
+        type: file_path
+      - name: target_phase_id
+        type: str
+      - name: output_dir
+        type: directory_path
+    outputs:
+      - name: elab_result_path
+        type: file_path
+    expected_output_patterns:
+      - "elab_result_path\\s*=\\s*\\S+"
+    pattern_examples:
+      - "elab_result_path = /tmp/autoskillit/planner/run-20260101-120000/phases/P1_result.json\n%%ORDER_UP%%"
+    write_behavior: always
   planner-elaborate-assignment:
     inputs: []
     outputs: []

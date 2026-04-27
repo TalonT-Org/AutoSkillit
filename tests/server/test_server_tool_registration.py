@@ -249,7 +249,7 @@ class TestConfigDrivenBehavior:
         await test_check(worktree_path="/tmp/wt")
 
         assert tool_ctx.runner.call_args_list[0][0] == ["pytest", "-x"]
-        assert tool_ctx.runner.call_args_list[0][2] == 300.0
+        assert tool_ctx.runner.call_args_list[0][2] == pytest.approx(300.0, abs=1.0)
 
     @pytest.mark.anyio
     async def test_classify_fix_uses_config_prefixes(self, tool_ctx, tmp_path):

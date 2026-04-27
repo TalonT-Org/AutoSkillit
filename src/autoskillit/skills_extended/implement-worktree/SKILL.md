@@ -147,7 +147,7 @@ missed registration generates 5–30 cascading test failures that require a seco
 
 ### Step 5: Final Verification
 
-Read the configured test command from `.autoskillit/config.yaml` (key: `test_check.command`). Use this command wherever `{test_command}` appears below. If no config exists, use `task test-check` as the default.
+Read the configured test command(s) from `.autoskillit/config.yaml`: check `test_check.commands` (ordered list of commands, if set) or `test_check.command` (single command, default: `task test-check`). The `test_check` MCP tool runs all configured commands automatically.
 
 Run the project's code quality checks and test suite from the worktree.
 

@@ -203,7 +203,12 @@ If no config exists, present the suggested config in full. If config exists, onl
 Suggested config template:
 ```yaml
 test_check:
+  # Single command (most projects):
   command: {detected test command as list}
+  # Multi-surface projects (e.g. Rust + Python e2e):
+  # commands:
+  #   - [cargo, nextest, run]
+  #   - [task, e2e-check]
   # timeout: 600
 
 # classify_fix:

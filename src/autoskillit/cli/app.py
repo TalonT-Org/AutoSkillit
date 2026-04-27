@@ -118,7 +118,7 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
     get_logger(__name__).info(
         "serve_startup",
         config_path=resolved_path,
-        test_check_command=cfg.test_check.command,
+        test_check_command=cfg.test_check.commands or cfg.test_check.command,
     )
 
     # Inject config-derived protected branches so hook scripts read consistent values.

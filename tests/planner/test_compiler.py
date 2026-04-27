@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.planner.compiler import compile_plan
+from tests.planner.conftest import make_assignment_result, make_phase_result, make_wp_result
 
 pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.feature("planner")]
 
@@ -37,37 +38,32 @@ def _make_valid_output_dir(
     for p in range(1, num_phases + 1):
         _write_json(
             phases_dir / f"P{p}_result.json",
-            {
-                "phase_number": p,
-                "name": f"Phase {p}",
-                "name_slug": f"phase-{p}",
-                "assignments": [f"P{p}-A1"],
-            },
+            make_phase_result(p, name=f"Phase {p}"),
         )
         _write_json(
             assigns_dir / f"P{p}-A1_result.json",
-            {
-                "phase_number": p,
-                "assignment_number": 1,
-                "name": f"Test Assignment P{p}",
-                "proposed_work_packages": [f"P{p}-A1-WP1"],
-            },
+            make_assignment_result(
+                p,
+                1,
+                name=f"Test Assignment P{p}",
+                proposed_work_packages=[f"P{p}-A1-WP1"],
+            ),
         )
         deps: list[str] = []
         if dependency_chain and p > 1:
             deps = [f"P{p - 1}-A1-WP1"]
         _write_json(
             wps_dir / f"P{p}-A1-WP1_result.json",
-            {
-                "id": f"P{p}-A1-WP1",
-                "name": f"WP P{p}-A1-WP1",
-                "summary": f"Summary P{p}",
-                "goal": f"Goal P{p}",
-                "deliverables": [f"src/mod_p{p}.py"],
-                "technical_steps": [f"step for p{p}"],
-                "acceptance_criteria": [f"criterion for p{p}"],
-                "depends_on": deps,
-            },
+            make_wp_result(
+                f"P{p}-A1-WP1",
+                name=f"WP P{p}-A1-WP1",
+                summary=f"Summary P{p}",
+                goal=f"Goal P{p}",
+                deliverables=[f"src/mod_p{p}.py"],
+                technical_steps=[f"step for p{p}"],
+                acceptance_criteria=[f"criterion for p{p}"],
+                depends_on=deps,
+            ),
         )
 
     manifest_items = [{"id": f"P{p}-A1-WP1", "status": "done"} for p in range(1, num_phases + 1)]
@@ -99,35 +95,30 @@ def _make_chain_3_wps(tmp_path: Path) -> Path:
 
     _write_json(
         phases_dir / "P1_result.json",
-        {
-            "phase_number": 1,
-            "name": "Foundation",
-            "name_slug": "foundation",
-            "assignments": ["P1-A1"],
-        },
+        make_phase_result(1, name="Foundation"),
     )
     _write_json(
         assigns_dir / "P1-A1_result.json",
-        {
-            "phase_number": 1,
-            "assignment_number": 1,
-            "name": "Test Assignment",
-            "proposed_work_packages": ["P1-A1-WP1", "P1-A1-WP2", "P1-A1-WP3"],
-        },
+        make_assignment_result(
+            1,
+            1,
+            name="Test Assignment",
+            proposed_work_packages=["P1-A1-WP1", "P1-A1-WP2", "P1-A1-WP3"],
+        ),
     )
     for i, deps in [(1, []), (2, ["P1-A1-WP1"]), (3, ["P1-A1-WP2"])]:
         _write_json(
             wps_dir / f"P1-A1-WP{i}_result.json",
-            {
-                "id": f"P1-A1-WP{i}",
-                "name": f"WP {i}",
-                "summary": f"Summary {i}",
-                "goal": f"Goal {i}",
-                "deliverables": [f"src/mod{i}.py"],
-                "technical_steps": [f"step {i}"],
-                "acceptance_criteria": [f"criterion {i}"],
-                "depends_on": deps,
-            },
+            make_wp_result(
+                f"P1-A1-WP{i}",
+                name=f"WP {i}",
+                summary=f"Summary {i}",
+                goal=f"Goal {i}",
+                deliverables=[f"src/mod{i}.py"],
+                technical_steps=[f"step {i}"],
+                acceptance_criteria=[f"criterion {i}"],
+                depends_on=deps,
+            ),
         )
     manifest_items = [{"id": f"P1-A1-WP{i}", "status": "done"} for i in range(1, 4)]
     _write_json(

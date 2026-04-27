@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.planner.validation import validate_plan
+from tests.planner.conftest import make_assignment_result, make_phase_result, make_wp_result
 
 pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.feature("planner")]
 
@@ -40,26 +41,21 @@ def _make_minimal_output_dir(
     for p in range(1, num_phases + 1):
         _write_json(
             phases_dir / f"P{p}_result.json",
-            {
-                "phase_number": p,
-                "name": f"Phase {p}",
-                "name_slug": f"phase-{p}",
-                "assignments": [f"P{p}-A1"],
-            },
+            make_phase_result(p, name=f"Phase {p}"),
         )
 
     for p in range(1, num_phases + 1):
         for a in range(1, 2):
             _write_json(
                 assigns_dir / f"P{p}-A{a}_result.json",
-                {
-                    "phase_number": p,
-                    "assignment_number": a,
-                    "name": f"Assignment P{p}-A{a}",
-                    "proposed_work_packages": [
+                make_assignment_result(
+                    p,
+                    a,
+                    name=f"Assignment P{p}-A{a}",
+                    proposed_work_packages=[
                         f"P{p}-A{a}-WP{w}" for w in range(1, wps_per_assignment + 1)
                     ],
-                },
+                ),
             )
 
     for p in range(1, num_phases + 1):
@@ -74,16 +70,7 @@ def _make_minimal_output_dir(
                 deps = (depends_on_override or {}).get(wp_id, [])
                 _write_json(
                     wps_dir / f"{wp_id}_result.json",
-                    {
-                        "id": wp_id,
-                        "name": f"WP {wp_id}",
-                        "summary": "summary",
-                        "goal": "goal",
-                        "deliverables": deliverables,
-                        "technical_steps": ["step 1"],
-                        "acceptance_criteria": ["criterion 1"],
-                        "depends_on": deps,
-                    },
+                    make_wp_result(wp_id, deliverables=deliverables, depends_on=deps),
                 )
 
     manifest_items = []
@@ -100,24 +87,14 @@ def _make_minimal_output_dir(
         for p in extra_phases:
             _write_json(
                 phases_dir / f"P{p}_result.json",
-                {
-                    "phase_number": p,
-                    "name": f"Phase {p}",
-                    "name_slug": f"phase-{p}",
-                    "assignments": [],
-                },
+                make_phase_result(p, name=f"Phase {p}"),
             )
 
     if extra_assignments:
         for p, a in extra_assignments:
             _write_json(
                 assigns_dir / f"P{p}-A{a}_result.json",
-                {
-                    "phase_number": p,
-                    "assignment_number": a,
-                    "name": f"Orphan assignment P{p}-A{a}",
-                    "proposed_work_packages": [],
-                },
+                make_assignment_result(p, a, name=f"Orphan assignment P{p}-A{a}"),
             )
 
     return tmp_path

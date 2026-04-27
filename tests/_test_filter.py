@@ -244,6 +244,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "execution/test_headless.py",
             "execution/test_zero_write_detection.py",
             "infra/test_pretty_output.py",
+            "skills/test_planner_skill_contracts.py",
             "skills/test_skill_placeholder_contracts.py",
             "skills/test_make_campaign_compliance.py",
             "skills/test_review_design_guards.py",
@@ -301,7 +302,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
         }
     ),
     # Standalone modules (not subpackage directories)
-    "planner": frozenset({"planner"}),
+    "planner": frozenset({"planner", "recipe"}),
     "_llm_triage": frozenset({"test_llm_triage.py", "execution", "server", "recipe"}),
     "_test_filter": frozenset({"arch", "infra", "contracts"}),
     "smoke_utils": frozenset({"test_smoke_utils.py", "recipe"}),

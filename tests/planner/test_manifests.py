@@ -6,6 +6,8 @@ from unittest.mock import patch
 
 import pytest
 
+from tests.planner.conftest import make_assignment_result, make_phase_result
+
 pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.feature("planner")]
 
 
@@ -347,13 +349,9 @@ def test_build_assignment_manifest_basic(tmp_path):
     output_dir = tmp_path / "out"
     output_dir.mkdir()
 
-    phase_result = {
-        "phase_number": 1,
-        "assignments": [
-            {"id_suffix": "A1", "name": "First assignment", "metadata": {}},
-        ],
-    }
-    (phases_dir / "phase_1_result.json").write_text(json.dumps(phase_result))
+    (phases_dir / "phase_1_result.json").write_text(
+        json.dumps(make_phase_result(1, assignments_preview=["First assignment"]))
+    )
 
     result = build_assignment_manifest(str(phases_dir), str(assignments_dir), str(output_dir))
 
@@ -374,23 +372,10 @@ def test_build_assignment_manifest_ordering(tmp_path):
     output_dir.mkdir()
 
     (phases_dir / "phase_2_result.json").write_text(
-        json.dumps(
-            {
-                "phase_number": 2,
-                "assignments": [{"id_suffix": "A1", "name": "Phase2-A1", "metadata": {}}],
-            }
-        )
+        json.dumps(make_phase_result(2, assignments_preview=["Phase2-A1"]))
     )
     (phases_dir / "phase_1_result.json").write_text(
-        json.dumps(
-            {
-                "phase_number": 1,
-                "assignments": [
-                    {"id_suffix": "A2", "name": "Phase1-A2", "metadata": {}},
-                    {"id_suffix": "A1", "name": "Phase1-A1", "metadata": {}},
-                ],
-            }
-        )
+        json.dumps(make_phase_result(1, assignments_preview=["Phase1-A2", "Phase1-A1"]))
     )
 
     result = build_assignment_manifest(
@@ -446,19 +431,22 @@ def test_build_wp_manifest_basic(tmp_path):
     output_dir = tmp_path / "out"
     output_dir.mkdir()
 
-    assign_result = {
-        "phase_number": 1,
-        "assignment_number": 1,
-        "proposed_work_packages": [
-            {
-                "id_suffix": "WP1",
-                "name": "First WP",
-                "scope": "do thing",
-                "estimated_files": ["a.py"],
-            },
-        ],
-    }
-    (assignments_dir / "P1-A1_result.json").write_text(json.dumps(assign_result))
+    (assignments_dir / "P1-A1_result.json").write_text(
+        json.dumps(
+            make_assignment_result(
+                1,
+                1,
+                proposed_work_packages=[
+                    {
+                        "id_suffix": "WP1",
+                        "name": "First WP",
+                        "scope": "do thing",
+                        "estimated_files": ["a.py"],
+                    }
+                ],
+            )
+        )
+    )
 
     result = build_wp_manifest(str(assignments_dir), str(output_dir))
 
@@ -481,25 +469,25 @@ def test_build_wp_manifest_hierarchical_ids(tmp_path):
 
     (assignments_dir / "P1-A2_result.json").write_text(
         json.dumps(
-            {
-                "phase_number": 1,
-                "assignment_number": 2,
-                "proposed_work_packages": [
-                    {"id_suffix": "WP1", "name": "P1A2WP1", "scope": "", "estimated_files": []},
+            make_assignment_result(
+                1,
+                2,
+                proposed_work_packages=[
+                    {"id_suffix": "WP1", "name": "P1A2WP1", "scope": "", "estimated_files": []}
                 ],
-            }
+            )
         )
     )
     (assignments_dir / "P1-A1_result.json").write_text(
         json.dumps(
-            {
-                "phase_number": 1,
-                "assignment_number": 1,
-                "proposed_work_packages": [
+            make_assignment_result(
+                1,
+                1,
+                proposed_work_packages=[
                     {"id_suffix": "WP2", "name": "P1A1WP2", "scope": "", "estimated_files": []},
                     {"id_suffix": "WP1", "name": "P1A1WP1", "scope": "", "estimated_files": []},
                 ],
-            }
+            )
         )
     )
 

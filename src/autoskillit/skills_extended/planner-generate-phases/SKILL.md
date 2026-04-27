@@ -81,6 +81,10 @@ For each phase, write to `{{AUTOSKILLIT_TEMP}}/planner/phases/{phase_id}_result.
 }
 ```
 
+The backend derives two additional fields at load time — do not write them:
+- `phase_number` (integer): derived from `ordering`
+- `name_slug` (string): derived by slugifying `name` (e.g., "Database Layer" → "database-layer")
+
 ### Step 4: Write phase manifest
 
 Write `{{AUTOSKILLIT_TEMP}}/planner/phases/phase_manifest.json`. Set every item's status to

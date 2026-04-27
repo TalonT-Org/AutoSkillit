@@ -53,7 +53,7 @@ def _check_weak_constraint_text(ctx: ValidationContext) -> list[RuleFinding]:
 @semantic_rule(
     name="undeclared-capture-key",
     description="result.X captures must match skill output keys in skill_contracts.yaml",
-    severity=Severity.WARNING,
+    severity=Severity.ERROR,
 )
 def _check_capture_output_coverage(ctx: ValidationContext) -> list[RuleFinding]:
     wf = ctx.recipe
@@ -77,7 +77,7 @@ def _check_capture_output_coverage(ctx: ValidationContext) -> list[RuleFinding]:
             findings.append(
                 RuleFinding(
                     rule="undeclared-capture-key",
-                    severity=Severity.WARNING,
+                    severity=Severity.ERROR,
                     step_name=step_name,
                     message=(
                         f"Step '{step_name}' captures from skill '{skill_name}' "
@@ -96,7 +96,7 @@ def _check_capture_output_coverage(ctx: ValidationContext) -> list[RuleFinding]:
                     findings.append(
                         RuleFinding(
                             rule="undeclared-capture-key",
-                            severity=Severity.WARNING,
+                            severity=Severity.ERROR,
                             step_name=step_name,
                             message=(
                                 f"Step '{step_name}' captures result.{ref_key} "
@@ -112,7 +112,7 @@ def _check_capture_output_coverage(ctx: ValidationContext) -> list[RuleFinding]:
                     findings.append(
                         RuleFinding(
                             rule="undeclared-capture-key",
-                            severity=Severity.WARNING,
+                            severity=Severity.ERROR,
                             step_name=step_name,
                             message=(
                                 f"Step '{step_name}' captures result.{ref_key} via capture_list "
@@ -247,7 +247,7 @@ def _check_implicit_handoff(ctx: ValidationContext) -> list[RuleFinding]:
             continue
         if not contract.get("outputs"):
             continue
-        if not step.capture:
+        if not step.capture and not step.capture_list:
             findings.append(
                 RuleFinding(
                     rule="implicit-handoff",
@@ -256,7 +256,7 @@ def _check_implicit_handoff(ctx: ValidationContext) -> list[RuleFinding]:
                     message=(
                         f"Step '{step_name}' calls '/autoskillit:{skill_name}' "
                         f"which declares {len(contract['outputs'])} output(s) "
-                        f"but has no capture: block. Add a capture: block to "
+                        f"but has no capture: or capture_list: block. Add a capture: block to "
                         f"thread the skill's structured output into pipeline context."
                     ),
                 )

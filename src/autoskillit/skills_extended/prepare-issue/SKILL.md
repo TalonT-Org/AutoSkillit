@@ -423,3 +423,9 @@ Emit to stdout for recipe capture:
 }
 ---/prepare-issue-result---
 ```
+
+Also emit the issue URL as a standalone structured token for recipe capture:
+
+```
+issue_url = https://github.com/owner/repo/issues/N
+```

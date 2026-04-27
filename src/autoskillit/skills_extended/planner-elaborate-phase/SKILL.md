@@ -78,6 +78,10 @@ Write to `{{AUTOSKILLIT_TEMP}}/planner/phases/{id}_result.json` (relative to the
 }
 ```
 
+The backend derives two additional fields at load time — do not write them:
+- `phase_number` (integer): derived from `ordering`
+- `name_slug` (string): derived by slugifying `name` (e.g., "Notification Layer" → "notification-layer")
+
 ### Step 4: Emit output token
 
 ```

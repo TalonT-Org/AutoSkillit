@@ -249,12 +249,20 @@ class TestBuildTestScope:
 
     def test_scope_l2_recipe_conservative(self, tmp_path: Path) -> None:
         tests_root = tmp_path / "tests"
-        for d in ["recipe", "server", "cli", "migration", "hooks", "arch", "contracts", "docs"]:
+        for d in ["recipe", "arch", "contracts", "docs"]:
             (tests_root / d).mkdir(parents=True, exist_ok=True)
         for f in [
-            "execution/test_headless.py",
+            "server/test_factory.py",
+            "server/test_tools_load_recipe.py",
+            "server/test_tools_kitchen.py",
+            "cli/test_cli_prompts.py",
+            "cli/test_cook.py",
             "execution/test_zero_write_detection.py",
+            "migration/test_api.py",
+            "migration/test_engine.py",
+            "hooks/test_recipe_write_advisor.py",
             "infra/test_pretty_output.py",
+            "skills/test_planner_skill_contracts.py",
             "skills/test_skill_placeholder_contracts.py",
             "skills/test_make_campaign_compliance.py",
             "skills/test_review_design_guards.py",
@@ -275,17 +283,29 @@ class TestBuildTestScope:
         )
         assert result is not None
         result_names = {p.name for p in result}
-        for expected in ["recipe", "server", "cli", "migration"]:
-            assert expected in result_names, f"{expected} missing"
+        assert "recipe" in result_names, "recipe missing"
         for expected in [
-            "test_headless.py",
+            "test_factory.py",
+            "test_tools_load_recipe.py",
+            "test_tools_kitchen.py",
+            "test_cli_prompts.py",
+            "test_cook.py",
             "test_zero_write_detection.py",
             "test_pretty_output.py",
             "test_skill_placeholder_contracts.py",
+            "test_recipe_write_advisor.py",
         ]:
             assert expected in result_names, f"{expected} missing"
-        assert "hooks" in result_names, "hooks missing"
-        for absent in ["execution", "infra", "skills", "core"]:
+        for absent in [
+            "execution",
+            "infra",
+            "skills",
+            "core",
+            "server",
+            "cli",
+            "migration",
+            "hooks",
+        ]:
             assert absent not in result_names, f"{absent} should not be a full directory"
 
     def test_scope_l3_server_conservative(self, tmp_path: Path) -> None:

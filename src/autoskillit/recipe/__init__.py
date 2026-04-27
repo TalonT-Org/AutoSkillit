@@ -26,6 +26,7 @@ from autoskillit.recipe import rules_reachability as _rules_reachability  # noqa
 from autoskillit.recipe import rules_recipe as _rules_recipe  # noqa: E402 F401
 from autoskillit.recipe import rules_skill_content as _rules_skill_content  # noqa: E402 F401
 from autoskillit.recipe import rules_skills as _rules_skills  # noqa: E402 F401
+from autoskillit.recipe import rules_temp_path as _rules_temp_path  # noqa: E402 F401
 from autoskillit.recipe import rules_tools as _rules_tools  # noqa: E402 F401
 from autoskillit.recipe import rules_verdict as _rules_verdict  # noqa: E402 F401
 from autoskillit.recipe import rules_worktree as _rules_worktree  # noqa: E402 F401

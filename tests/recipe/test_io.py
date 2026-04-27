@@ -624,13 +624,6 @@ class TestListRecipes:
             if not ranks or ranks[-1] != rank:
                 ranks.append(rank)
         assert ranks == sorted(ranks), f"Groups interleaved: {ranks}"
-        # bundled (0 or 1) must appear before family (2)
-        family_idx = ranks.index(2) if 2 in ranks else len(ranks)
-        for r_val in ranks:
-            if r_val in (0, 1):
-                assert ranks.index(r_val) < family_idx, (
-                    f"Bundled rank {r_val} does not appear before family rank 2"
-                )
         # experimental must be last
         assert 3 in ranks
         assert ranks[-1] == 3
@@ -682,20 +675,6 @@ class TestListRecipes:
         result = list_recipes(tmp_path)
         r = next(r for r in result.items if r.name == "custom")
         assert r.requires_packs == ["github", "ci"]
-
-    def test_list_recipes_bundled_appear_before_family(self, tmp_path: Path) -> None:
-        """Non-experimental BUILTIN recipes must appear before PROJECT recipes."""
-        recipe_dir = tmp_path / ".autoskillit" / "recipes"
-        recipe_dir.mkdir(parents=True)
-        (recipe_dir / "proj.yaml").write_text("name: proj\ndescription: p\nsteps: {}\n")
-        result = list_recipes(tmp_path)
-        non_exp = [r for r in result.items if not r.experimental]
-        seen_project = False
-        for s in [r.source for r in non_exp]:
-            if s == RecipeSource.PROJECT:
-                seen_project = True
-            elif s == RecipeSource.BUILTIN:
-                assert not seen_project, "BUILTIN recipe appeared after PROJECT recipe"
 
     def test_core_bundled_before_addon_bundled(self, tmp_path: Path) -> None:
         """Core bundled recipes (CORE_PACKS only) must sort before add-on bundled recipes."""

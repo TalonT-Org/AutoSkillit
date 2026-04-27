@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from pathlib import Path
 
 import pytest
@@ -50,10 +49,16 @@ def test_create_run_dir_unique_across_calls(tmp_path, monkeypatch) -> None:
     from autoskillit.planner import create_run_dir
 
     r1 = create_run_dir()
-    time.sleep(1.1)
     r2 = create_run_dir()
 
     assert r1["planner_dir"] != r2["planner_dir"]
+    planner_dir2 = Path(r2["planner_dir"])
+    assert planner_dir2.exists()
+    assert planner_dir2.parent.name == "planner"
+    assert planner_dir2.name.startswith("run-")
+    assert (planner_dir2 / "phases").is_dir()
+    assert (planner_dir2 / "assignments").is_dir()
+    assert (planner_dir2 / "work_packages").is_dir()
 
 
 def test_planner_feature_skill_categories() -> None:

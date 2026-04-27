@@ -17,7 +17,6 @@ def test_planner_all_exports_callables() -> None:
     from autoskillit.planner import __all__
 
     assert set(__all__) == {
-        # Existing
         "check_remaining",
         "build_assignment_manifest",
         "build_wp_manifest",
@@ -26,7 +25,6 @@ def test_planner_all_exports_callables() -> None:
         "PlannerManifest",
         "PlannerManifestItem",
         "create_run_dir",
-        # New in Issue 01
         "merge_files",
         "extract_item",
         "replace_item",

@@ -4,6 +4,8 @@ import json
 
 import pytest
 
+from autoskillit.planner.merge import build_plan_snapshot, extract_item, merge_files, replace_item
+
 pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.feature("planner")]
 
 
@@ -17,7 +19,6 @@ def test_merge_files_creates_combined_document(tmp_path):
         file_paths.append(str(p))
 
     out = tmp_path / "combined.json"
-    from autoskillit.planner.merge import merge_files
 
     result = merge_files(
         file_paths=file_paths,
@@ -41,8 +42,6 @@ def test_merge_files_schema_version_1(tmp_path):
     p.write_text(json.dumps({"id": "P1", "name": "x"}))
     out = tmp_path / "combined.json"
 
-    from autoskillit.planner.merge import merge_files
-
     merge_files(file_paths=[str(p)], output_path=str(out), key="phases")
 
     assert json.loads(out.read_text())["schema_version"] == 1
@@ -61,8 +60,6 @@ def test_merge_files_accumulates_existing(tmp_path):
     new_file = tmp_path / "p2.json"
     new_file.write_text(json.dumps({"id": "P2", "name": "Phase 2"}))
 
-    from autoskillit.planner.merge import merge_files
-
     result = merge_files(file_paths=[str(new_file)], output_path=str(out), key="phases")
 
     data = json.loads(out.read_text())
@@ -79,8 +76,6 @@ def test_merge_files_deduplicates_by_id(tmp_path):
     dup_file = tmp_path / "p1_dup.json"
     dup_file.write_text(json.dumps(item))
 
-    from autoskillit.planner.merge import merge_files
-
     merge_files(file_paths=[str(dup_file)], output_path=str(out), key="phases")
 
     assert len(json.loads(out.read_text())["phases"]) == 1
@@ -88,8 +83,6 @@ def test_merge_files_deduplicates_by_id(tmp_path):
 
 def test_merge_files_strict_raises_on_missing_file(tmp_path):
     """strict=True (default) raises ValueError for nonexistent input file."""
-    from autoskillit.planner.merge import merge_files
-
     with pytest.raises(ValueError, match="File not found"):
         merge_files(
             file_paths=["/nonexistent/path.json"],
@@ -100,8 +93,6 @@ def test_merge_files_strict_raises_on_missing_file(tmp_path):
 
 def test_merge_files_non_strict_collects_errors(tmp_path):
     """strict=False collects errors for missing files and continues."""
-    from autoskillit.planner.merge import merge_files
-
     result = merge_files(
         file_paths=["/nonexistent/path.json"],
         output_path=str(tmp_path / "out.json"),
@@ -116,7 +107,6 @@ def test_merge_files_non_strict_invalid_json(tmp_path):
     """strict=False collects errors for malformed JSON and continues."""
     bad = tmp_path / "bad.json"
     bad.write_text("not json{{{")
-    from autoskillit.planner.merge import merge_files
 
     result = merge_files(
         file_paths=[str(bad)],
@@ -127,6 +117,16 @@ def test_merge_files_non_strict_invalid_json(tmp_path):
     assert "errors" in result
 
 
+def test_merge_files_invalid_key_raises(tmp_path):
+    """merge_files raises ValueError for an unrecognised tier key."""
+    with pytest.raises(ValueError, match="Invalid key"):
+        merge_files(
+            file_paths=[],
+            output_path=str(tmp_path / "out.json"),
+            key="unknown_tier",
+        )
+
+
 def test_extract_item_writes_extracted_item(tmp_path):
     phases = [{"id": "P1", "name": "Phase 1"}, {"id": "P2", "name": "Phase 2"}]
     doc = {"task": "", "source_dir": "", "phases": phases, "schema_version": 1}
@@ -134,12 +134,12 @@ def test_extract_item_writes_extracted_item(tmp_path):
     src.write_text(json.dumps(doc))
     out = tmp_path / "extracted.json"
 
-    from autoskillit.planner.merge import extract_item
-
     result = extract_item(source_path=str(src), item_id="P2", output_path=str(out))
 
     assert result["extracted_path"] == str(out)
-    assert json.loads(out.read_text())["id"] == "P2"
+    extracted = json.loads(out.read_text())
+    assert extracted["id"] == "P2"
+    assert extracted["schema_version"] == 1
 
 
 def test_extract_item_missing_id_raises(tmp_path):
@@ -147,12 +147,19 @@ def test_extract_item_missing_id_raises(tmp_path):
     src = tmp_path / "combined.json"
     src.write_text(json.dumps(doc))
 
-    from autoskillit.planner.merge import extract_item
-
     with pytest.raises(ValueError, match="not found"):
         extract_item(
             source_path=str(src),
             item_id="MISSING",
+            output_path=str(tmp_path / "out.json"),
+        )
+
+
+def test_extract_item_missing_file_raises(tmp_path):
+    with pytest.raises(ValueError, match="Source file not found"):
+        extract_item(
+            source_path=str(tmp_path / "nonexistent.json"),
+            item_id="P1",
             output_path=str(tmp_path / "out.json"),
         )
 
@@ -171,8 +178,6 @@ def test_extract_item_searches_all_tiers(tmp_path):
     src.write_text(json.dumps(doc))
     out = tmp_path / "extracted.json"
 
-    from autoskillit.planner.merge import extract_item
-
     extract_item(source_path=str(src), item_id="P1-A1-WP1", output_path=str(out))
     assert json.loads(out.read_text())["id"] == "P1-A1-WP1"
 
@@ -185,8 +190,6 @@ def test_replace_item_updates_combined_document(tmp_path):
     rep_file = tmp_path / "rep.json"
     rep_file.write_text(json.dumps({"id": "P1", "name": "New", "goal": "updated"}))
 
-    from autoskillit.planner.merge import replace_item
-
     result = replace_item(source_path=str(src), item_id="P1", replacement_path=str(rep_file))
 
     assert result["replaced_id"] == "P1"
@@ -198,14 +201,58 @@ def test_replace_item_updates_combined_document(tmp_path):
     assert len(data["phases"]) == 2
 
 
+def test_replace_item_in_assignments_tier(tmp_path):
+    """replace_item correctly updates items in the assignments tier."""
+    doc = {
+        "task": "",
+        "source_dir": "",
+        "phases": [],
+        "assignments": [{"id": "P1-A1", "name": "Old assignment"}],
+        "schema_version": 1,
+    }
+    src = tmp_path / "combined.json"
+    src.write_text(json.dumps(doc))
+    rep_file = tmp_path / "rep.json"
+    rep_file.write_text(json.dumps({"id": "P1-A1", "name": "Updated assignment"}))
+
+    result = replace_item(source_path=str(src), item_id="P1-A1", replacement_path=str(rep_file))
+
+    assert result["replaced_id"] == "P1-A1"
+    data = json.loads(src.read_text())
+    a1 = next(a for a in data["assignments"] if a["id"] == "P1-A1")
+    assert a1["name"] == "Updated assignment"
+
+
+def test_replace_item_in_work_packages_tier(tmp_path):
+    """replace_item correctly updates items in the work_packages tier."""
+    doc = {
+        "task": "",
+        "source_dir": "",
+        "phases": [],
+        "work_packages": [{"id": "P1-A1-WP1", "name": "Old WP"}],
+        "schema_version": 1,
+    }
+    src = tmp_path / "combined.json"
+    src.write_text(json.dumps(doc))
+    rep_file = tmp_path / "rep.json"
+    rep_file.write_text(json.dumps({"id": "P1-A1-WP1", "name": "Updated WP"}))
+
+    result = replace_item(
+        source_path=str(src), item_id="P1-A1-WP1", replacement_path=str(rep_file)
+    )
+
+    assert result["replaced_id"] == "P1-A1-WP1"
+    data = json.loads(src.read_text())
+    wp1 = next(w for w in data["work_packages"] if w["id"] == "P1-A1-WP1")
+    assert wp1["name"] == "Updated WP"
+
+
 def test_replace_item_missing_id_raises(tmp_path):
     doc = {"task": "", "source_dir": "", "phases": [], "schema_version": 1}
     src = tmp_path / "combined.json"
     src.write_text(json.dumps(doc))
     rep_file = tmp_path / "rep.json"
     rep_file.write_text(json.dumps({"id": "MISSING"}))
-
-    from autoskillit.planner.merge import replace_item
 
     with pytest.raises(ValueError, match="not found"):
         replace_item(source_path=str(src), item_id="MISSING", replacement_path=str(rep_file))
@@ -223,8 +270,6 @@ def test_replace_item_preserves_schema_version(tmp_path):
     rep_file = tmp_path / "rep.json"
     rep_file.write_text(json.dumps({"id": "P1", "name": "updated"}))
 
-    from autoskillit.planner.merge import replace_item
-
     replace_item(source_path=str(src), item_id="P1", replacement_path=str(rep_file))
 
     assert json.loads(src.read_text())["schema_version"] == 1
@@ -241,8 +286,6 @@ def test_build_plan_snapshot_produces_phase_ids(tmp_path):
         }
         (phases_dir / f"{phase_id}_result.json").write_text(json.dumps(r))
     out = tmp_path / "snapshot.json"
-
-    from autoskillit.planner.merge import build_plan_snapshot
 
     result = build_plan_snapshot(
         phases_dir=str(phases_dir),
@@ -263,6 +306,7 @@ def test_build_plan_snapshot_writes_short_form_only(tmp_path):
     r = {
         "id": "P1",
         "name": "Phase One",
+        "goal": "some goal",
         "ordering": 1,
         "scope": ["s1"],
         "relationship_notes": "should not appear",
@@ -270,8 +314,6 @@ def test_build_plan_snapshot_writes_short_form_only(tmp_path):
     }
     (phases_dir / "P1_result.json").write_text(json.dumps(r))
     out = tmp_path / "snapshot.json"
-
-    from autoskillit.planner.merge import build_plan_snapshot
 
     build_plan_snapshot(
         phases_dir=str(phases_dir), output_path=str(out), task="t", source_dir="/s"

@@ -2,7 +2,7 @@
 
 ## Overview
 
-AutoSkillit's 121 bundled skills are organized into three tiers that control when and where
+AutoSkillit's 120 bundled skills are organized into three tiers that control when and where
 they appear as slash commands. The tier system is orthogonal to subset categories — you can
 disable a subset across all tiers simultaneously, or reclassify individual skills between
 tiers. See [Subset Categories](subsets.md) for subset configuration.
@@ -28,7 +28,7 @@ tiers. See [Subset Categories](subsets.md) for subset configuration.
   all 13 `arch-lens-*` skills, `audit-arch`, `audit-cohesion`, `audit-tests`,
   `audit-defense-standards`, `audit-bugs`, `audit-friction`, `make-req`,
   `elaborate-phase`, `write-recipe`, `migrate-recipes`, `setup-project`,
-  `sprint-planner`, `design-guards`, `triage-issues`, `collapse-issues`,
+  `design-guards`, `triage-issues`, `collapse-issues`,
   `issue-splitter`, `enrich-issues`, `prepare-issue`, `process-issues`
 - **Visible in**: cook and headless sessions
 - **Mechanism**: copied to an ephemeral session directory (cook) or exposed via

@@ -70,8 +70,7 @@ tree. See [safety/workspace.md](safety/workspace.md).
 Set `quota_guard.short_window_threshold` (default 85.0) for short windows
 (e.g. `five_hour`), `quota_guard.long_window_threshold` (default 98.0) for
 long windows (weekly, sonnet, opus), and `quota_guard.buffer_seconds`
-(default 60) in `.autoskillit/config.yaml`. See
-[operations/sprint-guide.md](operations/sprint-guide.md).
+(default 60) in `.autoskillit/config.yaml`.
 
 ### Where do session diagnostics go?
 
@@ -100,5 +99,4 @@ contract card. See [recipes/authoring.md](recipes/authoring.md).
 Open an issue in the GitHub repository. AutoSkillit also has a built-in
 `report_bug` MCP tool that the `pipeline-summary` skill calls automatically
 when an overnight pipeline surfaces a bug. The tool deduplicates against
-existing open issues by fingerprint. See
-[operations/sprint-guide.md](operations/sprint-guide.md).
+existing open issues by fingerprint.

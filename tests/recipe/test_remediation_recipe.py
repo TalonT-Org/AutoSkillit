@@ -100,3 +100,22 @@ def test_check_review_loop_with_args_has_previous_verdict(recipe) -> None:
     step = recipe.steps["check_review_loop"]
     assert "previous_verdict" in step.with_args
     assert "review_verdict" in step.with_args["previous_verdict"]
+
+
+def test_remediation_has_no_sprint_mode_ingredient() -> None:
+    """remediation.yaml must not declare sprint_mode after sprint-prefix removal."""
+    recipe = load_recipe(RECIPE_PATH)
+    assert "sprint_mode" not in recipe.ingredients
+
+
+def test_remediation_has_no_sprint_entry_step() -> None:
+    """remediation.yaml must not have a sprint_entry step after sprint-prefix removal."""
+    recipe = load_recipe(RECIPE_PATH)
+    assert "sprint_entry" not in recipe.steps
+
+
+def test_remediation_validates_clean_after_sprint_removal() -> None:
+    """remediation.yaml must pass schema validation after sprint references removed."""
+    recipe = load_recipe(RECIPE_PATH)
+    errors = validate_recipe(recipe)
+    assert not errors, f"remediation.yaml failed validation after sprint removal: {errors}"

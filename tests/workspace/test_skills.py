@@ -427,17 +427,17 @@ class TestSkillResolver:
         assert names == {"open-kitchen", "close-kitchen", "sous-chef"}
 
     def test_119_skills_in_skills_extended(self) -> None:
-        """skills_extended/ contains exactly 124 SKILL.md-carrying directories."""
+        """skills_extended/ contains exactly 122 SKILL.md-carrying directories."""
         skills = [
             d
             for d in bundled_skills_extended_dir().iterdir()
             if d.is_dir() and (d / "SKILL.md").is_file()
         ]
-        assert len(skills) == 124
+        assert len(skills) == 122
 
     def test_skill_resolver_list_all_total_count(self) -> None:
-        """list_all() returns 126 public skills (2 Tier-1 + 124 extended)."""
-        assert len(DefaultSkillResolver().list_all()) == 126
+        """list_all() returns 124 public skills (2 Tier-1 + 122 extended)."""
+        assert len(DefaultSkillResolver().list_all()) == 124
 
     def test_skill_resolver_resolve_extended_skill(self) -> None:
         """resolve() finds a skill living in skills_extended/ with BUNDLED_EXTENDED source."""
@@ -608,16 +608,6 @@ class TestSkillCategories:
 
     def test_planner_elaborate_phase_has_planner_category(self) -> None:
         info = DefaultSkillResolver().resolve("planner-elaborate-phase")
-        assert info is not None
-        assert "planner" in info.categories
-
-    def test_planner_elaborate_assignment_has_planner_category(self) -> None:
-        info = DefaultSkillResolver().resolve("planner-elaborate-assignment")
-        assert info is not None
-        assert "planner" in info.categories
-
-    def test_planner_elaborate_wp_has_planner_category(self) -> None:
-        info = DefaultSkillResolver().resolve("planner-elaborate-wp")
         assert info is not None
         assert "planner" in info.categories
 

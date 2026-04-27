@@ -386,13 +386,15 @@ steps:
     on_result:
       - when: "${{ result.conclusion }} == 'success'"
         route: reenter_queue
+      - when: "${{ result.conclusion }} == 'timed_out'"
+        route: ci_watch_post_queue_fix
       - route: register_clone_failure
     on_failure: register_clone_failure
     note: >
       Validates CI passes on the rebased branch before re-entering the merge queue.
       Prevents re-enqueue of a broken branch that would be ejected again.
       Routes on result.conclusion: success → reenter_queue,
-      no_runs/failure → register_clone_failure.
+      timed_out → self (re-watch), no_runs/failure → register_clone_failure.
 
   reenter_queue:
     tool: enqueue_pr
@@ -749,13 +751,15 @@ steps:
     on_result:
       - when: "${{ result.conclusion }} == 'success'"
         route: merge_conflict_pr
+      - when: "${{ result.conclusion }} == 'timed_out'"
+        route: wait_for_conflict_ci
       - route: register_clone_failure
     on_failure: register_clone_failure
     note: >
       Waits for CI to pass on the worktree branch before merging.
       600 second timeout matches the merge-pr skill poll timeout.
       Routes on result.conclusion: success → merge_conflict_pr,
-      no_runs/failure → register_clone_failure.
+      timed_out → self (re-watch), no_runs/failure → register_clone_failure.
 
   merge_conflict_pr:
     tool: run_cmd
@@ -1113,12 +1117,15 @@ steps:
     on_result:
       - when: "${{ result.conclusion }} == 'success'"
         route: register_clone_success
+      - when: "${{ result.conclusion }} == 'timed_out'"
+        route: ci_watch_pr
       - route: register_clone_failure
     on_failure: diagnose_ci
     note: >
       Waits for the GitHub Actions CI run on context.integration_branch to complete
       using the wait_for_ci MCP tool (timeout: 300 s). Routes on result.conclusion:
-      success → register_clone_success, no_runs/failure → register_clone_failure.
+      success → register_clone_success, timed_out → self (re-watch),
+      no_runs/failure → register_clone_failure.
       Tool-level failure routes to diagnose_ci for log capture.
 
   diagnose_ci:

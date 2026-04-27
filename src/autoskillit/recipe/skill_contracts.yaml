@@ -1740,6 +1740,8 @@ skills:
       type: string
     - name: total_issues
       type: string
+    - name: review_approach_candidates
+      type: string
     expected_output_patterns:
     - "execution_map\\s*=\\s*/.+"
     pattern_examples:

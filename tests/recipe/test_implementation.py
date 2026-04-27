@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+from autoskillit.recipe.validator import validate_recipe
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -145,3 +146,22 @@ def test_capture_base_sha_captures_both_base_sha_and_merge_target(recipe) -> Non
         "capture_base_sha must capture merge_target — the fallback target branch name "
         "(replaces the removed set_merge_target step)"
     )
+
+
+def test_implementation_has_no_sprint_mode_ingredient() -> None:
+    """implementation.yaml must not declare sprint_mode after sprint-prefix removal."""
+    recipe = load_recipe("implementation")
+    assert "sprint_mode" not in recipe.ingredients
+
+
+def test_implementation_has_no_sprint_entry_step() -> None:
+    """implementation.yaml must not have a sprint_entry step after sprint-prefix removal."""
+    recipe = load_recipe("implementation")
+    assert "sprint_entry" not in recipe.steps
+
+
+def test_implementation_validates_clean_after_sprint_removal() -> None:
+    """implementation.yaml must pass schema validation after sprint references removed."""
+    recipe = load_recipe("implementation")
+    errors = validate_recipe(recipe)
+    assert not errors, f"implementation.yaml failed validation after sprint removal: {errors}"

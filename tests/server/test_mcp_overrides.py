@@ -54,7 +54,7 @@ async def test_load_recipe_tool_accepts_overrides_param(tmp_path: Path) -> None:
     ):
         from autoskillit.server.tools_recipe import load_recipe as _load_recipe_tool
 
-        result_str = await _load_recipe_tool(name="test-recipe", overrides={"sprint_mode": "true"})
+        result_str = await _load_recipe_tool(name="test-recipe", overrides={"run_mode": "sequential"})
         result = json.loads(result_str)
         assert "error" not in result
         assert result.get("valid") is True
@@ -62,7 +62,7 @@ async def test_load_recipe_tool_accepts_overrides_param(tmp_path: Path) -> None:
         # Verify overrides were passed through to load_and_validate
         mock_recipes.load_and_validate.assert_called_once()
         call_kwargs = mock_recipes.load_and_validate.call_args
-        assert call_kwargs.kwargs.get("ingredient_overrides") == {"sprint_mode": "true"}
+        assert call_kwargs.kwargs.get("ingredient_overrides") == {"run_mode": "sequential"}
 
 
 async def test_open_kitchen_accepts_overrides_param(tmp_path: Path) -> None:
@@ -102,7 +102,7 @@ async def test_open_kitchen_accepts_overrides_param(tmp_path: Path) -> None:
 
         result_str = await _open_kitchen_tool(
             name="test-recipe",
-            overrides={"sprint_mode": "true"},
+            overrides={"run_mode": "sequential"},
             ctx=mock_mcp_ctx,
         )
         result = json.loads(result_str)
@@ -112,7 +112,7 @@ async def test_open_kitchen_accepts_overrides_param(tmp_path: Path) -> None:
         # Verify overrides were passed through to load_and_validate
         mock_recipes.load_and_validate.assert_called_once()
         call_kwargs = mock_recipes.load_and_validate.call_args
-        assert call_kwargs.kwargs.get("ingredient_overrides") == {"sprint_mode": "true"}
+        assert call_kwargs.kwargs.get("ingredient_overrides") == {"run_mode": "sequential"}
 
 
 async def test_unknown_override_key_ignored(tmp_path: Path) -> None:

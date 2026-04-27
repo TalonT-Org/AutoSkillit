@@ -365,6 +365,10 @@ After both parallel subagents return:
 
 ### Step 8 — Split Validated Report by Grouping Manifest
 
+Before writing any ticket body files, verify `$AUTOSKILLIT_TEMP` is non-empty
+(`test -n "${AUTOSKILLIT_TEMP}"`); abort with an error message if unset to prevent
+path collapse to filesystem root.
+
 For each ticket group in the grouping manifest:
 
 1. Extract the subset of findings assigned to this group from the validated report.

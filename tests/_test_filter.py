@@ -336,14 +336,29 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
     "recipe": frozenset(
         {
             "recipe",
-            "server",
-            "cli",
-            "migration",
-            "hooks",
             "_llm_triage",
-            # File-level (narrowed from full directory):
-            "execution/test_headless.py",
+            # Server file-level entries (9 of 52 import autoskillit.recipe):
+            "server/test_factory.py",
+            "server/test_tools_load_recipe.py",
+            "server/test_server_tool_registration.py",
+            "server/test_mcp_overrides.py",
+            "server/test_smoke_pipeline.py",
+            "server/test_tools_dispatch.py",
+            "server/test_tools_kitchen.py",
+            "server/test_service_wrappers.py",
+            "server/test_tools_list_recipes.py",
+            # CLI file-level entries (3 of 38 import autoskillit.recipe):
+            "cli/test_cli_prompts.py",
+            "cli/test_l3_orchestrator_prompt.py",
+            "cli/test_cook.py",
+            # Execution file-level entries:
             "execution/test_zero_write_detection.py",
+            # Migration file-level entries (migration/_api.py + engine.py import recipe):
+            "migration/test_api.py",
+            "migration/test_engine.py",
+            # Hooks file-level entries (_fmt_recipe.py imports autoskillit.recipe types):
+            "hooks/test_recipe_write_advisor.py",
+            # Other file-level entries:
             "infra/test_pretty_output.py",
             "skills/test_planner_skill_contracts.py",
             "skills/test_skill_placeholder_contracts.py",

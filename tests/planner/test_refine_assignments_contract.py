@@ -86,7 +86,7 @@ class TestContractRegistration:
         )
 
     def test_three_inputs_declared(self, skill_contract: dict) -> None:
-        """Exactly three inputs must be declared: combined_assignments_path, refined_plan_path, output_dir."""
+        """Three inputs: combined_assignments_path, refined_plan_path, output_dir."""
         inputs = skill_contract.get("inputs", [])
         assert len(inputs) == 3, (
             f"Expected exactly 3 inputs, got {len(inputs)}: {[i.get('name') for i in inputs]}"
@@ -132,7 +132,7 @@ class TestSkillMdPresence:
         )
 
     def test_skill_md_has_l0_response_fields(self, skill_md: str) -> None:
-        """SKILL.md must describe L0 response fields: assignment_id, changes, dependency_corrections, wp_proposal_adjustments."""
+        """SKILL.md must describe L0 response fields for assignments."""
         assert "assignment_id" in skill_md, (
             "SKILL.md must document L0 structured response field: assignment_id."
         )

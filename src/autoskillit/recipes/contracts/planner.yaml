@@ -1,15 +1,6 @@
-generated_at: '2026-04-27T04:03:03.096931+00:00'
+generated_at: '2026-04-27T15:22:59.865998+00:00'
 bundled_manifest_version: 0.1.0
-skill_hashes:
-  planner-analyze: sha256:e9785980a9e68b849de28ffc90bfdcc2d31e7c4e1c75450db2d4384f9fd5d3d6
-  planner-extract-domain: sha256:a6cdccd877e0d7d46d44fe559100e0c7638e1534e34dc18d2b77c6b7681f2f90
-  planner-generate-phases: sha256:8c69291d11a254035aee782e739720790fbd99197828ca99a6729132bd33a8b0
-  planner-elaborate-phase: sha256:3c6bfc60d8ba26270529734c21e7571db3f8d907309b8ad106df0ede82eadff4
-  planner-elaborate-assignment: sha256:6dafc1ffe6af33d924f38b49c01b26861cbab07d0ffe18c67c5b6ed721078127
-  planner-elaborate-assignments: sha256:2ff1d73d586a955c66ddadda4366dc2cd7b5541da05eddde9419acab2029ddea
-  planner-elaborate-wp: sha256:75d9e33fd3373080d39a7c09a3172d20362dcbff72c971b09ef68b410071557d
-  planner-reconcile-deps: sha256:350fd62e7eade27ad11bf1bea7971e1fdb06aa3e8aec092b374fdc9fb5de0743
-  planner-refine: sha256:83ccf798e0e641588d5d7f52f445ef77a974ae197a903499b87c030a1ce0ed9d
+skill_hashes: {}
 skills:
   planner-analyze:
     inputs: []
@@ -26,6 +17,8 @@ skills:
     outputs:
     - name: phase_manifest_path
       type: file_path
+    - name: phase_ids
+      type: str
     expected_output_patterns:
     - phase_manifest_path\s*=\s*\S+
     pattern_examples:
@@ -34,29 +27,69 @@ skills:
       %%ORDER_UP%%'
     write_behavior: always
   planner-elaborate-phase:
-    inputs: []
-    outputs: []
-    expected_output_patterns: []
-    pattern_examples: []
-  planner-elaborate-assignment:
-    inputs: []
-    outputs: []
-    expected_output_patterns: []
-    pattern_examples: []
+    inputs:
+    - name: plan_snapshot_path
+      type: file_path
+      required: true
+      recommended: false
+    - name: target_phase_id
+      type: str
+      required: true
+      recommended: false
+    - name: output_dir
+      type: directory_path
+      required: true
+      recommended: false
+    outputs:
+    - name: elab_result_path
+      type: file_path
+    expected_output_patterns:
+    - elab_result_path\s*=\s*\S+
+    pattern_examples:
+    - 'elab_result_path = /tmp/autoskillit/planner/run-20260101-120000/phases/P1_result.json
+
+      %%ORDER_UP%%'
+    write_behavior: always
   planner-elaborate-assignments:
     inputs:
-    - context_file
-    - planner_dir
+    - name: context_file
+      type: file_path
+      required: true
+      recommended: false
+    - name: planner_dir
+      type: directory_path
+      required: true
+      recommended: false
     outputs:
-    - phase_assignments_result_dir
-    write_behavior: always
+    - name: phase_assignments_result_dir
+      type: directory_path
     expected_output_patterns:
-    - 'phase_assignments_result_dir = '
-  planner-elaborate-wp:
-    inputs: []
-    outputs: []
-    expected_output_patterns: []
-    pattern_examples: []
+    - phase_assignments_result_dir\s*=\s*\S+
+    pattern_examples:
+    - 'phase_assignments_result_dir = /tmp/autoskillit/planner/run-20260101-120000/assignments
+
+      %%ORDER_UP%%'
+    write_behavior: always
+  planner-elaborate-wps:
+    inputs:
+    - name: context_file
+      type: file_path
+      required: true
+      recommended: false
+    - name: planner_dir
+      type: directory_path
+      required: true
+      recommended: false
+    outputs:
+    - name: phase_wps_result_dir
+      type: directory_path
+    expected_output_patterns:
+    - phase_wps_result_dir\s*=\s*\S+
+    pattern_examples:
+    - 'phase_wps_result_dir = /tmp/autoskillit/planner/run-20260101-120000/work_packages
+
+      %%ORDER_UP%%'
+    write_behavior: always
   planner-reconcile-deps:
     inputs: []
     outputs: []
@@ -98,7 +131,7 @@ dataflow:
   produced:
   - phase_manifest_path
   positional_args: 2
-- step: check_phases
+- step: build_pre_elab_snapshot
   available:
   - phase_manifest_path
   - planner_dir
@@ -106,24 +139,40 @@ dataflow:
   - task
   required: []
   produced:
+  - pre_elab_snapshot_path
+- step: check_phases
+  available:
+  - phase_manifest_path
+  - planner_dir
+  - pre_elab_snapshot_path
+  - source_dir
+  - task
+  required: []
+  produced:
   - has_remaining
   - current_item_path
+  - current_item_id
 - step: elaborate_phase
   available:
+  - current_item_id
   - current_item_path
   - has_remaining
   - phase_manifest_path
   - planner_dir
+  - pre_elab_snapshot_path
   - source_dir
   - task
   required: []
   produced: []
+  positional_args: 1
 - step: build_phase_assignment_manifest
   available:
+  - current_item_id
   - current_item_path
   - has_remaining
   - phase_manifest_path
   - planner_dir
+  - pre_elab_snapshot_path
   - source_dir
   - task
   required: []
@@ -131,11 +180,13 @@ dataflow:
   - phase_assignment_manifest
 - step: check_phase_assignments
   available:
+  - current_item_id
   - current_item_path
   - has_remaining
   - phase_assignment_manifest
   - phase_manifest_path
   - planner_dir
+  - pre_elab_snapshot_path
   - source_dir
   - task
   required: []
@@ -151,11 +202,13 @@ dataflow:
   - phase_assignment_manifest
   - phase_manifest_path
   - planner_dir
+  - pre_elab_snapshot_path
   - source_dir
   - task
-  required: []
+  required:
+  - context_file
   produced: []
-- step: build_wp_manifest
+- step: build_phase_wp_manifest
   available:
   - current_item_id
   - current_item_path
@@ -163,39 +216,59 @@ dataflow:
   - phase_assignment_manifest
   - phase_manifest_path
   - planner_dir
+  - pre_elab_snapshot_path
+  - source_dir
+  - task
+  required: []
+  produced:
+  - phase_wp_manifest_path
+- step: check_phase_wps
+  available:
+  - current_item_id
+  - current_item_path
+  - has_remaining
+  - phase_assignment_manifest
+  - phase_manifest_path
+  - phase_wp_manifest_path
+  - planner_dir
+  - pre_elab_snapshot_path
+  - source_dir
+  - task
+  required: []
+  produced:
+  - has_remaining
+  - current_item_path
+  - current_item_id
+- step: elaborate_phase_wps
+  available:
+  - current_item_id
+  - current_item_path
+  - has_remaining
+  - phase_assignment_manifest
+  - phase_manifest_path
+  - phase_wp_manifest_path
+  - planner_dir
+  - pre_elab_snapshot_path
+  - source_dir
+  - task
+  required:
+  - context_file
+  produced: []
+- step: finalize_wp_manifest
+  available:
+  - current_item_id
+  - current_item_path
+  - has_remaining
+  - phase_assignment_manifest
+  - phase_manifest_path
+  - phase_wp_manifest_path
+  - planner_dir
+  - pre_elab_snapshot_path
   - source_dir
   - task
   required: []
   produced:
   - wp_manifest_path
-- step: check_wps
-  available:
-  - current_item_id
-  - current_item_path
-  - has_remaining
-  - phase_assignment_manifest
-  - phase_manifest_path
-  - planner_dir
-  - source_dir
-  - task
-  - wp_manifest_path
-  required: []
-  produced:
-  - has_remaining
-  - current_item_path
-- step: elaborate_wp
-  available:
-  - current_item_id
-  - current_item_path
-  - has_remaining
-  - phase_assignment_manifest
-  - phase_manifest_path
-  - planner_dir
-  - source_dir
-  - task
-  - wp_manifest_path
-  required: []
-  produced: []
 - step: reconcile_deps
   available:
   - current_item_id
@@ -203,7 +276,9 @@ dataflow:
   - has_remaining
   - phase_assignment_manifest
   - phase_manifest_path
+  - phase_wp_manifest_path
   - planner_dir
+  - pre_elab_snapshot_path
   - source_dir
   - task
   - wp_manifest_path
@@ -216,7 +291,9 @@ dataflow:
   - has_remaining
   - phase_assignment_manifest
   - phase_manifest_path
+  - phase_wp_manifest_path
   - planner_dir
+  - pre_elab_snapshot_path
   - source_dir
   - task
   - wp_manifest_path
@@ -230,7 +307,9 @@ dataflow:
   - has_remaining
   - phase_assignment_manifest
   - phase_manifest_path
+  - phase_wp_manifest_path
   - planner_dir
+  - pre_elab_snapshot_path
   - source_dir
   - task
   - verdict
@@ -244,7 +323,9 @@ dataflow:
   - has_remaining
   - phase_assignment_manifest
   - phase_manifest_path
+  - phase_wp_manifest_path
   - planner_dir
+  - pre_elab_snapshot_path
   - source_dir
   - task
   - verdict
@@ -259,7 +340,9 @@ dataflow:
   - has_remaining
   - phase_assignment_manifest
   - phase_manifest_path
+  - phase_wp_manifest_path
   - planner_dir
+  - pre_elab_snapshot_path
   - source_dir
   - task
   - verdict
@@ -273,7 +356,9 @@ dataflow:
   - has_remaining
   - phase_assignment_manifest
   - phase_manifest_path
+  - phase_wp_manifest_path
   - planner_dir
+  - pre_elab_snapshot_path
   - source_dir
   - task
   - verdict
@@ -287,7 +372,9 @@ dataflow:
   - has_remaining
   - phase_assignment_manifest
   - phase_manifest_path
+  - phase_wp_manifest_path
   - planner_dir
+  - pre_elab_snapshot_path
   - source_dir
   - task
   - verdict

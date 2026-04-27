@@ -136,7 +136,7 @@ steps:
     on_result:
       - when: "${{ result.has_remaining }} == true"
         route: elaborate_phase_assignments
-      - route: build_wp_manifest
+      - route: build_phase_wp_manifest
     on_failure: escalate_stop
 
   elaborate_phase_assignments:
@@ -152,44 +152,57 @@ steps:
     on_exhausted: escalate_stop
     on_failure: escalate_stop
 
-  build_wp_manifest:
+  build_phase_wp_manifest:
     tool: run_python
     with:
-      callable: "autoskillit.planner.build_wp_manifest"
+      callable: "autoskillit.planner.build_phase_wp_manifest"
       assignments_dir: "${{ context.planner_dir }}/assignments"
       work_packages_dir: "${{ context.planner_dir }}/work_packages"
       output_dir: "${{ context.planner_dir }}"
     capture:
-      wp_manifest_path: "${{ result.manifest_path }}"
-    on_success: check_wps
+      phase_wp_manifest_path: "${{ result.manifest_path }}"
+    on_success: check_phase_wps
     on_failure: escalate_stop
 
-  check_wps:
+  check_phase_wps:
     tool: run_python
     with:
       callable: "autoskillit.planner.check_remaining"
-      manifest_path: "${{ context.wp_manifest_path }}"
-      pass_name: "work_packages"
-      output_dir: "${{ context.planner_dir }}"
+      manifest_path: "${{ context.phase_wp_manifest_path }}"
+      pass_name: "phase_work_packages"
+      output_dir: "${{ context.planner_dir }}/work_packages"
     capture:
       has_remaining: "${{ result.has_remaining }}"
       current_item_path: "${{ result.current_item_path }}"
+      current_item_id: "${{ result.current_item_id }}"
     on_result:
       - when: "${{ result.has_remaining }} == true"
-        route: elaborate_wp
-      - route: reconcile_deps
+        route: elaborate_phase_wps
+      - route: finalize_wp_manifest
     on_failure: escalate_stop
 
-  elaborate_wp:
+  elaborate_phase_wps:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:planner-elaborate-wp ${{ context.current_item_path }} ${{ context.planner_dir }}"
+      skill_command: "/autoskillit:planner-elaborate-wps ${{ context.current_item_path }} ${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"
     optional_context_refs: [current_item_path]
-    retries: 2
-    stale_threshold: 600
-    on_success: check_wps
-    on_exhausted: check_wps
+    capture_list:
+      phase_wps_result_dir: "${{ result.phase_wps_result_dir }}"
+    retries: 1
+    on_success: check_phase_wps
+    on_exhausted: check_phase_wps
+    on_failure: escalate_stop
+
+  finalize_wp_manifest:
+    tool: run_python
+    with:
+      callable: "autoskillit.planner.finalize_wp_manifest"
+      work_packages_dir: "${{ context.planner_dir }}/work_packages"
+      output_dir: "${{ context.planner_dir }}"
+    capture:
+      wp_manifest_path: "${{ result.manifest_path }}"
+    on_success: reconcile_deps
     on_failure: escalate_stop
 
   reconcile_deps:

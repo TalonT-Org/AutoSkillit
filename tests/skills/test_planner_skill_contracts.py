@@ -20,6 +20,7 @@ ALL_PLANNER_SKILLS = [
     "planner-elaborate-assignment",
     "planner-elaborate-assignments",
     "planner-elaborate-wp",
+    "planner-elaborate-wps",
     "planner-reconcile-deps",
     "planner-refine",
     "planner-refine-assignments",
@@ -204,3 +205,50 @@ def test_elaborate_assignments_contract_write_behavior_always() -> None:
     contracts = load_bundled_manifest()
     contract = contracts["skills"]["planner-elaborate-assignments"]
     assert contract.get("write_behavior") == "always"
+
+
+def test_elaborate_wps_contract_declares_phase_wps_result_dir() -> None:
+    """planner-elaborate-wps must declare phase_wps_result_dir output."""
+    from autoskillit.recipe.contracts import load_bundled_manifest
+
+    contracts = load_bundled_manifest()
+    contract = contracts["skills"]["planner-elaborate-wps"]
+    output_names = [o["name"] for o in contract.get("outputs", [])]
+    assert "phase_wps_result_dir" in output_names, (
+        "planner-elaborate-wps must declare phase_wps_result_dir output"
+    )
+
+
+def test_elaborate_wps_contract_has_output_pattern() -> None:
+    """phase_wps_result_dir must appear in expected_output_patterns."""
+    from autoskillit.recipe.contracts import load_bundled_manifest
+
+    contracts = load_bundled_manifest()
+    contract = contracts["skills"]["planner-elaborate-wps"]
+    patterns = contract.get("expected_output_patterns", [])
+    assert any("phase_wps_result_dir" in p for p in patterns), (
+        "planner-elaborate-wps must have an expected_output_pattern matching phase_wps_result_dir"
+    )
+
+
+def test_elaborate_wps_contract_write_behavior_always() -> None:
+    """planner-elaborate-wps must declare write_behavior: always."""
+    from autoskillit.recipe.contracts import load_bundled_manifest
+
+    contracts = load_bundled_manifest()
+    contract = contracts["skills"]["planner-elaborate-wps"]
+    assert contract.get("write_behavior") == "always"
+
+
+def test_elaborate_wps_contract_two_inputs() -> None:
+    """planner-elaborate-wps must declare two inputs: context_file and planner_dir."""
+    from autoskillit.recipe.contracts import load_bundled_manifest
+
+    contracts = load_bundled_manifest()
+    contract = contracts["skills"]["planner-elaborate-wps"]
+    inputs = contract.get("inputs", [])
+    assert len(inputs) == 2, (
+        f"Expected 2 inputs, got {len(inputs)}: {[i.get('name') for i in inputs]}"
+    )
+    input_names = {i.get("name") for i in inputs}
+    assert input_names == {"context_file", "planner_dir"}

@@ -404,7 +404,7 @@ def test_validate_audit_project_local_has_ticket_grouping_step() -> None:
     assert "grouping manifest" in content, (
         "validate-audit/.claude/SKILL.md missing ticket grouping manifest"
     )
-    assert "finding id" in content or "finding ids" in content, (
+    assert "finding id" in content, (
         "validate-audit/.claude/SKILL.md grouping manifest must reference finding IDs"
     )
 

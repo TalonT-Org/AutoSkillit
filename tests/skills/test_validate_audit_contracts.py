@@ -85,7 +85,7 @@ class TestValidateAuditNewSteps:
     def test_ticket_grouping_manifest_with_finding_ids(self) -> None:
         text = _skill_text().lower()
         assert "grouping manifest" in text
-        assert "finding id" in text or "finding ids" in text
+        assert "finding id" in text
 
     # T-VAL-018
     def test_validation_summary_separate_file(self) -> None:

@@ -148,7 +148,10 @@ class TestSkillMdPresence:
 
     def test_skill_md_has_batch_limit_spec(self, skill_md: str) -> None:
         """SKILL.md must specify the L0 batch ceiling of 6."""
-        assert "6" in skill_md, "SKILL.md must specify the maximum parallel L0 batch size of 6."
+        assert "Spawn more than 6" in skill_md, (
+            "SKILL.md must specify the maximum parallel L0 batch size of 6 "
+            "(expected literal phrase 'Spawn more than 6')."
+        )
 
     def test_skill_md_has_wp_conflict_policy(self, skill_md: str) -> None:
         """SKILL.md must document the WP conflict resolution policy (earlier assignment wins)."""

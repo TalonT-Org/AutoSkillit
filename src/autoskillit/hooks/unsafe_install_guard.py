@@ -9,6 +9,8 @@ run_cmd at all — they are blocked by leaf_orchestration_guard.py).
 import json
 import sys
 
+UNSAFE_INSTALL_DENY_TRIGGER: str = "Blocked: editable install without --python .venv"
+
 _UNSAFE_PATTERNS = (
     "pip install -e",
     "pip install --editable",

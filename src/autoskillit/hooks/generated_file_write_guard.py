@@ -10,6 +10,8 @@ import json
 import os
 import sys
 
+GENERATED_FILE_DENY_TRIGGER: str = "is a generated file"
+
 _GENERATED_FILE_SUFFIXES = ("/hooks/hooks.json", ".claude/settings.json")
 
 

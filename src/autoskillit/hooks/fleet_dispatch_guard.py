@@ -12,6 +12,8 @@ import json
 import os
 import sys
 
+FLEET_DISPATCH_DENY_TRIGGER: str = "dispatch_food_truck cannot be called from headless sessions"
+
 
 def main() -> None:
     try:

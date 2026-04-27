@@ -402,6 +402,22 @@ CONTEXT LIMIT ROUTING — run_skill only (check BEFORE on_failure):
 - When run_skill returns "needs_retry: true" AND "retry_reason: early_stop" or "zero_writes":
   - These are not context limit conditions. Fall through to on_failure.
 
+HOOK DENIAL COMPLIANCE — ALL HOOKS:
+- When a PreToolUse hook DENIES a tool call (permissionDecision: "deny"), the denial
+  is a MANDATORY directive, not a suggestion. You MUST comply immediately.
+- Read the permissionDecisionReason carefully — it contains the required corrective action.
+- NEVER retry the denied tool call without first completing the corrective action.
+- NEVER ignore, work around, or reason past a hook denial.
+- Hook denials are structural enforcement of recipe/pipeline contracts. Treating them
+  as optional undermines the pipeline's safety guarantees.
+- After completing the corrective action specified in the deny reason, you may retry
+  the original tool call.
+
+SPECIFIC HOOK DENIAL PATTERNS:
+- "QUOTA WAIT REQUIRED": Temporary — sleep and retry (see QUOTA DENIAL ROUTING below).
+- "REVIEW LOOP REQUIRED": Call check_review_loop before retrying wait_for_ci/enqueue_pr.
+- All other denials: Follow the corrective instruction in the deny reason text.
+
 QUOTA DENIAL ROUTING — run_skill only (check BEFORE on_failure):
 - When a PreToolUse hook DENIES run_skill with "{QUOTA_GUARD_DENY_TRIGGER}":
   - This is a TEMPORARY block. The API quota resets on a rolling window.
@@ -450,6 +466,20 @@ ACTION: CONFIRM STEP SEMANTICS:
   route to the step's on_success target.
 - If the user declines (answers no, skip, keep, cancel, or similar negative),
   route to the step's on_failure target.
+
+ACTION: STOP STEP SEMANTICS:
+- When you reach a step with action: "stop", the pipeline is TERMINATED.
+- Display the step's message to the user. Do NOT call any MCP tools.
+- Do NOT attempt recovery, error reporting, or off-recipe actions after a stop step.
+- Do NOT reason about what went wrong or try alternative approaches.
+- A stop step is an INTENTIONAL terminus, not an error. Treat it as the recipe's
+  final word — the recipe author designed this as the endpoint.
+
+ACTION: ROUTE STEP SEMANTICS:
+- When you reach a step with action: "route", evaluate the step's on_result
+  conditions against captured context variables. Route to the matching target.
+- Do NOT call any MCP tools for this step type — routing evaluation IS the step.
+- If no on_result condition matches and on_failure is defined, follow on_failure.
 
 SKILL_COMMAND FORMATTING — MANDATORY:
 - The `skill_command` value in each step's `with:` block is a LITERAL template.

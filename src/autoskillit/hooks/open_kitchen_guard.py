@@ -14,6 +14,8 @@ import os
 import sys
 from datetime import UTC
 
+OPEN_KITCHEN_DENY_TRIGGER: str = "open_kitchen cannot be called"
+
 
 def _write_kitchen_marker(session_id: str, recipe_name: str | None) -> None:
     """Write the kitchen-open session marker (stdlib-only, inline implementation)."""

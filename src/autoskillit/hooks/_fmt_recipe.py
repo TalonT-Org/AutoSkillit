@@ -40,6 +40,7 @@ _FMT_LOAD_RECIPE_SUPPRESSED: frozenset[str] = frozenset(
         "content_hash",  # internal identity metadata
         "composite_hash",  # internal identity metadata
         "recipe_version",  # internal identity metadata
+        "stop_step_semantics",  # delivered via open_kitchen response Channel B; not redisplayed
     }
 )
 

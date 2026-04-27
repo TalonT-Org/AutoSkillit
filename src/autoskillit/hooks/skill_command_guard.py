@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 import sys
 
+SKILL_COMMAND_DENY_TRIGGER: str = "run_skill requires a slash-command prefix"
+
 SKILL_COMMAND_PREFIX = "/"
 AUTOSKILLIT_SKILL_PREFIX = "/autoskillit:"
 

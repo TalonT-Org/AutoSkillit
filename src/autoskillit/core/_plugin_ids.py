@@ -29,13 +29,24 @@ def _get_autoskillit_install_path() -> Path:
 
     The plugin value can be a dict {"installPath": ...} (old format) or
     a list [{"installPath": ...}] (new scoped format). Raises KeyError if
-    the plugin is not present; raises ValueError if the format is unexpected.
+    the plugin is not present; raises ValueError if the file is unreadable,
+    unparseable, or the entry format is unexpected.
     """
-    data = json.loads(_installed_plugins_path().read_text())
+    try:
+        data = json.loads(_installed_plugins_path().read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Cannot read installed_plugins.json: {exc}") from exc
     entry = data["plugins"][_AUTOSKILLIT_PLUGIN_KEY]
     if isinstance(entry, list):
+        if not entry:
+            raise ValueError(f"Empty install entry list for {_AUTOSKILLIT_PLUGIN_KEY!r}")
         entry = entry[0]
-    return Path(entry["installPath"])
+    install_path = entry.get("installPath") if isinstance(entry, dict) else None
+    if install_path is None:
+        raise ValueError(
+            f"Missing 'installPath' in entry for {_AUTOSKILLIT_PLUGIN_KEY!r}: {entry!r}"
+        )
+    return Path(install_path)
 
 
 def detect_autoskillit_mcp_prefix() -> str:

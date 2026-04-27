@@ -55,7 +55,7 @@ def check_remaining(manifest_path: str, pass_name: str, output_dir: str) -> dict
         )
 
     result_dir_str = manifest.get("result_dir")
-    if not result_dir_str:
+    if result_dir_str is None:
         raise ValueError(
             f"Manifest at {manifest_file} is missing required 'result_dir' field. "
             f"Re-run build_assignment_manifest or build_wp_manifest to regenerate."
@@ -169,7 +169,11 @@ def build_wp_manifest(
 
     assign_path = Path(assignments_dir)
     out_dir = Path(output_dir)
-    wp_dir = Path(work_packages_dir).resolve() if work_packages_dir else out_dir / "work_packages"
+    wp_dir = (
+        Path(work_packages_dir).resolve()
+        if work_packages_dir
+        else (out_dir / "work_packages").resolve()
+    )
 
     assign_files = list(assign_path.glob("*_result.json"))
     parsed_assignments = []

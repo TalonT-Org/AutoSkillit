@@ -67,8 +67,8 @@ review fixes are committed and the downstream push step receives a clean branch.
 
 ## Workflow
 
-Read `test_check.command` from `.autoskillit/config.yaml` (default: `task test-check`).
-Store the resolved command as `{test_command}` for use in all test-running steps.
+Read test configuration from `.autoskillit/config.yaml`: check `test_check.commands` (ordered list, if set) or `test_check.command` (single command, default: `task test-check`).
+The `test_check` MCP tool runs all configured commands automatically.
 
 ### Step 0: Validate Arguments
 

@@ -201,7 +201,7 @@ class DefaultTestRunner:
         self._runner = runner
 
     async def run(self, cwd: Path) -> TestResult:
-        command = self._config.test_check.command
+        effective_commands = self._config.test_check.commands or [self._config.test_check.command]
         timeout = float(self._config.test_check.timeout)
         env = build_sanitized_env()
 
@@ -217,21 +217,38 @@ class DefaultTestRunner:
         if base_ref:
             env["AUTOSKILLIT_TEST_BASE_REF"] = base_ref
 
-        # Create sidecar for conftest to write filter stats into
         fd, sidecar_path = tempfile.mkstemp(suffix=".json", prefix="filter-stats-")
         os.close(fd)
         env["AUTOSKILLIT_FILTER_STATS_FILE"] = sidecar_path
 
+        total = len(effective_commands)
+        stdout_parts: list[str] = []
+        last_result = None
         elapsed: float = 0.0
         stat_filter_mode: str | None = None
         stat_tests_selected: int | None = None
         stat_tests_deselected: int | None = None
         start = time.monotonic()
+        deadline = start + timeout
+
         try:
-            result = await self._runner(command, cwd=cwd, timeout=timeout, env=env)
+            for idx, command in enumerate(effective_commands, 1):
+                remaining = deadline - time.monotonic()
+                if remaining < 0.01:
+                    break
+                result = await self._runner(command, cwd=cwd, timeout=remaining, env=env)
+                last_result = result
+                if total > 1:
+                    stdout_parts.append(
+                        f"=== [{idx}/{total}] {' '.join(command)} ===\n{result.stdout}"
+                    )
+                else:
+                    stdout_parts.append(result.stdout)
+                if result.returncode != 0:
+                    break
+
             elapsed = time.monotonic() - start
 
-            # Read filter stats sidecar (written by conftest pytest_sessionfinish)
             sidecar = Path(sidecar_path)
             if sidecar.is_file() and sidecar.stat().st_size > 0:
                 try:
@@ -248,11 +265,15 @@ class DefaultTestRunner:
         finally:
             Path(sidecar_path).unlink(missing_ok=True)
 
-        passed = check_test_passed(result.returncode, result.stdout, result.stderr)
+        combined_stdout = "\n".join(stdout_parts)
+        final_returncode = last_result.returncode if last_result is not None else 1
+        final_stderr = last_result.stderr if last_result is not None else ""
+
+        passed = check_test_passed(final_returncode, combined_stdout, final_stderr)
         return TestResult(
             passed=passed,
-            stdout=result.stdout,
-            stderr=result.stderr,
+            stdout=combined_stdout,
+            stderr=final_stderr,
             duration_seconds=elapsed,
             filter_mode=stat_filter_mode,
             tests_selected=stat_tests_selected,

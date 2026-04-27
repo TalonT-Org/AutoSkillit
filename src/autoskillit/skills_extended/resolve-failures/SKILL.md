@@ -75,7 +75,7 @@ edits are committed and the downstream merge gate receives a clean worktree.
 
 ## Workflow
 
-Read the configured test command from `.autoskillit/config.yaml` (key: `test_check.command`). Use this command wherever `{test_command}` appears in these instructions. If no config exists, use the `test_check` MCP tool (which resolves the command from the project's config automatically).
+Read the configured test command(s) from `.autoskillit/config.yaml`: check `test_check.commands` first (ordered list of commands); fall back to `test_check.command` (single command). Use the `test_check` MCP tool (which runs all configured commands automatically and returns a single pass/fail).
 
 ### Step 0: Validate Arguments
 1. Parse positional args using **path detection**: scan all tokens after the

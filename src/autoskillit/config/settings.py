@@ -45,12 +45,23 @@ _SECRETS_ONLY_KEYS: frozenset[str] = frozenset({"github.token"})
 _METADATA_KEYS: frozenset[str] = frozenset({"version"})
 
 
+_DEFAULT_COMMAND: list[str] = ["task", "test-check"]
+
+
 @dataclass
 class TestCheckConfig:
-    command: list[str] = field(default_factory=lambda: ["task", "test-check"])
+    command: list[str] = field(default_factory=lambda: list(_DEFAULT_COMMAND))
     timeout: int = 600
     filter_mode: str | None = None
     base_ref: str | None = None
+    commands: list[list[str]] | None = None
+
+    def __post_init__(self) -> None:
+        if self.commands is not None and self.command != _DEFAULT_COMMAND:
+            raise ConfigSchemaError(
+                "test_check: 'command' and 'commands' are mutually exclusive; "
+                "omit 'command' when using 'commands'"
+            )
 
 
 @dataclass
@@ -477,6 +488,7 @@ class AutomationConfig:
                 timeout=int(val(tc, "timeout", _tc["timeout"])),
                 filter_mode=val(tc, "filter_mode", _tc["filter_mode"]) or None,
                 base_ref=val(tc, "base_ref", _tc["base_ref"]) or None,
+                commands=_to_optional_commands(val(tc, "commands", _tc["commands"])),
             ),
             classify_fix=ClassifyFixConfig(
                 path_prefixes=list(val(cf, "path_prefixes", _cf["path_prefixes"])),
@@ -786,6 +798,13 @@ def _to_optional_list(value: Any) -> list[str] | None:
     if not value:
         return None
     return list(value)
+
+
+def _to_optional_commands(value: Any) -> list[list[str]] | None:
+    """Return None if value is falsy, else coerce to list[list[str]]."""
+    if not value:
+        return None
+    return [list(cmd) for cmd in value]
 
 
 def _apply_layer(base: dict[str, Any], override: dict[str, Any]) -> None:

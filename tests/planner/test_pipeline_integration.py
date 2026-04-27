@@ -25,19 +25,16 @@ def _write_json(path: Path, data: object) -> None:
 def test_multi_phase_pipeline_end_to_end(tmp_path: Path) -> None:
     """Two-phase pipeline: SKILL.md-compliant data flows through every pipeline stage."""
     from autoskillit.planner import (
-        build_assignment_manifest,
-        build_wp_manifest,
         compile_plan,
+        expand_assignments,
+        expand_wps,
+        finalize_wp_manifest,
         validate_plan,
     )
 
-    phases_dir = tmp_path / "phases"
-    assignments_dir = tmp_path / "assignments"
-    wp_dir = tmp_path / "work_packages"
-
-    # Phase 1: Foundation  (SKILL.md field names)
+    # Phase results (needed by validate_plan/compile_plan)
     _write_json(
-        phases_dir / "P1_result.json",
+        tmp_path / "phases" / "P1_result.json",
         {
             "id": "P1",
             "name": "Foundation",
@@ -48,9 +45,8 @@ def test_multi_phase_pipeline_end_to_end(tmp_path: Path) -> None:
             "assignments_preview": ["Core setup"],
         },
     )
-    # Phase 2: Application (SKILL.md field names)
     _write_json(
-        phases_dir / "P2_result.json",
+        tmp_path / "phases" / "P2_result.json",
         {
             "id": "P2",
             "name": "Application Layer",
@@ -62,12 +58,30 @@ def test_multi_phase_pipeline_end_to_end(tmp_path: Path) -> None:
         },
     )
 
-    # build_assignment_manifest using SKILL.md phase data
-    build_assignment_manifest(str(phases_dir), str(assignments_dir), str(tmp_path))
-
-    # Write assignment results using SKILL.md field names (id, phase_id, not phase_number)
     _write_json(
-        assignments_dir / "P1-A1_result.json",
+        tmp_path / "refined_plan.json",
+        {
+            "phases": [
+                {
+                    "id": "P1",
+                    "name": "Foundation",
+                    "ordering": 1,
+                    "assignments_preview": [{"id": "P1-A1", "name": "Core setup"}],
+                },
+                {
+                    "id": "P2",
+                    "name": "Application Layer",
+                    "ordering": 2,
+                    "assignments_preview": [{"id": "P2-A1", "name": "App module"}],
+                },
+            ]
+        },
+    )
+
+    expand_assignments(str(tmp_path / "refined_plan.json"), str(tmp_path))
+
+    _write_json(
+        tmp_path / "assignments" / "P1-A1_result.json",
         {
             "id": "P1-A1",
             "name": "Core setup",
@@ -85,7 +99,7 @@ def test_multi_phase_pipeline_end_to_end(tmp_path: Path) -> None:
         },
     )
     _write_json(
-        assignments_dir / "P2-A1_result.json",
+        tmp_path / "assignments" / "P2-A1_result.json",
         {
             "id": "P2-A1",
             "name": "App module",
@@ -103,8 +117,37 @@ def test_multi_phase_pipeline_end_to_end(tmp_path: Path) -> None:
         },
     )
 
-    build_wp_manifest(str(assignments_dir), str(wp_dir))
+    _write_json(
+        tmp_path / "refined_assignments.json",
+        {
+            "assignments": [
+                {
+                    "id": "P1-A1",
+                    "phase_id": "P1",
+                    "phase_name": "Foundation",
+                    "phase_number": 1,
+                    "assignment_number": 1,
+                    "proposed_work_packages": [
+                        {"id": "P1-A1-WP1", "name": "Core module", "scope": "core"},
+                    ],
+                },
+                {
+                    "id": "P2-A1",
+                    "phase_id": "P2",
+                    "phase_name": "Application Layer",
+                    "phase_number": 2,
+                    "assignment_number": 1,
+                    "proposed_work_packages": [
+                        {"id": "P2-A1-WP1", "name": "App module", "scope": "app"},
+                    ],
+                },
+            ]
+        },
+    )
 
+    expand_wps(str(tmp_path / "refined_assignments.json"), str(tmp_path))
+
+    wp_dir = tmp_path / "work_packages"
     _write_json(
         wp_dir / "P1-A1-WP1_result.json",
         make_wp_result("P1-A1-WP1", deliverables=["src/core.py"]),
@@ -113,6 +156,8 @@ def test_multi_phase_pipeline_end_to_end(tmp_path: Path) -> None:
         wp_dir / "P2-A1-WP1_result.json",
         make_wp_result("P2-A1-WP1", deliverables=["src/app.py"], depends_on=["P1-A1-WP1"]),
     )
+
+    finalize_wp_manifest(str(wp_dir), str(tmp_path))
 
     validate_result = validate_plan(str(tmp_path))
     assert validate_result["verdict"] == "pass", validate_result
@@ -131,7 +176,6 @@ def test_multi_phase_pipeline_end_to_end(tmp_path: Path) -> None:
     assert "application-layer" in slugs
 
     manifest = json.loads((tmp_path / "manifest.json").read_text())
-    # P1 WP must come before P2 WP (dependency order)
     order = manifest["execution_order"]
     assert order.index("P1-A1-WP1") < order.index("P2-A1-WP1")
 

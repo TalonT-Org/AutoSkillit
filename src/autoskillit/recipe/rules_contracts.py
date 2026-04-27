@@ -18,8 +18,6 @@ _RESULT_FIELD_DRIFT_SKILLS = frozenset(
     {
         "planner-generate-phases",
         "planner-elaborate-phase",
-        "planner-elaborate-assignment",
-        "planner-elaborate-wp",
     }
 )
 
@@ -354,16 +352,12 @@ def _check_result_field_drift(ctx: ValidationContext) -> list[RuleFinding]:
     # Deferred import: recipe/ must not import planner/ at module level (REQ-COMP-009).
     # planner/ is L1 and does not import recipe/, so no circular risk.
     from autoskillit.planner import (  # noqa: PLC0415
-        ASSIGNMENT_REQUIRED_KEYS,
         PHASE_REQUIRED_KEYS,
-        WP_REQUIRED_KEYS,
     )
 
     skill_schemas: dict[str, frozenset[str]] = {
         "planner-generate-phases": PHASE_REQUIRED_KEYS,
         "planner-elaborate-phase": PHASE_REQUIRED_KEYS,
-        "planner-elaborate-assignment": ASSIGNMENT_REQUIRED_KEYS,
-        "planner-elaborate-wp": WP_REQUIRED_KEYS,
     }
 
     findings: list[RuleFinding] = []

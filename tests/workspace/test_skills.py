@@ -433,11 +433,11 @@ class TestSkillResolver:
             for d in bundled_skills_extended_dir().iterdir()
             if d.is_dir() and (d / "SKILL.md").is_file()
         ]
-        assert len(skills) == 121
+        assert len(skills) == 122
 
     def test_skill_resolver_list_all_total_count(self) -> None:
         """list_all() returns 123 public skills (2 Tier-1 + 121 extended)."""
-        assert len(DefaultSkillResolver().list_all()) == 123
+        assert len(DefaultSkillResolver().list_all()) == 124
 
     def test_skill_resolver_resolve_extended_skill(self) -> None:
         """resolve() finds a skill living in skills_extended/ with BUNDLED_EXTENDED source."""

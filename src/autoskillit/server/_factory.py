@@ -163,7 +163,8 @@ def make_context(
                 tester (useful in tests that don't need real subprocess execution).
         plugin_dir: Absolute path to the autoskillit plugin directory for a
                     direct install. When omitted (sentinel), auto-detects via
-                    _check_plugin_installed(). Superseded by plugin_source.
+                    _check_plugin_installed(). When plugin_source is also provided,
+                    plugin_source takes precedence.
         plugin_source: PluginSource override. When supplied, used directly
                        without detection. For tests and CLI that construct
                        install mode explicitly.
@@ -238,7 +239,16 @@ def make_context(
     elif plugin_dir is not _UNSET and isinstance(plugin_dir, (str, Path)):
         resolved_plugin_source = DirectInstall(plugin_dir=Path(plugin_dir))
     elif _check_plugin_installed():
-        resolved_plugin_source = MarketplaceInstall(cache_path=_resolve_marketplace_cache_path())
+        try:
+            resolved_plugin_source = MarketplaceInstall(
+                cache_path=_resolve_marketplace_cache_path()
+            )
+        except (KeyError, ValueError) as exc:
+            logger.warning(
+                "marketplace install path unavailable (%s) — falling back to direct install",
+                exc,
+            )
+            resolved_plugin_source = DirectInstall(plugin_dir=_default_plugin_dir())
     else:
         resolved_plugin_source = DirectInstall(plugin_dir=_default_plugin_dir())
     plugin_source = resolved_plugin_source

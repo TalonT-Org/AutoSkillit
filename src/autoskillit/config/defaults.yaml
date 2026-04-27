@@ -7,9 +7,6 @@
 #   5. AUTOSKILLIT_SECTION__KEY=value environment variables
 
 test_check:
-  command:
-    - task
-    - test-check
   timeout: 600
   filter_mode: null
   base_ref: null

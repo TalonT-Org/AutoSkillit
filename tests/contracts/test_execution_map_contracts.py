@@ -87,3 +87,54 @@ def test_execution_map_references_dependency_ordering() -> None:
     text = _skill_md_text()
     lower = text.lower()
     assert "dependency" in lower, "SKILL.md must reference dependency-based group ordering"
+
+
+def test_execution_map_review_approach_flag_declared() -> None:
+    """SKILL.md Arguments section must declare --assess-review-approach flag."""
+    text = _skill_md_text()
+    args_match = re.search(r"## Arguments(.*?)(?=\n##)", text, re.DOTALL)
+    assert args_match is not None, "SKILL.md must have an ## Arguments section"
+    args_section = args_match.group(1)
+    assert "--assess-review-approach" in args_section, (
+        "Arguments section must declare --assess-review-approach flag"
+    )
+
+
+def test_execution_map_review_approach_schema_fields() -> None:
+    """SKILL.md output schema must document review-approach fields when flag is active."""
+    text = _skill_md_text()
+    assert '"review_approach_recommended"' in text, (
+        "Schema must document 'review_approach_recommended' boolean field"
+    )
+    assert '"review_approach_reasoning"' in text, (
+        "Schema must document 'review_approach_reasoning' string field"
+    )
+
+
+def test_execution_map_review_approach_candidates_token() -> None:
+    """SKILL.md must declare review_approach_candidates output token."""
+    text = _skill_md_text()
+    assert re.search(r"review_approach_candidates\s*=\s*\S", text), (
+        "SKILL.md must declare 'review_approach_candidates = ...' output token"
+    )
+
+
+def test_execution_map_reads_review_approach_skill() -> None:
+    """SKILL.md must instruct reading review-approach/SKILL.md to ground assessment."""
+    text = _skill_md_text()
+    assert "review-approach" in text.lower() and "SKILL.md" in text, (
+        "SKILL.md must reference reading review-approach/SKILL.md for assessment grounding"
+    )
+
+
+def test_review_approach_candidates_contract_registered() -> None:
+    """skill_contracts.yaml must register review_approach_candidates output."""
+    from autoskillit.recipe.contracts import get_skill_contract, load_bundled_manifest
+
+    manifest = load_bundled_manifest()
+    contract = get_skill_contract("build-execution-map", manifest)
+    assert contract is not None
+    output_names = [o.name for o in contract.outputs]
+    assert "review_approach_candidates" in output_names, (
+        "build-execution-map contract must register review_approach_candidates output"
+    )

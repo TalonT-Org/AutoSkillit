@@ -328,7 +328,7 @@ def test_build_plan_snapshot_writes_short_form_only(tmp_path):
 
 
 def test_build_plan_snapshot_projects_ordering(tmp_path) -> None:
-    """Snapshot items must include ordering so parallel workers can reason about phase sequence."""
+    """ordering is the sort key in build_plan_snapshot; validate_phase_result raises if absent."""
     phases_dir = tmp_path / "phases"
     phases_dir.mkdir()
     result = {

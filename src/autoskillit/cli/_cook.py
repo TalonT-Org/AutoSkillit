@@ -107,21 +107,28 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
     if confirm.lower() in ("n", "no"):
         return
 
+    from autoskillit.cli._installed_plugins import InstalledPluginsFile
     from autoskillit.cli._onboarding import is_first_run, run_onboarding_menu
     from autoskillit.core import (
+        _AUTOSKILLIT_PLUGIN_KEY,
         LAUNCH_ID_ENV_VAR,
         MARKETPLACE_PREFIX,
         SESSION_TYPE_COOK,
         SESSION_TYPE_ENV_VAR,
         BareResume,
+        DirectInstall,
+        MarketplaceInstall,
         NamedResume,
         NoResume,
+        _get_autoskillit_install_path,
         configure_logging,
-        detect_autoskillit_mcp_prefix,
+        get_logger,
         pkg_root,
         resume_spec_from_cli,
         write_registry_entry,
     )
+
+    logger = get_logger(__name__)
     from autoskillit.execution import build_interactive_cmd
 
     configure_logging()
@@ -143,7 +150,18 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
         session_id_local, cook_session=True, config=config, project_dir=project_dir
     )
 
-    plugin_dir = None if detect_autoskillit_mcp_prefix() == MARKETPLACE_PREFIX else pkg_root()
+    plugin_source: MarketplaceInstall | DirectInstall
+    if InstalledPluginsFile().contains(_AUTOSKILLIT_PLUGIN_KEY):
+        try:
+            plugin_source = MarketplaceInstall(cache_path=_get_autoskillit_install_path())
+        except (KeyError, ValueError) as exc:
+            logger.warning(
+                "marketplace install path unavailable (%s) — falling back to direct install",
+                exc,
+            )
+            plugin_source = DirectInstall(plugin_dir=pkg_root())
+    else:
+        plugin_source = DirectInstall(plugin_dir=pkg_root())
 
     if isinstance(resume_spec, BareResume):
         from autoskillit.cli._session_picker import pick_session
@@ -167,7 +185,7 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
     seen_reload_ids: set[str] = set()
     while True:
         spec = build_interactive_cmd(
-            plugin_dir=plugin_dir,
+            plugin_source=plugin_source,
             add_dirs=[skills_dir],
             initial_prompt=_current_initial_prompt,
             resume_spec=current_resume_spec,

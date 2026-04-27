@@ -729,7 +729,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "server": 20,
         "recipe": 39,
         "execution": 26,
-        "core": 26,
+        "core": 27,
         "cli": 27,
         "hooks": 27,
     }
@@ -940,7 +940,7 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
     """REQ-ARCH-002: Every non-exempt ToolContext field must use a Protocol from core/types.py.
 
     Exempt fields:
-    - plugin_dir: str primitive (explicitly stated in the requirement)
+    - plugin_source: PluginSource discriminated union (value type, not a service interface)
     - config: AutomationConfig dataclass (configuration container, not a service interface)
     """
     AUTOSKILLIT_ROOT = SRC_ROOT
@@ -970,7 +970,7 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
     context_path = AUTOSKILLIT_ROOT / "pipeline" / "context.py"
     context_tree = ast.parse(context_path.read_text())
 
-    EXEMPT = {"plugin_dir", "config", "active_recipe_packs", "temp_dir", "project_dir"}
+    EXEMPT = {"plugin_source", "config", "active_recipe_packs", "temp_dir", "project_dir"}
     violations: list[str] = []
 
     for node in ast.walk(context_tree):

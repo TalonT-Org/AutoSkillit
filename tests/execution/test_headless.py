@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
+from autoskillit.core._type_plugin_source import DirectInstall, MarketplaceInstall
 from autoskillit.core.types import (
     CONTEXT_EXHAUSTION_MARKER,
     ChannelConfirmation,
@@ -4274,7 +4275,7 @@ class TestDispatchFoodTruck:
             )
         )
         minimal_ctx.runner = runner
-        minimal_ctx.plugin_dir = str(tmp_path)
+        minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
         await executor.dispatch_food_truck(
@@ -4309,7 +4310,7 @@ class TestDispatchFoodTruck:
             )
         )
         minimal_ctx.runner = runner
-        minimal_ctx.plugin_dir = str(tmp_path)
+        minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
         result = await executor.dispatch_food_truck(
@@ -4338,7 +4339,7 @@ class TestDispatchFoodTruck:
             )
         )
         minimal_ctx.runner = runner
-        minimal_ctx.plugin_dir = str(tmp_path)
+        minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
 
         spawned_pids: list[int] = []
 
@@ -4369,7 +4370,7 @@ class TestDispatchFoodTruck:
             )
         )
         minimal_ctx.runner = runner
-        minimal_ctx.plugin_dir = str(tmp_path)
+        minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
         result = await executor.dispatch_food_truck(
@@ -4381,6 +4382,40 @@ class TestDispatchFoodTruck:
 
         assert isinstance(result, SkillResult)
         assert result.success is True
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_marketplace_install_does_not_raise(
+        self, minimal_ctx, tmp_path: Path
+    ):
+        """dispatch_food_truck with MarketplaceInstall resolves cache_path — no ValueError."""
+        from autoskillit.core.types import SubprocessResult, TerminationReason
+        from autoskillit.execution.headless import DefaultHeadlessExecutor
+        from tests.fakes import MockSubprocessRunner
+
+        cache = tmp_path / "marketplace_cache"
+        cache.mkdir()
+        runner = MockSubprocessRunner()
+        runner.set_default(
+            SubprocessResult(
+                returncode=0,
+                stdout=self._make_success_stdout(),
+                stderr="",
+                termination=TerminationReason.NATURAL_EXIT,
+                pid=55555,
+            )
+        )
+        minimal_ctx.runner = runner
+        minimal_ctx.plugin_source = MarketplaceInstall(cache_path=cache)
+
+        executor = DefaultHeadlessExecutor(minimal_ctx)
+        await executor.dispatch_food_truck(
+            "You are an L2 orchestrator",
+            str(tmp_path),
+            completion_marker="%%FT_DONE%%",
+        )
+        cmd, _cwd, _timeout, _kwargs = runner.call_args_list[0]
+        assert "--plugin-dir" in cmd
+        assert str(cache) in cmd
 
 
 class TestDispatchFoodTruckPackInjection:
@@ -4417,7 +4452,7 @@ class TestDispatchFoodTruckPackInjection:
             )
         )
         minimal_ctx.runner = runner
-        minimal_ctx.plugin_dir = str(tmp_path)
+        minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
         await executor.dispatch_food_truck(
@@ -4451,7 +4486,7 @@ class TestDispatchFoodTruckPackInjection:
             )
         )
         minimal_ctx.runner = runner
-        minimal_ctx.plugin_dir = str(tmp_path)
+        minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
         await executor.dispatch_food_truck(

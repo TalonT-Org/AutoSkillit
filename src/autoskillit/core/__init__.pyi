@@ -9,6 +9,9 @@ from ._plugin_cache import clear_kitchens_for_pid as clear_kitchens_for_pid
 from ._plugin_cache import register_active_kitchen as register_active_kitchen
 from ._plugin_cache import sweep_retiring_cache as sweep_retiring_cache
 from ._plugin_cache import unregister_active_kitchen as unregister_active_kitchen
+from ._plugin_ids import _AUTOSKILLIT_PLUGIN_KEY as _AUTOSKILLIT_PLUGIN_KEY
+from ._plugin_ids import _get_autoskillit_install_path as _get_autoskillit_install_path
+from ._plugin_ids import _installed_plugins_path as _installed_plugins_path
 from ._plugin_ids import DIRECT_PREFIX as DIRECT_PREFIX
 from ._plugin_ids import MARKETPLACE_PREFIX as MARKETPLACE_PREFIX
 from ._plugin_ids import detect_autoskillit_mcp_prefix as detect_autoskillit_mcp_prefix
@@ -96,6 +99,7 @@ from .types import CloneResult as CloneResult
 from .types import CloneSuccessResult as CloneSuccessResult
 from .types import DISPATCH_ID_ENV_VAR as DISPATCH_ID_ENV_VAR
 from .types import DatabaseReader as DatabaseReader
+from .types import DirectInstall as DirectInstall
 from .types import FEATURE_REGISTRY as FEATURE_REGISTRY
 from .types import FLEET_DISPATCH_MODE as FLEET_DISPATCH_MODE
 from .types import FLEET_DISPATCH_TOOLS as FLEET_DISPATCH_TOOLS
@@ -121,6 +125,7 @@ from .types import LAUNCH_ID_ENV_VAR as LAUNCH_ID_ENV_VAR
 from .types import LoadReport as LoadReport
 from .types import LoadResult as LoadResult
 from .types import MUTATING_TOOLS as MUTATING_TOOLS
+from .types import MarketplaceInstall as MarketplaceInstall
 from .types import McpResponseLog as McpResponseLog
 from .types import MergeFailedStep as MergeFailedStep
 from .types import MergeQueueWatcher as MergeQueueWatcher
@@ -134,6 +139,7 @@ from .types import PACK_REGISTRY as PACK_REGISTRY
 from .types import PIPELINE_FORBIDDEN_TOOLS as PIPELINE_FORBIDDEN_TOOLS
 from .types import PRState as PRState
 from .types import PackDef as PackDef
+from .types import PluginSource as PluginSource
 from .types import QuotaRefreshTask as QuotaRefreshTask
 from .types import RECIPE_PACK_REGISTRY as RECIPE_PACK_REGISTRY
 from .types import RECIPE_PACK_TAGS as RECIPE_PACK_TAGS

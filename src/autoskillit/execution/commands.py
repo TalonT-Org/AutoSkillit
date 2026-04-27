@@ -15,8 +15,11 @@ from autoskillit.core import (
     SESSION_TYPE_ORCHESTRATOR,
     BareResume,
     ClaudeFlags,
+    DirectInstall,
+    MarketplaceInstall,
     NamedResume,
     NoResume,
+    PluginSource,
     ResumeSpec,
     ValidatedAddDir,
     build_claude_env,
@@ -55,7 +58,7 @@ def build_interactive_cmd(
     *,
     initial_prompt: str | None = None,
     model: str | None = None,
-    plugin_dir: Path | None = None,
+    plugin_source: PluginSource | None = None,
     add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
     resume_spec: ResumeSpec = NoResume(),
     env_extras: Mapping[str, str] | None = None,
@@ -70,8 +73,10 @@ def build_interactive_cmd(
         session start.
     model
         Optional model override.
-    plugin_dir
-        When provided, appended as ``--plugin-dir <path>``.
+    plugin_source
+        When provided, determines the ``--plugin-dir`` flag. DirectInstall uses
+        the plugin_dir path; MarketplaceInstall omits the flag (parent session
+        already has it loaded).
     add_dirs
         Each entry is appended as ``--add-dir <path>``.
     resume_spec
@@ -91,8 +96,13 @@ def build_interactive_cmd(
             pass
     if model:
         cmd += [ClaudeFlags.MODEL, model]
-    if plugin_dir is not None:
-        cmd += [ClaudeFlags.PLUGIN_DIR, str(plugin_dir)]
+    match plugin_source:
+        case DirectInstall(plugin_dir=p):
+            cmd += [ClaudeFlags.PLUGIN_DIR, str(p)]
+        case MarketplaceInstall():
+            pass  # parent session already has the marketplace plugin loaded
+        case None:
+            pass
     for d in add_dirs:
         cmd += [ClaudeFlags.ADD_DIR, str(d)]
     if initial_prompt is not None:
@@ -160,7 +170,7 @@ def build_headless_resume_cmd(
     resume_session_id: str,
     prompt: str,
     output_format: str = "json",
-    plugin_dir: Path | None = None,
+    plugin_source: PluginSource | None = None,
     env_extras: Mapping[str, str] | None = None,
 ) -> ClaudeHeadlessCmd:
     """Build a headless resume command for contract recovery nudge.
@@ -179,8 +189,13 @@ def build_headless_resume_cmd(
         ClaudeFlags.OUTPUT_FORMAT,
         output_format,
     ]
-    if plugin_dir is not None:
-        cmd += [ClaudeFlags.PLUGIN_DIR, str(plugin_dir)]
+    match plugin_source:
+        case DirectInstall(plugin_dir=p):
+            cmd += [ClaudeFlags.PLUGIN_DIR, str(p)]
+        case MarketplaceInstall():
+            pass  # parent session already has the marketplace plugin loaded
+        case None:
+            pass
     merged: dict[str, str] = dict(_SESSION_BASELINE_ENV)
     if env_extras:
         merged.update(env_extras)
@@ -248,7 +263,7 @@ def build_leaf_headless_cmd(
     cwd: str,
     completion_marker: str,
     model: str | None,
-    plugin_dir: str | Path | None,
+    plugin_source: PluginSource | None,
     output_format_value: str,
     output_format_required_flags: Sequence[str] = (),
     add_dirs: Sequence[ValidatedAddDir] = (),
@@ -278,8 +293,9 @@ def build_leaf_headless_cmd(
         Marker string appended to the prompt as a completion directive.
     model
         Optional model override; passed through to ``build_headless_cmd``.
-    plugin_dir
-        Path passed as ``--plugin-dir`` flag.
+    plugin_source
+        PluginSource determining the ``--plugin-dir`` flag. DirectInstall uses the
+        path; MarketplaceInstall omits the flag.
     output_format_value
         String value passed as ``--output-format`` flag.
     output_format_required_flags
@@ -318,8 +334,13 @@ def build_leaf_headless_cmd(
     filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
     spec = build_headless_cmd(prompt, model=model, env_extras=extras, base=filtered_base)
     cmd: list[str] = [*spec.cmd]
-    if plugin_dir is not None:
-        cmd += [ClaudeFlags.PLUGIN_DIR, str(plugin_dir)]
+    match plugin_source:
+        case DirectInstall(plugin_dir=p):
+            cmd += [ClaudeFlags.PLUGIN_DIR, str(p)]
+        case MarketplaceInstall():
+            pass  # parent session already has the marketplace plugin loaded
+        case None:
+            pass
     cmd += [ClaudeFlags.OUTPUT_FORMAT, output_format_value]
     for flag in output_format_required_flags:
         if flag not in cmd:
@@ -333,7 +354,7 @@ def build_leaf_headless_cmd(
 def build_food_truck_cmd(
     *,
     orchestrator_prompt: str,
-    plugin_dir: str | Path,
+    plugin_source: PluginSource,
     cwd: str,
     completion_marker: str,
     model: str | None = None,
@@ -351,13 +372,17 @@ def build_food_truck_cmd(
     - Sets ``SESSION_TYPE=orchestrator`` (not ``leaf``)
     - Accepts caller-provided ``env_extras`` for campaign-specific variables
       (CAMPAIGN_ID, CAMPAIGN_STATE_PATH, PROJECT_DIR, L2_TOOL_TAGS, etc.)
+    - Always emits ``--plugin-dir``: DirectInstall uses plugin_dir, MarketplaceInstall
+      uses cache_path (food truck sessions are fresh subprocesses that need explicit
+      plugin loading, unlike leaf sessions where the parent already has it).
 
     Parameters
     ----------
     orchestrator_prompt
         Complete system prompt built by the fleet caller.
-    plugin_dir
-        Path passed as ``--plugin-dir`` flag.
+    plugin_source
+        PluginSource determining the ``--plugin-dir`` path. Both DirectInstall and
+        MarketplaceInstall produce a ``--plugin-dir`` flag (paths differ).
     cwd
         Absolute path to the working directory. Injected as anchor directive.
     completion_marker
@@ -399,7 +424,12 @@ def build_food_truck_cmd(
     spec = build_headless_cmd(prompt, model=model, env_extras=extras, base=filtered_base)
 
     cmd: list[str] = [*spec.cmd]
-    cmd += [ClaudeFlags.PLUGIN_DIR, str(plugin_dir)]
+    # Both install modes require --plugin-dir for food truck sessions (fresh subprocess).
+    match plugin_source:
+        case DirectInstall(plugin_dir=p):
+            cmd += [ClaudeFlags.PLUGIN_DIR, str(p)]
+        case MarketplaceInstall(cache_path=cp):
+            cmd += [ClaudeFlags.PLUGIN_DIR, str(cp)]
     cmd += [ClaudeFlags.OUTPUT_FORMAT, output_format_value]
     cmd += [ClaudeFlags.TOOLS, "AskUserQuestion"]
 

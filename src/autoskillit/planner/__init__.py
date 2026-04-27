@@ -10,6 +10,8 @@ from autoskillit.planner.schema import (  # noqa: F401
     ASSIGNMENT_REQUIRED_KEYS,
     PHASE_REQUIRED_KEYS,
     WP_REQUIRED_KEYS,
+    PlannerManifest,
+    PlannerManifestItem,
 )
 from autoskillit.planner.validation import validate_plan
 
@@ -19,4 +21,6 @@ __all__ = [
     "build_wp_manifest",
     "validate_plan",
     "compile_plan",
+    "PlannerManifest",
+    "PlannerManifestItem",
 ]

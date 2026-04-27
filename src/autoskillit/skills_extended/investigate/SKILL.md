@@ -287,7 +287,7 @@ No prior investigations or fixes found for this root cause.
 {In deep analysis mode: single recommendation, not a menu of options}
 {Include killed alternatives with reasons if deep mode}
 
-## Breakage Analysis
+## Breakage Analysis {Deep mode only — omit in standard mode}
 {Deep mode only — adversarial breakage analysis for removal/change recommendations:}
 - Recommendation: {recommendation text}
   - Breakage surface: {components that would break, with file paths}
@@ -345,7 +345,7 @@ For each subsequent batch (Batch 2, Batch 3, ...):
 1. Open with an explicit synthesis from prior batches — what was confirmed, what remains uncertain
 2. Each batch must include mandatory code exploration (local code search, file reads, symbol tracing) and mandatory web research (search for external documentation, known issues, library behavior)
 3. After each batch completes, produce inter-batch synthesis (confirmed findings, open questions, new leads)
-4. If inter-batch synthesis surfaces new mechanisms as change candidates that were not covered in prior batches, re-dispatch the Design Intent subagent targeting those specific mechanisms
+4. If inter-batch synthesis surfaces new mechanisms as change candidates that were not covered in prior batches, re-dispatch the Design Intent subagent targeting those specific mechanisms. Fan-in: append each re-dispatched result as additional bullet points under `## Design Intent Findings` in the final report (do not replace prior findings).
 
 **Early termination:** When all findings across all open questions are SUPPORTED (backed by direct code evidence) and no new investigative leads have emerged in the last batch, stop iterating and proceed to D4.
 

@@ -119,9 +119,7 @@ def test_bundled_recipe_no_unbounded_cycle_findings(recipe_name: str) -> None:
     recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
     findings = run_semantic_rules(recipe)
     ci_watch_cycle_findings = [
-        f
-        for f in findings
-        if f.rule == "unbounded-cycle" and any(kw in f.message for kw in _CI_WATCH_CYCLE_STEPS)
+        f for f in findings if f.rule == "unbounded-cycle" and f.step_name in _CI_WATCH_CYCLE_STEPS
     ]
     assert ci_watch_cycle_findings == [], (
         f"{recipe_name} has unbounded-cycle findings for ci_watch cycle: "

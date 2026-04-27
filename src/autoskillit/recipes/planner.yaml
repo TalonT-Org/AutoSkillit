@@ -1,11 +1,13 @@
 name: planner
 autoskillit_version: "0.9.205"
-recipe_version: "1"
+recipe_version: "2"
 description: |
-  Progressive decomposition pipeline. Analyzes a codebase, generates phases, elaborates
-  assignments and work packages in iterative loops, reconciles dependencies, validates the
-  dependency graph, and compiles a manifest ready for issue creation.
-summary: "init > analyze > [extract_domain?] > phases-loop > assignments-loop > wps-loop > reconcile > validate/refine > compile"
+  Progressive decomposition pipeline with parallel fan-out. Analyzes a codebase,
+  generates phases, then elaborates each tier (phases, assignments, work packages)
+  in parallel — one run_skill per phase simultaneously. Each tier follows the
+  pattern: parallel elaborate → merge → refine. Reconciles dependencies, validates
+  the dependency graph, and compiles a manifest ready for issue creation.
+summary: "init > analyze > [domain?] > gen-phases > parallel-phases > parallel-assignments > parallel-wps > reconcile > validate/refine > compile"
 
 requires_packs: [kitchen-core]
 categories: [orchestration-family]
@@ -15,9 +17,12 @@ kitchen_rules:
     WebFetch, WebSearch, NotebookEdit) from the orchestrator. All codebase interaction
     runs inside headless skill sessions.
   - Route to on_failure or escalate_stop rather than attempting inline recovery.
-  - Each check_* step controls loop iteration. Do not call elaborate_* steps directly;
-    always go through the corresponding check_* step first.
   - The refine/validate cycle is bounded by retries. If refine is exhausted, halt.
+  - "PARALLEL DISPATCH: When a step note says 'PARALLEL DISPATCH', iterate the
+    comma-separated list in the referenced context variable. For each item, substitute
+    it into the skill_command template placeholder and issue one run_skill call. Issue
+    ALL calls in a single assistant message so they execute concurrently. Accumulate
+    each result via capture_list."
 
 ingredients:
   task:
@@ -32,7 +37,6 @@ steps:
   init:
     tool: run_python
     with:
-      step_name: "init"
       callable: "autoskillit.planner.create_run_dir"
     capture:
       planner_dir: "${{ result.planner_dir }}"
@@ -67,132 +71,152 @@ steps:
       cwd: "${{ inputs.source_dir }}"
     capture:
       phase_manifest_path: "${{ result.phase_manifest_path }}"
-    on_success: build_pre_elab_snapshot
+    on_success: build_plan_snapshot
     on_failure: escalate_stop
 
-  build_pre_elab_snapshot:
+  # --- PHASE TIER ---
+
+  build_plan_snapshot:
     tool: run_python
     with:
-      callable: "autoskillit.planner.build_pre_elab_snapshot"
-      manifest_path: "${{ context.phase_manifest_path }}"
-      output_dir: "${{ context.planner_dir }}"
+      callable: "autoskillit.planner.merge.build_plan_snapshot"
+      phases_dir: "${{ context.planner_dir }}/phases"
+      output_path: "${{ context.planner_dir }}/plan_snapshot.json"
+      task: "${{ inputs.task }}"
+      source_dir: "${{ inputs.source_dir }}"
     capture:
-      pre_elab_snapshot_path: "${{ result.snapshot_path }}"
-    on_success: check_phases
+      plan_snapshot_path: "${{ result.snapshot_path }}"
+      phase_ids: "${{ result.phase_ids }}"
+    on_success: elaborate_phases
     on_failure: escalate_stop
 
-  check_phases:
-    tool: run_python
-    with:
-      callable: "autoskillit.planner.check_remaining"
-      manifest_path: "${{ context.phase_manifest_path }}"
-      pass_name: "phases"
-      output_dir: "${{ context.planner_dir }}"
-    capture:
-      has_remaining: "${{ result.has_remaining }}"
-      current_item_path: "${{ result.current_item_path }}"
-      current_item_id: "${{ result.current_item_id }}"
-    on_result:
-      - when: "${{ result.has_remaining }} == true"
-        route: elaborate_phase
-      - route: build_phase_assignment_manifest
-    on_failure: escalate_stop
-
-  elaborate_phase:
+  elaborate_phases:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:planner-elaborate-phase ${{ context.pre_elab_snapshot_path }} ${{ context.current_item_id }} ${{ context.planner_dir }}/phases"
+      skill_command: "/autoskillit:planner-elaborate-phase ${{ context.plan_snapshot_path }} {phase_id} ${{ context.planner_dir }}/phases"
       cwd: "${{ inputs.source_dir }}"
-    optional_context_refs: [current_item_id]
     capture_list:
       elab_result_path: "${{ result.elab_result_path }}"
-    retries: 1
-    on_success: check_phases
-    on_exhausted: escalate_stop
+    on_success: merge_phases
     on_failure: escalate_stop
+    note: >
+      PARALLEL DISPATCH: context.phase_ids contains comma-separated phase IDs
+      (e.g. "P1,P2,P3"). For each phase_id, substitute it into the {phase_id}
+      placeholder in skill_command and issue one run_skill call. Run ALL
+      elaborations in parallel (all run_skill calls in a single message).
+      Accumulate each elab_result_path value via capture_list.
 
-  build_phase_assignment_manifest:
+  merge_phases:
     tool: run_python
     with:
-      callable: "autoskillit.planner.build_phase_assignment_manifest"
-      phases_dir: "${{ context.planner_dir }}/phases"
-      output_dir: "${{ context.planner_dir }}/assignments"
+      callable: "autoskillit.planner.merge.merge_tier_dir"
+      results_dir: "${{ context.planner_dir }}/phases"
+      output_path: "${{ context.planner_dir }}/combined_plan.json"
+      key: "phases"
+      task: "${{ inputs.task }}"
+      source_dir: "${{ inputs.source_dir }}"
     capture:
-      phase_assignment_manifest: "${{ result.manifest_path }}"
-    on_success: check_phase_assignments
+      combined_phases_path: "${{ result.merged_path }}"
+    on_success: refine_phases
     on_failure: escalate_stop
 
-  check_phase_assignments:
-    tool: run_python
-    with:
-      callable: "autoskillit.planner.check_remaining"
-      manifest_path: "${{ context.phase_assignment_manifest }}"
-      pass_name: "phase_assignments"
-      output_dir: "${{ context.planner_dir }}/assignments"
-    capture:
-      has_remaining: "${{ result.has_remaining }}"
-      current_item_path: "${{ result.current_item_path }}"
-      current_item_id: "${{ result.current_item_id }}"
-    on_result:
-      - when: "${{ result.has_remaining }} == true"
-        route: elaborate_phase_assignments
-      - route: build_phase_wp_manifest
-    on_failure: escalate_stop
-
-  elaborate_phase_assignments:
+  refine_phases:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:planner-elaborate-assignments ${{ context.current_item_path }} ${{ context.planner_dir }}"
+      skill_command: "/autoskillit:planner-refine-phases ${{ context.combined_phases_path }} ${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"
-    optional_context_refs: [current_item_path]
-    capture_list:
-      phase_assignments_result_dir: "${{ result.phase_assignments_result_dir }}"
-    retries: 1
-    on_success: check_phase_assignments
-    on_exhausted: escalate_stop
+    capture:
+      refined_plan_path: "${{ result.refined_plan_path }}"
+    on_success: expand_assignments
     on_failure: escalate_stop
 
-  build_phase_wp_manifest:
+  # --- ASSIGNMENT TIER ---
+
+  expand_assignments:
     tool: run_python
     with:
-      callable: "autoskillit.planner.build_phase_wp_manifest"
-      assignments_dir: "${{ context.planner_dir }}/assignments"
-      work_packages_dir: "${{ context.planner_dir }}/work_packages"
+      callable: "autoskillit.planner.expand_assignments"
+      refined_plan_path: "${{ context.refined_plan_path }}"
+      output_dir: "${{ context.planner_dir }}"
+    capture:
+      phase_assignment_manifest: "${{ result.manifest_path }}"
+      assignment_context_paths: "${{ result.context_paths }}"
+      assignment_item_ids: "${{ result.item_ids }}"
+    on_success: elaborate_assignments
+    on_failure: escalate_stop
+
+  elaborate_assignments:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:planner-elaborate-assignments {context_path} ${{ context.planner_dir }}"
+      cwd: "${{ inputs.source_dir }}"
+    capture_list:
+      phase_assignments_result_dir: "${{ result.phase_assignments_result_dir }}"
+    on_success: merge_assignments
+    on_failure: escalate_stop
+    note: >
+      PARALLEL DISPATCH: context.assignment_context_paths contains comma-separated
+      paths to per-phase context files. For each context_path, substitute it into
+      the {context_path} placeholder in skill_command and issue one run_skill call.
+      Run ALL elaborations in parallel. Accumulate results via capture_list.
+
+  merge_assignments:
+    tool: run_python
+    with:
+      callable: "autoskillit.planner.merge.merge_tier_dir"
+      results_dir: "${{ context.planner_dir }}/assignments"
+      output_path: "${{ context.planner_dir }}/combined_assignments.json"
+      key: "assignments"
+      task: "${{ inputs.task }}"
+      source_dir: "${{ inputs.source_dir }}"
+    capture:
+      combined_assignments_path: "${{ result.merged_path }}"
+    on_success: refine_assignments
+    on_failure: escalate_stop
+
+  refine_assignments:
+    tool: run_skill
+    with:
+      skill_command: >
+        /autoskillit:planner-refine-assignments
+        ${{ context.combined_assignments_path }}
+        ${{ context.refined_plan_path }}
+        ${{ context.planner_dir }}
+      cwd: "${{ inputs.source_dir }}"
+    capture:
+      refined_assignments_path: "${{ result.refined_assignments_path }}"
+    on_success: expand_wps
+    on_failure: escalate_stop
+
+  # --- WORK PACKAGE TIER ---
+
+  expand_wps:
+    tool: run_python
+    with:
+      callable: "autoskillit.planner.expand_wps"
+      refined_assignments_path: "${{ context.refined_assignments_path }}"
       output_dir: "${{ context.planner_dir }}"
     capture:
       phase_wp_manifest_path: "${{ result.manifest_path }}"
-    on_success: check_phase_wps
+      wp_context_paths: "${{ result.context_paths }}"
+      wp_item_ids: "${{ result.item_ids }}"
+    on_success: elaborate_wps
     on_failure: escalate_stop
 
-  check_phase_wps:
-    tool: run_python
-    with:
-      callable: "autoskillit.planner.check_remaining"
-      manifest_path: "${{ context.phase_wp_manifest_path }}"
-      pass_name: "phase_work_packages"
-      output_dir: "${{ context.planner_dir }}/work_packages"
-    capture:
-      has_remaining: "${{ result.has_remaining }}"
-      current_item_path: "${{ result.current_item_path }}"
-      current_item_id: "${{ result.current_item_id }}"
-    on_result:
-      - when: "${{ result.has_remaining }} == true"
-        route: elaborate_phase_wps
-      - route: finalize_wp_manifest
-    on_failure: escalate_stop
-
-  elaborate_phase_wps:
+  elaborate_wps:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:planner-elaborate-wps ${{ context.current_item_path }} ${{ context.planner_dir }}"
+      skill_command: "/autoskillit:planner-elaborate-wps {context_path} ${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"
-    optional_context_refs: [current_item_path]
     capture_list:
       phase_wps_result_dir: "${{ result.phase_wps_result_dir }}"
-    retries: 1
-    on_success: check_phase_wps
-    on_exhausted: check_phase_wps
+    on_success: finalize_wp_manifest
     on_failure: escalate_stop
+    note: >
+      PARALLEL DISPATCH: context.wp_context_paths contains comma-separated paths
+      to per-phase WP context files. For each context_path, substitute it into
+      the {context_path} placeholder in skill_command and issue one run_skill call.
+      Run ALL elaborations in parallel. Accumulate results via capture_list.
 
   finalize_wp_manifest:
     tool: run_python
@@ -200,8 +224,39 @@ steps:
       callable: "autoskillit.planner.finalize_wp_manifest"
       work_packages_dir: "${{ context.planner_dir }}/work_packages"
       output_dir: "${{ context.planner_dir }}"
+    on_success: merge_wps
+    on_failure: escalate_stop
+
+  merge_wps:
+    tool: run_python
+    with:
+      callable: "autoskillit.planner.merge.merge_tier_dir"
+      results_dir: "${{ context.planner_dir }}/work_packages"
+      output_path: "${{ context.planner_dir }}/combined_wps.json"
+      key: "work_packages"
+      task: "${{ inputs.task }}"
+      source_dir: "${{ inputs.source_dir }}"
+    capture:
+      combined_wps_path: "${{ result.merged_path }}"
+    on_success: refine_wps
+    on_failure: escalate_stop
+
+  refine_wps:
+    tool: run_skill
+    with:
+      skill_command: >
+        /autoskillit:planner-refine-wps
+        ${{ context.combined_wps_path }}
+        ${{ context.refined_plan_path }}
+        ${{ context.refined_assignments_path }}
+        ${{ context.planner_dir }}
+      cwd: "${{ inputs.source_dir }}"
+    capture:
+      refined_wps_path: "${{ result.refined_wps_path }}"
     on_success: reconcile_deps
     on_failure: escalate_stop
+
+  # --- FINALIZATION ---
 
   reconcile_deps:
     tool: run_skill

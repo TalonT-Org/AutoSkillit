@@ -170,12 +170,12 @@ def test_d1_headless_auto_approve(deep_workflow_section: str) -> None:
 
 
 def test_d2_broad_exploration_minimum_subagents(deep_workflow_section: str) -> None:
-    """Step D2 must specify a minimum of 4 parallel subagents."""
+    """Step D2 must specify a minimum of 5 parallel subagents."""
     d2 = _extract_step_section(deep_workflow_section, "Step D2")
     has_minimum = "minimum" in d2.lower()
-    has_four = "4" in d2
-    assert has_minimum and has_four, (
-        "Step D2 must specify a 'minimum' of '4' parallel subagents for broad exploration"
+    has_five = "5" in d2
+    assert has_minimum and has_five, (
+        "Step D2 must specify a 'minimum' of '5' parallel subagents for broad exploration"
     )
 
 

@@ -144,6 +144,13 @@ Spawn explore subagents to investigate different aspects simultaneously (some as
 - Check GitHub issues for similar problems
 - Search for Stack Overflow discussions
 
+**Design Intent**
+- Run `git log --follow` on the mechanism's primary file(s) to find the introducing commit
+- Read the introducing commit message and diff to extract the stated purpose
+- Trace callers and dependents to map what relies on the mechanism
+- Check architecture docs (architecture.md, CLAUDE.md, ADRs) for documented design constraints
+- Produce a "design intent finding" per mechanism: what it is for, what introduced it, and what depends on it
+
 ### Step 3: Synthesize Findings
 
 After subagents complete, consolidate into structured findings:
@@ -154,11 +161,12 @@ After subagents complete, consolidate into structured findings:
 4. **Data Flow**: How data moves through the system
 5. **Test Gap Analysis**: Why tests didn't catch this
 6. **Similar Patterns**: How similar issues are handled elsewhere
-7. **Historical Context**: Whether this root cause has been investigated or fixed before (populated by the historical recurrence check below)
-8. **External Research**: Relevant findings from web search (if applicable)
-9. **Scope Boundary**: What was investigated vs. what remains unexplored
-10. **Confidence Levels**: Per-finding confidence — SUPPORTED (direct code evidence or experimental confirmation), UNSUPPORTED (contradicted by evidence), NEEDS-EVIDENCE (theoretical reasoning, not yet confirmed)
-11. **Recommendations**: Suggested approaches (NOT implementations)
+7. **Design Intent Findings**: Per-mechanism analysis — what each mechanism is for, what introduced it, and what depends on it (populated by the Design Intent subagent)
+8. **Historical Context**: Whether this root cause has been investigated or fixed before (populated by the historical recurrence check below)
+9. **External Research**: Relevant findings from web search (if applicable)
+10. **Scope Boundary**: What was investigated vs. what remains unexplored
+11. **Confidence Levels**: Per-finding confidence — SUPPORTED (direct code evidence or experimental confirmation), UNSUPPORTED (contradicted by evidence), NEEDS-EVIDENCE (theoretical reasoning, not yet confirmed)
+12. **Recommendations**: Suggested approaches (NOT implementations)
 
 ### Step 3.5 — Historical Recurrence Check
 
@@ -249,6 +257,13 @@ Report structure:
 ## Similar Patterns
 {How similar scenarios are handled elsewhere}
 
+## Design Intent Findings
+{Per-mechanism analysis from the Design Intent subagent:}
+- {mechanism_1}: Introduced in {commit_hash} ({date}) — {stated purpose}. Callers: {caller list}. Documented constraints: {any ADR/architecture.md references}.
+- {mechanism_2}: ...
+{If no mechanisms were specifically targeted:}
+No specific mechanisms flagged for design intent analysis.
+
 ## Historical Context
 {If prior fixes found:}
 - Prior investigation dates and report paths
@@ -271,6 +286,16 @@ No prior investigations or fixes found for this root cause.
 {Suggested approaches - NOT code changes}
 {In deep analysis mode: single recommendation, not a menu of options}
 {Include killed alternatives with reasons if deep mode}
+
+## Breakage Analysis
+{Deep mode only — adversarial breakage analysis for removal/change recommendations:}
+- Recommendation: {recommendation text}
+  - Breakage surface: {components that would break, with file paths}
+  - Prior reverts: {any revert history on this mechanism}
+  - Downstream contract violations: {contracts that depend on this mechanism}
+  - Risk level: {LOW / MEDIUM / HIGH}
+{If standard mode or no removal/change recommendations:}
+{Omit this section entirely.}
 ```
 
 After writing the report file, emit the structured output token as the very last line
@@ -301,12 +326,13 @@ Parse the investigation target (same as Step 1). Then propose an adaptive batch 
 
 ### Step D2: Batch 1 — Broad Parallel Exploration
 
-Launch a minimum of 4 parallel subagents (model: "sonnet") covering:
+Launch a minimum of 5 parallel subagents (model: "sonnet") covering:
 
 - **Code path tracing**: Trace execution paths through the primary affected components
 - **Log and history analysis**: Scan session logs and git history for prior occurrences
 - **Related component mapping**: Map all components that interact with the target
 - **External research**: Web search for known issues, library bugs, documentation
+- **Design Intent**: Run `git log --follow`, caller tracing, and architecture doc checks on the mechanisms under investigation — identical to the Standard Mode Design Intent vector but with deep mode evidence standards
 
 Simultaneously with Batch 1 subagents, run historical recurrence check (Step 3.5 Parts A+B) in parallel. After Batch 1 completes, produce inter-batch synthesis: summarize confirmed findings, open questions, and new investigative leads.
 
@@ -319,6 +345,7 @@ For each subsequent batch (Batch 2, Batch 3, ...):
 1. Open with an explicit synthesis from prior batches — what was confirmed, what remains uncertain
 2. Each batch must include mandatory code exploration (local code search, file reads, symbol tracing) and mandatory web research (search for external documentation, known issues, library behavior)
 3. After each batch completes, produce inter-batch synthesis (confirmed findings, open questions, new leads)
+4. If inter-batch synthesis surfaces new mechanisms as change candidates that were not covered in prior batches, re-dispatch the Design Intent subagent targeting those specific mechanisms
 
 **Early termination:** When all findings across all open questions are SUPPORTED (backed by direct code evidence) and no new investigative leads have emerged in the last batch, stop iterating and proceed to D4.
 
@@ -348,6 +375,17 @@ Spawn solution-space subagents to enumerate candidate fixes. For each candidate,
 
 After blast radius analysis, converge to a single recommendation — the highest-confidence, lowest-blast-radius candidate with direct code evidence. Kill alternative options and document why each was rejected.
 
+**Adversarial Breakage Analysis:** After converging to a single recommendation, assess whether it proposes removal, replacement, or any action whose execution would eliminate, reduce, or supersede the function of an existing mechanism. If so, spawn one adversarial breakage subagent (model: "sonnet") per such recommendation:
+
+1. Receive the recommendation and the mechanism it targets, along with the Design Intent findings for that mechanism
+2. Trace the mechanism's full dependency chain through code: callers, importers, flag consumers
+3. Check git history for prior revert patterns on the same mechanism: `git log --oneline --grep="revert" -- {mechanism_files}`
+4. Report a breakage surface analysis: what components would break, prior revert history, downstream contract violations, and overall breakage risk (LOW / MEDIUM / HIGH)
+
+The adversarial breakage subagent is distinct from the D4 challenge round. D4 asks "is the root cause correct?" (epistemological — fires on NEEDS-EVIDENCE findings). D5 breakage asks "what breaks if we follow this recommendation?" (consequentialist — fires on removal/change recommendations). Both are required in deep mode.
+
+If the recommendation does not propose removal or change of an existing mechanism (e.g., it proposes adding new code only), skip adversarial breakage analysis for that recommendation.
+
 ### Step D6: Post-Report Validation
 
 After writing the report (Step 4), spawn 2–3 independent validator subagents (model: "sonnet") with distinct roles:
@@ -374,6 +412,30 @@ Focus on:
 
 This is a research task - DO NOT modify any code.
 Report your findings in a structured format.
+```
+
+### Design Intent Subagent Template
+
+Use this template for the Design Intent subagent in both standard and deep modes:
+
+```
+Investigate the design intent and dependency chain of {mechanism} in {target}.
+
+Investigation tasks:
+1. Run `git log --follow` on {file_path(s)} to find the introducing commit
+2. Read the introducing commit message and diff to extract the stated purpose
+3. Trace all callers and dependents — map every component that relies on this mechanism
+4. Check architecture docs (architecture.md, CLAUDE.md, ADRs) for documented design constraints
+5. Produce a design intent finding: what this mechanism is for, what introduced it, and what depends on it
+
+Evidence standards:
+- Cite the introducing commit hash and date
+- List specific caller file paths and line numbers
+- Reference any architecture doc sections that mention this mechanism
+- Mark finding as SUPPORTED (direct evidence) or NEEDS-EVIDENCE (inferred)
+
+This is a research task - DO NOT modify any code.
+Report your findings in a structured format with explicit evidence citations.
 ```
 
 ### Deep Analysis Mode Template
@@ -455,5 +517,34 @@ Gap Analysis Validator tasks:
 - Report whether the investigation coverage is sufficient for the stated findings
 
 Report your findings in a structured format. If corrections are needed, state them explicitly.
+This is a research task - DO NOT modify any code.
+```
+
+### Adversarial Breakage Subagent Template (Solution Breakage)
+
+Use this template for the D5 adversarial breakage subagent (deep mode only):
+
+```
+RECOMMENDATION: {recommendation text}
+TARGET MECHANISM: {mechanism being removed/changed/superseded}
+DESIGN INTENT: {summary from Design Intent subagent findings for this mechanism}
+
+YOUR ROLE: You are a breakage analyst. Your task is NOT to evaluate the recommendation's
+merit. Your task is to determine what would break if this recommendation is followed.
+
+Investigation tasks:
+1. Trace the mechanism's full dependency chain: callers, importers, flag consumers,
+   test fixtures that depend on its behavior
+2. Check git history for prior revert patterns on this mechanism:
+   `git log --oneline --grep="revert" -- {mechanism_files}`
+3. Identify downstream components whose contracts or invariants rely on this mechanism
+4. Assess whether the recommendation accounts for all dependents found in steps 1-3
+
+Report a breakage surface analysis:
+- Components that would break (with file paths and line numbers)
+- Prior reverts of similar changes (with commit hashes)
+- Downstream contract violations
+- Overall breakage risk: LOW (no dependents) / MEDIUM (dependents exist, manageable) / HIGH (critical path dependents)
+
 This is a research task - DO NOT modify any code.
 ```

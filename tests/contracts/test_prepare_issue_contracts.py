@@ -532,7 +532,7 @@ def test_dedup_closed_issues_stricter_relevance():
 
 def test_step6_validated_report_shortcut_to_implementation():
     """Step 6 must short-circuit to implementation when is_validated_report is true."""
-    text = SKILL_MD.read_text()
+    text = SKILL_MD.read_text(encoding="utf-8")
     step6_pos = text.find("### Step 6")
     assert step6_pos != -1, "Step 6 not found"
     step7_pos = text.find("### Step 7", step6_pos)
@@ -544,8 +544,14 @@ def test_step6_validated_report_shortcut_to_implementation():
     )
     # Must reference implementation in the validated-report shortcut, not only remediation
     shortcut_idx = step6_section.find("is_validated_report")
-    post_shortcut = step6_section[shortcut_idx : shortcut_idx + 600]
-    assert "implementation" in post_shortcut, (
+    assert shortcut_idx != -1, "is_validated_report not found in Step 6 section"
+    next_heading = step6_section.find("###", shortcut_idx)
+    shortcut_block = (
+        step6_section[shortcut_idx:next_heading]
+        if next_heading != -1
+        else step6_section[shortcut_idx:]
+    )
+    assert "implementation" in shortcut_block, (
         "Step 6 is_validated_report shortcut must assign route=implementation"
     )
 

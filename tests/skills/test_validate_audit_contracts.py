@@ -110,6 +110,7 @@ class TestValidateAuditFeatureGates:
             "validate-audit must document severity normalization for feature-gates: BLOCK->HIGH"
         )
         block_idx = text.find("BLOCK")
+        assert block_idx != -1, "BLOCK not found in validate-audit SKILL.md"
         high_idx = text.find("HIGH", block_idx)
         assert high_idx != -1 and (high_idx - block_idx) < 300, (
             "BLOCK->HIGH mapping must appear as a co-located severity mapping table, "

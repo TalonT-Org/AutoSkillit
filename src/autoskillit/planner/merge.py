@@ -169,6 +169,7 @@ def build_plan_snapshot(
             "name": validated["name"],
             "goal": validated.get("goal", ""),
             "scope": validated.get("scope", []),
+            "ordering": validated["ordering"],
         }
         phase_pairs.append((int(validated["ordering"]), short))
 

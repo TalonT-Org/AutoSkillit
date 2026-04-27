@@ -251,6 +251,8 @@ def test_output_path_tokens_synchronized() -> None:
             "execution_map_report",
             # planner-generate-phases output (planner recipe)
             "phase_manifest_path",
+            # planner-elaborate-phase output (parallel worker)
+            "elab_result_path",
         }
     )
 

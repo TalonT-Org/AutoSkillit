@@ -134,3 +134,37 @@ def test_all_planner_skills_in_master_manifest(skill_name: str) -> None:
     assert skill_name in manifest.get("skills", {}), (
         f"Planner skill '{skill_name}' is not registered in skill_contracts.yaml"
     )
+
+
+def test_elaborate_phase_contract_declares_elab_result_path() -> None:
+    """planner-elaborate-phase must declare elab_result_path for capture_list (Issue 08)."""
+    from autoskillit.recipe.contracts import load_bundled_manifest
+
+    contracts = load_bundled_manifest()
+    contract = contracts["skills"]["planner-elaborate-phase"]
+    output_names = [o["name"] for o in contract.get("outputs", [])]
+    assert "elab_result_path" in output_names, (
+        "planner-elaborate-phase must declare elab_result_path output for "
+        "capture_list: elab_result_path in the parallel recipe step (Issue 08)"
+    )
+
+
+def test_elaborate_phase_contract_has_output_pattern() -> None:
+    """elab_result_path must appear in expected_output_patterns for run_skill validation."""
+    from autoskillit.recipe.contracts import load_bundled_manifest
+
+    contracts = load_bundled_manifest()
+    contract = contracts["skills"]["planner-elaborate-phase"]
+    patterns = contract.get("expected_output_patterns", [])
+    assert any("elab_result_path" in p for p in patterns), (
+        "planner-elaborate-phase must have an expected_output_pattern matching elab_result_path"
+    )
+
+
+def test_elaborate_phase_contract_write_behavior_always() -> None:
+    """planner-elaborate-phase must declare write_behavior: always."""
+    from autoskillit.recipe.contracts import load_bundled_manifest
+
+    contracts = load_bundled_manifest()
+    contract = contracts["skills"]["planner-elaborate-phase"]
+    assert contract.get("write_behavior") == "always"

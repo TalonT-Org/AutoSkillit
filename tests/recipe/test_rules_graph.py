@@ -202,7 +202,7 @@ def test_cycle_with_on_result_all_routes_in_cycle_is_still_flagged() -> None:
     )
     findings = run_semantic_rules(recipe)
     cycle_findings = [f for f in findings if f.rule == "unbounded-cycle"]
-    assert len(cycle_findings) >= 1
+    assert len(cycle_findings) == 1
 
 
 # ---------------------------------------------------------------------------

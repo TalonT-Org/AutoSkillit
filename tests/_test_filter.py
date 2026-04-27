@@ -353,6 +353,11 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "cli/test_cook.py",
             # Execution file-level entries:
             "execution/test_zero_write_detection.py",
+            # Migration file-level entries (migration/_api.py + engine.py import recipe):
+            "migration/test_api.py",
+            "migration/test_engine.py",
+            # Hooks file-level entries (_fmt_recipe.py imports autoskillit.recipe types):
+            "hooks/test_recipe_write_advisor.py",
             # Other file-level entries:
             "infra/test_pretty_output.py",
             "skills/test_planner_skill_contracts.py",

@@ -135,7 +135,7 @@ _CLI_FILE_LEVEL_ENTRIES = [
 
 class TestRecipeCascadeNarrowing:
     """REQ-RECIPE-001/002/003: recipe cascade uses file-level entries for server/cli,
-    and excludes migration and hooks entirely."""
+    and uses file-level entries for migration/hooks (not full-directory entries)."""
 
     def test_recipe_cascade_server_file_level_only(self, tmp_path: Path) -> None:
         tests_root = tmp_path / "tests"
@@ -146,7 +146,7 @@ class TestRecipeCascadeNarrowing:
         (server_dir / "test_serve_guard.py").touch()
 
         result = build_test_scope(
-            changed_files={"recipe/__init__.py"},
+            changed_files={"src/autoskillit/recipe/__init__.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
@@ -165,7 +165,7 @@ class TestRecipeCascadeNarrowing:
         (cli_dir / "test_app.py").touch()
 
         result = build_test_scope(
-            changed_files={"recipe/schema.py"},
+            changed_files={"src/autoskillit/recipe/schema.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
@@ -175,34 +175,36 @@ class TestRecipeCascadeNarrowing:
             assert fname in result_names, f"{fname!r} missing from recipe cascade result"
         assert "test_app.py" not in result_names
 
-    def test_recipe_cascade_no_migration(self, tmp_path: Path) -> None:
+    def test_recipe_cascade_no_migration_full_directory(self, tmp_path: Path) -> None:
+        # migration/test_store.py is not in the file-level cascade; it should be excluded.
         tests_root = tmp_path / "tests"
         migration_dir = tests_root / "migration"
         migration_dir.mkdir(parents=True, exist_ok=True)
-        (migration_dir / "test_engine.py").touch()
+        (migration_dir / "test_store.py").touch()
 
         result = build_test_scope(
-            changed_files={"recipe/schema.py"},
+            changed_files={"src/autoskillit/recipe/schema.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
         assert result is not None
         assert not any("migration" in str(p) for p in result), (
-            f"migration/ paths should not appear in recipe cascade; got {result}"
+            f"migration/test_store.py (not in cascade) should not appear; got {result}"
         )
 
-    def test_recipe_cascade_no_hooks(self, tmp_path: Path) -> None:
+    def test_recipe_cascade_no_hooks_full_directory(self, tmp_path: Path) -> None:
+        # hooks/test_fmt_status.py is not in the file-level cascade; it should be excluded.
         tests_root = tmp_path / "tests"
         hooks_dir = tests_root / "hooks"
         hooks_dir.mkdir(parents=True, exist_ok=True)
-        (hooks_dir / "test_quota_guard.py").touch()
+        (hooks_dir / "test_fmt_status.py").touch()
 
         result = build_test_scope(
-            changed_files={"recipe/schema.py"},
+            changed_files={"src/autoskillit/recipe/schema.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
         assert result is not None
         assert not any("hooks" in str(p) for p in result), (
-            f"hooks/ paths should not appear in recipe cascade; got {result}"
+            f"hooks/test_fmt_status.py (not in cascade) should not appear; got {result}"
         )

@@ -38,7 +38,7 @@ Pass 1 entry point. Read the analysis file (and optionally domain knowledge) and
 - Write `$(dirname $1)/phases/{phase_id}_result.json` for every phase
 - Write `$(dirname $1)/phases/phase_manifest.json` with every item status=`done`
 - Use sequential `ordering` values starting at 1
-- Emit `phase_manifest_path` and `phase_count` output tokens
+- Emit `phase_manifest_path`, `phase_count`, and `phase_ids` output tokens
 
 ## Workflow
 
@@ -113,4 +113,5 @@ Manifest structure:
 ```
 phase_manifest_path = <absolute path to phase_manifest.json>
 phase_count = <N>
+phase_ids = <comma-separated list of phase IDs, e.g. P1,P2,P3>
 ```

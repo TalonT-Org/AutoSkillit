@@ -22,12 +22,12 @@ class TestCascadeNewEntries:
                 ["planner"],
                 ["planner"],
             ),
-            # Conservative: _llm_triage cascades into execution/server/recipe + direct test file
+            # Conservative: _llm_triage cascades into server + direct test file
             (
                 "src/autoskillit/_llm_triage.py",
                 FilterMode.CONSERVATIVE,
-                ["execution", "server", "recipe", "test_llm_triage.py"],
-                ["execution", "server", "recipe", "test_llm_triage.py"],
+                ["server", "test_llm_triage.py"],
+                ["server", "test_llm_triage.py"],
             ),
             # Conservative: smoke_utils cascades into recipe + direct test file
             (

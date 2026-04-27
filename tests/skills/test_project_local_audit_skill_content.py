@@ -375,3 +375,48 @@ def test_bundled_audit_tests_has_category_11() -> None:
     assert "Test Path Filter Integrity" in content, (
         "Bundled audit-tests/SKILL.md Category 11 missing 'Test Path Filter Integrity'"
     )
+
+
+# ---------------------------------------------------------------------------
+# Test 20: validate-audit project-local has cross-validation step
+# ---------------------------------------------------------------------------
+
+
+def test_validate_audit_project_local_has_cross_validation_step() -> None:
+    path = SKILLS_DIR / "validate-audit" / "SKILL.md"
+    content = path.read_text(encoding="utf-8").lower()
+    assert "cross-valid" in content, (
+        "validate-audit/.claude/SKILL.md missing cross-validation step"
+    )
+    assert "read-only" in content, (
+        "validate-audit/.claude/SKILL.md cross-validation subagent must be read-only"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 21: validate-audit project-local has ticket grouping step
+# ---------------------------------------------------------------------------
+
+
+def test_validate_audit_project_local_has_ticket_grouping_step() -> None:
+    path = SKILLS_DIR / "validate-audit" / "SKILL.md"
+    content = path.read_text(encoding="utf-8").lower()
+    assert "grouping manifest" in content, (
+        "validate-audit/.claude/SKILL.md missing ticket grouping manifest"
+    )
+    assert "finding id" in content, (
+        "validate-audit/.claude/SKILL.md grouping manifest must reference finding IDs"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 22: validate-audit project-local has validation summary
+# ---------------------------------------------------------------------------
+
+
+def test_validate_audit_project_local_has_validation_summary() -> None:
+    path = SKILLS_DIR / "validate-audit" / "SKILL.md"
+    content = path.read_text(encoding="utf-8")
+    assert "validation_summary_" in content, (
+        "validate-audit/.claude/SKILL.md missing validation_summary_ output file"
+    )

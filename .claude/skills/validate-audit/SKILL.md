@@ -44,6 +44,7 @@ signal downstream processing.
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message
 - Write output files before synthesizing ALL subagent results
 - Subagents must NOT create their own files — they return findings in response text only
+- Do NOT include VALID BUT EXCEPTION WARRANTED findings in the validated report body — they belong in the validation summary only
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
@@ -222,11 +223,9 @@ validated: true
 
 ## Validated Findings
 
-{Each VALID finding: original text, verdict badge, severity adjustment if any.}
-
-## Findings with Exceptions
-
-{Each VALID BUT EXCEPTION WARRANTED finding: original text + exception note.}
+{Each **VALID** finding only — do NOT include VALID BUT EXCEPTION WARRANTED findings here.
+Exception-warranted findings go exclusively in the validation summary file.
+Format: original finding text, VALID verdict badge, severity adjustment note if applicable.}
 
 ---
 
@@ -251,47 +250,230 @@ Structure:
 **Historical context:** {from history agent, if relevant; else omit}
 ```
 
-### Step 6 — Interactive vs Headless Approval
+### Step 5b — Write Validation Summary
+
+Write the full audit trail to a separate file. This file is NOT part of the issue body —
+it is posted as a comment after issue creation.
+
+Path: `{{AUTOSKILLIT_TEMP}}/validate-audit/validation_summary_{source}_{YYYY-MM-DD_HHMMSS}.md`
+
+Structure:
+
+```markdown
+# Validation Summary — {source} ({YYYY-MM-DD})
+
+**Original report:** {audit_report_path}
+**Total findings:** {total} | **Valid:** {N_valid} | **Exception warranted:** {N_exception} | **Contested:** {N_contested}
+
+---
+
+## Per-Finding Verdicts
+
+| Finding ID | Verdict | Severity (adj.) | Reasoning summary |
+|------------|---------|-----------------|-------------------|
+| ... | ... | ... | ... |
+
+---
+
+## Exception-Warranted Findings
+
+{For each VALID BUT EXCEPTION WARRANTED finding:}
+
+### [{ID}] {short description}
+
+**Original severity:** {severity}
+**Exception note:** {constraint that warrants exception}
+**Code evidence:** {file:line + what code shows}
+**Historical context:** {from history agent, if relevant; else omit}
+
+---
+
+## Contested Findings (Removed)
+
+{For each CONTESTED finding: full text, contest rationale, code evidence.}
+
+---
+
+## Severity Adjustments
+
+{For each finding where severity was adjusted: original → adjusted, rationale.}
+```
+
+### Step 6 — Parallel Post-Validation (SINGLE MESSAGE, READ-ONLY)
+
+After both the validated report and validation summary are written, launch **two read-only
+subagents in a single message**. Neither subagent may use Write, Edit, or any file-creation
+tool — they return findings as response text only.
+
+**Subagent A — Cross-Validator**
+
+Receives paths to three files:
+1. Original audit report (`{audit_report_path}`)
+2. Validated report (`validated_report_{source}_{ts}.md`)
+3. Validation summary (`validation_summary_{source}_{ts}.md`)
+
+Instructions:
+> You are cross-validating three audit artifacts for consistency. Read all three files.
+> Check:
+> 1. **No accidental deletions** — every finding in the validated report traces to a finding in the original
+> 2. **No accidental survivors** — every CONTESTED finding in the summary is absent from the validated report
+> 3. **No exception-warranted leakage** — no VALID BUT EXCEPTION WARRANTED finding appears in the validated report's `## Validated Findings` section
+> 4. **Structural integrity** — valid markdown, Summary Table counts match actual finding count, finding IDs sequential, no orphaned references
+> 5. **Count reconciliation** — N_valid + N_exception + N_contested equals original total; consistent between summary and validated report
+> Return a structured discrepancy report. If no issues found, return "CROSS-VALIDATION PASSED".
+> Do NOT create any files. Return structured text only.
+
+Output format:
+```
+## Cross-Validation Report
+
+Status: PASSED | DISCREPANCIES FOUND
+
+### Discrepancy [{N}]: {type}
+- **Finding ID**: {id}
+- **Issue**: {what is wrong}
+- **Expected**: {what should be there}
+- **Actual**: {what is there}
+```
+
+**Subagent B — Ticket Grouper**
+
+Receives the validated report path.
+
+Instructions:
+> You are analyzing validated audit findings to propose ticket groupings. Read the validated report.
+> For each finding, assess scope: lines of code affected, complexity, criticality, file overlap.
+> Grouping rules:
+> - **Standalone ticket**: finding is large in scope (many files/lines), complex refactor, or touches a critical path
+> - **Grouped ticket**: finding is small, low-risk, non-conflicting. Group same-category small findings together.
+> - **Conflict awareness**: findings touching the same file(s) must be in the same ticket or explicitly sequenced
+> - No rigid severity-to-grouping rule: a HIGH can be grouped if small; a LOW can be standalone if complex
+>
+> Return a grouping manifest listing each proposed ticket with:
+> - Ticket title (descriptive, scoped)
+> - Finding IDs included (e.g., P1-F09, P1-F11, P3-F18)
+> - Rationale for grouping or standalone
+> - Estimated scope: small / medium / large
+> - File overlap notes (which findings touch the same files)
+> Do NOT create any files. Return structured text only.
+
+Output format:
+```
+## Grouping Manifest
+
+### Ticket Group 1: {title}
+- **Finding IDs**: {id1}, {id2}, ...
+- **Rationale**: {why grouped or standalone}
+- **Scope**: small | medium | large
+- **File overlap**: {files touched by multiple findings in this group, or "none"}
+
+### Ticket Group 2: {title}
+...
+```
+
+### Step 7 — Apply Cross-Validation Corrections
+
+After both parallel subagents return:
+
+**From Cross-Validator:**
+- If status is `CROSS-VALIDATION PASSED`: proceed directly to Step 8.
+- If discrepancies found: for each discrepancy, re-read the relevant section of the validated
+  report and validation summary, write the corrected content to a `.tmp` file first, then
+  atomically move it over the original (to prevent partial-write corruption), and note the
+  correction applied. Limit to at most 3 correction passes; after 3 passes, record any
+  remaining discrepancies and continue to Step 8.
+- Corrections are writes to existing output files only — no new findings are introduced.
+
+**From Ticket Grouper:**
+- Record the grouping manifest (it will be written to disk in Step 8).
+- If the grouper returned fewer than 1 group: treat the entire validated report as a single ticket.
+
+### Step 8 — Split Validated Report by Grouping Manifest
+
+Before writing any ticket body files, verify `$AUTOSKILLIT_TEMP` is non-empty
+(`test -n "${AUTOSKILLIT_TEMP}"`); abort with an error message if unset to prevent
+path collapse to filesystem root.
+
+For each ticket group in the grouping manifest:
+
+1. Extract the subset of findings assigned to this group from the validated report.
+2. Build a per-ticket body file with:
+   - The `validated: true` sentinel on line 1
+   - An H1 heading: `# {ticket title}` (from grouping manifest)
+   - A subset Summary Table (only the rows for included finding IDs)
+   - Only the `## Validated Findings` sub-sections for included finding IDs
+   - A footer: `*Part of validated {source} audit — see full report for remaining tickets.*`
+3. Write to: `{{AUTOSKILLIT_TEMP}}/validate-audit/ticket_body_{source}_{N}_{YYYY-MM-DD_HHMMSS}.md`
+   where `{N}` is 1-indexed from the grouping manifest.
+
+Also write the grouping manifest itself to:
+`{{AUTOSKILLIT_TEMP}}/validate-audit/grouping_manifest_{source}_{YYYY-MM-DD_HHMMSS}.md`
+
+The grouping manifest file is the structured text returned by the ticket grouper subagent,
+prefixed with:
+```markdown
+# Ticket Grouping Manifest — {source} ({YYYY-MM-DD})
+
+**Validated report:** {validated_report_path}
+**Total groups:** {N}
+
+---
+```
+
+### Step 9 — Interactive vs Headless Approval
 
 Detect headless mode: run `echo "${AUTOSKILLIT_HEADLESS:-0}"` via Bash. Output `1` means
 headless.
 
-**Headless mode:** Write both output files immediately without prompting. Print to terminal:
+**Headless mode:** Write all output files immediately without prompting. Print to terminal:
 
 ```
 [validate-audit] Done.
   Valid: {N_valid} | Exceptions: {N_exception} | Contested: {N_contested}
-  Report:    {{AUTOSKILLIT_TEMP}}/validate-audit/validated_report_{source}_{ts}.md
-  Contested: {{AUTOSKILLIT_TEMP}}/validate-audit/contested_findings_{source}_{ts}.md
+  Report:    {validated_report_path}
+  Summary:   {validation_summary_path}
+  Manifest:  {grouping_manifest_path}
+  Tickets:   {ticket_body_1_path}
+             {ticket_body_2_path}  (one line per ticket group)
+  Contested: {contested_findings_path}  (omit if N_contested == 0)
 ```
-
-(Omit the "Contested:" line if `N_contested == 0`.)
 
 **Interactive mode:** Display the validation status table (verdict counts), then ask:
 
 > Write validated report and contested findings files? [Y/n]
 
-On Y or empty input, write both files. After writing, if `N_contested > 0`, offer:
+On Y or empty input, write all files. After writing, offer:
 
-> Run `/autoskillit:prepare-issue` for contested findings? [y/N]
+> Run `/autoskillit:prepare-issue` for each ticket group? [Y/n]
 
-If the user confirms, pass the contested findings file path to `prepare-issue`.
+On Y, call `prepare-issue` for each ticket body file (in parallel). After issue creation,
+append the validation summary to each created issue body using `gh issue edit --body-file`:
+fetch the current issue body, verify the fetched body is non-empty (abort the append for
+that issue if empty to avoid overwriting with summary-only content), append a horizontal
+rule and the validation summary content, write the combined text to a temp file, then run
+`gh issue edit {issue_number} --body-file` with that temp file. Do NOT use `gh issue comment`.
 
 ---
 
 ## Output Location
 
+All output files are written relative to the current working directory under `{{AUTOSKILLIT_TEMP}}/validate-audit/`:
+
 ```
 {{AUTOSKILLIT_TEMP}}/validate-audit/
-├── validated_report_{source}_{YYYY-MM-DD_HHMMSS}.md    (always written)
-└── contested_findings_{source}_{YYYY-MM-DD_HHMMSS}.md  (when N_contested > 0)
+├── validated_report_{source}_{YYYY-MM-DD_HHMMSS}.md      (always written; VALID findings only)
+├── contested_findings_{source}_{YYYY-MM-DD_HHMMSS}.md    (when N_contested > 0)
+├── validation_summary_{source}_{YYYY-MM-DD_HHMMSS}.md    (always written; audit trail)
+├── grouping_manifest_{source}_{YYYY-MM-DD_HHMMSS}.md     (always written; ticket grouping)
+└── ticket_body_{source}_{N}_{YYYY-MM-DD_HHMMSS}.md       (one per ticket group, N ≥ 1)
 ```
 
-`{source}` is `arch`, `tests`, or `cohesion` based on the input report.
+`{source}` is `arch`, `tests`, `cohesion`, or `feature_gates` based on the input report.
 
 ## Related Skills
 
 - `/autoskillit:audit-arch` — produces reports this skill validates
 - `/autoskillit:audit-tests` — produces reports this skill validates
 - `/autoskillit:audit-cohesion` — produces reports this skill validates
+- `/autoskillit:audit-feature-gates` — produces reports this skill validates
 - `/autoskillit:prepare-issue` — offered interactively for contested findings

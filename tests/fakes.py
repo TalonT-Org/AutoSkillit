@@ -380,12 +380,14 @@ class InMemoryCIWatcher(CIWatcher):
         self,
         wait_result: dict[str, Any] | None = None,
         status_result: dict[str, Any] | None = None,
+        wait_results: list[dict[str, Any]] | None = None,
     ) -> None:
         self._wait_result = wait_result or {
             "run_id": 0,
             "conclusion": "success",
             "failed_jobs": [],
         }
+        self._wait_results_queue: list[dict[str, Any]] = list(wait_results) if wait_results else []
         self._status_result = status_result or {"runs": []}
         self.wait_calls: list[dict[str, Any]] = []
         self.status_calls: list[dict[str, Any]] = []
@@ -414,6 +416,8 @@ class InMemoryCIWatcher(CIWatcher):
         )
         if self.wait_side_effect is not None:
             return _resolve_side_effect(self.wait_side_effect)
+        if self._wait_results_queue:
+            return self._wait_results_queue.pop(0)
         return self._wait_result
 
     async def status(

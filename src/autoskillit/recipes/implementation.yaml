@@ -659,6 +659,7 @@ steps:
       timeout_seconds: 300
       cwd: "${{ context.work_dir }}"
       remote_url: "${{ context.remote_url }}"
+      auto_trigger: "true"
     capture:
       ci_conclusion: "${{ result.conclusion }}"
       ci_failed_jobs: "${{ result.failed_jobs }}"
@@ -677,7 +678,8 @@ steps:
       (conclusion + failed job names) for downstream resolve_ci.
       Skipped when open_pr=false — no remote feature branch is opened in that mode.
       Routes on result.conclusion: success → check_repo_merge_state,
-      no_runs → handle_no_ci_runs (re-derive event + retry), failure → detect_ci_conflict.
+      no_runs → handle_no_ci_runs (auto_trigger fires first: empty commit + force-push +
+      re-poll; handle_no_ci_runs reached only when push fails), failure → detect_ci_conflict.
 
   handle_no_ci_runs:
     tool: check_repo_merge_state

@@ -97,7 +97,7 @@ Flag findings in these categories (maps to REQ-SKILL-004):
 
 6. **Self-validation pass** — for every CRITICAL or HIGH finding, re-read the cited file line to confirm the claim; downgrade or remove if not confirmed.
 
-7. **Write report** to `{{AUTOSKILLIT_TEMP}}/audit-docs/docs_audit_{YYYY-MM-DD_HHMMSS}.md` using the format below.
+7. **Write report** to `{{AUTOSKILLIT_TEMP}}/audit-docs/docs_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory) using the format below.
 
 8. **Output summary** — print finding counts by severity to terminal.
 
@@ -138,7 +138,7 @@ Flag findings in these categories (maps to REQ-SKILL-004):
 
 Do NOT flag:
 - Test files (`tests/`)
-- Generated files (`.autoskillit/temp/`, `uv.lock`, `*.pyc`)
+- Generated files (`{{AUTOSKILLIT_TEMP}}/`, `uv.lock`, `*.pyc`)
 - Comment-only files or changelog entries
 - External tool output or CI logs
 - Doc-to-doc wording differences that don't contradict each other factually

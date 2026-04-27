@@ -263,7 +263,7 @@ def build_phase_assignment_manifest(phases_dir: str, output_dir: str) -> dict[st
         "created_at": datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "items": items,
     }
-    manifest_path = out_dir / "phase_assignment_manifest.json"
+    manifest_path = assign_dir / "phase_assignment_manifest.json"
     write_versioned_json(manifest_path, manifest, schema_version=1)
     return {"manifest_path": str(manifest_path), "total_count": str(len(items))}
 

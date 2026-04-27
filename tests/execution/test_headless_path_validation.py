@@ -1,7 +1,6 @@
 """Tests for headless_runner.py extracted helpers."""
 
 import json
-from pathlib import Path
 
 import pytest
 
@@ -17,21 +16,10 @@ from autoskillit.execution.headless import (
 )
 from autoskillit.execution.session import ClaudeSessionResult
 from autoskillit.pipeline.audit import DefaultAuditLog, FailureRecord
-from tests.conftest import _make_result, _make_timeout_result
-from tests.execution.test_headless_core import _success_session_json, _sr
+from tests.conftest import _make_result
+from tests.execution.test_headless_core import _make_tool_use_line, _success_session_json
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
-
-
-def _make_tool_use_line(name: str, input_dict: dict) -> str:
-    return json.dumps(
-        {
-            "type": "assistant",
-            "message": {
-                "content": [{"type": "tool_use", "name": name, "id": "x", "input": input_dict}]
-            },
-        }
-    )
 
 
 class TestBuildSkillResultChannelAPatternRecovery:

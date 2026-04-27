@@ -76,9 +76,9 @@ def test_make_success_stdout_not_duplicated():
     src = (EXECUTION_DIR / "test_headless_dispatch.py").read_text()
     assert src.count("def _make_success_stdout") == 1
     lines = src.splitlines()
-    defn_lines = [l for l in lines if "def _make_success_stdout" in l]
+    defn_lines = [line for line in lines if "def _make_success_stdout" in line]
     assert len(defn_lines) == 1
-    assert not defn_lines[0].startswith(" ")
+    assert not defn_lines[0].startswith(" ")  # module-level: no leading indent
 
 
 def test_timestamp_assertion_captures_return_value():

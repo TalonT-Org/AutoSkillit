@@ -1,7 +1,6 @@
 """Tests for headless_runner.py extracted helpers."""
 
 import json
-from pathlib import Path
 
 import pytest
 
@@ -12,7 +11,6 @@ from autoskillit.core.types import (
     TerminationReason,
 )
 from autoskillit.execution.headless import _build_skill_result, _scan_jsonl_write_paths
-from tests.conftest import _make_result
 from tests.execution.test_headless_core import (
     _make_tool_use_line,
     _sr,

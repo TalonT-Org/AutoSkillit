@@ -6,8 +6,6 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core._type_plugin_source import DirectInstall, MarketplaceInstall
-from autoskillit.execution.headless import _build_skill_result
-from tests.conftest import _make_result
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 

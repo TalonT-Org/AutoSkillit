@@ -6,7 +6,6 @@ from unittest.mock import patch
 
 import pytest
 
-from autoskillit.core._type_plugin_source import DirectInstall, MarketplaceInstall
 from autoskillit.core.types import (
     CONTEXT_EXHAUSTION_MARKER,
     ChannelConfirmation,
@@ -18,9 +17,7 @@ from autoskillit.core.types import (
 from autoskillit.execution.commands import _ensure_skill_prefix
 from autoskillit.execution.headless import (
     _build_skill_result,
-    _extract_missing_token_hints,
     _extract_worktree_path,
-    _scan_jsonl_write_paths,
 )
 from tests.conftest import _make_result, _make_timeout_result
 
@@ -91,6 +88,17 @@ def _sr(
         pid=12345,
         session_id=session_id,
         channel_b_session_id=channel_b_session_id,
+    )
+
+
+def _make_tool_use_line(name: str, input_dict: dict) -> str:
+    return json.dumps(
+        {
+            "type": "assistant",
+            "message": {
+                "content": [{"type": "tool_use", "name": name, "id": "x", "input": input_dict}]
+            },
+        }
     )
 
 
@@ -951,7 +959,11 @@ class TestBuildSkillResultCrossValidation:
                 pid=1,
             ),
             SubprocessResult(
-                returncode=0, stdout="", stderr="", termination=TerminationReason.NATURAL_EXIT, pid=1
+                returncode=0,
+                stdout="",
+                stderr="",
+                termination=TerminationReason.NATURAL_EXIT,
+                pid=1,
             ),
         ],
         ids=["stale", "timeout", "normal_success", "empty_stdout"],

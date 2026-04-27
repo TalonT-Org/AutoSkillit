@@ -18,6 +18,15 @@ from autoskillit.core import ClaudeFlags
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
+
+@pytest.fixture(autouse=True)
+def _stub_detect_mcp_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Stub detect_autoskillit_mcp_prefix for deterministic PLUGIN_DIR behavior."""
+    from autoskillit.core._plugin_ids import DIRECT_PREFIX
+
+    monkeypatch.setattr("autoskillit.core.detect_autoskillit_mcp_prefix", lambda: DIRECT_PREFIX)
+
+
 _SCRIPT_YAML = """\
 name: test-script
 description: A test script
@@ -103,15 +112,6 @@ class TestCLIOrder:
     def _interactive_stdin(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Most order() paths require an interactive TTY — default to True for this class."""
         monkeypatch.setattr("sys.stdin.isatty", lambda: True)
-
-    @pytest.fixture(autouse=True)
-    def _stub_detect_mcp_prefix(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Stub detect_autoskillit_mcp_prefix for deterministic PLUGIN_DIR behavior."""
-        from autoskillit.core._plugin_ids import DIRECT_PREFIX
-
-        monkeypatch.setattr(
-            "autoskillit.core._plugin_ids.detect_autoskillit_mcp_prefix", lambda: DIRECT_PREFIX
-        )
 
     @pytest.fixture(autouse=True)
     def _stub_ingredients_table(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -481,7 +481,7 @@ class TestCLIOrder:
         from autoskillit.core._plugin_ids import MARKETPLACE_PREFIX
 
         monkeypatch.setattr(
-            "autoskillit.core._plugin_ids.detect_autoskillit_mcp_prefix",
+            "autoskillit.core.detect_autoskillit_mcp_prefix",
             lambda: MARKETPLACE_PREFIX,
         )
         mock_run.return_value = subprocess.CompletedProcess(
@@ -512,7 +512,7 @@ class TestCLIOrder:
         from autoskillit.core._plugin_ids import DIRECT_PREFIX
 
         monkeypatch.setattr(
-            "autoskillit.core._plugin_ids.detect_autoskillit_mcp_prefix", lambda: DIRECT_PREFIX
+            "autoskillit.core.detect_autoskillit_mcp_prefix", lambda: DIRECT_PREFIX
         )
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="", stderr=""
@@ -1387,15 +1387,6 @@ class TestOrderSubsetGate:
         )
 
     @pytest.fixture(autouse=True)
-    def _stub_detect_mcp_prefix(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Stub detect_autoskillit_mcp_prefix for deterministic PLUGIN_DIR behavior."""
-        from autoskillit.core._plugin_ids import DIRECT_PREFIX
-
-        monkeypatch.setattr(
-            "autoskillit.core._plugin_ids.detect_autoskillit_mcp_prefix", lambda: DIRECT_PREFIX
-        )
-
-    @pytest.fixture(autouse=True)
     def _stub_ingredients_table(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Stub _get_ingredients_table in app.py to prevent subprocess.run git calls."""
         import importlib
@@ -1583,15 +1574,6 @@ class TestOrderMcpPrefixSelection:
     @pytest.fixture(autouse=True)
     def _interactive_stdin(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("sys.stdin.isatty", lambda: True)
-
-    @pytest.fixture(autouse=True)
-    def _stub_detect_mcp_prefix(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Stub detect_autoskillit_mcp_prefix for deterministic PLUGIN_DIR behavior."""
-        from autoskillit.core._plugin_ids import DIRECT_PREFIX
-
-        monkeypatch.setattr(
-            "autoskillit.core._plugin_ids.detect_autoskillit_mcp_prefix", lambda: DIRECT_PREFIX
-        )
 
     @pytest.fixture(autouse=True)
     def _stub_ingredients_table(self, monkeypatch: pytest.MonkeyPatch) -> None:

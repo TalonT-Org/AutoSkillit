@@ -160,7 +160,7 @@ class TestOpenKitchenRetryOnUnavailable:
         """
         from autoskillit.cli._prompts import _MCP_RETRY_INSTRUCTION
 
-        assert '"returns"' not in _MCP_RETRY_INSTRUCTION and (
+        assert (
             "returns" not in _MCP_RETRY_INSTRUCTION
             or "any error" in _MCP_RETRY_INSTRUCTION.lower()
             or "error" in _MCP_RETRY_INSTRUCTION.lower()

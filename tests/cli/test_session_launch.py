@@ -37,9 +37,7 @@ def _stub_plugin_installed(monkeypatch: pytest.MonkeyPatch, *, installed: bool =
     from autoskillit.core._plugin_ids import DIRECT_PREFIX, MARKETPLACE_PREFIX
 
     prefix = MARKETPLACE_PREFIX if installed else DIRECT_PREFIX
-    monkeypatch.setattr(
-        "autoskillit.core._plugin_ids.detect_autoskillit_mcp_prefix", lambda: prefix
-    )
+    monkeypatch.setattr("autoskillit.core.detect_autoskillit_mcp_prefix", lambda: prefix)
 
 
 # ---------------------------------------------------------------------------

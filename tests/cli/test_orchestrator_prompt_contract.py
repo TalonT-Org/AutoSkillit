@@ -135,6 +135,50 @@ class TestOpenKitchenRetryOnUnavailable:
             "_build_open_kitchen_prompt retry must reference 'No such tool' or 'unavailable'"
         )
 
+    def test_mcp_retry_instruction_covers_is_error_block_shape(self) -> None:
+        """_MCP_RETRY_INSTRUCTION must explicitly cover the is_error:true wire format.
+
+        Claude Code delivers MCP transport failures as is_error: true tool_use_error blocks,
+        not as string returns. The instruction must cover "any error" or explicitly mention
+        error blocks — not just the string-return case.
+        """
+        from autoskillit.cli._prompts import _MCP_RETRY_INSTRUCTION
+
+        instr = _MCP_RETRY_INSTRUCTION.lower()
+        assert any(
+            phrase in instr for phrase in ("any error", "tool error", "tool_use_error", "is_error")
+        ), (
+            "_MCP_RETRY_INSTRUCTION does not cover is_error:true wire format. "
+            "Claude Code sends MCP failures as is_error blocks, not string returns."
+        )
+
+    def test_mcp_retry_instruction_does_not_gate_on_string_return_only(self) -> None:
+        """Instruction must not use 'returns' as the sole trigger for retry.
+
+        'If open_kitchen returns X' is a string-return pattern. The actual error arrives
+        as is_error: true with a tool_use_error content block — not a function return.
+        """
+        from autoskillit.cli._prompts import _MCP_RETRY_INSTRUCTION
+
+        assert '"returns"' not in _MCP_RETRY_INSTRUCTION and (
+            "returns" not in _MCP_RETRY_INSTRUCTION
+            or "any error" in _MCP_RETRY_INSTRUCTION.lower()
+            or "error" in _MCP_RETRY_INSTRUCTION.lower()
+        ), "_MCP_RETRY_INSTRUCTION uses 'returns' as sole trigger — misses is_error:true shape."
+
+    def test_mcp_retry_instruction_covers_silent_retry(self) -> None:
+        """Instruction must direct LLM to retry silently without troubleshooting.
+
+        Session 5f08b230 showed LLM gave troubleshooting advice instead of retrying.
+        Instruction must explicitly prohibit explaining the error to the user.
+        """
+        from autoskillit.cli._prompts import _MCP_RETRY_INSTRUCTION
+
+        instr = _MCP_RETRY_INSTRUCTION.lower()
+        assert "silently" in instr or "do not explain" in instr or "do not" in instr, (
+            "_MCP_RETRY_INSTRUCTION does not prohibit LLM from explaining the error to the user."
+        )
+
 
 class TestFirstActionDirectOpenKitchen:
     """FIRST ACTION must call open_kitchen directly — no ToolSearch or Bash preamble."""

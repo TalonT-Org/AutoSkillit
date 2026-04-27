@@ -26,10 +26,10 @@ def _run_interactive_session(
     if shutil.which("claude") is None:
         print("ERROR: 'claude' not found. Install: https://docs.anthropic.com/en/docs/claude-code")
         sys.exit(1)
-    from autoskillit.cli._init_helpers import _is_plugin_installed
     from autoskillit.cli._reload import consume_reload_sentinel
     from autoskillit.cli._terminal import terminal_guard
     from autoskillit.core import BareResume, ClaudeFlags, NamedResume, NoResume, pkg_root
+    from autoskillit.core._plugin_ids import MARKETPLACE_PREFIX, detect_autoskillit_mcp_prefix
     from autoskillit.execution import build_interactive_cmd
 
     _project_dir = project_dir if project_dir is not None else Path.cwd()
@@ -38,7 +38,11 @@ def _run_interactive_session(
         resume_spec=resume_spec if resume_spec is not None else NoResume(),
         env_extras=extra_env,
     )
-    plugin_flags = [] if _is_plugin_installed() else [ClaudeFlags.PLUGIN_DIR, str(pkg_root())]
+    plugin_flags = (
+        []
+        if detect_autoskillit_mcp_prefix() == MARKETPLACE_PREFIX
+        else [ClaudeFlags.PLUGIN_DIR, str(pkg_root())]
+    )
     _is_resume = isinstance(resume_spec, (BareResume, NamedResume))
     cmd = [
         *spec.cmd,

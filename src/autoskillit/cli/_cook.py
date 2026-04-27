@@ -107,7 +107,6 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
     if confirm.lower() in ("n", "no"):
         return
 
-    from autoskillit.cli._init_helpers import _is_plugin_installed
     from autoskillit.cli._onboarding import is_first_run, run_onboarding_menu
     from autoskillit.core import (
         LAUNCH_ID_ENV_VAR,
@@ -121,6 +120,7 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
         resume_spec_from_cli,
         write_registry_entry,
     )
+    from autoskillit.core._plugin_ids import MARKETPLACE_PREFIX, detect_autoskillit_mcp_prefix
     from autoskillit.execution import build_interactive_cmd
 
     configure_logging()
@@ -142,7 +142,7 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
         session_id_local, cook_session=True, config=config, project_dir=project_dir
     )
 
-    plugin_dir = None if _is_plugin_installed() else pkg_root()
+    plugin_dir = None if detect_autoskillit_mcp_prefix() == MARKETPLACE_PREFIX else pkg_root()
 
     if isinstance(resume_spec, BareResume):
         from autoskillit.cli._session_picker import pick_session

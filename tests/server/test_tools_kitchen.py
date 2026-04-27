@@ -1449,3 +1449,20 @@ def test_close_kitchen_no_review_gate_state_no_error(tmp_path, monkeypatch):
             _close_kitchen_handler()  # Must not raise
 
     assert not tmp_path.joinpath(*_REVIEW_GATE_STATE_RELPATH).exists()
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_has_always_load_meta() -> None:
+    """open_kitchen must carry anthropic/alwaysLoad: true in its MCP meta.
+
+    alwaysLoad ensures open_kitchen is always in the initial tool context for
+    direct 'claude' sessions (where ToolSearch is enabled). Defense-in-depth
+    against the MCP first-call race for non-order/cook sessions.
+    """
+    from autoskillit.server import mcp
+
+    tool = await mcp.get_tool("open_kitchen")
+    assert tool is not None
+    assert tool.meta is not None and tool.meta.get("anthropic/alwaysLoad") is True, (
+        "open_kitchen missing anthropic/alwaysLoad:true — add to @mcp.tool(meta={...})"
+    )

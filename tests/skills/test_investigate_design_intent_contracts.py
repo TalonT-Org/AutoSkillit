@@ -66,6 +66,18 @@ def design_intent_content(step2_section: str) -> str:
     return step2_section[start:]
 
 
+def _strip_code_fences(text: str) -> str:
+    """Remove lines inside triple-backtick code fences (template content vs. instructions)."""
+    result = []
+    in_fence = False
+    for line in text.split("\n"):
+        if line.strip().startswith("```"):
+            in_fence = not in_fence
+        elif not in_fence:
+            result.append(line)
+    return "\n".join(result)
+
+
 def _extract_step_section(deep_workflow_section: str, step_name: str) -> str:
     """Helper to extract the text of a specific D-step subsection."""
     start = deep_workflow_section.find(f"### {step_name}")
@@ -169,9 +181,7 @@ def test_design_intent_section_positioned_after_similar_patterns(skill_text: str
 def test_d2_includes_design_intent_subagent(deep_workflow_section: str) -> None:
     """Step D2 must mention Design Intent as a parallel subagent."""
     d2 = _extract_step_section(deep_workflow_section, "Step D2")
-    assert "Design Intent" in d2, (
-        "Step D2 must include 'Design Intent' as a parallel subagent"
-    )
+    assert "Design Intent" in d2, "Step D2 must include 'Design Intent' as a parallel subagent"
 
 
 def test_d2_minimum_subagents_increased(deep_workflow_section: str) -> None:
@@ -180,7 +190,8 @@ def test_d2_minimum_subagents_increased(deep_workflow_section: str) -> None:
     has_minimum = "minimum" in d2.lower()
     has_five = "5" in d2
     assert has_minimum and has_five, (
-        "Step D2 must specify a 'minimum' of '5' parallel subagents (was 4, increased for Design Intent)"
+        "Step D2 must specify a 'minimum' of '5' parallel subagents"
+        " (was 4, increased for Design Intent)"
     )
 
 
@@ -189,7 +200,8 @@ def test_d3_design_intent_redispatch(d3_section: str) -> None:
     has_design_intent = "Design Intent" in d3_section
     has_redispatch = "re-dispatch" in d3_section.lower() or "redispatch" in d3_section.lower()
     assert has_design_intent and has_redispatch, (
-        "Step D3 must mention re-dispatching the Design Intent subagent for newly surfaced mechanisms"
+        "Step D3 must mention re-dispatching the Design Intent subagent"
+        " for newly surfaced mechanisms"
     )
 
 
@@ -216,12 +228,13 @@ def test_d5_breakage_triggers_on_removal_change(d5_section: str) -> None:
 
 
 def test_d5_breakage_traces_dependency_chain(d5_section: str) -> None:
-    """Step D5 breakage must mention dependency chain tracing (callers, importers, flag consumers)."""
+    """Step D5 breakage must mention dependency chain tracing."""
     has_dependency = "dependency chain" in d5_section.lower()
     has_callers = "callers" in d5_section.lower()
     has_importers = "importers" in d5_section.lower()
     assert has_dependency or has_callers or has_importers, (
-        "Step D5 breakage analysis must mention dependency chain tracing (callers, importers, flag consumers)"
+        "Step D5 breakage analysis must mention dependency chain tracing"
+        " (callers, importers, flag consumers)"
     )
 
 
@@ -235,7 +248,7 @@ def test_d5_breakage_checks_revert_patterns(d5_section: str) -> None:
 
 
 def test_d5_breakage_distinct_from_d4(deep_workflow_section: str) -> None:
-    """D4 is epistemological (hypothesis/root cause); D5 breakage is consequentialist (recommendation/breaks)."""
+    """D4 is epistemological (hypothesis); D5 breakage is consequentialist (recommendation)."""
     d4 = _extract_step_section(deep_workflow_section, "Step D4")
     d5 = _extract_step_section(deep_workflow_section, "Step D5")
     # D4: epistemological — about hypothesis/root cause
@@ -260,11 +273,16 @@ def test_report_template_has_breakage_analysis_deep_mode(skill_text: str) -> Non
 
 
 def test_standard_mode_no_adversarial_breakage(standard_workflow_section: str) -> None:
-    """Standard mode workflow must NOT contain adversarial breakage content."""
-    has_adversarial = "adversarial breakage" in standard_workflow_section.lower()
-    has_breakage_analysis = "breakage analysis" in standard_workflow_section.lower()
+    """Standard mode workflow instructions must NOT contain adversarial breakage content."""
+    # Strip code fences: the Step 4 report template documents what deep mode output looks
+    # like, which legitimately contains '## Breakage Analysis'. The intent of this guard
+    # is that the *execution instructions* don't spawn adversarial breakage in standard mode.
+    instructions = _strip_code_fences(standard_workflow_section)
+    has_adversarial = "adversarial breakage" in instructions.lower()
+    has_breakage_analysis = "breakage analysis" in instructions.lower()
     assert not has_adversarial and not has_breakage_analysis, (
-        "Standard mode workflow must not contain 'adversarial breakage' or 'breakage analysis'"
+        "Standard mode workflow instructions must not contain"
+        " 'adversarial breakage' or 'breakage analysis'"
     )
 
 
@@ -292,7 +310,11 @@ def test_design_intent_template_has_git_log_follow(skill_text: str) -> None:
         pytest.fail("Design Intent Subagent Template section not found")
     # Find the next template heading after this one
     next_template = skill_text.find("###", template_start + 1)
-    template_section = skill_text[template_start:next_template] if next_template != -1 else skill_text[template_start:]
+    template_section = (
+        skill_text[template_start:next_template]
+        if next_template != -1
+        else skill_text[template_start:]
+    )
     assert "git log --follow" in template_section, (
         "Design Intent Subagent Template must contain 'git log --follow'"
     )
@@ -311,7 +333,11 @@ def test_adversarial_breakage_template_has_dependency_chain(skill_text: str) -> 
     if template_start == -1:
         pytest.fail("Adversarial Breakage Subagent Template section not found")
     next_template = skill_text.find("###", template_start + 1)
-    template_section = skill_text[template_start:next_template] if next_template != -1 else skill_text[template_start:]
+    template_section = (
+        skill_text[template_start:next_template]
+        if next_template != -1
+        else skill_text[template_start:]
+    )
     assert "dependency chain" in template_section.lower(), (
         "Adversarial Breakage Subagent Template must mention dependency chain"
     )
@@ -323,7 +349,11 @@ def test_adversarial_breakage_template_has_revert_check(skill_text: str) -> None
     if template_start == -1:
         pytest.fail("Adversarial Breakage Subagent Template section not found")
     next_template = skill_text.find("###", template_start + 1)
-    template_section = skill_text[template_start:next_template] if next_template != -1 else skill_text[template_start:]
+    template_section = (
+        skill_text[template_start:next_template]
+        if next_template != -1
+        else skill_text[template_start:]
+    )
     assert "revert" in template_section.lower(), (
         "Adversarial Breakage Subagent Template must mention revert pattern check"
     )

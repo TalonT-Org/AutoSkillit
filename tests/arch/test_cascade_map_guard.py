@@ -212,13 +212,11 @@ class TestModuleCascadeExecutionGuard:
         )
 
     def test_module_cascade_execution_has_no_phantom_stems(self) -> None:
-        exec_src = _SRC_ROOT / "execution"
-        phantoms = [
-            stem for stem in MODULE_CASCADE_EXECUTION if not (exec_src / f"{stem}.py").exists()
-        ]
+        graph = _build_execution_module_reverse_graph()
+        phantoms = [stem for stem in MODULE_CASCADE_EXECUTION if not graph.get(stem)]
         assert not phantoms, (
-            "MODULE_CASCADE_EXECUTION contains stems with no matching source file — "
-            "the file may have been renamed or deleted:\n"
+            "MODULE_CASCADE_EXECUTION contains stems with zero AST consumers — "
+            "the source file may have been renamed or deleted:\n"
             f"  {sorted(phantoms)}\n"
             "Remove the stale entry or rename it to match the current module."
         )

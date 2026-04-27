@@ -108,12 +108,9 @@ def _default_plugin_dir() -> Path:
 
 def _resolve_marketplace_cache_path() -> Path:
     """Read the installPath for autoskillit from installed_plugins.json."""
-    import json
+    from autoskillit.core import _get_autoskillit_install_path
 
-    from autoskillit.core._plugin_ids import _AUTOSKILLIT_PLUGIN_KEY, _installed_plugins_path
-
-    data = json.loads(_installed_plugins_path().read_text())
-    return Path(data["plugins"][_AUTOSKILLIT_PLUGIN_KEY]["installPath"])
+    return _get_autoskillit_install_path()
 
 
 def _gh_cli_token() -> str | None:

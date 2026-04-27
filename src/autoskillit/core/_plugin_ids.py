@@ -24,6 +24,20 @@ def _installed_plugins_path() -> Path:
     return Path.home() / ".claude" / "plugins" / "installed_plugins.json"
 
 
+def _get_autoskillit_install_path() -> Path:
+    """Return the installPath for autoskillit from installed_plugins.json.
+
+    The plugin value can be a dict {"installPath": ...} (old format) or
+    a list [{"installPath": ...}] (new scoped format). Raises KeyError if
+    the plugin is not present; raises ValueError if the format is unexpected.
+    """
+    data = json.loads(_installed_plugins_path().read_text())
+    entry = data["plugins"][_AUTOSKILLIT_PLUGIN_KEY]
+    if isinstance(entry, list):
+        entry = entry[0]
+    return Path(entry["installPath"])
+
+
 def detect_autoskillit_mcp_prefix() -> str:
     """Return the MCP prefix that autoskillit tools will use in a spawned session.
 

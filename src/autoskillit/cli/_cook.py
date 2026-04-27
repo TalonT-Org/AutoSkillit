@@ -110,6 +110,7 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
     from autoskillit.cli._installed_plugins import InstalledPluginsFile
     from autoskillit.cli._onboarding import is_first_run, run_onboarding_menu
     from autoskillit.core import (
+        _AUTOSKILLIT_PLUGIN_KEY,
         LAUNCH_ID_ENV_VAR,
         MARKETPLACE_PREFIX,
         SESSION_TYPE_COOK,
@@ -119,13 +120,13 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
         MarketplaceInstall,
         NamedResume,
         NoResume,
+        _get_autoskillit_install_path,
         configure_logging,
         detect_autoskillit_mcp_prefix,
         pkg_root,
         resume_spec_from_cli,
         write_registry_entry,
     )
-    from autoskillit.core._plugin_ids import _AUTOSKILLIT_PLUGIN_KEY
     from autoskillit.execution import build_interactive_cmd
 
     configure_logging()
@@ -147,12 +148,9 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
         session_id_local, cook_session=True, config=config, project_dir=project_dir
     )
 
-    _plugins = InstalledPluginsFile().get_plugins()
     plugin_source: MarketplaceInstall | DirectInstall
-    if _AUTOSKILLIT_PLUGIN_KEY in _plugins:
-        plugin_source = MarketplaceInstall(
-            cache_path=Path(_plugins[_AUTOSKILLIT_PLUGIN_KEY]["installPath"])
-        )
+    if InstalledPluginsFile().contains(_AUTOSKILLIT_PLUGIN_KEY):
+        plugin_source = MarketplaceInstall(cache_path=_get_autoskillit_install_path())
     else:
         plugin_source = DirectInstall(plugin_dir=pkg_root())
 

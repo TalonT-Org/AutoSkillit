@@ -9,6 +9,9 @@ from ._plugin_cache import clear_kitchens_for_pid as clear_kitchens_for_pid
 from ._plugin_cache import register_active_kitchen as register_active_kitchen
 from ._plugin_cache import sweep_retiring_cache as sweep_retiring_cache
 from ._plugin_cache import unregister_active_kitchen as unregister_active_kitchen
+from ._plugin_ids import _AUTOSKILLIT_PLUGIN_KEY as _AUTOSKILLIT_PLUGIN_KEY
+from ._plugin_ids import _get_autoskillit_install_path as _get_autoskillit_install_path
+from ._plugin_ids import _installed_plugins_path as _installed_plugins_path
 from ._plugin_ids import DIRECT_PREFIX as DIRECT_PREFIX
 from ._plugin_ids import MARKETPLACE_PREFIX as MARKETPLACE_PREFIX
 from ._plugin_ids import detect_autoskillit_mcp_prefix as detect_autoskillit_mcp_prefix

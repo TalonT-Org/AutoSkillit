@@ -144,6 +144,7 @@ steps:
     with:
       callable: "autoskillit.planner.build_wp_manifest"
       assignments_dir: "{{AUTOSKILLIT_TEMP}}/planner/assignments"
+      work_packages_dir: "{{AUTOSKILLIT_TEMP}}/planner/work_packages"
       output_dir: "{{AUTOSKILLIT_TEMP}}/planner"
     capture:
       wp_manifest_path: "${{ result.manifest_path }}"

@@ -42,6 +42,21 @@ class WPResult(TypedDict):
     acceptance_criteria: list[str]
 
 
+class PlannerManifestItem(TypedDict):
+    id: str
+    name: str
+    status: str
+    result_path: str | None
+    metadata: dict[str, Any]
+
+
+class PlannerManifest(TypedDict):
+    pass_name: str
+    result_dir: str
+    created_at: str
+    items: list[PlannerManifestItem]
+
+
 PHASE_REQUIRED_KEYS: frozenset[str] = frozenset({"id", "name", "ordering"})
 ASSIGNMENT_REQUIRED_KEYS: frozenset[str] = frozenset({"id", "name", "proposed_work_packages"})
 WP_REQUIRED_KEYS: frozenset[str] = frozenset({"id", "name", "deliverables"})

@@ -242,7 +242,7 @@ provided (adopting an existing issue) or when `--dry-run` is active.
    - `| **Contested:** N` and `| **Exception warranted:** N` — count segments from the
      `**Findings processed:**` summary line; leaves `**Findings processed:** {total} | **Valid:** {N}`
    - `## Findings with Exceptions` through next `---` — the entire exception-findings section
-   - `**Exception note:**` blocks — exception-warranted finding detail sections (defense-in-depth; upstream validate-audit now excludes these, but strip is retained for robustness)
+   - `**Exception note:**` blocks — exception-warranted finding detail sections
 
 3. Call `gh issue create` using the temp file:
 

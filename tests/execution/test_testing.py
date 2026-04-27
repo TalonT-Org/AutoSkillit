@@ -678,3 +678,193 @@ async def test_default_test_runner_passes_default_base_branch(
     runner = DefaultTestRunner(config=config, runner=capturing_runner)
     await runner.run(cwd=tmp_path)
     assert captured_kwargs["env"].get("AUTOSKILLIT_TEST_BASE_REF") == "integration"
+
+
+# ---------------------------------------------------------------------------
+# Multi-command (commands: list[list[str]]) tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_multi_command_sequential_pass(tmp_path: Path) -> None:
+    from tests.conftest import _make_result
+    from tests.fakes import MockSubprocessRunner
+
+    runner = MockSubprocessRunner()
+    runner.push(_make_result(returncode=0, stdout="cmd1 output"))
+    runner.push(_make_result(returncode=0, stdout="cmd2 output"))
+    cfg = make_test_config(
+        test_check=make_test_check_config(
+            commands=[["cargo", "test"], ["task", "e2e"]],
+        )
+    )
+    result = await DefaultTestRunner(cfg, runner).run(tmp_path)
+    assert result.passed is True
+    assert "cmd1 output" in result.stdout
+    assert "cmd2 output" in result.stdout
+
+
+@pytest.mark.anyio
+async def test_multi_command_fail_fast(tmp_path: Path) -> None:
+    from tests.conftest import _make_result
+    from tests.fakes import MockSubprocessRunner
+
+    runner = MockSubprocessRunner()
+    runner.push(_make_result(returncode=1, stdout="cmd1 failed"))
+    cfg = make_test_config(
+        test_check=make_test_check_config(
+            commands=[["cargo", "test"], ["task", "e2e"]],
+        )
+    )
+    result = await DefaultTestRunner(cfg, runner).run(tmp_path)
+    assert result.passed is False
+    assert len(runner.call_args_list) == 1
+
+
+@pytest.mark.anyio
+async def test_multi_command_second_fails(tmp_path: Path) -> None:
+    from tests.conftest import _make_result
+    from tests.fakes import MockSubprocessRunner
+
+    runner = MockSubprocessRunner()
+    runner.push(_make_result(returncode=0, stdout="cmd1 ok"))
+    runner.push(_make_result(returncode=1, stdout="cmd2 failed"))
+    cfg = make_test_config(
+        test_check=make_test_check_config(
+            commands=[["cargo", "test"], ["task", "e2e"]],
+        )
+    )
+    result = await DefaultTestRunner(cfg, runner).run(tmp_path)
+    assert result.passed is False
+    assert "cmd1 ok" in result.stdout
+    assert "cmd2 failed" in result.stdout
+
+
+@pytest.mark.anyio
+async def test_multi_command_timeout_ceiling(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import autoskillit.execution.testing as testing_mod
+    from tests.conftest import _make_result
+    from tests.fakes import MockSubprocessRunner
+
+    # Simulate 3 seconds elapsed between start and the second command's remaining check.
+    # monotonic() call sequence: start, loop1-remaining, loop2-remaining, elapsed
+    _times = iter([0.0, 0.0, 3.0, 3.0])
+    monkeypatch.setattr(
+        testing_mod,
+        "time",
+        type("_FakeTime", (), {"monotonic": staticmethod(lambda: next(_times))})(),
+    )
+
+    runner = MockSubprocessRunner()
+    runner.push(_make_result(returncode=0, stdout="cmd1"))
+    runner.push(_make_result(returncode=0, stdout="cmd2"))
+    cfg = make_test_config(
+        test_check=make_test_check_config(
+            commands=[["a"], ["b"]],
+            timeout=10,
+        )
+    )
+    await DefaultTestRunner(cfg, runner).run(tmp_path)
+    t1 = runner.call_args_list[0][2]
+    t2 = runner.call_args_list[1][2]
+    assert t1 == pytest.approx(10.0)
+    assert t2 == pytest.approx(7.0)
+    assert t2 < t1
+
+
+@pytest.mark.anyio
+async def test_multi_command_empty_commands_falls_back(tmp_path: Path) -> None:
+    from tests.conftest import _make_result
+    from tests.fakes import MockSubprocessRunner
+
+    runner = MockSubprocessRunner()
+    runner.push(_make_result(returncode=0, stdout="fallback"))
+    cfg = make_test_config(
+        test_check=make_test_check_config(
+            command=["task", "test-check"],
+            commands=None,
+        )
+    )
+    result = await DefaultTestRunner(cfg, runner).run(tmp_path)
+    assert result.passed is True
+    assert runner.call_args_list[0][0] == ["task", "test-check"]
+
+
+@pytest.mark.anyio
+async def test_multi_command_single_entry_equivalent(tmp_path: Path) -> None:
+    from tests.conftest import _make_result
+    from tests.fakes import MockSubprocessRunner
+
+    runner_a = MockSubprocessRunner()
+    runner_a.push(_make_result(returncode=0, stdout="out"))
+    runner_b = MockSubprocessRunner()
+    runner_b.push(_make_result(returncode=0, stdout="out"))
+    cfg_single = make_test_config(test_check=make_test_check_config(command=["task", "t"]))
+    cfg_multi = make_test_config(test_check=make_test_check_config(commands=[["task", "t"]]))
+    r1 = await DefaultTestRunner(cfg_single, runner_a).run(tmp_path)
+    r2 = await DefaultTestRunner(cfg_multi, runner_b).run(tmp_path)
+    assert r1.passed == r2.passed
+
+
+def test_commands_and_command_mutual_exclusion() -> None:
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        make_test_check_config(
+            command=["cargo", "test"],
+            commands=[["cargo", "test"], ["task", "e2e"]],
+        )
+
+
+@pytest.mark.anyio
+async def test_multi_command_env_vars_propagated(tmp_path: Path) -> None:
+    captured_envs: list[dict] = []
+
+    async def capturing_runner(cmd, *, cwd, timeout, env, **kwargs):
+        captured_envs.append(dict(env))
+        from tests.conftest import _make_result
+
+        return _make_result(returncode=0, stdout="")
+
+    cfg = make_test_config(
+        test_check=make_test_check_config(
+            commands=[["a"], ["b"]],
+            filter_mode="conservative",
+        )
+    )
+    await DefaultTestRunner(cfg, capturing_runner).run(tmp_path)
+    assert all("AUTOSKILLIT_TEST_FILTER" in e for e in captured_envs)
+
+
+@pytest.mark.anyio
+async def test_multi_command_section_headers(tmp_path: Path) -> None:
+    from tests.conftest import _make_result
+    from tests.fakes import MockSubprocessRunner
+
+    runner = MockSubprocessRunner()
+    runner.push(_make_result(returncode=0, stdout="out1"))
+    runner.push(_make_result(returncode=0, stdout="out2"))
+    cfg = make_test_config(
+        test_check=make_test_check_config(
+            commands=[["cargo", "test"], ["task", "e2e"]],
+        )
+    )
+    result = await DefaultTestRunner(cfg, runner).run(tmp_path)
+    assert "=== [1/2]" in result.stdout
+    assert "=== [2/2]" in result.stdout
+
+
+def test_defaults_yaml_has_commands_null() -> None:
+    import yaml
+
+    from autoskillit.core.paths import pkg_root
+
+    defaults = yaml.safe_load((pkg_root() / "config" / "defaults.yaml").read_text())
+    assert "commands" in defaults["test_check"]
+    assert defaults["test_check"]["commands"] is None
+
+
+def test_test_check_config_has_commands_field() -> None:
+    cfg = make_test_check_config()
+    assert hasattr(cfg, "commands")
+    assert cfg.commands is None

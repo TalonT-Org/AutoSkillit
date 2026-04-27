@@ -396,24 +396,24 @@ def read_proc_snapshot(pid: int, *, process: psutil.Process | None = None) -> Pr
     # Read process name from /proc/{pid}/comm (max 15 chars, kernel-truncated)
     try:
         comm = Path(f"/proc/{pid}/comm").read_text().strip()
-    except (FileNotFoundError, PermissionError):
+    except (FileNotFoundError, PermissionError, ProcessLookupError):
         comm = ""
 
     # Hand-rolled /proc reads for fields psutil doesn't expose
     try:
         status_content = Path(f"/proc/{pid}/status").read_text()
-    except (FileNotFoundError, PermissionError):
+    except (FileNotFoundError, PermissionError, ProcessLookupError):
         return None
     sig_fields = _parse_proc_status(status_content)
 
     try:
         oom = int(Path(f"/proc/{pid}/oom_score").read_text().strip())
-    except (FileNotFoundError, PermissionError, ValueError):
+    except (FileNotFoundError, PermissionError, ProcessLookupError, ValueError):
         oom = -1
 
     try:
         wchan = Path(f"/proc/{pid}/wchan").read_text().strip()
-    except (FileNotFoundError, PermissionError):
+    except (FileNotFoundError, PermissionError, ProcessLookupError):
         wchan = ""
 
     # Best-effort: /proc/{pid}/net/tcp and tcp6 (Linux network namespace for this PID)

@@ -271,7 +271,7 @@ def test_output_patterns_nonempty_for_investigate() -> None:
         ),
         ("/autoskillit:make-plan some task", "always", []),
         ("/autoskillit:nonexistent-skill foo", None, []),
-        ("/autoskillit:resolve-merge-conflicts", "conditional", []),
+        ("/autoskillit:resolve-merge-conflicts", "conditional", ["conflict_report_path"]),
     ],
 )
 def test_write_expected_resolver_mode(

@@ -763,6 +763,7 @@ steps:
     with:
       cmd: "gh pr close ${{ context.pr_number }} && sleep 2 && gh pr reopen ${{ context.pr_number }}"
       cwd: "${{ context.work_dir }}"
+      step_name: "trigger_ci_actively"
     on_success: ci_watch
     on_failure: escalate_stop_no_ci
     retries: 1

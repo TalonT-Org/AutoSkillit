@@ -397,9 +397,9 @@ class DefaultCIWatcher:
                         "ci_watcher_no_runs",
                         branch=branch,
                         repo=owner_repo,
-                        event=scope.event,
-                        workflow=scope.workflow,
-                        head_sha=scope.head_sha,
+                        scope_event=scope.event,
+                        scope_workflow=scope.workflow,
+                        scope_head_sha=scope.head_sha,
                         poll_duration_s=round(poll_duration, 1),
                     )
                     return {

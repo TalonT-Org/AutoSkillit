@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Literal
+from typing import Any, Literal
 
 import httpx
 import structlog
@@ -27,7 +27,7 @@ from autoskillit.server.helpers import (
 logger = get_logger(__name__)
 
 
-@mcp.tool(tags={"autoskillit", "kitchen", "ci"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "ci"}, annotations={"readOnlyHint": False})
 @track_response_size("wait_for_ci")
 async def wait_for_ci(
     branch: str,
@@ -39,6 +39,7 @@ async def wait_for_ci(
     timeout_seconds: int = 300,
     cwd: str = ".",
     step_name: str = "",
+    auto_trigger: bool = False,
     ctx: Context = CurrentContext(),
 ) -> str:
     """Wait for a GitHub Actions CI run to complete on the given branch.
@@ -62,6 +63,11 @@ async def wait_for_ci(
         timeout_seconds: Maximum time to wait (default 300s).
         cwd: Working directory for git operations.
         step_name: Optional YAML step key for wall-clock timing accumulation.
+        auto_trigger: When True and ci_watcher returns "no_runs", performs an active
+                      self-healing sequence: checks PR mergeability, creates an empty
+                      commit, and force-pushes the branch to re-trigger webhook delivery,
+                      then re-polls CI with a fresh timeout. Result includes
+                      "triggered": true when the sequence fires. Default False.
 
     Returns:
         JSON with run_id, conclusion ("success", "failure", "cancelled",
@@ -140,6 +146,17 @@ async def wait_for_ci(
             # CI results correspond to the current HEAD after a force-push.
             if scope.head_sha:
                 result = {**result, "head_sha": scope.head_sha}
+
+            if auto_trigger and result.get("conclusion") == "no_runs":
+                result = await _auto_trigger_ci(
+                    branch=branch,
+                    cwd=cwd,
+                    result=result,
+                    scope=scope,
+                    resolved_repo=resolved_repo,
+                    tool_ctx=tool_ctx,
+                    timeout_seconds=timeout_seconds,
+                )
 
             conclusion = result.get("conclusion", "unknown")
             level = "info" if conclusion == "success" else "error"
@@ -672,3 +689,80 @@ async def check_repo_merge_state(
                 "ci_event": None,
             }
         )
+
+
+async def _auto_trigger_ci(
+    *,
+    branch: str,
+    cwd: str,
+    result: dict[str, Any],
+    scope: CIRunScope,
+    resolved_repo: str | None,
+    tool_ctx: Any,
+    timeout_seconds: int,
+) -> dict[str, Any]:
+    """Active CI trigger recovery: empty commit + force-push + re-poll.
+
+    Called when wait_for_ci returns no_runs and auto_trigger=True.
+    Returns result dict augmented with "triggered" key.
+    On any failure (merge conflict, push rejected, etc.) returns original
+    no_runs result so the recipe routes to handle_no_ci_runs as fallback.
+    """
+    # 1. Check PR mergeability — CONFLICTING means CI won't run even after push
+    rc_m, out_m, _ = await _run_subprocess(
+        ["gh", "pr", "view", branch, "--json", "mergeable"],
+        cwd=cwd,
+        timeout=15.0,
+    )
+    if rc_m == 0:
+        try:
+            mergeable = json.loads(out_m).get("mergeable", "UNKNOWN")
+        except Exception:
+            mergeable = "UNKNOWN"
+        if mergeable == "CONFLICTING":
+            return {**result, "conclusion": "merge_conflict", "triggered": False}
+
+    # 2. Create empty commit to force webhook re-delivery
+    rc_c, _, err_c = await _run_subprocess(
+        ["git", "commit", "--allow-empty", "-m", "ci: trigger"],
+        cwd=cwd,
+        timeout=30.0,
+    )
+    if rc_c != 0:
+        logger.warning("auto_trigger: empty commit failed", stderr=err_c)
+        return result
+
+    # 3. Capture new HEAD SHA for scoped CI polling
+    rc_sha, sha_out, _ = await _run_subprocess(["git", "rev-parse", "HEAD"], cwd=cwd, timeout=5.0)
+    new_head_sha = sha_out.strip() if rc_sha == 0 else None
+
+    # 4. Force-push to trigger webhook delivery
+    rc_p, _, err_p = await _run_subprocess(
+        ["git", "push", "--force-with-lease", "upstream", branch],
+        cwd=cwd,
+        timeout=60.0,
+    )
+    if rc_p != 0:
+        logger.warning("auto_trigger: push failed", stderr=err_p)
+        return result
+
+    # 5. Re-poll CI with new SHA and fresh timeout
+    new_scope = CIRunScope(
+        workflow=scope.workflow,
+        head_sha=new_head_sha,
+        event=scope.event,
+    )
+    try:
+        triggered_result = await tool_ctx.ci_watcher.wait(
+            branch,
+            repo=resolved_repo or None,
+            scope=new_scope,
+            timeout_seconds=timeout_seconds,
+            cwd=cwd,
+        )
+        if new_head_sha:
+            triggered_result = {**triggered_result, "head_sha": new_head_sha}
+        return {**triggered_result, "triggered": True}
+    except Exception:
+        logger.error("auto_trigger: second CI poll failed", exc_info=True)
+        return result

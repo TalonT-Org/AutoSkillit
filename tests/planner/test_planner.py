@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import time
+from pathlib import Path
+
 import pytest
 
 pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.feature("planner")]
@@ -22,7 +25,35 @@ def test_planner_all_exports_callables() -> None:
         "compile_plan",
         "PlannerManifest",
         "PlannerManifestItem",
+        "create_run_dir",
     }
+
+
+def test_create_run_dir_creates_timestamped_directory(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("AUTOSKILLIT_TEMP", str(tmp_path))
+    from autoskillit.planner import create_run_dir
+
+    result = create_run_dir()
+
+    assert "planner_dir" in result
+    planner_dir = Path(result["planner_dir"])
+    assert planner_dir.exists()
+    assert planner_dir.parent.name == "planner"
+    assert planner_dir.name.startswith("run-")
+    assert (planner_dir / "phases").is_dir()
+    assert (planner_dir / "assignments").is_dir()
+    assert (planner_dir / "work_packages").is_dir()
+
+
+def test_create_run_dir_unique_across_calls(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("AUTOSKILLIT_TEMP", str(tmp_path))
+    from autoskillit.planner import create_run_dir
+
+    r1 = create_run_dir()
+    time.sleep(1.1)
+    r2 = create_run_dir()
+
+    assert r1["planner_dir"] != r2["planner_dir"]
 
 
 def test_planner_feature_skill_categories() -> None:

@@ -697,7 +697,8 @@ steps:
       Skipped when open_pr=false — no remote feature branch is opened in that mode.
       Routes on result.conclusion: success → check_repo_merge_state,
       no_runs → handle_no_ci_runs (auto_trigger fires first: empty commit + force-push +
-      re-poll; handle_no_ci_runs reached only when push fails), failure → detect_ci_conflict.
+      re-poll; handle_no_ci_runs reached only when push fails),
+      timed_out → self (re-watch), failure → detect_ci_conflict.
 
   handle_no_ci_runs:
     tool: check_repo_merge_state

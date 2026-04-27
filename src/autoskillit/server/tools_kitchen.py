@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict
@@ -93,14 +92,9 @@ def _quota_guard_hook_payload(cfg: QuotaGuardConfig) -> QuotaGuardHookPayload:
     }
 
 
-def _extract_sous_chef_discipline(sc_text: str) -> str:
-    """Extract the STEP EXECUTION IS NOT DISCRETIONARY section from sous-chef SKILL.md.
-
-    Returns the matching section text, or an empty string if not found.
-    """
-    sections = re.split(r"(?=^## )", sc_text, flags=re.MULTILINE)
-    match = next((s for s in sections if "STEP EXECUTION IS NOT DISCRETIONARY" in s), "")
-    return match.strip()
+def _build_sous_chef_for_delivery(sc_text: str) -> str:
+    """Return stripped sous-chef SKILL.md text for delivery via the named-recipe path."""
+    return sc_text.strip()
 
 
 def _write_hook_config() -> None:
@@ -418,10 +412,10 @@ async def open_kitchen(
             _sc_path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
             try:
                 if _sc_path.exists():
-                    _discipline = _extract_sous_chef_discipline(_sc_path.read_text())
-                    if _discipline:
-                        result["sous_chef_discipline"] = _discipline
-            except Exception:
+                    _sc_content = _build_sous_chef_for_delivery(_sc_path.read_text())
+                    if _sc_content:
+                        result["sous_chef_discipline"] = _sc_content
+            except (OSError, UnicodeDecodeError):
                 logger.warning(
                     "open_kitchen_failure", stage="read_sous_chef_discipline", exc_info=True
                 )

@@ -188,7 +188,7 @@ class TestRecipeCascadeNarrowing:
             tests_root=tests_root,
         )
         assert result is not None
-        assert not any("migration" in str(p) for p in result), (
+        assert not any("/migration/" in str(p) for p in result), (
             f"migration/test_store.py (not in cascade) should not appear; got {result}"
         )
 
@@ -205,6 +205,6 @@ class TestRecipeCascadeNarrowing:
             tests_root=tests_root,
         )
         assert result is not None
-        assert not any("hooks" in str(p) for p in result), (
+        assert not any("/hooks/" in str(p) for p in result), (
             f"hooks/test_fmt_status.py (not in cascade) should not appear; got {result}"
         )

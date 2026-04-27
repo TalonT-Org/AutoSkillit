@@ -249,12 +249,33 @@ class TestBuildTestScope:
 
     def test_scope_l2_recipe_conservative(self, tmp_path: Path) -> None:
         tests_root = tmp_path / "tests"
-        for d in ["recipe", "server", "cli", "migration", "hooks", "arch", "contracts", "docs"]:
+        for d in ["recipe", "arch", "contracts", "docs"]:
             (tests_root / d).mkdir(parents=True, exist_ok=True)
         for f in [
-            "execution/test_headless.py",
+            # Server file-level entries (9 of 52 import autoskillit.recipe):
+            "server/test_factory.py",
+            "server/test_tools_load_recipe.py",
+            "server/test_server_tool_registration.py",
+            "server/test_mcp_overrides.py",
+            "server/test_smoke_pipeline.py",
+            "server/test_tools_dispatch.py",
+            "server/test_tools_kitchen.py",
+            "server/test_service_wrappers.py",
+            "server/test_tools_list_recipes.py",
+            # CLI file-level entries (3 of 38 import autoskillit.recipe):
+            "cli/test_cli_prompts.py",
+            "cli/test_l3_orchestrator_prompt.py",
+            "cli/test_cook.py",
+            # Execution file-level entries:
             "execution/test_zero_write_detection.py",
+            # Migration file-level entries:
+            "migration/test_api.py",
+            "migration/test_engine.py",
+            # Hooks file-level entries:
+            "hooks/test_recipe_write_advisor.py",
+            # Other file-level entries:
             "infra/test_pretty_output.py",
+            "skills/test_planner_skill_contracts.py",
             "skills/test_skill_placeholder_contracts.py",
             "skills/test_make_campaign_compliance.py",
             "skills/test_review_design_guards.py",
@@ -275,17 +296,29 @@ class TestBuildTestScope:
         )
         assert result is not None
         result_names = {p.name for p in result}
-        for expected in ["recipe", "server", "cli", "migration"]:
-            assert expected in result_names, f"{expected} missing"
+        assert "recipe" in result_names, "recipe missing"
         for expected in [
-            "test_headless.py",
+            "test_factory.py",
+            "test_tools_load_recipe.py",
+            "test_tools_kitchen.py",
+            "test_cli_prompts.py",
+            "test_cook.py",
             "test_zero_write_detection.py",
             "test_pretty_output.py",
             "test_skill_placeholder_contracts.py",
+            "test_recipe_write_advisor.py",
         ]:
             assert expected in result_names, f"{expected} missing"
-        assert "hooks" in result_names, "hooks missing"
-        for absent in ["execution", "infra", "skills", "core"]:
+        for absent in [
+            "execution",
+            "infra",
+            "skills",
+            "core",
+            "server",
+            "cli",
+            "migration",
+            "hooks",
+        ]:
             assert absent not in result_names, f"{absent} should not be a full directory"
 
     def test_scope_l3_server_conservative(self, tmp_path: Path) -> None:

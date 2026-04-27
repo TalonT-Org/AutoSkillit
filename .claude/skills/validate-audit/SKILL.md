@@ -44,7 +44,7 @@ signal downstream processing.
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message
 - Write output files before synthesizing ALL subagent results
 - Subagents must NOT create their own files — they return findings in response text only
-- Include VALID BUT EXCEPTION WARRANTED findings in the validated report body — they belong in the validation summary only
+- Do NOT include VALID BUT EXCEPTION WARRANTED findings in the validated report body — they belong in the validation summary only
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
@@ -442,9 +442,10 @@ On Y or empty input, write all files. After writing, offer:
 
 On Y, call `prepare-issue` for each ticket body file (in parallel). After issue creation,
 append the validation summary to each created issue body using `gh issue edit --body-file`:
-fetch the current issue body, append a horizontal rule and the validation summary content,
-write the combined text to a temp file, then run `gh issue edit {issue_number} --body-file`
-with that temp file. Do NOT use `gh issue comment`.
+fetch the current issue body, verify the fetched body is non-empty (abort the append for
+that issue if empty to avoid overwriting with summary-only content), append a horizontal
+rule and the validation summary content, write the combined text to a temp file, then run
+`gh issue edit {issue_number} --body-file` with that temp file. Do NOT use `gh issue comment`.
 
 ---
 
@@ -461,11 +462,12 @@ All output files are written relative to the current working directory under `{{
 └── ticket_body_{source}_{N}_{YYYY-MM-DD_HHMMSS}.md       (one per ticket group, N ≥ 1)
 ```
 
-`{source}` is `arch`, `tests`, or `cohesion` based on the input report.
+`{source}` is `arch`, `tests`, `cohesion`, or `feature_gates` based on the input report.
 
 ## Related Skills
 
 - `/autoskillit:audit-arch` — produces reports this skill validates
 - `/autoskillit:audit-tests` — produces reports this skill validates
 - `/autoskillit:audit-cohesion` — produces reports this skill validates
+- `/autoskillit:audit-feature-gates` — produces reports this skill validates
 - `/autoskillit:prepare-issue` — offered interactively for contested findings

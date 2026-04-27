@@ -29,7 +29,7 @@ def test_merge_files_creates_combined_document(tmp_path):
     )
 
     assert result["merged_path"] == str(out)
-    assert result["item_count"] == "2"
+    assert result["item_count"] == "2"  # item_count is always str per MCP tool contract
     data = json.loads(out.read_text())
     assert data["task"] == "my task"
     assert data["source_dir"] == "/src"
@@ -64,7 +64,7 @@ def test_merge_files_accumulates_existing(tmp_path):
 
     data = json.loads(out.read_text())
     assert len(data["phases"]) == 2
-    assert result["item_count"] == "2"
+    assert result["item_count"] == "2"  # item_count is always str per MCP tool contract
 
 
 def test_merge_files_deduplicates_by_id(tmp_path):

@@ -14,6 +14,7 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import CIRunScope, get_logger
+from autoskillit.pipeline.context import ToolContext
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
     _notify,
@@ -698,7 +699,7 @@ async def _auto_trigger_ci(
     result: dict[str, Any],
     scope: CIRunScope,
     resolved_repo: str | None,
-    tool_ctx: Any,
+    tool_ctx: ToolContext,
     timeout_seconds: int,
 ) -> dict[str, Any]:
     """Active CI trigger recovery: empty commit + force-push + re-poll.
@@ -735,7 +736,7 @@ async def _auto_trigger_ci(
 
     # 3. Capture new HEAD SHA for scoped CI polling
     rc_sha, sha_out, _ = await _run_subprocess(["git", "rev-parse", "HEAD"], cwd=cwd, timeout=5.0)
-    new_head_sha = sha_out.strip() if rc_sha == 0 else None
+    new_head_sha = (sha_out.strip() or None) if rc_sha == 0 else None
 
     # 4. Force-push to trigger webhook delivery
     rc_p, _, err_p = await _run_subprocess(
@@ -745,6 +746,7 @@ async def _auto_trigger_ci(
     )
     if rc_p != 0:
         logger.warning("auto_trigger: push failed", stderr=err_p)
+        await _run_subprocess(["git", "reset", "--soft", "HEAD~1"], cwd=cwd, timeout=10.0)
         return result
 
     # 5. Re-poll CI with new SHA and fresh timeout
@@ -753,10 +755,11 @@ async def _auto_trigger_ci(
         head_sha=new_head_sha,
         event=scope.event,
     )
+    assert tool_ctx.ci_watcher is not None
     try:
         triggered_result = await tool_ctx.ci_watcher.wait(
             branch,
-            repo=resolved_repo or None,
+            repo=resolved_repo,
             scope=new_scope,
             timeout_seconds=timeout_seconds,
             cwd=cwd,
@@ -766,4 +769,4 @@ async def _auto_trigger_ci(
         return {**triggered_result, "triggered": True}
     except Exception:
         logger.error("auto_trigger: second CI poll failed", exc_info=True)
-        return result
+        return {**result, "conclusion": "auto_trigger_failed", "triggered": False}

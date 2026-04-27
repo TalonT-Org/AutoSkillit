@@ -709,3 +709,67 @@ def test_bundled_recipes_no_runs_guarded() -> None:
             f"Recipe '{yaml_path.stem}' has unguarded no_runs paths: "
             + ", ".join(f.message for f in no_runs_findings)
         )
+
+
+# ---------------------------------------------------------------------------
+# ci-event-literal-merge-group rule tests
+# ---------------------------------------------------------------------------
+
+_CI_EVENT_MG_RULE = "ci-event-literal-merge-group"
+
+
+def test_wait_for_ci_with_literal_merge_group_event_is_flagged() -> None:
+    """wait_for_ci with event='merge_group' must trigger ci-event-literal-merge-group ERROR."""
+    steps = {
+        "ci_watch": RecipeStep(
+            tool="wait_for_ci",
+            with_args={"branch": "main", "event": "merge_group"},
+        ),
+    }
+    recipe = _make_recipe(steps)
+    findings = run_semantic_rules(recipe)
+    mg_findings = [f for f in findings if f.rule == _CI_EVENT_MG_RULE]
+    assert len(mg_findings) == 1
+    assert mg_findings[0].severity == Severity.ERROR
+    assert mg_findings[0].step_name == "ci_watch"
+    assert "merge_group" in mg_findings[0].message
+
+
+def test_wait_for_ci_with_push_event_not_flagged() -> None:
+    """wait_for_ci with event='push' must not trigger ci-event-literal-merge-group."""
+    steps = {
+        "ci_watch": RecipeStep(
+            tool="wait_for_ci",
+            with_args={"branch": "main", "event": "push"},
+        ),
+    }
+    recipe = _make_recipe(steps)
+    findings = run_semantic_rules(recipe)
+    mg_findings = [f for f in findings if f.rule == _CI_EVENT_MG_RULE]
+    assert len(mg_findings) == 0
+
+
+def test_wait_for_ci_without_event_not_flagged() -> None:
+    """wait_for_ci with no event arg must not trigger ci-event-literal-merge-group."""
+    steps = {
+        "ci_watch": RecipeStep(
+            tool="wait_for_ci",
+            with_args={"branch": "main"},
+        ),
+    }
+    recipe = _make_recipe(steps)
+    findings = run_semantic_rules(recipe)
+    mg_findings = [f for f in findings if f.rule == _CI_EVENT_MG_RULE]
+    assert len(mg_findings) == 0
+
+
+def test_bundled_recipes_no_literal_merge_group_event() -> None:
+    """No bundled recipe must hardcode event='merge_group' in a wait_for_ci step."""
+    for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):
+        recipe = load_recipe(yaml_path)
+        findings = run_semantic_rules(recipe)
+        mg_findings = [f for f in findings if f.rule == _CI_EVENT_MG_RULE]
+        assert len(mg_findings) == 0, (
+            f"Recipe '{yaml_path.stem}' hardcodes event='merge_group': "
+            + ", ".join(f.message for f in mg_findings)
+        )

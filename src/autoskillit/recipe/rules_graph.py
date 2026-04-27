@@ -51,15 +51,18 @@ def _check_unbounded_cycles(ctx: ValidationContext) -> list[RuleFinding]:
                 reported_cycles.add(cycle_key)
                 cycle_set = set(cycle_steps)
 
-                # A step with on_result where at least one condition routes outside the
-                # cycle and at least one routes inside provides a deterministic conditional
-                # bound — the exit condition is evaluated on every iteration.
+                # A run_python step with on_result where at least one condition routes
+                # outside the cycle and at least one routes inside provides a
+                # deterministic conditional bound — the exit condition is a pure
+                # function evaluated on every iteration. Scoped to run_python only:
+                # shell-based (run_cmd) counters use external file state and are not
+                # structural bounds.
                 has_on_result_exit = False
                 for s in cycle_steps:
                     if s not in recipe.steps:
                         continue
                     step = recipe.steps[s]
-                    if step.on_result is None:
+                    if step.tool != "run_python" or step.on_result is None:
                         continue
                     targets: set[str] = set()
                     if step.on_result.conditions:

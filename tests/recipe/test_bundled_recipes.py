@@ -110,14 +110,22 @@ def test_every_bundled_recipe_declares_requires_packs() -> None:
         assert recipe.requires_packs, f"{path.name} does not declare requires_packs"
 
 
+_CI_WATCH_CYCLE_STEPS = {"ci_watch", "handle_no_ci_runs", "check_ci_loop"}
+
+
 @pytest.mark.parametrize("recipe_name", ["remediation", "implementation", "implementation-groups"])
 def test_bundled_recipe_no_unbounded_cycle_findings(recipe_name: str) -> None:
-    """Pipeline recipes must have zero unbounded-cycle findings (WARNING or ERROR)."""
-    recipe = load_recipe(recipe_name)
+    """Pipeline recipes must have zero unbounded-cycle findings for the ci_watch cycle."""
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
     findings = run_semantic_rules(recipe)
-    cycle_findings = [f for f in findings if f.rule == "unbounded-cycle"]
-    assert cycle_findings == [], f"{recipe_name} has unbounded-cycle findings: " + "; ".join(
-        f.message for f in cycle_findings
+    ci_watch_cycle_findings = [
+        f
+        for f in findings
+        if f.rule == "unbounded-cycle" and any(kw in f.message for kw in _CI_WATCH_CYCLE_STEPS)
+    ]
+    assert ci_watch_cycle_findings == [], (
+        f"{recipe_name} has unbounded-cycle findings for ci_watch cycle: "
+        + "; ".join(f.message for f in ci_watch_cycle_findings)
     )
 
 

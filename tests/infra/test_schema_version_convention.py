@@ -152,7 +152,7 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # smoke_utils.py — domain partitions dict, hunk ranges list, merge queue list
     ("src/autoskillit/smoke_utils.py", 57),
     ("src/autoskillit/smoke_utils.py", 87),
-    ("src/autoskillit/smoke_utils.py", 169),
+    ("src/autoskillit/smoke_utils.py", 188),
     # planner/manifests.py — _backstop_wp_index: list payload (index is a list, not dict)
     ("src/autoskillit/planner/manifests.py", 87),
 }
@@ -216,7 +216,7 @@ class TestSchemaVersionConvention:
         # These sites write list payloads through function calls but are caught by the scanner
         list_sites = [
             ("src/autoskillit/smoke_utils.py", 87),
-            ("src/autoskillit/smoke_utils.py", 169),
+            ("src/autoskillit/smoke_utils.py", 188),
         ]
         for site in list_sites:
             assert site in _LEGACY_JSON_WRITES, (

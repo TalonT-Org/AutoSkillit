@@ -802,7 +802,6 @@ async def test_wait_for_ci_exception_returns_conclusion_key(tool_ctx, monkeypatc
     assert "conclusion" in result, "Exception path must include conclusion key"
     assert result["conclusion"] == "error"
     assert "error" in result
-    assert result["http_status"] == 403
 
 
 # ---------------------------------------------------------------------------

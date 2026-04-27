@@ -7,6 +7,7 @@ import secrets
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TypedDict
 
 from autoskillit.core import atomic_write, get_logger, write_versioned_json
 from autoskillit.planner.schema import (
@@ -19,6 +20,16 @@ from autoskillit.planner.schema import (
 _logger = get_logger(__name__)
 
 _NATURAL_SORT_RE = re.compile(r"(\d+)")
+
+
+class _PhaseBucket(TypedDict):
+    id: str
+    name: str
+    wp_ids: list[str]
+    wp_names: list[str]
+    wp_scopes: list[str]
+    wp_estimated_files: list[list[str]]
+    wp_count: int
 
 
 def _natural_sort_key(s: str) -> list[int | str]:
@@ -484,7 +495,13 @@ def finalize_wp_manifest(work_packages_dir: str, output_dir: str) -> dict[str, s
 def expand_assignments(
     refined_plan_path: str, output_dir: str, **kwargs: object
 ) -> dict[str, str]:
-    plan = json.loads(Path(refined_plan_path).read_text())
+    plan_file = Path(refined_plan_path)
+    try:
+        plan = json.loads(plan_file.read_text())
+    except json.JSONDecodeError as exc:
+        raise json.JSONDecodeError(
+            f"Failed to parse {plan_file}: {exc.msg}", exc.doc, exc.pos
+        ) from exc
     phases = plan.get("phases", [])
     assign_dir = Path(output_dir) / "assignments"
     assign_dir.mkdir(parents=True, exist_ok=True)
@@ -540,44 +557,46 @@ def expand_assignments(
 
 
 def expand_wps(refined_assignments_path: str, output_dir: str, **kwargs: object) -> dict[str, str]:
-    data = json.loads(Path(refined_assignments_path).read_text())
+    assignments_file = Path(refined_assignments_path)
+    try:
+        data = json.loads(assignments_file.read_text())
+    except json.JSONDecodeError as exc:
+        raise json.JSONDecodeError(
+            f"Failed to parse {assignments_file}: {exc.msg}", exc.doc, exc.pos
+        ) from exc
     assignments = data.get("assignments", [])
     out_dir = Path(output_dir)
     wp_dir = out_dir / "work_packages"
     wp_dir.mkdir(parents=True, exist_ok=True)
 
-    phase_buckets: dict[str, dict[str, object]] = {}
+    phase_buckets: dict[str, _PhaseBucket] = {}
     for assign in assignments:
         phase_id = assign.get("phase_id", "")
         if not phase_id:
             pn = assign.get("phase_number", 0)
             phase_id = f"P{pn}"
         if phase_id not in phase_buckets:
-            phase_buckets[phase_id] = {
-                "id": phase_id,
-                "name": assign.get("phase_name", f"Phase {phase_id}"),
-                "wp_ids": [],
-                "wp_names": [],
-                "wp_scopes": [],
-                "wp_estimated_files": [],
-                "wp_count": 0,
-            }
+            phase_buckets[phase_id] = _PhaseBucket(
+                id=phase_id,
+                name=assign.get("phase_name", f"Phase {phase_id}"),
+                wp_ids=[],
+                wp_names=[],
+                wp_scopes=[],
+                wp_estimated_files=[],
+                wp_count=0,
+            )
         bucket = phase_buckets[phase_id]
         wps = assign.get("proposed_work_packages", [])
         for wp in wps:
             wp_id = wp.get("id", "")
-            cast_bucket_wp_ids: list[str] = bucket["wp_ids"]  # type: ignore[assignment]
-            cast_bucket_wp_ids.append(wp_id)
-            cast_bucket_wp_names: list[str] = bucket["wp_names"]  # type: ignore[assignment]
-            cast_bucket_wp_names.append(wp.get("name", ""))
-            cast_bucket_wp_scopes: list[str] = bucket["wp_scopes"]  # type: ignore[assignment]
-            cast_bucket_wp_scopes.append(wp.get("scope", ""))
+            bucket["wp_ids"].append(wp_id)
+            bucket["wp_names"].append(wp.get("name", ""))
+            bucket["wp_scopes"].append(wp.get("scope", ""))
             est = wp.get("estimated_files", [])
             if not isinstance(est, list):
                 est = []
-            cast_bucket_wp_files: list[list[str]] = bucket["wp_estimated_files"]  # type: ignore[assignment]
-            cast_bucket_wp_files.append(est)
-            bucket["wp_count"] = int(str(bucket["wp_count"])) + 1
+            bucket["wp_estimated_files"].append(est)
+            bucket["wp_count"] += 1
 
     items: list[dict[str, object]] = []
     context_paths: list[str] = []

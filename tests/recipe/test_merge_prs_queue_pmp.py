@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.core import PRState
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.validator import validate_recipe
 
@@ -201,8 +200,12 @@ def test_merge_prs_advance_queue_pr_fallthrough_routes_to_get_next_pr_branch(
     pmp_recipe,
 ) -> None:
     step = pmp_recipe.steps["advance_queue_pr"]
-    fallback = [c for c in step.on_result.conditions if c.when is None]
-    assert fallback[0].route == "get_next_pr_branch"
+    assert step.on_result is not None
+    fallback_route = next(
+        (c.route for c in step.on_result.conditions if c.when is None),
+        None,
+    )
+    assert fallback_route == "get_next_pr_branch"
 
 
 def test_merge_prs_get_next_pr_branch_exists(pmp_recipe) -> None:
@@ -246,11 +249,17 @@ def test_merge_prs_proactive_rebase_next_pr_cmd_uses_rebase(pmp_recipe) -> None:
 
 def test_merge_prs_proactive_rebase_next_pr_routing(pmp_recipe) -> None:
     step = pmp_recipe.steps["proactive_rebase_next_pr"]
-    conditions = step.on_result.conditions
-    clean_routes = [c for c in conditions if c.when and "clean" in c.when]
-    assert clean_routes[0].route == "push_rebased_next_pr"
-    fallback = [c for c in conditions if c.when is None]
-    assert fallback[0].route == "resolve_proactive_rebase_conflicts"
+    assert step.on_result is not None
+    clean_route = next(
+        (c.route for c in step.on_result.conditions if c.when and "clean" in c.when),
+        None,
+    )
+    assert clean_route == "push_rebased_next_pr"
+    fallback_route = next(
+        (c.route for c in step.on_result.conditions if c.when is None),
+        None,
+    )
+    assert fallback_route == "resolve_proactive_rebase_conflicts"
 
 
 def test_merge_prs_proactive_rebase_next_pr_on_failure_routes_to_enqueue(pmp_recipe) -> None:
@@ -282,11 +291,17 @@ def test_merge_prs_resolve_proactive_conflicts_exists(pmp_recipe) -> None:
 
 def test_merge_prs_resolve_proactive_conflicts_routing(pmp_recipe) -> None:
     step = pmp_recipe.steps["resolve_proactive_rebase_conflicts"]
-    conditions = step.on_result.conditions
-    escalation_routes = [c for c in conditions if c.when and "escalation_required" in c.when]
-    assert escalation_routes[0].route == "register_clone_failure"
-    success_routes = [c for c in conditions if c.when is None]
-    assert success_routes[0].route == "push_rebased_next_pr"
+    assert step.on_result is not None
+    escalation_route = next(
+        (c.route for c in step.on_result.conditions if c.when and "escalation_required" in c.when),
+        None,
+    )
+    assert escalation_route == "register_clone_failure"
+    success_route = next(
+        (c.route for c in step.on_result.conditions if c.when is None),
+        None,
+    )
+    assert success_route == "push_rebased_next_pr"
 
 
 def test_merge_prs_resolve_proactive_conflicts_has_retries(pmp_recipe) -> None:

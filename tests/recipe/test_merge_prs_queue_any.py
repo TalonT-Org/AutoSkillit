@@ -75,6 +75,7 @@ def _discover_queue_recipe_fixtures() -> list[str]:
     return sorted(result)
 
 
+# Intentional: fail-fast at collection time if a bundled recipe YAML is malformed.
 QUEUE_RECIPES = _discover_queue_recipe_fixtures()
 
 # Family-specific list: impl/remed/impl_groups use register_clone_unconfirmed as

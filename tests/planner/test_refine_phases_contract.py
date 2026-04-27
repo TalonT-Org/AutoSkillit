@@ -49,7 +49,9 @@ def skill_md() -> str:
 class TestContractRegistration:
     def test_skill_entry_exists(self, skill_contract: dict) -> None:
         """skill_contracts.yaml must have an entry for planner-refine-phases."""
-        assert skill_contract is not None
+        assert isinstance(skill_contract, dict), (
+            f"{SKILL_NAME!r} contract entry must be a dict, got {type(skill_contract)}"
+        )
 
     def test_write_behavior_always(self, skill_contract: dict) -> None:
         """write_behavior must be 'always' — prevents silent no-write success."""
@@ -85,7 +87,10 @@ class TestContractRegistration:
 class TestSkillMdPresence:
     def test_skill_md_exists(self, skill_md: str) -> None:
         """SKILL.md must exist under skills_extended/planner-refine-phases/."""
-        assert len(skill_md) > 0
+        assert "## Workflow" in skill_md, (
+            "SKILL.md must contain a '## Workflow' section — "
+            "file exists but appears empty or structurally incomplete."
+        )
 
     def test_skill_md_has_categories_planner(self, skill_md: str) -> None:
         """Frontmatter must declare categories: [planner]."""

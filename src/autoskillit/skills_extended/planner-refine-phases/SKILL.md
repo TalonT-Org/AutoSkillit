@@ -22,8 +22,8 @@ conflicts, applies field-level edits to the plan, and writes `refined_plan.json`
 ## When to Use
 
 - Launched by the L2 planner recipe after the parallel phase elaboration merge step
-- Accepts the `combined_plan.json` output from Issue #02's merge step
-- Produces `refined_plan.json` as input for downstream planner steps (Issue #08)
+- Accepts the `combined_plan.json` output from the parallel phase elaboration merge step
+- Produces `refined_plan.json` as input for downstream planner steps
 
 ## Arguments
 

@@ -300,7 +300,7 @@ def test_build_plan_snapshot_produces_phase_ids(tmp_path):
 
 
 def test_build_plan_snapshot_writes_short_form_only(tmp_path):
-    """Snapshot phases contain only PhaseShort fields: id, name, goal, scope, ordering."""
+    """PhaseShort must not include elaborated fields; parallel workers receive only these keys."""
     phases_dir = tmp_path / "phases"
     phases_dir.mkdir()
     r = {

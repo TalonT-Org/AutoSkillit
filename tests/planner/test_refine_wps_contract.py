@@ -13,12 +13,10 @@ pytestmark = [
 
 SKILL_NAME = "planner-refine-wps"
 CONTRACTS_PATH = (
-    Path(__file__).parent.parent.parent
-    / "src/autoskillit/recipe/skill_contracts.yaml"
+    Path(__file__).parent.parent.parent / "src/autoskillit/recipe/skill_contracts.yaml"
 )
 SKILL_MD_PATH = (
-    Path(__file__).parent.parent.parent
-    / f"src/autoskillit/skills_extended/{SKILL_NAME}/SKILL.md"
+    Path(__file__).parent.parent.parent / f"src/autoskillit/skills_extended/{SKILL_NAME}/SKILL.md"
 )
 
 
@@ -64,16 +62,12 @@ class TestContractRegistration:
         """outputs must declare refined_wps_path."""
         outputs = skill_contract.get("outputs", [])
         names = [o.get("name") for o in outputs]
-        assert "refined_wps_path" in names, (
-            f"refined_wps_path not in outputs. Found: {names}"
-        )
+        assert "refined_wps_path" in names, f"refined_wps_path not in outputs. Found: {names}"
 
     def test_refined_wps_path_type_is_file_path(self, skill_contract: dict) -> None:
         """refined_wps_path output must have type file_path."""
         outputs = skill_contract.get("outputs", [])
-        token = next(
-            (o for o in outputs if o.get("name") == "refined_wps_path"), None
-        )
+        token = next((o for o in outputs if o.get("name") == "refined_wps_path"), None)
         assert token is not None
         assert token.get("type") == "file_path", (
             f"refined_wps_path type must be 'file_path', got {token.get('type')!r}. "
@@ -88,11 +82,10 @@ class TestContractRegistration:
         )
 
     def test_four_inputs_declared(self, skill_contract: dict) -> None:
-        """Four inputs: combined_wps_path, refined_plan_path, refined_assignments_path, output_dir."""
+        """Four inputs: combined_wps_path, refined_plan_path, etc."""
         inputs = skill_contract.get("inputs", [])
         assert len(inputs) == 4, (
-            f"Expected exactly 4 inputs, got {len(inputs)}: "
-            f"{[i.get('name') for i in inputs]}"
+            f"Expected exactly 4 inputs, got {len(inputs)}: {[i.get('name') for i in inputs]}"
         )
         input_names = {i.get("name") for i in inputs}
         assert input_names == {
@@ -128,8 +121,7 @@ class TestSkillMdPresence:
     def test_skill_md_has_write_path_restriction(self, skill_md: str) -> None:
         """SKILL.md NEVER block must restrict writes to AUTOSKILLIT_TEMP/planner/."""
         assert "AUTOSKILLIT_TEMP" in skill_md and "planner/" in skill_md, (
-            "SKILL.md NEVER block must restrict write paths to "
-            "{{AUTOSKILLIT_TEMP}}/planner/."
+            "SKILL.md NEVER block must restrict write paths to {{AUTOSKILLIT_TEMP}}/planner/."
         )
 
     def test_skill_md_has_output_token(self, skill_md: str) -> None:
@@ -168,8 +160,7 @@ class TestSkillMdPresence:
     def test_skill_md_has_conflict_resolution_policy(self, skill_md: str) -> None:
         """SKILL.md must document the deliverable conflict resolution policy (earlier WP wins)."""
         assert "earlier" in skill_md.lower(), (
-            "SKILL.md must document that the earlier WP ID wins "
-            "deliverable ownership conflicts."
+            "SKILL.md must document that the earlier WP ID wins deliverable ownership conflicts."
         )
 
     def test_skill_md_has_partial_failure_handling(self, skill_md: str) -> None:

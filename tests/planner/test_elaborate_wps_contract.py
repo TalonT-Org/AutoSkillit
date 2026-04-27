@@ -138,7 +138,9 @@ class TestSkillMdPresence:
             )
 
     def test_has_batch_ceiling(self, skill_md: str) -> None:
-        assert "6" in skill_md, "SKILL.md must specify the maximum parallel L0 batch size of 6."
+        assert "batches of 6" in skill_md, (
+            "SKILL.md must specify the maximum parallel L0 batch size of 6."
+        )
 
     def test_has_partial_failure_handling(self, skill_md: str) -> None:
         assert "CRITICAL" in skill_md or "partial" in skill_md.lower(), (

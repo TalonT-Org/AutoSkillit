@@ -288,8 +288,7 @@ def test_sub_recipe_hidden_ingredients_remain_hidden(tmp_path: Path) -> None:
 
 def test_sprint_prefix_sub_recipe_does_not_exist() -> None:
     """sprint-prefix sub-recipe must not exist in the bundled sub-recipe directory."""
-    from autoskillit.recipe.io import list_recipes
+    from autoskillit.recipe.io import builtin_sub_recipes_dir
 
-    sub_recipes = list_recipes(sub_recipes=True)
-    names = [r.name for r in sub_recipes]
-    assert "sprint-prefix" not in names
+    sub_recipe_path = builtin_sub_recipes_dir() / "sprint-prefix.yaml"
+    assert not sub_recipe_path.exists()

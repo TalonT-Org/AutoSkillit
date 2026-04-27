@@ -525,17 +525,6 @@ skills:
     pattern_examples:
     - "triage_report = .autoskillit/temp/triage-issues/triage_report_20260310_120000.md\n%%ORDER_UP%%"
 
-  sprint-planner:
-    inputs: []
-    outputs:
-    - name: sprint_manifest
-      type: file_path
-    expected_output_patterns:
-    - "sprint_manifest\\s*=\\s*\\S+"
-    pattern_examples:
-    - "sprint_manifest = /tmp/autoskillit/sprint-planner/sprint_manifest.json\n%%ORDER_UP%%"
-    write_behavior: always
-
   review-pr:
     inputs:
     - name: feature_branch

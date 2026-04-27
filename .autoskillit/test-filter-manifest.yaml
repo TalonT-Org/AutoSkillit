@@ -15,9 +15,6 @@ src/autoskillit/recipes/*.yaml:
 src/autoskillit/recipes/examples/*.yaml:
   - recipe/
 
-src/autoskillit/recipes/sub-recipes/*.yaml:
-  - recipe/
-
 src/autoskillit/recipes/diagrams/*.md:
   - recipe/
 
@@ -142,6 +139,3 @@ src/autoskillit/core/__init__.pyi:
   - core/
   - arch/
   - contracts/
-
-src/autoskillit/recipes/sub-recipes/diagrams/*.md:
-  - recipe/

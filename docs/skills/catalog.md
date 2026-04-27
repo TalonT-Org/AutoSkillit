@@ -27,7 +27,7 @@ Located under `src/autoskillit/skills_extended/`. Grouped by purpose:
 
 ### Requirements and planning
 `make-req`, `elaborate-phase`, `write-recipe`, `migrate-recipes`,
-`setup-project`, `sprint-planner`, `design-guards`, `triage-issues`,
+`setup-project`, `design-guards`, `triage-issues`,
 `collapse-issues`, `issue-splitter`, `enrich-issues`, `prepare-issue`,
 `process-issues`
 

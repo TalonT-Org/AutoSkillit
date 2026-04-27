@@ -115,7 +115,6 @@ For each feature: do not output any prose between iterations — return findings
 - Cross-reference `feature_def.tool_tags` against `TOOL_SUBSET_TAGS` in `src/autoskillit/core/_type_constants.py`
 - Grep skill bodies in `src/autoskillit/skills_extended/` for feature-specific references
 - FLAG (WARN): skills with feature references in body but missing the feature's category in frontmatter
-- Ground-truth target: `sprint-planner` skill — check if `categories: [planner]` is present
 - Verify `_DISPLAY_CATEGORIES` in `cli/_cook.py` applies feature-check filtering before displaying
 - Verify `list_recipes` in `server/tools_recipe.py` filters `kind: campaign` when fleet is disabled
 - FLAG (WARN): any `run_python` callable in `skill_contracts.yaml` whose package matches `feature_def.import_package` without a feature gate in the execution path

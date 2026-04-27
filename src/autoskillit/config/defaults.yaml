@@ -191,7 +191,6 @@ skills:
     - make-campaign
     - migrate-recipes
     - setup-project
-    - sprint-planner
     - design-guards
     - triage-issues
     - collapse-issues

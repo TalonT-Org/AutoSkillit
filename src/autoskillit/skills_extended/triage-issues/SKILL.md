@@ -18,7 +18,7 @@ Analyze open GitHub issues, classify each into a recipe route, group them into p
 ## When to Use
 
 - User says "triage issues", "prioritize issues", or "plan issue order"
-- Before starting a multi-issue implementation sprint
+- Before starting a multi-issue implementation batch
 - When a backlog needs sequencing into implementable batches
 - As input to a pipeline that processes issues in batch order
 

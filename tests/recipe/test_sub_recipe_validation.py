@@ -22,14 +22,14 @@ def _make_parent_recipe(
         name="test-recipe",
         description="Test",
         ingredients={
-            "sprint_mode": RecipeIngredient(
-                description="Enable sprint", default=gate_default, hidden=True
+            "flag_mode": RecipeIngredient(
+                description="Enable flag mode", default=gate_default, hidden=True
             ),
         },
         steps={
-            "sprint_entry": RecipeStep(
-                sub_recipe="sprint-prefix",
-                gate="sprint_mode",
+            "test_entry": RecipeStep(
+                sub_recipe="test-sub",
+                gate="flag_mode",
                 on_success=on_success,
                 on_failure=on_failure,
                 on_exhausted="escalate",
@@ -39,7 +39,7 @@ def _make_parent_recipe(
     )
 
 
-def _write_sub_recipe(sub_dir: Path, name: str = "sprint-prefix") -> None:
+def _write_sub_recipe(sub_dir: Path, name: str = "test-sub") -> None:
     sub_dir.mkdir(parents=True, exist_ok=True)
     content = textwrap.dedent(f"""
         name: {name}
@@ -88,12 +88,12 @@ def test_circular_sub_recipe_detected(tmp_path: Path) -> None:
         name="test-recipe",
         description="Test",
         ingredients={
-            "sprint_mode": RecipeIngredient(description="Gate", default="false"),
+            "flag_mode": RecipeIngredient(description="Gate", default="false"),
         },
         steps={
-            "sprint_entry": RecipeStep(
+            "test_entry": RecipeStep(
                 sub_recipe="self-ref",
-                gate="sprint_mode",
+                gate="flag_mode",
                 on_success="done",
                 on_exhausted="escalate",
             ),
@@ -114,12 +114,12 @@ def test_unknown_sub_recipe_name_detected() -> None:
         name="test-recipe",
         description="Test",
         ingredients={
-            "sprint_mode": RecipeIngredient(description="Gate", default="false"),
+            "flag_mode": RecipeIngredient(description="Gate", default="false"),
         },
         steps={
-            "sprint_entry": RecipeStep(
+            "test_entry": RecipeStep(
                 sub_recipe="nonexistent-sub",
-                gate="sprint_mode",
+                gate="flag_mode",
                 on_success="done",
                 on_exhausted="escalate",
             ),
@@ -141,19 +141,19 @@ def test_known_sub_recipe_name_passes() -> None:
         name="test-recipe",
         description="Test",
         ingredients={
-            "sprint_mode": RecipeIngredient(description="Gate", default="false"),
+            "flag_mode": RecipeIngredient(description="Gate", default="false"),
         },
         steps={
-            "sprint_entry": RecipeStep(
-                sub_recipe="sprint-prefix",
-                gate="sprint_mode",
+            "test_entry": RecipeStep(
+                sub_recipe="test-sub",
+                gate="flag_mode",
                 on_success="done",
                 on_exhausted="escalate",
             ),
         },
         kitchen_rules=["no native tools"],
     )
-    ctx = make_validation_context(recipe, available_sub_recipes=frozenset({"sprint-prefix"}))
+    ctx = make_validation_context(recipe, available_sub_recipes=frozenset({"test-sub"}))
     findings = run_semantic_rules(ctx)
     unknown_findings = [f for f in findings if f.rule == "unknown-sub-recipe"]
     assert not unknown_findings
@@ -178,14 +178,14 @@ def test_dual_validation_runs_standalone_and_combined(tmp_path: Path) -> None:
           - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash,
              Agent, WebFetch, WebSearch, NotebookEdit) from the orchestrator."
         ingredients:
-          sprint_mode:
+          flag_mode:
             description: Enable sprint
             default: "false"
             hidden: true
         steps:
-          sprint_entry:
-            sub_recipe: sprint-prefix
-            gate: sprint_mode
+          test_entry:
+            sub_recipe: test-sub
+            gate: flag_mode
             on_success: finish
             on_failure: escalate
           finish:
@@ -200,7 +200,7 @@ def test_dual_validation_runs_standalone_and_combined(tmp_path: Path) -> None:
     result = load_and_validate(
         "test-recipe",
         project_dir=tmp_path,
-        ingredient_overrides={"sprint_mode": "true"},
+        ingredient_overrides={"flag_mode": "true"},
     )
     assert "error" not in result
     # Both standalone and combined graphs were validated
@@ -223,12 +223,12 @@ def test_dual_validation_standalone_errors_surfaced(tmp_path: Path) -> None:
         kitchen_rules:
           - no native tools
         ingredients:
-          sprint_mode:
+          flag_mode:
             description: Enable sprint
             default: "false"
         steps:
-          sprint_entry:
-            sub_recipe: sprint-prefix
+          test_entry:
+            sub_recipe: test-sub
             on_success: done
     """)
     (recipes_dir / "test-recipe.yaml").write_text(recipe_content)
@@ -253,14 +253,14 @@ def test_combined_graph_dataflow_validated(tmp_path: Path) -> None:
         kitchen_rules:
           - no native tools
         ingredients:
-          sprint_mode:
+          flag_mode:
             description: Enable sprint
             default: "false"
             hidden: true
         steps:
-          sprint_entry:
-            sub_recipe: sprint-prefix
-            gate: sprint_mode
+          test_entry:
+            sub_recipe: test-sub
+            gate: flag_mode
             on_success: done
     """)
     (recipes_dir / "test-recipe.yaml").write_text(recipe_content)
@@ -268,7 +268,7 @@ def test_combined_graph_dataflow_validated(tmp_path: Path) -> None:
     result = load_and_validate(
         "test-recipe",
         project_dir=tmp_path,
-        ingredient_overrides={"sprint_mode": "true"},
+        ingredient_overrides={"flag_mode": "true"},
     )
     # When gate=true, semantic rules should have run (result contains suggestions list)
     assert "suggestions" in result

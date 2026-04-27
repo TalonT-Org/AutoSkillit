@@ -25,13 +25,13 @@ def test_sub_recipe_step_parsed() -> None:
     """RecipeStep with sub_recipe and gate fields is parsed correctly."""
     step = _parse_step(
         {
-            "sub_recipe": "sprint-prefix",
-            "gate": "sprint_mode",
+            "sub_recipe": "test-sub",
+            "gate": "flag_mode",
             "on_success": "clone",
         }
     )
-    assert step.sub_recipe == "sprint-prefix"
-    assert step.gate == "sprint_mode"
+    assert step.sub_recipe == "test-sub"
+    assert step.gate == "flag_mode"
     assert step.on_success == "clone"
 
 
@@ -40,11 +40,11 @@ def test_sub_recipe_is_valid_discriminator() -> None:
     recipe = Recipe(
         name="test-recipe",
         description="Test",
-        ingredients={"sprint_mode": RecipeIngredient(description="Gate", default="false")},
+        ingredients={"flag_mode": RecipeIngredient(description="Gate", default="false")},
         steps={
-            "sprint_entry": RecipeStep(
-                sub_recipe="sprint-prefix",
-                gate="sprint_mode",
+            "test_entry": RecipeStep(
+                sub_recipe="test-sub",
+                gate="flag_mode",
                 on_success="done",
                 on_exhausted="escalate",
             ),
@@ -62,10 +62,10 @@ def test_sub_recipe_requires_gate() -> None:
     recipe = Recipe(
         name="test-recipe",
         description="Test",
-        ingredients={"sprint_mode": RecipeIngredient(description="Gate", default="false")},
+        ingredients={"flag_mode": RecipeIngredient(description="Gate", default="false")},
         steps={
-            "sprint_entry": RecipeStep(
-                sub_recipe="sprint-prefix",
+            "test_entry": RecipeStep(
+                sub_recipe="test-sub",
                 on_success="done",
                 on_exhausted="escalate",
                 # gate is missing
@@ -82,11 +82,11 @@ def test_sub_recipe_gate_must_be_known_ingredient() -> None:
     recipe = Recipe(
         name="test-recipe",
         description="Test",
-        ingredients={},  # sprint_mode NOT declared
+        ingredients={},  # flag_mode NOT declared
         steps={
-            "sprint_entry": RecipeStep(
-                sub_recipe="sprint-prefix",
-                gate="sprint_mode",
+            "test_entry": RecipeStep(
+                sub_recipe="test-sub",
+                gate="flag_mode",
                 on_success="done",
                 on_exhausted="escalate",
             ),
@@ -94,7 +94,7 @@ def test_sub_recipe_gate_must_be_known_ingredient() -> None:
         kitchen_rules=["no native tools"],
     )
     errors = validate_recipe(recipe)
-    assert any("undeclared ingredient 'sprint_mode'" in e for e in errors)
+    assert any("undeclared ingredient 'flag_mode'" in e for e in errors)
 
 
 def test_sub_recipe_discriminator_exclusion() -> None:
@@ -102,11 +102,11 @@ def test_sub_recipe_discriminator_exclusion() -> None:
     recipe = Recipe(
         name="test-recipe",
         description="Test",
-        ingredients={"sprint_mode": RecipeIngredient(description="Gate", default="false")},
+        ingredients={"flag_mode": RecipeIngredient(description="Gate", default="false")},
         steps={
-            "sprint_entry": RecipeStep(
-                sub_recipe="sprint-prefix",
-                gate="sprint_mode",
+            "test_entry": RecipeStep(
+                sub_recipe="test-sub",
+                gate="flag_mode",
                 tool="run_skill",  # conflict!
                 on_success="done",
                 on_exhausted="escalate",
@@ -123,11 +123,11 @@ def test_sub_recipe_step_requires_on_success() -> None:
     recipe = Recipe(
         name="test-recipe",
         description="Test",
-        ingredients={"sprint_mode": RecipeIngredient(description="Gate", default="false")},
+        ingredients={"flag_mode": RecipeIngredient(description="Gate", default="false")},
         steps={
-            "sprint_entry": RecipeStep(
-                sub_recipe="sprint-prefix",
-                gate="sprint_mode",
+            "test_entry": RecipeStep(
+                sub_recipe="test-sub",
+                gate="flag_mode",
                 # on_success missing
                 on_exhausted="escalate",
             ),

@@ -60,10 +60,13 @@ def merge_files(
                     errors.append(msg)
                     continue
                 item_id = item.get("id")
+                if item_id is None:
+                    _logger.debug("Skipping item with no 'id' field from %s", fp)
+                    skipped += 1
+                    continue
                 if item_id not in existing_ids:
                     existing_items.append(item)
-                    if item_id is not None:
-                        existing_ids.add(item_id)
+                    existing_ids.add(item_id)
                 else:
                     _logger.debug("Skipping duplicate id %r from %s", item_id, fp)
                     skipped += 1

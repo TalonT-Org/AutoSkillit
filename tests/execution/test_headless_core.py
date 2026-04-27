@@ -20,6 +20,7 @@ from autoskillit.execution.headless import (
     _extract_worktree_path,
 )
 from tests.conftest import _make_result, _make_timeout_result
+from tests.execution.conftest import _sr, _success_session_json
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -31,18 +32,6 @@ def test_inject_completion_directive_appends_marker():
     assert "%%DONE%%" in result
     assert "/investigate foo" in result
     assert "ORCHESTRATION DIRECTIVE" in result
-
-
-def _success_session_json(result_text: str) -> str:
-    return json.dumps(
-        {
-            "type": "result",
-            "subtype": "success",
-            "result": result_text,
-            "session_id": "test-session",
-            "is_error": False,
-        }
-    )
 
 
 def _failed_session_json() -> str:
@@ -67,37 +56,6 @@ def _context_exhausted_session_json() -> str:
             "session_id": "test-session",
             "is_error": True,
             "errors": ["prompt is too long"],
-        }
-    )
-
-
-def _sr(
-    returncode=0,
-    stdout="",
-    stderr="",
-    termination=TerminationReason.NATURAL_EXIT,
-    session_id: str = "",
-    channel_b_session_id: str = "",
-):
-    """Build a minimal SubprocessResult for _build_skill_result tests."""
-    return SubprocessResult(
-        returncode,
-        stdout,
-        stderr,
-        termination,
-        pid=12345,
-        session_id=session_id,
-        channel_b_session_id=channel_b_session_id,
-    )
-
-
-def _make_tool_use_line(name: str, input_dict: dict) -> str:
-    return json.dumps(
-        {
-            "type": "assistant",
-            "message": {
-                "content": [{"type": "tool_use", "name": name, "id": "x", "input": input_dict}]
-            },
         }
     )
 

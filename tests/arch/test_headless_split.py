@@ -68,7 +68,7 @@ def test_make_session_renamed_in_path_validation():
 
 
 def test_make_session_renamed_in_adjudication():
-    adj = Path("tests/execution/test_session_adjudication.py").read_text()
+    adj = (EXECUTION_DIR / "test_session_adjudication.py").read_text()
     assert "make_headless_session" not in adj
 
 

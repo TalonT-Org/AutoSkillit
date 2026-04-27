@@ -728,6 +728,18 @@ async def test_dispatch_food_truck_marketplace_install_succeeds(tool_ctx_marketp
     This test was impossible before the fix — it would raise ValueError.
     """
     from autoskillit.fleet._api import execute_dispatch
+    from autoskillit.fleet.result_parser import L2ParseResult
+
+    monkeypatch.setattr(
+        "autoskillit.fleet._api.parse_l2_result_block",
+        lambda **_kwargs: L2ParseResult(
+            outcome="completed_clean",
+            payload={"success": True},
+            raw_body=None,
+            parse_error=None,
+            source="stdout",
+        ),
+    )
 
     tool_ctx_marketplace.fleet_lock = asyncio.Lock()
     repo = InMemoryRecipeRepository()

@@ -574,7 +574,7 @@ def order(recipe: str | None = None, session_id: str | None = None, *, resume: b
             _build_open_kitchen_prompt,
             _resolve_recipe_input,
         )
-        from autoskillit.recipe.io import _group_rank
+        from autoskillit.recipe import _group_rank
 
         available = list_recipes(Path.cwd()).items
         if not available:

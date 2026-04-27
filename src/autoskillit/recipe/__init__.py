@@ -64,6 +64,7 @@ from autoskillit.recipe.identity import (  # noqa: E402
     find_prior_runs,
 )
 from autoskillit.recipe.io import (  # noqa: E402
+    _group_rank,
     builtin_sub_recipes_dir,
     find_campaign_by_name,
     find_recipe_by_name,
@@ -105,6 +106,7 @@ from autoskillit.recipe.validator import (  # noqa: E402
 )
 
 __all__ = [
+    "_group_rank",
     "ListRecipesResult",
     "LoadRecipeResult",
     "RecipeListItem",

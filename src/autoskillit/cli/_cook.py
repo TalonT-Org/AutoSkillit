@@ -13,8 +13,7 @@ from autoskillit.cli._terminal import terminal_guard
 
 def _print_recipes_list() -> None:
     """Print available recipes grouped by category to stdout."""
-    from autoskillit.recipe import list_recipes
-    from autoskillit.recipe.io import _group_rank
+    from autoskillit.recipe import _group_rank, list_recipes
 
     _GROUP_LABELS = {
         0: "Bundled Recipes",

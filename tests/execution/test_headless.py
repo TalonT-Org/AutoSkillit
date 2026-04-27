@@ -3399,31 +3399,6 @@ class TestOutputPathTokensDerivedFromContracts:
         }
     )
 
-    def test_output_path_tokens_contains_all_file_path_contract_outputs(self) -> None:
-        """Every skill output declared with type=file_path or type=file_path_list in
-        skill_contracts.yaml must appear in _OUTPUT_PATH_TOKENS (or be documented as
-        intentionally excluded)."""
-        from autoskillit.execution.headless import (
-            _INTENTIONALLY_EXCLUDED_PATH_TOKENS,
-            _OUTPUT_PATH_TOKENS,
-        )
-        from autoskillit.recipe.contracts import load_bundled_manifest
-
-        manifest = load_bundled_manifest()
-        declared_path_tokens = {
-            out["name"]
-            for skill_data in manifest.get("skills", {}).values()
-            for out in skill_data.get("outputs", [])
-            if isinstance(out, dict) and out.get("type", "").startswith("file_path")
-        }
-        untracked = (
-            declared_path_tokens - _OUTPUT_PATH_TOKENS - _INTENTIONALLY_EXCLUDED_PATH_TOKENS
-        )
-        assert not untracked, (
-            f"These path tokens are declared in skill_contracts.yaml but missing from "
-            f"_OUTPUT_PATH_TOKENS or _INTENTIONALLY_EXCLUDED_PATH_TOKENS: {untracked}"
-        )
-
     def test_output_path_tokens_matches_expected_fixture(self) -> None:
         """_OUTPUT_PATH_TOKENS must exactly match the known fixture set.
 

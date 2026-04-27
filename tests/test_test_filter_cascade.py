@@ -112,3 +112,97 @@ class TestCascadeNewEntries:
                 f"{expected!r} not found in result scope {result_names!r} "
                 f"for {filepath} in {mode} mode"
             )
+
+
+_SERVER_FILE_LEVEL_ENTRIES = [
+    "test_factory.py",
+    "test_tools_load_recipe.py",
+    "test_server_tool_registration.py",
+    "test_mcp_overrides.py",
+    "test_smoke_pipeline.py",
+    "test_tools_dispatch.py",
+    "test_tools_kitchen.py",
+    "test_service_wrappers.py",
+    "test_tools_list_recipes.py",
+]
+
+_CLI_FILE_LEVEL_ENTRIES = [
+    "test_cli_prompts.py",
+    "test_l3_orchestrator_prompt.py",
+    "test_cook.py",
+]
+
+
+class TestRecipeCascadeNarrowing:
+    """REQ-RECIPE-001/002/003: recipe cascade uses file-level entries for server/cli,
+    and excludes migration and hooks entirely."""
+
+    def test_recipe_cascade_server_file_level_only(self, tmp_path: Path) -> None:
+        tests_root = tmp_path / "tests"
+        server_dir = tests_root / "server"
+        server_dir.mkdir(parents=True, exist_ok=True)
+        for fname in _SERVER_FILE_LEVEL_ENTRIES:
+            (server_dir / fname).touch()
+        (server_dir / "test_serve_guard.py").touch()
+
+        result = build_test_scope(
+            changed_files={"recipe/__init__.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        result_names = {p.name for p in result}
+        for fname in _SERVER_FILE_LEVEL_ENTRIES:
+            assert fname in result_names, f"{fname!r} missing from recipe cascade result"
+        assert "test_serve_guard.py" not in result_names
+
+    def test_recipe_cascade_cli_file_level_only(self, tmp_path: Path) -> None:
+        tests_root = tmp_path / "tests"
+        cli_dir = tests_root / "cli"
+        cli_dir.mkdir(parents=True, exist_ok=True)
+        for fname in _CLI_FILE_LEVEL_ENTRIES:
+            (cli_dir / fname).touch()
+        (cli_dir / "test_app.py").touch()
+
+        result = build_test_scope(
+            changed_files={"recipe/schema.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        result_names = {p.name for p in result}
+        for fname in _CLI_FILE_LEVEL_ENTRIES:
+            assert fname in result_names, f"{fname!r} missing from recipe cascade result"
+        assert "test_app.py" not in result_names
+
+    def test_recipe_cascade_no_migration(self, tmp_path: Path) -> None:
+        tests_root = tmp_path / "tests"
+        migration_dir = tests_root / "migration"
+        migration_dir.mkdir(parents=True, exist_ok=True)
+        (migration_dir / "test_engine.py").touch()
+
+        result = build_test_scope(
+            changed_files={"recipe/schema.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        assert not any("migration" in str(p) for p in result), (
+            f"migration/ paths should not appear in recipe cascade; got {result}"
+        )
+
+    def test_recipe_cascade_no_hooks(self, tmp_path: Path) -> None:
+        tests_root = tmp_path / "tests"
+        hooks_dir = tests_root / "hooks"
+        hooks_dir.mkdir(parents=True, exist_ok=True)
+        (hooks_dir / "test_quota_guard.py").touch()
+
+        result = build_test_scope(
+            changed_files={"recipe/schema.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        assert not any("hooks" in str(p) for p in result), (
+            f"hooks/ paths should not appear in recipe cascade; got {result}"
+        )

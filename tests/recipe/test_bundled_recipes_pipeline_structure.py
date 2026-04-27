@@ -213,6 +213,9 @@ class TestPipelineVariantInvariants:
 # ---------------------------------------------------------------------------
 
 
+# Negative-parity mirror of TestImplementationGroupsStructure: asserts that
+# implementation.yaml uniquely owns features absent from implementation-groups.yaml,
+# and vice versa.  Changes to one class should be reviewed alongside the other.
 class TestImplementationPipelineStructure:
     @pytest.fixture(scope="class")
     def recipe(self):

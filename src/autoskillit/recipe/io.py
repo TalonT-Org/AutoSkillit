@@ -88,7 +88,7 @@ def group_rank(r: RecipeInfo) -> int:
         return 3
     if r.source == RecipeSource.PROJECT:
         return 2
-    if all(p in CORE_PACKS for p in r.requires_packs):
+    if r.requires_packs and all(p in CORE_PACKS for p in r.requires_packs):
         return 0
     return 1
 

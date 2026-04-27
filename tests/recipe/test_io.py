@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core.types import RecipeSource
+from autoskillit.core.types import CORE_PACKS, RecipeSource
 from autoskillit.recipe.io import (
     _parse_recipe,
     _parse_step,
@@ -684,14 +684,16 @@ class TestListRecipes:
             for i, r in enumerate(result.items)
             if r.source == RecipeSource.BUILTIN
             and not r.experimental
-            and r.name in ("implementation", "remediation", "implementation-groups", "merge-prs")
+            and r.requires_packs
+            and all(p in CORE_PACKS for p in r.requires_packs)
         ]
         addon_indices = [
             i
             for i, r in enumerate(result.items)
             if r.source == RecipeSource.BUILTIN
             and not r.experimental
-            and r.name in ("planner", "research")
+            and r.requires_packs
+            and not all(p in CORE_PACKS for p in r.requires_packs)
         ]
         if core_indices and addon_indices:
             assert max(core_indices) < min(addon_indices), (

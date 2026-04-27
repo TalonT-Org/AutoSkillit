@@ -588,7 +588,7 @@ def order(recipe: str | None = None, session_id: str | None = None, *, resume: b
             rank = group_rank(r)
             if rank != current_rank:
                 current_rank = rank
-                print(f"\n  {GROUP_LABELS[rank]}")
+                print(f"\n  {GROUP_LABELS.get(rank, str(rank))}")
             print(f"  {i}. {r.name}")
         raw = timed_prompt(
             f"Select recipe [0-{len(available)}]:",

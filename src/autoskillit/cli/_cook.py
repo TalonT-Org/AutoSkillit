@@ -27,7 +27,7 @@ def _print_recipes_list() -> None:
         rank = group_rank(r)
         if rank != current_rank:
             current_rank = rank
-            print(f"\n{GROUP_LABELS[rank]}")
+            print(f"\n{GROUP_LABELS.get(rank, str(rank))}")
             print(f"{'NAME':<{name_w}}  {'SOURCE':<{src_w}}  DESCRIPTION")
             print(f"{'-' * name_w}  {'-' * src_w}  {'-' * 11}")
         print(f"{r.name:<{name_w}}  {r.source:<{src_w}}  {r.description}")

@@ -22,6 +22,26 @@ Perform deep codebase investigation without making any changes. This skill uses 
 - User says "investigate", "explore", "understand", or "analyze"
 - User explicitly says "do not change any code"
 
+## Deep Analysis Mode
+
+### Activation
+
+Deep analysis mode is activated when ANY of the following conditions are met:
+
+1. The `--depth deep` flag is present in ARGUMENTS
+2. The user explicitly says "investigate deeply" or requests "deep analysis"
+3. An explicit batch count is requested (e.g., "run 3 batches")
+4. The user requests "maximum thoroughness"
+5. The recipe passes `--depth deep` via the `skill_command`
+
+### Model
+
+When deep analysis mode is active, all subagents spawned via the Task tool always use `model: "sonnet"`. The main skill session model is controlled by the recipe or user — typically `opus[1m]` for the main session in deep mode.
+
+### When NOT Activated
+
+Deep analysis mode is never enabled by default. When none of the activation conditions above are met, the skill routes to Standard Mode (Steps 1–4).
+
 ## GitHub Issue Input
 
 If the ARGUMENTS contain a GitHub issue reference, call `fetch_github_issue` via the MCP
@@ -52,6 +72,7 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 - Suggest fallbacks that hide errors
 - Create files outside `{{AUTOSKILLIT_TEMP}}/investigate/` directory
 - Choose or accept approaches, solutions, and/or fixes that are chosen simply because they are easier
+- File GitHub issues automatically (issue filing is always a separate, user-directed action)
 
 **ALWAYS:**
 - Use subagents for parallel exploration
@@ -68,7 +89,7 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 - Check for similar existing patterns in codebase
 - Ensure approaches, solutions, and fixes are the appropriate long-term solutions with proper architecture
 
-## Investigation Workflow
+## Standard Mode Workflow (Steps 1–4)
 
 **Path-existence guard:** Before issuing a `Read` call on a path that is not guaranteed to
 exist (e.g., plan file arguments, `{{AUTOSKILLIT_TEMP}}/investigate/` reports, external file references), use
@@ -135,7 +156,9 @@ After subagents complete, consolidate into structured findings:
 6. **Similar Patterns**: How similar issues are handled elsewhere
 7. **Historical Context**: Whether this root cause has been investigated or fixed before (populated by Step 3.5)
 8. **External Research**: Relevant findings from web search (if applicable)
-9. **Recommendations**: Suggested approaches (NOT implementations)
+9. **Scope Boundary**: What was investigated vs. what remains unexplored
+10. **Confidence Levels**: Per-finding confidence — SUPPORTED (direct code evidence or experimental confirmation), UNSUPPORTED (contradicted by evidence), NEEDS-EVIDENCE (theoretical reasoning, not yet confirmed)
+11. **Recommendations**: Suggested approaches (NOT implementations)
 
 ### Step 3.5 — Historical Recurrence Check
 
@@ -205,6 +228,7 @@ Report structure:
 
 **Date:** {YYYY-MM-DD}
 **Scope:** {What was investigated}
+**Mode:** {Standard | Deep Analysis}
 
 ## Summary
 {One paragraph overview}
@@ -213,8 +237,8 @@ Report structure:
 {If error investigation - the actual source}
 
 ## Affected Components
-- {file1}: {role}
-- {file2}: {role}
+- {file1}: {role} [SUPPORTED / NEEDS-EVIDENCE]
+- {file2}: {role} [SUPPORTED / NEEDS-EVIDENCE]
 
 ## Data Flow
 {How data moves through the system}
@@ -238,8 +262,15 @@ No prior investigations or fixes found for this root cause.
 {Relevant findings from web search - library bugs, known issues, documentation insights}
 {Include source URLs for reference}
 
+## Scope Boundary
+
+**Investigated:** {What was actually explored in this investigation}
+**Not yet explored:** {Areas identified but not yet investigated — may warrant follow-up}
+
 ## Recommendations
 {Suggested approaches - NOT code changes}
+{In deep analysis mode: single recommendation, not a menu of options}
+{Include killed alternatives with reasons if deep mode}
 ```
 
 After writing the report file, emit the structured output token as the very last line
@@ -254,9 +285,84 @@ of your text output:
 investigation_path = {absolute_path_to_investigation_report_file}
 ```
 
+## Deep Analysis Mode Workflow (Steps D1–D6)
+
+When deep analysis mode is activated, Steps D1–D6 replace standard Steps 1–3.5. Step 4 (Write Report) is still executed at the end of D5, and Step D6 adds post-report validation before emitting `investigation_path`.
+
+### Step D1: Parse Target + Propose Batch Plan
+
+Parse the investigation target (same as Step 1). Then propose an adaptive batch plan:
+
+- Minimum 2 batches; typically 3–4 for complex investigations
+- State the planned batch count and scope for each batch
+- Present as "Proposed investigation plan: Batch 1 — {scope}, Batch 2 — {scope}, ..."
+
+**Headless auto-approve:** Check the `AUTOSKILLIT_HEADLESS` environment variable. If set to a truthy value (`1`, `true`, `yes`), automatically approve the proposed batch plan without prompting the user. In interactive mode (AUTOSKILLIT_HEADLESS unset or falsy), present the plan and await user confirmation before proceeding to D2.
+
+### Step D2: Batch 1 — Broad Parallel Exploration
+
+Launch a minimum of 4 parallel subagents (model: "sonnet") covering:
+
+- **Code path tracing**: Trace execution paths through the primary affected components
+- **Log and history analysis**: Scan session logs and git history for prior occurrences
+- **Related component mapping**: Map all components that interact with the target
+- **External research**: Web search for known issues, library bugs, documentation
+
+Simultaneously with Batch 1 subagents, run historical recurrence check (Step 3.5 Parts A+B) in parallel. After Batch 1 completes, produce inter-batch synthesis: summarize confirmed findings, open questions, and new investigative leads.
+
+After inter-batch synthesis, run Part C of Step 3.5 conditionally: if Parts A+B found prior history, spawn the conditional analysis subagent. Otherwise skip and proceed to D3.
+
+### Step D3: Batch 2+ — Informed Deepening
+
+For each subsequent batch (Batch 2, Batch 3, ...):
+
+1. Open with an explicit synthesis from prior batches — what was confirmed, what remains uncertain
+2. Each batch must include mandatory code exploration (local code search, file reads, symbol tracing) and mandatory web research (search for external documentation, known issues, library behavior)
+3. After each batch completes, produce inter-batch synthesis (confirmed findings, open questions, new leads)
+
+**Early termination:** When all findings across all open questions are SUPPORTED (backed by direct code evidence) and no new investigative leads have emerged in the last batch, stop iterating and proceed to D4.
+
+**Empty batch handling:** If a batch produces no new findings (all subagents report the same conclusions as prior batches), treat it as an early termination signal and proceed to D4.
+
+### Step D4: Challenge Round
+
+Fires when ANY finding across any batch is marked NEEDS-EVIDENCE.
+
+Spawn one adversarial subagent (model: "sonnet") whose role is to disconfirm the primary hypothesis:
+
+- Provide the primary hypothesis and all supporting evidence collected so far
+- Task: find counterevidence — code paths, behaviors, or data that contradict the hypothesis
+- Task: assess prior-fix falsifiability — if Step 3.5 found prior fix history, determine whether the prior fix actually addressed this root cause or only a surface symptom
+
+**If counterevidence is found:** Return to D3 for one additional deepening batch focused on reconciling the contradiction.
+
+**If no counterevidence is found:** The hypothesis stands. Proceed to D5.
+
+### Step D5: Solution Convergence
+
+Spawn solution-space subagents to enumerate candidate fixes. For each candidate, spawn one blast radius subagent (model: "sonnet") to assess:
+
+- Which components would be affected by this fix
+- What tests would need to be added or modified
+- What risk surface is introduced
+
+After blast radius analysis, converge to a single recommendation — the highest-confidence, lowest-blast-radius candidate with direct code evidence. Kill alternative options and document why each was rejected.
+
+### Step D6: Post-Report Validation
+
+After writing the report (Step 4), spawn 2–3 independent validator subagents (model: "sonnet") with distinct roles:
+
+- **Validator 1 — Factual accuracy**: Cross-check every claim in the report against actual code/evidence. Flag any factual inaccuracy.
+- **Validator 2 — Recommendation soundness**: Assess whether the single recommendation is implementable, safe, and correctly scoped.
+- **Validator 3 — Gap analysis** (optional, spawn if investigation was complex): Identify what the report does not cover that could be relevant.
+
+If any validator identifies errors or gaps, apply in-place corrections to the report before emitting `investigation_path`. The structured output token is emitted **after** all validation and correction is complete.
+
 ## Subagent Prompt Template
 
-Use this template for each Explore subagent:
+### Standard Mode Template
+
+Use this template for each Explore subagent in standard mode:
 
 ```
 Investigate {specific aspect} of {target}.
@@ -268,4 +374,86 @@ Focus on:
 
 This is a research task - DO NOT modify any code.
 Report your findings in a structured format.
+```
+
+### Deep Analysis Mode Template
+
+Use this template for each subagent in deep mode batches:
+
+```
+Investigate {specific aspect} of {target}.
+
+Context from prior batches:
+{Summary of confirmed findings and open questions from previous batch inter-batch synthesis}
+
+Focus on:
+1. {Specific question 1}
+2. {Specific question 2}
+3. {Specific question 3}
+
+Evidence standards:
+- Cite specific file paths and line numbers for all code claims
+- Include log timestamps for any log-based findings
+- Mark each finding as SUPPORTED (direct evidence), UNSUPPORTED (contradicted), or NEEDS-EVIDENCE (not yet confirmed)
+
+This is a research task - DO NOT modify any code.
+Report your findings in a structured format with explicit evidence citations.
+```
+
+### Adversarial Subagent Template (Challenge Round)
+
+Use this template for the D4 challenge round subagent:
+
+```
+PRIMARY HYPOTHESIS: {primary hypothesis from D3 synthesis}
+
+SUPPORTING EVIDENCE:
+{All evidence collected across all batches that supports the hypothesis}
+
+YOUR ROLE: You are an adversarial reviewer. Your task is NOT to confirm the hypothesis.
+Your task is to find counterevidence — code paths, behaviors, data, or reasoning that
+CONTRADICTS or WEAKENS the primary hypothesis.
+
+Specifically:
+1. Search for code paths that would NOT exhibit the described behavior
+2. Look for prior fix commits that may have already addressed this root cause
+3. Assess prior-fix falsifiability: if prior fixes exist, determine whether they actually
+   addressed this root cause or only a surface symptom
+4. Identify any assumptions in the hypothesis that are not backed by direct code evidence
+
+If you find counterevidence, report it explicitly with citations.
+If you cannot find counterevidence after thorough search, report "No counterevidence found."
+
+This is a research task - DO NOT modify any code.
+```
+
+### Validation Subagent Template
+
+Use this template for D6 validator subagents:
+
+```
+REPORT PATH: {absolute path to investigation report}
+
+YOUR ROLE: {Factual Accuracy Validator | Recommendation Soundness Validator | Gap Analysis Validator}
+
+Factual Accuracy Validator tasks:
+- Read the full report
+- Cross-check every factual claim against the actual codebase (use file reads, symbol lookups)
+- Flag any claim that is incorrect, imprecise, or not backed by direct code evidence
+- Propose corrections for any inaccuracies found
+
+Recommendation Soundness Validator tasks:
+- Read the Recommendations section of the report
+- Assess whether the recommendation is implementable without introducing new bugs
+- Assess whether the scope is correct (not too narrow, not too broad)
+- Flag any risk surface the recommendation introduces
+
+Gap Analysis Validator tasks:
+- Read the Scope Boundary section of the report
+- Identify any areas listed as "not yet explored" that are actually relevant to the root cause
+- Identify any areas NOT listed that should have been explored
+- Report whether the investigation coverage is sufficient for the stated findings
+
+Report your findings in a structured format. If corrections are needed, state them explicitly.
+This is a research task - DO NOT modify any code.
 ```

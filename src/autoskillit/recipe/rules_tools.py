@@ -77,6 +77,7 @@ _TOOL_PARAMS: dict[str, frozenset[str]] = {
     # --- CI tools ---
     "wait_for_ci": frozenset(
         {
+            "auto_trigger",
             "branch",
             "repo",
             "remote_url",

@@ -30,22 +30,18 @@ from autoskillit.planner.schema import (  # noqa: F401
 from autoskillit.planner.validation import validate_plan
 
 __all__ = [
-    # Existing manifest/compile/validate callables
     "check_remaining",
     "build_assignment_manifest",
     "build_wp_manifest",
     "compile_plan",
     "create_run_dir",
     "validate_plan",
-    # Existing TypedDicts
     "PlannerManifest",
     "PlannerManifestItem",
-    # New merge callables (Issue 01)
     "merge_files",
     "extract_item",
     "replace_item",
     "build_plan_snapshot",
-    # New interchange TypedDicts (Issue 01)
     "PlanDocument",
     "PhaseShort",
     "PhaseElaborated",

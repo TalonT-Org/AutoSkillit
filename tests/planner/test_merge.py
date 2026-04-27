@@ -187,9 +187,7 @@ def test_replace_item_updates_combined_document(tmp_path):
 
     from autoskillit.planner.merge import replace_item
 
-    result = replace_item(
-        source_path=str(src), item_id="P1", replacement_path=str(rep_file)
-    )
+    result = replace_item(source_path=str(src), item_id="P1", replacement_path=str(rep_file))
 
     assert result["replaced_id"] == "P1"
     assert result["updated_path"] == str(src)
@@ -210,9 +208,7 @@ def test_replace_item_missing_id_raises(tmp_path):
     from autoskillit.planner.merge import replace_item
 
     with pytest.raises(ValueError, match="not found"):
-        replace_item(
-            source_path=str(src), item_id="MISSING", replacement_path=str(rep_file)
-        )
+        replace_item(source_path=str(src), item_id="MISSING", replacement_path=str(rep_file))
 
 
 def test_replace_item_preserves_schema_version(tmp_path):

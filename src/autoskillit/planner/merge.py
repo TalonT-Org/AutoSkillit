@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core import atomic_write, get_logger, write_versioned_json
+from autoskillit.core import get_logger, write_versioned_json
 
 _logger = get_logger(__name__)
 
@@ -82,7 +82,7 @@ def extract_item(
     for tier_key in _TIER_KEYS:
         for item in data.get(tier_key, []):
             if item.get("id") == item_id:
-                atomic_write(Path(output_path), json.dumps(item))
+                write_versioned_json(Path(output_path), item, schema_version=1)
                 return {"extracted_path": str(output_path)}
     raise ValueError(f"Item {item_id!r} not found in {source_path}")
 

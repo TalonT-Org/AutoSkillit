@@ -3390,6 +3390,8 @@ class TestOutputPathTokensDerivedFromContracts:
             "phase_manifest_path",
             # planner-elaborate-phase output (parallel worker)
             "elab_result_path",
+            # planner-refine-phases output
+            "refined_plan_path",
         }
     )
 

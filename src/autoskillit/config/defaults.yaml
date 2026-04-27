@@ -227,6 +227,7 @@ skills:
     - planner-elaborate-wp
     - planner-reconcile-deps
     - planner-refine
+    - planner-refine-phases
     - reload-session
   tier3:
     - prepare-pr

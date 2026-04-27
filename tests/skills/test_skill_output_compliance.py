@@ -253,6 +253,8 @@ def test_output_path_tokens_synchronized() -> None:
             "phase_manifest_path",
             # planner-elaborate-phase output (parallel worker)
             "elab_result_path",
+            # planner-refine-phases output
+            "refined_plan_path",
         }
     )
 

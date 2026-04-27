@@ -1828,6 +1828,22 @@ skills:
   planner-refine:
     inputs: []
     outputs: []
+  planner-refine-phases:
+    inputs:
+      - name: combined_plan_path
+        type: file_path
+        required: true
+      - name: output_dir
+        type: directory_path
+        required: true
+    outputs:
+      - name: refined_plan_path
+        type: file_path
+    expected_output_patterns:
+      - "refined_plan_path\\s*=\\s*\\S+"
+    pattern_examples:
+      - "refined_plan_path = /tmp/autoskillit/planner/run-20260101-120000/refined_plan.json\n%%ORDER_UP%%"
+    write_behavior: always
 callable_contracts:
   autoskillit.smoke_utils.check_review_loop:
     outputs:

@@ -18,6 +18,7 @@ def test_perform_restart_sets_skip_env_and_execs() -> None:
     captured: dict[str, object] = {}
 
     def fake_execv(exe: str, args: list[str]) -> None:
+        assert os.environ.get("AUTOSKILLIT_SKIP_UPDATE_CHECK") == "1"
         captured["exe"] = exe
         captured["args"] = args
         raise SystemExit(0)
@@ -29,7 +30,6 @@ def test_perform_restart_sets_skip_env_and_execs() -> None:
             except SystemExit:
                 pass
 
-        assert os.environ.get("AUTOSKILLIT_SKIP_UPDATE_CHECK") == "1"
         assert captured["exe"] == sys.executable
         assert captured["args"] == [sys.executable] + sys.argv
 

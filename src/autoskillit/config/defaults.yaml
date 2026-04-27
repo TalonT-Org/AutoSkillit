@@ -185,6 +185,7 @@ skills:
     - audit-bugs
     - audit-feature-gates
     - audit-friction
+    - audit-docs
     - make-req
     - elaborate-phase
     - write-recipe

@@ -36,6 +36,7 @@ BUNDLED_SKILLS = [
     "audit-bugs",
     "audit-claims",
     "audit-cohesion",
+    "audit-docs",
     "audit-defense-standards",
     "audit-feature-gates",
     "audit-friction",
@@ -177,6 +178,7 @@ AUDIT_SKILL_NAMES = [
     "audit-cohesion",
     "audit-defense-standards",
     "validate-audit",
+    "audit-docs",
 ]
 
 BUNDLED_SKILL_NAMES = set(BUNDLED_SKILLS)
@@ -424,17 +426,17 @@ class TestSkillResolver:
         assert names == {"open-kitchen", "close-kitchen", "sous-chef"}
 
     def test_118_skills_in_skills_extended(self) -> None:
-        """skills_extended/ contains exactly 118 SKILL.md-carrying directories."""
+        """skills_extended/ contains exactly 119 SKILL.md-carrying directories."""
         skills = [
             d
             for d in bundled_skills_extended_dir().iterdir()
             if d.is_dir() and (d / "SKILL.md").is_file()
         ]
-        assert len(skills) == 118
+        assert len(skills) == 119
 
     def test_skill_resolver_list_all_total_count(self) -> None:
-        """list_all() returns 120 public skills (2 Tier-1 + 118 extended)."""
-        assert len(DefaultSkillResolver().list_all()) == 120
+        """list_all() returns 121 public skills (2 Tier-1 + 119 extended)."""
+        assert len(DefaultSkillResolver().list_all()) == 121
 
     def test_skill_resolver_resolve_extended_skill(self) -> None:
         """resolve() finds a skill living in skills_extended/ with BUNDLED_EXTENDED source."""
@@ -548,6 +550,7 @@ class TestSkillCategories:
             "audit-friction",
             "audit-impl",
             "validate-audit",
+            "audit-docs",
         ]:
             info = resolver.resolve(name)
             assert info is not None
@@ -706,3 +709,10 @@ def test_sprint_planner_not_in_skill_registry() -> None:
     resolver = DefaultSkillResolver()
     skill_names = [s.name for s in resolver.list_all()]
     assert "sprint-planner" not in skill_names
+
+
+def test_audit_docs_skill_md_exists() -> None:
+    resolver = DefaultSkillResolver()
+    info = resolver.resolve("audit-docs")
+    assert info is not None
+    assert info.path.exists()

@@ -6,7 +6,15 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core import LoadReport, LoadResult, RecipeSource, get_logger, load_yaml, pkg_root
+from autoskillit.core import (
+    CORE_PACKS,
+    LoadReport,
+    LoadResult,
+    RecipeSource,
+    get_logger,
+    load_yaml,
+    pkg_root,
+)
 from autoskillit.recipe.schema import (
     AUTOSKILLIT_VERSION_KEY,
     RECIPE_VERSION_KEY,
@@ -67,10 +75,20 @@ def load_recipe(path: Path, temp_dir_relpath: str = ".autoskillit/temp") -> Reci
     return recipe
 
 
-def _group_rank(r: RecipeInfo) -> int:
+GROUP_LABELS: dict[int, str] = {
+    0: "Bundled Recipes",
+    1: "Bundled Add-ons",
+    2: "Family Recipes",
+    3: "Experimental",
+}
+
+
+def group_rank(r: RecipeInfo) -> int:
     if r.experimental:
-        return 2
+        return 3
     if r.source == RecipeSource.PROJECT:
+        return 2
+    if r.requires_packs and all(p in CORE_PACKS for p in r.requires_packs):
         return 0
     return 1
 
@@ -92,7 +110,7 @@ def list_recipes(
 
     filtered = [r for r in items if r.kind not in exclude_kinds] if exclude_kinds else items
     return LoadResult(
-        items=sorted(filtered, key=lambda r: (_group_rank(r), r.name)),
+        items=sorted(filtered, key=lambda r: (group_rank(r), r.name)),
         errors=errors,
     )
 
@@ -425,6 +443,7 @@ def _collect_recipes(
                             content=raw,
                             kind=recipe.kind,
                             experimental=recipe.experimental,
+                            requires_packs=recipe.requires_packs,
                         )
                     )
             except Exception as exc:

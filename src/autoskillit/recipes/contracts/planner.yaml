@@ -1,12 +1,60 @@
-generated_at: '2026-04-25T14:21:41.844319+00:00'
+generated_at: '2026-04-26T20:57:11.410246+00:00'
 bundled_manifest_version: 0.1.0
-skill_hashes: {}
+skill_hashes:
+  planner-analyze: sha256:493f4753b98943dc593966ebb1e107b03446a41cec1017513cd81ac6051c1247
+  planner-extract-domain: sha256:94cd2bf02dbd1c0d8d28053d61dc18564be8ccdfbc861368b91326cbe4a785dd
+  planner-generate-phases: sha256:e1346c639aca2daa460b0342ea7e78fefe0729e47e91cdc8d5c8916370b070a3
+  planner-elaborate-phase: sha256:110a53c28b82d8f9d1fba1eb227f44f938b27660013cf176c6a402ca41438e87
+  planner-elaborate-assignment: sha256:683f1b24bf2d5e6d5c8447ad42083df2de3152ca48c197e333b9da77a7625345
+  planner-elaborate-wp: sha256:e19ab9995a24293124ecf8562b536121ca257c124c2b6b0d3169922e206b7997
+  planner-reconcile-deps: sha256:350fd62e7eade27ad11bf1bea7971e1fdb06aa3e8aec092b374fdc9fb5de0743
+  planner-refine: sha256:83ccf798e0e641588d5d7f52f445ef77a974ae197a903499b87c030a1ce0ed9d
 skills:
+  planner-analyze:
+    inputs: []
+    outputs: []
+    expected_output_patterns: []
+    pattern_examples: []
+  planner-extract-domain:
+    inputs: []
+    outputs: []
+    expected_output_patterns: []
+    pattern_examples: []
   planner-generate-phases:
     inputs: []
     outputs:
     - name: phase_manifest_path
       type: file_path
+    expected_output_patterns:
+    - phase_manifest_path\s*=\s*\S+
+    pattern_examples:
+    - 'phase_manifest_path = /tmp/autoskillit/planner/phases/phase_manifest.json
+
+      %%ORDER_UP%%'
+    write_behavior: always
+  planner-elaborate-phase:
+    inputs: []
+    outputs: []
+    expected_output_patterns: []
+    pattern_examples: []
+  planner-elaborate-assignment:
+    inputs: []
+    outputs: []
+    expected_output_patterns: []
+    pattern_examples: []
+  planner-elaborate-wp:
+    inputs: []
+    outputs: []
+    expected_output_patterns: []
+    pattern_examples: []
+  planner-reconcile-deps:
+    inputs: []
+    outputs: []
+    expected_output_patterns: []
+    pattern_examples: []
+  planner-refine:
+    inputs: []
+    outputs: []
     expected_output_patterns: []
     pattern_examples: []
 dataflow:
@@ -35,6 +83,7 @@ dataflow:
   required: []
   produced:
   - phase_manifest_path
+  positional_args: 2
 - step: check_phases
   available:
   - phase_manifest_path
@@ -131,6 +180,7 @@ dataflow:
   - wp_manifest_path
   required: []
   produced: []
+  positional_args: 1
 - step: validate
   available:
   - assignment_manifest_path
@@ -167,6 +217,7 @@ dataflow:
   - wp_manifest_path
   required: []
   produced: []
+  positional_args: 2
 - step: compile
   available:
   - assignment_manifest_path

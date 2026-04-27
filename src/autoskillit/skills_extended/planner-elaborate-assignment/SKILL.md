@@ -115,6 +115,10 @@ Write to `{{AUTOSKILLIT_TEMP}}/planner/assignments/{id}_result.json` (relative t
 }
 ```
 
+The backend derives two additional fields at load time — do not write them:
+- `phase_number` (integer): derived by parsing the phase component of `id` (e.g., "P1-A2" → 1)
+- `assignment_number` (integer): derived by parsing the assignment component of `id` (e.g., "P1-A2" → 2)
+
 ### Step 5: Emit output token
 
 ```

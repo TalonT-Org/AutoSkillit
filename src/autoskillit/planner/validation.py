@@ -5,6 +5,11 @@ from collections import deque
 from pathlib import Path
 
 from autoskillit.core import get_logger, write_versioned_json
+from autoskillit.planner.schema import (
+    validate_assignment_result,
+    validate_phase_result,
+    validate_wp_result,
+)
 
 _logger = get_logger(__name__)
 
@@ -13,9 +18,10 @@ def _load_phase_results(root: Path) -> dict[str, dict]:
     results: dict[str, dict] = {}
     for f in sorted((root / "phases").glob("*_result.json")):
         try:
-            data = json.loads(f.read_text())
+            raw = json.loads(f.read_text())
+            data = validate_phase_result(raw)
             phase_id = f"P{data['phase_number']}"
-        except (json.JSONDecodeError, KeyError) as exc:
+        except (json.JSONDecodeError, KeyError, ValueError) as exc:
             raise RuntimeError(f"Malformed phase result file {f}: {exc}") from exc
         results[phase_id] = data
     return results
@@ -28,9 +34,10 @@ def _load_assignment_results(root: Path) -> dict[str, dict]:
         return results
     for f in sorted(assign_dir.glob("*_result.json")):
         try:
-            data = json.loads(f.read_text())
+            raw = json.loads(f.read_text())
+            data = validate_assignment_result(raw)
             assign_id = f"P{data['phase_number']}-A{data['assignment_number']}"
-        except (json.JSONDecodeError, KeyError) as exc:
+        except (json.JSONDecodeError, KeyError, ValueError) as exc:
             raise RuntimeError(f"Malformed assignment result file {f}: {exc}") from exc
         results[assign_id] = data
     return results
@@ -45,9 +52,10 @@ def _load_wp_results(root: Path) -> dict[str, dict]:
         if f.name in ("wp_manifest.json", "wp_index.json"):
             continue
         try:
-            data = json.loads(f.read_text())
+            raw = json.loads(f.read_text())
+            data = validate_wp_result(raw)
             results[data["id"]] = data
-        except (json.JSONDecodeError, KeyError) as exc:
+        except (json.JSONDecodeError, KeyError, ValueError) as exc:
             raise RuntimeError(f"Malformed WP result file {f}: {exc}") from exc
     return results
 

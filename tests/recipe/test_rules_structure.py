@@ -34,12 +34,12 @@ def test_registry_collects_rules() -> None:
     wf = _make_workflow(
         {
             "do_thing": {"tool": "run_cmd", "on_success": "done"},
+            "orphan": {"tool": "run_cmd", "on_success": "done"},
             "done": {"action": "stop", "message": "Done."},
         }
     )
-    findings = run_semantic_rules(wf)
-    assert isinstance(findings, list)
-    assert all(isinstance(f, RuleFinding) for f in findings)
+    rule_ids = [f.rule for f in run_semantic_rules(wf)]
+    assert "unreachable-step" in rule_ids
 
 
 def test_unsatisfied_input_replaces_worktree_path_check() -> None:
@@ -1517,9 +1517,10 @@ class TestMergeRoutingIncompleteRule:
 class TestRecipeIntegrationPredicateRouting:
     """Integration tests: bundled recipes with predicate on_result validate correctly."""
 
-    def setup_method(self) -> None:
-        self.if_recipe = load_recipe(builtin_recipes_dir() / "remediation.yaml")
-        self.ip_recipe = load_recipe(builtin_recipes_dir() / "implementation.yaml")
+    @pytest.fixture(scope="class", autouse=True)
+    def _load_recipes(self, request) -> None:
+        request.instance.if_recipe = load_recipe(builtin_recipes_dir() / "remediation.yaml")
+        request.instance.ip_recipe = load_recipe(builtin_recipes_dir() / "implementation.yaml")
 
     def test_investigate_first_merge_step_has_predicate_on_result(self) -> None:
         """The merge step in remediation.yaml has predicate on_result."""

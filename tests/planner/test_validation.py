@@ -222,7 +222,7 @@ def test_validate_plan_return_values_are_strings(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_check_duplicate_files_touched_detects_overlap(tmp_path: Path) -> None:
+def test_check_duplicate_files_touched_detects_overlap() -> None:
     """T12: Two WPs touching the same file produce a finding."""
     from autoskillit.planner.validation import _check_duplicate_files_touched
 
@@ -237,7 +237,7 @@ def test_check_duplicate_files_touched_detects_overlap(tmp_path: Path) -> None:
     assert "P2-A1-WP1" in findings[0]
 
 
-def test_check_duplicate_files_touched_no_false_positives(tmp_path: Path) -> None:
+def test_check_duplicate_files_touched_no_false_positives() -> None:
     """T13: WPs with disjoint files_touched produce no findings."""
     from autoskillit.planner.validation import _check_duplicate_files_touched
 

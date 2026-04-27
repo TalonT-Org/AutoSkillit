@@ -28,7 +28,7 @@ tiers. See [Subset Categories](subsets.md) for subset configuration.
   all 13 `arch-lens-*` skills, `audit-arch`, `audit-cohesion`, `audit-tests`,
   `audit-defense-standards`, `audit-bugs`, `audit-friction`, `make-req`,
   `elaborate-phase`, `write-recipe`, `migrate-recipes`, `setup-project`,
-  `sprint-planner`, `design-guards`, `triage-issues`, `collapse-issues`,
+  `design-guards`, `triage-issues`, `collapse-issues`,
   `issue-splitter`, `enrich-issues`, `prepare-issue`, `process-issues`
 - **Visible in**: cook and headless sessions
 - **Mechanism**: copied to an ephemeral session directory (cook) or exposed via

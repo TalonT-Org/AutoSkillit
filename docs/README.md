@@ -23,6 +23,6 @@ two-tier orchestrator. The bundled recipes implement issue → plan → worktree
 - [skills/](skills/README.md) — Tier model, catalog, subsets, overrides
 - [execution/](execution/README.md) — architecture, tool access, orchestration
 - [safety/](safety/README.md) — hooks, workspace isolation
-- [operations/](operations/README.md) — sprint guide, observability
+- [operations/](operations/README.md) — observability
 - [developer/](developer/README.md) — contributing, diagnostics, end-turn hazards
 - [examples/](examples/README.md) — end-to-end pipeline runs

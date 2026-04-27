@@ -147,7 +147,7 @@ steps:
     message: "Failed."
 ```
 
-See **[Sub-Recipe Composition](composition.md)** for advanced patterns like sprint mode.
+See **[Sub-Recipe Composition](composition.md)** for advanced patterns like gated sub-recipe prefixes.
 
 ## Recipe Management
 

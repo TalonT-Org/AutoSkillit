@@ -120,12 +120,13 @@ class TestValidateAuditFeatureGates:
     def test_feature_gates_d1_d5_table_handling_documented(self) -> None:
         """validate-audit must document special handling for D1/D5 table-format findings."""
         text = _skill_text()
-        has_d1_d5_handling = (
-            ("D1" in text and "D5" in text)
-            and ("table" in text.lower() or "table-format" in text.lower() or "cross-cutting" in text.lower())
+        has_d1_d5_handling = ("D1" in text and "D5" in text) and (
+            "table" in text.lower()
+            or "table-format" in text.lower()
+            or "cross-cutting" in text.lower()
         )
         assert has_d1_d5_handling, (
             "validate-audit must document that D1 (Config Projection) and D5 (Boundary Coupling) "
-            "produce table-format findings without file:line and must be handled in the cross-cutting "
-            "batch with direct file verification"
+            "produce table-format findings without file:line and must be handled in the "
+            "cross-cutting batch with direct file verification"
         )

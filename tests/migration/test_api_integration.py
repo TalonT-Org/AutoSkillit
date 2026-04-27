@@ -1,9 +1,10 @@
 """Integration tests for migration/_api.py — no mocking of recipe lookup or engine."""
+
 from __future__ import annotations
 
 import pytest
 
-from autoskillit.migration._api import check_and_migrate
+from autoskillit.migration import check_and_migrate
 
 pytestmark = [pytest.mark.layer("migration"), pytest.mark.medium]
 

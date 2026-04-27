@@ -215,3 +215,51 @@ def test_validate_plan_return_values_are_strings(tmp_path: Path) -> None:
     _make_minimal_output_dir(tmp_path)
     result = validate_plan(str(tmp_path))
     assert all(isinstance(v, str) for v in result.values())
+
+
+# ---------------------------------------------------------------------------
+# _check_duplicate_files_touched tests (T12–T14)
+# ---------------------------------------------------------------------------
+
+
+def test_check_duplicate_files_touched_detects_overlap() -> None:
+    """T12: Two WPs touching the same file produce a finding."""
+    from autoskillit.planner.validation import _check_duplicate_files_touched
+
+    wp_results = {
+        "P1-A1-WP1": {"files_touched": ["src/foo.py", "src/bar.py"]},
+        "P2-A1-WP1": {"files_touched": ["src/foo.py", "src/baz.py"]},
+    }
+    findings = _check_duplicate_files_touched(wp_results)
+    assert len(findings) == 1
+    assert "src/foo.py" in findings[0]
+    assert "P1-A1-WP1" in findings[0]
+    assert "P2-A1-WP1" in findings[0]
+
+
+def test_check_duplicate_files_touched_no_false_positives() -> None:
+    """T13: WPs with disjoint files_touched produce no findings."""
+    from autoskillit.planner.validation import _check_duplicate_files_touched
+
+    wp_results = {
+        "P1-A1-WP1": {"files_touched": ["src/foo.py"]},
+        "P1-A1-WP2": {"files_touched": ["src/bar.py"]},
+    }
+    findings = _check_duplicate_files_touched(wp_results)
+    assert findings == []
+
+
+def test_validate_plan_includes_duplicate_files_touched(tmp_path: Path) -> None:
+    """T14: validate_plan detects files_touched overlap and fails."""
+    _make_minimal_output_dir(tmp_path, wps_per_assignment=2)
+    wp_dir = tmp_path / "work_packages"
+    for wp_id in ("P1-A1-WP1", "P1-A1-WP2"):
+        result_path = wp_dir / f"{wp_id}_result.json"
+        data = json.loads(result_path.read_text())
+        data["files_touched"] = ["src/shared.py"]
+        result_path.write_text(json.dumps(data))
+
+    result = validate_plan(str(tmp_path))
+    assert result["verdict"] == "fail"
+    validation = json.loads((tmp_path / "validation.json").read_text())
+    assert any("src/shared.py" in f for f in validation["findings"])

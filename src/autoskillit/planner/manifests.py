@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
 import time
 from datetime import UTC, datetime
@@ -12,9 +13,16 @@ from autoskillit.planner.schema import (
     RunDirResult,
     validate_assignment_result,
     validate_phase_result,
+    validate_wp_result,
 )
 
 _logger = get_logger(__name__)
+
+_NATURAL_SORT_RE = re.compile(r"(\d+)")
+
+
+def _natural_sort_key(s: str) -> list[int | str]:
+    return [int(tok) if tok.isdigit() else tok for tok in _NATURAL_SORT_RE.split(s)]
 
 
 def create_run_dir() -> RunDirResult:
@@ -275,6 +283,8 @@ def build_wp_manifest(
         raise ValueError("assignments_dir and output_dir must not be empty")
 
     assign_path = Path(assignments_dir)
+    if not assign_path.is_dir():
+        raise FileNotFoundError(f"assignments_dir does not exist: {assign_path}")
     out_dir = Path(output_dir)
     wp_dir = (
         Path(work_packages_dir).resolve()
@@ -305,6 +315,9 @@ def build_wp_manifest(
         work_packages = assign_data.get("proposed_work_packages", [])
         for wp_seq, wp in enumerate(work_packages, start=1):
             wp_id = f"P{phase_number}-A{assignment_number}-WP{wp_seq}"
+            est_files = wp.get("estimated_files", [])
+            if not isinstance(est_files, list):
+                est_files = []
             items.append(
                 {
                     "id": wp_id,
@@ -313,7 +326,7 @@ def build_wp_manifest(
                     "result_path": None,
                     "metadata": {
                         "scope": wp.get("scope", ""),
-                        "estimated_files": wp.get("estimated_files", []),
+                        "estimated_files": est_files,
                     },
                 }
             )
@@ -327,4 +340,142 @@ def build_wp_manifest(
     manifest_path = out_dir / "wp_manifest.json"
     write_versioned_json(manifest_path, manifest, schema_version=1)
     atomic_write(out_dir / "wp_index.json", "[]")
+    return {"manifest_path": str(manifest_path), "total_count": str(len(items))}
+
+
+def build_phase_wp_manifest(
+    assignments_dir: str, output_dir: str, work_packages_dir: str = ""
+) -> dict[str, str]:
+    if not assignments_dir or not output_dir:
+        raise ValueError("assignments_dir and output_dir must not be empty")
+
+    assign_path = Path(assignments_dir)
+    if not assign_path.is_dir():
+        raise FileNotFoundError(f"assignments_dir does not exist: {assign_path}")
+    out_dir = Path(output_dir)
+    wp_dir = (
+        Path(work_packages_dir).resolve()
+        if work_packages_dir
+        else (out_dir / "work_packages").resolve()
+    )
+
+    assign_files = list(assign_path.glob("*_result.json"))
+    parsed_assignments: list[dict] = []
+    for f in assign_files:
+        try:
+            raw = json.loads(f.read_text())
+        except json.JSONDecodeError as exc:
+            raise json.JSONDecodeError(
+                f"Failed to parse {f}: {exc.msg}", exc.doc, exc.pos
+            ) from exc
+        try:
+            data = validate_assignment_result(raw)
+        except (ValueError, KeyError) as exc:
+            raise ValueError(f"Invalid assignment result in {f}: {exc}") from exc
+        parsed_assignments.append(data)
+    parsed_assignments.sort(key=lambda d: (d["phase_number"], d["assignment_number"]))
+
+    phase_buckets: dict[int, dict] = {}
+    for assign_data in parsed_assignments:
+        pn = assign_data["phase_number"]
+        an = assign_data["assignment_number"]
+        if pn not in phase_buckets:
+            phase_buckets[pn] = {
+                "phase_name": assign_data.get("phase_name", f"Phase {pn}"),
+                "phase_id": f"P{pn}",
+                "wp_ids": [],
+                "wp_names": [],
+                "wp_scopes": [],
+                "wp_estimated_files": [],
+            }
+        for wp_seq, wp in enumerate(assign_data.get("proposed_work_packages", []), start=1):
+            wp_id = f"P{pn}-A{an}-WP{wp_seq}"
+            phase_buckets[pn]["wp_ids"].append(wp_id)
+            phase_buckets[pn]["wp_names"].append(wp.get("name", ""))
+            phase_buckets[pn]["wp_scopes"].append(wp.get("scope", ""))
+            est_files = wp.get("estimated_files", [])
+            if not isinstance(est_files, list):
+                est_files = []
+            phase_buckets[pn]["wp_estimated_files"].append(est_files)
+
+    items = []
+    for pn in sorted(phase_buckets):
+        bucket = phase_buckets[pn]
+        items.append(
+            {
+                "id": bucket["phase_id"],
+                "name": bucket["phase_name"],
+                "status": "pending",
+                "result_path": None,
+                "metadata": {
+                    "wp_count": len(bucket["wp_ids"]),
+                    "wp_ids": bucket["wp_ids"],
+                    "wp_names": bucket["wp_names"],
+                    "wp_scopes": bucket["wp_scopes"],
+                    "wp_estimated_files": bucket["wp_estimated_files"],
+                },
+            }
+        )
+
+    sentinel_dir = wp_dir / "wp_sentinels"
+    sentinel_dir.mkdir(parents=True, exist_ok=True)
+
+    manifest = {
+        "pass_name": "phase_work_packages",
+        "result_dir": str(sentinel_dir),
+        "created_at": datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "items": items,
+    }
+    manifest_path = out_dir / "phase_wp_manifest.json"
+    write_versioned_json(manifest_path, manifest, schema_version=1)
+    atomic_write(out_dir / "wp_index.json", "[]")
+    return {"manifest_path": str(manifest_path), "total_count": str(len(items))}
+
+
+def finalize_wp_manifest(work_packages_dir: str, output_dir: str) -> dict[str, str]:
+    if not work_packages_dir or not output_dir:
+        raise ValueError("work_packages_dir and output_dir must not be empty")
+
+    wp_dir = Path(work_packages_dir)
+    if not wp_dir.is_dir():
+        raise FileNotFoundError(f"work_packages_dir does not exist: {wp_dir}")
+    out_dir = Path(output_dir)
+
+    result_files = sorted(wp_dir.glob("*_result.json"), key=lambda p: _natural_sort_key(p.name))
+    items = []
+    index_entries = []
+    for f in result_files:
+        try:
+            raw = json.loads(f.read_text())
+        except json.JSONDecodeError as exc:
+            raise json.JSONDecodeError(
+                f"Failed to parse {f}: {exc.msg}", exc.doc, exc.pos
+            ) from exc
+        try:
+            data = validate_wp_result(raw)
+        except (ValueError, KeyError) as exc:
+            raise ValueError(f"Invalid WP result in {f}: {exc}") from exc
+        items.append(
+            {
+                "id": data["id"],
+                "name": data["name"],
+                "status": "done",
+                "result_path": str(f),
+                "metadata": {},
+            }
+        )
+        index_entries.append(_build_index_entry(data))
+
+    items.sort(key=lambda i: _natural_sort_key(str(i["id"])))
+    index_entries.sort(key=lambda e: _natural_sort_key(str(e["id"])))
+
+    manifest = {
+        "pass_name": "work_packages",
+        "result_dir": str(wp_dir.resolve()),
+        "created_at": datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "items": items,
+    }
+    manifest_path = out_dir / "wp_manifest.json"
+    write_versioned_json(manifest_path, manifest, schema_version=1)
+    atomic_write(out_dir / "wp_index.json", json.dumps(index_entries, indent=2))
     return {"manifest_path": str(manifest_path), "total_count": str(len(items))}

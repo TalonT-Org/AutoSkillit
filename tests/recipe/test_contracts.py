@@ -646,6 +646,7 @@ ALWAYS_WRITE_SKILLS = {
     "plan-visualization",
     "planner-elaborate-assignments",
     "planner-elaborate-phase",
+    "planner-elaborate-wps",
     "planner-generate-phases",
     "planner-refine-assignments",
     "planner-refine-phases",

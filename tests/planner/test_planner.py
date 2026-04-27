@@ -19,6 +19,7 @@ def test_planner_all_exports_callables() -> None:
     assert set(__all__) == {
         "check_remaining",
         "build_assignment_manifest",
+        "build_phase_assignment_manifest",
         "build_pre_elab_snapshot",
         "build_wp_manifest",
         "validate_plan",

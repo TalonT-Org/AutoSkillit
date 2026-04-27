@@ -129,13 +129,11 @@ dataflow:
   required: []
   produced:
   - phase_assignment_manifest
-  - phase_assignment_total
 - step: check_phase_assignments
   available:
   - current_item_path
   - has_remaining
   - phase_assignment_manifest
-  - phase_assignment_total
   - phase_manifest_path
   - planner_dir
   - source_dir
@@ -151,7 +149,6 @@ dataflow:
   - current_item_path
   - has_remaining
   - phase_assignment_manifest
-  - phase_assignment_total
   - phase_manifest_path
   - planner_dir
   - source_dir
@@ -164,7 +161,6 @@ dataflow:
   - current_item_path
   - has_remaining
   - phase_assignment_manifest
-  - phase_assignment_total
   - phase_manifest_path
   - planner_dir
   - source_dir
@@ -178,7 +174,6 @@ dataflow:
   - current_item_path
   - has_remaining
   - phase_assignment_manifest
-  - phase_assignment_total
   - phase_manifest_path
   - planner_dir
   - source_dir
@@ -194,7 +189,6 @@ dataflow:
   - current_item_path
   - has_remaining
   - phase_assignment_manifest
-  - phase_assignment_total
   - phase_manifest_path
   - planner_dir
   - source_dir
@@ -208,7 +202,6 @@ dataflow:
   - current_item_path
   - has_remaining
   - phase_assignment_manifest
-  - phase_assignment_total
   - phase_manifest_path
   - planner_dir
   - source_dir
@@ -222,7 +215,6 @@ dataflow:
   - current_item_path
   - has_remaining
   - phase_assignment_manifest
-  - phase_assignment_total
   - phase_manifest_path
   - planner_dir
   - source_dir
@@ -237,7 +229,6 @@ dataflow:
   - current_item_path
   - has_remaining
   - phase_assignment_manifest
-  - phase_assignment_total
   - phase_manifest_path
   - planner_dir
   - source_dir
@@ -252,7 +243,6 @@ dataflow:
   - current_item_path
   - has_remaining
   - phase_assignment_manifest
-  - phase_assignment_total
   - phase_manifest_path
   - planner_dir
   - source_dir
@@ -268,7 +258,6 @@ dataflow:
   - current_item_path
   - has_remaining
   - phase_assignment_manifest
-  - phase_assignment_total
   - phase_manifest_path
   - planner_dir
   - source_dir
@@ -283,7 +272,6 @@ dataflow:
   - current_item_path
   - has_remaining
   - phase_assignment_manifest
-  - phase_assignment_total
   - phase_manifest_path
   - planner_dir
   - source_dir
@@ -298,7 +286,6 @@ dataflow:
   - current_item_path
   - has_remaining
   - phase_assignment_manifest
-  - phase_assignment_total
   - phase_manifest_path
   - planner_dir
   - source_dir

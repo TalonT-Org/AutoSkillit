@@ -119,7 +119,6 @@ steps:
       output_dir: "${{ context.planner_dir }}/assignments"
     capture:
       phase_assignment_manifest: "${{ result.manifest_path }}"
-      phase_assignment_total: "${{ result.total_count }}"
     on_success: check_phase_assignments
     on_failure: escalate_stop
 
@@ -146,6 +145,8 @@ steps:
       skill_command: "/autoskillit:planner-elaborate-assignments ${{ context.current_item_path }} ${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"
     optional_context_refs: [current_item_path]
+    capture_list:
+      phase_assignments_result_dir: "${{ result.phase_assignments_result_dir }}"
     retries: 1
     on_success: check_phase_assignments
     on_exhausted: escalate_stop

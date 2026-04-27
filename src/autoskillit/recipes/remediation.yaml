@@ -75,6 +75,10 @@ ingredients:
       step scheduling — fast steps for all pipelines before any slow step).
     default: "sequential"
     hidden: true
+  depth:
+    description: "Investigation depth mode"
+    default: "standard"
+    hidden: true
 
 steps:
   clone:
@@ -205,8 +209,9 @@ steps:
 
   investigate:
     tool: run_skill
+    model: "${{ 'opus[1m]' if inputs.depth == 'deep' else 'sonnet' }}"
     with:
-      skill_command: "/autoskillit:investigate ${{ inputs.task }}"
+      skill_command: "/autoskillit:investigate ${{ '--depth deep ' if inputs.depth == 'deep' else '' }}${{ inputs.task }}"
       cwd: "${{ context.work_dir }}"
       step_name: "investigate"
       issue_url: "${{ inputs.issue_url }}"
@@ -215,11 +220,15 @@ steps:
       investigation_path: "${{ result.investigation_path }}"
     on_success: rectify
     on_failure: release_issue_failure
+    on_context_limit: release_issue_failure
     note: >
       ISSUE CONTEXT: If inputs.issue_url is a non-empty string, append it to the
       skill_command so the investigate skill can detect and fetch the issue itself:
       "/autoskillit:investigate {task}\n\nGitHub Issue: {inputs.issue_url}"
       The skill detects the URL pattern and calls fetch_github_issue internally.
+      DEPTH: When inputs.depth == 'deep', passes --depth deep flag and sets model
+      to opus[1m] for the main skill session. Subagents within the skill always
+      use model: sonnet regardless of depth setting.
 
   rectify:
     tool: run_skill

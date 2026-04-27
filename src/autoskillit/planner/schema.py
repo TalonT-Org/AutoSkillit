@@ -83,6 +83,7 @@ class WPShort(TypedDict):
     assignment_id: str
     phase_id: str
     name: str
+    goal: str
     scope: str
     estimated_files: list[str]
 

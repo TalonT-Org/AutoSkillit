@@ -718,6 +718,7 @@ async def _auto_trigger_ci(
         try:
             mergeable = json.loads(out_m).get("mergeable", "UNKNOWN")
         except Exception:
+            logger.warning("auto_trigger: failed to parse gh pr view JSON", exc_info=True)
             mergeable = "UNKNOWN"
         if mergeable == "CONFLICTING":
             return {**result, "conclusion": "merge_conflict", "triggered": False}

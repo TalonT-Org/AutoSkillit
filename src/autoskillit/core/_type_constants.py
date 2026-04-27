@@ -255,6 +255,7 @@ MUTATING_TOOLS: frozenset[str] = frozenset(
     {
         "toggle_auto_merge",
         "enqueue_pr",
+        "wait_for_ci",
         "wait_for_merge_queue",
         "register_clone_status",
         "batch_cleanup_clones",

@@ -60,7 +60,11 @@ def test_pipeline_variant_invariants_parametrized():
                 if call:
                     for kw in call.keywords:
                         if kw.arg == "params":
-                            names = [elt.s for elt in kw.value.elts]
+                            names = [
+                                elt.value
+                                for elt in kw.value.elts
+                                if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
+                            ]
                             assert set(names) == {
                                 "implementation",
                                 "implementation-groups",

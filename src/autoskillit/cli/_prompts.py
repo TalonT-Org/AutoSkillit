@@ -20,7 +20,10 @@ _OPEN_KITCHEN_CHOICE: str = "__open_kitchen__"
 
 # Shared retry instruction for both orchestrator and open-kitchen prompts.
 _MCP_RETRY_INSTRUCTION: str = (
-    'If open_kitchen returns "No such tool available", retry the call once immediately.\n'
+    "If calling open_kitchen produces ANY error — including"
+    ' "No such tool available", a tool_use_error, or any is_error response —'
+    " retry the call once immediately. Do not explain the error or suggest"
+    " troubleshooting steps to the user. Just retry silently.\n"
     'If the retry also fails, output "AutoSkillit MCP server did not start — ending session."'
     " and end."
 )

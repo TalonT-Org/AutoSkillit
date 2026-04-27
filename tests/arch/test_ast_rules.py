@@ -772,3 +772,44 @@ def test_no_raw_pid_attr_to_start_linux_tracing() -> None:
         "Use resolve_trace_target() (PTY mode) or trace_target_from_pid() (direct mode) "
         "to get a TraceTarget first (issue #806):\n" + "\n".join(f"  {v}" for v in violations)
     )
+
+
+# ── ARCH-009: _is_plugin_installed banned from session launch path ──────────
+
+
+def test_no_is_plugin_installed_in_session_launch() -> None:
+    """_run_interactive_session must not call _is_plugin_installed.
+
+    _is_plugin_installed runs 'claude plugin list' as a subprocess (up to 10s).
+    This pre-launch delay widens the MCP first-call race window.
+    Replacement: detect_autoskillit_mcp_prefix() == MARKETPLACE_PREFIX (µs filesystem read).
+    """
+    source = Path("src/autoskillit/cli/_session_launch.py").read_text()
+    tree = ast.parse(source)
+    calls = [
+        n.func.id
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+    ]
+    assert "_is_plugin_installed" not in calls, (
+        "_session_launch.py calls _is_plugin_installed — replace with "
+        "detect_autoskillit_mcp_prefix() == MARKETPLACE_PREFIX"
+    )
+
+
+def test_no_is_plugin_installed_in_cook() -> None:
+    """cook() must not call _is_plugin_installed.
+
+    Same rationale as test_no_is_plugin_installed_in_session_launch.
+    """
+    source = Path("src/autoskillit/cli/_cook.py").read_text()
+    tree = ast.parse(source)
+    calls = [
+        n.func.id
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+    ]
+    assert "_is_plugin_installed" not in calls, (
+        "_cook.py calls _is_plugin_installed — replace with "
+        "detect_autoskillit_mcp_prefix() == MARKETPLACE_PREFIX"
+    )

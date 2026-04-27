@@ -1162,7 +1162,10 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     # execution tests — clone_guard/headless/commands use sibling layers
     "tests/execution/test_clone_guard.py": frozenset({"autoskillit.pipeline"}),
     "tests/execution/test_commands.py": frozenset({"autoskillit.cli"}),
-    "tests/execution/test_headless.py": frozenset({"autoskillit.pipeline", "autoskillit.recipe"}),
+    "tests/execution/test_headless_core.py": frozenset({"autoskillit.pipeline"}),
+    "tests/execution/test_headless_path_validation.py": frozenset(
+        {"autoskillit.pipeline", "autoskillit.recipe"}
+    ),
     # write detection sync guard validates recipe contract patterns against test fixtures
     "tests/execution/test_zero_write_detection.py": frozenset({"autoskillit.recipe"}),
     # quota tests cross into config to validate the contract between vocab constants

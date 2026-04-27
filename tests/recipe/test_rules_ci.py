@@ -718,6 +718,29 @@ def test_bundled_recipes_no_runs_guarded() -> None:
 _TIMED_OUT_RULE = "ci-timed-out-unguarded"
 
 
+def test_ci_timed_out_unguarded_detects_bare_on_success() -> None:
+    """wait_for_ci with on_success but no on_result must be flagged."""
+    recipe = _make_workflow(
+        {
+            "ci_watch": {
+                "tool": "wait_for_ci",
+                "on_success": "merge_step",
+                "on_failure": "handle_failure",
+                "with": {"event": "${{ context.ci_event }}", "branch": "main"},
+            },
+            "merge_step": {"tool": "enqueue_pr"},
+            "handle_failure": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:diagnose-ci b - -"},
+            },
+        }
+    )
+    findings = [f for f in run_semantic_rules(recipe) if f.rule == _TIMED_OUT_RULE]
+    assert len(findings) == 1
+    assert findings[0].severity == Severity.ERROR
+    assert findings[0].step_name == "ci_watch"
+
+
 def test_ci_timed_out_unguarded_fires_with_only_catch_all() -> None:
     recipe = _make_workflow(
         {

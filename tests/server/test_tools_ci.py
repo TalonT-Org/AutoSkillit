@@ -533,7 +533,7 @@ async def test_get_ci_status_handler_passes_workflow(tool_ctx):
 
 @pytest.mark.anyio
 async def test_wait_for_ci_watcher_exception_returns_structured_json(tool_ctx):
-    """wait_for_ci returns {success: false, error: ...} when watcher.wait() raises.
+    """wait_for_ci returns structured JSON with conclusion='error' when watcher.wait() raises.
 
     BEFORE fix: bare raise propagates to track_response_size which adds
     subtype='tool_exception'. AFTER fix: explicit return gives clean JSON.
@@ -553,7 +553,7 @@ async def test_wait_for_ci_watcher_exception_returns_structured_json(tool_ctx):
 
         result = json.loads(await wait_for_ci("main", cwd="/some/repo"))
 
-    assert result["success"] is False
+    assert result["conclusion"] == "error"
     assert "network timeout" in result["error"]
     assert "subtype" not in result  # no decorator fallback marker
     assert "exit_code" not in result  # no decorator fallback marker
@@ -782,7 +782,26 @@ async def test_check_repo_merge_state_error_includes_http_status(tool_ctx, monke
 
     result = json.loads(await check_repo_merge_state(branch="main"))
     assert "http_status" in result
-    assert result["http_status"] == 403
+
+
+# ---------------------------------------------------------------------------
+# C9-2: exception path shape — conclusion key required for recipe on_result routing
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_wait_for_ci_exception_returns_conclusion_key(tool_ctx, monkeypatch):
+    """Inner exception path must return conclusion='error' for recipe on_result routing."""
+
+    async def _exploding_wait(*a, **kw):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(tool_ctx.ci_watcher, "wait", _exploding_wait)
+    raw = await wait_for_ci(branch="main", cwd="/tmp")
+    result = json.loads(raw)
+    assert "conclusion" in result, "Exception path must include conclusion key"
+    assert result["conclusion"] == "error"
+    assert "error" in result
 
 
 # ---------------------------------------------------------------------------

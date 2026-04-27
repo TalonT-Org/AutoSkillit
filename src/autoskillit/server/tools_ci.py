@@ -173,7 +173,14 @@ async def wait_for_ci(
             return json.dumps(result)
         except Exception as exc:
             logger.error("wait_for_ci failed", exc_info=True)
-            return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+            return json.dumps(
+                {
+                    "run_id": None,
+                    "conclusion": "error",
+                    "failed_jobs": [],
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+            )
         finally:
             if step_name:
                 tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
@@ -181,7 +188,14 @@ async def wait_for_ci(
         logger.error("wait_for_ci unhandled exception", exc_info=True)
         if step_name and _timing_ctx is not None:
             _timing_ctx.timing_log.record(step_name, time.monotonic() - _start)
-        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+        return json.dumps(
+            {
+                "run_id": None,
+                "conclusion": "error",
+                "failed_jobs": [],
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+        )
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": False})

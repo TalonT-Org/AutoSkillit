@@ -118,6 +118,31 @@ def check_review_loop(
     }
 
 
+def check_loop_iteration(
+    current_iteration: str = "",
+    max_iterations: str = "2",
+) -> dict[str, str]:
+    """Generic loop iteration guard for recipe cycles.
+
+    Increments the iteration counter and returns whether the budget is exhausted.
+    Designed to be called via run_python in a recipe step with on_result routing
+    based on max_exceeded.
+    """
+    try:
+        iteration = int(current_iteration.strip()) if current_iteration.strip() else 0
+    except ValueError as exc:
+        raise ValueError(f"current_iteration must be numeric, got: {current_iteration!r}") from exc
+    next_iteration = iteration + 1
+    try:
+        max_iter = int(max_iterations.strip()) if max_iterations.strip() else 2
+    except ValueError as exc:
+        raise ValueError(f"max_iterations must be numeric, got: {max_iterations!r}") from exc
+    return {
+        "next_iteration": str(next_iteration),
+        "max_exceeded": "true" if next_iteration >= max_iter else "false",
+    }
+
+
 def fetch_merge_queue_data(base_branch: str, cwd: str, output_dir: str) -> dict[str, str]:
     """Fetch and parse GitHub merge queue data server-side for analyze-prs.
 

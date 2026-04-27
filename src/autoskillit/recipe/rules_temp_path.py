@@ -31,7 +31,8 @@ def _iter_path_values(step: RecipeStep) -> Iterator[tuple[str, str]]:
     name="non-unique-output-path",
     description=(
         "Recipe steps must scope output paths through a per-run context variable. "
-        "Bare {{AUTOSKILLIT_TEMP}}/ paths are shared across runs and cause stale-artifact failures."
+        "Bare {{AUTOSKILLIT_TEMP}}/ paths are shared across runs and cause "
+        "stale-artifact failures."
     ),
     severity=Severity.ERROR,
 )
@@ -46,8 +47,8 @@ def _check_non_unique_output_path(ctx: ValidationContext) -> list[RuleFinding]:
                         severity=Severity.ERROR,
                         step_name=step_name,
                         message=(
-                            f"Step '{step_name}' references a bare '{{{{AUTOSKILLIT_TEMP}}}}/' path "
-                            f"in '{key}' without a context-variable scope prefix. "
+                            f"Step '{step_name}' uses a bare '{{{{AUTOSKILLIT_TEMP}}}}/' "
+                            f"path in '{key}' without a context-variable scope prefix. "
                             "Capture a unique per-run directory in the init step "
                             "and reference it via ${{{{ context.run_dir }}}} or similar."
                         ),

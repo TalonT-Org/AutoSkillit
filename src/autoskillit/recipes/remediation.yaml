@@ -641,13 +641,13 @@ steps:
     capture:
       ci_event: "${{ result.ci_event }}"
     on_success: check_pr_state
-    on_failure: check_pr_state
+    on_failure: ci_watch
     skip_when_false: "inputs.open_pr"
     note: >
       Derives ci_event for the feature branch BEFORE ci_watch runs.
       Uses context.merge_target (feature branch) so push.branches filter
       is evaluated against the actual branch being pushed, not the base branch.
-      Non-blocking: on_failure routes to check_pr_state with ci_event=null (match-any).
+      Non-blocking: on_failure routes to ci_watch with ci_event=null (match-any).
 
   check_pr_state:
     tool: check_pr_mergeable

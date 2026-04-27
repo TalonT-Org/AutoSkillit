@@ -1819,6 +1819,22 @@ skills:
   planner-elaborate-assignment:
     inputs: []
     outputs: []
+  planner-elaborate-assignments:
+    inputs:
+      - name: context_file
+        type: file_path
+        required: true
+      - name: planner_dir
+        type: directory_path
+        required: true
+    outputs:
+      - name: phase_assignments_result_dir
+        type: directory_path
+    expected_output_patterns:
+      - "phase_assignments_result_dir\\s*=\\s*\\S+"
+    pattern_examples:
+      - "phase_assignments_result_dir = /tmp/autoskillit/planner/run-20260101-120000/assignments\n%%ORDER_UP%%"
+    write_behavior: always
   planner-elaborate-wp:
     inputs: []
     outputs: []

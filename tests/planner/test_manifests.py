@@ -706,3 +706,77 @@ def test_build_wp_manifest_return_values_are_strings(tmp_path):
 
     for key, val in result.items():
         assert isinstance(val, str), f"key {key!r} has non-string value {val!r}"
+
+
+def test_build_phase_assignment_manifest_creates_one_item_per_phase(tmp_path):
+    """P1 with 3 assignments and P2 with 2 assignments produce a 2-item manifest."""
+    from autoskillit.planner import build_phase_assignment_manifest
+
+    phases_dir = tmp_path / "phases"
+    phases_dir.mkdir()
+    output_dir = tmp_path / "assignments"
+    output_dir.mkdir()
+
+    (phases_dir / "P1_result.json").write_text(
+        json.dumps(
+            make_phase_result(1, assignments_preview=["Auth Setup", "DB Schema", "API Layer"])
+        )
+    )
+    (phases_dir / "P2_result.json").write_text(
+        json.dumps(make_phase_result(2, assignments_preview=["CLI Integration", "Config Loading"]))
+    )
+
+    result = build_phase_assignment_manifest(str(phases_dir), str(output_dir))
+
+    manifest = json.loads(Path(result["manifest_path"]).read_text())
+    assert len(manifest["items"]) == 2
+
+    p1_item = next(i for i in manifest["items"] if i["id"] == "P1")
+    p2_item = next(i for i in manifest["items"] if i["id"] == "P2")
+    assert p1_item["metadata"]["assignment_count"] == 3
+    assert len(p1_item["metadata"]["assignment_names"]) == 3
+    assert p2_item["metadata"]["assignment_count"] == 2
+    assert len(p2_item["metadata"]["assignment_names"]) == 2
+
+
+def test_build_phase_assignment_manifest_item_ids_match_phase_ids(tmp_path):
+    """Item IDs in the manifest match phase IDs (P1, P2) not assignment IDs."""
+    from autoskillit.planner import build_phase_assignment_manifest
+
+    phases_dir = tmp_path / "phases"
+    phases_dir.mkdir()
+    output_dir = tmp_path / "assignments"
+    output_dir.mkdir()
+
+    (phases_dir / "P1_result.json").write_text(
+        json.dumps(make_phase_result(1, assignments_preview=["Task A"]))
+    )
+    (phases_dir / "P2_result.json").write_text(
+        json.dumps(make_phase_result(2, assignments_preview=["Task B"]))
+    )
+
+    result = build_phase_assignment_manifest(str(phases_dir), str(output_dir))
+
+    manifest = json.loads(Path(result["manifest_path"]).read_text())
+    item_ids = {i["id"] for i in manifest["items"]}
+    assert item_ids == {"P1", "P2"}
+
+
+def test_build_phase_assignment_manifest_items_start_pending(tmp_path):
+    """All items in the manifest start with status 'pending'."""
+    from autoskillit.planner import build_phase_assignment_manifest
+
+    phases_dir = tmp_path / "phases"
+    phases_dir.mkdir()
+    output_dir = tmp_path / "assignments"
+    output_dir.mkdir()
+
+    (phases_dir / "P1_result.json").write_text(
+        json.dumps(make_phase_result(1, assignments_preview=["Task X", "Task Y"]))
+    )
+
+    result = build_phase_assignment_manifest(str(phases_dir), str(output_dir))
+
+    manifest = json.loads(Path(result["manifest_path"]).read_text())
+    for item in manifest["items"]:
+        assert item["status"] == "pending", f"item {item['id']} status was {item['status']!r}"

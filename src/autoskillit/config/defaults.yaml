@@ -224,6 +224,7 @@ skills:
     - planner-generate-phases
     - planner-elaborate-phase
     - planner-elaborate-assignment
+    - planner-elaborate-assignments
     - planner-elaborate-wp
     - planner-reconcile-deps
     - planner-refine

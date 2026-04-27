@@ -14,8 +14,9 @@ hooks:
 # planner-elaborate-assignment
 
 Pass 2 loop body. Elaborates a single assignment with full awareness of all prior
-assignments across all phases. Uses sub-agents to scan for dependencies and overlaps.
-Produces the `proposed_work_packages` array — the critical bridge to Pass 3.
+assignments across all phases. Performs dependency and overlap analysis directly using
+Grep/Glob/Read tools. Produces the `proposed_work_packages` array — the critical bridge
+to Pass 3.
 
 ## When to Use
 
@@ -34,9 +35,9 @@ Produces the `proposed_work_packages` array — the critical bridge to Pass 3.
 - Use freeform strings in WP entries — every entry must have `id_suffix`, `name`, `scope`, `estimated_files`
 - Write output outside `$2/assignments/`
 - Make `estimated_files` exhaustive — it is guidance, not a contract
+- Spawn sub-agents — use Grep/Glob/Read directly for all codebase analysis
 
 **ALWAYS:**
-- Spawn dependency and overlap sub-agents in parallel
 - Include at least 1 work package per assignment
 - Ensure WP `id_suffix` values are unique within the assignment (WP1, WP2, ...)
 - Emit `assignment_result_path` output token
@@ -63,21 +64,22 @@ Read the context file at $1:
 }
 ```
 
-### Step 2: Spawn parallel sub-agents
+### Step 2: Analyze dependencies and overlaps directly
 
-Launch both sub-agents concurrently with `model: "sonnet"`:
+Read all prior result files listed in `prior_results` using the Read tool.
 
-1. **Dependency Scanner** — Read prior results and identify which prior assignments this
-   one depends on. Report: assignment IDs depended upon, specific artifacts/interfaces
-   needed (e.g., "requires P1-A1's database schema").
+**Dependency analysis:** For each prior result, compare its `proposed_work_packages[*].estimated_files`
+and `scope` against the current assignment's goal and scope. Identify which prior assignments
+produce artifacts this assignment depends on (e.g., requires a database schema created in P1-A1).
 
-2. **Overlap Scanner** — Read prior results and identify scope overlaps to avoid. Report:
-   any prior assignment that touched similar files or components, flagging anything that
-   should NOT be duplicated here.
+**Overlap analysis:** Grep the assignment's key terms (from the goal) across prior result files.
+Identify any prior assignments that touched similar files or components to avoid duplication.
+
+Record `dependency_notes` and `overlap_notes` as short summary strings for the result file.
 
 ### Step 3: Decompose into work packages
 
-Based on the assignment goal, phase context, and scanner findings, decompose the assignment
+Based on the assignment goal, phase context, and dependency/overlap findings, decompose
 into 1–5 work packages. Each WP should be implementable in a single focused session.
 
 For each WP, define:

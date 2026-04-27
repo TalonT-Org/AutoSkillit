@@ -5,7 +5,8 @@ skill_hashes:
   planner-extract-domain: sha256:a6cdccd877e0d7d46d44fe559100e0c7638e1534e34dc18d2b77c6b7681f2f90
   planner-generate-phases: sha256:8c69291d11a254035aee782e739720790fbd99197828ca99a6729132bd33a8b0
   planner-elaborate-phase: sha256:3c6bfc60d8ba26270529734c21e7571db3f8d907309b8ad106df0ede82eadff4
-  planner-elaborate-assignment: sha256:5b14748317b972deabaf41f6a6a71bb1de747105ac4466c32f0bbfae7e27df2b
+  planner-elaborate-assignment: sha256:6dafc1ffe6af33d924f38b49c01b26861cbab07d0ffe18c67c5b6ed721078127
+  planner-elaborate-assignments: sha256:2ff1d73d586a955c66ddadda4366dc2cd7b5541da05eddde9419acab2029ddea
   planner-elaborate-wp: sha256:75d9e33fd3373080d39a7c09a3172d20362dcbff72c971b09ef68b410071557d
   planner-reconcile-deps: sha256:350fd62e7eade27ad11bf1bea7971e1fdb06aa3e8aec092b374fdc9fb5de0743
   planner-refine: sha256:83ccf798e0e641588d5d7f52f445ef77a974ae197a903499b87c030a1ce0ed9d
@@ -42,6 +43,15 @@ skills:
     outputs: []
     expected_output_patterns: []
     pattern_examples: []
+  planner-elaborate-assignments:
+    inputs:
+    - context_file
+    - planner_dir
+    outputs:
+    - phase_assignments_result_dir
+    write_behavior: always
+    expected_output_patterns:
+    - 'phase_assignments_result_dir = '
   planner-elaborate-wp:
     inputs: []
     outputs: []
@@ -108,7 +118,7 @@ dataflow:
   - task
   required: []
   produced: []
-- step: build_assignment_manifest
+- step: build_phase_assignment_manifest
   available:
   - current_item_path
   - has_remaining
@@ -118,12 +128,12 @@ dataflow:
   - task
   required: []
   produced:
-  - assignment_manifest_path
-- step: check_assignments
+  - phase_assignment_manifest
+- step: check_phase_assignments
   available:
-  - assignment_manifest_path
   - current_item_path
   - has_remaining
+  - phase_assignment_manifest
   - phase_manifest_path
   - planner_dir
   - source_dir
@@ -132,11 +142,13 @@ dataflow:
   produced:
   - has_remaining
   - current_item_path
-- step: elaborate_assignment
+  - current_item_id
+- step: elaborate_phase_assignments
   available:
-  - assignment_manifest_path
+  - current_item_id
   - current_item_path
   - has_remaining
+  - phase_assignment_manifest
   - phase_manifest_path
   - planner_dir
   - source_dir
@@ -145,9 +157,10 @@ dataflow:
   produced: []
 - step: build_wp_manifest
   available:
-  - assignment_manifest_path
+  - current_item_id
   - current_item_path
   - has_remaining
+  - phase_assignment_manifest
   - phase_manifest_path
   - planner_dir
   - source_dir
@@ -157,9 +170,10 @@ dataflow:
   - wp_manifest_path
 - step: check_wps
   available:
-  - assignment_manifest_path
+  - current_item_id
   - current_item_path
   - has_remaining
+  - phase_assignment_manifest
   - phase_manifest_path
   - planner_dir
   - source_dir
@@ -171,9 +185,10 @@ dataflow:
   - current_item_path
 - step: elaborate_wp
   available:
-  - assignment_manifest_path
+  - current_item_id
   - current_item_path
   - has_remaining
+  - phase_assignment_manifest
   - phase_manifest_path
   - planner_dir
   - source_dir
@@ -183,9 +198,10 @@ dataflow:
   produced: []
 - step: reconcile_deps
   available:
-  - assignment_manifest_path
+  - current_item_id
   - current_item_path
   - has_remaining
+  - phase_assignment_manifest
   - phase_manifest_path
   - planner_dir
   - source_dir
@@ -195,9 +211,10 @@ dataflow:
   produced: []
 - step: validate
   available:
-  - assignment_manifest_path
+  - current_item_id
   - current_item_path
   - has_remaining
+  - phase_assignment_manifest
   - phase_manifest_path
   - planner_dir
   - source_dir
@@ -208,9 +225,10 @@ dataflow:
   - verdict
 - step: check_verdict
   available:
-  - assignment_manifest_path
+  - current_item_id
   - current_item_path
   - has_remaining
+  - phase_assignment_manifest
   - phase_manifest_path
   - planner_dir
   - source_dir
@@ -221,9 +239,10 @@ dataflow:
   produced: []
 - step: refine
   available:
-  - assignment_manifest_path
+  - current_item_id
   - current_item_path
   - has_remaining
+  - phase_assignment_manifest
   - phase_manifest_path
   - planner_dir
   - source_dir
@@ -235,9 +254,10 @@ dataflow:
   positional_args: 1
 - step: compile
   available:
-  - assignment_manifest_path
+  - current_item_id
   - current_item_path
   - has_remaining
+  - phase_assignment_manifest
   - phase_manifest_path
   - planner_dir
   - source_dir
@@ -248,9 +268,10 @@ dataflow:
   produced: []
 - step: done
   available:
-  - assignment_manifest_path
+  - current_item_id
   - current_item_path
   - has_remaining
+  - phase_assignment_manifest
   - phase_manifest_path
   - planner_dir
   - source_dir
@@ -261,9 +282,10 @@ dataflow:
   produced: []
 - step: escalate_stop
   available:
-  - assignment_manifest_path
+  - current_item_id
   - current_item_path
   - has_remaining
+  - phase_assignment_manifest
   - phase_manifest_path
   - planner_dir
   - source_dir

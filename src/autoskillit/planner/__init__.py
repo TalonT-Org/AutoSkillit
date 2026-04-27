@@ -5,6 +5,7 @@ from autoskillit.planner.manifests import (
     build_assignment_manifest,
     build_wp_manifest,
     check_remaining,
+    create_run_dir,
 )
 from autoskillit.planner.schema import (  # noqa: F401
     ASSIGNMENT_REQUIRED_KEYS,
@@ -16,11 +17,12 @@ from autoskillit.planner.schema import (  # noqa: F401
 from autoskillit.planner.validation import validate_plan
 
 __all__ = [
-    "check_remaining",
     "build_assignment_manifest",
     "build_wp_manifest",
-    "validate_plan",
+    "check_remaining",
     "compile_plan",
+    "create_run_dir",
     "PlannerManifest",
     "PlannerManifestItem",
+    "validate_plan",
 ]

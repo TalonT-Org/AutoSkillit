@@ -688,17 +688,46 @@ steps:
       step_name: "handle_no_ci_runs"
     capture:
       ci_event: "${{ result.ci_event }}"
-    on_success: ci_watch
+    on_success: check_ci_loop
     on_failure: release_issue_failure
     retries: 1
     on_exhausted: release_issue_failure
     note: >
       Intercepts no_runs conclusion from wait_for_ci. Re-derives ci_event using
       check_repo_merge_state (the original event may have been wrong for this
-      branch's workflow configuration) and retries ci_watch. retries: 1 bounds
-      the tool-call retry; if the re-derived ci_event still produces no_runs on
-      the next ci_watch iteration, the recipe engine's step-visit ceiling
-      terminates infinite cycles.
+      branch's workflow configuration) and routes to check_ci_loop for iteration
+      guard before retrying ci_watch. retries: 1 bounds the tool-call retry;
+      check_ci_loop bounds the outer loop at 2 iterations.
+
+  check_ci_loop:
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.check_loop_iteration"
+      current_iteration: "${{ context.ci_loop_count }}"
+      max_iterations: "2"
+    capture:
+      ci_loop_count: "${{ result.next_iteration }}"
+    on_result:
+      - when: "${{ result.max_exceeded }} == true"
+        route: escalate_stop_no_ci
+      - route: ci_watch
+    on_failure: escalate_stop_no_ci
+    optional_context_refs:
+      - ci_loop_count
+    note: >
+      Iteration guard for the ci_watch / handle_no_ci_runs cycle. Caps the
+      loop at 2 iterations (initial + 1 retry after re-deriving ci_event).
+      On budget exhaustion, routes to escalate_stop_no_ci with targeted
+      diagnostic message instead of looping indefinitely.
+
+  escalate_stop_no_ci:
+    action: stop
+    message: >
+      CI watch loop exhausted — no CI runs found after re-deriving ci_event
+      and retrying. Likely causes: merge conflict suppressing pull_request
+      trigger, workflow not configured for this branch, or GitHub webhook
+      delivery failure. Check PR mergeable state and .github/workflows
+      trigger configuration.
 
   check_repo_merge_state:
     tool: check_repo_merge_state

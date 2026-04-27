@@ -5,7 +5,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from autoskillit.smoke_utils import check_bug_report_non_empty, check_review_loop
+from autoskillit.smoke_utils import (
+    check_bug_report_non_empty,
+    check_loop_iteration,
+    check_review_loop,
+)
 
 
 # T_SU1
@@ -147,6 +151,46 @@ def test_crl_had_blocking_false_when_empty_verdict() -> None:
     """had_blocking=false when previous_verdict is absent (first-pass guard)."""
     result = check_review_loop("42", "/tmp")
     assert result["had_blocking"] == "false"
+
+
+# ---------------------------------------------------------------------------
+# T_SU_LI1–T_SU_LI5: check_loop_iteration tests (generic loop iteration guard)
+# ---------------------------------------------------------------------------
+
+
+# T_SU_LI1
+def test_check_loop_iteration_first_call() -> None:
+    """First iteration (empty string) → next=1, max_exceeded=false for max=2."""
+    result = check_loop_iteration(current_iteration="", max_iterations="2")
+    assert result == {"next_iteration": "1", "max_exceeded": "false"}
+
+
+# T_SU_LI2
+def test_check_loop_iteration_at_budget() -> None:
+    """iteration=1, max=2 → next=2, max_exceeded=true."""
+    result = check_loop_iteration(current_iteration="1", max_iterations="2")
+    assert result == {"next_iteration": "2", "max_exceeded": "true"}
+
+
+# T_SU_LI3
+def test_check_loop_iteration_over_budget() -> None:
+    """iteration=5, max=2 → max_exceeded=true."""
+    result = check_loop_iteration(current_iteration="5", max_iterations="2")
+    assert result == {"next_iteration": "6", "max_exceeded": "true"}
+
+
+# T_SU_LI4
+def test_check_loop_iteration_custom_max() -> None:
+    """iteration=3, max=5 → next=4, max_exceeded=false."""
+    result = check_loop_iteration(current_iteration="3", max_iterations="5")
+    assert result == {"next_iteration": "4", "max_exceeded": "false"}
+
+
+# T_SU_LI5
+def test_check_loop_iteration_defaults() -> None:
+    """No arguments → iteration=0, max=2 → next=1, max_exceeded=false."""
+    result = check_loop_iteration()
+    assert result == {"next_iteration": "1", "max_exceeded": "false"}
 
 
 def test_subprocess_calls_have_timeout() -> None:

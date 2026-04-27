@@ -85,6 +85,21 @@ def _assert_ci_steps(recipe) -> None:
     assert re_push.on_success == "check_repo_ci_event"
     assert re_push.on_failure == "release_issue_failure"
 
+    # check_ci_loop guard (loop bounding for ci_watch / handle_no_ci_runs cycle)
+    assert "check_ci_loop" in recipe.steps, "ci_watch cycle must have check_ci_loop guard"
+    guard = recipe.steps["check_ci_loop"]
+    assert guard.tool == "run_python"
+    assert "check_loop_iteration" in guard.with_args.get("callable", "")
+    assert guard.on_result is not None
+    guard_routes = {c.route for c in guard.on_result.conditions}
+    assert "ci_watch" in guard_routes, "check_ci_loop must route back to ci_watch"
+    assert "escalate_stop_no_ci" in guard_routes, "check_ci_loop must route to escalation"
+    assert "ci_loop_count" in guard.capture
+    handle = recipe.steps["handle_no_ci_runs"]
+    assert handle.on_success == "check_ci_loop", (
+        "handle_no_ci_runs must route to check_ci_loop, not ci_watch"
+    )
+
 
 def test_every_bundled_recipe_declares_requires_packs() -> None:
     """All top-level bundled recipes must declare a non-empty requires_packs."""
@@ -93,6 +108,17 @@ def test_every_bundled_recipe_declares_requires_packs() -> None:
     for path in sorted(builtin_recipes_dir().glob("*.yaml")):
         recipe = load_recipe(path)
         assert recipe.requires_packs, f"{path.name} does not declare requires_packs"
+
+
+@pytest.mark.parametrize("recipe_name", ["remediation", "implementation", "implementation-groups"])
+def test_bundled_recipe_no_unbounded_cycle_findings(recipe_name: str) -> None:
+    """Pipeline recipes must have zero unbounded-cycle findings (WARNING or ERROR)."""
+    recipe = load_recipe(recipe_name)
+    findings = run_semantic_rules(recipe)
+    cycle_findings = [f for f in findings if f.rule == "unbounded-cycle"]
+    assert cycle_findings == [], f"{recipe_name} has unbounded-cycle findings: " + "; ".join(
+        f.message for f in cycle_findings
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -6,7 +6,7 @@ import pytest
 
 from autoskillit.core import Severity
 from autoskillit.recipe.registry import run_semantic_rules
-from autoskillit.recipe.schema import Recipe, RecipeStep, StepResultRoute
+from autoskillit.recipe.schema import Recipe, RecipeStep, StepResultCondition, StepResultRoute
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -133,6 +133,76 @@ def test_no_cycle_is_clean() -> None:
     findings = run_semantic_rules(recipe)
     cycle_findings = [f for f in findings if f.rule == "unbounded-cycle"]
     assert cycle_findings == []
+
+
+def test_cycle_with_on_result_conditional_exit_is_clean() -> None:
+    """A→B→C(on_result: max_exceeded→done, else→A) → no unbounded-cycle finding.
+
+    The on_result conditional exit provides a structural bound because one
+    route exits the cycle and one re-enters, meaning the exit condition is
+    evaluated on every iteration."""
+    recipe = _make_recipe(
+        {
+            "A": RecipeStep(
+                tool="wait_for_ci",
+                with_args={"branch": "main", "timeout_seconds": 300},
+                on_success="B",
+                on_failure="B",
+            ),
+            "B": RecipeStep(
+                tool="check_repo_merge_state",
+                with_args={"branch": "main", "cwd": "/tmp", "remote_url": ""},
+                on_success="C",
+                on_failure="done",
+            ),
+            "C": RecipeStep(
+                tool="run_python",
+                with_args={"callable": "autoskillit.smoke_utils.check_loop_iteration"},
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(
+                            when="${{ result.max_exceeded }} == true", route="done"
+                        ),
+                        StepResultCondition(route="A"),
+                    ]
+                ),
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    cycle_findings = [f for f in findings if f.rule == "unbounded-cycle"]
+    assert cycle_findings == []
+
+
+def test_cycle_with_on_result_all_routes_in_cycle_is_still_flagged() -> None:
+    """A→B(on_result: both routes inside cycle) → still flagged."""
+    recipe = _make_recipe(
+        {
+            "A": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "echo a"},
+                on_success="B",
+                on_failure="done",
+            ),
+            "B": RecipeStep(
+                tool="run_python",
+                with_args={"callable": "some.func"},
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(when="${{ result.x }} == true", route="A"),
+                        StepResultCondition(route="A"),
+                    ]
+                ),
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    cycle_findings = [f for f in findings if f.rule == "unbounded-cycle"]
+    assert len(cycle_findings) >= 1
 
 
 # ---------------------------------------------------------------------------

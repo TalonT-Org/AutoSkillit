@@ -29,7 +29,8 @@ def _check_stop_step_has_no_routing(ctx: ValidationContext) -> list[RuleFinding]
             or step.on_failure is not None
             or step.on_context_limit is not None
             or step.on_result is not None
-            or step.on_exhausted != "escalate"
+            or step.on_exhausted
+            != "escalate"  # "escalate" is RecipeStep's dataclass default (schema.py)
         )
         if has_routing:
             findings.append(
@@ -58,6 +59,8 @@ def _check_stop_step_message_quality(ctx: ValidationContext) -> list[RuleFinding
         if step.action != "stop":
             continue
         msg = (step.message or "").strip()
+        # 10 chars: short enough to pass "Done." equivalents that name the outcome,
+        # long enough to reject single-word placeholders caught by _PLACEHOLDER_MESSAGES.
         if len(msg) < 10 or msg.lower() in _PLACEHOLDER_MESSAGES:
             findings.append(
                 RuleFinding(

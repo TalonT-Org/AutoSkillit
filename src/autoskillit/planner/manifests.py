@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
 import time
 from datetime import UTC, datetime
@@ -16,6 +17,12 @@ from autoskillit.planner.schema import (
 )
 
 _logger = get_logger(__name__)
+
+_NATURAL_SORT_RE = re.compile(r"(\d+)")
+
+
+def _natural_sort_key(s: str) -> list[int | str]:
+    return [int(tok) if tok.isdigit() else tok for tok in _NATURAL_SORT_RE.split(s)]
 
 
 def create_run_dir() -> RunDirResult:
@@ -434,7 +441,7 @@ def finalize_wp_manifest(work_packages_dir: str, output_dir: str) -> dict[str, s
         raise FileNotFoundError(f"work_packages_dir does not exist: {wp_dir}")
     out_dir = Path(output_dir)
 
-    result_files = sorted(wp_dir.glob("*_result.json"))
+    result_files = sorted(wp_dir.glob("*_result.json"), key=lambda p: _natural_sort_key(p.name))
     items = []
     index_entries = []
     for f in result_files:
@@ -459,8 +466,8 @@ def finalize_wp_manifest(work_packages_dir: str, output_dir: str) -> dict[str, s
         )
         index_entries.append(_build_index_entry(data))
 
-    items.sort(key=lambda i: str(i["id"]))
-    index_entries.sort(key=lambda e: str(e["id"]))
+    items.sort(key=lambda i: _natural_sort_key(str(i["id"])))
+    index_entries.sort(key=lambda e: _natural_sort_key(str(e["id"])))
 
     manifest = {
         "pass_name": "work_packages",

@@ -201,14 +201,6 @@ def test_bundled_recipes_pass_unrouted_verdict_value_rule() -> None:
         )
 
 
-def test_implementation_groups_has_ci_watch() -> None:
-    """T_RP10: implementation-groups now has ci_watch (parity with other recipes)."""
-    recipe = load_recipe(builtin_recipes_dir() / "implementation-groups.yaml")
-    assert "ci_watch" in recipe.steps
-    assert "resolve_ci" in recipe.steps
-    assert "re_push" in recipe.steps
-
-
 class TestBaseBranchDefaults:
     @pytest.mark.parametrize(
         "recipe_name",

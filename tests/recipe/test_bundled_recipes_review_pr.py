@@ -121,3 +121,11 @@ class TestReviewPrRecipeIntegration:
             "resolve_review step must call /autoskillit:resolve-review, "
             f"not resolve-failures. Got: {skill_cmd}"
         )
+
+
+def test_implementation_groups_has_ci_watch() -> None:
+    """T_RP10: implementation-groups now has ci_watch (parity with other recipes)."""
+    recipe = load_recipe(builtin_recipes_dir() / "implementation-groups.yaml")
+    assert "ci_watch" in recipe.steps
+    assert "resolve_ci" in recipe.steps
+    assert "re_push" in recipe.steps

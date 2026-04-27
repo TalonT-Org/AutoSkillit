@@ -200,8 +200,6 @@ steps:
       callable: "autoskillit.planner.finalize_wp_manifest"
       work_packages_dir: "${{ context.planner_dir }}/work_packages"
       output_dir: "${{ context.planner_dir }}"
-    capture:
-      wp_manifest_path: "${{ result.manifest_path }}"
     on_success: reconcile_deps
     on_failure: escalate_stop
 

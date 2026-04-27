@@ -1,4 +1,4 @@
-generated_at: '2026-04-27T15:22:59.865998+00:00'
+generated_at: '2026-04-27T15:29:11.519072+00:00'
 bundled_manifest_version: 0.1.0
 skill_hashes: {}
 skills:
@@ -267,8 +267,7 @@ dataflow:
   - source_dir
   - task
   required: []
-  produced:
-  - wp_manifest_path
+  produced: []
 - step: reconcile_deps
   available:
   - current_item_id
@@ -281,7 +280,6 @@ dataflow:
   - pre_elab_snapshot_path
   - source_dir
   - task
-  - wp_manifest_path
   required: []
   produced: []
 - step: validate
@@ -296,7 +294,6 @@ dataflow:
   - pre_elab_snapshot_path
   - source_dir
   - task
-  - wp_manifest_path
   required: []
   produced:
   - verdict
@@ -313,7 +310,6 @@ dataflow:
   - source_dir
   - task
   - verdict
-  - wp_manifest_path
   required: []
   produced: []
 - step: refine
@@ -329,7 +325,6 @@ dataflow:
   - source_dir
   - task
   - verdict
-  - wp_manifest_path
   required: []
   produced: []
   positional_args: 1
@@ -346,7 +341,6 @@ dataflow:
   - source_dir
   - task
   - verdict
-  - wp_manifest_path
   required: []
   produced: []
 - step: done
@@ -362,7 +356,6 @@ dataflow:
   - source_dir
   - task
   - verdict
-  - wp_manifest_path
   required: []
   produced: []
 - step: escalate_stop
@@ -378,6 +371,5 @@ dataflow:
   - source_dir
   - task
   - verdict
-  - wp_manifest_path
   required: []
   produced: []

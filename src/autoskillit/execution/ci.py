@@ -283,7 +283,8 @@ class DefaultCIWatcher:
             }
 
         headers = self._headers()
-        deadline = time.monotonic() + timeout_seconds
+        _start_time = time.monotonic()
+        deadline = _start_time + timeout_seconds
 
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
@@ -392,7 +393,7 @@ class DefaultCIWatcher:
                     attempt += 1
 
                 if found_run is None:
-                    poll_duration = time.monotonic() - (deadline - timeout_seconds)
+                    poll_duration = time.monotonic() - _start_time
                     _log.warning(
                         "ci_watcher_no_runs",
                         branch=branch,

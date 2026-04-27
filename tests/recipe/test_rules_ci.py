@@ -712,6 +712,89 @@ def test_bundled_recipes_no_runs_guarded() -> None:
 
 
 # ---------------------------------------------------------------------------
+# ci-timed-out-unguarded rule tests
+# ---------------------------------------------------------------------------
+
+_TIMED_OUT_RULE = "ci-timed-out-unguarded"
+
+
+def test_ci_timed_out_unguarded_fires_with_only_catch_all() -> None:
+    recipe = _make_workflow(
+        {
+            "ci_watch": {
+                "tool": "wait_for_ci",
+                "with": {"branch": "main", "event": "push", "timeout_seconds": 300},
+                "on_result": [
+                    {"when": "${{ result.conclusion }} == 'success'", "route": "merge"},
+                    {"when": "${{ result.conclusion }} == 'no_runs'", "route": "handle_no_runs"},
+                    {"route": "detect_ci_conflict"},
+                ],
+            },
+            "merge": {"tool": "run_cmd", "with": {"cmd": "echo merge"}},
+            "handle_no_runs": {"tool": "run_cmd", "with": {"cmd": "echo no_runs"}},
+            "detect_ci_conflict": {"tool": "run_cmd", "with": {"cmd": "echo conflict"}},
+        }
+    )
+    findings = [f for f in run_semantic_rules(recipe) if f.rule == _TIMED_OUT_RULE]
+    assert len(findings) == 1
+    assert findings[0].severity == Severity.ERROR
+    assert findings[0].step_name == "ci_watch"
+
+
+def test_ci_timed_out_unguarded_passes_with_explicit_arm() -> None:
+    recipe = _make_workflow(
+        {
+            "ci_watch": {
+                "tool": "wait_for_ci",
+                "with": {"branch": "main", "event": "push", "timeout_seconds": 300},
+                "on_result": [
+                    {"when": "${{ result.conclusion }} == 'success'", "route": "merge"},
+                    {"when": "${{ result.conclusion }} == 'timed_out'", "route": "ci_watch"},
+                    {"route": "detect_ci_conflict"},
+                ],
+            },
+            "merge": {"tool": "run_cmd", "with": {"cmd": "echo merge"}},
+            "detect_ci_conflict": {"tool": "run_cmd", "with": {"cmd": "echo conflict"}},
+        }
+    )
+    findings = [f for f in run_semantic_rules(recipe) if f.rule == _TIMED_OUT_RULE]
+    assert len(findings) == 0
+
+
+def test_ci_timed_out_unguarded_silent_for_non_ci_tools() -> None:
+    recipe = _make_workflow(
+        {
+            "run_tests": {
+                "tool": "run_cmd",
+                "with": {"cmd": "pytest"},
+                "on_result": [{"route": "done"}],
+            },
+            "done": {"tool": "run_cmd", "with": {"cmd": "echo done"}},
+        }
+    )
+    findings = [f for f in run_semantic_rules(recipe) if f.rule == _TIMED_OUT_RULE]
+    assert len(findings) == 0
+
+
+def test_bundled_recipes_timed_out_guarded() -> None:
+    for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):
+        recipe = load_recipe(yaml_path)
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == _TIMED_OUT_RULE]
+        assert not findings, f"{yaml_path.name}: {[f.message for f in findings]}"
+
+
+def test_ci_watch_post_queue_fix_timeout_600s() -> None:
+    target_recipes = ["implementation.yaml", "remediation.yaml", "implementation-groups.yaml"]
+    for name in target_recipes:
+        recipe = load_recipe(builtin_recipes_dir() / name)
+        step = recipe.steps["ci_watch_post_queue_fix"]
+        assert step.with_args["timeout_seconds"] == 600, (
+            f"{name}: ci_watch_post_queue_fix timeout_seconds is "
+            f"{step.with_args['timeout_seconds']}, expected 600"
+        )
+
+
+# ---------------------------------------------------------------------------
 # ci-event-literal-merge-group rule tests
 # ---------------------------------------------------------------------------
 

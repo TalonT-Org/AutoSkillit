@@ -110,17 +110,18 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
     from autoskillit.cli._onboarding import is_first_run, run_onboarding_menu
     from autoskillit.core import (
         LAUNCH_ID_ENV_VAR,
+        MARKETPLACE_PREFIX,
         SESSION_TYPE_COOK,
         SESSION_TYPE_ENV_VAR,
         BareResume,
         NamedResume,
         NoResume,
         configure_logging,
+        detect_autoskillit_mcp_prefix,
         pkg_root,
         resume_spec_from_cli,
         write_registry_entry,
     )
-    from autoskillit.core._plugin_ids import MARKETPLACE_PREFIX, detect_autoskillit_mcp_prefix
     from autoskillit.execution import build_interactive_cmd
 
     configure_logging()

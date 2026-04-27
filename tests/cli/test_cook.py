@@ -105,9 +105,13 @@ class TestCLIOrder:
         monkeypatch.setattr("sys.stdin.isatty", lambda: True)
 
     @pytest.fixture(autouse=True)
-    def _stub_is_plugin_installed(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Stub _is_plugin_installed to False to prevent subprocess.run collision."""
-        monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: False)
+    def _stub_detect_mcp_prefix(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Stub detect_autoskillit_mcp_prefix for deterministic PLUGIN_DIR behavior."""
+        from autoskillit.core._plugin_ids import DIRECT_PREFIX
+
+        monkeypatch.setattr(
+            "autoskillit.core._plugin_ids.detect_autoskillit_mcp_prefix", lambda: DIRECT_PREFIX
+        )
 
     @pytest.fixture(autouse=True)
     def _stub_ingredients_table(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -474,7 +478,12 @@ class TestCLIOrder:
         (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
-        monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: True)
+        from autoskillit.core._plugin_ids import MARKETPLACE_PREFIX
+
+        monkeypatch.setattr(
+            "autoskillit.core._plugin_ids.detect_autoskillit_mcp_prefix",
+            lambda: MARKETPLACE_PREFIX,
+        )
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="", stderr=""
         )
@@ -500,7 +509,11 @@ class TestCLIOrder:
         (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
-        monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: False)
+        from autoskillit.core._plugin_ids import DIRECT_PREFIX
+
+        monkeypatch.setattr(
+            "autoskillit.core._plugin_ids.detect_autoskillit_mcp_prefix", lambda: DIRECT_PREFIX
+        )
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="", stderr=""
         )
@@ -1374,9 +1387,13 @@ class TestOrderSubsetGate:
         )
 
     @pytest.fixture(autouse=True)
-    def _stub_is_plugin_installed(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Stub _is_plugin_installed to False to prevent subprocess.run collision."""
-        monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: False)
+    def _stub_detect_mcp_prefix(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Stub detect_autoskillit_mcp_prefix for deterministic PLUGIN_DIR behavior."""
+        from autoskillit.core._plugin_ids import DIRECT_PREFIX
+
+        monkeypatch.setattr(
+            "autoskillit.core._plugin_ids.detect_autoskillit_mcp_prefix", lambda: DIRECT_PREFIX
+        )
 
     @pytest.fixture(autouse=True)
     def _stub_ingredients_table(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1568,9 +1585,13 @@ class TestOrderMcpPrefixSelection:
         monkeypatch.setattr("sys.stdin.isatty", lambda: True)
 
     @pytest.fixture(autouse=True)
-    def _stub_is_plugin_installed(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Stub _is_plugin_installed to False to prevent subprocess.run collision."""
-        monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: False)
+    def _stub_detect_mcp_prefix(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Stub detect_autoskillit_mcp_prefix for deterministic PLUGIN_DIR behavior."""
+        from autoskillit.core._plugin_ids import DIRECT_PREFIX
+
+        monkeypatch.setattr(
+            "autoskillit.core._plugin_ids.detect_autoskillit_mcp_prefix", lambda: DIRECT_PREFIX
+        )
 
     @pytest.fixture(autouse=True)
     def _stub_ingredients_table(self, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -28,8 +28,15 @@ def _run_interactive_session(
         sys.exit(1)
     from autoskillit.cli._reload import consume_reload_sentinel
     from autoskillit.cli._terminal import terminal_guard
-    from autoskillit.core import BareResume, ClaudeFlags, NamedResume, NoResume, pkg_root
-    from autoskillit.core._plugin_ids import MARKETPLACE_PREFIX, detect_autoskillit_mcp_prefix
+    from autoskillit.core import (
+        MARKETPLACE_PREFIX,
+        BareResume,
+        ClaudeFlags,
+        NamedResume,
+        NoResume,
+        detect_autoskillit_mcp_prefix,
+        pkg_root,
+    )
     from autoskillit.execution import build_interactive_cmd
 
     _project_dir = project_dir if project_dir is not None else Path.cwd()

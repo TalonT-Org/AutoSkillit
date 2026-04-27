@@ -1,7 +1,7 @@
 """
 Contract conformance tests for planner-refine-phases skill registration.
 """
-import importlib.resources
+
 from pathlib import Path
 
 import pytest
@@ -15,12 +15,10 @@ pytestmark = [
 
 SKILL_NAME = "planner-refine-phases"
 CONTRACTS_PATH = (
-    Path(__file__).parent.parent.parent
-    / "src/autoskillit/recipe/skill_contracts.yaml"
+    Path(__file__).parent.parent.parent / "src/autoskillit/recipe/skill_contracts.yaml"
 )
 SKILL_MD_PATH = (
-    Path(__file__).parent.parent.parent
-    / f"src/autoskillit/skills_extended/{SKILL_NAME}/SKILL.md"
+    Path(__file__).parent.parent.parent / f"src/autoskillit/skills_extended/{SKILL_NAME}/SKILL.md"
 )
 
 
@@ -64,9 +62,7 @@ class TestContractRegistration:
         """outputs must declare refined_plan_path."""
         outputs = skill_contract.get("outputs", [])
         names = [o.get("name") for o in outputs]
-        assert "refined_plan_path" in names, (
-            f"refined_plan_path not in outputs. Found: {names}"
-        )
+        assert "refined_plan_path" in names, f"refined_plan_path not in outputs. Found: {names}"
 
     def test_refined_plan_path_type_is_file_path(self, skill_contract: dict) -> None:
         """refined_plan_path output must have type file_path."""
@@ -108,8 +104,7 @@ class TestSkillMdPresence:
     def test_skill_md_has_write_path_restriction(self, skill_md: str) -> None:
         """SKILL.md NEVER block must restrict writes to AUTOSKILLIT_TEMP/planner/."""
         assert "AUTOSKILLIT_TEMP" in skill_md and "planner/" in skill_md, (
-            "SKILL.md NEVER block must restrict write paths to "
-            "{{AUTOSKILLIT_TEMP}}/planner/."
+            "SKILL.md NEVER block must restrict write paths to {{AUTOSKILLIT_TEMP}}/planner/."
         )
 
     def test_skill_md_has_output_token(self, skill_md: str) -> None:
@@ -121,8 +116,7 @@ class TestSkillMdPresence:
     def test_skill_md_has_l0_validation_instructions(self, skill_md: str) -> None:
         """SKILL.md must describe L0 response validation (phase_id, changes, conflicts)."""
         assert "phase_id" in skill_md and "changes" in skill_md and "conflicts" in skill_md, (
-            "SKILL.md must document L0 structured response fields: "
-            "phase_id, changes, conflicts."
+            "SKILL.md must document L0 structured response fields: phase_id, changes, conflicts."
         )
 
     def test_skill_md_has_partial_failure_handling(self, skill_md: str) -> None:

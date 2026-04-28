@@ -403,8 +403,8 @@ def _transition_dead_dispatch(state_path: Path, record: DispatchRecord, reason: 
     from autoskillit.fleet import (  # noqa: PLC0415
         mark_dispatch_interrupted,
         mark_dispatch_resumable,
+        read_sidecar_from_path,  # noqa: PLC0415
     )
-    from autoskillit.fleet.sidecar import read_sidecar_from_path  # noqa: PLC0415
 
     sidecar = Path(record.sidecar_path) if record.sidecar_path else None
     if sidecar is not None and sidecar.exists():

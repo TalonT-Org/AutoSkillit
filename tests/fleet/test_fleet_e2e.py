@@ -442,7 +442,7 @@ async def test_halt_on_first_failure_default(fleet_runtime: FleetRuntime) -> Non
 
 @pytest.mark.anyio
 async def test_continue_on_failure_when_flagged(fleet_runtime: FleetRuntime) -> None:
-    """continue_on_failure=True does not halt; FAILURE dispatches are excluded from next selection."""
+    """continue_on_failure=True does not halt; FAILURE dispatches excluded from next selection."""
     from autoskillit.fleet.state import (
         FLEET_HALTED_SENTINEL,
         DispatchStatus,

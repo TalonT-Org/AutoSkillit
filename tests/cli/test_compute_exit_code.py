@@ -8,7 +8,7 @@ import pytest
 
 from autoskillit.fleet import CampaignState, DispatchRecord, DispatchStatus
 
-pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.small, pytest.mark.feature("fleet")]
 
 
 def _make_state(*statuses: DispatchStatus) -> CampaignState:

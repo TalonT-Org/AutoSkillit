@@ -8,7 +8,6 @@ from autoskillit.core import (
     TerminalColumn,
     _render_gfm_table,
 )
-from autoskillit.recipe.schema import Recipe  # noqa: F401 — re-exported for type hints
 
 # ---------------------------------------------------------------------------
 # GFM ingredient table column specs

@@ -213,6 +213,7 @@ generic_automation_mcp/
 │   ├── __init__.py
 │   ├── contracts.py         #   Contract card generation + staleness triage
 │   ├── io.py                #   load_recipe, list_recipes, iter_steps_with_context
+│   ├── order.py             #   BUNDLED_RECIPE_ORDER — stable display order registry for Group 0 recipes
 │   ├── loader.py            #   Path-based recipe metadata utilities
 │   ├── _api.py              #   Orchestration API
 │   ├── diagrams.py          #   Flow diagram generation + staleness detection

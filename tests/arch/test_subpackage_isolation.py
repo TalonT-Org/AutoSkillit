@@ -668,6 +668,10 @@ def test_no_subpackage_exceeds_10_files() -> None:
         bringing the count to 38.
         rules_temp_path.py adds the non-unique-output-path lint rule for output path
         isolation enforcement, bringing the count to 39.
+        identity.py adds recipe identity hashing (content and composite fingerprints),
+        bringing the count to 40.
+        order.py adds the stable display order registry (BUNDLED_RECIPE_ORDER) for
+        Group 0 bundled recipes, bringing the count to 41.
       execution/ — REQ-CNST-003-E3: execution/ decomposes process lifecycle into
         focused single-concern modules (_process_io, _process_kill, _process_race,
         etc.) that cannot be merged without re-introducing the coupling they isolate.
@@ -730,7 +734,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
     """
     EXEMPTIONS: dict[str, int] = {
         "server": 20,
-        "recipe": 40,
+        "recipe": 41,
         "execution": 26,
         "core": 27,
         "cli": 27,

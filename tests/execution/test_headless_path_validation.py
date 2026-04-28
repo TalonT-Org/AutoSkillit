@@ -1172,11 +1172,6 @@ class TestContractNudge:
         assert result.needs_retry is True
 
 
-# ---------------------------------------------------------------------------
-# last_stop_reason threading test
-# ---------------------------------------------------------------------------
-
-
 def test_build_skill_result_surfaces_last_stop_reason():
     ndjson = "\n".join(
         [

@@ -146,7 +146,7 @@ quota_guard:
     - sonnet
     - opus
   buffer_seconds: 60             # extra buffer after quota reset before resuming
-  cache_max_age: 60              # seconds before a live quota fetch is triggered
+  cache_max_age: 300             # seconds before a live quota fetch is triggered
 ```
 
 Check current quota: `autoskillit quota-status`.
@@ -271,7 +271,7 @@ read_db:
 
 ```yaml
 report_bug:
-  output_dir: null  # null = {cwd}/.autoskillit/temp/bug-reports/
+  report_dir: null  # null = {cwd}/.autoskillit/temp/bug-reports/
   timeout: 600
   github_filing: true
   github_labels: ["autoreported", "bug"]

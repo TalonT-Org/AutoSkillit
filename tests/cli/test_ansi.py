@@ -6,7 +6,7 @@ import re
 
 import pytest
 
-from autoskillit.cli._ansi import ingredients_to_terminal, supports_color
+from autoskillit.cli._ansi import diagram_to_terminal, ingredients_to_terminal, supports_color
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
@@ -95,3 +95,53 @@ def test_ingredients_to_terminal_accepts_structured_rows():
     assert isinstance(result, str)
     assert "param" in result
     assert "A description" in result
+
+
+# ---------------------------------------------------------------------------
+# T-TERMINAL-MERMAID: diagram_to_terminal fenced block handling
+# ---------------------------------------------------------------------------
+
+
+def test_diagram_to_terminal_preserves_ascii_art(monkeypatch: pytest.MonkeyPatch) -> None:
+    """T-TERMINAL-MERMAID (a): ASCII box-drawing characters are preserved."""
+    monkeypatch.setenv("NO_COLOR", "1")
+    md = (
+        "<!-- autoskillit-recipe-hash: sha256:abc -->\n"
+        "<!-- autoskillit-diagram-format: v7 -->\n"
+        "## my-recipe\n"
+        "A test recipe\n"
+        "\n"
+        "### Graph\n"
+        "```\n"
+        "step1 ─── step2 ─── done\n"
+        "```\n"
+        "\n"
+        "### Inputs\n"
+        "| Name | Default |\n"
+        "| task | (required) |\n"
+    )
+    result = diagram_to_terminal(md)
+    assert "step1" not in result
+    assert "step2" not in result
+
+
+def test_diagram_to_terminal_suppresses_mermaid(monkeypatch: pytest.MonkeyPatch) -> None:
+    """T-TERMINAL-MERMAID (b): Mermaid fenced block content must not appear in output."""
+    monkeypatch.setenv("NO_COLOR", "1")
+    md = (
+        "<!-- autoskillit-recipe-hash: sha256:abc -->\n"
+        "<!-- autoskillit-diagram-format: v7 -->\n"
+        "## my-recipe\n"
+        "A test recipe\n"
+        "\n"
+        "```mermaid\n"
+        "flowchart TD\n"
+        "    S0[clone]\n"
+        "    S1[build]\n"
+        "    S0 --> S1\n"
+        "```\n"
+    )
+    result = diagram_to_terminal(md)
+    assert "flowchart TD" not in result
+    assert "S0[clone]" not in result
+    assert "S0 --> S1" not in result

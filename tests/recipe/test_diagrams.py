@@ -339,3 +339,39 @@ def test_spec_fixture_version_matches_diagram_format_constant() -> None:
         f"spec embeds {m.group(1)!r} but DIAGRAM_FORMAT_VERSION={DIAGRAM_FORMAT_VERSION!r}. "
         "Either bump DIAGRAM_FORMAT_VERSION or regenerate the spec fixture."
     )
+
+
+# ---------------------------------------------------------------------------
+# T-FORMAT-GUARD: no bundled diagram contains Mermaid stubs
+# ---------------------------------------------------------------------------
+
+
+def test_bundled_diagrams_contain_no_mermaid_stubs() -> None:
+    """T-FORMAT-GUARD: all bundled recipes/diagrams/*.md must be ASCII art, not Mermaid."""
+    import autoskillit
+
+    diagrams_dir = Path(autoskillit.__file__).parent / "recipes" / "diagrams"
+    assert diagrams_dir.is_dir(), f"diagrams dir missing: {diagrams_dir}"
+    md_files = sorted(diagrams_dir.glob("*.md"))
+    assert md_files, "No .md files found in diagrams/"
+    for md_file in md_files:
+        content = md_file.read_text(encoding="utf-8")
+        assert "flowchart TD" not in content, (
+            f"{md_file.name} contains 'flowchart TD' (Mermaid stub). "
+            "Bundled diagrams must be ASCII art produced by /render-recipe."
+        )
+
+
+# ---------------------------------------------------------------------------
+# T-SPEC-1: generate_recipe_diagram removed
+# ---------------------------------------------------------------------------
+
+
+def test_generate_recipe_diagram_removed() -> None:
+    """T-SPEC-1: generate_recipe_diagram must not exist — rendering is skill-only."""
+    import autoskillit.recipe.diagrams as diagrams_mod
+
+    assert not hasattr(diagrams_mod, "generate_recipe_diagram"), (
+        "generate_recipe_diagram still exists in diagrams module. "
+        "Diagram rendering must be handled by /render-recipe skill only."
+    )

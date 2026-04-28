@@ -13,6 +13,8 @@ from autoskillit.core.types import RetryReason
 from autoskillit.execution.session import SkillResult
 from autoskillit.migration.engine import (
     MIGRATE_RECIPES_MAX_RETRIES,
+    AdvisoryMigrationAdapter,
+    AdvisoryResult,
     ContractMigrationAdapter,
     DeterministicMigrationAdapter,
     DiagramMigrationAdapter,
@@ -505,6 +507,11 @@ class TestAdapterHierarchy:
         with pytest.raises(TypeError):
             BrokenAdapter()
 
+    # ME-ADP5
+    def test_diagram_adapter_is_advisory_not_deterministic(self) -> None:
+        assert isinstance(DiagramMigrationAdapter(), AdvisoryMigrationAdapter)
+        assert not isinstance(DiagramMigrationAdapter(), DeterministicMigrationAdapter)
+
 
 # ---------------------------------------------------------------------------
 # DiagramMigrationAdapter tests (DG-16 through DG-20)
@@ -586,32 +593,20 @@ class TestDiagramMigrationAdapter:
         )
         assert DiagramMigrationAdapter().needs_migration(file) is True
 
-    # DG-19
-    @pytest.mark.anyio
-    async def test_diagram_adapter_migrate_writes_file(
-        self, tmp_path: Path, sample_recipe_yaml_for_diagram: Path
-    ) -> None:
-        """DG-19: DiagramMigrationAdapter.migrate() delegates to generate_recipe_diagram."""
-        from unittest.mock import patch
-
-        recipes_dir = tmp_path / ".autoskillit" / "recipes"
-        diagrams_dir = recipes_dir / "diagrams"
-        diagrams_dir.mkdir(parents=True)
-        recipe_yaml = recipes_dir / "my-recipe.yaml"
-        recipe_yaml.write_text("name: my-recipe\n")
-
+    # DG-19 (replaced: advisory path instead of destructive migrate)
+    def test_diagram_adapter_check_staleness_returns_advisory(self) -> None:
+        """DG-19: DiagramMigrationAdapter.check_staleness() returns AdvisoryResult."""
         file = MigrationFile(
             name="my-recipe",
-            path=diagrams_dir / "my-recipe.md",
+            path=Path("/fake/diagrams/my-recipe.md"),
             file_type="diagram",
             current_version=None,
         )
-        with patch("autoskillit.recipe.generate_recipe_diagram") as mock_gen:
-            mock_gen.return_value = None
-            result = await DiagramMigrationAdapter().migrate(file, temp_dir=tmp_path / "temp")
-
-        mock_gen.assert_called_once()
-        assert result.success is True
+        result = DiagramMigrationAdapter().check_staleness(file)
+        assert isinstance(result, AdvisoryResult)
+        assert result.stale is True
+        assert "/render-recipe" in result.suggestion
+        assert "my-recipe" in result.suggestion
 
     def test_diagram_adapter_validate_passes_when_hash_present(self, tmp_path: Path) -> None:
         """DG-20: DiagramMigrationAdapter.validate() passes when hash comment present."""
@@ -635,6 +630,46 @@ class TestDiagramMigrationAdapter:
         """default_migration_engine() registers the DiagramMigrationAdapter."""
         engine = default_migration_engine()
         assert isinstance(engine.get_adapter("diagram"), DiagramMigrationAdapter)
+
+
+def test_diagram_adapter_type_is_not_deterministic() -> None:
+    """T-ADAPTER-TYPE: DiagramMigrationAdapter must NOT be a DeterministicMigrationAdapter."""
+    assert not isinstance(DiagramMigrationAdapter(), DeterministicMigrationAdapter)
+
+
+@pytest.mark.anyio
+async def test_advisory_dispatch_does_not_write_file(tmp_path: Path) -> None:
+    """T-ADVISORY-DISPATCH: MigrationEngine returns advisory for stale diagrams without writing."""
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    diagrams_dir = recipes_dir / "diagrams"
+    diagrams_dir.mkdir(parents=True)
+    recipe_yaml = recipes_dir / "my-recipe.yaml"
+    recipe_yaml.write_text(_SAMPLE_RECIPE_YAML_FOR_DIAG)
+
+    original_content = (
+        "<!-- autoskillit-recipe-hash: sha256:wronghash -->\n## my-recipe\nASCII art here\n"
+    )
+    diagram_md = diagrams_dir / "my-recipe.md"
+    diagram_md.write_text(original_content)
+
+    file = MigrationFile(
+        name="my-recipe",
+        path=diagram_md,
+        file_type="diagram",
+        current_version=None,
+    )
+    from autoskillit.migration.engine import MigrationEngine
+
+    engine = MigrationEngine([DiagramMigrationAdapter()])
+    result = await engine.migrate_file(
+        file,
+        run_headless=AsyncMock(),
+        temp_dir=tmp_path / "temp",
+    )
+    assert result.success is True
+    assert result.advisory is not None
+    assert "/render-recipe" in result.advisory
+    assert diagram_md.read_text() == original_content
 
 
 class TestMigrateRecipesConstant:

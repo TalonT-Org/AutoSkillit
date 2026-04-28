@@ -55,7 +55,6 @@ from autoskillit.recipe.contracts import (  # noqa: E402
 from autoskillit.recipe.diagrams import (  # noqa: E402
     check_diagram_staleness,
     diagram_stale_to_suggestions,
-    generate_recipe_diagram,
     load_recipe_diagram,
 )
 from autoskillit.recipe.experiment_type_registry import (  # noqa: E402
@@ -157,7 +156,6 @@ __all__ = [
     "load_recipe_diagram",
     "check_diagram_staleness",
     "diagram_stale_to_suggestions",
-    "generate_recipe_diagram",
     "builtin_sub_recipes_dir",
     "find_sub_recipe_by_name",
     "ExperimentTypeSpec",

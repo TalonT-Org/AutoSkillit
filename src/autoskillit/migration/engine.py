@@ -42,6 +42,14 @@ class MigrationResult:
     migrated_content: str | None = None
     error: str | None = None
     retries_attempted: int = 0
+    advisory: str | None = None
+
+
+@dataclass
+class AdvisoryResult:
+    name: str
+    stale: bool
+    suggestion: str
 
 
 class MigrationAdapter(ABC):
@@ -89,7 +97,18 @@ class DeterministicMigrationAdapter(MigrationAdapter):
         """Apply migration deterministically; write-back handled by MigrationEngine."""
 
 
-_AnyAdapter = HeadlessMigrationAdapter | DeterministicMigrationAdapter
+class AdvisoryMigrationAdapter(MigrationAdapter):
+    """Adapter for skill-crafted artifacts: detects staleness but never writes files.
+
+    Returns advisory results (warnings/suggestions) that surface in migration
+    reports. File regeneration is deferred to the appropriate skill invocation.
+    """
+
+    @abstractmethod
+    def check_staleness(self, file: MigrationFile) -> AdvisoryResult: ...
+
+
+_AnyAdapter = HeadlessMigrationAdapter | DeterministicMigrationAdapter | AdvisoryMigrationAdapter
 
 
 class MigrationEngine:
@@ -116,7 +135,10 @@ class MigrationEngine:
         if not adapter.needs_migration(file):
             return MigrationResult(success=True, name=file.name)
 
-        if isinstance(adapter, DeterministicMigrationAdapter):
+        if isinstance(adapter, AdvisoryMigrationAdapter):
+            advisory = adapter.check_staleness(file)
+            return MigrationResult(success=True, name=file.name, advisory=advisory.suggestion)
+        elif isinstance(adapter, DeterministicMigrationAdapter):
             result = await adapter.migrate(file, temp_dir=temp_dir)
         else:
             result = await adapter.migrate(file, run_headless=run_headless, temp_dir=temp_dir)
@@ -306,8 +328,12 @@ class ContractMigrationAdapter(DeterministicMigrationAdapter):
             return False, str(exc)
 
 
-class DiagramMigrationAdapter(DeterministicMigrationAdapter):
-    """Adapter that regenerates stale recipe flow diagram Markdown files."""
+class DiagramMigrationAdapter(AdvisoryMigrationAdapter):
+    """Advisory adapter for skill-crafted recipe flow diagrams.
+
+    Detects stale diagrams but never overwrites them — returns a suggestion
+    to run ``/render-recipe`` instead.
+    """
 
     file_type = "diagram"
 
@@ -329,28 +355,15 @@ class DiagramMigrationAdapter(DeterministicMigrationAdapter):
             return False
         return check_diagram_staleness(file.name, recipes_dir, recipe_path)
 
-    async def migrate(
-        self,
-        file: MigrationFile,
-        *,
-        temp_dir: Path,
-    ) -> MigrationResult:
-        from autoskillit.recipe import generate_recipe_diagram
+    def check_staleness(self, file: MigrationFile) -> AdvisoryResult:
+        from autoskillit.recipe import diagram_stale_to_suggestions
 
-        recipes_dir = file.path.parent.parent
-        recipe_path = recipes_dir / f"{file.name}.yaml"
-        if not recipe_path.exists():
-            return MigrationResult(
-                success=False,
-                name=file.name,
-                error=f"Source recipe '{file.name}.yaml' not found",
-            )
-        try:
-            generate_recipe_diagram(recipe_path, recipes_dir)
-            return MigrationResult(success=True, name=file.name)
-        except Exception as exc:
-            logger.warning("Diagram generation failed", name=file.name, error=str(exc))
-            return MigrationResult(success=False, name=file.name, error=str(exc))
+        suggestions = diagram_stale_to_suggestions(file.name)
+        return AdvisoryResult(
+            name=file.name,
+            stale=True,
+            suggestion=suggestions[0]["message"] if suggestions else "",
+        )
 
     def validate(self, path: Path) -> tuple[bool, str]:
         try:
@@ -466,6 +479,7 @@ class DefaultMigrationService:
                 )
                 return {"error": f"Migration failed: {migration_result.error}", "name": name}
 
+        advisories: list[str] = []
         contracts_regenerated: list[str] = []
         contract_adapter = self._engine.get_adapter("contract")
         if contract_adapter is not None:
@@ -504,7 +518,9 @@ class DefaultMigrationService:
                     run_headless=run_headless,
                     temp_dir=temp_dir,
                 )
-                if not diagram_result.success:
+                if diagram_result.advisory:
+                    advisories.append(diagram_result.advisory)
+                elif not diagram_result.success:
                     logger.warning(
                         "diagram.migration_failed",
                         name=name,
@@ -516,5 +532,6 @@ class DefaultMigrationService:
                 "status": "migrated",
                 "name": name,
                 "contracts_regenerated": contracts_regenerated,
+                "advisories": advisories,
             }
-        return {"status": "up_to_date", "name": name}
+        return {"status": "up_to_date", "name": name, "advisories": advisories}

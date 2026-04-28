@@ -208,3 +208,34 @@ class TestRecipeCascadeNarrowing:
         assert not any("/hooks/" in str(p) for p in result), (
             f"hooks/test_fmt_status.py (not in cascade) should not appear; got {result}"
         )
+
+
+class TestServerFleetCascadeNarrowing:
+    """REQ-FLEET-002: server cascade targets only fleet/test_pack_enforcement.py."""
+
+    def test_server_source_change_targets_pack_enforcement_only(self, tmp_path: Path) -> None:
+        """A server source change cascades to fleet/test_pack_enforcement.py only,
+        not to other fleet test files."""
+        tests_root = tmp_path / "tests"
+        fleet_dir = tests_root / "fleet"
+        fleet_dir.mkdir(parents=True, exist_ok=True)
+        (fleet_dir / "test_pack_enforcement.py").touch()
+        (fleet_dir / "test_fleet.py").touch()
+        server_dir = tests_root / "server"
+        server_dir.mkdir(parents=True, exist_ok=True)
+        (server_dir / "test_factory.py").touch()
+
+        result = build_test_scope(
+            changed_files={"src/autoskillit/server/tools_kitchen.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None, "server source change should not force a full run"
+        result_names = {p.name for p in result}
+        assert "test_pack_enforcement.py" in result_names, (
+            "fleet/test_pack_enforcement.py must appear in server cascade"
+        )
+        assert "test_fleet.py" not in result_names, (
+            "fleet/test_fleet.py must NOT appear in server cascade — "
+            "only test_pack_enforcement.py has server imports"
+        )

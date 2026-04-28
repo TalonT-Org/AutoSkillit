@@ -165,7 +165,12 @@ def install(*, scope: str = "user") -> bool:
     from autoskillit.core import _InstallLock
 
     with _InstallLock():
-        _clear_plugin_cache()
+        from autoskillit.core import any_kitchen_open
+
+        if any_kitchen_open(project_path=str(Path.cwd())):
+            print("Kitchen open for this project — skipping plugin cache clear.")
+        else:
+            _clear_plugin_cache()
 
         # Regenerate hooks.json from the canonical registry with absolute paths
         hooks_json_path = pkg_root() / "hooks" / "hooks.json"

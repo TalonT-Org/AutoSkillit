@@ -60,6 +60,7 @@ def _setup_run_update(
 
     monkeypatch.setattr(importlib.metadata, "version", lambda _name: new_version)
     monkeypatch.setattr("autoskillit.cli._update.perform_restart", lambda: None)
+    monkeypatch.setattr("autoskillit.core.any_kitchen_open", lambda **kw: False)
     return run_calls
 
 
@@ -294,7 +295,7 @@ def test_run_update_command_restarts_on_success(
     info = _make_info(InstallType.GIT_VCS, revision="stable")
     monkeypatch.setattr("autoskillit.cli._update.detect_install", lambda: info)
     monkeypatch.setattr("autoskillit.cli._update.terminal_guard", FakeTG)
-    monkeypatch.setattr("autoskillit.core.any_kitchen_open", lambda: False)
+    monkeypatch.setattr("autoskillit.core.any_kitchen_open", lambda **kw: False)
     monkeypatch.setattr(
         "autoskillit.cli._update.subprocess.run",
         lambda *a, **kw: subprocess.CompletedProcess([], 0),
@@ -320,4 +321,53 @@ def test_run_update_command_restarts_on_success(
     run_update_command(home=tmp_path)
     assert restart_called, (
         "run_update_command must call perform_restart() after successful upgrade"
+    )
+
+
+def test_run_update_command_blocks_when_same_project_kitchen_open(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from autoskillit.cli._update import run_update_command
+
+    monkeypatch.setattr("autoskillit.core.any_kitchen_open", lambda **kw: True)
+    with pytest.raises(SystemExit) as exc_info:
+        run_update_command(home=tmp_path)
+    assert exc_info.value.code == 1
+
+
+def test_run_update_command_passes_project_path_to_kitchen_check(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from autoskillit.cli._update import run_update_command
+
+    calls: list[dict] = []
+
+    def _spy(**kw):
+        calls.append(kw)
+        return False
+
+    info = _make_info(InstallType.GIT_VCS, revision="stable")
+    monkeypatch.setattr("autoskillit.cli._update.detect_install", lambda: info)
+    monkeypatch.setattr("autoskillit.cli._update.terminal_guard", FakeTG)
+    monkeypatch.setattr("autoskillit.core.any_kitchen_open", _spy)
+    monkeypatch.setattr(
+        "autoskillit.cli._update.subprocess.run",
+        lambda *a, **kw: subprocess.CompletedProcess([], 0),
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli._update_checks._fetch_latest_version", lambda *a, **kw: "0.9.1"
+    )
+    import autoskillit as _pkg
+
+    monkeypatch.setattr(_pkg, "__version__", "0.9.0")
+    import importlib.metadata
+
+    monkeypatch.setattr(importlib.metadata, "version", lambda _name: "0.9.1")
+    monkeypatch.setattr("builtins.print", lambda *a, **kw: None)
+    monkeypatch.setattr("autoskillit.cli._update.perform_restart", lambda: None)
+
+    run_update_command(home=tmp_path)
+    assert calls, "any_kitchen_open was not called"
+    assert "project_path" in calls[0], (
+        "run_update_command must pass project_path to any_kitchen_open"
     )

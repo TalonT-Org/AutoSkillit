@@ -690,7 +690,11 @@ def run_update_checks(home: Path | None = None) -> None:
 
     from autoskillit.core import any_kitchen_open  # noqa: PLC0415
 
-    if any_kitchen_open():
+    if any_kitchen_open(project_path=str(Path.cwd())):
+        print(
+            "Skipping update check: a kitchen is open for this project. "
+            "Run 'autoskillit update' manually after the pipeline finishes.",
+        )
         return
 
     _skip_env: dict[str, str] = {

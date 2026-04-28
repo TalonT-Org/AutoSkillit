@@ -1915,14 +1915,27 @@ skills:
     write_behavior: always
   audit-tests:
     inputs: []
-    outputs: []
-    expected_output_patterns: []
-    pattern_examples: []
+    outputs:
+      - name: audit_report_path
+        type: file_path
+    expected_output_patterns:
+      - "audit_report_path\\s*=\\s*\\S+"
+    pattern_examples:
+      - "audit_report_path = /tmp/autoskillit/audit-tests/test_audit_2026-04-28_120000.md\n%%ORDER_UP%%"
+    write_behavior: always
   validate-audit:
-    inputs: []
-    outputs: []
-    expected_output_patterns: []
-    pattern_examples: []
+    inputs:
+      - name: audit_report_path
+        type: file_path
+        required: true
+    outputs:
+      - name: validated_report_path
+        type: file_path
+    expected_output_patterns:
+      - "Report:\\s+\\S+"
+    pattern_examples:
+      - "Report:    /tmp/autoskillit/validate-audit/validated_report_tests_2026-04-28_120000.md"
+    write_behavior: always
 callable_contracts:
   autoskillit.smoke_utils.check_review_loop:
     outputs:

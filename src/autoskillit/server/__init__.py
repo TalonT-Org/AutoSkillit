@@ -64,6 +64,8 @@ from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS  # noqa: E402, F401
 from autoskillit.server import (  # noqa: E402, F401
     helpers,
     tools_ci,
+    tools_ci_merge_queue,
+    tools_ci_watch,
     tools_clone,
     tools_execution,
     tools_git,

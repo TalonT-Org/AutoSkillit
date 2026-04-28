@@ -13,12 +13,15 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Literal, TypedDict, assert_never
+from typing import TYPE_CHECKING, Any, Literal, TypedDict, assert_never
 
 import httpx
 
 from autoskillit.core import PRState, YAMLError, get_logger, load_yaml
-from autoskillit.execution.github import github_headers
+from autoskillit.execution.github import github_headers, make_tracked_httpx_client
+
+if TYPE_CHECKING:
+    from autoskillit.core._type_protocols import GitHubApiLog
 
 logger = get_logger(__name__)
 
@@ -309,26 +312,31 @@ class DefaultMergeQueueWatcher:
     def __init__(
         self,
         token: str | None | Callable[[], str | None],
+        *,
+        tracker: GitHubApiLog | None = None,
     ) -> None:
         self._token_factory: Callable[[], str | None] | None
+        self._tracker = tracker
         if callable(token):
             self._token_factory = token
             self._client: httpx.AsyncClient | None = None
         else:
             self._token_factory = None
-            self._client = httpx.AsyncClient(
+            self._client = make_tracked_httpx_client(
+                self._tracker,
+                timeout=httpx.Timeout(30.0),
                 headers=github_headers(token),
                 limits=httpx.Limits(keepalive_expiry=60),
-                timeout=30.0,
             )
 
     def _ensure_client(self) -> httpx.AsyncClient:
         if self._client is None:
             resolved = self._token_factory() if self._token_factory is not None else None
-            self._client = httpx.AsyncClient(
+            self._client = make_tracked_httpx_client(
+                self._tracker,
+                timeout=httpx.Timeout(30.0),
                 headers=github_headers(resolved),
                 limits=httpx.Limits(keepalive_expiry=60),
-                timeout=30.0,
             )
         return self._client
 

@@ -10,11 +10,15 @@ import asyncio
 import re
 import time
 from collections.abc import Callable
-from typing import Any
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
 from autoskillit.core import _parse_issue_ref, get_logger
+
+if TYPE_CHECKING:
+    from autoskillit.core._type_protocols import GitHubApiLog
 
 logger = get_logger(__name__)
 
@@ -80,6 +84,66 @@ def github_headers(token: str | None) -> dict[str, str]:
     return h
 
 
+class _TrackingTransport(httpx.AsyncBaseTransport):
+    """httpx transport wrapper that records each request into a GitHubApiLog."""
+
+    def __init__(
+        self,
+        wrapped: httpx.AsyncBaseTransport,
+        tracker: GitHubApiLog,
+    ) -> None:
+        self._wrapped = wrapped
+        self._tracker = tracker
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        start = time.monotonic()
+        response = await self._wrapped.handle_async_request(request)
+        latency_ms = (time.monotonic() - start) * 1000.0
+        headers = response.headers
+
+        def _int(key: str) -> int:
+            try:
+                return int(headers.get(key, "-1"))
+            except ValueError:
+                return -1
+
+        await self._tracker.record_httpx(
+            method=request.method,
+            path=str(request.url.path),
+            status_code=response.status_code,
+            latency_ms=latency_ms,
+            rate_limit_remaining=_int("x-ratelimit-remaining"),
+            rate_limit_used=_int("x-ratelimit-used"),
+            rate_limit_reset=_int("x-ratelimit-reset"),
+            timestamp=datetime.now(UTC).isoformat(),
+        )
+        return response
+
+    async def aclose(self) -> None:
+        await self._wrapped.aclose()
+
+
+def make_tracked_httpx_client(
+    tracker: GitHubApiLog | None,
+    *,
+    timeout: httpx.Timeout,
+    headers: dict[str, str] | None = None,
+    limits: httpx.Limits | None = None,
+    base_url: str | None = None,
+) -> httpx.AsyncClient:
+    """Build an httpx.AsyncClient, optionally wrapping transport with tracking."""
+    kwargs: dict[str, Any] = {"timeout": timeout}
+    if headers is not None:
+        kwargs["headers"] = headers
+    if limits is not None:
+        kwargs["limits"] = limits
+    if base_url is not None:
+        kwargs["base_url"] = base_url
+    if tracker is not None:
+        kwargs["transport"] = _TrackingTransport(httpx.AsyncHTTPTransport(), tracker)
+    return httpx.AsyncClient(**kwargs)
+
+
 def parse_merge_queue_response(data: dict[str, Any]) -> list[dict[str, Any]]:
     """Parse a GitHub GraphQL merge queue response into a sorted entry list.
 
@@ -127,7 +191,13 @@ class DefaultGitHubFetcher:
 
     _UNRESOLVED = object()
 
-    def __init__(self, *, token: str | None | Callable[[], str | None] = None) -> None:
+    def __init__(
+        self,
+        *,
+        token: str | None | Callable[[], str | None] = None,
+        tracker: GitHubApiLog | None = None,
+        base_url: str = "https://api.github.com",
+    ) -> None:
         self._token_factory: Callable[[], str | None] | None
         if callable(token):
             self._token_factory = token
@@ -135,6 +205,8 @@ class DefaultGitHubFetcher:
         else:
             self._token_factory = None
             self._token = token
+        self._tracker = tracker
+        self._base_url = base_url.rstrip("/")
         self._last_mutating_ts: float = 0.0
         self._mutating_lock: asyncio.Lock = asyncio.Lock()
         self._label_cache: set[tuple[str, str, str]] = set()
@@ -168,25 +240,37 @@ class DefaultGitHubFetcher:
 
     async def fetch_issue(
         self,
-        issue_ref: str,
+        issue_ref_or_owner: str,
+        repo: str | None = None,
+        number: int | None = None,
         *,
         include_comments: bool = True,
     ) -> dict[str, Any]:
         """Fetch a GitHub issue. Returns structured data + Markdown content.
 
-        Never raises.
+        Accepts either a single issue_ref string ("owner/repo#N") or separate
+        (owner, repo, number) positional arguments. Never raises.
         """
-        try:
-            owner, repo, number = _parse_issue_ref(issue_ref)
-        except ValueError as exc:
-            return {"success": False, "error": str(exc)}
+        if repo is not None and number is not None:
+            owner = issue_ref_or_owner
+            issue_ref = f"{owner}/{repo}#{number}"
+        else:
+            try:
+                owner, repo, number = _parse_issue_ref(issue_ref_or_owner)
+            except ValueError as exc:
+                return {"success": False, "error": str(exc)}
+            issue_ref = issue_ref_or_owner
 
-        headers = self._headers()
-        base = f"https://api.github.com/repos/{owner}/{repo}/issues/{number}"
+        path = f"/repos/{owner}/{repo}/issues/{number}"
 
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
-                resp = await client.get(base, headers=headers)
+            async with make_tracked_httpx_client(
+                self._tracker,
+                timeout=httpx.Timeout(15.0, connect=5.0),
+                headers=github_headers(self._resolve_token()),
+                base_url=self._base_url,
+            ) as client:
+                resp = await client.get(path)
                 if resp.status_code == 404:
                     if not self.has_token:
                         return {
@@ -206,9 +290,7 @@ class DefaultGitHubFetcher:
 
                 comments: list[dict[str, str]] = []
                 if include_comments and issue_data.get("comments", 0) > 0:
-                    c_resp = await client.get(
-                        f"{base}/comments", headers=headers, params={"per_page": 100}
-                    )
+                    c_resp = await client.get(f"{path}/comments", params={"per_page": 100})
                     c_resp.raise_for_status()
                     comments = [
                         {"author": c["user"]["login"], "body": c["body"] or ""}
@@ -273,12 +355,15 @@ class DefaultGitHubFetcher:
         Never raises.
         """
         search_query = f'repo:{owner}/{repo} is:issue state:{state} "{query}"'
-        headers = self._headers()
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
+            async with make_tracked_httpx_client(
+                self._tracker,
+                timeout=httpx.Timeout(15.0, connect=5.0),
+                headers=github_headers(self._resolve_token()),
+                base_url=self._base_url,
+            ) as client:
                 resp = await client.get(
-                    "https://api.github.com/search/issues",
-                    headers=headers,
+                    "/search/issues",
                     params={"q": search_query, "per_page": 5},
                 )
                 resp.raise_for_status()
@@ -318,15 +403,18 @@ class DefaultGitHubFetcher:
         Returns {success, issue_number, url}. Never raises.
         """
         await self._throttle_mutating()
-        headers = self._headers()
         payload: dict[str, Any] = {"title": title, "body": body}
         if labels:
             payload["labels"] = labels
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
+            async with make_tracked_httpx_client(
+                self._tracker,
+                timeout=httpx.Timeout(15.0, connect=5.0),
+                headers=github_headers(self._resolve_token()),
+                base_url=self._base_url,
+            ) as client:
                 resp = await client.post(
-                    f"https://api.github.com/repos/{owner}/{repo}/issues",
-                    headers=headers,
+                    f"/repos/{owner}/{repo}/issues",
                     json=payload,
                 )
                 resp.raise_for_status()
@@ -359,12 +447,15 @@ class DefaultGitHubFetcher:
         Returns {success, issue_url}. Never raises.
         """
         await self._throttle_mutating()
-        headers = self._headers()
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
+            async with make_tracked_httpx_client(
+                self._tracker,
+                timeout=httpx.Timeout(15.0, connect=5.0),
+                headers=github_headers(self._resolve_token()),
+                base_url=self._base_url,
+            ) as client:
                 resp = await client.patch(
-                    f"https://api.github.com/repos/{owner}/{repo}/issues/{issue_number}",
-                    headers=headers,
+                    f"/repos/{owner}/{repo}/issues/{issue_number}",
                     json={"body": new_body},
                 )
                 resp.raise_for_status()
@@ -398,10 +489,15 @@ class DefaultGitHubFetcher:
             owner, repo, number = _parse_issue_ref(issue_url)
         except ValueError as exc:
             return {"success": False, "error": str(exc)}
-        url = f"https://api.github.com/repos/{owner}/{repo}/issues/{number}"
+        path = f"/repos/{owner}/{repo}/issues/{number}"
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
-                resp = await client.get(url, headers=self._headers())
+            async with make_tracked_httpx_client(
+                self._tracker,
+                timeout=httpx.Timeout(15.0, connect=5.0),
+                headers=github_headers(self._resolve_token()),
+                base_url=self._base_url,
+            ) as client:
+                resp = await client.get(path)
                 if resp.status_code == 404:
                     hint = (
                         " Set github.token in .autoskillit/.secrets.yaml,"
@@ -437,12 +533,15 @@ class DefaultGitHubFetcher:
     ) -> dict[str, Any]:
         """Add labels to an issue. Returns {success, labels}. Never raises."""
         await self._throttle_mutating()
-        headers = self._headers()
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
+            async with make_tracked_httpx_client(
+                self._tracker,
+                timeout=httpx.Timeout(15.0, connect=5.0),
+                headers=github_headers(self._resolve_token()),
+                base_url=self._base_url,
+            ) as client:
                 resp = await client.post(
-                    f"https://api.github.com/repos/{owner}/{repo}/issues/{issue_number}/labels",
-                    headers=headers,
+                    f"/repos/{owner}/{repo}/issues/{issue_number}/labels",
                     json={"labels": labels},
                 )
                 resp.raise_for_status()
@@ -469,13 +568,16 @@ class DefaultGitHubFetcher:
         """Remove a label from an issue. 404 is treated as success (idempotent).
         Returns {success}. Never raises."""
         await self._throttle_mutating()
-        headers = self._headers()
         encoded = label.replace(" ", "%20")
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
+            async with make_tracked_httpx_client(
+                self._tracker,
+                timeout=httpx.Timeout(15.0, connect=5.0),
+                headers=github_headers(self._resolve_token()),
+                base_url=self._base_url,
+            ) as client:
                 resp = await client.delete(
-                    f"https://api.github.com/repos/{owner}/{repo}/issues/{issue_number}/labels/{encoded}",
-                    headers=headers,
+                    f"/repos/{owner}/{repo}/issues/{issue_number}/labels/{encoded}",
                 )
                 if resp.status_code == 404:
                     return {"success": True}  # already removed — idempotent
@@ -509,13 +611,16 @@ class DefaultGitHubFetcher:
 
         Returns {success, labels}. Never raises.
         """
-        headers = self._headers()
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
+            async with make_tracked_httpx_client(
+                self._tracker,
+                timeout=httpx.Timeout(15.0, connect=5.0),
+                headers=github_headers(self._resolve_token()),
+                base_url=self._base_url,
+            ) as client:
                 # Step 1: GET current labels (read-only, no throttle needed)
                 get_resp = await client.get(
-                    f"https://api.github.com/repos/{owner}/{repo}/issues/{issue_number}/labels",
-                    headers=headers,
+                    f"/repos/{owner}/{repo}/issues/{issue_number}/labels",
                 )
                 get_resp.raise_for_status()
                 current = {lbl["name"] for lbl in get_resp.json()}
@@ -528,8 +633,7 @@ class DefaultGitHubFetcher:
                 # Step 3: PUT atomically (throttle the single mutating call)
                 await self._throttle_mutating()
                 put_resp = await client.put(
-                    f"https://api.github.com/repos/{owner}/{repo}/issues/{issue_number}/labels",
-                    headers=headers,
+                    f"/repos/{owner}/{repo}/issues/{issue_number}/labels",
                     json={"labels": target},
                 )
                 put_resp.raise_for_status()
@@ -563,12 +667,15 @@ class DefaultGitHubFetcher:
             return {"success": True, "created": False}
 
         await self._throttle_mutating()
-        headers = self._headers()
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
+            async with make_tracked_httpx_client(
+                self._tracker,
+                timeout=httpx.Timeout(15.0, connect=5.0),
+                headers=github_headers(self._resolve_token()),
+                base_url=self._base_url,
+            ) as client:
                 resp = await client.post(
-                    f"https://api.github.com/repos/{owner}/{repo}/labels",
-                    headers=headers,
+                    f"/repos/{owner}/{repo}/labels",
                     json={"name": label, "color": color, "description": description},
                 )
                 if resp.status_code == 422:

@@ -86,18 +86,19 @@ class TestResearchRecipeStructure:
         """review_design STOP verdict routes to resolve_design_review (not design_rejected)."""
         step = recipe.steps["review_design"]
         assert step.on_result is not None
-        routes = {c.when: c.route for c in step.on_result.conditions if c.when}
-        assert any("GO" in (w or "") for w in routes), "Missing GO route"
-        go_route = next(c.route for c in step.on_result.conditions if c.when and "GO" in c.when)
-        assert go_route == "plan_visualization"
-        revise_route = next(
-            c.route for c in step.on_result.conditions if c.when and "REVISE" in c.when
+        go_cond = next((c for c in step.on_result.conditions if c.when and "GO" in c.when), None)
+        assert go_cond is not None, "Missing GO route"
+        assert go_cond.route == "plan_visualization"
+        revise_cond = next(
+            (c for c in step.on_result.conditions if c.when and "REVISE" in c.when), None
         )
-        assert revise_route == "revise_design"
-        stop_route = next(
-            c.route for c in step.on_result.conditions if c.when and "STOP" in c.when
+        assert revise_cond is not None, "Missing REVISE route"
+        assert revise_cond.route == "revise_design"
+        stop_cond = next(
+            (c for c in step.on_result.conditions if c.when and "STOP" in c.when), None
         )
-        assert stop_route == "resolve_design_review"
+        assert stop_cond is not None, "Missing STOP route"
+        assert stop_cond.route == "resolve_design_review"
 
     def test_has_revise_design_step(self, recipe) -> None:
         assert "revise_design" in recipe.steps
@@ -143,19 +144,21 @@ class TestResearchRecipeStructure:
         """resolve_design_review routes resolution=revised back to revise_design."""
         step = recipe.steps["resolve_design_review"]
         assert step.on_result is not None
-        revised_route = next(
-            c.route for c in step.on_result.conditions if c.when and "revised" in c.when
+        revised_cond = next(
+            (c for c in step.on_result.conditions if c.when and "revised" in c.when), None
         )
-        assert revised_route == "revise_design"
+        assert revised_cond is not None, "Missing revised route"
+        assert revised_cond.route == "revise_design"
 
     def test_resolve_design_review_routes_failed_to_design_rejected(self, recipe) -> None:
         """resolve_design_review routes resolution=failed to design_rejected."""
         step = recipe.steps["resolve_design_review"]
         assert step.on_result is not None
-        failed_route = next(
-            c.route for c in step.on_result.conditions if c.when and "failed" in c.when
+        failed_cond = next(
+            (c for c in step.on_result.conditions if c.when and "failed" in c.when), None
         )
-        assert failed_route == "design_rejected"
+        assert failed_cond is not None, "Missing failed route"
+        assert failed_cond.route == "design_rejected"
 
     def test_resolve_design_review_fallbacks_to_design_rejected(self, recipe) -> None:
         """resolve_design_review routes on_failure and on_context_limit to design_rejected."""

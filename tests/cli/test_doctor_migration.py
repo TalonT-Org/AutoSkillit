@@ -68,7 +68,7 @@ def test_doctor_reports_drift_in_project_scope(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """_check_hook_registry_drift must report drift found in project scope."""
-    from autoskillit.cli._doctor import _check_hook_registry_drift
+    from autoskillit.cli._doctor_hooks import _check_hook_registry_drift
     from autoskillit.core import Severity
 
     # Seed a stale pretty_output.py in project scope

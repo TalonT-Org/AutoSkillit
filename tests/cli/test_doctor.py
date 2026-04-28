@@ -739,7 +739,7 @@ def test_doctor_reports_ok_when_no_misplaced_secrets(
 
 # DC-11: _check_hook_registry_drift — deployed matches canonical → OK
 def test_check_hook_registry_drift_ok(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from autoskillit.cli._doctor import _check_hook_registry_drift
+    from autoskillit.cli._doctor_hooks import _check_hook_registry_drift
     from autoskillit.cli._hooks import _evict_stale_autoskillit_hooks, sync_hooks_to_settings
     from autoskillit.core import Severity
 
@@ -755,7 +755,7 @@ def test_check_hook_registry_drift_ok(tmp_path: Path, monkeypatch: pytest.Monkey
 def test_check_hook_registry_drift_warning(tmp_path: Path) -> None:
     import json
 
-    from autoskillit.cli._doctor import _check_hook_registry_drift
+    from autoskillit.cli._doctor_hooks import _check_hook_registry_drift
     from autoskillit.core import Severity
 
     settings = tmp_path / "settings.json"
@@ -1020,7 +1020,7 @@ def test_count_hook_registry_drift_detects_orphaned_hooks(tmp_path: Path) -> Non
 
 # T-DRIFT-2: _check_hook_registry_drift() returns ERROR for orphaned hooks
 def test_check_hook_registry_drift_error_on_orphaned_hooks(tmp_path: Path) -> None:
-    from autoskillit.cli._doctor import _check_hook_registry_drift
+    from autoskillit.cli._doctor_hooks import _check_hook_registry_drift
     from autoskillit.core import Severity
 
     settings = tmp_path / ".claude" / "settings.json"

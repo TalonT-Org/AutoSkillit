@@ -7,8 +7,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from autoskillit.core import Severity, get_logger
-from autoskillit.core._claude_env import build_claude_env
+from autoskillit.core import Severity, build_claude_env, get_logger
 
 from ._doctor_types import DoctorResult
 

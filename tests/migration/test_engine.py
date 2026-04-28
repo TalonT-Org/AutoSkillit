@@ -604,7 +604,6 @@ class TestDiagramMigrationAdapter:
         )
         result = DiagramMigrationAdapter().check_staleness(file)
         assert isinstance(result, AdvisoryResult)
-        assert result.stale is True
         assert "/render-recipe" in result.suggestion
         assert "my-recipe" in result.suggestion
 

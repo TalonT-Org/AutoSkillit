@@ -48,7 +48,6 @@ class MigrationResult:
 @dataclass
 class AdvisoryResult:
     name: str
-    stale: bool
     suggestion: str
 
 
@@ -363,7 +362,6 @@ class DiagramMigrationAdapter(AdvisoryMigrationAdapter):
         suggestions = diagram_stale_to_suggestions(file.name)
         return AdvisoryResult(
             name=file.name,
-            stale=True,
             suggestion=suggestions[0]["message"] if suggestions else "",
         )
 

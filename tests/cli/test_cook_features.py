@@ -10,26 +10,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from autoskillit import cli
+from tests.cli.conftest import _GITHUB_RECIPE_YAML
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
-
-_GITHUB_RECIPE_YAML = """\
-name: github-recipe
-description: A recipe using github tools
-summary: Fetch an issue
-steps:
-  fetch:
-    tool: fetch_github_issue
-    with:
-      issue_url: https://github.com/example/repo/issues/1
-    on_success: done
-    on_failure: done
-  done:
-    action: stop
-    message: Done
-kitchen_rules:
-  - Only use AutoSkillit MCP tools during pipeline execution
-"""
 
 
 class TestOrderSubsetGate:

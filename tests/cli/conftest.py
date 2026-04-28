@@ -55,9 +55,29 @@ kitchen_rules:
   - Only use AutoSkillit MCP tools during pipeline execution
 """
 
+_GITHUB_RECIPE_YAML = """\
+name: github-recipe
+description: A recipe using github tools
+summary: Fetch an issue
+steps:
+  fetch:
+    tool: fetch_github_issue
+    with:
+      issue_url: https://github.com/example/repo/issues/1
+    on_success: done
+    on_failure: done
+  done:
+    action: stop
+    message: Done
+kitchen_rules:
+  - Only use AutoSkillit MCP tools during pipeline execution
+"""
+
 
 @pytest.fixture(autouse=True)
-def _fleet_config(request: pytest.FixtureRequest, tmp_path: Path) -> None:
+def _fleet_config(
+    request: pytest.FixtureRequest, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Ensure .autoskillit/config.yaml enables fleet so _require_fleet passes.
 
     Only activates for tests carrying pytest.mark.feature("fleet").
@@ -70,3 +90,4 @@ def _fleet_config(request: pytest.FixtureRequest, tmp_path: Path) -> None:
     cfg_file = cfg_dir / "config.yaml"
     if not cfg_file.exists():
         cfg_file.write_text("features:\n  fleet: true\n")
+    monkeypatch.chdir(tmp_path)

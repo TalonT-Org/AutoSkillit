@@ -12,30 +12,9 @@ import pytest
 from autoskillit import cli
 from autoskillit.cli._prompts import _OPEN_KITCHEN_CHOICE, _resolve_recipe_input
 from autoskillit.core import ClaudeFlags
+from tests.cli.conftest import _SCRIPT_YAML
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
-
-_SCRIPT_YAML = """\
-name: test-script
-description: A test script
-summary: Test flow
-ingredients:
-  target:
-    description: Target path
-    required: true
-steps:
-  do-something:
-    tool: run_cmd
-    with:
-      cmd: echo hello
-    on_success: done
-    on_failure: done
-  done:
-    action: stop
-    message: Finished
-kitchen_rules:
-  - Only use AutoSkillit MCP tools during pipeline execution
-"""
 
 
 class TestResolveRecipeInput:

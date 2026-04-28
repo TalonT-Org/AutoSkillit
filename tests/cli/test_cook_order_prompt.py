@@ -11,30 +11,9 @@ import pytest
 
 from autoskillit import cli
 from autoskillit.core import ClaudeFlags
+from tests.cli.conftest import _SCRIPT_YAML
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
-
-_SCRIPT_YAML = """\
-name: test-script
-description: A test script
-summary: Test flow
-ingredients:
-  target:
-    description: Target path
-    required: true
-steps:
-  do-something:
-    tool: run_cmd
-    with:
-      cmd: echo hello
-    on_success: done
-    on_failure: done
-  done:
-    action: stop
-    message: Finished
-kitchen_rules:
-  - Only use AutoSkillit MCP tools during pipeline execution
-"""
 
 
 class TestCLIOrderPrompt:
@@ -272,24 +251,6 @@ class TestOrderDisplayOwnership:
         assert "open_kitchen" in system_prompt
         assert "FIRST ACTION" in system_prompt
 
-
-_GITHUB_RECIPE_YAML = """\
-name: github-recipe
-description: A recipe using github tools
-summary: Fetch an issue
-steps:
-  fetch:
-    tool: fetch_github_issue
-    with:
-      issue_url: https://github.com/example/repo/issues/1
-    on_success: done
-    on_failure: done
-  done:
-    action: stop
-    message: Done
-kitchen_rules:
-  - Only use AutoSkillit MCP tools during pipeline execution
-"""
 
 _PLUGIN_KEY = "autoskillit@autoskillit-local"
 

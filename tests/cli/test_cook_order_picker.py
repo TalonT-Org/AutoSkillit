@@ -12,30 +12,9 @@ import pytest
 
 from autoskillit import cli
 from autoskillit.core import ClaudeFlags
+from tests.cli.conftest import _SCRIPT_YAML
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
-
-_SCRIPT_YAML = """\
-name: test-script
-description: A test script
-summary: Test flow
-ingredients:
-  target:
-    description: Target path
-    required: true
-steps:
-  do-something:
-    tool: run_cmd
-    with:
-      cmd: echo hello
-    on_success: done
-    on_failure: done
-  done:
-    action: stop
-    message: Finished
-kitchen_rules:
-  - Only use AutoSkillit MCP tools during pipeline execution
-"""
 
 
 class TestCLIOrderPicker:
@@ -93,14 +72,12 @@ class TestCLIOrderPicker:
         capsys: pytest.CaptureFixture,
     ) -> None:
         """order exits 1 when no recipe is given and no recipes are available."""
-        from unittest.mock import MagicMock as _MagicMock
-
         import autoskillit.recipe as _recipe_mod
 
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
 
-        mock_result = _MagicMock()
+        mock_result = MagicMock()
         mock_result.items = []
         monkeypatch.setattr(_recipe_mod, "list_recipes", lambda _: mock_result)
 
@@ -609,6 +586,7 @@ class TestOrderResumeParsing:
                 app(["order", "--resume"])
             assert exc_info.value.code == 0
 
+        assert captured, "fake_launch was never called"
         assert captured["resume_spec"] == NoResume()
 
     def test_order_resume_uuid_does_not_validate_recipe(

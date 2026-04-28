@@ -396,33 +396,12 @@ def _launch_fleet_session(
 def _transition_dead_dispatch(state_path: Path, record: DispatchRecord, reason: str) -> None:
     """Transition a confirmed-dead RUNNING dispatch to RESUMABLE or INTERRUPTED.
 
-    Checks sidecar presence/parseability to distinguish recoverable crashes from true
-    interruptions. Always writes to state_path atomically; never raises on ValueError
-    (already-terminal races are silently skipped).
+    Delegates sidecar decision logic to the fleet layer. Always writes to state_path
+    atomically; never raises on ValueError (already-terminal races are silently skipped).
     """
-    from autoskillit.fleet import (  # noqa: PLC0415
-        mark_dispatch_interrupted,
-        mark_dispatch_resumable,
-        read_sidecar_from_path,  # noqa: PLC0415
-    )
+    from autoskillit.fleet.state import _crash_recover_dispatch  # noqa: PLC0415
 
-    sidecar = Path(record.sidecar_path) if record.sidecar_path else None
-    if sidecar is not None and sidecar.exists():
-        raw_lines = [ln.strip() for ln in sidecar.read_text().splitlines() if ln.strip()]
-        if not raw_lines or read_sidecar_from_path(sidecar):
-            try:
-                mark_dispatch_resumable(state_path, record.name, sidecar_path=str(sidecar))
-            except Exception:
-                logger.warning(
-                    "_transition_dead_dispatch: failed to mark dispatch resumable", exc_info=True
-                )
-            return
-    try:
-        mark_dispatch_interrupted(state_path, record.name, reason=reason)
-    except Exception:
-        logger.warning(
-            "_transition_dead_dispatch: failed to mark dispatch interrupted", exc_info=True
-        )
+    _crash_recover_dispatch(state_path, record, reason=reason)
 
 
 @asynccontextmanager

@@ -394,7 +394,11 @@ def read_all_campaign_captures(
     return result
 
 
-def _crash_recover_dispatch(state_path: Path, record: DispatchRecord) -> DispatchStatus:
+def _crash_recover_dispatch(
+    state_path: Path,
+    record: DispatchRecord,
+    reason: str = "stale_running_on_resume",
+) -> DispatchStatus:
     """Transition a confirmed-dead RUNNING dispatch to RESUMABLE or INTERRUPTED.
 
     Returns the new status so the caller can update the in-memory record.
@@ -407,11 +411,26 @@ def _crash_recover_dispatch(state_path: Path, record: DispatchRecord) -> Dispatc
 
     sidecar = Path(record.sidecar_path) if record.sidecar_path else None
     if sidecar is not None and sidecar.exists():
-        raw_lines = [ln.strip() for ln in sidecar.read_text().splitlines() if ln.strip()]
-        if not raw_lines or read_sidecar_from_path(sidecar):
-            mark_dispatch_resumable(state_path, record.name, sidecar_path=str(sidecar))
-            return DispatchStatus.RESUMABLE
-    mark_dispatch_interrupted(state_path, record.name, reason="stale_running_on_resume")
+        try:
+            raw_lines = [ln.strip() for ln in sidecar.read_text().splitlines() if ln.strip()]
+        except OSError:
+            logger.warning("_crash_recover_dispatch: sidecar vanished during read", exc_info=True)
+        else:
+            if not raw_lines or read_sidecar_from_path(sidecar):
+                try:
+                    mark_dispatch_resumable(state_path, record.name, sidecar_path=str(sidecar))
+                    return DispatchStatus.RESUMABLE
+                except Exception:
+                    logger.warning(
+                        "_crash_recover_dispatch: failed to mark dispatch resumable",
+                        exc_info=True,
+                    )
+    try:
+        mark_dispatch_interrupted(state_path, record.name, reason=reason)
+    except Exception:
+        logger.warning(
+            "_crash_recover_dispatch: failed to mark dispatch interrupted", exc_info=True
+        )
     return DispatchStatus.INTERRUPTED
 
 

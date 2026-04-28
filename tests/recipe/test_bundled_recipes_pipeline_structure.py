@@ -36,7 +36,7 @@ def _assert_ci_steps(recipe) -> None:
     ci = recipe.steps["ci_watch"]
     assert ci.tool == "wait_for_ci"
     assert ci.skip_when_false == "inputs.open_pr"
-    assert ci.with_args.get("timeout_seconds") == 300
+    assert ci.with_args.get("timeout_seconds") == 600
     assert ci.on_result is not None
     result_routes = {c.route for c in ci.on_result.conditions}
     assert "check_repo_merge_state" in result_routes

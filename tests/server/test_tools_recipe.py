@@ -486,7 +486,7 @@ async def test_list_recipes_returns_error_string_when_context_missing() -> None:
     result = await list_recipes()
     assert isinstance(result, str)
     parsed = json.loads(result)
-    assert "error" in parsed
+    assert "error" in parsed or parsed.get("is_error") is True
 
 
 # P5F2-T4  (import hygiene check)

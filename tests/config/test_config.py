@@ -473,7 +473,7 @@ class TestLoggingConfig:
 
     def test_logging_config_defaults(self, tmp_path):
         """LOG_C1: LoggingConfig has correct defaults from defaults.yaml."""
-        cfg = load_config(tmp_path / "settings.toml")
+        cfg = load_config(tmp_path)
         assert cfg.logging.level == "INFO"
         assert cfg.logging.json_output is None
 
@@ -540,7 +540,7 @@ class TestLinuxTracingConfig:
 
     def test_linux_tracing_config_defaults(self, tmp_path):
         """LT_C1: LinuxTracingConfig defaults: enabled, 5s interval, empty log_dir."""
-        cfg = load_config(tmp_path / "settings.toml")
+        cfg = load_config(tmp_path)
         assert cfg.linux_tracing.enabled is True
         assert cfg.linux_tracing.proc_interval == 5.0
         assert cfg.linux_tracing.log_dir == ""
@@ -830,7 +830,7 @@ class TestBranchingConfig:
         from autoskillit.config import load_config
 
         monkeypatch.setenv("AUTOSKILLIT_BRANCHING__PROMOTION_TARGET", "stable")
-        cfg = load_config(tmp_path / "settings.toml")
+        cfg = load_config(tmp_path)
         assert cfg.branching.promotion_target == "stable"
 
 
@@ -840,17 +840,17 @@ class TestWorkspaceConfig:
     def test_workspace_config_exists_on_automation_config(self, tmp_path):
         from autoskillit.config import load_config
 
-        cfg = load_config(tmp_path / "settings.toml")
+        cfg = load_config(tmp_path)
         assert hasattr(cfg, "workspace")
 
     def test_workspace_worktree_root_defaults_to_none(self, tmp_path):
         from autoskillit.config import load_config
 
-        cfg = load_config(tmp_path / "settings.toml")
+        cfg = load_config(tmp_path)
         assert cfg.workspace.worktree_root is None
 
     def test_workspace_runs_root_defaults_to_none(self, tmp_path):
         from autoskillit.config import load_config
 
-        cfg = load_config(tmp_path / "settings.toml")
+        cfg = load_config(tmp_path)
         assert cfg.workspace.runs_root is None

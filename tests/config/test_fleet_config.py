@@ -56,10 +56,6 @@ class TestFleetConfig:
 
     def test_fleet_key_accepted_by_schema_validator(self, tmp_path) -> None:
         """User config with fleet: section does not raise ConfigSchemaError."""
-        import yaml
-
-        from autoskillit.config import load_config
-
         config_dir = tmp_path / ".autoskillit"
         config_dir.mkdir()
         config_data = {"fleet": {"default_timeout_sec": 1800}}

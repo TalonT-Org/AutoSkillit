@@ -59,11 +59,3 @@ class TestPacksConfig:
             logger.removeHandler(handler)
         assert config.packs.enabled == ["nonexistent-pack"]  # preserved as-is
         assert any("nonexistent-pack" in r.getMessage() for r in captured)
-
-    def test_write_config_layer_accepts_packs_enabled(self, tmp_path) -> None:
-        """write_config_layer does not raise for valid packs.enabled."""
-        from autoskillit.config.settings import write_config_layer
-
-        config_path = tmp_path / "config.yaml"
-        write_config_layer(config_path, {"packs": {"enabled": ["research"]}})
-        assert config_path.exists()

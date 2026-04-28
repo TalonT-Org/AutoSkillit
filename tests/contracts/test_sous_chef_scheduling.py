@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import pytest
+
+from tests.contracts._anti_confirm_helpers import ANTI_CONFIRM_RE as _ANTI_CONFIRM_RE
 
 
 def _sous_chef_text() -> str:
@@ -149,12 +150,6 @@ def test_sous_chef_execution_map_group_iteration() -> None:
     assert "merge" in lower and ("wait" in lower or "before" in lower or "mandatory" in lower), (
         "EXECUTION MAP section must contain mandatory merge-wait rule between groups"
     )
-
-
-_ANTI_CONFIRM_RE = re.compile(
-    r"(?:never|do\s+not|must\s+not).*(?:ask|confirm|pause|AskUserQuestion)",
-    re.IGNORECASE,
-)
 
 
 def test_sous_chef_execution_map_has_anti_confirmation() -> None:

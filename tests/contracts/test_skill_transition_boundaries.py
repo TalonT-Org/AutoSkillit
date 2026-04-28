@@ -5,10 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-_ANTI_CONFIRM_RE = re.compile(
-    r"(?:never|do\s+not|must\s+not).*(?:ask|confirm|pause|AskUserQuestion)",
-    re.IGNORECASE,
-)
+from tests.contracts._anti_confirm_helpers import ANTI_CONFIRM_RE as _ANTI_CONFIRM_RE
 
 
 def _skill_text(skill_name: str) -> str:
@@ -20,29 +17,40 @@ def _skill_text(skill_name: str) -> str:
     raise FileNotFoundError(f"SKILL.md not found for skill: {skill_name!r}")
 
 
+_BATCH_ANTI_CONFIRM_RE = re.compile(
+    r"(?:never|do\s+not|must\s+not)[^\n]{0,80}(?:next\s+batch|batch\s+transition)",
+    re.IGNORECASE,
+)
+_INTER_ISSUE_ANTI_CONFIRM_RE = re.compile(
+    r"between\s+issues[^\n]{0,60}immediately"
+    r"|(?:never|do\s+not|must\s+not)[^\n]{0,80}next\s+issue",
+    re.IGNORECASE,
+)
+
+
 def test_process_issues_batch_anti_confirmation() -> None:
-    """Critical Constraints section must prohibit AskUserQuestion at batch transitions."""
+    """Critical Constraints must explicitly prohibit confirmation at batch transitions."""
     text = _skill_text("process-issues")
     cc_start = text.find("## Critical Constraints")
     assert cc_start != -1, "process-issues must have a Critical Constraints section"
     next_section = text.find("\n## ", cc_start + 1)
     section = text[cc_start:next_section] if next_section != -1 else text[cc_start:]
-    assert _ANTI_CONFIRM_RE.search(section) is not None, (
-        "process-issues Critical Constraints must explicitly prohibit AskUserQuestion "
-        "at batch transitions (e.g., 'NEVER use AskUserQuestion ... batch')"
+    assert _BATCH_ANTI_CONFIRM_RE.search(section) is not None, (
+        "process-issues Critical Constraints must explicitly prohibit confirmation at "
+        "batch transitions (e.g., 'NEVER use AskUserQuestion ... next batch')"
     )
 
 
 def test_process_issues_inter_issue_anti_confirmation() -> None:
-    """Critical Constraints section must prohibit AskUserQuestion between issues."""
+    """Critical Constraints section must explicitly prohibit pausing between issues."""
     text = _skill_text("process-issues")
     cc_start = text.find("## Critical Constraints")
     assert cc_start != -1, "process-issues must have a Critical Constraints section"
     next_section = text.find("\n## ", cc_start + 1)
     section = text[cc_start:next_section] if next_section != -1 else text[cc_start:]
-    assert _ANTI_CONFIRM_RE.search(section) is not None, (
-        "process-issues Critical Constraints must explicitly prohibit AskUserQuestion "
-        "between issues (e.g., 'NEVER use AskUserQuestion ... issue')"
+    assert _INTER_ISSUE_ANTI_CONFIRM_RE.search(section) is not None, (
+        "process-issues Critical Constraints must explicitly prohibit pausing between "
+        "issues (e.g., 'Between issues: immediately...' or 'NEVER...next issue')"
     )
 
 

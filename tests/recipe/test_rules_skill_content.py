@@ -10,6 +10,7 @@ from unittest.mock import patch
 import pytest
 
 import autoskillit.recipe.rules_skill_content as _rsc
+from autoskillit.core import Severity
 from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 
@@ -803,8 +804,6 @@ def test_transition_boundary_anti_confirmation_rule_fires(tmp_path: Path) -> Non
         f"got: {rule_ids}"
     )
     matching = [f for f in findings if f.rule == _BOUNDARY_RULE_ID]
-    from autoskillit.core import Severity  # noqa: PLC0415
-
     assert matching[0].severity == Severity.WARNING
 
 

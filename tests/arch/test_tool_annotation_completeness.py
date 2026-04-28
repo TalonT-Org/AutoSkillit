@@ -9,9 +9,13 @@ Runtime layers (2-4) live in tests/server/test_tool_annotation_completeness.py.
 from __future__ import annotations
 
 import ast
+import sys
 from pathlib import Path
 
 import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "scripts"))
+from check_tool_annotations import check as check_readonly_violations
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
@@ -73,42 +77,10 @@ class TestToolAnnotationCompleteness:
     def test_all_annotations_are_readonly_true(self):
         """AST scan: readOnlyHint must be True in every @mcp.tool() decorator.
 
-        Catches the bug at AST level (no server import needed) by inspecting
-        the literal value passed to annotations={"readOnlyHint": ...}.
+        Delegates to scripts/check_tool_annotations.py:check() to avoid
+        duplicating the AST scanning logic.
         """
-        violations: list[str] = []
-        for path in _tools_files():
-            source = path.read_text(encoding="utf-8")
-            tree = ast.parse(source, filename=str(path))
-            for node in ast.walk(tree):
-                if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    continue
-                for dec in node.decorator_list:
-                    if not (
-                        isinstance(dec, ast.Call)
-                        and isinstance(dec.func, ast.Attribute)
-                        and dec.func.attr == "tool"
-                        and isinstance(dec.func.value, ast.Name)
-                        and dec.func.value.id == "mcp"
-                    ):
-                        continue
-                    for kw in dec.keywords:
-                        if kw.arg != "annotations":
-                            continue
-                        if not isinstance(kw.value, ast.Dict):
-                            continue
-                        for key, val in zip(kw.value.keys, kw.value.values):
-                            if (
-                                isinstance(key, ast.Constant)
-                                and key.value == "readOnlyHint"
-                                and isinstance(val, ast.Constant)
-                                and val.value is not True
-                            ):
-                                violations.append(
-                                    f"{path.name}:{dec.lineno}: {node.name!r} "
-                                    f"has readOnlyHint={val.value!r} (must be True)"
-                                )
-
+        violations = check_readonly_violations()
         assert not violations, (
             "readOnlyHint must be True for all tools. "
             "All pipelines use independent branches/worktrees.\n\n"

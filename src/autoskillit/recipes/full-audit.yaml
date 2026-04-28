@@ -166,8 +166,12 @@ steps:
     action: stop
     message: >-
       Full audit complete. GitHub issues created from validated audit reports.
-      Check context.issue_urls for the created issue links and
-      {{AUTOSKILLIT_TEMP}}/ for all audit artifacts.
+      Emit the L2 result sentinel with issue_urls included as a JSON array of
+      the created issue URLs. context.issue_urls contains the list of created
+      issue URLs — emit them as a JSON array in the sentinel JSON:
+      {"success": true, "reason": "completed", "summary": "Full audit complete.
+      GitHub issues created.", "issue_urls": ["url1", "url2"]}
+      Artifacts are in {{AUTOSKILLIT_TEMP}}/.
 
   escalate_stop:
     action: stop

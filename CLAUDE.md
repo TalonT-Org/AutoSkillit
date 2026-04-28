@@ -171,7 +171,10 @@ generic_automation_mcp/
 │   ├── commands.py          #   Claude{Interactive,Headless}Cmd builders
 │   ├── db.py                #   Read-only SQLite with defence-in-depth
 │   ├── diff_annotator.py    #   Diff annotation + findings filter for review-pr
-│   ├── headless.py          #   Headless Claude session orchestration
+│   ├── headless.py          #   Headless Claude session orchestration (facade)
+│   ├── _headless_recovery.py #  Recovery functions: _recover_from_separate_marker, _synthesize_from_write_artifacts, etc.
+│   ├── _headless_path_tokens.py # Path-token extraction: _build_path_token_set, _extract_output_paths, _validate_output_paths
+│   ├── _headless_result.py  #   Result building: _build_skill_result, _capture_failure, _apply_budget_guard
 │   ├── _headless_scan.py    #   Write-path JSONL scanning (extracted from headless.py)
 │   ├── linux_tracing.py     #   /proc + psutil process tracing (Linux)
 │   ├── anomaly_detection.py #   Post-hoc anomaly detection over snapshots

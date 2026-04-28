@@ -19,14 +19,12 @@ from autoskillit.core import (
     get_logger,
 )
 from autoskillit.execution._headless_path_tokens import (
-    _OUTPUT_PATH_PATTERN,
     _extract_output_paths,
     _extract_worktree_path,
     _validate_output_paths,
 )
 from autoskillit.execution._headless_recovery import (
     _CHANNEL_B_RECOVERABLE_SUBTYPES,
-    _attempt_contract_nudge,
     _recover_block_from_assistant_messages,
     _recover_from_separate_marker,
     _synthesize_from_write_artifacts,

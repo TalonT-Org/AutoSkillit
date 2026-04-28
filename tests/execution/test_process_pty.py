@@ -727,7 +727,7 @@ class TestChannelBDrainRaceRecovery:
         Monkeypatches parse_session_result to inject assistant_messages since
         an empty stdout produces no NDJSON records to accumulate from.
         """
-        from autoskillit.execution import headless as headless_mod
+        import autoskillit.execution._headless_result as headless_result_mod
 
         fake_session = ClaudeSessionResult(
             subtype=CliSubtype.EMPTY_OUTPUT,
@@ -736,7 +736,7 @@ class TestChannelBDrainRaceRecovery:
             session_id="test",
             assistant_messages=["Done.\n%%ORDER_UP%%"],
         )
-        monkeypatch.setattr(headless_mod, "parse_session_result", lambda _: fake_session)
+        monkeypatch.setattr(headless_result_mod, "parse_session_result", lambda _: fake_session)
         result = SubprocessResult(
             returncode=0,
             stdout="",

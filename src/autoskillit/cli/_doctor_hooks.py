@@ -91,6 +91,16 @@ def _check_hook_health(settings_path: Path) -> DoctorResult:
     return DoctorResult(Severity.OK, "hook_health", "All hook scripts accessible")
 
 
+def _check_hook_registry_drift_all_scopes(project_root: Path | None = None) -> list[DoctorResult]:
+    """Check hook registry drift across ALL scopes."""
+    from autoskillit.hook_registry import iter_all_scope_paths
+
+    results: list[DoctorResult] = []
+    for scope_label, settings_path in iter_all_scope_paths(project_root):
+        results.append(_check_hook_registry_drift(settings_path, scope_label=scope_label))
+    return results
+
+
 def _check_hook_health_all_scopes(project_root: Path | None = None) -> list[DoctorResult]:
     """Verify all deployed hook scripts exist on disk across ALL scopes."""
     from autoskillit.hook_registry import iter_all_scope_paths

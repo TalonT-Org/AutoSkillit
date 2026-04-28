@@ -8,7 +8,6 @@ from pathlib import Path
 from autoskillit.cli._hooks import _claude_settings_path
 from autoskillit.config import load_config
 from autoskillit.core import Severity, get_logger, is_feature_enabled
-from autoskillit.hook_registry import iter_all_scope_paths
 
 from ._doctor_config import (
     _check_config_layers_for_secrets,
@@ -37,7 +36,7 @@ from ._doctor_fleet import (
 from ._doctor_hooks import (
     _check_hook_health_all_scopes,
     _check_hook_registration,
-    _check_hook_registry_drift,
+    _check_hook_registry_drift_all_scopes,
 )
 from ._doctor_install import (
     _check_autoskillit_on_path,
@@ -127,8 +126,7 @@ def run_doctor(*, output_json: bool = False) -> None:
     results.append(_check_hook_registration(_claude_settings_path("user")))
 
     # Check 7b: Hook registry drift (multi-scope)
-    for scope_label, settings_path in iter_all_scope_paths(Path.cwd()):
-        results.append(_check_hook_registry_drift(settings_path, scope_label=scope_label))
+    results.extend(_check_hook_registry_drift_all_scopes(Path.cwd()))
 
     # Check 8: Script version health
     results.append(_check_script_version_health())

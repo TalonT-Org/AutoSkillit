@@ -389,6 +389,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
         {
             "server",
             "cli",
+            # file-level: only test_pack_enforcement.py imports server (autouse fixtures
+            # were moved from fleet/conftest.py into this module to narrow the cascade)
             "fleet/test_pack_enforcement.py",
         }
     ),

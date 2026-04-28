@@ -57,9 +57,12 @@ def _function_body_has_any_kitchen_open_patch(func_node: ast.FunctionDef) -> boo
         func = node.func
         if not (isinstance(func, ast.Attribute) and func.attr == "setattr"):
             continue
-        for arg in node.args:
-            if isinstance(arg, ast.Constant) and "any_kitchen_open" in str(arg.value):
-                return True
+        if (
+            len(node.args) >= 2
+            and isinstance(node.args[1], ast.Constant)
+            and "any_kitchen_open" in str(node.args[1].value)
+        ):
+            return True
     return False
 
 

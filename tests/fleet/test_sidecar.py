@@ -43,7 +43,7 @@ class TestAppendSidecarEntry:
             append_sidecar_entry(
                 "d2", IssueSidecarEntry(issue_url=url, status="completed", ts=TS), tmp_path
             )
-        lines = [l for l in sidecar_path("d2", tmp_path).read_text().splitlines() if l.strip()]
+        lines = [ln for ln in sidecar_path("d2", tmp_path).read_text().splitlines() if ln.strip()]
         assert len(lines) == 3
 
     def test_appended_line_is_valid_json(self, tmp_path: Path) -> None:

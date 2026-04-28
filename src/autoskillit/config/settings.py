@@ -93,7 +93,6 @@ __all__ = [
     "TokenUsageConfig",
     "WorkspaceConfig",
     "WorktreeSetupConfig",
-    "_SECRETS_ONLY_KEYS",
     "load_config",
     "validate_layer_keys",
     "write_config_layer",

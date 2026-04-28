@@ -309,7 +309,7 @@ class TestResumeSkipsAliveRunningDispatch:
             l2_starttime_ticks=999,
         )
         monkeypatch.setattr(
-            "autoskillit.fleet.state.is_dispatch_session_alive",
+            "autoskillit.fleet._liveness.is_dispatch_session_alive",
             lambda r: True,
         )
         write_initial_state(sp, "c1", "test", "", [record])
@@ -335,7 +335,7 @@ class TestResumeInterruptsStaleRunningDispatch:
             l2_starttime_ticks=0,
         )
         monkeypatch.setattr(
-            "autoskillit.fleet.state.is_dispatch_session_alive",
+            "autoskillit.fleet._liveness.is_dispatch_session_alive",
             lambda r: False,
         )
         write_initial_state(sp, "c1", "test", "", [record])
@@ -359,7 +359,7 @@ class TestResumeLockPreventsDoubleInterrupt:
             l2_starttime_ticks=0,
         )
         monkeypatch.setattr(
-            "autoskillit.fleet.state.is_dispatch_session_alive",
+            "autoskillit.fleet._liveness.is_dispatch_session_alive",
             lambda r: False,
         )
         write_initial_state(sp, "c1", "test", "", [record])

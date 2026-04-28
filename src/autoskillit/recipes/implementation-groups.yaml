@@ -940,7 +940,7 @@ steps:
     action: route
     on_result:
       - when: "${{ inputs.auto_merge }} != 'true'"
-        route: register_clone_success
+        route: patch_token_summary
       - when: "${{ context.queue_available }} == true and ${{ context.merge_group_trigger }} == true"
         route: enqueue_to_queue
       - when: "${{ context.auto_merge_available }} == true"
@@ -1498,13 +1498,34 @@ steps:
     with:
       issue_url: ${{ inputs.issue_url }}
       target_branch: ${{ inputs.base_branch }}
-    on_success: register_clone_success
-    on_failure: register_clone_success
+    on_success: patch_token_summary
+    on_failure: patch_token_summary
     note: >
       Called on the success path after PR merge is confirmed.
       Passes target_branch so release_issue can determine whether to apply the
       staged label (non-default target) or just remove in-progress (default target).
       optional=true ensures pipeline still reaches register_clone_success if this step errors.
+
+  patch_token_summary:
+    description: "Collect all pipeline token data and patch the PR body with complete summary"
+    tool: run_python
+    optional: true
+    skip_when_false: "context.pr_url"
+    with:
+      callable: "autoskillit.smoke_utils.patch_pr_token_summary"
+      timeout: 60
+      pr_url: "${{ context.pr_url }}"
+      cwd: "${{ context.work_dir }}"
+    on_success: register_clone_success
+    on_failure: register_clone_success
+    note: >
+      Terminal token collection step. Runs in the MCP server process (zero tokens),
+      reads sessions.jsonl with cwd_filter to capture all pipeline sessions regardless
+      of kitchen_id splits, and PATCHes the PR body with a complete Token Usage Summary
+      table. Replaces any partial table written by the PostToolUse hook at compose_pr
+      time. skip_when_false guards the no-PR path (open_pr=false). Both on_success and
+      on_failure route to register_clone_success — token summary failure must never
+      block pipeline completion.
 
   release_issue_failure:
     description: "Release the in-progress claim after pipeline failure"

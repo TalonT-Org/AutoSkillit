@@ -582,7 +582,7 @@ steps:
     on_result:
       - when: "${{ context.pr_url }}"
         route: review_research_pr
-      - route: research_complete
+      - route: patch_token_summary
     note: Guard — skip review if pr_url is empty (graceful degradation from open_research_pr).
 
   review_research_pr:
@@ -890,12 +890,12 @@ steps:
       step_name: export_local_bundle
     capture:
       local_bundle_path: "${{ result.local_bundle_path }}"
-    on_success: research_complete
-    on_failure: research_complete
+    on_success: patch_token_summary
+    on_failure: patch_token_summary
     note: >
       Local mode terminal export. Copies the finalized research_dir (containing
       report.html, mermaid.min.js, images/, report.md, artifacts.tar.gz) to
-      {source_dir}/research-bundles/{slug}/. Non-fatal — routes to research_complete
+      {source_dir}/research-bundles/{slug}/. Non-fatal — routes to patch_token_summary
       on both outcomes. The captured local_bundle_path is available to the orchestrator
       via research_complete.
 
@@ -904,11 +904,11 @@ steps:
     on_result:
       - when: "${{ context.pr_url }}"
         route: capture_experiment_branch
-      - route: research_complete
+      - route: patch_token_summary
     note: >
       Gate step for the archival phase. Routes to artifact extraction when
-      a research PR exists, otherwise skips directly to completion. All paths
-      from review/resolve/re-push converge here.
+      a research PR exists, otherwise skips directly to patch_token_summary.
+      All paths from review/resolve/re-push converge here.
 
   capture_experiment_branch:
     tool: run_cmd
@@ -919,7 +919,7 @@ steps:
     capture:
       experiment_branch: "${{ result.stdout | trim }}"
     on_success: create_artifact_branch
-    on_failure: research_complete
+    on_failure: patch_token_summary
 
   create_artifact_branch:
     tool: run_cmd
@@ -947,7 +947,7 @@ steps:
     capture:
       artifact_branch: "${{ result.artifact_branch }}"
     on_success: open_artifact_pr
-    on_failure: research_complete
+    on_failure: patch_token_summary
     note: >
       Creates a temporary worktree from the base branch, checks out only the
       research/ directory from the experiment branch, commits and pushes, then
@@ -980,7 +980,7 @@ steps:
     capture:
       artifact_pr_url: "${{ result.artifact_pr_url }}"
     on_success: tag_experiment_branch
-    on_failure: research_complete
+    on_failure: patch_token_summary
     note: >
       Opens a PR containing only the research/ directory. The PR body documents
       the two-file structure (README.md + artifacts.tar.gz) and provides the
@@ -1001,7 +1001,7 @@ steps:
     capture:
       archive_tag: "${{ result.archive_tag }}"
     on_success: close_experiment_pr
-    on_failure: research_complete
+    on_failure: patch_token_summary
     note: >
       Creates an annotated tag preserving the full experiment branch (including
       all variant code, benchmark scaffolding, etc.) under archive/research/.
@@ -1017,13 +1017,33 @@ steps:
         gh pr close '${{ context.pr_url }}' --comment "${CLOSE_BODY}"
       cwd: "${{ context.worktree_path }}"
       step_name: close_experiment_pr
-    on_success: research_complete
-    on_failure: research_complete
+    on_success: patch_token_summary
+    on_failure: patch_token_summary
     note: >
       Closes the original experiment PR with a structured comment linking to
       the artifact PR (where research/ was merged) and the archive tag (where
       the full experiment branch is preserved). Both success and failure route
-      to research_complete — closing the PR is best-effort.
+      to patch_token_summary — closing the PR is best-effort.
+
+  patch_token_summary:
+    description: "Collect all pipeline token data and patch the PR body with complete summary"
+    tool: run_python
+    optional: true
+    skip_when_false: "context.pr_url"
+    with:
+      callable: "autoskillit.smoke_utils.patch_pr_token_summary"
+      timeout: 60
+      pr_url: "${{ context.pr_url }}"
+      cwd: "${{ context.worktree_path }}"
+    on_success: research_complete
+    on_failure: research_complete
+    note: >
+      Terminal token collection step. Runs in the MCP server process (zero tokens),
+      reads sessions.jsonl with cwd_filter to capture all pipeline sessions regardless
+      of kitchen_id splits, and PATCHes the PR body with a complete Token Usage Summary
+      table. Replaces any partial table written by the PostToolUse hook at compose_pr
+      time. skip_when_false guards the no-PR path. Both on_success and on_failure route
+      to research_complete — token summary failure must never block pipeline completion.
 
   research_complete:
     action: stop

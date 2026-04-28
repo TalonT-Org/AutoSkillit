@@ -143,6 +143,84 @@ def check_loop_iteration(
     }
 
 
+def patch_pr_token_summary(pr_url: str, cwd: str, log_dir: str = "") -> dict[str, str]:
+    import re as _re  # noqa: PLC0415
+    import subprocess  # noqa: PLC0415
+    import time  # noqa: PLC0415
+
+    from autoskillit.execution.session_log import resolve_log_dir  # noqa: PLC0415
+    from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter  # noqa: PLC0415
+    from autoskillit.pipeline.tokens import DefaultTokenLog  # noqa: PLC0415
+
+    m = _re.match(r"https://github\.com/([^/]+)/([^/]+)/pull/(\d+)", pr_url)
+    if not m:
+        return {"success": "false", "error": f"Invalid PR URL: {pr_url}"}
+
+    owner, repo, pr_number = m.group(1), m.group(2), m.group(3)
+
+    log_root = resolve_log_dir(log_dir)
+    token_log = DefaultTokenLog()
+    count = token_log.load_from_log_dir(log_root, cwd_filter=cwd)
+
+    if count == 0:
+        return {"success": "false", "error": "No sessions found", "sessions_loaded": "0"}
+
+    steps = token_log.get_report()
+    total = token_log.compute_total()
+    table = TelemetryFormatter.format_token_table(steps, total)
+
+    try:
+        read_result = subprocess.run(
+            ["gh", "api", f"repos/{owner}/{repo}/pulls/{pr_number}", "--jq", ".body"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+        return {"success": "false", "error": f"Failed to read PR body: {exc}"}
+
+    if read_result.returncode != 0:
+        return {"success": "false", "error": f"Failed to read PR: {read_result.stderr.strip()}"}
+
+    current_body = read_result.stdout.strip()
+    if not current_body:
+        return {"success": "false", "error": "PR body is empty"}
+
+    section_re = _re.compile(r"\n*## Token Usage Summary\n.*", _re.DOTALL)
+    if section_re.search(current_body):
+        new_body = section_re.sub("\n\n" + table, current_body)
+    else:
+        new_body = current_body + "\n\n" + table
+
+    time.sleep(1)
+
+    try:
+        patch_result = subprocess.run(
+            [
+                "gh",
+                "api",
+                f"repos/{owner}/{repo}/pulls/{pr_number}",
+                "--method",
+                "PATCH",
+                "--raw-field",
+                f"body={new_body}",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+        return {"success": "false", "error": f"Failed to patch PR: {exc}"}
+
+    if patch_result.returncode != 0:
+        return {
+            "success": "false",
+            "error": f"Failed to patch PR: {patch_result.stderr.strip()}",
+        }
+
+    return {"success": "true", "sessions_loaded": str(count)}
+
+
 def fetch_merge_queue_data(base_branch: str, cwd: str, output_dir: str) -> dict[str, str]:
     """Fetch and parse GitHub merge queue data server-side for analyze-prs.
 

@@ -160,10 +160,10 @@ async def execute_dispatch(
             FleetErrorCode.FLEET_LOCK_NOT_INITIALIZED,
             "Fleet lock not initialized — open_kitchen with fleet mode.",
         )
-    if lock.locked():
+    if lock.at_capacity():
         return fleet_error(
             FleetErrorCode.FLEET_PARALLEL_REFUSED,
-            "A dispatch is already in progress. Only one dispatch at a time.",
+            f"Fleet at capacity ({lock.active_count}/{lock.max_concurrent} dispatches running).",
         )
 
     await lock.acquire()

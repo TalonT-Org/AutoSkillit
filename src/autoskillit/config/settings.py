@@ -312,6 +312,7 @@ class WorkspaceConfig:
 @dataclass
 class FleetConfig:
     default_timeout_sec: int = 3600
+    max_concurrent_dispatches: int = 1
 
     def validate(self, feature_enabled: bool) -> None:
         """Validate only when the feature is active."""
@@ -320,6 +321,10 @@ class FleetConfig:
         if self.default_timeout_sec <= 0:
             raise ValueError(
                 f"default_timeout_sec must be positive, got {self.default_timeout_sec}"
+            )
+        if self.max_concurrent_dispatches < 1:
+            raise ValueError(
+                f"max_concurrent_dispatches must be >= 1, got {self.max_concurrent_dispatches}"
             )
 
 
@@ -640,6 +645,9 @@ class AutomationConfig:
             fleet=FleetConfig(
                 default_timeout_sec=int(
                     val(fr, "default_timeout_sec", _fr["default_timeout_sec"])
+                ),
+                max_concurrent_dispatches=int(
+                    val(fr, "max_concurrent_dispatches", _fr["max_concurrent_dispatches"])
                 ),
             ),
             features=_features_dict,

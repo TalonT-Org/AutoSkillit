@@ -87,11 +87,7 @@ def check_diagram_staleness(
 
 
 def generate_recipe_diagram(recipe_path: Path, recipes_dir: Path) -> None:
-    """Generate a flow diagram Markdown file for the recipe at *recipe_path*.
-
-    Writes ``recipes_dir/diagrams/{recipe_name}.md`` with the recipe hash and
-    format-version markers so the diagram passes staleness and validation checks.
-    """
+    """Generate a flow diagram Markdown file for the recipe at *recipe_path*."""
     from autoskillit.recipe.io import load_recipe
 
     recipe = load_recipe(recipe_path)

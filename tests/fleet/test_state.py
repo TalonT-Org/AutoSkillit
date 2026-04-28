@@ -12,6 +12,7 @@ from unittest.mock import patch
 import pytest
 
 from autoskillit.fleet import (
+    FLEET_HALTED_SENTINEL,
     DispatchRecord,
     DispatchStatus,
     append_dispatch_record,
@@ -141,7 +142,7 @@ class TestResumeRejectsHaltedOnFailure:
         decision = resume_campaign_from_state(sp, continue_on_failure=False)
         assert decision is not None
         assert decision.next_dispatch_name == ""
-        assert "fleet_halted_on_failure" in decision.completed_dispatches_block
+        assert decision.completed_dispatches_block == FLEET_HALTED_SENTINEL
 
 
 class TestAtomicUnderConcurrentRead:
@@ -292,5 +293,5 @@ class TestGateDispatchFailureHaltsCampaign:
 
         decision = resume_campaign_from_state(sp, continue_on_failure=False)
         assert decision is not None
+        assert decision.completed_dispatches_block == FLEET_HALTED_SENTINEL
         assert decision.next_dispatch_name == ""
-        assert decision.completed_dispatches_block == "fleet_halted_on_failure"

@@ -669,19 +669,17 @@ def test_campaign_prompt_tool_list_still_enumerates_six_tools():
 
 def test_campaign_prompt_includes_gate_dispatch_handling_section():
     """Campaign prompt includes GATE DISPATCH HANDLING section when a gate dispatch is present."""
-    from unittest.mock import MagicMock
-
     from autoskillit.cli._prompts import _build_fleet_campaign_prompt
+    from autoskillit.recipe.schema import CampaignDispatch, Recipe, RecipeKind
 
-    dispatch = MagicMock()
-    dispatch.gate = "confirm"
-    dispatch.message = "Proceed?"
-
-    recipe = MagicMock()
-    recipe.name = "test-campaign"
-    recipe.description = "Test"
-    recipe.dispatches = [dispatch]
-    recipe.continue_on_failure = False
+    dispatch = CampaignDispatch(name="gate-check", gate="confirm", message="Proceed?")
+    recipe = Recipe(
+        name="test-campaign",
+        description="Test",
+        kind=RecipeKind.CAMPAIGN,
+        dispatches=[dispatch],
+        continue_on_failure=False,
+    )
 
     prompt = _build_fleet_campaign_prompt(
         campaign_recipe=recipe,

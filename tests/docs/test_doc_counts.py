@@ -362,11 +362,13 @@ def test_catalog_states_vis_lens_count_is_12() -> None:
 
 def test_catalog_count_matches_filesystem() -> None:
     """Header in catalog.md must match the actual skill-dir count."""
-    catalog = (DOCS_DIR / "skills" / "catalog.md").read_text()
+    catalog = (DOCS_DIR / "skills" / "catalog.md").read_text(encoding="utf-8")
     skills_dir = SRC_DIR / "skills"
     extended_dir = SRC_DIR / "skills_extended"
-    tier1_count = sum(1 for p in skills_dir.iterdir() if p.is_dir())
-    extended_count = sum(1 for p in extended_dir.iterdir() if p.is_dir())
+    tier1_count = sum(1 for p in skills_dir.iterdir() if p.is_dir() and p.name != "__pycache__")
+    extended_count = sum(
+        1 for p in extended_dir.iterdir() if p.is_dir() and p.name != "__pycache__"
+    )
     total = tier1_count + extended_count
     assert f"{total} total" in catalog, f"catalog.md header should claim {total} total skills"
 
@@ -419,6 +421,6 @@ def test_authoring_recipe_step_fields_match_schema() -> None:
 
 def test_subsets_lists_required_packs() -> None:
     """subsets.md must document all four missing built-in pack categories."""
-    subsets = (DOCS_DIR / "skills" / "subsets.md").read_text()
+    subsets = (DOCS_DIR / "skills" / "subsets.md").read_text(encoding="utf-8")
     for pack in ("kitchen-core", "research", "exp-lens", "vis-lens"):
         assert pack in subsets, f"subsets.md missing pack category: {pack}"

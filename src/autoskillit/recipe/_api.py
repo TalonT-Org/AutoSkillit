@@ -24,8 +24,10 @@ from autoskillit.recipe._recipe_composition import (
     _build_active_recipe,
 )
 from autoskillit.recipe._recipe_ingredients import (
+    ListRecipesResult,  # noqa: F401
     LoadRecipeResult,
     RecipeListItem,
+    build_ingredient_rows,  # noqa: F401
     format_ingredients_table,
 )
 from autoskillit.recipe.contracts import (

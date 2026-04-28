@@ -21,6 +21,9 @@ _TEMP_PATH_WHITELIST: dict[str, str] = {
     # Justification: default fallback values for temp_dir_relpath in load_and_validate
     # / _build_active_recipe / validate_from_path (mirrors canonical default).
     "recipe/_api.py": "fallback default for temp_dir_relpath kwargs",
+    # Justification: _build_active_recipe default temp_dir_relpath parameter mirrors
+    # the canonical default used by _api.py (split into _recipe_composition.py).
+    "recipe/_recipe_composition.py": "fallback default for temp_dir_relpath kwargs",
     # Justification: validate_from_path signature now includes temp_dir_relpath with
     # the canonical default value, mirroring the _api.py pattern.
     "recipe/repository.py": "validate_from_path default arg mirrors canonical default",

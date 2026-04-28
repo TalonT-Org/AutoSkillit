@@ -1170,7 +1170,9 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/execution/test_zero_write_detection.py": frozenset({"autoskillit.recipe"}),
     # quota tests cross into config to validate the contract between vocab constants
     # (execution layer) and config defaults — intentional, documented cross-ref
-    "tests/execution/test_quota.py": frozenset({"autoskillit.hooks", "autoskillit.config"}),
+    "tests/execution/test_quota_binding.py": frozenset({"autoskillit.config"}),
+    "tests/execution/test_quota_io.py": frozenset({"autoskillit.config"}),
+    "tests/execution/test_quota_sleep.py": frozenset({"autoskillit.hooks", "autoskillit.config"}),
     "tests/execution/test_quota_http.py": frozenset({"autoskillit.config"}),
     # workspace tests
     "tests/workspace/test_clone_ci_contract.py": frozenset({"autoskillit.execution"}),

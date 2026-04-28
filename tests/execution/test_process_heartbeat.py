@@ -13,12 +13,10 @@ import pytest
 
 from autoskillit.core.types import ChannelBStatus, TerminationReason
 from autoskillit.execution.process import (
-    RaceAccumulator,
     _has_active_api_connection,
     _has_active_child_processes,
     _heartbeat,
     _session_log_monitor,
-    _watch_session_log,
     run_managed_async,
 )
 from tests.execution.conftest import WRITE_RESULT_THEN_HANG_SCRIPT

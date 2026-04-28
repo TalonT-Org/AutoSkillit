@@ -8,13 +8,6 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import pytest
 
-import autoskillit.execution.merge_queue as _mq
-from autoskillit.core.types import PRState
-from autoskillit.execution.merge_queue import (
-    ClassifierInconclusive,
-    DefaultMergeQueueWatcher,
-    PRFetchState,
-)
 from tests.execution.conftest import _make_watcher, _queue_state
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]

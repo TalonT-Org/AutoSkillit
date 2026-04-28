@@ -15,14 +15,11 @@ from autoskillit.core.types import (
 )
 from autoskillit.execution.session import (
     ClaudeSessionResult,
-    ContentState,
     _check_expected_patterns,
     _check_session_content,
     _compute_outcome,
     _compute_retry,
     _compute_success,
-    _evaluate_content_state,
-    _is_kill_anomaly,
     parse_session_result,
 )
 

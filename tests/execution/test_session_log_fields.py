@@ -6,21 +6,13 @@ from __future__ import annotations
 
 import json
 import os
-import sys
-import time
 from datetime import UTC, datetime
-from pathlib import Path
 
 import pytest
 
-from autoskillit.execution.linux_tracing import read_boot_id, read_starttime_ticks
 from autoskillit.execution.session_log import (
     flush_session_log,
-    read_telemetry_clear_marker,
-    resolve_log_dir,
-    write_telemetry_clear_marker,
 )
-
 from tests.execution.conftest import _flush, _snap
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]

@@ -14,13 +14,9 @@ import pytest
 from autoskillit.execution.linux_tracing import read_boot_id, read_starttime_ticks
 from autoskillit.execution.session_log import (
     flush_session_log,
-    read_telemetry_clear_marker,
     recover_crashed_sessions,
-    resolve_log_dir,
-    write_telemetry_clear_marker,
 )
 from autoskillit.fleet import build_protected_campaign_ids
-
 from tests.execution.conftest import _flush, _snap
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]

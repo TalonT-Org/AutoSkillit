@@ -14,7 +14,6 @@ from autoskillit.core.types import (
     TerminationReason,
 )
 from autoskillit.execution.session import (
-    ClaudeSessionResult,
     SkillResult,
     extract_token_usage,
     parse_session_result,

@@ -409,7 +409,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "cli",
             "fleet",
             "server",
-            "execution/test_quota.py",
+            "execution/test_quota_sleep.py",
         }
     ),
     "hook_registry": frozenset(

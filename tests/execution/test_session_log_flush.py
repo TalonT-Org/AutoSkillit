@@ -6,8 +6,6 @@ from __future__ import annotations
 
 import json
 import os
-import sys
-import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -19,7 +17,6 @@ from autoskillit.execution.session_log import (
     resolve_log_dir,
     write_telemetry_clear_marker,
 )
-
 from tests.execution.conftest import _flush, _snap
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
@@ -180,7 +177,6 @@ def test_flush_session_log_retention_purges_oldest(tmp_path):
         (d / "summary.json").write_text("{}")
         # Set mtime to ensure ordering
         mtime = 1000000000 + i
-        import os
 
         os.utime(d, (mtime, mtime))
         with index_path.open("a") as f:

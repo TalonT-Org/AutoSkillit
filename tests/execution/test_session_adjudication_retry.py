@@ -9,20 +9,14 @@ import pytest
 from autoskillit.core.types import (
     ChannelConfirmation,
     RetryReason,
-    SessionOutcome,
     TerminationReason,
 )
 from autoskillit.execution.session import (
     ClaudeSessionResult,
     ContentState,
-    _check_expected_patterns,
-    _check_session_content,
-    _compute_outcome,
     _compute_retry,
-    _compute_success,
     _evaluate_content_state,
     _is_kill_anomaly,
-    parse_session_result,
 )
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -407,6 +401,8 @@ def test_is_kill_anomaly_returns_true_for_interrupted_subtype():
         errors=[],
     )
     assert _is_kill_anomaly(session) is True
+
+
 class TestSessionCompleteProperty:
     """session_complete property must encode the canonical completion invariant."""
 
@@ -486,5 +482,3 @@ class TestContentStateEnum:
         session = make_session(subtype="success", is_error=is_error, result=result)
         state = _evaluate_content_state(session, completion_marker, patterns)
         assert state.value == expected_state
-
-

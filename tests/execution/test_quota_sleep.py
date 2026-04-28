@@ -18,7 +18,6 @@ class TestCheckAndSleepIfNeeded:
     @pytest.mark.anyio
     async def test_disabled_returns_immediately_no_io(self, monkeypatch):
         from autoskillit.execution.quota import check_and_sleep_if_needed
-        from tests._helpers import make_quota_guard_config
 
         config = make_quota_guard_config(enabled=False)
         fetch_called = []
@@ -40,7 +39,6 @@ class TestCheckAndSleepIfNeeded:
             QuotaWindowEntry,
             check_and_sleep_if_needed,
         )
-        from tests._helpers import make_quota_guard_config
 
         resets_at = datetime.now(UTC) + timedelta(hours=2)
         config = make_quota_guard_config(
@@ -72,7 +70,6 @@ class TestCheckAndSleepIfNeeded:
             QuotaWindowEntry,
             check_and_sleep_if_needed,
         )
-        from tests._helpers import make_quota_guard_config
 
         resets_at = datetime.now(UTC) + timedelta(hours=2)
         config = make_quota_guard_config(
@@ -110,7 +107,6 @@ class TestCheckAndSleepIfNeeded:
             _write_cache,
             check_and_sleep_if_needed,
         )
-        from tests._helpers import make_quota_guard_config
 
         resets_at = datetime.now(UTC) + timedelta(hours=1)
         cache_path = tmp_path / "cache.json"
@@ -144,7 +140,6 @@ class TestCheckAndSleepIfNeeded:
     @pytest.mark.anyio
     async def test_credentials_failure_returns_error_dict(self, tmp_path):
         from autoskillit.execution.quota import check_and_sleep_if_needed
-        from tests._helpers import make_quota_guard_config
 
         config = make_quota_guard_config(
             enabled=True,
@@ -158,7 +153,6 @@ class TestCheckAndSleepIfNeeded:
     @pytest.mark.anyio
     async def test_network_error_returns_error_dict(self, monkeypatch, tmp_path):
         from autoskillit.execution.quota import check_and_sleep_if_needed
-        from tests._helpers import make_quota_guard_config
 
         config = make_quota_guard_config(
             enabled=True,
@@ -194,7 +188,6 @@ class TestCheckAndSleepIfNeeded:
             QuotaWindowEntry,
             check_and_sleep_if_needed,
         )
-        from tests._helpers import make_quota_guard_config
 
         config = make_quota_guard_config(
             enabled=True,
@@ -251,7 +244,6 @@ class TestCheckAndSleepResetAtNoneBlocks:
             QuotaWindowEntry,
             check_and_sleep_if_needed,
         )
-        from tests._helpers import make_quota_guard_config
 
         config = make_quota_guard_config(
             enabled=True,
@@ -287,7 +279,6 @@ class TestCheckAndSleepResetAtNoneBlocks:
             QuotaWindowEntry,
             check_and_sleep_if_needed,
         )
-        from tests._helpers import make_quota_guard_config
 
         resets_at = datetime.now(UTC) + timedelta(hours=2)
         config = make_quota_guard_config(
@@ -332,7 +323,6 @@ class TestCheckAndSleepResetAtNoneBlocks:
             _write_cache,
             check_and_sleep_if_needed,
         )
-        from tests._helpers import make_quota_guard_config
 
         cache_path = tmp_path / "cache.json"
         # Write a cache entry with resets_at=None and above-threshold utilization
@@ -375,7 +365,6 @@ class TestCheckAndSleepResetAtNoneBlocks:
             QuotaWindowEntry,
             check_and_sleep_if_needed,
         )
-        from tests._helpers import make_quota_guard_config
 
         config = make_quota_guard_config(
             enabled=True,
@@ -411,7 +400,6 @@ class TestCheckAndSleepResetAtNoneBlocks:
             QuotaWindowEntry,
             check_and_sleep_if_needed,
         )
-        from tests._helpers import make_quota_guard_config
 
         resets_at = datetime.now(UTC) + timedelta(hours=2)
         # Do NOT override buffer_seconds — exercises the real default (60)

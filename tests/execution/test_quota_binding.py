@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import json
-import time
 from datetime import UTC, datetime, timedelta
-from unittest.mock import patch
 
 import pytest
 
@@ -899,4 +897,3 @@ class TestPerWindowToggles:
         await _refresh_quota_cache(config)
         assert captured_kwargs["short_enabled"] is False
         assert captured_kwargs["long_enabled"] is True
-

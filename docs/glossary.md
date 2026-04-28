@@ -56,19 +56,20 @@ sub-recipes themselves.
 
 ### free range tools
 
-The 2 MCP tools that are always visible regardless of kitchen state:
-`open_kitchen` and `close_kitchen`. Tagged only with `autoskillit`, never with
-`kitchen`. Always two words, no hyphen. Common mistake: `free-range tools`.
+The 4 MCP tools that are always visible regardless of kitchen state:
+`open_kitchen`, `close_kitchen`, `disable_quota_guard`, and `reload_session`. Tagged
+only with `autoskillit`, never with `kitchen`. Always two words, no hyphen. Common
+mistake: `free-range tools`.
 
 ### kitchen
 
-The collection of 40 kitchen-tagged MCP tools that the orchestrator must
+The collection of 44 kitchen-tagged MCP tools that the orchestrator must
 explicitly reveal via `open_kitchen` before they can be called. Hidden at
 server startup via `mcp.disable(tags={'kitchen'})`.
 
 ### kitchen tools
 
-Synonym for the 40 kitchen-tagged MCP tools. Two words, no hyphen.
+Synonym for the 44 kitchen-tagged MCP tools. Two words, no hyphen.
 
 ### kitchen_id
 

@@ -41,8 +41,11 @@ def run_update_command(home: Path | None = None) -> None:
 
     from autoskillit.core import any_kitchen_open
 
-    if any_kitchen_open():
-        print("A kitchen is currently open. Close it or wait for the pipeline to finish.")
+    if any_kitchen_open(project_path=str(Path.cwd())):
+        print(
+            "A kitchen is currently open for this project. "
+            "Close it or wait for the pipeline to finish.",
+        )
         raise SystemExit(1)
 
     info = detect_install()

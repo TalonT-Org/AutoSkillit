@@ -310,10 +310,14 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
     for d in dispatches_raw:
         if isinstance(d, dict):
             d_name = d.get("name", "")
+            d_gate = d.get("gate") or None
             d_recipe = d.get("recipe", "")
-            if not d_name or not d_recipe:
+            if not d_name:
+                raise ValueError(f"Campaign dispatch is missing required 'name' field: {d!r}")
+            if not d_gate and not d_recipe:
                 raise ValueError(
-                    f"Campaign dispatch is missing required 'name' or 'recipe' field: {d!r}"
+                    f"Campaign dispatch is missing required 'recipe' field "
+                    f"(required when 'gate' is not set): {d!r}"
                 )
             dispatches.append(
                 CampaignDispatch(
@@ -323,6 +327,8 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
                     ingredients=d.get("ingredients") or {},
                     depends_on=d.get("depends_on") or [],
                     capture=d.get("capture") or {},
+                    gate=d_gate,
+                    message=d.get("message", ""),
                 )
             )
 

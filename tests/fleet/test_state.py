@@ -262,3 +262,35 @@ class TestReadAllCampaignCaptures:
     def test_read_all_campaign_captures_empty_dir(self, tmp_path: Path) -> None:
         result = read_all_campaign_captures(tmp_path / "nonexistent", "any-id")
         assert result == {}
+
+
+class TestGateDispatchSuccessIsSkippedOnResume:
+    def test_gate_dispatch_success_is_skipped_on_resume(self, tmp_path: Path) -> None:
+        sp = _state_path(tmp_path)
+        write_initial_state(
+            sp, "cid", "camp", "/m.yaml", _make_dispatches("gate-check", "phase-one")
+        )
+        append_dispatch_record(
+            sp, DispatchRecord(name="gate-check", status=DispatchStatus.SUCCESS)
+        )
+
+        decision = resume_campaign_from_state(sp, continue_on_failure=False)
+        assert decision is not None
+        assert decision.next_dispatch_name == "phase-one"
+        assert "gate-check" in decision.completed_dispatches_block
+
+
+class TestGateDispatchFailureHaltsCampaign:
+    def test_gate_dispatch_failure_halts_campaign(self, tmp_path: Path) -> None:
+        sp = _state_path(tmp_path)
+        write_initial_state(
+            sp, "cid", "camp", "/m.yaml", _make_dispatches("gate-check", "phase-one")
+        )
+        append_dispatch_record(
+            sp, DispatchRecord(name="gate-check", status=DispatchStatus.FAILURE)
+        )
+
+        decision = resume_campaign_from_state(sp, continue_on_failure=False)
+        assert decision is not None
+        assert decision.next_dispatch_name == ""
+        assert decision.completed_dispatches_block == "fleet_halted_on_failure"

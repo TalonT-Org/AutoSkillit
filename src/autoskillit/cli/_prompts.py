@@ -59,6 +59,35 @@ def _build_fleet_campaign_prompt(
         f"\n## SOUS-CHEF DISCIPLINE\n\n{sous_chef_content}\n" if sous_chef_content else ""
     )
 
+    has_gate_dispatches = any(d.gate for d in campaign_recipe.dispatches)
+
+    gate_tool_line = "\n- AskUserQuestion" if has_gate_dispatches else ""
+
+    gate_section = ""
+    if has_gate_dispatches:
+        gate_section = """\
+
+## GATE DISPATCH HANDLING
+
+When you reach a dispatch with `gate: confirm` in the manifest:
+
+1. Do NOT call `dispatch_food_truck`. Gate dispatches spawn no L2 session.
+2. Call `AskUserQuestion` with the dispatch's `message` field as the question text.
+3. Evaluate the response:
+   - Affirmative (yes / proceed / approve / confirm): mark the gate as completed
+     (status=success), emit the %%FLEET_PROGRESS%% marker with state=success, and
+     advance to the next dispatch.
+   - Negative (no / reject / abort / cancel): halt the campaign immediately
+     (proceed to INTERRUPT/CLEANUP as if a dispatch had failed with
+     continue_on_failure=false).
+
+In the campaign summary, for gate dispatch entries:
+- Set `status` to `success` or `failure` based on user response.
+- Set `l2_session_id` to `""` (no L2 session was spawned).
+- Set `elapsed_seconds` to the wall-clock time for the question/response exchange.
+- Set all `token_usage` fields to 0.
+"""
+
     resume_section = ""
     if completed_dispatches:
         resume_section = f"""\
@@ -100,13 +129,13 @@ Each dispatch is an independent L2 session with its own kitchen context. There i
 cross-dispatch state sharing managed by you — the runtime handles it
 via capture:. There is NO cross-dispatch token aggregation.
 
-After startup, only these 6 tools should be used for all campaign operations:
+After startup, only these tools should be used for all campaign operations:
 - {mcp_prefix}dispatch_food_truck
 - {mcp_prefix}batch_cleanup_clones
 - {mcp_prefix}get_pipeline_report
 - {mcp_prefix}get_token_summary
 - {mcp_prefix}get_timing_summary
-- {mcp_prefix}get_quota_events
+- {mcp_prefix}get_quota_events{gate_tool_line}
 
 Explicitly FORBIDDEN: open_kitchen, close_kitchen, run_skill, and all GitHub/CI tools.
 Use ONLY {mcp_prefix}dispatch_food_truck to dispatch — never run_skill.
@@ -132,7 +161,7 @@ dispatch_food_truck(
 If a dispatch has no `capture:` field, pass `capture={{}}` or omit the parameter.
 The `${{{{ campaign.* }}}}` references in ingredients are resolved before the L2 session
 is started — the L2 agent always receives concrete values.
-
+{gate_section}
 ## FAILURE RECOVERY
 
 When a dispatch call returns, evaluate the envelope and payload:

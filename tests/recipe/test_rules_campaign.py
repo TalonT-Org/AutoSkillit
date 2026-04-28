@@ -542,3 +542,143 @@ def test_valid_capture_spec_passes():
     capture_val_findings = _findings(recipe, "dispatch-capture-value-references-result")
     assert capture_key_findings == []
     assert capture_val_findings == []
+
+
+# ---------------------------------------------------------------------------
+# T-G1: gate-dispatch-valid-type
+# ---------------------------------------------------------------------------
+
+
+def test_gate_dispatch_valid_type_fires_on_unknown_value():
+    recipe = _campaign(
+        dispatches=[CampaignDispatch(name="gate-check", gate="approve", message="Approve?")]
+    )
+    found = _findings(recipe, "gate-dispatch-valid-type")
+    assert found
+    assert found[0].severity == Severity.ERROR
+
+
+def test_gate_dispatch_valid_type_passes_for_confirm():
+    recipe = _campaign(
+        dispatches=[CampaignDispatch(name="gate-check", gate="confirm", message="Proceed?")]
+    )
+    found = _findings(recipe, "gate-dispatch-valid-type")
+    assert found == []
+
+
+# ---------------------------------------------------------------------------
+# T-G3: gate-dispatch-has-message
+# ---------------------------------------------------------------------------
+
+
+def test_gate_dispatch_has_message_fires_on_empty_message():
+    recipe = _campaign(
+        dispatches=[CampaignDispatch(name="gate-check", gate="confirm", message="")]
+    )
+    found = _findings(recipe, "gate-dispatch-has-message")
+    assert found
+    assert found[0].severity == Severity.ERROR
+
+
+# ---------------------------------------------------------------------------
+# T-G4: gate-dispatch-no-recipe
+# ---------------------------------------------------------------------------
+
+
+def test_gate_dispatch_no_recipe_fires_when_recipe_is_set():
+    recipe = _campaign(
+        dispatches=[
+            CampaignDispatch(
+                name="gate-check",
+                gate="confirm",
+                recipe="some-recipe",
+                task="do it",
+                message="Proceed?",
+            )
+        ]
+    )
+    found = _findings(recipe, "gate-dispatch-no-recipe")
+    assert found
+    assert found[0].severity == Severity.ERROR
+
+
+# ---------------------------------------------------------------------------
+# T-G5: gate-dispatch-no-capture
+# ---------------------------------------------------------------------------
+
+
+def test_gate_dispatch_no_capture_fires_when_capture_is_set():
+    recipe = _campaign(
+        dispatches=[
+            CampaignDispatch(
+                name="gate-check",
+                gate="confirm",
+                message="Proceed?",
+                capture={"key": "${{ result.val }}"},
+            )
+        ]
+    )
+    found = _findings(recipe, "gate-dispatch-no-capture")
+    assert found
+    assert found[0].severity == Severity.ERROR
+
+
+# ---------------------------------------------------------------------------
+# T-G6: campaign-task-non-empty exempts gate dispatches
+# ---------------------------------------------------------------------------
+
+
+def test_campaign_task_non_empty_exempts_gate_dispatches():
+    recipe = _campaign(
+        dispatches=[CampaignDispatch(name="gate-check", gate="confirm", message="Proceed?")]
+    )
+    found = _findings(recipe, "campaign-task-non-empty")
+    assert found == []
+
+
+# ---------------------------------------------------------------------------
+# T-G7: dispatch-recipe-exists exempts gate dispatches
+# ---------------------------------------------------------------------------
+
+
+def test_dispatch_recipe_exists_exempts_gate_dispatches():
+    recipe = _campaign(
+        dispatches=[CampaignDispatch(name="gate-check", gate="confirm", message="Proceed?")]
+    )
+    found = _findings(
+        recipe, "dispatch-recipe-exists", available_recipes=frozenset({"some-other-recipe"})
+    )
+    assert found == []
+
+
+# ---------------------------------------------------------------------------
+# T-G8: dispatch-recipe-is-standard exempts gate dispatches
+# ---------------------------------------------------------------------------
+
+
+def test_dispatch_recipe_is_standard_exempts_gate_dispatches():
+    recipe = _campaign(
+        dispatches=[CampaignDispatch(name="gate-check", gate="confirm", message="Proceed?")]
+    )
+    found = _findings(recipe, "dispatch-recipe-is-standard", project_dir=None)
+    assert found == []
+
+
+# ---------------------------------------------------------------------------
+# T-G9: dispatch-ingredients-keys-in-target-schema exempts gate dispatches
+# ---------------------------------------------------------------------------
+
+
+def test_dispatch_ingredients_keys_exempts_gate_dispatches():
+    recipe = _campaign(
+        dispatches=[
+            CampaignDispatch(
+                name="gate-check",
+                gate="confirm",
+                message="Proceed?",
+                ingredients={"foo": "bar"},
+            )
+        ]
+    )
+    found = _findings(recipe, "dispatch-ingredients-keys-in-target-schema")
+    assert found == []

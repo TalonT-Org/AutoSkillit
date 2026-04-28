@@ -195,7 +195,7 @@ def parse_campaign_summary(text: str, campaign_id: str) -> CampaignParseResult:
                     cache_read=e["token_usage"]["cache_read"],
                     cache_creation=e["token_usage"]["cache_creation"],
                 ),
-                l2_session_id=e["l2_session_id"],
+                l2_session_id=e.get("l2_session_id", ""),
             )
             for e in data["per_dispatch"]
         ]
@@ -204,7 +204,7 @@ def parse_campaign_summary(text: str, campaign_id: str) -> CampaignParseResult:
                 dispatch_name=r["dispatch_name"],
                 code=FleetErrorCode(r["code"]),
                 message=r["message"],
-                l2_session_id=r["l2_session_id"],
+                l2_session_id=r.get("l2_session_id", ""),
             )
             for r in data["error_records"]
         ]

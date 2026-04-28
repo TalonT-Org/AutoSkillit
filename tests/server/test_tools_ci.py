@@ -753,7 +753,7 @@ async def test_check_repo_merge_state_uses_token_factory(tool_ctx, monkeypatch):
 
     monkeypatch.setattr("autoskillit.server.tools_ci.fetch_repo_merge_state", fake_fetch)
     monkeypatch.setattr(
-        "autoskillit.server.tools_ci.infer_repo_from_remote",
+        "autoskillit.server.tools_ci.resolve_repo_from_remote",
         AsyncMock(return_value="owner/repo"),
     )
 
@@ -783,7 +783,7 @@ async def test_check_repo_merge_state_falls_back_to_config_token_when_no_factory
 
     monkeypatch.setattr("autoskillit.server.tools_ci.fetch_repo_merge_state", fake_fetch)
     monkeypatch.setattr(
-        "autoskillit.server.tools_ci.infer_repo_from_remote",
+        "autoskillit.server.tools_ci.resolve_repo_from_remote",
         AsyncMock(return_value="owner/repo"),
     )
 
@@ -804,7 +804,7 @@ async def test_check_repo_merge_state_error_includes_http_status(tool_ctx, monke
 
     monkeypatch.setattr("autoskillit.server.tools_ci.fetch_repo_merge_state", fake_fetch)
     monkeypatch.setattr(
-        "autoskillit.server.tools_ci.infer_repo_from_remote",
+        "autoskillit.server.tools_ci.resolve_repo_from_remote",
         AsyncMock(return_value="owner/repo"),
     )
 

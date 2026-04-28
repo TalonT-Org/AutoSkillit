@@ -12,10 +12,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from autoskillit.cli._install_info import InstallInfo, InstallType
 from autoskillit.cli._update_checks import (
     _fetch_with_cache,
-    run_update_checks,
 )
 
 from ._update_checks_helpers import (

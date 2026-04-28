@@ -172,6 +172,7 @@ from .types import SkillResult as SkillResult
 from .types import SkillSource as SkillSource
 from .types import SubprocessResult as SubprocessResult
 from .types import SubprocessRunner as SubprocessRunner
+from .types import SupportsDebug as SupportsDebug
 from .types import SupportsLogger as SupportsLogger
 from .types import TOOL_SUBSET_TAGS as TOOL_SUBSET_TAGS
 from .types import TerminationAction as TerminationAction

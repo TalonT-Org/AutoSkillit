@@ -69,3 +69,17 @@ def test_launch_id_env_var_in_private_vars() -> None:
     from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS, LAUNCH_ID_ENV_VAR
 
     assert LAUNCH_ID_ENV_VAR in AUTOSKILLIT_PRIVATE_ENV_VARS
+
+
+def test_supports_debug_importable_from_core() -> None:
+    from typing import Protocol
+
+    from autoskillit.core import SupportsDebug
+
+    assert issubclass(SupportsDebug, Protocol)
+
+
+def test_supports_debug_in_core_all() -> None:
+    import autoskillit.core as core_mod
+
+    assert hasattr(core_mod, "SupportsDebug")

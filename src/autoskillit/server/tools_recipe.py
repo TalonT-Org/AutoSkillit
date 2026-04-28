@@ -54,12 +54,12 @@ async def list_recipes() -> str:
         structlog.contextvars.bind_contextvars(tool="list_recipes")
         tool_ctx = _get_ctx_or_none()
         if tool_ctx is None or tool_ctx.recipes is None:
-            return json.dumps([])
+            return json.dumps({"error": "kitchen not open — call open_kitchen first"})
         result = tool_ctx.recipes.list_all(Path.cwd(), features=tool_ctx.config.features)
         return json.dumps(result)
     except Exception:
         logger.error("list_recipes unhandled exception", exc_info=True)
-        return json.dumps([])
+        return json.dumps({"error": "internal error listing recipes — see server logs"})
 
 
 @mcp.tool(

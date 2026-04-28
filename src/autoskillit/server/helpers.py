@@ -451,7 +451,7 @@ async def _import_and_call(
         return {"success": True, "result": str(result)}
 
 
-async def infer_repo_from_remote(cwd: str, hint: str | None = None) -> str:
+async def resolve_repo_from_remote(cwd: str, hint: str | None = None) -> str:
     """Return 'owner/repo' from git remote URL, or '' on failure.
 
     hint: optional owner/repo string or full GitHub URL; parsed before

@@ -11,12 +11,12 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
 
 @pytest.mark.anyio
-async def test_infer_repo_from_remote_returns_empty_for_file_url(tmp_path: Path) -> None:
-    """Regression guard: file:// origin, no upstream → infer_repo_from_remote returns ''.
+async def test_resolve_repo_from_remote_returns_empty_for_file_url(tmp_path: Path) -> None:
+    """Regression guard: file:// origin, no upstream → resolve_repo_from_remote returns ''.
 
     Creates a minimal git repo with only a file:// origin remote (no upstream).
     """
-    from autoskillit.server.helpers import infer_repo_from_remote
+    from autoskillit.server.helpers import resolve_repo_from_remote
 
     repo = tmp_path / "clone"
     repo.mkdir()
@@ -29,5 +29,21 @@ async def test_infer_repo_from_remote_returns_empty_for_file_url(tmp_path: Path)
     )
     # No upstream remote — simulates file:// origin-only scenario
 
-    result = await infer_repo_from_remote(str(repo))
+    result = await resolve_repo_from_remote(str(repo))
     assert result == ""
+
+
+def test_resolve_repo_from_remote_exists() -> None:
+    """Function renamed from infer_repo_from_remote must exist at new name."""
+    import inspect
+
+    from autoskillit.server.helpers import resolve_repo_from_remote
+
+    assert inspect.iscoroutinefunction(resolve_repo_from_remote)
+
+
+def test_infer_repo_from_remote_removed() -> None:
+    """Old name must not exist after rename."""
+    import autoskillit.server.helpers as helpers
+
+    assert not hasattr(helpers, "infer_repo_from_remote")

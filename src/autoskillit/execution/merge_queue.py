@@ -1,62 +1,41 @@
 """Merge queue polling service (L1) — monitors GitHub merge queue for a PR.
 
 Never raises. All errors are returned as structured results.
+
+Facade: re-exports from _merge_queue_classifier and _merge_queue_repo_state.
 """
 
 from __future__ import annotations
 
 import asyncio
-import fnmatch
-import random
 import re
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, Literal, TypedDict, assert_never
+from typing import TYPE_CHECKING, Any, assert_never
 
 import httpx
 
-from autoskillit.core import PRState, YAMLError, get_logger, load_yaml
+from autoskillit.core import PRState, get_logger
+from autoskillit.execution._merge_queue_classifier import (
+    _QUERY_FIELD_MAP,
+    CIStillRunning,
+    NoPositiveSignal,
+    PRFetchState,
+    _classify_pr_state,
+)
+from autoskillit.execution._merge_queue_repo_state import (
+    _GRAPHQL_ENDPOINT,
+    _has_merge_group_trigger,  # noqa: F401 — re-export for callers
+    _push_trigger_applies_to_branch,  # noqa: F401 — re-export for callers
+    fetch_repo_merge_state,  # noqa: F401 — re-export for callers
+)
 from autoskillit.execution.github import github_headers, make_tracked_httpx_client
 
 if TYPE_CHECKING:
     from autoskillit.core._type_protocols import GitHubApiLog
 
 logger = get_logger(__name__)
-
-# All GitHub merge_state_status values known to be returned by the GraphQL API.
-# https://docs.github.com/en/graphql/reference/enums#mergestatestatus
-KNOWN_MQ_MERGE_STATE_STATUSES: frozenset[str] = frozenset(
-    {
-        "BEHIND",
-        "BLOCKED",
-        "CLEAN",
-        "DIRTY",
-        "HAS_HOOKS",
-        "UNKNOWN",
-        "UNSTABLE",
-    }
-)
-assert "CLEAN" in KNOWN_MQ_MERGE_STATE_STATUSES  # Import-time drift guard
-
-
-class PRFetchState(TypedDict):
-    """Typed contract for _fetch_pr_and_queue_state return value."""
-
-    merged: bool
-    state: str
-    mergeable: str  # "MERGEABLE" | "CONFLICTING" | "UNKNOWN"
-    merge_state_status: str
-    auto_merge_present: bool  # True when autoMergeRequest is not null
-    auto_merge_enabled_at: datetime | None
-    pr_node_id: str
-    in_queue: bool
-    queue_state: str | None
-    checks_state: str | None  # statusCheckRollup.state; None = no checks configured
-
-
-_GRAPHQL_ENDPOINT = "https://api.github.com/graphql"
 
 _QUERY = """
 query GetPRAndQueueState($owner: String!, $repo: String!, $prNumber: Int!, $branch: String!) {
@@ -86,30 +65,9 @@ query GetPRAndQueueState($owner: String!, $repo: String!, $prNumber: Int!, $bran
 }
 """
 
-# Maps every PRFetchState key to its GraphQL source path.
-# "<computed>" means the field is derived from query results, not directly selected.
-# This constant is validated at import time against PRFetchState.__required_keys__
-# (mirroring the pattern in recipe/io.py:126-161).
-_QUERY_FIELD_MAP: dict[str, str] = {
-    "merged": "merged",
-    "state": "state",
-    "mergeable": "mergeable",
-    "merge_state_status": "mergeStateStatus",
-    "auto_merge_present": "autoMergeRequest",
-    "auto_merge_enabled_at": "autoMergeRequest.enabledAt",
-    "pr_node_id": "id",
-    "in_queue": "<computed>",
-    "queue_state": "<computed>",
-    "checks_state": "statusCheckRollup.state",
-}
-
-_ALL_FETCH_STATE_KEYS = PRFetchState.__required_keys__ | PRFetchState.__optional_keys__
-if set(_QUERY_FIELD_MAP) != _ALL_FETCH_STATE_KEYS:
-    raise RuntimeError(
-        "_QUERY_FIELD_MAP is out of sync with PRFetchState keys.\n"
-        f"Missing from map: {_ALL_FETCH_STATE_KEYS - set(_QUERY_FIELD_MAP)}\n"
-        f"Missing from state: {set(_QUERY_FIELD_MAP) - _ALL_FETCH_STATE_KEYS}"
-    )
+# Part 2 of the _QUERY_FIELD_MAP validation: checks that every non-computed field
+# path head appears as a GraphQL field name in _QUERY.
+# Part 1 (keys match PRFetchState) lives in _merge_queue_classifier.py.
 for _key, _path in _QUERY_FIELD_MAP.items():
     if _path.startswith("<"):
         continue
@@ -144,167 +102,9 @@ mutation EnqueuePullRequest($prId: ID!) {
 }
 """
 
-# Repo-level state query: consolidates three former run_cmd steps into one HTTP round-trip.
-# Distinct from _QUERY (PR-level + queue-entries); do not merge these constants.
-# Returns: mergeQueue presence, autoMergeAllowed flag, and workflow file texts for
-# merge_group trigger detection — all in a single GraphQL call.
-_REPO_STATE_QUERY = """
-query GetRepoMergeState($owner: String!, $repo: String!, $branch: String!) {
-  repository(owner: $owner, name: $repo) {
-    mergeQueue(branch: $branch) {
-      id
-    }
-    autoMergeAllowed
-    object(expression: "HEAD:.github/workflows") {
-      ... on Tree {
-        entries {
-          name
-          object {
-            ... on Blob {
-              text
-            }
-          }
-        }
-      }
-    }
-  }
-}
-"""
-
-
-# ---------------------------------------------------------------------------
-# Classifier primitives (pure functions — no I/O, no async)
-# ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class ClassificationResult:
-    """Positive-signal classification outcome from _classify_pr_state."""
-
-    terminal: PRState
-    reason: str
-
-
-class ClassifierInconclusive(Exception):
-    """Raised when no positive gate matched — caller must continue polling.
-
-    The .state attribute exposes the full PRFetchState that was inspected,
-    enabling callers to log or surface the ambiguous fields.
-    """
-
-    def __init__(self, state: PRFetchState, reason: str) -> None:
-        super().__init__(reason)
-        self.state = state
-        self.reason = reason
-
-
-class CIStillRunning(ClassifierInconclusive):
-    """CI checks are legitimately in-progress (PENDING or EXPECTED).
-
-    Expected transient state — outer timeout_seconds bounds the wait.
-    Must NOT consume the inconclusive budget.
-    """
-
-
-class NoPositiveSignal(ClassifierInconclusive):
-    """No positive classifier gate matched — state is genuinely ambiguous.
-
-    Bounded by max_inconclusive_retries. Counts against the inconclusive budget.
-    """
-
-
-def _is_positive_stall(state: PRFetchState) -> bool:
-    """True when auto-merge is enabled and merge_state_status indicates the PR is
-    stuck in a state where it should be in queue but is not."""
-    return state["auto_merge_enabled_at"] is not None and state["merge_state_status"] in {
-        "CLEAN",
-        "HAS_HOOKS",
-    }
-
-
-def _is_positive_dropped_healthy(state: PRFetchState, *, ever_enrolled: bool) -> bool:
-    """True when the PR is fully healthy but auto_merge was cleared externally."""
-    if not ever_enrolled:
-        return False
-    return (
-        state["state"] == "OPEN"
-        and state["mergeable"] == "MERGEABLE"
-        and state["merge_state_status"] == "CLEAN"
-        and state["checks_state"] in (None, "SUCCESS")
-        and state["auto_merge_present"] is False
-        and state["in_queue"] is False
-    )
-
-
-def _is_not_enrolled(state: PRFetchState, *, ever_enrolled: bool) -> bool:
-    """True when the PR is healthy but was never enrolled in the merge queue."""
-    if ever_enrolled:
-        return False
-    return (
-        state["state"] == "OPEN"
-        and state["mergeable"] == "MERGEABLE"
-        and state["merge_state_status"] == "CLEAN"
-        and state["checks_state"] in (None, "SUCCESS")
-        and state["auto_merge_present"] is False
-        and state["in_queue"] is False
-    )
-
-
-def _classify_pr_state(state: PRFetchState, *, ever_enrolled: bool) -> ClassificationResult:
-    """Classify PR state using positive signals only — no fall-through to EJECTED.
-
-    Every return originates from a direct positive signal. When no positive gate
-    matches, raises ClassifierInconclusive so the caller can continue polling
-    within a bounded retry budget rather than silently misclassifying.
-
-    Args:
-        state: Current PR fetch state snapshot.
-        ever_enrolled: Whether the PR was ever observed in the queue or with auto-merge.
-
-    Returns:
-        ClassificationResult with the matched terminal PRState.
-
-    Raises:
-        ClassifierInconclusive: When no positive signal matched. .state exposes
-            the full snapshot for logging/surfacing.
-    """
-    if state["merged"]:
-        return ClassificationResult(PRState.MERGED, "PR merged")
-
-    if state["state"] == "CLOSED":
-        if state["checks_state"] in {"FAILURE", "ERROR"}:
-            return ClassificationResult(PRState.EJECTED_CI_FAILURE, "PR closed after CI failure")
-        return ClassificationResult(PRState.EJECTED, "PR closed while not merged")
-
-    if state["checks_state"] in {"FAILURE", "ERROR"}:
-        return ClassificationResult(PRState.EJECTED_CI_FAILURE, "checks terminal failure")
-
-    if _is_positive_stall(state):
-        return ClassificationResult(PRState.STALLED, "stall signals present")
-
-    if state["mergeable"] == "CONFLICTING":
-        return ClassificationResult(PRState.EJECTED, "conflicting changes prevent merge")
-
-    if _is_positive_dropped_healthy(state, ever_enrolled=ever_enrolled):
-        return ClassificationResult(PRState.DROPPED_HEALTHY, "PR healthy but auto_merge cleared")
-
-    if _is_not_enrolled(state, ever_enrolled=ever_enrolled):
-        return ClassificationResult(
-            PRState.NOT_ENROLLED, "PR was never enrolled in the merge queue"
-        )
-
-    if state["checks_state"] in {"PENDING", "EXPECTED"}:
-        raise CIStillRunning(state, "checks still running")
-
-    raise NoPositiveSignal(state, "no positive signal matched")
-
 
 class DefaultMergeQueueWatcher:
     """Polls GitHub merge queue state until merged, ejected, stalled, or timed out.
-
-    Uses a single consolidated GraphQL query per poll cycle to atomically capture
-    both PR state and queue entries, eliminating the race condition where two
-    separate API calls straddle a merge event.
 
     Never raises; all errors are returned as structured dicts.
     """
@@ -360,33 +160,7 @@ class DefaultMergeQueueWatcher:
     ) -> dict[str, Any]:
         """Poll until PR is merged, ejected, stalled, dropped, or timeout expires.
 
-        Args:
-            pr_number: PR number to monitor.
-            target_branch: Branch the merge queue targets.
-            repo: "owner/name" format. Required.
-            cwd: Working directory. Present to satisfy the MergeQueueWatcher protocol.
-            timeout_seconds: Maximum polling duration (default 600s).
-            poll_interval: Seconds between poll cycles (default 15s).
-            stall_grace_period: Seconds after autoMergeRequest.enabledAt before stall
-                recovery may trigger (default 60s). Prevents intervention during normal
-                queue processing.
-            max_stall_retries: Maximum disable/re-enable toggle attempts before
-                returning pr_state="stalled" (default 3).
-            not_in_queue_confirmation_cycles: Consecutive "not in queue" cycles required
-                before acting on absence. Guards against race between queue exit and
-                merged=true propagation (default 2).
-            max_inconclusive_retries: Maximum NoPositiveSignal cycles (beyond the
-                confirmation window) before returning pr_state="timeout" (default 5).
-            auto_merge_available: Whether the repository allows auto-merge. When False,
-                stall recovery uses enqueuePullRequest instead of toggle.
-
-        Returns:
-            {
-                "success": bool,
-                "pr_state": PRState value string,
-                "reason": str,
-                "stall_retries_attempted": int,
-            }
+        Returns {"success": bool, "pr_state": str, "reason": str, "stall_retries_attempted": int}.
         """
         if not repo or "/" not in repo:
             return {
@@ -429,7 +203,6 @@ class DefaultMergeQueueWatcher:
             if state["in_queue"] or state["auto_merge_present"]:
                 ever_enrolled = True
 
-            # In queue: reset window and continue
             if state["in_queue"]:
                 not_in_queue_cycles = 0
                 inconclusive_count = 0
@@ -440,7 +213,6 @@ class DefaultMergeQueueWatcher:
 
             not_in_queue_cycles += 1
 
-            # Classify state using positive-signal gates
             try:
                 classification = _classify_pr_state(state, ever_enrolled=ever_enrolled)
             except CIStillRunning:
@@ -460,11 +232,9 @@ class DefaultMergeQueueWatcher:
                 await asyncio.sleep(poll_interval)
                 continue
 
-            # MERGED: definitive — bypasses confirmation window
             if classification.terminal == PRState.MERGED:
                 return _make_result(True, PRState.MERGED, classification.reason)
 
-            # CLOSED: definitive — bypasses confirmation window
             if state["state"] == "CLOSED":
                 ejection_cause = (
                     "ci_failure" if classification.terminal == PRState.EJECTED_CI_FAILURE else ""
@@ -473,12 +243,10 @@ class DefaultMergeQueueWatcher:
                     False, classification.terminal, classification.reason, ejection_cause
                 )
 
-            # All other positive terminals require the confirmation window
             if not_in_queue_cycles < not_in_queue_confirmation_cycles:
                 await asyncio.sleep(poll_interval)
                 continue
 
-            # Post-confirmation terminal dispatch
             if classification.terminal == PRState.STALLED:
                 enabled_at = state["auto_merge_enabled_at"]
                 assert enabled_at is not None  # guaranteed by _is_positive_stall
@@ -535,7 +303,6 @@ class DefaultMergeQueueWatcher:
                 # additions to PRState (pyright/mypy will flag any new unhandled member).
                 assert_never(classification.terminal)  # type: ignore[arg-type]
 
-        # Deadline exceeded
         return _make_result(
             False,
             PRState.TIMEOUT,
@@ -608,11 +375,7 @@ class DefaultMergeQueueWatcher:
         repo: str | None = None,
         cwd: str = ".",
     ) -> dict[str, Any]:
-        """Disable then re-enable auto-merge for a PR to re-enroll it in the merge queue.
-
-        Fetches the PR node ID via a single GraphQL query, then applies the
-        disable/re-enable toggle. Never raises; returns a structured result dict.
-        """
+        """Toggle auto-merge off/on to re-enroll the PR. Never raises."""
         if not repo or "/" not in repo:
             return {
                 "success": False,
@@ -666,12 +429,7 @@ class DefaultMergeQueueWatcher:
         cwd: str = ".",
         auto_merge_available: bool = True,
     ) -> dict[str, Any]:
-        """Enqueue a PR using the correct enrollment strategy.
-
-        When auto_merge_available is True, uses enablePullRequestAutoMerge.
-        When False, uses the enqueuePullRequest GraphQL mutation directly.
-        Never raises; returns a structured result dict.
-        """
+        """Enqueue a PR (via auto-merge or direct enqueue). Never raises."""
         if not repo or "/" not in repo:
             return {
                 "success": False,
@@ -706,11 +464,7 @@ class DefaultMergeQueueWatcher:
     async def _toggle_auto_merge(
         self, pr_node_id: str, *, auto_merge_available: bool = True
     ) -> None:
-        """Re-enroll a PR in the merge queue.
-
-        When auto_merge_available is True, uses the disable/re-enable toggle.
-        When False, uses enqueuePullRequest directly (skip toggle entirely).
-        """
+        """Re-enroll a PR: toggle disable/re-enable or enqueuePullRequest directly."""
         if not pr_node_id:
             raise ValueError("pr_node_id must be a non-empty string")
         if not auto_merge_available:
@@ -730,230 +484,3 @@ class DefaultMergeQueueWatcher:
             raise RuntimeError(f"GraphQL mutation error: {body['errors']}")
         await asyncio.sleep(2)
         await self._enable_auto_merge_direct(pr_node_id)
-
-
-# ---------------------------------------------------------------------------
-# Repo-level state helper (used by check_repo_merge_state MCP tool)
-# ---------------------------------------------------------------------------
-
-
-def _text_has_push_trigger(text: str) -> bool:
-    """Return True if a workflow file text declares a push trigger.
-
-    Checks for the three YAML forms GitHub supports for a push trigger:
-    - ``on: [push, ...]``  (list form)
-    - ``on: push``         (scalar form)
-    - ``push:``            (mapping form under ``on:``)
-
-    Note: the first two patterns (``on: [push``, ``on: push``) are reliably
-    scoped to YAML trigger syntax. The third (``push:``) may match inside
-    comments or run-step values — acceptable for the positive-signal-only
-    classification heuristic but not precise.
-    """
-    return any(pat in text for pat in ("on: [push", "on: push", "push:"))
-
-
-def _push_trigger_applies_to_branch(text: str, branch: str) -> bool:
-    """Return True if the workflow push trigger fires for the given branch.
-
-    Parses the YAML to inspect push.branches / push.branches-ignore filters.
-    Falls back to presence-only heuristic on YAML parse failure (safe for
-    ambiguous/binary blobs). Supports GitHub's fnmatch-compatible glob patterns
-    (e.g. 'feature/**', 'release-*').
-    """
-    try:
-        parsed = load_yaml(text)
-    except YAMLError:
-        return _text_has_push_trigger(text)
-
-    if not isinstance(parsed, dict):
-        return False
-
-    # PyYAML (YAML 1.1) parses the bare key `on` as boolean True.
-    # Accept both to be safe.
-    on_value = parsed.get(True, parsed.get("on"))
-    if on_value == "push":
-        return True
-    if isinstance(on_value, list):
-        return "push" in on_value
-    if not isinstance(on_value, dict) or "push" not in on_value:
-        return False
-
-    push_cfg = on_value["push"]
-    if not isinstance(push_cfg, dict) or not push_cfg:
-        # push: null or push: {} — no branch filter, fires for all branches
-        return True
-
-    branches = push_cfg.get("branches")
-    branches_ignore = push_cfg.get("branches-ignore")
-
-    if branches is not None:
-        return any(fnmatch.fnmatch(branch, pat) for pat in branches)
-    if branches_ignore is not None:
-        return not any(fnmatch.fnmatch(branch, pat) for pat in branches_ignore)
-    return True
-
-
-def _has_merge_group_trigger(text: str) -> bool:
-    """Return True if the workflow declares a merge_group trigger.
-
-    Parses YAML to inspect the on: key rather than relying on substring
-    matching, which can false-positive on comments or shell strings.
-    Falls back to substring heuristic on YAML parse failure.
-    """
-    try:
-        parsed = load_yaml(text)
-    except YAMLError:
-        return "merge_group" in text
-    if not isinstance(parsed, dict):
-        return False
-    # PyYAML (YAML 1.1) parses the bare key `on` as boolean True.
-    # Accept both to be safe.
-    on_value = parsed.get(True, parsed.get("on"))
-    if on_value == "merge_group":
-        return True
-    if isinstance(on_value, list):
-        return "merge_group" in on_value
-    if isinstance(on_value, dict):
-        return "merge_group" in on_value
-    return False
-
-
-_RATE_LIMIT_MAX_ATTEMPTS = 3
-_RATE_LIMIT_SECONDARY_MARKER = "secondary rate limit"
-
-
-def _is_secondary_rate_limit(resp: httpx.Response) -> bool:
-    """Return True when a 403 response is a GitHub secondary rate limit.
-
-    GitHub returns HTTP 403 (not 429) for secondary rate limits.
-    The response body contains the phrase "secondary rate limit".
-    Primary rate limits use HTTP 429 or include x-ratelimit-remaining: 0.
-    """
-    if resp.status_code != 403:
-        return False
-    try:
-        text = resp.text.lower()
-    except Exception:
-        logger.warning("Failed to read response body for rate-limit check", exc_info=True)
-        return False
-    return _RATE_LIMIT_SECONDARY_MARKER in text
-
-
-def _retry_after_seconds(attempt: int, resp: httpx.Response) -> float:
-    """Return seconds to sleep before the next retry attempt.
-
-    Prefers the Retry-After header (integer seconds) when present and valid.
-    Falls back to full-jitter exponential backoff: random(0, min(60, 1 * 2^attempt)).
-    """
-    try:
-        header_val = resp.headers.get("Retry-After", "")
-        if header_val:
-            return float(header_val)
-    except (ValueError, AttributeError):
-        pass
-    return random.uniform(0, min(60.0, 1.0 * (2**attempt)))
-
-
-async def fetch_repo_merge_state(
-    owner: str,
-    repo: str,
-    branch: str,
-    token: str | None,
-) -> dict[str, bool | str | None]:
-    """Fetch repository merge-state in a single GraphQL round-trip.
-
-    Returns a dict with four keys:
-    - ``queue_available``: the branch has an active GitHub merge queue (bool).
-    - ``merge_group_trigger``: at least one CI workflow declares the
-      ``merge_group`` event trigger (bool).
-    - ``auto_merge_available``: the repository has auto-merge enabled (bool).
-    - ``ci_event``: ``"push"`` when any workflow declares a push trigger
-      that fires for the given branch, or ``None`` otherwise (match-any —
-      ci.py scope.event=None lets head_sha provide correctness).
-
-    Null-handling:
-    - ``mergeQueue is null`` → ``queue_available: False``  (no queue)
-    - ``object is null`` → ``merge_group_trigger: False``, ``ci_event: None``  (no workflows dir)
-    - ``entry.object.text is null`` → skip entry (binary/large file)
-    - GraphQL ``autoMergeAllowed`` field error (GHES 3.0.x) → ``auto_merge_available: False``
-
-    Only transport-level failures (network timeout, non-200 HTTP status) are
-    allowed to propagate; callers are expected to handle them.
-
-    Historical note: Issue #498 ("Merge queue detection should validate workflow has
-    merge_group trigger") established the merge_group_trigger field. The ci_event
-    field is a closely related extension — verify that the push-trigger scan does
-    not regress the merge_group-only detection that #498 established.
-    """
-    resp: httpx.Response | None = None
-    for attempt in range(_RATE_LIMIT_MAX_ATTEMPTS):
-        async with httpx.AsyncClient(
-            headers=github_headers(token),
-            timeout=30.0,
-        ) as client:
-            resp = await client.post(
-                _GRAPHQL_ENDPOINT,
-                json={
-                    "query": _REPO_STATE_QUERY,
-                    "variables": {"owner": owner, "repo": repo, "branch": branch},
-                },
-            )
-        if resp.status_code == 429 or _is_secondary_rate_limit(resp):
-            sleep_secs = _retry_after_seconds(attempt, resp)
-            logger.warning(
-                "fetch_repo_merge_state rate limited",
-                status=resp.status_code,
-                attempt=attempt,
-                sleep_secs=sleep_secs,
-            )
-            await asyncio.sleep(sleep_secs)
-            continue
-        resp.raise_for_status()
-        break
-    else:
-        assert resp is not None, "_RATE_LIMIT_MAX_ATTEMPTS must be >= 1"
-        resp.raise_for_status()
-
-    assert resp is not None
-    body = resp.json()
-
-    # GitHub GraphQL always returns a JSON object; guard against unexpected shapes.
-    if not isinstance(body, dict):
-        body = {}
-
-    # Gracefully handle GHES 3.0.x where autoMergeAllowed doesn't exist.
-    auto_merge_field_missing = any(
-        "autoMergeAllowed" in str(e.get("message", "")) for e in body.get("errors", [])
-    )
-
-    repo_data: dict[str, Any] = (body.get("data") or {}).get("repository") or {}
-    queue_available = repo_data.get("mergeQueue") is not None
-    auto_merge_available = (
-        False if auto_merge_field_missing else bool(repo_data.get("autoMergeAllowed", False))
-    )
-
-    # Scan workflow files for push and merge_group trigger declarations.
-    # Both flags are derived from the same Blob.text scan — no extra round-trips.
-    merge_group_trigger = False
-    has_push_trigger = False
-    workflows_tree = repo_data.get("object")
-    if workflows_tree is not None:
-        for entry in workflows_tree.get("entries", []):
-            blob = entry.get("object") or {}
-            text = blob.get("text")
-            if text is None:
-                continue  # binary or oversized blob — skip
-            if _has_merge_group_trigger(text):
-                merge_group_trigger = True
-            if _push_trigger_applies_to_branch(text, branch):
-                has_push_trigger = True
-
-    ci_event: Literal["push"] | None = "push" if has_push_trigger else None
-
-    return {
-        "queue_available": queue_available,
-        "merge_group_trigger": merge_group_trigger,
-        "auto_merge_available": auto_merge_available,
-        "ci_event": ci_event,
-    }

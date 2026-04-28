@@ -1499,13 +1499,7 @@ steps:
     on_success: register_clone_success
     on_failure: register_clone_success
     note: >
-      Terminal token collection step. Runs in the MCP server process (zero tokens),
-      reads sessions.jsonl with cwd_filter to capture all pipeline sessions regardless
-      of kitchen_id splits, and PATCHes the PR body with a complete Token Usage Summary
-      table. Replaces any partial table written by the PostToolUse hook at compose_pr
-      time. skip_when_false guards the no-PR path (open_pr=false). Both on_success and
-      on_failure route to register_clone_success — token summary failure must never
-      block pipeline completion.
+      Patches PR body with complete token summary; failure never blocks pipeline completion.
 
   release_issue_failure:
     description: "Release the in-progress claim after pipeline failure"

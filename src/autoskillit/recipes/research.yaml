@@ -1036,14 +1036,7 @@ steps:
     on_success: research_complete
     on_failure: research_complete
     note: >
-      Terminal token collection step. Runs in the MCP server process (zero tokens),
-      reads sessions.jsonl with cwd_filter to capture all pipeline sessions regardless
-      of kitchen_id splits, and PATCHes the PR body with a complete Token Usage Summary
-      table. Replaces any partial table written by the PostToolUse hook at compose_pr
-      time. The callable returns early with an error dict when pr_url is empty or
-      invalid, so no skip_when_false guard is needed. Both on_success and on_failure
-      route to research_complete — token summary failure must never block pipeline
-      completion.
+      Patches PR body with complete token summary; failure never blocks pipeline completion.
 
   research_complete:
     action: stop

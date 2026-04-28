@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import warnings
 from typing import Any, TypedDict
 
 
@@ -137,6 +138,10 @@ class RunDirResult(TypedDict):
     planner_dir: str
 
 
+_PHASE_ID_RE = re.compile(r"^P\d+$")
+_ASSIGN_ID_RE = re.compile(r"^P\d+-A\d+$")
+_WP_ID_RE = re.compile(r"^P\d+-A\d+-WP\d+$")
+
 PHASE_REQUIRED_KEYS: frozenset[str] = frozenset({"id", "name", "ordering"})
 ASSIGNMENT_REQUIRED_KEYS: frozenset[str] = frozenset({"id", "name", "proposed_work_packages"})
 WP_REQUIRED_KEYS: frozenset[str] = frozenset({"id", "name", "deliverables"})
@@ -214,7 +219,17 @@ def validate_wp_result(data: dict[str, Any]) -> dict[str, Any]:
     if missing:
         raise ValueError(f"WP result missing required keys: {sorted(missing)}")
 
+    _reject_empty_string_ids(data, "WP result")
+
     result: dict[str, Any] = dict(data)
+
+    wp_id = result["id"]
+    if not _WP_ID_RE.match(wp_id):
+        warnings.warn(
+            f"WP id {wp_id!r} does not match expected PX-AY-WPZ format",
+            stacklevel=2,
+        )
+
     result.setdefault("summary", "")
     result.setdefault("goal", "")
     result.setdefault("technical_steps", [])
@@ -225,3 +240,71 @@ def validate_wp_result(data: dict[str, Any]) -> dict[str, Any]:
     result.setdefault("acceptance_criteria", [])
 
     return result
+
+
+def _reject_empty_string_ids(data: dict[str, Any], context: str) -> None:
+    if "id" in data and data["id"] == "":
+        raise ValueError(f"{context}: 'id' field is present but empty")
+
+
+def resolve_wp_id(wp: dict[str, Any], assign_id: str) -> str:
+    wp_id = wp.get("id", "")
+    if wp_id:
+        return wp_id
+    id_suffix = wp.get("id_suffix", "")
+    if id_suffix:
+        return f"{assign_id}-{id_suffix}"
+    raise ValueError(f"Work package in assignment {assign_id!r} has neither 'id' nor 'id_suffix'")
+
+
+def validate_refined_assignments(data: dict[str, Any]) -> dict[str, Any]:
+    """Validate and normalize refined_assignments.json at ingestion."""
+    assignments = data.get("assignments", [])
+    if not assignments:
+        raise ValueError("refined_assignments must contain non-empty 'assignments' list")
+
+    for assign in assignments:
+        assign_id = assign.get("id", "")
+        if not assign_id:
+            phase_id = assign.get("phase_id", "")
+            pn = assign.get("phase_number", 0)
+            an = assign.get("assignment_number", 0)
+            if not phase_id and not pn:
+                raise ValueError(
+                    "assignment has no resolvable id: needs 'id', "
+                    "or 'phase_id'+'assignment_number', "
+                    "or 'phase_number'+'assignment_number'"
+                )
+            if not phase_id:
+                phase_id = f"P{pn}"
+            assign_id = f"{phase_id}-A{an}"
+            assign["id"] = assign_id
+
+        for wp in assign.get("proposed_work_packages", []):
+            wp["id"] = resolve_wp_id(wp, assign_id)
+
+    return data
+
+
+def validate_refined_plan(data: dict[str, Any]) -> dict[str, Any]:
+    """Validate and normalize refined_plan.json at ingestion."""
+    phases = data.get("phases", [])
+    if not phases:
+        raise ValueError("refined_plan must contain non-empty 'phases' list")
+
+    for phase in phases:
+        phase_id = phase.get("id", "")
+        if not phase_id:
+            raise ValueError(f"Phase has empty 'id': {phase.get('name', '<unnamed>')}")
+        previews = phase.get("assignments_preview", [])
+        for i, preview in enumerate(previews):
+            if (
+                isinstance(preview, dict)
+                and not preview.get("id", "")
+                and not preview.get("name", "")
+            ):
+                raise ValueError(
+                    f"Phase {phase_id} assignments_preview[{i}] has neither 'id' nor 'name'"
+                )
+
+    return data

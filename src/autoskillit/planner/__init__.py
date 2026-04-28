@@ -32,6 +32,9 @@ from autoskillit.planner.schema import (
     PlannerManifestItem,
     WPElaborated,
     WPShort,
+    resolve_wp_id,
+    validate_refined_assignments,
+    validate_refined_plan,
 )
 from autoskillit.planner.validation import validate_plan
 
@@ -62,4 +65,7 @@ __all__ = [
     "ASSIGNMENT_REQUIRED_KEYS",
     "PHASE_REQUIRED_KEYS",
     "WP_REQUIRED_KEYS",
+    "resolve_wp_id",
+    "validate_refined_assignments",
+    "validate_refined_plan",
 ]

@@ -17,6 +17,30 @@ from tests.fleet._helpers import (
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
+# --- MCP state isolation (module-level; only this file mutates MCP tags) ---
+
+
+@pytest.fixture(autouse=True)
+def _reset_mcp_tags():
+    from autoskillit.core import ALL_VISIBILITY_TAGS
+    from autoskillit.server import mcp
+
+    mcp._transforms.clear()
+    for tag in sorted(ALL_VISIBILITY_TAGS):
+        mcp.disable(tags={tag})
+    yield
+    mcp._transforms.clear()
+    for tag in sorted(ALL_VISIBILITY_TAGS):
+        mcp.disable(tags={tag})
+
+
+@pytest.fixture(autouse=True)
+def _reset_server_state(monkeypatch):
+    from autoskillit.server import _state
+
+    monkeypatch.setattr(_state, "_ctx", None)
+
+
 # ---------------------------------------------------------------------------
 # Module-level constants — additional packs used only in this test module
 # ---------------------------------------------------------------------------

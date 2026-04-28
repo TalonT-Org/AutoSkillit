@@ -389,7 +389,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
         {
             "server",
             "cli",
-            "fleet",
+            "fleet/test_pack_enforcement.py",
         }
     ),
     "cli": frozenset(

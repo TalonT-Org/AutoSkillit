@@ -28,11 +28,11 @@ async def test_tracking_transport_records_request(mock_http_server, _reset_mock)
         "/repos/owner/repo/issues/1",
         PyResponseSpec(
             body={"number": 1, "title": "T", "body": "", "labels": [], "state": "open"},
-            headers={
-                "X-RateLimit-Remaining": "4900",
-                "X-RateLimit-Used": "100",
-                "X-RateLimit-Reset": "1714000000",
-            },
+            headers=[
+                ("X-RateLimit-Remaining", "4900"),
+                ("X-RateLimit-Used", "100"),
+                ("X-RateLimit-Reset", "1714000000"),
+            ],
         ),
     )
     log = InMemoryGitHubApiLog()
@@ -50,11 +50,11 @@ async def test_tracking_transport_captures_rate_limit_headers(mock_http_server, 
         "/repos/owner/repo/issues/1",
         PyResponseSpec(
             body={"number": 1, "title": "T", "body": "", "labels": [], "state": "open"},
-            headers={
-                "X-RateLimit-Remaining": "42",
-                "X-RateLimit-Used": "4958",
-                "X-RateLimit-Reset": "1714000000",
-            },
+            headers=[
+                ("X-RateLimit-Remaining", "42"),
+                ("X-RateLimit-Used", "4958"),
+                ("X-RateLimit-Reset", "1714000000"),
+            ],
         ),
     )
     log = InMemoryGitHubApiLog()
@@ -72,8 +72,8 @@ async def test_tracking_transport_records_4xx_error(mock_http_server, _reset_moc
     )
     log = InMemoryGitHubApiLog()
     fetcher = DefaultGitHubFetcher(token="test-token", tracker=log, base_url=mock_http_server.url)
-    with pytest.raises(Exception):
-        await fetcher.fetch_issue("owner", "repo", 999)
+    # fetch_issue never raises — 404 is returned as {"success": False, ...}
+    await fetcher.fetch_issue("owner", "repo", 999)
     assert len(log.httpx_calls) == 1
     assert log.httpx_calls[0]["status_code"] == 404
 

@@ -50,6 +50,11 @@ def test_unregistered_group0_recipes_alphabetical_after_registered(
     result = list_recipes(tmp_path)
     group0 = [r.name for r in result.items if group_rank(r) == 0]
     unregistered = group0[1:]
+    if not unregistered:
+        pytest.skip(
+            "No unregistered Group-0 recipes — all Group-0 recipes are registered; "
+            "alphabetical-tail contract cannot be verified"
+        )
     assert unregistered == sorted(unregistered), (
         f"Unregistered Group-0 recipes not alphabetical: {unregistered}"
     )
@@ -63,12 +68,26 @@ def test_adding_unregistered_recipe_does_not_shift_registered(
 
     monkeypatch.setattr(recipe_io, "BUNDLED_RECIPE_ORDER", ["implementation", "remediation"])
     result = list_recipes(tmp_path)
-    group0_before = [r.name for r in result.items if group_rank(r) == 0]
-    impl_idx_before = group0_before.index("implementation")
-    remed_idx_before = group0_before.index("remediation")
+    group0 = [r.name for r in result.items if group_rank(r) == 0]
+    impl_idx = group0.index("implementation")
+    remed_idx = group0.index("remediation")
 
     # Confirm registry order is honoured
-    assert impl_idx_before < remed_idx_before, "'implementation' must come before 'remediation'"
+    assert impl_idx < remed_idx, "'implementation' must come before 'remediation'"
+
+    # Verify unregistered recipes that alphabetically precede 'implementation'
+    # (e.g. 'bem-wrapper') do not displace it from its registered position
+    unregistered = [n for n in group0 if n not in {"implementation", "remediation"}]
+    preceding = [n for n in unregistered if n < "implementation"]
+    assert preceding, (
+        "Expected at least one unregistered Group-0 recipe alphabetically before "
+        "'implementation' (e.g. 'bem-wrapper') to verify the shift-invariant"
+    )
+    for name in preceding:
+        assert group0.index(name) > impl_idx, (
+            f"Unregistered recipe {name!r} (alphabetically before 'implementation') "
+            f"displaced it — registry position-stability contract violated: {group0}"
+        )
 
 
 def test_registry_does_not_affect_addon_group(

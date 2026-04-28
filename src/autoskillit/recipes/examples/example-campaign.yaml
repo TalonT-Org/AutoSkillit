@@ -3,7 +3,7 @@ description: >-
   Example campaign recipe demonstrating all campaign schema fields.
   Use as a reference when authoring new campaigns.
 kind: campaign
-autoskillit_version: "0.9.212"
+autoskillit_version: "0.9.213"
 recipe_version: "1.0.0"
 
 categories:

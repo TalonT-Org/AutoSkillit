@@ -18,9 +18,7 @@ def _make_state(*statuses: DispatchStatus) -> CampaignState:
         campaign_name="test",
         manifest_path="",
         started_at=time.time(),
-        dispatches=[
-            DispatchRecord(name=f"d{i}", status=s) for i, s in enumerate(statuses)
-        ],
+        dispatches=[DispatchRecord(name=f"d{i}", status=s) for i, s in enumerate(statuses)],
     )
 
 

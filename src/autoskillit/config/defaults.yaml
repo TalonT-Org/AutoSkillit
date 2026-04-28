@@ -82,11 +82,13 @@ github:
   default_repo: null
   in_progress_label: "in-progress"
   staged_label: "staged"
+  fail_label: "fail"
   allowed_labels:
     - "bug"
     - "enhancement"
     - "in-progress"
     - "staged"
+    - "fail"
     - "autoreported"
     - "recipe:implementation"
     - "recipe:remediation"

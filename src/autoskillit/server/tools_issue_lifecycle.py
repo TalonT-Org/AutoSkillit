@@ -457,12 +457,16 @@ async def claim_issue(
             description="Issue is actively being processed by a pipeline session",
         )
 
-        add_result = await tool_ctx.github_client.add_labels(
-            owner, repo, issue_number, [effective_label]
+        swap_result = await tool_ctx.github_client.swap_labels(
+            owner,
+            repo,
+            issue_number,
+            remove_labels=[tool_ctx.config.github.fail_label],
+            add_labels=[effective_label],
         )
-        if not add_result.get("success"):
+        if not swap_result.get("success"):
             return json.dumps(
-                {"success": False, "error": add_result.get("error", "add_labels failed")}
+                {"success": False, "error": swap_result.get("error", "swap_labels failed")}
             )
 
         return json.dumps(
@@ -485,6 +489,7 @@ async def release_issue(
     label: str | None = None,
     target_branch: str | None = None,
     staged_label: str | None = None,
+    fail_label: str | None = None,
 ) -> str:
     """Remove the in-progress label from a GitHub issue to release it.
 
@@ -494,6 +499,9 @@ async def release_issue(
     When target_branch is provided and differs from the configured default base branch,
     also applies a 'staged' label to indicate the work is merged and awaiting promotion.
 
+    When fail_label is provided (and target_branch is NOT), swaps in-progress for the
+    fail label to mark the issue as failed without releasing it back to the queue.
+
     Returns JSON with: success, issue_number, label, staged, staged_label.
     On gate closed or no token: {success: false, error: "..."}.
 
@@ -502,6 +510,7 @@ async def release_issue(
         label: Label name to remove. Defaults to github.in_progress_label from config.
         target_branch: Branch the PR was merged into. When non-default, applies staged label.
         staged_label: Label name for staged state. Defaults to github.staged_label from config.
+        fail_label: Label name for failure state. When provided, swaps in-progress for this label.
 
     Never raises.
     """
@@ -532,6 +541,7 @@ async def release_issue(
         should_stage = target_branch is not None and target_branch != promotion_target
 
         staged = False
+        config_fail_label = tool_ctx.config.github.fail_label
         effective_staged_label = staged_label or tool_ctx.config.github.staged_label
 
         if should_stage:
@@ -545,7 +555,6 @@ async def release_issue(
                     }
                 )
 
-            # Ensure the staged label definition exists in the repo (no label set mutation yet)
             ensure_result = await tool_ctx.github_client.ensure_label(
                 owner,
                 repo,
@@ -567,12 +576,14 @@ async def release_issue(
                     }
                 )
 
-            # Atomic swap: remove in-progress, add staged in one PUT
+            remove_set = [effective_label]
+            if config_fail_label:
+                remove_set.append(config_fail_label)
             swap_result = await tool_ctx.github_client.swap_labels(
                 owner,
                 repo,
                 issue_number,
-                remove_labels=[effective_label],
+                remove_labels=remove_set,
                 add_labels=[effective_staged_label],
             )
             if not swap_result.get("success"):
@@ -585,13 +596,70 @@ async def release_issue(
                     }
                 )
             staged = True
-        else:
-            # Just remove in-progress atomically (no staging)
+        elif fail_label is not None:
+            if err := tool_ctx.config.github.check_label_allowed(fail_label):
+                return json.dumps(
+                    {
+                        "success": False,
+                        "issue_number": issue_number,
+                        "label": fail_label,
+                        "error": err,
+                    }
+                )
+
+            ensure_result = await tool_ctx.github_client.ensure_label(
+                owner,
+                repo,
+                fail_label,
+                color="d73a4a",
+            )
+            if not ensure_result.get("success"):
+                return json.dumps(
+                    {
+                        "success": False,
+                        "issue_number": issue_number,
+                        "label": effective_label,
+                        "error": (
+                            f"Failed to ensure fail label: {ensure_result.get('error', '?')}"
+                        ),
+                    }
+                )
+
             swap_result = await tool_ctx.github_client.swap_labels(
                 owner,
                 repo,
                 issue_number,
                 remove_labels=[effective_label],
+                add_labels=[fail_label],
+            )
+            if not swap_result.get("success"):
+                return json.dumps(
+                    {
+                        "success": False,
+                        "issue_number": issue_number,
+                        "label": effective_label,
+                        "error": f"Failed to apply fail label: {swap_result.get('error', '?')}",
+                    }
+                )
+
+            return json.dumps(
+                {
+                    "success": True,
+                    "issue_number": issue_number,
+                    "label": effective_label,
+                    "failed": True,
+                    "fail_label": fail_label,
+                }
+            )
+        else:
+            remove_set = [effective_label]
+            if config_fail_label:
+                remove_set.append(config_fail_label)
+            swap_result = await tool_ctx.github_client.swap_labels(
+                owner,
+                repo,
+                issue_number,
+                remove_labels=remove_set,
                 add_labels=[],
             )
             if not swap_result.get("success"):

@@ -1,4 +1,5 @@
-"""Tests for execution/quota.py — check_and_sleep_if_needed, resets_at-None blocking, integration, and novel window warnings."""
+"""Tests for execution/quota.py — check_and_sleep_if_needed, resets_at-None blocking,
+integration, and novel window warnings."""
 
 from __future__ import annotations
 

@@ -1,4 +1,5 @@
-"""Tests for merge queue ejection: RelatedCoverage, EjectionEnrichment, FetchRepoMergeStateRetry, NotEnrolledState, and EnqueueMethod."""
+"""Tests for merge queue ejection: RelatedCoverage, EjectionEnrichment,
+FetchRepoMergeStateRetry, NotEnrolledState, and EnqueueMethod."""
 
 from __future__ import annotations
 

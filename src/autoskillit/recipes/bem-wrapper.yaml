@@ -1,0 +1,141 @@
+name: bem-wrapper
+description: >-
+  Re-fetch open audit issues, run build-execution-map, emit execution map path
+  and compact dispatch plan. Used by the promote-to-main campaign to compute
+  issue distribution before dispatching implementation L2s.
+kind: standard
+autoskillit_version: "0.9.239"
+recipe_version: "1.0.0"
+
+requires_packs: [github]
+
+kitchen_rules:
+  - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Agent,
+    WebFetch, WebSearch, NotebookEdit) from the orchestrator. All work is delegated
+    through run_cmd and run_skill."
+  - "This recipe is a food truck dispatched by a campaign. Emit the L2 sentinel JSON
+    block exactly as instructed in the done step message — no extra tool calls after
+    reaching done."
+
+ingredients:
+  issue_urls:
+    description: "Comma-separated GitHub issue URLs from full-audit"
+    required: true
+  base_branch:
+    description: "Base branch for dependency analysis"
+    default: "integration"
+
+steps:
+  refetch_issues:
+    tool: run_cmd
+    with:
+      cmd: |
+        ISSUE_URLS="${{ inputs.issue_urls }}"
+        QUERY=$(ISSUE_URLS="$ISSUE_URLS" python3 -c "
+        import os, re
+        urls = os.environ['ISSUE_URLS'].split(',')
+        parts = []
+        for i, url in enumerate(urls):
+            url = url.strip()
+            if not url:
+                continue
+            m = re.match(r'https://github\.com/([^/]+)/([^/]+)/issues/(\d+)', url)
+            if m:
+                owner, repo, num = m.groups()
+                parts.append(f'i{i}: repository(owner: \"{owner}\", name: \"{repo}\") {{ issue(number: {num}) {{ number state }} }}')
+        print('{' + ' '.join(parts) + '}')
+        ")
+        gh api graphql -f query="$QUERY" \
+          --jq '[.data[] | select(.issue != null and .issue.state == "OPEN") | .issue.number | tostring] | join(" ")' && echo ""
+      step_name: refetch_issues
+    capture:
+      issue_numbers: "${{ result.stdout | trim }}"
+    on_success: check_issue_count
+    on_failure: emit_fallback_map
+
+  check_issue_count:
+    action: route
+    on_result:
+      - when: "${{ context.issue_numbers }} == ''"
+        route: emit_empty_result
+      - route: run_bem
+
+  run_bem:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:build-execution-map ${{ context.issue_numbers }} --base-ref ${{ inputs.base_branch }}"
+      step_name: run_bem
+    retries: 1
+    capture:
+      execution_map: "${{ result.execution_map }}"
+    on_success: emit_result
+    on_failure: emit_fallback_map
+
+  emit_fallback_map:
+    tool: run_cmd
+    with:
+      cmd: |
+        MAP_FILE="$AUTOSKILLIT_TEMP/bem-fallback-map.json"
+        ISSUE_URLS="${{ inputs.issue_urls }}"
+        NUMS=$(echo "$ISSUE_URLS" | tr ',' '\n' | grep -oE 'issues/[0-9]+' | grep -oE '[0-9]+' | tr '\n' ',' | sed 's/,$//')
+        NUMS="$NUMS" MAP_FILE="$MAP_FILE" python3 -c "
+        import json, os, sys
+        nums_str = os.environ['NUMS']
+        map_file = os.environ['MAP_FILE']
+        nums = [int(n) for n in nums_str.split(',') if n.strip()]
+        if not nums:
+            print('ERROR: no issue numbers extracted from issue URLs', file=sys.stderr)
+            sys.exit(1)
+        issues = [{'number': n, 'title': str(n)} for n in nums]
+        data = {
+            'groups': [{'group': 1, 'parallel': False, 'issues': issues}],
+            'merge_order': nums,
+            'pairwise_assessments': []
+        }
+        with open(map_file, 'w') as f:
+            json.dump(data, f)
+        print(map_file)
+        "
+      step_name: emit_fallback_map
+    capture:
+      execution_map: "${{ result.stdout | trim }}"
+    on_success: emit_result
+    on_failure: escalate_stop
+
+  emit_result:
+    tool: run_cmd
+    with:
+      cmd: "echo 'execution_map=${{ context.execution_map }}'"
+      step_name: emit_result
+    on_success: done
+    on_failure: done
+
+  emit_empty_result:
+    tool: run_cmd
+    with:
+      cmd: "echo 'execution_map=none'"
+      step_name: emit_empty_result
+    on_success: done
+    on_failure: done
+
+  done:
+    action: stop
+    message: >-
+      Execution map computed. The context variable execution_map holds either a
+      file path or "none" (if all issues were closed during review gate). Emit
+      your L2 sentinel JSON block now. The sentinel must include: success=true,
+      execution_map=<the captured value>, and dispatch_plan=<compact array>.
+      To build dispatch_plan: if execution_map is a file path, parse the JSON
+      and for each group emit {"group": <N>, "parallel": <bool>, "issues":
+      "<comma-separated issue numbers as string>"}. If execution_map is "none",
+      set dispatch_plan=[]. Example sentinel:
+      {"success": true, "execution_map": "/path/map.json", "dispatch_plan":
+      [{"group": 1, "parallel": true, "issues": "1155,1156"},
+       {"group": 2, "parallel": false, "issues": "1157"}]}
+
+  escalate_stop:
+    action: stop
+    message: >-
+      BEM wrapper failed — fallback execution map could not be written to disk.
+      Human intervention required. Check $AUTOSKILLIT_TEMP permissions and
+      issue URLs in the ingredients.

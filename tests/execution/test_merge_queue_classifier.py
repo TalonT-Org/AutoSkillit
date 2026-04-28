@@ -1,4 +1,5 @@
-"""Tests for merge queue classifier: PendingCIGuard, InconclusiveBudget, ClassifierImmunity, and VocabularyContract."""
+"""Tests for merge queue classifier: PendingCIGuard, InconclusiveBudget,
+ClassifierImmunity, and VocabularyContract."""
 
 from __future__ import annotations
 

@@ -1,4 +1,5 @@
-"""Tests for execution/quota.py — credential reading, cache I/O, dataclass validation, and cache schema versioning."""
+"""Tests for execution/quota.py — credential reading, cache I/O,
+dataclass validation, and cache schema versioning."""
 
 from __future__ import annotations
 

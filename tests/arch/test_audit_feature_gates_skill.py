@@ -8,7 +8,7 @@ import yaml
 _SKILLS_ROOT = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "skills_extended"
 _SKILL_DIR = _SKILLS_ROOT / "audit-feature-gates"
 _SKILL_FILE = _SKILL_DIR / "SKILL.md"
-_RECIPES_ROOT = Path(__file__).parent.parent.parent / ".autoskillit" / "recipes"
+_RECIPES_ROOT = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "recipes"
 _FULL_AUDIT = _RECIPES_ROOT / "full-audit.yaml"
 _VALIDATE_SKILL = _SKILLS_ROOT / "validate-audit" / "SKILL.md"
 

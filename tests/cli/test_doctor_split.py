@@ -76,44 +76,12 @@ def test_doctor_core_does_not_contain_quota_cache_class():
     )
 
 
-def test_doctor_types_file_exists():
-    assert (_CLI_SRC / "_doctor_types.py").exists()
-
-
-def test_doctor_mcp_file_exists():
-    assert (_CLI_SRC / "_doctor_mcp.py").exists()
-
-
-def test_doctor_hooks_file_exists():
-    assert (_CLI_SRC / "_doctor_hooks.py").exists()
-
-
-def test_doctor_install_file_exists():
-    assert (_CLI_SRC / "_doctor_install.py").exists()
-
-
-def test_doctor_config_file_exists():
-    assert (_CLI_SRC / "_doctor_config.py").exists()
-
-
-def test_doctor_runtime_file_exists():
-    assert (_CLI_SRC / "_doctor_runtime.py").exists()
-
-
-def test_doctor_env_file_exists():
-    assert (_CLI_SRC / "_doctor_env.py").exists()
-
-
-def test_doctor_features_file_exists():
-    assert (_CLI_SRC / "_doctor_features.py").exists()
-
-
-def test_doctor_fleet_file_exists():
-    assert (_CLI_SRC / "_doctor_fleet.py").exists()
-
-
 def test_doctor_facade_exports_run_doctor():
     from autoskillit.cli._doctor import run_doctor  # noqa: F401
+
+
+def test_doctor_submodule_types_importable():
+    from autoskillit.cli._doctor_types import _NON_PROBLEM, DoctorResult  # noqa: F401
 
 
 def test_doctor_submodule_mcp_importable():

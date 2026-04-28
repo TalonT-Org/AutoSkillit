@@ -9,14 +9,6 @@ pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 _CLI_SRC = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "cli"
 
 
-def test_update_checks_fetch_file_exists():
-    assert (_CLI_SRC / "_update_checks_fetch.py").exists()
-
-
-def test_update_checks_source_file_exists():
-    assert (_CLI_SRC / "_update_checks_source.py").exists()
-
-
 def test_update_checks_fetch_importable():
     from autoskillit.cli._update_checks_fetch import (  # noqa: F401
         _fetch_latest_version,

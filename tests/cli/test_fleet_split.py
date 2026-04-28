@@ -1,24 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
-
-_CLI_SRC = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "cli"
-
-
-def test_fleet_display_file_exists():
-    assert (_CLI_SRC / "_fleet_display.py").exists()
-
-
-def test_fleet_lifecycle_file_exists():
-    assert (_CLI_SRC / "_fleet_lifecycle.py").exists()
-
-
-def test_fleet_session_file_exists():
-    assert (_CLI_SRC / "_fleet_session.py").exists()
 
 
 def test_fleet_display_importable():

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from autoskillit.cli._mcp_names import DIRECT_PREFIX, MARKETPLACE_PREFIX
@@ -691,3 +693,25 @@ def test_campaign_prompt_includes_gate_dispatch_handling_section():
     assert "GATE DISPATCH HANDLING" in prompt
     assert "AskUserQuestion" in prompt
     assert "dispatch_food_truck" in prompt
+
+
+def test_show_cook_preview_no_mermaid_in_output(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """T-PREVIEW-FORMAT: show_cook_preview must not leak Mermaid syntax to terminal."""
+    from autoskillit.cli._prompts import show_cook_preview
+    from autoskillit.core import pkg_root
+    from autoskillit.recipe.io import find_recipe_by_name, load_recipe
+
+    monkeypatch.setenv("NO_COLOR", "1")
+    recipes_dir = pkg_root() / "recipes"
+    recipe_info = find_recipe_by_name("implementation", recipes_dir)
+    assert recipe_info is not None
+    parsed = load_recipe(recipe_info.path)
+    show_cook_preview("implementation", parsed, recipes_dir, tmp_path)
+    captured = capsys.readouterr()
+    assert "flowchart TD" not in captured.out, "Mermaid syntax leaked to terminal"
+    assert "S0[" not in captured.out, "Mermaid node syntax leaked to terminal"
+    assert "-->" not in captured.out, "Mermaid arrow syntax leaked to terminal"

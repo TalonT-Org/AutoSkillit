@@ -11,17 +11,9 @@ from autoskillit.core.types import (
     RetryReason,
 )
 from autoskillit.execution.session import ClaudeSessionResult, parse_session_result
+from tests.execution.conftest import _make_success_session
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
-
-
-def _make_success_session(result: str = "done") -> ClaudeSessionResult:
-    return ClaudeSessionResult(
-        subtype="success",
-        is_error=False,
-        result=result,
-        session_id="s1",
-    )
 
 
 def _make_error_session(

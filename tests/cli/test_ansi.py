@@ -103,7 +103,7 @@ def test_ingredients_to_terminal_accepts_structured_rows():
 
 
 def test_diagram_to_terminal_preserves_ascii_art(monkeypatch: pytest.MonkeyPatch) -> None:
-    """T-TERMINAL-MERMAID (a): ASCII box-drawing characters are preserved."""
+    """T-TERMINAL-MERMAID (a): ASCII art in plain fenced blocks is preserved."""
     monkeypatch.setenv("NO_COLOR", "1")
     md = (
         "<!-- autoskillit-recipe-hash: sha256:abc -->\n"
@@ -121,8 +121,8 @@ def test_diagram_to_terminal_preserves_ascii_art(monkeypatch: pytest.MonkeyPatch
         "| task | (required) |\n"
     )
     result = diagram_to_terminal(md)
-    assert "step1" not in result
-    assert "step2" not in result
+    assert "step1" in result
+    assert "step2" in result
 
 
 def test_diagram_to_terminal_suppresses_mermaid(monkeypatch: pytest.MonkeyPatch) -> None:

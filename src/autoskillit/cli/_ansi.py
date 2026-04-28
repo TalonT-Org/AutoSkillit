@@ -125,12 +125,18 @@ def diagram_to_terminal(md: str) -> str:
     out: list[str] = []
     in_table_section = False
     in_fenced_block = False
+    suppress_fenced = False
     saw_title = False
     for ln in md.splitlines():
         if ln.startswith("```"):
-            in_fenced_block = not in_fenced_block
+            if not in_fenced_block:
+                in_fenced_block = True
+                suppress_fenced = len(ln) > 3 and not ln[3:].isspace()
+            else:
+                in_fenced_block = False
+                suppress_fenced = False
             continue
-        if in_fenced_block:
+        if in_fenced_block and suppress_fenced:
             continue
         if any(ln.startswith(s) for s in _skip):
             continue

@@ -7,7 +7,7 @@ from typing import Literal
 
 from autoskillit.core import ensure_project_temp, get_logger
 
-_log = get_logger()
+logger = get_logger()
 
 
 @dataclass(frozen=True)
@@ -52,7 +52,7 @@ def read_sidecar(dispatch_id: str, project_dir: Path) -> list[IssueSidecarEntry]
                 )
             )
         except (json.JSONDecodeError, KeyError) as exc:
-            _log.debug("sidecar: skipping corrupt JSONL line", path=str(path), error=str(exc))
+            logger.debug("sidecar: skipping corrupt JSONL line", path=str(path), error=str(exc))
             continue
     return entries
 

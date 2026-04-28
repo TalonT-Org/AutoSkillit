@@ -12,9 +12,9 @@ from autoskillit.core import (
     TOOL_SUBSET_TAGS,
     FeatureDef,
     Severity,
-    SkillLister,
 )
 from autoskillit.recipe._analysis import ValidationContext
+from autoskillit.recipe._skill_helpers import _get_skill_category_map
 from autoskillit.recipe.contracts import resolve_skill_name
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
@@ -27,15 +27,6 @@ def _tools_for_feature(fdef: FeatureDef) -> frozenset[str]:
 def _get_disabled_feature_defs(ctx: ValidationContext) -> dict[str, FeatureDef]:
     """Return {feature_name: FeatureDef} for all features named in ctx.disabled_features."""
     return {name: fdef for name, fdef in FEATURE_REGISTRY.items() if name in ctx.disabled_features}
-
-
-def _get_skill_category_map(lister: SkillLister | None = None) -> dict[str, frozenset[str]]:
-    """Return {skill_name: categories} for all bundled skills."""
-    if lister is None:
-        from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
-
-        lister = DefaultSkillResolver()
-    return {s.name: s.categories for s in lister.list_all()}
 
 
 @semantic_rule(

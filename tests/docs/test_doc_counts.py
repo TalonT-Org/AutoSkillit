@@ -306,8 +306,8 @@ def test_docs_state_44_kitchen_tools(doc_path: Path) -> None:
     _assert_doc_states_number(doc_path, "kitchen tools", 44)
 
 
-def test_skill_visibility_states_124_skills() -> None:
-    _assert_doc_states_number(DOCS_DIR / "skills" / "visibility.md", "skills total", 124)
+def test_skill_visibility_states_125_skills() -> None:
+    _assert_doc_states_number(DOCS_DIR / "skills" / "visibility.md", "skills total", 125)
 
 
 def test_safety_hooks_states_21_hooks() -> None:
@@ -339,8 +339,8 @@ def test_orchestration_states_11_retry_reasons() -> None:
     _assert_doc_states_number(DOCS_DIR / "execution" / "orchestration.md", "retry reasons", 11)
 
 
-def test_authoring_states_17_rule_families() -> None:
-    _assert_doc_states_number(DOCS_DIR / "recipes" / "authoring.md", "rule families", 17)
+def test_authoring_states_24_rule_families() -> None:
+    _assert_doc_states_number(DOCS_DIR / "recipes" / "authoring.md", "rule families", 24)
 
 
 def test_catalog_states_arch_and_exp_lens_counts() -> None:
@@ -358,3 +358,69 @@ def test_catalog_states_vis_lens_count_is_12() -> None:
         pytest.skip("docs/skills/catalog.md not present")
     text = _read(catalog)
     assert "12" in text, "skills/catalog.md does not state 12 vis-lens skills"
+
+
+def test_catalog_count_matches_filesystem() -> None:
+    """Header in catalog.md must match the actual skill-dir count."""
+    catalog = (DOCS_DIR / "skills" / "catalog.md").read_text(encoding="utf-8")
+    skills_dir = SRC_DIR / "skills"
+    extended_dir = SRC_DIR / "skills_extended"
+    tier1_count = sum(1 for p in skills_dir.iterdir() if p.is_dir() and p.name != "__pycache__")
+    extended_count = sum(
+        1 for p in extended_dir.iterdir() if p.is_dir() and p.name != "__pycache__"
+    )
+    total = tier1_count + extended_count
+    assert f"{total} total" in catalog, f"catalog.md header should claim {total} total skills"
+
+
+def test_catalog_does_not_reference_open_pr() -> None:
+    """open-pr was decomposed into prepare-pr + compose-pr in PR #659."""
+    catalog = (DOCS_DIR / "skills" / "catalog.md").read_text()
+    assert "`open-pr`" not in catalog
+
+
+def test_catalog_lists_all_skills_in_extended_dir() -> None:
+    """Every directory in skills_extended/ must appear at least once in catalog.md."""
+    catalog = (DOCS_DIR / "skills" / "catalog.md").read_text()
+    extended_dir = SRC_DIR / "skills_extended"
+    missing = [
+        p.name
+        for p in sorted(extended_dir.iterdir())
+        if p.is_dir() and f"`{p.name}`" not in catalog
+    ]
+    assert missing == [], f"Skills in skills_extended/ not listed in catalog.md: {missing}"
+
+
+def test_authoring_bundled_recipe_count_mentions_6() -> None:
+    """authoring.md prose must reference 6 bundled recipes (planner was missing)."""
+    authoring = (DOCS_DIR / "recipes" / "authoring.md").read_text()
+    assert "6 today" in authoring and "planner" in authoring, (
+        "authoring.md should mention 6 bundled recipes including planner"
+    )
+
+
+def test_authoring_recipe_step_fields_match_schema() -> None:
+    """authoring.md field summary must use actual RecipeStep field names."""
+    authoring = (DOCS_DIR / "recipes" / "authoring.md").read_text()
+    assert "`name`" in authoring
+    assert "`with_args`" in authoring
+    assert "`on_result`" in authoring
+    assert "`retries`" in authoring
+    field_summary_line = next(
+        (line for line in authoring.splitlines() if "with_args" in line or "id`," in line),
+        None,
+    )
+    assert field_summary_line is not None, (
+        "authoring.md must contain a line listing RecipeStep fields (with_args or id`,)"
+    )
+    assert "id`," not in field_summary_line
+    assert "params`," not in field_summary_line
+    assert "verdict_routes`" not in field_summary_line
+    assert "retry`." not in field_summary_line
+
+
+def test_subsets_lists_required_packs() -> None:
+    """subsets.md must document all four missing built-in pack categories."""
+    subsets = (DOCS_DIR / "skills" / "subsets.md").read_text(encoding="utf-8")
+    for pack in ("kitchen-core", "research", "exp-lens", "vis-lens"):
+        assert pack in subsets, f"subsets.md missing pack category: {pack}"

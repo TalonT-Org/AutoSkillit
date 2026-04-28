@@ -72,10 +72,12 @@ async def fetch_github_issue(
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    with structlog.contextvars.bound_contextvars(tool="fetch_github_issue", issue_url=issue_url):
-        try:
-            from autoskillit.server import _get_config, _get_ctx
+    try:
+        from autoskillit.server import _get_config, _get_ctx
 
+        with structlog.contextvars.bound_contextvars(
+            tool="fetch_github_issue", issue_url=issue_url
+        ):
             logger.info("fetch_github_issue", include_comments=include_comments)
 
             tool_ctx = _get_ctx()
@@ -105,9 +107,14 @@ async def fetch_github_issue(
                 include_comments=include_comments,
             )
             return json.dumps(result)
-        except Exception as exc:
-            logger.error("fetch_github_issue unhandled exception", exc_info=True)
-            return json.dumps({"success": False, "error": str(exc)})
+    except Exception as exc:
+        logger.error(
+            "fetch_github_issue unhandled exception",
+            exc_info=True,
+            tool="fetch_github_issue",
+            issue_url=issue_url,
+        )
+        return json.dumps({"success": False, "error": str(exc)})
 
 
 @mcp.tool(

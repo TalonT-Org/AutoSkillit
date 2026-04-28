@@ -45,11 +45,9 @@ def _stub_campaign_resolution(
     recipe.continue_on_failure = False
     recipe.description = f"Test campaign {name}"
 
-    monkeypatch.setattr(
-        "autoskillit.cli._fleet.find_campaign_by_name", lambda *a, **kw: recipe_info
-    )
-    monkeypatch.setattr("autoskillit.cli._fleet.load_recipe", lambda *a, **kw: recipe)
-    monkeypatch.setattr("autoskillit.cli._fleet.validate_recipe", lambda *a: [])
+    monkeypatch.setattr("autoskillit.recipe.find_campaign_by_name", lambda *a, **kw: recipe_info)
+    monkeypatch.setattr("autoskillit.recipe.load_recipe", lambda *a, **kw: recipe)
+    monkeypatch.setattr("autoskillit.recipe.validate_recipe", lambda *a: [])
     return recipe
 
 

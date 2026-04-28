@@ -253,7 +253,6 @@ class TestBuildTestScope:
             (tests_root / d).mkdir(parents=True, exist_ok=True)
         for f in [
             "server/test_factory.py",
-            "server/test_tools_load_recipe.py",
             "server/test_tools_kitchen_gate.py",
             "server/test_tools_kitchen_envelope.py",
             "cli/test_cli_prompts.py",
@@ -267,7 +266,6 @@ class TestBuildTestScope:
             "infra/test_pretty_output_recipe.py",
             "skills/test_planner_skill_contracts.py",
             "skills/test_skill_placeholder_contracts.py",
-            "skills/test_make_campaign_compliance.py",
             "skills/test_review_design_guards.py",
             "skills/test_skill_tool_syntax_contracts.py",
             "core/test_type_constants.py",

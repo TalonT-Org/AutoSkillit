@@ -194,8 +194,8 @@ The following manifest defines all dispatches for this campaign:
 
 Execute static manifest dispatches SEQUENTIALLY via {mcp_prefix}dispatch_food_truck.
 The fleet_lock semaphore uses max_concurrent=1 for static dispatches — do NOT issue
-static manifest calls in parallel. For dynamic dispatches (see DYNAMIC DISPATCH section
-when present), `parallel: true` groups override this rule.
+static manifest calls in parallel. For dynamic dispatches (see the dynamic dispatch
+instructions section when present), `parallel: true` groups override this rule.
 
 Each dispatch is an independent L2 session with its own kitchen context. There is NO
 cross-dispatch state sharing managed by you — the runtime handles it

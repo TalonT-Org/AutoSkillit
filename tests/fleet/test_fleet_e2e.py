@@ -325,7 +325,7 @@ def fleet_runtime(
     _write_claude_shim(shim_dir)
     monkeypatch.setenv("PATH", f"{shim_dir}:{os.environ['PATH']}")
 
-    from autoskillit.server._factory import FleetSemaphore
+    from autoskillit.fleet import FleetSemaphore
 
     runner = FleetTestRunner()
     tool_ctx.runner = runner
@@ -379,7 +379,7 @@ def fleet_runtime_factory(fleet_runtime: FleetRuntime):
     """Factory variant of fleet_runtime that accepts max_concurrent_dispatches."""
 
     def _factory(max_concurrent_dispatches: int = 1) -> FleetRuntime:
-        from autoskillit.server._factory import FleetSemaphore
+        from autoskillit.fleet import FleetSemaphore
 
         fleet_runtime.tool_ctx.fleet_lock = FleetSemaphore(
             max_concurrent=max_concurrent_dispatches

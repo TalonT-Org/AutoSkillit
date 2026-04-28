@@ -159,8 +159,8 @@ async def _noop_quota_refresher(config, **kwargs) -> None:
 
 
 def _setup_dispatch(tool_ctx, recipe_name: str = "test-recipe", ingredients: dict | None = None):
+    from autoskillit.fleet import FleetSemaphore
     from autoskillit.recipe.schema import Recipe, RecipeKind
-    from autoskillit.server._factory import FleetSemaphore
     from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
 
     tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.core import FleetLock
-from autoskillit.server._factory import FleetSemaphore
+from autoskillit.fleet import FleetSemaphore
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 

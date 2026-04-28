@@ -20,7 +20,7 @@ def test_fleet_package_importable() -> None:
 def test_fleet_semaphore_satisfies_fleet_lock() -> None:
     """FleetSemaphore is a structural match for FleetLock at runtime."""
     from autoskillit.core import FleetLock
-    from autoskillit.server._factory import FleetSemaphore
+    from autoskillit.fleet import FleetSemaphore
 
     s = FleetSemaphore(max_concurrent=1)
     assert isinstance(s, FleetLock)
@@ -42,7 +42,7 @@ def test_fleet_lock_protocol_has_required_methods() -> None:
 
 def test_fleet_lock_acquire_is_coroutine() -> None:
     """acquire() must be async — verifies FleetSemaphore.acquire is a coroutine."""
-    from autoskillit.server._factory import FleetSemaphore
+    from autoskillit.fleet import FleetSemaphore
 
     assert inspect.iscoroutinefunction(FleetSemaphore(max_concurrent=1).acquire)
 

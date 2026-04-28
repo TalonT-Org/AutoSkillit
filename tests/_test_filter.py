@@ -393,12 +393,9 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
         {
             "server",
             "cli",
-            # file-level: fleet tests that import autoskillit.server._factory.FleetSemaphore
+            # file-level: only test_pack_enforcement.py imports server (autouse fixtures
+            # were moved from fleet/conftest.py into this module to narrow the cascade)
             "fleet/test_pack_enforcement.py",
-            "fleet/test_campaign_capture.py",
-            "fleet/test_fleet.py",
-            "fleet/test_fleet_e2e.py",
-            "fleet/test_fleet_semaphore.py",
         }
     ),
     "cli": frozenset(

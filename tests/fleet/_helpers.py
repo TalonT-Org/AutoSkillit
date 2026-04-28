@@ -46,8 +46,8 @@ def _make_recipe_info(name: str = "test-recipe", path_prefix: str = "/fake/"):
 
 def _setup_dispatch(tool_ctx, monkeypatch, recipe_name: str = "test-recipe"):
     """Wire tool_ctx for dispatch tests."""
+    from autoskillit.fleet import FleetSemaphore
     from autoskillit.recipe.schema import Recipe, RecipeKind
-    from autoskillit.server._factory import FleetSemaphore
     from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
 
     tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)

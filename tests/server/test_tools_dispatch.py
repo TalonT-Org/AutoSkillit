@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from autoskillit.server._factory import FleetSemaphore
+from autoskillit.fleet import FleetSemaphore
 from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
 from tests.fleet._helpers import _make_recipe_info as _fleet_make_recipe_info
 

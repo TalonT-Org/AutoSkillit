@@ -9,7 +9,6 @@ construction scattered across callers.
 
 from __future__ import annotations
 
-import asyncio
 import os
 import subprocess
 from collections.abc import Callable
@@ -140,34 +139,6 @@ def _check_plugin_installed() -> bool:
     return detect_autoskillit_mcp_prefix() == MARKETPLACE_PREFIX
 
 
-class FleetSemaphore:
-    """Configurable semaphore implementing FleetLock for fleet dispatch concurrency."""
-
-    def __init__(self, max_concurrent: int = 1) -> None:
-        self._semaphore = asyncio.BoundedSemaphore(max_concurrent)
-        self._active = 0
-        self._max = max_concurrent
-
-    def at_capacity(self) -> bool:
-        return self._active >= self._max
-
-    async def acquire(self) -> None:
-        await self._semaphore.acquire()
-        self._active += 1
-
-    def release(self) -> None:
-        self._active -= 1
-        self._semaphore.release()
-
-    @property
-    def active_count(self) -> int:
-        return self._active
-
-    @property
-    def max_concurrent(self) -> int:
-        return self._max
-
-
 def make_context(
     config: AutomationConfig,
     *,
@@ -198,8 +169,8 @@ def make_context(
                        without detection. For tests and CLI that construct
                        install mode explicitly.
         fleet_lock: FleetLock implementation to inject. Defaults to
-                        asyncio.Lock() when None. Pass a custom implementation
-                        in tests to substitute the lock without monkey-patching.
+                        FleetSemaphore(max_concurrent_dispatches) when None. Pass a
+                        custom implementation in tests to substitute without monkey-patching.
 
     Returns:
         ToolContext with gate starting closed (enabled=False) in all contexts.
@@ -292,6 +263,11 @@ def make_context(
     ephemeral_root = resolve_ephemeral_root()
     session_mgr = DefaultSessionSkillManager(provider, ephemeral_root)
 
+    from autoskillit.fleet import (  # lazy: avoids fleet init on server import
+        FleetSemaphore,
+        build_protected_campaign_ids,
+    )
+
     audit = DefaultAuditLog()
     github_api_log = DefaultGitHubApiLog()
     ctx = ToolContext(
@@ -348,10 +324,6 @@ def make_context(
     ctx.output_pattern_resolver = _resolve_output_patterns
     ctx.write_expected_resolver = _resolve_write_behavior
     ctx.token_factory = token_factory
-    from autoskillit.fleet import (
-        build_protected_campaign_ids,
-    )  # lazy: avoids fleet init on server import
-
     ctx.build_protected_campaign_ids = build_protected_campaign_ids
     ctx.executor = DefaultHeadlessExecutor(ctx)
     ctx.migrations = DefaultMigrationService(

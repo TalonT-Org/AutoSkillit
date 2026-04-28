@@ -1,0 +1,57 @@
+name: promote-to-main-wrapper
+description: >-
+  Thin wrapper that invokes the promote-to-main skill via run_skill, enabling
+  campaign dispatch of integration branch promotions as L2 food trucks.
+kind: standard
+autoskillit_version: "0.9.228"
+recipe_version: "1.0.0"
+
+requires_packs:
+  - github
+
+ingredients:
+  integration_branch:
+    description: "Branch to promote (must exist ahead of base_branch)"
+    default: "integration"
+  base_branch:
+    description: "Target branch for the promotion PR"
+    default: "main"
+  source_dir:
+    description: >-
+      Absolute path to the source repository. Required — no default prevents
+      silent cwd inheritance from the MCP server when an empty string is passed.
+    required: true
+
+steps:
+  promote:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:promote-to-main ${{ inputs.integration_branch }} ${{ inputs.base_branch }}"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: "promote"
+    capture:
+      pr_url: "${{ result.pr_url }}"
+      verdict: "${{ result.verdict }}"
+      category_summary: "${{ result.category_summary }}"
+    on_result:
+      - when: "${{ result.verdict }} == 'preflight_failed'"
+        route: escalate_stop
+      - route: emit_result
+    on_context_limit: escalate_stop
+    on_failure: escalate_stop
+
+  emit_result:
+    tool: run_cmd
+    with:
+      cmd: "echo 'pr_url = ${{ context.pr_url }}' && echo 'verdict = ${{ context.verdict }}' && echo 'category_summary = ${{ context.category_summary }}'"
+      step_name: "emit_result"
+    on_success: done
+    on_failure: done
+
+  done:
+    action: stop
+    message: "Promotion complete."
+
+  escalate_stop:
+    action: stop
+    message: "Promotion failed — escalating for manual review."

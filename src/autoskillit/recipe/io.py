@@ -8,6 +8,7 @@ from typing import Any
 
 from autoskillit.core import (
     CORE_PACKS,
+    DispatchGateType,
     LoadReport,
     LoadResult,
     RecipeSource,
@@ -310,10 +311,22 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
     for d in dispatches_raw:
         if isinstance(d, dict):
             d_name = d.get("name", "")
-            d_gate = d.get("gate") or None
+            _raw_gate = d.get("gate") or None
+            try:
+                d_gate: DispatchGateType | None = (
+                    DispatchGateType(_raw_gate) if _raw_gate else None
+                )
+            except ValueError:
+                d_gate = _raw_gate  # type: ignore[assignment]  # Invalid; caught by validate_recipe
             d_recipe = d.get("recipe", "")
             if not d_name:
                 raise ValueError(f"Campaign dispatch is missing required 'name' field: {d!r}")
+            if d_gate and d_recipe:
+                raise ValueError(
+                    f"Campaign dispatch {d_name!r} has both 'gate' and 'recipe' set. "
+                    "A dispatch must be either a gate dispatch (gate only) or a recipe "
+                    "dispatch (recipe only), not both."
+                )
             if not d_gate and not d_recipe:
                 raise ValueError(
                     f"Campaign dispatch is missing required 'recipe' field "
@@ -328,7 +341,7 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
                     depends_on=d.get("depends_on") or [],
                     capture=d.get("capture") or {},
                     gate=d_gate,
-                    message=d.get("message", ""),
+                    message=d.get("message") or None,
                 )
             )
 

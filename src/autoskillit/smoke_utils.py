@@ -212,9 +212,10 @@ def patch_pr_token_summary(pr_url: str, cwd: str, log_dir: str = "") -> dict[str
         return {"success": "false", "error": f"Failed to patch PR: {exc}"}
 
     if patch_result.returncode != 0:
+        detail = patch_result.stderr.strip() or patch_result.stdout.strip()
         return {
             "success": "false",
-            "error": f"Failed to patch PR: {patch_result.stderr.strip()}",
+            "error": f"Failed to patch PR: {detail}",
         }
 
     return {"success": "true", "sessions_loaded": str(count)}

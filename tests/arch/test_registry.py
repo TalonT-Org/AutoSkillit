@@ -94,6 +94,7 @@ def test_rule_registry_completeness() -> None:
             "ARCH-006",
             "ARCH-007",
             "ARCH-008",
+            "ARCH-009",
         }
     )
     actual_ids = frozenset(rule_ids)

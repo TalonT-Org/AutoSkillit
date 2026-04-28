@@ -7,7 +7,7 @@ from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 from autoskillit.recipe.schema import RecipeKind
 
-_logger = get_logger(__name__)
+logger = get_logger(__name__)
 
 _PLACEHOLDER_MESSAGES: frozenset[str] = frozenset(
     {"done", "ok", "complete", "finished", "end", "stop", "exit"}

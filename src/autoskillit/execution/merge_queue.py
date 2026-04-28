@@ -20,7 +20,7 @@ import httpx
 from autoskillit.core import PRState, YAMLError, get_logger, load_yaml
 from autoskillit.execution.github import github_headers
 
-_log = get_logger(__name__)
+logger = get_logger(__name__)
 
 # All GitHub merge_state_status values known to be returned by the GraphQL API.
 # https://docs.github.com/en/graphql/reference/enums#mergestatestatus
@@ -414,7 +414,7 @@ class DefaultMergeQueueWatcher:
                     pr_number, owner, repo_name, target_branch
                 )
             except Exception:
-                _log.warning("fetch_pr_and_queue_state failed, retrying", exc_info=True)
+                logger.warning("fetch_pr_and_queue_state failed, retrying", exc_info=True)
                 await asyncio.sleep(poll_interval)
                 continue
 
@@ -481,7 +481,7 @@ class DefaultMergeQueueWatcher:
                     continue
                 if stall_retries_attempted < max_stall_retries:
                     backoff = min(30 * (2**stall_retries_attempted), 120)
-                    _log.info(
+                    logger.info(
                         "merge_queue_stall_detected",
                         stall_duration=stall_duration,
                         attempt=stall_retries_attempted + 1,
@@ -493,7 +493,7 @@ class DefaultMergeQueueWatcher:
                             auto_merge_available=auto_merge_available,
                         )
                     except Exception:
-                        _log.warning("toggle_auto_merge failed", exc_info=True)
+                        logger.warning("toggle_auto_merge failed", exc_info=True)
                     stall_retries_attempted += 1
                     not_in_queue_cycles = 0
                     await asyncio.sleep(backoff)
@@ -618,7 +618,7 @@ class DefaultMergeQueueWatcher:
             await self._toggle_auto_merge(state["pr_node_id"])
             return {"success": True, "pr_number": pr_number}
         except Exception as exc:
-            _log.warning("toggle_auto_merge failed", exc_info=True)
+            logger.warning("toggle_auto_merge failed", exc_info=True)
             return {"success": False, "error": f"toggle failed: {exc}"}
 
     async def _enqueue_direct(self, pr_node_id: str) -> None:
@@ -692,7 +692,7 @@ class DefaultMergeQueueWatcher:
                 "enrollment_method": enrollment_method,
             }
         except Exception as exc:
-            _log.warning("enqueue failed", exc_info=True)
+            logger.warning("enqueue failed", exc_info=True)
             return {"success": False, "error": f"enqueue failed: {exc}"}
 
     async def _toggle_auto_merge(
@@ -827,7 +827,7 @@ def _is_secondary_rate_limit(resp: httpx.Response) -> bool:
     try:
         text = resp.text.lower()
     except Exception:
-        _log.warning("Failed to read response body for rate-limit check", exc_info=True)
+        logger.warning("Failed to read response body for rate-limit check", exc_info=True)
         return False
     return _RATE_LIMIT_SECONDARY_MARKER in text
 
@@ -893,7 +893,7 @@ async def fetch_repo_merge_state(
             )
         if resp.status_code == 429 or _is_secondary_rate_limit(resp):
             sleep_secs = _retry_after_seconds(attempt, resp)
-            _log.warning(
+            logger.warning(
                 "fetch_repo_merge_state rate limited",
                 status=resp.status_code,
                 attempt=attempt,

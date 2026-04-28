@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import dataclasses
 import inspect
-import logging
 import os
 import tempfile
 from dataclasses import dataclass, field
@@ -26,6 +25,7 @@ from autoskillit.core import (
     OutputFormat,
     atomic_write,
     dump_yaml_str,
+    get_logger,
     is_feature_enabled,
     load_yaml,
     pkg_root,
@@ -34,7 +34,7 @@ from autoskillit.core import (
 if TYPE_CHECKING:
     from dynaconf import Dynaconf
 
-_logger = logging.getLogger(__name__)  # noqa: TID251
+logger = get_logger(__name__)
 
 
 class ConfigSchemaError(ValueError):
@@ -774,7 +774,7 @@ def _build_subsets_config(raw: dict[str, Any]) -> SubsetsConfig:
         if isinstance(v, list):
             custom_tags[str(k)] = [str(item) for item in v]
         else:
-            _logger.warning(
+            logger.warning(
                 "Ignoring non-list value for custom_tags entry %r: %r",
                 k,
                 v,
@@ -782,7 +782,7 @@ def _build_subsets_config(raw: dict[str, Any]) -> SubsetsConfig:
     known_categories = CATEGORY_TAGS | frozenset(custom_tags.keys())
     for tag in disabled:
         if tag not in known_categories:
-            _logger.warning(
+            logger.warning(
                 "Unknown category %r in subsets.disabled"
                 " (not in CATEGORY_TAGS and not a custom_tag)",
                 tag,
@@ -797,7 +797,7 @@ def _build_packs_config(raw: dict[str, Any]) -> PacksConfig:
     enabled = list(raw.get("enabled", []))
     for pack_name in enabled:
         if pack_name not in PACK_REGISTRY:
-            _logger.warning(
+            logger.warning(
                 "Unknown pack name %r in packs.enabled (not in PACK_REGISTRY)",
                 pack_name,
             )

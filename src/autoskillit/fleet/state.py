@@ -15,7 +15,7 @@ from typing import Any
 
 from autoskillit.core import get_logger, write_versioned_json
 
-_log = get_logger(__name__)
+logger = get_logger(__name__)
 
 _SCHEMA_VERSION = 3
 
@@ -169,7 +169,7 @@ def read_state(state_path: Path) -> CampaignState | None:
             captured_values=data.get("captured_values", {}),
         )
     except (KeyError, ValueError, TypeError) as exc:
-        _log.warning("read_state: schema mismatch or corrupt payload in %s: %s", state_path, exc)
+        logger.warning("read_state: schema mismatch or corrupt payload in %s: %s", state_path, exc)
         return None
 
 
@@ -303,7 +303,7 @@ def build_protected_campaign_ids(project_dir: Path) -> frozenset[str]:
                 continue
         return frozenset(protected)
     except Exception:
-        _log.warning("campaign_ids_protection_error", exc_info=True)
+        logger.warning("campaign_ids_protection_error", exc_info=True)
         return frozenset(protected)
 
 
@@ -315,7 +315,7 @@ def write_captured_values(state_path: Path, captures: dict[str, str]) -> None:
     """
     state = read_state(state_path)
     if state is None:
-        _log.warning("write_captured_values: state not found at %s", state_path)
+        logger.warning("write_captured_values: state not found at %s", state_path)
         return
     state.captured_values = {**state.captured_values, **captures}
     _write_state(state_path, state)
@@ -347,7 +347,7 @@ def read_all_campaign_captures(
             if all_success and dispatches:
                 result.update(caps)
         except (json.JSONDecodeError, OSError) as exc:
-            _log.warning("read_all_campaign_captures: skipping %s: %s", path, exc)
+            logger.warning("read_all_campaign_captures: skipping %s: %s", path, exc)
             continue
     return result
 

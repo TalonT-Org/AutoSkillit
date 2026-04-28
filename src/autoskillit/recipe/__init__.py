@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from autoskillit.core import get_logger
 
-_logger = get_logger(__name__)
+logger = get_logger(__name__)
 
 # Rule registration — import triggers @semantic_rule registration.
 from autoskillit.recipe import rules_actions as _rules_actions  # noqa: E402 F401

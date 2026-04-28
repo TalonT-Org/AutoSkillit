@@ -31,7 +31,7 @@ from autoskillit.hook_registry import (
     find_broken_hook_scripts,
 )
 
-_log = get_logger(__name__)
+logger = get_logger(__name__)
 _NON_PROBLEM: frozenset[Severity] = frozenset({Severity.OK, Severity.INFO})
 _STALE_THRESHOLD_DAYS = 7
 
@@ -472,7 +472,7 @@ def _check_source_version_drift(home: Path | None = None) -> DoctorResult:
         )
 
     except Exception:
-        _log.debug("Source drift check failed", exc_info=True)
+        logger.debug("Source drift check failed", exc_info=True)
         return DoctorResult(
             Severity.OK, check_name, "Source drift check skipped (unexpected error)"
         )
@@ -500,7 +500,7 @@ def _check_install_classification() -> DoctorResult:
             f"commit_id={commit_short}",
         )
     except Exception:
-        _log.debug("Install classification check failed", exc_info=True)
+        logger.debug("Install classification check failed", exc_info=True)
         return DoctorResult(
             Severity.OK, check_name, "Install classification check skipped (unexpected error)"
         )
@@ -532,7 +532,7 @@ def _check_update_dismissal_state(home: Path | None = None) -> DoctorResult:
             f"update_prompt dismissed until {expiry}; conditions={conditions}",
         )
     except Exception:
-        _log.debug("Update dismissal state check failed", exc_info=True)
+        logger.debug("Update dismissal state check failed", exc_info=True)
         return DoctorResult(
             Severity.OK, check_name, "Update dismissal state check skipped (unexpected error)"
         )
@@ -547,7 +547,7 @@ def _check_quota_cache_schema(cache_path: Path | None = None) -> DoctorResult:
     try:
         raw = json.loads(path.read_text())
     except Exception as exc:
-        _log.warning("quota_cache_parse_error", path=str(path), exc_info=True)
+        logger.warning("quota_cache_parse_error", path=str(path), exc_info=True)
         return DoctorResult(
             Severity.WARNING,
             check_name,

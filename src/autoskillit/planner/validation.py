@@ -11,7 +11,7 @@ from autoskillit.planner.schema import (
     validate_wp_result,
 )
 
-_logger = get_logger(__name__)
+logger = get_logger(__name__)
 
 
 def _load_phase_results(root: Path) -> dict[str, dict]:
@@ -224,7 +224,7 @@ def validate_plan(output_dir: str) -> dict[str, str]:
         {"verdict": verdict, "findings": findings},
         schema_version=1,
     )
-    _logger.info("validate_plan", verdict=verdict, issue_count=len(findings))
+    logger.info("validate_plan", verdict=verdict, issue_count=len(findings))
     return {
         "verdict": verdict,
         "validation_path": str(validation_path),

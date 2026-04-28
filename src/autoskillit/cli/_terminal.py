@@ -20,7 +20,7 @@ from typing import NamedTuple
 
 from autoskillit.core import get_logger
 
-_log = get_logger(__name__)
+logger = get_logger(__name__)
 
 _KBP_TERMINALS = frozenset({"kitty", "WezTerm", "ghostty", "iTerm.app"})
 
@@ -122,7 +122,7 @@ def terminal_guard() -> Generator[None, None, None]:
             try:
                 termios.tcsetattr(fd, termios.TCSAFLUSH, old_settings)
             except termios.error:
-                _log.debug("tcsetattr failed; falling back to stty sane")
+                logger.debug("tcsetattr failed; falling back to stty sane")
                 os.system("stty sane 2>/dev/null")
         if fd is not None:
             try:

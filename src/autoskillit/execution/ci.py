@@ -25,7 +25,7 @@ import httpx
 from autoskillit.core import CIRunScope, get_logger
 from autoskillit.execution.github import github_headers
 
-_log = get_logger(__name__)
+logger = get_logger(__name__)
 
 # Backoff schedule: (floor, ceiling) per attempt band.
 _BACKOFF_BANDS: tuple[tuple[int, int], ...] = ((5, 10), (10, 20), (15, 30))
@@ -292,7 +292,7 @@ class DefaultCIWatcher:
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
                 # Phase 1: Look-back — check for recently-completed runs
-                _log.info(
+                logger.info(
                     "ci_watcher_lookback",
                     branch=branch,
                     repo=owner_repo,
@@ -312,7 +312,7 @@ class DefaultCIWatcher:
                         r for r in completed if _validate_run_matches_scope(r, scope)
                     ]
                     if not valid_completed:
-                        _log.warning(
+                        logger.warning(
                             "ci_watcher_scope_mismatch",
                             count=len(completed),
                             scope=str(scope),
@@ -331,7 +331,9 @@ class DefaultCIWatcher:
                             if conclusion in FAILED_CONCLUSIONS
                             else []
                         )
-                        _log.info("ci_watcher_lookback_hit", run_id=run_id, conclusion=conclusion)
+                        logger.info(
+                            "ci_watcher_lookback_hit", run_id=run_id, conclusion=conclusion
+                        )
                         return {
                             "run_id": run_id,
                             "conclusion": conclusion,
@@ -339,7 +341,7 @@ class DefaultCIWatcher:
                         }
 
                 # Phase 2: Poll for active runs
-                _log.info("ci_watcher_polling", branch=branch, repo=owner_repo)
+                logger.info("ci_watcher_polling", branch=branch, repo=owner_repo)
                 attempt = 0
                 found_run: dict[str, Any] | None = None
                 while time.monotonic() < deadline:
@@ -397,7 +399,7 @@ class DefaultCIWatcher:
 
                 if found_run is None:
                     poll_duration = time.monotonic() - _start_time
-                    _log.warning(
+                    logger.warning(
                         "ci_watcher_no_runs",
                         branch=branch,
                         repo=owner_repo,
@@ -421,7 +423,7 @@ class DefaultCIWatcher:
 
                 # Phase 3: Wait for the found run to complete
                 run_id = found_run["id"]
-                _log.info("ci_watcher_waiting", run_id=run_id)
+                logger.info("ci_watcher_waiting", run_id=run_id)
                 attempt = 0
                 while time.monotonic() < deadline:
                     run_data = await self._poll_run_status(
@@ -442,7 +444,7 @@ class DefaultCIWatcher:
                             if conclusion in FAILED_CONCLUSIONS
                             else []
                         )
-                        _log.info("ci_watcher_completed", run_id=run_id, conclusion=conclusion)
+                        logger.info("ci_watcher_completed", run_id=run_id, conclusion=conclusion)
                         return {
                             "run_id": run_id,
                             "conclusion": conclusion,
@@ -456,7 +458,7 @@ class DefaultCIWatcher:
                     await asyncio.sleep(min(sleep_duration, remaining))
                     attempt += 1
 
-                _log.warning("ci_watcher_timeout", run_id=run_id, timeout=timeout_seconds)
+                logger.warning("ci_watcher_timeout", run_id=run_id, timeout=timeout_seconds)
                 return {
                     "run_id": run_id,
                     "conclusion": "timed_out",
@@ -469,7 +471,7 @@ class DefaultCIWatcher:
                 }
 
         except httpx.HTTPStatusError as exc:
-            _log.warning("ci_watcher_http_error", status=exc.response.status_code, branch=branch)
+            logger.warning("ci_watcher_http_error", status=exc.response.status_code, branch=branch)
             return {
                 "run_id": None,
                 "conclusion": "error",
@@ -477,7 +479,7 @@ class DefaultCIWatcher:
                 "error": f"HTTP {exc.response.status_code}: {exc.response.text[:200]}",
             }
         except httpx.RequestError as exc:
-            _log.warning("ci_watcher_request_error", branch=branch, error=str(exc))
+            logger.warning("ci_watcher_request_error", branch=branch, error=str(exc))
             return {
                 "run_id": None,
                 "conclusion": "error",
@@ -568,11 +570,11 @@ class DefaultCIWatcher:
                 return {"runs": runs}
 
         except httpx.HTTPStatusError as exc:
-            _log.warning("ci_status_http_error", status=exc.response.status_code)
+            logger.warning("ci_status_http_error", status=exc.response.status_code)
             return {
                 "runs": [],
                 "error": f"HTTP {exc.response.status_code}: {exc.response.text[:200]}",
             }
         except httpx.RequestError as exc:
-            _log.warning("ci_status_request_error", error=str(exc))
+            logger.warning("ci_status_request_error", error=str(exc))
             return {"runs": [], "error": f"Request error: {exc}"}

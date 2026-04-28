@@ -25,7 +25,7 @@ from autoskillit.core import (
     resolve_temp_dir,
 )
 
-_log = get_logger(__name__)
+logger = get_logger(__name__)
 
 CloneStatus = Literal["success", "error", "unconfirmed"]
 _DEFAULT_REGISTRY_NAME = "clone-cleanup-registry.json"
@@ -74,7 +74,7 @@ class CloneRegistry:
             try:
                 self._entries = json.loads(self._path.read_text()).get("clones", [])
             except (json.JSONDecodeError, OSError, AttributeError) as exc:
-                _log.warning("clone_registry: could not read %s: %s", self._path, exc)
+                logger.warning("clone_registry: could not read %s: %s", self._path, exc)
                 self._entries = []
         return self
 
@@ -168,7 +168,7 @@ def read_registry(
     try:
         return json.loads(path.read_text()).get("clones", [])
     except (json.JSONDecodeError, OSError) as exc:
-        _log.warning("clone_registry: could not read %s: %s", path, exc)
+        logger.warning("clone_registry: could not read %s: %s", path, exc)
         return []
 
 

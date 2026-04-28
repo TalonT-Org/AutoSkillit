@@ -10,7 +10,7 @@ import asyncio
 
 from autoskillit.core import get_logger, normalize_owner_repo, parse_github_repo
 
-_log = get_logger(__name__)
+logger = get_logger(__name__)
 
 # Canonical remote precedence order: upstream before origin encodes the clone
 # isolation contract (upstream = real GitHub URL; origin = file:// local path).
@@ -59,7 +59,7 @@ async def resolve_remote_repo(
                 proc.kill()
                 await proc.wait()
                 await asyncio.gather(io_task, return_exceptions=True)
-                _log.warning("Timed out getting URL for remote %r in %r", remote, cwd)
+                logger.warning("Timed out getting URL for remote %r in %r", remote, cwd)
                 continue
             stdout, _ = await io_task
             if proc.returncode == 0:
@@ -67,7 +67,7 @@ async def resolve_remote_repo(
                 if parsed:
                     return parsed
         except OSError:
-            _log.warning("Failed to get URL for remote %r in %r", remote, cwd, exc_info=True)
+            logger.warning("Failed to get URL for remote %r in %r", remote, cwd, exc_info=True)
 
     return None
 

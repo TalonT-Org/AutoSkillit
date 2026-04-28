@@ -16,7 +16,7 @@ import httpx
 
 from autoskillit.core import _parse_issue_ref, get_logger
 
-_log = get_logger(__name__)
+logger = get_logger(__name__)
 
 
 def _slugify(title: str) -> str:
@@ -94,7 +94,7 @@ def parse_merge_queue_response(data: dict[str, Any]) -> list[dict[str, Any]]:
     rather than skipped, so callers can inspect and handle partial entries.
     """
     if "errors" in data:
-        _log.warning("parse_merge_queue_response graphql errors", errors=data["errors"])
+        logger.warning("parse_merge_queue_response graphql errors", errors=data["errors"])
         return []
     try:
         queue = data.get("data", {}).get("repository", {}).get("mergeQueue") or {}
@@ -216,7 +216,7 @@ class DefaultGitHubFetcher:
                     ]
 
         except httpx.HTTPStatusError as exc:
-            _log.warning(
+            logger.warning(
                 "github fetch http error",
                 status=exc.response.status_code,
                 ref=issue_ref,
@@ -226,7 +226,7 @@ class DefaultGitHubFetcher:
                 "error": f"HTTP {exc.response.status_code}: {exc.response.text[:200]}",
             }
         except httpx.RequestError as exc:
-            _log.warning("github fetch request error", ref=issue_ref, error=str(exc))
+            logger.warning("github fetch request error", ref=issue_ref, error=str(exc))
             return {"success": False, "error": f"Request error: {exc}"}
 
         labels = [lbl["name"] for lbl in issue_data.get("labels", [])]
@@ -284,10 +284,12 @@ class DefaultGitHubFetcher:
                 resp.raise_for_status()
                 data = resp.json()
         except httpx.HTTPStatusError as exc:
-            _log.warning("github search http error", status=exc.response.status_code, query=query)
+            logger.warning(
+                "github search http error", status=exc.response.status_code, query=query
+            )
             return {"success": False, "error": f"HTTP {exc.response.status_code}"}
         except httpx.RequestError as exc:
-            _log.warning("github search request error", query=query, error=str(exc))
+            logger.warning("github search request error", query=query, error=str(exc))
             return {"success": False, "error": f"Request error: {exc}"}
 
         items = [
@@ -330,13 +332,13 @@ class DefaultGitHubFetcher:
                 resp.raise_for_status()
                 data = resp.json()
         except httpx.HTTPStatusError as exc:
-            _log.warning("github create_issue http error", status=exc.response.status_code)
+            logger.warning("github create_issue http error", status=exc.response.status_code)
             return {
                 "success": False,
                 "error": f"HTTP {exc.response.status_code}: {exc.response.text[:200]}",
             }
         except httpx.RequestError as exc:
-            _log.warning("github create_issue request error", error=str(exc))
+            logger.warning("github create_issue request error", error=str(exc))
             return {"success": False, "error": f"Request error: {exc}"}
 
         return {
@@ -368,7 +370,7 @@ class DefaultGitHubFetcher:
                 resp.raise_for_status()
                 data = resp.json()
         except httpx.HTTPStatusError as exc:
-            _log.warning(
+            logger.warning(
                 "github update_issue_body http error",
                 status=exc.response.status_code,
                 issue=issue_number,
@@ -379,7 +381,7 @@ class DefaultGitHubFetcher:
                 "error": f"HTTP {exc.response.status_code}: {exc.response.text[:200]}",
             }
         except httpx.RequestError as exc:
-            _log.warning(
+            logger.warning(
                 "github update_issue_body request error", issue=issue_number, error=str(exc)
             )
             return {"success": False, "error": f"Request error: {exc}"}
@@ -446,13 +448,13 @@ class DefaultGitHubFetcher:
                 resp.raise_for_status()
                 data = resp.json()
         except httpx.HTTPStatusError as exc:
-            _log.warning("github add_labels http error", status=exc.response.status_code)
+            logger.warning("github add_labels http error", status=exc.response.status_code)
             return {
                 "success": False,
                 "error": f"HTTP {exc.response.status_code}: {exc.response.text[:200]}",
             }
         except httpx.RequestError as exc:
-            _log.warning("github add_labels request error", error=str(exc))
+            logger.warning("github add_labels request error", error=str(exc))
             return {"success": False, "error": f"Request error: {exc}"}
         applied = [lbl["name"] for lbl in data]
         return {"success": True, "labels": applied}
@@ -479,13 +481,13 @@ class DefaultGitHubFetcher:
                     return {"success": True}  # already removed — idempotent
                 resp.raise_for_status()
         except httpx.HTTPStatusError as exc:
-            _log.warning("github remove_label http error", status=exc.response.status_code)
+            logger.warning("github remove_label http error", status=exc.response.status_code)
             return {
                 "success": False,
                 "error": f"HTTP {exc.response.status_code}: {exc.response.text[:200]}",
             }
         except httpx.RequestError as exc:
-            _log.warning("github remove_label request error", error=str(exc))
+            logger.warning("github remove_label request error", error=str(exc))
             return {"success": False, "error": f"Request error: {exc}"}
         return {"success": True}
 
@@ -533,13 +535,13 @@ class DefaultGitHubFetcher:
                 put_resp.raise_for_status()
                 applied = [lbl["name"] for lbl in put_resp.json()]
         except httpx.HTTPStatusError as exc:
-            _log.warning("github swap_labels http error", status=exc.response.status_code)
+            logger.warning("github swap_labels http error", status=exc.response.status_code)
             return {
                 "success": False,
                 "error": f"HTTP {exc.response.status_code}: {exc.response.text[:200]}",
             }
         except httpx.RequestError as exc:
-            _log.warning("github swap_labels request error", error=str(exc))
+            logger.warning("github swap_labels request error", error=str(exc))
             return {"success": False, "error": f"Request error: {exc}"}
         return {"success": True, "labels": applied}
 
@@ -574,13 +576,13 @@ class DefaultGitHubFetcher:
                     return {"success": True, "created": False}
                 resp.raise_for_status()
         except httpx.HTTPStatusError as exc:
-            _log.warning("github ensure_label http error", status=exc.response.status_code)
+            logger.warning("github ensure_label http error", status=exc.response.status_code)
             return {
                 "success": False,
                 "error": f"HTTP {exc.response.status_code}: {exc.response.text[:200]}",
             }
         except httpx.RequestError as exc:
-            _log.warning("github ensure_label request error", error=str(exc))
+            logger.warning("github ensure_label request error", error=str(exc))
             return {"success": False, "error": f"Request error: {exc}"}
         self._label_cache.add(cache_key)
         return {"success": True, "created": True}

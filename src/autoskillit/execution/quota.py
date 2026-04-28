@@ -17,7 +17,7 @@ import httpx
 
 from autoskillit.core import get_logger, write_versioned_json
 
-_log = get_logger(__name__)
+logger = get_logger(__name__)
 
 _DEFAULT_BASE_URL: str = "https://api.anthropic.com"
 
@@ -195,7 +195,7 @@ def _read_cache(cache_path: str, max_age: int) -> QuotaStatus | None:
             cache_key = str(Path(cache_path).expanduser())
             if cache_key not in _SCHEMA_DRIFT_LOGGED:
                 _SCHEMA_DRIFT_LOGGED.add(cache_key)
-                _log.warning(
+                logger.warning(
                     "quota_cache_schema_drift",
                     cache_path=cache_key,
                     observed=raw.get("schema_version"),
@@ -245,7 +245,7 @@ def _write_cache(cache_path: str, result: QuotaFetchResult) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         write_versioned_json(path, payload, schema_version=QUOTA_CACHE_SCHEMA_VERSION)
     except OSError as exc:
-        _log.warning("quota cache write failed", path=cache_path, error=str(exc))
+        logger.warning("quota cache write failed", path=cache_path, error=str(exc))
 
 
 def invalidate_cache(cache_path: str) -> None:
@@ -258,7 +258,7 @@ def invalidate_cache(cache_path: str) -> None:
     except FileNotFoundError:
         pass
     except OSError as exc:
-        _log.warning("quota cache invalidation failed", path=cache_path, error=str(exc))
+        logger.warning("quota cache invalidation failed", path=cache_path, error=str(exc))
 
 
 async def _fetch_quota(
@@ -296,7 +296,7 @@ async def _fetch_quota(
             )
     novel = {name for name in windows if name not in KNOWN_QUOTA_WINDOW_NAMES}
     if novel:
-        _log.warning(
+        logger.warning(
             "Anthropic quota API returned unknown quota window names. "
             "If this is a new rate-limit window, add it to KNOWN_QUOTA_WINDOW_NAMES in quota.py "
             "and update LONG_WINDOW_NAMES and long_window_patterns if it is a long window.",
@@ -407,7 +407,7 @@ async def check_and_sleep_if_needed(
 
         if status.resets_at is None:
             fallback_seconds = max(config.buffer_seconds, 60)
-            _log.warning(
+            logger.warning(
                 "quota above threshold but resets_at is None — blocking with fallback",
                 utilization=status.utilization,
                 fallback_sleep_seconds=fallback_seconds,
@@ -429,7 +429,7 @@ async def check_and_sleep_if_needed(
 
         if status.resets_at is None:
             fallback_seconds = max(config.buffer_seconds, 60)
-            _log.warning(
+            logger.warning(
                 "quota above threshold but resets_at is None after re-fetch"
                 " — blocking with fallback",
                 utilization=status.utilization,
@@ -448,7 +448,7 @@ async def check_and_sleep_if_needed(
         now = datetime.now(UTC)
         wake_at = status.resets_at + timedelta(seconds=config.buffer_seconds)
         sleep_secs = max(0, int((wake_at - now).total_seconds()))
-        _log.info(
+        logger.info(
             "quota threshold exceeded — caller should sleep",
             utilization=status.utilization,
             effective_threshold=status.effective_threshold,
@@ -480,14 +480,14 @@ async def check_and_sleep_if_needed(
             httpx.HTTPError,
         )
         if isinstance(exc, _operational_types):
-            _log.warning(
+            logger.warning(
                 "quota check failed — continuing without sleep",
                 error=str(exc),
                 error_type=type(exc).__name__,
                 exc_info=True,
             )
         else:
-            _log.error(
+            logger.error(
                 "quota check failed (unexpected error) — continuing without sleep",
                 error=str(exc),
                 error_type=type(exc).__name__,

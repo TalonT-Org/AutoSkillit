@@ -99,7 +99,7 @@ def test_structlog_does_not_write_to_stdout_in_tests(capsys):
     writes to sys.stdout. The autouse _structlog_to_null fixture must intercept
     all log output before it reaches stdout.
     """
-    from autoskillit.execution.quota import _log as quota_log
+    from autoskillit.execution.quota import logger as quota_log
 
     quota_log.warning("test_sentinel_should_not_reach_stdout", probe=True)
     captured = capsys.readouterr()

@@ -8,7 +8,7 @@ from typing import Any
 from autoskillit.core import get_logger, write_versioned_json
 from autoskillit.planner.schema import validate_phase_result
 
-_logger = get_logger(__name__)
+logger = get_logger(__name__)
 
 _TIER_KEYS = ("phases", "assignments", "work_packages")
 
@@ -61,14 +61,14 @@ def merge_files(
                     continue
                 item_id = item.get("id")
                 if item_id is None:
-                    _logger.debug("Skipping item with no 'id' field from %s", fp)
+                    logger.debug("Skipping item with no 'id' field from %s", fp)
                     skipped += 1
                     continue
                 if item_id not in existing_ids:
                     existing_items.append(item)
                     existing_ids.add(item_id)
                 else:
-                    _logger.debug("Skipping duplicate id %r from %s", item_id, fp)
+                    logger.debug("Skipping duplicate id %r from %s", item_id, fp)
                     skipped += 1
 
             document: dict[str, Any] = {
@@ -182,7 +182,7 @@ def build_plan_snapshot(
             raw = json.loads(p.read_text())
             validated = validate_phase_result(raw)
         except (ValueError, json.JSONDecodeError) as exc:
-            _logger.warning("Skipping malformed phase file %s: %s", p, exc)
+            logger.warning("Skipping malformed phase file %s: %s", p, exc)
             continue
         short: dict[str, Any] = {
             "id": validated["id"],

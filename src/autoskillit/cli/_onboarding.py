@@ -6,7 +6,7 @@ from pathlib import Path
 
 from autoskillit.core import get_logger
 
-_log = get_logger(__name__)
+logger = get_logger(__name__)
 
 
 def is_first_run(project_dir: Path) -> bool:
@@ -21,7 +21,7 @@ def is_first_run(project_dir: Path) -> bool:
             if any(recipes_dir.iterdir()):
                 return False
         except OSError:
-            _log.debug("Could not list recipes dir %s", recipes_dir, exc_info=True)
+            logger.debug("Could not list recipes dir %s", recipes_dir, exc_info=True)
     from autoskillit.workspace import detect_project_local_overrides
 
     if detect_project_local_overrides(project_dir):

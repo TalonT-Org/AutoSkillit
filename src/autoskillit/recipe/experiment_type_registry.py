@@ -7,7 +7,7 @@ from pathlib import Path
 
 from autoskillit.core import get_logger, load_yaml, pkg_root
 
-_log = get_logger(__name__)
+logger = get_logger(__name__)
 
 BUNDLED_EXPERIMENT_TYPES_DIR: Path = pkg_root() / "recipes" / "experiment-types"
 
@@ -55,7 +55,7 @@ def _load_types_from_dir(directory: Path) -> dict[str, ExperimentTypeSpec]:
                 spec = _parse_experiment_type(data, path)
                 result[spec.name] = spec
         except Exception:
-            _log.warning("Skipping malformed experiment type file: %s", path, exc_info=True)
+            logger.warning("Skipping malformed experiment type file: %s", path, exc_info=True)
     return result
 
 

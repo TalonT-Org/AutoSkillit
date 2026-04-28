@@ -58,7 +58,7 @@ from autoskillit.recipe.validator import (
     validate_recipe,
 )
 
-_logger = get_logger(__name__)
+logger = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
 # GFM ingredient table column specs
@@ -200,7 +200,7 @@ def _t(label: str, t0: float, name: str) -> float:
     filtering without requiring an explicit isEnabledFor() guard.
     """
     elapsed_ms = (time.perf_counter() - t0) * 1000
-    _logger.debug("load_recipe_stage", recipe=name, stage=label, elapsed_ms=round(elapsed_ms, 1))
+    logger.debug("load_recipe_stage", recipe=name, stage=label, elapsed_ms=round(elapsed_ms, 1))
     return time.perf_counter()
 
 
@@ -633,7 +633,7 @@ def load_and_validate(
             and rm == cached.recipe_mtime
             and rs == cached.recipe_size
         ):
-            _logger.debug("load_recipe_cache_hit", recipe=name)
+            logger.debug("load_recipe_cache_hit", recipe=name)
             return cached.result
 
     t0 = time.perf_counter()
@@ -757,7 +757,7 @@ def load_and_validate(
             t0 = _t("yaml_parse", t0, name)
 
     except YAMLError as exc:
-        _logger.warning("Recipe YAML parse error", name=name, exc_info=True)
+        logger.warning("Recipe YAML parse error", name=name, exc_info=True)
         suggestions.append(
             {
                 "rule": "validation-error",
@@ -768,7 +768,7 @@ def load_and_validate(
         )
         valid = False
     except ValueError as exc:
-        _logger.warning("Recipe structure invalid", name=name, exc_info=True)
+        logger.warning("Recipe structure invalid", name=name, exc_info=True)
         suggestions.append(
             {
                 "rule": "validation-error",
@@ -779,7 +779,7 @@ def load_and_validate(
         )
         valid = False
     except (FileNotFoundError, OSError) as exc:
-        _logger.warning("Recipe file not found or unreadable", name=name, exc_info=True)
+        logger.warning("Recipe file not found or unreadable", name=name, exc_info=True)
         suggestions.append(
             {
                 "rule": "validation-error",

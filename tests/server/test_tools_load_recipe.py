@@ -167,7 +167,7 @@ class TestLoadRecipeTools:
                 "autoskillit.recipe._api.run_semantic_rules",
                 side_effect=ValueError("injected crash"),
             ),
-            patch("autoskillit.recipe._api._logger") as mock_logger,
+            patch("autoskillit.recipe._api.logger") as mock_logger,
         ):
             result = json.loads(await load_recipe(name="test"))
 

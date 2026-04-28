@@ -22,7 +22,7 @@ def test_analysis_graph_importable():
         RouteEdge,
     )
 
-    assert RouteEdge is not None
+    assert callable(RouteEdge)
 
 
 def test_analysis_bfs_importable():

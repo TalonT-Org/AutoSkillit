@@ -257,7 +257,7 @@ def test_fleet_tools_matches_expected() -> None:
             "dispatch_food_truck",
         }
     )
-    assert FLEET_TOOLS == expected
+    assert FLEET_TOOLS == expected, "Update expected set when FLEET_TOOLS changes"
 
 
 def test_skill_tools_matches_expected() -> None:

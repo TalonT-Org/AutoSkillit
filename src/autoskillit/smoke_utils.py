@@ -206,7 +206,7 @@ def patch_pr_token_summary(pr_url: str, cwd: str, log_dir: str = "") -> dict[str
             ],
             capture_output=True,
             text=True,
-            timeout=15,
+            timeout=30,
         )
     except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
         return {"success": "false", "error": f"Failed to patch PR: {exc}"}

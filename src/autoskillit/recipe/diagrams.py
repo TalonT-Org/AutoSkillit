@@ -14,7 +14,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from autoskillit.core.io import atomic_write
+from autoskillit.core import atomic_write
 from autoskillit.recipe.staleness_cache import compute_recipe_hash
 
 # Diagram format version — bump when the render-recipe skill spec changes

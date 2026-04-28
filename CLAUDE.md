@@ -201,7 +201,8 @@ generic_automation_mcp/
 │   ├── manifests.py         #   expand_assignments, expand_wps, finalize_wp_manifest, build_phase_assignment_manifest, build_phase_wp_manifest — manifest callables
 │   ├── merge.py             #   merge_tier_dir, merge_files, build_plan_snapshot, extract_item, replace_item — JSON interchange merge tooling
 │   ├── validation.py        #   validate_plan — DAG cycle check, structural completeness, sizing bounds, duplicate-deliverable detection
-│   └── compiler.py          #   compile_plan — topological sort, issue body generation, milestone definitions, plan artifacts
+│   ├── compiler.py          #   compile_plan — topological sort, issue body generation, milestone definitions, plan artifacts
+│   └── schema.py            #   TypedDict schemas for planner output — PhaseResult and AssignmentResult shapes
 │
 ├── recipe/                  # L2
 │   ├── __init__.py
@@ -254,7 +255,10 @@ generic_automation_mcp/
 │
 ├── fleet/                   # L2
 │   ├── __init__.py          #   Re-exports: CampaignSummary, parse_campaign_summary, etc.
+│   ├── _api.py              #   Fleet campaign execution engine — dispatches L2 sessions, resolves campaign/result variable references
+│   ├── _prompts.py          #   Prompt builder for L2 fleet dispatch sessions — assembles sous-chef instruction block from SKILL.md sections
 │   ├── result_parser.py     #   L2 result block parser with Channel B JSONL fallback
+│   ├── state.py             #   Campaign state persistence — DispatchRecord, DispatchStatus, atomic writes, resume algorithm
 │   └── summary.py           #   Campaign summary schema v1: frozen dataclasses, sentinel parser, validator
 │
 ├── server/                  # L3 FastMCP server
@@ -285,7 +289,6 @@ generic_automation_mcp/
 │   ├── _terminal.py         #   terminal_guard() TTY restore
 │   ├── _terminal_table.py   #   Re-export shim from core/_terminal_table
 │   ├── _cook.py             #   cook: ephemeral skill session launcher
-│   ├── _fleet.py            #   fleet sub-app: run, list, status campaign commands
 │   ├── _reload.py           #   consume_reload_sentinel: reload sentinel detection for re-launch loops
 │   ├── _restart.py          #   perform_restart() -> NoReturn: sets SKIP_UPDATE_CHECK, calls os.execv
 │   ├── _session_launch.py   #   _run_interactive_session: shared interactive session launch prelude

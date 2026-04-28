@@ -185,7 +185,7 @@ def patch_pr_token_summary(pr_url: str, cwd: str, log_dir: str = "") -> dict[str
     if not current_body or current_body == "null":
         return {"success": "false", "error": "PR body is empty"}
 
-    section_re = _re.compile(r"\n*## Token Usage Summary\n.*", _re.DOTALL)
+    section_re = _re.compile(r"\n*## Token Usage Summary\n.*?(?=\n## |\Z)", _re.DOTALL)
     if section_re.search(current_body):
         new_body = section_re.sub("\n\n" + table, current_body)
     else:

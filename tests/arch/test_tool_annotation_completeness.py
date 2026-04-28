@@ -1,17 +1,21 @@
-"""Arch test: every @mcp.tool() decorator must include an ``annotations=`` keyword.
+"""AST annotation test shield for MCP tool readOnlyHint semantics.
 
-Layer 1 of the three-layer annotation test shield. Uses AST scanning (no import)
-so it catches missing annotations before the server is even started.
+Layer 1a — AST presence: every @mcp.tool() has annotations= keyword.
+Layer 1b — AST value: every annotations= has readOnlyHint=True (no import).
 
-Follows the pattern in test_doc_counts.py and test_ast_rules.py.
+Runtime layers (2-4) live in tests/server/test_tool_annotation_completeness.py.
 """
 
 from __future__ import annotations
 
 import ast
+import sys
 from pathlib import Path
 
 import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "scripts"))
+from check_tool_annotations import check as check_readonly_violations
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
@@ -66,6 +70,19 @@ class TestToolAnnotationCompleteness:
 
         assert not violations, (
             "The following @mcp.tool() decorators are missing the annotations= keyword.\n"
-            "Add annotations={'readOnlyHint': True/False} to each:\n\n"
+            "Add annotations={'readOnlyHint': True} to each:\n\n"
+            + "\n".join(f"  {v}" for v in violations)
+        )
+
+    def test_all_annotations_are_readonly_true(self):
+        """AST scan: readOnlyHint must be True in every @mcp.tool() decorator.
+
+        Delegates to scripts/check_tool_annotations.py:check() to avoid
+        duplicating the AST scanning logic.
+        """
+        violations = check_readonly_violations()
+        assert not violations, (
+            "readOnlyHint must be True for all tools. "
+            "All pipelines use independent branches/worktrees.\n\n"
             + "\n".join(f"  {v}" for v in violations)
         )

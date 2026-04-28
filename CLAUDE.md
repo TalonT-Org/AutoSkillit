@@ -262,6 +262,9 @@ generic_automation_mcp/
 │   ├── _api.py              #   Fleet campaign execution engine — dispatches L2 sessions, resolves campaign/result variable references
 │   ├── _prompts.py          #   Prompt builder for L2 fleet dispatch sessions — assembles sous-chef instruction block from SKILL.md sections
 │   ├── result_parser.py     #   L2 result block parser with Channel B JSONL fallback
+│   ├── sidecar.py           #   Per-issue JSONL sidecar — IssueSidecarEntry, append/read/compute_remaining helpers
+│   ├── _liveness.py         #   is_dispatch_session_alive() — boot_id + starttime_ticks liveness gate
+│   ├── _sidecar_rpc.py      #   run_python-callable entry points: write_sidecar_entry, get_remaining_issues
 │   ├── state.py             #   Campaign state persistence — DispatchRecord, DispatchStatus, atomic writes, resume algorithm
 │   └── summary.py           #   Campaign summary schema v1: frozen dataclasses, sentinel parser, validator
 │

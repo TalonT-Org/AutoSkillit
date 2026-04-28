@@ -5,9 +5,17 @@ Gateway exports per REQ-IMP-001 — consumers import from
 """
 
 from ._api import execute_dispatch
+from ._liveness import is_dispatch_session_alive
 from ._prompts import _build_food_truck_prompt as _build_food_truck_prompt
 from ._prompts import _build_l2_sous_chef_block as _build_l2_sous_chef_block
 from .result_parser import L2ParseResult, parse_l2_result_block
+from .sidecar import (
+    IssueSidecarEntry,
+    append_sidecar_entry,
+    compute_remaining_issues,
+    read_sidecar,
+    sidecar_path,
+)
 from .state import (
     FLEET_HALTED_SENTINEL,
     CampaignState,
@@ -69,4 +77,10 @@ __all__ = [
     "resume_campaign_from_state",
     "write_captured_values",
     "write_initial_state",
+    "is_dispatch_session_alive",
+    "IssueSidecarEntry",
+    "append_sidecar_entry",
+    "compute_remaining_issues",
+    "read_sidecar",
+    "sidecar_path",
 ]

@@ -71,14 +71,17 @@ class TestListRecipes:
         # Registered entries appear first; the unregistered tail must be alphabetical
         unregistered_core = [n for n in core_names if n not in BUNDLED_RECIPE_ORDER]
         registered_core = [n for n in core_names if n in BUNDLED_RECIPE_ORDER]
-        if registered_core:
-            last_registered_idx = core_names.index(registered_core[-1])
-            first_unregistered_idx = (
-                core_names.index(unregistered_core[0]) if unregistered_core else len(core_names)
-            )
-            assert last_registered_idx < first_unregistered_idx, (
-                "Registered core recipes must appear before unregistered ones"
-            )
+        assert registered_core, (
+            "BUNDLED_RECIPE_ORDER is empty at test time — registered_core must be non-empty "
+            "for the ordering contract to be verifiable"
+        )
+        last_registered_idx = core_names.index(registered_core[-1])
+        first_unregistered_idx = (
+            core_names.index(unregistered_core[0]) if unregistered_core else len(core_names)
+        )
+        assert last_registered_idx < first_unregistered_idx, (
+            "Registered core recipes must appear before unregistered ones"
+        )
         assert unregistered_core == sorted(unregistered_core), (
             f"Unregistered core recipes not alphabetical: {unregistered_core}"
         )

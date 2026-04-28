@@ -325,10 +325,12 @@ def fleet_runtime(
     _write_claude_shim(shim_dir)
     monkeypatch.setenv("PATH", f"{shim_dir}:{os.environ['PATH']}")
 
+    from autoskillit.fleet import FleetSemaphore
+
     runner = FleetTestRunner()
     tool_ctx.runner = runner
     tool_ctx.executor = DefaultHeadlessExecutor(tool_ctx)
-    tool_ctx.fleet_lock = asyncio.Lock()
+    tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
     recipes = InMemoryRecipeRepository()
     tool_ctx.recipes = recipes
     tool_ctx.kitchen_id = uuid4().hex[:16]
@@ -370,6 +372,21 @@ def fleet_runtime(
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             pass
     assert not leaked, f"Test leaked processes: {[c.pid for c in leaked]}"
+
+
+@pytest.fixture
+def fleet_runtime_factory(fleet_runtime: FleetRuntime):
+    """Factory variant of fleet_runtime that accepts max_concurrent_dispatches."""
+
+    def _factory(max_concurrent_dispatches: int = 1) -> FleetRuntime:
+        from autoskillit.fleet import FleetSemaphore
+
+        fleet_runtime.tool_ctx.fleet_lock = FleetSemaphore(
+            max_concurrent=max_concurrent_dispatches
+        )
+        return fleet_runtime
+
+    return _factory
 
 
 # ---------------------------------------------------------------------------
@@ -839,3 +856,60 @@ async def test_manifest_mid_campaign_deletion(fleet_runtime: FleetRuntime, tmp_p
 
     decision = resume_campaign_from_state(state_path, continue_on_failure=True)
     assert decision is None
+
+
+# ---------------------------------------------------------------------------
+# Parallel dispatch tests — FleetSemaphore with max > 1
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_two_concurrent_dispatches_allowed_with_max2(
+    fleet_runtime_factory,
+) -> None:
+    """FleetSemaphore(max=2) allows both L2 dispatches to complete successfully."""
+    rt = fleet_runtime_factory(max_concurrent_dispatches=2)
+    rt.add_recipe("slow-recipe")
+    results: list[dict | None] = [None, None]
+
+    async def _dispatch(idx: int) -> None:
+        results[idx] = await rt.dispatch(
+            "slow-recipe", shim_mode="sleep_then_exit", sleep_sec=1.0, timeout_sec=10
+        )
+
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(_dispatch, 0)
+        tg.start_soon(_dispatch, 1)
+
+    assert results[0] is not None and results[0]["success"] is True
+    assert results[1] is not None and results[1]["success"] is True
+
+
+@pytest.mark.anyio
+async def test_third_concurrent_dispatch_refused_with_max2(
+    fleet_runtime_factory,
+) -> None:
+    """FleetSemaphore(max=2) rejects a third concurrent dispatch immediately."""
+    rt = fleet_runtime_factory(max_concurrent_dispatches=2)
+    rt.add_recipe("slow-recipe")
+    results: list[dict | None] = [None, None, None]
+
+    async def _slow(idx: int) -> None:
+        results[idx] = await rt.dispatch(
+            "slow-recipe", shim_mode="sleep_then_exit", sleep_sec=3.0, timeout_sec=15
+        )
+
+    async def _fast() -> None:
+        await anyio.sleep(0.3)
+        results[2] = await rt.dispatch("slow-recipe", shim_mode="success")
+
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(_slow, 0)
+        tg.start_soon(_slow, 1)
+        tg.start_soon(_fast)
+
+    assert results[0] is not None and results[0]["success"] is True
+    assert results[1] is not None and results[1]["success"] is True
+    assert results[2] is not None
+    assert results[2]["error"] == "fleet_parallel_refused"
+    assert results[2]["success"] is False

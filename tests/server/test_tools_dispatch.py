@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from autoskillit.fleet import FleetSemaphore
 from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
 from tests.fleet._helpers import _make_recipe_info as _fleet_make_recipe_info
 
@@ -82,10 +83,10 @@ class TestDispatchFoodTruckGates:
     async def test_dispatch_food_truck_parallel_refused_when_locked(
         self, tool_ctx, monkeypatch, tmp_path
     ):
-        """fleet_lock.locked() == True → fleet_parallel_refused error."""
+        """fleet_lock.at_capacity() == True → fleet_parallel_refused error."""
         from autoskillit.fleet._api import execute_dispatch
 
-        lock = asyncio.Lock()
+        lock = FleetSemaphore(max_concurrent=1)
         await lock.acquire()  # lock it
         tool_ctx.fleet_lock = lock
 
@@ -136,7 +137,7 @@ class TestDispatchFoodTruckValidation:
         from autoskillit.fleet._api import execute_dispatch
         from autoskillit.recipe.schema import Recipe, RecipeKind
 
-        tool_ctx.fleet_lock = asyncio.Lock()
+        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
         repo = InMemoryRecipeRepository()
         recipe_info = _make_recipe_info("campaign-recipe")
         repo.add_recipe("campaign-recipe", recipe_info)
@@ -167,7 +168,7 @@ class TestDispatchFoodTruckValidation:
         """Keys not in recipe.ingredients → fleet_unknown_ingredient error."""
         from autoskillit.fleet._api import execute_dispatch
 
-        tool_ctx.fleet_lock = asyncio.Lock()
+        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
         repo = InMemoryRecipeRepository()
         recipe_info = _make_recipe_info("test-recipe")
         repo.add_recipe("test-recipe", recipe_info)
@@ -197,7 +198,7 @@ class TestDispatchFoodTruckValidation:
         """Non-string ingredient values rejected before lock acquisition."""
         from autoskillit.fleet._api import execute_dispatch
 
-        lock = asyncio.Lock()
+        lock = FleetSemaphore(max_concurrent=1)
         tool_ctx.fleet_lock = lock
 
         result = json.loads(
@@ -216,14 +217,14 @@ class TestDispatchFoodTruckValidation:
         assert result["success"] is False
         assert result["error"] == "fleet_unknown_ingredient"
         # Lock must not have been acquired
-        assert not lock.locked()
+        assert not lock.at_capacity()
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_no_recipes_configured(self, tool_ctx, monkeypatch):
         """recipes=None → fleet_manifest_missing error."""
         from autoskillit.fleet._api import execute_dispatch
 
-        tool_ctx.fleet_lock = asyncio.Lock()
+        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
         tool_ctx.recipes = None
 
         result = json.loads(
@@ -247,7 +248,7 @@ class TestDispatchFoodTruckValidation:
         """executor=None → fleet_manifest_missing error."""
         from autoskillit.fleet._api import execute_dispatch
 
-        tool_ctx.fleet_lock = asyncio.Lock()
+        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
         repo = InMemoryRecipeRepository()
         recipe_info = _make_recipe_info("test-recipe")
         repo.add_recipe("test-recipe", recipe_info)
@@ -283,7 +284,7 @@ class TestDispatchFoodTruckValidation:
         from autoskillit.fleet._api import execute_dispatch
         from autoskillit.recipe.schema import Recipe, RecipeInfo, RecipeKind, RecipeSource
 
-        tool_ctx.fleet_lock = asyncio.Lock()
+        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
         tool_ctx.executor = None
         repo = InMemoryRecipeRepository()
         recipe_info = RecipeInfo(
@@ -335,7 +336,7 @@ class TestDispatchFoodTruckValidation:
             RecipeSource,
         )
 
-        tool_ctx.fleet_lock = asyncio.Lock()
+        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
         tool_ctx.executor = None
         repo = InMemoryRecipeRepository()
         recipe_info = RecipeInfo(
@@ -383,7 +384,7 @@ class TestDispatchFoodTruckValidation:
 class TestDispatchFoodTruckExecution:
     def _setup_standard_dispatch(self, tool_ctx, monkeypatch):
         """Wire tool_ctx for a successful standard dispatch."""
-        tool_ctx.fleet_lock = asyncio.Lock()
+        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
         repo = InMemoryRecipeRepository()
         recipe_info = _make_recipe_info("test-recipe")
         repo.add_recipe("test-recipe", recipe_info)
@@ -409,7 +410,7 @@ class TestDispatchFoodTruckExecution:
             quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
-        assert not tool_ctx.fleet_lock.locked()
+        assert not tool_ctx.fleet_lock.at_capacity()
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_releases_lock_on_exception(self, tool_ctx, monkeypatch):
@@ -435,7 +436,7 @@ class TestDispatchFoodTruckExecution:
             )
         )
         assert result["success"] is False
-        assert not tool_ctx.fleet_lock.locked()
+        assert not tool_ctx.fleet_lock.at_capacity()
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_releases_lock_on_cancellation(self, tool_ctx, monkeypatch):
@@ -457,7 +458,7 @@ class TestDispatchFoodTruckExecution:
                 quota_checker=_no_sleep_quota_checker,
                 quota_refresher=_noop_quota_refresher,
             )
-        assert not tool_ctx.fleet_lock.locked()
+        assert not tool_ctx.fleet_lock.at_capacity()
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_success_envelope(self, tool_ctx, monkeypatch):
@@ -741,7 +742,7 @@ async def test_dispatch_food_truck_marketplace_install_succeeds(tool_ctx_marketp
         ),
     )
 
-    tool_ctx_marketplace.fleet_lock = asyncio.Lock()
+    tool_ctx_marketplace.fleet_lock = FleetSemaphore(max_concurrent=1)
     repo = InMemoryRecipeRepository()
     recipe_info = _make_recipe_info("test-recipe")
     repo.add_recipe("test-recipe", recipe_info)

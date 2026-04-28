@@ -731,6 +731,11 @@ def test_no_subpackage_exceeds_10_files() -> None:
       pipeline/ — REQ-CNST-003-E7: pipeline/ added github_api_log.py for session-scoped
         GitHub API request tracking (DefaultGitHubApiLog accumulator + GitHubApiEntry).
         Exempt at 12 files.
+      fleet/ — REQ-CNST-003-E8: fleet/ added _semaphore.py for FleetSemaphore, the
+        configurable asyncio.BoundedSemaphore implementation of the FleetLock protocol.
+        Placed in fleet/ rather than server/ to preserve conservative test-filter cascade
+        narrowing: changes to fleet/_semaphore.py only cascade to fleet/ tests, not to
+        server/ tests. Exempt at 11 files.
     """
     EXEMPTIONS: dict[str, int] = {
         "server": 20,
@@ -740,6 +745,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "cli": 27,
         "hooks": 27,
         "pipeline": 12,
+        "fleet": 11,
     }
     violations: list[str] = []
     for sub_dir in sorted(SRC_ROOT.iterdir()):

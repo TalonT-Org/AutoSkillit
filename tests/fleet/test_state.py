@@ -295,3 +295,88 @@ class TestGateDispatchFailureHaltsCampaign:
         assert decision is not None
         assert decision.completed_dispatches_block == FLEET_HALTED_SENTINEL
         assert decision.next_dispatch_name == ""
+
+
+class TestResumeSkipsAliveRunningDispatch:
+    def test_resume_skips_running_dispatch_when_alive(self, tmp_path: Path, monkeypatch) -> None:
+        """RUNNING dispatch with live process is NOT interrupted on resume."""
+        sp = _state_path(tmp_path)
+        record = DispatchRecord(
+            name="issue-1",
+            status=DispatchStatus.RUNNING,
+            l2_pid=12345,
+            l2_boot_id="abc",
+            l2_starttime_ticks=999,
+        )
+        monkeypatch.setattr(
+            "autoskillit.fleet.is_dispatch_session_alive",
+            lambda r: True,
+        )
+        write_initial_state(sp, "c1", "test", "", [record])
+
+        decision = resume_campaign_from_state(sp, continue_on_failure=False)
+
+        state = read_state(sp)
+        assert state is not None
+        assert state.dispatches[0].status == DispatchStatus.RUNNING
+        assert decision is not None
+        assert decision.next_dispatch_name == ""
+
+
+class TestResumeInterruptsStaleRunningDispatch:
+    def test_resume_interrupts_stale_running_dispatch(self, tmp_path: Path, monkeypatch) -> None:
+        """resume_campaign_from_state marks RUNNING as INTERRUPTED when process is dead."""
+        sp = _state_path(tmp_path)
+        record = DispatchRecord(
+            name="issue-1",
+            status=DispatchStatus.RUNNING,
+            l2_pid=0,
+            l2_boot_id="",
+            l2_starttime_ticks=0,
+        )
+        monkeypatch.setattr(
+            "autoskillit.fleet.is_dispatch_session_alive",
+            lambda r: False,
+        )
+        write_initial_state(sp, "c1", "test", "", [record])
+
+        resume_campaign_from_state(sp, continue_on_failure=False)
+
+        state = read_state(sp)
+        assert state is not None
+        assert state.dispatches[0].status == DispatchStatus.INTERRUPTED
+
+
+class TestResumeLockPreventsDoubleInterrupt:
+    def test_resume_lock_prevents_concurrent_mutation(self, tmp_path: Path, monkeypatch) -> None:
+        """Two concurrent resume_campaign_from_state calls serialize — no double-interrupt."""
+        sp = _state_path(tmp_path)
+        record = DispatchRecord(
+            name="issue-1",
+            status=DispatchStatus.RUNNING,
+            l2_pid=0,
+            l2_boot_id="",
+            l2_starttime_ticks=0,
+        )
+        monkeypatch.setattr(
+            "autoskillit.fleet.is_dispatch_session_alive",
+            lambda r: False,
+        )
+        write_initial_state(sp, "c1", "test", "", [record])
+
+        results: list[object] = []
+
+        def _call() -> None:
+            results.append(resume_campaign_from_state(sp, continue_on_failure=False))
+
+        t1 = threading.Thread(target=_call)
+        t2 = threading.Thread(target=_call)
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+
+        state = read_state(sp)
+        assert state is not None
+        assert state.dispatches[0].status == DispatchStatus.INTERRUPTED
+        assert len(results) == 2

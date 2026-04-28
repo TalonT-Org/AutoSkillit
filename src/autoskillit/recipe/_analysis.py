@@ -35,7 +35,6 @@ from autoskillit.recipe.schema import (
     RecipeBlock,
 )
 
-# Re-export all symbols that external code currently imports from this module.
 __all__ = [
     "build_recipe_graph",
     "RouteEdge",

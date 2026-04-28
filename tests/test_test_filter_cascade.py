@@ -71,12 +71,12 @@ class TestCascadeNewEntries:
                 ["test_version.py"],
                 ["test_version.py"],
             ),
-            # Conservative: quota_guard.py cascades into hooks tests + execution/test_quota.py
+            # Conservative: quota_guard.py cascades into hooks tests + execution/test_quota_sleep.py
             (
                 "src/autoskillit/hooks/quota_guard.py",
                 FilterMode.CONSERVATIVE,
-                ["hooks", "execution", "execution/test_quota.py"],
-                ["hooks", "test_quota.py"],
+                ["hooks", "execution", "execution/test_quota_sleep.py"],
+                ["hooks", "test_quota_sleep.py"],
             ),
         ],
     )

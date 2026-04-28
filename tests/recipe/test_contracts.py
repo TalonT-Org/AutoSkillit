@@ -653,6 +653,7 @@ ALWAYS_WRITE_SKILLS = {
     "planner-refine-phases",
     "planner-refine-wps",
     "prepare-research-pr",
+    "promote-to-main",
     "rectify",
     "report-bug",
     "resolve-design-review",

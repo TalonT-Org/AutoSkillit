@@ -42,6 +42,8 @@ steps:
     on_result:
       - when: "${{ result.verdict }} == 'preflight_failed'"
         route: escalate_stop
+      - when: "${{ result.verdict }} == 'created'"
+        route: emit_result
       - route: emit_result
     on_context_limit: escalate_stop
     on_failure: escalate_stop

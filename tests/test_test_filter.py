@@ -321,11 +321,10 @@ class TestBuildTestScope:
             tests_root=tests_root,
         )
         assert result is not None
-        dir_names = {p.name for p in result}
-        assert "server" in dir_names
-        assert "cli" in dir_names
-        assert "test_pack_enforcement.py" in dir_names
         result_names = {p.name for p in result}
+        assert "server" in result_names
+        assert "cli" in result_names
+        assert "test_pack_enforcement.py" in result_names
         from tests._test_filter import _INFRA_UNCONDITIONAL_FILES
 
         for fname in _INFRA_UNCONDITIONAL_FILES:

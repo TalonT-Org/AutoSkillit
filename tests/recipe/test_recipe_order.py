@@ -31,6 +31,13 @@ def test_registered_recipes_precede_unregistered_in_group0(
     result = list_recipes(tmp_path)
     group0 = [r.name for r in result.items if group_rank(r) == 0]
     assert group0[0] == "implementation"
+    unregistered = [n for n in group0 if n != "implementation"]
+    assert unregistered, (
+        "Expected at least one unregistered Group-0 recipe to verify the ordering contract"
+    )
+    assert all(group0.index(n) > 0 for n in unregistered), (
+        f"Some unregistered Group-0 recipes appear before 'implementation': {group0}"
+    )
 
 
 def test_unregistered_group0_recipes_alphabetical_after_registered(

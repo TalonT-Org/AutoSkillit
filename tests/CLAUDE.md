@@ -171,8 +171,8 @@ tests/
 ├── conftest.py                          # Shared fixtures: minimal_ctx, tool_ctx, _make_result, _make_timeout_result
 ├── fakes.py                             # Protocol-based test fakes: InMemory*, MockSubprocessRunner
 ├── test_conftest.py                     # Tests for conftest fixtures
-├── test_phase2_skills.py
-├── test_skill_preambles.py
+├── test_llm_triage.py
+├── test_smoke_utils.py
 ├── test_version.py                      # Version health tests
 ├── arch/                                # AST enforcement + sub-package layer contracts
 │   ├── __init__.py
@@ -203,7 +203,6 @@ tests/
 │   ├── test_interactive_subprocess_contracts.py
 │   ├── test_mcp_names.py
 │   ├── test_onboarding.py
-│   ├── test_stale_check.py
 │   ├── test_subprocess_env_contracts.py
 │   ├── test_terminal.py
 │   └── test_workspace.py
@@ -223,7 +222,6 @@ tests/
 │   ├── test_issue_content_fidelity.py
 │   ├── test_issue_splitter_contracts.py
 │   ├── test_l1_packages.py
-│   ├── test_open_pr_contracts.py
 │   ├── test_package_gateways.py
 │   ├── test_pr_traceability_contracts.py
 │   ├── test_prepare_issue_contracts.py
@@ -272,9 +270,8 @@ tests/
 │   ├── test_headless.py
 │   ├── test_headless_add_dirs.py
 │   ├── test_headless_debug_logging.py
-│   ├── test_headless_env_injection.py   # (moved from root test_phase2_headless_env.py in groupG)
+│   ├── test_headless_env_injection.py
 │   ├── test_linux_tracing.py
-│   ├── test_llm_triage.py
 │   ├── test_merge_queue.py
 │   ├── test_normalize_subtype.py
 │   ├── test_output_format_contract.py
@@ -338,11 +335,9 @@ tests/
 │   ├── test_audit.py
 │   ├── test_context.py
 │   ├── test_background_supervisor.py
-│   ├── test_fidelity.py                 # (moved from root test_review_pr_fidelity.py in groupG)
 │   ├── test_gate.py
 │   ├── test_mcp_response.py
-│   ├── test_pr_domain_partitioner.py    # (moved from root in groupG)
-│   ├── test_pr_gates.py                 # (moved from root test_analyze_prs_gates.py in groupG)
+│   ├── test_pr_gates.py
 │   ├── test_telemetry_formatter.py
 │   ├── test_timings.py
 │   └── test_tokens.py
@@ -358,8 +353,6 @@ tests/
 │   ├── test_diagrams.py
 │   ├── test_hidden_ingredients.py
 │   ├── test_implementation.py
-│   ├── test_implementation_groups.py
-│   ├── test_implementation_sprint_mode.py
 │   ├── test_io.py
 │   ├── test_issue_url_pipeline.py
 │   ├── test_loader.py
@@ -367,7 +360,6 @@ tests/
 │   ├── test_merge_prs_queue.py
 │   ├── test_merge_sub_recipe_hidden.py
 │   ├── test_remediation_recipe.py
-│   ├── test_remediation_sprint_mode.py
 │   ├── test_rule_decomposition.py
 │   ├── test_rules_bypass.py
 │   ├── test_rules_ci.py
@@ -387,9 +379,6 @@ tests/
 │   ├── test_rules_worktree.py
 │   ├── test_schema.py
 │   ├── test_skill_emit_consistency.py
-│   ├── test_smoke_pipeline.py
-│   ├── test_smoke_utils.py
-│   ├── test_sprint_sub_recipe.py
 │   ├── test_staleness_cache.py
 │   ├── test_sub_recipe_loading.py
 │   ├── test_sub_recipe_schema.py
@@ -407,6 +396,7 @@ tests/
 │   ├── test_server_init.py
 │   ├── test_service_wrappers.py
 │   ├── test_set_commit_status.py
+│   ├── test_smoke_pipeline.py
 │   ├── test_state.py
 │   ├── test_tool_exception_boundary.py
 │   ├── test_tools_ci.py
@@ -432,7 +422,7 @@ tests/
 │   ├── test_dry_walkthrough_contracts.py
 │   ├── test_merge_pr_ci_gate.py
 │   ├── test_open_integration_pr_domain_analysis.py
-│   ├── test_open_pr_closing_issue.py
+│   ├── test_phase2_skills.py
 │   ├── test_resolve_review_intent_validation.py
 │   ├── test_resolve_review_thread_resolution.py
 │   ├── test_review_pr_inline_comment_guards.py
@@ -441,6 +431,7 @@ tests/
 │   ├── test_skill_genericization.py
 │   ├── test_skill_output_compliance.py
 │   ├── test_skill_placeholder_contracts.py
+│   ├── test_skill_preambles.py
 │   └── test_validate_audit_contracts.py
 └── workspace/                           # Workspace and clone tests
     ├── __init__.py

@@ -3,6 +3,7 @@
 Asserts that both rule modules share the exact same function object, meaning
 the function is defined once in a shared helper and imported in both places.
 """
+
 from __future__ import annotations
 
 import pytest

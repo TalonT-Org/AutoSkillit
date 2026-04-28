@@ -4,11 +4,13 @@ import pytest
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
-RECIPE_PATH = Path(__file__).resolve().parents[2] / ".autoskillit" / "recipes" / "full-audit.yaml"
+RECIPE_PATH = (
+    Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "recipes" / "full-audit.yaml"
+)
 
 
 def test_full_audit_recipe_file_exists() -> None:
-    """The recipe YAML exists at the project-scoped location."""
+    """The recipe YAML exists at the bundled location."""
     assert RECIPE_PATH.exists(), f"Expected recipe at {RECIPE_PATH}"
 
 
@@ -81,22 +83,15 @@ def test_full_audit_kitchen_rules() -> None:
     assert len(recipe.kitchen_rules) == 3
 
 
-def test_full_audit_discovered_as_project_recipe(tmp_path: Path) -> None:
-    """list_recipes discovers the recipe as RecipeSource.PROJECT."""
-    import shutil
-
+def test_full_audit_discovered_as_builtin_recipe(tmp_path: Path) -> None:
+    """list_recipes discovers the recipe as RecipeSource.BUILTIN."""
     from autoskillit.core.types import RecipeSource
     from autoskillit.recipe.io import list_recipes
 
-    project_dir = tmp_path / "project"
-    recipe_dir = project_dir / ".autoskillit" / "recipes"
-    recipe_dir.mkdir(parents=True)
-    shutil.copy2(RECIPE_PATH, recipe_dir / "full-audit.yaml")
-
-    result = list_recipes(project_dir)
+    result = list_recipes(tmp_path)  # tmp_path has no project-scoped recipes
     match = [r for r in result.items if r.name == "full-audit"]
     assert len(match) == 1
-    assert match[0].source == RecipeSource.PROJECT
+    assert match[0].source == RecipeSource.BUILTIN
 
 
 def test_full_audit_semantic_rules_no_errors() -> None:

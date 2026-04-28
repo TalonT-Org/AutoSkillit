@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core.types import RecipeSource
 from autoskillit.recipe.io import group_rank, list_recipes
 from autoskillit.recipe.order import BUNDLED_RECIPE_ORDER
 
@@ -62,9 +61,7 @@ def test_adding_unregistered_recipe_does_not_shift_registered(
     remed_idx_before = group0_before.index("remediation")
 
     # Confirm registry order is honoured
-    assert impl_idx_before < remed_idx_before, (
-        "'implementation' must come before 'remediation'"
-    )
+    assert impl_idx_before < remed_idx_before, "'implementation' must come before 'remediation'"
 
 
 def test_registry_does_not_affect_addon_group(

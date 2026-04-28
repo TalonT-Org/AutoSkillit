@@ -80,6 +80,8 @@ steps:
       If any audit fails, note the failure but continue with the other four.
       Proceed to validate_audits even if only one, two, three, or four audits succeeded.
       Route to escalate_stop ONLY if all five audits fail.
+    capture_list:
+      audit_report_paths: "${{ result.audit_report_path }}"
     on_success: validate_audits
     on_failure: escalate_stop
     retries: 1
@@ -113,6 +115,8 @@ steps:
 
       If any validation fails, note it but continue with the others.
       Route to escalate_stop ONLY if all five validations fail.
+    capture_list:
+      validated_report_paths: "${{ result.validated_report_path }}"
     on_success: create_issues
     on_failure: escalate_stop
     retries: 1

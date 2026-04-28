@@ -405,12 +405,13 @@ headless.
 ```
 [validate-audit] Done.
   Valid: {N_valid} | Exceptions: {N_exception} | Contested: {N_contested}
-  Report:    {validated_report_path}
   Summary:   {validation_summary_path}
   Manifest:  {grouping_manifest_path}
   Tickets:   {ticket_body_1_path}
              {ticket_body_2_path}  (one line per ticket group)
   Contested: {contested_findings_path}  (omit if N_contested == 0)
+validated_report_path = {validated_report_path}
+%%ORDER_UP%%
 ```
 
 **Interactive mode:** Display the validation status table (verdict counts), then ask:

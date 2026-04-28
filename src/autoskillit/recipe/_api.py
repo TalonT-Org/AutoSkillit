@@ -2,28 +2,32 @@
 
 from __future__ import annotations
 
-import dataclasses
-import re
 import threading
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass as _dc
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any
 
 from autoskillit.core import (
     LoadResult,
     RecipeSource,
     SkillLister,
-    TerminalColumn,
     YAMLError,
-    _render_gfm_table,
     get_logger,
     load_yaml,
     pkg_root,
     resolve_temp_dir,
 )
 from autoskillit.recipe._analysis import make_validation_context
+from autoskillit.recipe._recipe_composition import (
+    _build_active_recipe,
+)
+from autoskillit.recipe._recipe_ingredients import (
+    LoadRecipeResult,
+    RecipeListItem,
+    format_ingredients_table,
+)
 from autoskillit.recipe.contracts import (
     check_contract_staleness,
     load_recipe_card,
@@ -41,14 +45,10 @@ from autoskillit.recipe.io import (
     builtin_recipes_dir,
     builtin_sub_recipes_dir,
     find_recipe_by_name,
-    find_sub_recipe_by_name,
     list_recipes,
     substitute_temp_placeholder,
 )
-from autoskillit.recipe.io import (
-    load_recipe as _load_recipe_from_path,
-)
-from autoskillit.recipe.schema import Recipe, StepResultCondition, StepResultRoute
+from autoskillit.recipe.schema import Recipe
 from autoskillit.recipe.validator import (
     build_quality_dict,
     compute_recipe_validity,
@@ -59,134 +59,6 @@ from autoskillit.recipe.validator import (
 )
 
 logger = get_logger(__name__)
-
-# ---------------------------------------------------------------------------
-# GFM ingredient table column specs
-# ---------------------------------------------------------------------------
-
-_GFM_DESC_MAX_WIDTH: int = 60
-
-_GFM_INGREDIENT_COLUMNS: tuple[TerminalColumn, ...] = (
-    TerminalColumn("Name", max_width=30, align=">"),
-    TerminalColumn("Description", max_width=_GFM_DESC_MAX_WIDTH, align="<"),
-    TerminalColumn("Default", max_width=20, align=">"),
-)
-
-
-# ---------------------------------------------------------------------------
-# Schema contract: handler → formatter boundary
-# ---------------------------------------------------------------------------
-
-
-def _ingredient_sort_key(name: str, required: bool, default: object) -> tuple[int, str]:
-    """Sort ingredients: required > auto-detect > flags > optional > constants."""
-    if required and default is None:
-        return (0, name)
-    if default == "":
-        return (1, name)
-    if default in ("true", "false"):
-        return (2, name)
-    if default is None:
-        return (3, name)
-    return (4, name)  # has a non-empty default (constants, rarely changed)
-
-
-def build_ingredient_rows(
-    recipe: Any,
-    resolved_defaults: dict[str, str] | None = None,
-) -> list[tuple[str, str, str]]:
-    """Build (name, description, default) rows for a recipe's ingredients.
-
-    This is the shared source of truth for ingredient row data, consumed by
-    both the GFM table formatter (LLM path) and the terminal renderer
-    (terminal path). Descriptions are full-length here — truncation is the
-    terminal renderer's responsibility.
-
-    Returns rows sorted by ingredient priority (required first, then alphabetical).
-    """
-    resolved = resolved_defaults or {}
-    raw: list[tuple[str, str, str, tuple[int, str]]] = []
-    for name, ing in (getattr(recipe, "ingredients", None) or {}).items():
-        if getattr(ing, "hidden", False):
-            continue
-        desc = getattr(ing, "description", "")
-        required = getattr(ing, "required", False)
-        default = getattr(ing, "default", None)
-        sort_key = _ingredient_sort_key(name, required, default)
-        if default is None and required:
-            default_str, name_str = "(required)", f"{name} *"
-        elif res := resolved.get(name):
-            default_str, name_str = res, name
-        elif default == "":
-            default_str, name_str = "auto-detect", name
-        elif default == "true":
-            default_str, name_str = "on", name
-        elif default == "false":
-            default_str, name_str = "off", name
-        elif default is None:
-            default_str, name_str = "--", name
-        else:
-            default_str, name_str = str(default), name
-        raw.append((name_str, desc, default_str, sort_key))
-    raw.sort(key=lambda r: r[3])
-    return [(r[0], r[1], r[2]) for r in raw]
-
-
-def format_ingredients_table(
-    recipe: Any, resolved_defaults: dict[str, str] | None = None
-) -> str | None:
-    """Build a pre-formatted ingredients table from a parsed Recipe.
-
-    When ``resolved_defaults`` is provided, auto-detect ingredients (``default: ""``)
-    use the resolved value instead of showing "auto-detect".
-    """
-    ingredients = getattr(recipe, "ingredients", None)
-    if not ingredients:
-        return None
-
-    rows = build_ingredient_rows(recipe, resolved_defaults)
-
-    if not rows:
-        return None
-
-    return _render_gfm_table(_GFM_INGREDIENT_COLUMNS, rows)
-
-
-class LoadRecipeResult(TypedDict, total=False):
-    """Typed schema for the load_recipe handler → formatter boundary."""
-
-    content: str
-    diagram: str | None
-    suggestions: list[dict[str, Any]]
-    valid: bool
-    kitchen_rules: list[str]
-    requires_packs: list[str]
-    error: str
-    greeting: str
-    ingredients_table: str
-    orchestration_rules: str
-    stop_step_semantics: str
-    content_hash: str
-    composite_hash: str
-    recipe_version: str | None
-
-
-class RecipeListItem(TypedDict):
-    """Typed schema for a single recipe entry in the list_recipes response."""
-
-    name: str
-    description: str
-    summary: str
-    source: str
-
-
-class ListRecipesResult(TypedDict, total=False):
-    """Typed schema for the list_recipes handler → formatter boundary."""
-
-    recipes: list[RecipeListItem]
-    count: int
-    errors: list[dict[str, str]]
-
 
 # ---------------------------------------------------------------------------
 # Stage timing helper
@@ -284,181 +156,6 @@ def list_all(
     exclude_kinds = frozenset() if fleet_enabled else frozenset({RecipeKind.CAMPAIGN})
     result = list_recipes(_pdir, exclude_kinds=exclude_kinds)
     return format_recipe_list_response(result)
-
-
-def _drop_sub_recipe_step(recipe: Any, step_name: str) -> Any:
-    """Return a new Recipe with the named sub_recipe placeholder step removed."""
-    new_steps = {k: v for k, v in recipe.steps.items() if k != step_name}
-    return dataclasses.replace(recipe, steps=new_steps)
-
-
-def _merge_sub_recipe(parent: Any, placeholder_name: str, sub: Any) -> Any:
-    """Replace the sub_recipe placeholder step with the sub-recipe's steps.
-
-    Algorithm:
-    1. Compute a safe name prefix from the sub-recipe name.
-    2. For each step in sub, create a prefixed copy with routing fixed:
-       - Routes to "done" → parent placeholder's on_success
-       - Routes to "escalate" → parent placeholder's on_failure
-       - Routes to other sub-recipe step names → add prefix
-    3. Insert sub-recipe steps in place of the placeholder.
-    4. Merge ingredients: add sub-recipe's non-hidden ingredients into parent.
-    5. Merge kitchen_rules: union (deduplicated), sub-recipe rules appended.
-    """
-    if placeholder_name not in parent.steps:
-        raise KeyError(
-            f"_merge_sub_recipe: placeholder step '{placeholder_name}' not found in "
-            f"recipe '{parent.name}'. Available steps: {list(parent.steps.keys())}"
-        )
-    placeholder = parent.steps[placeholder_name]
-    on_success = placeholder.on_success or "done"
-    on_failure = placeholder.on_failure or "escalate"
-
-    # Build prefix: "sprint-prefix" → "sprint_prefix_", "my-sub" → "my_sub_"
-    raw_prefix = re.sub(r"[^a-z0-9]", "_", (sub.name or placeholder_name).lower())
-    if not raw_prefix.endswith("_"):
-        raw_prefix += "_"
-    prefix = raw_prefix
-
-    sub_step_names = set(sub.steps.keys())
-
-    def _fix_route(target: str | None) -> str | None:
-        if target is None:
-            return None
-        if target == "done":
-            return on_success
-        if target == "escalate":
-            return on_failure
-        if target in sub_step_names:
-            return prefix + target
-        return target
-
-    def _fix_result_route(route: Any) -> Any:
-        if route is None:
-            return None
-        if route.conditions:
-            return StepResultRoute(
-                conditions=[
-                    StepResultCondition(when=c.when, route=_fix_route(c.route) or "")
-                    for c in route.conditions
-                ]
-            )
-        return StepResultRoute(
-            field=route.field,
-            routes={k: (_fix_route(v) or v) for k, v in route.routes.items()},
-        )
-
-    prefixed_steps: dict[str, Any] = {}
-    for sub_step_name, sub_step in sub.steps.items():
-        new_name = prefix + sub_step_name
-        new_step = dataclasses.replace(
-            sub_step,
-            on_success=_fix_route(sub_step.on_success),
-            on_failure=_fix_route(sub_step.on_failure),
-            on_context_limit=_fix_route(sub_step.on_context_limit),
-            on_exhausted=_fix_route(sub_step.on_exhausted),
-            on_result=_fix_result_route(sub_step.on_result),
-        )
-        prefixed_steps[new_name] = new_step
-
-    # Assemble new steps dict: sub-recipe steps injected in place of placeholder
-    new_steps: dict[str, Any] = {}
-    for step_name, step in parent.steps.items():
-        if step_name == placeholder_name:
-            new_steps.update(prefixed_steps)
-        else:
-            new_steps[step_name] = step
-
-    # Merge ingredients: sub-recipe non-hidden ingredients into parent
-    merged_ingredients = dict(parent.ingredients)
-    for ing_name, ing in sub.ingredients.items():
-        if getattr(ing, "hidden", False):
-            continue  # do not propagate hidden sub-recipe ingredients to parent
-        if ing_name not in merged_ingredients:
-            merged_ingredients[ing_name] = ing
-
-    # Merge kitchen_rules: union (parent first, then sub-recipe additions)
-    seen_rules: set[str] = set(parent.kitchen_rules)
-    merged_rules = list(parent.kitchen_rules)
-    for rule in sub.kitchen_rules:
-        if rule not in seen_rules:
-            merged_rules.append(rule)
-            seen_rules.add(rule)
-
-    # Merge requires_packs: union (parent first, then sub-recipe additions)
-    seen_packs: set[str] = set(parent.requires_packs)
-    merged_packs = list(parent.requires_packs)
-    for pack in sub.requires_packs:
-        if pack not in seen_packs:
-            merged_packs.append(pack)
-            seen_packs.add(pack)
-
-    return dataclasses.replace(
-        parent,
-        steps=new_steps,
-        ingredients=merged_ingredients,
-        kitchen_rules=merged_rules,
-        requires_packs=merged_packs,
-    )
-
-
-def _build_active_recipe(
-    recipe: Any,
-    ingredient_overrides: dict[str, str] | None,
-    project_dir: Path,
-    temp_dir_relpath: str = ".autoskillit/temp",
-) -> tuple[Any, Any | None]:
-    """Return (active_recipe, combined_recipe | None).
-
-    active_recipe: the Recipe to serve to the agent.
-        - If no sub_recipe steps: returns recipe unchanged.
-        - If sub_recipe step with gate=false: returns recipe with sub_recipe step dropped.
-        - If sub_recipe step with gate=true: returns the merged (combined) recipe.
-
-    combined_recipe: the merged Recipe if any gate was true, else None.
-        Used to run dual validation (REQ-VALID-004).
-    """
-    overrides = ingredient_overrides or {}
-    sub_recipe_steps = [
-        (name, step) for name, step in recipe.steps.items() if step.sub_recipe is not None
-    ]
-    if not sub_recipe_steps:
-        return recipe, None
-
-    combined: Any | None = None
-    working = recipe
-
-    # Re-read each step from working.steps to get the current state after prior
-    # merge/drop operations, rather than using the stale reference from recipe.steps.
-    for step_name, _orig_step in sub_recipe_steps:
-        current_step = working.steps.get(step_name)
-        if current_step is None or current_step.sub_recipe is None:
-            continue
-        gate_name = current_step.gate or ""
-        gate_ingredient = working.ingredients.get(gate_name) if gate_name else None
-        gate_default: str = (gate_ingredient.default or "false") if gate_ingredient else "false"
-        gate_value = overrides.get(gate_name, gate_default)
-
-        if gate_value.lower() in ("true", "1", "yes"):
-            sr_path = find_sub_recipe_by_name(current_step.sub_recipe, project_dir)
-            if sr_path is None:
-                raise FileNotFoundError(
-                    f"Sub-recipe '{current_step.sub_recipe}' not found. "
-                    f"Expected in recipes/sub-recipes/{current_step.sub_recipe}.yaml"
-                )
-            try:
-                sub_recipe = _load_recipe_from_path(sr_path, temp_dir_relpath)
-            except (YAMLError, ValueError, OSError) as exc:
-                raise ValueError(
-                    f"Failed to load sub-recipe '{current_step.sub_recipe}' "
-                    f"(gate: {gate_name}={gate_value}): {exc}"
-                ) from exc
-            working = _merge_sub_recipe(working, step_name, sub_recipe)
-            combined = working
-        else:
-            working = _drop_sub_recipe_step(working, step_name)
-
-    return working, combined
 
 
 def validate_from_path(

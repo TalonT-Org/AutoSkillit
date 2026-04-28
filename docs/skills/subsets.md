@@ -20,6 +20,10 @@ manually reclassifying each of its tools and skills one by one. A project withou
 | `telemetry` | `get_token_summary`, `get_timing_summary`, `write_telemetry_files`, `get_quota_events` | — |
 | `arch-lens` | — | All 13 `arch-lens-*` skills, `make-arch-diag`, `verify-diag` |
 | `audit` | — | `audit-arch`, `audit-cohesion`, `audit-tests`, `audit-defense-standards`, `audit-bugs`, `audit-friction`, `audit-impl` |
+| `exp-lens` | — | All 18 `exp-lens-*` skills |
+| `kitchen-core` | `run_cmd`, `run_python`, `run_skill`, `test_check`, `reset_test_dir`, `reset_workspace`, `classify_fix`, `list_recipes`, `load_recipe`, `validate_recipe`, `migrate_recipe`, `kitchen_status`, `read_db`, `get_pipeline_report`, `dispatch_food_truck`, `merge_worktree`, `get_token_summary`, `get_timing_summary`, `write_telemetry_files`, `get_quota_events`, `analyze_tool_sequences` | — |
+| `research` | — | `compose-research-pr`, `prepare-research-pr`, `review-research-pr`, `resolve-research-review` |
+| `vis-lens` | — | All 12 `vis-lens-*` skills, `plan-visualization` |
 
 ## Disabling a Subset
 

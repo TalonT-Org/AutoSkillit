@@ -399,7 +399,7 @@ def _transition_dead_dispatch(state_path: Path, record: DispatchRecord, reason: 
     Delegates sidecar decision logic to the fleet layer. Always writes to state_path
     atomically; never raises on ValueError (already-terminal races are silently skipped).
     """
-    from autoskillit.fleet.state import _crash_recover_dispatch  # noqa: PLC0415
+    from autoskillit.fleet import _crash_recover_dispatch  # noqa: PLC0415
 
     _crash_recover_dispatch(state_path, record, reason=reason)
 

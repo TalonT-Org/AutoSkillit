@@ -22,11 +22,14 @@ def test_fleet_session_file_exists():
 
 
 def test_fleet_display_importable():
-    from autoskillit.cli._fleet_display import _humanize, _build_status_rows  # noqa: F401
+    from autoskillit.cli._fleet_display import _build_status_rows, _humanize  # noqa: F401
 
 
 def test_fleet_lifecycle_importable():
-    from autoskillit.cli._fleet_lifecycle import _fleet_signal_guard, _reap_stale_dispatches  # noqa: F401
+    from autoskillit.cli._fleet_lifecycle import (  # noqa: F401
+        _fleet_signal_guard,
+        _reap_stale_dispatches,
+    )
 
 
 def test_fleet_session_importable():

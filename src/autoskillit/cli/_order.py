@@ -9,6 +9,9 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from autoskillit.cli._mcp_names import detect_autoskillit_mcp_prefix
+from autoskillit.cli._prompts import _build_orchestrator_prompt, _get_ingredients_table
+from autoskillit.cli._session_launch import _launch_cook_session, _write_order_entry
 from autoskillit.core import (
     RecipeSource,
     atomic_write,
@@ -102,9 +105,6 @@ def order(recipe: str | None = None, session_id: str | None = None, *, resume: b
     resume
         When True, attempt to restore a previous session.
     """
-    from autoskillit.cli._mcp_names import detect_autoskillit_mcp_prefix
-    from autoskillit.cli._prompts import _build_orchestrator_prompt, _get_ingredients_table
-    from autoskillit.cli._session_launch import _launch_cook_session, _write_order_entry
     from autoskillit.recipe import (
         find_recipe_by_name,
         list_recipes,

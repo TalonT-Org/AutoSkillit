@@ -19,13 +19,16 @@ def test_update_checks_source_file_exists():
 
 def test_update_checks_fetch_importable():
     from autoskillit.cli._update_checks_fetch import (  # noqa: F401
-        _fetch_with_cache, invalidate_fetch_cache, _fetch_latest_version,
+        _fetch_latest_version,
+        _fetch_with_cache,
+        invalidate_fetch_cache,
     )
 
 
 def test_update_checks_source_importable():
     from autoskillit.cli._update_checks_source import (  # noqa: F401
-        find_source_repo, resolve_reference_sha,
+        find_source_repo,
+        resolve_reference_sha,
     )
 
 
@@ -38,4 +41,4 @@ def test_order_module_file_exists():
 
 
 def test_order_importable_from_submodule():
-    from autoskillit.cli._order import order, _get_subsets_needed  # noqa: F401
+    from autoskillit.cli._order import _get_subsets_needed, order  # noqa: F401

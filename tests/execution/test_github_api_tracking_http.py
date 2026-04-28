@@ -12,8 +12,11 @@ pytestmark = [
 _api_sim_http = pytest.importorskip("api_simulator.http")
 PyResponseSpec = _api_sim_http.MockResponseSpec
 
-from autoskillit.execution.github import DefaultGitHubFetcher, make_tracked_httpx_client
-from tests.fakes import InMemoryGitHubApiLog
+from autoskillit.execution.github import (  # noqa: E402
+    DefaultGitHubFetcher,
+    make_tracked_httpx_client,
+)
+from tests.fakes import InMemoryGitHubApiLog  # noqa: E402
 
 
 @pytest.fixture

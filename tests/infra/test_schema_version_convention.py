@@ -110,7 +110,8 @@ def _is_yaml_dump(node: ast.expr) -> bool:
 _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # core/io.py — write_versioned_json itself (the blessed helper) uses atomic_write+json.dumps
     ("src/autoskillit/core/io.py", 118),
-    # session_log.py — github_api_usage dict, summary dict, meta.json sidecar, token_usage dict, step_timing dict
+    # session_log.py — github_api_usage dict, summary dict, meta.json sidecar,
+    # token_usage dict, step_timing dict
     ("src/autoskillit/execution/session_log.py", 305),
     ("src/autoskillit/execution/session_log.py", 366),
     ("src/autoskillit/execution/session_log.py", 370),

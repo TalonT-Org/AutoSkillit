@@ -2,7 +2,7 @@
 
 ## Overview
 
-AutoSkillit's 124 bundled skills are organized into three tiers that control when and where
+AutoSkillit's 125 bundled skills are organized into three tiers that control when and where
 they appear as slash commands. The tier system is orthogonal to subset categories — you can
 disable a subset across all tiers simultaneously, or reclassify individual skills between
 tiers. See [Subset Categories](subsets.md) for subset configuration.
@@ -22,14 +22,21 @@ tiers. See [Subset Categories](subsets.md) for subset configuration.
 ### Tier 2 — Cook (Interactive Skills)
 
 - **Location**: `src/autoskillit/skills_extended/` (NOT plugin-scanned)
-- **Default members** (41 total):
+- **Default members** (99 total):
   `investigate`, `make-plan`, `implement-worktree`, `rectify`,
   `dry-walkthrough`, `make-groups`, `review-approach`, `mermaid`, `make-arch-diag`,
-  all 13 `arch-lens-*` skills, `audit-arch`, `audit-cohesion`, `audit-tests`,
-  `audit-defense-standards`, `audit-bugs`, `audit-friction`, `make-req`,
-  `elaborate-phase`, `write-recipe`, `migrate-recipes`, `setup-project`,
+  `make-experiment-diag`, `build-execution-map`, `plan-visualization`,
+  all 13 `arch-lens-*` skills, all 18 `exp-lens-*` skills, all 12 `vis-lens-*` skills,
+  all 11 `planner-*` skills,
+  `audit-arch`, `audit-cohesion`, `audit-tests`,
+  `audit-defense-standards`, `audit-bugs`, `audit-friction`, `validate-audit`,
+  `audit-claims`, `audit-docs`, `audit-feature-gates`,
+  `make-req`, `elaborate-phase`, `write-recipe`, `migrate-recipes`, `setup-project`,
   `design-guards`, `triage-issues`, `collapse-issues`,
-  `issue-splitter`, `enrich-issues`, `prepare-issue`, `process-issues`
+  `issue-splitter`, `enrich-issues`, `prepare-issue`, `process-issues`, `make-campaign`,
+  `scope`, `plan-experiment`, `implement-experiment`, `run-experiment`,
+  `generate-report`, `troubleshoot-experiment`,
+  `review-design`, `stage-data`, `bundle-local-report`, `reload-session`
 - **Visible in**: cook and headless sessions
 - **Mechanism**: copied to an ephemeral session directory (cook) or exposed via
   `--add-dir` (headless sessions launched by `run_skill`)
@@ -37,11 +44,13 @@ tiers. See [Subset Categories](subsets.md) for subset configuration.
 ### Tier 3 — Pipeline-Only (Automation Skills)
 
 - **Location**: `src/autoskillit/skills_extended/` (same directory as Tier 2)
-- **Default members** (16 total):
-  `open-pr`, `open-integration-pr`, `merge-pr`, `analyze-prs`,
+- **Default members** (23 total):
+  `prepare-pr`, `compose-pr`, `open-integration-pr`, `merge-pr`, `analyze-prs`,
   `review-pr`, `resolve-review`, `implement-worktree-no-merge`, `resolve-failures`,
   `retry-worktree`, `resolve-merge-conflicts`, `audit-impl`, `smoke-task`,
-  `report-bug`, `pipeline-summary`, `diagnose-ci`, `verify-diag`
+  `report-bug`, `pipeline-summary`, `diagnose-ci`, `verify-diag`,
+  `compose-research-pr`, `prepare-research-pr`, `resolve-claims-review`,
+  `resolve-design-review`, `resolve-research-review`, `review-research-pr`
 - **Visible in**: cook and headless sessions
 - **Distinction from Tier 2**: semantic only — both tiers live in `skills_extended/` and
   are available in the same session modes. The tier distinction lets users reclassify

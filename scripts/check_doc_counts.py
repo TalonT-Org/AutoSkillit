@@ -22,21 +22,13 @@ TYPES_FILE = PROJECT_ROOT / "src" / "autoskillit" / "core" / "_type_constants.py
 
 
 def count_skills() -> int:
-    """Count public skills in skills/ and skills_extended/.
-
-    Only counts skills whose SKILL.md begins with YAML frontmatter (``---``),
-    matching the behaviour of DefaultSkillResolver().list_all() which excludes
-    internal bootstrap documents such as sous-chef.
-    """
+    """Count all bundled skill directories in skills/ and skills_extended/."""
     count = 0
     for skills_dir in (SKILLS_DIR, SKILLS_EXTENDED_DIR):
         if skills_dir.is_dir():
             for d in skills_dir.iterdir():
-                skill_md = d / "SKILL.md"
-                if d.is_dir() and skill_md.exists():
-                    text = skill_md.read_text(encoding="utf-8")
-                    if text.startswith("---\n"):
-                        count += 1
+                if d.is_dir():
+                    count += 1
     return count
 
 

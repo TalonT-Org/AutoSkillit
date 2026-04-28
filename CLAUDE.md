@@ -293,6 +293,7 @@ generic_automation_mcp/
 │   ├── _terminal.py         #   terminal_guard() TTY restore
 │   ├── _terminal_table.py   #   Re-export shim from core/_terminal_table
 │   ├── _cook.py             #   cook: ephemeral skill session launcher
+│   ├── _fleet.py            #   fleet subcommand group: status --reap/--dry-run, run stub, signal guard; render_fleet_error()
 │   ├── _reload.py           #   consume_reload_sentinel: reload sentinel detection for re-launch loops
 │   ├── _restart.py          #   perform_restart() -> NoReturn: sets SKIP_UPDATE_CHECK, calls os.execv
 │   ├── _session_launch.py   #   _run_interactive_session: shared interactive session launch prelude
@@ -309,7 +310,6 @@ generic_automation_mcp/
 │   ├── _update.py           #   run_update_command(): first-class upgrade path for `autoskillit update`
 │   ├── _update_checks.py    #   Unified startup update check: version/hook/source-drift signals, branch-aware dismissal
 │   ├── _serve_guard.py      #   Async signal-guarded MCP server bootstrap (extracted from app.py)
-│   ├── _fleet.py            #   fleet subcommand group: status --reap/--dry-run, run stub, signal guard; render_fleet_error()
 │   ├── _features.py         #   features subcommand group: list/status commands for feature gate inspection
 │   ├── _workspace.py        #   Workspace clean helpers
 │   ├── _session_picker.py   #   Scoped resume picker: filters sessions by type (cook/order) via registry + heuristic

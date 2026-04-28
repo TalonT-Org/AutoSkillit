@@ -14,6 +14,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from autoskillit.core.io import atomic_write
 from autoskillit.recipe.staleness_cache import compute_recipe_hash
 
 # Diagram format version — bump when the render-recipe skill spec changes
@@ -118,7 +119,7 @@ def generate_recipe_diagram(recipe_path: Path, recipes_dir: Path) -> None:
     )
     diagrams_dir = recipes_dir / "diagrams"
     diagrams_dir.mkdir(parents=True, exist_ok=True)
-    (diagrams_dir / f"{recipe_path.stem}.md").write_text(diagram_content, encoding="utf-8")
+    atomic_write(diagrams_dir / f"{recipe_path.stem}.md", diagram_content)
 
 
 def diagram_stale_to_suggestions(recipe_name: str) -> list[dict[str, str]]:

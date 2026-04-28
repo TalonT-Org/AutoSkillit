@@ -160,7 +160,7 @@ class DefaultCIWatcher:
         owner_repo: str,
         branch: str,
         scope: CIRunScope,
-        lookback_seconds: int,
+        cutoff_dt: datetime | None,
     ) -> list[dict[str, Any]]:
         """Phase 1: Look-back — fetch recently completed runs for the branch."""
         url = f"https://api.github.com/repos/{owner_repo}/actions/runs"
@@ -178,14 +178,17 @@ class DefaultCIWatcher:
 
         data = await self._get_with_etag(client, headers, url, params)
 
-        cutoff = datetime.now(UTC) - timedelta(seconds=lookback_seconds)
+        # SHA is a content-addressable identifier — time is irrelevant when identity is known
+        if scope.head_sha:
+            return list(data.get("workflow_runs", []))
+
         runs = []
         for run in data.get("workflow_runs", []):
             updated = run.get("updated_at", "")
             if updated:
                 try:
                     run_time = datetime.fromisoformat(updated.replace("Z", "+00:00"))
-                    if run_time >= cutoff:
+                    if cutoff_dt is None or run_time >= cutoff_dt:
                         runs.append(run)
                 except ValueError:
                     continue
@@ -284,6 +287,7 @@ class DefaultCIWatcher:
         headers = self._headers()
         _start_time = time.monotonic()
         deadline = _start_time + timeout_seconds
+        cutoff_dt = datetime.now(UTC) - timedelta(seconds=lookback_seconds)
 
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
@@ -301,7 +305,7 @@ class DefaultCIWatcher:
                     owner_repo,
                     branch,
                     scope,
-                    lookback_seconds,
+                    cutoff_dt,
                 )
                 if completed:
                     valid_completed = [
@@ -358,7 +362,7 @@ class DefaultCIWatcher:
                         owner_repo,
                         branch,
                         scope,
-                        lookback_seconds,
+                        cutoff_dt,
                     )
                     if completed:
                         valid_completed = [

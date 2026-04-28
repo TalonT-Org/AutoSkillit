@@ -13,7 +13,6 @@ from ._doctor_config import (
     _check_config_layers_for_secrets,
     _check_gitignore_completeness,
     _check_project_config,
-    _check_script_version_health,
     _check_secret_scanning_hook,
 )
 from ._doctor_env import (
@@ -30,6 +29,7 @@ from ._doctor_fleet import (
     _check_campaign_manifest_clone_dests,
     _check_campaign_onboarding_hint,
     _check_fleet_dispatch_guard_registered,
+    _check_script_version_health,
     _check_sous_chef_bundled,
     _check_stale_fleet_state,
 )

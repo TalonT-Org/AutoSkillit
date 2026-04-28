@@ -23,48 +23,6 @@ def _check_project_config(project_dir: Path | None = None) -> DoctorResult:
     return DoctorResult(Severity.OK, "project_config", "Project config exists")
 
 
-def _check_script_version_health(project_dir: Path | None = None) -> DoctorResult:
-    """Check recipe migration status for all project pipeline scripts."""
-    from autoskillit import __version__
-    from autoskillit.core import RecipeSource
-    from autoskillit.migration import FailureStore, default_store_path
-    from autoskillit.recipe import list_recipes as _list_all_recipes
-
-    root = project_dir or Path.cwd()
-    _all_result = _list_all_recipes(root)
-    scripts_result_items = [r for r in _all_result.items if r.source == RecipeSource.PROJECT]
-    if not scripts_result_items:
-        return DoctorResult(Severity.OK, "script_version_health", "No pipeline scripts found")
-
-    from packaging.version import Version
-
-    failure_store = FailureStore(default_store_path(root))
-    known_failures = failure_store.load()
-
-    failed_migrations: list[str] = []
-    outdated: list[str] = []
-    for script in scripts_result_items:
-        if script.name in known_failures:
-            f = known_failures[script.name]
-            failed_migrations.append(f"{script.name} (failed after {f.retries_attempted} retries)")
-        elif script.version is None or Version(script.version) < Version(__version__):
-            outdated.append(script.name)
-
-    if failed_migrations:
-        return DoctorResult(
-            Severity.ERROR,
-            "script_version_health",
-            "Migration failed — manual intervention required: " + ", ".join(failed_migrations),
-        )
-    if outdated:
-        return DoctorResult(
-            Severity.WARNING,
-            "script_version_health",
-            "Outdated recipes: " + ", ".join(outdated) + ". Will be auto-migrated on next load.",
-        )
-    return DoctorResult(Severity.OK, "script_version_health", "All recipes up to date")
-
-
 def _check_config_layers_for_secrets(project_dir: Path | None = None) -> DoctorResult:
     """Check all config.yaml layers for _SECRETS_ONLY_KEYS violations.
 

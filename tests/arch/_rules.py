@@ -270,6 +270,7 @@ RULES: tuple[RuleDescriptor, ...] = (
         ),
         exemptions=frozenset(),
         severity="error",
+        defense_standard="DS-009",
     ),
 )
 

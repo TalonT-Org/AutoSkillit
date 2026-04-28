@@ -112,7 +112,7 @@ def test_install_guards_same_version_when_kitchen_open(
         "autoskillit.cli._marketplace._user_claude_json_path", lambda: tmp_path / "claude.json"
     )
     monkeypatch.setattr(
-        "autoskillit.cli._hooks._claude_settings_path", lambda *a: tmp_path / "settings.json"
+        "autoskillit.cli._claude_settings_path", lambda *a: tmp_path / "settings.json"
     )
     monkeypatch.setattr("autoskillit.cli._update_checks.invalidate_fetch_cache", lambda *a: None)
 

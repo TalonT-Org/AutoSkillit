@@ -5,10 +5,8 @@
 ```mermaid
 flowchart TD
     S0[clone]
-    S1[capture_base_sha]
-    S0 --> S1
     S2[get_issue_title]
-    S1 --> S2
+    S0 --> S2
     S3[claim_issue]
     S2 --> S3
     S4[compute_branch]

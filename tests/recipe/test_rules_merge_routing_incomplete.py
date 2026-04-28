@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from autoskillit.recipe.schema import Recipe
 from autoskillit.recipe.validator import run_semantic_rules
 from tests.recipe.conftest import _make_workflow
 
@@ -11,7 +12,7 @@ pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 class TestMergeRoutingIncompleteRule:
     """Tests for the merge-routing-incomplete semantic rule (RMR*)."""
 
-    def _make_merge_step(self, conditions: list[dict]) -> "Recipe":
+    def _make_merge_step(self, conditions: list[dict]) -> Recipe:
         """Build a minimal recipe with a merge_worktree step using predicate on_result."""
         return _make_workflow(
             {

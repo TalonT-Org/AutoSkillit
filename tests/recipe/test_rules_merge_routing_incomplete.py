@@ -11,7 +11,7 @@ pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 class TestMergeRoutingIncompleteRule:
     """Tests for the merge-routing-incomplete semantic rule (RMR*)."""
 
-    def _make_merge_step(self, conditions: list[dict]) -> "Recipe":
+    def _make_merge_step(self, conditions: list[dict]) -> Recipe:
         """Build a minimal recipe with a merge_worktree step using predicate on_result."""
         return _make_workflow(
             {

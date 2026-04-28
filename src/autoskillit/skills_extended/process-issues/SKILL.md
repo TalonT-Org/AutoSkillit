@@ -47,6 +47,9 @@ issues upfront, load recipe, execute session, collect result, report.
 - Between issues: immediately begin step 1 for the next issue after completing the
   previous issue. Do not output prose status between issues — inter-issue text creates
   end_turn windows that cause stochastic session termination.
+- NEVER use AskUserQuestion to confirm proceeding to the next issue or the next batch.
+  Once Step 2a's initial confirmation gate passes, all subsequent issue and batch
+  transitions are fully automated.
 - Emit `---process-issues-result---` result block on completion (success or failure)
 - Write the summary report to `{{AUTOSKILLIT_TEMP}}/process-issues/` (relative to the current working directory)
 - Use `model: "sonnet"` when spawning subagents via the Task tool

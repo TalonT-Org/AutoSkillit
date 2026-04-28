@@ -46,9 +46,7 @@ steps:
         print('{' + ' '.join(parts) + '}')
         ")
         gh api graphql -f query="$QUERY" \
-          --jq '[.data[] | select(.issue != null and .issue.state == "OPEN") | .issue.number | tostring] | join(" ")' \
-          2>/dev/null || true
-        echo ""
+          --jq '[.data[] | select(.issue != null and .issue.state == "OPEN") | .issue.number | tostring] | join(" ")' && echo ""
       step_name: refetch_issues
     capture:
       issue_numbers: "${{ result.stdout | trim }}"
@@ -79,12 +77,15 @@ steps:
       cmd: |
         MAP_FILE="$AUTOSKILLIT_TEMP/bem-fallback-map.json"
         ISSUE_URLS="${{ inputs.issue_urls }}"
-        NUMS=$(echo "$ISSUE_URLS" | tr ',' '\n' | grep -oE '[0-9]+$' | tr '\n' ',' | sed 's/,$//')
+        NUMS=$(echo "$ISSUE_URLS" | tr ',' '\n' | grep -oE 'issues/[0-9]+' | grep -oE '[0-9]+' | tr '\n' ',' | sed 's/,$//')
         NUMS="$NUMS" MAP_FILE="$MAP_FILE" python3 -c "
-        import json, os
+        import json, os, sys
         nums_str = os.environ['NUMS']
         map_file = os.environ['MAP_FILE']
         nums = [int(n) for n in nums_str.split(',') if n.strip()]
+        if not nums:
+            print('ERROR: no issue numbers extracted from issue URLs', file=sys.stderr)
+            sys.exit(1)
         issues = [{'number': n, 'title': str(n)} for n in nums]
         data = {
             'groups': [{'group': 1, 'parallel': False, 'issues': issues}],

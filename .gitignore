@@ -1,5 +1,7 @@
 __pycache__/
 *.egg-info/
+# Stale bytecode directory from franchise→fleet rename (PR #1225); no source files remain
+src/autoskillit/franchise/
 dist/
 build/
 .venv/

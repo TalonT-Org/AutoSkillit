@@ -115,7 +115,7 @@ requires-dist = [
     { name = "cyclopts", specifier = ">=4.0" },
     { name = "dynaconf", specifier = ">=3.2.13,<4.0" },
     { name = "fastmcp", specifier = ">=3.2.0,<4.0" },
-    { name = "httpx", specifier = ">=0.28,<0.29" },
+    { name = "httpx", specifier = ">=0.28,<1.0" },
     { name = "igraph", specifier = ">=1.0,<2.0" },
     { name = "import-linter", marker = "extra == 'dev'", specifier = ">=2.1" },
     { name = "lazy-loader", specifier = ">=0.4" },

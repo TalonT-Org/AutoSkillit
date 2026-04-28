@@ -132,3 +132,28 @@ def test_reload_session_raises_when_no_session_id(
 
         with pytest.raises(ValueError, match="session ID"):
             reload_session()
+
+
+# ---------------------------------------------------------------------------
+# RS-6 — The async wrapper serializes to str (not raw dict)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_reload_session_tool_wrapper_returns_str(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path / "empty"))
+
+    with patch(
+        "autoskillit.server.tools_kitchen.find_latest_session_id", return_value="sess-wrap"
+    ):
+        from autoskillit.server.tools_kitchen import reload_session
+
+        result = await reload_session()
+
+    assert isinstance(result, str), f"Expected str, got {type(result).__name__}"
+    parsed = json.loads(result)
+    assert parsed["status"] == "reload_requested"
+    assert parsed["session_id"] == "sess-wrap"

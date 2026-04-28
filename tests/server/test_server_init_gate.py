@@ -1,4 +1,4 @@
-"""Tests for server init: gate access, visibility, subset management, and wire format compliance."""
+"""Tests for server init: gate access, visibility, subset management, wire format compliance."""
 
 from __future__ import annotations
 

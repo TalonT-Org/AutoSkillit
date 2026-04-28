@@ -1,4 +1,4 @@
-"""Tests for autoskillit server status tools: kitchen status, pipeline report, and telemetry recovery."""
+"""Tests for server status tools: kitchen status, pipeline report, and telemetry recovery."""
 
 from __future__ import annotations
 

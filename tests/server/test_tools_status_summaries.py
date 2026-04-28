@@ -13,7 +13,6 @@ from autoskillit.server.tools_status import (
     get_pipeline_report,
     get_timing_summary,
     get_token_summary,
-    write_telemetry_files,
 )
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]

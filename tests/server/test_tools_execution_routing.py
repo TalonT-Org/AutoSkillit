@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import json
-from unittest.mock import AsyncMock
-
 import pytest
 
 from autoskillit.server.tools_execution import run_skill
@@ -21,8 +18,6 @@ async def test_tools_execution_routes_through_executor(tool_ctx, monkeypatch) ->
     tool_ctx.executor = executor
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
 
-    from autoskillit.server.tools_execution import run_skill
-
     await run_skill("/test skill", "/tmp")
     assert len(executor.calls) == 1
     assert executor.calls[0].skill_command == "/test skill"
@@ -38,8 +33,6 @@ async def test_run_skill_passes_validated_add_dirs(tool_ctx, monkeypatch) -> Non
     executor = InMemoryHeadlessExecutor()
     tool_ctx.executor = executor
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
-
-    from autoskillit.server.tools_execution import run_skill
 
     await run_skill("/test skill", "/tmp")
     # All add_dirs must be ValidatedAddDir instances
@@ -71,8 +64,6 @@ async def test_run_skill_calls_session_skill_manager_init_session(tool_ctx, monk
     executor = InMemoryHeadlessExecutor()
     tool_ctx.executor = executor
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
-
-    from autoskillit.server.tools_execution import run_skill
 
     await run_skill("/test skill", "/tmp")
 
@@ -107,8 +98,6 @@ async def test_run_skill_activates_deps_for_tier3_target(tool_ctx, monkeypatch) 
     tool_ctx.executor = InMemoryHeadlessExecutor()
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
 
-    from autoskillit.server.tools_execution import run_skill
-
     # Use a tier3 skill name
     await run_skill("/open-pr", "/tmp")
 
@@ -126,8 +115,6 @@ async def test_run_skill_result_includes_order_id_when_passed(tool_ctx, monkeypa
     tool_ctx.executor = InMemoryHeadlessExecutor()
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
 
-    from autoskillit.server.tools_execution import run_skill
-
     result_json = await run_skill("/test skill", "/tmp", order_id="issue-185")
     data = _json.loads(result_json)
     assert data.get("order_id") == "issue-185"
@@ -142,8 +129,6 @@ async def test_run_skill_result_no_order_id_field_when_empty(tool_ctx, monkeypat
 
     tool_ctx.executor = InMemoryHeadlessExecutor()
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
-
-    from autoskillit.server.tools_execution import run_skill
 
     result_json = await run_skill("/test skill", "/tmp")  # no order_id
     data = _json.loads(result_json)
@@ -173,8 +158,6 @@ async def test_run_skill_passes_allow_only_to_init_session(tool_ctx, monkeypatch
     tool_ctx.executor = InMemoryHeadlessExecutor()
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
 
-    from autoskillit.server.tools_execution import run_skill
-
     await run_skill("/autoskillit:investigate the bug", "/tmp")
 
     mock_ssm.compute_skill_closure.assert_called_once_with("investigate")
@@ -198,8 +181,6 @@ async def test_run_skill_no_target_skill_passes_none_allow_only(tool_ctx, monkey
 
     tool_ctx.executor = InMemoryHeadlessExecutor()
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
-
-    from autoskillit.server.tools_execution import run_skill
 
     await run_skill("/test skill", "/tmp")
 
@@ -251,8 +232,6 @@ async def test_run_skill_make_plan_closure_includes_arch_lens_pack(tool_ctx, mon
     tool_ctx.executor = InMemoryHeadlessExecutor()
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
 
-    from autoskillit.server.tools_execution import run_skill
-
     await run_skill("/autoskillit:make-plan refactor", "/tmp")
 
     closure = captured["allow_only"]
@@ -272,8 +251,6 @@ async def test_run_skill_passes_idle_output_timeout(tool_ctx, monkeypatch) -> No
     tool_ctx.executor = executor
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
 
-    from autoskillit.server.tools_execution import run_skill
-
     await run_skill("/test skill", "/tmp", idle_output_timeout=120)
     assert executor.calls[0].idle_output_timeout == 120.0  # int→float conversion
 
@@ -286,8 +263,6 @@ async def test_run_skill_idle_output_timeout_defaults_to_none(tool_ctx, monkeypa
     executor = InMemoryHeadlessExecutor()
     tool_ctx.executor = executor
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
-
-    from autoskillit.server.tools_execution import run_skill
 
     await run_skill("/test skill", "/tmp")
     assert executor.calls[0].idle_output_timeout is None

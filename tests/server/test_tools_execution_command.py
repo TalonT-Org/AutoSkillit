@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import json
-from unittest.mock import AsyncMock
-
 import pytest
 
 from autoskillit.config import (

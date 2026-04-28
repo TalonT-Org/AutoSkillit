@@ -1,4 +1,4 @@
-"""Tests for server init: session type visibility, fleet auto-gate boot, and feature gate visibility."""
+"""Tests for server init: session type visibility, fleet gate boot, feature gate visibility."""
 
 from __future__ import annotations
 

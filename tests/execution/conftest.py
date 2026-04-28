@@ -6,12 +6,14 @@ import json
 import pathlib
 import textwrap
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from autoskillit.core.types import SubprocessResult, TerminationReason
+from autoskillit.execution.merge_queue import DefaultMergeQueueWatcher, PRFetchState
 from autoskillit.execution.session import ClaudeSessionResult
 from tests._helpers import make_tracing_config
 
@@ -163,9 +165,7 @@ def merge_group_only_repo_state() -> dict[str, Any]:
     }
 
 
-def _make_watcher():
-    from autoskillit.execution.merge_queue import DefaultMergeQueueWatcher
-
+def _make_watcher() -> DefaultMergeQueueWatcher:
     return DefaultMergeQueueWatcher(token=None)
 
 
@@ -176,12 +176,12 @@ def _queue_state(
     mergeable: str = "MERGEABLE",
     merge_state_status: str = "CLEAN",
     auto_merge_present: bool = False,
-    auto_merge_enabled_at=None,
+    auto_merge_enabled_at: datetime | None = None,
     pr_node_id: str = "PR_kwDO_test",
     in_queue: bool = False,
-    queue_state=None,
-    checks_state=None,
-):
+    queue_state: str | None = None,
+    checks_state: str | None = None,
+) -> PRFetchState:
     return {
         "merged": merged,
         "state": state,

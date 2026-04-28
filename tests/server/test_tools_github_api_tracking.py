@@ -85,7 +85,8 @@ async def test_gh_cli_records_exit_code_and_latency(build_ctx):
 
     usage = log.to_usage("sess-1")
     assert usage["total_requests"] == 1
-    assert usage["total_latency_ms"] >= 0
+    assert usage["total_latency_ms"] > 0
+    assert log._entries[0].status_code == 1
 
 
 async def test_flush_session_log_writes_github_api_usage(tmp_path):
@@ -131,5 +132,5 @@ async def test_flush_session_log_writes_github_api_usage(tmp_path):
     assert summary["github_api_requests"] == 1
 
     index_file = tmp_path / "sessions.jsonl"
-    lines = [json.loads(l) for l in index_file.read_text().splitlines()]
+    lines = [json.loads(line) for line in index_file.read_text().splitlines()]
     assert lines[0]["github_api_requests"] == 1

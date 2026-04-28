@@ -50,6 +50,10 @@ kitchen_rules:
     stopping the batch."
   - "After all groups complete, call batch_cleanup_clones once with all clone
     registry paths from the batch."
+  - "SOURCE ISOLATION: After clone_repo returns, the source_dir is strictly
+    off-limits. Never run any command in source_dir — no git checkout, git
+    status, or any other git operation. All implementation work must happen
+    inside the cloned directory returned by clone_repo."
 
 steps:
   check_resume:
@@ -66,7 +70,7 @@ steps:
     note: >
       Reads AUTOSKILLIT_DISPATCH_ID from env (set by execute_dispatch).
       Parses comma-separated issue_urls, checks the per-dispatch sidecar at
-      .autoskillit/temp/dispatches/{dispatch_id}_issues.jsonl, and returns
+      {{AUTOSKILLIT_TEMP}}/dispatches/{dispatch_id}_issues.jsonl, and returns
       only the URLs not yet completed or failed. On resume, already-processed
       issues are excluded automatically.
 

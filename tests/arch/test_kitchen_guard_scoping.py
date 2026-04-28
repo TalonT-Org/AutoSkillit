@@ -57,10 +57,13 @@ def _function_body_has_any_kitchen_open_patch(func_node: ast.FunctionDef) -> boo
         func = node.func
         if not (isinstance(func, ast.Attribute) and func.attr == "setattr"):
             continue
+        # 2-arg string form: setattr("dotted.path.name", value) → name at args[0]
+        # 3-arg form: setattr(target, "name", value) → name at args[1]
+        name_arg_idx = 0 if len(node.args) == 2 else 1
         if (
             len(node.args) >= 2
-            and isinstance(node.args[1], ast.Constant)
-            and "any_kitchen_open" in str(node.args[1].value)
+            and isinstance(node.args[name_arg_idx], ast.Constant)
+            and "any_kitchen_open" in str(node.args[name_arg_idx].value)
         ):
             return True
     return False

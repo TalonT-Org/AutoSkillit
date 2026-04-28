@@ -47,8 +47,11 @@ class TestListRecipes:
                 )
 
     def test_list_recipes_alphabetical_within_bundled_tiers(self, tmp_path: Path) -> None:
-        """Each bundled tier (core and add-on) must be alphabetically sorted within its tier."""
+        """Unregistered core bundled recipes are alphabetical after registered ones.
+        Add-on bundled recipes remain alphabetical.
+        """
         from autoskillit.core._type_constants import CORE_PACKS
+        from autoskillit.recipe.order import BUNDLED_RECIPE_ORDER
 
         result = list_recipes(tmp_path)
         core_names = [
@@ -65,8 +68,19 @@ class TestListRecipes:
             and not r.experimental
             and not all(p in CORE_PACKS for p in r.requires_packs)
         ]
-        assert core_names == sorted(core_names), (
-            f"Core bundled recipes not in alphabetical order: {core_names}"
+        # Registered entries appear first; the unregistered tail must be alphabetical
+        unregistered_core = [n for n in core_names if n not in BUNDLED_RECIPE_ORDER]
+        registered_core = [n for n in core_names if n in BUNDLED_RECIPE_ORDER]
+        if registered_core:
+            last_registered_idx = core_names.index(registered_core[-1])
+            first_unregistered_idx = (
+                core_names.index(unregistered_core[0]) if unregistered_core else len(core_names)
+            )
+            assert last_registered_idx < first_unregistered_idx, (
+                "Registered core recipes must appear before unregistered ones"
+            )
+        assert unregistered_core == sorted(unregistered_core), (
+            f"Unregistered core recipes not alphabetical: {unregistered_core}"
         )
         assert addon_names == sorted(addon_names), (
             f"Add-on bundled recipes not in alphabetical order: {addon_names}"

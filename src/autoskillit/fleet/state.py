@@ -6,7 +6,9 @@ All writes use core.io.atomic_write for crash-safety (tmp + os.replace).
 
 from __future__ import annotations
 
+import fcntl
 import json
+import threading
 import time
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
@@ -16,6 +18,8 @@ from typing import Any
 from autoskillit.core import get_logger, write_versioned_json
 
 logger = get_logger(__name__)
+
+_resume_lock = threading.Lock()
 
 _SCHEMA_VERSION = 3
 
@@ -363,7 +367,7 @@ def resume_campaign_from_state(
     Algorithm:
       1. Read state.json; return None if absent or corrupted.
       2. Find first dispatch not in {success, skipped}.
-      3. If running exists, mark it interrupted and continue from next.
+      3. If running exists and stale, mark it interrupted; skip alive ones.
       4. If failure exists and continue_on_failure=False, return None
          with reason fleet_halted_on_failure (encoded via a sentinel).
       5. Return ResumeDecision with next_dispatch_name and completed block.
@@ -371,38 +375,60 @@ def resume_campaign_from_state(
     Returns None if the state file is missing/corrupted. Returns a
     ResumeDecision with next_dispatch_name="" if all dispatches are
     complete or the campaign is halted.
+
+    Thread-safe: _resume_lock (intra-process) + fcntl.flock(LOCK_EX)
+    (cross-process) prevent concurrent callers from corrupting state.
     """
-    state = read_state(state_path)
-    if state is None:
-        return None
+    from autoskillit.fleet import is_dispatch_session_alive
 
-    # Phase 1: handle any stale "running" dispatch (crash recovery)
-    for d in state.dispatches:
-        if d.status == DispatchStatus.RUNNING:
-            mark_dispatch_interrupted(state_path, d.name, reason="stale_running_on_resume")
-            d.status = DispatchStatus.INTERRUPTED
-            d.reason = "stale_running_on_resume"
+    with _resume_lock:
+        lock_path = state_path.with_suffix(".lock")
+        with open(lock_path, "wb") as _flock_handle:
+            fcntl.flock(_flock_handle, fcntl.LOCK_EX)
 
-    # Phase 2: check for failure halt
-    for d in state.dispatches:
-        if d.status == DispatchStatus.FAILURE and not continue_on_failure:
+            state = read_state(state_path)
+            if state is None:
+                return None
+
+            # Phase 1: crash recovery — skip live sessions, interrupt stale ones
+            for d in state.dispatches:
+                if d.status == DispatchStatus.RUNNING:
+                    if is_dispatch_session_alive(d):
+                        continue
+                    mark_dispatch_interrupted(state_path, d.name, reason="stale_running_on_resume")
+                    d.status = DispatchStatus.INTERRUPTED
+                    d.reason = "stale_running_on_resume"
+
+            # Phase 2: check for failure halt
+            for d in state.dispatches:
+                if d.status == DispatchStatus.FAILURE and not continue_on_failure:
+                    return ResumeDecision(
+                        next_dispatch_name="",
+                        completed_dispatches_block=FLEET_HALTED_SENTINEL,
+                    )
+
+            # Phase 3: build completed dispatches block and find next
+            # Skip RUNNING dispatches (still alive) — do not return them as next_name
+            completed_lines: list[str] = []
+            next_name = ""
+            for d in state.dispatches:
+                if d.status in _COMPLETED_STATUSES:
+                    completed_lines.append(f"- {d.name}: {d.status}")
+                elif (
+                    d.status
+                    not in {
+                        DispatchStatus.INTERRUPTED,
+                        DispatchStatus.RUNNING,
+                        DispatchStatus.REFUSED,
+                        DispatchStatus.RELEASED,
+                    }
+                    and not next_name
+                ):
+                    next_name = d.name
+
+            completed_block = "\n".join(completed_lines) if completed_lines else ""
+
             return ResumeDecision(
-                next_dispatch_name="",
-                completed_dispatches_block=FLEET_HALTED_SENTINEL,
+                next_dispatch_name=next_name,
+                completed_dispatches_block=completed_block,
             )
-
-    # Phase 3: build completed dispatches block and find next
-    completed_lines: list[str] = []
-    next_name = ""
-    for d in state.dispatches:
-        if d.status in _COMPLETED_STATUSES:
-            completed_lines.append(f"- {d.name}: {d.status}")
-        elif d.status != DispatchStatus.INTERRUPTED and not next_name:
-            next_name = d.name
-
-    completed_block = "\n".join(completed_lines) if completed_lines else ""
-
-    return ResumeDecision(
-        next_dispatch_name=next_name,
-        completed_dispatches_block=completed_block,
-    )

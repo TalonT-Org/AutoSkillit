@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from autoskillit.recipe.schema import Recipe, RecipeInfo
@@ -623,17 +623,22 @@ class QuotaRefreshTask(Protocol):
 
 @runtime_checkable
 class FleetLock(Protocol):
-    """Protocol for a mutual-exclusion lock handle.
+    """Protocol for a semaphore-style fleet dispatch guard.
 
-    Satisfied by asyncio.Lock — used to type the fleet_lock field in
-    ToolContext without leaking asyncio.Lock into the core layer.
+    Default implementation is FleetSemaphore in server/_factory.py.
     """
 
-    def locked(self) -> bool: ...
+    def at_capacity(self) -> bool: ...
 
-    async def acquire(self) -> Literal[True]: ...
+    async def acquire(self) -> None: ...
 
     def release(self) -> None: ...
+
+    @property
+    def active_count(self) -> int: ...
+
+    @property
+    def max_concurrent(self) -> int: ...
 
 
 @runtime_checkable

@@ -46,12 +46,11 @@ def _make_recipe_info(name: str = "test-recipe", path_prefix: str = "/fake/"):
 
 def _setup_dispatch(tool_ctx, monkeypatch, recipe_name: str = "test-recipe"):
     """Wire tool_ctx for dispatch tests."""
-    import asyncio
-
+    from autoskillit.fleet import FleetSemaphore
     from autoskillit.recipe.schema import Recipe, RecipeKind
     from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
 
-    tool_ctx.fleet_lock = asyncio.Lock()
+    tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
     repo = InMemoryRecipeRepository()
     recipe_info = _make_recipe_info(recipe_name)
     repo.add_recipe(recipe_name, recipe_info)

@@ -114,6 +114,28 @@ class TestFleetConfig:
         with pytest.raises(ValueError, match="default_timeout_sec must be positive"):
             load_config(tmp_path)
 
+    def test_fleet_config_max_concurrent_dispatches_defaults_to_1(self) -> None:
+        """FleetConfig.max_concurrent_dispatches defaults to 1 (serial)."""
+        from autoskillit.config.settings import FleetConfig
+
+        assert FleetConfig().max_concurrent_dispatches == 1
+
+    def test_fleet_config_max_concurrent_dispatches_validates_positive(self) -> None:
+        """FleetConfig raises ValueError when max_concurrent_dispatches is 0."""
+        from autoskillit.config.settings import FleetConfig
+
+        with pytest.raises(ValueError, match="max_concurrent_dispatches"):
+            FleetConfig(max_concurrent_dispatches=0).validate(feature_enabled=True)
+
+    def test_load_config_fleet_max_concurrent_override(self, tmp_path: Path) -> None:
+        """User config can override max_concurrent_dispatches."""
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        config_data = {"fleet": {"max_concurrent_dispatches": 3}}
+        (config_dir / "config.yaml").write_text(yaml.dump(config_data))
+        cfg = load_config(tmp_path)
+        assert cfg.fleet.max_concurrent_dispatches == 3
+
 
 def test_config_resolution_fleet_enabled_via_experimental() -> None:
     """Full config resolution enables fleet via experimental_enabled=True from defaults."""

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 from pathlib import Path
 
@@ -160,10 +159,11 @@ async def _noop_quota_refresher(config, **kwargs) -> None:
 
 
 def _setup_dispatch(tool_ctx, recipe_name: str = "test-recipe", ingredients: dict | None = None):
+    from autoskillit.fleet import FleetSemaphore
     from autoskillit.recipe.schema import Recipe, RecipeKind
     from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
 
-    tool_ctx.fleet_lock = asyncio.Lock()
+    tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
     repo = InMemoryRecipeRepository()
     recipe_info = _make_recipe_info(recipe_name)
     repo.add_recipe(recipe_name, recipe_info)

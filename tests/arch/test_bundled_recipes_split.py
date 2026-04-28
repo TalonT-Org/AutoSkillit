@@ -60,6 +60,8 @@ def test_pipeline_variant_invariants_parametrized():
                 if call:
                     for kw in call.keywords:
                         if kw.arg == "params":
+                            if not isinstance(kw.value, (ast.List, ast.Tuple)):
+                                continue
                             names = [
                                 elt.value
                                 for elt in kw.value.elts

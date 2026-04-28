@@ -322,8 +322,8 @@ class TestClaimReleaseGates:
         for name in self.RECIPES_WITH_RELEASE_SUCCESS_STEP:
             data = yaml.safe_load(_recipe_path(name).read_text())
             step = data["steps"]["release_issue_success"]
-            assert step["on_success"] == "register_clone_success", (
-                f"{name}: release_issue_success.on_success should be register_clone_success"
+            assert step["on_success"] == "patch_token_summary", (
+                f"{name}: release_issue_success.on_success should be patch_token_summary"
             )
 
     def test_release_issue_failure_routes_to_register_clone_failure(self):

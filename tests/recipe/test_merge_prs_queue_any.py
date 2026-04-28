@@ -411,7 +411,7 @@ def test_auto_merge_false_routes_to_register_clone_success(any_recipe) -> None:
         c for c in step.on_result.conditions if c.when and "auto_merge" in c.when
     )
     assert auto_merge_cond.when == "${{ inputs.auto_merge }} != 'true'"
-    assert auto_merge_cond.route == "register_clone_success"
+    assert auto_merge_cond.route == "patch_token_summary"
 
 
 # ---------------------------------------------------------------------------

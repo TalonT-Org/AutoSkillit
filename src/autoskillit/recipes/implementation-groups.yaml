@@ -1510,7 +1510,7 @@ steps:
     description: "Collect all pipeline token data and patch the PR body with complete summary"
     tool: run_python
     optional: true
-    skip_when_false: "context.pr_url"
+    skip_when_false: "inputs.open_pr"
     with:
       callable: "autoskillit.smoke_utils.patch_pr_token_summary"
       timeout: 60

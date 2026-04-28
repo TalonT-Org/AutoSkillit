@@ -266,6 +266,7 @@ generic_automation_mcp/
 │   ├── result_parser.py     #   L2 result block parser with Channel B JSONL fallback
 │   ├── sidecar.py           #   Per-issue JSONL sidecar — IssueSidecarEntry, append/read/compute_remaining helpers
 │   ├── _liveness.py         #   is_dispatch_session_alive() — boot_id + starttime_ticks liveness gate
+│   ├── _semaphore.py        #   FleetSemaphore — configurable asyncio.BoundedSemaphore implementing FleetLock
 │   ├── _sidecar_rpc.py      #   run_python-callable entry points: write_sidecar_entry, get_remaining_issues
 │   ├── _findings_rpc.py     #   run_python-callable entry points: parse_and_resume, load_execution_map
 │   ├── state.py             #   Campaign state persistence — DispatchRecord, DispatchStatus, atomic writes, resume algorithm

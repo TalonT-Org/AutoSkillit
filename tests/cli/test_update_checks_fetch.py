@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from autoskillit.cli._update_checks import (
+from autoskillit.cli._update_checks_fetch import (
     _fetch_with_cache,
 )
 
@@ -233,7 +233,7 @@ def test_fetch_304_response_returns_cached_payload(tmp_path: Path) -> None:
 
 
 def test_fetch_uses_correct_timeout(tmp_path: Path) -> None:
-    from autoskillit.cli._update_checks import _HTTP_TIMEOUT
+    from autoskillit.cli._update_checks_fetch import _HTTP_TIMEOUT
 
     assert _HTTP_TIMEOUT.connect == 2.0
     assert _HTTP_TIMEOUT.read == 1.0
@@ -600,7 +600,7 @@ def test_api_sha_with_seeded_cache_returns_cached_sha(tmp_path: Path) -> None:
     """_api_sha returns cached SHA when cache epoch matches current version."""
     import time
 
-    from autoskillit.cli._update_checks import _api_sha
+    from autoskillit.cli._update_checks_source import _api_sha
     from autoskillit.core import AUTOSKILLIT_INSTALLED_VERSION
 
     sha = "c" * 40
@@ -643,7 +643,7 @@ def test_api_sha_with_stale_epoch_forces_network(
     """_api_sha issues a network request when cache epoch is stale."""
     import time
 
-    from autoskillit.cli._update_checks import _api_sha
+    from autoskillit.cli._update_checks_source import _api_sha
 
     stale_sha = "d" * 40
     fresh_sha = "e" * 40
@@ -698,7 +698,7 @@ def test_api_sha_network_false_reads_raw_cache_no_epoch(tmp_path: Path) -> None:
     """_api_sha(network=False) reads raw cache regardless of epoch (doctor mode)."""
     import time
 
-    from autoskillit.cli._update_checks import _api_sha
+    from autoskillit.cli._update_checks_source import _api_sha
 
     sha = "f" * 40
     url = "https://api.github.com/repos/TalonT-Org/AutoSkillit/git/refs/heads/integration"
@@ -721,7 +721,7 @@ def test_api_sha_network_false_reads_raw_cache_no_epoch(tmp_path: Path) -> None:
 
 def test_api_sha_tags_url_prefix(tmp_path: Path) -> None:
     """_api_sha('v0.9.174', ...) constructs a refs/tags/ URL."""
-    from autoskillit.cli._update_checks import _api_sha
+    from autoskillit.cli._update_checks_source import _api_sha
 
     (tmp_path / ".autoskillit").mkdir(parents=True, exist_ok=True)
     captured_urls: list[str] = []

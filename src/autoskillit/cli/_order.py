@@ -20,7 +20,7 @@ from autoskillit.core import (
 )
 
 if TYPE_CHECKING:
-    from autoskillit.recipe import RecipeInfo
+    from autoskillit.recipe import Recipe, RecipeInfo
 
 _UUID_RE = re.compile(r"^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$", re.IGNORECASE)
 
@@ -31,7 +31,7 @@ def _recipes_dir_for(info: RecipeInfo) -> Path:
     return Path.cwd() / ".autoskillit" / "recipes"
 
 
-def _get_subsets_needed(recipe, disabled_subsets: frozenset[str]) -> frozenset[str]:
+def _get_subsets_needed(recipe: Recipe, disabled_subsets: frozenset[str]) -> frozenset[str]:
     """Return the subset names from disabled_subsets that are actually referenced in recipe."""
     from autoskillit.recipe import make_validation_context, run_semantic_rules
 
@@ -47,7 +47,7 @@ def _get_subsets_needed(recipe, disabled_subsets: frozenset[str]) -> frozenset[s
     return frozenset(needed)
 
 
-def _get_packs_needed(recipe, default_disabled_packs: frozenset[str]) -> frozenset[str]:
+def _get_packs_needed(recipe: Recipe, default_disabled_packs: frozenset[str]) -> frozenset[str]:
     """Return pack names from default_disabled_packs that are required by recipe."""
     requires = frozenset(getattr(recipe, "requires_packs", []))
     return requires & default_disabled_packs
@@ -88,7 +88,9 @@ def _enable_subsets_permanently(project_dir: Path, subsets: frozenset[str]) -> N
     print(f"Updated {config_path}: removed {sorted(subsets)} from subsets.disabled")
 
 
-def order(recipe: str | None = None, session_id: str | None = None, *, resume: bool = False):
+def order(
+    recipe: str | None = None, session_id: str | None = None, *, resume: bool = False
+) -> None:
     """Launch an interactive Claude Code session to execute a recipe.
 
     Starts Claude Code with hard tool restrictions: only AskUserQuestion

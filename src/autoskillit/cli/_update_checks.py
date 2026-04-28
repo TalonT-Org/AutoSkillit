@@ -34,14 +34,10 @@ from autoskillit.cli._install_info import (
 from autoskillit.cli._restart import perform_restart
 from autoskillit.cli._terminal import terminal_guard
 from autoskillit.cli._update_checks_fetch import (
-    _HTTP_TIMEOUT,  # noqa: F401 re-exported for test backward compat
     _fetch_latest_version,
-    _fetch_with_cache,  # noqa: F401 re-exported for test backward compat
     invalidate_fetch_cache,
 )
 from autoskillit.cli._update_checks_source import (
-    _api_sha,  # noqa: F401 re-exported for test backward compat
-    find_source_repo,  # noqa: F401 re-exported for test backward compat
     resolve_reference_sha,
 )
 from autoskillit.core import atomic_write, get_logger

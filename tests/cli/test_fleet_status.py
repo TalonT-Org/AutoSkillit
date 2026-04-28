@@ -88,7 +88,7 @@ def test_fleet_status_table_columns(
 
 def test_status_numeric_columns_right_aligned() -> None:
     """Numeric column definitions use align='>'."""
-    from autoskillit.cli._fleet import _STATUS_COLUMNS
+    from autoskillit.cli._fleet_display import _STATUS_COLUMNS
 
     numeric_labels = {"ELAPSED", "INPUT", "OUTPUT", "CACHE_RD", "CACHE_WR"}
     for col in _STATUS_COLUMNS:

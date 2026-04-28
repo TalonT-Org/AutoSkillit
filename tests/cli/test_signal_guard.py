@@ -66,7 +66,7 @@ async def _run_signal_guard(
     campaign_name: str | None = None,
 ) -> None:
     """Run the signal guard and fire a signal after it's armed."""
-    from autoskillit.cli._fleet import _fleet_signal_guard
+    from autoskillit.cli._fleet_lifecycle import _fleet_signal_guard
 
     async with anyio.create_task_group() as tg:
 

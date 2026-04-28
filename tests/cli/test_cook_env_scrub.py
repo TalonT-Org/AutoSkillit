@@ -26,7 +26,7 @@ def test_launch_cook_session_env_excludes_ide_vars(
     monkeypatch.setenv("VSCODE_GIT_ASKPASS_MAIN", "/fake/vscode")
     monkeypatch.setenv("CLAUDE_CODE_IDE_HOST_OVERRIDE", "host")
 
-    from autoskillit.cli.app import _launch_cook_session
+    from autoskillit.cli._session_launch import _launch_cook_session
 
     with (
         patch("shutil.which", return_value="/usr/bin/claude"),
@@ -52,7 +52,7 @@ def test_launch_cook_session_extra_env_still_applied(
 ) -> None:
     monkeypatch.setenv("CLAUDE_CODE_SSE_PORT", "23270")
 
-    from autoskillit.cli.app import _launch_cook_session
+    from autoskillit.cli._session_launch import _launch_cook_session
 
     with (
         patch("shutil.which", return_value="/usr/bin/claude"),
@@ -76,7 +76,7 @@ def test_launch_cook_session_env_has_max_mcp_output_tokens(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """_launch_cook_session (order path) must produce env with MAX_MCP_OUTPUT_TOKENS."""
-    from autoskillit.cli.app import _launch_cook_session
+    from autoskillit.cli._session_launch import _launch_cook_session
 
     with (
         patch("shutil.which", return_value="/usr/bin/claude"),
@@ -96,7 +96,7 @@ def test_launch_cook_session_env_has_mcp_connection_nonblocking(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """_launch_cook_session (order path) must produce env with MCP_CONNECTION_NONBLOCKING=0."""
-    from autoskillit.cli.app import _launch_cook_session
+    from autoskillit.cli._session_launch import _launch_cook_session
 
     with (
         patch("shutil.which", return_value="/usr/bin/claude"),

@@ -45,7 +45,8 @@ def _extract_captures(
             continue
         field_name = m.group(1)
         if field_name in payload:
-            result[key] = str(payload[field_name])
+            value = payload[field_name]
+            result[key] = value if isinstance(value, str) else json.dumps(value, default=str)
     return result
 
 

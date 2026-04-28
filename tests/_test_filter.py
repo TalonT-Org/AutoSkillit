@@ -446,6 +446,7 @@ LAYER_CASCADE_AGGRESSIVE: dict[str, frozenset[str]] = {
     "_llm_triage": frozenset({"test_llm_triage.py"}),
     "smoke_utils": frozenset({"test_smoke_utils.py"}),
     "version": frozenset({"test_version.py"}),
+    "_test_filter": frozenset({"arch", "contracts"}),
 }
 
 # ---------------------------------------------------------------------------

@@ -80,7 +80,7 @@ def test_full_audit_kitchen_rules() -> None:
     from autoskillit.recipe.io import load_recipe
 
     recipe = load_recipe(RECIPE_PATH)
-    assert len(recipe.kitchen_rules) == 3
+    assert len(recipe.kitchen_rules) == 4
 
 
 def test_full_audit_discovered_as_builtin_recipe(tmp_path: Path) -> None:

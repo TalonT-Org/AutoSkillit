@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -78,7 +79,7 @@ def test_get_state_dir_namespaces_by_campaign_id(tmp_path, monkeypatch):
 
     monkeypatch.delenv("AUTOSKILLIT_STATE_DIR", raising=False)
     monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_ID", "camp-42")
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
     result = get_state_dir()
     assert result == tmp_path / ".autoskillit" / "temp" / "kitchen_state" / "camp-42"
 
@@ -87,11 +88,10 @@ def test_get_state_dir_no_campaign_id_flat(tmp_path, monkeypatch):
     """get_state_dir returns flat path when AUTOSKILLIT_CAMPAIGN_ID is absent."""
     from autoskillit.core.kitchen_state import get_state_dir
 
-    monkeypatch.delenv("AUTOSKILLIT_STATE_DIR", raising=False)
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
     monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
-    monkeypatch.chdir(tmp_path)
     result = get_state_dir()
-    assert result == tmp_path / ".autoskillit" / "temp" / "kitchen_state"
+    assert result == tmp_path / "kitchen_state"
 
 
 def test_concurrent_campaigns_disjoint_dirs(tmp_path, monkeypatch):
@@ -99,7 +99,7 @@ def test_concurrent_campaigns_disjoint_dirs(tmp_path, monkeypatch):
     from autoskillit.core.kitchen_state import get_state_dir
 
     monkeypatch.delenv("AUTOSKILLIT_STATE_DIR", raising=False)
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
 
     monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_ID", "campaign-a")
     dir_a = get_state_dir()

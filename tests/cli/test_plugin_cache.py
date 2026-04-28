@@ -38,7 +38,7 @@ def test_retire_old_versions_registers_different_version(
     entries = data["retiring"]
     assert len(entries) == 1
     assert entries[0]["version"] == "0.8.0"
-    assert datetime.fromisoformat(entries[0]["retired_at"]) is not None
+    assert isinstance(datetime.fromisoformat(entries[0]["retired_at"]), datetime)
 
 
 def test_retire_old_versions_multiple_old_dirs(

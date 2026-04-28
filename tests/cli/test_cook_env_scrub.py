@@ -38,7 +38,7 @@ def test_launch_cook_session_env_excludes_ide_vars(
     ):
         _launch_cook_session("system prompt", initial_message="hello")
 
-    assert mock_run.call_args is not None
+    mock_run.assert_called_once()
     env = mock_run.call_args.kwargs["env"]
     assert "CLAUDE_CODE_SSE_PORT" not in env
     assert "ENABLE_IDE_INTEGRATION" not in env
@@ -139,7 +139,7 @@ def test_cook_command_env_excludes_ide_vars(
 
         cook()
 
-    assert mock_run.call_args is not None
+    mock_run.assert_called_once()
     env = mock_run.call_args.kwargs["env"]
     assert "CLAUDE_CODE_SSE_PORT" not in env
     assert "ENABLE_IDE_INTEGRATION" not in env

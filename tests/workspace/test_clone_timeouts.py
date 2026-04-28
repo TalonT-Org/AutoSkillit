@@ -14,7 +14,7 @@ _GIT_NETWORK_SUBCOMMANDS = {"push", "clone", "fetch", "pull", "ls-remote"}
 
 def test_git_network_commands_have_timeout() -> None:
     """All subprocess.run() calls with git network commands must have timeout=."""
-    src = Path("src/autoskillit/workspace/clone.py").read_text()
+    src = (Path(__file__).parent.parent.parent / "src/autoskillit/workspace/clone.py").read_text()
     tree = ast.parse(src)
     for node in ast.walk(tree):
         if not (

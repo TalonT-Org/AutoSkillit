@@ -545,9 +545,11 @@ def test_server_file_count_under_limit() -> None:
     Claude Code wire-format sanitization middleware.
     Limit updated from 19 to 20 after _session_type.py was added for
     session-type tag visibility dispatch (3-branch startup logic).
+    Limit updated from 20 to 22 after tools_ci.py was split into
+    tools_ci_watch.py and tools_ci_merge_queue.py submodules.
     """
     py_files = list((SRC_ROOT / "server").glob("*.py"))
-    assert len(py_files) <= 20, f"server/ has {len(py_files)} files, max is 20"
+    assert len(py_files) <= 22, f"server/ has {len(py_files)} files, max is 22"
 
 
 def test_tools_integrations_replaced_by_split_modules() -> None:
@@ -672,6 +674,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         bringing the count to 40.
         order.py adds the stable display order registry (BUNDLED_RECIPE_ORDER) for
         Group 0 bundled recipes, bringing the count to 41.
+        Monolithic file splits (_api.py → _recipe_ingredients + _recipe_composition;
+        _analysis.py → _analysis_graph + _analysis_bfs + _analysis_blocks +
+        _analysis_detectors) add 6 files, bringing the count to 47. Exempt at 47 files.
       execution/ — REQ-CNST-003-E3: execution/ decomposes process lifecycle into
         focused single-concern modules (_process_io, _process_kill, _process_race,
         etc.) that cannot be merged without re-introducing the coupling they isolate.
@@ -738,8 +743,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         server/ tests. Exempt at 11 files.
     """
     EXEMPTIONS: dict[str, int] = {
-        "server": 20,
-        "recipe": 41,
+        "server": 22,
+        "recipe": 47,
         "execution": 26,
         "core": 27,
         "cli": 27,

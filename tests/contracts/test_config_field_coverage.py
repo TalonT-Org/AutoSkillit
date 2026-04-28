@@ -29,12 +29,22 @@ def _collect_referenced_names(tree: ast.Module) -> set[str]:
     dedicated _build_* helpers that contain the actual val(...) / .get(...) calls.
     These helpers are called directly from from_dynaconf and are part of the same
     construction pipeline — their field references are equally authoritative.
+    After the config split, _build_* helpers may reside in _config_loader.py
+    rather than settings.py; both modules are scanned.
     """
-    # Collect all module-level function definitions by name
+    # Collect all module-level function definitions from settings.py
     top_level_fns: dict[str, ast.FunctionDef] = {}
     for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef):
             top_level_fns[node.name] = node
+
+    # Also collect from _config_loader.py (split destination for _build_* helpers)
+    loader_path = Path(settings_mod.__file__).parent / "_config_loader.py"
+    if loader_path.exists():
+        loader_tree = ast.parse(loader_path.read_text())
+        for node in ast.walk(loader_tree):
+            if isinstance(node, ast.FunctionDef) and node.name not in top_level_fns:
+                top_level_fns[node.name] = node
 
     fn: ast.FunctionDef | None = top_level_fns.get("from_dynaconf")
     assert fn is not None, "from_dynaconf must exist"

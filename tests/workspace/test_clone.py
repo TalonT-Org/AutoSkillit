@@ -1511,7 +1511,7 @@ class TestProbeSingleRemote:
     def test_probe_single_remote_returns_ok_reason_when_remote_configured(
         self, local_with_remote: Path, bare_remote: Path
     ) -> None:
-        from autoskillit.workspace.clone import _probe_single_remote
+        from autoskillit.workspace._clone_remote import _probe_single_remote
 
         resolution = _probe_single_remote(local_with_remote, "origin")
         assert resolution.reason == "ok"
@@ -1521,17 +1521,17 @@ class TestProbeSingleRemote:
     def test_probe_single_remote_returns_no_origin_reason_when_no_remote(
         self, git_repo: Path
     ) -> None:
-        from autoskillit.workspace.clone import _probe_single_remote
+        from autoskillit.workspace._clone_remote import _probe_single_remote
 
         resolution = _probe_single_remote(git_repo, "origin")
         assert resolution.reason == "no_origin"
         assert resolution.url == ""
 
     def test_probe_single_remote_returns_timeout_reason_on_timeout(self, tmp_path: Path) -> None:
-        from autoskillit.workspace.clone import _probe_single_remote
+        from autoskillit.workspace._clone_remote import _probe_single_remote
 
         with patch(
-            "autoskillit.workspace.clone.subprocess.run",
+            "autoskillit.workspace._clone_remote.subprocess.run",
             side_effect=subprocess.TimeoutExpired(cmd=["git"], timeout=30),
         ):
             resolution = _probe_single_remote(tmp_path, "origin")
@@ -1539,13 +1539,13 @@ class TestProbeSingleRemote:
         assert resolution.url == ""
 
     def test_probe_single_remote_returns_error_reason_on_non_zero_rc(self, tmp_path: Path) -> None:
-        from autoskillit.workspace.clone import _probe_single_remote
+        from autoskillit.workspace._clone_remote import _probe_single_remote
 
         mock_result = MagicMock()
         mock_result.returncode = 1
         mock_result.stdout = ""
         mock_result.stderr = "fatal: not a git repository"
-        with patch("autoskillit.workspace.clone.subprocess.run", return_value=mock_result):
+        with patch("autoskillit.workspace._clone_remote.subprocess.run", return_value=mock_result):
             resolution = _probe_single_remote(tmp_path, "origin")
         assert resolution.reason == "error"
         assert resolution.url == ""
@@ -1561,7 +1561,7 @@ class TestProbeCloneSourceUrl:
         This is the exact scenario that caused stale clones in multi-batch pipelines:
         source_dir is a previous autoskillit clone with origin rewritten to file://.
         """
-        from autoskillit.workspace.clone import _probe_clone_source_url
+        from autoskillit.workspace._clone_remote import _probe_clone_source_url
 
         bare = tmp_path / "bare.git"
         subprocess.run(["git", "init", "--bare", str(bare)], check=True, capture_output=True)
@@ -1602,7 +1602,7 @@ class TestProbeCloneSourceUrl:
 
     def test_falls_back_to_origin_when_no_upstream(self, tmp_path: Path) -> None:
         """Without upstream remote, falls back to origin URL (existing behavior preserved)."""
-        from autoskillit.workspace.clone import _probe_clone_source_url
+        from autoskillit.workspace._clone_remote import _probe_clone_source_url
 
         bare = tmp_path / "bare.git"
         subprocess.run(["git", "init", "--bare", str(bare)], check=True, capture_output=True)
@@ -1633,7 +1633,7 @@ class TestProbeCloneSourceUrl:
     ) -> None:
         """When upstream=file:// and origin=non-file-local-path that is network-equivalent,
         falls through to origin result (covers edge cases where upstream is also local)."""
-        from autoskillit.workspace.clone import _probe_clone_source_url
+        from autoskillit.workspace._clone_remote import _probe_clone_source_url
 
         bare = tmp_path / "bare.git"
         subprocess.run(["git", "init", "--bare", str(bare)], check=True, capture_output=True)
@@ -1672,7 +1672,7 @@ class TestProbeCloneSourceUrl:
 
     def test_returns_no_origin_for_repo_without_remotes(self, tmp_path: Path) -> None:
         """Repo with no remotes returns reason='no_origin' (unchanged from current behavior)."""
-        from autoskillit.workspace.clone import _probe_clone_source_url
+        from autoskillit.workspace._clone_remote import _probe_clone_source_url
 
         source = tmp_path / "source"
         subprocess.run(["git", "init", str(source)], check=True, capture_output=True)

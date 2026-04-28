@@ -87,6 +87,6 @@ def make_test_check_config(**overrides):
 def make_dynaconf_and_automation_config():
     """Return (_make_dynaconf, AutomationConfig) for integration tests."""
     from autoskillit.config import AutomationConfig
-    from autoskillit.config.settings import _make_dynaconf
+    from autoskillit.config._config_loader import _make_dynaconf
 
     return _make_dynaconf, AutomationConfig

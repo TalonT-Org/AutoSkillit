@@ -41,7 +41,7 @@ def test_gfm_ingredient_columns_all_have_bounded_max_width():
     overflow from long ingredient values.
     """
     from autoskillit.core import TerminalColumn
-    from autoskillit.recipe._api import _GFM_INGREDIENT_COLUMNS
+    from autoskillit.recipe._recipe_ingredients import _GFM_INGREDIENT_COLUMNS
 
     assert len(_GFM_INGREDIENT_COLUMNS) > 0, "_GFM_INGREDIENT_COLUMNS must not be empty"
     for col in _GFM_INGREDIENT_COLUMNS:

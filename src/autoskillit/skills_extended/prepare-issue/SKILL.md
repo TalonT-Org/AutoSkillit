@@ -281,17 +281,29 @@ Use the fetched data as the issue context.
 
 ### Step 6: LLM Classification
 
-Analyze the issue title + body using in-context reasoning:
+**Shortcut — Validated audit report:** When `is_validated_report = true` (set in Step 1b),
+immediately assign:
+- `route = implementation`
+- `issue_type = enhancement`
+- `confidence = high`
+- `rationale = "Validated audit report — structural/quality improvement work, not broken behavior"`
+
+Skip the heuristic table below and proceed directly to Step 7.
+
+Analyze the issue title + body using in-context reasoning for all other inputs:
 
 | Signal | Route | Issue Type |
 |--------|-------|------------|
 | Existing behavior broken / error traceback present | `remediation` | `bug` |
 | New feature / enhancement with clear acceptance criteria | `implementation` | `enhancement` |
 | "X doesn't support Y" / clearly absent feature | `implementation` | `enhancement` |
+| Validated audit report with structural/quality findings (finding IDs present, no tracebacks, no crashes) | `implementation` | `enhancement` |
 | Large/ambiguous scope / unclear root cause | `remediation` | `enhancement` |
 
 Record: `route` (implementation|remediation), `issue_type` (bug|enhancement),
 `confidence` (high|low), `rationale` (one sentence).
+
+Note: The audit-signal table row is a secondary defense for `--issue N` adoption of pre-existing validated audit issues where `is_validated_report` may not be set.
 
 ### Step 7: Confidence Gate
 

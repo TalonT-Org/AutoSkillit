@@ -81,3 +81,39 @@ def test_validate_audit_recognizes_feature_gate_format():
     assert "Feature Gate Audit" in source, (
         "validate-audit SKILL.md must contain 'Feature Gate Audit' abort-error string"
     )
+
+
+# ---------------------------------------------------------------------------
+# GAP 2a: audit-feature-gates format standardization tests
+# ---------------------------------------------------------------------------
+
+
+def test_audit_feature_gates_finding_id_scheme():
+    """Skill must document the FG-D{dim}-{seq} per-finding ID scheme."""
+    source = _SKILL_FILE.read_text(encoding="utf-8")
+    assert re.search(r"FG-D\d+-\d+", source), (
+        "audit-feature-gates must define a per-finding ID scheme (e.g. FG-D2-01) "
+        "so validate-audit can address individual findings"
+    )
+
+
+def test_audit_feature_gates_block_warn_file_line_mandate():
+    """BLOCK and WARN findings must require file:line references."""
+    source = _SKILL_FILE.read_text(encoding="utf-8")
+    # Verify file:line mandate appears co-located with BLOCK or WARN (within 200 chars)
+    has_file_line_mandate = bool(
+        re.search(r"(?:BLOCK|WARN)\b.{0,200}file:line|file:line.{0,200}(?:BLOCK|WARN)\b", source)
+    )
+    assert has_file_line_mandate, (
+        "audit-feature-gates must mandate file:line references on BLOCK and WARN findings "
+        "so validate-audit subagents can verify them against actual code"
+    )
+
+
+def test_audit_feature_gates_remediation_checklist_per_dimension():
+    """Each dimension must have a Remediation Checklist in the output report."""
+    source = _SKILL_FILE.read_text()
+    assert "Remediation Checklist" in source, (
+        "audit-feature-gates report format must include a Remediation Checklist "
+        "per dimension, matching the pattern established by audit-cohesion"
+    )

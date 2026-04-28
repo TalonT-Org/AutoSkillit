@@ -8,6 +8,7 @@ Facade: re-exports from _merge_queue_classifier and _merge_queue_repo_state.
 from __future__ import annotations
 
 import asyncio
+import random  # noqa: F401 — re-exported for test monkeypatching (_mq.random.uniform)
 import re
 import time
 from collections.abc import Callable
@@ -19,15 +20,27 @@ import httpx
 from autoskillit.core import PRState, get_logger
 from autoskillit.execution._merge_queue_classifier import (
     _QUERY_FIELD_MAP,
+    KNOWN_MQ_MERGE_STATE_STATUSES,  # noqa: F401 — re-export for callers
     CIStillRunning,
+    ClassificationResult,  # noqa: F401 — re-export for callers
+    ClassifierInconclusive,  # noqa: F401 — re-export for callers
     NoPositiveSignal,
     PRFetchState,
     _classify_pr_state,
+    _is_not_enrolled,  # noqa: F401 — re-export for callers
+    _is_positive_dropped_healthy,  # noqa: F401 — re-export for callers
+    _is_positive_stall,  # noqa: F401 — re-export for callers
 )
 from autoskillit.execution._merge_queue_repo_state import (
     _GRAPHQL_ENDPOINT,
+    _RATE_LIMIT_MAX_ATTEMPTS,  # noqa: F401 — re-export for callers
+    _RATE_LIMIT_SECONDARY_MARKER,  # noqa: F401 — re-export for callers
+    _REPO_STATE_QUERY,  # noqa: F401 — re-export for callers
     _has_merge_group_trigger,  # noqa: F401 — re-export for callers
+    _is_secondary_rate_limit,  # noqa: F401 — re-export for callers
     _push_trigger_applies_to_branch,  # noqa: F401 — re-export for callers
+    _retry_after_seconds,  # noqa: F401 — re-export for callers
+    _text_has_push_trigger,  # noqa: F401 — re-export for callers
     fetch_repo_merge_state,  # noqa: F401 — re-export for callers
 )
 from autoskillit.execution.github import github_headers, make_tracked_httpx_client

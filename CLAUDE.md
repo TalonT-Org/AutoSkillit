@@ -189,9 +189,13 @@ generic_automation_mcp/
 │   ├── _process_race.py     #   RaceAccumulator, resolve_termination
 │   ├── quota.py             #   QuotaStatus, cache, check_and_sleep_if_needed
 │   ├── ci.py                #   GitHub Actions CI watcher (httpx, never raises)
-│   ├── merge_queue.py       #   GitHub merge queue watcher
+│   ├── merge_queue.py       #   GitHub merge queue watcher (facade)
+│   ├── _merge_queue_classifier.py #  PRFetchState, ClassificationResult, ClassifierInconclusive, _classify_pr_state
+│   ├── _merge_queue_repo_state.py #  fetch_repo_merge_state, _text_has_push_trigger, _has_merge_group_trigger
 │   ├── github.py            #   GitHub issue fetcher
-│   ├── session.py           #   ClaudeSessionResult, extract_token_usage
+│   ├── session.py           #   ClaudeSessionResult, extract_token_usage (facade)
+│   ├── _session_model.py    #   ContentState, ClaudeSessionResult, extract_token_usage, parse_session_result
+│   ├── _session_content.py  #   _check_expected_patterns, _check_session_content, _evaluate_content_state
 │   ├── remote_resolver.py   #   upstream > origin, clone-aware
 │   ├── testing.py           #   Pytest output parsing + pass/fail adjudication
 │   ├── clone_guard.py       #   Clone contamination guard — detect and revert direct changes to clone CWD

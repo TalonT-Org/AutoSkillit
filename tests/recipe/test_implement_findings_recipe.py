@@ -10,7 +10,11 @@ from autoskillit.recipe.schema import RecipeKind
 from autoskillit.recipe.validator import run_semantic_rules
 from tests.recipe.conftest import NO_AUTOSKILLIT_IMPORT
 
-pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+pytestmark = [
+    pytest.mark.layer("recipe"),
+    pytest.mark.small,
+    pytest.mark.xdist_group(name="implement_findings_recipe"),
+]
 
 RECIPE_PATH = builtin_recipes_dir() / "implement-findings.yaml"
 

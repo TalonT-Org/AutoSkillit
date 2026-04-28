@@ -98,9 +98,15 @@ def test_load_execution_map_invalid_json(tmp_path: Path) -> None:
 def test_parse_and_resume_reads_dispatch_id_from_env(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("AUTOSKILLIT_DISPATCH_ID", "env-dispatch-99")
+    dispatch_id = "env-dispatch-99"
+    monkeypatch.setenv("AUTOSKILLIT_DISPATCH_ID", dispatch_id)
+    write_sidecar_entry(
+        dispatch_id, "https://github.com/o/r/issues/7", "completed", project_dir=str(tmp_path)
+    )
     result = parse_and_resume(
         "https://github.com/o/r/issues/7",
         project_dir=str(tmp_path),
     )
-    assert "remaining_urls_json" in result
+    # Proves the env dispatch_id was used: the pre-completed issue is filtered out
+    assert json.loads(result["remaining_urls_json"]) == []
+    assert result["completed_count"] == "1"

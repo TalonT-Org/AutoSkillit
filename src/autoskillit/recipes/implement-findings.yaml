@@ -63,7 +63,7 @@ steps:
       issue_urls_csv: "${{ inputs.issue_urls }}"
       project_dir: "${{ inputs.source_dir }}"
     capture:
-      remaining_issue_urls_json: "${{ result.remaining_urls_json }}"
+      remaining_urls_json: "${{ result.remaining_urls_json }}"
       completed_count: "${{ result.completed_count }}"
     on_success: route_bem_mode
     on_failure: escalate_stop
@@ -104,7 +104,7 @@ steps:
   run_bem_internally:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:build-execution-map ${{ context.remaining_issue_urls_json }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:build-execution-map ${{ context.remaining_urls_json }} ${{ inputs.base_branch }}"
       cwd: "${{ inputs.source_dir }}"
       step_name: "run_bem_internally"
     capture:
@@ -135,14 +135,14 @@ steps:
   claim_all_issues:
     tool: run_cmd
     with:
-      cmd: "echo 'claiming_all=${{ context.remaining_issue_urls_json }} completed_already=${{ context.completed_count }} total_groups=${{ context.total_groups }} groups=${{ context.groups_json }}'"
+      cmd: "echo 'claiming_all=${{ context.remaining_urls_json }} completed_already=${{ context.completed_count }} total_groups=${{ context.total_groups }} groups=${{ context.groups_json }}'"
       cwd: "${{ inputs.source_dir }}"
       step_name: "claim_all_issues"
     on_success: process_groups
     on_failure: escalate_stop
     note: >
       Upfront claim: call claim_issue for EACH URL in
-      context.remaining_issue_urls_json. Use allow_reentry: 'true' to handle
+      context.remaining_urls_json. Use allow_reentry: 'true' to handle
       the resume case where issues were already claimed in a prior run.
       Do this before beginning group processing — this is the process-issues
       pattern that prevents concurrent claim conflicts.
@@ -152,7 +152,7 @@ steps:
   process_groups:
     tool: run_cmd
     with:
-      cmd: "printf 'groups_total=%s\n' '${{ context.total_groups }}'  # groups=${{ context.groups_json }}"
+      cmd: "printf 'groups_total=%s\n' '${{ context.total_groups }}'"
       cwd: "${{ inputs.source_dir }}"
       step_name: "process_groups"
     on_success: next_or_done
@@ -197,6 +197,8 @@ steps:
     on_result:
       - when: "${{ result.next }} == more_groups"
         route: process_groups
+      - when: "${{ result.next }} == all_done"
+        route: batch_cleanup
       - route: batch_cleanup
     note: >
       Routing step — no tool call. The agent evaluates whether more groups

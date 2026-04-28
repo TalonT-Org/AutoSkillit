@@ -144,14 +144,14 @@ def check_loop_iteration(
 
 
 def patch_pr_token_summary(pr_url: str, cwd: str, log_dir: str = "") -> dict[str, str]:
-    import re as _re  # noqa: PLC0415
+    import re  # noqa: PLC0415
     import subprocess  # noqa: PLC0415
     import time  # noqa: PLC0415
 
     from autoskillit.execution import resolve_log_dir  # noqa: PLC0415
     from autoskillit.pipeline import DefaultTokenLog, TelemetryFormatter  # noqa: PLC0415
 
-    m = _re.match(r"https://github\.com/([^/]+)/([^/]+)/pull/(\d+)", pr_url)
+    m = re.match(r"https://github\.com/([^/]+)/([^/]+)/pull/(\d+)", pr_url)
     if not m:
         return {"success": "false", "error": f"Invalid PR URL: {pr_url}"}
 
@@ -185,7 +185,7 @@ def patch_pr_token_summary(pr_url: str, cwd: str, log_dir: str = "") -> dict[str
     if not current_body or current_body == "null":
         return {"success": "false", "error": "PR body is empty"}
 
-    section_re = _re.compile(r"\n*## Token Usage Summary\n.*?(?=\n## |\Z)", _re.DOTALL)
+    section_re = re.compile(r"\n*## Token Usage Summary\n.*?(?=\n## |\Z)", re.DOTALL)
     if section_re.search(current_body):
         new_body = section_re.sub("\n\n" + table, current_body)
     else:

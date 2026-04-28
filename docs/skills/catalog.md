@@ -37,8 +37,7 @@ Located under `src/autoskillit/skills_extended/`. Grouped by purpose:
 `generate-report`, `troubleshoot-experiment`
 
 ### Research and review
-`review-design`, `stage-data`, `bundle-local-report`, `reload-session`,
-`compose-research-pr`, `prepare-research-pr`, `review-research-pr`
+`review-design`, `stage-data`, `bundle-local-report`, `reload-session`
 
 ## Tier 3 — pipeline / automation
 
@@ -49,7 +48,8 @@ runs:
 `resolve-review`, `implement-worktree-no-merge`, `resolve-failures`,
 `retry-worktree`, `resolve-merge-conflicts`, `audit-impl`, `smoke-task`,
 `report-bug`, `pipeline-summary`, `diagnose-ci`, `verify-diag`,
-`resolve-claims-review`, `resolve-design-review`, `resolve-research-review`
+`resolve-claims-review`, `resolve-design-review`, `resolve-research-review`,
+`compose-research-pr`, `prepare-research-pr`, `review-research-pr`
 
 ## arch-lens family (13)
 

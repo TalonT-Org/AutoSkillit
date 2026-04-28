@@ -1116,7 +1116,7 @@ steps:
       pr_url: "${{ context.pr_url }}"
     on_result:
       - when: "${{ result.conclusion }} == 'success'"
-        route: register_clone_success
+        route: patch_token_summary
       - when: "${{ result.conclusion }} == 'timed_out'"
         route: ci_watch_pr
       - route: register_clone_failure
@@ -1143,6 +1143,19 @@ steps:
       Fetches logs and writes a diagnosis to {{AUTOSKILLIT_TEMP}}/diagnose-ci/ for human inspection.
       diagnosis_path is captured for observability — no automated remediation for
       integration CI, so always routes to register_clone_failure.
+
+  patch_token_summary:
+    description: "Collect all pipeline token data and patch the PR body with complete summary"
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.patch_pr_token_summary"
+      timeout: 60
+      pr_url: "${{ context.pr_url }}"
+      cwd: "${{ context.work_dir }}"
+    on_success: register_clone_success
+    on_failure: register_clone_success
+    note: >
+      Patches PR body with complete token summary; failure never blocks pipeline completion.
 
   register_clone_success:
     description: "Register clone as cleanup candidate for batch deletion"

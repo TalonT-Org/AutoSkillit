@@ -317,7 +317,7 @@ class TestResearchRecipeStructure:
         conditions = step.on_result.conditions
         default = next((c for c in conditions if not c.when), None)
         assert default is not None
-        assert default.route == "research_complete"
+        assert default.route == "patch_token_summary"
 
     def test_archival_capture_experiment_branch_step(self, recipe) -> None:
         """capture_experiment_branch captures experiment_branch from git rev-parse."""
@@ -326,7 +326,7 @@ class TestResearchRecipeStructure:
         assert step.tool == "run_cmd"
         assert "experiment_branch" in step.capture
         assert step.on_success == "create_artifact_branch"
-        assert step.on_failure == "research_complete"
+        assert step.on_failure == "patch_token_summary"
 
     def test_archival_create_artifact_branch_step(self, recipe) -> None:
         """create_artifact_branch creates temp worktree and captures artifact_branch."""
@@ -335,7 +335,7 @@ class TestResearchRecipeStructure:
         assert step.tool == "run_cmd"
         assert "artifact_branch" in step.capture
         assert step.on_success == "open_artifact_pr"
-        assert step.on_failure == "research_complete"
+        assert step.on_failure == "patch_token_summary"
 
     def test_archival_create_artifact_branch_uses_research_checkout(self, recipe) -> None:
         """create_artifact_branch must use git checkout <branch> -- research/ pattern."""
@@ -351,7 +351,7 @@ class TestResearchRecipeStructure:
         assert step.tool == "run_cmd"
         assert "artifact_pr_url" in step.capture
         assert step.on_success == "tag_experiment_branch"
-        assert step.on_failure == "research_complete"
+        assert step.on_failure == "patch_token_summary"
 
     def test_archival_tag_experiment_branch_step(self, recipe) -> None:
         """tag_experiment_branch creates annotated archive tag and captures archive_tag."""
@@ -360,7 +360,7 @@ class TestResearchRecipeStructure:
         assert step.tool == "run_cmd"
         assert "archive_tag" in step.capture
         assert step.on_success == "close_experiment_pr"
-        assert step.on_failure == "research_complete"
+        assert step.on_failure == "patch_token_summary"
 
     def test_archival_tag_uses_archive_prefix(self, recipe) -> None:
         """Tag name must use archive/research/ prefix convention."""
@@ -373,8 +373,8 @@ class TestResearchRecipeStructure:
         assert "close_experiment_pr" in recipe.steps
         step = recipe.steps["close_experiment_pr"]
         assert step.tool == "run_cmd"
-        assert step.on_success == "research_complete"
-        assert step.on_failure == "research_complete"
+        assert step.on_success == "patch_token_summary"
+        assert step.on_failure == "patch_token_summary"
 
     def test_archival_close_pr_references_artifact_and_tag(self, recipe) -> None:
         """close_experiment_pr comment must reference both artifact PR and archive tag."""
@@ -394,8 +394,8 @@ class TestResearchRecipeStructure:
         ]
         for name in archival_steps:
             step = recipe.steps[name]
-            assert step.on_failure == "research_complete", (
-                f"{name}.on_failure must be research_complete for graceful degradation"
+            assert step.on_failure == "patch_token_summary", (
+                f"{name}.on_failure must be patch_token_summary for graceful degradation"
             )
 
     def test_re_push_research_routes_to_finalize_bundle_render(self, recipe) -> None:

@@ -79,6 +79,14 @@ def test_skill_command_guard_no_silent_broad_except():
                 )
 
 
+# CD5
+def test_doctor_py_under_line_limit():
+    """CD5: _doctor.py must be ≤250 lines after split."""
+    p = SRC_ROOT / "cli" / "_doctor.py"
+    lines = p.read_text().splitlines()
+    assert len(lines) <= 250, f"_doctor.py is {len(lines)} lines — split required"
+
+
 # CD4
 def test_quota_check_no_silent_broad_except():
     """CC-2: quota_guard.py must not have bare 'except Exception: sys.exit(0)'.

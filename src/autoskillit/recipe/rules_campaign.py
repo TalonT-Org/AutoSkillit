@@ -7,7 +7,7 @@ from collections import Counter
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.core import RECIPE_PACK_REGISTRY, Severity, get_logger
+from autoskillit.core import RECIPE_PACK_REGISTRY, DispatchGateType, Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 from autoskillit.recipe.schema import CAMPAIGN_REF_RE, CampaignDispatch, RecipeKind
@@ -547,7 +547,7 @@ def _check_autoskillit_version_compatible(ctx: ValidationContext) -> list[RuleFi
     return []
 
 
-_VALID_GATE_TYPES: frozenset[str] = frozenset({"confirm"})
+_VALID_GATE_TYPES: frozenset[DispatchGateType] = frozenset({DispatchGateType.CONFIRM})
 
 
 @semantic_rule(
@@ -589,7 +589,7 @@ def _check_gate_dispatch_has_message(ctx: ValidationContext) -> list[RuleFinding
     for d in ctx.recipe.dispatches:
         if d.gate is None:
             continue
-        if not d.message.strip():
+        if not (d.message or "").strip():
             findings.append(
                 RuleFinding(
                     rule="gate-dispatch-has-message",

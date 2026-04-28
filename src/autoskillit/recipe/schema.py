@@ -10,7 +10,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Final
 
-from autoskillit.core import RECIPE_PACK_TAGS, RecipeSource
+from autoskillit.core import RECIPE_PACK_TAGS, DispatchGateType, RecipeSource
 
 AUTOSKILLIT_VERSION_KEY: Final = "autoskillit_version"
 RECIPE_VERSION_KEY: Final = "recipe_version"
@@ -134,8 +134,8 @@ class CampaignDispatch:
     )  # string-only: YAML pass-through key-value pairs, not structured RecipeIngredient objects
     depends_on: list[str] = field(default_factory=list)
     capture: dict[str, str] = field(default_factory=dict)
-    gate: str | None = None
-    message: str = ""
+    gate: DispatchGateType | None = None
+    message: str | None = None
 
 
 @dataclass

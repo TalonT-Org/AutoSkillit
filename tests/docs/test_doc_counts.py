@@ -404,9 +404,13 @@ def test_authoring_recipe_step_fields_match_schema() -> None:
     assert "`with_args`" in authoring
     assert "`on_result`" in authoring
     assert "`retries`" in authoring
-    field_summary_line = [
-        line for line in authoring.splitlines() if "with_args" in line or "id`," in line
-    ][0]
+    field_summary_line = next(
+        (line for line in authoring.splitlines() if "with_args" in line or "id`," in line),
+        None,
+    )
+    assert field_summary_line is not None, (
+        "authoring.md must contain a line listing RecipeStep fields (with_args or id`,)"
+    )
     assert "id`," not in field_summary_line
     assert "params`," not in field_summary_line
     assert "verdict_routes`" not in field_summary_line

@@ -1941,6 +1941,30 @@ skills:
     write_behavior: conditional
     write_expected_when:
       - "verdict\\s*=\\s*validated"
+  promote-to-main:
+    inputs:
+    - name: integration_branch
+      type: string
+      required: false
+    - name: base_branch
+      type: string
+      required: false
+    outputs:
+    - name: pr_url
+      type: string
+    - name: verdict
+      type: string
+      allowed_values: [created, dry_run, preflight_failed]
+    - name: category_summary
+      type: string
+    - name: pr_body_path
+      type: file_path
+    expected_output_patterns:
+    - "verdict\\s*=\\s*(created|dry_run|preflight_failed)"
+    pattern_examples:
+    - "pr_url = https://github.com/org/repo/pull/42\nverdict = created\ncategory_summary = 14 fixes, 3 features\n%%ORDER_UP%%"
+    - "pr_url = \nverdict = dry_run\ncategory_summary = 14 fixes, 3 features\n%%ORDER_UP%%"
+    write_behavior: always
 callable_contracts:
   autoskillit.smoke_utils.check_review_loop:
     outputs:

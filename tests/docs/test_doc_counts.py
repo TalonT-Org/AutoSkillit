@@ -259,6 +259,7 @@ def test_bundled_recipe_count_is_7() -> None:
         "implementation-groups",
         "merge-prs",
         "planner",
+        "promote-to-main-wrapper",
         "remediation",
         "research",
     ]

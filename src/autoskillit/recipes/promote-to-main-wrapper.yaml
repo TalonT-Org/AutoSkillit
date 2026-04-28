@@ -9,6 +9,12 @@ recipe_version: "1.0.0"
 requires_packs:
   - github
 
+kitchen_rules:
+  - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
+    Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the
+    orchestrator. All work is delegated through run_skill."
+  - "Route to on_failure — never investigate or fix directly from the orchestrator."
+
 ingredients:
   integration_branch:
     description: "Branch to promote (must exist ahead of base_branch)"

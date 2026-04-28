@@ -497,6 +497,13 @@ def _check_uncaptured_handoff_consumer(ctx: ValidationContext) -> list[RuleFindi
     return findings
 
 
+def _get_provided_args(with_args: dict) -> set[str]:
+    _nested = with_args.get("args")
+    nested_args: set[str] = set(_nested.keys()) if isinstance(_nested, dict) else set()
+    top_level_args = set(with_args.keys()) - {"callable", "timeout", "args"}
+    return nested_args | top_level_args
+
+
 @semantic_rule(
     name="missing-callable-input",
     description="run_python steps must pass all required inputs declared in callable contract",
@@ -515,10 +522,7 @@ def _check_missing_callable_input(ctx: ValidationContext) -> list[RuleFinding]:
         if contract is None:
             continue
         required_inputs = {inp.name for inp in contract.inputs if inp.required}
-        _nested = step.with_args.get("args")
-        nested_args: set[str] = set(_nested.keys()) if isinstance(_nested, dict) else set()
-        top_level_args = set(step.with_args.keys()) - {"callable", "timeout", "args"}
-        provided_args = nested_args | top_level_args
+        provided_args = _get_provided_args(step.with_args)
         missing = required_inputs - provided_args
         for arg_name in sorted(missing):
             findings.append(
@@ -552,16 +556,13 @@ def _check_callable_signature_mismatch(ctx: ValidationContext) -> list[RuleFindi
             module_path, attr_name = callable_path.rsplit(".", 1)
             mod = importlib.import_module(module_path)
             func = getattr(mod, attr_name)
+            sig = inspect.signature(func)
         except (ImportError, AttributeError, ValueError):
             continue
-        sig = inspect.signature(func)
         if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
             continue
         valid_params = set(sig.parameters.keys())
-        _nested = step.with_args.get("args")
-        nested_args: set[str] = set(_nested.keys()) if isinstance(_nested, dict) else set()
-        top_level_args = set(step.with_args.keys()) - {"callable", "timeout", "args"}
-        provided_args = nested_args | top_level_args
+        provided_args = _get_provided_args(step.with_args)
         invalid = provided_args - valid_params
         for arg_name in sorted(invalid):
             findings.append(

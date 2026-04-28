@@ -415,7 +415,13 @@ def resume_campaign_from_state(
                 if d.status in _COMPLETED_STATUSES:
                     completed_lines.append(f"- {d.name}: {d.status}")
                 elif (
-                    d.status not in (DispatchStatus.INTERRUPTED, DispatchStatus.RUNNING)
+                    d.status
+                    not in {
+                        DispatchStatus.INTERRUPTED,
+                        DispatchStatus.RUNNING,
+                        DispatchStatus.REFUSED,
+                        DispatchStatus.RELEASED,
+                    }
                     and not next_name
                 ):
                     next_name = d.name

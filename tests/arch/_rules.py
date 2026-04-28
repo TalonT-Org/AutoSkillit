@@ -114,7 +114,7 @@ _DISPATCH_TABLE_EXEMPT_FUNCTIONS = frozenset(
     }
 )
 
-# ── RULES tuple — 8 entries ───────────────────────────────────────────────────
+# ── RULES tuple — 9 entries ───────────────────────────────────────────────────
 
 RULES: tuple[RuleDescriptor, ...] = (
     RuleDescriptor(
@@ -257,6 +257,20 @@ RULES: tuple[RuleDescriptor, ...] = (
         exemptions=frozenset(),
         severity="error",
         defense_standard="DS-008",
+    ),
+    RuleDescriptor(
+        rule_id="ARCH-009",
+        name="logger-variable-name",
+        lens="operational",
+        description="The variable receiving get_logger() must be named 'logger'.",
+        rationale=(
+            "A single canonical name eliminates the _log/_logger/logger split across 90+ files. "
+            "Consistent naming makes logger call sites instantly recognizable at a glance "
+            "and removes ambiguity about module-level binding conventions."
+        ),
+        exemptions=frozenset(),
+        severity="error",
+        defense_standard="DS-009",
     ),
 )
 

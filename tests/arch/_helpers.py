@@ -156,6 +156,25 @@ class ArchitectureViolationVisitor(ast.NodeVisitor):
 
         self.generic_visit(node)
 
+    def visit_Assign(self, node: ast.Assign) -> None:  # ARCH-009
+        """logger variable name: get_logger() result must be bound to 'logger'."""
+        if isinstance(node.value, ast.Call):
+            call = node.value
+            func_name: str | None = None
+            if isinstance(call.func, ast.Name):
+                func_name = call.func.id
+            elif isinstance(call.func, ast.Attribute):
+                func_name = call.func.attr
+            if func_name == "get_logger":
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and target.id != "logger":
+                        self._add(
+                            node,
+                            _RULE["ARCH-009"],
+                            f"get_logger() result bound to '{target.id}'; must be named 'logger'",
+                        )
+        self.generic_visit(node)
+
     def visit_ExceptHandler(self, node: ast.ExceptHandler) -> None:
         """Rule ARCH-003 (visitor): broad except without logger or re-raise -> silent swallow."""
         is_broad = node.type is None or (

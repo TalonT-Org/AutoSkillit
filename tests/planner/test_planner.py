@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 from pathlib import Path
 
@@ -60,11 +61,32 @@ def test_sequential_state_machine_removed() -> None:
         assert not hasattr(m, name), f"{name} still exists — should have been removed"
 
 
-def test_create_run_dir_creates_timestamped_directory(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("AUTOSKILLIT_TEMP", str(tmp_path))
+def test_create_run_dir_requires_temp_dir_argument() -> None:
+    """create_run_dir must accept temp_dir as explicit parameter, not read os.environ."""
     from autoskillit.planner import create_run_dir
 
-    result = create_run_dir()
+    sig = inspect.signature(create_run_dir)
+    assert "temp_dir" in sig.parameters, (
+        "create_run_dir must accept temp_dir as an explicit keyword argument"
+    )
+    required = [p for p in sig.parameters.values() if p.default is inspect.Parameter.empty]
+    assert len(required) >= 1
+
+
+def test_create_run_dir_does_not_read_environ(tmp_path, monkeypatch) -> None:
+    """create_run_dir must not depend on AUTOSKILLIT_TEMP env var."""
+    from autoskillit.planner import create_run_dir
+
+    monkeypatch.delenv("AUTOSKILLIT_TEMP", raising=False)
+    result = create_run_dir(temp_dir=str(tmp_path))
+    assert result["planner_dir"]
+    assert Path(result["planner_dir"]).exists()
+
+
+def test_create_run_dir_creates_timestamped_directory(tmp_path) -> None:
+    from autoskillit.planner import create_run_dir
+
+    result = create_run_dir(temp_dir=str(tmp_path))
 
     assert "planner_dir" in result
     planner_dir = Path(result["planner_dir"])
@@ -76,12 +98,11 @@ def test_create_run_dir_creates_timestamped_directory(tmp_path, monkeypatch) -> 
     assert (planner_dir / "work_packages").is_dir()
 
 
-def test_create_run_dir_unique_across_calls(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("AUTOSKILLIT_TEMP", str(tmp_path))
+def test_create_run_dir_unique_across_calls(tmp_path) -> None:
     from autoskillit.planner import create_run_dir
 
-    r1 = create_run_dir()
-    r2 = create_run_dir()
+    r1 = create_run_dir(temp_dir=str(tmp_path))
+    r2 = create_run_dir(temp_dir=str(tmp_path))
 
     assert r1["planner_dir"] != r2["planner_dir"]
     planner_dir2 = Path(r2["planner_dir"])

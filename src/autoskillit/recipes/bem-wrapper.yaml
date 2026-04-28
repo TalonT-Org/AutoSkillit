@@ -75,7 +75,7 @@ steps:
     tool: run_cmd
     with:
       cmd: |
-        MAP_FILE="$AUTOSKILLIT_TEMP/bem-fallback-map.json"
+        MAP_FILE="{{AUTOSKILLIT_TEMP}}/bem-fallback-map.json"
         ISSUE_URLS="${{ inputs.issue_urls }}"
         NUMS=$(echo "$ISSUE_URLS" | tr ',' '\n' | grep -oE 'issues/[0-9]+' | grep -oE '[0-9]+' | tr '\n' ',' | sed 's/,$//')
         NUMS="$NUMS" MAP_FILE="$MAP_FILE" python3 -c "
@@ -137,5 +137,5 @@ steps:
     action: stop
     message: >-
       BEM wrapper failed — fallback execution map could not be written to disk.
-      Human intervention required. Check $AUTOSKILLIT_TEMP permissions and
+      Human intervention required. Check {{AUTOSKILLIT_TEMP}} permissions and
       issue URLs in the ingredients.

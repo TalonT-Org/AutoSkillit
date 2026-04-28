@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import importlib
+import inspect
+
 from autoskillit.core import (
     PIPELINE_FORBIDDEN_TOOLS,
     SKILL_TOOLS,
@@ -491,4 +494,79 @@ def _check_uncaptured_handoff_consumer(ctx: ValidationContext) -> list[RuleFindi
                 )
             )
 
+    return findings
+
+
+@semantic_rule(
+    name="missing-callable-input",
+    description="run_python steps must pass all required inputs declared in callable contract",
+    severity=Severity.ERROR,
+)
+def _check_missing_callable_input(ctx: ValidationContext) -> list[RuleFinding]:
+    findings = []
+    manifest = load_bundled_manifest()
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_python":
+            continue
+        callable_path = step.with_args.get("callable", "")
+        if not callable_path:
+            continue
+        contract = get_callable_contract(callable_path, manifest)
+        if contract is None:
+            continue
+        required_inputs = {inp.name for inp in contract.inputs if inp.required}
+        _args = step.with_args.get("args")
+        provided_args: set[str] = set(_args.keys()) if isinstance(_args, dict) else set()
+        missing = required_inputs - provided_args
+        for arg_name in sorted(missing):
+            findings.append(
+                RuleFinding(
+                    rule="missing-callable-input",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' calls '{callable_path}' but does not pass "
+                        f"required input '{arg_name}'. Add it to the step's args block."
+                    ),
+                )
+            )
+    return findings
+
+
+@semantic_rule(
+    name="callable-signature-mismatch",
+    description="run_python step args keys must match the callable's function signature",
+    severity=Severity.ERROR,
+)
+def _check_callable_signature_mismatch(ctx: ValidationContext) -> list[RuleFinding]:
+    findings = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_python":
+            continue
+        callable_path = step.with_args.get("callable", "")
+        if not callable_path:
+            continue
+        try:
+            module_path, attr_name = callable_path.rsplit(".", 1)
+            mod = importlib.import_module(module_path)
+            func = getattr(mod, attr_name)
+        except (ImportError, AttributeError, ValueError):
+            continue
+        sig = inspect.signature(func)
+        valid_params = set(sig.parameters.keys())
+        _args = step.with_args.get("args")
+        provided_args: set[str] = set(_args.keys()) if isinstance(_args, dict) else set()
+        invalid = provided_args - valid_params
+        for arg_name in sorted(invalid):
+            findings.append(
+                RuleFinding(
+                    rule="callable-signature-mismatch",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' passes arg '{arg_name}' to '{callable_path}' "
+                        f"but the callable does not accept that parameter."
+                    ),
+                )
+            )
     return findings

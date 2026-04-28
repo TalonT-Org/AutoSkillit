@@ -66,10 +66,18 @@ def test_bem_wrapper_routing_chain():
 
 
 def test_bem_wrapper_fallback_references_autoskillit_temp():
-    """Fallback map must write to $AUTOSKILLIT_TEMP, not raw /tmp or hardcoded paths."""
-    recipe = _load()
-    cmd = recipe.steps["emit_fallback_map"].with_args["cmd"]
-    assert "$AUTOSKILLIT_TEMP" in cmd
+    """Fallback map must reference {{AUTOSKILLIT_TEMP}} placeholder, not bare $AUTOSKILLIT_TEMP."""
+    raw = RECIPE_PATH.read_text()
+    assert "{{AUTOSKILLIT_TEMP}}" in raw
+    assert "$AUTOSKILLIT_TEMP" not in raw
+
+
+def test_emit_fallback_map_uses_placeholder_not_shell_var():
+    """run_cmd steps must use {{AUTOSKILLIT_TEMP}} placeholder, not $AUTOSKILLIT_TEMP."""
+    raw = RECIPE_PATH.read_text()
+    assert "$AUTOSKILLIT_TEMP" not in raw, (
+        "Shell variable $AUTOSKILLIT_TEMP found — use {{AUTOSKILLIT_TEMP}} placeholder"
+    )
 
 
 def test_bem_wrapper_fallback_writes_file_not_json_to_stdout():

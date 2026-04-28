@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 import secrets
 from datetime import UTC, datetime
@@ -33,12 +32,11 @@ def _natural_sort_key(s: str) -> list[int | str]:
     return [int(tok) if tok.isdigit() else tok for tok in _NATURAL_SORT_RE.split(s)]
 
 
-def create_run_dir() -> RunDirResult:
-    temp = os.environ.get("AUTOSKILLIT_TEMP")
-    if not temp:
-        raise RuntimeError("AUTOSKILLIT_TEMP must be set before calling create_run_dir()")
+def create_run_dir(temp_dir: str) -> RunDirResult:
+    if not temp_dir:
+        raise ValueError("temp_dir must be a non-empty path")
     stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-    run_dir = Path(temp) / "planner" / f"run-{stamp}-{secrets.token_hex(4)}"
+    run_dir = Path(temp_dir) / "planner" / f"run-{stamp}-{secrets.token_hex(4)}"
     for sub in ("phases", "assignments", "work_packages"):
         (run_dir / sub).mkdir(parents=True, exist_ok=True)
     return RunDirResult(planner_dir=str(run_dir))

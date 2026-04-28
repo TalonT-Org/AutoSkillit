@@ -38,6 +38,8 @@ steps:
     tool: run_python
     with:
       callable: "autoskillit.planner.create_run_dir"
+      args:
+        temp_dir: "{{AUTOSKILLIT_TEMP}}"
     capture:
       planner_dir: "${{ result.planner_dir }}"
     on_success: analyze

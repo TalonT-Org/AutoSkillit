@@ -115,6 +115,9 @@ task install-worktree   # or equivalent for the project type
 
 ### Step 4: Implement Phase by Phase
 
+NEVER pause for confirmation between phases. Once the plan is loaded, execute all
+phases sequentially without asking the user whether to proceed to the next phase.
+
 For each phase:
 1. Announce phase objective and files to modify
 2. Implement changes guided by understanding from Step 2

@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.contracts._anti_confirm_helpers import ANTI_CONFIRM_RE as _ANTI_CONFIRM_RE
+
 
 def _sous_chef_text() -> str:
     skill_md = (
@@ -147,4 +149,17 @@ def test_sous_chef_execution_map_group_iteration() -> None:
     )
     assert "merge" in lower and ("wait" in lower or "before" in lower or "mandatory" in lower), (
         "EXECUTION MAP section must contain mandatory merge-wait rule between groups"
+    )
+
+
+def test_sous_chef_execution_map_has_anti_confirmation() -> None:
+    """EXECUTION MAP section must contain explicit anti-confirmation instruction between groups."""
+    text = _sous_chef_text()
+    exec_map_pos = text.find("EXECUTION MAP")
+    assert exec_map_pos != -1, "sous-chef SKILL.md must contain an EXECUTION MAP section"
+    next_section = text.find("\n## ", exec_map_pos + 1)
+    section_text = text[exec_map_pos:next_section] if next_section != -1 else text[exec_map_pos:]
+    assert _ANTI_CONFIRM_RE.search(section_text) is not None, (
+        "EXECUTION MAP section must contain an explicit anti-confirmation instruction "
+        "(e.g., 'NEVER use AskUserQuestion to ask whether to proceed to the next group')"
     )

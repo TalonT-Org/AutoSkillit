@@ -230,6 +230,10 @@ When dispatching from an execution map:
 4. **Single-issue groups skip wavefront.** If a group has `parallel: false` or contains
    only one issue, run it as a single pipeline — no wavefront scheduling needed.
 
+5. **Do not pause for confirmation between groups.** Once merge-wait verifies all
+   Group N PRs have merged, dispatch Group N+1 immediately. NEVER use
+   AskUserQuestion to ask whether to proceed to the next group.
+
 ---
 
 ## STEP NAME IMMUTABILITY — MANDATORY

@@ -151,6 +151,9 @@ Only explore systems related to the **remaining** phases. Do NOT re-explore alre
 
 Initialize a counter before iterating: `PHASES_IMPLEMENTED=0`
 
+NEVER use AskUserQuestion between phase iterations. Each phase begins immediately
+after the previous phase completes.
+
 For each remaining/incomplete phase, begin implementation immediately (no announcement):
 1. Implement changes
 2. Run per-phase verification if plan specifies it

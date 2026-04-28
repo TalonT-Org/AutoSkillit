@@ -24,8 +24,8 @@ def test_project_config_has_base_ref():
 
 
 def test_hook_registry_tests_in_infra():
-    """AC4: test_hook_registry.py must live in tests/infra/."""
-    assert (REPO_ROOT / "tests/infra/test_hook_registry.py").is_file()
+    """AC4: test_hook_registry.py must live in tests/hooks/."""
+    assert (REPO_ROOT / "tests/hooks/test_hook_registry.py").is_file()
     assert not (REPO_ROOT / "tests/test_hook_registry.py").is_file()
 
 

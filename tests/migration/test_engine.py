@@ -591,13 +591,14 @@ class TestDiagramMigrationAdapter:
     async def test_diagram_adapter_migrate_writes_file(
         self, tmp_path: Path, sample_recipe_yaml_for_diagram: Path
     ) -> None:
-        """DG-19: DiagramMigrationAdapter.migrate() writes diagram file."""
-        import shutil
+        """DG-19: DiagramMigrationAdapter.migrate() delegates to generate_recipe_diagram."""
+        from unittest.mock import patch
 
         recipes_dir = tmp_path / ".autoskillit" / "recipes"
         diagrams_dir = recipes_dir / "diagrams"
         diagrams_dir.mkdir(parents=True)
-        shutil.copy2(sample_recipe_yaml_for_diagram, recipes_dir / "my-recipe.yaml")
+        recipe_yaml = recipes_dir / "my-recipe.yaml"
+        recipe_yaml.write_text("name: my-recipe\n")
 
         file = MigrationFile(
             name="my-recipe",
@@ -605,10 +606,13 @@ class TestDiagramMigrationAdapter:
             file_type="diagram",
             current_version=None,
         )
-        result = await DiagramMigrationAdapter().migrate(file, temp_dir=tmp_path / "temp")
+        with patch("autoskillit.recipe.generate_recipe_diagram") as mock_gen:
+            mock_gen.return_value = None
+            result = await DiagramMigrationAdapter().migrate(file, temp_dir=tmp_path / "temp")
+
+        mock_gen.assert_called_once()
         assert result.success is True
 
-    # DG-20
     def test_diagram_adapter_validate_passes_when_hash_present(self, tmp_path: Path) -> None:
         """DG-20: DiagramMigrationAdapter.validate() passes when hash comment present."""
         md = tmp_path / "test.md"

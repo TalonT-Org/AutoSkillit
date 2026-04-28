@@ -25,7 +25,7 @@ async def test_enqueue_pr_delegates_to_watcher_enqueue(tool_ctx):
     tool_ctx.merge_queue_watcher = watcher
 
     with patch(
-        "autoskillit.server.tools_ci.infer_repo_from_remote",
+        "autoskillit.server.tools_ci.resolve_repo_from_remote",
         new_callable=AsyncMock,
         return_value="owner/repo",
     ):

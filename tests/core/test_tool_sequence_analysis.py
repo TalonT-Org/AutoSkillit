@@ -19,7 +19,7 @@ from autoskillit.core.tool_sequence_analysis import (
     render_mermaid,
 )
 
-pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
+pytestmark = [pytest.mark.layer("core"), pytest.mark.medium]
 
 
 # ---------------------------------------------------------------------------

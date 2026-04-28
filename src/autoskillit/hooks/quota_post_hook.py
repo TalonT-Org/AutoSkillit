@@ -60,7 +60,8 @@ def _resolve_quota_log_dir() -> Path | None:
         if xdg:
             return Path(xdg) / "autoskillit" / "logs"
         return Path.home() / ".local" / "share" / "autoskillit" / "logs"
-    except Exception:
+    except Exception as exc:
+        print(f"quota_post_hook: failed to resolve log directory: {exc}", file=sys.stderr)
         return None
 
 
@@ -73,8 +74,8 @@ def _write_quota_log_event(event: dict, log_dir: Path | None) -> None:
         line = json.dumps(event) + "\n"
         with open(log_dir / "quota_events.jsonl", "a", encoding="utf-8") as f:
             f.write(line)
-    except Exception:
-        pass
+    except Exception as exc:
+        print(f"quota_post_hook: failed to write quota log event: {exc}", file=sys.stderr)
 
 
 def _extract_run_skill_result(tool_response: str | dict) -> str:

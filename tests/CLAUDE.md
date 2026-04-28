@@ -393,7 +393,8 @@ tests/
 │   ├── test_git.py
 │   ├── test_headless_session.py         # (moved from root test_phase2_cook_session.py in groupG)
 │   ├── test_mcp_overrides.py            # (moved from recipe/ in groupG)
-│   ├── test_server_init.py
+│   ├── test_server_init_gate.py
+│   ├── test_server_init_session_visibility.py
 │   ├── test_service_wrappers.py
 │   ├── test_set_commit_status.py
 │   ├── test_smoke_pipeline.py
@@ -401,17 +402,24 @@ tests/
 │   ├── test_tool_exception_boundary.py
 │   ├── test_tools_ci.py
 │   ├── test_tools_clone.py
-│   ├── test_tools_execution.py
+│   ├── test_tools_execution_command.py
+│   ├── test_tools_execution_input_gates.py
+│   ├── test_tools_execution_results.py
+│   ├── test_tools_execution_routing.py
 │   ├── test_tools_git.py
 │   ├── test_tools_integrations.py
 │   ├── test_tools_integrations_release.py
-│   ├── test_tools_kitchen.py
+│   ├── test_tools_kitchen_envelope.py
+│   ├── test_tools_kitchen_gate.py
+│   ├── test_tools_kitchen_visibility.py
 │   ├── test_tools_recipe.py
 │   ├── test_tools_run_cmd.py
 │   ├── test_tools_run_skill_retry.py
 │   ├── test_tools_session_diagnostics.py
-│   ├── test_tools_status.py
+│   ├── test_tools_status_kitchen.py
 │   ├── test_tools_status_mcp_response.py
+│   ├── test_tools_status_quota_and_db.py
+│   ├── test_tools_status_summaries.py
 │   ├── test_tools_workspace.py
 │   └── test_track_response_size.py
 ├── skills/                              # Skill contract and compliance tests

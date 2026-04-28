@@ -205,7 +205,7 @@ MODULE_CASCADE_EXECUTION: dict[str, frozenset[str]] = {
         {
             "execution",
             "server/test_factory.py",
-            "server/test_tools_status.py",
+            "server/test_tools_status_kitchen.py",
         }
     ),
     "remote_resolver": frozenset(
@@ -249,8 +249,8 @@ MODULE_CASCADE_EXECUTION: dict[str, frozenset[str]] = {
     "commands": frozenset(
         {
             "execution",
-            "server/test_tools_execution.py",
-            "cli/test_cook.py",
+            "server/test_tools_execution_command.py",
+            "cli/test_cook_order_command.py",
             "cli/test_cook_interactive.py",
             "cli/test_cook_env_scrub.py",
             "cli/test_reload_loop.py",
@@ -344,13 +344,15 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_mcp_overrides.py",
             "server/test_smoke_pipeline.py",
             "server/test_tools_dispatch.py",
-            "server/test_tools_kitchen.py",
+            "server/test_tools_kitchen_gate.py",
+            "server/test_tools_kitchen_envelope.py",
             "server/test_service_wrappers.py",
             "server/test_tools_list_recipes.py",
             # CLI file-level entries (3 of 38 import autoskillit.recipe):
             "cli/test_cli_prompts.py",
             "cli/test_l3_orchestrator_prompt.py",
-            "cli/test_cook.py",
+            "cli/test_cook_order_command.py",
+            "cli/test_cook_order_picker.py",
             # Execution file-level entries:
             "execution/test_headless_path_validation.py",
             "execution/test_zero_write_detection.py",
@@ -360,7 +362,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             # Hooks file-level entries (_fmt_recipe.py imports autoskillit.recipe types):
             "hooks/test_recipe_write_advisor.py",
             # Other file-level entries:
-            "infra/test_pretty_output.py",
+            "infra/test_pretty_output_recipe.py",
             "skills/test_planner_skill_contracts.py",
             "skills/test_skill_placeholder_contracts.py",
             "skills/test_make_campaign_compliance.py",

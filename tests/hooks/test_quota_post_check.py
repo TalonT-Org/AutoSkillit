@@ -7,10 +7,13 @@ tool output with a quota warning + sleep instruction via updatedMCPToolOutput.
 
 import io
 import json
+import pathlib
 from contextlib import redirect_stdout
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 from autoskillit.hooks._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
 
@@ -415,3 +418,36 @@ def test_qpc_cache_max_age_env_var_override(tmp_path, monkeypatch):
     out, exit_code = _run_hook(event=event, cache_path=cache)
     assert out.strip() == ""
     assert exit_code == 0
+
+
+def test_resolve_quota_log_dir_prints_to_stderr_on_exception(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """_resolve_quota_log_dir() bare except must print warning to stderr, not silently swallow."""
+    from autoskillit.hooks.quota_post_hook import _resolve_quota_log_dir
+
+    def _raise() -> None:
+        raise OSError("boom")
+
+    monkeypatch.delenv("AUTOSKILLIT_LOG_DIR", raising=False)
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+    monkeypatch.setattr(pathlib.Path, "home", staticmethod(_raise))
+
+    result = _resolve_quota_log_dir()
+
+    assert result is None
+    captured = capsys.readouterr()
+    assert "quota_post_hook" in captured.err
+
+
+def test_write_quota_log_event_prints_to_stderr_on_write_failure(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """_write_quota_log_event() bare except must print warning to stderr, not silently swallow."""
+    from autoskillit.hooks.quota_post_hook import _write_quota_log_event
+
+    with patch("builtins.open", side_effect=OSError("disk full")):
+        _write_quota_log_event({}, tmp_path)
+
+    captured = capsys.readouterr()
+    assert "quota_post_hook" in captured.err

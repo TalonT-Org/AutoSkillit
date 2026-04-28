@@ -51,6 +51,7 @@ __all__ = [
     "QuotaRefreshTask",
     "TokenFactory",
     "SupportsLogger",
+    "SupportsDebug",
     "CampaignProtector",
 ]
 

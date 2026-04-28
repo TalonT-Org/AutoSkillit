@@ -22,7 +22,7 @@ from autoskillit.server.helpers import (
     _require_enabled,
     _run_subprocess,
     fetch_repo_merge_state,
-    infer_repo_from_remote,
+    resolve_repo_from_remote,
     track_response_size,
 )
 
@@ -122,7 +122,7 @@ async def wait_for_ci(
             event=event or tool_ctx.default_ci_scope.event,
         )
 
-        resolved_repo = await infer_repo_from_remote(cwd, hint=remote_url or repo or None)
+        resolved_repo = await resolve_repo_from_remote(cwd, hint=remote_url or repo or None)
 
         await _notify(
             ctx,
@@ -260,7 +260,7 @@ async def set_commit_status(
         # Resolve owner/repo if not provided
         owner_repo = repo
         if not owner_repo:
-            owner_repo = await infer_repo_from_remote(effective_cwd)
+            owner_repo = await resolve_repo_from_remote(effective_cwd)
             if not owner_repo:
                 return json.dumps(
                     {"success": False, "error": "Could not infer owner/repo from git remote"}
@@ -405,7 +405,7 @@ async def toggle_auto_merge(
                 }
             )
 
-        resolved_repo = await infer_repo_from_remote(cwd, hint=remote_url or repo or None)
+        resolved_repo = await resolve_repo_from_remote(cwd, hint=remote_url or repo or None)
 
         result = await tool_ctx.merge_queue_watcher.toggle(
             pr_number=pr_number,
@@ -478,7 +478,7 @@ async def enqueue_pr(
                 }
             )
 
-        resolved_repo = await infer_repo_from_remote(cwd, hint=remote_url or repo or None)
+        resolved_repo = await resolve_repo_from_remote(cwd, hint=remote_url or repo or None)
 
         _start = time.monotonic()
         try:
@@ -596,7 +596,7 @@ async def wait_for_merge_queue(
                 }
             )
 
-        resolved_repo = await infer_repo_from_remote(cwd, hint=remote_url or repo or None)
+        resolved_repo = await resolve_repo_from_remote(cwd, hint=remote_url or repo or None)
 
         _start = time.monotonic()
         try:
@@ -665,7 +665,7 @@ async def check_repo_merge_state(
         tool_ctx = _get_ctx()
         _start = time.monotonic()
         try:
-            resolved_repo = await infer_repo_from_remote(cwd, hint=remote_url or None)
+            resolved_repo = await resolve_repo_from_remote(cwd, hint=remote_url or None)
             if not resolved_repo or "/" not in resolved_repo:
                 return json.dumps(
                     {

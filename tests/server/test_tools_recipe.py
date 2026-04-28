@@ -478,6 +478,21 @@ async def test_list_recipes_mcp_tool_hides_campaign_when_fleet_disabled(
     )
 
 
+@pytest.mark.anyio
+async def test_list_recipes_returns_error_string_when_context_missing() -> None:
+    """list_recipes must return an error message string (not []) when tool_ctx is None."""
+    from autoskillit.server.tools_recipe import list_recipes
+
+    result = await list_recipes()
+    assert result != json.dumps([])
+    assert isinstance(result, str)
+    try:
+        parsed = json.loads(result)
+        assert "error" in parsed or parsed != []
+    except json.JSONDecodeError:
+        pass
+
+
 # P5F2-T4  (import hygiene check)
 def test_tools_recipe_does_not_import_raw_ctx():
     """tools_recipe.py must not import _ctx directly from server._state."""

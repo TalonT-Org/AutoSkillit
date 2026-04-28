@@ -35,6 +35,9 @@ A Claude Code plugin that orchestrates automated skill-driven workflows using he
     arguments. `\|` is Bash grep BRE syntax — ripgrep treats it as a literal backslash-pipe
     and returns 0 results. Example: `Grep(pattern="foo|bar")` not `Grep(pattern="foo\|bar")`.
   * **Worktree Init Prohibition**: Never run `autoskillit init` from within a git worktree. `sync_hooks_to_settings()` will raise `RuntimeError` if `pkg_root()` resolves to a worktree. Use `task install-worktree` for worktree setup — it does NOT call `init`.
+  * **Naming convention — `*Def` vs `*Spec` suffixes**:
+    - `*Def` — static definition of a registered entity (e.g., `HookDef`, `PackDef`, `FeatureDef`). Typically a `NamedTuple` or `@dataclass(frozen=True)`, used as elements in a registry or lookup table. Lives in `core/`.
+    - `*Spec` — behavioral specification or validation rule (e.g., `RuleSpec`, `ExperimentTypeSpec`, `WriteBehaviorSpec`). Typically a `@dataclass` or `TypedDict` configuring a pipeline or validation stage. Lives in `recipe/` or domain layers.
 
 ### **3.2. File System**
 

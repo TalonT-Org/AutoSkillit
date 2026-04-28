@@ -85,6 +85,42 @@ def check_diagram_staleness(
     return stored_format != DIAGRAM_FORMAT_VERSION
 
 
+def generate_recipe_diagram(recipe_path: Path, recipes_dir: Path) -> None:
+    """Generate a flow diagram Markdown file for the recipe at *recipe_path*.
+
+    Writes ``recipes_dir/diagrams/{recipe_name}.md`` with the recipe hash and
+    format-version markers so the diagram passes staleness and validation checks.
+
+    Args:
+        recipe_path: Path to the recipe ``.yaml`` file.
+        recipes_dir: Root recipes directory; diagram goes in its ``diagrams/`` sub-dir.
+    """
+    from autoskillit.recipe.io import load_recipe
+
+    recipe = load_recipe(recipe_path)
+    recipe_hash = compute_recipe_hash(recipe_path)
+
+    step_lines: list[str] = []
+    prev_id: str | None = None
+    for i, step_name in enumerate(recipe.steps):
+        step_id = f"S{i}"
+        step_lines.append(f"    {step_id}[{step_name}]")
+        if prev_id is not None:
+            step_lines.append(f"    {prev_id} --> {step_id}")
+        prev_id = step_id
+
+    flow_body = "\n".join(step_lines) if step_lines else "    START([start])"
+    diagram_content = (
+        f"<!-- autoskillit-recipe-hash: {recipe_hash} -->\n"
+        f"<!-- autoskillit-diagram-format: {DIAGRAM_FORMAT_VERSION} -->\n"
+        f"# {recipe.name}\n\n"
+        f"```mermaid\nflowchart TD\n{flow_body}\n```\n"
+    )
+    diagrams_dir = recipes_dir / "diagrams"
+    diagrams_dir.mkdir(parents=True, exist_ok=True)
+    (diagrams_dir / f"{recipe_path.stem}.md").write_text(diagram_content, encoding="utf-8")
+
+
 def diagram_stale_to_suggestions(recipe_name: str) -> list[dict[str, str]]:
     """Return an MCP suggestion list for a stale diagram.
 

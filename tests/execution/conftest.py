@@ -2,13 +2,59 @@
 
 from __future__ import annotations
 
+import json
 import pathlib
 import textwrap
 from typing import Any
 
 import pytest
 
+from autoskillit.core.types import SubprocessResult, TerminationReason
 from tests._helpers import make_tracing_config
+
+
+def _success_session_json(result_text: str) -> str:
+    return json.dumps(
+        {
+            "type": "result",
+            "subtype": "success",
+            "result": result_text,
+            "session_id": "test-session",
+            "is_error": False,
+        }
+    )
+
+
+def _sr(
+    returncode=0,
+    stdout="",
+    stderr="",
+    termination=TerminationReason.NATURAL_EXIT,
+    session_id: str = "",
+    channel_b_session_id: str = "",
+):
+    """Build a minimal SubprocessResult for _build_skill_result tests."""
+    return SubprocessResult(
+        returncode,
+        stdout,
+        stderr,
+        termination,
+        pid=12345,
+        session_id=session_id,
+        channel_b_session_id=channel_b_session_id,
+    )
+
+
+def _make_tool_use_line(name: str, input_dict: dict) -> str:
+    return json.dumps(
+        {
+            "type": "assistant",
+            "message": {
+                "content": [{"type": "tool_use", "name": name, "id": "x", "input": input_dict}]
+            },
+        }
+    )
+
 
 # Simulates Claude CLI process that writes a result line then hangs.
 # Used by test_process_channel_b.py and test_process_monitor.py.

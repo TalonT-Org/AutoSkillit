@@ -14,41 +14,52 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 # ---------------------------------------------------------------------------
 
 
-def test_session_type_returns_orchestrator(monkeypatch):
+@pytest.mark.parametrize(
+    "env_val, expected, suppress_deprecation, strict_no_deprecation",
+    [
+        ("orchestrator", "ORCHESTRATOR", False, False),
+        ("leaf", "LEAF", False, False),
+        ("ORCHESTRATOR", "ORCHESTRATOR", False, False),
+        (None, "LEAF", False, False),
+        ("bogus", "LEAF", True, False),
+        ("fleet", "FLEET", False, False),
+        ("FLEET", "FLEET", False, False),
+        ("fleet", "FLEET", False, True),
+    ],
+    ids=[
+        "orchestrator",
+        "leaf",
+        "case-insensitive",
+        "unset",
+        "invalid-defaults-leaf",
+        "fleet",
+        "fleet-case-insensitive",
+        "fleet-no-warning",
+    ],
+)
+def test_session_type_resolver(
+    monkeypatch, env_val, expected, suppress_deprecation, strict_no_deprecation
+):
     from autoskillit.core import SessionType, session_type
 
-    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
-    assert session_type() is SessionType.ORCHESTRATOR
+    if env_val is None:
+        monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
+    else:
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", env_val)
+    monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
 
+    if strict_no_deprecation:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            result = session_type()
+    elif suppress_deprecation:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            result = session_type()
+    else:
+        result = session_type()
 
-def test_session_type_returns_leaf(monkeypatch):
-    from autoskillit.core import SessionType, session_type
-
-    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaf")
-    assert session_type() is SessionType.LEAF
-
-
-def test_session_type_case_insensitive(monkeypatch):
-    from autoskillit.core import SessionType, session_type
-
-    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "ORCHESTRATOR")
-    assert session_type() is SessionType.ORCHESTRATOR
-
-
-def test_session_type_defaults_to_leaf_when_unset(monkeypatch):
-    from autoskillit.core import SessionType, session_type
-
-    monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
-    assert session_type() is SessionType.LEAF
-
-
-def test_session_type_defaults_to_leaf_on_invalid(monkeypatch):
-    from autoskillit.core import SessionType, session_type
-
-    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "bogus")
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", DeprecationWarning)
-        assert session_type() is SessionType.LEAF
+    assert result is SessionType[expected]
 
 
 def test_session_type_invalid_emits_deprecation_warning(monkeypatch):
@@ -109,36 +120,12 @@ def test_session_type_env_var_constant():
 # ---------------------------------------------------------------------------
 
 
-def test_session_type_returns_fleet(monkeypatch):
-    from autoskillit.core import SessionType, session_type
-
-    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
-    assert session_type() is SessionType.FLEET
-
-
-def test_session_type_fleet_case_insensitive(monkeypatch):
-    from autoskillit.core import SessionType, session_type
-
-    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "FLEET")
-    assert session_type() is SessionType.FLEET
-
-
 def test_session_type_invalid_session_type_emits_warning(monkeypatch):
     from autoskillit.core import session_type
 
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "franchise")
     with pytest.warns(DeprecationWarning, match="Invalid"):
         session_type()
-
-
-def test_session_type_fleet_emits_no_warning(monkeypatch):
-    from autoskillit.core import SessionType, session_type
-
-    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
-    with warnings.catch_warnings():
-        warnings.simplefilter("error", DeprecationWarning)
-        result = session_type()
-    assert result is SessionType.FLEET
 
 
 def test_session_type_enum_fleet_value():

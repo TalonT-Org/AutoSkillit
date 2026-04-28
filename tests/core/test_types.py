@@ -128,55 +128,58 @@ def test_session_outcome_is_str_enum_with_expected_values():
     assert SessionOutcome.FAILED == "failed"
 
 
-def test_skill_result_outcome_succeeded():
-    """SkillResult with success=True, needs_retry=False → outcome is SUCCEEDED."""
-    sr = SkillResult(
-        success=True,
-        result="ok",
-        session_id="s1",
-        subtype="success",
-        is_error=False,
-        exit_code=0,
-        needs_retry=False,
-        retry_reason=RetryReason.NONE,
-        stderr="",
-    )
-    assert sr.outcome is SessionOutcome.SUCCEEDED
-    assert sr.outcome == "succeeded"
-
-
-def test_skill_result_outcome_retriable():
-    """SkillResult with success=False, needs_retry=True → outcome is RETRIABLE."""
-    sr = SkillResult(
-        success=False,
-        result="partial",
-        session_id="s1",
-        subtype="error_max_turns",
-        is_error=False,
-        exit_code=1,
-        needs_retry=True,
-        retry_reason=RetryReason.RESUME,
-        stderr="",
-    )
-    assert sr.outcome is SessionOutcome.RETRIABLE
-    assert sr.outcome == "retriable"
-
-
-def test_skill_result_outcome_failed():
-    """SkillResult with success=False, needs_retry=False → outcome is FAILED."""
-    sr = SkillResult(
-        success=False,
-        result="",
-        session_id="s1",
-        subtype="timeout",
-        is_error=True,
-        exit_code=-1,
-        needs_retry=False,
-        retry_reason=RetryReason.NONE,
-        stderr="",
-    )
-    assert sr.outcome is SessionOutcome.FAILED
-    assert sr.outcome == "failed"
+@pytest.mark.parametrize(
+    "kwargs, expected_outcome",
+    [
+        (
+            dict(
+                success=True,
+                result="ok",
+                session_id="s1",
+                subtype="success",
+                is_error=False,
+                exit_code=0,
+                needs_retry=False,
+                retry_reason=RetryReason.NONE,
+                stderr="",
+            ),
+            SessionOutcome.SUCCEEDED,
+        ),
+        (
+            dict(
+                success=False,
+                result="partial",
+                session_id="s1",
+                subtype="error_max_turns",
+                is_error=False,
+                exit_code=1,
+                needs_retry=True,
+                retry_reason=RetryReason.RESUME,
+                stderr="",
+            ),
+            SessionOutcome.RETRIABLE,
+        ),
+        (
+            dict(
+                success=False,
+                result="",
+                session_id="s1",
+                subtype="timeout",
+                is_error=True,
+                exit_code=-1,
+                needs_retry=False,
+                retry_reason=RetryReason.NONE,
+                stderr="",
+            ),
+            SessionOutcome.FAILED,
+        ),
+    ],
+    ids=["succeeded", "retriable", "failed"],
+)
+def test_skill_result_outcome(kwargs, expected_outcome):
+    sr = SkillResult(**kwargs)
+    assert sr.outcome is expected_outcome
+    assert sr.outcome == expected_outcome.value
 
 
 def test_skill_result_to_json_excludes_outcome():

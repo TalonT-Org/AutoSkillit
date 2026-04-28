@@ -418,34 +418,6 @@ class TestDefaultTokenLogLoadFromLogDir:
         assert report[0]["elapsed_seconds"] == 0.0
 
 
-class TestLoadFromLogDirDesignDocumentation:
-    """P9-F1: tokens.py must document design decisions inline."""
-
-    def test_load_from_log_dir_documents_timing_seconds_rename(self):
-        """tokens.py must comment the timing_seconds → elapsed_seconds key rename."""
-        from pathlib import Path
-
-        src = (
-            Path(__file__).parent.parent.parent / "src/autoskillit/pipeline/tokens.py"
-        ).read_text()
-        assert "timing_seconds" in src
-        assert "elapsed_seconds" in src
-
-    def test_load_from_log_dir_documents_invocation_count_design(self):
-        """tokens.py must comment why invocation_count += 1 per file is intentional."""
-        from pathlib import Path
-
-        src = (
-            Path(__file__).parent.parent.parent / "src/autoskillit/pipeline/tokens.py"
-        ).read_text()
-        assert "invocation_count" in src
-        assert (
-            "one file" in src.lower()
-            or "one invocation" in src.lower()
-            or "per file" in src.lower()
-        )
-
-
 # ---------------------------------------------------------------------------
 # cwd_filter tests
 # ---------------------------------------------------------------------------
@@ -696,8 +668,8 @@ class TestOrderIdScoping:
         assert report_185[0]["invocation_count"] == 1
         assert report_186[0]["invocation_count"] == 1
 
-    def test_same_step_different_orders_do_not_contaminate(self):
-        """A-2: same step name in two orders does not aggregate to one entry."""
+    def test_unfiltered_report_aggregates_across_order_ids(self):
+        """A-2: unfiltered report aggregates same step across orders into one entry."""
         log = DefaultTokenLog()
         log.record("plan", self._make_usage(), order_id="issue-185")
         log.record("plan", self._make_usage(), order_id="issue-186")

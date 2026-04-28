@@ -461,13 +461,13 @@ _TRANSITION_BOUNDARY_RES: list[tuple[str, re.Pattern[str]]] = [
 
 _TRANSITION_ANTI_CONFIRM_RE: re.Pattern[str] = re.compile(
     r"(?:never|do\s+not|must\s+not|prohibited)"
-    r".{0,80}"
+    r"[^\n]{0,80}"
     r"(?:ask|confirm|pause|AskUserQuestion"
-    r"|wait\s+for\s.{0,30}(?:user|human|permission|approval|confirmation))"
+    r"|wait\s+for\s+[^\n]{0,30}(?:user|human|permission|approval|confirmation))"
     r"|(?:proceed|dispatch|continue|start)"
-    r".{0,60}"
-    r"(?:immediately|without.{0,30}(?:asking|confirming|pausing|waiting))",
-    re.IGNORECASE | re.DOTALL,
+    r"[^\n]{0,60}"
+    r"(?:immediately|without[^\n]{0,30}(?:asking|confirming|pausing|waiting))",
+    re.IGNORECASE,
 )
 
 
@@ -481,8 +481,8 @@ def _extract_sections(content: str) -> list[str]:
     name="transition-boundary-anti-confirmation",
     description=(
         "A SKILL.md section describes a transition boundary (between groups, phases, or batches) "
-        "but does not contain an explicit anti-confirmation instruction. Without it, the model may "
-        "insert unsolicited confirmation prompts between iterations."
+        "but does not contain an explicit anti-confirmation instruction. Without it, the model "
+        "may insert unsolicited confirmation prompts between iterations."
     ),
 )
 def _check_transition_boundary_anti_confirmation(ctx: ValidationContext) -> list[RuleFinding]:
@@ -506,7 +506,8 @@ def _check_transition_boundary_anti_confirmation(ctx: ValidationContext) -> list
             continue
         unprotected: list[tuple[str, str]] = []
         for section in _extract_sections(content):
-            heading = section.splitlines()[0].strip() if section.splitlines() else ""
+            lines = section.splitlines()
+            heading = lines[0].strip() if lines else ""
             for boundary_name, boundary_re in _TRANSITION_BOUNDARY_RES:
                 if boundary_re.search(section) and not _TRANSITION_ANTI_CONFIRM_RE.search(section):
                     unprotected.append((boundary_name, heading))

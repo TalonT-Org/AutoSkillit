@@ -15,6 +15,8 @@ def test_all_callable_contracts_declare_inputs():
     manifest = load_bundled_manifest()
     callables = manifest.get("callable_contracts", {})
     for dotted_path, entry in callables.items():
+        if "." not in dotted_path:
+            pytest.fail(f"{dotted_path}: not a dotted module path")
         module_path, attr_name = dotted_path.rsplit(".", 1)
         mod = importlib.import_module(module_path)
         func = getattr(mod, attr_name)
@@ -22,7 +24,8 @@ def test_all_callable_contracts_declare_inputs():
         required_params = [
             name
             for name, p in sig.parameters.items()
-            if p.default is inspect.Parameter.empty and name != "kwargs"
+            if p.default is inspect.Parameter.empty
+            and p.kind not in (inspect.Parameter.VAR_KEYWORD, inspect.Parameter.VAR_POSITIONAL)
         ]
         declared_inputs = [inp["name"] for inp in entry.get("inputs", [])]
         for param in required_params:

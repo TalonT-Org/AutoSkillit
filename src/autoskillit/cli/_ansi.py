@@ -121,11 +121,23 @@ def diagram_to_terminal(md: str) -> str:
     _C = "\x1b[96m" if color else ""
     _R = "\x1b[0m" if color else ""
 
-    _skip = {"<!--", "```", "Agent-managed:"}
+    _skip = {"<!--", "Agent-managed:"}
     out: list[str] = []
     in_table_section = False
+    in_fenced_block = False
+    suppress_fenced = False
     saw_title = False
     for ln in md.splitlines():
+        if ln.startswith("```"):
+            if not in_fenced_block:
+                in_fenced_block = True
+                suppress_fenced = len(ln) > 3 and not ln[3:].isspace()
+            else:
+                in_fenced_block = False
+                suppress_fenced = False
+            continue
+        if in_fenced_block and suppress_fenced:
+            continue
         if any(ln.startswith(s) for s in _skip):
             continue
         if ln.startswith("## "):

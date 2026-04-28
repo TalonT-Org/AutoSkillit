@@ -484,13 +484,9 @@ async def test_list_recipes_returns_error_string_when_context_missing() -> None:
     from autoskillit.server.tools_recipe import list_recipes
 
     result = await list_recipes()
-    assert result != json.dumps([])
     assert isinstance(result, str)
-    try:
-        parsed = json.loads(result)
-        assert "error" in parsed or parsed != []
-    except json.JSONDecodeError:
-        pass
+    parsed = json.loads(result)
+    assert "error" in parsed
 
 
 # P5F2-T4  (import hygiene check)

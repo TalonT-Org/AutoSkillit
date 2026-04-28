@@ -91,10 +91,6 @@ def generate_recipe_diagram(recipe_path: Path, recipes_dir: Path) -> None:
 
     Writes ``recipes_dir/diagrams/{recipe_name}.md`` with the recipe hash and
     format-version markers so the diagram passes staleness and validation checks.
-
-    Args:
-        recipe_path: Path to the recipe ``.yaml`` file.
-        recipes_dir: Root recipes directory; diagram goes in its ``diagrams/`` sub-dir.
     """
     from autoskillit.recipe.io import load_recipe
 

@@ -112,11 +112,7 @@ def _run_advisor_inprocess(
     from autoskillit.hooks.recipe_write_advisor import main
 
     payload = json.dumps({"tool_name": tool_name, "tool_input": {"file_path": file_path}})
-    env_clean = {**os.environ}
-    if headless:
-        env_clean["AUTOSKILLIT_HEADLESS"] = "1"
-    else:
-        env_clean.pop("AUTOSKILLIT_HEADLESS", None)
+    env_clean = {"AUTOSKILLIT_HEADLESS": "1"} if headless else {}
     with (
         patch.dict(os.environ, env_clean, clear=True),
         patch("sys.stdin", io.StringIO(payload)),

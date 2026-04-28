@@ -323,7 +323,7 @@ class DiagramMigrationAdapter(DeterministicMigrationAdapter):
     def needs_migration(self, file: MigrationFile) -> bool:
         from autoskillit.recipe import check_diagram_staleness
 
-        recipes_dir = file.path.parent.parent  # diagrams/ -> recipes/
+        recipes_dir = file.path.parent.parent
         recipe_path = recipes_dir / f"{file.name}.yaml"
         if not recipe_path.exists():
             return False
@@ -337,7 +337,7 @@ class DiagramMigrationAdapter(DeterministicMigrationAdapter):
     ) -> MigrationResult:
         from autoskillit.recipe import generate_recipe_diagram
 
-        recipes_dir = file.path.parent.parent  # diagrams/ -> recipes/
+        recipes_dir = file.path.parent.parent
         recipe_path = recipes_dir / f"{file.name}.yaml"
         if not recipe_path.exists():
             return MigrationResult(

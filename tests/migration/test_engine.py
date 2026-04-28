@@ -613,32 +613,6 @@ class TestDiagramMigrationAdapter:
         mock_gen.assert_called_once()
         assert result.success is True
 
-    # DG-19b (T-C2-03)
-    @pytest.mark.anyio
-    async def test_migrate_calls_generate_diagram(self, tmp_path: Path) -> None:
-        """migrate() must delegate to the diagram generation function, not be a no-op."""
-        from unittest.mock import patch
-
-        diagrams_dir = tmp_path / ".autoskillit" / "recipes" / "diagrams"
-        diagrams_dir.mkdir(parents=True)
-        recipe_yaml = tmp_path / ".autoskillit" / "recipes" / "my-recipe.yaml"
-        recipe_yaml.parent.mkdir(parents=True, exist_ok=True)
-        recipe_yaml.write_text("name: my-recipe\n")
-        file = MigrationFile(
-            name="my-recipe",
-            path=diagrams_dir / "my-recipe.md",
-            file_type="diagram",
-            current_version=None,
-        )
-
-        with patch("autoskillit.recipe.generate_recipe_diagram") as mock_gen:
-            mock_gen.return_value = None
-            result = await DiagramMigrationAdapter().migrate(file, temp_dir=tmp_path)
-
-        mock_gen.assert_called_once()
-        assert result.success is True
-
-    # DG-20
     def test_diagram_adapter_validate_passes_when_hash_present(self, tmp_path: Path) -> None:
         """DG-20: DiagramMigrationAdapter.validate() passes when hash comment present."""
         md = tmp_path / "test.md"

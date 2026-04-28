@@ -325,11 +325,6 @@ async def test_set_commit_status_success_returns_str(tool_ctx, monkeypatch):
     assert parsed["success"] is True
 
 
-# ---------------------------------------------------------------------------
-# T2 — Uses resolve_repo_from_remote, not gh repo view subprocess
-# ---------------------------------------------------------------------------
-
-
 @pytest.mark.anyio
 async def test_set_commit_status_uses_infer_repo_not_gh_subprocess(tool_ctx, monkeypatch):
     """Must call resolve_repo_from_remote, not launch gh repo view subprocess."""

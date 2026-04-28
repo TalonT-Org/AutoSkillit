@@ -129,7 +129,8 @@ _SERVER_FILE_LEVEL_ENTRIES = [
 _CLI_FILE_LEVEL_ENTRIES = [
     "test_cli_prompts.py",
     "test_l3_orchestrator_prompt.py",
-    "test_cook.py",
+    "test_cook_order_command.py",
+    "test_cook_order_picker.py",
 ]
 
 

@@ -250,7 +250,7 @@ MODULE_CASCADE_EXECUTION: dict[str, frozenset[str]] = {
         {
             "execution",
             "server/test_tools_execution.py",
-            "cli/test_cook.py",
+            "cli/test_cook_order_command.py",
             "cli/test_cook_interactive.py",
             "cli/test_cook_env_scrub.py",
             "cli/test_reload_loop.py",
@@ -350,7 +350,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             # CLI file-level entries (3 of 38 import autoskillit.recipe):
             "cli/test_cli_prompts.py",
             "cli/test_l3_orchestrator_prompt.py",
-            "cli/test_cook.py",
+            "cli/test_cook_order_command.py",
+            "cli/test_cook_order_picker.py",
             # Execution file-level entries:
             "execution/test_headless_path_validation.py",
             "execution/test_zero_write_detection.py",
@@ -360,7 +361,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             # Hooks file-level entries (_fmt_recipe.py imports autoskillit.recipe types):
             "hooks/test_recipe_write_advisor.py",
             # Other file-level entries:
-            "infra/test_pretty_output.py",
+            "infra/test_pretty_output_recipe.py",
             "skills/test_planner_skill_contracts.py",
             "skills/test_skill_placeholder_contracts.py",
             "skills/test_make_campaign_compliance.py",

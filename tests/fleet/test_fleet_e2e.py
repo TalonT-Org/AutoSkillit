@@ -325,10 +325,12 @@ def fleet_runtime(
     _write_claude_shim(shim_dir)
     monkeypatch.setenv("PATH", f"{shim_dir}:{os.environ['PATH']}")
 
+    from autoskillit.server._factory import FleetSemaphore
+
     runner = FleetTestRunner()
     tool_ctx.runner = runner
     tool_ctx.executor = DefaultHeadlessExecutor(tool_ctx)
-    tool_ctx.fleet_lock = asyncio.Lock()
+    tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
     recipes = InMemoryRecipeRepository()
     tool_ctx.recipes = recipes
     tool_ctx.kitchen_id = uuid4().hex[:16]
@@ -370,6 +372,21 @@ def fleet_runtime(
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             pass
     assert not leaked, f"Test leaked processes: {[c.pid for c in leaked]}"
+
+
+@pytest.fixture
+def fleet_runtime_factory(fleet_runtime: FleetRuntime):
+    """Factory variant of fleet_runtime that accepts max_concurrent_dispatches."""
+
+    def _factory(max_concurrent_dispatches: int = 1) -> FleetRuntime:
+        from autoskillit.server._factory import FleetSemaphore
+
+        fleet_runtime.tool_ctx.fleet_lock = FleetSemaphore(
+            max_concurrent=max_concurrent_dispatches
+        )
+        return fleet_runtime
+
+    return _factory
 
 
 # ---------------------------------------------------------------------------

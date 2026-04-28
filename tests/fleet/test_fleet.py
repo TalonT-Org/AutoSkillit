@@ -17,35 +17,34 @@ def test_fleet_package_importable() -> None:
     from autoskillit.fleet import CampaignState, DispatchRecord, read_state  # noqa: F401
 
 
-def test_asyncio_lock_satisfies_fleet_lock() -> None:
-    """asyncio.Lock() is a structural match for FleetLock at runtime.
-
-    isinstance() with @runtime_checkable only verifies that required attribute names
-    are present — not signatures. The additional assertion confirms that acquire is
-    a coroutine on the concrete implementation, not just a name match.
-    """
-    import asyncio
-
+def test_fleet_semaphore_satisfies_fleet_lock() -> None:
+    """FleetSemaphore is a structural match for FleetLock at runtime."""
     from autoskillit.core import FleetLock
+    from autoskillit.server._factory import FleetSemaphore
 
-    lock = asyncio.Lock()
-    assert isinstance(lock, FleetLock)
-    assert inspect.iscoroutinefunction(lock.acquire)
+    s = FleetSemaphore(max_concurrent=1)
+    assert isinstance(s, FleetLock)
+    assert inspect.iscoroutinefunction(s.acquire)
 
 
 def test_fleet_lock_protocol_has_required_methods() -> None:
-    """FleetLock exposes locked, acquire, and release."""
+    """FleetLock exposes at_capacity, acquire, release, active_count, max_concurrent."""
     from autoskillit.core import FleetLock
 
     members = {name for name, _ in inspect.getmembers(FleetLock) if not name.startswith("_")}
-    assert {"locked", "acquire", "release"} <= members
+    assert "at_capacity" in members
+    assert "acquire" in members
+    assert "release" in members
+    assert "active_count" in members
+    assert "max_concurrent" in members
+    assert "locked" not in members
 
 
 def test_fleet_lock_acquire_is_coroutine() -> None:
-    """acquire() must be async — verifies asyncio.Lock().acquire is a coroutine."""
-    import asyncio
+    """acquire() must be async — verifies FleetSemaphore.acquire is a coroutine."""
+    from autoskillit.server._factory import FleetSemaphore
 
-    assert inspect.iscoroutinefunction(asyncio.Lock().acquire)
+    assert inspect.iscoroutinefunction(FleetSemaphore(max_concurrent=1).acquire)
 
 
 def test_headless_executor_protocol_has_dispatch_food_truck() -> None:

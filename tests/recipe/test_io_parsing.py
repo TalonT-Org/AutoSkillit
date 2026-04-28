@@ -1,13 +1,13 @@
-"""Tests for recipe I/O and parsing (recipe_io module)."""
+"""Tests for recipe I/O — parse functions, TestRecipeParser, kitchen_rules, schema drift."""
 
 from __future__ import annotations
 
 import re
+import textwrap
 from pathlib import Path
 
 import pytest
 
-from autoskillit.core.types import CORE_PACKS, RecipeSource
 from autoskillit.recipe.io import (
     _parse_recipe,
     _parse_step,
@@ -17,7 +17,6 @@ from autoskillit.recipe.io import (
 )
 from autoskillit.recipe.schema import (
     Recipe,
-    RecipeKind,
     RecipeStep,
     StepResultRoute,
 )
@@ -117,6 +116,8 @@ class TestRecipeParser:
 
     # WF8
     def test_project_recipe_overrides_builtin(self, tmp_path: Path) -> None:
+        from autoskillit.core.types import RecipeSource
+
         wf_dir = tmp_path / ".autoskillit" / "recipes"
         wf_dir.mkdir(parents=True)
         override = {**VALID_RECIPE, "name": "implementation", "description": "Custom override"}
@@ -477,423 +478,6 @@ class TestRecipeParser:
                     )
 
 
-class TestListRecipes:
-    """TestListRecipes: discovery from project and builtin sources."""
-
-    def test_finds_builtins(self, tmp_path: Path) -> None:
-        result = list_recipes(tmp_path)
-        recipes = result.items
-        names = {w.name for w in recipes}
-        assert "implementation" in names
-        assert len(recipes) > 0
-        assert all(r.source.value in ("project", "builtin") for r in recipes)
-
-    def test_list_recipes_bundled_appear_before_project(self, tmp_path: Path) -> None:
-        """Non-experimental BUILTIN recipes must appear before PROJECT recipes."""
-        recipes_dir = tmp_path / ".autoskillit" / "recipes"
-        recipes_dir.mkdir(parents=True)
-        (recipes_dir / "aardvark.yaml").write_text(
-            "name: aardvark\ndescription: test\nsteps: {}\n"
-        )
-        result = list_recipes(tmp_path)
-        non_exp = [r for r in result.items if not r.experimental]
-        seen_project = False
-        for r in non_exp:
-            if r.source == RecipeSource.PROJECT:
-                seen_project = True
-            elif r.source == RecipeSource.BUILTIN:
-                assert not seen_project, (
-                    "A BUILTIN recipe appeared after a PROJECT recipe — ordering is broken"
-                )
-
-    def test_list_recipes_alphabetical_within_bundled_tiers(self, tmp_path: Path) -> None:
-        """Each bundled tier (core and add-on) must be alphabetically sorted within its tier."""
-        from autoskillit.core._type_constants import CORE_PACKS
-
-        result = list_recipes(tmp_path)
-        core_names = [
-            r.name
-            for r in result.items
-            if r.source == RecipeSource.BUILTIN
-            and not r.experimental
-            and all(p in CORE_PACKS for p in r.requires_packs)
-        ]
-        addon_names = [
-            r.name
-            for r in result.items
-            if r.source == RecipeSource.BUILTIN
-            and not r.experimental
-            and not all(p in CORE_PACKS for p in r.requires_packs)
-        ]
-        assert core_names == sorted(core_names), (
-            f"Core bundled recipes not in alphabetical order: {core_names}"
-        )
-        assert addon_names == sorted(addon_names), (
-            f"Add-on bundled recipes not in alphabetical order: {addon_names}"
-        )
-
-    def test_list_recipes_alphabetical_within_project_tier(self, tmp_path: Path) -> None:
-        """Project recipes must be sorted alphabetically by name within their tier."""
-        recipes_dir = tmp_path / ".autoskillit" / "recipes"
-        recipes_dir.mkdir(parents=True)
-        for name in ("zebra", "apple", "mango"):
-            (recipes_dir / f"{name}.yaml").write_text(
-                f"name: {name}\ndescription: test\nsteps: {{}}\n"
-            )
-        result = list_recipes(tmp_path)
-        project_names = [r.name for r in result.items if r.source == RecipeSource.PROJECT]
-        assert project_names == sorted(project_names), (
-            f"Project recipes not in alphabetical order: {project_names}"
-        )
-
-    def test_list_recipes_excludes_campaign_when_fleet_disabled(self, tmp_path: Path) -> None:
-        """list_recipes with exclude_kinds={CAMPAIGN} must omit campaign-kind recipes."""
-        recipe_dir = tmp_path / ".autoskillit" / "recipes"
-        recipe_dir.mkdir(parents=True)
-        (recipe_dir / "my-campaign.yaml").write_text(
-            "name: my-campaign\ndescription: test\nkind: campaign\nsteps: {}\n"
-        )
-        result = list_recipes(tmp_path, exclude_kinds=frozenset({RecipeKind.CAMPAIGN}))
-        assert all(r.kind != RecipeKind.CAMPAIGN for r in result.items)
-
-    def test_list_recipes_includes_campaign_when_fleet_enabled(self, tmp_path: Path) -> None:
-        """list_recipes with no exclusions must include campaign-kind recipes."""
-        recipe_dir = tmp_path / ".autoskillit" / "recipes"
-        recipe_dir.mkdir(parents=True)
-        (recipe_dir / "my-campaign.yaml").write_text(
-            "name: my-campaign\ndescription: test\nkind: campaign\nsteps: {}\n"
-        )
-        result = list_recipes(tmp_path)
-        names = [r.name for r in result.items]
-        assert "my-campaign" in names
-
-    def test_recipe_info_kind_field_populated(self, tmp_path: Path) -> None:
-        """RecipeInfo.kind must be populated from the YAML kind field."""
-        recipe_dir = tmp_path / ".autoskillit" / "recipes"
-        recipe_dir.mkdir(parents=True)
-        (recipe_dir / "std.yaml").write_text("name: std\ndescription: standard\nsteps: {}\n")
-        (recipe_dir / "camp.yaml").write_text(
-            "name: camp\ndescription: campaign\nkind: campaign\nsteps: {}\n"
-        )
-        result = list_recipes(tmp_path)
-        kinds = {r.name: r.kind for r in result.items}
-        assert kinds["std"] == RecipeKind.STANDARD
-        assert kinds["camp"] == RecipeKind.CAMPAIGN
-
-    def test_recipe_info_experimental_field_false_by_default(self, tmp_path: Path) -> None:
-        """RecipeInfo.experimental must default to False for standard recipes."""
-        recipe_dir = tmp_path / ".autoskillit" / "recipes"
-        recipe_dir.mkdir(parents=True)
-        (recipe_dir / "plain.yaml").write_text("name: plain\ndescription: plain\nsteps: {}\n")
-        result = list_recipes(tmp_path)
-        r = next(r for r in result.items if r.name == "plain")
-        assert r.experimental is False
-
-    def test_recipe_info_experimental_field_true_when_set(self, tmp_path: Path) -> None:
-        """RecipeInfo.experimental must be True when YAML sets experimental: true."""
-        recipe_dir = tmp_path / ".autoskillit" / "recipes"
-        recipe_dir.mkdir(parents=True)
-        (recipe_dir / "research.yaml").write_text(
-            "name: research\ndescription: exp\nexperimental: true\nsteps: {}\n"
-        )
-        result = list_recipes(tmp_path)
-        r = next(r for r in result.items if r.name == "research")
-        assert r.experimental is True
-
-    def test_list_recipes_bundled_before_family_before_experimental(self, tmp_path: Path) -> None:
-        """list_recipes must order: BUILTIN-non-experimental → PROJECT → experimental."""
-        from autoskillit.core._type_constants import CORE_PACKS
-
-        recipe_dir = tmp_path / ".autoskillit" / "recipes"
-        recipe_dir.mkdir(parents=True)
-        (recipe_dir / "proj.yaml").write_text("name: proj\ndescription: p\nsteps: {}\n")
-        (recipe_dir / "exp-proj.yaml").write_text(
-            "name: exp-proj\ndescription: ep\nexperimental: true\nsteps: {}\n"
-        )
-        result = list_recipes(tmp_path)
-        ranks = []
-        for r in result.items:
-            if r.experimental:
-                rank = 3
-            elif r.source == RecipeSource.PROJECT:
-                rank = 2
-            elif all(p in CORE_PACKS for p in r.requires_packs):
-                rank = 0
-            else:
-                rank = 1
-            if not ranks or ranks[-1] != rank:
-                ranks.append(rank)
-        assert ranks == sorted(ranks), f"Groups interleaved: {ranks}"
-        # experimental must be last
-        assert 3 in ranks
-        assert ranks[-1] == 3
-
-    def test_list_recipes_alphabetical_within_experimental_group(self, tmp_path: Path) -> None:
-        """Experimental recipes must be sorted alphabetically by name within their group."""
-        recipe_dir = tmp_path / ".autoskillit" / "recipes"
-        recipe_dir.mkdir(parents=True)
-        for name in ("zebra-exp", "apple-exp", "mango-exp"):
-            (recipe_dir / f"{name}.yaml").write_text(
-                f"name: {name}\ndescription: test\nexperimental: true\nsteps: {{}}\n"
-            )
-        result = list_recipes(tmp_path)
-        exp_names = [r.name for r in result.items if r.experimental]
-        assert exp_names == sorted(exp_names)
-
-    def test_list_recipes_bundled_experimental_sorted_last(self, tmp_path: Path) -> None:
-        """A BUILTIN recipe with experimental: true must appear after non-experimental builtins."""
-        result = list_recipes(tmp_path)
-        non_exp_builtin_indices = [
-            i
-            for i, r in enumerate(result.items)
-            if r.source == RecipeSource.BUILTIN and not r.experimental
-        ]
-        exp_builtin_indices = [
-            i
-            for i, r in enumerate(result.items)
-            if r.source == RecipeSource.BUILTIN and r.experimental
-        ]
-        if non_exp_builtin_indices and exp_builtin_indices:
-            assert max(non_exp_builtin_indices) < min(exp_builtin_indices)
-
-    def test_recipe_info_has_requires_packs_field(self, tmp_path: Path) -> None:
-        """RecipeInfo must have a requires_packs field defaulting to empty list."""
-        from autoskillit.recipe.schema import RecipeInfo
-
-        r = RecipeInfo(
-            name="x", description="d", source=RecipeSource.BUILTIN, path=tmp_path / "x.yaml"
-        )
-        assert r.requires_packs == []
-
-    def test_requires_packs_forwarded_to_recipe_info(self, tmp_path: Path) -> None:
-        """_collect_recipes must populate RecipeInfo.requires_packs from YAML."""
-        recipe_dir = tmp_path / ".autoskillit" / "recipes"
-        recipe_dir.mkdir(parents=True)
-        (recipe_dir / "custom.yaml").write_text(
-            "name: custom\ndescription: d\nrequires_packs: [github, ci]\nsteps: {}\n"
-        )
-        result = list_recipes(tmp_path)
-        r = next(r for r in result.items if r.name == "custom")
-        assert r.requires_packs == ["github", "ci"]
-
-    def test_core_bundled_before_addon_bundled(self, tmp_path: Path) -> None:
-        """Core bundled recipes (CORE_PACKS only) must sort before add-on bundled recipes."""
-        result = list_recipes(tmp_path)
-        core_indices = [
-            i
-            for i, r in enumerate(result.items)
-            if r.source == RecipeSource.BUILTIN
-            and not r.experimental
-            and r.requires_packs
-            and all(p in CORE_PACKS for p in r.requires_packs)
-        ]
-        addon_indices = [
-            i
-            for i, r in enumerate(result.items)
-            if r.source == RecipeSource.BUILTIN
-            and not r.experimental
-            and r.requires_packs
-            and not all(p in CORE_PACKS for p in r.requires_packs)
-        ]
-        if core_indices and addon_indices:
-            assert max(core_indices) < min(addon_indices), (
-                "Core bundled recipes must appear before add-on bundled recipes"
-            )
-
-
-class TestBuiltinRecipesDir:
-    """Tests for builtin_recipes_dir() function."""
-
-    def test_returns_existing_directory(self) -> None:
-        d = builtin_recipes_dir()
-        assert d.is_dir(), f"builtin_recipes_dir() {d} is not a directory"
-
-    def test_points_to_recipes(self) -> None:
-        d = builtin_recipes_dir()
-        assert d.name == "recipes", (
-            f"builtin_recipes_dir() should point to 'recipes', got '{d.name}'"
-        )
-
-    def test_contains_yaml_files(self) -> None:
-        d = builtin_recipes_dir()
-        yaml_files = list(d.glob("*.yaml"))
-        assert len(yaml_files) > 0, "builtin_recipes_dir() contains no YAML files"
-
-
-class TestVersionField:
-    """autoskillit_version field on Recipe dataclass."""
-
-    # VER1+VER2 merged
-    @pytest.mark.parametrize("version_val,expected", [(None, None), ("0.2.0", "0.2.0")])
-    def test_version_field(self, version_val, expected) -> None:
-        data = {
-            "name": "v-test",
-            "description": "d",
-            "steps": {
-                "do_it": {"tool": "run_cmd", "on_success": "done"},
-                "done": {"action": "stop", "message": "Done."},
-            },
-        }
-        if version_val is not None:
-            data["autoskillit_version"] = version_val
-        wf = _parse_recipe(data)
-        assert wf.version == expected
-
-    # VER4
-    def test_version_preserved_in_round_trip(self, tmp_path: Path) -> None:
-        data = {
-            "name": "version-test-recipe",
-            "description": "A recipe for testing the version field",
-            "kitchen_rules": ["Only use AutoSkillit MCP tools during pipeline execution"],
-            "steps": {
-                "do_it": {"tool": "run_cmd", "on_success": "done"},
-                "done": {"action": "stop", "message": "Done."},
-            },
-            "autoskillit_version": "1.3.0",
-        }
-        path = _write_yaml(tmp_path / "recipe.yaml", data)
-        wf = load_recipe(path)
-        assert wf.version == "1.3.0"
-
-
-# ---------------------------------------------------------------------------
-# capture_list field tests (D1–D3, D8–D9)
-# ---------------------------------------------------------------------------
-
-
-# D1
-def test_recipe_step_accepts_capture_list_field() -> None:
-    """RecipeStep accepts capture_list field and stores it."""
-    step = RecipeStep(
-        tool="run_skill",
-        with_args={"skill_command": "/autoskillit:make-plan inputs.task"},
-        capture={"plan_path": "${{ result.plan_path }}"},
-        capture_list={"plan_parts": "${{ result.plan_parts }}"},
-        on_success="verify",
-    )
-    assert step.capture_list == {"plan_parts": "${{ result.plan_parts }}"}
-
-
-# D2
-def test_recipe_step_capture_list_defaults_empty() -> None:
-    """RecipeStep.capture_list defaults to an empty dict."""
-    step = RecipeStep(tool="run_skill", with_args={}, on_success="done")
-    assert step.capture_list == {}
-
-
-# D3
-def test_recipe_yaml_with_capture_list_parses(tmp_path: Path) -> None:
-    """YAML recipe with capture_list key is parsed into RecipeStep.capture_list."""
-    data = {
-        "name": "test-recipe",
-        "description": "test",
-        "ingredients": {},
-        "steps": {
-            "plan": {
-                "tool": "run_skill",
-                "with": {"skill_command": "/autoskillit:make-plan inputs.task"},
-                "capture": {"plan_path": "${{ result.plan_path }}"},
-                "capture_list": {"plan_parts": "${{ result.plan_parts }}"},
-                "on_success": "done",
-            },
-            "done": {"action": "stop", "message": "Done"},
-        },
-    }
-    path = _write_yaml(tmp_path / "recipe.yaml", data)
-    recipe = load_recipe(path)
-    assert recipe.steps["plan"].capture_list == {"plan_parts": "${{ result.plan_parts }}"}
-
-
-# D8
-def test_iter_steps_with_context_includes_capture_list_keys() -> None:
-    """iter_steps_with_context must include capture_list keys in available_context."""
-    from autoskillit.recipe.io import iter_steps_with_context
-
-    recipe = Recipe(
-        name="test",
-        description="test",
-        ingredients={},
-        steps={
-            "plan": RecipeStep(
-                tool="run_skill",
-                with_args={"skill_command": "/autoskillit:make-plan t"},
-                capture={"plan_path": "${{ result.plan_path }}"},
-                capture_list={"plan_parts": "${{ result.plan_parts }}"},
-                on_success="verify",
-            ),
-            "verify": RecipeStep(
-                tool="run_skill",
-                with_args={"skill_command": "/autoskillit:dry-walkthrough c"},
-                on_success="done",
-            ),
-            "done": RecipeStep(action="stop", message="Done"),
-        },
-        kitchen_rules=[],
-    )
-    steps = list(iter_steps_with_context(recipe))
-    verify_ctx = next(ctx for name, _, ctx in steps if name == "verify")
-    assert "plan_parts" in verify_ctx, (
-        "capture_list keys must appear in available_context for downstream steps"
-    )
-
-
-# D9
-def test_implementation_pipeline_captures_plan_parts_as_list() -> None:
-    """implementation.yaml plan step must capture plan_parts via capture_list."""
-    recipe = load_recipe(builtin_recipes_dir() / "implementation.yaml")
-    step = recipe.steps["plan"]
-    assert hasattr(step, "capture_list"), "RecipeStep must have capture_list field"
-    assert "plan_parts" in step.capture_list, (
-        "implementation plan step must capture plan_parts via capture_list"
-    )
-
-
-# IO-1: RecipeInfo dataclass accepts content kwarg; defaults to None
-def test_recipe_info_has_content_field_defaulting_to_none() -> None:
-    """RecipeInfo.content defaults to None when not provided."""
-    from autoskillit.recipe.schema import RecipeInfo
-
-    info = RecipeInfo(
-        name="x",
-        description="y",
-        source=RecipeSource.BUILTIN,
-        path=Path("/x.yaml"),
-    )
-    assert info.content is None
-
-
-# IO-2: list_recipes populates content field with raw YAML text
-def test_list_recipes_populates_content(tmp_path: Path) -> None:
-    """list_recipes() populates the content field with raw YAML text."""
-    recipes_dir = tmp_path / ".autoskillit" / "recipes"
-    recipes_dir.mkdir(parents=True)
-    raw = "name: my-recipe\ndescription: test\nsteps: {}\n"
-    (recipes_dir / "my-recipe.yaml").write_text(raw)
-    result = list_recipes(tmp_path)
-    assert result.items, "expected at least one recipe"
-    item = next(r for r in result.items if r.name == "my-recipe")
-    assert item.content == raw
-
-
-# IO-3: content field preserved through find_recipe_by_name
-def test_find_recipe_by_name_returns_info_with_content(tmp_path: Path) -> None:
-    """find_recipe_by_name() returns a RecipeInfo with content populated."""
-    from autoskillit.recipe.io import find_recipe_by_name
-
-    recipes_dir = tmp_path / ".autoskillit" / "recipes"
-    recipes_dir.mkdir(parents=True)
-    raw = "name: my-recipe\ndescription: test\nsteps: {}\n"
-    (recipes_dir / "my-recipe.yaml").write_text(raw)
-    info = find_recipe_by_name("my-recipe", tmp_path)
-    assert info is not None
-    assert info.content == raw
-
-
-# ---------------------------------------------------------------------------
-# Bundled recipe skill_command prefix contract
-# ---------------------------------------------------------------------------
-
-
 def test_parse_step_with_key_maps_to_with_args() -> None:
     """_parse_step maps YAML 'with' key to RecipeStep.with_args."""
     step = _parse_step({"tool": "claim_issue", "with": {"issue_url": "https://example.com"}})
@@ -904,11 +488,6 @@ def test_parse_step_with_args_key_is_not_read() -> None:
     """_parse_step does NOT read 'with_args' YAML key — confirms the fix is needed."""
     step = _parse_step({"tool": "claim_issue", "with_args": {"issue_url": "https://example.com"}})
     assert step.with_args == {}, "with_args YAML key must not be read — use 'with:' instead"
-
-
-# ---------------------------------------------------------------------------
-# P9-F1: step description field mapping
-# ---------------------------------------------------------------------------
 
 
 def test_parse_step_maps_description_field() -> None:
@@ -925,8 +504,6 @@ def test_parse_step_description_defaults_to_empty_string() -> None:
 
 def test_load_recipe_preserves_step_description(tmp_path: Path) -> None:
     """End-to-end: load_recipe preserves description: on a step."""
-    import textwrap
-
     yaml_content = textwrap.dedent("""\
         name: desc-test
         kitchen_rules: [rule1]
@@ -941,11 +518,6 @@ def test_load_recipe_preserves_step_description(tmp_path: Path) -> None:
     recipe_file.write_text(yaml_content)
     recipe = load_recipe(recipe_file)
     assert recipe.steps["build"].description == "Run the full build suite"
-
-
-# ---------------------------------------------------------------------------
-# CC-F4: kitchen_rules non-list raises ValueError
-# ---------------------------------------------------------------------------
 
 
 def test_parse_recipe_kitchen_rules_string_raises() -> None:
@@ -1023,15 +595,9 @@ def test_bundled_recipes_all_skill_commands_start_with_slash() -> None:
     assert not violations, f"Bundled recipe steps with prose skill_command: {violations}"
 
 
-# ---------------------------------------------------------------------------
-# T1 — schema-drift guard
-# ---------------------------------------------------------------------------
-
-
 def test_parse_step_handles_all_recipe_step_fields() -> None:
     """_PARSE_STEP_HANDLED_FIELDS must equal RecipeStep.__dataclass_fields__ keys."""
     from autoskillit.recipe.io import _PARSE_STEP_HANDLED_FIELDS
-    from autoskillit.recipe.schema import RecipeStep
 
     schema_fields = frozenset(RecipeStep.__dataclass_fields__)
     assert _PARSE_STEP_HANDLED_FIELDS == schema_fields, (
@@ -1039,130 +605,3 @@ def test_parse_step_handles_all_recipe_step_fields() -> None:
         f"  Missing from handled: {schema_fields - _PARSE_STEP_HANDLED_FIELDS}\n"
         f"  Extra in handled:     {_PARSE_STEP_HANDLED_FIELDS - schema_fields}"
     )
-
-
-# ---------------------------------------------------------------------------
-# REQ-ORD-003: Stable positions when project recipe added
-# ---------------------------------------------------------------------------
-
-
-def test_list_recipes_stable_with_project_recipe_added(tmp_path: Path) -> None:
-    """Adding a project recipe must not shift the positions of bundled recipes."""
-    # Collect bundled positions without any project recipes
-    before = [r.name for r in list_recipes(tmp_path).items]
-
-    # Add a project recipe whose name sorts before all bundled recipes
-    recipes_dir = tmp_path / ".autoskillit" / "recipes"
-    recipes_dir.mkdir(parents=True)
-    (recipes_dir / "aaa-custom.yaml").write_text(
-        "name: aaa-custom\ndescription: test\nsteps: {}\n"
-    )
-    after = [r.name for r in list_recipes(tmp_path).items]
-
-    # Bundled names must occupy the same leading positions
-    bundled_before = list(before)
-    bundled_after = [n for n in after if n in set(bundled_before)]
-    assert bundled_after == bundled_before, (
-        "Adding a project recipe must not shift bundled recipe positions"
-    )
-
-
-def test_parse_recipe_reads_requires_packs():
-    from autoskillit.recipe.io import _parse_recipe
-
-    data = {
-        "name": "test",
-        "description": "d",
-        "requires_packs": ["research", "github"],
-    }
-    recipe = _parse_recipe(data)
-    assert recipe.requires_packs == ["research", "github"]
-
-
-def test_parse_recipe_requires_packs_defaults_to_empty():
-    from autoskillit.recipe.io import _parse_recipe
-
-    recipe = _parse_recipe({"name": "test", "description": "d"})
-    assert recipe.requires_packs == []
-
-
-def test_research_recipe_loads_without_error():
-    from autoskillit.core.paths import pkg_root
-    from autoskillit.recipe.io import load_recipe
-
-    path = pkg_root() / "recipes" / "research.yaml"
-    recipe = load_recipe(path)
-    assert recipe.name == "research"
-
-
-def test_research_recipe_declares_requires_packs():
-    from autoskillit.core.paths import pkg_root
-    from autoskillit.recipe.io import load_recipe
-
-    path = pkg_root() / "recipes" / "research.yaml"
-    recipe = load_recipe(path)
-    assert recipe.requires_packs == ["research", "exp-lens", "vis-lens"]
-
-
-class TestRecipeVersionField:
-    def test_parse_recipe_reads_recipe_version(self, tmp_path):
-        yaml_content = (
-            "name: test\ndescription: d\nrecipe_version: '1.2.0'\n"
-            "kitchen_rules:\n  - rule\nsteps:\n  s1:\n    tool: run_skill\n"
-            "    message: hi\n    on_success: done\n"
-            "  done:\n    action: stop\n    message: Done\n"
-        )
-        p = tmp_path / "r.yaml"
-        p.write_text(yaml_content)
-        recipe = load_recipe(p)
-        assert recipe.recipe_version == "1.2.0"
-
-    def test_parse_recipe_no_recipe_version(self, tmp_path):
-        yaml_content = (
-            "name: test\ndescription: d\nkitchen_rules:\n  - rule\n"
-            "steps:\n  s1:\n    tool: run_skill\n    message: hi\n"
-            "    on_success: done\n  done:\n    action: stop\n    message: Done\n"
-        )
-        p = tmp_path / "r.yaml"
-        p.write_text(yaml_content)
-        recipe = load_recipe(p)
-        assert recipe.recipe_version is None
-
-    def test_parse_recipe_rejects_float_recipe_version(self, tmp_path):
-        yaml_content = (
-            "name: test\ndescription: d\nrecipe_version: 1.0\n"
-            "kitchen_rules:\n  - rule\nsteps:\n  s1:\n    tool: run_skill\n"
-            "    message: hi\n    on_success: done\n"
-            "  done:\n    action: stop\n    message: Done\n"
-        )
-        p = tmp_path / "r.yaml"
-        p.write_text(yaml_content)
-        with pytest.raises(ValueError, match="recipe_version must be a quoted string"):
-            load_recipe(p)
-
-
-class TestContentHash:
-    def test_load_recipe_sets_content_hash(self, tmp_path):
-        import hashlib
-
-        yaml_content = (
-            "name: test\ndescription: d\nkitchen_rules:\n  - rule\n"
-            "steps:\n  s1:\n    tool: run_skill\n    message: hi\n"
-            "    on_success: done\n  done:\n    action: stop\n    message: Done\n"
-        )
-        p = tmp_path / "r.yaml"
-        p.write_text(yaml_content)
-        recipe = load_recipe(p)
-        expected = "sha256:" + hashlib.sha256(p.read_bytes()).hexdigest()
-        assert recipe.content_hash == expected
-
-    def test_list_recipes_populates_content_hash(self, tmp_path):
-        recipe_dir = tmp_path / ".autoskillit" / "recipes"
-        recipe_dir.mkdir(parents=True)
-        (recipe_dir / "test.yaml").write_text(
-            "name: test\ndescription: d\nkitchen_rules:\n  - rule\n"
-            "steps:\n  s1:\n    tool: run_skill\n    message: hi\n"
-            "    on_success: done\n  done:\n    action: stop\n    message: Done\n"
-        )
-        result = list_recipes(tmp_path)
-        assert result.items[0].content_hash.startswith("sha256:")

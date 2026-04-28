@@ -7,7 +7,7 @@ from pathlib import Path
 import yaml
 
 from autoskillit.recipe.io import _parse_step
-from autoskillit.recipe.schema import Recipe
+from autoskillit.recipe.schema import Recipe, RecipeStep
 
 # Known violations fixed in Parts B and C — excluded from general semantic-error assertions.
 NO_AUTOSKILLIT_IMPORT = "no-autoskillit-import-in-skill-python-block"
@@ -20,6 +20,25 @@ NO_AUTOSKILLIT_IMPORT = "no-autoskillit-import-in-skill-python-block"
 def _make_workflow(steps: dict[str, dict]) -> Recipe:
     parsed_steps = {name: _parse_step(data) for name, data in steps.items()}
     return Recipe(name="test", description="test", steps=parsed_steps, kitchen_rules=["test"])
+
+
+def _build_merge_worktree_recipe(capture: dict) -> Recipe:
+    """Helper: build a minimal Recipe with a merge_worktree step and the given capture dict."""
+    return Recipe(
+        name="test-merge",
+        description="Test merge recipe",
+        summary="merge > done",
+        steps={
+            "merge": RecipeStep(
+                tool="merge_worktree",
+                with_args={"worktree_path": "${{ context.worktree_path }}", "base_branch": "main"},
+                capture=capture,
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="Done"),
+        },
+    )
 
 
 # ---------------------------------------------------------------------------

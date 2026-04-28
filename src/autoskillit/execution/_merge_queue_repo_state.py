@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 import fnmatch
 import random
-import re
 from typing import Any, Literal
 
 import httpx

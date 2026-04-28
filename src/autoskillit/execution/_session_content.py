@@ -8,12 +8,11 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 
-from autoskillit.core import CliSubtype, get_logger
-
+from autoskillit.core import get_logger
 from autoskillit.execution._session_model import (
+    FAILURE_SUBTYPES,
     ClaudeSessionResult,
     ContentState,
-    FAILURE_SUBTYPES,
 )
 
 logger = get_logger(__name__)

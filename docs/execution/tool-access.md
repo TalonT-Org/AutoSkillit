@@ -89,7 +89,7 @@ missing kitchen visibility.
 All 48 tools with their access level, tags, source file, and functional category.
 
 **Tag abbreviations**: AS = `autoskillit`, K = `kitchen`, HL = `headless`,
-GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`
+GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`, FL = `fleet`
 
 ---
 
@@ -143,7 +143,7 @@ GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`
 | `remove_clone` | AS, K, CL | `server/tools_clone.py` |
 | `push_to_remote` | AS, K, GH | `server/tools_clone.py` |
 | `register_clone_status` | AS, K, CL | `server/tools_clone.py` |
-| `batch_cleanup_clones` | AS, K, CL | `server/tools_clone.py` |
+| `batch_cleanup_clones` | AS, K, CL, FL | `server/tools_clone.py` |
 
 ---
 
@@ -156,6 +156,7 @@ GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`
 | `wait_for_merge_queue` | AS, K, CI | `server/tools_ci.py` |
 | `check_repo_merge_state` | AS, K, CI | `server/tools_ci.py` |
 | `toggle_auto_merge` | AS, K, CI | `server/tools_ci.py` |
+| `enqueue_pr` | AS, K, CI | `server/tools_ci.py` |
 | `set_commit_status` | AS, K, GH | `server/tools_ci.py` |
 
 ---
@@ -187,6 +188,7 @@ GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`
 | `get_quota_events` | AS, K, TL | `server/tools_status.py` |
 | `write_telemetry_files` | AS, K, TL | `server/tools_status.py` |
 | `read_db` | AS, K | `server/tools_status.py` |
+| `analyze_tool_sequences` | AS, K, TL | `server/tools_status.py` |
 
 ---
 

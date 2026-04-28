@@ -45,8 +45,9 @@ For unknown install types (e.g. installed from PyPI without a VCS reference),
 
 ## Escape hatches
 
-Set either env var to silence all update checks for a single invocation:
+Set any of these env vars to silence all update checks for a single invocation:
 
+    AUTOSKILLIT_SKIP_UPDATE_CHECK=1 autoskillit <command>
     AUTOSKILLIT_SKIP_STALE_CHECK=1 autoskillit <command>
     AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK=1 autoskillit <command>
 

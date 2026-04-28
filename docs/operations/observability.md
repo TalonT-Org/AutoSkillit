@@ -69,9 +69,9 @@ Per-session layout:
 ```
 sessions/
   <session-uuid>/
-    proc.jsonl          # ProcSnapshot stream
+    proc_trace.jsonl    # ProcSnapshot stream
     anomalies.jsonl     # detected anomalies
-    stdout.log          # captured headless stdout
+    raw_stdout.jsonl    # captured headless stdout
 sessions.jsonl          # one summary line per session
 ```
 
@@ -92,8 +92,8 @@ jq 'select(.anomaly_count > 0)' ~/.local/share/autoskillit/logs/sessions.jsonl
 ## 500-directory retention
 
 `execution/session_log.py` keeps the most recent 500 session directories and
-prunes older ones at every new session start. The `sessions.jsonl` index is
-append-only and is not pruned.
+prunes older ones at every new session start. `sessions.jsonl` is also rewritten
+on each prune to remove entries for deleted session directories.
 
 ## Recording and replay
 

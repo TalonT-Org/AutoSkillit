@@ -87,7 +87,7 @@ If the array is empty (`[]`) there are no issues to implement — skip to INTERR
     ingredients={{
         "issue_urls": "<comma-separated URLs for this batch>",
         "execution_map": "${{{{ campaign.execution_map }}}}",
-        "base_branch": "<base branch from campaign ingredients>",
+        "base_branch": "${{{{ campaign.base_branch }}}}",
     }},
     dispatch_name="implement-findings-g{{N}}-{{letter}}",
     capture={{}},

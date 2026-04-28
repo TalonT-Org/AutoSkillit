@@ -9,6 +9,8 @@ class FleetSemaphore:
     """Configurable semaphore implementing FleetLock for fleet dispatch concurrency."""
 
     def __init__(self, max_concurrent: int = 1) -> None:
+        if max_concurrent <= 0:
+            raise ValueError(f"max_concurrent must be > 0, got {max_concurrent}")
         self._semaphore = asyncio.BoundedSemaphore(max_concurrent)
         self._active = 0
         self._max = max_concurrent
@@ -21,8 +23,8 @@ class FleetSemaphore:
         self._active += 1
 
     def release(self) -> None:
-        self._active -= 1
         self._semaphore.release()
+        self._active -= 1
 
     @property
     def active_count(self) -> int:

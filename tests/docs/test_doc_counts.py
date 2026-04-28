@@ -260,6 +260,7 @@ def test_bundled_recipe_count_is_8() -> None:
         "implementation-groups",
         "merge-prs",
         "planner",
+        "promote-to-main-wrapper",
         "remediation",
         "research",
     ]
@@ -308,8 +309,8 @@ def test_docs_state_44_kitchen_tools(doc_path: Path) -> None:
     _assert_doc_states_number(doc_path, "kitchen tools", 44)
 
 
-def test_skill_visibility_states_125_skills() -> None:
-    _assert_doc_states_number(DOCS_DIR / "skills" / "visibility.md", "skills total", 125)
+def test_skill_visibility_states_126_skills() -> None:
+    _assert_doc_states_number(DOCS_DIR / "skills" / "visibility.md", "skills total", 126)
 
 
 def test_safety_hooks_states_21_hooks() -> None:

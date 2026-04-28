@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
 
 from autoskillit.core import CIRunScope, CIWatcher
@@ -549,9 +550,8 @@ async def test_fetch_completed_runs_sha_bypasses_time_filter(httpx_mock):
         json=_runs_response(_run(run_id=42, head_sha="sha123", updated_at=stale_time)),
     )
     watcher = DefaultCIWatcher(token="tok")
-    import httpx as httpx_mod
 
-    async with httpx_mod.AsyncClient() as client:
+    async with httpx.AsyncClient() as client:
         runs = await watcher._fetch_completed_runs(
             client,
             watcher._headers(),
@@ -572,9 +572,8 @@ async def test_fetch_completed_runs_no_sha_rejects_stale(httpx_mock):
         json=_runs_response(_run(run_id=42, updated_at=stale_time)),
     )
     watcher = DefaultCIWatcher(token="tok")
-    import httpx as httpx_mod
 
-    async with httpx_mod.AsyncClient() as client:
+    async with httpx.AsyncClient() as client:
         runs = await watcher._fetch_completed_runs(
             client,
             watcher._headers(),

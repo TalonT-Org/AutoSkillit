@@ -198,6 +198,17 @@ The `review_approach_candidates` token is conditional: emit it only when
 (e.g., `1155,1158`). When no issues are recommended or the flag is inactive, omit this
 token entirely.
 
+## Context Limit Behavior
+
+This skill writes output files to `{{AUTOSKILLIT_TEMP}}/build-execution-map/` and emits
+structured output tokens. If context is exhausted mid-execution:
+
+1. Before emitting any structured output tokens, verify that both output files
+   (execution map JSON and report markdown) exist on disk.
+2. If the files exist, emit the structured tokens and exit normally.
+3. If context exhaustion interrupts before files are written, the caller's
+   `on_context_limit` routing handles escalation — do not attempt partial output.
+
 ## Output JSON Schema
 
 ```json

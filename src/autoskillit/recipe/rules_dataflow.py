@@ -515,8 +515,10 @@ def _check_missing_callable_input(ctx: ValidationContext) -> list[RuleFinding]:
         if contract is None:
             continue
         required_inputs = {inp.name for inp in contract.inputs if inp.required}
-        _args = step.with_args.get("args")
-        provided_args: set[str] = set(_args.keys()) if isinstance(_args, dict) else set()
+        _nested = step.with_args.get("args")
+        nested_args: set[str] = set(_nested.keys()) if isinstance(_nested, dict) else set()
+        top_level_args = set(step.with_args.keys()) - {"callable", "timeout", "args"}
+        provided_args = nested_args | top_level_args
         missing = required_inputs - provided_args
         for arg_name in sorted(missing):
             findings.append(
@@ -554,8 +556,10 @@ def _check_callable_signature_mismatch(ctx: ValidationContext) -> list[RuleFindi
             continue
         sig = inspect.signature(func)
         valid_params = set(sig.parameters.keys())
-        _args = step.with_args.get("args")
-        provided_args: set[str] = set(_args.keys()) if isinstance(_args, dict) else set()
+        _nested = step.with_args.get("args")
+        nested_args: set[str] = set(_nested.keys()) if isinstance(_nested, dict) else set()
+        top_level_args = set(step.with_args.keys()) - {"callable", "timeout", "args"}
+        provided_args = nested_args | top_level_args
         invalid = provided_args - valid_params
         for arg_name in sorted(invalid):
             findings.append(

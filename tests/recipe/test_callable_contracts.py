@@ -20,7 +20,8 @@ def test_all_callable_contracts_declare_inputs():
         func = getattr(mod, attr_name)
         sig = inspect.signature(func)
         required_params = [
-            name for name, p in sig.parameters.items()
+            name
+            for name, p in sig.parameters.items()
             if p.default is inspect.Parameter.empty and name != "kwargs"
         ]
         declared_inputs = [inp["name"] for inp in entry.get("inputs", [])]

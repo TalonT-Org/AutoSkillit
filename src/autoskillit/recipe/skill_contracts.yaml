@@ -1913,6 +1913,16 @@ skills:
     pattern_examples:
       - "refined_wps_path = /tmp/autoskillit/planner/run-20260101-120000/refined_wps.json\n%%ORDER_UP%%"
     write_behavior: always
+  audit-tests:
+    inputs: []
+    outputs: []
+    expected_output_patterns: []
+    pattern_examples: []
+  validate-audit:
+    inputs: []
+    outputs: []
+    expected_output_patterns: []
+    pattern_examples: []
 callable_contracts:
   autoskillit.smoke_utils.check_review_loop:
     outputs:

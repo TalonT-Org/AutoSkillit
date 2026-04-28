@@ -251,9 +251,10 @@ def test_doctor_check_count_is_31() -> None:
     )
 
 
-def test_bundled_recipe_count_is_6() -> None:
+def test_bundled_recipe_count_is_7() -> None:
     recipes = _bundled_recipes()
     expected = [
+        "full-audit",
         "implementation",
         "implementation-groups",
         "merge-prs",

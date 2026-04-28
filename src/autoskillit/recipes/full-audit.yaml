@@ -18,6 +18,10 @@ ingredients:
 
 kitchen_rules:
   - >-
+    NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Agent,
+    WebFetch, WebSearch, NotebookEdit) from the orchestrator. All work is delegated
+    through run_skill.
+  - >-
     Each audit chain (tests, cohesion, arch, feature-gates, docs) is independent. A
     failure in one chain MUST NOT block or affect the other four chains. Continue with
     successful chains and note failures for escalation.
@@ -26,7 +30,7 @@ kitchen_rules:
     parallelism. Do not serialize audit/validate/issue calls.
   - >-
     Report paths are discovered from session output — look for file paths
-    in .autoskillit/temp/ directories. Pass discovered paths as positional
+    in {{AUTOSKILLIT_TEMP}}/ directories. Pass discovered paths as positional
     arguments to downstream skills.
 
 steps:
@@ -63,11 +67,11 @@ steps:
       5. run_skill(skill_command="/autoskillit:audit-docs", cwd="${{ inputs.workspace }}", step_name="audit_docs")
 
       Each audit writes its report to a well-known temp directory:
-      - .autoskillit/temp/audit-tests/{name}_{timestamp}.md
-      - .autoskillit/temp/audit-cohesion/cohesion_audit_{timestamp}.md
-      - .autoskillit/temp/audit-arch/arch_audit_{timestamp}.md
-      - .autoskillit/temp/audit-feature-gates/feature_gate_audit_{timestamp}.md
-      - .autoskillit/temp/audit-docs/docs_audit_{timestamp}.md
+      - {{AUTOSKILLIT_TEMP}}/audit-tests/{name}_{timestamp}.md
+      - {{AUTOSKILLIT_TEMP}}/audit-cohesion/cohesion_audit_{timestamp}.md
+      - {{AUTOSKILLIT_TEMP}}/audit-arch/arch_audit_{timestamp}.md
+      - {{AUTOSKILLIT_TEMP}}/audit-feature-gates/feature_gate_audit_{timestamp}.md
+      - {{AUTOSKILLIT_TEMP}}/audit-docs/docs_audit_{timestamp}.md
 
       After all five complete, discover the most-recently-modified .md file in
       each temp directory from the session output. Record which audits succeeded
@@ -100,7 +104,7 @@ steps:
       5. run_skill(skill_command="/autoskillit:validate-audit {docs_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_docs")
 
       Skip validation for any audit that failed in wave 1.
-      Each validation writes to .autoskillit/temp/validate-audit/:
+      Each validation writes to {{AUTOSKILLIT_TEMP}}/validate-audit/:
       - validated_report_{source}_{timestamp}.md (first line: "validated: true")
       - contested_findings_{source}_{timestamp}.md (only if contested > 0)
 
@@ -159,11 +163,11 @@ steps:
     message: >-
       Full audit complete. GitHub issues created from validated audit reports.
       Check context.issue_urls for the created issue links and
-      .autoskillit/temp/ for all audit artifacts.
+      {{AUTOSKILLIT_TEMP}}/ for all audit artifacts.
 
   escalate_stop:
     action: stop
     message: >-
       Full audit pipeline failed — one or more audit chains could not complete.
-      Check session logs and .autoskillit/temp/ directories for partial results.
+      Check session logs and {{AUTOSKILLIT_TEMP}}/ directories for partial results.
       Individual chain failures are noted in the session output above.

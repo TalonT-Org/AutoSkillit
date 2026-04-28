@@ -19,6 +19,7 @@ from autoskillit.server.tools_git import (
     merge_worktree,
 )
 from tests.conftest import _make_result
+from tests.server.conftest import assert_no_timing, assert_step_timed
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -607,8 +608,7 @@ class TestMergeWorktreeTiming:
         tool_ctx.runner.push(_make_result())
 
         await merge_worktree(str(wt), "dev", step_name="merge")
-        report = tool_ctx.timing_log.get_report()
-        assert any(e["step_name"] == "merge" for e in report)
+        assert_step_timed(tool_ctx.timing_log, "merge")
 
     @pytest.mark.anyio
     async def test_merge_worktree_empty_step_name_skips_timing(self, tool_ctx, tmp_path):
@@ -626,7 +626,7 @@ class TestMergeWorktreeTiming:
         tool_ctx.runner.push(_make_result())
 
         await merge_worktree(str(wt), "dev")
-        assert tool_ctx.timing_log.get_report() == []
+        assert_no_timing(tool_ctx.timing_log)
 
 
 class TestClassifyFixTiming:
@@ -636,14 +636,13 @@ class TestClassifyFixTiming:
     async def test_classify_fix_step_name_records_timing(self, tool_ctx, tmp_path):
         tool_ctx.runner.push(_make_result(stdout="src/other/file.py\n"))
         await classify_fix(str(tmp_path), "main", step_name="classify")
-        report = tool_ctx.timing_log.get_report()
-        assert any(e["step_name"] == "classify" for e in report)
+        assert_step_timed(tool_ctx.timing_log, "classify")
 
     @pytest.mark.anyio
     async def test_classify_fix_empty_step_name_skips_timing(self, tool_ctx, tmp_path):
         tool_ctx.runner.push(_make_result(stdout="src/other/file.py\n"))
         await classify_fix(str(tmp_path), "main")
-        assert tool_ctx.timing_log.get_report() == []
+        assert_no_timing(tool_ctx.timing_log)
 
 
 class TestMergeWorktreeMergeCommitDetection:

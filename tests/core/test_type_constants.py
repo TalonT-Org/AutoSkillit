@@ -241,3 +241,27 @@ def test_feature_def_has_no_name_field() -> None:
 
     field_names = {f.name for f in dataclasses.fields(FeatureDef)}
     assert "name" not in field_names, "FeatureDef.name is redundant with FEATURE_REGISTRY dict key"
+
+
+def test_fleet_tools_matches_expected() -> None:
+    """FLEET_TOOLS must match a hardcoded expected set — not derived from tags."""
+    from autoskillit.core import FLEET_TOOLS
+
+    expected = frozenset(
+        {
+            "batch_cleanup_clones",
+            "get_pipeline_report",
+            "get_token_summary",
+            "get_timing_summary",
+            "get_quota_events",
+            "dispatch_food_truck",
+        }
+    )
+    assert FLEET_TOOLS == expected
+
+
+def test_skill_tools_matches_expected() -> None:
+    """SKILL_TOOLS must match a hardcoded expected set."""
+    from autoskillit.core import SKILL_TOOLS
+
+    assert SKILL_TOOLS == frozenset({"run_skill"})

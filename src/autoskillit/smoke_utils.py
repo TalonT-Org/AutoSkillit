@@ -182,7 +182,7 @@ def patch_pr_token_summary(pr_url: str, cwd: str, log_dir: str = "") -> dict[str
         return {"success": "false", "error": f"Failed to read PR: {read_result.stderr.strip()}"}
 
     current_body = read_result.stdout.strip()
-    if not current_body:
+    if not current_body or current_body == "null":
         return {"success": "false", "error": "PR body is empty"}
 
     section_re = _re.compile(r"\n*## Token Usage Summary\n.*", _re.DOTALL)

@@ -270,7 +270,7 @@ tests/
 │   ├── test_headless.py
 │   ├── test_headless_add_dirs.py
 │   ├── test_headless_debug_logging.py
-│   ├── test_headless_env_injection.py   # (moved from root test_phase2_headless_env.py in groupG)
+│   ├── test_headless_env_injection.py
 │   ├── test_linux_tracing.py
 │   ├── test_merge_queue.py
 │   ├── test_normalize_subtype.py
@@ -337,7 +337,7 @@ tests/
 │   ├── test_background_supervisor.py
 │   ├── test_gate.py
 │   ├── test_mcp_response.py
-│   ├── test_pr_gates.py                 # (moved from root test_analyze_prs_gates.py in groupG)
+│   ├── test_pr_gates.py
 │   ├── test_telemetry_formatter.py
 │   ├── test_timings.py
 │   └── test_tokens.py

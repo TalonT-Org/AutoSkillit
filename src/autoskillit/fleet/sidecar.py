@@ -5,8 +5,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Literal
 
-from autoskillit.core import ensure_project_temp
-from autoskillit.core.logging import get_logger
+from autoskillit.core import ensure_project_temp, get_logger
 
 _log = get_logger()
 

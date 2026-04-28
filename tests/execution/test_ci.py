@@ -150,7 +150,6 @@ async def test_lookback_filters_by_head_sha():
         timeout_seconds=60,
     )
     assert result["run_id"] == 222
-    # scope.head_sha is still passed through to _fetch_completed_runs
     call_kwargs = watcher._fetch_completed_runs.call_args
     assert call_kwargs[0][4].head_sha == "abc123"  # positional arg: scope
 

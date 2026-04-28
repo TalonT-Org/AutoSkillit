@@ -366,6 +366,8 @@ class TestOutputPathTokensDerivedFromContracts:
             "audit_report_path",
             # validate-audit output (bundled full-audit recipe)
             "validated_report_path",
+            # promote-to-main skill output (promote-to-main-wrapper recipe)
+            "pr_body_path",
         }
     )
 

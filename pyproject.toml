@@ -116,6 +116,13 @@ select = ["E", "F", "I", "UP", "TID251"]
 [tool.ruff.lint.per-file-ignores]
 "tests/execution/test_session_classification_e2e.py" = ["E402"]
 "tests/execution/test_process_channel_b.py" = ["E501"]
+"tests/test_test_filter_cascade.py" = ["E501"]
+"tests/execution/test_quota_io.py" = ["E501"]
+"tests/execution/test_merge_queue_ejection.py" = ["E501"]
+"tests/execution/test_quota_binding.py" = ["E501"]
+"tests/arch/test_layer_enforcement.py" = ["E501"]
+"tests/execution/test_quota_sleep.py" = ["E501"]
+"tests/execution/test_merge_queue_classifier.py" = ["E501"]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "logging.getLogger" = {msg = "Use get_logger() from autoskillit._logging instead."}

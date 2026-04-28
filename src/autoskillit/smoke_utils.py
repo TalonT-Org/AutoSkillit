@@ -148,9 +148,8 @@ def patch_pr_token_summary(pr_url: str, cwd: str, log_dir: str = "") -> dict[str
     import subprocess  # noqa: PLC0415
     import time  # noqa: PLC0415
 
-    from autoskillit.execution.session_log import resolve_log_dir  # noqa: PLC0415
-    from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter  # noqa: PLC0415
-    from autoskillit.pipeline.tokens import DefaultTokenLog  # noqa: PLC0415
+    from autoskillit.execution import resolve_log_dir  # noqa: PLC0415
+    from autoskillit.pipeline import DefaultTokenLog, TelemetryFormatter  # noqa: PLC0415
 
     m = _re.match(r"https://github\.com/([^/]+)/([^/]+)/pull/(\d+)", pr_url)
     if not m:

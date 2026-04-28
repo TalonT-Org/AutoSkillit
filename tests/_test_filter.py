@@ -319,6 +319,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "infra",
             "cli",
             "fleet",
+            "smoke_utils",
         }
     ),
     "workspace": frozenset(

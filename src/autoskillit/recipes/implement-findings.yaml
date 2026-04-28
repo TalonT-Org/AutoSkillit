@@ -1,0 +1,224 @@
+name: implement-findings
+description: >-
+  Multi-issue L2 orchestration recipe for promote-to-main campaign. Processes
+  a batch of audit findings through the full implementation or remediation
+  lifecycle. Issues within the same BEM group run in parallel via wavefront
+  scheduling; groups run sequentially.
+kind: standard
+autoskillit_version: "0.9.240"
+recipe_version: "1.0.0"
+requires_packs:
+  - github
+  - clone
+  - telemetry
+
+ingredients:
+  issue_urls:
+    description: "Comma-separated GitHub issue URLs to process"
+    required: true
+  base_branch:
+    description: "Target branch for implementation PRs"
+    default: "integration"
+  source_dir:
+    description: "Source repository path"
+    required: false
+    default: ""
+  execution_map:
+    description: >-
+      Path to pre-computed BEM execution map JSON. When provided (campaign
+      mode), skips internal BEM computation. When empty (standalone mode),
+      runs /autoskillit:build-execution-map internally.
+    required: false
+    default: ""
+    hidden: true
+  max_parallel:
+    description: "Max issues to run in parallel within a group (default suits 200K-context models)"
+    default: "6"
+    hidden: true
+
+kitchen_rules:
+  - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
+    Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the
+    orchestrator. All work is delegated through run_skill."
+  - "Route to on_failure — never investigate or fix directly from the orchestrator."
+  - "Issues within a parallel group MUST complete all fast MCP steps
+    (clone_repo, create_branch) for ALL issues before launching any run_skill
+    calls. Wait for all fast steps to finish, then launch run_skill calls for
+    all issues simultaneously."
+  - "Per-issue failures are non-fatal. Write the sidecar entry with
+    status:failed, call release_issue, and continue to the next issue without
+    stopping the batch."
+  - "After all groups complete, call batch_cleanup_clones once with all clone
+    registry paths from the batch."
+
+steps:
+  check_resume:
+    tool: run_python
+    with:
+      callable: "autoskillit.fleet._findings_rpc.parse_and_resume"
+      issue_urls_csv: "${{ inputs.issue_urls }}"
+      project_dir: "${{ inputs.source_dir }}"
+    capture:
+      remaining_issue_urls_json: "${{ result.remaining_urls_json }}"
+      completed_count: "${{ result.completed_count }}"
+    on_success: route_bem_mode
+    on_failure: escalate_stop
+    note: >
+      Reads AUTOSKILLIT_DISPATCH_ID from env (set by execute_dispatch).
+      Parses comma-separated issue_urls, checks the per-dispatch sidecar at
+      .autoskillit/temp/dispatches/{dispatch_id}_issues.jsonl, and returns
+      only the URLs not yet completed or failed. On resume, already-processed
+      issues are excluded automatically.
+
+  route_bem_mode:
+    action: route
+    on_result:
+      - when: "${{ inputs.execution_map }} != ''"
+        route: set_bem_path_from_ingredient
+      - route: run_bem_internally
+    note: >
+      Campaign mode: execution_map ingredient is pre-computed by the L3 fleet
+      dispatcher — skip BEM computation, read the provided file path directly.
+      Standalone mode: execution_map is empty — run build-execution-map skill
+      to compute groups from scratch.
+
+  set_bem_path_from_ingredient:
+    tool: run_cmd
+    with:
+      cmd: "printf '%s' '${{ inputs.execution_map }}'"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: "set_bem_path_from_ingredient"
+    capture:
+      execution_map_path: "${{ result.stdout | trim }}"
+    on_success: load_bem_from_file
+    on_failure: escalate_stop
+    note: >
+      Campaign mode only. Captures execution_map ingredient into context
+      variable execution_map_path so load_bem_from_file can use a single
+      source for both modes.
+
+  run_bem_internally:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:build-execution-map ${{ context.remaining_issue_urls_json }} ${{ inputs.base_branch }}"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: "run_bem_internally"
+    capture:
+      execution_map_path: "${{ result.execution_map }}"
+    on_success: load_bem_from_file
+    on_failure: escalate_stop
+    on_context_limit: escalate_stop
+    note: >
+      Standalone mode only. Runs build-execution-map skill to compute the
+      BEM groups from the remaining issue URLs. Captures the output map
+      file path as execution_map_path for load_bem_from_file.
+
+  load_bem_from_file:
+    tool: run_python
+    with:
+      callable: "autoskillit.fleet._findings_rpc.load_execution_map"
+      map_path: "${{ context.execution_map_path }}"
+    capture:
+      groups_json: "${{ result.groups_json }}"
+      total_groups: "${{ result.total_groups }}"
+    on_success: claim_all_issues
+    on_failure: escalate_stop
+    note: >
+      Reads the BEM JSON file and extracts the groups array. Each group
+      has: name, parallel (bool), issues (list of URLs). Captured as
+      groups_json (JSON string) and total_groups (count string).
+
+  claim_all_issues:
+    tool: run_cmd
+    with:
+      cmd: "echo 'claiming_all=${{ context.remaining_issue_urls_json }} completed_already=${{ context.completed_count }} total_groups=${{ context.total_groups }} groups=${{ context.groups_json }}'"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: "claim_all_issues"
+    on_success: process_groups
+    on_failure: escalate_stop
+    note: >
+      Upfront claim: call claim_issue for EACH URL in
+      context.remaining_issue_urls_json. Use allow_reentry: 'true' to handle
+      the resume case where issues were already claimed in a prior run.
+      Do this before beginning group processing — this is the process-issues
+      pattern that prevents concurrent claim conflicts.
+      The run_cmd here serves as an anchor step. Make all claim_issue calls
+      in the same turn before routing to process_groups.
+
+  process_groups:
+    tool: run_cmd
+    with:
+      cmd: "printf 'groups_total=%s\n' '${{ context.total_groups }}'  # groups=${{ context.groups_json }}"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: "process_groups"
+    on_success: next_or_done
+    on_failure: escalate_stop
+    note: >
+      GROUP LOOP — the agent maintains a group queue from context.groups_json.
+      For each group (process in order, one group at a time):
+
+      1. Parse the group's issue URLs and parallel flag.
+
+      2. For each issue in the group, fetch its GitHub labels via
+         fetch_github_issue to determine recipe type:
+         - Label "recipe:implementation" -> use implementation recipe steps
+         - Label "recipe:remediation"    -> use remediation recipe steps
+
+      3. WAVEFRONT SCHEDULING (for parallel: true groups):
+         - First turn: call clone_repo for ALL issues simultaneously.
+           Wait for all clones to complete.
+         - Second turn: call create_branch + push_merge_target for ALL
+           issues simultaneously. Wait for all to complete.
+         - Third turn: launch run_skill for ALL issues simultaneously
+           (implementation or remediation skill session per issue).
+         For sequential groups (parallel: false): process one issue at a time.
+
+      4. After each issue completes (success or failure):
+         - Success: call run_python with callable
+           "autoskillit.fleet._sidecar_rpc.write_sidecar_entry",
+           args: dispatch_id=$AUTOSKILLIT_DISPATCH_ID, issue_url=<url>,
+           status="completed", pr_url=<pr_url>
+         - Failure: call run_python with callable
+           "autoskillit.fleet._sidecar_rpc.write_sidecar_entry",
+           args: status="failed", reason=<error summary>.
+           Then call release_issue for that URL to remove the in-progress label.
+           Continue to next issue — do NOT stop the batch.
+
+      5. After all issues in the current group complete, advance to the
+         next group. When all groups are done, route to next_or_done
+         with result.next = "all_done".
+
+  next_or_done:
+    action: route
+    on_result:
+      - when: "${{ result.next }} == more_groups"
+        route: process_groups
+      - route: batch_cleanup
+    note: >
+      Routing step — no tool call. The agent evaluates whether more groups
+      remain in the queue (result.next = more_groups) or all groups have
+      been processed (route to batch_cleanup).
+
+  batch_cleanup:
+    tool: batch_cleanup_clones
+    with:
+      step_name: "batch_cleanup"
+    on_success: done
+    on_failure: done
+    note: >
+      Deletes all success-status clones registered during this batch run.
+      Preserves failure-status clones for post-mortem inspection.
+      Always routes to done regardless of outcome — cleanup failures are
+      non-fatal.
+
+  done:
+    action: stop
+    message: >-
+      implement-findings batch complete. All groups processed.
+      See sidecar for per-issue outcomes.
+
+  escalate_stop:
+    action: stop
+    message: >-
+      implement-findings batch failed at setup. Manual investigation required.
+      Check the step that routed here for root cause.

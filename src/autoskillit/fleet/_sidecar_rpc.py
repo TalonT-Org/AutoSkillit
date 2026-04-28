@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import cast, Literal
+from typing import Literal, cast
 
-from autoskillit.fleet.sidecar import IssueSidecarEntry, append_sidecar_entry, compute_remaining_issues
+from autoskillit.fleet.sidecar import (
+    IssueSidecarEntry,
+    append_sidecar_entry,
+    compute_remaining_issues,
+)
 
 
 def write_sidecar_entry(
@@ -22,7 +26,7 @@ def write_sidecar_entry(
     entry = IssueSidecarEntry(
         issue_url=issue_url,
         status=cast(Literal["completed", "failed"], status),
-        ts=datetime.now(tz=timezone.utc).isoformat(),
+        ts=datetime.now(tz=UTC).isoformat(),
         pr_url=pr_url or None,
         reason=reason or None,
     )
@@ -36,7 +40,7 @@ def get_remaining_issues(
     original_urls_json: str,
     project_dir: str = "",
 ) -> dict[str, str]:
-    """Return remaining URLs as {"remaining_urls_json": "<json array>", "remaining_count": "<N>"}."""
+    """Return remaining URLs as remaining_urls_json + remaining_count dict."""
     original_urls: list[str] = json.loads(original_urls_json)
     root = Path(project_dir) if project_dir else Path.cwd()
     remaining = compute_remaining_issues(dispatch_id, original_urls, root)

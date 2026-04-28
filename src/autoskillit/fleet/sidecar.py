@@ -5,7 +5,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Literal
 
-from autoskillit.core.io import ensure_project_temp
+from autoskillit.core import ensure_project_temp
 
 
 @dataclass(frozen=True)

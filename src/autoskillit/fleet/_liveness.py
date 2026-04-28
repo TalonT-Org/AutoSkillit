@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from autoskillit.core._linux_proc import read_boot_id, read_starttime_ticks
+from autoskillit.core import read_boot_id, read_starttime_ticks
 from autoskillit.fleet.state import DispatchRecord
 
 

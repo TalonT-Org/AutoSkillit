@@ -1,12 +1,14 @@
 import json
 from pathlib import Path
+
 import pytest
+
 from autoskillit.fleet.sidecar import (
     IssueSidecarEntry,
-    sidecar_path,
     append_sidecar_entry,
-    read_sidecar,
     compute_remaining_issues,
+    read_sidecar,
+    sidecar_path,
 )
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
@@ -38,7 +40,9 @@ class TestAppendSidecarEntry:
 
     def test_multiple_appends_produce_multiple_lines(self, tmp_path: Path) -> None:
         for url in [URL1, URL2, URL3]:
-            append_sidecar_entry("d2", IssueSidecarEntry(issue_url=url, status="completed", ts=TS), tmp_path)
+            append_sidecar_entry(
+                "d2", IssueSidecarEntry(issue_url=url, status="completed", ts=TS), tmp_path
+            )
         lines = [l for l in sidecar_path("d2", tmp_path).read_text().splitlines() if l.strip()]
         assert len(lines) == 3
 
@@ -58,7 +62,12 @@ class TestAppendSidecarEntry:
         assert "reason" not in parsed or parsed.get("reason") is None
 
     def test_pr_url_written_for_completed(self, tmp_path: Path) -> None:
-        entry = IssueSidecarEntry(issue_url=URL1, status="completed", pr_url="https://github.com/org/repo/pull/200", ts=TS)
+        entry = IssueSidecarEntry(
+            issue_url=URL1,
+            status="completed",
+            pr_url="https://github.com/org/repo/pull/200",
+            ts=TS,
+        )
         append_sidecar_entry("d5", entry, tmp_path)
         parsed = json.loads(sidecar_path("d5", tmp_path).read_text().strip())
         assert parsed["pr_url"] == "https://github.com/org/repo/pull/200"
@@ -78,7 +87,7 @@ class TestReadSidecar:
         p = sidecar_path("d7", tmp_path)
         p.parent.mkdir(parents=True, exist_ok=True)
         good = json.dumps({"issue_url": URL1, "status": "completed", "ts": TS})
-        p.write_text(f"{good}\n{{\"issue_url\":\"truncated-bad-json\n")
+        p.write_text(f'{good}\n{{"issue_url":"truncated-bad-json\n')
         entries = read_sidecar("d7", tmp_path)
         assert len(entries) == 1
         assert entries[0].issue_url == URL1
@@ -91,7 +100,12 @@ class TestReadSidecar:
         assert len(read_sidecar("d8", tmp_path)) == 1
 
     def test_round_trip_fidelity(self, tmp_path: Path) -> None:
-        entry = IssueSidecarEntry(issue_url=URL1, status="completed", pr_url="https://github.com/org/repo/pull/200", ts=TS)
+        entry = IssueSidecarEntry(
+            issue_url=URL1,
+            status="completed",
+            pr_url="https://github.com/org/repo/pull/200",
+            ts=TS,
+        )
         append_sidecar_entry("d9", entry, tmp_path)
         [result] = read_sidecar("d9", tmp_path)
         assert result.issue_url == entry.issue_url
@@ -106,26 +120,36 @@ class TestComputeRemainingIssues:
         assert compute_remaining_issues("d10", originals, tmp_path) == originals
 
     def test_completed_removed(self, tmp_path: Path) -> None:
-        append_sidecar_entry("d11", IssueSidecarEntry(issue_url=URL1, status="completed", ts=TS), tmp_path)
+        append_sidecar_entry(
+            "d11", IssueSidecarEntry(issue_url=URL1, status="completed", ts=TS), tmp_path
+        )
         assert compute_remaining_issues("d11", [URL1, URL2], tmp_path) == [URL2]
 
     def test_failed_removed(self, tmp_path: Path) -> None:
-        append_sidecar_entry("d12", IssueSidecarEntry(issue_url=URL1, status="failed", reason="x", ts=TS), tmp_path)
+        append_sidecar_entry(
+            "d12", IssueSidecarEntry(issue_url=URL1, status="failed", reason="x", ts=TS), tmp_path
+        )
         assert compute_remaining_issues("d12", [URL1, URL2], tmp_path) == [URL2]
 
     def test_preserves_original_order(self, tmp_path: Path) -> None:
         originals = [URL1, URL2, URL3]
-        append_sidecar_entry("d13", IssueSidecarEntry(issue_url=URL2, status="completed", ts=TS), tmp_path)
+        append_sidecar_entry(
+            "d13", IssueSidecarEntry(issue_url=URL2, status="completed", ts=TS), tmp_path
+        )
         assert compute_remaining_issues("d13", originals, tmp_path) == [URL1, URL3]
 
     def test_all_done_returns_empty(self, tmp_path: Path) -> None:
         for url in [URL1, URL2]:
-            append_sidecar_entry("d14", IssueSidecarEntry(issue_url=url, status="completed", ts=TS), tmp_path)
+            append_sidecar_entry(
+                "d14", IssueSidecarEntry(issue_url=url, status="completed", ts=TS), tmp_path
+            )
         assert compute_remaining_issues("d14", [URL1, URL2], tmp_path) == []
 
     def test_crash_scenario_2_of_4_done(self, tmp_path: Path) -> None:
         originals = [URL1, URL2, URL3, "https://github.com/org/repo/issues/104"]
         for url in originals[:2]:
-            append_sidecar_entry("d15", IssueSidecarEntry(issue_url=url, status="completed", ts=TS), tmp_path)
+            append_sidecar_entry(
+                "d15", IssueSidecarEntry(issue_url=url, status="completed", ts=TS), tmp_path
+            )
         remaining = compute_remaining_issues("d15", originals, tmp_path)
         assert remaining == originals[2:]

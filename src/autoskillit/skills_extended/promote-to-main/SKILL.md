@@ -34,9 +34,9 @@ and creates a comprehensive promotion PR.
 ## Critical Constraints
 
 **NEVER:**
-- Create files outside `.autoskillit/temp/promote-to-main/`
+- Create files outside `{{AUTOSKILLIT_TEMP}}/promote-to-main/`
 - Modify any source code — this skill is read-only analysis + PR creation
-- Fail silently if `gh` is unavailable — output `pr_url = ` (empty) and exit successfully
+- Fail silently when `gh` is unavailable — output `pr_url = ` (empty) and exit successfully
 - Push or merge anything — this skill only creates the PR
 - Skip pre-flight checks — a failing pre-flight must block PR creation
 - Use the Bash tool for file reads — use Read, Grep, Glob for all codebase inspection
@@ -63,6 +63,17 @@ Every subagent spawned by this skill receives this standing instruction:
 
 Include this grant verbatim in every Task tool prompt throughout this skill.
 
+## Context Limit Behavior
+
+When context is exhausted mid-execution, temp files may be written but the PR may
+not yet be created. The recipe routes to `on_context_limit` (typically `escalate_stop`),
+bypassing the normal completion protocol.
+
+**Before emitting structured output tokens:**
+1. Emit `pr_url = ` (empty) if the PR was not successfully created
+2. Emit `verdict = preflight_failed` to signal an incomplete run
+3. Emit whatever was completed; the orchestrator handles the context-limit route
+
 ## Workflow
 
 ### Phase 0: Setup
@@ -81,7 +92,7 @@ git rev-parse --verify {base_branch} 2>/dev/null
 ```
 If either fails, try fetching:
 ```bash
-git fetch origin {branch}:{branch} 2>/dev/null
+git fetch origin {integration_branch}:{integration_branch} 2>/dev/null
 ```
 If still missing, print error to stderr and exit 1.
 
@@ -91,14 +102,14 @@ If still missing, print error to stderr and exit 1.
 git merge-base {base_branch} {integration_branch}
 ```
 
-Store as `merge_base_sha`.
+Store as `$MERGE_BASE_SHA`.
 
 Get commit count and timestamp:
 ```bash
-git rev-list --count {merge_base_sha}..{integration_branch}
-git show -s --format=%cI {merge_base_sha}
+git rev-list --count $MERGE_BASE_SHA..{integration_branch}
+git show -s --format=%cI $MERGE_BASE_SHA
 ```
-Store as `commit_count` and `merge_base_date`.
+Store as `$COMMIT_COUNT` and `$MERGE_BASE_DATE`.
 
 #### Step 0.3: Retrieve Token Summary from Session Logs
 
@@ -107,8 +118,8 @@ This aggregates token usage across all constituent PR sessions that ran in this 
 working directory.
 
 ```bash
-mkdir -p .autoskillit/temp/promote-to-main
-python3 - <<'EOF' > .autoskillit/temp/promote-to-main/token_summary.md 2>/dev/null || true
+mkdir -p {{AUTOSKILLIT_TEMP}}/promote-to-main
+python3 - <<'EOF' > {{AUTOSKILLIT_TEMP}}/promote-to-main/token_summary.md 2>/dev/null || true
 import json, pathlib, sys
 from autoskillit.pipeline.tokens import DefaultTokenLog
 from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
@@ -132,10 +143,9 @@ print(TelemetryFormatter.format_token_table(steps, total))
 EOF
 ```
 
-- If `.autoskillit/temp/promote-to-main/token_summary.md` is non-empty, set `TOKEN_SUMMARY_CONTENT` to its
+- If `{{AUTOSKILLIT_TEMP}}/promote-to-main/token_summary.md` is non-empty, set `TOKEN_SUMMARY_CONTENT` to its
   contents and embed it in the PR body under `## Token Usage Summary`.
-- If empty or absent (standalone invocation, no pipeline sessions in this cwd), omit the
-  section — graceful degradation with no error.
+- If empty or absent (standalone invocation, no pipeline sessions in this cwd), omit this section.
 
 ### Phase 1: Pre-flight Checks (parallel, blocking)
 
@@ -214,7 +224,7 @@ in each prompt.**
 
 Receive the output of:
 ```bash
-git log {merge_base_sha}..{integration_branch} --format="%H %s"
+git log $MERGE_BASE_SHA..{integration_branch} --format="%H %s"
 ```
 
 Categorize each commit into exactly one category based on its subject line:
@@ -248,16 +258,16 @@ Run:
 gh pr list --base {integration_branch} --state merged --limit 200 --json number,title,author,mergedAt,body,headRefName,additions,deletions,labels,url
 ```
 
-Filter to PRs merged after `merge_base_date`. If empty, fall back to commit-subject
+Filter to PRs merged after `$MERGE_BASE_DATE`. If empty, fall back to commit-subject
 discovery:
 ```bash
-git log {merge_base_sha}..{integration_branch} --oneline --grep="(#" --format="%s"
+git log $MERGE_BASE_SHA..{integration_branch} --oneline --grep="(#" --format="%s"
 ```
 
 For each PR, extract `Closes|Fixes|Resolves #N` references (case-insensitive).
 Deduplicate across all PRs. For each linked issue number, fetch details:
 ```bash
-gh issue view {number} --json number,title,state,url,labels 2>/dev/null
+gh issue view $ISSUE_NUMBER --json number,title,state,url,labels 2>/dev/null
 ```
 
 Build a traceability matrix: for each issue, identify which PR(s) close it.
@@ -327,6 +337,9 @@ Return JSON:
 
 ### Phase 3: Architecture Diagrams
 
+Architecture diagrams are generated via arch-lens skills.
+Using ONLY classDef styles from the mermaid skill (no invented colors).
+
 #### Step 3.1: Select Arch-Lens Lenses
 
 Spawn a Task subagent (model: sonnet) with the `changed_files` list and this lens menu:
@@ -358,7 +371,7 @@ next lens.
 
 **1. Write the PR context to a file using the Write tool:**
 
-- **Path:** `.autoskillit/temp/promote-to-main/pr_arch_lens_context_{YYYY-MM-DD_HHMMSS}.md`
+- **Path:** `{{AUTOSKILLIT_TEMP}}/promote-to-main/pr_arch_lens_context_{YYYY-MM-DD_HHMMSS}.md`
 - **Content:**
 
 ```markdown
@@ -389,7 +402,7 @@ This diagram is for a promotion PR merging the integration branch into main. Foc
 
 **3. Follow the loaded skill's instructions** to generate the diagram.
 
-Read the output from `.autoskillit/temp/arch-lens-{lens-name}/` and extract the mermaid block(s).
+Read the output from `{{AUTOSKILLIT_TEMP}}/arch-lens-{lens-name}/` and extract the mermaid block(s).
 
 Validate: if the block contains at least one star marker or bullet marker for
 new/modified nodes, add to `validated_diagrams`. Otherwise discard.
@@ -420,11 +433,11 @@ Return JSON:
 
 #### Step 4.2: Write PR Body
 
-Write to `.autoskillit/temp/promote-to-main/pr_body_{YYYY-MM-DD_HHMMSS}.md`
+Write to `{{AUTOSKILLIT_TEMP}}/promote-to-main/pr_body_{YYYY-MM-DD_HHMMSS}.md`
 (relative to the current working directory).
 
 Sections in order:
-1. `## Promotion: {integration_branch} to {base_branch}` — executive summary + stats (`diff_stat_summary`, `commit_count`, PR count)
+1. `## Promotion: {integration_branch} to {base_branch}` — executive summary + stats (`diff_stat_summary`, `$COMMIT_COUNT`, PR count)
 2. `### Highlights` — from synthesis
 3. `## Release Notes` — from synthesis
 4. `## Merged PRs` — table (PR, Title, Author, Labels) from Subagent 2B
@@ -446,21 +459,21 @@ gh auth status 2>/dev/null
 If exit code non-zero: output `pr_url = ` and exit successfully.
 
 Construct PR title using actual branch names:
-`Promote {integration_branch} to {base_branch} ({len(prs)} PRs, {len(linked_issue_numbers)} issues, {category_summary})`
+`Promote {integration_branch} to {base_branch} ($PR_COUNT PRs, $ISSUE_COUNT issues, $CATEGORY_SUMMARY)`
 
 ```bash
 gh pr create \
   --base {base_branch} \
   --head {integration_branch} \
-  --title "{pr_title}" \
-  --body-file .autoskillit/temp/promote-to-main/pr_body_{timestamp}.md
+  --title "$PR_TITLE" \
+  --body-file {{AUTOSKILLIT_TEMP}}/promote-to-main/pr_body_$TIMESTAMP.md
 ```
 
-Capture the PR URL as `pr_url`.
+Capture the PR URL as `$PR_URL`.
 
 Add label (optional, continue if fails):
 ```bash
-gh pr edit {pr_url} --add-label "promotion" 2>/dev/null || true
+gh pr edit $PR_URL --add-label "promotion" 2>/dev/null || true
 ```
 
 ### Output
@@ -468,7 +481,7 @@ gh pr edit {pr_url} --add-label "promotion" 2>/dev/null || true
 Always emit these structured output tokens as the final lines:
 
 ```
-pr_body_path = {absolute path to .autoskillit/temp/promote-to-main/pr_body_{timestamp}.md}
+pr_body_path = {absolute path to {{AUTOSKILLIT_TEMP}}/promote-to-main/pr_body_{timestamp}.md}
 pr_url = {pr_url, empty if dry-run or gh unavailable}
 verdict = {created|dry_run|preflight_failed}
 category_summary = {e.g., "14 fixes, 13 features, 3 infra"}

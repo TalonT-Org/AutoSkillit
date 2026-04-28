@@ -41,6 +41,14 @@ _PSEUDOCODE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         # bash blocks that reference it.
         ("implement-experiment", "slug"),
         ("generate-report", "slug"),
+        # ── promote-to-main: runtime-computed values in pseudocode bash blocks ──────────
+        # These are derived at runtime during skill execution; not recipe ingredients.
+        ("promote-to-main", "branch"),
+        ("promote-to-main", "merge_base_sha"),
+        ("promote-to-main", "number"),
+        ("promote-to-main", "pr_title"),
+        ("promote-to-main", "pr_url"),
+        ("promote-to-main", "timestamp"),
     }
 )
 

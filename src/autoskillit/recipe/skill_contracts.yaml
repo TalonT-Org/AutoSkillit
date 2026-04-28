@@ -1913,6 +1913,34 @@ skills:
     pattern_examples:
       - "refined_wps_path = /tmp/autoskillit/planner/run-20260101-120000/refined_wps.json\n%%ORDER_UP%%"
     write_behavior: always
+  audit-tests:
+    inputs: []
+    outputs:
+      - name: audit_report_path
+        type: file_path
+    expected_output_patterns:
+      - "audit_report_path\\s*=\\s*\\S+"
+    pattern_examples:
+      - "audit_report_path = /tmp/autoskillit/audit-tests/test_audit_2026-04-28_120000.md\n%%ORDER_UP%%"
+    write_behavior: always
+  validate-audit:
+    inputs:
+      - name: audit_report_path
+        type: file_path
+        required: false
+    outputs:
+      - name: validated_report_path
+        type: file_path
+      - name: verdict
+        type: str
+    expected_output_patterns:
+      - "validated_report_path\\s*=\\s*\\S+"
+      - "verdict\\s*=\\s*\\S+"
+    pattern_examples:
+      - "validated_report_path = /tmp/autoskillit/validate-audit/validated_report_tests_2026-04-28_120000.md\nverdict = validated"
+    write_behavior: conditional
+    write_expected_when:
+      - "verdict\\s*=\\s*validated"
 callable_contracts:
   autoskillit.smoke_utils.check_review_loop:
     outputs:

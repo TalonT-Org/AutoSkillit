@@ -185,6 +185,7 @@ tests/
 │   ├── test_never_raises_contracts.py
 │   ├── test_import_paths.py
 │   ├── test_layer_enforcement.py
+│   ├── test_python_no_hardcoded_temp.py    # Architectural invariant: no literal .autoskillit/temp outside whitelist
 │   ├── test_registry.py
 │   └── test_subpackage_isolation.py
 ├── cli/                                 # CLI command tests
@@ -344,7 +345,6 @@ tests/
 ├── recipe/                              # Recipe I/O, validation, schema tests
 │   ├── __init__.py
 │   ├── conftest.py
-│   ├── test__api.py                     # private _api module tests
 │   ├── test_anti_pattern_guards.py
 │   ├── test_api.py
 │   ├── test_bundled_recipe_hidden_policy.py

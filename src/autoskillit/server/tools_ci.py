@@ -29,7 +29,7 @@ from autoskillit.server.helpers import (
 logger = get_logger(__name__)
 
 
-@mcp.tool(tags={"autoskillit", "kitchen", "ci"}, annotations={"readOnlyHint": False})
+@mcp.tool(tags={"autoskillit", "kitchen", "ci"}, annotations={"readOnlyHint": True})
 @track_response_size("wait_for_ci")
 async def wait_for_ci(
     branch: str,
@@ -201,7 +201,7 @@ async def wait_for_ci(
         )
 
 
-@mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": False})
+@mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
 @track_response_size("set_commit_status")
 async def set_commit_status(
     sha: str,
@@ -349,7 +349,7 @@ async def get_ci_status(
         return json.dumps({"runs": [], "error": f"{type(exc).__name__}: {exc}"})
 
 
-@mcp.tool(tags={"autoskillit", "kitchen", "ci"}, annotations={"readOnlyHint": False})
+@mcp.tool(tags={"autoskillit", "kitchen", "ci"}, annotations={"readOnlyHint": True})
 @track_response_size("toggle_auto_merge")
 async def toggle_auto_merge(
     pr_number: int,
@@ -419,7 +419,7 @@ async def toggle_auto_merge(
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
-@mcp.tool(tags={"autoskillit", "kitchen", "ci"}, annotations={"readOnlyHint": False})
+@mcp.tool(tags={"autoskillit", "kitchen", "ci"}, annotations={"readOnlyHint": True})
 @track_response_size("enqueue_pr")
 async def enqueue_pr(
     pr_number: int,
@@ -501,7 +501,7 @@ async def enqueue_pr(
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
-@mcp.tool(tags={"autoskillit", "kitchen", "ci"}, annotations={"readOnlyHint": False})
+@mcp.tool(tags={"autoskillit", "kitchen", "ci"}, annotations={"readOnlyHint": True})
 @track_response_size("wait_for_merge_queue")
 async def wait_for_merge_queue(
     pr_number: int,

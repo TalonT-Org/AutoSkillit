@@ -396,7 +396,7 @@ async def run_skill(
 
 @mcp.tool(
     tags={"autoskillit", "kitchen", "kitchen-core", "fleet"},
-    annotations={"readOnlyHint": False},
+    annotations={"readOnlyHint": True},
 )
 @track_response_size("dispatch_food_truck")
 async def dispatch_food_truck(

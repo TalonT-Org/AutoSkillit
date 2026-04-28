@@ -498,7 +498,7 @@ async def close_kitchen(ctx: Context = CurrentContext()) -> str:
 
 
 @mcp.tool(
-    tags={"autoskillit"}, annotations={"readOnlyHint": False}, meta={"anthropic/alwaysLoad": True}
+    tags={"autoskillit"}, annotations={"readOnlyHint": True}, meta={"anthropic/alwaysLoad": True}
 )
 @track_response_size("disable_quota_guard")
 async def disable_quota_guard() -> str:
@@ -600,7 +600,7 @@ def _reload_session_handler() -> dict[str, str]:
 
 
 @mcp.tool(
-    tags={"autoskillit"}, annotations={"readOnlyHint": False}, meta={"anthropic/alwaysLoad": True}
+    tags={"autoskillit"}, annotations={"readOnlyHint": True}, meta={"anthropic/alwaysLoad": True}
 )
 @track_response_size("reload_session")
 async def reload_session() -> dict[str, str]:

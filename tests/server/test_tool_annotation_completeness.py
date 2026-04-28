@@ -1,10 +1,11 @@
-"""Three-layer annotation test shield for MCP tool readOnlyHint semantics.
+"""Runtime annotation test shield for MCP tool readOnlyHint semantics.
 
 Layer 2 — Pre-middleware: internal registry has non-None annotations on every tool.
 Layer 3 — Post-middleware: wire output preserves annotations (readOnlyHint survives).
-Layer 4 — Registry cross-check: decorator values match MUTATING_TOOLS registry.
+Layer 4 — Universal assertion: every tool has readOnlyHint=True on the wire.
 
-Together these make annotation regression impossible without immediate test failure.
+No registry cross-check — the invariant is universal: all tools are read-only.
+Layers 1a/1b (AST) live in tests/arch/test_tool_annotation_completeness.py.
 """
 
 from __future__ import annotations
@@ -71,17 +72,16 @@ class TestPostMiddlewareAnnotations:
         )
 
     @pytest.mark.anyio
-    async def test_readonly_hint_values_match_mutating_registry(self, kitchen_enabled):
-        """Layer 4 — Registry cross-check: wire readOnlyHint must match MUTATING_TOOLS.
+    async def test_all_tools_have_readonly_hint_true(self, kitchen_enabled):
+        """Layer 4 — Universal invariant: every tool must have readOnlyHint=True.
 
-        - Tools in MUTATING_TOOLS must have readOnlyHint=False on the wire.
-        - All other tools must have readOnlyHint=True on the wire.
-
-        This catches drift between the L0 registry and actual decorator values.
+        All pipelines operate on independent branches and worktrees with zero
+        cross-pipeline interference. readOnlyHint=False serializes parallel tool
+        calls and causes catastrophic pipeline slowdowns (40+ minutes instead of
+        5 minutes for concurrent CI watches). Zero exceptions.
         """
         from fastmcp.client import Client
 
-        from autoskillit.core._type_constants import MUTATING_TOOLS
         from autoskillit.server import mcp
 
         async with Client(mcp) as client:
@@ -90,20 +90,15 @@ class TestPostMiddlewareAnnotations:
         violations: list[str] = []
         for tool in tools:
             if tool.annotations is None:
-                # Covered by test_annotations_survive_middleware; skip to avoid duplicate noise
                 continue
-            expected_readonly = tool.name not in MUTATING_TOOLS
-            actual_readonly = tool.annotations.readOnlyHint
-            if actual_readonly != expected_readonly:
-                registry_label = "MUTATING_TOOLS" if tool.name in MUTATING_TOOLS else "read-only"
+            if tool.annotations.readOnlyHint is not True:
                 violations.append(
-                    f"  {tool.name!r}: readOnlyHint={actual_readonly!r} "
-                    f"but registry says {registry_label} "
-                    f"(expected readOnlyHint={expected_readonly!r})"
+                    f"  {tool.name!r}: readOnlyHint={tool.annotations.readOnlyHint!r} "
+                    f"(must be True)"
                 )
 
         assert not violations, (
-            "The following tools have readOnlyHint values that disagree with MUTATING_TOOLS.\n"
-            "Either fix the @mcp.tool(annotations=...) decorator or update MUTATING_TOOLS "
-            "in src/autoskillit/core/_type_constants.py:\n\n" + "\n".join(violations)
+            "Every MCP tool must have readOnlyHint=True. All pipelines operate on "
+            "independent branches/worktrees — there is no valid reason for False.\n"
+            "Fix the @mcp.tool(annotations=...) decorator:\n\n" + "\n".join(violations)
         )

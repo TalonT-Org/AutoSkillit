@@ -856,3 +856,60 @@ async def test_manifest_mid_campaign_deletion(fleet_runtime: FleetRuntime, tmp_p
 
     decision = resume_campaign_from_state(state_path, continue_on_failure=True)
     assert decision is None
+
+
+# ---------------------------------------------------------------------------
+# Parallel dispatch tests — FleetSemaphore with max > 1
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_two_concurrent_dispatches_allowed_with_max2(
+    fleet_runtime_factory,
+) -> None:
+    """FleetSemaphore(max=2) allows both L2 dispatches to complete successfully."""
+    rt = fleet_runtime_factory(max_concurrent_dispatches=2)
+    rt.add_recipe("slow-recipe")
+    results: list[dict | None] = [None, None]
+
+    async def _dispatch(idx: int) -> None:
+        results[idx] = await rt.dispatch(
+            "slow-recipe", shim_mode="sleep_then_exit", sleep_sec=1.0, timeout_sec=10
+        )
+
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(_dispatch, 0)
+        tg.start_soon(_dispatch, 1)
+
+    assert results[0] is not None and results[0]["success"] is True
+    assert results[1] is not None and results[1]["success"] is True
+
+
+@pytest.mark.anyio
+async def test_third_concurrent_dispatch_refused_with_max2(
+    fleet_runtime_factory,
+) -> None:
+    """FleetSemaphore(max=2) rejects a third concurrent dispatch immediately."""
+    rt = fleet_runtime_factory(max_concurrent_dispatches=2)
+    rt.add_recipe("slow-recipe")
+    results: list[dict | None] = [None, None, None]
+
+    async def _slow(idx: int) -> None:
+        results[idx] = await rt.dispatch(
+            "slow-recipe", shim_mode="sleep_then_exit", sleep_sec=3.0, timeout_sec=15
+        )
+
+    async def _fast() -> None:
+        await anyio.sleep(0.3)
+        results[2] = await rt.dispatch("slow-recipe", shim_mode="success")
+
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(_slow, 0)
+        tg.start_soon(_slow, 1)
+        tg.start_soon(_fast)
+
+    assert results[0] is not None and results[0]["success"] is True
+    assert results[1] is not None and results[1]["success"] is True
+    assert results[2] is not None
+    assert results[2]["error"] == "fleet_parallel_refused"
+    assert results[2]["success"] is False

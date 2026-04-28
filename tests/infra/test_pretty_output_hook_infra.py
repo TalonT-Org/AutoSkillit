@@ -10,7 +10,11 @@ from autoskillit.core.types import ChannelConfirmation, TerminationReason
 from autoskillit.execution.headless import _build_skill_result
 from autoskillit.hooks.pretty_output_hook import _format_response
 from tests.conftest import _make_result
-from tests.infra._pretty_output_helpers import _run_hook
+from tests.infra._pretty_output_helpers import (
+    _run_hook,
+    _wrap_for_claude_code,
+    _wrap_plain_str_for_claude_code,
+)
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
@@ -95,8 +99,6 @@ def test_formatter_coverage_contract():
 
 def test_wrap_plain_str_helper_produces_correct_shape():
     """_wrap_plain_str_for_claude_code produces the real hook event shape."""
-    from tests.infra._pretty_output_helpers import _wrap_plain_str_for_claude_code
-
     raw = _wrap_plain_str_for_claude_code("hello world")
     parsed = json.loads(raw)
     assert parsed == {"result": "hello world"}
@@ -117,8 +119,6 @@ def test_unformatted_tools_and_formatters_are_disjoint():
 
 def test_unformatted_tool_routes_to_generic_not_named_formatter(tmp_path):
     """A tool in _UNFORMATTED_TOOLS must reach _fmt_generic."""
-    from tests.infra._pretty_output_helpers import _wrap_for_claude_code
-
     payload = {"total_failures": 1, "failures": [{"step": "impl", "reason": "red"}]}
     event = {
         "tool_name": "mcp__plugin_autoskillit_autoskillit__get_pipeline_report",

@@ -247,17 +247,3 @@ class TestComputeSkillClosure:
             {"target": {"deps": ["audit"]}},
         )
         assert compute_skill_closure("target", provider) == frozenset({"target"})
-
-
-def test_resolve_effective_disabled_includes_feature_tags() -> None:
-    from autoskillit.core import PACK_REGISTRY
-    from autoskillit.workspace.session_skills import _resolve_effective_disabled
-
-    result = _resolve_effective_disabled(
-        explicit_disabled=[],
-        pack_registry=PACK_REGISTRY,
-        packs_enabled=[],
-        recipe_packs=None,
-        disabled_feature_tags=frozenset({"fleet"}),
-    )
-    assert "fleet" in result

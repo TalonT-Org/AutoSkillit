@@ -218,13 +218,14 @@ class TestCLIOrderWorkspace:
         assert _format_age(3 * 86400) == "3d ago"
         assert _format_age(5 * 3600) == "5h ago"
 
-    def test_skills_list_shows_all_sources(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
-    ) -> None:
-        """skills list outputs skill names with source labels."""
-        monkeypatch.chdir(tmp_path)
-        cli.skills_list()
-        captured = capsys.readouterr()
-        assert "investigate" in captured.out
-        assert "bundled" in captured.out
-        assert "NAME" in captured.out
+
+def test_skills_list_shows_all_sources(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """skills list outputs skill names with source labels."""
+    monkeypatch.chdir(tmp_path)
+    cli.skills_list()
+    captured = capsys.readouterr()
+    assert "investigate" in captured.out
+    assert "bundled" in captured.out
+    assert "NAME" in captured.out

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -41,8 +42,6 @@ def test_tsa2_no_pr_url_exits_zero() -> None:
 
     hook_path = pkg_root() / "hooks" / "token_summary_hook.py"
     event = _make_run_skill_event("done.\n%%ORDER_UP%%")
-
-    import json
 
     proc = subprocess.run(
         [sys.executable, str(hook_path)],
@@ -85,7 +84,6 @@ def test_tsa4_no_pipeline_id_sessions_exits_zero(tmp_path: Path) -> None:
 
 def test_tsa5_matching_sessions_formats_table_and_edits_pr(tmp_path: Path) -> None:
     """Matching sessions → aggregate token data and append ## Token Usage Summary."""
-    import json
 
     log_root = tmp_path / "logs"
     log_root.mkdir()
@@ -170,7 +168,6 @@ def test_tsa5_matching_sessions_formats_table_and_edits_pr(tmp_path: Path) -> No
 
 def test_tsa6_idempotency_skips_if_summary_present(tmp_path: Path) -> None:
     """PR body already contains ## Token Usage Summary → gh pr edit NOT called."""
-    import json
 
     log_root = tmp_path / "logs"
     log_root.mkdir()
@@ -219,7 +216,6 @@ def test_tsa6_idempotency_skips_if_summary_present(tmp_path: Path) -> None:
 
 def test_tsa_kitchen_id_match_despite_cwd_mismatch(tmp_path: Path) -> None:
     """kitchen_id match + CWD mismatch → sessions FOUND → hook appends table."""
-    import json
 
     log_root = tmp_path / "logs"
     log_root.mkdir()
@@ -269,7 +265,6 @@ def test_tsa_kitchen_id_match_despite_cwd_mismatch(tmp_path: Path) -> None:
 
 def test_tsa_kitchen_id_mismatch_exits_zero(tmp_path: Path) -> None:
     """Wrong kitchen_id → no sessions found → exits 0, no gh pr edit."""
-    import json
 
     log_root = tmp_path / "logs"
     log_root.mkdir()
@@ -298,7 +293,6 @@ def test_tsa_kitchen_id_mismatch_exits_zero(tmp_path: Path) -> None:
 
 def test_tsa8_gh_pr_edit_failure_exits_nonzero(tmp_path: Path) -> None:
     """gh pr edit returning non-zero → hook exits 0 (fail-open)."""
-    import json
 
     log_root = tmp_path / "logs"
     log_root.mkdir()
@@ -346,7 +340,6 @@ def test_tsa8_gh_pr_edit_failure_exits_nonzero(tmp_path: Path) -> None:
 
 def test_tsa_gh_pr_edit_stderr_captured(tmp_path: Path) -> None:
     """gh pr edit failure includes stderr in the logged error message."""
-    import json
 
     log_root = tmp_path / "logs"
     log_root.mkdir()
@@ -401,7 +394,6 @@ def test_tsa_gh_pr_edit_stderr_captured(tmp_path: Path) -> None:
 
 def test_tsa_gh_pr_view_failure_emits_diagnostic(tmp_path: Path) -> None:
     """gh pr view non-zero exit emits a stderr message before exiting 0."""
-    import json
 
     log_root = tmp_path / "logs"
     log_root.mkdir()
@@ -445,7 +437,6 @@ def test_tsa_gh_pr_view_failure_emits_diagnostic(tmp_path: Path) -> None:
 
 def test_token_summary_hook_patch_failure_exits_zero(tmp_path: Path) -> None:
     """CalledProcessError on PATCH must exit 0, not 1 (fail-open hook)."""
-    import json
 
     event = {
         "tool_name": "mcp__autoskillit_server__run_skill",
@@ -482,7 +473,6 @@ def test_token_summary_hook_patch_failure_exits_zero(tmp_path: Path) -> None:
 
 def test_token_summary_hook_unexpected_error_exits_zero(monkeypatch: object) -> None:
     """Unhandled exception in outer except must exit 0 (fail-open)."""
-    import json
 
     original_loads = json.loads
     call_count = [0]

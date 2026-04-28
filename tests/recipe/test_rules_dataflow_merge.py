@@ -8,7 +8,7 @@ from autoskillit.core.types import Severity
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.schema import Recipe, RecipeStep
 from autoskillit.recipe.validator import run_semantic_rules
-from tests.recipe.conftest import _make_workflow
+from tests.recipe.conftest import _build_merge_worktree_recipe, _make_workflow
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -20,25 +20,6 @@ def all_bundled_recipes() -> list[tuple[str, Recipe]]:
     for yaml_file in builtin_recipes_dir().glob("*.yaml"):
         result.append((yaml_file.stem, load_recipe(yaml_file)))
     return result
-
-
-def _build_merge_worktree_recipe(capture: dict) -> Recipe:
-    """Helper: build a minimal Recipe with a merge_worktree step and the given capture dict."""
-    return Recipe(
-        name="test-merge",
-        description="Test merge recipe",
-        summary="merge > done",
-        steps={
-            "merge": RecipeStep(
-                tool="merge_worktree",
-                with_args={"worktree_path": "${{ context.worktree_path }}", "base_branch": "main"},
-                capture=capture,
-                on_success="done",
-                on_failure="done",
-            ),
-            "done": RecipeStep(action="stop", message="Done"),
-        },
-    )
 
 
 def _make_stale_worktree_path_recipe() -> Recipe:

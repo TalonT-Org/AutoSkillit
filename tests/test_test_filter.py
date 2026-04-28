@@ -255,6 +255,7 @@ class TestBuildTestScope:
             "server/test_factory.py",
             "server/test_tools_load_recipe.py",
             "server/test_tools_kitchen_gate.py",
+            "server/test_tools_kitchen_envelope.py",
             "cli/test_cli_prompts.py",
             "cli/test_cook_order_command.py",
             "cli/test_cook_order_picker.py",
@@ -289,6 +290,7 @@ class TestBuildTestScope:
         for expected in [
             "test_factory.py",
             "test_tools_kitchen_gate.py",
+            "test_tools_kitchen_envelope.py",
             "test_cli_prompts.py",
             "test_cook_order_command.py",
             "test_headless_path_validation.py",

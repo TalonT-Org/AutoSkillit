@@ -1745,7 +1745,7 @@ skills:
     expected_output_patterns:
     - "execution_map\\s*=\\s*/.+"
     pattern_examples:
-    - "execution_map = {{AUTOSKILLIT_TEMP}}/build-execution-map/execution_map_2026-04-22_190000.json\nexecution_map_report = {{AUTOSKILLIT_TEMP}}/build-execution-map/execution_map_report_2026-04-22_190000.md\ngroup_count = 3\ntotal_issues = 5"
+    - "execution_map = /tmp/build-execution-map/execution_map_2026-04-22_190000.json\nexecution_map_report = /tmp/build-execution-map/execution_map_report_2026-04-22_190000.md\ngroup_count = 3\ntotal_issues = 5"
     write_behavior: always
   bundle-local-report:
     inputs:

@@ -72,14 +72,6 @@ def test_bem_wrapper_fallback_references_autoskillit_temp():
     assert "$AUTOSKILLIT_TEMP" not in raw
 
 
-def test_emit_fallback_map_uses_placeholder_not_shell_var():
-    """run_cmd steps must use {{AUTOSKILLIT_TEMP}} placeholder, not $AUTOSKILLIT_TEMP."""
-    raw = RECIPE_PATH.read_text()
-    assert "$AUTOSKILLIT_TEMP" not in raw, (
-        "Shell variable $AUTOSKILLIT_TEMP found — use {{AUTOSKILLIT_TEMP}} placeholder"
-    )
-
-
 def test_bem_wrapper_fallback_writes_file_not_json_to_stdout():
     """emit_fallback_map must echo the FILE PATH to stdout (not raw JSON).
 

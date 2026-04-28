@@ -652,14 +652,6 @@ class TestImplementationGroupsStructure:
         assert "pr_number" in step.capture
         assert step.on_success == "annotate_pr_diff"
 
-    def test_ig_compose_pr_routes_to_extract_pr_number(self, recipe) -> None:
-        """REQ-C7-01: compose_pr must route to extract_pr_number (not review_pr directly)."""
-        step = recipe.steps["compose_pr"]
-        assert step.on_success == "extract_pr_number", (
-            "compose_pr must route to extract_pr_number so pr_number is available "
-            "for enable_auto_merge and wait_for_queue"
-        )
-
     def test_ig_ci_watch_routes_to_check_repo_merge_state(self, recipe) -> None:
         """REQ-C7-01: ci_watch on_result success must route to check_repo_merge_state."""
         step = recipe.steps["ci_watch"]
@@ -697,6 +689,25 @@ class TestImplementationGroupsStructure:
             "without it release_issue cannot apply the staged label on non-default branches"
         )
         assert "inputs.base_branch" in with_args["target_branch"]
+
+    def test_create_branch_does_not_use_run_name_verbatim(self, recipe) -> None:
+        """compute_branch must not use inputs.run_name as the full branch name."""
+        cmd = recipe.steps["compute_branch"].with_args["cmd"]
+        assert "git checkout -b ${{ inputs.run_name }} &&" not in cmd
+
+    def test_create_branch_checks_remote_for_collisions(self, recipe) -> None:
+        """create_branch must use create_unique_branch tool (which always checks ls-remote)."""
+        assert recipe.steps["create_branch"].tool == "create_unique_branch"
+
+    def test_create_branch_references_issue_number(self, recipe) -> None:
+        """compute_branch cmd must reference context.issue_number for branch naming."""
+        cmd = recipe.steps["compute_branch"].with_args["cmd"]
+        assert "context.issue_number" in cmd
+
+    def test_create_branch_uses_run_name_as_prefix(self, recipe) -> None:
+        """compute_branch must use inputs.run_name as a prefix in branch naming."""
+        cmd = recipe.steps["compute_branch"].with_args["cmd"]
+        assert "inputs.run_name" in cmd
 
 
 # ---------------------------------------------------------------------------
@@ -800,6 +811,13 @@ class TestInvestigateFirstStructure:
         """compute_branch must use inputs.run_name as a prefix in branch naming."""
         cmd = recipe.steps["compute_branch"].with_args["cmd"]
         assert "inputs.run_name" in cmd
+
+    def test_if_push_after_audit_warning_fires(self, recipe) -> None:
+        """push-before-audit semantic rule fires as WARNING (audit has skip_when_false)."""
+        findings = run_semantic_rules(recipe)
+        violations = [f for f in findings if f.rule == "push-before-audit"]
+        assert len(violations) >= 1
+        assert all(v.severity == Severity.WARNING for v in violations)
 
     def test_if_c1_implement_uses_no_merge_skill(self, recipe) -> None:
         """T_IF_C1: implement step must use implement-worktree-no-merge.

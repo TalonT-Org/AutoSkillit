@@ -46,3 +46,11 @@ def test_pytest_cov_in_dev_deps(dev_deps: list[str]):
     assert any(d.startswith("pytest-cov") for d in dev_deps), (
         "pytest-cov must be in dev dependencies"
     )
+
+
+def test_httpx_upper_bound_not_tight() -> None:
+    data = tomllib.loads(_PYPROJECT.read_text())
+    deps = data["project"]["dependencies"]
+    httpx_dep = next(d for d in deps if d.startswith("httpx"))
+    assert "<0.29" not in httpx_dep, f"httpx upper bound is too tight: {httpx_dep!r}"
+    assert "<1.0" in httpx_dep, f"httpx should have <1.0 upper bound: {httpx_dep!r}"

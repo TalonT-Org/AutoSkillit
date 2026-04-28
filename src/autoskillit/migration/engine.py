@@ -158,7 +158,7 @@ class RecipeMigrationAdapter(HeadlessMigrationAdapter):
     file_type = "recipe"
 
     def discover(self, project_dir: Path) -> list[MigrationFile]:
-        from autoskillit.recipe import parse_recipe_metadata
+        from autoskillit.recipe import parse_recipe_metadata  # noqa: PLC0415
 
         recipes_dir = project_dir / ".autoskillit" / "recipes"
         if not recipes_dir.exists():
@@ -251,8 +251,8 @@ class RecipeMigrationAdapter(HeadlessMigrationAdapter):
         return temp_dir / "migrations" / f"{file.path.stem}.yaml"
 
     def validate(self, path: Path) -> tuple[bool, str]:
-        from autoskillit.recipe import load_recipe as _parse_recipe
-        from autoskillit.recipe import validate_recipe
+        from autoskillit.recipe import load_recipe as _parse_recipe  # noqa: PLC0415
+        from autoskillit.recipe import validate_recipe  # noqa: PLC0415
 
         try:
             recipe = _parse_recipe(path)
@@ -285,7 +285,7 @@ class ContractMigrationAdapter(DeterministicMigrationAdapter):
         return files
 
     def needs_migration(self, file: MigrationFile) -> bool:
-        from autoskillit.recipe import check_contract_staleness, load_recipe_card
+        from autoskillit.recipe import check_contract_staleness, load_recipe_card  # noqa: PLC0415
 
         recipes_dir = file.path.parent.parent
         contract = load_recipe_card(file.name, recipes_dir)
@@ -299,7 +299,7 @@ class ContractMigrationAdapter(DeterministicMigrationAdapter):
         *,
         temp_dir: Path,
     ) -> MigrationResult:
-        from autoskillit.recipe import generate_recipe_card
+        from autoskillit.recipe import generate_recipe_card  # noqa: PLC0415
 
         recipes_dir = file.path.parent.parent
         recipe_path = recipes_dir / f"{file.name}.yaml"
@@ -346,7 +346,7 @@ class DiagramMigrationAdapter(AdvisoryMigrationAdapter):
         ]
 
     def needs_migration(self, file: MigrationFile) -> bool:
-        from autoskillit.recipe import check_diagram_staleness
+        from autoskillit.recipe import check_diagram_staleness  # noqa: PLC0415
 
         if not file.path.exists():
             return False
@@ -357,7 +357,7 @@ class DiagramMigrationAdapter(AdvisoryMigrationAdapter):
         return check_diagram_staleness(file.name, recipes_dir, recipe_path)
 
     def check_staleness(self, file: MigrationFile) -> AdvisoryResult:
-        from autoskillit.recipe import diagram_stale_to_suggestions
+        from autoskillit.recipe import diagram_stale_to_suggestions  # noqa: PLC0415
 
         suggestions = diagram_stale_to_suggestions(file.name)
         return AdvisoryResult(
@@ -416,7 +416,7 @@ class DefaultMigrationService:
         """
         from autoskillit.migration.loader import applicable_migrations as _applicable
         from autoskillit.migration.store import FailureStore, default_store_path
-        from autoskillit.recipe import parse_recipe_metadata
+        from autoskillit.recipe import parse_recipe_metadata  # noqa: PLC0415
 
         meta = parse_recipe_metadata(recipe_path)
         name = meta.name

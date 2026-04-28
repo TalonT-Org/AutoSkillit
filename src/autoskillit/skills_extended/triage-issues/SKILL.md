@@ -128,6 +128,13 @@ Use `model: "sonnet"` for all subagents.
 
 ### Step 3: Recipe Classification
 
+**Priority signal — Validated Audit Report:**
+If the issue title contains "Validated Audit Report" (the exact prefix set by `prepare-issue`
+when creating an issue from a validated audit output), classify as `recipe:implementation`
+with `high` confidence. Do NOT allow issue scope (number of findings / large scope) to override
+this signal — a 40-finding audit is structural quality improvement work, not broken behavior.
+Skip the "Is existing behavior broken?" analysis for these issues.
+
 Classify each issue into a recipe route using the primary behavioral criterion — is existing behavior broken?
 
 **Is existing behavior broken?**
@@ -151,6 +158,8 @@ Examples that route to `implementation`:
 - A plan/recipe that scoped too narrowly (gap in design, not a crash)
 - Improving error messages, refactoring, writing documentation
 - Adding support for a new file format — regardless of scope or complexity
+- A validated audit report with structural/quality findings (split oversized files, add missing
+  docstrings, naming consistency) — regardless of finding count
 
 **Common misclassification: "the orchestrator did the wrong thing"**
 When an LLM orchestrator bypasses routing, retries instead of escalating, or ignores a failure — that is almost always a **gap** (missing guardrail, missing discipline rule), not a runtime error. The orchestrator didn't crash; it made an unguarded choice. Route to `implementation` unless the orchestrator hit an actual exception.

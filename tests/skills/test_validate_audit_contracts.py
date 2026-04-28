@@ -94,9 +94,40 @@ class TestValidateAuditNewSteps:
     # T-VAL-019
     def test_validated_findings_contains_only_valid(self) -> None:
         text = _skill_text()
-        # Must explicitly exclude exception-warranted findings from the validated report body
         assert (
             "do NOT include VALID BUT EXCEPTION WARRANTED" in text
             or "exception-warranted findings go exclusively" in text.lower()
             or "exception-warranted findings must not appear" in text.lower()
+        )
+
+
+class TestValidateAuditFeatureGates:
+    # T-VAL-020
+    def test_feature_gates_severity_mapping_documented(self) -> None:
+        """validate-audit must document BLOCK->HIGH, WARN->MEDIUM, INFO->LOW severity mapping."""
+        text = _skill_text()
+        assert "BLOCK" in text and "HIGH" in text, (
+            "validate-audit must document severity normalization for feature-gates: BLOCK->HIGH"
+        )
+        block_idx = text.find("BLOCK")
+        assert block_idx != -1, "BLOCK not found in validate-audit SKILL.md"
+        high_idx = text.find("HIGH", block_idx)
+        assert high_idx != -1 and (high_idx - block_idx) < 300, (
+            "BLOCK->HIGH mapping must appear as a co-located severity mapping table, "
+            "not just incidental mentions"
+        )
+
+    # T-VAL-021
+    def test_feature_gates_d1_d5_table_handling_documented(self) -> None:
+        """validate-audit must document special handling for D1/D5 table-format findings."""
+        text = _skill_text()
+        has_d1_d5_handling = ("D1" in text and "D5" in text) and (
+            "table" in text.lower()
+            or "table-format" in text.lower()
+            or "cross-cutting" in text.lower()
+        )
+        assert has_d1_d5_handling, (
+            "validate-audit must document that D1 (Config Projection) and D5 (Boundary Coupling) "
+            "produce table-format findings without file:line and must be handled in the "
+            "cross-cutting batch with direct file verification"
         )

@@ -523,3 +523,53 @@ def test_dedup_closed_issues_stricter_relevance():
         "Step 4 must document applying stricter relevance criteria for closed issue "
         "candidates before showing them (e.g., require 2+ keyword set matches)"
     )
+
+
+# ---------------------------------------------------------------------------
+# TRIAGE MISCLASSIFICATION: Gap 1a — validated report shortcut in Step 6
+# ---------------------------------------------------------------------------
+
+
+def test_step6_validated_report_shortcut_to_implementation():
+    """Step 6 must short-circuit to implementation when is_validated_report is true."""
+    text = SKILL_MD.read_text(encoding="utf-8")
+    step6_pos = text.find("### Step 6")
+    assert step6_pos != -1, "Step 6 not found"
+    step7_pos = text.find("### Step 7", step6_pos)
+    step6_section = (
+        text[step6_pos:step7_pos] if step7_pos != -1 else text[step6_pos : step6_pos + 2000]
+    )
+    assert "is_validated_report" in step6_section, (
+        "Step 6 must check is_validated_report and short-circuit to implementation route"
+    )
+    # Must reference implementation in the validated-report shortcut, not only remediation
+    shortcut_idx = step6_section.find("is_validated_report")
+    assert shortcut_idx != -1, "is_validated_report not found in Step 6 section"
+    next_heading = step6_section.find("###", shortcut_idx)
+    shortcut_block = (
+        step6_section[shortcut_idx:next_heading]
+        if next_heading != -1
+        else step6_section[shortcut_idx:]
+    )
+    assert "implementation" in shortcut_block, (
+        "Step 6 is_validated_report shortcut must assign route=implementation"
+    )
+
+
+def test_step6_heuristic_table_has_audit_signal_row():
+    """Step 6 heuristic table must include an explicit row for validated audit reports."""
+    text = SKILL_MD.read_text()
+    step6_pos = text.find("### Step 6")
+    assert step6_pos != -1, "Step 6 not found"
+    step7_pos = text.find("### Step 7", step6_pos)
+    step6_section = (
+        text[step6_pos:step7_pos] if step7_pos != -1 else text[step6_pos : step6_pos + 2000]
+    )
+    # Either the shortcut or an explicit audit row must map validated reports to implementation
+    has_audit_implementation_signal = (
+        "audit" in step6_section.lower() and "implementation" in step6_section
+    )
+    assert has_audit_implementation_signal, (
+        "Step 6 must document that validated audit reports (no tracebacks, structural scope) "
+        "route to implementation — not fall through to the large/ambiguous-scope remediation row"
+    )

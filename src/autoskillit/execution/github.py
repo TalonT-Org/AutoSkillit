@@ -251,6 +251,8 @@ class DefaultGitHubFetcher:
         Accepts either a single issue_ref string ("owner/repo#N") or separate
         (owner, repo, number) positional arguments. Never raises.
         """
+        if (repo is None) != (number is None):
+            return {"success": False, "error": "repo and number must both be provided together"}
         if repo is not None and number is not None:
             owner = issue_ref_or_owner
             issue_ref = f"{owner}/{repo}#{number}"

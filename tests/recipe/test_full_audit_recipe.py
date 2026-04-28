@@ -83,6 +83,27 @@ def test_full_audit_kitchen_rules() -> None:
     assert len(recipe.kitchen_rules) == 4
 
 
+def test_full_audit_done_step_has_message() -> None:
+    """done step must have a non-empty message field."""
+    from autoskillit.recipe.io import load_recipe
+
+    recipe = load_recipe(RECIPE_PATH)
+    assert recipe.steps["done"].message, "done step must have a non-empty message"
+
+
+def test_full_audit_done_step_message_embeds_issue_urls_in_sentinel() -> None:
+    """done step message must instruct the model to include issue_urls in the sentinel JSON."""
+    import yaml
+
+    data = yaml.safe_load(RECIPE_PATH.read_text())
+    message = data["steps"]["done"]["message"]
+    assert "issue_urls" in message, "done message must reference issue_urls"
+    msg_lower = message.lower()
+    assert "sentinel" in msg_lower or "json" in msg_lower or '{"success"' in message, (
+        "done message must instruct model to embed issue_urls in the sentinel JSON block"
+    )
+
+
 def test_full_audit_discovered_as_builtin_recipe(tmp_path: Path) -> None:
     """list_recipes discovers the recipe as RecipeSource.BUILTIN."""
     from autoskillit.core.types import RecipeSource

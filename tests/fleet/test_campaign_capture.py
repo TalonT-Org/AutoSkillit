@@ -56,6 +56,36 @@ def test_extract_captures_converts_value_to_str():
     assert result == {"count": "42"}
 
 
+def test_extract_captures_list_value_uses_json_dumps():
+    """list payload value must be JSON-serialized, not Python repr."""
+    from autoskillit.fleet._api import _extract_captures
+
+    result = _extract_captures(
+        {"issue_urls": "${{ result.issue_urls }}"},
+        {
+            "issue_urls": [
+                "https://github.com/org/repo/issues/1",
+                "https://github.com/org/repo/issues/2",
+            ]
+        },
+    )
+    assert result == {
+        "issue_urls": '["https://github.com/org/repo/issues/1", "https://github.com/org/repo/issues/2"]'
+    }
+    assert "'" not in result["issue_urls"]
+
+
+def test_extract_captures_dict_value_uses_json_dumps():
+    """dict payload value must be JSON-serialized, not Python repr."""
+    from autoskillit.fleet._api import _extract_captures
+
+    result = _extract_captures(
+        {"meta": "${{ result.meta }}"},
+        {"meta": {"count": 3, "status": "ok"}},
+    )
+    assert json.loads(result["meta"]) == {"count": 3, "status": "ok"}
+
+
 # ---------------------------------------------------------------------------
 # Ingredient interpolation tests
 # ---------------------------------------------------------------------------

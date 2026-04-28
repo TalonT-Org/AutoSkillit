@@ -497,7 +497,7 @@ class TestResumableStateTransitionsValid:
             sp = _state_path(tmp_path / next_status.value)
             write_initial_state(sp, "c1", "camp", "m.yaml", _make_dispatches("impl"))
             mark_dispatch_running(sp, "impl", dispatch_id="d1", l2_pid=1)
-            mark_dispatch_resumable(sp, "impl", sidecar_path="/tmp/s.jsonl")
+            mark_dispatch_resumable(sp, "impl", sidecar_path=str(tmp_path / "s.jsonl"))
             append_dispatch_record(sp, DispatchRecord(name="impl", status=next_status))
             state = read_state(sp)
             assert state is not None

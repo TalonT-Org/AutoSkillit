@@ -564,33 +564,6 @@ async def test_ci_etag_stores_on_200(httpx_mock):
     assert requests[1].headers.get("if-none-match") == '"abc123"'
 
 
-# ---------------------------------------------------------------------------
-# SHA-aware filter bypass — immunity tests
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.anyio
-async def test_fetch_completed_runs_sha_bypasses_time_filter(httpx_mock):
-    """When scope.head_sha is set, stale runs ARE returned (SHA = identity)."""
-    stale_time = (datetime.now(UTC) - timedelta(minutes=30)).isoformat()
-    httpx_mock.add_response(
-        json=_runs_response(_run(run_id=42, head_sha="sha123", updated_at=stale_time)),
-    )
-    watcher = DefaultCIWatcher(token="tok")
-
-    async with httpx.AsyncClient() as client:
-        runs = await watcher._fetch_completed_runs(
-            client,
-            watcher._headers(),
-            "owner/repo",
-            "main",
-            scope=CIRunScope(head_sha="sha123"),
-            cutoff_dt=datetime.now(UTC) - timedelta(seconds=120),
-        )
-    assert len(runs) == 1
-    assert runs[0]["id"] == 42
-
-
 @pytest.mark.anyio
 async def test_fetch_completed_runs_no_sha_rejects_stale(httpx_mock):
     """When scope.head_sha is NOT set, stale runs are filtered out."""

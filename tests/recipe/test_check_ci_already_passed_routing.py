@@ -1,6 +1,7 @@
 """Tests verifying the check_ci_already_passed safety net step in CI watch recipes."""
 
 import pytest
+
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
@@ -23,9 +24,7 @@ def test_check_ci_already_passed_routes_to_merge_state_on_success(recipe):
     step = recipe.steps["check_ci_already_passed"]
     assert step.on_result is not None
     success_routes = [
-        c.route
-        for c in (step.on_result.conditions or [])
-        if c.when and "true" in c.when
+        c.route for c in (step.on_result.conditions or []) if c.when and "true" in c.when
     ]
     assert "check_repo_merge_state" in success_routes
 

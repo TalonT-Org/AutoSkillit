@@ -222,8 +222,16 @@ def get_callable_contract(
     entry = callables.get(dotted_path)
     if entry is None:
         return None
+    inputs = [
+        SkillInput(
+            name=inp["name"],
+            type=inp["type"],
+            required=inp.get("required", True),
+        )
+        for inp in entry.get("inputs", [])
+    ]
     outputs = [SkillOutput(name=out["name"], type=out["type"]) for out in entry.get("outputs", [])]
-    return SkillContract(inputs=[], outputs=outputs)
+    return SkillContract(inputs=inputs, outputs=outputs)
 
 
 def compute_skill_hash(skill_name: str, *, skills_dir: Path) -> str:

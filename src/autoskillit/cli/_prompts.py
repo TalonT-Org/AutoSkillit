@@ -38,6 +38,70 @@ def _read_full_sous_chef() -> str:
         return ""
 
 
+def _has_dynamic_dispatch(campaign_recipe: Recipe) -> bool:
+    return any("dispatch_plan" in d.capture for d in campaign_recipe.dispatches)
+
+
+def _build_dynamic_dispatch_section(mcp_prefix: str) -> str:
+    return f"""\
+
+## DYNAMIC DISPATCH — IMPLEMENT-FINDINGS
+
+After the dispatch that captures `dispatch_plan` completes, read the plan and launch
+implement-findings food trucks dynamically. These dispatches are NOT in the manifest —
+you create them yourself based on the captured plan.
+
+**Step 1 — Read the plan:**
+
+The captured value `${{{{ campaign.dispatch_plan }}}}` is a JSON array of groups:
+```json
+[
+  {{"group": 1, "parallel": true, "issues": "1155,1156,1157"}},
+  {{"group": 2, "parallel": false, "issues": "1158,1159"}}
+]
+```
+
+If the array is empty (`[]`) there are no issues to implement — skip to INTERRUPT/CLEANUP.
+
+**Step 2 — For each group (in array order):**
+
+1. Parse the group's `issues` string into individual issue URLs.
+2. If the group has more issues than `max_issues_per_food_truck` (default: 5), split into
+   batches of that size. Name batches: `implement-findings-g{{N}}-a`, `-b`, `-c` …
+   If the group fits in one batch, use the name `implement-findings-g{{N}}-a`.
+3. If `parallel` is `true`: issue ALL `{mcp_prefix}dispatch_food_truck` calls for this
+   group **in a single response (parallel tool calls)** — do not wait for one to
+   complete before issuing the next. The fleet semaphore gates actual concurrency;
+   calls queue when the semaphore is saturated. **This overrides the general
+   sequential discipline — parallel groups are an explicit exception.**
+4. If `parallel` is `false`: dispatch each batch and wait for it to complete before
+   dispatching the next batch in this group.
+5. Wait for ALL food trucks in this group to complete before advancing to the next group.
+
+**Step 3 — Dispatch call format:**
+
+```python
+{mcp_prefix}dispatch_food_truck(
+    recipe="implement-findings",
+    task="Implement audit findings — group {{N}}, batch {{M}}",
+    ingredients={{
+        "issue_urls": "<comma-separated URLs for this batch>",
+        "execution_map": "${{{{ campaign.execution_map }}}}",
+        "base_branch": "<base branch from campaign ingredients>",
+    }},
+    dispatch_name="implement-findings-g{{N}}-{{letter}}",
+    capture={{}},
+)
+```
+
+**Step 4 — Failure handling:**
+
+Apply the same failure rules as static dispatches. On any food truck failure:
+- If `continue_on_failure` is true: mark failed, continue remaining groups.
+- If `continue_on_failure` is false: halt immediately (INTERRUPT/CLEANUP).
+"""
+
+
 def _build_fleet_campaign_prompt(
     campaign_recipe: Recipe,
     manifest_yaml: str,
@@ -100,6 +164,12 @@ Skip these dispatch names in the dispatch loop. Begin from the first
 dispatch name NOT listed above.
 """
 
+    dynamic_dispatch_section = (
+        _build_dynamic_dispatch_section(mcp_prefix)
+        if _has_dynamic_dispatch(campaign_recipe)
+        else ""
+    )
+
     return f"""\
 You are a fleet campaign dispatcher. Execute campaign '{campaign_recipe.name}' autonomously.
 Campaign ID: {campaign_id}. Dispatches: {dispatch_count}.
@@ -122,8 +192,10 @@ The following manifest defines all dispatches for this campaign:
 
 ## CAMPAIGN DISCIPLINE
 
-Execute dispatches SEQUENTIALLY via {mcp_prefix}dispatch_food_truck. Do NOT attempt
-parallel dispatch — fleet_lock enforces serial execution and concurrent calls will fail.
+Execute static manifest dispatches SEQUENTIALLY via {mcp_prefix}dispatch_food_truck.
+The fleet_lock semaphore uses max_concurrent=1 for static dispatches — do NOT issue
+static manifest calls in parallel. For dynamic dispatches (see DYNAMIC DISPATCH section
+when present), `parallel: true` groups override this rule.
 
 Each dispatch is an independent L2 session with its own kitchen context. There is NO
 cross-dispatch state sharing managed by you — the runtime handles it
@@ -161,7 +233,7 @@ dispatch_food_truck(
 If a dispatch has no `capture:` field, pass `capture={{}}` or omit the parameter.
 The `${{{{ campaign.* }}}}` references in ingredients are resolved before the L2 session
 is started — the L2 agent always receives concrete values.
-{gate_section}
+{gate_section}{dynamic_dispatch_section}
 ## FAILURE RECOVERY
 
 When a dispatch call returns, evaluate the envelope and payload:

@@ -50,11 +50,11 @@ from autoskillit.pipeline import (
     DefaultAuditLog,
     DefaultBackgroundSupervisor,
     DefaultGateState,
+    DefaultGitHubApiLog,
     DefaultTimingLog,
     DefaultTokenLog,
     ToolContext,
 )
-from autoskillit.pipeline.github_api_log import DefaultGitHubApiLog
 from autoskillit.recipe import (
     DefaultRecipeRepository,
     get_skill_contract,

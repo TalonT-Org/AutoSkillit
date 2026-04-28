@@ -1,5 +1,5 @@
 name: research
-autoskillit_version: "0.9.219"
+autoskillit_version: "0.9.220"
 recipe_version: "1.0.0"
 requires_packs: [research, exp-lens, vis-lens]
 description: >

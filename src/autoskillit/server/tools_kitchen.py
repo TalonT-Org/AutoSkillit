@@ -603,7 +603,7 @@ def _reload_session_handler() -> dict[str, str]:
     tags={"autoskillit"}, annotations={"readOnlyHint": True}, meta={"anthropic/alwaysLoad": True}
 )
 @track_response_size("reload_session")
-async def reload_session() -> dict[str, str]:
+async def reload_session() -> str:
     """Signal the parent autoskillit process to reload this session with the full
     wrapper environment intact and resume the conversation.
 
@@ -613,7 +613,7 @@ async def reload_session() -> dict[str, str]:
     Never raises.
     """
     try:
-        return _reload_session_handler()
+        return json.dumps(_reload_session_handler())
     except Exception as exc:
         logger.error("reload_session unhandled exception", exc_info=True)
-        return {"status": "error", "error": f"{type(exc).__name__}: {exc}"}
+        return json.dumps({"status": "error", "error": f"{type(exc).__name__}: {exc}"})

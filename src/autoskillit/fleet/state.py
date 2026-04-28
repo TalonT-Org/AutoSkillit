@@ -19,6 +19,8 @@ logger = get_logger(__name__)
 
 _SCHEMA_VERSION = 3
 
+FLEET_HALTED_SENTINEL = "fleet_halted_on_failure"
+
 
 class DispatchStatus(StrEnum):
     """Status of a single dispatch within a campaign."""
@@ -386,7 +388,7 @@ def resume_campaign_from_state(
         if d.status == DispatchStatus.FAILURE and not continue_on_failure:
             return ResumeDecision(
                 next_dispatch_name="",
-                completed_dispatches_block="fleet_halted_on_failure",
+                completed_dispatches_block=FLEET_HALTED_SENTINEL,
             )
 
     # Phase 3: build completed dispatches block and find next

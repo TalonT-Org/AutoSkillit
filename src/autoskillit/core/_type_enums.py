@@ -31,6 +31,7 @@ __all__ = [
     "session_type",
     "FleetErrorCode",
     "FeatureLifecycle",
+    "DispatchGateType",
 ]
 
 
@@ -421,3 +422,10 @@ class FeatureLifecycle(StrEnum):
     STABLE = "stable"
     DEPRECATED = "deprecated"
     DISABLED = "disabled"
+
+
+@unique
+class DispatchGateType(StrEnum):
+    """Valid gate types for campaign dispatch entries."""
+
+    CONFIRM = "confirm"

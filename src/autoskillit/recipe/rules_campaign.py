@@ -7,7 +7,7 @@ from collections import Counter
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.core import RECIPE_PACK_REGISTRY, Severity, get_logger
+from autoskillit.core import RECIPE_PACK_REGISTRY, DispatchGateType, Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 from autoskillit.recipe.schema import CAMPAIGN_REF_RE, CampaignDispatch, RecipeKind
@@ -139,6 +139,8 @@ def _check_dispatch_recipe_exists(ctx: ValidationContext) -> list[RuleFinding]:
         return []
     findings: list[RuleFinding] = []
     for d in ctx.recipe.dispatches:
+        if d.gate:
+            continue
         if d.recipe not in ctx.available_recipes:
             findings.append(
                 RuleFinding(
@@ -164,6 +166,8 @@ def _check_dispatch_recipe_is_standard(ctx: ValidationContext) -> list[RuleFindi
         return []
     findings: list[RuleFinding] = []
     for d in ctx.recipe.dispatches:
+        if d.gate:
+            continue
         target = _load_dispatch_target(d, ctx.project_dir)
         if target is None:
             continue
@@ -194,6 +198,8 @@ def _check_dispatch_recipe_in_declared_packs(ctx: ValidationContext) -> list[Rul
         return []
     findings: list[RuleFinding] = []
     for d in ctx.recipe.dispatches:
+        if d.gate:
+            continue
         if d.recipe in ctx.recipe.allowed_recipes:
             continue
         target = _load_dispatch_target(d, ctx.project_dir)
@@ -252,6 +258,8 @@ def _check_dispatch_ingredients_keys_in_target_schema(ctx: ValidationContext) ->
         return []
     findings: list[RuleFinding] = []
     for d in ctx.recipe.dispatches:
+        if d.gate:
+            continue
         if not d.ingredients:
             continue
         target = _load_dispatch_target(d, ctx.project_dir)
@@ -381,6 +389,8 @@ def _check_campaign_task_non_empty(ctx: ValidationContext) -> list[RuleFinding]:
         return []
     findings: list[RuleFinding] = []
     for d in ctx.recipe.dispatches:
+        if d.gate:
+            continue
         if not d.task.strip():
             findings.append(
                 RuleFinding(
@@ -535,3 +545,116 @@ def _check_autoskillit_version_compatible(ctx: ValidationContext) -> list[RuleFi
     except Exception:
         logger.warning("autoskillit_version_check_failed", exc_info=True)
     return []
+
+
+_VALID_GATE_TYPES: frozenset[DispatchGateType] = frozenset({DispatchGateType.CONFIRM})
+
+
+@semantic_rule(
+    name="gate-dispatch-valid-type",
+    description="gate value must be 'confirm'",
+    severity=Severity.ERROR,
+)
+def _check_gate_dispatch_valid_type(ctx: ValidationContext) -> list[RuleFinding]:
+    if ctx.recipe.kind != RecipeKind.CAMPAIGN:
+        return []
+    findings: list[RuleFinding] = []
+    for d in ctx.recipe.dispatches:
+        if d.gate is None:
+            continue
+        if d.gate not in _VALID_GATE_TYPES:
+            findings.append(
+                RuleFinding(
+                    rule="gate-dispatch-valid-type",
+                    severity=Severity.ERROR,
+                    step_name="(top-level)",
+                    message=(
+                        f"Dispatch {d.name!r} has gate={d.gate!r} which is not a valid "
+                        f"gate type. Supported types: {sorted(_VALID_GATE_TYPES)}"
+                    ),
+                )
+            )
+    return findings
+
+
+@semantic_rule(
+    name="gate-dispatch-has-message",
+    description="A gate dispatch must have a non-empty message",
+    severity=Severity.ERROR,
+)
+def _check_gate_dispatch_has_message(ctx: ValidationContext) -> list[RuleFinding]:
+    if ctx.recipe.kind != RecipeKind.CAMPAIGN:
+        return []
+    findings: list[RuleFinding] = []
+    for d in ctx.recipe.dispatches:
+        if d.gate is None:
+            continue
+        if not (d.message or "").strip():
+            findings.append(
+                RuleFinding(
+                    rule="gate-dispatch-has-message",
+                    severity=Severity.ERROR,
+                    step_name="(top-level)",
+                    message=(
+                        f"Dispatch {d.name!r} has gate={d.gate!r} but 'message' is empty. "
+                        "A non-empty message is required for gate dispatches."
+                    ),
+                )
+            )
+    return findings
+
+
+@semantic_rule(
+    name="gate-dispatch-no-recipe",
+    description="A gate dispatch must not specify recipe or task",
+    severity=Severity.ERROR,
+)
+def _check_gate_dispatch_no_recipe(ctx: ValidationContext) -> list[RuleFinding]:
+    if ctx.recipe.kind != RecipeKind.CAMPAIGN:
+        return []
+    findings: list[RuleFinding] = []
+    for d in ctx.recipe.dispatches:
+        if d.gate is None:
+            continue
+        if d.recipe or d.task:
+            findings.append(
+                RuleFinding(
+                    rule="gate-dispatch-no-recipe",
+                    severity=Severity.ERROR,
+                    step_name="(top-level)",
+                    message=(
+                        f"Dispatch {d.name!r} has gate={d.gate!r} but also specifies "
+                        f"recipe={d.recipe!r} or task={d.task!r}. "
+                        "Gate dispatches must not specify recipe or task."
+                    ),
+                )
+            )
+    return findings
+
+
+@semantic_rule(
+    name="gate-dispatch-no-capture",
+    description="A gate dispatch must not specify capture",
+    severity=Severity.ERROR,
+)
+def _check_gate_dispatch_no_capture(ctx: ValidationContext) -> list[RuleFinding]:
+    if ctx.recipe.kind != RecipeKind.CAMPAIGN:
+        return []
+    findings: list[RuleFinding] = []
+    for d in ctx.recipe.dispatches:
+        if d.gate is None:
+            continue
+        if d.capture:
+            findings.append(
+                RuleFinding(
+                    rule="gate-dispatch-no-capture",
+                    severity=Severity.ERROR,
+                    step_name="(top-level)",
+                    message=(
+                        f"Dispatch {d.name!r} has gate={d.gate!r} but also specifies "
+                        f"capture={d.capture!r}. Gate dispatches produce no L2 session "
+                        "output and must not specify capture."
+                    ),
+                )
+            )
+    return findings

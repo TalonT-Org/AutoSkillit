@@ -10,7 +10,6 @@ from autoskillit.hooks.pretty_output_hook import _format_response
 from tests.infra._pretty_output_helpers import (
     REALISTIC_RECIPE_YAML,
     _make_event,
-    _make_run_skill_event,
     _run_hook,
 )
 
@@ -286,7 +285,7 @@ def test_get_token_summary_format_table_passes_through_unmodified(tmp_path):
 
 
 def test_get_timing_summary_format_table_passes_through_unmodified(tmp_path):
-    """get_timing_summary(format='table') returns pre-formatted markdown; hook passes it through."""
+    """get_timing_summary(format='table') returns pre-formatted markdown; hook passes through."""
     table = (
         "## Step Timing Summary\n\n"
         "| Step | Duration | Invocations |\n|---|---|---|\n| clone | 4s | 1 |"
@@ -510,7 +509,7 @@ def test_fmt_load_recipe_field_coverage():
 
 
 def test_fmt_load_recipe_derivation_map_coverage():
-    """Every key/value in _LOAD_RECIPE_CONTENT_DERIVED_FROM must be in _FMT_LOAD_RECIPE_RENDERED."""
+    """Every key/value in _LOAD_RECIPE_CONTENT_DERIVED_FROM must be in _FMT_LOAD_RECIPE_RENDERED."""  # noqa: E501
     from autoskillit.hooks.pretty_output_hook import (
         _FMT_LOAD_RECIPE_RENDERED,
         _LOAD_RECIPE_CONTENT_DERIVED_FROM,

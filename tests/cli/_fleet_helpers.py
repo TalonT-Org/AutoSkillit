@@ -135,7 +135,7 @@ def _setup_campaign_with_sessions(
     )
 
 
-def _make_state(*, statuses: list[str]) -> "CampaignState":
+def _make_state(*, statuses: list[str]) -> CampaignState:
     """Build an in-memory CampaignState for unit-testing _compute_exit_code."""
     from autoskillit.fleet import CampaignState, DispatchRecord, DispatchStatus
 
@@ -152,7 +152,7 @@ def _make_state(*, statuses: list[str]) -> "CampaignState":
     )
 
 
-def _make_state_with_tokens(*, input_total: int) -> "CampaignState":
+def _make_state_with_tokens(*, input_total: int) -> CampaignState:
     """Build an in-memory CampaignState with known token totals."""
     from autoskillit.fleet import CampaignState, DispatchRecord, DispatchStatus
 

@@ -10,7 +10,7 @@ from autoskillit.core.types import ChannelConfirmation, TerminationReason
 from autoskillit.execution.headless import _build_skill_result
 from autoskillit.hooks.pretty_output_hook import _format_response
 from tests.conftest import _make_result
-from tests.infra._pretty_output_helpers import _make_event, _make_run_skill_event, _run_hook
+from tests.infra._pretty_output_helpers import _run_hook
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 

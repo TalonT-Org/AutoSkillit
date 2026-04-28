@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 
 from autoskillit.cli._fleet import fleet_list as _fleet_list
-
 from tests.cli._fleet_helpers import _setup_campaign_recipes
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium, pytest.mark.feature("fleet")]

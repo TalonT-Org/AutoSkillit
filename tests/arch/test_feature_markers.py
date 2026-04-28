@@ -40,8 +40,11 @@ _ALL_FLEET_FILES = [*_FLEET_DIR_FILES, *_FLEET_CROSS_DIR_FILES]
 
 # Classes within mixed files that MUST carry @pytest.mark.feature("fleet")
 _FLEET_CLASS_MARKERS: dict[str, set[str]] = {
-    "server/test_server_init.py": {"TestSessionTypeVisibility", "TestFeatureGateVisibility"},
-    "server/test_tools_execution.py": {"TestTierAwareGateEnforcement"},
+    "server/test_server_init_session_visibility.py": {
+        "TestSessionTypeVisibility",
+        "TestFeatureGateVisibility",
+    },
+    "server/test_tools_execution_results.py": {"TestTierAwareGateEnforcement"},
     "cli/test_doctor_migration.py": {
         "TestGroupMFranchiseDoctorChecks",
         "TestGroupNFeatureGateDoctorChecks",

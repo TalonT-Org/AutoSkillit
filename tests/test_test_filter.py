@@ -254,7 +254,7 @@ class TestBuildTestScope:
         for f in [
             "server/test_factory.py",
             "server/test_tools_load_recipe.py",
-            "server/test_tools_kitchen.py",
+            "server/test_tools_kitchen_gate.py",
             "cli/test_cli_prompts.py",
             "cli/test_cook_order_command.py",
             "cli/test_cook_order_picker.py",
@@ -288,7 +288,7 @@ class TestBuildTestScope:
         assert "recipe" in result_names, "recipe missing"
         for expected in [
             "test_factory.py",
-            "test_tools_kitchen.py",
+            "test_tools_kitchen_gate.py",
             "test_cli_prompts.py",
             "test_cook_order_command.py",
             "test_headless_path_validation.py",

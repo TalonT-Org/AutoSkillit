@@ -9,7 +9,6 @@ from pathlib import Path
 import pytest
 
 from autoskillit.cli._fleet import fleet_status as _fleet_status
-
 from tests.cli._fleet_helpers import (
     _make_state,
     _make_state_with_tokens,

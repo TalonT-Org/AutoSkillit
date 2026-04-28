@@ -9,7 +9,6 @@ import pytest
 from tests.infra._pretty_output_helpers import (
     _run_hook,
     _wrap_for_claude_code,
-    _wrap_plain_str_for_claude_code,
 )
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]

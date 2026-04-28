@@ -63,7 +63,7 @@ def _context_exhausted_session_json() -> str:
 class TestSessionLogDir:
     """Unit tests for _session_log_dir — path derivation and log emission."""
 
-    # --- path derivation (from test_tools_execution.py TestSessionLogDir) ---
+    # --- path derivation (from test_tools_execution_command.py TestSessionLogDir) ---
 
     def test_replaces_slashes(self):
         from autoskillit.execution.headless import _session_log_dir
@@ -85,7 +85,7 @@ class TestSessionLogDir:
             result == Path.home() / ".claude" / "projects" / "-home-user-name-my-project-sub-dir"
         )
 
-    # --- log behavior (from test_server_init.py TestGateTransitionLogs) ---
+    # --- log behavior (from test_server_init_gate.py TestGateTransitionLogs) ---
 
     def test_warns_when_dir_missing(self, tmp_path, monkeypatch):
         import structlog.testing

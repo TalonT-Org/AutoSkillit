@@ -1,4 +1,4 @@
-"""Tests: cook CLI order command — system prompt content, MCP prefix selection, display ownership."""
+"""Tests: cook CLI order command — system prompt content, MCP prefix selection, ownership."""
 
 from __future__ import annotations
 

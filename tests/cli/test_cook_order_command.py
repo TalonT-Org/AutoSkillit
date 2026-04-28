@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from autoskillit import cli
-from autoskillit.cli._prompts import _resolve_recipe_input, _OPEN_KITCHEN_CHOICE
+from autoskillit.cli._prompts import _OPEN_KITCHEN_CHOICE, _resolve_recipe_input
 from autoskillit.core import ClaudeFlags
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]

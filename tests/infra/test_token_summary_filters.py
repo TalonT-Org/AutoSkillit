@@ -129,7 +129,7 @@ def test_e1_order_id_isolation_multi_issue_session(tmp_path: Path) -> None:
     assert exit_code == 0
     assert len(edit_calls) == 1, "gh api PATCH must be called once"
     body_arg = edit_calls[0][edit_calls[0].index("--raw-field") + 1]
-    body_content = body_arg[len("body="):]
+    body_content = body_arg[len("body=") :]
     assert "implement" in body_content, "issue-B's step 'implement' must be in table"
     assert "plan" not in body_content, "issue-A's step 'plan' must NOT be in table"
     assert "review" not in body_content, "issue-C's step 'review' must NOT be in table"

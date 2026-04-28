@@ -41,9 +41,9 @@ def test_tsa2_no_pr_url_exits_zero() -> None:
 
     hook_path = pkg_root() / "hooks" / "token_summary_hook.py"
     event = _make_run_skill_event("done.\n%%ORDER_UP%%")
-    stdin_text = str.__new__(str, event) if isinstance(event, str) else __import__("json").dumps(event)
 
     import json
+
     proc = subprocess.run(
         [sys.executable, str(hook_path)],
         input=json.dumps(event),
@@ -158,7 +158,7 @@ def test_tsa5_matching_sessions_formats_table_and_edits_pr(tmp_path: Path) -> No
     field_idx = edit_calls[0].index("--raw-field")
     body_arg = edit_calls[0][field_idx + 1]
     assert body_arg.startswith("body=")
-    body_content = body_arg[len("body="):]
+    body_content = body_arg[len("body=") :]
     assert "## Token Usage Summary" in body_content
     assert "plan" in body_content
     assert "open-pr" in body_content

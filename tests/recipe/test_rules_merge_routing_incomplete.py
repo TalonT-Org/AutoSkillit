@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from autoskillit.recipe.schema import Recipe
 from autoskillit.recipe.validator import run_semantic_rules
 from tests.recipe.conftest import _make_workflow
 

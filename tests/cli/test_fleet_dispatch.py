@@ -9,11 +9,8 @@ import pytest
 from cyclopts import App
 
 from autoskillit.cli._fleet import fleet_dispatch as _fleet_dispatch
-
 from tests.cli._fleet_helpers import (
     _capture_subprocess,
-    _setup_campaign_recipes,
-    _stub_campaign_resolution,
     _stub_guards,
 )
 

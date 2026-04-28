@@ -375,8 +375,6 @@ class TestHasActiveChildProcesses:
         from autoskillit.execution._process_monitor import _child_process_cache
 
         for c in children:
-            if c.pid in _child_process_cache:
-                pass  # Already cached by prime call
             _child_process_cache[c.pid] = c
         assert _has_active_child_processes(1234) is False
 

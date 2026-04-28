@@ -149,7 +149,9 @@ generic_automation_mcp/
 │   ├── __init__.py
 │   ├── defaults.yaml
 │   ├── ingredient_defaults.py
-│   └── settings.py          #   Dataclass config + dynaconf layered resolution
+│   ├── settings.py          #   AutomationConfig + schema validate/write API
+│   ├── _config_dataclasses.py #  22 leaf dataclasses + ConfigSchemaError
+│   └── _config_loader.py    #   _make_dynaconf + load_config layer helpers
 │
 ├── pipeline/                # L1 pipeline state
 │   ├── __init__.py
@@ -195,7 +197,9 @@ generic_automation_mcp/
 ├── workspace/               # L1
 │   ├── __init__.py
 │   ├── cleanup.py           #   CleanupResult, preserve list
-│   ├── clone.py             #   Clone-based run isolation
+│   ├── clone.py             #   clone_repo + push_to_remote + DefaultCloneManager
+│   ├── _clone_detect.py     #   detect_* helpers + RUNS_DIR + classify_remote_url
+│   ├── _clone_remote.py     #   CloneSourceResolution + probe/isolate remotes
 │   ├── session_skills.py    #   Per-session ephemeral skill dirs; subset filtering
 │   ├── clone_registry.py    #   Shared file-based coordination for deferred cleanup
 │   ├── skills.py            #   SkillResolver — bundled skill listing
@@ -216,11 +220,17 @@ generic_automation_mcp/
 │   ├── order.py             #   BUNDLED_RECIPE_ORDER — stable display order registry for Group 0 recipes
 │   ├── loader.py            #   Path-based recipe metadata utilities
 │   ├── _api.py              #   Orchestration API
+│   ├── _recipe_ingredients.py #  format_ingredients_table + LoadRecipeResult TypedDicts
+│   ├── _recipe_composition.py #  _build_active_recipe + sub-recipe merging
 │   ├── diagrams.py          #   Flow diagram generation + staleness detection
 │   ├── experiment_type_registry.py #  ExperimentTypeSpec, load_all_experiment_types
 │   ├── registry.py          #   RuleFinding, RuleSpec, semantic_rule decorator
 │   ├── repository.py
-│   ├── _analysis.py         #   Step graph building + dataflow analysis
+│   ├── _analysis.py         #   ValidationContext + make_validation_context
+│   ├── _analysis_graph.py   #   RouteEdge + build_recipe_graph + step graph primitives
+│   ├── _analysis_bfs.py     #   bfs_reachable + symbolic BFS fact propagation
+│   ├── _analysis_blocks.py  #   extract_blocks — group steps by block annotation
+│   ├── _analysis_detectors.py #  dead outputs + ref invalidations + implicit handoffs
 │   ├── rules_actions.py     #   Action-type semantic rules (stop-step-has-no-routing, recipe-has-terminal-step, route-step-requires-on-result)
 │   ├── rules_blocks.py      #   Block-level budget rules (block-run-cmd-budget, etc.)
 │   ├── rules_bypass.py
@@ -281,7 +291,9 @@ generic_automation_mcp/
 │   ├── _wire_compat.py      #   Claude Code wire-format sanitization middleware
 │   ├── helpers.py
 │   ├── tools_kitchen.py     #   open_kitchen, close_kitchen + recipe:// resource
-│   ├── tools_ci.py          #   CI/merge-queue tool handlers
+│   ├── tools_ci.py          #   set_commit_status + check_repo_merge_state
+│   ├── tools_ci_watch.py    #   wait_for_ci + get_ci_status + _auto_trigger_ci
+│   ├── tools_ci_merge_queue.py #  toggle_auto_merge + enqueue_pr + wait_for_merge_queue
 │   ├── tools_clone.py
 │   ├── tools_execution.py   #   run_cmd, run_python, run_skill
 │   ├── tools_git.py         #   merge_worktree, classify_fix, etc.

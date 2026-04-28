@@ -11,24 +11,54 @@ Resolution order (low → high priority):
 from __future__ import annotations
 
 import dataclasses
-import inspect
-import os
-import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any
 
+from autoskillit.config._config_dataclasses import (
+    _COMMAND_UNSET,
+    _METADATA_KEYS,
+    _SECRETS_ONLY_KEYS,
+    BranchingConfig,
+    CIConfig,
+    ClassifyFixConfig,
+    ConfigSchemaError,
+    FleetConfig,
+    GitHubConfig,
+    ImplementGateConfig,
+    LinuxTracingConfig,
+    LoggingConfig,
+    McpResponseConfig,
+    MigrationConfig,
+    ModelConfig,
+    PacksConfig,
+    QuotaGuardConfig,
+    ReadDbConfig,
+    ReportBugConfig,
+    ResetWorkspaceConfig,
+    RunSkillConfig,
+    SafetyConfig,
+    SkillsConfig,
+    SubsetsConfig,
+    TestCheckConfig,
+    TokenUsageConfig,
+    WorkspaceConfig,
+    WorktreeSetupConfig,
+)
+from autoskillit.config._config_loader import (
+    _build_packs_config,
+    _build_subsets_config,
+    _to_optional_commands,
+    _to_optional_list,
+    load_config,
+)
 from autoskillit.core import (
-    CATEGORY_TAGS,
     FEATURE_REGISTRY,
     FeatureLifecycle,
-    OutputFormat,
     atomic_write,
     dump_yaml_str,
     get_logger,
     is_feature_enabled,
-    load_yaml,
-    pkg_root,
 )
 
 if TYPE_CHECKING:
@@ -36,296 +66,37 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-
-class ConfigSchemaError(ValueError):
-    """Raised when a config YAML layer contains unrecognized or misplaced keys."""
-
-
-_SECRETS_ONLY_KEYS: frozenset[str] = frozenset({"github.token"})
-_METADATA_KEYS: frozenset[str] = frozenset({"version"})
-
-
-_DEFAULT_COMMAND: tuple[str, ...] = ("task", "test-check")
-
-# Unique sentinel object — identity check in __post_init__ detects whether
-# `command` was explicitly supplied by the caller or left at its default.
-_COMMAND_UNSET: list[str] = []
-
-
-@dataclass
-class TestCheckConfig:
-    command: list[str] = field(default_factory=lambda: _COMMAND_UNSET)
-    timeout: int = 600
-    filter_mode: str | None = None
-    base_ref: str | None = None
-    commands: list[list[str]] | None = None
-
-    def __post_init__(self) -> None:
-        if self.command is _COMMAND_UNSET:
-            self.command = list(_DEFAULT_COMMAND)
-        elif self.commands is not None:
-            raise ConfigSchemaError(
-                "test_check: 'command' and 'commands' are mutually exclusive; "
-                "omit 'command' when using 'commands'"
-            )
-
-    @property
-    def effective_commands(self) -> list[list[str]]:
-        return self.commands if self.commands is not None else [self.command]
-
-
-@dataclass
-class ClassifyFixConfig:
-    path_prefixes: list[str] = field(default_factory=list)
-
-
-@dataclass
-class ResetWorkspaceConfig:
-    command: list[str] | None = None
-    preserve_dirs: set[str] = field(default_factory=set)
-
-
-@dataclass
-class ImplementGateConfig:
-    marker: str = "Dry-walkthrough verified = TRUE"
-    skill_names: set[str] = field(
-        default_factory=lambda: {
-            "/autoskillit:implement-worktree",
-            "/autoskillit:implement-worktree-no-merge",
-        }
-    )
-
-
-@dataclass
-class SafetyConfig:
-    reset_guard_marker: str = ".autoskillit-workspace"
-    require_dry_walkthrough: bool = True
-    test_gate_on_merge: bool = True
-    protected_branches: list[str] = field(
-        default_factory=lambda: ["main", "integration", "stable"]
-    )
-
-
-@dataclass
-class ReadDbConfig:
-    timeout: int = 30
-    max_rows: int = 10000
-
-
-@dataclass
-class RunSkillConfig:
-    timeout: int = 7200
-    stale_threshold: int = 1200  # 20 minutes
-    completion_marker: str = "%%ORDER_UP%%"
-    completion_drain_timeout: float = 5.0
-    exit_after_stop_delay_ms: int = 2000
-    natural_exit_grace_seconds: float = 3.0
-    idle_output_timeout: int = 600
-    max_suppression_seconds: int = 1800
-
-    # Safety margin (ms) above exit_after_stop_delay_ms that
-    # natural_exit_grace_seconds must cover so the drain window can absorb
-    # the CLI self-exit delay without a race.
-    _EXIT_GRACE_BUFFER_MS: ClassVar[int] = 500
-
-    def __post_init__(self) -> None:
-        required_ms = self.exit_after_stop_delay_ms + self._EXIT_GRACE_BUFFER_MS
-        # Convert seconds → ms for the comparison
-        if self.natural_exit_grace_seconds * 1000 < required_ms:
-            raise ValueError(
-                f"natural_exit_grace_seconds={self.natural_exit_grace_seconds} is too small: "
-                f"{self.natural_exit_grace_seconds * 1000:.0f}ms < "
-                f"{required_ms}ms (exit_after_stop_delay_ms + {self._EXIT_GRACE_BUFFER_MS}). "
-                "Increase natural_exit_grace_seconds so the drain window can absorb the "
-                "CLI self-exit delay."
-            )
-
-    @property
-    def output_format(self) -> OutputFormat:
-        """Derived from feature requirements — not independently configurable."""
-        return OutputFormat.derive(completion_marker=self.completion_marker)
-
-
-@dataclass
-class ModelConfig:
-    default: str = "sonnet"
-    override: str | None = None
-
-
-@dataclass
-class WorktreeSetupConfig:
-    command: list[str] | None = None
-
-
-@dataclass
-class MigrationConfig:
-    suppressed: list[str] = field(default_factory=list)
-
-
-@dataclass
-class TokenUsageConfig:
-    verbosity: str = "summary"  # "summary" | "none"
-
-
-@dataclass
-class QuotaGuardConfig:
-    enabled: bool = True
-    short_window_enabled: bool = True
-    long_window_enabled: bool = True
-    short_window_threshold: float = 85.0
-    long_window_threshold: float = 95.0
-    long_window_patterns: list[str] = field(
-        default_factory=lambda: ["seven_day", "sonnet", "opus"]
-    )
-    buffer_seconds: int = 60
-    cache_max_age: int = 300
-    cache_refresh_interval: int = 240
-    credentials_path: str = "~/.claude/.credentials.json"
-    cache_path: str = "~/.claude/autoskillit_quota_cache.json"
-
-
-@dataclass
-class GitHubConfig:
-    token: str | None = None
-    default_repo: str | None = None
-    in_progress_label: str = "in-progress"
-    staged_label: str = "staged"
-    allowed_labels: list[str] = field(default_factory=list)
-
-    def check_label_allowed(self, label: str) -> str | None:
-        """Return None if label is permitted, or an error message string if not.
-
-        When allowed_labels is empty, all labels are permitted (unrestricted/opt-out mode).
-        """
-        if not self.allowed_labels:
-            return None
-        if label not in self.allowed_labels:
-            allowed_sorted = sorted(self.allowed_labels)
-            return (
-                f"Label '{label}' is not in the configured allowed labels. "
-                f"Allowed: {allowed_sorted}. "
-                f"Add '{label}' to github.allowed_labels in your config to permit it."
-            )
-        return None
-
-    def check_labels_allowed(self, labels: list[str]) -> str | None:
-        """Return None if all labels are permitted, or an error message for the first violation.
-
-        When allowed_labels is empty, all labels are permitted (unrestricted/opt-out mode).
-        """
-        for label in labels:
-            if err := self.check_label_allowed(label):
-                return err
-        return None
-
-
-@dataclass
-class ReportBugConfig:
-    timeout: int = 600
-    model: str | None = None
-    report_dir: str | None = None  # None = resolved temp dir + /bug-reports/
-    github_filing: bool = True
-    github_labels: list[str] = field(default_factory=lambda: ["autoreported", "bug"])
-
-
-@dataclass
-class LoggingConfig:
-    level: str = "INFO"
-    json_output: bool | None = None  # None = auto-detect from stderr.isatty()
-
-
-@dataclass
-class LinuxTracingConfig:
-    enabled: bool = True
-    proc_interval: float = 5.0
-    log_dir: str = ""  # empty = platform default (~/.local/share/autoskillit/logs on Linux)
-    tmpfs_path: str = "/dev/shm"  # RAM-backed tmpfs for crash-resilient streaming
-
-    def __post_init__(self) -> None:
-        if self.tmpfs_path != "/dev/shm" or not os.environ.get("PYTEST_CURRENT_TEST"):
-            return
-        # Only raise when called directly from test code — not from library machinery
-        # (e.g. AutomationConfig default_factory, from_dynaconf). We inspect the call
-        # frame two levels up: __post_init__ → __init__ (generated) → actual caller.
-        frame = inspect.currentframe()
-        init_frame = frame.f_back if frame is not None else None
-        caller = init_frame.f_back if init_frame is not None else None
-        if caller is not None and "/tests/" in (caller.f_code.co_filename or ""):
-            raise RuntimeError(
-                "LinuxTracingConfig.tmpfs_path is '/dev/shm' but PYTEST_CURRENT_TEST "
-                "is set — this test would write to the real shared tmpfs and pollute "
-                "production state. Override tmpfs_path with a test-local path, e.g.: "
-                "LinuxTracingConfig(tmpfs_path=str(tmp_path)). "
-                "Use the isolated_tracing_config fixture for new tests."
-            )
-        del frame, init_frame, caller
-
-
-@dataclass
-class McpResponseConfig:
-    alert_threshold_tokens: int = 2000
-
-
-@dataclass
-class BranchingConfig:
-    default_base_branch: str = "main"
-    promotion_target: str = "main"  # Canonical upstream default for staged-label comparison.
-
-
-@dataclass
-class CIConfig:
-    workflow: str | None = None
-    event: str | None = None
-
-
-@dataclass
-class SkillsConfig:
-    tier1: list[str] = field(default_factory=list)
-    tier2: list[str] = field(default_factory=list)
-    tier3: list[str] = field(default_factory=list)
-
-    def __post_init__(self) -> None:
-        t1, t2, t3 = set(self.tier1), set(self.tier2), set(self.tier3)
-        dupes = (t1 & t2) | (t1 & t3) | (t2 & t3)
-        if dupes:
-            raise ValueError(f"Skills assigned to multiple tiers: {sorted(dupes)}")
-
-
-@dataclass
-class SubsetsConfig:
-    disabled: list[str] = field(default_factory=list)
-    custom_tags: dict[str, list[str]] = field(default_factory=dict)
-
-
-@dataclass
-class PacksConfig:
-    enabled: list[str] = field(default_factory=list)
-
-
-@dataclass
-class WorkspaceConfig:
-    worktree_root: str | None = None  # null = auto-resolve to ../worktrees/
-    runs_root: str | None = None  # null = auto-resolve to ../autoskillit-runs/
-    temp_dir: str | None = None  # null = canonical default (see resolve_temp_dir)
-
-
-@dataclass
-class FleetConfig:
-    default_timeout_sec: int = 3600
-    max_concurrent_dispatches: int = 1
-
-    def validate(self, feature_enabled: bool) -> None:
-        """Validate only when the feature is active."""
-        if not feature_enabled:
-            return
-        if self.default_timeout_sec <= 0:
-            raise ValueError(
-                f"default_timeout_sec must be positive, got {self.default_timeout_sec}"
-            )
-        if self.max_concurrent_dispatches < 1:
-            raise ValueError(
-                f"max_concurrent_dispatches must be >= 1, got {self.max_concurrent_dispatches}"
-            )
+__all__ = [
+    "AutomationConfig",
+    "BranchingConfig",
+    "CIConfig",
+    "ClassifyFixConfig",
+    "ConfigSchemaError",
+    "FleetConfig",
+    "GitHubConfig",
+    "ImplementGateConfig",
+    "LinuxTracingConfig",
+    "LoggingConfig",
+    "McpResponseConfig",
+    "MigrationConfig",
+    "ModelConfig",
+    "PacksConfig",
+    "QuotaGuardConfig",
+    "ReadDbConfig",
+    "ReportBugConfig",
+    "ResetWorkspaceConfig",
+    "RunSkillConfig",
+    "SafetyConfig",
+    "SkillsConfig",
+    "SubsetsConfig",
+    "TestCheckConfig",
+    "TokenUsageConfig",
+    "WorkspaceConfig",
+    "WorktreeSetupConfig",
+    "load_config",
+    "validate_layer_keys",
+    "write_config_layer",
+]
 
 
 def _field_defaults(cls: type) -> dict[str, Any]:
@@ -766,157 +537,3 @@ def write_config_layer(path: Path, data: dict[str, Any]) -> None:
     validate_layer_keys(data, path, is_secrets_layer=False)
     path.parent.mkdir(parents=True, exist_ok=True)
     atomic_write(path, dump_yaml_str(data, default_flow_style=False, allow_unicode=True))
-
-
-def _build_subsets_config(raw: dict[str, Any]) -> SubsetsConfig:
-    """Parse subsets section, emitting warnings for unknown disabled categories."""
-    disabled = list(raw.get("disabled", []))
-    custom_tags_raw = raw.get("custom_tags", {}) or {}
-    if not isinstance(custom_tags_raw, dict):
-        raise ValueError(
-            f"subsets.custom_tags must be a dict mapping tag names to skill lists, "
-            f"got {type(custom_tags_raw).__name__!r}: {custom_tags_raw!r}"
-        )
-    custom_tags: dict[str, list[str]] = {}
-    for k, v in custom_tags_raw.items():
-        if isinstance(v, list):
-            custom_tags[str(k)] = [str(item) for item in v]
-        else:
-            logger.warning(
-                "Ignoring non-list value for custom_tags entry %r: %r",
-                k,
-                v,
-            )
-    known_categories = CATEGORY_TAGS | frozenset(custom_tags.keys())
-    for tag in disabled:
-        if tag not in known_categories:
-            logger.warning(
-                "Unknown category %r in subsets.disabled"
-                " (not in CATEGORY_TAGS and not a custom_tag)",
-                tag,
-            )
-    return SubsetsConfig(disabled=disabled, custom_tags=custom_tags)
-
-
-def _build_packs_config(raw: dict[str, Any]) -> PacksConfig:
-    """Parse packs section, warning on unknown pack names."""
-    from autoskillit.core import PACK_REGISTRY
-
-    enabled = list(raw.get("enabled", []))
-    for pack_name in enabled:
-        if pack_name not in PACK_REGISTRY:
-            logger.warning(
-                "Unknown pack name %r in packs.enabled (not in PACK_REGISTRY)",
-                pack_name,
-            )
-    return PacksConfig(enabled=enabled)
-
-
-def _to_optional_list(value: Any) -> list[str] | None:
-    """Return None if value is falsy, else coerce to list[str]."""
-    if not value:
-        return None
-    return list(value)
-
-
-def _to_optional_commands(value: Any) -> list[list[str]] | None:
-    """Return None if value is falsy, else coerce to list[list[str]]."""
-    if not value:
-        return None
-    if not isinstance(value, list) or any(not isinstance(cmd, (list, tuple)) for cmd in value):
-        raise ConfigSchemaError(f"test_check.commands must be a list of lists, got: {value!r}")
-    return [list(cmd) for cmd in value]
-
-
-def _apply_layer(base: dict[str, Any], override: dict[str, Any]) -> None:
-    """Apply override into base with dict deep-merge and list-replace semantics.
-
-    Dicts are recursively merged so that a partial section in a later layer
-    (e.g. project config with only github.default_repo) does not wipe sibling
-    keys set by an earlier layer (e.g. user config with github.token).
-    All other value types — including lists — are replaced outright, preserving
-    the intuitive expectation that setting test_check.command in a config file
-    gives exactly that command (not the defaults appended to it).
-    """
-    for key, value in override.items():
-        if key in base and isinstance(base[key], dict) and isinstance(value, dict):
-            _apply_layer(base[key], value)
-        else:
-            base[key] = value
-
-
-def _merge_yaml_layers(*paths: Path) -> dict[str, Any]:
-    """Load and merge YAML files in order, applying _apply_layer for each."""
-    result: dict[str, Any] = {}
-    for path in paths:
-        if path.is_file():
-            data = load_yaml(path)
-            if isinstance(data, dict):
-                _apply_layer(result, data)
-    return result
-
-
-def _make_dynaconf(project_dir: Path | None = None) -> Dynaconf:
-    """Create a Dynaconf instance for env-var overrides over pre-merged file layers.
-
-    File layers (defaults, user, project, secrets) are merged in advance with
-    dict deep-merge + list-replace semantics. User-writable layers are validated
-    for unrecognized keys before merging. The merged result is written to a temp
-    YAML file so that Dynaconf can apply env var overrides (AUTOSKILLIT_SECTION__KEY).
-
-    Deferred import keeps dynaconf off the module-level import chain.
-    """
-    from dynaconf import Dynaconf  # noqa: PLC0415
-
-    defaults_path = pkg_root() / "config" / "defaults.yaml"
-    root = project_dir or Path.cwd()
-
-    # Layer definitions: (path, should_validate, is_secrets_layer)
-    _layers = [
-        (defaults_path, False, False),
-        (Path.home() / ".autoskillit" / "config.yaml", True, False),
-        (root / ".autoskillit" / "config.yaml", True, False),
-        (root / ".autoskillit" / ".secrets.yaml", True, True),
-    ]
-
-    merged: dict[str, Any] = {}
-    for path, should_validate, is_secrets in _layers:
-        if path.is_file():
-            data = load_yaml(path)
-            if isinstance(data, dict):
-                if should_validate:
-                    validate_layer_keys(data, path, is_secrets_layer=is_secrets)
-                _apply_layer(merged, data)
-            elif data is not None:
-                raise ConfigSchemaError(
-                    f"Invalid configuration in {str(path)!r}: "
-                    f"expected a YAML mapping at the top level, "
-                    f"got {type(data).__name__!r}."
-                )
-
-    # Write to a temp file so Dynaconf can load it and apply env var overrides.
-    # Dynaconf reads files lazily; we trigger eager loading before the file is
-    # deleted so the in-memory cache remains valid.
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as tmp:
-        tmp.write(dump_yaml_str(merged))
-        tmp_path = Path(tmp.name)
-
-    try:
-        d = Dynaconf(
-            envvar_prefix="AUTOSKILLIT",
-            preload=[str(tmp_path)],
-            settings_files=[],
-            merge_enabled=False,
-            load_dotenv=False,
-            environments=False,
-        )
-        d.as_dict()  # trigger eager load so the temp file can be safely deleted
-    finally:
-        tmp_path.unlink(missing_ok=True)
-
-    return d
-
-
-def load_config(project_dir: Path | None = None) -> AutomationConfig:
-    """Load layered config: defaults < user < project < secrets < env vars."""
-    return AutomationConfig.from_dynaconf(_make_dynaconf(project_dir))

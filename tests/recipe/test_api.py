@@ -365,27 +365,27 @@ class TestIngredientSortOrder:
     """Ingredients must sort: required > auto-detect > flags > constants > optional."""
 
     def test_sort_key_required_is_highest_priority(self):
-        from autoskillit.recipe._api import _ingredient_sort_key
+        from autoskillit.recipe._recipe_ingredients import _ingredient_sort_key
 
         key = _ingredient_sort_key("task", required=True, default=None)
         assert key[0] == 0
 
     def test_sort_key_auto_detect_above_flags(self):
-        from autoskillit.recipe._api import _ingredient_sort_key
+        from autoskillit.recipe._recipe_ingredients import _ingredient_sort_key
 
         auto = _ingredient_sort_key("source_dir", required=False, default="")
         flag = _ingredient_sort_key("audit", required=False, default="true")
         assert auto[0] < flag[0], "auto-detect must sort above boolean flags"
 
     def test_sort_key_flags_above_optional(self):
-        from autoskillit.recipe._api import _ingredient_sort_key
+        from autoskillit.recipe._recipe_ingredients import _ingredient_sort_key
 
         flag = _ingredient_sort_key("audit", required=False, default="true")
         opt = _ingredient_sort_key("issue_url", required=False, default=None)
         assert flag[0] < opt[0], "boolean flags must sort above optional"
 
     def test_sort_key_optional_above_constants(self):
-        from autoskillit.recipe._api import _ingredient_sort_key
+        from autoskillit.recipe._recipe_ingredients import _ingredient_sort_key
 
         opt = _ingredient_sort_key("issue_url", required=False, default=None)
         const = _ingredient_sort_key("run_name", required=False, default="impl")
@@ -393,7 +393,7 @@ class TestIngredientSortOrder:
 
     def test_sort_key_full_tier_ordering(self):
         """All five tiers must be strictly ordered."""
-        from autoskillit.recipe._api import _ingredient_sort_key
+        from autoskillit.recipe._recipe_ingredients import _ingredient_sort_key
 
         tiers = [
             _ingredient_sort_key("task", required=True, default=None)[0],  # required
@@ -470,7 +470,10 @@ class TestFormatIngredientsTableGfmWidthCap:
         A 220-char description (as in implementation.yaml run_mode) must not produce a
         220-wide GFM column. Each data row's description cell must be <= the cap.
         """
-        from autoskillit.recipe._api import _GFM_DESC_MAX_WIDTH, format_ingredients_table
+        from autoskillit.recipe._recipe_ingredients import (
+            _GFM_DESC_MAX_WIDTH,
+            format_ingredients_table,
+        )
 
         recipe = self._recipe_with_long_desc("X" * 220)
         table = format_ingredients_table(recipe)
@@ -544,7 +547,10 @@ class TestFormatIngredientsTableGfmWidthCap:
         This is the regression test for GitHub Issue #489 (run_mode 220-char description).
         """
         from autoskillit.core import pkg_root
-        from autoskillit.recipe._api import _GFM_DESC_MAX_WIDTH, format_ingredients_table
+        from autoskillit.recipe._recipe_ingredients import (
+            _GFM_DESC_MAX_WIDTH,
+            format_ingredients_table,
+        )
         from autoskillit.recipe.io import find_recipe_by_name, load_recipe
 
         recipe_info = find_recipe_by_name("implementation", pkg_root() / "recipes")
@@ -684,7 +690,7 @@ def test_build_ingredient_rows_returns_tuples():
 def test_drop_sub_recipe_step_preserves_future_fields() -> None:
     """_drop_sub_recipe_step round-trips all Recipe fields (catches future field additions)."""
 
-    from autoskillit.recipe._api import _drop_sub_recipe_step
+    from autoskillit.recipe._recipe_composition import _drop_sub_recipe_step
     from autoskillit.recipe.schema import Recipe, RecipeStep
 
     recipe = Recipe(

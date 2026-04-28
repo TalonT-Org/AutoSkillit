@@ -3,7 +3,8 @@
 import pytest
 
 from autoskillit.config import AutomationConfig
-from autoskillit.config.settings import GitHubConfig, _make_dynaconf
+from autoskillit.config._config_loader import _make_dynaconf
+from autoskillit.config.settings import GitHubConfig
 
 pytestmark = [pytest.mark.layer("config"), pytest.mark.small]
 

@@ -336,6 +336,8 @@ def test_rebase_then_push_with_force_true_passes_validation() -> None:
 
 _SERVER_TOOL_MODULES = [
     "autoskillit.server.tools_ci",
+    "autoskillit.server.tools_ci_watch",
+    "autoskillit.server.tools_ci_merge_queue",
     "autoskillit.server.tools_clone",
     "autoskillit.server.tools_execution",
     "autoskillit.server.tools_git",

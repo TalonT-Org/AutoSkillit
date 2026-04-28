@@ -5,20 +5,23 @@ All sub-modules depend only on autoskillit.core.*.
 """
 
 from autoskillit.core import SkillResolver
+from autoskillit.workspace._clone_detect import (
+    RUNS_DIR,
+    classify_remote_url,
+    detect_branch,
+    detect_source_dir,
+    detect_uncommitted_changes,
+    detect_unpublished_branch,
+)
+from autoskillit.workspace._clone_remote import CloneSourceResolution
 from autoskillit.workspace.cleanup import (
     CleanupResult,
     DefaultWorkspaceManager,
     _delete_directory_contents,
 )
 from autoskillit.workspace.clone import (
-    RUNS_DIR,
     DefaultCloneManager,
-    classify_remote_url,
     clone_repo,
-    detect_branch,
-    detect_source_dir,
-    detect_uncommitted_changes,
-    detect_unpublished_branch,
     push_to_remote,
     remove_clone,
 )
@@ -76,6 +79,7 @@ __all__ = [
     "bundled_skills_extended_dir",
     "detect_project_local_overrides",
     "clone_repo",
+    "CloneSourceResolution",
     "detect_branch",
     "detect_source_dir",
     "detect_uncommitted_changes",

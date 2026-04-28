@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -90,3 +91,19 @@ def assert_step_timed(timing_log: DefaultTimingLog, step_name: str) -> None:
 
 def assert_no_timing(timing_log: DefaultTimingLog) -> None:
     assert timing_log.get_report() == []
+
+
+def _make_mock_ctx() -> MagicMock:
+    """Return a minimal mock ToolContext with a gate."""
+    gate = MagicMock()
+    gate.enabled = False
+    ctx = MagicMock()
+    ctx.gate = gate
+    ctx.config.subsets.disabled = []  # REQ-VIS-008: no subsets disabled by default
+    return ctx
+
+
+_SUCCESS_JSON = (
+    '{"type": "result", "subtype": "success", "is_error": false,'
+    ' "result": "done", "session_id": "s1"}'
+)

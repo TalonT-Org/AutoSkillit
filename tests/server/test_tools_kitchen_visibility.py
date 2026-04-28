@@ -8,18 +8,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from autoskillit.core._type_constants import SOUS_CHEF_MANDATORY_SECTIONS
+from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
-
-
-def _make_mock_ctx():
-    """Return a minimal mock ToolContext with a gate."""
-    gate = MagicMock()
-    gate.enabled = False
-    ctx = MagicMock()
-    ctx.gate = gate
-    ctx.config.subsets.disabled = []  # REQ-VIS-008: no subsets disabled by default
-    return ctx
 
 
 # ---------------------------------------------------------------------------

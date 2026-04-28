@@ -12,13 +12,9 @@ from autoskillit.execution.commands import _inject_completion_directive
 from autoskillit.execution.headless import _session_log_dir
 from autoskillit.server.tools_execution import run_skill
 from tests.conftest import _make_result
+from tests.server.conftest import _SUCCESS_JSON
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
-
-_SUCCESS_JSON = (
-    '{"type": "result", "subtype": "success", "is_error": false,'
-    ' "result": "done", "session_id": "s1"}'
-)
 
 
 class TestRunSkillPluginDir:

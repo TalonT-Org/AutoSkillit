@@ -15,14 +15,9 @@ from autoskillit.core.types import (
 )
 from autoskillit.server.tools_execution import run_skill
 from tests.conftest import _make_result
-from tests.server.conftest import assert_no_timing, assert_step_timed
+from tests.server.conftest import _SUCCESS_JSON, assert_no_timing, assert_step_timed
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
-
-_SUCCESS_JSON = (
-    '{"type": "result", "subtype": "success", "is_error": false,'
-    ' "result": "done", "session_id": "s1"}'
-)
 
 
 class TestGateErrorSchemaNormalization:

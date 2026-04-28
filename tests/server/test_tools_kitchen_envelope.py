@@ -7,17 +7,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from tests.server.conftest import _make_mock_ctx
+
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
-
-
-def _make_mock_ctx():
-    """Return a minimal mock ToolContext with a gate."""
-    gate = MagicMock()
-    gate.enabled = False
-    ctx = MagicMock()
-    ctx.gate = gate
-    ctx.config.subsets.disabled = []  # REQ-VIS-008: no subsets disabled by default
-    return ctx
 
 
 # ---------------------------------------------------------------------------
@@ -471,8 +463,6 @@ async def test_open_kitchen_sous_chef_read_raises_returns_failure_envelope(tmp_p
     mock_ctx.enable_components = AsyncMock()
 
     import autoskillit.server.tools_kitchen as tk_mod
-
-    _original_pkg_root = tk_mod.pkg_root
 
     def fake_pkg_root():
         root = tmp_path / "fake_pkg"

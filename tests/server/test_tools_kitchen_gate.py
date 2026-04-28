@@ -11,18 +11,9 @@ import pytest
 
 from autoskillit.config.settings import QuotaGuardConfig
 from autoskillit.hooks._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
+from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
-
-
-def _make_mock_ctx():
-    """Return a minimal mock ToolContext with a gate."""
-    gate = MagicMock()
-    gate.enabled = False
-    ctx = MagicMock()
-    ctx.gate = gate
-    ctx.config.subsets.disabled = []  # REQ-VIS-008: no subsets disabled by default
-    return ctx
 
 
 # T2a

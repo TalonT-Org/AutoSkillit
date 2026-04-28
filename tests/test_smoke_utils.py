@@ -255,8 +255,8 @@ def _make_gh_mock(get_body: str = "", get_rc: int = 0, patch_rc: int = 0):
 
 
 # T_PTS1
-@patch("autoskillit.smoke_utils.time.sleep")
-@patch("autoskillit.smoke_utils.subprocess.run")
+@patch("time.sleep")
+@patch("subprocess.run")
 def test_pts_happy_path_appends_table(mock_run, _mock_sleep, tmp_path: Path) -> None:
     cwd = "/clone/test"
     _write_test_sessions(
@@ -298,8 +298,8 @@ def test_pts_happy_path_appends_table(mock_run, _mock_sleep, tmp_path: Path) -> 
 
 
 # T_PTS2
-@patch("autoskillit.smoke_utils.time.sleep")
-@patch("autoskillit.smoke_utils.subprocess.run")
+@patch("time.sleep")
+@patch("subprocess.run")
 def test_pts_replaces_existing_partial_table(mock_run, _mock_sleep, tmp_path: Path) -> None:
     cwd = "/clone/test"
     _write_test_sessions(
@@ -357,8 +357,8 @@ def test_pts_zero_sessions(tmp_path: Path) -> None:
 
 
 # T_PTS5
-@patch("autoskillit.smoke_utils.time.sleep")
-@patch("autoskillit.smoke_utils.subprocess.run")
+@patch("time.sleep")
+@patch("subprocess.run")
 def test_pts_cross_kitchen_sessions(mock_run, _mock_sleep, tmp_path: Path) -> None:
     cwd = "/clone/test"
     entries = [
@@ -390,7 +390,7 @@ def test_pts_cross_kitchen_sessions(mock_run, _mock_sleep, tmp_path: Path) -> No
 
 
 # T_PTS6
-@patch("autoskillit.smoke_utils.subprocess.run")
+@patch("subprocess.run")
 def test_pts_gh_api_read_failure(mock_run, tmp_path: Path) -> None:
     cwd = "/clone/test"
     _write_test_sessions(
@@ -406,8 +406,8 @@ def test_pts_gh_api_read_failure(mock_run, tmp_path: Path) -> None:
 
 
 # T_PTS7
-@patch("autoskillit.smoke_utils.time.sleep")
-@patch("autoskillit.smoke_utils.subprocess.run")
+@patch("time.sleep")
+@patch("subprocess.run")
 def test_pts_gh_api_patch_failure(mock_run, _mock_sleep, tmp_path: Path) -> None:
     cwd = "/clone/test"
     _write_test_sessions(

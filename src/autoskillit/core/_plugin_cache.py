@@ -265,7 +265,10 @@ def any_kitchen_open(project_path: str | None = None) -> bool:
             except OSError as exc:
                 logger.warning("any_kitchen_open: failed to persist pruned kitchens: %s", exc)
         if project_path is not None:
-            return any(entry.get("project_path") == project_path for entry in survivors)
+            return any(
+                entry.get("project_path") is None or entry.get("project_path") == project_path
+                for entry in survivors
+            )
         return len(survivors) > 0
     finally:
         fh.close()

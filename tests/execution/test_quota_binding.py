@@ -1,4 +1,5 @@
-"""Tests for execution/quota.py — multi-window selection, per-window thresholds, cache refresh, per-window toggles, and API vocabulary contract."""
+"""Tests for execution/quota.py — multi-window selection, per-window thresholds,
+cache refresh, per-window toggles, and API vocabulary contract."""
 
 from __future__ import annotations
 

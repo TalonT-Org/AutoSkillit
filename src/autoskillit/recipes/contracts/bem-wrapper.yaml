@@ -1,0 +1,93 @@
+generated_at: '2026-04-28T09:27:39.466273+00:00'
+bundled_manifest_version: 0.1.0
+skill_hashes: {}
+skills:
+  build-execution-map:
+    inputs: []
+    outputs:
+    - name: execution_map
+      type: file_path
+    - name: execution_map_report
+      type: file_path
+    - name: group_count
+      type: string
+    - name: total_issues
+      type: string
+    - name: review_approach_candidates
+      type: string
+    expected_output_patterns:
+    - execution_map\s*=\s*/.+
+    pattern_examples:
+    - 'execution_map = /tmp/build-execution-map/execution_map_2026-04-22_190000.json
+
+      execution_map_report = /tmp/build-execution-map/execution_map_report_2026-04-22_190000.md
+
+      group_count = 3
+
+      total_issues = 5'
+    write_behavior: always
+dataflow:
+- step: refetch_issues
+  available:
+  - base_branch
+  - issue_urls
+  required: []
+  produced:
+  - issue_numbers
+- step: check_issue_count
+  available:
+  - base_branch
+  - issue_numbers
+  - issue_urls
+  required: []
+  produced: []
+- step: run_bem
+  available:
+  - base_branch
+  - issue_numbers
+  - issue_urls
+  required: []
+  produced:
+  - execution_map
+  positional_args: 1
+- step: emit_fallback_map
+  available:
+  - base_branch
+  - execution_map
+  - issue_numbers
+  - issue_urls
+  required: []
+  produced:
+  - execution_map
+- step: emit_result
+  available:
+  - base_branch
+  - execution_map
+  - issue_numbers
+  - issue_urls
+  required: []
+  produced: []
+- step: emit_empty_result
+  available:
+  - base_branch
+  - execution_map
+  - issue_numbers
+  - issue_urls
+  required: []
+  produced: []
+- step: done
+  available:
+  - base_branch
+  - execution_map
+  - issue_numbers
+  - issue_urls
+  required: []
+  produced: []
+- step: escalate_stop
+  available:
+  - base_branch
+  - execution_map
+  - issue_numbers
+  - issue_urls
+  required: []
+  produced: []

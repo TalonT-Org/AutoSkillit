@@ -359,3 +359,85 @@ class TestFleetCampaignRoleText:
     def test_role_identifies_as_fleet_campaign_dispatcher(self) -> None:
         prompt = _build()
         assert "fleet campaign dispatcher" in prompt
+
+
+# --- K-14: TestDynamicDispatchSection ---
+
+
+class TestDynamicDispatchSection:
+    def _make_dynamic_recipe(self) -> Recipe:
+        return Recipe(
+            name="audit-campaign",
+            description="Full audit and implement campaign",
+            kind=RecipeKind.CAMPAIGN,
+            dispatches=[
+                CampaignDispatch(
+                    name="build-map",
+                    recipe="bem-wrapper",
+                    task="Build execution map",
+                    capture={
+                        "execution_map": "${{ result.execution_map }}",
+                        "dispatch_plan": "${{ result.dispatch_plan }}",
+                    },
+                ),
+            ],
+            continue_on_failure=False,
+        )
+
+    def test_dynamic_dispatch_section_present_when_dispatch_plan_captured(self) -> None:
+        prompt = _build(campaign_recipe=self._make_dynamic_recipe())
+        assert "DYNAMIC DISPATCH" in prompt
+
+    def test_dynamic_dispatch_section_absent_for_static_only_campaign(self) -> None:
+        prompt = _build()
+        assert "DYNAMIC DISPATCH" not in prompt
+
+    def test_implement_findings_recipe_name_referenced(self) -> None:
+        prompt = _build(campaign_recipe=self._make_dynamic_recipe())
+        assert "implement-findings" in prompt
+
+    def test_dispatch_plan_campaign_ref_referenced(self) -> None:
+        prompt = _build(campaign_recipe=self._make_dynamic_recipe())
+        assert "campaign.dispatch_plan" in prompt
+
+    def test_group_iteration_instruction_present(self) -> None:
+        prompt = _build(campaign_recipe=self._make_dynamic_recipe())
+        assert "For each group (in array order)" in prompt
+
+    def test_naming_convention_instruction_present(self) -> None:
+        prompt = _build(campaign_recipe=self._make_dynamic_recipe())
+        assert "-g" in prompt and "-a" in prompt
+
+    def test_parallel_dispatch_instruction_present(self) -> None:
+        prompt = _build(campaign_recipe=self._make_dynamic_recipe())
+        assert "parallel tool calls" in prompt
+
+    def test_wait_for_group_before_next_group(self) -> None:
+        prompt = _build(campaign_recipe=self._make_dynamic_recipe())
+        assert "Wait for ALL food trucks in this group" in prompt
+
+    def test_max_issues_per_food_truck_split_instruction(self) -> None:
+        prompt = _build(campaign_recipe=self._make_dynamic_recipe())
+        assert "batches of that size" in prompt
+
+    def test_empty_dispatch_plan_handled(self) -> None:
+        prompt = _build(campaign_recipe=self._make_dynamic_recipe())
+        assert "no issues to implement" in prompt
+
+    def test_dynamic_dispatch_absent_when_only_execution_map_captured(self) -> None:
+        recipe = Recipe(
+            name="partial-campaign",
+            description="Only captures execution_map",
+            kind=RecipeKind.CAMPAIGN,
+            dispatches=[
+                CampaignDispatch(
+                    name="build-map",
+                    recipe="bem-wrapper",
+                    task="Build map",
+                    capture={"execution_map": "${{ result.execution_map }}"},
+                ),
+            ],
+            continue_on_failure=False,
+        )
+        prompt = _build(campaign_recipe=recipe)
+        assert "DYNAMIC DISPATCH" not in prompt

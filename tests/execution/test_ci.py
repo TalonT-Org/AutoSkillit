@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
 
 from autoskillit.core import CIRunScope, CIWatcher
@@ -534,3 +535,101 @@ async def test_ci_etag_stores_on_200(httpx_mock):
     requests = httpx_mock.get_requests()
     assert len(requests) == 2
     assert requests[1].headers.get("if-none-match") == '"abc123"'
+
+
+# ---------------------------------------------------------------------------
+# SHA-aware filter bypass — immunity tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_fetch_completed_runs_sha_bypasses_time_filter(httpx_mock):
+    """When scope.head_sha is set, stale runs ARE returned (SHA = identity)."""
+    stale_time = (datetime.now(UTC) - timedelta(minutes=30)).isoformat()
+    httpx_mock.add_response(
+        json=_runs_response(_run(run_id=42, head_sha="sha123", updated_at=stale_time)),
+    )
+    watcher = DefaultCIWatcher(token="tok")
+
+    async with httpx.AsyncClient() as client:
+        runs = await watcher._fetch_completed_runs(
+            client,
+            watcher._headers(),
+            "owner/repo",
+            "main",
+            scope=CIRunScope(head_sha="sha123"),
+            cutoff_dt=datetime.now(UTC) - timedelta(seconds=120),
+        )
+    assert len(runs) == 1
+    assert runs[0]["id"] == 42
+
+
+@pytest.mark.anyio
+async def test_fetch_completed_runs_no_sha_rejects_stale(httpx_mock):
+    """When scope.head_sha is NOT set, stale runs are filtered out."""
+    stale_time = (datetime.now(UTC) - timedelta(minutes=30)).isoformat()
+    httpx_mock.add_response(
+        json=_runs_response(_run(run_id=42, updated_at=stale_time)),
+    )
+    watcher = DefaultCIWatcher(token="tok")
+
+    async with httpx.AsyncClient() as client:
+        runs = await watcher._fetch_completed_runs(
+            client,
+            watcher._headers(),
+            "owner/repo",
+            "main",
+            scope=CIRunScope(),
+            cutoff_dt=datetime.now(UTC) - timedelta(seconds=120),
+        )
+    assert len(runs) == 0
+
+
+@pytest.mark.anyio
+async def test_phase2_recheck_uses_anchored_cutoff():
+    """Phase 2 re-check uses anchored cutoff — clock advancing doesn't lose runs."""
+    watcher = DefaultCIWatcher(token="tok")
+    # Phase 1: no completed runs
+    call_count = [0]
+    borderline_time = (datetime.now(UTC) - timedelta(seconds=119)).isoformat()
+
+    async def mock_fetch_completed(client, headers, repo, branch, scope, cutoff_dt):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return []
+        return [_run(run_id=99, conclusion="success", updated_at=borderline_time)]
+
+    watcher._fetch_completed_runs = mock_fetch_completed  # type: ignore[method-assign]
+    watcher._fetch_active_runs = AsyncMock(return_value=[])  # type: ignore[method-assign]
+
+    with patch("autoskillit.execution.ci.asyncio.sleep", new_callable=AsyncMock):
+        result = await watcher.wait(
+            "main", repo="owner/repo", timeout_seconds=60, lookback_seconds=120
+        )
+
+    assert result["run_id"] == 99
+    assert result["conclusion"] == "success"
+
+
+@pytest.mark.anyio
+async def test_phase2_recheck_finds_late_completing_run():
+    """Phase 2 re-check finds a run that completed between Phase 1 and Phase 2."""
+    watcher = DefaultCIWatcher(token="tok")
+    call_count = [0]
+
+    async def mock_fetch_completed(client, headers, repo, branch, scope, cutoff_dt):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return []
+        return [_run(run_id=77, conclusion="failure")]
+
+    watcher._fetch_completed_runs = mock_fetch_completed  # type: ignore[method-assign]
+    watcher._fetch_active_runs = AsyncMock(return_value=[])  # type: ignore[method-assign]
+    watcher._fetch_failed_jobs = AsyncMock(return_value=["build"])  # type: ignore[method-assign]
+
+    with patch("autoskillit.execution.ci.asyncio.sleep", new_callable=AsyncMock):
+        result = await watcher.wait("main", repo="owner/repo", timeout_seconds=60)
+
+    assert result["run_id"] == 77
+    assert result["conclusion"] == "failure"
+    assert "build" in result["failed_jobs"]

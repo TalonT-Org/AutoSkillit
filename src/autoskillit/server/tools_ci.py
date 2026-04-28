@@ -39,6 +39,7 @@ async def wait_for_ci(
     workflow: str | None = None,
     event: str | None = None,
     timeout_seconds: int = 300,
+    lookback_seconds: int = 3600,
     cwd: str = ".",
     step_name: str = "",
     auto_trigger: bool = False,
@@ -141,6 +142,7 @@ async def wait_for_ci(
                 repo=resolved_repo or None,
                 scope=scope,
                 timeout_seconds=timeout_seconds,
+                lookback_seconds=lookback_seconds,
                 cwd=cwd,
             )
 
@@ -158,6 +160,7 @@ async def wait_for_ci(
                     resolved_repo=resolved_repo,
                     tool_ctx=tool_ctx,
                     timeout_seconds=timeout_seconds,
+                    lookback_seconds=lookback_seconds,
                 )
 
             conclusion = result.get("conclusion", "unknown")
@@ -723,6 +726,7 @@ async def _auto_trigger_ci(
     resolved_repo: str | None,
     tool_ctx: ToolContext,
     timeout_seconds: int,
+    lookback_seconds: int = 3600,
 ) -> dict[str, Any]:
     """Active CI trigger recovery: empty commit + force-push + re-poll.
 
@@ -794,6 +798,7 @@ async def _auto_trigger_ci(
             repo=resolved_repo,
             scope=new_scope,
             timeout_seconds=timeout_seconds,
+            lookback_seconds=lookback_seconds,
             cwd=cwd,
         )
         if new_head_sha:

@@ -692,7 +692,7 @@ steps:
     with:
       branch: "${{ context.merge_target }}"
       event: "${{ context.ci_event }}"
-      timeout_seconds: 300
+      timeout_seconds: 600
       cwd: "${{ context.work_dir }}"
       remote_url: "${{ context.remote_url }}"
       auto_trigger: "true"

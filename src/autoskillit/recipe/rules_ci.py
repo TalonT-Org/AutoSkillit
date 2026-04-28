@@ -453,3 +453,38 @@ def _check_ci_event_literal_merge_group(ctx: ValidationContext) -> list[RuleFind
                 )
             )
     return findings
+
+
+_CI_TIMEOUT_MINIMUM = 600
+
+
+@semantic_rule(
+    name="ci-timeout-minimum",
+    description="Flags wait_for_ci steps with timeout_seconds below 600",
+    severity=Severity.WARNING,
+)
+def _check_ci_timeout_minimum(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for name, step in ctx.recipe.steps.items():
+        if step.tool != "wait_for_ci":
+            continue
+        raw = (step.with_args or {}).get("timeout_seconds")
+        if raw is None:
+            continue
+        try:
+            timeout = int(raw)
+        except (ValueError, TypeError):
+            continue
+        if timeout < _CI_TIMEOUT_MINIMUM:
+            findings.append(
+                RuleFinding(
+                    rule="ci-timeout-minimum",
+                    severity=Severity.WARNING,
+                    step_name=name,
+                    message=(
+                        f"timeout_seconds={timeout} is below the {_CI_TIMEOUT_MINIMUM}s "
+                        f"minimum — average CI duration is ~317s with peaks to 392s."
+                    ),
+                )
+            )
+    return findings

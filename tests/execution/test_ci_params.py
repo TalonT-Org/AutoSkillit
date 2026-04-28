@@ -7,7 +7,7 @@ immunity guards against the bug where workflow_id was silently absent.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
@@ -41,7 +41,7 @@ async def test_completed_runs_includes_workflow_id(httpx_mock):
             "owner/repo",
             "main",
             scope=CIRunScope(workflow="tests.yml"),
-            lookback_seconds=300,
+            cutoff_dt=datetime.now(UTC) - timedelta(seconds=300),
         )
     req = httpx_mock.get_requests()[0]
     assert httpx.URL(str(req.url)).params["workflow_id"] == "tests.yml"
@@ -61,7 +61,7 @@ async def test_completed_runs_omits_workflow_id_when_none(httpx_mock):
             "owner/repo",
             "main",
             scope=CIRunScope(),
-            lookback_seconds=300,
+            cutoff_dt=datetime.now(UTC) - timedelta(seconds=300),
         )
     req = httpx_mock.get_requests()[0]
     assert "workflow_id" not in str(req.url)
@@ -81,7 +81,7 @@ async def test_completed_runs_always_sends_branch(httpx_mock):
             "owner/repo",
             "main",
             scope=CIRunScope(),
-            lookback_seconds=300,
+            cutoff_dt=datetime.now(UTC) - timedelta(seconds=300),
         )
     req = httpx_mock.get_requests()[0]
     assert httpx.URL(str(req.url)).params["branch"] == "main"
@@ -101,7 +101,7 @@ async def test_completed_runs_sends_head_sha(httpx_mock):
             "owner/repo",
             "main",
             scope=CIRunScope(head_sha="abc123"),
-            lookback_seconds=300,
+            cutoff_dt=datetime.now(UTC) - timedelta(seconds=300),
         )
     req = httpx_mock.get_requests()[0]
     assert httpx.URL(str(req.url)).params["head_sha"] == "abc123"
@@ -253,7 +253,7 @@ async def test_completed_runs_includes_event(httpx_mock):
             "owner/repo",
             "main",
             scope=CIRunScope(event="push"),
-            lookback_seconds=300,
+            cutoff_dt=datetime.now(UTC) - timedelta(seconds=300),
         )
     req = httpx_mock.get_requests()[0]
     assert httpx.URL(str(req.url)).params["event"] == "push"
@@ -271,7 +271,7 @@ async def test_completed_runs_omits_event_when_none(httpx_mock):
             "owner/repo",
             "main",
             scope=CIRunScope(),
-            lookback_seconds=300,
+            cutoff_dt=datetime.now(UTC) - timedelta(seconds=300),
         )
     req = httpx_mock.get_requests()[0]
     assert "event" not in httpx.URL(str(req.url)).params

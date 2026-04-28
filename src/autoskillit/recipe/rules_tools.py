@@ -85,6 +85,7 @@ _TOOL_PARAMS: dict[str, frozenset[str]] = {
             "workflow",
             "event",
             "timeout_seconds",
+            "lookback_seconds",
             "cwd",
             "step_name",
         }

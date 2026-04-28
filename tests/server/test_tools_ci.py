@@ -222,6 +222,33 @@ async def test_wait_for_ci_passes_event_to_scope(tool_ctx):
 
 
 # ---------------------------------------------------------------------------
+# wait_for_ci lookback_seconds forwarding
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_wait_for_ci_forwards_lookback_seconds(tool_ctx):
+    """wait_for_ci must propagate lookback_seconds to ci_watcher.wait()."""
+    watcher = InMemoryCIWatcher(
+        wait_result={"run_id": 1, "conclusion": "success", "failed_jobs": []}
+    )
+    tool_ctx.ci_watcher = watcher
+    await wait_for_ci(branch="main", lookback_seconds=7200, cwd="/tmp")
+    assert watcher.wait_calls[-1]["lookback_seconds"] == 7200
+
+
+@pytest.mark.anyio
+async def test_wait_for_ci_lookback_defaults_to_3600(tool_ctx):
+    """wait_for_ci default lookback_seconds is 3600 (1 hour)."""
+    watcher = InMemoryCIWatcher(
+        wait_result={"run_id": 1, "conclusion": "success", "failed_jobs": []}
+    )
+    tool_ctx.ci_watcher = watcher
+    await wait_for_ci(branch="main", cwd="/tmp")
+    assert watcher.wait_calls[-1]["lookback_seconds"] == 3600
+
+
+# ---------------------------------------------------------------------------
 # wait_for_merge_queue
 # ---------------------------------------------------------------------------
 
@@ -962,3 +989,23 @@ class TestWaitForCiAutoTrigger:
         assert len(watcher.wait_calls) == 2
         assert result["conclusion"] == "auto_trigger_failed"
         assert result["triggered"] is False
+
+    @pytest.mark.anyio
+    async def test_auto_trigger_ci_forwards_lookback_seconds(self, tool_ctx):
+        """The second wait() call in _auto_trigger_ci must forward lookback_seconds."""
+        watcher = InMemoryCIWatcher(wait_results=[_NO_RUNS, _SUCCESS])
+        tool_ctx.ci_watcher = watcher
+        tool_ctx.runner.push(_sub(0, "abc123\n"))  # git rev-parse HEAD
+        tool_ctx.runner.push(_sub(0, '{"mergeable":"MERGEABLE"}\n'))  # gh pr view
+        tool_ctx.runner.push(_sub(0))  # git commit --allow-empty
+        tool_ctx.runner.push(_sub(0, "def456\n"))  # git rev-parse HEAD — new HEAD
+        tool_ctx.runner.push(
+            _sub(0, "https://github.com/org/repo\n")
+        )  # git remote get-url upstream
+        tool_ctx.runner.push(_sub(0))  # git push --force-with-lease
+
+        await wait_for_ci("branch", cwd="/repo", auto_trigger=True, lookback_seconds=7200)
+
+        assert len(watcher.wait_calls) == 2
+        assert watcher.wait_calls[0]["lookback_seconds"] == 7200
+        assert watcher.wait_calls[1]["lookback_seconds"] == 7200

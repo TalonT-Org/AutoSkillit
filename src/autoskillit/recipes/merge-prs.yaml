@@ -1111,7 +1111,7 @@ steps:
     with:
       branch: "${{ context.integration_branch }}"
       event: "${{ context.ci_event }}"
-      timeout_seconds: 300
+      timeout_seconds: 600
       cwd: "${{ context.work_dir }}"
       pr_url: "${{ context.pr_url }}"
     on_result:

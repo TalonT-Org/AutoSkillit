@@ -63,13 +63,14 @@ def test_check_ci_already_passed_has_skip_when_false(recipe):
 
 
 def test_no_direct_escalate_stop_no_ci_callers_except_safety_net(recipe):
-    """Only check_ci_already_passed and escalate_stop_no_ci itself reference escalate_stop_no_ci."""
+    """Only check_ci_already_passed and escalate_stop_no_ci itself reference
+    escalate_stop_no_ci."""
     EXCLUDED = {"check_ci_already_passed", "escalate_stop_no_ci"}
     for name, step in recipe.steps.items():
         if name in EXCLUDED:
             continue
         direct_routes = {step.on_success, step.on_failure, step.on_exhausted}
-        for cond in (step.on_result.conditions if step.on_result else []) or []:
+        for cond in step.on_result.conditions if step.on_result else []:
             direct_routes.add(cond.route)
         assert "escalate_stop_no_ci" not in direct_routes, (
             f"Step '{name}' still routes directly to escalate_stop_no_ci"

@@ -156,7 +156,7 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/smoke_utils.py", 87),
     ("src/autoskillit/smoke_utils.py", 272),
     # planner/manifests.py — finalize_wp_manifest: wp_index.json rebuild (list payload)
-    ("src/autoskillit/planner/manifests.py", 275),
+    ("src/autoskillit/planner/manifests.py", 273),
 }
 
 

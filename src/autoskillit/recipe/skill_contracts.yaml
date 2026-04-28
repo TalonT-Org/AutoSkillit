@@ -1967,30 +1967,78 @@ skills:
     write_behavior: always
 callable_contracts:
   autoskillit.smoke_utils.check_review_loop:
+    inputs:
+    - name: pr_number
+      type: str
+      required: true
+    - name: cwd
+      type: directory_path
+      required: true
     outputs:
     - name: next_iteration
       type: str
     - name: max_exceeded
       type: str
   autoskillit.smoke_utils.check_bug_report_non_empty:
+    inputs:
+    - name: workspace
+      type: directory_path
+      required: true
     outputs:
     - name: non_empty
       type: str
   autoskillit.smoke_utils.annotate_pr_diff:
+    inputs:
+    - name: pr_number
+      type: str
+      required: true
+    - name: cwd
+      type: directory_path
+      required: true
+    - name: output_dir
+      type: directory_path
+      required: true
     outputs:
     - name: annotated_diff_path
       type: file_path
     - name: hunk_ranges_path
       type: file_path
   autoskillit.smoke_utils.compute_domain_partitions:
+    inputs:
+    - name: integration_branch
+      type: str
+      required: true
+    - name: base_branch
+      type: str
+      required: true
+    - name: cwd
+      type: directory_path
+      required: true
+    - name: output_dir
+      type: directory_path
+      required: true
     outputs:
     - name: domain_partitions_path
       type: file_path
   autoskillit.smoke_utils.fetch_merge_queue_data:
+    inputs:
+    - name: base_branch
+      type: str
+      required: true
+    - name: cwd
+      type: directory_path
+      required: true
+    - name: output_dir
+      type: directory_path
+      required: true
     outputs:
     - name: merge_queue_data_path
       type: file_path
   autoskillit.planner.validate_plan:
+    inputs:
+    - name: output_dir
+      type: directory_path
+      required: true
     outputs:
     - name: verdict
       type: str
@@ -1999,6 +2047,16 @@ callable_contracts:
     - name: issue_count
       type: str
   autoskillit.planner.compile_plan:
+    inputs:
+    - name: output_dir
+      type: directory_path
+      required: true
+    - name: task
+      type: str
+      required: true
+    - name: source_dir
+      type: directory_path
+      required: true
     outputs:
     - name: plan_path
       type: file_path
@@ -2007,44 +2065,109 @@ callable_contracts:
     - name: plan_parts
       type: str
   autoskillit.planner.merge.merge_files:
+    inputs:
+    - name: file_paths
+      type: str
+      required: true
+    - name: output_path
+      type: file_path
+      required: true
+    - name: key
+      type: str
+      required: true
     outputs:
     - name: merged_path
       type: file_path
     - name: item_count
       type: str
   autoskillit.planner.merge.extract_item:
+    inputs:
+    - name: source_path
+      type: file_path
+      required: true
+    - name: item_id
+      type: str
+      required: true
+    - name: output_path
+      type: file_path
+      required: true
     outputs:
     - name: extracted_path
       type: file_path
   autoskillit.planner.merge.replace_item:
+    inputs:
+    - name: source_path
+      type: file_path
+      required: true
+    - name: item_id
+      type: str
+      required: true
+    - name: replacement_path
+      type: file_path
+      required: true
     outputs:
     - name: updated_path
       type: file_path
     - name: replaced_id
       type: str
   autoskillit.planner.merge.build_plan_snapshot:
+    inputs:
+    - name: phases_dir
+      type: directory_path
+      required: true
+    - name: output_path
+      type: file_path
+      required: true
     outputs:
     - name: snapshot_path
       type: file_path
     - name: phase_ids
       type: str
   autoskillit.planner.merge.merge_tier_dir:
+    inputs:
+    - name: results_dir
+      type: directory_path
+      required: true
+    - name: output_path
+      type: file_path
+      required: true
+    - name: key
+      type: str
+      required: true
     outputs:
     - name: merged_path
       type: file_path
     - name: item_count
       type: str
   autoskillit.planner.create_run_dir:
+    inputs:
+    - name: temp_dir
+      type: directory_path
+      required: true
     outputs:
     - name: planner_dir
       type: directory_path
   autoskillit.planner.finalize_wp_manifest:
+    inputs:
+    - name: work_packages_dir
+      type: directory_path
+      required: true
+    - name: output_dir
+      type: directory_path
+      required: true
     outputs:
     - name: manifest_path
       type: file_path
     - name: total_count
       type: str
   autoskillit.planner.expand_assignments:
+    inputs:
+    - name: refined_plan_path
+      type: file_path
+      required: true
+    - name: output_dir
+      type: directory_path
+      required: true
     outputs:
     - name: manifest_path
       type: file_path
@@ -2053,6 +2176,13 @@ callable_contracts:
     - name: item_ids
       type: str
   autoskillit.planner.expand_wps:
+    inputs:
+    - name: refined_assignments_path
+      type: file_path
+      required: true
+    - name: output_dir
+      type: directory_path
+      required: true
     outputs:
     - name: manifest_path
       type: file_path

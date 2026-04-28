@@ -31,7 +31,10 @@ def write_sidecar_entry(
         reason=reason or None,
     )
     root = Path(project_dir) if project_dir else Path.cwd()
-    append_sidecar_entry(dispatch_id, entry, root)
+    try:
+        append_sidecar_entry(dispatch_id, entry, root)
+    except OSError as exc:
+        return {"ok": "false", "error": str(exc)}
     return {"ok": "true"}
 
 
@@ -41,7 +44,10 @@ def get_remaining_issues(
     project_dir: str = "",
 ) -> dict[str, str]:
     """Return remaining URLs as remaining_urls_json + remaining_count dict."""
-    original_urls: list[str] = json.loads(original_urls_json)
+    try:
+        original_urls: list[str] = json.loads(original_urls_json)
+    except (json.JSONDecodeError, TypeError) as exc:
+        return {"ok": "false", "error": f"invalid original_urls_json: {exc}"}
     root = Path(project_dir) if project_dir else Path.cwd()
     remaining = compute_remaining_issues(dispatch_id, original_urls, root)
     return {

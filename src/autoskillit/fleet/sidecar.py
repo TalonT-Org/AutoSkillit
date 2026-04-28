@@ -6,6 +6,9 @@ from pathlib import Path
 from typing import Literal
 
 from autoskillit.core import ensure_project_temp
+from autoskillit.core.logging import get_logger
+
+_log = get_logger()
 
 
 @dataclass(frozen=True)
@@ -49,7 +52,8 @@ def read_sidecar(dispatch_id: str, project_dir: Path) -> list[IssueSidecarEntry]
                     reason=data.get("reason"),
                 )
             )
-        except (json.JSONDecodeError, KeyError):
+        except (json.JSONDecodeError, KeyError) as exc:
+            _log.debug("sidecar: skipping corrupt JSONL line", path=str(path), error=str(exc))
             continue
     return entries
 

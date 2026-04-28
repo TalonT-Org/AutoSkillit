@@ -188,6 +188,7 @@ generic_automation_mcp/
 │   ├── session.py           #   ClaudeSessionResult, extract_token_usage
 │   ├── remote_resolver.py   #   upstream > origin, clone-aware
 │   ├── testing.py           #   Pytest output parsing + pass/fail adjudication
+│   ├── clone_guard.py       #   Clone contamination guard — detect and revert direct changes to clone CWD
 │   └── pr_analysis.py       #   extract_linked_issues, DOMAIN_PATHS, partition_files_by_domain
 │
 ├── workspace/               # L1
@@ -204,8 +205,8 @@ generic_automation_mcp/
 │   ├── manifests.py         #   expand_assignments, expand_wps, finalize_wp_manifest, build_phase_assignment_manifest, build_phase_wp_manifest — manifest callables
 │   ├── merge.py             #   merge_tier_dir, merge_files, build_plan_snapshot, extract_item, replace_item — JSON interchange merge tooling
 │   ├── validation.py        #   validate_plan — DAG cycle check, structural completeness, sizing bounds, duplicate-deliverable detection
-│   ├── compiler.py          #   compile_plan — topological sort, issue body generation, milestone definitions, plan artifacts
-│   └── schema.py            #   TypedDict schemas for planner output — PhaseResult and AssignmentResult shapes
+│   ├── schema.py            #   planner data contracts — PhaseResult, AssignmentResult, WPResult, PlanDocument TypedDicts
+│   └── compiler.py          #   compile_plan — topological sort, issue body generation, milestone definitions, plan artifacts
 │
 ├── recipe/                  # L2
 │   ├── __init__.py
@@ -292,10 +293,11 @@ generic_automation_mcp/
 │   ├── _terminal.py         #   terminal_guard() TTY restore
 │   ├── _terminal_table.py   #   Re-export shim from core/_terminal_table
 │   ├── _cook.py             #   cook: ephemeral skill session launcher
+│   ├── _fleet.py            #   fleet subcommand group: status --reap/--dry-run, run stub, signal guard; render_fleet_error()
 │   ├── _reload.py           #   consume_reload_sentinel: reload sentinel detection for re-launch loops
 │   ├── _restart.py          #   perform_restart() -> NoReturn: sets SKIP_UPDATE_CHECK, calls os.execv
 │   ├── _session_launch.py   #   _run_interactive_session: shared interactive session launch prelude
-│   ├── _doctor.py           #   16 project setup checks
+│   ├── _doctor.py           #   28+ project setup checks
 │   ├── _hooks.py            #   PreToolUse hook registration helpers
 │   ├── _init_helpers.py
 │   ├── _installed_plugins.py #  InstalledPluginsFile — canonical accessor for installed_plugins.json
@@ -308,7 +310,6 @@ generic_automation_mcp/
 │   ├── _update.py           #   run_update_command(): first-class upgrade path for `autoskillit update`
 │   ├── _update_checks.py    #   Unified startup update check: version/hook/source-drift signals, branch-aware dismissal
 │   ├── _serve_guard.py      #   Async signal-guarded MCP server bootstrap (extracted from app.py)
-│   ├── _fleet.py            #   fleet subcommand group: status --reap/--dry-run, run stub, signal guard; render_fleet_error()
 │   ├── _features.py         #   features subcommand group: list/status commands for feature gate inspection
 │   ├── _workspace.py        #   Workspace clean helpers
 │   ├── _session_picker.py   #   Scoped resume picker: filters sessions by type (cook/order) via registry + heuristic
@@ -349,7 +350,7 @@ generic_automation_mcp/
 ├── recipes/                 # Bundled recipe YAML + contracts/, diagrams/, sub-recipes/
 ├── skills/                  # Tier 1: open-kitchen, close-kitchen, sous-chef
 └── skills_extended/         # Tier 2 (interactive) + Tier 3 (pipeline/automation) skills
-                             # incl. arch-lens-* (13) and exp-lens-* (18) diagram families
+                             # incl. arch-lens-* (13), exp-lens-* (18), and vis-lens-* (12) diagram families
 ```
 
 **Session diagnostics logs** live at `~/.local/share/autoskillit/logs/` (Linux) or `~/Library/Application Support/autoskillit/logs/` (macOS). Override with `linux_tracing.log_dir`. Session directories are named by Claude Code session UUID when available (parsed from stdout, or discovered from JSONL filename via Channel B). Fallback: `no_session_{timestamp}`. Query the index: `jq 'select(.success == false)' ~/.local/share/autoskillit/logs/sessions.jsonl`.

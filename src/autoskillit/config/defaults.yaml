@@ -259,6 +259,7 @@ skills:
     - audit-claims
     - resolve-claims-review
     - build-execution-map
+    - promote-to-main
 
 workspace:
   worktree_root: null   # null = auto-resolve to ../worktrees/ relative to project root

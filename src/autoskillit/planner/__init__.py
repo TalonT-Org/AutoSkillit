@@ -1,3 +1,5 @@
+"""planner/ L1 package: progressive resolution planner — manifests, merge, validation, compiler."""
+
 from __future__ import annotations
 
 from autoskillit.planner.compiler import compile_plan
@@ -17,7 +19,7 @@ from autoskillit.planner.merge import (
     merge_tier_dir,
     replace_item,
 )
-from autoskillit.planner.schema import (  # noqa: F401
+from autoskillit.planner.schema import (
     ASSIGNMENT_REQUIRED_KEYS,
     PHASE_REQUIRED_KEYS,
     WP_REQUIRED_KEYS,
@@ -57,4 +59,7 @@ __all__ = [
     "AssignmentElaborated",
     "WPShort",
     "WPElaborated",
+    "ASSIGNMENT_REQUIRED_KEYS",
+    "PHASE_REQUIRED_KEYS",
+    "WP_REQUIRED_KEYS",
 ]

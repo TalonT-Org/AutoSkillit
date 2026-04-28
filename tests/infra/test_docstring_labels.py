@@ -33,3 +33,12 @@ def test_claude_md_no_stale_l3_headless_label():
     assert "L3 service module" not in src, (
         "CLAUDE.md still contains stale 'L3 service module' label for headless"
     )
+
+
+def test_planner_init_has_docstring():
+    """planner/__init__.py must have a module-level docstring like other L1 packages."""
+    import autoskillit.planner as planner_pkg
+
+    assert planner_pkg.__doc__ is not None and planner_pkg.__doc__.strip(), (
+        "planner/__init__.py is missing a module-level docstring"
+    )

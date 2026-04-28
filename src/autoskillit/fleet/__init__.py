@@ -9,6 +9,7 @@ from ._prompts import _build_food_truck_prompt as _build_food_truck_prompt
 from ._prompts import _build_l2_sous_chef_block as _build_l2_sous_chef_block
 from .result_parser import L2ParseResult, parse_l2_result_block
 from .state import (
+    FLEET_HALTED_SENTINEL,
     CampaignState,
     DispatchRecord,
     DispatchStatus,
@@ -54,6 +55,7 @@ __all__ = [
     "parse_campaign_summary",
     "serialize_campaign_summary",
     "validate_campaign_summary",
+    "FLEET_HALTED_SENTINEL",
     "CampaignState",
     "DispatchRecord",
     "DispatchStatus",

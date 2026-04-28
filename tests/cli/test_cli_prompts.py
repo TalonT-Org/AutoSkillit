@@ -665,3 +665,29 @@ def test_campaign_prompt_tool_list_still_enumerates_six_tools():
     assert "get_token_summary" in prompt
     assert "get_timing_summary" in prompt
     assert "get_quota_events" in prompt
+
+
+def test_campaign_prompt_includes_gate_dispatch_handling_section():
+    """Campaign prompt includes GATE DISPATCH HANDLING section when a gate dispatch is present."""
+    from autoskillit.cli._prompts import _build_fleet_campaign_prompt
+    from autoskillit.recipe.schema import CampaignDispatch, Recipe, RecipeKind
+
+    dispatch = CampaignDispatch(name="gate-check", gate="confirm", message="Proceed?")
+    recipe = Recipe(
+        name="test-campaign",
+        description="Test",
+        kind=RecipeKind.CAMPAIGN,
+        dispatches=[dispatch],
+        continue_on_failure=False,
+    )
+
+    prompt = _build_fleet_campaign_prompt(
+        campaign_recipe=recipe,
+        manifest_yaml="...",
+        completed_dispatches="",
+        mcp_prefix="mcp__autoskillit__",
+        campaign_id="abc-123",
+    )
+    assert "GATE DISPATCH HANDLING" in prompt
+    assert "AskUserQuestion" in prompt
+    assert "dispatch_food_truck" in prompt

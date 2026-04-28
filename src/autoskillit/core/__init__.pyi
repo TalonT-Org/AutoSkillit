@@ -100,6 +100,7 @@ from .types import CloneSuccessResult as CloneSuccessResult
 from .types import DISPATCH_ID_ENV_VAR as DISPATCH_ID_ENV_VAR
 from .types import DatabaseReader as DatabaseReader
 from .types import DirectInstall as DirectInstall
+from .types import DispatchGateType as DispatchGateType
 from .types import FEATURE_REGISTRY as FEATURE_REGISTRY
 from .types import FLEET_DISPATCH_MODE as FLEET_DISPATCH_MODE
 from .types import FLEET_DISPATCH_TOOLS as FLEET_DISPATCH_TOOLS

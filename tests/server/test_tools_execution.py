@@ -25,6 +25,7 @@ from autoskillit.server.helpers import (
 )
 from autoskillit.server.tools_execution import run_skill
 from tests.conftest import _make_result
+from tests.server.conftest import assert_no_timing, assert_step_timed
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -1060,16 +1061,13 @@ class TestRunSkillTiming:
     async def test_run_skill_records_timing_via_step_name(self, tool_ctx):
         tool_ctx.runner.push(_make_result(0, _SUCCESS_JSON, ""))
         await run_skill("/investigate foo", "/tmp", step_name="implement")
-        report = tool_ctx.timing_log.get_report()
-        assert len(report) == 1
-        assert report[0]["step_name"] == "implement"
-        assert report[0]["invocation_count"] == 1
+        assert_step_timed(tool_ctx.timing_log, "implement")
 
     @pytest.mark.anyio
     async def test_run_skill_empty_step_name_skips_timing(self, tool_ctx):
         tool_ctx.runner.push(_make_result(0, _SUCCESS_JSON, ""))
         await run_skill("/investigate foo", "/tmp")
-        assert tool_ctx.timing_log.get_report() == []
+        assert_no_timing(tool_ctx.timing_log)
 
 
 class TestRunHeadlessCoreFlushTelemetry:

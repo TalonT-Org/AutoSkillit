@@ -657,9 +657,9 @@ class TestWriteTelemetryFiles:
         assert Path(result["timing_summary_path"]).exists()
 
     @pytest.mark.anyio
-    async def test_gate_closed_returns_gate_error(self, tool_ctx):
+    async def test_gate_closed_returns_gate_error(self, tool_ctx, tmp_path):
         tool_ctx.gate.disable()
-        result = json.loads(await write_telemetry_files("/tmp"))
+        result = json.loads(await write_telemetry_files(str(tmp_path)))
         assert result["success"] is False
         assert result["subtype"] == "gate_error"
 
@@ -817,35 +817,22 @@ class TestTokenSummaryWallClock:
 
 
 class TestClearMarkerWritten:
+    @pytest.mark.parametrize(
+        "fn,kwargs",
+        [
+            (get_token_summary, {"clear": True}),
+            (get_timing_summary, {"clear": True}),
+            (get_pipeline_report, {"clear": True}),
+        ],
+    )
     @pytest.mark.anyio
-    async def test_token_summary_clear_writes_marker(self, tool_ctx, tmp_path, monkeypatch):
+    async def test_clear_writes_marker(self, tool_ctx, tmp_path, monkeypatch, fn, kwargs):
         from autoskillit.execution.session_log import read_telemetry_clear_marker
 
         log_dir = tmp_path / "logs"
         log_dir.mkdir()
         monkeypatch.setattr(tool_ctx.config.linux_tracing, "log_dir", str(log_dir))
-        await get_token_summary(clear=True)
-        marker = read_telemetry_clear_marker(log_dir)
-        assert marker is not None
-
-    @pytest.mark.anyio
-    async def test_timing_summary_clear_writes_marker(self, tool_ctx, tmp_path, monkeypatch):
-        from autoskillit.execution.session_log import read_telemetry_clear_marker
-
-        log_dir = tmp_path / "logs"
-        log_dir.mkdir()
-        monkeypatch.setattr(tool_ctx.config.linux_tracing, "log_dir", str(log_dir))
-        await get_timing_summary(clear=True)
-        assert read_telemetry_clear_marker(log_dir) is not None
-
-    @pytest.mark.anyio
-    async def test_pipeline_report_clear_writes_marker(self, tool_ctx, tmp_path, monkeypatch):
-        from autoskillit.execution.session_log import read_telemetry_clear_marker
-
-        log_dir = tmp_path / "logs"
-        log_dir.mkdir()
-        monkeypatch.setattr(tool_ctx.config.linux_tracing, "log_dir", str(log_dir))
-        await get_pipeline_report(clear=True)
+        await fn(**kwargs)
         assert read_telemetry_clear_marker(log_dir) is not None
 
 

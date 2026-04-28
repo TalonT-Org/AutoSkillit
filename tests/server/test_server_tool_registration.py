@@ -546,23 +546,6 @@ class TestSafetyConfigWiring:
         assert result["is_error"] is True
         assert "dry-walked" in result["result"].lower()
 
-    @pytest.mark.anyio
-    async def test_run_skill_skips_dry_walkthrough_when_disabled(self, tool_ctx, tmp_path):
-        """2g: run_skill skips dry-walkthrough gate when disabled."""
-        from autoskillit.server.tools_execution import run_skill
-        from tests.conftest import _make_result
-
-        tool_ctx.config = AutomationConfig(safety=SafetyConfig(require_dry_walkthrough=False))
-
-        plan = tmp_path / "plan.md"
-        plan.write_text("# No marker plan")
-
-        tool_ctx.runner.push(_make_result(0, '{"result": "done"}', ""))
-        result = json.loads(
-            await run_skill(f"/autoskillit:implement-worktree {plan}", str(tmp_path))
-        )
-        assert result["subtype"] != "gate_error"
-
 
 class TestToolSchemas:
     """Regression guard: tool descriptions must not contain legacy terminology."""

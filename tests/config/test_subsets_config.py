@@ -104,7 +104,7 @@ class TestSubsetsConfig:
         with structlog.testing.capture_logs() as cap_logs:
             cfg = load_config(tmp_path)
         assert cfg.subsets.disabled == ["totally-unknown-category"]  # preserved as-is
-        assert any("totally-unknown-category" in str(entry) for entry in cap_logs)
+        assert any("totally-unknown-category" in entry.get("event", "") for entry in cap_logs)
 
     def test_load_config_known_disabled_category_no_warning(self, tmp_path, caplog) -> None:
         import logging

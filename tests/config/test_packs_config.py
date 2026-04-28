@@ -51,4 +51,4 @@ class TestPacksConfig:
         with structlog.testing.capture_logs() as cap_logs:
             config = load_config(tmp_path)
         assert config.packs.enabled == ["nonexistent-pack"]  # preserved as-is
-        assert any("nonexistent-pack" in str(entry) for entry in cap_logs)
+        assert any("nonexistent-pack" in entry.get("event", "") for entry in cap_logs)

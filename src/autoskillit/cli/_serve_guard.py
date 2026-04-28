@@ -20,7 +20,7 @@ import anyio
 
 from autoskillit.core import get_logger
 
-_log = get_logger(__name__)
+logger = get_logger(__name__)
 
 
 async def serve_with_signal_guard(mcp_server: Any) -> None:
@@ -39,7 +39,7 @@ async def serve_with_signal_guard(mcp_server: Any) -> None:
         with anyio.open_signal_receiver(signal.SIGTERM, signal.SIGINT, signal.SIGHUP) as signals:
             task_status.started()  # signal receiver is now armed
             async for sig in signals:
-                _log.info("serve_with_signal_guard: received %s — initiating shutdown", sig.name)
+                logger.info("serve_with_signal_guard: received %s — initiating shutdown", sig.name)
                 scope.cancel()
                 return
 

@@ -19,7 +19,7 @@ from autoskillit.core import (
 )
 from autoskillit.core import session_type as _resolve_session_type
 
-_log = get_logger(__name__)
+logger = get_logger(__name__)
 
 
 def _collect_fleet_tool_tags() -> frozenset[str]:
@@ -54,7 +54,7 @@ def _apply_session_type_visibility() -> None:
                 if not pack:
                     continue
                 if pack not in CATEGORY_TAGS:
-                    _log.warning(
+                    logger.warning(
                         "Unknown pack %r in AUTOSKILLIT_L2_TOOL_TAGS — skipping mcp.enable(); "
                         "valid packs: %s",
                         pack,

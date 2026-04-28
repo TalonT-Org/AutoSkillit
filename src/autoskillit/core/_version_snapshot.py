@@ -18,7 +18,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-_logger = logging.getLogger(__name__)  # noqa: TID251 — L0 module, no autoskillit imports allowed
+logger = logging.getLogger(__name__)  # noqa: TID251 — L0 module, no autoskillit imports allowed
 
 
 @functools.lru_cache(maxsize=1)
@@ -47,7 +47,7 @@ def _autoskillit_version() -> str:
     try:
         return importlib.metadata.version("autoskillit")
     except Exception:
-        _logger.warning("Failed to read autoskillit version", exc_info=True)
+        logger.warning("Failed to read autoskillit version", exc_info=True)
         return ""
 
 
@@ -73,7 +73,7 @@ def _install_info() -> dict[str, Any]:
             return {"install_type": "local-path", "commit_id": None}
         return {"install_type": "unknown", "commit_id": None}
     except Exception:
-        _logger.warning("Failed to parse install info from direct_url.json", exc_info=True)
+        logger.warning("Failed to parse install info from direct_url.json", exc_info=True)
         return {"install_type": "unknown", "commit_id": None}
 
 
@@ -94,12 +94,12 @@ def _claude_code_version() -> str:
             timeout=5,
         )
         if result.returncode != 0:
-            _logger.warning("claude --version exited with code %d", result.returncode)
+            logger.warning("claude --version exited with code %d", result.returncode)
         return result.stdout.strip() or result.stderr.strip()
     except subprocess.TimeoutExpired:
         return ""
     except Exception:
-        _logger.warning("Failed to run claude --version", exc_info=True)
+        logger.warning("Failed to run claude --version", exc_info=True)
         return ""
 
 
@@ -132,5 +132,5 @@ def _plugins() -> list[dict[str, Any]]:
             entries.append(entry)
         return entries
     except Exception:
-        _logger.warning("Failed to read installed_plugins.json", exc_info=True)
+        logger.warning("Failed to read installed_plugins.json", exc_info=True)
         return []

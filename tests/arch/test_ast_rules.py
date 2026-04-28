@@ -1,4 +1,4 @@
-"""Architectural enforcement: AST-based visitor rules (ARCH-001 through ARCH-007).
+"""Architectural enforcement: AST-based visitor rules (ARCH-001 through ARCH-009).
 
 Rules enforced here (compile-time, no execution required):
   1. No print() calls in production code
@@ -8,6 +8,8 @@ Rules enforced here (compile-time, no execution required):
   5. get_logger() must be called with __name__
   6. No f-string interpolation of sensitive variables in logger positional args
   7. Exhaustive TerminationReason dispatch (match/case + assert_never)
+  8. No raw .pid attribute passed to start_linux_tracing()
+  9. get_logger() result must be bound to variable named 'logger'
 
 Note: `import logging` and `logging.getLogger()` are enforced by ruff TID251
 at pre-commit time (see pyproject.toml [tool.ruff.lint.flake8-tidy-imports]).
@@ -575,6 +577,28 @@ def test_get_logger_no_bind() -> None:
             )
             return
     pytest.fail("get_logger() function not found in core/logging.py")
+
+
+def test_logger_variable_name_violation_underscore_log(tmp_path: Path) -> None:
+    f = tmp_path / "bad.py"
+    f.write_text("from autoskillit.core import get_logger\n_log = get_logger(__name__)\n")
+    violations = _scan(f)
+    assert any(v.rule_id == "ARCH-009" for v in violations)
+
+
+def test_logger_variable_name_violation_underscore_logger(tmp_path: Path) -> None:
+    f = tmp_path / "bad.py"
+    f.write_text("from autoskillit.core import get_logger\n_logger = get_logger(__name__)\n")
+    violations = _scan(f)
+    assert any(v.rule_id == "ARCH-009" for v in violations)
+
+
+def test_logger_variable_name_accepts_logger(tmp_path: Path) -> None:
+    f = tmp_path / "good.py"
+    f.write_text("from autoskillit.core import get_logger\nlogger = get_logger(__name__)\n")
+    violations = _scan(f)
+    arch009_violations = [v for v in violations if v.rule_id == "ARCH-009"]
+    assert not arch009_violations
 
 
 # ── Kill-path structural guards (1f) ─────────────────────────────────────────

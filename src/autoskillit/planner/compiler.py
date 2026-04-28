@@ -11,7 +11,7 @@ from autoskillit.planner.validation import (
     _load_wp_results,
 )
 
-_logger = get_logger(__name__)
+logger = get_logger(__name__)
 
 
 def _topological_sort(wp_results: dict[str, dict]) -> list[str]:
@@ -122,7 +122,7 @@ def compile_plan(output_dir: str, task: str, source_dir: str) -> dict[str, str]:
         except json.JSONDecodeError as exc:
             raise RuntimeError(f"Malformed validation file {validation_path}: {exc}") from exc
         if validation.get("verdict") != "pass":
-            _logger.warning(
+            logger.warning(
                 "compile_plan called with non-passing validation",
                 verdict=validation.get("verdict"),
             )
@@ -233,7 +233,7 @@ def compile_plan(output_dir: str, task: str, source_dir: str) -> dict[str, str]:
 
     plan_parts = "\n".join(issue_paths[wp_id] for wp_id in execution_order)
 
-    _logger.info("compile_plan", wp_count=len(execution_order))
+    logger.info("compile_plan", wp_count=len(execution_order))
     return {
         "plan_path": str(plan_md_path),
         "plan_json_path": str(plan_json_path),

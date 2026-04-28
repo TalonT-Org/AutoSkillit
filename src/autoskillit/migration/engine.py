@@ -349,6 +349,8 @@ class DiagramMigrationAdapter(AdvisoryMigrationAdapter):
     def needs_migration(self, file: MigrationFile) -> bool:
         from autoskillit.recipe import check_diagram_staleness
 
+        if not file.path.exists():
+            return False
         recipes_dir = file.path.parent.parent
         recipe_path = recipes_dir / f"{file.name}.yaml"
         if not recipe_path.exists():

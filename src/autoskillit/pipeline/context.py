@@ -21,6 +21,7 @@ from autoskillit.core import (
     DatabaseReader,
     FleetLock,
     GateState,
+    GitHubApiLog,
     GitHubFetcher,
     HeadlessExecutor,
     McpResponseLog,
@@ -120,6 +121,7 @@ class ToolContext:
     github_client: GitHubFetcher | None = field(default=None)
     ci_watcher: CIWatcher | None = field(default=None)
     merge_queue_watcher: MergeQueueWatcher | None = field(default=None)
+    github_api_log: GitHubApiLog | None = field(default=None)
     background: BackgroundSupervisor | None = field(default=None)
     output_pattern_resolver: OutputPatternResolver | None = field(default=None)
     write_expected_resolver: WriteExpectedResolver | None = field(default=None)

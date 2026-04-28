@@ -589,6 +589,30 @@ class InMemoryDatabaseReader(DatabaseReader):
 # ---------------------------------------------------------------------------
 
 
+class InMemoryGitHubApiLog:
+    """In-memory fake for the GitHubApiLog protocol. Records calls for assertions."""
+
+    def __init__(self) -> None:
+        self.httpx_calls: list[dict[str, Any]] = []
+        self.gh_cli_calls: list[dict[str, Any]] = []
+
+    async def record_httpx(self, **kwargs: Any) -> None:
+        self.httpx_calls.append(kwargs)
+
+    async def record_gh_cli(self, **kwargs: Any) -> None:
+        self.gh_cli_calls.append(kwargs)
+
+    def to_usage(self, session_id: str) -> dict[str, Any] | None:
+        total = len(self.httpx_calls) + len(self.gh_cli_calls)
+        if total == 0:
+            return None
+        return {"session_id": session_id, "total_requests": total}
+
+    def clear(self) -> None:
+        self.httpx_calls.clear()
+        self.gh_cli_calls.clear()
+
+
 class MockSubprocessRunner(SubprocessRunner):
     """Test double for SubprocessRunner. Queues predetermined results.
 

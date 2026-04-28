@@ -455,7 +455,7 @@ def test_stale_fetch_cache_after_install_resolve_reference_sha_path2(
         json.dumps(cache_data), encoding="utf-8"
     )
 
-    monkeypatch.setattr("autoskillit.cli._update_checks.find_source_repo", lambda: None)
+    monkeypatch.setattr("autoskillit.cli._update_checks_source.find_source_repo", lambda: None)
 
     class FreshClient:
         def __init__(self, **kw):

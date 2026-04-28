@@ -32,6 +32,9 @@ from autoskillit.cli._init_helpers import (
     _prompt_test_command,
     _register_all,
 )
+from autoskillit.cli._session_launch import (
+    _launch_cook_session,  # noqa: F401 re-exported for test backward compat
+)
 from autoskillit.core import (
     RecipeSource,
     atomic_write,

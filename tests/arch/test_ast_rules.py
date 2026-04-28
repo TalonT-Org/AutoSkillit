@@ -617,7 +617,8 @@ def test_no_direct_async_kill_process_tree_outside_executor() -> None:
     allowed_files = {
         SRC_ROOT / "execution" / "_process_kill.py",
         SRC_ROOT / "execution" / "process.py",
-        SRC_ROOT / "cli" / "_fleet.py",  # signal guard + reap CLI commands
+        SRC_ROOT / "cli" / "_fleet.py",  # signal guard + reap CLI commands (facade re-export)
+        SRC_ROOT / "cli" / "_fleet_lifecycle.py",  # signal guard + reap implementation
     }
     violations: list[str] = []
 

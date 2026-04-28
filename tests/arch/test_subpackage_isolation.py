@@ -77,6 +77,8 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_headless_path_tokens",  # execution/_headless_path_tokens.py: _OUTPUT_PATH_TOKENS
         # _STABLE_DISMISS_WINDOW = timedelta(days=7), _DEV_DISMISS_WINDOW = timedelta(hours=12)
         "_update_checks",  # cli/_update_checks.py: window constants (see comment above)
+        # _HTTP_TIMEOUT = httpx.Timeout(...) — module-level httpx client timeout config
+        "_update_checks_fetch",  # cli/_update_checks_fetch.py: _HTTP_TIMEOUT constant
         "_terminal",  # cli/_terminal.py: _BASE_RESET = "".join(...) derived from _RESET_SPEC
         "hook_registry",  # hook_registry.py: HOOK_REGISTRY_HASH = compute_registry_hash(...)
         "_fleet",  # cli/_fleet.py: fleet_app = App(name="fleet", ...)
@@ -760,7 +762,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "recipe": 48,
         "execution": 33,
         "core": 27,
-        "cli": 36,
+        "cli": 42,
         "hooks": 27,
         "pipeline": 12,
         "fleet": 11,

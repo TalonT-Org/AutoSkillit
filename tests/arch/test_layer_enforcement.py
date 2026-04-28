@@ -1062,8 +1062,12 @@ def test_default_classes_only_instantiated_inside_factory_or_allowlist() -> None
         Path("cli/_cook.py"): {"DefaultSessionSkillManager"},  # interactive cook
         Path("cli/_fleet.py"): {
             "DefaultSessionSkillManager",  # interactive cleanup
-            "DefaultWorkspaceManager",  # signal guard cleanup
+        },
+        Path("cli/_fleet_display.py"): {
             "DefaultTokenLog",  # cross-check token diagnostic
+        },
+        Path("cli/_fleet_lifecycle.py"): {
+            "DefaultWorkspaceManager",  # signal guard cleanup
         },
         Path("cli/app.py"): {"DefaultSkillResolver"},  # skill listing command
         Path("execution/recording.py"): {"DefaultSubprocessRunner"},  # lazy fallback

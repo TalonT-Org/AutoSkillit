@@ -398,11 +398,11 @@ class TestDynamicDispatchSection:
 
     def test_dispatch_plan_campaign_ref_referenced(self) -> None:
         prompt = _build(campaign_recipe=self._make_dynamic_recipe())
-        assert "dispatch_plan" in prompt
+        assert "campaign.dispatch_plan" in prompt
 
     def test_group_iteration_instruction_present(self) -> None:
         prompt = _build(campaign_recipe=self._make_dynamic_recipe())
-        assert "group" in prompt.lower()
+        assert "For each group (in array order)" in prompt
 
     def test_naming_convention_instruction_present(self) -> None:
         prompt = _build(campaign_recipe=self._make_dynamic_recipe())
@@ -410,20 +410,19 @@ class TestDynamicDispatchSection:
 
     def test_parallel_dispatch_instruction_present(self) -> None:
         prompt = _build(campaign_recipe=self._make_dynamic_recipe())
-        assert "parallel" in prompt
+        assert "parallel tool calls" in prompt
 
     def test_wait_for_group_before_next_group(self) -> None:
         prompt = _build(campaign_recipe=self._make_dynamic_recipe())
-        lower = prompt.lower()
-        assert "wait" in lower or "before" in lower
+        assert "Wait for ALL food trucks in this group" in prompt
 
     def test_max_issues_per_food_truck_split_instruction(self) -> None:
         prompt = _build(campaign_recipe=self._make_dynamic_recipe())
-        assert "batch" in prompt.lower() or "split" in prompt.lower()
+        assert "batches of that size" in prompt
 
     def test_empty_dispatch_plan_handled(self) -> None:
         prompt = _build(campaign_recipe=self._make_dynamic_recipe())
-        assert "[]" in prompt or "empty" in prompt.lower() or "none" in prompt.lower()
+        assert "no issues to implement" in prompt
 
     def test_dynamic_dispatch_absent_when_only_execution_map_captured(self) -> None:
         recipe = Recipe(

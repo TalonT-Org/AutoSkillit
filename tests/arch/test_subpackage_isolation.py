@@ -730,7 +730,11 @@ def test_no_subpackage_exceeds_10_files() -> None:
         tool call sequence diagnostics.
         _restart.py adds the perform_restart() NoReturn contract for post-upgrade
         process re-exec, keeping the restart logic isolated from update orchestration.
-        Exempt at 27 files.
+        _doctor.py was split (1245 lines → facade + 9 sub-modules) following the
+        _process_*.py pattern: _doctor_types.py (shared DoctorResult type),
+        _doctor_mcp.py, _doctor_hooks.py, _doctor_install.py, _doctor_config.py,
+        _doctor_runtime.py, _doctor_env.py, _doctor_features.py, _doctor_fleet.py.
+        Exempt at 36 files.
       hooks/ — REQ-CNST-003-E6: hooks/ hosts one standalone script per hook event
         (PreToolUse, PostToolUse, SessionStart). Each script must remain a separate
         file so Claude Code can invoke it directly as a subprocess. pretty_output_hook.py
@@ -756,7 +760,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "recipe": 48,
         "execution": 33,
         "core": 27,
-        "cli": 27,
+        "cli": 36,
         "hooks": 27,
         "pipeline": 12,
         "fleet": 11,

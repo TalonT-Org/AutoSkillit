@@ -862,8 +862,9 @@ class TestVersionArchitecture:
         """cli/_doctor.py must not import version_info from autoskillit.server."""
         src = (SRC_ROOT / "cli" / "_doctor.py").read_text()
         assert "from autoskillit.server import version_info" not in src
-        # Doctor uses importlib.metadata for version info (not autoskillit.version)
-        assert "importlib.metadata" in src
+        # Doctor install sub-module uses importlib.metadata for version info
+        install_src = (SRC_ROOT / "cli" / "_doctor_install.py").read_text()
+        assert "importlib.metadata" in install_src
 
 
 def test_native_tool_guard_absent_from_hook_registry():

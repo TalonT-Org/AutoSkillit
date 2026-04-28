@@ -418,7 +418,7 @@ def test_no_raw_claude_list_construction() -> None:
         ("commands.py", "build_headless_cmd"),
         ("commands.py", "build_headless_resume_cmd"),
         ("_init_helpers.py", "_is_plugin_installed"),
-        ("_doctor.py", "_check_mcp_server_registered"),
+        ("_doctor_mcp.py", "_check_mcp_server_registered"),
     }
     violations: list[str] = []
     for path in SRC_ROOT.rglob("*.py"):

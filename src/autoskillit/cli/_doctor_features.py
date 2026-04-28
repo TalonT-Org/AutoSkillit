@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from autoskillit.core import FEATURE_REGISTRY, Severity, get_logger, is_feature_enabled  # noqa: F401
+import autoskillit.core as _core
+from autoskillit.core import Severity, get_logger
 
 from ._doctor_types import DoctorResult
 
@@ -12,11 +13,11 @@ logger = get_logger(__name__)
 def _check_feature_dependencies(features: dict[str, bool]) -> DoctorResult:
     """Verify all enabled features have their dependencies satisfied."""
     violations: list[str] = []
-    for name, defn in FEATURE_REGISTRY.items():
+    for name, defn in _core.FEATURE_REGISTRY.items():
         if not features.get(name, defn.default_enabled) or not defn.depends_on:
             continue
         for dep in defn.depends_on:
-            dep_defn = FEATURE_REGISTRY.get(dep)
+            dep_defn = _core.FEATURE_REGISTRY.get(dep)
             dep_default = dep_defn.default_enabled if dep_defn is not None else False
             if not features.get(dep, dep_default):
                 violations.append(
@@ -41,7 +42,7 @@ def _check_feature_registry_consistency() -> DoctorResult:
     import importlib
 
     failures: list[str] = []
-    for name, defn in FEATURE_REGISTRY.items():
+    for name, defn in _core.FEATURE_REGISTRY.items():
         if not defn.import_package:
             continue
         try:

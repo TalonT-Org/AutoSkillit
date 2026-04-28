@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 
 from autoskillit.core import Severity, get_logger
+from autoskillit.core._claude_env import build_claude_env
 
 from ._doctor_types import DoctorResult
 
@@ -88,6 +89,7 @@ def _check_mcp_server_registered(claude_json_path: Path | None = None) -> Doctor
             capture_output=True,
             text=True,
             timeout=10,
+            env=build_claude_env(),
         )
         if result.returncode == 0 and "autoskillit" in result.stdout:
             return DoctorResult(

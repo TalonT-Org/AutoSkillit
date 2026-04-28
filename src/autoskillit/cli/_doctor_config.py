@@ -46,9 +46,7 @@ def _check_script_version_health(project_dir: Path | None = None) -> DoctorResul
     for script in scripts_result_items:
         if script.name in known_failures:
             f = known_failures[script.name]
-            failed_migrations.append(
-                f"{script.name} (failed after {f.retries_attempted} retries)"
-            )
+            failed_migrations.append(f"{script.name} (failed after {f.retries_attempted} retries)")
         elif script.version is None or Version(script.version) < Version(__version__):
             outdated.append(script.name)
 

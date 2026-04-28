@@ -79,6 +79,18 @@ def _check_hook_registry_drift(
     )
 
 
+def _check_hook_health(settings_path: Path) -> DoctorResult:
+    """Verify all deployed hook scripts in a single settings file exist on disk."""
+    broken = find_broken_hook_scripts(settings_path)
+    if broken:
+        return DoctorResult(
+            severity=Severity.ERROR,
+            check="hook_health",
+            message=f"Hook scripts not found: {', '.join(broken)}",
+        )
+    return DoctorResult(Severity.OK, "hook_health", "All hook scripts accessible")
+
+
 def _check_hook_health_all_scopes(project_root: Path | None = None) -> list[DoctorResult]:
     """Verify all deployed hook scripts exist on disk across ALL scopes."""
     from autoskillit.hook_registry import iter_all_scope_paths

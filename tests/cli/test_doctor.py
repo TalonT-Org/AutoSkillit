@@ -926,7 +926,7 @@ class TestStaleEntryPointsCheck:
 
 def test_doctor_hook_health_checks_all_event_types(tmp_path: Path) -> None:
     """hook_health must verify PostToolUse and SessionStart scripts exist, not just PreToolUse."""
-    from autoskillit.cli._doctor import _check_hook_health
+    from autoskillit.cli._doctor_hooks import _check_hook_health
     from autoskillit.core import Severity
 
     # Write a settings.json that includes token_summary_hook (PostToolUse)
@@ -995,7 +995,7 @@ def test_count_hook_registry_drift_detects_orphaned_hooks(tmp_path: Path) -> Non
     """deployed − canonical must be counted and returned.
     Orphaned hooks are the fatal failure mode (ENOENT on every tool call).
     """
-    from autoskillit.cli._doctor import _count_hook_registry_drift
+    from autoskillit.hook_registry import _count_hook_registry_drift
 
     settings = tmp_path / ".claude" / "settings.json"
     settings.parent.mkdir()

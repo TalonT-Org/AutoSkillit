@@ -324,7 +324,16 @@ generic_automation_mcp/
 │   ├── _reload.py           #   consume_reload_sentinel: reload sentinel detection for re-launch loops
 │   ├── _restart.py          #   perform_restart() -> NoReturn: sets SKIP_UPDATE_CHECK, calls os.execv
 │   ├── _session_launch.py   #   _run_interactive_session: shared interactive session launch prelude
-│   ├── _doctor.py           #   28+ project setup checks
+│   ├── _doctor.py           #   Facade: DoctorResult, run_doctor(); delegates to sub-modules
+│   ├── _doctor_types.py     #   DoctorResult dataclass, _NON_PROBLEM frozenset (shared types)
+│   ├── _doctor_mcp.py       #   MCP server registration + plugin cache checks
+│   ├── _doctor_hooks.py     #   Hook registration, registry drift, and health checks
+│   ├── _doctor_install.py   #   Install path, entry points, version drift, update dismissal checks
+│   ├── _doctor_config.py    #   Project config, gitignore, secret scanning checks
+│   ├── _doctor_runtime.py   #   Quota cache schema + claude process state checks
+│   ├── _doctor_env.py       #   Ambient session type + campaign ID env checks
+│   ├── _doctor_features.py  #   Feature dependency + registry consistency checks
+│   ├── _doctor_fleet.py     #   Fleet infrastructure, campaign state, sous-chef checks
 │   ├── _hooks.py            #   PreToolUse hook registration helpers
 │   ├── _init_helpers.py
 │   ├── _installed_plugins.py #  InstalledPluginsFile — canonical accessor for installed_plugins.json

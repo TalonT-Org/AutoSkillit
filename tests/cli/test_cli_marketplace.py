@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import contextlib
+import subprocess
+from pathlib import Path
+
 import pytest
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
@@ -66,3 +70,54 @@ def test_upgrade_is_registered_as_cli_command():
 def test_marketplace_module_still_importable():
     """_marketplace module is still importable (not deleted)."""
     import autoskillit.cli._marketplace  # noqa: F401
+
+
+# MK-GUARD-1
+def test_install_guards_same_version_when_kitchen_open(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    """install() must skip _clear_plugin_cache when a kitchen is open for the current project."""
+    from autoskillit.cli._marketplace import install
+
+    monkeypatch.delenv("CLAUDECODE", raising=False)
+    monkeypatch.setattr("autoskillit.cli._marketplace.shutil.which", lambda cmd: "/usr/bin/claude")
+    monkeypatch.setattr("autoskillit.cli._marketplace._ensure_marketplace", lambda: tmp_path)
+    monkeypatch.setattr("autoskillit.cli._marketplace._ensure_workspace_ready", lambda: None)
+
+    @contextlib.contextmanager
+    def _fake_lock():
+        yield
+
+    monkeypatch.setattr("autoskillit.core._InstallLock", _fake_lock)
+    monkeypatch.setattr("autoskillit.core.any_kitchen_open", lambda **kw: True)
+
+    clear_called: list[bool] = []
+    monkeypatch.setattr(
+        "autoskillit.cli._marketplace._clear_plugin_cache",
+        lambda: clear_called.append(True),
+    )
+    monkeypatch.setattr("autoskillit.cli._marketplace.generate_hooks_json", lambda: {})
+    monkeypatch.setattr("autoskillit.cli._marketplace.atomic_write", lambda *a, **kw: None)
+    monkeypatch.setattr("autoskillit.cli._marketplace.pkg_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        "autoskillit.cli._marketplace.subprocess.run",
+        lambda *a, **kw: subprocess.CompletedProcess([], 0, stdout="", stderr=""),
+    )
+    monkeypatch.setattr("autoskillit.cli._marketplace.evict_direct_mcp_entry", lambda *a: False)
+    monkeypatch.setattr(
+        "autoskillit.cli._marketplace.sweep_all_scopes_for_orphans", lambda *a: None
+    )
+    monkeypatch.setattr("autoskillit.cli._marketplace.sync_hooks_to_settings", lambda *a: None)
+    monkeypatch.setattr(
+        "autoskillit.cli._marketplace._user_claude_json_path", lambda: tmp_path / "claude.json"
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli._hooks._claude_settings_path", lambda *a: tmp_path / "settings.json"
+    )
+    monkeypatch.setattr("autoskillit.cli._update_checks.invalidate_fetch_cache", lambda *a: None)
+
+    install()
+
+    assert not clear_called, "_clear_plugin_cache must be skipped when kitchen is open"
+    out = capsys.readouterr().out
+    assert "kitchen" in out.lower(), "install must print a notification when skipping cache clear"

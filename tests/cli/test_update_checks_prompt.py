@@ -113,6 +113,8 @@ def _setup_run_checks(
     input_calls: list[str] = []
     monkeypatch.setattr("builtins.input", lambda _="": input_calls.append("called") or answer)
 
+    monkeypatch.setattr("autoskillit.core.any_kitchen_open", lambda **kw: False)
+
     return printed, input_calls
 
 
@@ -814,4 +816,28 @@ def test_all_dismissed_signals_produce_no_interactive_prompt(
     combined = " ".join(printed)
     assert "autoskillit update" in combined, (
         "All-dismissed signals must produce passive notification containing 'autoskillit update'"
+    )
+
+
+def test_run_update_checks_shows_notification_when_kitchen_open(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    printed, input_calls = _setup_run_checks(monkeypatch, tmp_path, binary_signal=True)
+    monkeypatch.setattr("autoskillit.core.any_kitchen_open", lambda **kw: True)
+
+    binary_signal_calls: list[bool] = []
+    monkeypatch.setattr(
+        "autoskillit.cli._update_checks._binary_signal",
+        lambda *a, **kw: binary_signal_calls.append(True) or None,
+    )
+
+    run_update_checks(home=tmp_path)
+
+    combined = " ".join(printed)
+    assert "kitchen" in combined.lower(), (
+        "run_update_checks must print a notification mentioning 'kitchen' when kitchen is open"
+    )
+    assert not input_calls, "run_update_checks must not prompt interactively when kitchen is open"
+    assert not binary_signal_calls, (
+        "run_update_checks must not proceed to signal checks when kitchen is open"
     )

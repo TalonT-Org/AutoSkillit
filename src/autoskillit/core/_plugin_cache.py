@@ -237,7 +237,7 @@ def clear_kitchens_for_pid(pid: int) -> None:
         fh.close()
 
 
-def any_kitchen_open() -> bool:
+def any_kitchen_open(project_path: str | None = None) -> bool:
     akp = _active_kitchens_path()
     lock = _active_kitchens_lock()
     if not akp.exists():
@@ -264,6 +264,8 @@ def any_kitchen_open() -> bool:
                 write_versioned_json(akp, {"kitchens": survivors}, schema_version=_SCHEMA_VERSION)
             except OSError as exc:
                 logger.warning("any_kitchen_open: failed to persist pruned kitchens: %s", exc)
+        if project_path is not None:
+            return any(entry.get("project_path") == project_path for entry in survivors)
         return len(survivors) > 0
     finally:
         fh.close()

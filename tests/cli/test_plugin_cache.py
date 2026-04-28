@@ -486,3 +486,28 @@ def test_any_kitchen_open_true_for_live_pid(
 
     result = any_kitchen_open()
     assert result is True
+
+
+def test_any_kitchen_open_scoped_excludes_other_project(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    from autoskillit.core._plugin_cache import any_kitchen_open, register_active_kitchen
+
+    project_a = "/project_A"
+    project_b = "/project_B"
+    register_active_kitchen("test-kitchen-007", os.getpid(), project_a)
+
+    assert any_kitchen_open(project_path=project_b) is False
+    assert any_kitchen_open(project_path=project_a) is True
+
+
+def test_any_kitchen_open_no_project_path_returns_global(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    from autoskillit.core._plugin_cache import any_kitchen_open, register_active_kitchen
+
+    register_active_kitchen("test-kitchen-008", os.getpid(), "/project_A")
+
+    assert any_kitchen_open() is True

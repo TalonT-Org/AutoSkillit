@@ -352,6 +352,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "cli/test_l3_orchestrator_prompt.py",
             "cli/test_cook.py",
             # Execution file-level entries:
+            "execution/test_headless_path_validation.py",
             "execution/test_zero_write_detection.py",
             # Migration file-level entries (migration/_api.py + engine.py import recipe):
             "migration/test_api.py",

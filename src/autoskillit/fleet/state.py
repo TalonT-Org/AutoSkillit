@@ -379,7 +379,7 @@ def resume_campaign_from_state(
     Thread-safe: _resume_lock (intra-process) + fcntl.flock(LOCK_EX)
     (cross-process) prevent concurrent callers from corrupting state.
     """
-    from autoskillit.fleet._liveness import is_dispatch_session_alive
+    from autoskillit.fleet import is_dispatch_session_alive
 
     with _resume_lock:
         lock_path = state_path.with_suffix(".lock")

@@ -310,8 +310,8 @@ def test_skill_visibility_states_124_skills() -> None:
     _assert_doc_states_number(DOCS_DIR / "skills" / "visibility.md", "skills total", 124)
 
 
-def test_safety_hooks_states_14_hooks() -> None:
-    _assert_doc_states_number(DOCS_DIR / "safety" / "hooks.md", "hooks total", 14)
+def test_safety_hooks_states_21_hooks() -> None:
+    _assert_doc_states_number(DOCS_DIR / "safety" / "hooks.md", "hooks total", 21)
 
 
 def test_configuration_states_quota_thresholds() -> None:

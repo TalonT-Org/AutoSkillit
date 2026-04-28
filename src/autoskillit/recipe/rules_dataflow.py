@@ -555,6 +555,8 @@ def _check_callable_signature_mismatch(ctx: ValidationContext) -> list[RuleFindi
         except (ImportError, AttributeError, ValueError):
             continue
         sig = inspect.signature(func)
+        if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
+            continue
         valid_params = set(sig.parameters.keys())
         _nested = step.with_args.get("args")
         nested_args: set[str] = set(_nested.keys()) if isinstance(_nested, dict) else set()

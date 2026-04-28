@@ -31,10 +31,10 @@ def test_callable_signature_mismatch_rule_fires():
     """Semantic rule must ERROR when recipe args keys don't match callable signature."""
     recipe = _make_workflow(
         {
-            "expand": {
+            "init": {
                 "tool": "run_python",
                 "with": {
-                    "callable": "autoskillit.planner.expand_assignments",
+                    "callable": "autoskillit.planner.create_run_dir",
                     "args": {"wrong_key": "x"},
                 },
                 "on_success": "done",

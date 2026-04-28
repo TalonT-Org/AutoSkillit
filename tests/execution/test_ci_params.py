@@ -88,23 +88,44 @@ async def test_completed_runs_always_sends_branch(httpx_mock):
 
 
 @pytest.mark.anyio
-async def test_completed_runs_sends_head_sha(httpx_mock):
-    """When scope.head_sha is set, head_sha must appear in API params."""
-    import httpx
-
-    httpx_mock.add_response(json={"workflow_runs": []})
+async def test_completed_runs_omits_head_sha_from_params(httpx_mock):
+    """_fetch_completed_runs must NOT include head_sha as a query param."""
+    httpx_mock.add_response(
+        json={"workflow_runs": []},
+        headers={"ETag": '"abc"'},
+    )
     watcher = DefaultCIWatcher(token="tok")
     async with httpx.AsyncClient() as client:
         await watcher._fetch_completed_runs(
             client,
             watcher._headers(),
             "owner/repo",
-            "main",
-            scope=CIRunScope(head_sha="abc123"),
-            cutoff_dt=datetime.now(UTC) - timedelta(seconds=300),
+            "feature-x",
+            CIRunScope(head_sha="abc123"),
+            cutoff_dt=None,
         )
     req = httpx_mock.get_requests()[0]
-    assert httpx.URL(str(req.url)).params["head_sha"] == "abc123"
+    assert "head_sha" not in req.url.params
+
+
+@pytest.mark.anyio
+async def test_active_runs_omits_head_sha_from_params(httpx_mock):
+    """_fetch_active_runs must NOT include head_sha as a query param."""
+    httpx_mock.add_response(
+        json={"workflow_runs": []},
+        headers={"ETag": '"xyz"'},
+    )
+    watcher = DefaultCIWatcher(token="tok")
+    async with httpx.AsyncClient() as client:
+        await watcher._fetch_active_runs(
+            client,
+            watcher._headers(),
+            "owner/repo",
+            "feature-x",
+            CIRunScope(head_sha="abc123"),
+        )
+    req = httpx_mock.get_requests()[0]
+    assert "head_sha" not in req.url.params
 
 
 # ---------------------------------------------------------------------------

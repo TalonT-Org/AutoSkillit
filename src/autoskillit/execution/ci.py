@@ -180,16 +180,10 @@ class DefaultCIWatcher:
         }
         if scope.workflow:
             params["workflow_id"] = scope.workflow
-        if scope.head_sha:
-            params["head_sha"] = scope.head_sha
         if scope.event:
             params["event"] = scope.event
 
         data = await self._get_with_etag(client, headers, url, params)
-
-        # SHA is a content-addressable identifier — time is irrelevant when identity is known
-        if scope.head_sha:
-            return list(data.get("workflow_runs", []))
 
         runs = []
         for run in data.get("workflow_runs", []):
@@ -219,8 +213,6 @@ class DefaultCIWatcher:
         }
         if scope.workflow:
             params["workflow_id"] = scope.workflow
-        if scope.head_sha:
-            params["head_sha"] = scope.head_sha
         if scope.event:
             params["event"] = scope.event
 
@@ -325,10 +317,15 @@ class DefaultCIWatcher:
                         r for r in completed if _validate_run_matches_scope(r, scope)
                     ]
                     if not valid_completed:
+                        found_shas = list(
+                            {r.get("head_sha") for r in completed if r.get("head_sha")}
+                        )
                         logger.warning(
                             "ci_watcher_scope_mismatch",
                             count=len(completed),
                             scope=str(scope),
+                            expected_sha=scope.head_sha,
+                            found_shas=found_shas,
                         )
                     else:
                         run = valid_completed[0]

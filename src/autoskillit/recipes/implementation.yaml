@@ -734,7 +734,7 @@ steps:
       - when: "${{ result.max_exceeded }} == true"
         route: check_active_trigger_loop
       - route: ci_watch
-    on_failure: escalate_stop_no_ci
+    on_failure: check_ci_already_passed
     optional_context_refs:
       - ci_loop_count
     note: >
@@ -753,9 +753,9 @@ steps:
       active_trigger_count: "${{ result.next_iteration }}"
     on_result:
       - when: "${{ result.max_exceeded }} == true"
-        route: escalate_stop_no_ci
+        route: check_ci_already_passed
       - route: trigger_ci_actively
-    on_failure: escalate_stop_no_ci
+    on_failure: check_ci_already_passed
     optional_context_refs:
       - active_trigger_count
     note: >
@@ -770,15 +770,38 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "trigger_ci_actively"
     on_success: ci_watch
-    on_failure: escalate_stop_no_ci
+    on_failure: check_ci_already_passed
     retries: 1
-    on_exhausted: escalate_stop_no_ci
+    on_exhausted: check_ci_already_passed
     note: >
       Active CI trigger remediation: closes and reopens the PR to force GitHub
       webhook re-delivery. This re-creates the pull_request event and the
       refs/pull/N/merge ref (if the PR is mergeable). Routes back to ci_watch
       for one final attempt. If the close/reopen fails or the subsequent
       ci_watch still returns no_runs, escalates to escalate_stop_no_ci.
+
+  check_ci_already_passed:
+    tool: run_cmd
+    with:
+      cmd: >-
+        gh pr view '${{ context.pr_number }}' --json statusCheckRollup
+        --jq '.statusCheckRollup | if length == 0 then "false" elif
+        all(.state == "SUCCESS" or .state == "NEUTRAL" or .state == "SKIPPED")
+        then "true" else "false" end'
+      cwd: "${{ context.work_dir }}"
+      step_name: "check_ci_already_passed"
+    on_result:
+      - when: "${{ result.stdout | trim }} == true"
+        route: check_repo_merge_state
+      - route: escalate_stop_no_ci
+    on_failure: escalate_stop_no_ci
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Safety net before terminal escalation: checks if CI already passed
+      despite the watcher failing to observe it (e.g. post-force-push SHA
+      staleness). Uses statusCheckRollup as the authoritative signal.
+      Routes to merge queue gate if all checks are SUCCESS/NEUTRAL/SKIPPED;
+      otherwise falls through to the terminal stop.
 
   escalate_stop_no_ci:
     action: stop

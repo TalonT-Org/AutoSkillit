@@ -157,6 +157,7 @@ generic_automation_mcp/
 │   ├── background.py        #   DefaultBackgroundSupervisor
 │   ├── context.py           #   ToolContext DI container
 │   ├── gate.py              #   DefaultGateState, gate_error_result
+│   ├── github_api_log.py    #   DefaultGitHubApiLog — session-scoped GitHub API request accumulator
 │   ├── mcp_response.py      #   Per-tool response size tracking
 │   ├── telemetry_fmt.py     #   Canonical token/timing display
 │   ├── timings.py

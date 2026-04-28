@@ -31,6 +31,7 @@ __all__ = [
     "TokenLog",
     "TimingLog",
     "McpResponseLog",
+    "GitHubApiLog",
     "TestRunner",
     "HeadlessExecutor",
     "RecipeRepository",
@@ -165,6 +166,37 @@ class McpResponseLog(Protocol):
     def get_report(self) -> list[dict[str, Any]]: ...
 
     def compute_total(self) -> dict[str, Any]: ...
+
+    def clear(self) -> None: ...
+
+
+@runtime_checkable
+class GitHubApiLog(Protocol):
+    """Protocol for session-scoped GitHub API request accumulation."""
+
+    async def record_httpx(
+        self,
+        *,
+        method: str,
+        path: str,
+        status_code: int,
+        latency_ms: float,
+        rate_limit_remaining: int,
+        rate_limit_used: int,
+        rate_limit_reset: int,
+        timestamp: str,
+    ) -> None: ...
+
+    async def record_gh_cli(
+        self,
+        *,
+        subcommand: str,
+        exit_code: int,
+        latency_ms: float,
+        timestamp: str,
+    ) -> None: ...
+
+    def to_usage(self, session_id: str) -> dict[str, Any] | None: ...
 
     def clear(self) -> None: ...
 
@@ -371,7 +403,9 @@ class GitHubFetcher(Protocol):
 
     async def fetch_issue(
         self,
-        issue_ref: str,
+        issue_ref_or_owner: str,
+        repo: str | None = None,
+        number: int | None = None,
         *,
         include_comments: bool = True,
     ) -> dict[str, Any]: ...

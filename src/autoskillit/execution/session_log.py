@@ -16,7 +16,10 @@ import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from autoskillit.core._type_protocols import GitHubApiLog
 
 import psutil
 
@@ -132,6 +135,7 @@ def flush_session_log(
     recipe_content_hash: str = "",
     recipe_composite_hash: str = "",
     recipe_version: str = "",
+    github_api_log: GitHubApiLog | None = None,
 ) -> None:
     """Flush session diagnostics to disk.
 
@@ -293,6 +297,17 @@ def flush_session_log(
         except ValueError:
             pass
 
+    # Compute GitHub API usage and write github_api_usage.json
+    github_api_requests = 0
+    if github_api_log is not None:
+        usage = github_api_log.to_usage(session_id)
+        if usage is not None:
+            atomic_write(
+                session_dir / "github_api_usage.json",
+                json.dumps(usage, sort_keys=True, indent=2) + "\n",
+            )
+            github_api_requests = usage["total_requests"]
+
     # Write summary.json
     summary = {
         "session_id": session_id,
@@ -331,6 +346,7 @@ def flush_session_log(
         "turn_tool_calls": _cb_turn_tool_calls,
         "campaign_id": campaign_id,
         "dispatch_id": dispatch_id,
+        "github_api_requests": github_api_requests,
     }
     if versions is not None:
         effective_model_id = model_identifier or _primary_model_identifier(token_usage)
@@ -423,6 +439,7 @@ def flush_session_log(
         "recipe_composite_hash": recipe_composite_hash,
         "recipe_version": recipe_version,
         "duration_seconds": duration_seconds,
+        "github_api_requests": github_api_requests,
     }
     index_path = log_root / "sessions.jsonl"
     with index_path.open("a") as f:

@@ -724,6 +724,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         input-validation guard for Grep tool BRE pattern syntax. review_gate_post_hook.py
         and review_loop_gate.py add the review gate enforcement hooks. recipe_write_advisor.py
         adds a non-blocking advisory hook for recipe YAML writes. Exempt at 27 files.
+      pipeline/ — REQ-CNST-003-E7: pipeline/ added github_api_log.py for session-scoped
+        GitHub API request tracking (DefaultGitHubApiLog accumulator + GitHubApiEntry).
+        Exempt at 12 files.
     """
     EXEMPTIONS: dict[str, int] = {
         "server": 20,
@@ -732,6 +735,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "core": 27,
         "cli": 27,
         "hooks": 27,
+        "pipeline": 12,
     }
     violations: list[str] = []
     for sub_dir in sorted(SRC_ROOT.iterdir()):

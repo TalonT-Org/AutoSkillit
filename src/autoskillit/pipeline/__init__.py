@@ -28,6 +28,7 @@ from autoskillit.pipeline.gate import (
     gate_error_result,
     headless_error_result,
 )
+from autoskillit.pipeline.github_api_log import DefaultGitHubApiLog
 from autoskillit.pipeline.mcp_response import DefaultMcpResponseLog, McpResponseEntry
 from autoskillit.pipeline.pr_gates import (
     is_ci_passing,
@@ -70,6 +71,8 @@ __all__ = [
     "write_status",
     # context
     "ToolContext",
+    # github_api_log
+    "DefaultGitHubApiLog",
     # pr_gates
     "is_ci_passing",
     "is_review_passing",

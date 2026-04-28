@@ -6,7 +6,9 @@ import asyncio
 import functools
 import json
 import os
+import time
 from collections.abc import Awaitable, Callable, Mapping
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -333,6 +335,15 @@ def _process_runner_result(
     return result.returncode, result.stdout, result.stderr
 
 
+_GH_API_SUBCOMMANDS: frozenset[str] = frozenset(
+    {"api", "pr", "issue", "repo", "release", "run", "workflow", "search"}
+)
+
+
+def _is_github_cli_call(cmd: list[str]) -> bool:
+    return len(cmd) >= 2 and cmd[0] == "gh" and cmd[1] in _GH_API_SUBCOMMANDS
+
+
 async def _run_subprocess(
     cmd: list[str],
     *,
@@ -347,8 +358,25 @@ async def _run_subprocess(
     """
     runner = _get_ctx().runner
     assert runner is not None, "No subprocess runner configured"
+
+    is_gh = _is_github_cli_call(cmd)
+    start = time.monotonic() if is_gh else 0.0
+
     result = await runner(cmd, cwd=Path(cwd), timeout=timeout, env=env)
-    return _process_runner_result(result, timeout)
+    returncode, stdout, stderr = _process_runner_result(result, timeout)
+
+    if is_gh:
+        latency_ms = (time.monotonic() - start) * 1000.0
+        log = _get_ctx().github_api_log
+        if log is not None:
+            await log.record_gh_cli(
+                subcommand=" ".join(str(c) for c in cmd[:3]),
+                exit_code=returncode,
+                latency_ms=latency_ms,
+                timestamp=datetime.now(UTC).isoformat(),
+            )
+
+    return returncode, stdout, stderr
 
 
 def _check_dry_walkthrough(skill_command: str, cwd: str) -> str | None:

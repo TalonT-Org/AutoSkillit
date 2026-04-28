@@ -18,12 +18,15 @@ import time
 import urllib.parse
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
 from autoskillit.core import CIRunScope, get_logger
-from autoskillit.execution.github import github_headers
+from autoskillit.execution.github import github_headers, make_tracked_httpx_client
+
+if TYPE_CHECKING:
+    from autoskillit.core._type_protocols import GitHubApiLog
 
 logger = get_logger(__name__)
 
@@ -88,7 +91,12 @@ class DefaultCIWatcher:
 
     _UNRESOLVED = object()
 
-    def __init__(self, *, token: str | None | Callable[[], str | None] = None) -> None:
+    def __init__(
+        self,
+        *,
+        token: str | None | Callable[[], str | None] = None,
+        tracker: GitHubApiLog | None = None,
+    ) -> None:
         self._token_factory: Callable[[], str | None] | None
         if callable(token):
             self._token_factory = token
@@ -96,6 +104,7 @@ class DefaultCIWatcher:
         else:
             self._token_factory = None
             self._token = token
+        self._tracker = tracker
         self._etag_cache: dict[str, tuple[str, Any]] = {}  # url -> (etag, cached_json)
 
     def _resolve_token(self) -> str | None:
@@ -290,7 +299,11 @@ class DefaultCIWatcher:
         cutoff_dt = datetime.now(UTC) - timedelta(seconds=lookback_seconds)
 
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
+            async with make_tracked_httpx_client(
+                self._tracker,
+                timeout=httpx.Timeout(15.0, connect=5.0),
+                headers=github_headers(self._resolve_token()),
+            ) as client:
                 # Phase 1: Look-back — check for recently-completed runs
                 logger.info(
                     "ci_watcher_lookback",
@@ -508,7 +521,11 @@ class DefaultCIWatcher:
         headers = self._headers()
 
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
+            async with make_tracked_httpx_client(
+                self._tracker,
+                timeout=httpx.Timeout(15.0, connect=5.0),
+                headers=github_headers(self._resolve_token()),
+            ) as client:
                 if run_id is not None:
                     run_data = await self._poll_run_status(
                         client,

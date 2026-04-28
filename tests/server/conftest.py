@@ -107,3 +107,32 @@ _SUCCESS_JSON = (
     '{"type": "result", "subtype": "success", "is_error": false,'
     ' "result": "done", "session_id": "s1"}'
 )
+
+
+@pytest.fixture
+def build_ctx(tmp_path):
+    """Factory: build_ctx(**overrides) → minimal ToolContext with overrides applied."""
+    from autoskillit.config.settings import AutomationConfig
+    from autoskillit.core.types import DirectInstall
+    from autoskillit.pipeline.audit import DefaultAuditLog
+    from autoskillit.pipeline.context import ToolContext
+    from autoskillit.pipeline.gate import DefaultGateState
+    from autoskillit.pipeline.timings import DefaultTimingLog
+    from autoskillit.pipeline.tokens import DefaultTokenLog
+
+    def _factory(**overrides):
+        ctx = ToolContext(
+            config=AutomationConfig(features={"fleet": True}),
+            audit=DefaultAuditLog(),
+            token_log=DefaultTokenLog(),
+            timing_log=DefaultTimingLog(),
+            gate=DefaultGateState(enabled=True),
+            plugin_source=DirectInstall(plugin_dir=tmp_path),
+            runner=None,
+            temp_dir=tmp_path / ".autoskillit" / "temp",
+        )
+        for field_name, value in overrides.items():
+            setattr(ctx, field_name, value)
+        return ctx
+
+    return _factory

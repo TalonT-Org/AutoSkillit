@@ -116,6 +116,7 @@ from .types import FleetErrorCode as FleetErrorCode
 from .types import FleetLock as FleetLock
 from .types import GATED_TOOLS as GATED_TOOLS
 from .types import GateState as GateState
+from .types import GitHubApiLog as GitHubApiLog
 from .types import GitHubFetcher as GitHubFetcher
 from .types import HEADLESS_ENV_VAR as HEADLESS_ENV_VAR
 from .types import HEADLESS_TOOLS as HEADLESS_TOOLS

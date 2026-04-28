@@ -392,7 +392,7 @@ def test_catalog_lists_all_skills_in_extended_dir() -> None:
 def test_authoring_bundled_recipe_count_mentions_6() -> None:
     """authoring.md prose must reference 6 bundled recipes (planner was missing)."""
     authoring = (DOCS_DIR / "recipes" / "authoring.md").read_text()
-    assert "6" in authoring and "planner" in authoring, (
+    assert "6 today" in authoring and "planner" in authoring, (
         "authoring.md should mention 6 bundled recipes including planner"
     )
 
@@ -400,7 +400,7 @@ def test_authoring_bundled_recipe_count_mentions_6() -> None:
 def test_authoring_recipe_step_fields_match_schema() -> None:
     """authoring.md field summary must use actual RecipeStep field names."""
     authoring = (DOCS_DIR / "recipes" / "authoring.md").read_text()
-    assert "`name`" in authoring or "name" in authoring
+    assert "`name`" in authoring
     assert "`with_args`" in authoring
     assert "`on_result`" in authoring
     assert "`retries`" in authoring

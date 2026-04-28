@@ -14,7 +14,7 @@ def test_planner_package_importable() -> None:
     import autoskillit.planner  # noqa: F401
 
 
-def test_planner_all_exports_callables() -> None:
+def test_planner_all_exports() -> None:
     from autoskillit.planner import __all__
 
     assert set(__all__) == {
@@ -41,6 +41,9 @@ def test_planner_all_exports_callables() -> None:
         "AssignmentElaborated",
         "WPShort",
         "WPElaborated",
+        "ASSIGNMENT_REQUIRED_KEYS",
+        "PHASE_REQUIRED_KEYS",
+        "WP_REQUIRED_KEYS",
     }
 
 

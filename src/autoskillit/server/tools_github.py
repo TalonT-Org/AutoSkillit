@@ -75,38 +75,45 @@ async def fetch_github_issue(
     try:
         from autoskillit.server import _get_config, _get_ctx
 
-        # Read-only query: structlog context binding is intentionally omitted.
-        logger.info("fetch_github_issue", issue_url=issue_url, include_comments=include_comments)
+        with structlog.contextvars.bound_contextvars(
+            tool="fetch_github_issue", issue_url=issue_url
+        ):
+            logger.info("fetch_github_issue", include_comments=include_comments)
 
-        tool_ctx = _get_ctx()
-        if tool_ctx.github_client is None:
-            return json.dumps({"success": False, "error": "GitHub client not configured"})
+            tool_ctx = _get_ctx()
+            if tool_ctx.github_client is None:
+                return json.dumps({"success": False, "error": "GitHub client not configured"})
 
-        config = _get_config()
+            config = _get_config()
 
-        # Resolve bare issue numbers using default_repo from config
-        resolved_ref = issue_url
-        if issue_url.strip().isdigit():
-            if not config.github.default_repo:
-                return json.dumps(
-                    {
-                        "success": False,
-                        "error": (
-                            f"Cannot resolve bare issue number {issue_url!r}: "
-                            "github.default_repo is not set in .autoskillit/config.yaml"
-                        ),
-                    }
-                )
-            resolved_ref = f"{config.github.default_repo}#{issue_url.strip()}"
-            logger.info("resolved bare number", resolved_ref=resolved_ref)
+            # Resolve bare issue numbers using default_repo from config
+            resolved_ref = issue_url
+            if issue_url.strip().isdigit():
+                if not config.github.default_repo:
+                    return json.dumps(
+                        {
+                            "success": False,
+                            "error": (
+                                f"Cannot resolve bare issue number {issue_url!r}: "
+                                "github.default_repo is not set in .autoskillit/config.yaml"
+                            ),
+                        }
+                    )
+                resolved_ref = f"{config.github.default_repo}#{issue_url.strip()}"
+                logger.info("resolved bare number", resolved_ref=resolved_ref)
 
-        result = await tool_ctx.github_client.fetch_issue(
-            resolved_ref,
-            include_comments=include_comments,
-        )
-        return json.dumps(result)
+            result = await tool_ctx.github_client.fetch_issue(
+                resolved_ref,
+                include_comments=include_comments,
+            )
+            return json.dumps(result)
     except Exception as exc:
-        logger.error("fetch_github_issue unhandled exception", exc_info=exc)
+        logger.error(
+            "fetch_github_issue unhandled exception",
+            exc_info=True,
+            tool="fetch_github_issue",
+            issue_url=issue_url,
+        )
         return json.dumps({"success": False, "error": str(exc)})
 
 
@@ -560,7 +567,7 @@ async def _file_or_update_github_issue(
             "issue_url": create_result.get("url", ""),
         }
     except Exception as exc:
-        logger.error("_file_or_update_github_issue unhandled exception", exc_info=exc)
+        logger.error("_file_or_update_github_issue unhandled exception", exc_info=True)
         return {"skipped": True, "reason": f"unexpected error: {exc}"}
 
 
@@ -639,7 +646,7 @@ async def _run_report_session(
             "github": github,
         }
     except Exception as exc:
-        logger.error("_run_report_session unhandled exception", exc_info=exc)
+        logger.error("_run_report_session unhandled exception", exc_info=True)
         write_status(status_path, "failed", error=str(exc))
         return {
             "success": False,

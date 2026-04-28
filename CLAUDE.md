@@ -197,7 +197,9 @@ generic_automation_mcp/
 ├── workspace/               # L1
 │   ├── __init__.py
 │   ├── cleanup.py           #   CleanupResult, preserve list
-│   ├── clone.py             #   Clone-based run isolation
+│   ├── clone.py             #   clone_repo + push_to_remote + DefaultCloneManager
+│   ├── _clone_detect.py     #   detect_* helpers + RUNS_DIR + classify_remote_url
+│   ├── _clone_remote.py     #   CloneSourceResolution + probe/isolate remotes
 │   ├── session_skills.py    #   Per-session ephemeral skill dirs; subset filtering
 │   ├── clone_registry.py    #   Shared file-based coordination for deferred cleanup
 │   ├── skills.py            #   SkillResolver — bundled skill listing

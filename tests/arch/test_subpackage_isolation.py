@@ -674,6 +674,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         bringing the count to 40.
         order.py adds the stable display order registry (BUNDLED_RECIPE_ORDER) for
         Group 0 bundled recipes, bringing the count to 41.
+        Monolithic file splits (_api.py → _recipe_ingredients + _recipe_composition;
+        _analysis.py → _analysis_graph + _analysis_bfs + _analysis_blocks +
+        _analysis_detectors) add 6 files, bringing the count to 47. Exempt at 47 files.
       execution/ — REQ-CNST-003-E3: execution/ decomposes process lifecycle into
         focused single-concern modules (_process_io, _process_kill, _process_race,
         etc.) that cannot be merged without re-introducing the coupling they isolate.
@@ -741,7 +744,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
     """
     EXEMPTIONS: dict[str, int] = {
         "server": 22,
-        "recipe": 41,
+        "recipe": 47,
         "execution": 26,
         "core": 27,
         "cli": 27,

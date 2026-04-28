@@ -1,6 +1,7 @@
 import pytest
+
 from autoskillit.recipe.contracts import load_bundled_manifest
-from autoskillit.recipe.io import load_recipe, builtin_recipes_dir
+from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.validator import validate_recipe
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]

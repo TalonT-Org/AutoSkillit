@@ -7,6 +7,8 @@ kind: standard
 autoskillit_version: "0.9.228"
 recipe_version: "1.0.0"
 
+requires_packs: [github]
+
 kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Agent,
     WebFetch, WebSearch, NotebookEdit) from the orchestrator. All work is delegated

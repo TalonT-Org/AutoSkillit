@@ -39,7 +39,7 @@ def test_source_dir_is_required_no_default() -> None:
     recipe = _load()
     ing = recipe.ingredients["source_dir"]
     assert ing.required is True
-    assert ing.default in (None, "")
+    assert ing.default is None
 
 
 def test_promote_step_has_fault_guards() -> None:
@@ -51,9 +51,11 @@ def test_promote_step_has_fault_guards() -> None:
 def test_verdict_routing() -> None:
     step = _load().steps["promote"]
     conditions = step.on_result.conditions
-    preflight = next(c for c in conditions if c.when and "preflight_failed" in c.when)
+    preflight = next((c for c in conditions if c.when and "preflight_failed" in c.when), None)
+    assert preflight is not None, "no preflight_failed condition found"
     assert preflight.route == "escalate_stop"
-    fallback = next(c for c in conditions if c.when is None)
+    fallback = next((c for c in conditions if c.when is None), None)
+    assert fallback is not None, "no fallback condition (when=None) found"
     assert fallback.route == "emit_result"
 
 
@@ -65,8 +67,8 @@ def test_category_summary_captured() -> None:
 def test_emit_result_echoes_all_tokens() -> None:
     cmd = _load().steps["emit_result"].with_args["cmd"]
     for token in ("pr_url", "verdict", "category_summary"):
-        assert token in cmd, f"missing token: {token}"
+        assert f"context.{token}" in cmd, f"missing context substitution for: {token}"
 
 
 def test_requires_packs_declared() -> None:
-    assert _load().requires_packs
+    assert _load().requires_packs == ["github"]

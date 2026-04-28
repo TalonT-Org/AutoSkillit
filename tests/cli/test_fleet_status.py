@@ -10,6 +10,7 @@ import pytest
 
 from autoskillit.cli._fleet import fleet_status as _fleet_status
 from tests.cli._fleet_helpers import (
+    DispatchDescriptor,
     _make_state,
     _make_state_with_tokens,
     _mock_batch_delete,
@@ -212,7 +213,10 @@ def test_cleanup_per_dispatch_session(monkeypatch: pytest.MonkeyPatch, tmp_path:
         tmp_path,
         "cid01",
         "test",
-        dispatches=[("d1", "success", "sid-1"), ("d2", "failure", "sid-2")],
+        dispatches=[
+            DispatchDescriptor("d1", "success", "sid-1"),
+            DispatchDescriptor("d2", "failure", "sid-2"),
+        ],
     )
     monkeypatch.chdir(tmp_path)
     _mock_batch_delete(monkeypatch)

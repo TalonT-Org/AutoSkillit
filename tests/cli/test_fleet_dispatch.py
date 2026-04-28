@@ -6,7 +6,6 @@ import shutil
 from pathlib import Path
 
 import pytest
-from cyclopts import App
 
 from autoskillit.cli._fleet import fleet_dispatch as _fleet_dispatch
 from tests.cli._fleet_helpers import (
@@ -15,20 +14,6 @@ from tests.cli._fleet_helpers import (
 )
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium, pytest.mark.feature("fleet")]
-
-
-def _get_app() -> App:
-    from autoskillit.cli.app import app
-
-    return app
-
-
-def _subcommand_names(app: App) -> set[str]:
-    return set(app._commands.keys())  # type: ignore[attr-defined]
-
-
-def _find_command(app: App, name: str) -> object:
-    return app._commands.get(name)  # type: ignore[attr-defined]
 
 
 # ---------------------------------------------------------------------------
@@ -121,48 +106,6 @@ def test_fleet_dispatch_proceeds_when_enabled(
     _fleet_dispatch()
     assert captured.get("cmd") is not None, "Expected fleet session subprocess to be invoked"
     assert captured["env"].get("AUTOSKILLIT_FLEET_MODE") == "dispatch"
-
-
-# ---------------------------------------------------------------------------
-# CLI registration tests
-# ---------------------------------------------------------------------------
-
-
-class TestFleetCLIRegistration:
-    def test_fleet_subcommand_registered(self) -> None:
-        app = _get_app()
-        names = _subcommand_names(app)
-        assert "fleet" in names
-
-    def test_fleet_status_accepts_reap_flag(self) -> None:
-        from autoskillit.cli._fleet import fleet_app
-
-        status_cmd = _find_command(fleet_app, "status")
-        assert status_cmd is not None, "fleet status command not found"
-
-    def test_fleet_status_accepts_dry_run_flag(self) -> None:
-        import inspect
-
-        from autoskillit.cli._fleet import fleet_status
-
-        sig = inspect.signature(fleet_status)
-        assert "dry_run" in sig.parameters
-        assert "reap" in sig.parameters
-
-    def test_fleet_dispatch_command_registered(self) -> None:
-        from autoskillit.cli._fleet import fleet_app
-
-        assert "dispatch" in _subcommand_names(fleet_app)
-
-    def test_fleet_campaign_command_registered(self) -> None:
-        from autoskillit.cli._fleet import fleet_app
-
-        assert "campaign" in _subcommand_names(fleet_app)
-
-    def test_fleet_run_command_not_registered(self) -> None:
-        from autoskillit.cli._fleet import fleet_app
-
-        assert "run" not in _subcommand_names(fleet_app)
 
 
 # ---------------------------------------------------------------------------

@@ -6,13 +6,19 @@ import shutil
 import subprocess
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 from unittest.mock import MagicMock
 
 import pytest
 
 if TYPE_CHECKING:
     from autoskillit.fleet import CampaignState
+
+
+class DispatchDescriptor(NamedTuple):
+    name: str
+    status: str
+    session_id: str
 
 
 def _stub_guards(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -39,9 +45,11 @@ def _stub_campaign_resolution(
     recipe.continue_on_failure = False
     recipe.description = f"Test campaign {name}"
 
-    monkeypatch.setattr("autoskillit.recipe.find_campaign_by_name", lambda *a, **kw: recipe_info)
-    monkeypatch.setattr("autoskillit.recipe.load_recipe", lambda *a, **kw: recipe)
-    monkeypatch.setattr("autoskillit.recipe.validate_recipe", lambda *a: [])
+    monkeypatch.setattr(
+        "autoskillit.cli._fleet.find_campaign_by_name", lambda *a, **kw: recipe_info
+    )
+    monkeypatch.setattr("autoskillit.cli._fleet.load_recipe", lambda *a, **kw: recipe)
+    monkeypatch.setattr("autoskillit.cli._fleet.validate_recipe", lambda *a: [])
     return recipe
 
 
@@ -119,7 +127,7 @@ def _setup_campaign_with_sessions(
     campaign_id: str,
     campaign_name: str,
     *,
-    dispatches: list[tuple[str, str, str]],
+    dispatches: list[DispatchDescriptor],
 ) -> None:
     """Create a state.json with dispatches that have l2_session_id set."""
     from autoskillit.fleet import DispatchRecord, DispatchStatus, write_initial_state
@@ -127,8 +135,8 @@ def _setup_campaign_with_sessions(
     state_dir = tmp_path / ".autoskillit" / "temp" / "fleet" / campaign_id
     state_dir.mkdir(parents=True)
     records = [
-        DispatchRecord(name=name, status=DispatchStatus(status), l2_session_id=session_id)
-        for name, status, session_id in dispatches
+        DispatchRecord(name=d.name, status=DispatchStatus(d.status), l2_session_id=d.session_id)
+        for d in dispatches
     ]
     write_initial_state(
         state_dir / "state.json", campaign_id, campaign_name, "manifest.yaml", records
@@ -189,3 +197,17 @@ def _mock_batch_delete(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     mock = MagicMock(return_value={"deleted": [], "delete_failures": [], "preserved": []})
     monkeypatch.setattr("autoskillit.workspace.batch_delete", mock)
     return mock
+
+
+def _get_app() -> object:
+    from autoskillit.cli.app import app
+
+    return app
+
+
+def _subcommand_names(app: object) -> set[str]:
+    return set(app._commands.keys())  # type: ignore[attr-defined]
+
+
+def _find_command(app: object, name: str) -> object:
+    return app._commands.get(name)  # type: ignore[attr-defined]

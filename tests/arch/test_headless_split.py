@@ -68,8 +68,14 @@ def test_make_session_renamed_in_path_validation():
 
 
 def test_make_session_renamed_in_adjudication():
-    adj = (EXECUTION_DIR / "test_session_adjudication.py").read_text()
-    assert "make_headless_session" not in adj
+    # test_session_adjudication.py was split into three files; check all of them
+    for fname in (
+        "test_session_adjudication_success.py",
+        "test_session_adjudication_retry.py",
+        "test_session_adjudication_outcome.py",
+    ):
+        adj = (EXECUTION_DIR / fname).read_text()
+        assert "make_headless_session" not in adj, f"{fname} must not use make_headless_session"
 
 
 def test_make_success_stdout_not_duplicated():

@@ -528,10 +528,15 @@ class DefaultMigrationService:
                     )
 
         if did_version_migrate or contracts_regenerated:
-            return {
+            result_dict: dict[str, object] = {
                 "status": "migrated",
                 "name": name,
                 "contracts_regenerated": contracts_regenerated,
-                "advisories": advisories,
             }
-        return {"status": "up_to_date", "name": name, "advisories": advisories}
+            if advisories:
+                result_dict["advisories"] = advisories
+            return result_dict
+        result_dict = {"status": "up_to_date", "name": name}
+        if advisories:
+            result_dict["advisories"] = advisories
+        return result_dict

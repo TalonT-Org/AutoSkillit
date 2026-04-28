@@ -482,7 +482,7 @@ Always emit these structured output tokens as the final lines:
 
 ```
 pr_body_path = {absolute path to {{AUTOSKILLIT_TEMP}}/promote-to-main/pr_body_{timestamp}.md}
-pr_url = {pr_url, empty if dry-run or gh unavailable}
+pr_url = {pr_url, empty on dry-run or when GitHub CLI is unreachable}
 verdict = {created|dry_run|preflight_failed}
 category_summary = {e.g., "14 fixes, 13 features, 3 infra"}
 ```

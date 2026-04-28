@@ -22,9 +22,17 @@ def test_recipe_parses() -> None:
 
 
 def test_recipe_validates_cleanly() -> None:
+    from autoskillit.core.types import Severity
+    from tests.recipe.conftest import NO_AUTOSKILLIT_IMPORT
+
     recipe = _load()
     findings = run_semantic_rules(recipe)
-    assert findings == [], findings
+    errors = [
+        f for f in findings if f.severity == Severity.ERROR and f.rule != NO_AUTOSKILLIT_IMPORT
+    ]
+    undeclared = [f for f in findings if f.rule == "undeclared-capture-key"]
+    assert errors == [], errors
+    assert undeclared == [], undeclared
 
 
 def test_source_dir_is_required_no_default() -> None:

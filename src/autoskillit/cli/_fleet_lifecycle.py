@@ -34,7 +34,6 @@ def _transition_dead_dispatch(
 
     return crash_recover_dispatch(state_path, record, reason=reason)
 
-
 @asynccontextmanager
 async def _fleet_signal_guard(
     state_path: Path,

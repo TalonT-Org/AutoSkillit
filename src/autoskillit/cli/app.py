@@ -8,22 +8,14 @@ import os
 import sys
 from datetime import UTC
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import Annotated
 
 import anyio
-
-from autoskillit.cli._features import features_app
-from autoskillit.cli._fleet import fleet_app
-from autoskillit.cli._order import _recipes_dir_for, order
-from autoskillit.cli._serve_guard import serve_with_signal_guard
-from autoskillit.cli._sessions import sessions_app
-
-if TYPE_CHECKING:
-    pass
-
 from cyclopts import App, Parameter
 
 from autoskillit.cli._cook import cook as cook_interactive
+from autoskillit.cli._features import features_app
+from autoskillit.cli._fleet import fleet_app
 from autoskillit.cli._init_helpers import (
     _MARKER_CONTENT,
     _check_secret_scanning,
@@ -32,6 +24,9 @@ from autoskillit.cli._init_helpers import (
     _prompt_test_command,
     _register_all,
 )
+from autoskillit.cli._order import _recipes_dir_for, order
+from autoskillit.cli._serve_guard import serve_with_signal_guard
+from autoskillit.cli._sessions import sessions_app
 from autoskillit.core import (
     RecipeSource,
     atomic_write,

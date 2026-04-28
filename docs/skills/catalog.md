@@ -1,7 +1,7 @@
 # Skill catalog
 
-The complete list of bundled skills (125 total: 3 in `src/autoskillit/skills/`,
-122 in `src/autoskillit/skills_extended/`). Filesystem walk this directory if
+The complete list of bundled skills (126 total: 3 in `src/autoskillit/skills/`,
+123 in `src/autoskillit/skills_extended/`). Filesystem walk this directory if
 you need an exhaustive listing; this catalog groups by purpose.
 
 ## Tier 1 — free range (3)
@@ -49,7 +49,8 @@ runs:
 `retry-worktree`, `resolve-merge-conflicts`, `audit-impl`, `smoke-task`,
 `report-bug`, `pipeline-summary`, `diagnose-ci`, `verify-diag`,
 `resolve-claims-review`, `resolve-design-review`, `resolve-research-review`,
-`compose-research-pr`, `prepare-research-pr`, `review-research-pr`
+`compose-research-pr`, `prepare-research-pr`, `review-research-pr`,
+`promote-to-main`
 
 ## arch-lens family (13)
 

@@ -411,7 +411,7 @@ headless.
              {ticket_body_2_path}  (one line per ticket group)
   Contested: {contested_findings_path}  (omit if N_contested == 0)
 validated_report_path = {validated_report_path}
-%%ORDER_UP%%
+verdict = validated
 ```
 
 **Interactive mode:** Display the validation status table (verdict counts), then ask:

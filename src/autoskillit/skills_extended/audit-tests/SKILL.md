@@ -221,7 +221,6 @@ Emit the structured output token so the recipe can capture the path:
 
 ```
 audit_report_path = {{AUTOSKILLIT_TEMP}}/audit-tests/test_audit_{YYYY-MM-DD_HHMMSS}.md
-%%ORDER_UP%%
 ```
 
 ---

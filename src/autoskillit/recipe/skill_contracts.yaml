@@ -1927,16 +1927,20 @@ skills:
     inputs:
       - name: audit_report_path
         type: file_path
+        required: false
     outputs:
       - name: validated_report_path
         type: file_path
+      - name: verdict
+        type: str
     expected_output_patterns:
       - "validated_report_path\\s*=\\s*\\S+"
+      - "verdict\\s*=\\s*\\S+"
     pattern_examples:
-      - "validated_report_path = /tmp/autoskillit/validate-audit/validated_report_tests_2026-04-28_120000.md"
+      - "validated_report_path = /tmp/autoskillit/validate-audit/validated_report_tests_2026-04-28_120000.md\nverdict = validated"
     write_behavior: conditional
     write_expected_when:
-      - "\\[validate-audit\\] Done\\."
+      - "verdict\\s*=\\s*validated"
 callable_contracts:
   autoskillit.smoke_utils.check_review_loop:
     outputs:

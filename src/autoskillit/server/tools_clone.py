@@ -168,7 +168,7 @@ async def remove_clone(
             if step_name:
                 tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
     except Exception as exc:
-        logger.error("remove_clone unhandled exception", exc_info=exc)
+        logger.error("remove_clone unhandled exception", exc_info=True)
         return json.dumps({"removed": "false", "reason": f"unexpected error: {exc}"})
 
 

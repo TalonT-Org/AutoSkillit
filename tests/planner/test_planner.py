@@ -41,6 +41,9 @@ def test_planner_all_exports_callables() -> None:
         "AssignmentElaborated",
         "WPShort",
         "WPElaborated",
+        "ASSIGNMENT_REQUIRED_KEYS",
+        "PHASE_REQUIRED_KEYS",
+        "WP_REQUIRED_KEYS",
     }
 
 

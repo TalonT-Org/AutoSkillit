@@ -135,7 +135,7 @@ async def test_lookback_finds_completed_failed_run():
 
 @pytest.mark.anyio
 async def test_lookback_filters_by_head_sha():
-    """When scope.head_sha is provided, the API filters server-side."""
+    """Client-side scope.head_sha still filters via _validate_run_matches_scope."""
     watcher = DefaultCIWatcher(token="tok")
     matching_run = _run(run_id=222, head_sha="abc123")
     watcher._fetch_completed_runs = AsyncMock(  # type: ignore[method-assign]
@@ -150,7 +150,6 @@ async def test_lookback_filters_by_head_sha():
         timeout_seconds=60,
     )
     assert result["run_id"] == 222
-    # Verify scope.head_sha was passed to the API call
     call_kwargs = watcher._fetch_completed_runs.call_args
     assert call_kwargs[0][4].head_sha == "abc123"  # positional arg: scope
 
@@ -167,6 +166,33 @@ async def test_lookback_without_head_sha_matches_any():
     result = await watcher.wait("feature-x", repo="owner/repo", timeout_seconds=60)
     assert result["run_id"] == 333
     assert result["conclusion"] == "success"
+
+
+@pytest.mark.anyio
+async def test_scope_mismatch_log_includes_found_shas():
+    """ci_watcher_scope_mismatch warning includes expected_sha and found_shas."""
+    watcher = DefaultCIWatcher(token="tok")
+    stale_run = _run(run_id=999, head_sha="old-sha", conclusion="success")
+    watcher._fetch_completed_runs = AsyncMock(  # type: ignore[method-assign]
+        return_value=[stale_run]
+    )
+    watcher._fetch_active_runs = AsyncMock(return_value=[])  # type: ignore[method-assign]
+
+    import structlog.testing
+
+    with structlog.testing.capture_logs() as cap:
+        await watcher.wait(
+            "feature-x",
+            repo="owner/repo",
+            scope=CIRunScope(head_sha="new-sha"),
+            timeout_seconds=1,
+        )
+
+    mismatch_events = [e for e in cap if e.get("event") == "ci_watcher_scope_mismatch"]
+    assert mismatch_events, "Expected ci_watcher_scope_mismatch warning to be logged"
+    evt = mismatch_events[0]
+    assert evt.get("expected_sha") == "new-sha"
+    assert "old-sha" in (evt.get("found_shas") or [])
 
 
 @pytest.mark.anyio
@@ -535,33 +561,6 @@ async def test_ci_etag_stores_on_200(httpx_mock):
     requests = httpx_mock.get_requests()
     assert len(requests) == 2
     assert requests[1].headers.get("if-none-match") == '"abc123"'
-
-
-# ---------------------------------------------------------------------------
-# SHA-aware filter bypass — immunity tests
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.anyio
-async def test_fetch_completed_runs_sha_bypasses_time_filter(httpx_mock):
-    """When scope.head_sha is set, stale runs ARE returned (SHA = identity)."""
-    stale_time = (datetime.now(UTC) - timedelta(minutes=30)).isoformat()
-    httpx_mock.add_response(
-        json=_runs_response(_run(run_id=42, head_sha="sha123", updated_at=stale_time)),
-    )
-    watcher = DefaultCIWatcher(token="tok")
-
-    async with httpx.AsyncClient() as client:
-        runs = await watcher._fetch_completed_runs(
-            client,
-            watcher._headers(),
-            "owner/repo",
-            "main",
-            scope=CIRunScope(head_sha="sha123"),
-            cutoff_dt=datetime.now(UTC) - timedelta(seconds=120),
-        )
-    assert len(runs) == 1
-    assert runs[0]["id"] == 42
 
 
 @pytest.mark.anyio

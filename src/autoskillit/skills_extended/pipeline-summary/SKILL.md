@@ -18,13 +18,12 @@ and a PR from the feature branch into the target branch.
 
 ## Arguments
 
-`/autoskillit:pipeline-summary {bug_report_path} {feature_branch} {target_branch} {workspace} [{token_summary_path}] [{closing_issue}]`
+`/autoskillit:pipeline-summary {bug_report_path} {feature_branch} {target_branch} {workspace} [{closing_issue}]`
 
 - **bug_report_path** — Path to the JSON file containing bug metadata
 - **feature_branch** — Name of the branch containing all accumulated fixes
 - **target_branch** — Branch to create the PR against (e.g., "main")
 - **workspace** — Path to the git repository workspace
-- **token_summary_path** — (Optional) Path to a JSON file with token/timing data written by the orchestrator. When absent or the file does not exist, the skill operates exactly as today with no token table in the PR body.
 - **closing_issue** — (Optional) GitHub issue number whose `## Requirements` section should be extracted and embedded in the PR body. When absent or empty, requirements extraction is skipped.
 
 ## When to Use
@@ -49,7 +48,7 @@ and a PR from the feature branch into the target branch.
 ## Workflow
 
 ### Step 1: Parse Arguments
-Parse up to six positional arguments from the prompt. The fifth (`token_summary_path`) and sixth (`closing_issue`) are optional.
+Parse up to five positional arguments from the prompt. The fifth (`closing_issue`) is optional.
 
 ### Step 2: Read Bug Report
 Read the JSON file at `{bug_report_path}`. Expected structure:
@@ -73,46 +72,6 @@ Write a markdown summary to `{workspace}/run-summary.md`:
 - Branch info: feature branch name, target branch
 
 Output: `summary_path={workspace}/run-summary.md`
-
-### Step 3b: Append Token+Timing Table (if token_summary_path provided)
-
-If `token_summary_path` was provided as a fifth argument and the file exists, read it as JSON. The JSON has the structure:
-
-```json
-{
-  "steps": [
-    {
-      "step_name": "string",
-      "input_tokens": 0,
-      "output_tokens": 0,
-      "cache_creation_input_tokens": 0,
-      "cache_read_input_tokens": 0,
-      "invocation_count": 0,
-      "elapsed_seconds": 0.0
-    }
-  ],
-  "total": {
-    "input_tokens": 0,
-    "output_tokens": 0,
-    "cache_creation_input_tokens": 0,
-    "cache_read_input_tokens": 0,
-    "total_elapsed_seconds": 0.0
-  }
-}
-```
-
-Append the following two markdown sections to `run-summary.md`:
-
-```markdown
-## Token Usage
-
-| Step | Input | Output | Cache Write | Cache Read | Calls | Elapsed (s) |
-|------|-------|--------|-------------|------------|-------|-------------|
-| {step_name} | {input_tokens} | {output_tokens} | {cache_creation_input_tokens} | {cache_read_input_tokens} | {invocation_count} | {elapsed_seconds:.1f} |
-| **Total** | {total.input_tokens} | {total.output_tokens} | {total.cache_creation_input_tokens} | {total.cache_read_input_tokens} | — | {total.total_elapsed_seconds:.1f} |
-```
-
-If `token_summary_path` is absent or the file does not exist, skip this step — no token table is added.
 
 ### Step 4: Check GitHub Availability
 Run `gh auth status 2>/dev/null`. If exit code is non-zero or `gh` is not found:
@@ -168,7 +127,6 @@ The PR body (`temp_pr_body`) contains:
 - `## Requirements` (if `requirements_section` is non-empty from Step 5b)
 - `Closes #{closing_issue}` (if closing_issue was provided)
 - Bug table from Step 3
-- Token/timing table from Step 3b (if available)
 
 Capture the PR URL from stdout.
 
@@ -178,19 +136,3 @@ Output: `pr_url={url}`
 - Always: `summary_path={workspace}/run-summary.md`
 - If GitHub available: `issue_url={url}` and `pr_url={url}`
 
-## Orchestrator Calling Convention
-
-For recipe authors who want to include token/timing data in the PR body:
-
-1. Call the `get_token_summary` MCP tool to retrieve current pipeline token data.
-2. Write the JSON result to `{{AUTOSKILLIT_TEMP}}/token_summary_{timestamp}.json` using a `run_python` step. (relative to the current working directory)
-   The `run_python` step executes in the MCP server process and has access to the live
-   `ToolContext` via the server context; call `ctx.token_log.get_report()` and
-   `ctx.token_log.compute_total()`, then write `{"steps": ..., "total": ...}` as JSON.
-   Capture the output path via `print(f"token_summary_path={out}")`.
-3. Pass the file path as the fifth positional argument to `run_skill pipeline-summary`.
-
-> Note: The headless session for `pipeline-summary` runs in a separate process with its own
-> (empty) token log, which is why the file-based handoff is required. `run_python` steps share
-> the live in-process token log with the MCP server, so they can access accumulated timing data
-> directly without a network call.

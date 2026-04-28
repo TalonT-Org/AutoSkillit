@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:dcb5955bae118041160b3100f4837bb735caadfcd1aad6cb40b1ba346a11902f -->
+<!-- autoskillit-recipe-hash: sha256:9c748a039b3eb0879c8adef380464dd4e95386043f3505d73bf71202e6cd1742 -->
 <!-- autoskillit-diagram-format: v7 -->
 # implementation
 
@@ -28,4 +28,8 @@
       |     → diagnose_ci → resolve_ci (on CI failure)
       |
       release_issue_success / release_issue_failure
+      |
+      +-- patch_token_summary (optional)
+      |
+      register_clone_success / register_clone_failure
 ```

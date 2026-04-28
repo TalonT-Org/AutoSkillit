@@ -358,7 +358,7 @@ def test_ci_watch_pr_routing(recipe) -> None:
     step = recipe.steps["ci_watch_pr"]
     assert step.on_result is not None, "ci_watch_pr must use on_result predicate routing"
     result_routes = {c.route for c in step.on_result.conditions}
-    assert "register_clone_success" in result_routes
+    assert "patch_token_summary" in result_routes
     assert step.on_failure == "diagnose_ci"
 
 

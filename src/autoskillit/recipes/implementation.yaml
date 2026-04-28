@@ -841,7 +841,7 @@ steps:
     action: route
     on_result:
       - when: "${{ inputs.auto_merge }} != 'true'"
-        route: register_clone_success
+        route: patch_token_summary
       - when: "${{ context.queue_available }} == true and ${{ context.merge_group_trigger }} == true"
         route: enqueue_to_queue
       - when: "${{ context.auto_merge_available }} == true"
@@ -1465,13 +1465,28 @@ steps:
     with:
       issue_url: ${{ inputs.issue_url }}
       target_branch: ${{ inputs.base_branch }}
-    on_success: register_clone_success
-    on_failure: register_clone_success
+    on_success: patch_token_summary
+    on_failure: patch_token_summary
     note: >
       Called on the success path after PR merge is confirmed.
       Passes target_branch so release_issue can determine whether to apply the
       staged label (non-default target) or just remove in-progress (default target).
       optional=true ensures pipeline still reaches register_clone_success if this step errors.
+
+  patch_token_summary:
+    description: "Collect all pipeline token data and patch the PR body with complete summary"
+    tool: run_python
+    optional: true
+    skip_when_false: "inputs.open_pr"
+    with:
+      callable: "autoskillit.smoke_utils.patch_pr_token_summary"
+      timeout: 60
+      pr_url: "${{ context.pr_url }}"
+      cwd: "${{ context.work_dir }}"
+    on_success: register_clone_success
+    on_failure: register_clone_success
+    note: >
+      Patches PR body with complete token summary; failure never blocks pipeline completion.
 
   register_clone_unconfirmed:
     description: "Register clone as preserved — merge unconfirmed, in-progress label retained"

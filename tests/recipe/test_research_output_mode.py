@@ -127,13 +127,13 @@ def test_export_local_bundle_uses_source_dir_research_bundles(recipe):
     assert "source_dir" in cmd, "export_local_bundle cmd must reference inputs.source_dir"
 
 
-def test_export_local_bundle_routes_to_research_complete(recipe):
+def test_export_local_bundle_routes_to_patch_token_summary(recipe):
     step = recipe.steps["export_local_bundle"]
-    assert step.on_success == "research_complete", (
-        "export_local_bundle.on_success must be research_complete"
+    assert step.on_success == "patch_token_summary", (
+        "export_local_bundle.on_success must be patch_token_summary"
     )
-    assert step.on_failure == "research_complete", (
-        "export_local_bundle.on_failure must be research_complete"
+    assert step.on_failure == "patch_token_summary", (
+        "export_local_bundle.on_failure must be patch_token_summary"
     )
 
 

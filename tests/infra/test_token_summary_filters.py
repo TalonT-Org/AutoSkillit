@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from autoskillit.core.paths import pkg_root
 from autoskillit.hooks._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
 from tests.infra._token_summary_helpers import _run_hook, _write_sessions
 
@@ -294,7 +295,7 @@ class TestUnwrapMcpResponse:
 
 def test_hook_subprocess_calls_have_timeout() -> None:
     """All subprocess.run() calls in token_summary_hook.py must have timeout=."""
-    src = Path("src/autoskillit/hooks/token_summary_hook.py").read_text()
+    src = (pkg_root() / "hooks" / "token_summary_hook.py").read_text()
     tree = ast.parse(src)
     for node in ast.walk(tree):
         if (

@@ -16,6 +16,7 @@ from autoskillit.core import (
     load_yaml,
     pkg_root,
 )
+from autoskillit.recipe.order import BUNDLED_RECIPE_ORDER
 from autoskillit.recipe.schema import (
     AUTOSKILLIT_VERSION_KEY,
     RECIPE_VERSION_KEY,
@@ -94,6 +95,16 @@ def group_rank(r: RecipeInfo) -> int:
     return 1
 
 
+def _registry_position(r: RecipeInfo) -> int:
+    """Return sort position within Group 0; 0 (no-op) for all other groups."""
+    if group_rank(r) == 0:
+        try:
+            return BUNDLED_RECIPE_ORDER.index(r.name)
+        except ValueError:
+            return len(BUNDLED_RECIPE_ORDER)
+    return 0
+
+
 def list_recipes(
     project_dir: Path,
     exclude_kinds: frozenset[RecipeKind] = frozenset(),
@@ -111,7 +122,7 @@ def list_recipes(
 
     filtered = [r for r in items if r.kind not in exclude_kinds] if exclude_kinds else items
     return LoadResult(
-        items=sorted(filtered, key=lambda r: (group_rank(r), r.name)),
+        items=sorted(filtered, key=lambda r: (group_rank(r), _registry_position(r), r.name)),
         errors=errors,
     )
 

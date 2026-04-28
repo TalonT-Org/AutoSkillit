@@ -1,7 +1,7 @@
 name: implementation-groups
 description: Decompose a source document into sequenced implementation groups, then plan, verify, implement, test, and merge each group end-to-end. Use when you have a large document or roadmap to implement via make-groups.
 summary: clone > capture_base_sha > set_merge_target > (create_branch?) > make-groups > make-plan > (review-approach?) > dry-walkthrough > implement > test > merge (per group, per plan part) > (audit-impl?) > (open_pr?) > push > (review_pr?) > (ci_watch?) > cleanup
-autoskillit_version: "0.9.220"
+autoskillit_version: "0.9.221"
 recipe_version: "1.0.0"
 requires_packs: [github, ci, clone, telemetry]
 

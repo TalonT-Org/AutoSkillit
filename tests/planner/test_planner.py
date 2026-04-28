@@ -69,8 +69,9 @@ def test_create_run_dir_requires_temp_dir_argument() -> None:
     assert "temp_dir" in sig.parameters, (
         "create_run_dir must accept temp_dir as an explicit keyword argument"
     )
-    required = [p for p in sig.parameters.values() if p.default is inspect.Parameter.empty]
-    assert len(required) >= 1
+    assert sig.parameters["temp_dir"].default is inspect.Parameter.empty, (
+        "temp_dir must be a required parameter (no default)"
+    )
 
 
 def test_create_run_dir_does_not_read_environ(tmp_path, monkeypatch) -> None:

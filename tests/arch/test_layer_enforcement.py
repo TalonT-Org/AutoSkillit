@@ -1170,7 +1170,9 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/execution/test_zero_write_detection.py": frozenset({"autoskillit.recipe"}),
     # quota tests cross into config to validate the contract between vocab constants
     # (execution layer) and config defaults — intentional, documented cross-ref
-    "tests/execution/test_quota.py": frozenset({"autoskillit.hooks", "autoskillit.config"}),
+    "tests/execution/test_quota_binding.py": frozenset({"autoskillit.config"}),
+    "tests/execution/test_quota_io.py": frozenset({"autoskillit.config"}),
+    "tests/execution/test_quota_sleep.py": frozenset({"autoskillit.hooks", "autoskillit.config"}),
     "tests/execution/test_quota_http.py": frozenset({"autoskillit.config"}),
     # workspace tests
     "tests/workspace/test_clone_ci_contract.py": frozenset({"autoskillit.execution"}),
@@ -1184,8 +1186,8 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/migration/test_engine.py": frozenset({"autoskillit.execution"}),
     # fleet e2e test exercises execution + cli layers end-to-end
     "tests/fleet/test_fleet_e2e.py": frozenset({"autoskillit.execution", "autoskillit.cli"}),
-    # session_log tests verify callback injection into _enforce_retention — needs fleet.state
-    "tests/execution/test_session_log.py": frozenset({"autoskillit.fleet"}),
+    # session_log retention tests verify callback injection into _enforce_retention — needs fleet.state
+    "tests/execution/test_session_log_retention.py": frozenset({"autoskillit.fleet"}),
 }
 
 

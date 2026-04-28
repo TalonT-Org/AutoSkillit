@@ -1,0 +1,599 @@
+"""Tests for flush_session_log: directory structure, proc-trace, summary/index,
+resolve_log_dir, temporal fields, duration/elapsed time, sidecars, schemas,
+proc-trace comm, and clear-marker roundtrip."""
+
+from __future__ import annotations
+
+import json
+import os
+from datetime import UTC, datetime
+from pathlib import Path
+
+import pytest
+
+from autoskillit.execution.session_log import (
+    flush_session_log,
+    read_telemetry_clear_marker,
+    resolve_log_dir,
+    write_telemetry_clear_marker,
+)
+from tests.execution.conftest import _flush, _snap
+
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
+
+
+def test_flush_session_log_creates_directory_structure(tmp_path):
+    """Flush creates the expected directory structure."""
+    _flush(tmp_path)
+    session_dir = tmp_path / "sessions" / "test-session-001"
+    assert session_dir.is_dir()
+    assert (session_dir / "proc_trace.jsonl").is_file()
+    assert (session_dir / "summary.json").is_file()
+    assert (tmp_path / "sessions.jsonl").is_file()
+
+
+def test_flush_session_log_writes_proc_trace_as_jsonl(tmp_path):
+    """proc_trace.jsonl has exactly 3 lines, each valid JSON."""
+    _flush(tmp_path)
+    trace_path = tmp_path / "sessions" / "test-session-001" / "proc_trace.jsonl"
+    lines = trace_path.read_text().strip().split("\n")
+    assert len(lines) == 3
+    for i, line in enumerate(lines):
+        record = json.loads(line)
+        assert record["seq"] == i
+        assert record["event"] == "snapshot"
+        assert record["pid"] == 12345
+        assert "vm_rss_kb" in record
+
+
+def test_flush_session_log_writes_summary_json(tmp_path):
+    """summary.json contains expected session metadata."""
+    _flush(tmp_path)
+    summary_path = tmp_path / "sessions" / "test-session-001" / "summary.json"
+    summary = json.loads(summary_path.read_text())
+    assert summary["session_id"] == "test-session-001"
+    assert summary["pid"] == 12345
+    assert summary["success"] is True
+    assert summary["snapshot_count"] == 3
+    assert summary["cwd"] == "/home/test/project"
+    assert "peak_rss_kb" in summary
+    assert "peak_oom_score" in summary
+
+
+def test_flush_session_log_creates_anomalies_file_only_when_anomalies_exist(tmp_path):
+    """anomalies.jsonl is only created when anomalies are detected."""
+    # Normal snapshots — no anomalies
+    _flush(tmp_path, session_id="normal-session")
+    anomalies_path = tmp_path / "sessions" / "normal-session" / "anomalies.jsonl"
+    assert not anomalies_path.exists()
+
+    # Snapshots with OOM critical — should create anomalies
+    _flush(
+        tmp_path,
+        session_id="anomaly-session",
+        proc_snapshots=[_snap(oom_score=900)],
+    )
+    anomalies_path = tmp_path / "sessions" / "anomaly-session" / "anomalies.jsonl"
+    assert anomalies_path.is_file()
+    lines = anomalies_path.read_text().strip().split("\n")
+    assert len(lines) == 1
+    record = json.loads(lines[0])
+    assert record["kind"] == "oom_critical"
+
+
+def test_flush_session_log_appends_to_index(tmp_path):
+    """Two flushes produce exactly 2 lines in sessions.jsonl."""
+    _flush(tmp_path, session_id="session-a")
+    _flush(tmp_path, session_id="session-b")
+    index_path = tmp_path / "sessions.jsonl"
+    lines = [ln for ln in index_path.read_text().strip().split("\n") if ln.strip()]
+    assert len(lines) == 2
+    a = json.loads(lines[0])
+    b = json.loads(lines[1])
+    assert a["session_id"] == "session-a"
+    assert b["session_id"] == "session-b"
+
+
+def test_flush_session_log_fallback_dirname_when_no_session_id(tmp_path):
+    """Empty session_id falls back to no_session_ prefix with timestamp."""
+    _flush(tmp_path, session_id="", pid=99999, start_ts="2026-03-03T12:00:00+00:00")
+    sessions_dir = tmp_path / "sessions"
+    dirs = list(sessions_dir.iterdir())
+    assert len(dirs) == 1
+    dir_name = dirs[0].name
+    assert dir_name.startswith("no_session_")
+    assert "2026" in dir_name
+
+
+def test_flush_session_log_uses_resolved_session_id(tmp_path):
+    """flush_session_log uses the caller-resolved session_id for dir name."""
+    _flush(tmp_path, session_id="chan-b-uuid-123")
+    session_dir = tmp_path / "sessions" / "chan-b-uuid-123"
+    assert session_dir.is_dir()
+    summary = json.loads((session_dir / "summary.json").read_text())
+    assert summary["session_id"] == "chan-b-uuid-123"
+
+
+def test_flush_summary_includes_claude_code_log_for_real_session(tmp_path):
+    """Flush with a real session_id produces claude_code_log in summary.json."""
+    _flush(tmp_path, session_id="real-session-abc", cwd="/home/test/project")
+    summary = json.loads((tmp_path / "sessions" / "real-session-abc" / "summary.json").read_text())
+    expected = str(
+        Path.home() / ".claude" / "projects" / "-home-test-project" / "real-session-abc.jsonl"
+    )
+    assert summary["claude_code_log"] == expected
+
+
+def test_flush_summary_claude_code_log_null_for_fallback_session(tmp_path):
+    """Flush with empty session_id produces claude_code_log: null in summary.json."""
+    _flush(tmp_path, session_id="")
+    sessions_dir = tmp_path / "sessions"
+    session_dir = next(sessions_dir.iterdir())
+    summary = json.loads((session_dir / "summary.json").read_text())
+    assert summary["claude_code_log"] is None
+
+
+def test_flush_index_includes_claude_code_log(tmp_path):
+    """sessions.jsonl index entry includes claude_code_log for real sessions."""
+    _flush(tmp_path, session_id="idx-session-xyz", cwd="/home/test/project")
+    index_path = tmp_path / "sessions.jsonl"
+    entry = json.loads(index_path.read_text().strip().split("\n")[-1])
+    expected = str(
+        Path.home() / ".claude" / "projects" / "-home-test-project" / "idx-session-xyz.jsonl"
+    )
+    assert entry["claude_code_log"] == expected
+
+
+def test_flush_index_claude_code_log_null_for_fallback(tmp_path):
+    """sessions.jsonl index entry has claude_code_log: null for fallback sessions."""
+    _flush(tmp_path, session_id="")
+    index_path = tmp_path / "sessions.jsonl"
+    entry = json.loads(index_path.read_text().strip().split("\n")[-1])
+    assert entry["claude_code_log"] is None
+
+
+def test_flush_session_log_handles_empty_snapshots(tmp_path):
+    """proc_snapshots=None produces no proc_trace.jsonl but summary is still written."""
+    _flush(tmp_path, proc_snapshots=None)
+    session_dir = tmp_path / "sessions" / "test-session-001"
+    assert not (session_dir / "proc_trace.jsonl").exists()
+    assert (session_dir / "summary.json").is_file()
+    summary = json.loads((session_dir / "summary.json").read_text())
+    assert summary["snapshot_count"] == 0
+
+
+def test_flush_session_log_retention_purges_oldest(tmp_path):
+    """After 503 sessions, only 500 remain and the 3 oldest are gone."""
+
+    # Create 502 session directories with staggered mtimes
+    sessions_dir = tmp_path / "sessions"
+    sessions_dir.mkdir(parents=True)
+    index_path = tmp_path / "sessions.jsonl"
+
+    for i in range(502):
+        dir_name = f"session-{i:04d}"
+        d = sessions_dir / dir_name
+        d.mkdir()
+        (d / "summary.json").write_text("{}")
+        # Set mtime to ensure ordering
+        mtime = 1000000000 + i
+
+        os.utime(d, (mtime, mtime))
+        with index_path.open("a") as f:
+            f.write(json.dumps({"session_id": dir_name, "dir_name": dir_name}) + "\n")
+
+    # Flush a 503rd session
+    _flush(tmp_path, session_id="session-0502")
+
+    remaining = list(sessions_dir.iterdir())
+    assert len(remaining) == 500
+
+    # The 3 oldest (session-0000, session-0001, session-0002) should be gone
+    assert not (sessions_dir / "session-0000").exists()
+    assert not (sessions_dir / "session-0001").exists()
+    assert not (sessions_dir / "session-0002").exists()
+
+    # The newest should still be there
+    assert (sessions_dir / "session-0502").exists()
+
+    # Index should only contain entries for surviving sessions
+    index_lines = [ln for ln in index_path.read_text().strip().split("\n") if ln.strip()]
+    assert len(index_lines) == 500
+
+
+# --- resolve_log_dir tests ---
+
+
+def test_resolve_log_dir_default_linux(monkeypatch):
+    """Empty log_dir on Linux (no XDG_DATA_HOME) uses ~/.local/share/autoskillit/logs."""
+    monkeypatch.setattr("autoskillit.execution.session_log.sys.platform", "linux")
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+    result = resolve_log_dir("")
+    assert result == Path.home() / ".local" / "share" / "autoskillit" / "logs"
+
+
+def test_resolve_log_dir_xdg_override(monkeypatch):
+    """XDG_DATA_HOME override is respected."""
+    monkeypatch.setattr("autoskillit.execution.session_log.sys.platform", "linux")
+    monkeypatch.setenv("XDG_DATA_HOME", "/custom/xdg")
+    result = resolve_log_dir("")
+    assert result == Path("/custom/xdg/autoskillit/logs")
+
+
+def test_resolve_log_dir_explicit_override():
+    """Explicit log_dir is used as-is."""
+    result = resolve_log_dir("/custom/path")
+    assert result == Path("/custom/path")
+
+
+def test_proc_trace_timestamps_are_per_snapshot_not_session_start(tmp_path):
+    """Each snapshot record must carry its own captured_at time, not the session start."""
+    ts1 = "2026-03-03T12:00:00+00:00"
+    ts2 = "2026-03-03T12:00:05+00:00"
+    ts3 = "2026-03-03T12:00:10+00:00"
+    snaps = [
+        _snap(captured_at=ts1),
+        _snap(captured_at=ts2),
+        _snap(captured_at=ts3),
+    ]
+    _flush(tmp_path, proc_snapshots=snaps, start_ts="2026-03-03T12:00:00+00:00")
+
+    session_dir = tmp_path / "sessions" / "test-session-001"
+    records = [
+        json.loads(line) for line in (session_dir / "proc_trace.jsonl").read_text().splitlines()
+    ]
+    assert records[0]["ts"] == ts1
+    assert records[1]["ts"] == ts2
+    assert records[2]["ts"] == ts3
+    # All three must differ — not the session start repeated
+    assert len({r["ts"] for r in records}) == 3
+
+
+def test_summary_contains_temporal_completion_fields(tmp_path):
+    """summary.json must record when the session ended and how long it ran."""
+    _flush(
+        tmp_path,
+        start_ts="2026-03-03T12:00:00+00:00",
+        end_ts="2026-03-03T12:05:00+00:00",
+        termination_reason="completed",
+        snapshot_interval_seconds=5.0,
+    )
+    session_dir = tmp_path / "sessions" / "test-session-001"
+    summary = json.loads((session_dir / "summary.json").read_text())
+
+    assert summary["end_ts"] == "2026-03-03T12:05:00+00:00"
+    assert summary["duration_seconds"] == pytest.approx(300.0)
+    assert summary["termination_reason"] == "completed"
+    assert summary["snapshot_interval_seconds"] == 5.0
+
+
+# --- termination_reason tests ---
+
+
+def test_flush_includes_termination_reason(tmp_path):
+    """summary.json includes termination_reason when provided."""
+    _flush(tmp_path, session_id="crash-session", termination_reason="CRASHED")
+    session_dir = tmp_path / "sessions" / "crash-session"
+    summary = json.loads((session_dir / "summary.json").read_text())
+    assert summary["termination_reason"] == "CRASHED"
+
+
+def test_flush_termination_reason_defaults_to_empty(tmp_path):
+    """summary.json has termination_reason = '' when not provided."""
+    _flush(tmp_path, session_id="normal-session")
+    session_dir = tmp_path / "sessions" / "normal-session"
+    summary = json.loads((session_dir / "summary.json").read_text())
+    assert summary["termination_reason"] == ""
+
+
+def test_proc_trace_uses_snapshot_captured_at(tmp_path):
+    """proc_trace.jsonl ts field equals snapshot captured_at, not start_ts."""
+    snap = dict(_snap(), captured_at="2026-03-03T10:00:00+00:00")
+    _flush(
+        tmp_path,
+        session_id="ts-test",
+        proc_snapshots=[snap],
+        start_ts="2026-03-03T09:00:00+00:00",
+    )
+    trace_path = tmp_path / "sessions" / "ts-test" / "proc_trace.jsonl"
+    records = [json.loads(line) for line in trace_path.read_text().splitlines()]
+    assert records[0]["ts"] == "2026-03-03T10:00:00+00:00"
+
+
+def test_proc_trace_falls_back_to_start_ts_when_no_captured_at(tmp_path):
+    """proc_trace.jsonl ts falls back to start_ts when captured_at is absent."""
+    snap = {k: v for k, v in _snap().items() if k != "captured_at"}  # no captured_at key
+    _flush(
+        tmp_path,
+        session_id="fallback-ts",
+        proc_snapshots=[snap],
+        start_ts="2026-03-03T09:00:00+00:00",
+    )
+    trace_path = tmp_path / "sessions" / "fallback-ts" / "proc_trace.jsonl"
+    records = [json.loads(line) for line in trace_path.read_text().splitlines()]
+    assert records[0]["ts"] == "2026-03-03T09:00:00+00:00"
+
+
+def test_flush_session_log_backward_clock_produces_non_negative_duration(tmp_path):
+    """duration_seconds must never be negative, even if end_ts precedes start_ts."""
+    start_ts = "2026-01-01T12:05:00+00:00"  # later
+    end_ts = "2026-01-01T12:00:00+00:00"  # earlier — backward clock
+    flush_session_log(
+        log_dir=str(tmp_path),
+        cwd="/tmp",
+        session_id="backward-clock-test",
+        pid=1,
+        skill_command="/test",
+        success=True,
+        subtype="completed",
+        exit_code=0,
+        start_ts=start_ts,
+        end_ts=end_ts,
+        proc_snapshots=[],
+        termination_reason="completed",
+        snapshot_interval_seconds=5.0,
+    )
+    session_dir = tmp_path / "sessions" / "backward-clock-test"
+    summary = json.loads((session_dir / "summary.json").read_text())
+    assert summary["duration_seconds"] >= 0, (
+        f"duration_seconds must not be negative, got {summary['duration_seconds']}"
+    )
+
+
+def test_flush_session_log_uses_elapsed_seconds_over_iso_subtraction(tmp_path):
+    """When elapsed_seconds is provided, it is used as duration_seconds, not ISO subtraction."""
+    start_ts = "2026-01-01T12:00:00+00:00"
+    end_ts = "2026-01-01T12:00:05+00:00"  # ISO implies 5.0s
+    flush_session_log(
+        log_dir=str(tmp_path),
+        cwd="/tmp",
+        session_id="elapsed-seconds-test",
+        pid=1,
+        skill_command="/test",
+        success=True,
+        subtype="completed",
+        exit_code=0,
+        start_ts=start_ts,
+        end_ts=end_ts,
+        elapsed_seconds=12.5,  # monotonic says 12.5s
+        proc_snapshots=[],
+        termination_reason="completed",
+        snapshot_interval_seconds=5.0,
+    )
+    session_dir = tmp_path / "sessions" / "elapsed-seconds-test"
+    summary = json.loads((session_dir / "summary.json").read_text())
+    assert summary["duration_seconds"] == pytest.approx(12.5), (
+        "elapsed_seconds param must override ISO subtraction"
+    )
+
+
+def test_flush_session_log_zero_elapsed_seconds_is_valid(tmp_path):
+    """elapsed_seconds=0.0 is falsy but must be used as duration_seconds.
+
+    Must not fall through to ISO subtraction when elapsed_seconds is 0.0.
+    """
+    start_ts = "2026-01-01T12:00:00+00:00"
+    end_ts = "2026-01-01T12:00:05+00:00"  # ISO implies 5.0s
+    flush_session_log(
+        log_dir=str(tmp_path),
+        cwd="/tmp",
+        session_id="zero-elapsed-test",
+        pid=1,
+        skill_command="/test",
+        success=True,
+        subtype="completed",
+        exit_code=0,
+        start_ts=start_ts,
+        end_ts=end_ts,
+        elapsed_seconds=0.0,  # explicit zero — must not fall through to ISO subtraction
+        proc_snapshots=[],
+        termination_reason="completed",
+        snapshot_interval_seconds=5.0,
+    )
+    session_dir = tmp_path / "sessions" / "zero-elapsed-test"
+    summary = json.loads((session_dir / "summary.json").read_text())
+    assert summary["duration_seconds"] == 0.0
+
+
+# --- telemetry persistence tests ---
+
+
+def test_flush_writes_token_usage_json_when_step_provided(tmp_path):
+    """token_usage.json appears in session dir when step_name + token_usage given."""
+    _flush(
+        tmp_path,
+        step_name="implement",
+        token_usage={"input_tokens": 100, "output_tokens": 50},
+        proc_snapshots=None,
+        success=False,
+    )
+    session_dir = tmp_path / "sessions" / "test-session-001"
+    assert (session_dir / "token_usage.json").is_file()
+
+
+def test_flush_omits_token_usage_json_when_no_step_name(tmp_path):
+    """token_usage.json is NOT written when step_name is empty, even if token_usage provided."""
+    _flush(
+        tmp_path,
+        step_name="",
+        token_usage={"input_tokens": 100},
+        proc_snapshots=None,
+        success=False,
+    )
+    session_dir = tmp_path / "sessions" / "test-session-001"
+    assert not (session_dir / "token_usage.json").exists()
+
+
+def test_flush_writes_step_timing_json(tmp_path):
+    """step_timing.json appears when step_name and timing_seconds > 0 provided."""
+    _flush(
+        tmp_path, step_name="implement", timing_seconds=42.5, proc_snapshots=None, success=False
+    )
+    session_dir = tmp_path / "sessions" / "test-session-001"
+    assert (session_dir / "step_timing.json").is_file()
+
+
+# ---------------------------------------------------------------------------
+# Test 1.10 — proc_trace.jsonl rows self-identify with comm field
+# ---------------------------------------------------------------------------
+
+
+def test_proc_trace_jsonl_rows_include_comm(tmp_path):
+    """proc_trace.jsonl rows must include a 'comm' field for post-hoc drift detection.
+
+    Test 1.10: after flush_session_log, every row in proc_trace.jsonl must carry
+    the process identity (comm). This makes any drift visible to anyone triaging
+    a session log — any row lacking comm is a drift indicator.
+    """
+    snaps = [
+        {**_snap(), "comm": "claude"},
+        {**_snap(), "comm": "claude"},
+        {**_snap(), "comm": "claude"},
+    ]
+    _flush(tmp_path, proc_snapshots=snaps, session_id="comm-test-001")
+
+    trace_path = tmp_path / "sessions" / "comm-test-001" / "proc_trace.jsonl"
+    assert trace_path.exists()
+    rows = [json.loads(line) for line in trace_path.read_text().splitlines()]
+    for i, row in enumerate(rows):
+        assert "comm" in row, (
+            f"Row {i} in proc_trace.jsonl is missing 'comm' field. "
+            "Every snapshot row must self-identify the traced process."
+        )
+        assert row["comm"] == "claude", f"Expected comm='claude' in row {i}, got {row['comm']!r}"
+
+
+def test_flush_writes_audit_log_json(tmp_path):
+    """audit_log.json written to session dir when step_name and audit_record dict provided."""
+    record = {
+        "timestamp": "2026-01-01T00:00:00Z",
+        "skill_command": "/foo",
+        "exit_code": 1,
+        "subtype": "error",
+        "needs_retry": False,
+        "retry_reason": "none",
+        "stderr": "oops",
+    }
+    _flush(
+        tmp_path, step_name="implement", audit_record=record, proc_snapshots=None, success=False
+    )
+    session_dir = tmp_path / "sessions" / "test-session-001"
+    assert (session_dir / "audit_log.json").is_file()
+
+
+def test_flush_omits_audit_log_when_no_record(tmp_path):
+    """audit_log.json NOT written when audit_record=None."""
+    _flush(tmp_path, audit_record=None, proc_snapshots=None, step_name="implement", success=False)
+    session_dir = tmp_path / "sessions" / "test-session-001"
+    assert not (session_dir / "audit_log.json").exists()
+
+
+def test_flush_index_includes_step_name_and_token_fields(tmp_path):
+    """sessions.jsonl entry has step_name, input_tokens, output_tokens fields."""
+    _flush(
+        tmp_path,
+        step_name="implement",
+        token_usage={"input_tokens": 100, "output_tokens": 50},
+        proc_snapshots=None,
+        success=False,
+    )
+    lines = (tmp_path / "sessions.jsonl").read_text().strip().split("\n")
+    entry = json.loads(lines[-1])
+    assert entry["step_name"] == "implement"
+    assert entry["input_tokens"] == 100
+    assert entry["output_tokens"] == 50
+
+
+def test_flush_index_token_fields_zero_when_no_step(tmp_path):
+    """sessions.jsonl entry has step_name='' and token fields=0 when no step telemetry."""
+    _flush(tmp_path, proc_snapshots=None, success=False)  # no step_name
+    lines = (tmp_path / "sessions.jsonl").read_text().strip().split("\n")
+    entry = json.loads(lines[-1])
+    assert entry["step_name"] == ""
+    assert entry["input_tokens"] == 0
+    assert entry["output_tokens"] == 0
+
+
+def test_token_usage_json_schema(tmp_path):
+    """token_usage.json contains all expected fields."""
+    _flush(
+        tmp_path,
+        step_name="plan",
+        token_usage={
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "cache_creation_input_tokens": 2,
+            "cache_read_input_tokens": 1,
+        },
+        timing_seconds=15.0,
+        proc_snapshots=None,
+        success=False,
+    )
+    tu = json.loads((tmp_path / "sessions" / "test-session-001" / "token_usage.json").read_text())
+    assert tu["step_name"] == "plan"
+    assert tu["input_tokens"] == 10
+    assert tu["output_tokens"] == 5
+    assert tu["cache_creation_input_tokens"] == 2
+    assert tu["cache_read_input_tokens"] == 1
+    assert tu["timing_seconds"] == 15.0
+
+
+def test_step_timing_json_schema(tmp_path):
+    """step_timing.json contains step_name and total_seconds."""
+    _flush(tmp_path, step_name="plan", timing_seconds=20.0, proc_snapshots=None, success=False)
+    st = json.loads((tmp_path / "sessions" / "test-session-001" / "step_timing.json").read_text())
+    assert st["step_name"] == "plan"
+    assert st["total_seconds"] == 20.0
+
+
+def test_audit_log_json_schema(tmp_path):
+    """audit_log.json contains list with expected failure record fields."""
+    record = {
+        "timestamp": "2026-01-01T00:00:00Z",
+        "skill_command": "/foo",
+        "exit_code": 1,
+        "subtype": "error",
+        "needs_retry": False,
+        "retry_reason": "none",
+        "stderr": "bad",
+    }
+    _flush(
+        tmp_path, step_name="implement", audit_record=record, proc_snapshots=None, success=False
+    )
+    al = json.loads((tmp_path / "sessions" / "test-session-001" / "audit_log.json").read_text())
+    assert isinstance(al, list)
+    assert len(al) == 1
+    assert al[0]["skill_command"] == "/foo"
+    assert al[0]["exit_code"] == 1
+
+
+# Clear marker tests
+
+
+def test_write_read_clear_marker_roundtrip(tmp_path):
+    before = datetime.now(UTC)
+    write_telemetry_clear_marker(tmp_path)
+    after = datetime.now(UTC)
+    result = read_telemetry_clear_marker(tmp_path)
+    assert result is not None
+    assert before <= result <= after
+
+
+def test_read_clear_marker_missing_returns_none(tmp_path):
+    assert read_telemetry_clear_marker(tmp_path) is None
+
+
+def test_read_clear_marker_corrupt_returns_none(tmp_path):
+    (tmp_path / ".telemetry_cleared_at").write_text("not-a-date")
+    assert read_telemetry_clear_marker(tmp_path) is None
+
+
+def test_write_clear_marker_is_atomic(tmp_path):
+    # Calling write twice does not corrupt — second write wins
+    write_telemetry_clear_marker(tmp_path)
+    t1 = read_telemetry_clear_marker(tmp_path)
+    write_telemetry_clear_marker(tmp_path)
+    t2 = read_telemetry_clear_marker(tmp_path)
+    assert t1 is not None
+    assert t2 is not None
+    assert t2 >= t1

@@ -45,3 +45,16 @@ def test_skill_resolver_satisfies_skill_lister() -> None:
 
     instance: SkillLister = DefaultSkillResolver()
     assert callable(instance.list_all)
+
+
+def test_recipe_repository_load_and_validate_project_dir_annotation() -> None:
+    import typing
+    from pathlib import Path
+
+    from autoskillit.core._type_protocols_recipe import RecipeRepository
+
+    hints = typing.get_type_hints(RecipeRepository.load_and_validate)
+    ann = hints["project_dir"]
+    args = typing.get_args(ann)
+    assert Path in args, f"Expected Path in annotation args, got: {ann}"
+    assert str in args, f"Expected str in annotation args, got: {ann}"

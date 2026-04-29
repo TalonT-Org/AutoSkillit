@@ -16,7 +16,6 @@ from ._type_enums import ChannelConfirmation, KillReason, TerminationReason
 __all__ = [
     "SubprocessResult",
     "SubprocessRunner",
-    "_TERMINATION_CONTRACT",
 ]
 
 #: Semantic contract for SubprocessResult fields per TerminationReason.

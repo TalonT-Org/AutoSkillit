@@ -224,3 +224,21 @@ def test_in_memory_recipe_repo_rejects_recipe_objects() -> None:
     repo = InMemoryRecipeRepository()
     with pytest.raises(TypeError, match="RecipeInfo"):
         repo.add_recipe("x", Recipe(name="x", description="x"))
+
+
+def test_load_and_validate_coerces_str_project_dir_to_path(tmp_path: Path) -> None:
+    mock_api = MagicMock(return_value={})
+    foo = _make_recipe_info("test-recipe", tmp_path / "test-recipe.yaml")
+    str_dir = str(tmp_path)
+
+    with patch("autoskillit.recipe._api.load_and_validate", mock_api):
+        with patch("autoskillit.recipe.repository.list_recipes", return_value=_load_result(foo)):
+            with patch("autoskillit.recipe.repository._dir_mtime", return_value=1.0):
+                repo = DefaultRecipeRepository()
+                repo.load_and_validate("test-recipe", str_dir)
+
+    call_kwargs = mock_api.call_args
+    assert isinstance(call_kwargs.kwargs["project_dir"], Path), (
+        f"Expected Path, got {type(call_kwargs.kwargs['project_dir'])}"
+    )
+    assert call_kwargs.kwargs["project_dir"] == tmp_path

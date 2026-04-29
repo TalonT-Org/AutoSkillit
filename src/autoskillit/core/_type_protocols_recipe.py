@@ -29,7 +29,7 @@ class RecipeRepository(Protocol):
     def load_and_validate(
         self,
         name: str,
-        project_dir: Any,
+        project_dir: Path | str,
         *,
         suppressed: Sequence[str] | None = None,
         resolved_defaults: dict[str, str] | None = None,

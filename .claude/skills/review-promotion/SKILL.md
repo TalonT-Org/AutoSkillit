@@ -42,20 +42,6 @@ posts the review report as a PR comment.
 **ALWAYS:**
 - Output `report_path = <absolute path>` as a structured token (absolute path, prepend CWD)
 - Output `verdict = <value>` as a structured token
-- Include Subagent Autonomy Grant in every Task tool prompt
-- Grant every subagent explicit permission to spawn their own sub-subagents
-
-## Subagent Autonomy Grant
-
-Every subagent spawned by this skill receives this standing instruction:
-
-> You may spawn additional subagents (Task tool, model: sonnet) at your discretion
-> to parallelize your research, fill gaps you discover during analysis, or decompose
-> large tasks into focused sub-investigations. You do not need permission — use your
-> judgment about when deeper exploration would improve the quality of your findings.
-
-Include this grant verbatim in every Task tool prompt throughout this skill.
-
 ## Workflow
 
 ### Phase 0: Setup
@@ -152,7 +138,7 @@ Store as `domain_pr_numbers`.
 #### Step 1.5: Parallel Domain Analysis Subagents
 
 For each domain `D` in `domain_diffs`, spawn a Task subagent (model: sonnet) in a
-single parallel message. **Include the Subagent Autonomy Grant in each prompt.**
+single parallel message.
 
 Each subagent receives:
 - Domain name and file list
@@ -179,7 +165,6 @@ Each subagent returns ONLY a JSON object:
 #### Step 1.6: Cross-Domain Dependency Analysis
 
 Spawn one Task subagent (model: sonnet) with ALL domain summaries from Step 1.5.
-**Include the Subagent Autonomy Grant.**
 
 Analyze cross-domain dependencies:
 - Do recipe schema changes require corresponding server tool updates?
@@ -198,8 +183,7 @@ Return JSON:
 
 ### Phase 2: Quality Assessment (parallel subagents)
 
-Spawn three parallel Task subagents (model: sonnet). **Include the Subagent Autonomy
-Grant in each prompt.**
+Spawn three parallel Task subagents (model: sonnet).
 
 #### Subagent 2A: Test Coverage Delta
 
@@ -282,7 +266,6 @@ Return JSON:
 ### Phase 3: Review Summary Synthesis
 
 Spawn one Task subagent (model: sonnet) with ALL results from Phases 1–2.
-**Include the Subagent Autonomy Grant.**
 
 The subagent synthesizes a reviewer-focused verdict based on:
 - Domain risk scores from Phase 1

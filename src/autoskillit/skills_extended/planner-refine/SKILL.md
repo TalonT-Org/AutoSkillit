@@ -1,7 +1,7 @@
 ---
 name: planner-refine
 categories: [planner]
-description: Targeted fix of validate_plan findings — re-elaboration, sizing adjustments, dependency corrections
+description: Targeted fix of validate_plan findings — re-elaboration, duplicate resolution, dependency corrections
 hooks:
   PreToolUse:
     - matcher: "*"
@@ -14,9 +14,9 @@ hooks:
 # planner-refine
 
 Targeted repair of `validate_plan` findings. Loads `validation.json` and repairs each
-finding type: re-elaborates failed WPs, splits or merges sizing violations, resolves
-duplicate deliverable ownership, and fixes dependency reference errors. Writes corrected
-artifacts back to the output directory so `validate_plan` can re-run.
+finding type: re-elaborates failed WPs, resolves duplicate deliverable ownership, and
+fixes dependency reference errors. Sizing violations are escalated as CRITICAL. Writes
+corrected artifacts back to the output directory so `validate_plan` can re-run.
 
 The recipe runs this skill with `retries: 2` — up to 3 total attempts (1 initial + 2
 retries) before escalation.
@@ -36,13 +36,13 @@ retries) before escalation.
 **NEVER:**
 - Attempt to auto-fix missing assignments or missing WPs — these require human review
 - Remove a deliverable without reassigning it to another WP
-- Introduce new WP IDs without updating both `wp_manifest.json` and `wp_index.json`
+- Introduce new WP IDs — the skill never creates WPs; it repairs or escalates existing ones
 
 **ALWAYS:**
 - Load `validation.json` before reading any artifact
 - Fix all addressable finding types in a single pass
 - Update `wp_manifest.json` and `wp_index.json` whenever WP structure changes
-- Escalate missing structural elements, malformed WP IDs, and DAG cycles as CRITICAL (write to stdout; do not count toward issues_fixed)
+- Escalate sizing violations, missing structural elements, malformed WP IDs, and DAG cycles as CRITICAL (write to stdout; do not count toward issues_fixed)
 - Emit both `refinement_complete` and `issues_fixed` output tokens
 
 ## Workflow
@@ -77,15 +77,16 @@ dicts). Extract the `message` field from each finding for classification. Group 
 - Sub-agent appends corrected compact entry to `wp_index.json`
 - Update the WP status in `wp_manifest.json` from `failed` to `done`
 
-**Sizing violations** — split or merge:
-- WPs with >5 deliverables: split into two sibling WPs
-  - Divide deliverables and `files_touched` between the two WPs (roughly equal split)
-  - Assign a suffix to the new WP IDs (e.g., `P1-A2-WP3` → `P1-A2-WP3a` + `P1-A2-WP3b`)
-  - Add both to `wp_manifest.json` and append both compact entries to `wp_index.json`
-  - Remove the original oversized WP from both artifacts
-- WPs with 0 deliverables: merge into the nearest sibling WP in the same assignment
-  - Transfer `technical_steps` and `files_touched` to the sibling WP's result file
-  - Remove the empty WP from `wp_manifest.json` and `wp_index.json`
+**Sizing violations** — escalate:
+- Findings matching `WP .* has \d+ deliverables` indicate WPs outside the 1–5 deliverable
+  sizing bound. Cannot be auto-corrected — the implementation recipe handles re-splitting
+  downstream.
+```
+CRITICAL: Cannot auto-fix sizing violation:
+- {finding text}
+Manual review of WP deliverable allocation required.
+```
+Write this to stdout. Do NOT attempt WP splitting or merging.
 
 **Duplicate deliverables** — resolve ownership:
 - For each duplicated file path, assign ownership to the WP whose scope most directly
@@ -143,7 +144,7 @@ refinement_complete = true
 issues_fixed = <N>
 ```
 
-`N` = count of findings addressed from the `findings` array (failed_wps + sizing_violations +
-duplicate_deliverables + dep_references). Missing-element, malformed-ID, and DAG-cycle findings
-are excluded from the count (they are escalated as critical, not fixed). Files-touched overlap
-findings are in the `warnings` array and are not actionable.
+`N` = count of findings addressed from the `findings` array (failed_wps +
+duplicate_deliverables + dep_references). Sizing-violation, missing-element, malformed-ID,
+and DAG-cycle findings are excluded from the count (they are escalated as critical, not
+fixed). Files-touched overlap findings are in the `warnings` array and are not actionable.

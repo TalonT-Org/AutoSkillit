@@ -376,7 +376,7 @@ def test_planner_skill_example_paths_are_run_scoped(skill_name: str) -> None:
     content = skill_md.read_text()
     for lineno, line in enumerate(content.splitlines(), 1):
         if "e.g.," in line and "{{AUTOSKILLIT_TEMP}}/planner" in line:
-            if "run-" not in line:
+            if "planner/run-" not in line:
                 pytest.fail(
                     f"{skill_name}/SKILL.md line {lineno} shows bare "
                     f"'{{{{AUTOSKILLIT_TEMP}}}}/planner' as example. "

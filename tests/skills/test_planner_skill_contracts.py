@@ -24,6 +24,7 @@ ALL_PLANNER_SKILLS = [
     "planner-refine-phases",
     "planner-refine-assignments",
     "planner-refine-wps",
+    "planner-validate-task-alignment",
 ]
 
 
@@ -284,3 +285,60 @@ def test_elaborate_wps_contract_two_inputs() -> None:
     )
     input_names = {i.get("name") for i in inputs}
     assert input_names == {"context_file", "planner_dir"}
+
+
+# --- Task-blindness fix tests ---
+
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.small]
+
+
+def test_generate_phases_skill_references_planner_task():
+    content = (SKILLS_ROOT / "planner-generate-phases" / "SKILL.md").read_text()
+    assert "PLANNER_TASK" in content, "SKILL.md must document PLANNER_TASK env var"
+    assert "task" in content.lower(), "SKILL.md must instruct task-constrained phase generation"
+
+
+TASK_AWARE_SKILLS = [
+    "planner-elaborate-phase",
+    "planner-refine-phases",
+    "planner-elaborate-assignments",
+    "planner-refine-assignments",
+    "planner-elaborate-wps",
+    "planner-refine-wps",
+]
+
+
+@pytest.mark.parametrize("skill_name", TASK_AWARE_SKILLS)
+def test_downstream_skill_has_task_alignment_instruction(skill_name):
+    content = (SKILLS_ROOT / skill_name / "SKILL.md").read_text()
+    assert "task" in content.lower()
+    has_alignment = (
+        "scope creep" in content.lower()
+        or "task alignment" in content.lower()
+        or "serves the stated task" in content.lower()
+        or "requested by the task" in content.lower()
+    )
+    assert has_alignment, f"{skill_name} SKILL.md must contain task-alignment instruction"
+
+
+def test_validate_task_alignment_skill_exists():
+    skill_dir = SKILLS_ROOT / "planner-validate-task-alignment"
+    assert skill_dir.is_dir(), "planner-validate-task-alignment skill must exist"
+    skill_md = skill_dir / "SKILL.md"
+    assert skill_md.is_file(), "SKILL.md must exist"
+    content = skill_md.read_text()
+    parts = content.split("---", 2)
+    data = yaml.safe_load(parts[1])
+    assert "planner" in (data.get("categories") or [])
+    assert "warning" in content.lower(), "Must emit warning-severity findings"
+
+
+def test_generate_phases_has_read_guardrails():
+    content = (SKILLS_ROOT / "planner-generate-phases" / "SKILL.md").read_text()
+    has_guardrail = (
+        "do not explore parent" in content.lower()
+        or "do not read files outside" in content.lower()
+        or "only read files passed" in content.lower()
+        or "explore parent directories" in content.lower()
+    )
+    assert has_guardrail, "SKILL.md must contain filesystem read guardrails"

@@ -162,6 +162,33 @@ skills:
 
       %%ORDER_UP%%'
     write_behavior: always
+  planner-validate-task-alignment:
+    inputs:
+    - name: refined_wps_path
+      type: file_path
+      required: true
+      recommended: false
+    - name: refined_plan_path
+      type: file_path
+      required: true
+      recommended: false
+    - name: output_dir
+      type: directory_path
+      required: true
+      recommended: false
+    outputs:
+    - name: alignment_findings_path
+      type: file_path
+    - name: alignment_finding_count
+      type: str
+    expected_output_patterns:
+    - alignment_findings_path\s*=\s*\S+
+    - alignment_finding_count\s*=\s*\d+
+    pattern_examples:
+    - 'alignment_findings_path = /tmp/autoskillit/planner/run-20260101-120000/task_alignment.json
+
+      %%ORDER_UP%%'
+    write_behavior: always
   planner-reconcile-deps:
     inputs: []
     outputs: []
@@ -391,6 +418,17 @@ dataflow:
   - output_dir
   produced:
   - refined_wps_path
+- step: validate_task_alignment
+  available:
+  - combined_wps_path
+  - planner_dir
+  - refined_assignments_path
+  - refined_plan_path
+  - refined_wps_path
+  - source_dir
+  - task
+  required: []
+  produced: []
 - step: reconcile_deps
   available:
   - assignment_context_paths

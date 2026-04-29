@@ -42,6 +42,7 @@ cross-assignment WP ownership conflicts, applies field-level edits, and writes
 - Emit `refined_assignments_path` before writing `refined_assignments.json`
 - Skip emitting `refined_assignments_path` even if all L0s fail (write unchanged assignments, still emit)
 - Spawn more than 6 L0s in a single parallel batch
+- Read `.autoskillit/temp/` artifacts not passed as positional arguments
 
 **ALWAYS:**
 - Validate each L0 response for `assignment_id`, `changes` (array), `dependency_corrections` (array), `wp_proposal_adjustments` (array)
@@ -85,6 +86,10 @@ Input schema (PlanDocument with AssignmentElaborated assignments):
 ```
 
 ### Step 2: Build L0 context packets
+
+Read the `task` field from the combined assignments document. Each L0 subagent must verify
+that the assignment's goal, scope, and deliverables serve the stated task. Flag assignments
+that introduce work not requested by the task as scope creep.
 
 For each assignment, build a context packet containing:
 - The full serialized `combined_assignments.json` content (all peers visible)

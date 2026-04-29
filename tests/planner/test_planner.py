@@ -464,3 +464,69 @@ def test_replace_item_does_not_use_atomic_write(
     assert data["phases"][0]["name"] == "New"
     assert data["schema_version"] == 1
     spy.assert_not_called()
+
+
+# --- Task-blindness fix: expand functions include task in context ---
+
+
+def test_expand_assignments_includes_task_in_context(tmp_path: Path) -> None:
+    from autoskillit.planner.manifests import expand_assignments
+
+    refined = {
+        "task": "Split research.yaml into 4 sub-recipes",
+        "phases": [
+            {
+                "id": "P1",
+                "name": "Recipe Split",
+                "assignments_preview": [{"name": "Sub-recipe A"}, {"name": "Sub-recipe B"}],
+            }
+        ],
+    }
+    plan_path = tmp_path / "refined_plan.json"
+    plan_path.write_text(json.dumps(refined))
+    result = expand_assignments(refined_plan_path=str(plan_path), output_dir=str(tmp_path))
+    context_paths = result["context_paths"].split(",")
+    assert context_paths and context_paths[0], "Must produce at least one context path"
+    for cp in context_paths:
+        context = json.loads(Path(cp).read_text())
+        assert "task" in context, "Context file must include task field"
+        assert context["task"] == "Split research.yaml into 4 sub-recipes"
+
+
+def test_expand_wps_includes_task_in_context(tmp_path: Path) -> None:
+    from autoskillit.planner.manifests import expand_wps
+
+    refined = {
+        "schema_version": 2,
+        "task": "Add telemetry to fleet dispatch",
+        "source_dir": "/fake",
+        "assignments": [
+            {
+                "id": "P1-A1",
+                "phase_id": "P1",
+                "phase_number": 1,
+                "assignment_number": 1,
+                "name": "Telemetry",
+                "goal": "Add metrics",
+                "scope": ["fleet"],
+                "deliverables": ["fleet/_api.py"],
+                "proposed_work_packages": [
+                    {
+                        "id": "P1-A1-WP1",
+                        "name": "WP: Instrument dispatch",
+                        "scope": "fleet/_api.py",
+                        "estimated_files": ["fleet/_api.py"],
+                    }
+                ],
+            }
+        ],
+    }
+    plan_path = tmp_path / "refined_assignments.json"
+    plan_path.write_text(json.dumps(refined))
+    result = expand_wps(refined_assignments_path=str(plan_path), output_dir=str(tmp_path))
+    context_paths = result["context_paths"].split(",")
+    assert context_paths and context_paths[0], "Must produce at least one context path"
+    for cp in context_paths:
+        context = json.loads(Path(cp).read_text())
+        assert "task" in context, "Context file must include task field"
+        assert context["task"] == "Add telemetry to fleet dispatch"

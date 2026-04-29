@@ -31,6 +31,9 @@ is the sole writer for this phase's WPs — no concurrent write races.
 - Write output outside `$2/work_packages/`
 - Spawn L0s sequentially — always in parallel
 - Spawn more than 6 L0s in one batch — if WP count exceeds 6, use sequential batches of 6
+- Read `.autoskillit/temp/` artifacts outside your designated input files and output directory
+- Explore parent directories of your input paths (e.g., `ls $(dirname $1)/..`)
+- Read result files from other phases
 
 **ALWAYS:**
 - Spawn all L0 subagents in parallel using the native Agent/Task tool (NOT run_skill — leaf guard blocks it)
@@ -61,6 +64,10 @@ Read all `$2/assignments/P{N}-A*_result.json` matching this phase to get assignm
 - `goal` — assignment goal
 - `technical_approach` — assignment technical approach
 - `proposed_work_packages` — the WP decomposition from the assignment pass
+
+Read the `task` field from the context file at $1. Every WP elaboration — its `deliverables`,
+`acceptance_criteria`, and `estimated_files` — must serve the stated task. Do not create WPs
+for work not requested by the task.
 
 ### Step 3: Build per-L0 context packets
 

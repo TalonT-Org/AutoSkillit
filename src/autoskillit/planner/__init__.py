@@ -30,6 +30,7 @@ from autoskillit.planner.schema import (
     PlanDocument,
     PlannerManifest,
     PlannerManifestItem,
+    ValidationFinding,
     WPElaborated,
     WPShort,
     resolve_wp_id,
@@ -68,4 +69,5 @@ __all__ = [
     "resolve_wp_id",
     "validate_refined_assignments",
     "validate_refined_plan",
+    "ValidationFinding",
 ]

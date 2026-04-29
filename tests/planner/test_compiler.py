@@ -72,7 +72,8 @@ def _make_valid_output_dir(
     )
 
     _write_json(
-        tmp_path / "validation.json", {"verdict": "pass", "findings": [], "schema_version": 1}
+        tmp_path / "validation.json",
+        {"verdict": "pass", "findings": [], "warnings": [], "schema_version": 2},
     )
 
     if with_dep_graph:
@@ -125,7 +126,8 @@ def _make_chain_3_wps(tmp_path: Path) -> Path:
         wps_dir / "wp_manifest.json", {"pass_name": "work_packages", "items": manifest_items}
     )
     _write_json(
-        tmp_path / "validation.json", {"verdict": "pass", "findings": [], "schema_version": 1}
+        tmp_path / "validation.json",
+        {"verdict": "pass", "findings": [], "warnings": [], "schema_version": 2},
     )
     return tmp_path
 

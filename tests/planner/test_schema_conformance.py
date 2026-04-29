@@ -168,7 +168,7 @@ def test_compile_plan_derives_name_slug_from_name(tmp_path: Path) -> None:
     )
     _write_json(
         tmp_path / "validation.json",
-        {"verdict": "pass", "findings": [], "schema_version": 1},
+        {"verdict": "pass", "findings": [], "warnings": [], "schema_version": 2},
     )
 
     compile_plan(str(tmp_path), "test task", "/src")

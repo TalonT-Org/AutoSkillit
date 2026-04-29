@@ -138,6 +138,12 @@ class RunDirResult(TypedDict):
     planner_dir: str
 
 
+class ValidationFinding(TypedDict):
+    message: str
+    severity: str  # "error" | "warning"
+    check: str
+
+
 _PHASE_ID_RE = re.compile(r"^P\d+$")
 _ASSIGN_ID_RE = re.compile(r"^P\d+-A\d+$")
 _WP_ID_RE = re.compile(r"^P\d+-A\d+-WP\d+$")

@@ -42,7 +42,9 @@ def _compute_exit_code(state: CampaignState) -> int:
             DispatchStatus.RELEASED,
         }
     )
-    _in_progress = frozenset({DispatchStatus.RUNNING, DispatchStatus.PENDING})
+    _in_progress = frozenset(
+        {DispatchStatus.RUNNING, DispatchStatus.PENDING, DispatchStatus.RESUMABLE}
+    )
     has_failure = any(d.status in _failure for d in state.dispatches)
     has_in_progress = any(d.status in _in_progress for d in state.dispatches)
     if has_failure:

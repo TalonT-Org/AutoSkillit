@@ -154,7 +154,6 @@ def session_type() -> SessionType:
                 stacklevel=2,
             )
             return SessionType.LEAF
-    # Transitional bridge: HEADLESS=1 without SESSION_TYPE → LEAF with warning
     if os.environ.get(HEADLESS_ENV_VAR) == "1":
         warnings.warn(
             f"{HEADLESS_ENV_VAR}=1 without {SESSION_TYPE_ENV_VAR} set. "

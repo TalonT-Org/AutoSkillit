@@ -277,6 +277,10 @@ def validate_plan(output_dir: str) -> dict[str, str]:
 
     errors = [f for f in all_findings if f["severity"] == "error"]
     warnings = [f for f in all_findings if f["severity"] == "warning"]
+    unrecognized = [f for f in all_findings if f["severity"] not in ("error", "warning")]
+    if unrecognized:
+        sev_vals = {f["severity"] for f in unrecognized}
+        raise ValueError(f"Unrecognized severity values in findings: {sev_vals}")
 
     verdict = "pass" if not errors else "fail"
     validation_path = root / "validation.json"
@@ -290,4 +294,5 @@ def validate_plan(output_dir: str) -> dict[str, str]:
         "verdict": verdict,
         "validation_path": str(validation_path),
         "issue_count": str(len(errors)),
+        "warning_count": str(len(warnings)),
     }

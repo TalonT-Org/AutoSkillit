@@ -544,6 +544,10 @@ async def release_issue(
         config_fail_label = tool_ctx.config.github.fail_label
         effective_staged_label = staged_label or tool_ctx.config.github.staged_label
 
+        remove_set = [effective_label]
+        if config_fail_label:
+            remove_set.append(config_fail_label)
+
         if should_stage:
             if err := tool_ctx.config.github.check_label_allowed(effective_staged_label):
                 return json.dumps(
@@ -576,9 +580,6 @@ async def release_issue(
                     }
                 )
 
-            remove_set = [effective_label]
-            if config_fail_label:
-                remove_set.append(config_fail_label)
             swap_result = await tool_ctx.github_client.swap_labels(
                 owner,
                 repo,
@@ -652,9 +653,6 @@ async def release_issue(
                 }
             )
         else:
-            remove_set = [effective_label]
-            if config_fail_label:
-                remove_set.append(config_fail_label)
             swap_result = await tool_ctx.github_client.swap_labels(
                 owner,
                 repo,

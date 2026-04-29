@@ -1,17 +1,25 @@
 """Core skill name resolution and text-processing helpers.
 
 Zero autoskillit imports outside this sub-package. Provides extract_skill_name,
-extract_path_arg, resolve_target_skill, truncate_text, and fleet_error.
+extract_path_arg, resolve_target_skill, truncate_text, fleet_error, and session_type.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import re
+import warnings
 from typing import Any
 
-from ._type_constants import AUTOSKILLIT_SKILL_PREFIX, FLEET_ERROR_CODES, SKILL_COMMAND_PREFIX
-from ._type_enums import SkillSource
+from ._type_constants import (
+    AUTOSKILLIT_SKILL_PREFIX,
+    FLEET_ERROR_CODES,
+    HEADLESS_ENV_VAR,
+    SESSION_TYPE_ENV_VAR,
+    SKILL_COMMAND_PREFIX,
+)
+from ._type_enums import SessionType, SkillSource
 from ._type_protocols_workspace import SkillResolver
 
 __all__ = [
@@ -19,6 +27,7 @@ __all__ = [
     "extract_skill_name",
     "fleet_error",
     "resolve_target_skill",
+    "session_type",
     "truncate_text",
 ]
 
@@ -124,3 +133,32 @@ def fleet_error(
             "details": details,
         }
     )
+
+
+def session_type() -> SessionType:
+    """Resolve current session type from AUTOSKILLIT_SESSION_TYPE env var.
+
+    Fail-closed: returns LEAF on unset or invalid values.
+    Transitional bridge: HEADLESS=1 without SESSION_TYPE emits DeprecationWarning.
+    """
+    raw = os.environ.get(SESSION_TYPE_ENV_VAR, "")
+    if raw:
+        raw_lower = raw.lower()
+        try:
+            return SessionType(raw_lower)
+        except ValueError:
+            warnings.warn(
+                f"Invalid {SESSION_TYPE_ENV_VAR}={raw!r}, defaulting to LEAF. "
+                f"Valid values: {', '.join(m.value for m in SessionType)}",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            return SessionType.LEAF
+    if os.environ.get(HEADLESS_ENV_VAR) == "1":
+        warnings.warn(
+            f"{HEADLESS_ENV_VAR}=1 without {SESSION_TYPE_ENV_VAR} set. "
+            "Defaulting to LEAF. Set AUTOSKILLIT_SESSION_TYPE explicitly.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    return SessionType.LEAF

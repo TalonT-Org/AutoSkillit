@@ -5,8 +5,6 @@ Zero autoskillit imports. Provides the shared enum vocabulary for all higher lay
 
 from __future__ import annotations
 
-import os
-import warnings
 from enum import StrEnum, unique
 
 __all__ = [
@@ -28,7 +26,6 @@ __all__ = [
     "ChannelBStatus",
     "PRState",
     "SessionType",
-    "session_type",
     "FleetErrorCode",
     "FeatureLifecycle",
     "DispatchGateType",
@@ -348,40 +345,6 @@ class SessionType(StrEnum):
     FLEET = "fleet"
     ORCHESTRATOR = "orchestrator"
     LEAF = "leaf"
-
-
-_SESSION_TYPE_ENV_VAR = "AUTOSKILLIT_SESSION_TYPE"
-_HEADLESS_ENV_VAR = "AUTOSKILLIT_HEADLESS"
-
-
-def session_type() -> SessionType:
-    """Resolve current session type from AUTOSKILLIT_SESSION_TYPE env var.
-
-    Fail-closed: returns LEAF on unset or invalid values.
-    Transitional bridge: HEADLESS=1 without SESSION_TYPE emits DeprecationWarning.
-    """
-    raw = os.environ.get(_SESSION_TYPE_ENV_VAR, "")
-    if raw:
-        raw_lower = raw.lower()
-        try:
-            return SessionType(raw_lower)
-        except ValueError:
-            warnings.warn(
-                f"Invalid {_SESSION_TYPE_ENV_VAR}={raw!r}, defaulting to LEAF. "
-                f"Valid values: {', '.join(m.value for m in SessionType)}",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            return SessionType.LEAF
-    # Transitional bridge: HEADLESS=1 without SESSION_TYPE → LEAF with warning
-    if os.environ.get(_HEADLESS_ENV_VAR) == "1":
-        warnings.warn(
-            f"{_HEADLESS_ENV_VAR}=1 without {_SESSION_TYPE_ENV_VAR} set. "
-            "Defaulting to LEAF. Set AUTOSKILLIT_SESSION_TYPE explicitly.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-    return SessionType.LEAF
 
 
 @unique

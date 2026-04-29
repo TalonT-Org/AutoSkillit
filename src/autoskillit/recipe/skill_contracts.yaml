@@ -1934,7 +1934,7 @@ skills:
       - "alignment_findings_path\\s*=\\s*\\S+"
       - "alignment_finding_count\\s*=\\s*\\d+"
     pattern_examples:
-      - "alignment_findings_path = /tmp/autoskillit/planner/run-20260101-120000/task_alignment.json\n%%ORDER_UP%%"
+      - "alignment_findings_path = /tmp/autoskillit/planner/run-20260101-120000/task_alignment.json\nalignment_finding_count = 0\n%%ORDER_UP%%"
     write_behavior: always
   audit-tests:
     inputs: []

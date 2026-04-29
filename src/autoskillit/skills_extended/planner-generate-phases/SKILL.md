@@ -29,7 +29,7 @@ Pass 1 entry point. Read the analysis file (and optionally domain knowledge) and
 
 ### Environment Variables
 
-- **PLANNER_TASK** (required) — The user's task description. All phases MUST serve this task.
+- **PLANNER_TASK** (required) — The user's task description. Every phase MUST serve this task.
 
 ## Critical Constraints
 

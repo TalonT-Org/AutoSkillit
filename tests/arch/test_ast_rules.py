@@ -837,3 +837,16 @@ def test_no_is_plugin_installed_in_cook() -> None:
         "_cook.py calls _is_plugin_installed — replace with "
         "detect_autoskillit_mcp_prefix() == MARKETPLACE_PREFIX"
     )
+
+
+def test_expand_functions_call_validators() -> None:
+    """expand_wps and expand_assignments must call their respective validators (ARCH-010)."""
+    src = Path("src/autoskillit/planner/manifests.py").read_text()
+    tree = ast.parse(src)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "expand_wps":
+            body_source = ast.dump(node)
+            assert "validate_refined_assignments" in body_source
+        if isinstance(node, ast.FunctionDef) and node.name == "expand_assignments":
+            body_source = ast.dump(node)
+            assert "validate_refined_plan" in body_source

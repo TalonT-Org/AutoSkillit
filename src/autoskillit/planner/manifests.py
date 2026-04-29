@@ -12,6 +12,8 @@ from autoskillit.planner.schema import (
     RunDirResult,
     validate_assignment_result,
     validate_phase_result,
+    validate_refined_assignments,
+    validate_refined_plan,
     validate_wp_result,
 )
 
@@ -284,6 +286,7 @@ def expand_assignments(
         raise json.JSONDecodeError(
             f"Failed to parse {plan_file}: {exc.msg}", exc.doc, exc.pos
         ) from exc
+    plan = validate_refined_plan(plan)
     phases = plan.get("phases", [])
     assign_dir = Path(output_dir) / "assignments"
     assign_dir.mkdir(parents=True, exist_ok=True)
@@ -296,8 +299,16 @@ def expand_assignments(
         previews = phase.get("assignments_preview", [])
         if not previews:
             continue
-        assignment_ids = [a.get("id", "") for a in previews]
-        assignment_names = [a.get("name", "") for a in previews]
+        assignment_ids: list[str] = []
+        for idx, a in enumerate(previews, start=1):
+            if isinstance(a, dict):
+                aid = a.get("id", "")
+                if not aid:
+                    aid = f"{phase_id}-A{idx}"
+                assignment_ids.append(aid)
+            else:
+                assignment_ids.append(str(a))
+        assignment_names = [a.get("name", "") if isinstance(a, dict) else str(a) for a in previews]
         metadata = {
             "assignment_count": len(previews),
             "assignment_ids": assignment_ids,
@@ -346,6 +357,7 @@ def expand_wps(refined_assignments_path: str, output_dir: str, **kwargs: object)
         raise json.JSONDecodeError(
             f"Failed to parse {assignments_file}: {exc.msg}", exc.doc, exc.pos
         ) from exc
+    data = validate_refined_assignments(data)
     assignments = data.get("assignments", [])
     out_dir = Path(output_dir)
     wp_dir = out_dir / "work_packages"
@@ -370,7 +382,7 @@ def expand_wps(refined_assignments_path: str, output_dir: str, **kwargs: object)
         bucket = phase_buckets[phase_id]
         wps = assign.get("proposed_work_packages", [])
         for wp in wps:
-            wp_id = wp.get("id", "")
+            wp_id = wp["id"]
             bucket["wp_ids"].append(wp_id)
             bucket["wp_names"].append(wp.get("name", ""))
             bucket["wp_scopes"].append(wp.get("scope", ""))

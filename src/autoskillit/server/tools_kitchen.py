@@ -227,22 +227,26 @@ def _close_kitchen_handler() -> None:
         logger.warning("hook_config_remove_failed", path=str(hook_cfg_path))
     review_gate_path = Path.cwd() / ".autoskillit" / "temp" / "review_gate_state.json"
     try:
-        if review_gate_path.exists():
-            try:
-                state = json.loads(review_gate_path.read_text())
-                loop_active = state.get("gate") == "LOOP_REQUIRED" and not state.get(
-                    "check_review_loop_called", False
-                )
-            except (json.JSONDecodeError, OSError):
-                loop_active = False
-            if loop_active:
-                logger.warning(
-                    "close_kitchen_review_gate_preserved",
-                    path=str(review_gate_path),
-                    reason="active_review_loop",
-                )
-            else:
-                review_gate_path.unlink(missing_ok=True)
+        try:
+            state = json.loads(review_gate_path.read_text())
+            loop_active = (
+                isinstance(state, dict)
+                and state.get("gate") == "LOOP_REQUIRED"
+                and not state.get("check_review_loop_called", False)
+            )
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.debug(
+                "review_gate_state_read_failed", path=str(review_gate_path), error=str(exc)
+            )
+            loop_active = False
+        if loop_active:
+            logger.warning(
+                "close_kitchen_review_gate_preserved",
+                path=str(review_gate_path),
+                reason="active_review_loop",
+            )
+        else:
+            review_gate_path.unlink(missing_ok=True)
     except OSError:
         logger.warning("review_gate_state_remove_failed", path=str(review_gate_path))
 

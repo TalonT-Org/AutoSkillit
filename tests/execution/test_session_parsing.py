@@ -543,6 +543,7 @@ class TestSkillResult:
             "token_usage",
             "write_path_warnings",
             "write_call_count",
+            "fs_writes_detected",
         }
         assert set(parsed.keys()) == expected
 

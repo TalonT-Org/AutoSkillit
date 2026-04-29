@@ -670,8 +670,8 @@ class TestFilesystemWriteDetection:
         assert sr.success is False
         assert sr.subtype == "zero_writes"
 
-    def test_fs_writes_detected_in_to_json_excluded(self) -> None:
-        """fs_writes_detected must NOT appear in to_json() output."""
+    def test_fs_writes_detected_in_to_json_included(self) -> None:
+        """fs_writes_detected must appear in to_json() output."""
         stdout = _ndjson_with_tool_uses(["Edit"])
         sr = _build_skill_result(
             _make_result(returncode=0, stdout=stdout),
@@ -680,7 +680,7 @@ class TestFilesystemWriteDetection:
             fs_writes_detected=True,
         )
         json_data = json.loads(sr.to_json())
-        assert "fs_writes_detected" not in json_data
+        assert json_data["fs_writes_detected"] is True
 
 
 class TestTempDirSnapshot:

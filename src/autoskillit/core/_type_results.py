@@ -180,6 +180,7 @@ class SkillResult:
             "token_usage": self.token_usage,
             "write_path_warnings": self.write_path_warnings,
             "write_call_count": self.write_call_count,
+            "fs_writes_detected": self.fs_writes_detected,
             "last_stop_reason": self.last_stop_reason,
             "lifespan_started": self.lifespan_started,
         }

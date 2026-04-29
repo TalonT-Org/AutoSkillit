@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import time
 from pathlib import Path
 
 import pytest
@@ -25,7 +24,9 @@ def _state_path(tmp_path: Path) -> Path:
 
 def _init_state(tmp_path: Path, *names: str) -> Path:
     sp = _state_path(tmp_path)
-    write_initial_state(sp, "cid", "test-campaign", "/m.yaml", [DispatchRecord(name=n) for n in names])
+    write_initial_state(
+        sp, "cid", "test-campaign", "/m.yaml", [DispatchRecord(name=n) for n in names]
+    )
     return sp
 
 
@@ -72,7 +73,9 @@ class TestRecordGateDispatch:
         assert gate.status == DispatchStatus.FAILURE
 
     @pytest.mark.anyio
-    async def test_record_gate_dispatch_rejects_unknown_dispatch(self, tool_ctx, monkeypatch, tmp_path):
+    async def test_record_gate_dispatch_rejects_unknown_dispatch(
+        self, tool_ctx, monkeypatch, tmp_path
+    ):
         sp = _init_state(tmp_path, "full-audit", "review-gate")
         monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(sp))
 
@@ -90,7 +93,9 @@ class TestRecordGateDispatch:
         sp = _init_state(tmp_path, "gate-check", "phase-one")
         append_dispatch_record(
             sp,
-            DispatchRecord(name="gate-check", status=DispatchStatus.SUCCESS, reason="gate_approved"),
+            DispatchRecord(
+                name="gate-check", status=DispatchStatus.SUCCESS, reason="gate_approved"
+            ),
         )
         monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(sp))
 
@@ -127,25 +132,26 @@ class TestDispatchFoodTruckCampaignState:
         monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(sp))
         monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
 
-        success_envelope = json.dumps({
-            "success": True,
-            "dispatch_id": "d1",
-            "l2_session_id": "s1",
-            "reason": "",
-            "token_usage": {},
-        })
+        success_envelope = json.dumps(
+            {
+                "success": True,
+                "dispatch_id": "d1",
+                "l2_session_id": "s1",
+                "reason": "",
+                "token_usage": {},
+            }
+        )
 
         async def _fake_execute(**kwargs):
             return success_envelope
 
         import autoskillit.fleet
+
         monkeypatch.setattr(autoskillit.fleet, "execute_dispatch", _fake_execute)
 
         from autoskillit.server.tools_execution import dispatch_food_truck
 
-        await dispatch_food_truck(
-            recipe="full-audit", task="audit", dispatch_name="full-audit"
-        )
+        await dispatch_food_truck(recipe="full-audit", task="audit", dispatch_name="full-audit")
 
         state = read_state(sp)
         assert state is not None
@@ -160,25 +166,26 @@ class TestDispatchFoodTruckCampaignState:
         monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(sp))
         monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
 
-        failure_envelope = json.dumps({
-            "success": False,
-            "dispatch_id": "d1",
-            "l2_session_id": "s1",
-            "reason": "l2_crashed",
-            "token_usage": {},
-        })
+        failure_envelope = json.dumps(
+            {
+                "success": False,
+                "dispatch_id": "d1",
+                "l2_session_id": "s1",
+                "reason": "l2_crashed",
+                "token_usage": {},
+            }
+        )
 
         async def _fake_execute(**kwargs):
             return failure_envelope
 
         import autoskillit.fleet
+
         monkeypatch.setattr(autoskillit.fleet, "execute_dispatch", _fake_execute)
 
         from autoskillit.server.tools_execution import dispatch_food_truck
 
-        await dispatch_food_truck(
-            recipe="full-audit", task="audit", dispatch_name="full-audit"
-        )
+        await dispatch_food_truck(recipe="full-audit", task="audit", dispatch_name="full-audit")
 
         state = read_state(sp)
         assert state is not None
@@ -193,9 +200,18 @@ class TestDispatchFoodTruckCampaignState:
         monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
 
         async def _fake_execute(**kwargs):
-            return json.dumps({"success": True, "dispatch_id": "d1", "l2_session_id": "s1", "reason": "", "token_usage": {}})
+            return json.dumps(
+                {
+                    "success": True,
+                    "dispatch_id": "d1",
+                    "l2_session_id": "s1",
+                    "reason": "",
+                    "token_usage": {},
+                }
+            )
 
         import autoskillit.fleet
+
         monkeypatch.setattr(autoskillit.fleet, "execute_dispatch", _fake_execute)
 
         from autoskillit.server.tools_execution import dispatch_food_truck
@@ -217,16 +233,23 @@ class TestDispatchFoodTruckCampaignState:
         monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
 
         async def _fake_execute(**kwargs):
-            return json.dumps({"success": True, "dispatch_id": "d1", "l2_session_id": "s1", "reason": "", "token_usage": {}})
+            return json.dumps(
+                {
+                    "success": True,
+                    "dispatch_id": "d1",
+                    "l2_session_id": "s1",
+                    "reason": "",
+                    "token_usage": {},
+                }
+            )
 
         import autoskillit.fleet
+
         monkeypatch.setattr(autoskillit.fleet, "execute_dispatch", _fake_execute)
 
         from autoskillit.server.tools_execution import dispatch_food_truck
 
-        await dispatch_food_truck(
-            recipe="full-audit", task="audit", dispatch_name=None
-        )
+        await dispatch_food_truck(recipe="full-audit", task="audit", dispatch_name=None)
 
         state = read_state(sp)
         assert state is not None
@@ -252,7 +275,9 @@ class TestCampaignResumeChain:
         )
         append_dispatch_record(
             sp,
-            DispatchRecord(name="review-gate", status=DispatchStatus.SUCCESS, reason="gate_approved"),
+            DispatchRecord(
+                name="review-gate", status=DispatchStatus.SUCCESS, reason="gate_approved"
+            ),
         )
 
         decision = resume_campaign_from_state(sp, continue_on_failure=False)

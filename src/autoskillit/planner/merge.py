@@ -77,9 +77,10 @@ def merge_files(
                 key: existing_items,
             }
             enriched = {**document, "schema_version": 1}
+            payload = json.dumps(enriched).encode()
             fh.seek(0)
             fh.truncate()
-            fh.write(json.dumps(enriched).encode())
+            fh.write(payload)
             fh.flush()
         finally:
             fcntl.flock(fh, fcntl.LOCK_UN)
@@ -141,9 +142,10 @@ def replace_item(
                     if item.get("id") == item_id:
                         tier[idx] = replacement
                         enriched = {**data, "schema_version": 1}
+                        payload = json.dumps(enriched).encode()
                         fh.seek(0)
                         fh.truncate()
-                        fh.write(json.dumps(enriched).encode())
+                        fh.write(payload)
                         fh.flush()
                         found = True
                         break

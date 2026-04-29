@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 if TYPE_CHECKING:
     from autoskillit.recipe.schema import Recipe, RecipeInfo
 
-from ._type_results import LoadResult
 from ._type_protocols_logging import SupportsDebug
+from ._type_results import LoadResult
 
 __all__ = ["RecipeRepository", "MigrationService", "DatabaseReader", "ReadOnlyResolver"]
 

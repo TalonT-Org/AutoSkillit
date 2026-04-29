@@ -12,7 +12,7 @@ from typing import Any
 
 from ._type_constants import AUTOSKILLIT_SKILL_PREFIX, FLEET_ERROR_CODES, SKILL_COMMAND_PREFIX
 from ._type_enums import SkillSource
-from ._type_protocols import SkillResolver
+from ._type_protocols_workspace import SkillResolver
 
 __all__ = [
     "extract_path_arg",

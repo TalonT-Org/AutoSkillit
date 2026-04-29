@@ -416,11 +416,6 @@ def test_expand_wps_raises_on_missing_id_and_suffix(tmp_path) -> None:
         expand_wps(str(refined), str(tmp_path))
 
 
-def test_write_json_helper_in_conftest() -> None:
-    from tests.planner.conftest import write_json
-
-    assert callable(write_json)
-
 
 def test_merge_files_does_not_use_atomic_write(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

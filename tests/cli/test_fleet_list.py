@@ -20,8 +20,11 @@ pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium, pytest.mark.feature(
 def test_fleet_list_no_campaigns(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
 ) -> None:
-    """fleet list prints 'No campaigns found' when directory is empty."""
+    """fleet list prints 'No campaigns found' when directory is empty and no builtins exist."""
+    import autoskillit.recipe.io as _rio
+
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(_rio, "pkg_root", lambda: tmp_path)
     _fleet_list()
     assert "No campaigns found" in capsys.readouterr().out
 

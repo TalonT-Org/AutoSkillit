@@ -123,7 +123,12 @@ def test_parse_recipe_defaults_campaign_fields_when_absent():
 # ---------------------------------------------------------------------------
 
 
-def test_list_campaign_recipes_scans_campaigns_dir(tmp_path: Path):
+def test_list_campaign_recipes_scans_campaigns_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    import autoskillit.recipe.io as _rio
+
+    monkeypatch.setattr(_rio, "pkg_root", lambda: tmp_path)
     campaigns_dir = tmp_path / ".autoskillit" / "recipes" / "campaigns"
     campaigns_dir.mkdir(parents=True)
     _write_yaml(
@@ -135,7 +140,12 @@ def test_list_campaign_recipes_scans_campaigns_dir(tmp_path: Path):
     assert result.items[0].name == "my-campaign"
 
 
-def test_list_campaign_recipes_returns_empty_when_no_dir(tmp_path: Path):
+def test_list_campaign_recipes_returns_empty_when_no_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    import autoskillit.recipe.io as _rio
+
+    monkeypatch.setattr(_rio, "pkg_root", lambda: tmp_path)
     result = list_campaign_recipes(tmp_path)
     assert result.items == []
 

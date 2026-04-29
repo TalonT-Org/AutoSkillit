@@ -49,19 +49,7 @@ and creates a comprehensive promotion PR.
 - Output `verdict = <value>` as a structured token
 - Carry forward ALL `Closes #N`, `Fixes #N`, and `Resolves #N` references from merged PR bodies
 - Use `gh pr create --body-file` (never inline body via `--body`)
-- Grant every subagent explicit permission to spawn their own sub-subagents
 - `pr_body_path` must be an absolute path (prepend CWD)
-
-## Subagent Autonomy Grant
-
-Every subagent spawned by this skill receives this standing instruction:
-
-> You may spawn additional subagents (Task tool, model: sonnet) at your discretion
-> to parallelize your research, fill gaps you discover during analysis, or decompose
-> large tasks into focused sub-investigations. You do not need permission — use your
-> judgment about when deeper exploration would improve the quality of your findings.
-
-Include this grant verbatim in every Task tool prompt throughout this skill.
 
 ## Context Limit Behavior
 
@@ -153,8 +141,6 @@ Spawn three parallel Task subagents (model: sonnet) to validate promotion readin
 All three must pass before analysis proceeds. If any fails, report the failure clearly
 and exit 1. Do NOT create a PR when pre-flight fails.
 
-**Include the Subagent Autonomy Grant in each prompt.**
-
 #### Subagent 1A: CI and Branch Status
 
 Check:
@@ -217,8 +203,7 @@ treat as a warning (non-blocking) and note it in the report.
 
 ### Phase 2: Change Inventory (parallel subagents)
 
-Spawn four parallel Task subagents (model: sonnet). **Include the Subagent Autonomy Grant
-in each prompt.**
+Spawn four parallel Task subagents (model: sonnet).
 
 #### Subagent 2A: Commit Categorization
 
@@ -413,8 +398,6 @@ new/modified nodes, add to `validated_diagrams`. Otherwise discard.
 
 Spawn one Task subagent (model: sonnet) with results from Phase 2 ONLY (no domain
 analysis or quality assessment data).
-
-**Include the Subagent Autonomy Grant.**
 
 The subagent receives:
 - Commit categorization from Subagent 2A

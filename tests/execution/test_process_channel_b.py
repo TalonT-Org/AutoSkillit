@@ -336,6 +336,7 @@ class TestChannelBFullPipelineAdjudication:
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=0.5,
+            natural_exit_grace_seconds=0.1,
             _phase1_timeout=120,
             _phase1_poll=0.01,
             _phase2_poll=0.05,

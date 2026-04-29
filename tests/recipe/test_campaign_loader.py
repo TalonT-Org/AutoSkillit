@@ -305,3 +305,14 @@ def test_implement_findings_has_model_context_window_ingredient():
     ing = recipe.ingredients["model_context_window"]
     assert ing.hidden is True
     assert ing.default == "200000"
+
+
+def test_full_audit_done_step_emits_csv_format():
+    path = pkg_root() / "recipes" / "full-audit.yaml"
+    recipe = load_recipe(path)
+    done_step = recipe.steps["done"]
+    assert (
+        "comma-separated" in done_step.message.lower()
+        or "comma,separated" in done_step.message.lower()
+    )
+    assert '["url' not in done_step.message

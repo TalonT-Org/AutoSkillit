@@ -126,23 +126,32 @@ def _build_fleet_campaign_prompt(
 
     has_gate_dispatches = any(d.gate for d in campaign_recipe.dispatches)
 
-    gate_tool_line = "\n- AskUserQuestion" if has_gate_dispatches else ""
+    gate_tool_line = (
+        (
+            f"\n- {mcp_prefix}record_gate_dispatch"
+            " — persist gate dispatch outcome to campaign state"
+            "\n- AskUserQuestion"
+        )
+        if has_gate_dispatches
+        else ""
+    )
 
     gate_section = ""
     if has_gate_dispatches:
-        gate_section = """\
+        gate_section = f"""\
 
 ## GATE DISPATCH HANDLING
 
 When you reach a dispatch with `gate: confirm` in the manifest:
 
-1. Do NOT call `dispatch_food_truck`. Gate dispatches spawn no L2 session.
+1. Do NOT call `{mcp_prefix}dispatch_food_truck`. Gate dispatches spawn no L2 session.
 2. Call `AskUserQuestion` with the dispatch's `message` field as the question text.
 3. Evaluate the response:
-   - Affirmative (yes / proceed / approve / confirm): mark the gate as completed
-     (status=success), emit the %%FLEET_PROGRESS%% marker with state=success, and
-     advance to the next dispatch.
-   - Negative (no / reject / abort / cancel): halt the campaign immediately
+   - Affirmative (yes / proceed / approve / confirm): call `{mcp_prefix}record_gate_dispatch`
+     with `dispatch_name` and `approved=true`. Emit the %%FLEET_PROGRESS%% marker with
+     state=success. Advance to the next dispatch.
+   - Negative (no / reject / abort / cancel): call `{mcp_prefix}record_gate_dispatch`
+     with `dispatch_name` and `approved=false`. Halt the campaign immediately
      (proceed to INTERRUPT/CLEANUP as if a dispatch had failed with
      continue_on_failure=false).
 

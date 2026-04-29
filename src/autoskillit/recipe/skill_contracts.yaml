@@ -196,6 +196,7 @@ skills:
     - "investigation_path\\s*=\\s*/.+"
     pattern_examples:
     - "investigation_path = /tmp/investigation.md\n%%ORDER_UP%%"
+    read_only: true
   make-groups:
     inputs:
     - name: source_doc

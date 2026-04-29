@@ -71,6 +71,11 @@ HOOK_REGISTRY: list[HookDef] = [
     ),
     HookDef(
         matcher=r"Write|Edit",
+        scripts=["write_guard.py"],
+        session_scope="headless_only",
+    ),
+    HookDef(
+        matcher=r"Write|Edit",
         scripts=["recipe_write_advisor.py"],
         session_scope="interactive_only",
     ),

@@ -19,6 +19,10 @@ def test_arch_lenses_ingredient_declared(recipe):
     assert "arch_lenses" in recipe.ingredients
 
 
+def test_arch_lenses_is_not_hidden(recipe):
+    assert recipe.ingredients["arch_lenses"].hidden is False
+
+
 def test_arch_lenses_defaults_to_true(recipe):
     assert recipe.ingredients["arch_lenses"].default == "true"
 

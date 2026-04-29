@@ -61,8 +61,6 @@ def _remove_clone_fn(path: str, _flag: str) -> dict[str, str]:
         return {"removed": "false", "reason": str(exc)}
 
 
-
-
 @fleet_app.command(name="dispatch")
 def fleet_dispatch() -> None:
     """Launch a bare fleet dispatcher session (free-flow mode)."""

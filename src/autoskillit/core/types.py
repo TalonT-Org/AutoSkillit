@@ -14,8 +14,18 @@ from ._type_helpers import *  # noqa: F401, F403
 from ._type_helpers import __all__ as _helpers_all
 from ._type_plugin_source import *  # noqa: F401, F403
 from ._type_plugin_source import __all__ as _plugin_source_all
-from ._type_protocols import *  # noqa: F401, F403
-from ._type_protocols import __all__ as _protocols_all
+from ._type_protocols_execution import *  # noqa: F401, F403
+from ._type_protocols_execution import __all__ as _protocols_execution_all
+from ._type_protocols_github import *  # noqa: F401, F403
+from ._type_protocols_github import __all__ as _protocols_github_all
+from ._type_protocols_infra import *  # noqa: F401, F403
+from ._type_protocols_infra import __all__ as _protocols_infra_all
+from ._type_protocols_logging import *  # noqa: F401, F403
+from ._type_protocols_logging import __all__ as _protocols_logging_all
+from ._type_protocols_recipe import *  # noqa: F401, F403
+from ._type_protocols_recipe import __all__ as _protocols_recipe_all
+from ._type_protocols_workspace import *  # noqa: F401, F403
+from ._type_protocols_workspace import __all__ as _protocols_workspace_all
 from ._type_results import *  # noqa: F401, F403
 from ._type_results import __all__ as _results_all
 from ._type_resume import *  # noqa: F401, F403
@@ -28,7 +38,12 @@ __all__ = (
     + _enums_all
     + _helpers_all
     + _plugin_source_all
-    + _protocols_all
+    + _protocols_logging_all
+    + _protocols_execution_all
+    + _protocols_github_all
+    + _protocols_workspace_all
+    + _protocols_recipe_all
+    + _protocols_infra_all
     + _results_all
     + _resume_all
     + _subprocess_all

@@ -154,8 +154,10 @@ def test_session_type_is_defined_in_type_helpers():
     from autoskillit.core._type_helpers import session_type as fn_helpers
 
     type_enums = importlib.import_module("autoskillit.core._type_enums")
+    importlib.reload(type_enums)
     assert not hasattr(type_enums, "session_type"), (
         "session_type must not be defined in _type_enums after relocation"
     )
 
     assert inspect.getmodule(fn_helpers).__name__ == "autoskillit.core._type_helpers"
+    assert inspect.getfile(fn_helpers).endswith("_type_helpers.py")

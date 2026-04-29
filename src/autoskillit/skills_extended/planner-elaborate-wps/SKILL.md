@@ -15,7 +15,7 @@ is the sole writer for this phase's WPs — no concurrent write races.
 
 ## When to Use
 
-- Invoked by the planner recipe when the recipe dispatches parallel elaboration via `dispatch_items`
+- Invoked by the planner recipe once per phase via sequential dispatch (`dispatch_items`)
 - One invocation per phase; handles all WPs within the phase in a single session
 
 ## Arguments

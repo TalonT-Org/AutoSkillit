@@ -6,6 +6,7 @@ import re
 
 from autoskillit.core import AUTOSKILLIT_SKILL_PREFIX, SKILL_TOOLS, Severity, SkillLister
 from autoskillit.recipe._analysis import ValidationContext
+from autoskillit.recipe._skill_helpers import _get_skill_category_map
 from autoskillit.recipe.contracts import resolve_skill_name
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
@@ -16,15 +17,6 @@ def _get_bundled_skill_names(lister: SkillLister | None = None) -> frozenset[str
 
         lister = DefaultSkillResolver()
     return frozenset(s.name for s in lister.list_all())
-
-
-def _get_skill_category_map(lister: SkillLister | None = None) -> dict[str, frozenset[str]]:
-    """Return {skill_name: categories} for all bundled skills."""
-    if lister is None:
-        from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
-
-        lister = DefaultSkillResolver()
-    return {s.name: s.categories for s in lister.list_all()}
 
 
 _SKILL_TOKEN_RE = re.compile(r"/autoskillit:(\S+)")

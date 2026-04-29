@@ -1081,6 +1081,9 @@ def test_default_classes_only_instantiated_inside_factory_or_allowlist() -> None
         Path("recipe/rules_features.py"): {
             "DefaultSkillResolver"
         },  # deferred default factory fallback
+        Path("recipe/_skill_helpers.py"): {
+            "DefaultSkillResolver"
+        },  # shared helper, deferred default factory fallback
         Path("workspace/session_skills.py"): {
             "DefaultSkillResolver"
         },  # ephemeral session resolver fallback

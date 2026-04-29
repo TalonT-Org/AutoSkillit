@@ -676,7 +676,10 @@ def test_no_subpackage_exceeds_10_files() -> None:
         Group 0 bundled recipes, bringing the count to 41.
         Monolithic file splits (_api.py → _recipe_ingredients + _recipe_composition;
         _analysis.py → _analysis_graph + _analysis_bfs + _analysis_blocks +
-        _analysis_detectors) add 6 files, bringing the count to 47. Exempt at 47 files.
+        _analysis_detectors) add 6 files, bringing the count to 47.
+        _skill_helpers.py extracts the shared _get_skill_category_map helper from
+        rules_skills.py and rules_features.py to eliminate duplication,
+        bringing the count to 48. Exempt at 48 files.
       execution/ — REQ-CNST-003-E3: execution/ decomposes process lifecycle into
         focused single-concern modules (_process_io, _process_kill, _process_race,
         etc.) that cannot be merged without re-introducing the coupling they isolate.
@@ -744,7 +747,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
     """
     EXEMPTIONS: dict[str, int] = {
         "server": 22,
-        "recipe": 47,
+        "recipe": 48,
         "execution": 26,
         "core": 27,
         "cli": 27,

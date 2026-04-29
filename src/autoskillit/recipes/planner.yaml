@@ -66,6 +66,7 @@ steps:
       cwd: "${{ inputs.source_dir }}"
       env:
         PLANNER_ANALYSIS_FILE: "${{ context.planner_dir }}/analysis.json"
+        PLANNER_TASK: "${{ inputs.task }}"
     on_success: generate_phases
     on_failure: generate_phases
 
@@ -77,6 +78,8 @@ steps:
         ${{ context.planner_dir }}/analysis.json
         ${{ context.planner_dir }}/domain_knowledge.md
       cwd: "${{ inputs.source_dir }}"
+      env:
+        PLANNER_TASK: "${{ inputs.task }}"
     capture:
       phase_manifest_path: "${{ result.phase_manifest_path }}"
     on_success: build_plan_snapshot
@@ -262,8 +265,22 @@ steps:
       cwd: "${{ inputs.source_dir }}"
     capture:
       refined_wps_path: "${{ result.refined_wps_path }}"
-    on_success: reconcile_deps
+    on_success: validate_task_alignment
     on_failure: escalate_stop
+
+  validate_task_alignment:
+    tool: run_skill
+    with:
+      skill_command: >
+        /autoskillit:planner-validate-task-alignment
+        ${{ context.refined_wps_path }}
+        ${{ context.refined_plan_path }}
+        ${{ context.planner_dir }}
+      cwd: "${{ inputs.source_dir }}"
+    capture:
+      alignment_findings_path: "${{ result.alignment_findings_path }}"
+    on_success: reconcile_deps
+    on_failure: reconcile_deps
 
   # --- FINALIZATION ---
 

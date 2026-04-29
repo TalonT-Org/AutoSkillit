@@ -37,6 +37,8 @@ independently and writes a single elaborated phase result. No dependency on
 - Read any `*_result.json` file from other phases (you have only the snapshot)
 - Require or read a context file from `check_remaining`
 - Communicate with other parallel worker instances
+- Read `{{AUTOSKILLIT_TEMP}}` artifacts outside your designated input files and output directory
+- Explore parent directories of your input paths (e.g., `ls $(dirname $1)/..`)
 
 **ALWAYS:**
 - Derive `relationship_notes` from snapshot context + codebase analysis, NOT from prior result files
@@ -64,6 +66,11 @@ Read the plan snapshot at `$1`. It is a `PlanDocument` with a `phases` list of `
 
 Find the entry in `phases` where `id == "$2"` (the target phase). Note its `ordering` to
 understand which phases come before and after it.
+
+After reading `plan_snapshot.json`, extract the `task` field. Every aspect of the elaborated
+phase — its `technical_approach`, `scope`, and `assignments[]` — must serve the stated task.
+Do not elaborate into work not requested by the task. Flag if the phase goal appears
+unrelated to the task.
 
 ### Step 2: Launch parallel codebase exploration subagents
 

@@ -27,12 +27,19 @@ Pass 1 entry point. Read the analysis file (and optionally domain knowledge) and
 - **$1** — Absolute path to `analysis.json` produced by `planner-analyze`
 - **$2** — (optional) Absolute path to `domain_knowledge.md` produced by `planner-extract-domain`
 
+### Environment Variables
+
+- **PLANNER_TASK** (required) — The user's task description. Every phase MUST serve this task.
+
 ## Critical Constraints
 
 **NEVER:**
 - Produce fewer than 3 or more than 6 phases
 - Write output outside `$(dirname $1)/phases/`
 - Use freeform text instead of the required JSON schema
+- Read files outside `$(dirname $1)` or the project's git-tracked source tree
+- Explore parent directories of `$(dirname $1)` (e.g., `ls $(dirname $1)/..`)
+- Read `{{AUTOSKILLIT_TEMP}}` artifacts from other planner runs or pipeline steps
 
 **ALWAYS:**
 - Write `$(dirname $1)/phases/{phase_id}_result.json` for every phase
@@ -41,6 +48,14 @@ Pass 1 entry point. Read the analysis file (and optionally domain knowledge) and
 - Emit `phase_manifest_path`, `phase_count`, and `phase_ids` output tokens
 
 ## Workflow
+
+### Step 0: Read task description
+
+Read the task description from the `PLANNER_TASK` environment variable. This is the user's
+statement of what they want planned. Every generated phase MUST serve this task.
+Do not generate phases for work not described in the task. If the task asks for specific
+deliverables (e.g., "split research.yaml into 4 sub-recipes"), the phases should decompose
+that work — not decompose the codebase into architectural layers.
 
 ### Step 1: Read inputs
 
@@ -54,7 +69,7 @@ Identify 3–6 high-level phases that partition the implementation work. Phases 
 - Coherent (each phase has a single, clear goal)
 - Ordered by dependency (foundational work first)
 - Non-overlapping in scope
-- Named to reflect architectural or domain boundaries (e.g., "Database Layer", "API Layer")
+- Named to reflect the task's work units, grounded in the codebase's architecture (e.g., if the task is "add user authentication", phases might be "Auth Data Model", "Auth API Endpoints", "Auth UI Integration")
 
 For each phase, generate:
 - `id`: Sequential `P{N}` identifier (P1, P2, ...)

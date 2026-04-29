@@ -44,6 +44,7 @@ suggestions, resolves conflicts, and writes `refined_wps.json`.
 - Skip emitting `refined_wps_path` even if all L0s fail (write unchanged WPs, still emit)
 - Spawn more than 6 L0s in a single parallel batch
 - Spawn one L0 per WP — L0s operate per PHASE
+- Read `{{AUTOSKILLIT_TEMP}}` artifacts not passed as positional arguments
 
 **ALWAYS:**
 - Spawn one L0 per phase (NOT per WP) — each L0 reviews ALL WPs in its phase against the full WP set
@@ -97,6 +98,10 @@ Input schema (PlanDocument with WPElaborated work packages):
 ```
 
 ### Step 2: Group WPs by phase and build L0 context packets
+
+Read the `task` field from the combined WPs document. Each L0 subagent reviewing a phase's
+WPs must verify that every WP's deliverables and scope serve the stated task. Flag WPs
+whose deliverables address concerns not mentioned in the task as scope creep.
 
 Group WPs by `phase_id` (extracted from `id` prefix, e.g., `P1-A1-WP1` → `P1`).
 For each phase, build a context packet containing:

@@ -2,7 +2,7 @@
 
 ## Overview
 
-AutoSkillit's 126 bundled skills are organized into three tiers that control when and where
+AutoSkillit's 127 bundled skills are organized into three tiers that control when and where
 they appear as slash commands. The tier system is orthogonal to subset categories — you can
 disable a subset across all tiers simultaneously, or reclassify individual skills between
 tiers. See [Subset Categories](subsets.md) for subset configuration.
@@ -22,12 +22,12 @@ tiers. See [Subset Categories](subsets.md) for subset configuration.
 ### Tier 2 — Cook (Interactive Skills)
 
 - **Location**: `src/autoskillit/skills_extended/` (NOT plugin-scanned)
-- **Default members** (99 total):
+- **Default members** (100 total):
   `investigate`, `make-plan`, `implement-worktree`, `rectify`,
   `dry-walkthrough`, `make-groups`, `review-approach`, `mermaid`, `make-arch-diag`,
   `make-experiment-diag`, `build-execution-map`, `plan-visualization`,
   all 13 `arch-lens-*` skills, all 18 `exp-lens-*` skills, all 12 `vis-lens-*` skills,
-  all 11 `planner-*` skills,
+  all 12 `planner-*` skills,
   `audit-arch`, `audit-cohesion`, `audit-tests`,
   `audit-defense-standards`, `audit-bugs`, `audit-friction`, `validate-audit`,
   `audit-claims`, `audit-docs`, `audit-feature-gates`,

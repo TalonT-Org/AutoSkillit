@@ -38,6 +38,7 @@ def test_planner_recipe_has_required_steps(planner_recipe):
         "finalize_wp_manifest",
         "merge_wps",
         "refine_wps",
+        "validate_task_alignment",
         "reconcile_deps",
         "validate",
         "check_verdict",
@@ -246,3 +247,27 @@ def test_merge_steps_use_merge_tier_dir(planner_recipe, step_name):
     step = planner_recipe.steps[step_name]
     assert step.tool == "run_python"
     assert step.with_args.get("callable") == "autoskillit.planner.merge.merge_tier_dir"
+
+
+# --- validate_task_alignment step integration ---
+
+
+def test_generate_phases_receives_planner_task_env(planner_recipe):
+    step = planner_recipe.steps["generate_phases"]
+    env = step.with_args.get("env", {})
+    assert "PLANNER_TASK" in env, "generate_phases must pass PLANNER_TASK env var"
+    assert "inputs.task" in env["PLANNER_TASK"], "PLANNER_TASK must reference inputs.task"
+
+
+def test_extract_domain_receives_planner_task_env(planner_recipe):
+    step = planner_recipe.steps["extract_domain"]
+    env = step.with_args.get("env", {})
+    assert "PLANNER_TASK" in env, "extract_domain must pass PLANNER_TASK env var"
+    assert "inputs.task" in env["PLANNER_TASK"], "PLANNER_TASK must reference inputs.task"
+
+
+def test_validate_task_alignment_step_exists(planner_recipe):
+    assert "validate_task_alignment" in planner_recipe.steps
+    step = planner_recipe.steps["validate_task_alignment"]
+    assert step.tool == "run_skill"
+    assert "planner-validate-task-alignment" in step.with_args.get("skill_command", "")

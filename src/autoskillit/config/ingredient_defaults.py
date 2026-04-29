@@ -65,7 +65,7 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "analyze_tool_sequences",
         ),
     ),
-    ("Fleet", (*FLEET_MENU_TOOLS, "record_gate_dispatch")),
+    ("Fleet", FLEET_MENU_TOOLS),
     ("Kitchen", ("open_kitchen", "close_kitchen", "disable_quota_guard", "reload_session")),
 )
 

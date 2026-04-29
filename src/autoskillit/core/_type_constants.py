@@ -239,7 +239,7 @@ FLEET_DISPATCH_TOOLS: frozenset[str] = frozenset(
 
 # Tools that appear in the Fleet group in the cook menu and open_kitchen response.
 # Defined here (L0) so menu modules can import the constant without loading the fleet package.
-FLEET_MENU_TOOLS: tuple[str, ...] = ("dispatch_food_truck",)
+FLEET_MENU_TOOLS: tuple[str, ...] = ("dispatch_food_truck", "record_gate_dispatch")
 
 FLEET_ERROR_CODES: frozenset[str] = frozenset(FleetErrorCode)
 

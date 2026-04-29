@@ -723,6 +723,12 @@ class TestDynaconfIntegration:
         cfg = GitHubConfig()
         assert cfg.in_progress_label == "in-progress"
 
+    def test_github_config_has_fail_label(self):
+        from autoskillit.config.settings import GitHubConfig
+
+        cfg = GitHubConfig()
+        assert cfg.fail_label == "fail"
+
 
 def test_secrets_only_keys_covers_all_github_secret_fields() -> None:
     """_SECRETS_ONLY_KEYS must include every field in GitHubConfig that holds a secret.

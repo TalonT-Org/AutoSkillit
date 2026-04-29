@@ -330,7 +330,7 @@ async def test_claim_issue_success(tool_ctx) -> None:
     tool_ctx.github_client = AsyncMock()
     tool_ctx.github_client.fetch_issue = AsyncMock(return_value=issue_data)
     tool_ctx.github_client.ensure_label = AsyncMock(return_value={"success": True})
-    tool_ctx.github_client.add_labels = AsyncMock(return_value={"success": True})
+    tool_ctx.github_client.swap_labels = AsyncMock(return_value={"success": True})
 
     result = json.loads(
         await claim_issue(
@@ -380,7 +380,7 @@ async def test_release_issue_stages_when_different_branch(
     tool_ctx.github_client = AsyncMock()
     tool_ctx.github_client.remove_label = AsyncMock(return_value={"success": True})
     tool_ctx.github_client.ensure_label = AsyncMock(return_value={"success": True})
-    tool_ctx.github_client.add_labels = AsyncMock(return_value={"success": True})
+    tool_ctx.github_client.swap_labels = AsyncMock(return_value={"success": True})
 
     result = json.loads(
         await release_issue(

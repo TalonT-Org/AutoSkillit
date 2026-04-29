@@ -811,8 +811,8 @@ steps:
     on_result:
       - when: "${{ result.stdout | trim }} == true"
         route: check_repo_merge_state
-      - route: escalate_stop_no_ci
-    on_failure: escalate_stop_no_ci
+      - route: mark_issue_failed_no_ci
+    on_failure: mark_issue_failed_no_ci
     skip_when_false: "inputs.open_pr"
     note: >
       Safety net before terminal escalation: checks if CI already passed
@@ -820,6 +820,27 @@ steps:
       staleness). Uses statusCheckRollup as the authoritative signal.
       Routes to merge queue gate if all checks are SUCCESS/NEUTRAL/SKIPPED;
       otherwise falls through to the terminal stop.
+
+  mark_issue_failed_no_ci:
+    description: "Swap in-progress → fail label before CI failure escalation"
+    tool: release_issue
+    optional: true
+    skip_when_false: inputs.issue_url
+    with:
+      issue_url: ${{ inputs.issue_url }}
+      fail_label: "fail"
+    on_success: register_clone_no_ci
+    on_failure: register_clone_no_ci
+
+  register_clone_no_ci:
+    description: "Register clone as preserved (no-CI error pipeline)"
+    tool: register_clone_status
+    with:
+      clone_path: "${{ context.work_dir }}"
+      status: "error"
+      step_name: register_clone_no_ci
+    on_success: escalate_stop_no_ci
+    on_failure: escalate_stop_no_ci
 
   escalate_stop_no_ci:
     action: stop

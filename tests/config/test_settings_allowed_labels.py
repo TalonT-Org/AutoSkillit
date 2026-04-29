@@ -86,3 +86,10 @@ class TestDefaultsYamlAllowedLabels:
             "recipe:remediation",
         }
         assert expected.issubset(set(cfg.github.allowed_labels))
+
+    def test_fail_label_in_allowed_labels_default(self, tmp_path):
+        """defaults.yaml whitelist includes 'fail' label for CI failure marking."""
+        from autoskillit.config import load_config
+
+        cfg = load_config(tmp_path)
+        assert "fail" in cfg.github.allowed_labels

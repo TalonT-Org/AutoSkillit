@@ -165,6 +165,7 @@ class GitHubConfig:
     default_repo: str | None = None
     in_progress_label: str = "in-progress"
     staged_label: str = "staged"
+    fail_label: str = "fail"
     allowed_labels: list[str] = field(default_factory=list)
 
     def check_label_allowed(self, label: str) -> str | None:

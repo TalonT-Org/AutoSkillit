@@ -136,7 +136,7 @@ class TestClaimIssueTool:
         mock_client = AsyncMock()
         mock_client.fetch_issue.return_value = {"success": True, "labels": []}
         mock_client.ensure_label.return_value = {"success": True, "created": True}
-        mock_client.add_labels.return_value = {"success": True, "labels": ["in-progress"]}
+        mock_client.swap_labels.return_value = {"success": True, "labels": ["in-progress"]}
         tool_ctx.github_client = mock_client
         result = json.loads(
             await claim_issue("https://github.com/owner/repo/issues/42", allow_reentry=True)
@@ -144,7 +144,9 @@ class TestClaimIssueTool:
         assert result["success"] is True
         assert result["claimed"] is True
         assert result.get("reentry", False) is False
-        mock_client.add_labels.assert_called_once_with("owner", "repo", 42, ["in-progress"])
+        mock_client.swap_labels.assert_called_once_with(
+            "owner", "repo", 42, remove_labels=["fail"], add_labels=["in-progress"]
+        )
 
 
 class TestReleaseIssueTool:

@@ -164,7 +164,9 @@ _TOOL_PARAMS: dict[str, frozenset[str]] = {
     ),
     "enrich_issues": frozenset({"issue_number", "batch", "dry_run", "repo"}),
     "claim_issue": frozenset({"issue_url", "label", "allow_reentry"}),
-    "release_issue": frozenset({"issue_url", "label", "target_branch", "staged_label"}),
+    "release_issue": frozenset(
+        {"issue_url", "label", "target_branch", "staged_label", "fail_label"}
+    ),
     "fetch_github_issue": frozenset({"issue_url", "include_comments"}),
     "get_issue_title": frozenset({"issue_url"}),
     # --- Status tools ---

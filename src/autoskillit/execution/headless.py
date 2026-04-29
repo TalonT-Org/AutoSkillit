@@ -489,6 +489,7 @@ async def run_headless_core(
     recipe_composite_hash: str = "",
     recipe_version: str = "",
     allowed_write_prefix: str = "",
+    readonly_skill: bool = False,
 ) -> SkillResult:
     """Shared headless runner used by run_skill.
 
@@ -556,7 +557,7 @@ async def run_headless_core(
             recipe_content_hash=recipe_content_hash,
             recipe_composite_hash=recipe_composite_hash,
             recipe_version=recipe_version,
-            readonly_skill=bool(allowed_write_prefix),
+            readonly_skill=readonly_skill,
         )
 
 
@@ -587,6 +588,7 @@ class DefaultHeadlessExecutor:
         recipe_composite_hash: str = "",
         recipe_version: str = "",
         allowed_write_prefix: str = "",
+        readonly_skill: bool = False,
     ) -> SkillResult:
         cfg = self._ctx.config.run_skill
         effective_timeout = timeout if timeout is not None else cfg.timeout
@@ -611,6 +613,7 @@ class DefaultHeadlessExecutor:
             recipe_composite_hash=recipe_composite_hash,
             recipe_version=recipe_version,
             allowed_write_prefix=allowed_write_prefix,
+            readonly_skill=readonly_skill,
         )
 
     async def dispatch_food_truck(

@@ -302,12 +302,20 @@ async def run_skill(
                 skill_command, tool_ctx.skill_resolver
             )
 
+        is_read_only = bool(
+            tool_ctx.read_only_resolver and tool_ctx.read_only_resolver(skill_command)
+        )
         allowed_write_prefix = ""
-        if tool_ctx.read_only_resolver and tool_ctx.read_only_resolver(skill_command):
+        if is_read_only:
             _skill_temp_name = target_name or ""
             if _skill_temp_name:
                 allowed_write_prefix = os.path.join(
                     cwd, ".autoskillit", "temp", _skill_temp_name, ""
+                )
+            else:
+                logger.warning(
+                    "read_only_skill_no_target_name",
+                    skill_command=skill_command[:100],
                 )
 
         invocation_marker = f"%%ORDER_UP::{uuid4().hex[:8]}%%"
@@ -360,6 +368,7 @@ async def run_skill(
                 recipe_composite_hash=tool_ctx.recipe_composite_hash,
                 recipe_version=tool_ctx.recipe_version,
                 allowed_write_prefix=allowed_write_prefix,
+                readonly_skill=is_read_only,
             )
             if skill_result.success:
                 tool_ctx.audit.record_success(skill_command)

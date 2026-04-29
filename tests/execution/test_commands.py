@@ -680,3 +680,35 @@ def test_all_session_builders_inject_mcp_connection_nonblocking(builder_call) ->
 
 def test_launch_id_in_headless_exclusive_vars() -> None:
     assert "AUTOSKILLIT_LAUNCH_ID" in _HEADLESS_EXCLUSIVE_VARS
+
+
+def test_allowed_write_prefix_in_headless_exclusive_vars() -> None:
+    assert "AUTOSKILLIT_ALLOWED_WRITE_PREFIX" in _HEADLESS_EXCLUSIVE_VARS
+
+
+class TestBuildLeafAllowedWritePrefix:
+    BASE = dict(
+        cwd="/repo",
+        completion_marker="DONE",
+        model=None,
+        plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
+        output_format_value="stream-json",
+        output_format_required_flags=["--verbose"],
+        add_dirs=[],
+        exit_after_stop_delay_ms=2000,
+    )
+
+    def test_allowed_write_prefix_in_env(self):
+        spec = build_leaf_headless_cmd(
+            "/investigate foo", **self.BASE, allowed_write_prefix="/tmp/foo/"
+        )
+        assert spec.env["AUTOSKILLIT_ALLOWED_WRITE_PREFIX"] == "/tmp/foo/"
+
+    def test_allowed_write_prefix_absent_when_empty(self):
+        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE, allowed_write_prefix="")
+        assert "AUTOSKILLIT_ALLOWED_WRITE_PREFIX" not in spec.env
+
+    def test_allowed_write_prefix_exclusive(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "old")
+        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE, allowed_write_prefix="new")
+        assert spec.env["AUTOSKILLIT_ALLOWED_WRITE_PREFIX"] == "new"

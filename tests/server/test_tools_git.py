@@ -180,6 +180,7 @@ class TestMergeWorktree:
             )
         )  # worktree list --porcelain
         tool_ctx.runner.push(_make_result(0, "dev\n", ""))  # step 7.5: branch --show-current
+        tool_ctx.runner.push(_make_result(0, "", ""))  # step 7.6: git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git merge
         tool_ctx.runner.push(_make_result(0, "", ""))  # worktree remove
         tool_ctx.runner.push(_make_result(0, "", ""))  # branch -D
@@ -314,6 +315,7 @@ class TestMergeWorktreeCleanupReporting:
             )
         )  # worktree list
         tool_ctx.runner.push(_make_result(0, "dev\n", ""))  # step 7.5: branch --show-current
+        tool_ctx.runner.push(_make_result(0, "", ""))  # step 7.6: git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git merge
         tool_ctx.runner.push(_make_result(0, "", ""))  # branch -D
         with patch(
@@ -354,6 +356,7 @@ class TestMergeWorktreeCleanupReporting:
             )
         )  # worktree list
         tool_ctx.runner.push(_make_result(0, "dev\n", ""))  # step 7.5: branch --show-current
+        tool_ctx.runner.push(_make_result(0, "", ""))  # step 7.6: git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git merge
         tool_ctx.runner.push(_make_result(0, "", ""))  # worktree remove
         tool_ctx.runner.push(_make_result(1, "", "error: branch not found"))  # branch -D FAILS
@@ -408,6 +411,7 @@ class TestMergeWorktreeCleanupWarnings:
             _make_result(0, "worktree /repo\nHEAD abc\nbranch refs/heads/dev\n\n", "")
         )
         tool_ctx.runner.push(_make_result(0, "dev\n", ""))  # step 7.5: branch --show-current
+        tool_ctx.runner.push(_make_result(0, "", ""))  # step 7.6: git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(0, "", ""))  # merge
         tool_ctx.runner.push(_make_result(0, "", ""))  # branch -D
 
@@ -450,6 +454,7 @@ class TestMergeWorktreeCleanupWarnings:
             _make_result(0, "worktree /repo\nHEAD abc\nbranch refs/heads/dev\n\n", "")
         )
         tool_ctx.runner.push(_make_result(0, "dev\n", ""))  # step 7.5: branch --show-current
+        tool_ctx.runner.push(_make_result(0, "", ""))  # step 7.6: git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(0, "", ""))  # merge
         tool_ctx.runner.push(_make_result(0, "", ""))  # worktree remove
         tool_ctx.runner.push(_make_result(1, "", "error: branch not found"))  # branch -D FAILS
@@ -485,6 +490,7 @@ class TestMergeWorktreeCleanupWarnings:
             _make_result(0, "worktree /repo\nHEAD abc\nbranch refs/heads/dev\n\n", "")
         )
         tool_ctx.runner.push(_make_result(0, "dev\n", ""))  # step 7.5: branch --show-current
+        tool_ctx.runner.push(_make_result(0, "", ""))  # step 7.6: git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(0, "", ""))  # merge
         tool_ctx.runner.push(_make_result(0, "", ""))  # worktree remove — success
         tool_ctx.runner.push(_make_result(0, "", ""))  # branch -D — success

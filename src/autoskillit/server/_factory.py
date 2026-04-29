@@ -321,8 +321,16 @@ def make_context(
             expected_when=tuple(contract.write_expected_when),
         )
 
+    def _resolve_read_only(skill_command: str) -> bool:
+        name = resolve_skill_name(skill_command)
+        if not name:
+            return False
+        contract = get_skill_contract(name, load_bundled_manifest())
+        return contract.read_only if contract else False
+
     ctx.output_pattern_resolver = _resolve_output_patterns
     ctx.write_expected_resolver = _resolve_write_behavior
+    ctx.read_only_resolver = _resolve_read_only
     ctx.token_factory = token_factory
     ctx.build_protected_campaign_ids = build_protected_campaign_ids
     ctx.executor = DefaultHeadlessExecutor(ctx)

@@ -414,6 +414,23 @@ async def perform_merge(
         return target_or_err
     target = target_or_err
 
+    # 7.6 Pre-merge dirty check — reject if main repo has uncommitted changes
+    rc, status_out, _ = await _run_git(["git", "status", "--porcelain"], target.path, 10, runner)
+    if rc == 0 and status_out.strip():
+        dirty_files = [line for line in status_out.splitlines() if line.strip()]
+        return {
+            "error": (
+                f"Main repository has {len(dirty_files)} dirty file(s): "
+                f"{', '.join(f.strip() for f in dirty_files[:10])}"
+                f"{' ...' if len(dirty_files) > 10 else ''}. "
+                f"Clean the working tree before merging."
+            ),
+            "failed_step": MergeFailedStep.DIRTY_MAIN_REPO,
+            "state": MergeState.WORKTREE_INTACT,
+            "worktree_path": worktree_path,
+            "dirty_files": dirty_files,
+        }
+
     # 8. Merge
     rc, _, merge_stderr = await _run_git(
         ["git", "merge", "--no-edit", worktree_branch], target.path, 60, runner

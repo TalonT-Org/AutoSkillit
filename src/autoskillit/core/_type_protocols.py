@@ -39,6 +39,7 @@ __all__ = [
     "DatabaseReader",
     "OutputPatternResolver",
     "WriteExpectedResolver",
+    "ReadOnlyResolver",
     "WorkspaceManager",
     "CloneManager",
     "GitHubFetcher",
@@ -235,6 +236,8 @@ class HeadlessExecutor(Protocol):
         recipe_content_hash: str = "",
         recipe_composite_hash: str = "",
         recipe_version: str = "",
+        allowed_write_prefix: str = "",
+        readonly_skill: bool = False,
     ) -> SkillResult: ...
 
     async def dispatch_food_truck(
@@ -348,6 +351,13 @@ class WriteExpectedResolver(Protocol):
     """Protocol for resolving write-expectation metadata from skill contracts."""
 
     def __call__(self, skill_command: str) -> WriteBehaviorSpec: ...
+
+
+@runtime_checkable
+class ReadOnlyResolver(Protocol):
+    """Protocol for resolving whether a skill is read-only from skill contracts."""
+
+    def __call__(self, skill_command: str) -> bool: ...
 
 
 @runtime_checkable

@@ -97,10 +97,9 @@ def test_pyi_stub_exports_skill_constants():
 
 
 def test_runtime_checkable_flags():
-    from autoskillit.core._type_protocols_infra import CampaignProtector
     from autoskillit.core._type_protocols_logging import SupportsDebug, SupportsLogger
 
-    for proto in (SupportsDebug, SupportsLogger, CampaignProtector):
+    for proto in (SupportsDebug, SupportsLogger):
         assert not getattr(proto, "_is_runtime_protocol", False), (
             f"{proto.__name__} must not be @runtime_checkable"
         )

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
 from autoskillit.planner.schema import (
@@ -53,3 +55,9 @@ def make_wp_result(wp_id: str, **overrides: Any) -> dict[str, Any]:
         **overrides,
     }
     return validate_wp_result(data)
+
+
+def write_json(path: Path, data: object) -> None:
+    """Write ``data`` as JSON to ``path``, creating parent dirs as needed."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data))

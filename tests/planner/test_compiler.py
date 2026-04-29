@@ -8,7 +8,12 @@ from pathlib import Path
 import pytest
 
 from autoskillit.planner.compiler import compile_plan
-from tests.planner.conftest import make_assignment_result, make_phase_result, make_wp_result
+from tests.planner.conftest import (
+    make_assignment_result,
+    make_phase_result,
+    make_wp_result,
+    write_json,
+)
 
 pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.feature("planner")]
 
@@ -16,11 +21,6 @@ pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.featu
 # ---------------------------------------------------------------------------
 # Fixture helpers
 # ---------------------------------------------------------------------------
-
-
-def _write_json(path: Path, data: object) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data))
 
 
 def _make_valid_output_dir(
@@ -36,11 +36,11 @@ def _make_valid_output_dir(
     wps_dir = tmp_path / "work_packages"
 
     for p in range(1, num_phases + 1):
-        _write_json(
+        write_json(
             phases_dir / f"P{p}_result.json",
             make_phase_result(p, name=f"Phase {p}"),
         )
-        _write_json(
+        write_json(
             assigns_dir / f"P{p}-A1_result.json",
             make_assignment_result(
                 p,
@@ -52,7 +52,7 @@ def _make_valid_output_dir(
         deps: list[str] = []
         if dependency_chain and p > 1:
             deps = [f"P{p - 1}-A1-WP1"]
-        _write_json(
+        write_json(
             wps_dir / f"P{p}-A1-WP1_result.json",
             make_wp_result(
                 f"P{p}-A1-WP1",
@@ -67,17 +67,17 @@ def _make_valid_output_dir(
         )
 
     manifest_items = [{"id": f"P{p}-A1-WP1", "status": "done"} for p in range(1, num_phases + 1)]
-    _write_json(
+    write_json(
         wps_dir / "wp_manifest.json", {"pass_name": "work_packages", "items": manifest_items}
     )
 
-    _write_json(
+    write_json(
         tmp_path / "validation.json",
         {"verdict": "pass", "findings": [], "warnings": [], "schema_version": 2},
     )
 
     if with_dep_graph:
-        _write_json(
+        write_json(
             tmp_path / "dep_graph.json",
             {
                 "added_backward_deps": {},
@@ -94,11 +94,11 @@ def _make_chain_3_wps(tmp_path: Path) -> Path:
     assigns_dir = tmp_path / "assignments"
     wps_dir = tmp_path / "work_packages"
 
-    _write_json(
+    write_json(
         phases_dir / "P1_result.json",
         make_phase_result(1, name="Foundation"),
     )
-    _write_json(
+    write_json(
         assigns_dir / "P1-A1_result.json",
         make_assignment_result(
             1,
@@ -108,7 +108,7 @@ def _make_chain_3_wps(tmp_path: Path) -> Path:
         ),
     )
     for i, deps in [(1, []), (2, ["P1-A1-WP1"]), (3, ["P1-A1-WP2"])]:
-        _write_json(
+        write_json(
             wps_dir / f"P1-A1-WP{i}_result.json",
             make_wp_result(
                 f"P1-A1-WP{i}",
@@ -122,10 +122,10 @@ def _make_chain_3_wps(tmp_path: Path) -> Path:
             ),
         )
     manifest_items = [{"id": f"P1-A1-WP{i}", "status": "done"} for i in range(1, 4)]
-    _write_json(
+    write_json(
         wps_dir / "wp_manifest.json", {"pass_name": "work_packages", "items": manifest_items}
     )
-    _write_json(
+    write_json(
         tmp_path / "validation.json",
         {"verdict": "pass", "findings": [], "warnings": [], "schema_version": 2},
     )
@@ -175,7 +175,7 @@ def test_compile_plan_depends_on_cross_ref(tmp_path: Path) -> None:
 
 def test_compile_plan_depended_on_by_cross_ref(tmp_path: Path) -> None:
     _make_chain_3_wps(tmp_path)
-    _write_json(
+    write_json(
         tmp_path / "dep_graph.json",
         {
             "added_backward_deps": {},

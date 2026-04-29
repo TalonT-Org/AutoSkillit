@@ -137,6 +137,11 @@ Write all modified files back atomically (read current → apply change → writ
 files may include: `_result.json` files, `wp_manifest.json`, `wp_index.json`,
 `dep_graph.json`.
 
+> **Note:** Combined documents (`combined_*.json`, `refined_*.json`) are intermediate
+> orchestration artifacts and are NOT updated by this skill. Downstream consumers
+> (`validate_plan`, `compile_plan`) read from individual `*_result.json` files directly,
+> so stale combined documents do not affect pipeline correctness.
+
 ### Step 5: Emit output tokens
 
 ```

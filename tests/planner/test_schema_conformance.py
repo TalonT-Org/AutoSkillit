@@ -12,13 +12,9 @@ from pathlib import Path
 import pytest
 
 from autoskillit.planner.validation import _load_assignment_results, _load_phase_results
+from tests.planner.conftest import write_json
 
 pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.feature("planner")]
-
-
-def _write_json(path: Path, data: object) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data))
 
 
 # ---------------------------------------------------------------------------
@@ -29,7 +25,7 @@ def _write_json(path: Path, data: object) -> None:
 def test_skill_compliant_phase_data_accepted_and_normalized(tmp_path: Path) -> None:
     phases_dir = tmp_path / "phases"
     phases_dir.mkdir()
-    _write_json(
+    write_json(
         phases_dir / "P1_result.json",
         {
             "id": "P1",
@@ -61,7 +57,7 @@ def test_skill_compliant_phase_data_accepted_and_normalized(tmp_path: Path) -> N
 def test_skill_compliant_assignment_data_accepted_and_normalized(tmp_path: Path) -> None:
     assign_dir = tmp_path / "assignments"
     assign_dir.mkdir()
-    _write_json(
+    write_json(
         assign_dir / "P1-A2_result.json",
         {
             "id": "P1-A2",
@@ -88,7 +84,7 @@ def test_skill_compliant_assignment_data_accepted_and_normalized(tmp_path: Path)
 def test_expand_assignments_with_skill_md_field_names(tmp_path: Path) -> None:
     from autoskillit.planner import expand_assignments
 
-    _write_json(
+    write_json(
         tmp_path / "refined_plan.json",
         {
             "phases": [
@@ -127,7 +123,7 @@ def test_expand_assignments_with_skill_md_field_names(tmp_path: Path) -> None:
 def test_compile_plan_derives_name_slug_from_name(tmp_path: Path) -> None:
     from autoskillit.planner.compiler import compile_plan
 
-    _write_json(
+    write_json(
         tmp_path / "phases" / "P1_result.json",
         {
             "id": "P1",
@@ -139,7 +135,7 @@ def test_compile_plan_derives_name_slug_from_name(tmp_path: Path) -> None:
             "assignments_preview": [],
         },
     )
-    _write_json(
+    write_json(
         tmp_path / "assignments" / "P1-A1_result.json",
         {
             "id": "P1-A1",
@@ -150,7 +146,7 @@ def test_compile_plan_derives_name_slug_from_name(tmp_path: Path) -> None:
             "proposed_work_packages": [],
         },
     )
-    _write_json(
+    write_json(
         tmp_path / "work_packages" / "P1-A1-WP1_result.json",
         {
             "id": "P1-A1-WP1",
@@ -162,11 +158,11 @@ def test_compile_plan_derives_name_slug_from_name(tmp_path: Path) -> None:
             "depends_on": [],
         },
     )
-    _write_json(
+    write_json(
         tmp_path / "work_packages" / "wp_manifest.json",
         {"pass_name": "work_packages", "items": [{"id": "P1-A1-WP1", "status": "done"}]},
     )
-    _write_json(
+    write_json(
         tmp_path / "validation.json",
         {"verdict": "pass", "findings": [], "warnings": [], "schema_version": 2},
     )
@@ -192,7 +188,7 @@ def test_skill_output_through_full_pipeline(tmp_path: Path) -> None:
         validate_plan,
     )
 
-    _write_json(
+    write_json(
         tmp_path / "phases" / "P1_result.json",
         {
             "id": "P1",
@@ -205,7 +201,7 @@ def test_skill_output_through_full_pipeline(tmp_path: Path) -> None:
         },
     )
 
-    _write_json(
+    write_json(
         tmp_path / "refined_plan.json",
         {
             "phases": [
@@ -224,7 +220,7 @@ def test_skill_output_through_full_pipeline(tmp_path: Path) -> None:
 
     expand_assignments(str(tmp_path / "refined_plan.json"), str(tmp_path))
 
-    _write_json(
+    write_json(
         tmp_path / "assignments" / "P1-A1_result.json",
         {
             "id": "P1-A1",
@@ -242,7 +238,7 @@ def test_skill_output_through_full_pipeline(tmp_path: Path) -> None:
             ],
         },
     )
-    _write_json(
+    write_json(
         tmp_path / "assignments" / "P1-A2_result.json",
         {
             "id": "P1-A2",
@@ -261,7 +257,7 @@ def test_skill_output_through_full_pipeline(tmp_path: Path) -> None:
         },
     )
 
-    _write_json(
+    write_json(
         tmp_path / "refined_assignments.json",
         {
             "assignments": [
@@ -292,7 +288,7 @@ def test_skill_output_through_full_pipeline(tmp_path: Path) -> None:
     expand_wps(str(tmp_path / "refined_assignments.json"), str(tmp_path))
 
     for wp_id in ["P1-A1-WP1", "P1-A2-WP1"]:
-        _write_json(
+        write_json(
             tmp_path / "work_packages" / f"{wp_id}_result.json",
             {
                 "id": wp_id,

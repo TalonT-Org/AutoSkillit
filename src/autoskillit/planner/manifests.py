@@ -44,38 +44,6 @@ def create_run_dir(temp_dir: str) -> RunDirResult:
     return RunDirResult(planner_dir=str(run_dir))
 
 
-def build_pre_elab_snapshot(manifest_path: str, output_dir: str) -> dict[str, str]:
-    manifest_file = Path(manifest_path)
-    out_dir = Path(output_dir)
-    try:
-        manifest = json.loads(manifest_file.read_text())
-    except json.JSONDecodeError as exc:
-        raise json.JSONDecodeError(
-            f"Failed to parse {manifest_file}: {exc.msg}", exc.doc, exc.pos
-        ) from exc
-    items = manifest.get("items", [])
-    phases = []
-    for item in items:
-        metadata = item.get("metadata", {})
-        phases.append(
-            {
-                "id": item["id"],
-                "name": item.get("name", ""),
-                "goal": metadata.get("goal", ""),
-                "scope": metadata.get("scope", []),
-                "ordering": metadata.get("ordering", 0),
-            }
-        )
-    phases.sort(key=lambda p: p["ordering"])
-    snapshot_path = out_dir / "plan_snapshot.json"
-    write_versioned_json(
-        snapshot_path,
-        {"task": "", "source_dir": "", "phases": phases},
-        schema_version=1,
-    )
-    return {"snapshot_path": str(snapshot_path)}
-
-
 def _build_index_entry(result_data: dict[str, object]) -> dict[str, object]:
     return {
         "id": result_data.get("id", ""),

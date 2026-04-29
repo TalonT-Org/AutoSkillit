@@ -1,3 +1,9 @@
+"""Planner compiler: topological sort, issue body generation, plan artifacts.
+
+Imports ``_load_*_results()`` from ``validation.py`` — see that module's
+docstring for the combined-document exclusion rationale.
+"""
+
 from __future__ import annotations
 
 import json

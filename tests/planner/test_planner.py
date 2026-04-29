@@ -48,6 +48,7 @@ def test_planner_all_exports() -> None:
         "resolve_wp_id",
         "validate_refined_assignments",
         "validate_refined_plan",
+        "ValidationFinding",
     }
 
 

@@ -127,7 +127,7 @@ def test_validate_plan_cyclic_dep_fails(tmp_path: Path) -> None:
     result = validate_plan(str(tmp_path))
     assert result["verdict"] == "fail"
     validation = json.loads((tmp_path / "validation.json").read_text())
-    assert any(wp1 in f and wp2 in f for f in validation["findings"])
+    assert any(wp1 in f["message"] and wp2 in f["message"] for f in validation["findings"])
 
 
 def test_validate_plan_missing_dep_ref_fails(tmp_path: Path) -> None:
@@ -176,7 +176,7 @@ def test_validate_plan_failed_wp_flagged_but_not_sole_fail_cause(tmp_path: Path)
     result = validate_plan(str(tmp_path))
     assert result["verdict"] == "fail"
     validation = json.loads((tmp_path / "validation.json").read_text())
-    assert any("P1-A1-WP1" in f for f in validation["findings"])
+    assert any("P1-A1-WP1" in f["message"] for f in validation["findings"])
 
 
 def test_validate_plan_dep_graph_backward_dep_injection(tmp_path: Path) -> None:
@@ -232,9 +232,9 @@ def test_check_duplicate_files_touched_detects_overlap() -> None:
     }
     findings = _check_duplicate_files_touched(wp_results)
     assert len(findings) == 1
-    assert "src/foo.py" in findings[0]
-    assert "P1-A1-WP1" in findings[0]
-    assert "P2-A1-WP1" in findings[0]
+    assert "src/foo.py" in findings[0]["message"]
+    assert "P1-A1-WP1" in findings[0]["message"]
+    assert "P2-A1-WP1" in findings[0]["message"]
 
 
 def test_check_duplicate_files_touched_no_false_positives() -> None:
@@ -250,8 +250,74 @@ def test_check_duplicate_files_touched_no_false_positives() -> None:
 
 
 def test_validate_plan_includes_duplicate_files_touched(tmp_path: Path) -> None:
-    """T14: validate_plan detects files_touched overlap and fails."""
+    """T14: validate_plan detects files_touched overlap as warning, not error."""
     _make_minimal_output_dir(tmp_path, wps_per_assignment=2)
+    wp_dir = tmp_path / "work_packages"
+    for wp_id in ("P1-A1-WP1", "P1-A1-WP2"):
+        result_path = wp_dir / f"{wp_id}_result.json"
+        data = json.loads(result_path.read_text())
+        data["files_touched"] = ["src/shared.py"]
+        result_path.write_text(json.dumps(data))
+
+    result = validate_plan(str(tmp_path))
+    assert result["verdict"] == "pass"
+    validation = json.loads((tmp_path / "validation.json").read_text())
+    assert any("src/shared.py" in w["message"] for w in validation["warnings"])
+
+
+# ---------------------------------------------------------------------------
+# Severity-level tests (T15–T19)
+# ---------------------------------------------------------------------------
+
+
+def test_warning_severity_does_not_fail_verdict(tmp_path: Path) -> None:
+    """T15: files_touched overlap is a warning, not an error — verdict stays pass."""
+    _make_minimal_output_dir(tmp_path, wps_per_assignment=2)
+    wp_dir = tmp_path / "work_packages"
+    for wp_id in ("P1-A1-WP1", "P1-A1-WP2"):
+        result_path = wp_dir / f"{wp_id}_result.json"
+        data = json.loads(result_path.read_text())
+        data["files_touched"] = ["src/shared.py"]
+        result_path.write_text(json.dumps(data))
+
+    result = validate_plan(str(tmp_path))
+    assert result["verdict"] == "pass"
+    assert result["issue_count"] == "0"
+    validation = json.loads((tmp_path / "validation.json").read_text())
+    assert len(validation["findings"]) == 0
+    assert len(validation["warnings"]) == 1
+    assert validation["warnings"][0]["severity"] == "warning"
+    assert validation["warnings"][0]["check"] == "duplicate_files_touched"
+    assert "src/shared.py" in validation["warnings"][0]["message"]
+
+
+def test_error_findings_have_structured_fields(tmp_path: Path) -> None:
+    """T16: Error findings contain message, severity, and check fields."""
+    _make_minimal_output_dir(tmp_path, wps_per_assignment=2)
+    wp1 = "P1-A1-WP1"
+    wp2 = "P1-A1-WP2"
+    wp_dir = tmp_path / "work_packages"
+    data1 = json.loads((wp_dir / f"{wp1}_result.json").read_text())
+    data1["depends_on"] = [wp2]
+    (wp_dir / f"{wp1}_result.json").write_text(json.dumps(data1))
+    data2 = json.loads((wp_dir / f"{wp2}_result.json").read_text())
+    data2["depends_on"] = [wp1]
+    (wp_dir / f"{wp2}_result.json").write_text(json.dumps(data2))
+
+    validate_plan(str(tmp_path))
+    validation = json.loads((tmp_path / "validation.json").read_text())
+    for finding in validation["findings"]:
+        assert "message" in finding
+        assert "severity" in finding
+        assert "check" in finding
+        assert finding["severity"] == "error"
+    cycle_findings = [f for f in validation["findings"] if f["check"] == "dag_acyclic"]
+    assert len(cycle_findings) == 1
+
+
+def test_mixed_errors_and_warnings(tmp_path: Path) -> None:
+    """T17: Sizing violation (error) + files_touched overlap (warning) coexist."""
+    _make_minimal_output_dir(tmp_path, wps_per_assignment=2, deliverables_override=[])
     wp_dir = tmp_path / "work_packages"
     for wp_id in ("P1-A1-WP1", "P1-A1-WP2"):
         result_path = wp_dir / f"{wp_id}_result.json"
@@ -262,4 +328,31 @@ def test_validate_plan_includes_duplicate_files_touched(tmp_path: Path) -> None:
     result = validate_plan(str(tmp_path))
     assert result["verdict"] == "fail"
     validation = json.loads((tmp_path / "validation.json").read_text())
-    assert any("src/shared.py" in f for f in validation["findings"])
+    error_findings = [f for f in validation["findings"] if f["severity"] == "error"]
+    assert len(error_findings) >= 1
+    assert len(validation["warnings"]) == 1
+    assert validation["warnings"][0]["severity"] == "warning"
+
+
+def test_validation_json_schema_version_2(tmp_path: Path) -> None:
+    """T18: validation.json uses schema_version 2 and includes warnings key."""
+    _make_minimal_output_dir(tmp_path)
+    validate_plan(str(tmp_path))
+    validation = json.loads((tmp_path / "validation.json").read_text())
+    assert validation["schema_version"] == 2
+    assert "warnings" in validation
+
+
+def test_check_duplicate_files_touched_returns_structured_findings() -> None:
+    """T19: _check_duplicate_files_touched returns dicts with message/severity/check."""
+    from autoskillit.planner.validation import _check_duplicate_files_touched
+
+    wp_results = {
+        "P1-A1-WP1": {"files_touched": ["src/foo.py"]},
+        "P2-A1-WP1": {"files_touched": ["src/foo.py"]},
+    }
+    findings = _check_duplicate_files_touched(wp_results)
+    assert len(findings) == 1
+    assert findings[0]["severity"] == "warning"
+    assert findings[0]["check"] == "duplicate_files_touched"
+    assert "message" in findings[0]

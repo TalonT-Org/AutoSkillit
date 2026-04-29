@@ -12,6 +12,10 @@ src/autoskillit/recipes/*.yaml:
   - recipe/
   - contracts/
 
+src/autoskillit/recipes/campaigns/*.yaml:
+  - recipe/
+  - cli/
+
 src/autoskillit/recipes/examples/*.yaml:
   - recipe/
 

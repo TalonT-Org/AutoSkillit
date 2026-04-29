@@ -38,7 +38,7 @@ def main() -> None:
         return
 
     tool_name = data.get("tool_name", "")
-    if tool_name not in ("Write", "Edit", "MultiEdit"):
+    if tool_name not in ("Write", "Edit"):
         sys.exit(0)
 
     tool_input = data.get("tool_input", {})

@@ -77,7 +77,7 @@ class DefaultRecipeRepository:
     def load_and_validate(
         self,
         name: str,
-        project_dir: Any,
+        project_dir: Path | str,
         *,
         suppressed: Sequence[str] | None = None,
         resolved_defaults: dict[str, str] | None = None,
@@ -85,6 +85,7 @@ class DefaultRecipeRepository:
         temp_dir: Path | None = None,
         temp_dir_relpath: str | None = None,
     ) -> dict[str, Any]:
+        project_dir = Path(project_dir)
         recipe_info = self.find(name, project_dir)
         return cast(
             dict[str, Any],

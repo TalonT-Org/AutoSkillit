@@ -78,6 +78,7 @@ class ExecutorCall:
     recipe_composite_hash: str = ""
     recipe_version: str | None = None
     allowed_write_prefix: str = ""
+    readonly_skill: bool = False
 
 
 @dataclasses.dataclass
@@ -154,6 +155,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         recipe_composite_hash: str = "",
         recipe_version: str | None = None,
         allowed_write_prefix: str = "",
+        readonly_skill: bool = False,
     ) -> SkillResult:
         self.calls.append(
             ExecutorCall(
@@ -175,6 +177,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 recipe_composite_hash=recipe_composite_hash,
                 recipe_version=recipe_version,
                 allowed_write_prefix=allowed_write_prefix,
+                readonly_skill=readonly_skill,
             )
         )
         if self._queue:

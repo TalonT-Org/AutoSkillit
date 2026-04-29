@@ -58,10 +58,7 @@ def read_sidecar(dispatch_id: str, project_dir: Path) -> list[IssueSidecarEntry]
 
 
 def read_sidecar_from_path(path: Path) -> list[IssueSidecarEntry]:
-    """Read and parse a sidecar JSONL at an explicit path.
-
-    Returns parsed entries. Skips corrupt lines. Returns [] on OSError.
-    """
+    """Read and parse a sidecar JSONL at path; skips corrupt lines; returns [] on OSError."""
     entries: list[IssueSidecarEntry] = []
     try:
         lines = path.read_text().splitlines()

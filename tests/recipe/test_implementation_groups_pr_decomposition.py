@@ -25,8 +25,13 @@ def test_arch_lenses_defaults_to_true(recipe):
 
 def test_prepare_pr_routes_to_compose_pr_when_arch_lenses_false(recipe):
     step = recipe.steps["prepare_pr"]
-    routes = [c.route for c in step.on_result.conditions if c.when and "prep_path" in c.when]
-    assert "compose_pr" in routes
+    compose_cond = next(
+        (c for c in step.on_result.conditions if c.route == "compose_pr" and c.when),
+        None,
+    )
+    assert compose_cond is not None
+    assert "prep_path" in compose_cond.when
+    assert "arch_lenses" not in compose_cond.when
 
 
 def test_prepare_pr_arch_lenses_route_checks_ingredient(recipe):

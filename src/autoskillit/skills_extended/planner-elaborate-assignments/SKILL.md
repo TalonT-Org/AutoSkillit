@@ -30,7 +30,7 @@ is the sole writer for this phase's assignments — no concurrent write races.
 - Let an L0 failure abort the phase — always write a stub and continue
 - Write output outside `$2/assignments/`
 - Spawn L0s sequentially — always in parallel
-- Read `.autoskillit/temp/` artifacts outside your designated input files and output directory
+- Read `{{AUTOSKILLIT_TEMP}}` artifacts outside your designated input files and output directory
 - Explore parent directories of your input paths (e.g., `ls $(dirname $1)/..`)
 - Read result files from other phases
 

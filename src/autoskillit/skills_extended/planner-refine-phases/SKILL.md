@@ -38,7 +38,7 @@ conflicts, applies field-level edits to the plan, and writes `refined_plan.json`
 - Allow an L0 subagent to write files directly (L0s return structured text only)
 - Emit `refined_plan_path` before writing `refined_plan.json`
 - Skip emitting `refined_plan_path` even if all L0s fail (write unchanged plan, still emit)
-- Read `.autoskillit/temp/` artifacts not passed as positional arguments
+- Read `{{AUTOSKILLIT_TEMP}}` artifacts not passed as positional arguments
 
 **ALWAYS:**
 - Validate each L0 response for `phase_id`, `changes` (array), `conflicts` (array)

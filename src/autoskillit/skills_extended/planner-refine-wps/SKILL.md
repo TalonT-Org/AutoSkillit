@@ -44,7 +44,7 @@ suggestions, resolves conflicts, and writes `refined_wps.json`.
 - Skip emitting `refined_wps_path` even if all L0s fail (write unchanged WPs, still emit)
 - Spawn more than 6 L0s in a single parallel batch
 - Spawn one L0 per WP — L0s operate per PHASE
-- Read `.autoskillit/temp/` artifacts not passed as positional arguments
+- Read `{{AUTOSKILLIT_TEMP}}` artifacts not passed as positional arguments
 
 **ALWAYS:**
 - Spawn one L0 per phase (NOT per WP) — each L0 reviews ALL WPs in its phase against the full WP set

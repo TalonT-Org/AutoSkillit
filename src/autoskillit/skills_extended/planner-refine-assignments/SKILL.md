@@ -42,7 +42,7 @@ cross-assignment WP ownership conflicts, applies field-level edits, and writes
 - Emit `refined_assignments_path` before writing `refined_assignments.json`
 - Skip emitting `refined_assignments_path` even if all L0s fail (write unchanged assignments, still emit)
 - Spawn more than 6 L0s in a single parallel batch
-- Read `.autoskillit/temp/` artifacts not passed as positional arguments
+- Read `{{AUTOSKILLIT_TEMP}}` artifacts not passed as positional arguments
 
 **ALWAYS:**
 - Validate each L0 response for `assignment_id`, `changes` (array), `dependency_corrections` (array), `wp_proposal_adjustments` (array)

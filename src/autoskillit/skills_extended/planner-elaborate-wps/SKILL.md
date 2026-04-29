@@ -31,7 +31,7 @@ is the sole writer for this phase's WPs — no concurrent write races.
 - Write output outside `$2/work_packages/`
 - Spawn L0s sequentially — always in parallel
 - Spawn more than 6 L0s in one batch — if WP count exceeds 6, use sequential batches of 6
-- Read `.autoskillit/temp/` artifacts outside your designated input files and output directory
+- Read `{{AUTOSKILLIT_TEMP}}` artifacts outside your designated input files and output directory
 - Explore parent directories of your input paths (e.g., `ls $(dirname $1)/..`)
 - Read result files from other phases
 

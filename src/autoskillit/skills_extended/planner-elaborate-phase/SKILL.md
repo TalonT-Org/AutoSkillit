@@ -37,7 +37,7 @@ independently and writes a single elaborated phase result. No dependency on
 - Read any `*_result.json` file from other phases (you have only the snapshot)
 - Require or read a context file from `check_remaining`
 - Communicate with other parallel worker instances
-- Read `.autoskillit/temp/` artifacts outside your designated input files and output directory
+- Read `{{AUTOSKILLIT_TEMP}}` artifacts outside your designated input files and output directory
 - Explore parent directories of your input paths (e.g., `ls $(dirname $1)/..`)
 
 **ALWAYS:**

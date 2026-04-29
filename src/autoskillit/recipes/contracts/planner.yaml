@@ -187,6 +187,8 @@ skills:
     pattern_examples:
     - 'alignment_findings_path = /tmp/autoskillit/planner/run-20260101-120000/task_alignment.json
 
+      alignment_finding_count = 0
+
       %%ORDER_UP%%'
     write_behavior: always
   planner-reconcile-deps:

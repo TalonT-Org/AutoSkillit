@@ -289,8 +289,6 @@ def test_elaborate_wps_contract_two_inputs() -> None:
 
 # --- Task-blindness fix tests ---
 
-pytestmark = [pytest.mark.layer("skills"), pytest.mark.small]
-
 
 def test_generate_phases_skill_references_planner_task():
     content = (SKILLS_ROOT / "planner-generate-phases" / "SKILL.md").read_text()

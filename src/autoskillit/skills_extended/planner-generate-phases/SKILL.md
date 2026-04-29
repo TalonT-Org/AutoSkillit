@@ -39,7 +39,7 @@ Pass 1 entry point. Read the analysis file (and optionally domain knowledge) and
 - Use freeform text instead of the required JSON schema
 - Read files outside `$(dirname $1)` or the project's git-tracked source tree
 - Explore parent directories of `$(dirname $1)` (e.g., `ls $(dirname $1)/..`)
-- Read `.autoskillit/temp/` artifacts from other planner runs or pipeline steps
+- Read `{{AUTOSKILLIT_TEMP}}` artifacts from other planner runs or pipeline steps
 
 **ALWAYS:**
 - Write `$(dirname $1)/phases/{phase_id}_result.json` for every phase

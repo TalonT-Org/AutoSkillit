@@ -150,12 +150,14 @@ class GitHubApiLog(Protocol):
     def clear(self) -> None: ...
 
 
+# Not @runtime_checkable: structural (duck-typing) protocol; isinstance() checks not needed.
 class SupportsDebug(Protocol):
     """Structural logger protocol — only the debug() method is required."""
 
     def debug(self, event: str, **kwargs: Any) -> None: ...
 
 
+# Not @runtime_checkable: structural (duck-typing) protocol; isinstance() checks not needed.
 class SupportsLogger(SupportsDebug, Protocol):
     """Structural logger protocol — debug() and error() methods required."""
 

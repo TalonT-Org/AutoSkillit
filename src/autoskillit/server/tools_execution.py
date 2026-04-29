@@ -501,19 +501,19 @@ async def dispatch_food_truck(
                 campaign_state_path = Path(campaign_state_path_str)
                 if campaign_state_path.exists():
                     from autoskillit.fleet import (
-                        DispatchRecord as _DR,
-                    )
-                    from autoskillit.fleet import (
-                        DispatchStatus as _DS,
-                    )
-                    from autoskillit.fleet import (
+                        DispatchRecord,
+                        DispatchStatus,
                         append_dispatch_record,
                     )
 
-                    status = _DS.SUCCESS if envelope.get("success") else _DS.FAILURE
+                    status = (
+                        DispatchStatus.SUCCESS
+                        if envelope.get("success")
+                        else DispatchStatus.FAILURE
+                    )
                     append_dispatch_record(
                         campaign_state_path,
-                        _DR(
+                        DispatchRecord(
                             name=dispatch_name,
                             status=status,
                             dispatch_id=envelope.get("dispatch_id", ""),

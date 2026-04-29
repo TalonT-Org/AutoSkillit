@@ -107,7 +107,12 @@ _ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
         }
     ),
     DispatchStatus.RESUMABLE: frozenset(
-        {DispatchStatus.RUNNING, DispatchStatus.SUCCESS, DispatchStatus.FAILURE}
+        {
+            DispatchStatus.RUNNING,
+            DispatchStatus.SUCCESS,
+            DispatchStatus.FAILURE,
+            DispatchStatus.INTERRUPTED,
+        }
     ),
     # Terminal states: no further transitions permitted
     DispatchStatus.SUCCESS: frozenset(),
@@ -300,7 +305,9 @@ def append_dispatch_record(
     _write_state(state_path, state)
 
 
-_COMPLETED_STATUSES = frozenset({DispatchStatus.SUCCESS, DispatchStatus.SKIPPED})
+_COMPLETED_STATUSES = frozenset(
+    {DispatchStatus.SUCCESS, DispatchStatus.SKIPPED, DispatchStatus.FAILURE}
+)
 
 _TERMINAL_DISPATCH_STATUSES: frozenset[str] = frozenset(
     {
@@ -398,15 +405,8 @@ def _crash_recover_dispatch(
     state_path: Path,
     record: DispatchRecord,
     reason: str = "stale_running_on_resume",
-) -> DispatchStatus:
-    """Transition a confirmed-dead RUNNING dispatch to RESUMABLE or INTERRUPTED.
-
-    Returns the new status so the caller can update the in-memory record.
-    Decision rule:
-    - sidecar_path absent or file missing → INTERRUPTED
-    - sidecar file exists, all non-blank lines corrupt → INTERRUPTED
-    - sidecar file exists, empty OR at least one parseable line → RESUMABLE
-    """
+) -> DispatchStatus | None:
+    """Recover a stale RUNNING dispatch to RESUMABLE or INTERRUPTED; None if both writes fail."""
     from autoskillit.fleet.sidecar import read_sidecar_from_path  # noqa: PLC0415
 
     sidecar = Path(record.sidecar_path) if record.sidecar_path else None
@@ -427,11 +427,12 @@ def _crash_recover_dispatch(
                     )
     try:
         mark_dispatch_interrupted(state_path, record.name, reason=reason)
+        return DispatchStatus.INTERRUPTED
     except Exception:
         logger.warning(
             "_crash_recover_dispatch: failed to mark dispatch interrupted", exc_info=True
         )
-    return DispatchStatus.INTERRUPTED
+        return None
 
 
 def resume_campaign_from_state(
@@ -471,7 +472,10 @@ def resume_campaign_from_state(
                 if d.status == DispatchStatus.RUNNING:
                     if is_dispatch_session_alive(d):
                         continue
-                    d.status = _crash_recover_dispatch(state_path, d)
+                    new_status = _crash_recover_dispatch(state_path, d)
+                    if new_status is not None:
+                        d.status = new_status
+                        d.reason = "stale_running_on_resume"
 
             # Phase 2: check for failure halt
             for d in state.dispatches:

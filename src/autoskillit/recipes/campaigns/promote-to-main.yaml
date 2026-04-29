@@ -1,0 +1,98 @@
+name: promote-to-main
+description: >-
+  Full promotion lifecycle: audit integration branch, human review gate,
+  implement audit findings with BEM-guided distribution, promote to main.
+kind: campaign
+autoskillit_version: "0.9.259"
+recipe_version: "1.0.0"
+categories:
+  - orchestration-family
+
+continue_on_failure: false
+
+allowed_recipes:
+  - full-audit
+  - bem-wrapper
+  - implement-findings
+  - promote-to-main-wrapper
+
+ingredients:
+  source_dir:
+    description: "Source repository path"
+    required: true
+  integration_branch:
+    description: "Integration branch to promote"
+    default: "integration"
+  base_branch:
+    description: "Target branch for promotion PR"
+    default: "main"
+  max_issues_per_l2:
+    description: "Max issues per L2 food truck"
+    default: "6"
+    hidden: true
+  model_context_window:
+    description: "Model context window in tokens; set to 1000000 for Opus 1M"
+    default: "200000"
+    hidden: true
+
+dispatches:
+  - name: full-audit
+    recipe: full-audit
+    task: "Run comprehensive audit on integration branch"
+    ingredients:
+      workspace: "${{ inputs.source_dir }}"
+      branch: "${{ inputs.integration_branch }}"
+    capture:
+      issue_urls: "${{ result.issue_urls }}"
+    depends_on: []
+
+  - name: review-gate
+    gate: confirm
+    message: >-
+      Full audit complete. Review the created GitHub issues.
+      Close any false positives, then approve to proceed.
+    depends_on:
+      - full-audit
+
+  - name: build-map
+    recipe: bem-wrapper
+    task: "Analyze issue dependencies and compute distribution plan"
+    ingredients:
+      issue_urls: "${{ campaign.issue_urls }}"
+      base_branch: "${{ inputs.integration_branch }}"
+    capture:
+      execution_map: "${{ result.execution_map }}"
+    depends_on:
+      - review-gate
+
+  - name: implement-findings
+    recipe: implement-findings
+    task: "Implement audit findings guided by BEM execution map"
+    ingredients:
+      issue_urls: "${{ campaign.issue_urls }}"
+      execution_map: "${{ campaign.execution_map }}"
+      base_branch: "${{ inputs.integration_branch }}"
+      source_dir: "${{ inputs.source_dir }}"
+      max_parallel: "${{ inputs.max_issues_per_l2 }}"
+      model_context_window: "${{ inputs.model_context_window }}"
+    depends_on:
+      - build-map
+
+  - name: promote
+    recipe: promote-to-main-wrapper
+    task: "Create promotion PR from integration branch to main"
+    ingredients:
+      integration_branch: "${{ inputs.integration_branch }}"
+      base_branch: "${{ inputs.base_branch }}"
+      source_dir: "${{ inputs.source_dir }}"
+    capture:
+      pr_url: "${{ result.pr_url }}"
+      verdict: "${{ result.verdict }}"
+    depends_on:
+      - implement-findings
+
+kitchen_rules:
+  - "The review-gate dispatch requires explicit human approval before proceeding."
+  - "Issues closed by the human during review are excluded by the BEM wrapper."
+
+steps: {}

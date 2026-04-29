@@ -80,7 +80,17 @@ async def test_gh_cli_records_exit_code_and_latency(build_ctx):
 
     from autoskillit.server.helpers import _run_subprocess
 
-    with patch("autoskillit.server.helpers._get_ctx", return_value=ctx):
+    _tick = 0.0
+
+    def _fake_monotonic() -> float:
+        nonlocal _tick
+        _tick += 0.001
+        return _tick
+
+    with (
+        patch("autoskillit.server.helpers._get_ctx", return_value=ctx),
+        patch("autoskillit.server.helpers.time.monotonic", _fake_monotonic),
+    ):
         await _run_subprocess(["gh", "api", "repos/o/r/issues"], cwd="/tmp", timeout=30)
 
     usage = log.to_usage("sess-1")

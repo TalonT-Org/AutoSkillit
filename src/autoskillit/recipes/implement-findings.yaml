@@ -35,6 +35,10 @@ ingredients:
     description: "Max issues to run in parallel within a group (default suits 200K-context models)"
     default: "6"
     hidden: true
+  model_context_window:
+    description: "Model context window in tokens for dynamic issue-cap calculation"
+    default: "200000"
+    hidden: true
 
 kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,

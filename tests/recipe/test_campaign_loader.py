@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from autoskillit.core import pkg_root
+from autoskillit.core import DispatchGateType, pkg_root
 from autoskillit.recipe.io import (
     _parse_recipe,
     find_campaign_by_name,
@@ -123,7 +123,12 @@ def test_parse_recipe_defaults_campaign_fields_when_absent():
 # ---------------------------------------------------------------------------
 
 
-def test_list_campaign_recipes_scans_campaigns_dir(tmp_path: Path):
+def test_list_campaign_recipes_scans_campaigns_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    import autoskillit.recipe.io as _rio
+
+    monkeypatch.setattr(_rio, "pkg_root", lambda: tmp_path)
     campaigns_dir = tmp_path / ".autoskillit" / "recipes" / "campaigns"
     campaigns_dir.mkdir(parents=True)
     _write_yaml(
@@ -135,7 +140,12 @@ def test_list_campaign_recipes_scans_campaigns_dir(tmp_path: Path):
     assert result.items[0].name == "my-campaign"
 
 
-def test_list_campaign_recipes_returns_empty_when_no_dir(tmp_path: Path):
+def test_list_campaign_recipes_returns_empty_when_no_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    import autoskillit.recipe.io as _rio
+
+    monkeypatch.setattr(_rio, "pkg_root", lambda: tmp_path)
     result = list_campaign_recipes(tmp_path)
     assert result.items == []
 
@@ -244,3 +254,54 @@ def test_bundled_example_campaign_parseable():
     recipe = load_recipe(example_path)
     assert recipe.kind == RecipeKind.CAMPAIGN
     assert len(recipe.dispatches) == 2
+
+
+# ---------------------------------------------------------------------------
+# promote-to-main campaign
+# ---------------------------------------------------------------------------
+
+
+def test_promote_to_main_campaign_parseable():
+    path = pkg_root() / "recipes" / "campaigns" / "promote-to-main.yaml"
+    recipe = load_recipe(path)
+    assert recipe.name == "promote-to-main"
+    assert recipe.kind == RecipeKind.CAMPAIGN
+    assert recipe.recipe_version == "1.0.0"
+
+
+def test_promote_to_main_campaign_passes_validation():
+    path = pkg_root() / "recipes" / "campaigns" / "promote-to-main.yaml"
+    recipe = load_recipe(path)
+    findings = validate_recipe(recipe)
+    assert findings == [], f"Unexpected findings: {findings}"
+
+
+def test_promote_to_main_campaign_dispatch_chain():
+    path = pkg_root() / "recipes" / "campaigns" / "promote-to-main.yaml"
+    recipe = load_recipe(path)
+    names = [d.name for d in recipe.dispatches]
+    assert names == ["full-audit", "review-gate", "build-map", "implement-findings", "promote"]
+    gate_dispatches = [d for d in recipe.dispatches if d.gate]
+    assert len(gate_dispatches) == 1
+    gd = gate_dispatches[0]
+    assert gd.name == "review-gate"
+    assert gd.gate == DispatchGateType.CONFIRM
+    assert gd.message
+    assert not gd.recipe
+    assert not gd.capture
+
+
+def test_promote_to_main_campaign_in_list_campaign_recipes(tmp_path: Path):
+    result = list_campaign_recipes(tmp_path)
+    assert result.errors == []
+    names = [r.name for r in result.items]
+    assert "promote-to-main" in names
+
+
+def test_implement_findings_has_model_context_window_ingredient():
+    path = pkg_root() / "recipes" / "implement-findings.yaml"
+    recipe = load_recipe(path)
+    assert "model_context_window" in recipe.ingredients
+    ing = recipe.ingredients["model_context_window"]
+    assert ing.hidden is True
+    assert ing.default == "200000"

@@ -43,7 +43,7 @@ def _require_fleet(cfg: AutomationConfig) -> None:
 
 if TYPE_CHECKING:
     from autoskillit.config import AutomationConfig
-    from autoskillit.fleet import CampaignState, DispatchRecord, ResumeDecision
+    from autoskillit.fleet import CampaignState, DispatchRecord, DispatchStatus, ResumeDecision
     from autoskillit.recipe.schema import Recipe
 
 _STATUS_COLUMNS = (
@@ -73,7 +73,9 @@ def _compute_exit_code(state: CampaignState) -> int:
             DispatchStatus.RELEASED,
         }
     )
-    _in_progress = frozenset({DispatchStatus.RUNNING, DispatchStatus.PENDING})
+    _in_progress = frozenset(
+        {DispatchStatus.RUNNING, DispatchStatus.PENDING, DispatchStatus.RESUMABLE}
+    )
     has_failure = any(d.status in _failure for d in state.dispatches)
     has_in_progress = any(d.status in _in_progress for d in state.dispatches)
     if has_failure:
@@ -363,8 +365,18 @@ def _launch_fleet_session(
         completed_dispatches = (
             resume_metadata.completed_dispatches_block if resume_metadata is not None else ""
         )
+        resumable_dispatch_name = (
+            resume_metadata.next_dispatch_name
+            if resume_metadata is not None and resume_metadata.is_resumable
+            else ""
+        )
         prompt = _build_fleet_campaign_prompt(
-            campaign_recipe, manifest_yaml, completed_dispatches, mcp_prefix, campaign_id
+            campaign_recipe,
+            manifest_yaml,
+            completed_dispatches,
+            mcp_prefix,
+            campaign_id,
+            resumable_dispatch_name=resumable_dispatch_name,
         )
         extra_env = {
             "AUTOSKILLIT_SESSION_TYPE": "fleet",
@@ -379,6 +391,19 @@ def _launch_fleet_session(
             )
             if reload_id is None:
                 break
+
+
+def _transition_dead_dispatch(
+    state_path: Path, record: DispatchRecord, reason: str
+) -> DispatchStatus | None:
+    """Transition a confirmed-dead RUNNING dispatch to RESUMABLE or INTERRUPTED.
+
+    Delegates sidecar decision logic to the fleet layer. Returns the new status,
+    or None if both write attempts failed. Never raises.
+    """
+    from autoskillit.fleet import crash_recover_dispatch  # noqa: PLC0415
+
+    return crash_recover_dispatch(state_path, record, reason=reason)
 
 
 @asynccontextmanager
@@ -419,7 +444,6 @@ async def _fleet_signal_guard(
                     from autoskillit.execution import async_kill_process_tree, read_starttime_ticks
                     from autoskillit.fleet import (  # noqa: PLC0415
                         DispatchStatus,
-                        mark_dispatch_interrupted,
                         read_state,
                     )
 
@@ -429,17 +453,9 @@ async def _fleet_signal_guard(
                             if dispatch.status != DispatchStatus.RUNNING:
                                 continue
                             if dispatch.l2_pid == 0:
-                                try:
-                                    mark_dispatch_interrupted(
-                                        state_path,
-                                        dispatch.name,
-                                        reason=f"signal_{signame}",
-                                    )
-                                except Exception:
-                                    logger.warning(
-                                        "signal_guard: failed to mark dispatch interrupted",
-                                        exc_info=True,
-                                    )
+                                _transition_dead_dispatch(
+                                    state_path, dispatch, reason=f"signal_{signame}"
+                                )
                                 continue
 
                             # Verify PID identity before killing
@@ -472,17 +488,9 @@ async def _fleet_signal_guard(
                                             exc_info=True,
                                         )
 
-                            try:
-                                mark_dispatch_interrupted(
-                                    state_path,
-                                    dispatch.name,
-                                    reason=f"signal_{signame}",
-                                )
-                            except Exception:
-                                logger.warning(
-                                    "signal_guard: failed to mark dispatch interrupted",
-                                    exc_info=True,
-                                )
+                            _transition_dead_dispatch(
+                                state_path, dispatch, reason=f"signal_{signame}"
+                            )
 
                     if cleanup_on_interrupt:
                         try:
@@ -523,11 +531,7 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
     - Process alive + ticks mismatch → reaped_pid_recycled (no kill)
     """
     from autoskillit.execution import kill_process_tree, read_boot_id, read_starttime_ticks
-    from autoskillit.fleet import (  # noqa: PLC0415
-        DispatchStatus,
-        mark_dispatch_interrupted,
-        read_state,
-    )
+    from autoskillit.fleet import DispatchStatus, read_state  # noqa: PLC0415
 
     current_boot_id = read_boot_id()
 
@@ -557,15 +561,16 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
                 pid = dispatch.l2_pid
 
                 if pid == 0:
-                    _action = "reaped_dead_pid"
                     if dry_run:
                         logger.info("reap: [WOULD MARK]  %s  pid=0  (no PID recorded)", name)
                     else:
-                        try:
-                            mark_dispatch_interrupted(state_path, name, reason=_action)
+                        new_status = _transition_dead_dispatch(
+                            state_path, dispatch, reason="reaped_dead_pid"
+                        )
+                        if new_status is not None:
                             logger.info("reap: [MARKED]      %s  (no PID recorded)", name)
-                        except ValueError:
-                            logger.info("reap: [SKIPPED]     %s  (already terminal)", name)
+                        else:
+                            logger.warning("reap: [MARK_FAILED] %s  (no PID recorded)", name)
                     continue
 
                 # Boot ID check: if machine rebooted, all PIDs are recycled
@@ -579,30 +584,22 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
                             "reap: [WOULD MARK]  %s  pid=%d  (rebooted, pid_recycled)", name, pid
                         )
                     else:
-                        try:
-                            mark_dispatch_interrupted(
-                                state_path, name, reason="reaped_pid_recycled"
-                            )
-                            logger.info(
-                                "reap: [MARKED]      %s  pid=%d  (rebooted, pid_recycled)",
-                                name,
-                                pid,
-                            )
-                        except ValueError:
-                            logger.info("reap: [SKIPPED]     %s  (already terminal)", name)
+                        _transition_dead_dispatch(
+                            state_path, dispatch, reason="reaped_pid_recycled"
+                        )
+                        logger.info(
+                            "reap: [MARKED]      %s  pid=%d  (rebooted, pid_recycled)",
+                            name,
+                            pid,
+                        )
                     continue
 
                 if not psutil.pid_exists(pid):
                     if dry_run:
                         logger.info("reap: [WOULD MARK]  %s  pid=%d  (process dead)", name, pid)
                     else:
-                        try:
-                            mark_dispatch_interrupted(state_path, name, reason="reaped_dead_pid")
-                            logger.info(
-                                "reap: [MARKED]      %s  pid=%d  (process dead)", name, pid
-                            )
-                        except ValueError:
-                            logger.info("reap: [SKIPPED]     %s  (already terminal)", name)
+                        _transition_dead_dispatch(state_path, dispatch, reason="reaped_dead_pid")
+                        logger.info("reap: [MARKED]      %s  pid=%d  (process dead)", name, pid)
                     continue
 
                 # Process is alive — check identity
@@ -619,30 +616,22 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
                             logger.warning(
                                 "reap: kill_process_tree failed for pid=%d", pid, exc_info=True
                             )
-                        try:
-                            mark_dispatch_interrupted(state_path, name, reason="reaped_orphan")
-                            logger.info(
-                                "reap: [KILLED]      %s  pid=%d  (orphan reaped)", name, pid
-                            )
-                        except ValueError:
-                            logger.info("reap: [SKIPPED]     %s  (already terminal)", name)
+                        _transition_dead_dispatch(state_path, dispatch, reason="reaped_orphan")
+                        logger.info("reap: [KILLED]      %s  pid=%d  (orphan reaped)", name, pid)
                 else:
                     if dry_run:
                         logger.info(
                             "reap: [WOULD MARK]  %s  pid=%d  (PID recycled, no kill)", name, pid
                         )
                     else:
-                        try:
-                            mark_dispatch_interrupted(
-                                state_path, name, reason="reaped_pid_recycled"
-                            )
-                            logger.info(
-                                "reap: [MARKED]      %s  pid=%d  (PID recycled, no kill)",
-                                name,
-                                pid,
-                            )
-                        except ValueError:
-                            logger.info("reap: [SKIPPED]     %s  (already terminal)", name)
+                        _transition_dead_dispatch(
+                            state_path, dispatch, reason="reaped_pid_recycled"
+                        )
+                        logger.info(
+                            "reap: [MARKED]      %s  pid=%d  (PID recycled, no kill)",
+                            name,
+                            pid,
+                        )
         finally:
             fcntl.flock(_lock_fh, fcntl.LOCK_UN)
 

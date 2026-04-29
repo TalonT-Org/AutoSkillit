@@ -442,8 +442,12 @@ async def test_halt_on_first_failure_default(fleet_runtime: FleetRuntime) -> Non
 
 @pytest.mark.anyio
 async def test_continue_on_failure_when_flagged(fleet_runtime: FleetRuntime) -> None:
-    """continue_on_failure=True returns next_dispatch_name for the failed dispatch."""
-    from autoskillit.fleet.state import DispatchStatus, resume_campaign_from_state
+    """continue_on_failure=True does not halt; FAILURE dispatches excluded from next selection."""
+    from autoskillit.fleet.state import (
+        FLEET_HALTED_SENTINEL,
+        DispatchStatus,
+        resume_campaign_from_state,
+    )
 
     rt = fleet_runtime
     rt.add_recipe("recipe-a")
@@ -456,7 +460,11 @@ async def test_continue_on_failure_when_flagged(fleet_runtime: FleetRuntime) -> 
     state_path = rt.dispatch_state_path(result_a["dispatch_id"])
     decision = resume_campaign_from_state(state_path, continue_on_failure=True)
     assert decision is not None
-    assert decision.next_dispatch_name != ""
+    # Campaign did not halt (FLEET_HALTED_SENTINEL not emitted)
+    assert decision.completed_dispatches_block != FLEET_HALTED_SENTINEL
+    # FAILURE dispatches are excluded from next_dispatch_name selection;
+    # with only one failed dispatch and no pending ones, next_name is empty.
+    assert decision.next_dispatch_name == ""
 
     result_b = await rt.dispatch("recipe-b", shim_mode="success")
     assert result_b["success"] is True

@@ -15,6 +15,7 @@ from .sidecar import (
     append_sidecar_entry,
     compute_remaining_issues,
     read_sidecar,
+    read_sidecar_from_path,
     sidecar_path,
 )
 from .state import (
@@ -25,7 +26,9 @@ from .state import (
     ResumeDecision,
     append_dispatch_record,
     build_protected_campaign_ids,
+    crash_recover_dispatch,
     mark_dispatch_interrupted,
+    mark_dispatch_resumable,
     mark_dispatch_running,
     read_all_campaign_captures,
     read_state,
@@ -70,8 +73,10 @@ __all__ = [
     "DispatchStatus",
     "ResumeDecision",
     "append_dispatch_record",
+    "crash_recover_dispatch",
     "build_protected_campaign_ids",
     "mark_dispatch_interrupted",
+    "mark_dispatch_resumable",
     "mark_dispatch_running",
     "read_all_campaign_captures",
     "read_state",
@@ -84,5 +89,6 @@ __all__ = [
     "append_sidecar_entry",
     "compute_remaining_issues",
     "read_sidecar",
+    "read_sidecar_from_path",
     "sidecar_path",
 ]

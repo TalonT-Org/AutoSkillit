@@ -259,11 +259,14 @@ def resolve_wp_id(wp: dict[str, Any], assign_id: str) -> str:
 
 def validate_refined_assignments(data: dict[str, Any]) -> dict[str, Any]:
     """Validate and normalize refined_assignments.json at ingestion."""
-    assignments = data.get("assignments", [])
+    result: dict[str, Any] = dict(data)
+    assignments = result.get("assignments", [])
     if not assignments:
         raise ValueError("refined_assignments must contain non-empty 'assignments' list")
 
-    for assign in assignments:
+    result["assignments"] = [dict(a) for a in assignments]
+
+    for assign in result["assignments"]:
         assign_id = assign.get("id", "")
         if not assign_id:
             phase_id = assign.get("phase_id", "")
@@ -280,10 +283,13 @@ def validate_refined_assignments(data: dict[str, Any]) -> dict[str, Any]:
             assign_id = f"{phase_id}-A{an}"
             assign["id"] = assign_id
 
-        for wp in assign.get("proposed_work_packages", []):
+        assign["proposed_work_packages"] = [
+            dict(wp) for wp in assign.get("proposed_work_packages", [])
+        ]
+        for wp in assign["proposed_work_packages"]:
             wp["id"] = resolve_wp_id(wp, assign_id)
 
-    return data
+    return result
 
 
 def validate_refined_plan(data: dict[str, Any]) -> dict[str, Any]:

@@ -1,3 +1,12 @@
+"""Planner validation: structural completeness, DAG acyclicity, sizing bounds.
+
+All loaders read from individual ``*_result.json`` files in the ``phases/``,
+``assignments/``, and ``work_packages/`` subdirectories.  Combined documents
+(``combined_*.json``, ``refined_*.json``) are intermediate orchestration
+artifacts produced by the merge/refine cycle — they are **not** authoritative
+and are never consumed here.
+"""
+
 from __future__ import annotations
 
 import json

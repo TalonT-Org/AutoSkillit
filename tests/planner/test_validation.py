@@ -8,7 +8,12 @@ from pathlib import Path
 import pytest
 
 from autoskillit.planner.validation import validate_plan
-from tests.planner.conftest import make_assignment_result, make_phase_result, make_wp_result
+from tests.planner.conftest import (
+    make_assignment_result,
+    make_phase_result,
+    make_wp_result,
+    write_json,
+)
 
 pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.feature("planner")]
 
@@ -16,11 +21,6 @@ pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.featu
 # ---------------------------------------------------------------------------
 # Fixture helpers
 # ---------------------------------------------------------------------------
-
-
-def _write_json(path: Path, data: object) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data))
 
 
 def _make_minimal_output_dir(
@@ -39,14 +39,14 @@ def _make_minimal_output_dir(
     wps_dir = tmp_path / "work_packages"
 
     for p in range(1, num_phases + 1):
-        _write_json(
+        write_json(
             phases_dir / f"P{p}_result.json",
             make_phase_result(p, name=f"Phase {p}"),
         )
 
     for p in range(1, num_phases + 1):
         for a in range(1, 2):
-            _write_json(
+            write_json(
                 assigns_dir / f"P{p}-A{a}_result.json",
                 make_assignment_result(
                     p,
@@ -68,7 +68,7 @@ def _make_minimal_output_dir(
                     else [f"src/mod_{wp_id}.py"]
                 )
                 deps = (depends_on_override or {}).get(wp_id, [])
-                _write_json(
+                write_json(
                     wps_dir / f"{wp_id}_result.json",
                     make_wp_result(wp_id, deliverables=deliverables, depends_on=deps),
                 )
@@ -78,21 +78,21 @@ def _make_minimal_output_dir(
         for a in range(1, 2):
             for w in range(1, wps_per_assignment + 1):
                 manifest_items.append({"id": f"P{p}-A{a}-WP{w}", "status": "done"})
-    _write_json(
+    write_json(
         wps_dir / "wp_manifest.json",
         {"pass_name": "work_packages", "items": manifest_items},
     )
 
     if extra_phases:
         for p in extra_phases:
-            _write_json(
+            write_json(
                 phases_dir / f"P{p}_result.json",
                 make_phase_result(p, name=f"Phase {p}"),
             )
 
     if extra_assignments:
         for p, a in extra_assignments:
-            _write_json(
+            write_json(
                 assigns_dir / f"P{p}-A{a}_result.json",
                 make_assignment_result(p, a, name=f"Orphan assignment P{p}-A{a}"),
             )
@@ -181,7 +181,7 @@ def test_validate_plan_failed_wp_flagged_but_not_sole_fail_cause(tmp_path: Path)
 
 def test_validate_plan_dep_graph_backward_dep_injection(tmp_path: Path) -> None:
     _make_minimal_output_dir(tmp_path, wps_per_assignment=2)
-    _write_json(
+    write_json(
         tmp_path / "dep_graph.json",
         {"added_backward_deps": {"P1-A1-WP2": ["P1-A1-WP1"]}, "forward_deps": {}},
     )
@@ -193,7 +193,7 @@ def test_validate_plan_dep_graph_creates_cycle_fails(tmp_path: Path) -> None:
     _make_minimal_output_dir(
         tmp_path, wps_per_assignment=2, depends_on_override={"P1-A1-WP1": ["P1-A1-WP2"]}
     )
-    _write_json(
+    write_json(
         tmp_path / "dep_graph.json",
         {"added_backward_deps": {"P1-A1-WP2": ["P1-A1-WP1"]}, "forward_deps": {}},
     )

@@ -21,7 +21,6 @@ def test_planner_all_exports() -> None:
     assert set(__all__) == {
         "build_phase_assignment_manifest",
         "build_phase_wp_manifest",
-        "build_pre_elab_snapshot",
         "compile_plan",
         "create_run_dir",
         "expand_assignments",
@@ -415,3 +414,59 @@ def test_expand_wps_raises_on_missing_id_and_suffix(tmp_path) -> None:
     )
     with pytest.raises(ValueError, match="neither 'id' nor 'id_suffix'"):
         expand_wps(str(refined), str(tmp_path))
+
+
+def test_write_json_helper_in_conftest() -> None:
+    from tests.planner.conftest import write_json
+
+    assert callable(write_json)
+
+
+def test_merge_files_does_not_use_atomic_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """merge_files must write directly under flock, not via atomic_write/os.replace."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.planner.merge import merge_files
+
+    spy = MagicMock(side_effect=AssertionError("atomic_write must not be called"))
+    monkeypatch.setattr("autoskillit.planner.merge.write_versioned_json", spy)
+
+    results_dir = tmp_path / "phases"
+    results_dir.mkdir()
+    (results_dir / "P1_result.json").write_text(
+        json.dumps({"id": "P1", "name": "Phase 1", "ordering": 1})
+    )
+
+    out = tmp_path / "combined.json"
+    result = merge_files([str(results_dir / "P1_result.json")], str(out), "phases")
+    assert result["item_count"] == "1"
+    merged = json.loads(out.read_text())
+    assert merged["schema_version"] == 1
+    assert len(merged["phases"]) == 1
+    spy.assert_not_called()
+
+
+def test_replace_item_does_not_use_atomic_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """replace_item must write directly under flock, not via atomic_write/os.replace."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.planner.merge import replace_item
+
+    spy = MagicMock(side_effect=AssertionError("atomic_write must not be called"))
+    monkeypatch.setattr("autoskillit.planner.merge.write_versioned_json", spy)
+
+    src = tmp_path / "combined.json"
+    src.write_text(json.dumps({"phases": [{"id": "P1", "name": "Old"}], "schema_version": 1}))
+    repl = tmp_path / "replacement.json"
+    repl.write_text(json.dumps({"id": "P1", "name": "New"}))
+
+    result = replace_item(str(src), "P1", str(repl))
+    assert result["replaced_id"] == "P1"
+    data = json.loads(src.read_text())
+    assert data["phases"][0]["name"] == "New"
+    assert data["schema_version"] == 1
+    spy.assert_not_called()

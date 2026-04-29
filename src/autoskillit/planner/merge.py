@@ -76,7 +76,11 @@ def merge_files(
                 "source_dir": existing_source_dir,
                 key: existing_items,
             }
-            write_versioned_json(out, document, schema_version=1)
+            enriched = {**document, "schema_version": 1}
+            fh.seek(0)
+            fh.truncate()
+            fh.write(json.dumps(enriched).encode())
+            fh.flush()
         finally:
             fcntl.flock(fh, fcntl.LOCK_UN)
 
@@ -127,7 +131,7 @@ def replace_item(
     src = Path(source_path)
 
     found = False
-    with open(src, "rb") as fh:
+    with open(src, "r+b") as fh:
         try:
             fcntl.flock(fh, fcntl.LOCK_EX)
             data: dict[str, Any] = json.loads(fh.read())
@@ -136,7 +140,11 @@ def replace_item(
                 for idx, item in enumerate(tier):
                     if item.get("id") == item_id:
                         tier[idx] = replacement
-                        write_versioned_json(src, data, schema_version=1)
+                        enriched = {**data, "schema_version": 1}
+                        fh.seek(0)
+                        fh.truncate()
+                        fh.write(json.dumps(enriched).encode())
+                        fh.flush()
                         found = True
                         break
                 if found:

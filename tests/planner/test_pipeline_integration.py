@@ -12,14 +12,14 @@ from pathlib import Path
 
 import pytest
 
-from tests.planner.conftest import make_assignment_result, make_phase_result, make_wp_result
+from tests.planner.conftest import (
+    make_assignment_result,
+    make_phase_result,
+    make_wp_result,
+    write_json,
+)
 
 pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.feature("planner")]
-
-
-def _write_json(path: Path, data: object) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data))
 
 
 def test_multi_phase_pipeline_end_to_end(tmp_path: Path) -> None:
@@ -33,7 +33,7 @@ def test_multi_phase_pipeline_end_to_end(tmp_path: Path) -> None:
     )
 
     # Phase results (needed by validate_plan/compile_plan)
-    _write_json(
+    write_json(
         tmp_path / "phases" / "P1_result.json",
         {
             "id": "P1",
@@ -45,7 +45,7 @@ def test_multi_phase_pipeline_end_to_end(tmp_path: Path) -> None:
             "assignments_preview": ["Core setup"],
         },
     )
-    _write_json(
+    write_json(
         tmp_path / "phases" / "P2_result.json",
         {
             "id": "P2",
@@ -58,7 +58,7 @@ def test_multi_phase_pipeline_end_to_end(tmp_path: Path) -> None:
         },
     )
 
-    _write_json(
+    write_json(
         tmp_path / "refined_plan.json",
         {
             "phases": [
@@ -80,7 +80,7 @@ def test_multi_phase_pipeline_end_to_end(tmp_path: Path) -> None:
 
     expand_assignments(str(tmp_path / "refined_plan.json"), str(tmp_path))
 
-    _write_json(
+    write_json(
         tmp_path / "assignments" / "P1-A1_result.json",
         {
             "id": "P1-A1",
@@ -98,7 +98,7 @@ def test_multi_phase_pipeline_end_to_end(tmp_path: Path) -> None:
             ],
         },
     )
-    _write_json(
+    write_json(
         tmp_path / "assignments" / "P2-A1_result.json",
         {
             "id": "P2-A1",
@@ -117,7 +117,7 @@ def test_multi_phase_pipeline_end_to_end(tmp_path: Path) -> None:
         },
     )
 
-    _write_json(
+    write_json(
         tmp_path / "refined_assignments.json",
         {
             "assignments": [
@@ -148,11 +148,11 @@ def test_multi_phase_pipeline_end_to_end(tmp_path: Path) -> None:
     expand_wps(str(tmp_path / "refined_assignments.json"), str(tmp_path))
 
     wp_dir = tmp_path / "work_packages"
-    _write_json(
+    write_json(
         wp_dir / "P1-A1-WP1_result.json",
         make_wp_result("P1-A1-WP1", deliverables=["src/core.py"]),
     )
-    _write_json(
+    write_json(
         wp_dir / "P2-A1-WP1_result.json",
         make_wp_result("P2-A1-WP1", deliverables=["src/app.py"], depends_on=["P1-A1-WP1"]),
     )
@@ -185,23 +185,23 @@ def test_pipeline_factory_fixtures_are_schema_compliant(tmp_path: Path) -> None:
     from autoskillit.planner import compile_plan, validate_plan
 
     # Build everything using factory functions (SKILL.md-derived, not raw backend fields)
-    _write_json(
+    write_json(
         tmp_path / "phases" / "P1_result.json",
         make_phase_result(1, name="Schema Alignment"),
     )
-    _write_json(
+    write_json(
         tmp_path / "assignments" / "P1-A1_result.json",
         make_assignment_result(1, 1, name="Implement schema"),
     )
-    _write_json(
+    write_json(
         tmp_path / "work_packages" / "P1-A1-WP1_result.json",
         make_wp_result("P1-A1-WP1"),
     )
-    _write_json(
+    write_json(
         tmp_path / "work_packages" / "wp_manifest.json",
         {"pass_name": "work_packages", "items": [{"id": "P1-A1-WP1", "status": "done"}]},
     )
-    _write_json(
+    write_json(
         tmp_path / "validation.json",
         {"verdict": "pass", "findings": [], "warnings": [], "schema_version": 2},
     )

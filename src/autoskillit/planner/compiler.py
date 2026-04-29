@@ -1,3 +1,11 @@
+"""Planner compiler: topological sort, issue body generation, plan artifacts.
+
+Imports ``_load_*_results()`` from ``validation.py`` — reads individual
+``*_result.json`` files only.  Combined documents (``combined_*.json``,
+``refined_*.json``) are intermediate orchestration artifacts and are never
+consumed by the compiler.
+"""
+
 from __future__ import annotations
 
 import json

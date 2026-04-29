@@ -82,7 +82,7 @@ def _write_pid(
     dispatch_id: str,
     pid: int,
     starttime_ticks: int,
-    sidecar_path: str = "",
+    sidecar_path: str | None = None,
 ) -> None:
     """on_spawn callback: atomically mark dispatch as running with l2_pid and identity fields."""
     from autoskillit.core import read_boot_id
@@ -96,7 +96,7 @@ def _write_pid(
             l2_pid=pid,
             starttime_ticks=starttime_ticks,
             boot_id=read_boot_id() or "",
-            sidecar_path=sidecar_path or None,
+            sidecar_path=sidecar_path,
         )
     except Exception:
         logger.warning("_write_pid: failed to mark dispatch running", exc_info=True)

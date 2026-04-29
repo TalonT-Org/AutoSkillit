@@ -15,7 +15,7 @@ from autoskillit.fleet import (
     write_initial_state,
 )
 
-pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
 
 def _state_path(tmp_path: Path) -> Path:

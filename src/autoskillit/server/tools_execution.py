@@ -500,13 +500,13 @@ async def dispatch_food_truck(
                 envelope = json.loads(result)
                 campaign_state_path = Path(campaign_state_path_str)
                 if campaign_state_path.exists():
-                    from autoskillit.fleet.state import (
+                    from autoskillit.fleet import (
                         DispatchRecord as _DR,
                     )
-                    from autoskillit.fleet.state import (
+                    from autoskillit.fleet import (
                         DispatchStatus as _DS,
                     )
-                    from autoskillit.fleet.state import (
+                    from autoskillit.fleet import (
                         append_dispatch_record,
                     )
 
@@ -558,61 +558,32 @@ async def record_gate_dispatch(
 
     Never raises.
     """
-    if (gate := _require_enabled()) is not None:
-        return gate
+    try:
+        if (gate := _require_enabled()) is not None:
+            return gate
 
-    from autoskillit.core import FleetErrorCode, fleet_error
+        from autoskillit.core import FleetErrorCode, fleet_error
+        from autoskillit.fleet import record_gate_outcome
 
-    campaign_state_path_str = os.environ.get("AUTOSKILLIT_CAMPAIGN_STATE_PATH")
-    if not campaign_state_path_str:
-        return fleet_error(
-            FleetErrorCode.FLEET_GATE_NO_CAMPAIGN,
-            "No AUTOSKILLIT_CAMPAIGN_STATE_PATH set — not running in campaign mode.",
+        campaign_state_path_str = os.environ.get("AUTOSKILLIT_CAMPAIGN_STATE_PATH")
+        if not campaign_state_path_str:
+            return fleet_error(
+                FleetErrorCode.FLEET_GATE_NO_CAMPAIGN,
+                "No AUTOSKILLIT_CAMPAIGN_STATE_PATH set — not running in campaign mode.",
+            )
+
+        result = record_gate_outcome(Path(campaign_state_path_str), dispatch_name, approved)
+        if not result.success:
+            return fleet_error(FleetErrorCode(result.error_code), result.error_message)
+
+        return json.dumps(
+            {"success": True, "dispatch_name": result.dispatch_name, "status": result.status}
         )
+    except Exception as exc:
+        logger.error("record_gate_dispatch unhandled exception", exc_info=True)
+        from autoskillit.core import FleetErrorCode, fleet_error
 
-    from autoskillit.fleet.state import (
-        DispatchRecord as _DR,
-    )
-    from autoskillit.fleet.state import (
-        DispatchStatus as _DS,
-    )
-    from autoskillit.fleet.state import (
-        append_dispatch_record,
-        read_state,
-    )
-
-    campaign_state_path = Path(campaign_state_path_str)
-    state = read_state(campaign_state_path)
-    if state is None:
         return fleet_error(
-            FleetErrorCode.FLEET_GATE_NO_CAMPAIGN,
-            f"Campaign state file missing or corrupted: {campaign_state_path}",
+            FleetErrorCode.FLEET_L2_STARTUP_OR_CRASH,
+            f"{type(exc).__name__}: {exc}",
         )
-
-    match = next((d for d in state.dispatches if d.name == dispatch_name), None)
-    if match is None:
-        return fleet_error(
-            FleetErrorCode.FLEET_GATE_UNKNOWN_DISPATCH,
-            f"Dispatch '{dispatch_name}' not found in campaign state.",
-        )
-
-    if match.status != _DS.PENDING:
-        return fleet_error(
-            FleetErrorCode.FLEET_GATE_ALREADY_RECORDED,
-            f"Dispatch '{dispatch_name}' is already {match.status.value}, not PENDING.",
-        )
-
-    status = _DS.SUCCESS if approved else _DS.FAILURE
-    now = time.time()
-    append_dispatch_record(
-        campaign_state_path,
-        _DR(
-            name=dispatch_name,
-            status=status,
-            reason="gate_approved" if approved else "gate_rejected",
-            started_at=now,
-            ended_at=now,
-        ),
-    )
-
-    return json.dumps({"success": True, "dispatch_name": dispatch_name, "status": status.value})

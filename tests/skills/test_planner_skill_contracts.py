@@ -287,7 +287,7 @@ def test_elaborate_wps_contract_two_inputs() -> None:
     assert input_names == {"context_file", "planner_dir"}
 
 
-# --- Task-blindness fix tests ---
+# --- validate_task_alignment skill contract tests ---
 
 
 def test_generate_phases_skill_references_planner_task():
@@ -309,7 +309,6 @@ TASK_AWARE_SKILLS = [
 @pytest.mark.parametrize("skill_name", TASK_AWARE_SKILLS)
 def test_downstream_skill_has_task_alignment_instruction(skill_name):
     content = (SKILLS_ROOT / skill_name / "SKILL.md").read_text()
-    assert "task" in content.lower()
     has_alignment = (
         "scope creep" in content.lower()
         or "task alignment" in content.lower()

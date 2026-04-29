@@ -466,7 +466,7 @@ def test_replace_item_does_not_use_atomic_write(
     spy.assert_not_called()
 
 
-# --- Task-blindness fix: expand functions include task in context ---
+# --- expand functions propagate task context ---
 
 
 def test_expand_assignments_includes_task_in_context(tmp_path: Path) -> None:
@@ -485,8 +485,8 @@ def test_expand_assignments_includes_task_in_context(tmp_path: Path) -> None:
     plan_path = tmp_path / "refined_plan.json"
     plan_path.write_text(json.dumps(refined))
     result = expand_assignments(refined_plan_path=str(plan_path), output_dir=str(tmp_path))
-    context_paths = result["context_paths"].split(",")
-    assert context_paths and context_paths[0], "Must produce at least one context path"
+    context_paths = [p for p in result["context_paths"].split(",") if p.strip()]
+    assert context_paths, "Must produce at least one context path"
     for cp in context_paths:
         context = json.loads(Path(cp).read_text())
         assert "task" in context, "Context file must include task field"
@@ -524,8 +524,8 @@ def test_expand_wps_includes_task_in_context(tmp_path: Path) -> None:
     plan_path = tmp_path / "refined_assignments.json"
     plan_path.write_text(json.dumps(refined))
     result = expand_wps(refined_assignments_path=str(plan_path), output_dir=str(tmp_path))
-    context_paths = result["context_paths"].split(",")
-    assert context_paths and context_paths[0], "Must produce at least one context path"
+    context_paths = [p for p in result["context_paths"].split(",") if p.strip()]
+    assert context_paths, "Must produce at least one context path"
     for cp in context_paths:
         context = json.loads(Path(cp).read_text())
         assert "task" in context, "Context file must include task field"

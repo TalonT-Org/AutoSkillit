@@ -249,7 +249,7 @@ def test_merge_steps_use_merge_tier_dir(planner_recipe, step_name):
     assert step.with_args.get("callable") == "autoskillit.planner.merge.merge_tier_dir"
 
 
-# --- Task-blindness fix tests ---
+# --- validate_task_alignment step integration ---
 
 
 def test_generate_phases_receives_planner_task_env(planner_recipe):

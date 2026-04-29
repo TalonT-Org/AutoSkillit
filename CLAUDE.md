@@ -320,11 +320,23 @@ generic_automation_mcp/
 │   ├── _terminal.py         #   terminal_guard() TTY restore
 │   ├── _terminal_table.py   #   Re-export shim from core/_terminal_table
 │   ├── _cook.py             #   cook: ephemeral skill session launcher
-│   ├── _fleet.py            #   fleet subcommand group: status --reap/--dry-run, run stub, signal guard; render_fleet_error()
+│   ├── _fleet.py            #   fleet subcommand group: status --reap/--dry-run, run stub; render_fleet_error() (facade)
+│   ├── _fleet_display.py    #   Fleet status display: _STATUS_COLUMNS, _render_status_display, _watch_loop, _build_status_rows
+│   ├── _fleet_lifecycle.py  #   Fleet lifecycle: _fleet_signal_guard, _reap_stale_dispatches
+│   ├── _fleet_session.py    #   Fleet session launcher: _launch_fleet_session
 │   ├── _reload.py           #   consume_reload_sentinel: reload sentinel detection for re-launch loops
 │   ├── _restart.py          #   perform_restart() -> NoReturn: sets SKIP_UPDATE_CHECK, calls os.execv
 │   ├── _session_launch.py   #   _run_interactive_session: shared interactive session launch prelude
-│   ├── _doctor.py           #   28+ project setup checks
+│   ├── _doctor.py           #   Facade: DoctorResult, run_doctor(); delegates to sub-modules
+│   ├── _doctor_types.py     #   DoctorResult dataclass, _NON_PROBLEM frozenset (shared types)
+│   ├── _doctor_mcp.py       #   MCP server registration + plugin cache checks
+│   ├── _doctor_hooks.py     #   Hook registration, registry drift, and health checks
+│   ├── _doctor_install.py   #   Install path, entry points, version drift, update dismissal checks
+│   ├── _doctor_config.py    #   Project config, gitignore, secret scanning checks
+│   ├── _doctor_runtime.py   #   Quota cache schema + claude process state checks
+│   ├── _doctor_env.py       #   Ambient session type + campaign ID env checks
+│   ├── _doctor_features.py  #   Feature dependency + registry consistency checks
+│   ├── _doctor_fleet.py     #   Fleet infrastructure, campaign state, sous-chef checks
 │   ├── _hooks.py            #   PreToolUse hook registration helpers
 │   ├── _init_helpers.py
 │   ├── _installed_plugins.py #  InstalledPluginsFile — canonical accessor for installed_plugins.json
@@ -335,12 +347,15 @@ generic_automation_mcp/
 │   ├── _prompts.py          #   Orchestrator prompt builder
 │   ├── _timed_input.py      #   timed_prompt() and status_line() CLI primitives
 │   ├── _update.py           #   run_update_command(): first-class upgrade path for `autoskillit update`
-│   ├── _update_checks.py    #   Unified startup update check: version/hook/source-drift signals, branch-aware dismissal
+│   ├── _update_checks.py    #   Unified startup update check: version/hook/source-drift signals, branch-aware dismissal (facade)
+│   ├── _update_checks_fetch.py #  HTTP cache + fetch machinery: _fetch_with_cache, _fetch_latest_version, invalidate_fetch_cache
+│   ├── _update_checks_source.py # Source-repo discovery + SHA resolution: find_source_repo, resolve_reference_sha
 │   ├── _serve_guard.py      #   Async signal-guarded MCP server bootstrap (extracted from app.py)
 │   ├── _features.py         #   features subcommand group: list/status commands for feature gate inspection
 │   ├── _workspace.py        #   Workspace clean helpers
 │   ├── _session_picker.py   #   Scoped resume picker: filters sessions by type (cook/order) via registry + heuristic
 │   ├── _sessions.py         #   sessions analyze CLI subcommand for cross-session DFG visualization
+│   ├── _order.py            #   order command + helpers: _recipes_dir_for, _get_subsets_needed, _get_packs_needed
 │   └── app.py               #   CLI entry: serve, init, config, skills, recipes, doctor, update, etc.
 │
 ├── hooks/                   # Claude Code PreToolUse/PostToolUse/SessionStart scripts

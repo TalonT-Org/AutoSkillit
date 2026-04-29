@@ -304,6 +304,7 @@ class TestChannelBDrainWait:
         )  # FAILS before fix: True
 
 
+@pytest.mark.timeout(180)
 class TestChannelBFullPipelineAdjudication:
     """Full end-to-end adjudication for Channel B drain-race scenarios."""
 

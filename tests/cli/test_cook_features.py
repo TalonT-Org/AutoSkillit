@@ -27,8 +27,8 @@ class TestOrderSubsetGate:
         import importlib
         import sys as _sys
 
-        _app_mod = _sys.modules.get("autoskillit.cli.app") or importlib.import_module(
-            "autoskillit.cli.app"
+        _app_mod = _sys.modules.get("autoskillit.cli._order") or importlib.import_module(
+            "autoskillit.cli._order"
         )
         monkeypatch.setattr(_app_mod, "_get_ingredients_table", lambda *a, **kw: "| col | val |")
 
@@ -124,8 +124,8 @@ class TestOrderSubsetGate:
         def _fake_enable(project_dir, subsets):
             called_with.append((project_dir, subsets))
 
-        _app_mod = _sys.modules.get("autoskillit.cli.app") or importlib.import_module(
-            "autoskillit.cli.app"
+        _app_mod = _sys.modules.get("autoskillit.cli._order") or importlib.import_module(
+            "autoskillit.cli._order"
         )
         monkeypatch.setattr(_app_mod, "_enable_subsets_permanently", _fake_enable)
         inputs = iter(["2", "n"])

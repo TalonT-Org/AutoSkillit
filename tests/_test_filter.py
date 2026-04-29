@@ -153,7 +153,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
             "workspace",
         }
     ),
-    "_claude_env": frozenset({"core", "execution", "_llm_triage"}),
+    "_claude_env": frozenset({"core", "execution", "_llm_triage", "cli"}),
     "_version_snapshot": frozenset({"core", "execution"}),
     "claude_conventions": frozenset({"core", "server", "workspace"}),
 }

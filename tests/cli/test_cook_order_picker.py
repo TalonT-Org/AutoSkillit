@@ -37,8 +37,8 @@ class TestCLIOrderPicker:
         import importlib
         import sys as _sys
 
-        _app_mod = _sys.modules.get("autoskillit.cli.app") or importlib.import_module(
-            "autoskillit.cli.app"
+        _app_mod = _sys.modules.get("autoskillit.cli._order") or importlib.import_module(
+            "autoskillit.cli._order"
         )
         monkeypatch.setattr(_app_mod, "_get_ingredients_table", lambda *a, **kw: "| col | val |")
 
@@ -522,7 +522,7 @@ class TestOrderResumeParsing:
             captured["resume_spec"] = resume_spec
 
         with (
-            patch("autoskillit.cli.app._launch_cook_session", side_effect=fake_launch),
+            patch("autoskillit.cli._order._launch_cook_session", side_effect=fake_launch),
             patch(
                 "autoskillit.recipe.find_recipe_by_name",
                 return_value=MagicMock(path=tmp_path / "dummy.yaml", name="my-recipe"),
@@ -554,7 +554,7 @@ class TestOrderResumeParsing:
         def fake_launch(prompt, *, initial_message=None, extra_env=None, resume_spec=NoResume()):
             captured["resume_spec"] = resume_spec
 
-        with patch("autoskillit.cli.app._launch_cook_session", side_effect=fake_launch):
+        with patch("autoskillit.cli._order._launch_cook_session", side_effect=fake_launch):
             with pytest.raises(SystemExit) as exc_info:
                 app(["order", "--resume", "4b581974-1f19-4aec-8405-78c5ede5e233"])
             assert exc_info.value.code == 0
@@ -579,7 +579,7 @@ class TestOrderResumeParsing:
             captured["resume_spec"] = resume_spec
 
         with (
-            patch("autoskillit.cli.app._launch_cook_session", side_effect=fake_launch),
+            patch("autoskillit.cli._order._launch_cook_session", side_effect=fake_launch),
             patch("autoskillit.cli._session_picker.pick_session", return_value=None),
         ):
             with pytest.raises(SystemExit) as exc_info:
@@ -604,7 +604,7 @@ class TestOrderResumeParsing:
             lambda *a, **kw: find_called.append(a) or None,
         )
 
-        with patch("autoskillit.cli.app._launch_cook_session"):
+        with patch("autoskillit.cli._order._launch_cook_session"):
             with pytest.raises(SystemExit) as exc_info:
                 app(["order", "--resume", "4b581974-1f19-4aec-8405-78c5ede5e233"])
             assert exc_info.value.code == 0

@@ -466,7 +466,7 @@ class TestCookTerminalGuard:
         """_launch_cook_session() must restore terminal on exception."""
         import importlib
 
-        app_mod = importlib.import_module("autoskillit.cli.app")
+        app_mod = importlib.import_module("autoskillit.cli._session_launch")
 
         monkeypatch.setattr("sys.stdin.isatty", lambda: True)
         monkeypatch.setattr("sys.stdin.fileno", lambda: 0)

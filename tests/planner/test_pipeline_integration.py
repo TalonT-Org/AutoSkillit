@@ -203,7 +203,7 @@ def test_pipeline_factory_fixtures_are_schema_compliant(tmp_path: Path) -> None:
     )
     _write_json(
         tmp_path / "validation.json",
-        {"verdict": "pass", "findings": [], "schema_version": 1},
+        {"verdict": "pass", "findings": [], "warnings": [], "schema_version": 2},
     )
 
     validate_result = validate_plan(str(tmp_path))

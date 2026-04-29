@@ -49,7 +49,8 @@ retries) before escalation.
 
 ### Step 1: Load validation.json
 
-Read `$1`. Extract the `findings` array. Group by type:
+Read `$1`. Extract the `findings` array (contains only error-severity findings as structured
+dicts). Extract the `message` field from each finding for classification. Group by type:
 
 - **failed_wps**: Findings matching `WP .* has status 'failed'`
 - **sizing_violations**: Findings matching `WP .* has \d+ deliverables`
@@ -58,6 +59,7 @@ Read `$1`. Extract the `findings` array. Group by type:
 - **missing**: Findings matching `Phase .* has no assignments` or `Assignment .* has no work packages`
 - **malformed_id**: Findings matching `WP .* has malformed id`
 - **dag_cycle**: Findings matching `Cycle detected among WPs`
+- **files_touched_overlap** (informational): Findings matching `File '.*' touched by multiple WPs` — these appear in the `warnings` array, not `findings`. No action needed; skip if encountered in `findings`.
 
 ### Step 2: Load required artifacts
 
@@ -141,6 +143,7 @@ refinement_complete = true
 issues_fixed = <N>
 ```
 
-`N` = count of findings addressed (failed_wps + sizing_violations + duplicate_deliverables
-+ dep_references). Missing-element, malformed-ID, and DAG-cycle findings are excluded from
-the count (they are escalated as critical, not fixed).
+`N` = count of findings addressed from the `findings` array (failed_wps + sizing_violations +
+duplicate_deliverables + dep_references). Missing-element, malformed-ID, and DAG-cycle findings
+are excluded from the count (they are escalated as critical, not fixed). Files-touched overlap
+findings are in the `warnings` array and are not actionable.

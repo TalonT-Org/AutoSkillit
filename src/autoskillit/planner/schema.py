@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import warnings
-from typing import Any, TypedDict
+from typing import Any, Literal, TypedDict
 
 
 class PhaseResult(TypedDict):
@@ -136,6 +136,12 @@ class PlannerManifest(TypedDict):
 
 class RunDirResult(TypedDict):
     planner_dir: str
+
+
+class ValidationFinding(TypedDict):
+    message: str
+    severity: Literal["error", "warning"]
+    check: str
 
 
 _PHASE_ID_RE = re.compile(r"^P\d+$")

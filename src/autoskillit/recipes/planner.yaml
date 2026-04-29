@@ -1,5 +1,5 @@
 name: planner
-autoskillit_version: "0.9.268"
+autoskillit_version: "0.9.269"
 recipe_version: "2"
 description: |
   Progressive decomposition pipeline with mixed dispatch. Analyzes a codebase,

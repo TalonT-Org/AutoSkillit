@@ -401,9 +401,9 @@ def _transition_dead_dispatch(
     Delegates sidecar decision logic to the fleet layer. Returns the new status,
     or None if both write attempts failed. Never raises.
     """
-    from autoskillit.fleet.state import _crash_recover_dispatch  # noqa: PLC0415
+    from autoskillit.fleet import crash_recover_dispatch  # noqa: PLC0415
 
-    return _crash_recover_dispatch(state_path, record, reason=reason)
+    return crash_recover_dispatch(state_path, record, reason=reason)
 
 
 @asynccontextmanager

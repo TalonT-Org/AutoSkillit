@@ -401,7 +401,7 @@ def read_all_campaign_captures(
     return result
 
 
-def _crash_recover_dispatch(
+def crash_recover_dispatch(
     state_path: Path,
     record: DispatchRecord,
     reason: str = "stale_running_on_resume",
@@ -414,7 +414,7 @@ def _crash_recover_dispatch(
         try:
             raw_lines = [ln.strip() for ln in sidecar.read_text().splitlines() if ln.strip()]
         except OSError:
-            logger.warning("_crash_recover_dispatch: sidecar vanished during read", exc_info=True)
+            logger.warning("crash_recover_dispatch: sidecar vanished during read", exc_info=True)
         else:
             if not raw_lines or read_sidecar_from_path(sidecar):
                 try:
@@ -422,7 +422,7 @@ def _crash_recover_dispatch(
                     return DispatchStatus.RESUMABLE
                 except Exception:
                     logger.warning(
-                        "_crash_recover_dispatch: failed to mark dispatch resumable",
+                        "crash_recover_dispatch: failed to mark dispatch resumable",
                         exc_info=True,
                     )
     try:
@@ -430,7 +430,7 @@ def _crash_recover_dispatch(
         return DispatchStatus.INTERRUPTED
     except Exception:
         logger.warning(
-            "_crash_recover_dispatch: failed to mark dispatch interrupted", exc_info=True
+            "crash_recover_dispatch: failed to mark dispatch interrupted", exc_info=True
         )
         return None
 
@@ -472,7 +472,7 @@ def resume_campaign_from_state(
                 if d.status == DispatchStatus.RUNNING:
                     if is_dispatch_session_alive(d):
                         continue
-                    new_status = _crash_recover_dispatch(state_path, d)
+                    new_status = crash_recover_dispatch(state_path, d)
                     if new_status is not None:
                         d.status = new_status
                         d.reason = "stale_running_on_resume"

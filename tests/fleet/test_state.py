@@ -479,7 +479,7 @@ class TestResumableSelectedBeforePending:
         )
         mark_dispatch_running(sp, "impl-1", dispatch_id="d1111", l2_pid=999)
         # Non-existent sidecar is intentional: test covers selection ordering only,
-        # not the sidecar-existence branch in _crash_recover_dispatch.
+        # not the sidecar-existence branch in crash_recover_dispatch.
         mark_dispatch_resumable(sp, "impl-1", sidecar_path=str(sp.parent / "d1111_issues.jsonl"))
 
         decision = resume_campaign_from_state(sp, continue_on_failure=False)

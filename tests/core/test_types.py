@@ -44,6 +44,7 @@ def test_merge_failed_step_values():
         MergeFailedStep.PROTECTED_BRANCH,
         MergeFailedStep.BRANCH_DETECTION,
         MergeFailedStep.DIRTY_TREE,
+        MergeFailedStep.DIRTY_MAIN_REPO,
         MergeFailedStep.TEST_GATE,
         MergeFailedStep.FETCH,
         MergeFailedStep.PRE_REBASE_CHECK,

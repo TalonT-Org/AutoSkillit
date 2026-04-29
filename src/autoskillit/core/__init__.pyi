@@ -189,6 +189,7 @@ from .types import ValidatedAddDir as ValidatedAddDir
 from .types import WorkspaceManager as WorkspaceManager
 from .types import WriteBehaviorSpec as WriteBehaviorSpec
 from .types import WriteExpectedResolver as WriteExpectedResolver
+from .types import ReadOnlyResolver as ReadOnlyResolver
 from .types import extract_path_arg as extract_path_arg
 from .types import extract_skill_name as extract_skill_name
 from .types import fleet_error as fleet_error

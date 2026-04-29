@@ -30,6 +30,7 @@ from autoskillit.core import (
     OutputPatternResolver,
     PluginSource,
     QuotaRefreshTask,
+    ReadOnlyResolver,
     RecipeRepository,
     SessionSkillManager,
     SkillResolver,
@@ -125,6 +126,7 @@ class ToolContext:
     background: BackgroundSupervisor | None = field(default=None)
     output_pattern_resolver: OutputPatternResolver | None = field(default=None)
     write_expected_resolver: WriteExpectedResolver | None = field(default=None)
+    read_only_resolver: ReadOnlyResolver | None = field(default=None)
     session_skill_manager: SessionSkillManager | None = field(default=None)
     skill_resolver: SkillResolver | None = field(default=None)
     recipe_name: str = field(default="")

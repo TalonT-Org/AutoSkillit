@@ -68,6 +68,7 @@ class SkillContract:
     pattern_examples: list[str] = dataclasses.field(default_factory=list)
     write_behavior: str | None = None
     write_expected_when: list[str] = dataclasses.field(default_factory=list)
+    read_only: bool = False
     result_fields: list[ResultFieldSpec] = dataclasses.field(default_factory=list)
 
 
@@ -183,6 +184,7 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
     examples = skill_data.get("pattern_examples", [])
     write_behavior = skill_data.get("write_behavior")
     write_expected_when = skill_data.get("write_expected_when", [])
+    read_only = bool(skill_data.get("read_only", False))
     try:
         result_fields = [
             ResultFieldSpec(
@@ -203,6 +205,7 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
         pattern_examples=examples,
         write_behavior=write_behavior,
         write_expected_when=write_expected_when,
+        read_only=read_only,
         result_fields=result_fields,
     )
 
@@ -427,6 +430,8 @@ def generate_recipe_card(
                         skill_entry["write_behavior"] = contract.write_behavior
                     if contract.write_expected_when:
                         skill_entry["write_expected_when"] = contract.write_expected_when
+                    if contract.read_only:
+                        skill_entry["read_only"] = True
                     skills[skill_name] = skill_entry
                     pos_arg_count = count_positional_args(skill_cmd)
                     if pos_arg_count > 0:

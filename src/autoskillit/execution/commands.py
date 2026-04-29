@@ -146,7 +146,7 @@ _SESSION_BASELINE_ENV: Mapping[str, str] = MappingProxyType(
 
 # Variables that build_leaf_headless_cmd controls exclusively. They must not
 # leak from the host process environment — the caller opts in via explicit
-# parameters (exit_after_stop_delay_ms, scenario_step_name, etc.).
+# parameters (exit_after_stop_delay_ms, scenario_step_name, allowed_write_prefix, etc.).
 # Note: CLAUDE_CODE_EXIT_AFTER_STOP_DELAY, SCENARIO_STEP_NAME, and
 # MAX_MCP_OUTPUT_TOKENS also overlap with IDE_ENV_DENYLIST in
 # core/_claude_env.py. AUTOSKILLIT_SESSION_TYPE and AUTOSKILLIT_CAMPAIGN_ID
@@ -154,6 +154,7 @@ _SESSION_BASELINE_ENV: Mapping[str, str] = MappingProxyType(
 # All lists must be kept in sync when adding new exclusive variables.
 _HEADLESS_EXCLUSIVE_VARS: frozenset[str] = frozenset(
     {
+        "AUTOSKILLIT_ALLOWED_WRITE_PREFIX",
         "AUTOSKILLIT_CAMPAIGN_ID",
         "AUTOSKILLIT_KITCHEN_SESSION_ID",
         "AUTOSKILLIT_LAUNCH_ID",
@@ -270,6 +271,7 @@ def build_leaf_headless_cmd(
     exit_after_stop_delay_ms: int = 0,
     scenario_step_name: str = "",
     temp_dir_relpath: str | None = None,
+    allowed_write_prefix: str = "",
 ) -> ClaudeHeadlessCmd:
     """Build the complete headless command spec for a leaf session.
 
@@ -330,6 +332,8 @@ def build_leaf_headless_cmd(
     kitchen_session_id = os.environ.get(KITCHEN_SESSION_ID_ENV_VAR)
     if kitchen_session_id:
         extras[KITCHEN_SESSION_ID_ENV_VAR] = kitchen_session_id
+    if allowed_write_prefix:
+        extras["AUTOSKILLIT_ALLOWED_WRITE_PREFIX"] = allowed_write_prefix
 
     filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
     spec = build_headless_cmd(prompt, model=model, env_extras=extras, base=filtered_base)

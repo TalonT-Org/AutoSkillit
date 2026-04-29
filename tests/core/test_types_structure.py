@@ -84,3 +84,16 @@ def test_supports_debug_in_core_all() -> None:
     import autoskillit.core as core_mod
 
     assert hasattr(core_mod, "SupportsDebug")
+
+
+def test_subprocess_shard_all() -> None:
+    from autoskillit.core._type_subprocess import __all__
+
+    assert set(__all__) == {"SubprocessResult", "SubprocessRunner"}
+    assert "_TERMINATION_CONTRACT" not in __all__
+
+
+def test_subprocess_termination_contract_variable_still_defined() -> None:
+    from autoskillit.core._type_subprocess import _TERMINATION_CONTRACT
+
+    assert _TERMINATION_CONTRACT is None

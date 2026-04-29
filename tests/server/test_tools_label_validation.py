@@ -29,7 +29,7 @@ class TestClaimIssueWhitelist:
         assert result["success"] is False
         assert "unlisted-label" in result["error"]
         mock_client.ensure_label.assert_not_called()
-        mock_client.add_labels.assert_not_called()
+        mock_client.swap_labels.assert_not_called()
 
     @pytest.mark.anyio
     async def test_claim_issue_allows_whitelisted_label(self, tool_ctx, monkeypatch):
@@ -41,7 +41,7 @@ class TestClaimIssueWhitelist:
             "labels": [],
         }
         mock_client.ensure_label.return_value = {"success": True, "created": True}
-        mock_client.add_labels.return_value = {"success": True, "labels": ["in-progress"]}
+        mock_client.swap_labels.return_value = {"success": True, "labels": ["in-progress"]}
         monkeypatch.setattr(tool_ctx, "github_client", mock_client)
 
         result = json.loads(
@@ -59,7 +59,7 @@ class TestClaimIssueWhitelist:
         mock_client = AsyncMock()
         mock_client.fetch_issue.return_value = {"success": True, "labels": []}
         mock_client.ensure_label.return_value = {"success": True, "created": True}
-        mock_client.add_labels.return_value = {"success": True, "labels": ["any-label"]}
+        mock_client.swap_labels.return_value = {"success": True, "labels": ["any-label"]}
         monkeypatch.setattr(tool_ctx, "github_client", mock_client)
 
         result = json.loads(

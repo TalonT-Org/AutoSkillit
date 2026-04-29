@@ -408,6 +408,9 @@ class FleetErrorCode(StrEnum):
     FLEET_BUDGET_EXCEEDED = "fleet_budget_exceeded"
     FLEET_QUOTA_EXHAUSTED = "fleet_quota_exhausted"
     FLEET_CLEANUP_FAILED = "fleet_cleanup_failed"
+    FLEET_GATE_UNKNOWN_DISPATCH = "fleet_gate_unknown_dispatch"
+    FLEET_GATE_ALREADY_RECORDED = "fleet_gate_already_recorded"
+    FLEET_GATE_NO_CAMPAIGN = "fleet_gate_no_campaign"
 
 
 class FeatureLifecycle(StrEnum):

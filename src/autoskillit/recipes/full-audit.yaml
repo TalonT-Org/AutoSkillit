@@ -166,11 +166,11 @@ steps:
     action: stop
     message: >-
       Full audit complete. GitHub issues created from validated audit reports.
-      Emit the L2 result sentinel with issue_urls included as a JSON array of
-      the created issue URLs. context.issue_urls contains the list of created
-      issue URLs — emit them as a JSON array in the sentinel JSON:
+      Emit the L2 result sentinel with issue_urls included as a comma-separated
+      string of the created issue URLs. context.issue_urls contains the list of
+      created issue URLs — join them with commas in the sentinel JSON:
       {"success": true, "reason": "completed", "summary": "Full audit complete.
-      GitHub issues created.", "issue_urls": ["url1", "url2"]}
+      GitHub issues created.", "issue_urls": "https://github.com/org/repo/issues/1,https://github.com/org/repo/issues/2"}
       Artifacts are in {{AUTOSKILLIT_TEMP}}/.
 
   escalate_stop:

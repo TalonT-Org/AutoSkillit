@@ -196,6 +196,7 @@ _UNFORMATTED_TOOLS: frozenset[str] = frozenset(
         "dispatch_food_truck",  # JSON dispatch envelope, generic renders correctly
         "reload_session",  # simple status dict, generic renders correctly
         "analyze_tool_sequences",  # DFG analysis result, generic renders correctly
+        "record_gate_dispatch",  # simple success/error result
     }
 )
 

@@ -41,6 +41,9 @@ class TestFleetErrorCodeEnum:
             "fleet_budget_exceeded",
             "fleet_quota_exhausted",
             "fleet_cleanup_failed",
+            "fleet_gate_unknown_dispatch",
+            "fleet_gate_already_recorded",
+            "fleet_gate_no_campaign",
         }
         assert {c.value for c in FleetErrorCode} == expected_values
 

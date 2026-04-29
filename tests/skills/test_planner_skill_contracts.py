@@ -103,15 +103,16 @@ def test_refine_no_wp_splitting() -> None:
 def test_refine_sizing_excluded_from_issues_fixed() -> None:
     """Sizing violations are escalated, so must not be counted in issues_fixed."""
     content = (SKILLS_ROOT / "planner-refine" / "SKILL.md").read_text()
-    idx = content.find("issues_fixed")
-    assert idx != -1
+    marker = "`N` = count of findings"
+    idx = content.find(marker)
+    assert idx != -1, "Step 5 N-count explanation not found"
     explanation = content[idx : idx + 400]
     assert "sizing" in explanation.lower(), (
         "Step 5 must mention sizing in the excluded-from-count explanation"
     )
-    assert "sizing_violations" not in explanation.split("excluded")[0], (
-        "sizing_violations must be in the excluded list, not counted as fixed"
-    )
+    formula_end = explanation.find(")")
+    formula = explanation[:formula_end] if formula_end != -1 else ""
+    assert "sizing" not in formula.lower(), "sizing must not appear in the issues_fixed formula"
 
 
 @pytest.mark.parametrize("skill_name", PLANNER_FINALIZATION_SKILLS)

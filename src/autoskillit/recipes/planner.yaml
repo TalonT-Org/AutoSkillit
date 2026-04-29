@@ -2,12 +2,13 @@ name: planner
 autoskillit_version: "0.9.264"
 recipe_version: "2"
 description: |
-  Progressive decomposition pipeline with parallel fan-out. Analyzes a codebase,
-  generates phases, then elaborates each tier (phases, assignments, work packages)
-  in parallel — one run_skill per phase simultaneously. Each tier follows the
-  pattern: parallel elaborate → merge → refine. Reconciles dependencies, validates
-  the dependency graph, and compiles a manifest ready for issue creation.
-summary: "init > analyze > [domain?] > gen-phases > parallel-phases > parallel-assignments > parallel-wps > reconcile > validate/refine > compile"
+  Progressive decomposition pipeline with mixed dispatch. Analyzes a codebase,
+  generates phases, then elaborates each tier (phases, assignments, work packages).
+  Phases and assignments elaborate in parallel; work packages elaborate sequentially
+  (one phase at a time) to smooth token spend rate. Each tier follows the pattern:
+  elaborate → merge → refine. Reconciles dependencies, validates the dependency
+  graph, and compiles a manifest ready for issue creation.
+summary: "init > analyze > [domain?] > gen-phases > parallel-phases > parallel-assignments > sequential-wps > reconcile > validate/refine > compile"
 
 requires_packs: [kitchen-core]
 categories: [orchestration-family]
@@ -23,6 +24,11 @@ kitchen_rules:
     it into the skill_command template placeholder and issue one run_skill call. Issue
     ALL calls in a single assistant message so they execute concurrently. Accumulate
     each result via capture_list."
+  - "SEQUENTIAL DISPATCH: When a step note says 'SEQUENTIAL DISPATCH', iterate the
+    comma-separated list in the referenced context variable. For each item, substitute
+    it into the skill_command template placeholder and issue one run_skill call. Wait
+    for the call to complete before issuing the next. Accumulate each result via
+    capture_list."
 
 ingredients:
   task:
@@ -215,10 +221,11 @@ steps:
     on_success: finalize_wp_manifest
     on_failure: escalate_stop
     note: >
-      PARALLEL DISPATCH: context.wp_context_paths contains comma-separated paths
+      SEQUENTIAL DISPATCH: context.wp_context_paths contains comma-separated paths
       to per-phase WP context files. For each context_path, substitute it into
       the {context_path} placeholder in skill_command and issue one run_skill call.
-      Run ALL elaborations in parallel. Accumulate results via capture_list.
+      Wait for each elaboration to complete before starting the next. Accumulate
+      results via capture_list.
 
   finalize_wp_manifest:
     tool: run_python

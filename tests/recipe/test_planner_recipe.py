@@ -74,6 +74,12 @@ def test_planner_recipe_has_kitchen_rules(planner_recipe):
     assert len(planner_recipe.kitchen_rules) >= 3
 
 
+def test_kitchen_rules_include_sequential_dispatch(planner_recipe):
+    assert any("SEQUENTIAL DISPATCH" in rule for rule in planner_recipe.kitchen_rules), (
+        "kitchen_rules must include a SEQUENTIAL DISPATCH rule"
+    )
+
+
 def test_planner_recipe_validate_routes_to_refine_on_fail(planner_recipe):
     assert "validate" in planner_recipe.steps, "validate step must exist"
     assert "check_verdict" in planner_recipe.steps, "check_verdict step must exist"
@@ -189,10 +195,19 @@ def test_elaborate_wps_uses_capture_list(planner_recipe):
 
 
 def test_parallel_elaborate_steps_have_dispatch_note(planner_recipe):
-    for step_name in ("elaborate_phases", "elaborate_assignments", "elaborate_wps"):
+    for step_name in ("elaborate_phases", "elaborate_assignments"):
         step = planner_recipe.steps[step_name]
         assert step.note, f"{step_name} must have a note for parallel dispatch instructions"
         assert "parallel" in step.note.lower(), f"{step_name} note must mention parallel dispatch"
+
+
+def test_elaborate_wps_has_sequential_dispatch_note(planner_recipe):
+    step = planner_recipe.steps["elaborate_wps"]
+    assert step.note, "elaborate_wps must have a note for sequential dispatch instructions"
+    assert "sequential" in step.note.lower(), "elaborate_wps note must mention sequential dispatch"
+    assert "parallel" not in step.note.lower(), (
+        "elaborate_wps note must not mention parallel dispatch"
+    )
 
 
 # --- T3: No sequential loops ---

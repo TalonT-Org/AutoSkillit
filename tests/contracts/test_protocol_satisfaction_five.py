@@ -12,7 +12,6 @@ from pathlib import Path
 
 import pytest
 
-
 # ── WP3-1: OutputPatternResolver ──────────────────────────────────────────────
 
 

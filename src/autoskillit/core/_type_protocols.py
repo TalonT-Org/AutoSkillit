@@ -235,6 +235,7 @@ class HeadlessExecutor(Protocol):
         recipe_content_hash: str = "",
         recipe_composite_hash: str = "",
         recipe_version: str = "",
+        allowed_write_prefix: str = "",
     ) -> SkillResult: ...
 
     async def dispatch_food_truck(

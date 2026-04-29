@@ -1,11 +1,13 @@
 """Clone contamination guard — detect and revert direct changes to clone CWD.
 
-L1 module (execution/). Detects when a worktree-based skill session modified
-the clone directory directly (without creating a worktree) and reverts those
-changes to prevent contamination from propagating to retry sessions.
+L1 module (execution/). Detects when a worktree-based or read-only skill
+session modified the clone directory directly and reverts those changes to
+prevent contamination from propagating to retry sessions.
 
 Public API:
     is_worktree_skill(skill_command) -> bool
+    is_readonly_skill(skill_command) -> bool
+    READ_ONLY_SKILLS
     snapshot_clone_state(cwd, runner) -> CloneSnapshot | None
     check_and_revert_clone_contamination(
         snapshot, skill_result, cwd, runner, audit
@@ -60,9 +62,21 @@ class ContaminationReport:
     reverted: bool
 
 
+READ_ONLY_SKILLS: frozenset[str] = frozenset(
+    {
+        "investigate",
+    }
+)
+
+
 def is_worktree_skill(skill_command: str) -> bool:
     """Return True if skill_command invokes a worktree-creating skill."""
     return any(name in skill_command for name in WORKTREE_SKILLS)
+
+
+def is_readonly_skill(skill_command: str) -> bool:
+    """Return True if skill_command invokes a read-only skill."""
+    return any(name in skill_command for name in READ_ONLY_SKILLS)
 
 
 async def snapshot_clone_state(cwd: str, runner: SubprocessRunner) -> CloneSnapshot | None:
@@ -141,14 +155,45 @@ async def revert_contamination(
     report: ContaminationReport,
     cwd: str,
     runner: SubprocessRunner,
+    *,
+    selective: bool = False,
 ) -> ContaminationReport:
-    """Revert the clone to its pre-session state."""
+    """Revert the clone to its pre-session state.
+
+    When *selective* is True (read-only skills), uses ``git checkout -- .``
+    and ``git clean -fd --exclude=.autoskillit/`` to preserve temp output.
+    Falls back to ``git reset --hard`` only when direct commits are present.
+    """
     logger.info(
         "reverting_clone_contamination",
         pre_sha=snapshot.head_sha,
         direct_commits=report.direct_commits,
         uncommitted_file_count=len(report.uncommitted_files),
+        selective=selective,
     )
+    if selective:
+        if report.direct_commits:
+            reset_result = await runner(
+                ["git", "reset", "--hard", snapshot.head_sha],
+                cwd=Path(cwd),
+                timeout=_GIT_TIMEOUT,
+            )
+            if reset_result.returncode != 0:
+                return dataclasses.replace(report, reverted=False)
+        checkout_result = await runner(
+            ["git", "checkout", "--", "."],
+            cwd=Path(cwd),
+            timeout=_GIT_TIMEOUT,
+        )
+        if checkout_result.returncode != 0:
+            return dataclasses.replace(report, reverted=False)
+        clean_result = await runner(
+            ["git", "clean", "-fd", "--exclude=.autoskillit/"],
+            cwd=Path(cwd),
+            timeout=_GIT_TIMEOUT,
+        )
+        return dataclasses.replace(report, reverted=clean_result.returncode == 0)
+
     reset_result = await runner(
         ["git", "reset", "--hard", snapshot.head_sha],
         cwd=Path(cwd),
@@ -182,15 +227,21 @@ async def check_and_revert_clone_contamination(
     runner: SubprocessRunner,
     audit: AuditLog | None,
     skill_command: str = "",
+    *,
+    readonly_skill: bool = False,
 ) -> tuple[SkillResult, bool]:
-    """Top-level guard: detect and revert clone contamination after a failed session.
+    """Top-level guard: detect and revert clone contamination.
+
+    For worktree skills, fires only on failure. For read-only skills
+    (``readonly_skill=True``), fires on both success and failure to catch
+    any stray writes that bypassed Layer 1.
 
     Returns (skill_result, reverted) where reverted is True if contamination
     was found and cleaned up.
     """
     if snapshot is None:
         return skill_result, False
-    if skill_result.success:
+    if skill_result.success and not readonly_skill:
         return skill_result, False
     if skill_result.worktree_path is not None:
         return skill_result, False
@@ -199,7 +250,7 @@ async def check_and_revert_clone_contamination(
     if report is None:
         return skill_result, False
 
-    report = await revert_contamination(snapshot, report, cwd, runner)
+    report = await revert_contamination(snapshot, report, cwd, runner, selective=readonly_skill)
 
     if audit is not None:
         audit.record_failure(

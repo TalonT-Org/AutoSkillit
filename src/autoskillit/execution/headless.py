@@ -175,6 +175,7 @@ async def _execute_claude_headless(
     recipe_version: str = "",
     on_spawn: Callable[[int, int], None] | None = None,
     skip_clone_guard: bool = False,
+    readonly_skill: bool = False,
 ) -> SkillResult:
     """Shared subprocess execution for headless Claude sessions.
 
@@ -214,11 +215,12 @@ async def _execute_claude_headless(
     _start_mono = time.monotonic()
     _versions = collect_version_snapshot()
 
+    _readonly_skill = readonly_skill
     _clone_snapshot = None
     if (
         not skip_clone_guard
-        and is_worktree_skill(skill_command)
         and not is_git_worktree(Path(cwd))
+        and (is_worktree_skill(skill_command) or _readonly_skill)
     ):
         _clone_snapshot = await snapshot_clone_state(cwd, runner)
 
@@ -378,6 +380,7 @@ async def _execute_claude_headless(
             runner,
             ctx.audit,
             skill_command=skill_command,
+            readonly_skill=_readonly_skill,
         )
 
     # Use monotonic elapsed_seconds — authoritative wall-clock timing set by time.monotonic()
@@ -485,6 +488,7 @@ async def run_headless_core(
     recipe_content_hash: str = "",
     recipe_composite_hash: str = "",
     recipe_version: str = "",
+    allowed_write_prefix: str = "",
 ) -> SkillResult:
     """Shared headless runner used by run_skill.
 
@@ -515,6 +519,7 @@ async def run_headless_core(
             exit_after_stop_delay_ms=cfg.exit_after_stop_delay_ms,
             scenario_step_name=step_name,
             temp_dir_relpath=temp_dir_display_str(ctx.config.workspace.temp_dir),
+            allowed_write_prefix=allowed_write_prefix,
         )
 
         effective_timeout = timeout if timeout is not None else cfg.timeout
@@ -551,6 +556,7 @@ async def run_headless_core(
             recipe_content_hash=recipe_content_hash,
             recipe_composite_hash=recipe_composite_hash,
             recipe_version=recipe_version,
+            readonly_skill=bool(allowed_write_prefix),
         )
 
 
@@ -580,6 +586,7 @@ class DefaultHeadlessExecutor:
         recipe_content_hash: str = "",
         recipe_composite_hash: str = "",
         recipe_version: str = "",
+        allowed_write_prefix: str = "",
     ) -> SkillResult:
         cfg = self._ctx.config.run_skill
         effective_timeout = timeout if timeout is not None else cfg.timeout
@@ -603,6 +610,7 @@ class DefaultHeadlessExecutor:
             recipe_content_hash=recipe_content_hash,
             recipe_composite_hash=recipe_composite_hash,
             recipe_version=recipe_version,
+            allowed_write_prefix=allowed_write_prefix,
         )
 
     async def dispatch_food_truck(

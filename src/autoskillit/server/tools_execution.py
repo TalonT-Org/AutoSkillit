@@ -288,11 +288,13 @@ async def run_skill(
         if tool_ctx.write_expected_resolver:
             write_spec = tool_ctx.write_expected_resolver(skill_command)
 
+        # Resolve read-only classification from skill contract
         # Build validated add_dirs via DefaultSessionSkillManager
         from pathlib import Path
         from uuid import uuid4
 
         from autoskillit.core import resolve_target_skill
+        from autoskillit.recipe.contracts import get_skill_contract, load_bundled_manifest
 
         # Resolve correct namespace and prepare for tier2 activation
         resolved_command = skill_command
@@ -301,6 +303,13 @@ async def run_skill(
             resolved_command, target_name = resolve_target_skill(
                 skill_command, tool_ctx.skill_resolver
             )
+
+        _manifest = load_bundled_manifest()
+        _contract = get_skill_contract(target_name, _manifest) if target_name else None
+        _is_read_only = _contract.read_only if _contract else False
+        allowed_write_prefix = ""
+        if _is_read_only and target_name:
+            allowed_write_prefix = os.path.join(cwd, ".autoskillit", "temp", target_name, "")
 
         invocation_marker = f"%%ORDER_UP::{uuid4().hex[:8]}%%"
 
@@ -351,6 +360,7 @@ async def run_skill(
                 recipe_content_hash=tool_ctx.recipe_content_hash,
                 recipe_composite_hash=tool_ctx.recipe_composite_hash,
                 recipe_version=tool_ctx.recipe_version,
+                allowed_write_prefix=allowed_write_prefix,
             )
             if skill_result.success:
                 tool_ctx.audit.record_success(skill_command)

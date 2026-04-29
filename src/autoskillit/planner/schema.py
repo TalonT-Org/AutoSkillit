@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import warnings
-from typing import Any, TypedDict
+from typing import Any, Literal, TypedDict
 
 
 class PhaseResult(TypedDict):
@@ -140,7 +140,7 @@ class RunDirResult(TypedDict):
 
 class ValidationFinding(TypedDict):
     message: str
-    severity: str  # "error" | "warning"
+    severity: Literal["error", "warning"]
     check: str
 
 

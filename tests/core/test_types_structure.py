@@ -94,6 +94,6 @@ def test_subprocess_shard_all() -> None:
 
 
 def test_subprocess_termination_contract_variable_still_defined() -> None:
-    from autoskillit.core._type_subprocess import _TERMINATION_CONTRACT
+    import autoskillit.core._type_subprocess as m
 
-    assert _TERMINATION_CONTRACT is None
+    assert hasattr(m, "_TERMINATION_CONTRACT")

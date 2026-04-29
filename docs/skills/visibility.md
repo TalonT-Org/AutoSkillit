@@ -22,12 +22,12 @@ tiers. See [Subset Categories](subsets.md) for subset configuration.
 ### Tier 2 — Cook (Interactive Skills)
 
 - **Location**: `src/autoskillit/skills_extended/` (NOT plugin-scanned)
-- **Default members** (99 total):
+- **Default members** (100 total):
   `investigate`, `make-plan`, `implement-worktree`, `rectify`,
   `dry-walkthrough`, `make-groups`, `review-approach`, `mermaid`, `make-arch-diag`,
   `make-experiment-diag`, `build-execution-map`, `plan-visualization`,
   all 13 `arch-lens-*` skills, all 18 `exp-lens-*` skills, all 12 `vis-lens-*` skills,
-  all 11 `planner-*` skills,
+  all 12 `planner-*` skills,
   `audit-arch`, `audit-cohesion`, `audit-tests`,
   `audit-defense-standards`, `audit-bugs`, `audit-friction`, `validate-audit`,
   `audit-claims`, `audit-docs`, `audit-feature-gates`,

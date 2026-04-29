@@ -74,7 +74,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "store",  # migration/store.py: defensive exemption for future module-level construction
         "validator",  # recipe/validator.py: defensive exemption for decorator-based rule registry
         "settings",  # config/settings.py: _CONFIG_SCHEMA = _build_config_schema()
-        "headless",  # execution/headless.py: _OUTPUT_PATH_TOKENS = _build_path_token_set()
+        "_headless_path_tokens",  # execution/_headless_path_tokens.py: _OUTPUT_PATH_TOKENS
         # _STABLE_DISMISS_WINDOW = timedelta(days=7), _DEV_DISMISS_WINDOW = timedelta(hours=12)
         "_update_checks",  # cli/_update_checks.py: window constants (see comment above)
         "_terminal",  # cli/_terminal.py: _BASE_RESET = "".join(...) derived from _RESET_SPEC
@@ -687,7 +687,13 @@ def test_no_subpackage_exceeds_10_files() -> None:
         to keep scenario recording concerns isolated from the core process lifecycle.
         _headless_scan.py extracts write-path JSONL scanning from headless.py to keep
         that module within its REQ-CNST-010-E2 line budget.
-        Exempt at 26 files.
+        _headless_recovery.py, _headless_path_tokens.py, and _headless_result.py
+        split the remaining headless.py concern groups into private sub-modules
+        following the _process_*.py precedent (P8-F1), bringing the count to 29.
+        _session_model.py and _session_content.py split session.py (P8-F3),
+        _merge_queue_classifier.py and _merge_queue_repo_state.py split merge_queue.py
+        (P8-F4), bringing the count to 33.
+        Exempt at 33 files.
       core/ — REQ-CNST-003-E4: core/ types split into per-concern type modules
         (_type_enums, _type_protocols, _type_results, _type_subprocess, etc.) to
         prevent circular imports while keeping L0 types co-located. Also houses
@@ -748,7 +754,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
     EXEMPTIONS: dict[str, int] = {
         "server": 22,
         "recipe": 48,
-        "execution": 26,
+        "execution": 33,
         "core": 27,
         "cli": 27,
         "hooks": 27,

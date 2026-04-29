@@ -171,7 +171,10 @@ generic_automation_mcp/
 │   ├── commands.py          #   Claude{Interactive,Headless}Cmd builders
 │   ├── db.py                #   Read-only SQLite with defence-in-depth
 │   ├── diff_annotator.py    #   Diff annotation + findings filter for review-pr
-│   ├── headless.py          #   Headless Claude session orchestration
+│   ├── headless.py          #   Headless Claude session orchestration (facade)
+│   ├── _headless_recovery.py #  Recovery functions: _recover_from_separate_marker, _synthesize_from_write_artifacts, etc.
+│   ├── _headless_path_tokens.py # Path-token extraction: _build_path_token_set, _extract_output_paths, _validate_output_paths
+│   ├── _headless_result.py  #   Result building: _build_skill_result, _capture_failure, _apply_budget_guard
 │   ├── _headless_scan.py    #   Write-path JSONL scanning (extracted from headless.py)
 │   ├── linux_tracing.py     #   /proc + psutil process tracing (Linux)
 │   ├── anomaly_detection.py #   Post-hoc anomaly detection over snapshots
@@ -186,9 +189,13 @@ generic_automation_mcp/
 │   ├── _process_race.py     #   RaceAccumulator, resolve_termination
 │   ├── quota.py             #   QuotaStatus, cache, check_and_sleep_if_needed
 │   ├── ci.py                #   GitHub Actions CI watcher (httpx, never raises)
-│   ├── merge_queue.py       #   GitHub merge queue watcher
+│   ├── merge_queue.py       #   GitHub merge queue watcher (facade)
+│   ├── _merge_queue_classifier.py #  PRFetchState, ClassificationResult, ClassifierInconclusive, _classify_pr_state
+│   ├── _merge_queue_repo_state.py #  fetch_repo_merge_state, _text_has_push_trigger, _has_merge_group_trigger
 │   ├── github.py            #   GitHub issue fetcher
-│   ├── session.py           #   ClaudeSessionResult, extract_token_usage
+│   ├── session.py           #   ClaudeSessionResult, extract_token_usage (facade)
+│   ├── _session_model.py    #   ContentState, ClaudeSessionResult, extract_token_usage, parse_session_result
+│   ├── _session_content.py  #   _check_expected_patterns, _check_session_content, _evaluate_content_state
 │   ├── remote_resolver.py   #   upstream > origin, clone-aware
 │   ├── testing.py           #   Pytest output parsing + pass/fail adjudication
 │   ├── clone_guard.py       #   Clone contamination guard — detect and revert direct changes to clone CWD

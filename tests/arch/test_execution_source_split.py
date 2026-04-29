@@ -1,0 +1,147 @@
+"""Arch guards for execution layer source splits (P8-F1, P8-F3, P8-F4 audit fixes)."""
+
+from pathlib import Path
+
+import pytest
+
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+
+SRC_EXECUTION = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "execution"
+
+NEW_HEADLESS_MODULES = [
+    "_headless_recovery.py",
+    "_headless_path_tokens.py",
+    "_headless_result.py",
+]
+HEADLESS_SIZE_BUDGETS = {
+    "headless.py": 750,
+    "_headless_recovery.py": 320,
+    "_headless_path_tokens.py": 175,
+    "_headless_result.py": 580,
+}
+
+
+def test_new_headless_modules_exist():
+    for name in NEW_HEADLESS_MODULES:
+        assert (SRC_EXECUTION / name).exists(), f"Missing: {name}"
+
+
+def test_headless_facade_under_budget():
+    for name, limit in HEADLESS_SIZE_BUDGETS.items():
+        lines = len((SRC_EXECUTION / name).read_text().splitlines())
+        assert lines <= limit, f"{name}: {lines} lines exceeds budget of {limit}"
+
+
+def test_headless_facade_does_not_define_build_skill_result():
+    src = (SRC_EXECUTION / "headless.py").read_text()
+    assert "def _build_skill_result" not in src, (
+        "_build_skill_result must live in _headless_result.py, not headless.py"
+    )
+
+
+def test_headless_facade_does_not_define_recovery_functions():
+    src = (SRC_EXECUTION / "headless.py").read_text()
+    for fn in (
+        "_recover_from_separate_marker",
+        "_recover_block_from_assistant_messages",
+        "_synthesize_from_write_artifacts",
+        "_extract_missing_token_hints",
+        "_attempt_contract_nudge",
+    ):
+        assert f"def {fn}" not in src, f"{fn} must live in _headless_recovery.py"
+
+
+def test_headless_facade_does_not_define_path_token_functions():
+    src = (SRC_EXECUTION / "headless.py").read_text()
+    for fn in (
+        "_build_path_token_set",
+        "_extract_output_paths",
+        "_validate_output_paths",
+        "_extract_worktree_path",
+    ):
+        assert f"def {fn}" not in src, f"{fn} must live in _headless_path_tokens.py"
+
+
+# ---------------------------------------------------------------------------
+# P8-F3: session.py split guards
+# ---------------------------------------------------------------------------
+
+NEW_SESSION_MODULES = ["_session_model.py", "_session_content.py"]
+NEW_MQ_MODULES = ["_merge_queue_classifier.py", "_merge_queue_repo_state.py"]
+
+SESSION_SIZE_BUDGETS = {
+    "session.py": 420,
+    "_session_model.py": 370,
+    "_session_content.py": 200,
+}
+MQ_SIZE_BUDGETS = {
+    "merge_queue.py": 500,
+    "_merge_queue_classifier.py": 175,
+    "_merge_queue_repo_state.py": 280,
+}
+
+
+def test_new_session_modules_exist():
+    for name in NEW_SESSION_MODULES:
+        assert (SRC_EXECUTION / name).exists(), f"Missing: {name}"
+
+
+def test_new_mq_modules_exist():
+    for name in NEW_MQ_MODULES:
+        assert (SRC_EXECUTION / name).exists(), f"Missing: {name}"
+
+
+def test_session_and_mq_under_budget():
+    for budgets in (SESSION_SIZE_BUDGETS, MQ_SIZE_BUDGETS):
+        for name, limit in budgets.items():
+            lines = len((SRC_EXECUTION / name).read_text().splitlines())
+            assert lines <= limit, f"{name}: {lines} lines exceeds budget of {limit}"
+
+
+def test_session_facade_does_not_define_model_types():
+    src = (SRC_EXECUTION / "session.py").read_text()
+    for sym in (
+        "class ClaudeSessionResult",
+        "class ContentState",
+        "class _ParseAccumulator",
+        "def extract_token_usage",
+        "def parse_session_result",
+    ):
+        assert sym not in src, f"{sym} must live in _session_model.py"
+
+
+def test_session_facade_does_not_define_content_functions():
+    src = (SRC_EXECUTION / "session.py").read_text()
+    for sym in (
+        "def _check_expected_patterns",
+        "def _check_session_content",
+        "def _evaluate_content_state",
+        "def _strip_markdown_from_tokens",
+    ):
+        assert sym not in src, f"{sym} must live in _session_content.py"
+
+
+# ---------------------------------------------------------------------------
+# P8-F4: merge_queue.py split guards
+# ---------------------------------------------------------------------------
+
+
+def test_merge_queue_facade_does_not_define_classifier():
+    src = (SRC_EXECUTION / "merge_queue.py").read_text()
+    for sym in (
+        "def _classify_pr_state",
+        "class ClassifierInconclusive",
+        "class ClassificationResult",
+        "class PRFetchState",
+    ):
+        assert sym not in src, f"{sym} must live in _merge_queue_classifier.py"
+
+
+def test_merge_queue_facade_does_not_define_repo_state():
+    src = (SRC_EXECUTION / "merge_queue.py").read_text()
+    for sym in (
+        "async def fetch_repo_merge_state",
+        "def _text_has_push_trigger",
+        "def _has_merge_group_trigger",
+    ):
+        assert sym not in src, f"{sym} must live in _merge_queue_repo_state.py"

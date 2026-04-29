@@ -355,7 +355,6 @@ def test_planner_skill_no_hardcoded_temp_in_never_constraint(skill_name: str) ->
     for lineno, line in enumerate(content.splitlines(), 1):
         if line.strip().startswith("**NEVER"):
             in_never_block = True
-            continue
         if line.strip().startswith("**ALWAYS") or (
             in_never_block and line.strip().startswith("##")
         ):

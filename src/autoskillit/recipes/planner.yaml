@@ -279,7 +279,6 @@ steps:
       cwd: "${{ inputs.source_dir }}"
     capture:
       alignment_findings_path: "${{ result.alignment_findings_path }}"
-      alignment_finding_count: "${{ result.alignment_finding_count }}"
     on_success: reconcile_deps
     on_failure: reconcile_deps
 

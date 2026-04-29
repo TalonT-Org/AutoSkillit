@@ -52,7 +52,7 @@ Pass 1 entry point. Read the analysis file (and optionally domain knowledge) and
 ### Step 0: Read task description
 
 Read the task description from the `PLANNER_TASK` environment variable. This is the user's
-statement of what they want planned. All phases generated in Step 2 MUST serve this task.
+statement of what they want planned. Every generated phase MUST serve this task.
 Do not generate phases for work not described in the task. If the task asks for specific
 deliverables (e.g., "split research.yaml into 4 sub-recipes"), the phases should decompose
 that work — not decompose the codebase into architectural layers.

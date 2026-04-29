@@ -558,12 +558,24 @@ async def record_gate_dispatch(
 
     Never raises.
     """
-    try:
-        if (gate := _require_enabled()) is not None:
-            return gate
+    if (gate := _require_enabled()) is not None:
+        return gate
 
-        from autoskillit.core import FleetErrorCode, fleet_error
+    try:
+        from autoskillit.core import FleetErrorCode, fleet_error, is_feature_enabled
         from autoskillit.fleet import record_gate_outcome
+        from autoskillit.server import _get_ctx as _get_ctx_for_feature_check
+
+        _feature_ctx = _get_ctx_for_feature_check()
+        if not is_feature_enabled(
+            "fleet",
+            _feature_ctx.config.features,
+            experimental_enabled=_feature_ctx.config.experimental_enabled,
+        ):
+            return fleet_error(
+                FleetErrorCode.FLEET_FEATURE_DISABLED,
+                "Fleet feature is disabled. Set features.experimental_enabled: true to enable.",
+            )
 
         campaign_state_path_str = os.environ.get("AUTOSKILLIT_CAMPAIGN_STATE_PATH")
         if not campaign_state_path_str:

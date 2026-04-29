@@ -83,6 +83,37 @@ def test_refine_handles_all_finding_types() -> None:
         )
 
 
+def test_refine_sizing_violations_escalated() -> None:
+    """Sizing violations must be escalated as CRITICAL, not auto-split/merged."""
+    content = (SKILLS_ROOT / "planner-refine" / "SKILL.md").read_text().lower()
+    assert "critical" in content and "sizing" in content, (
+        "planner-refine must escalate sizing violations as CRITICAL"
+    )
+
+
+def test_refine_no_wp_splitting() -> None:
+    """Alpha-suffix WP IDs break the backend; splitting instructions must not exist."""
+    content = (SKILLS_ROOT / "planner-refine" / "SKILL.md").read_text()
+    for forbidden in ["WP3a", "WP3b", "split into two", "merge into the nearest"]:
+        assert forbidden not in content, (
+            f"planner-refine must not contain WP split/merge instruction: '{forbidden}'"
+        )
+
+
+def test_refine_sizing_excluded_from_issues_fixed() -> None:
+    """Sizing violations are escalated, so must not be counted in issues_fixed."""
+    content = (SKILLS_ROOT / "planner-refine" / "SKILL.md").read_text()
+    idx = content.find("issues_fixed")
+    assert idx != -1
+    explanation = content[idx : idx + 400]
+    assert "sizing" in explanation.lower(), (
+        "Step 5 must mention sizing in the excluded-from-count explanation"
+    )
+    assert "sizing_violations" not in explanation.split("excluded")[0], (
+        "sizing_violations must be in the excluded list, not counted as fixed"
+    )
+
+
 @pytest.mark.parametrize("skill_name", PLANNER_FINALIZATION_SKILLS)
 def test_skill_in_defaults_yaml_tier2(skill_name: str) -> None:
     defaults = yaml.safe_load((pkg_root() / "config" / "defaults.yaml").read_text())

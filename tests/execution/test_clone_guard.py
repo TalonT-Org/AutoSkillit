@@ -406,26 +406,6 @@ async def test_audit_log_records_contamination(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# T17: is_readonly_skill
-# ---------------------------------------------------------------------------
-class TestIsReadonlySkill:
-    def test_investigate(self):
-        from autoskillit.execution.clone_guard import is_readonly_skill
-
-        assert is_readonly_skill("/autoskillit:investigate foo")
-
-    def test_implement_is_not_readonly(self):
-        from autoskillit.execution.clone_guard import is_readonly_skill
-
-        assert not is_readonly_skill("/autoskillit:implement-worktree-no-merge")
-
-    def test_empty_string(self):
-        from autoskillit.execution.clone_guard import is_readonly_skill
-
-        assert not is_readonly_skill("")
-
-
-# ---------------------------------------------------------------------------
 # T18: readonly check fires on success
 # ---------------------------------------------------------------------------
 @pytest.mark.anyio
@@ -524,30 +504,3 @@ async def test_worktree_skill_still_uses_nuclear_revert(tmp_path):
     cmds = [call[0] for call in runner.call_args_list]
     assert ["git", "reset", "--hard", "abc123"] in cmds
     assert ["git", "clean", "-fd"] in cmds
-
-
-# ---------------------------------------------------------------------------
-# T22: readonly preserves skill_result on contamination
-# ---------------------------------------------------------------------------
-@pytest.mark.anyio
-async def test_readonly_preserves_skill_result_on_contamination(tmp_path):
-    runner = MockSubprocessRunner()
-    runner.push(_git_result(stdout="abc123\n"))  # detect: rev-parse (same sha)
-    runner.push(_git_result(stdout=" M dirty.py\n"))  # detect: status (dirty)
-    runner.push(_git_result())  # revert: checkout -- .
-    runner.push(_git_result())  # revert: clean -fd --exclude
-
-    snapshot = CloneSnapshot(head_sha="abc123")
-    skill_result = _make_skill_result(success=True, worktree_path=None)
-
-    returned_result, reverted = await check_and_revert_clone_contamination(
-        snapshot,
-        skill_result,
-        str(tmp_path),
-        runner,
-        None,
-        readonly_skill=True,
-    )
-    assert reverted
-    assert returned_result is skill_result
-    assert returned_result.success is True

@@ -6,8 +6,6 @@ prevent contamination from propagating to retry sessions.
 
 Public API:
     is_worktree_skill(skill_command) -> bool
-    is_readonly_skill(skill_command) -> bool
-    READ_ONLY_SKILLS
     snapshot_clone_state(cwd, runner) -> CloneSnapshot | None
     check_and_revert_clone_contamination(
         snapshot, skill_result, cwd, runner, audit
@@ -62,21 +60,9 @@ class ContaminationReport:
     reverted: bool
 
 
-READ_ONLY_SKILLS: frozenset[str] = frozenset(
-    {
-        "investigate",
-    }
-)
-
-
 def is_worktree_skill(skill_command: str) -> bool:
     """Return True if skill_command invokes a worktree-creating skill."""
     return any(name in skill_command for name in WORKTREE_SKILLS)
-
-
-def is_readonly_skill(skill_command: str) -> bool:
-    """Return True if skill_command invokes a read-only skill."""
-    return any(name in skill_command for name in READ_ONLY_SKILLS)
 
 
 async def snapshot_clone_state(cwd: str, runner: SubprocessRunner) -> CloneSnapshot | None:

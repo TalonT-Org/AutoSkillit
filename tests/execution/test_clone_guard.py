@@ -403,3 +403,151 @@ async def test_audit_log_records_contamination(tmp_path):
     assert "post_sha=def456" in record.stderr
     assert "files=2" in record.stderr
     assert "direct_commits=True" in record.stderr
+
+
+# ---------------------------------------------------------------------------
+# T17: is_readonly_skill
+# ---------------------------------------------------------------------------
+class TestIsReadonlySkill:
+    def test_investigate(self):
+        from autoskillit.execution.clone_guard import is_readonly_skill
+
+        assert is_readonly_skill("/autoskillit:investigate foo")
+
+    def test_implement_is_not_readonly(self):
+        from autoskillit.execution.clone_guard import is_readonly_skill
+
+        assert not is_readonly_skill("/autoskillit:implement-worktree-no-merge")
+
+    def test_empty_string(self):
+        from autoskillit.execution.clone_guard import is_readonly_skill
+
+        assert not is_readonly_skill("")
+
+
+# ---------------------------------------------------------------------------
+# T18: readonly check fires on success
+# ---------------------------------------------------------------------------
+@pytest.mark.anyio
+async def test_readonly_check_fires_on_success(tmp_path):
+    runner = MockSubprocessRunner()
+    runner.push(_git_result(stdout="abc123\n"))  # detect: rev-parse (same sha)
+    runner.push(_git_result(stdout=" M dirty.py\n"))  # detect: status (dirty)
+    runner.push(_git_result())  # revert: checkout -- .
+    runner.push(_git_result())  # revert: clean -fd --exclude
+
+    snapshot = CloneSnapshot(head_sha="abc123")
+    skill_result = _make_skill_result(success=True, worktree_path=None)
+
+    result, reverted = await check_and_revert_clone_contamination(
+        snapshot,
+        skill_result,
+        str(tmp_path),
+        runner,
+        None,
+        skill_command="/autoskillit:investigate foo",
+        readonly_skill=True,
+    )
+    assert reverted
+    assert result is skill_result
+
+
+# ---------------------------------------------------------------------------
+# T19: selective revert uses checkout and clean --exclude
+# ---------------------------------------------------------------------------
+@pytest.mark.anyio
+async def test_readonly_selective_revert_checkout_and_clean(tmp_path):
+    runner = MockSubprocessRunner()
+
+    snapshot = CloneSnapshot(head_sha="abc123")
+    from autoskillit.execution.clone_guard import ContaminationReport
+
+    report = ContaminationReport(
+        pre_sha="abc123",
+        post_sha="abc123",
+        uncommitted_files=[" M src/main.py"],
+        direct_commits=False,
+        reverted=False,
+    )
+    result = await revert_contamination(snapshot, report, str(tmp_path), runner, selective=True)
+    assert result.reverted
+    cmds = [call[0] for call in runner.call_args_list]
+    assert ["git", "checkout", "--", "."] in cmds
+    assert ["git", "clean", "-fd", "--exclude=.autoskillit/"] in cmds
+    assert ["git", "reset", "--hard", "abc123"] not in cmds
+
+
+# ---------------------------------------------------------------------------
+# T20: selective revert with direct commits includes reset
+# ---------------------------------------------------------------------------
+@pytest.mark.anyio
+async def test_readonly_selective_revert_with_commits(tmp_path):
+    runner = MockSubprocessRunner()
+
+    snapshot = CloneSnapshot(head_sha="abc123")
+    from autoskillit.execution.clone_guard import ContaminationReport
+
+    report = ContaminationReport(
+        pre_sha="abc123",
+        post_sha="def456",
+        uncommitted_files=[],
+        direct_commits=True,
+        reverted=False,
+    )
+    result = await revert_contamination(snapshot, report, str(tmp_path), runner, selective=True)
+    assert result.reverted
+    cmds = [call[0] for call in runner.call_args_list]
+    assert ["git", "reset", "--hard", "abc123"] in cmds
+    assert ["git", "checkout", "--", "."] in cmds
+    assert ["git", "clean", "-fd", "--exclude=.autoskillit/"] in cmds
+
+
+# ---------------------------------------------------------------------------
+# T21: worktree skill still uses nuclear revert
+# ---------------------------------------------------------------------------
+@pytest.mark.anyio
+async def test_worktree_skill_still_uses_nuclear_revert(tmp_path):
+    runner = MockSubprocessRunner()
+
+    snapshot = CloneSnapshot(head_sha="abc123")
+    from autoskillit.execution.clone_guard import ContaminationReport
+
+    report = ContaminationReport(
+        pre_sha="abc123",
+        post_sha="abc123",
+        uncommitted_files=[" M src/main.py"],
+        direct_commits=False,
+        reverted=False,
+    )
+    result = await revert_contamination(snapshot, report, str(tmp_path), runner, selective=False)
+    assert result.reverted
+    cmds = [call[0] for call in runner.call_args_list]
+    assert ["git", "reset", "--hard", "abc123"] in cmds
+    assert ["git", "clean", "-fd"] in cmds
+
+
+# ---------------------------------------------------------------------------
+# T22: readonly preserves skill_result on contamination
+# ---------------------------------------------------------------------------
+@pytest.mark.anyio
+async def test_readonly_preserves_skill_result_on_contamination(tmp_path):
+    runner = MockSubprocessRunner()
+    runner.push(_git_result(stdout="abc123\n"))  # detect: rev-parse (same sha)
+    runner.push(_git_result(stdout=" M dirty.py\n"))  # detect: status (dirty)
+    runner.push(_git_result())  # revert: checkout -- .
+    runner.push(_git_result())  # revert: clean -fd --exclude
+
+    snapshot = CloneSnapshot(head_sha="abc123")
+    skill_result = _make_skill_result(success=True, worktree_path=None)
+
+    returned_result, reverted = await check_and_revert_clone_contamination(
+        snapshot,
+        skill_result,
+        str(tmp_path),
+        runner,
+        None,
+        readonly_skill=True,
+    )
+    assert reverted
+    assert returned_result is skill_result
+    assert returned_result.success is True

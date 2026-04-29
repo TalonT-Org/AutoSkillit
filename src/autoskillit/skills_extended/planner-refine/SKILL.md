@@ -29,7 +29,7 @@ retries) before escalation.
 ## Arguments
 
 - **$1** — Absolute path to `validation.json`
-- **$2** — Absolute path to the planner output directory (e.g., `{{AUTOSKILLIT_TEMP}}/planner`)
+- **$2** — Absolute path to the run-scoped planner directory (e.g., `{{AUTOSKILLIT_TEMP}}/planner/run-YYYYMMDD-HHMMSS`)
 
 ## Critical Constraints
 

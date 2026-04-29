@@ -28,12 +28,12 @@ conflicts, applies field-level edits to the plan, and writes `refined_plan.json`
 ## Arguments
 
 - **$1** — Absolute path to `combined_plan.json` (PlanDocument, every phase as PhaseElaborated)
-- **$2** — Absolute path to output directory for `refined_plan.json` (must exist under `{{AUTOSKILLIT_TEMP}}/planner/`)
+- **$2** — Absolute path to the run-scoped planner directory (e.g., `{{AUTOSKILLIT_TEMP}}/planner/run-YYYYMMDD-HHMMSS`). Output is written to `$2/refined_plan.json`.
 
 ## Critical Constraints
 
 **NEVER:**
-- Write any file outside `{{AUTOSKILLIT_TEMP}}/planner/`
+- Write any file outside `$2/`
 - Directly modify the combined_plan.json ($1) — always write a new refined_plan.json
 - Allow an L0 subagent to write files directly (L0s return structured text only)
 - Emit `refined_plan_path` before writing `refined_plan.json`

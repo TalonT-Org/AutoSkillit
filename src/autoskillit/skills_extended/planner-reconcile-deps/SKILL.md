@@ -29,7 +29,7 @@ spawning parallel sessions.
 
 ## Arguments
 
-- **$1** — Absolute path to the planner output directory (e.g., `{{AUTOSKILLIT_TEMP}}/planner`)
+- **$1** — Absolute path to the run-scoped planner directory (e.g., `{{AUTOSKILLIT_TEMP}}/planner/run-YYYYMMDD-HHMMSS`)
 
 ## Critical Constraints
 

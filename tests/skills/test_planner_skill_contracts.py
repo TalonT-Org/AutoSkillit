@@ -339,3 +339,46 @@ def test_generate_phases_has_read_guardrails():
         or "explore parent directories" in content.lower()
     )
     assert has_guardrail, "SKILL.md must contain filesystem read guardrails"
+
+
+# --- run-scoped output directory regression guards ---
+
+
+@pytest.mark.parametrize("skill_name", ALL_PLANNER_SKILLS)
+def test_planner_skill_no_hardcoded_temp_in_never_constraint(skill_name: str) -> None:
+    """No planner SKILL.md should hardcode {{AUTOSKILLIT_TEMP}}/planner in NEVER constraints."""
+    skill_md = SKILLS_ROOT / skill_name / "SKILL.md"
+    if not skill_md.exists():
+        pytest.skip(f"{skill_name} has no SKILL.md")
+    content = skill_md.read_text()
+    in_never_block = False
+    for lineno, line in enumerate(content.splitlines(), 1):
+        if line.strip().startswith("**NEVER"):
+            in_never_block = True
+        if line.strip().startswith("**ALWAYS") or (
+            in_never_block and line.strip().startswith("##")
+        ):
+            in_never_block = False
+        if in_never_block and "{{AUTOSKILLIT_TEMP}}/planner" in line:
+            pytest.fail(
+                f"{skill_name}/SKILL.md line {lineno} has hardcoded "
+                f"'{{{{AUTOSKILLIT_TEMP}}}}/planner' in NEVER constraint. "
+                f"Use argument-relative path (e.g., '$2/', '$3/') instead."
+            )
+
+
+@pytest.mark.parametrize("skill_name", ALL_PLANNER_SKILLS)
+def test_planner_skill_example_paths_are_run_scoped(skill_name: str) -> None:
+    """Example paths in arg docs should show run-scoped form, not bare shared path."""
+    skill_md = SKILLS_ROOT / skill_name / "SKILL.md"
+    if not skill_md.exists():
+        pytest.skip(f"{skill_name} has no SKILL.md")
+    content = skill_md.read_text()
+    for lineno, line in enumerate(content.splitlines(), 1):
+        if "e.g.," in line and "{{AUTOSKILLIT_TEMP}}/planner" in line:
+            if "planner/run-" not in line:
+                pytest.fail(
+                    f"{skill_name}/SKILL.md line {lineno} shows bare "
+                    f"'{{{{AUTOSKILLIT_TEMP}}}}/planner' as example. "
+                    f"Use run-scoped form: '{{{{AUTOSKILLIT_TEMP}}}}/planner/run-YYYYMMDD-HHMMSS'"
+                )

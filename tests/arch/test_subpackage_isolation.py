@@ -697,7 +697,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         (P8-F4), bringing the count to 33.
         Exempt at 33 files.
       core/ — REQ-CNST-003-E4: core/ types split into per-concern type modules
-        (_type_enums, _type_protocols, _type_results, _type_subprocess, etc.) to
+        (_type_enums, _type_protocols_logging, _type_protocols_execution,
+        _type_protocols_github, _type_protocols_workspace, _type_protocols_recipe,
+        _type_protocols_infra, _type_results, _type_subprocess, etc.) to
         prevent circular imports while keeping L0 types co-located. Also houses
         _terminal_table.py as the L0 shared terminal rendering primitive so that
         both cli/ (L3) and pipeline/ (L1) can import it without layer violations.
@@ -716,7 +718,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         resume picker.
         tool_sequence_analysis.py adds the stdlib-only cross-session tool call
         sequence DFG analysis (L0; must live in core/ to be importable by server/).
-        Exempt at 26 files.
+        Monolithic protocol module split into 6 domain-grouped shard files (net +5 files).
+        Exempt at 32 files.
       cli/ — REQ-CNST-003-E5: cli/ retains _terminal_table.py as a re-export shim
         for backward-compatible cli/ imports; canonical implementation lives in
         core/_terminal_table.py. Also contains _terminal.py — the terminal state
@@ -763,7 +766,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "server": 22,
         "recipe": 48,
         "execution": 33,
-        "core": 27,
+        "core": 32,
         "cli": 42,
         "hooks": 28,
         "pipeline": 12,
@@ -982,12 +985,17 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
     AUTOSKILLIT_ROOT = SRC_ROOT
 
     # Collect Protocol class names from core/types.py and its sub-modules via AST.
-    # After the types.py split, Protocol definitions live in _type_protocols.py and
-    # SubprocessRunner lives in _type_subprocess.py; types.py is a thin re-export hub.
+    # After the types.py split, Protocol definitions live in the _type_protocols_*.py
+    # shards and SubprocessRunner lives in _type_subprocess.py; types.py is a thin re-export hub.
     core_protocols: set[str] = set()
     for types_filename in (
         "core/types.py",
-        "core/_type_protocols.py",
+        "core/_type_protocols_logging.py",
+        "core/_type_protocols_execution.py",
+        "core/_type_protocols_github.py",
+        "core/_type_protocols_workspace.py",
+        "core/_type_protocols_recipe.py",
+        "core/_type_protocols_infra.py",
         "core/_type_subprocess.py",
     ):
         types_path = AUTOSKILLIT_ROOT / types_filename

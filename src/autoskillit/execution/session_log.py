@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from autoskillit.core._type_protocols import GitHubApiLog
+    from autoskillit.core._type_protocols_logging import GitHubApiLog
 
 import psutil
 

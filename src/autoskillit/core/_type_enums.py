@@ -56,6 +56,7 @@ class MergeFailedStep(StrEnum):
     PROTECTED_BRANCH = "protected_branch"
     BRANCH_DETECTION = "branch_detection"
     DIRTY_TREE = "dirty_tree"
+    DIRTY_MAIN_REPO = "dirty_main_repo"
     TEST_GATE = "test_gate"
     FETCH = "fetch"
     PRE_REBASE_CHECK = "pre_rebase_check"

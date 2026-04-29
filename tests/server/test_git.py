@@ -171,6 +171,7 @@ async def test_perform_merge_returns_success_on_green_tests(
     conftest_mock_runner.push(_make_result(0, "", ""))  # git ls-files (generated file check)
     conftest_mock_runner.push(_make_result(0, f"worktree {fake_wt}\n", ""))  # wt list
     conftest_mock_runner.push(_make_result(0, "dev\n", ""))  # step 7.5: branch --show-current
+    conftest_mock_runner.push(_make_result(0, "", ""))  # step 7.6: git status --porcelain (clean)
     conftest_mock_runner.push(_make_result(0, "", ""))  # merge
     conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
     conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
@@ -250,6 +251,7 @@ async def test_perform_merge_uses_no_edit_flag(default_config, conftest_mock_run
     conftest_mock_runner.push(_make_result(0, "", ""))  # git ls-files (generated file check)
     conftest_mock_runner.push(_make_result(0, f"worktree {fake_wt}\n", ""))  # wt list
     conftest_mock_runner.push(_make_result(0, "dev\n", ""))  # step 7.5: branch --show-current
+    conftest_mock_runner.push(_make_result(0, "", ""))  # step 7.6: git status --porcelain (clean)
     conftest_mock_runner.push(_make_result(0, "", ""))  # merge
     conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
     conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
@@ -338,6 +340,7 @@ async def test_perform_merge_strips_tracked_generated_files(
     conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
     conftest_mock_runner.push(_make_result(0, f"worktree {fake_wt}\n", ""))  # wt list
     conftest_mock_runner.push(_make_result(0, "dev\n", ""))  # step 7.5: branch --show-current
+    conftest_mock_runner.push(_make_result(0, "", ""))  # step 7.6: git status --porcelain (clean)
     conftest_mock_runner.push(_make_result(0, "", ""))  # merge
     conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
     conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
@@ -388,6 +391,7 @@ async def test_perform_merge_noop_when_no_generated_files_tracked(
     conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
     conftest_mock_runner.push(_make_result(0, f"worktree {fake_wt}\n", ""))  # wt list
     conftest_mock_runner.push(_make_result(0, "dev\n", ""))  # step 7.5: branch --show-current
+    conftest_mock_runner.push(_make_result(0, "", ""))  # step 7.6: git status --porcelain (clean)
     conftest_mock_runner.push(_make_result(0, "", ""))  # merge
     conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
     conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
@@ -456,6 +460,7 @@ async def test_perform_merge_dirty_check_ignores_generated_files(
     conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
     conftest_mock_runner.push(_make_result(0, f"worktree {fake_wt}\n", ""))  # wt list
     conftest_mock_runner.push(_make_result(0, "dev\n", ""))  # step 7.5: branch --show-current
+    conftest_mock_runner.push(_make_result(0, "", ""))  # step 7.6: git status --porcelain (clean)
     conftest_mock_runner.push(_make_result(0, "", ""))  # merge
     conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
     conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
@@ -494,6 +499,7 @@ async def test_perform_merge_strips_generated_files_before_dirty_check(
     conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
     conftest_mock_runner.push(_make_result(0, f"worktree {fake_wt}\n", ""))  # wt list
     conftest_mock_runner.push(_make_result(0, "dev\n", ""))  # step 7.5: branch --show-current
+    conftest_mock_runner.push(_make_result(0, "", ""))  # step 7.6: git status --porcelain (clean)
     conftest_mock_runner.push(_make_result(0, "", ""))  # merge
     conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
     conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
@@ -544,6 +550,7 @@ def _push_full_success_sequence(
         _make_result(0, f"worktree /repo\nHEAD abc123\nbranch refs/heads/{base_branch}\n\n")
     )
     runner.push(_make_result(0, f"{base_branch}\n"))  # step 7.5: branch --show-current (main_repo)
+    runner.push(_make_result(0, ""))  # step 7.6: git status --porcelain (main_repo clean)
     runner.push(_make_result(0, ""))  # git merge --no-edit
 
 
@@ -712,6 +719,7 @@ class TestPerformMergeTargetBranchVerification:
         runner.push(_make_result(0, "worktree /repo\nHEAD abc123\nbranch refs/heads/dev\n\n"))
         # Step 7.5: git branch --show-current on main_repo returns 'dev'
         runner.push(_make_result(0, "dev\n"))
+        runner.push(_make_result(0, ""))  # step 7.6: git status --porcelain (clean)
         runner.push(_make_result(0, ""))  # git merge --no-edit
         # cleanup: remove_git_worktree + branch -D use runner defaults (rc=0)
 
@@ -749,6 +757,7 @@ class TestPerformMergeTargetBranchVerification:
         runner.push(_make_result(0, "worktree /repo\nHEAD abc123\nbranch refs/heads/dev\n\n"))
         # Step 7.5: branch verification
         runner.push(_make_result(0, "dev\n"))
+        runner.push(_make_result(0, ""))  # step 7.6: git status --porcelain (clean)
         runner.push(_make_result(0, ""))  # git merge --no-edit
 
         result = await perform_merge(
@@ -791,6 +800,7 @@ class TestPerformMergeTargetBranchVerification:
         runner.push(_make_result(0, "worktree /repo\nHEAD abc123\nbranch refs/heads/dev\n\n"))
         # Step 7.5: verified branch
         runner.push(_make_result(0, "dev\n"))
+        runner.push(_make_result(0, ""))  # step 7.6: git status --porcelain (clean)
         runner.push(_make_result(0, ""))  # merge
 
         result = await perform_merge(

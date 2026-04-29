@@ -40,8 +40,9 @@ def test_reap_stale_dispatches_marks_resumable_when_sidecar_exists(tmp_path: Pat
 
     state = read_state(sp)
     assert state is not None
-    latest = next(d for d in reversed(state.dispatches) if d.name == "impl")
-    assert latest.status == DispatchStatus.RESUMABLE
+    matches = [d for d in state.dispatches if d.name == "impl"]
+    assert matches, "no dispatch named 'impl' found"
+    assert matches[-1].status == DispatchStatus.RESUMABLE
 
 
 def test_reap_stale_dispatches_marks_interrupted_when_no_sidecar(tmp_path: Path) -> None:
@@ -55,8 +56,9 @@ def test_reap_stale_dispatches_marks_interrupted_when_no_sidecar(tmp_path: Path)
 
     state = read_state(sp)
     assert state is not None
-    latest = next(d for d in reversed(state.dispatches) if d.name == "impl")
-    assert latest.status == DispatchStatus.INTERRUPTED
+    matches = [d for d in state.dispatches if d.name == "impl"]
+    assert matches, "no dispatch named 'impl' found"
+    assert matches[-1].status == DispatchStatus.INTERRUPTED
 
 
 def test_reap_stale_dispatches_dry_run_does_not_modify_state(tmp_path: Path) -> None:
@@ -76,5 +78,6 @@ def test_reap_stale_dispatches_dry_run_does_not_modify_state(tmp_path: Path) -> 
 
     state = read_state(sp)
     assert state is not None
-    latest = next(d for d in reversed(state.dispatches) if d.name == "impl")
-    assert latest.status == DispatchStatus.RUNNING
+    matches = [d for d in state.dispatches if d.name == "impl"]
+    assert matches, "no dispatch named 'impl' found"
+    assert matches[-1].status == DispatchStatus.RUNNING

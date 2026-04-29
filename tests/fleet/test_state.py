@@ -478,6 +478,8 @@ class TestResumableSelectedBeforePending:
             sp, "c1", "myCampaign", "manifest.yaml", _make_dispatches("impl-1", "impl-2")
         )
         mark_dispatch_running(sp, "impl-1", dispatch_id="d1111", l2_pid=999)
+        # Non-existent sidecar is intentional: test covers selection ordering only,
+        # not the sidecar-existence branch in _crash_recover_dispatch.
         mark_dispatch_resumable(sp, "impl-1", sidecar_path=str(sp.parent / "d1111_issues.jsonl"))
 
         decision = resume_campaign_from_state(sp, continue_on_failure=False)
@@ -493,6 +495,7 @@ class TestResumableStateTransitionsValid:
             DispatchStatus.RUNNING,
             DispatchStatus.SUCCESS,
             DispatchStatus.FAILURE,
+            DispatchStatus.INTERRUPTED,
         ]:
             sp = _state_path(tmp_path / next_status.value)
             write_initial_state(sp, "c1", "camp", "m.yaml", _make_dispatches("impl"))
@@ -501,18 +504,9 @@ class TestResumableStateTransitionsValid:
             append_dispatch_record(sp, DispatchRecord(name="impl", status=next_status))
             state = read_state(sp)
             assert state is not None
-            latest = next(d for d in reversed(state.dispatches) if d.name == "impl")
-            assert latest.status == next_status
-
-    def test_resumable_to_interrupted_is_invalid(self, tmp_path: Path) -> None:
-        sp = _state_path(tmp_path)
-        write_initial_state(sp, "c1", "camp", "m.yaml", _make_dispatches("impl"))
-        mark_dispatch_running(sp, "impl", dispatch_id="d1", l2_pid=1)
-        mark_dispatch_resumable(sp, "impl", sidecar_path="/tmp/s.jsonl")
-        with pytest.raises(ValueError, match="(?i)resumable"):
-            append_dispatch_record(
-                sp, DispatchRecord(name="impl", status=DispatchStatus.INTERRUPTED)
-            )
+            matches = [d for d in reversed(state.dispatches) if d.name == "impl"]
+            assert matches, f"no dispatch named 'impl' found for status {next_status}"
+            assert matches[0].status == next_status
 
 
 class TestMarkDispatchResumable:

@@ -480,7 +480,7 @@ async def dispatch_food_truck(
         )
 
         tool_ctx = _get_ctx()
-        return await execute_dispatch(
+        result = await execute_dispatch(
             tool_ctx=tool_ctx,
             recipe=recipe,
             task=task,
@@ -493,8 +493,106 @@ async def dispatch_food_truck(
             cache_invalidator=invalidate_cache,
             capture=capture,
         )
+
+        campaign_state_path_str = os.environ.get("AUTOSKILLIT_CAMPAIGN_STATE_PATH")
+        if campaign_state_path_str and dispatch_name:
+            try:
+                envelope = json.loads(result)
+                campaign_state_path = Path(campaign_state_path_str)
+                if campaign_state_path.exists():
+                    from autoskillit.fleet import (
+                        DispatchRecord,
+                        DispatchStatus,
+                        append_dispatch_record,
+                    )
+
+                    status = (
+                        DispatchStatus.SUCCESS
+                        if envelope.get("success")
+                        else DispatchStatus.FAILURE
+                    )
+                    append_dispatch_record(
+                        campaign_state_path,
+                        DispatchRecord(
+                            name=dispatch_name,
+                            status=status,
+                            dispatch_id=envelope.get("dispatch_id", ""),
+                            l2_session_id=envelope.get("l2_session_id", ""),
+                            reason=envelope.get("reason", ""),
+                            token_usage=envelope.get("token_usage") or {},
+                        ),
+                    )
+            except Exception:
+                logger.warning("campaign state update failed", exc_info=True)
+
+        return result
     except Exception as exc:
         logger.error("dispatch_food_truck unhandled exception", exc_info=True)
+        from autoskillit.core import FleetErrorCode, fleet_error
+
+        return fleet_error(
+            FleetErrorCode.FLEET_L2_STARTUP_OR_CRASH,
+            f"{type(exc).__name__}: {exc}",
+        )
+
+
+@mcp.tool(
+    tags={"autoskillit", "kitchen", "kitchen-core", "fleet"},
+    annotations={"readOnlyHint": True},
+)
+@track_response_size("record_gate_dispatch")
+async def record_gate_dispatch(
+    dispatch_name: str,
+    approved: bool,
+    ctx: Context = CurrentContext(),
+) -> str:
+    """Record the outcome of a gate dispatch to the campaign state file.
+
+    Gate dispatches are handled by AskUserQuestion (no L2 session). This tool
+    persists the user's approval/rejection so that campaign resume can skip
+    completed gates.
+
+    Args:
+        dispatch_name: Name of the gate dispatch in the campaign manifest.
+        approved: True if the user approved the gate, False if rejected.
+
+    Never raises.
+    """
+    if (gate := _require_enabled()) is not None:
+        return gate
+
+    try:
+        from autoskillit.core import FleetErrorCode, fleet_error, is_feature_enabled
+        from autoskillit.fleet import record_gate_outcome
+        from autoskillit.server import _get_ctx as _get_ctx_for_feature_check
+
+        _feature_ctx = _get_ctx_for_feature_check()
+        if not is_feature_enabled(
+            "fleet",
+            _feature_ctx.config.features,
+            experimental_enabled=_feature_ctx.config.experimental_enabled,
+        ):
+            return fleet_error(
+                FleetErrorCode.FLEET_FEATURE_DISABLED,
+                "Fleet feature is disabled. Set features.experimental_enabled: true to enable.",
+            )
+
+        campaign_state_path_str = os.environ.get("AUTOSKILLIT_CAMPAIGN_STATE_PATH")
+        if not campaign_state_path_str:
+            return fleet_error(
+                FleetErrorCode.FLEET_GATE_NO_CAMPAIGN,
+                "No AUTOSKILLIT_CAMPAIGN_STATE_PATH set — not running in campaign mode.",
+            )
+
+        result = record_gate_outcome(Path(campaign_state_path_str), dispatch_name, approved)
+        if not result.success:
+            return fleet_error(FleetErrorCode(result.error_code), result.error_message)
+
+        return json.dumps(
+            {"success": True, "dispatch_name": result.dispatch_name, "status": result.status}
+        )
+    except Exception as exc:
+        logger.error("record_gate_dispatch unhandled exception", exc_info=True)
         from autoskillit.core import FleetErrorCode, fleet_error
 
         return fleet_error(

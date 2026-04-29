@@ -210,6 +210,7 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "register_clone_status",
         "batch_cleanup_clones",
         "dispatch_food_truck",
+        "record_gate_dispatch",
     }
 )
 
@@ -223,6 +224,7 @@ FLEET_TOOLS: frozenset[str] = frozenset(
         "get_timing_summary",
         "get_quota_events",
         "dispatch_food_truck",
+        "record_gate_dispatch",
     }
 )
 
@@ -237,7 +239,7 @@ FLEET_DISPATCH_TOOLS: frozenset[str] = frozenset(
 
 # Tools that appear in the Fleet group in the cook menu and open_kitchen response.
 # Defined here (L0) so menu modules can import the constant without loading the fleet package.
-FLEET_MENU_TOOLS: tuple[str, ...] = ("dispatch_food_truck",)
+FLEET_MENU_TOOLS: tuple[str, ...] = ("dispatch_food_truck", "record_gate_dispatch")
 
 FLEET_ERROR_CODES: frozenset[str] = frozenset(FleetErrorCode)
 
@@ -342,6 +344,7 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     "read_db": frozenset({"kitchen-core"}),
     "get_pipeline_report": frozenset({"kitchen-core", "fleet"}),
     "dispatch_food_truck": frozenset({"kitchen-core", "fleet"}),
+    "record_gate_dispatch": frozenset({"kitchen-core", "fleet"}),
     # kitchen-core — git
     "merge_worktree": frozenset({"kitchen-core"}),
 }

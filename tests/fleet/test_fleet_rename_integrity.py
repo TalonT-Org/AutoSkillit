@@ -6,7 +6,7 @@ pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature
 def test_fleet_menu_tools_importable_from_core() -> None:
     from autoskillit.core import FLEET_MENU_TOOLS
 
-    assert FLEET_MENU_TOOLS == ("dispatch_food_truck",)
+    assert FLEET_MENU_TOOLS == ("dispatch_food_truck", "record_gate_dispatch")
 
 
 def test_campaign_summary_importable_from_fleet() -> None:

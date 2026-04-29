@@ -66,6 +66,40 @@ def test_compose_pr_captures_pr_url(recipe):
     assert "pr_url" in (step.capture or {})
 
 
+def test_arch_lenses_ingredient_declared(recipe):
+    assert "arch_lenses" in recipe.ingredients
+
+
+def test_arch_lenses_defaults_to_true(recipe):
+    assert recipe.ingredients["arch_lenses"].default == "true"
+
+
+def test_arch_lenses_is_not_hidden(recipe):
+    assert recipe.ingredients["arch_lenses"].hidden is False
+
+
+def test_prepare_pr_routes_to_compose_pr_when_arch_lenses_false(recipe):
+    step = recipe.steps["prepare_pr"]
+    assert step.on_result is not None
+    routes = [c.route for c in step.on_result.conditions if c.when and "prep_path" in c.when]
+    assert "compose_pr" in routes
+
+
+def test_prepare_pr_arch_lenses_route_checks_ingredient(recipe):
+    step = recipe.steps["prepare_pr"]
+    arch_lens_condition = next(
+        (c for c in step.on_result.conditions if c.route == "run_arch_lenses" and c.when),
+        None,
+    )
+    assert arch_lens_condition is not None
+    assert "arch_lenses" in arch_lens_condition.when
+
+
+def test_run_arch_lenses_still_gated_on_open_pr(recipe):
+    step = recipe.steps["run_arch_lenses"]
+    assert step.skip_when_false == "inputs.open_pr"
+
+
 def test_implementation_recipe_validates_after_decomposition(recipe):
     errors = validate_recipe(recipe)
     assert not errors, f"Validation errors: {errors}"

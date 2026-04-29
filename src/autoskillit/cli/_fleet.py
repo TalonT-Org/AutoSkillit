@@ -43,7 +43,7 @@ def _require_fleet(cfg: AutomationConfig) -> None:
 
 if TYPE_CHECKING:
     from autoskillit.config import AutomationConfig
-    from autoskillit.fleet import CampaignState, DispatchRecord, ResumeDecision
+    from autoskillit.fleet import CampaignState, DispatchRecord, DispatchStatus, ResumeDecision
     from autoskillit.recipe.schema import Recipe
 
 _STATUS_COLUMNS = (
@@ -393,15 +393,17 @@ def _launch_fleet_session(
                 break
 
 
-def _transition_dead_dispatch(state_path: Path, record: DispatchRecord, reason: str) -> None:
+def _transition_dead_dispatch(
+    state_path: Path, record: DispatchRecord, reason: str
+) -> DispatchStatus | None:
     """Transition a confirmed-dead RUNNING dispatch to RESUMABLE or INTERRUPTED.
 
-    Delegates sidecar decision logic to the fleet layer. Always writes to state_path
-    atomically; never raises on ValueError (already-terminal races are silently skipped).
+    Delegates sidecar decision logic to the fleet layer. Returns the new status,
+    or None if both write attempts failed. Never raises.
     """
-    from autoskillit.fleet import _crash_recover_dispatch  # noqa: PLC0415
+    from autoskillit.fleet.state import _crash_recover_dispatch  # noqa: PLC0415
 
-    _crash_recover_dispatch(state_path, record, reason=reason)
+    return _crash_recover_dispatch(state_path, record, reason=reason)
 
 
 @asynccontextmanager
@@ -562,8 +564,13 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
                     if dry_run:
                         logger.info("reap: [WOULD MARK]  %s  pid=0  (no PID recorded)", name)
                     else:
-                        _transition_dead_dispatch(state_path, dispatch, reason="reaped_dead_pid")
-                        logger.info("reap: [MARKED]      %s  (no PID recorded)", name)
+                        new_status = _transition_dead_dispatch(
+                            state_path, dispatch, reason="reaped_dead_pid"
+                        )
+                        if new_status is not None:
+                            logger.info("reap: [MARKED]      %s  (no PID recorded)", name)
+                        else:
+                            logger.warning("reap: [MARK_FAILED] %s  (no PID recorded)", name)
                     continue
 
                 # Boot ID check: if machine rebooted, all PIDs are recycled

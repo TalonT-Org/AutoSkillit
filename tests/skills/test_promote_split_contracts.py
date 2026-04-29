@@ -47,6 +47,13 @@ class TestPromoteToMainProjectLocal:
             "promote-to-main arch-lens loop must have anti-prose guard"
         )
 
+    def test_promote_to_main_has_no_subagent_autonomy_grant(self):
+        """promote-to-main must NOT carry the Subagent Autonomy Grant (impossible at depth-1)."""
+        content = self._content()
+        assert "Subagent Autonomy Grant" not in content
+        assert "spawn additional subagents" not in content.lower()
+        assert "spawn their own sub-subagents" not in content.lower()
+
     def test_promote_to_main_outputs_pr_body_path_token(self) -> None:
         """promote-to-main must emit pr_body_path (not report_path) structured output token."""
         content = self._content()
@@ -106,9 +113,23 @@ class TestReviewPromotionProjectLocal:
         content = self._content()
         assert ".autoskillit/temp/review-promotion/" in content
 
-    def test_review_promotion_has_subagent_autonomy_grant(self):
-        """review-promotion must carry the Subagent Autonomy Grant."""
+    def test_review_promotion_has_no_subagent_autonomy_grant(self):
+        """review-promotion must NOT carry the Subagent Autonomy Grant (impossible at depth-1)."""
         content = self._content()
-        assert (
-            "Subagent Autonomy Grant" in content or "spawn additional subagents" in content.lower()
-        )
+        assert "Subagent Autonomy Grant" not in content
+        assert "spawn additional subagents" not in content.lower()
+        assert "spawn their own sub-subagents" not in content.lower()
+
+
+class TestPromoteToMainCanonical:
+    def _content(self) -> str:
+        return (
+            _REPO_ROOT / "src" / "autoskillit" / "skills_extended" / "promote-to-main" / "SKILL.md"
+        ).read_text()
+
+    def test_canonical_has_no_subagent_autonomy_grant(self):
+        """Canonical promote-to-main must NOT carry the Subagent Autonomy Grant."""
+        content = self._content()
+        assert "Subagent Autonomy Grant" not in content
+        assert "spawn additional subagents" not in content.lower()
+        assert "spawn their own sub-subagents" not in content.lower()

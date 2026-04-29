@@ -90,6 +90,7 @@ class TokenFactory(Protocol):
     def __call__(self) -> str | None: ...
 
 
+@runtime_checkable
 class CampaignProtector(Protocol):
     """Protocol for resolving the set of protected campaign IDs for session retention.
 

@@ -140,6 +140,7 @@ class TestRunSkillStepName:
 
     @pytest.mark.anyio
     async def test_step_name_records_token_usage(self, tool_ctx):
+        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot (not a git repo)
         tool_ctx.runner.push(_make_result(returncode=0, stdout=self._make_ndjson()))
         await run_skill(
             skill_command="/autoskillit:investigate topic", cwd="/tmp", step_name="plan"
@@ -151,6 +152,7 @@ class TestRunSkillStepName:
 
     @pytest.mark.anyio
     async def test_no_step_name_does_not_record(self, tool_ctx):
+        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot (not a git repo)
         tool_ctx.runner.push(_make_result(returncode=0, stdout=self._make_ndjson()))
         await run_skill(skill_command="/autoskillit:investigate topic", cwd="/tmp", step_name="")
         assert tool_ctx.token_log.get_report() == []
@@ -167,6 +169,7 @@ class TestRunSkillStepName:
                 "session_id": "s1",
             }
         )
+        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot (not a git repo)
         tool_ctx.runner.push(_make_result(returncode=0, stdout=no_usage_ndjson))
         await run_skill(
             skill_command="/autoskillit:investigate topic", cwd="/tmp", step_name="plan"
@@ -176,6 +179,7 @@ class TestRunSkillStepName:
     @pytest.mark.anyio
     async def test_step_name_run_skill_long_running(self, tool_ctx):
         """run_skill accumulates token usage by step_name (run_skill_retry test replacement)."""
+        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot (not a git repo)
         tool_ctx.runner.push(_make_result(returncode=0, stdout=self._make_ndjson()))
         await run_skill(
             skill_command="/autoskillit:investigate the test failures",
@@ -382,6 +386,7 @@ class TestTierAwareGateEnforcement:
         """run_skill does NOT return headless_error for orchestrator-tier headless sessions."""
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
+        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot (not a git repo)
         tool_ctx.runner.push(
             _make_result(
                 returncode=0,

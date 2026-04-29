@@ -8,8 +8,14 @@ from unittest.mock import patch
 import pytest
 
 from autoskillit.config import AutomationConfig
-from autoskillit.core import MergeFailedStep, MergeState, SubprocessResult, TerminationReason
-from tests.fakes import MockSubprocessRunner
+from autoskillit.core import (
+    MergeFailedStep,
+    MergeState,
+    SubprocessResult,
+    TerminationReason,
+    TestResult,
+)
+from tests.fakes import InMemoryTestRunner, MockSubprocessRunner
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -28,21 +34,13 @@ def _make_result(
     )
 
 
-class InMemoryTestRunner:
-    def __init__(self, results: list | None = None):
-        self._results = results or []
-        self._idx = 0
-        self.call_count = 0
-
-    async def __call__(self, cmd: str, *, cwd: Path, timeout: float = 60) -> object:
-        self.call_count += 1
-        if self._idx < len(self._results):
-            r = self._results[self._idx]
-            self._idx += 1
-            return r
-        from autoskillit.core import TestResult
-
-        return TestResult(passed=True, stdout="", stderr="")
+def _make_tester() -> InMemoryTestRunner:
+    return InMemoryTestRunner(
+        results=[
+            TestResult(True, "PASS\n= 10 passed =", ""),
+            TestResult(True, "PASS\n= 10 passed =", ""),
+        ]
+    )
 
 
 def _push_through_verify_merge(
@@ -78,14 +76,13 @@ async def test_dirty_main_repo_returns_error(tmp_path):
     _push_through_verify_merge(runner, fake_wt)
     runner.push(_make_result(0, " M src/foo.py\n M tests/bar.py\n"))  # step 7.6: dirty!
 
-    with patch(
-        "autoskillit.server.git.scan_editable_installs_for_worktree", return_value=[]
-    ):
+    with patch("autoskillit.server.git.scan_editable_installs_for_worktree", return_value=[]):
         result = await perform_merge(
             fake_wt,
             "dev",
             config=AutomationConfig(),
             runner=runner,
+            tester=_make_tester(),
         )
 
     assert "error" in result
@@ -110,14 +107,13 @@ async def test_clean_main_repo_proceeds_to_merge(tmp_path):
     runner.push(_make_result(0, ""))  # wt remove
     runner.push(_make_result(0, ""))  # branch -D
 
-    with patch(
-        "autoskillit.server.git.scan_editable_installs_for_worktree", return_value=[]
-    ):
+    with patch("autoskillit.server.git.scan_editable_installs_for_worktree", return_value=[]):
         result = await perform_merge(
             fake_wt,
             "dev",
             config=AutomationConfig(),
             runner=runner,
+            tester=_make_tester(),
         )
 
     assert result.get("merge_succeeded") is True
@@ -136,14 +132,13 @@ async def test_dirty_check_error_format(tmp_path):
     dirty_output = " M file1.py\n M file2.py\n?? newfile.txt\n"
     runner.push(_make_result(0, dirty_output))  # step 7.6: dirty
 
-    with patch(
-        "autoskillit.server.git.scan_editable_installs_for_worktree", return_value=[]
-    ):
+    with patch("autoskillit.server.git.scan_editable_installs_for_worktree", return_value=[]):
         result = await perform_merge(
             fake_wt,
             "dev",
             config=AutomationConfig(),
             runner=runner,
+            tester=_make_tester(),
         )
 
     assert "3 dirty file(s)" in result["error"]

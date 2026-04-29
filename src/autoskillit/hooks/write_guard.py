@@ -24,13 +24,16 @@ def _deny(reason: str) -> None:
 
 
 def main() -> None:
+    if not os.environ.get("AUTOSKILLIT_HEADLESS"):
+        sys.exit(0)
+
     allowed_prefix = os.environ.get("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "")
     if not allowed_prefix:
         sys.exit(0)
 
     try:
         data = json.loads(sys.stdin.read())
-    except Exception:
+    except (json.JSONDecodeError, ValueError, OSError):
         _deny(f"Write/Edit blocked: {WRITE_GUARD_DENY_TRIGGER} (malformed hook input).")
         return
 

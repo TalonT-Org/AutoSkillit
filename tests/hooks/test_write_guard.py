@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import io
 import json
-import sys
 from contextlib import redirect_stdout
 from unittest.mock import patch
 
@@ -33,13 +32,30 @@ def _run_hook(event: dict | str) -> str:
     return buf.getvalue()
 
 
+def _set_headless(monkeypatch: pytest.MonkeyPatch, *, headless: bool) -> None:
+    if headless:
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+    else:
+        monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
+
+
+class TestWriteGuardNoHeadless:
+    def test_no_headless_env_allows_all_writes(self, monkeypatch: pytest.MonkeyPatch):
+        _set_headless(monkeypatch, headless=False)
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "/clone/.autoskillit/temp/")
+        result = _run_hook(_build_event("Write", "/clone/src/foo.py"))
+        assert result == ""
+
+
 class TestWriteGuardNoEnv:
     def test_no_env_var_allows_all_writes(self, monkeypatch: pytest.MonkeyPatch):
+        _set_headless(monkeypatch, headless=True)
         monkeypatch.delenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", raising=False)
         result = _run_hook(_build_event("Write", "/src/foo.py"))
         assert result == ""
 
     def test_no_json_allows_when_no_prefix(self, monkeypatch: pytest.MonkeyPatch):
+        _set_headless(monkeypatch, headless=True)
         monkeypatch.delenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", raising=False)
         result = _run_hook("not json at all")
         assert result == ""
@@ -47,6 +63,10 @@ class TestWriteGuardNoEnv:
 
 class TestWriteGuardWithPrefix:
     PREFIX = "/clone/.autoskillit/temp/investigate/"
+
+    @pytest.fixture(autouse=True)
+    def _enable_headless(self, monkeypatch: pytest.MonkeyPatch):
+        _set_headless(monkeypatch, headless=True)
 
     def test_write_within_prefix_allowed(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)

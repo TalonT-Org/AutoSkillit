@@ -109,6 +109,7 @@ def _build_fleet_campaign_prompt(
     mcp_prefix: str,
     campaign_id: str,
     max_quota_wait_sec: int = 3600,
+    resumable_dispatch_name: str = "",
 ) -> str:
     """Build the system prompt for an L3 campaign dispatcher headless session.
 
@@ -169,6 +170,19 @@ dispatch name NOT listed above.
         if _has_dynamic_dispatch(campaign_recipe)
         else ""
     )
+
+    resumable_section = ""
+    if resumable_dispatch_name:
+        resumable_section = f"""\
+
+## RESUMABLE DISPATCH: {resumable_dispatch_name}
+
+This dispatch was interrupted mid-run with partial sidecar progress.
+Re-dispatch it using compute_remaining_issues(dispatch_id, original_urls, project_dir)
+to retrieve only the remaining issue URLs, then call dispatch_food_truck with
+issue_urls=<remaining> and allow_reentry=true as ingredient overrides.
+Do NOT re-dispatch from the full original issue list.
+"""
 
     return f"""\
 You are a fleet campaign dispatcher. Execute campaign '{campaign_recipe.name}' autonomously.
@@ -260,7 +274,7 @@ Action:
 3. If the retry still fails: halt campaign (proceed to INTERRUPT/CLEANUP).
 
 This is the ONLY condition where re-dispatching the same dispatch_name is permitted.
-{resume_section}
+{resume_section}{resumable_section}
 ## INTERRUPT/CLEANUP SEQUENCE
 
 On campaign completion (all dispatches done) OR halt (failure or quota exhaustion):

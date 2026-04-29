@@ -34,6 +34,7 @@ class DispatchStatus(StrEnum):
     SUCCESS = "success"
     FAILURE = "failure"
     INTERRUPTED = "interrupted"
+    RESUMABLE = "resumable"
     SKIPPED = "skipped"
     REFUSED = "refused"
     RELEASED = "released"
@@ -58,6 +59,7 @@ class DispatchRecord:
     token_usage: dict[str, Any] = field(default_factory=dict)
     started_at: float = 0.0
     ended_at: float = 0.0
+    sidecar_path: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -82,6 +84,7 @@ class ResumeDecision:
 
     next_dispatch_name: str
     completed_dispatches_block: str
+    is_resumable: bool = False
 
 
 _ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
@@ -96,7 +99,20 @@ _ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
         }
     ),
     DispatchStatus.RUNNING: frozenset(
-        {DispatchStatus.SUCCESS, DispatchStatus.FAILURE, DispatchStatus.INTERRUPTED}
+        {
+            DispatchStatus.SUCCESS,
+            DispatchStatus.FAILURE,
+            DispatchStatus.INTERRUPTED,
+            DispatchStatus.RESUMABLE,
+        }
+    ),
+    DispatchStatus.RESUMABLE: frozenset(
+        {
+            DispatchStatus.RUNNING,
+            DispatchStatus.SUCCESS,
+            DispatchStatus.FAILURE,
+            DispatchStatus.INTERRUPTED,
+        }
     ),
     # Terminal states: no further transitions permitted
     DispatchStatus.SUCCESS: frozenset(),
@@ -162,6 +178,7 @@ def read_state(state_path: Path) -> CampaignState | None:
                 token_usage=d.get("token_usage", {}),
                 started_at=d.get("started_at", 0.0),
                 ended_at=d.get("ended_at", 0.0),
+                sidecar_path=d.get("sidecar_path"),
             )
             for d in data["dispatches"]
         ]
@@ -200,6 +217,7 @@ def mark_dispatch_running(
     l2_pid: int,
     starttime_ticks: int = 0,
     boot_id: str = "",
+    sidecar_path: str | None = None,
 ) -> None:
     """Atomically mark a dispatch as running with its dispatch_id and l2_pid."""
     state = read_state(state_path)
@@ -214,6 +232,7 @@ def mark_dispatch_running(
             d.l2_starttime_ticks = starttime_ticks
             d.l2_boot_id = boot_id
             d.started_at = time.time()
+            d.sidecar_path = sidecar_path
             break
     else:
         raise ValueError(f"Dispatch '{dispatch_name}' not found in state")
@@ -235,6 +254,28 @@ def mark_dispatch_interrupted(
             _validate_transition(d.status, DispatchStatus.INTERRUPTED, d.name)
             d.status = DispatchStatus.INTERRUPTED
             d.reason = reason
+            d.ended_at = time.time()
+            break
+    else:
+        raise ValueError(f"Dispatch '{dispatch_name}' not found in state")
+    _write_state(state_path, state)
+
+
+def mark_dispatch_resumable(
+    state_path: Path,
+    dispatch_name: str,
+    *,
+    sidecar_path: str,
+) -> None:
+    """Atomically transition a RUNNING dispatch to RESUMABLE, preserving the sidecar path."""
+    state = read_state(state_path)
+    if state is None:
+        raise FileNotFoundError(f"State file not found or corrupted: {state_path}")
+    for d in state.dispatches:
+        if d.name == dispatch_name:
+            _validate_transition(d.status, DispatchStatus.RESUMABLE, d.name)
+            d.status = DispatchStatus.RESUMABLE
+            d.sidecar_path = sidecar_path
             d.ended_at = time.time()
             break
     else:
@@ -264,7 +305,9 @@ def append_dispatch_record(
     _write_state(state_path, state)
 
 
-_COMPLETED_STATUSES = frozenset({DispatchStatus.SUCCESS, DispatchStatus.SKIPPED})
+_COMPLETED_STATUSES = frozenset(
+    {DispatchStatus.SUCCESS, DispatchStatus.SKIPPED, DispatchStatus.FAILURE}
+)
 
 _TERMINAL_DISPATCH_STATUSES: frozenset[str] = frozenset(
     {
@@ -358,6 +401,40 @@ def read_all_campaign_captures(
     return result
 
 
+def crash_recover_dispatch(
+    state_path: Path,
+    record: DispatchRecord,
+    reason: str = "stale_running_on_resume",
+) -> DispatchStatus | None:
+    """Recover a stale RUNNING dispatch to RESUMABLE or INTERRUPTED; None if both writes fail."""
+    from autoskillit.fleet.sidecar import read_sidecar_from_path  # noqa: PLC0415
+
+    sidecar = Path(record.sidecar_path) if record.sidecar_path else None
+    if sidecar is not None and sidecar.exists():
+        try:
+            raw_lines = [ln.strip() for ln in sidecar.read_text().splitlines() if ln.strip()]
+        except OSError:
+            logger.warning("crash_recover_dispatch: sidecar vanished during read", exc_info=True)
+        else:
+            if not raw_lines or read_sidecar_from_path(sidecar):
+                try:
+                    mark_dispatch_resumable(state_path, record.name, sidecar_path=str(sidecar))
+                    return DispatchStatus.RESUMABLE
+                except Exception:
+                    logger.warning(
+                        "crash_recover_dispatch: failed to mark dispatch resumable",
+                        exc_info=True,
+                    )
+    try:
+        mark_dispatch_interrupted(state_path, record.name, reason=reason)
+        return DispatchStatus.INTERRUPTED
+    except Exception:
+        logger.warning(
+            "crash_recover_dispatch: failed to mark dispatch interrupted", exc_info=True
+        )
+        return None
+
+
 def resume_campaign_from_state(
     state_path: Path,
     continue_on_failure: bool,
@@ -390,14 +467,15 @@ def resume_campaign_from_state(
             if state is None:
                 return None
 
-            # Phase 1: crash recovery — skip live sessions, interrupt stale ones
+            # Phase 1: crash recovery — skip live sessions, recover stale ones
             for d in state.dispatches:
                 if d.status == DispatchStatus.RUNNING:
                     if is_dispatch_session_alive(d):
                         continue
-                    mark_dispatch_interrupted(state_path, d.name, reason="stale_running_on_resume")
-                    d.status = DispatchStatus.INTERRUPTED
-                    d.reason = "stale_running_on_resume"
+                    new_status = crash_recover_dispatch(state_path, d)
+                    if new_status is not None:
+                        d.status = new_status
+                        d.reason = "stale_running_on_resume"
 
             # Phase 2: check for failure halt
             for d in state.dispatches:
@@ -408,12 +486,16 @@ def resume_campaign_from_state(
                     )
 
             # Phase 3: build completed dispatches block and find next
-            # Skip RUNNING dispatches (still alive) — do not return them as next_name
+            # RESUMABLE is selected before PENDING; RUNNING (alive) dispatches are skipped
             completed_lines: list[str] = []
             next_name = ""
+            is_resumable = False
             for d in state.dispatches:
                 if d.status in _COMPLETED_STATUSES:
                     completed_lines.append(f"- {d.name}: {d.status}")
+                elif d.status == DispatchStatus.RESUMABLE and not next_name:
+                    next_name = d.name
+                    is_resumable = True
                 elif (
                     d.status
                     not in {
@@ -421,6 +503,8 @@ def resume_campaign_from_state(
                         DispatchStatus.RUNNING,
                         DispatchStatus.REFUSED,
                         DispatchStatus.RELEASED,
+                        DispatchStatus.FAILURE,
+                        DispatchStatus.RESUMABLE,
                     }
                     and not next_name
                 ):
@@ -431,4 +515,5 @@ def resume_campaign_from_state(
             return ResumeDecision(
                 next_dispatch_name=next_name,
                 completed_dispatches_block=completed_block,
+                is_resumable=is_resumable,
             )

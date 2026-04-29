@@ -57,6 +57,34 @@ def read_sidecar(dispatch_id: str, project_dir: Path) -> list[IssueSidecarEntry]
     return entries
 
 
+def read_sidecar_from_path(path: Path) -> list[IssueSidecarEntry]:
+    """Read and parse a sidecar JSONL at path; skips corrupt lines; returns [] on OSError."""
+    entries: list[IssueSidecarEntry] = []
+    try:
+        lines = path.read_text().splitlines()
+    except OSError:
+        return []
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            data = json.loads(line)
+            entries.append(
+                IssueSidecarEntry(
+                    issue_url=data["issue_url"],
+                    status=data["status"],
+                    ts=data.get("ts", ""),
+                    pr_url=data.get("pr_url"),
+                    reason=data.get("reason"),
+                )
+            )
+        except (json.JSONDecodeError, KeyError) as exc:
+            logger.debug("sidecar: skipping corrupt JSONL line", path=str(path), error=str(exc))
+            continue
+    return entries
+
+
 def compute_remaining_issues(
     dispatch_id: str, original_urls: list[str], project_dir: Path
 ) -> list[str]:

@@ -82,6 +82,7 @@ def _write_pid(
     dispatch_id: str,
     pid: int,
     starttime_ticks: int,
+    sidecar_path: str | None = None,
 ) -> None:
     """on_spawn callback: atomically mark dispatch as running with l2_pid and identity fields."""
     from autoskillit.core import read_boot_id
@@ -95,6 +96,7 @@ def _write_pid(
             l2_pid=pid,
             starttime_ticks=starttime_ticks,
             boot_id=read_boot_id() or "",
+            sidecar_path=sidecar_path,
         )
     except Exception:
         logger.warning("_write_pid: failed to mark dispatch running", exc_info=True)
@@ -276,6 +278,9 @@ async def _run_dispatch(
 
     dispatch_id = str(uuid4())
     completion_marker = f"%%L2_DONE::{dispatch_id[:8]}%%"
+    from autoskillit.fleet.sidecar import sidecar_path as compute_sidecar_path  # noqa: PLC0415
+
+    dispatch_sidecar_path = str(compute_sidecar_path(dispatch_id, tool_ctx.project_dir))
     effective_name = dispatch_name or recipe
 
     campaign_id = tool_ctx.kitchen_id
@@ -309,7 +314,7 @@ async def _run_dispatch(
 
     def _on_spawn(pid: int, ticks: int) -> None:
         _l2_pid.append(pid)
-        _write_pid(state_path, effective_name, dispatch_id, pid, ticks)
+        _write_pid(state_path, effective_name, dispatch_id, pid, ticks, dispatch_sidecar_path)
 
     skill_result = await tool_ctx.executor.dispatch_food_truck(
         orchestrator_prompt=prompt,

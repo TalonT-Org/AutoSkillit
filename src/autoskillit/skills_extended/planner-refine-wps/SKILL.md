@@ -32,12 +32,12 @@ suggestions, resolves conflicts, and writes `refined_wps.json`.
 - **$1** — Absolute path to `combined_wps.json` (PlanDocument with `work_packages: list[WPElaborated]`)
 - **$2** — Absolute path to `refined_plan.json` (PlanDocument with phases as PhaseElaborated)
 - **$3** — Absolute path to `refined_assignments.json` (PlanDocument with assignments as AssignmentElaborated)
-- **$4** — Absolute path to output directory for `refined_wps.json` (must exist under `{{AUTOSKILLIT_TEMP}}/planner/`)
+- **$4** — Absolute path to the run-scoped planner directory (e.g., `{{AUTOSKILLIT_TEMP}}/planner/run-YYYYMMDD-HHMMSS`). Output is written to `$4/refined_wps.json`.
 
 ## Critical Constraints
 
 **NEVER:**
-- Write any file outside `{{AUTOSKILLIT_TEMP}}/planner/`
+- Write any file outside `$4/`
 - Directly modify `combined_wps.json` ($1) — always write a new `refined_wps.json`
 - Allow an L0 subagent to write files directly (L0s return structured text only)
 - Emit `refined_wps_path` before writing `refined_wps.json`

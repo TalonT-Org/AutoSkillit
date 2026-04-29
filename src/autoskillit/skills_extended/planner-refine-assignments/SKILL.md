@@ -31,12 +31,12 @@ cross-assignment WP ownership conflicts, applies field-level edits, and writes
 
 - **$1** — Absolute path to `combined_assignments.json` (PlanDocument, all assignments as AssignmentElaborated)
 - **$2** — Absolute path to `refined_plan.json` (PlanDocument with phases as PhaseElaborated, for phase context)
-- **$3** — Absolute path to output directory for `refined_assignments.json` (must exist under `{{AUTOSKILLIT_TEMP}}/planner/`)
+- **$3** — Absolute path to the run-scoped planner directory (e.g., `{{AUTOSKILLIT_TEMP}}/planner/run-YYYYMMDD-HHMMSS`). Output is written to `$3/refined_assignments.json`.
 
 ## Critical Constraints
 
 **NEVER:**
-- Write any file outside `{{AUTOSKILLIT_TEMP}}/planner/`
+- Write any file outside `$3/`
 - Directly modify `combined_assignments.json` ($1) — always write a new `refined_assignments.json`
 - Allow an L0 subagent to write files directly (L0s return structured text only)
 - Emit `refined_assignments_path` before writing `refined_assignments.json`

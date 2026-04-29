@@ -362,6 +362,8 @@ class TestOutputPathTokensDerivedFromContracts:
             "refined_assignments_path",
             # planner-refine-wps output
             "refined_wps_path",
+            # planner-validate-task-alignment output
+            "alignment_findings_path",
             # audit-tests output (bundled full-audit recipe)
             "audit_report_path",
             # validate-audit output (bundled full-audit recipe)

@@ -256,6 +256,7 @@ def expand_assignments(
         ) from exc
     plan = validate_refined_plan(plan)
     phases = plan.get("phases", [])
+    task = plan.get("task", "")
     assign_dir = Path(output_dir) / "assignments"
     assign_dir.mkdir(parents=True, exist_ok=True)
 
@@ -294,6 +295,7 @@ def expand_assignments(
         context: dict[str, object] = {
             "id": phase_id,
             "name": phase.get("name", ""),
+            "task": task,
             "metadata": metadata,
             "prior_results": [],
         }
@@ -327,6 +329,7 @@ def expand_wps(refined_assignments_path: str, output_dir: str, **kwargs: object)
         ) from exc
     data = validate_refined_assignments(data)
     assignments = data.get("assignments", [])
+    task = data.get("task", "")
     out_dir = Path(output_dir)
     wp_dir = out_dir / "work_packages"
     wp_dir.mkdir(parents=True, exist_ok=True)
@@ -384,6 +387,7 @@ def expand_wps(refined_assignments_path: str, output_dir: str, **kwargs: object)
         context: dict[str, object] = {
             "id": phase_id,
             "name": bucket["name"],
+            "task": task,
             "metadata": metadata,
             "prior_results": [],
             "wp_index_path": str(out_dir / "wp_index.json"),

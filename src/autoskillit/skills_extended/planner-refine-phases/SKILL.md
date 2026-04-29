@@ -38,6 +38,7 @@ conflicts, applies field-level edits to the plan, and writes `refined_plan.json`
 - Allow an L0 subagent to write files directly (L0s return structured text only)
 - Emit `refined_plan_path` before writing `refined_plan.json`
 - Skip emitting `refined_plan_path` even if all L0s fail (write unchanged plan, still emit)
+- Read `{{AUTOSKILLIT_TEMP}}` artifacts not passed as positional arguments
 
 **ALWAYS:**
 - Validate each L0 response for `phase_id`, `changes` (array), `conflicts` (array)
@@ -76,6 +77,10 @@ Input schema (PlanDocument with PhaseElaborated phases):
 ```
 
 ### Step 2: Spawn parallel L0 subagents
+
+Read the `task` field from the combined plan document. Each L0 subagent reviewing a phase
+must verify that the phase's goal and scope serve the stated task. Phases that appear to
+address codebase concerns not mentioned in the task should be flagged for scope creep.
 
 Spawn one L0 subagent per phase in parallel using the Agent/Task tool. Each L0 receives:
 - The full serialized `combined_plan.json` content (pasted inline or via file read)

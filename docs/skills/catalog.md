@@ -1,7 +1,7 @@
 # Skill catalog
 
-The complete list of bundled skills (126 total: 3 in `src/autoskillit/skills/`,
-123 in `src/autoskillit/skills_extended/`). Filesystem walk this directory if
+The complete list of bundled skills (127 total: 3 in `src/autoskillit/skills/`,
+124 in `src/autoskillit/skills_extended/`). Filesystem walk this directory if
 you need an exhaustive listing; this catalog groups by purpose.
 
 ## Tier 1 — free range (3)
@@ -119,15 +119,15 @@ figure set:
 | 11 | `vis-lens-story-arc` | Narrative | Do the figures tell a coherent story across the report? | P2 |
 | 12 | `vis-lens-reproducibility` | Replicative | Can the figures be reproduced from the data and code? | P2 |
 
-## Planner family (11)
+## Planner family (12)
 
-11 progressive-decomposition sub-skills under `skills_extended/planner-*/`. Invoked
+12 progressive-decomposition sub-skills under `skills_extended/planner-*/`. Invoked
 internally by the `planner` recipe to break a roadmap into GitHub milestones and issues:
 
 `planner-analyze`, `planner-elaborate-assignments`, `planner-elaborate-phase`,
 `planner-elaborate-wps`, `planner-extract-domain`, `planner-generate-phases`,
 `planner-reconcile-deps`, `planner-refine`, `planner-refine-assignments`,
-`planner-refine-phases`, `planner-refine-wps`
+`planner-refine-phases`, `planner-refine-wps`, `planner-validate-task-alignment`
 
 ## Rectify doctrine
 

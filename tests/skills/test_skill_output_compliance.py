@@ -265,6 +265,8 @@ def test_output_path_tokens_synchronized() -> None:
             "validated_report_path",
             # promote-to-main skill output (promote-to-main-wrapper recipe)
             "pr_body_path",
+            # planner-validate-task-alignment output
+            "alignment_findings_path",
         }
     )
 

@@ -30,6 +30,9 @@ is the sole writer for this phase's assignments — no concurrent write races.
 - Let an L0 failure abort the phase — always write a stub and continue
 - Write output outside `$2/assignments/`
 - Spawn L0s sequentially — always in parallel
+- Read `{{AUTOSKILLIT_TEMP}}` artifacts outside your designated input files and output directory
+- Explore parent directories of your input paths (e.g., `ls $(dirname $1)/..`)
+- Read result files from other phases
 
 **ALWAYS:**
 - Spawn all L0 subagents in parallel using the native Agent/Task tool (NOT run_skill — leaf guard blocks it)
@@ -54,6 +57,10 @@ Read `$2/phases/{id}_result.json` (the elaborated phase result). Extract:
 - `scope` — phase-level scope list
 - `technical_approach` — overall technical approach for the phase
 - `assignments` — array of assignment objects with `name`, `goal`, `metadata`
+
+Read the `task` field from the context file at $1. Every assignment elaboration — its `goal`,
+`scope`, `deliverables`, and `work_packages_preview` — must serve the stated task. Do not
+elaborate into work not requested by the task.
 
 ### Step 3: Build per-L0 context packets
 

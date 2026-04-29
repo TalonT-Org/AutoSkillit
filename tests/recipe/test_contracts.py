@@ -652,6 +652,7 @@ ALWAYS_WRITE_SKILLS = {
     "planner-refine-assignments",
     "planner-refine-phases",
     "planner-refine-wps",
+    "planner-validate-task-alignment",
     "prepare-research-pr",
     "promote-to-main",
     "rectify",

@@ -66,7 +66,7 @@ async def _run_signal_guard(
     campaign_name: str | None = None,
 ) -> None:
     """Run the signal guard and fire a signal after it's armed."""
-    from autoskillit.cli._fleet import _fleet_signal_guard
+    from autoskillit.cli._fleet_lifecycle import _fleet_signal_guard
 
     async with anyio.create_task_group() as tg:
 
@@ -266,7 +266,7 @@ class TestSignalGuard:
 
 
 def test_sighup_in_fleet_signal_list() -> None:
-    """_fleet.py must pass signal.SIGHUP to open_signal_receiver (AST guard).
+    """_fleet_lifecycle.py must pass signal.SIGHUP to open_signal_receiver (AST guard).
 
     Sending a real SIGHUP in tests is unsafe — before SIGHUP is registered,
     the default disposition terminates the process. AST analysis is safe for
@@ -274,7 +274,7 @@ def test_sighup_in_fleet_signal_list() -> None:
     """
     from autoskillit.core.paths import pkg_root
 
-    src_path = pkg_root() / "cli" / "_fleet.py"
+    src_path = pkg_root() / "cli" / "_fleet_lifecycle.py"
     tree = ast.parse(src_path.read_text(encoding="utf-8"))
 
     sighup_found = False
@@ -295,13 +295,13 @@ def test_sighup_in_fleet_signal_list() -> None:
                 break
 
     assert sighup_found, (
-        "signal.SIGHUP not found in anyio.open_signal_receiver() call in _fleet.py. "
+        "signal.SIGHUP not found in anyio.open_signal_receiver() call in _fleet_lifecycle.py. "
         "Terminal disconnects (SIGHUP) must trigger graceful shutdown."
     )
 
 
 def test_fleet_signame_uses_sig_name_attribute() -> None:
-    """_fleet.py must use sig.name for signame, not a hardcoded ternary (AST guard).
+    """_fleet_lifecycle.py must use sig.name for signame, not a hardcoded ternary (AST guard).
 
     Verifies that the old ``"SIGINT" if sig == signal.SIGINT else "SIGTERM"``
     ternary has been replaced with ``sig.name`` so that SIGHUP and any future
@@ -312,7 +312,7 @@ def test_fleet_signame_uses_sig_name_attribute() -> None:
     """
     from autoskillit.core.paths import pkg_root
 
-    src_path = pkg_root() / "cli" / "_fleet.py"
+    src_path = pkg_root() / "cli" / "_fleet_lifecycle.py"
     tree = ast.parse(src_path.read_text(encoding="utf-8"))
 
     sig_name_attr_found = False
@@ -333,7 +333,7 @@ def test_fleet_signame_uses_sig_name_attribute() -> None:
             break
 
     assert sig_name_attr_found, (
-        "signame assignment in _fleet.py does not use sig.name. "
+        "signame assignment in _fleet_lifecycle.py does not use sig.name. "
         "Replace the hardcoded ternary with `signame = sig.name` so that "
         "SIGHUP and future signals are handled without manual mapping."
     )

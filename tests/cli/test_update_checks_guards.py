@@ -51,7 +51,7 @@ def test_run_update_checks_skips_on_guard_env_var(
             monkeypatch.delenv(other, raising=False)
     fetched: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks._fetch_with_cache",
+        "autoskillit.cli._update_checks_fetch._fetch_with_cache",
         lambda url, **kw: fetched.append(url) or None,
     )
     prompted: list[str] = []
@@ -75,7 +75,7 @@ def test_run_update_checks_skips_non_tty_stdin(
     monkeypatch.setattr(sys, "stdout", fake_stdout)
     fetched: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks._fetch_with_cache",
+        "autoskillit.cli._update_checks_fetch._fetch_with_cache",
         lambda url, **kw: fetched.append(url) or None,
     )
     run_update_checks(home=tmp_path)
@@ -98,7 +98,7 @@ def test_run_update_checks_skips_non_tty_stdout(
     monkeypatch.setattr(sys, "stdout", fake_stdout)
     fetched: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks._fetch_with_cache",
+        "autoskillit.cli._update_checks_fetch._fetch_with_cache",
         lambda url, **kw: fetched.append(url) or None,
     )
     run_update_checks(home=tmp_path)
@@ -136,7 +136,7 @@ def test_run_update_checks_skips_local_and_unknown_install_types(
     monkeypatch.setattr("autoskillit.cli._update_checks.detect_install", lambda: info)
     fetched: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks._fetch_with_cache",
+        "autoskillit.cli._update_checks_fetch._fetch_with_cache",
         lambda url, **kw: fetched.append(url) or None,
     )
     prompted: list[str] = []
@@ -361,7 +361,7 @@ def test_find_source_repo_env_var_override_valid(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """AUTOSKILLIT_SOURCE_REPO env var pointing to a valid repo root is returned."""
-    from autoskillit.cli._update_checks import find_source_repo
+    from autoskillit.cli._update_checks_source import find_source_repo
 
     src_dir = tmp_path / "src" / "autoskillit"
     src_dir.mkdir(parents=True)
@@ -374,7 +374,7 @@ def test_find_source_repo_env_var_override_invalid_falls_through(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """AUTOSKILLIT_SOURCE_REPO pointing to a path without src/autoskillit/ is ignored."""
-    from autoskillit.cli._update_checks import find_source_repo
+    from autoskillit.cli._update_checks_source import find_source_repo
 
     monkeypatch.setenv("AUTOSKILLIT_SOURCE_REPO", str(tmp_path / "nonexistent"))
     monkeypatch.setattr("autoskillit.cli._update_checks.Path.cwd", lambda: tmp_path)
@@ -386,7 +386,7 @@ def test_find_source_repo_cwd_walk_finds_pyproject(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """CWD walk finds the project root when pyproject.toml has name=autoskillit."""
-    from autoskillit.cli._update_checks import find_source_repo
+    from autoskillit.cli._update_checks_source import find_source_repo
 
     project_root = tmp_path / "project"
     src_dir = project_root / "src" / "autoskillit"
@@ -406,7 +406,7 @@ def test_find_source_repo_cwd_walk_no_match_returns_none(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """CWD walk returns None when no autoskillit project is found."""
-    from autoskillit.cli._update_checks import find_source_repo
+    from autoskillit.cli._update_checks_source import find_source_repo
 
     monkeypatch.delenv("AUTOSKILLIT_SOURCE_REPO", raising=False)
     monkeypatch.setattr("autoskillit.cli._update_checks.Path.cwd", lambda: tmp_path)

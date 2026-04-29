@@ -68,7 +68,7 @@ def test_doctor_reports_drift_in_project_scope(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """_check_hook_registry_drift must report drift found in project scope."""
-    from autoskillit.cli._doctor import _check_hook_registry_drift
+    from autoskillit.cli._doctor_hooks import _check_hook_registry_drift
     from autoskillit.core import Severity
 
     # Seed a stale pretty_output.py in project scope
@@ -547,7 +547,7 @@ class TestGroupMFranchiseDoctorChecks:
         from autoskillit.cli._doctor import _check_sous_chef_bundled
         from autoskillit.core import Severity
 
-        monkeypatch.setattr("autoskillit.cli._doctor.pkg_root", lambda: tmp_path)
+        monkeypatch.setattr("autoskillit.cli._doctor_fleet.pkg_root", lambda: tmp_path)
         result = _check_sous_chef_bundled()
         assert result.severity == Severity.ERROR
         assert "sous-chef" in result.message
@@ -563,7 +563,7 @@ class TestGroupMFranchiseDoctorChecks:
         hooks_dir.mkdir()
         (hooks_dir / "fleet_dispatch_guard.py").write_text("")
         monkeypatch.setattr(
-            "autoskillit.cli._doctor.canonical_script_basenames",
+            "autoskillit.cli._doctor_fleet.canonical_script_basenames",
             lambda: frozenset({"fleet_dispatch_guard.py"}),
         )
         monkeypatch.setattr("autoskillit.hook_registry.HOOKS_DIR", hooks_dir)
@@ -578,7 +578,7 @@ class TestGroupMFranchiseDoctorChecks:
         from autoskillit.core import Severity
 
         monkeypatch.setattr(
-            "autoskillit.cli._doctor.canonical_script_basenames",
+            "autoskillit.cli._doctor_fleet.canonical_script_basenames",
             lambda: frozenset(),
         )
         result = _check_fleet_dispatch_guard_registered()

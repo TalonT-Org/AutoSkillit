@@ -399,12 +399,11 @@ _REVIEW_GATE_STATE_RELPATH = (".autoskillit", "temp", "review_gate_state.json")
 
 
 # T5-1
-def test_close_kitchen_removes_review_gate_state(tmp_path, monkeypatch):
-    """_close_kitchen_handler() must remove review_gate_state.json when present."""
+def test_close_kitchen_preserves_review_gate_when_loop_active(tmp_path, monkeypatch):
+    """Preserve review_gate_state.json when an active review loop is in progress."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
 
-    # Write the state file before closing the kitchen
     state_path = tmp_path.joinpath(*_REVIEW_GATE_STATE_RELPATH)
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(
@@ -426,7 +425,7 @@ def test_close_kitchen_removes_review_gate_state(tmp_path, monkeypatch):
 
             _close_kitchen_handler()
 
-    assert not state_path.exists(), "review_gate_state.json must be removed by close_kitchen"
+    assert state_path.exists(), "Active review loop state must survive close_kitchen"
 
 
 # T5-2
@@ -442,6 +441,82 @@ def test_close_kitchen_no_review_gate_state_no_error(tmp_path, monkeypatch):
             _close_kitchen_handler()  # Must not raise
 
     assert not tmp_path.joinpath(*_REVIEW_GATE_STATE_RELPATH).exists()
+
+
+# T5-3
+def test_close_kitchen_removes_review_gate_when_loop_complete(tmp_path, monkeypatch):
+    """Remove review_gate_state.json when check_review_loop_called is True."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+
+    state_path = tmp_path.joinpath(*_REVIEW_GATE_STATE_RELPATH)
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(
+        json.dumps(
+            {
+                "gate": "LOOP_REQUIRED",
+                "review_verdict": "changes_requested",
+                "check_review_loop_called": True,
+                "pr_number": "1290",
+                "set_at": "2026-04-26T04:30:00+00:00",
+            }
+        )
+    )
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            from autoskillit.server.tools_kitchen import _close_kitchen_handler
+
+            _close_kitchen_handler()
+
+    assert not state_path.exists(), "Completed loop state must be cleaned up on close"
+
+
+# T5-4
+def test_close_kitchen_removes_review_gate_when_gate_not_loop_required(tmp_path, monkeypatch):
+    """_close_kitchen_handler() must remove review_gate_state.json when gate != LOOP_REQUIRED."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+
+    state_path = tmp_path.joinpath(*_REVIEW_GATE_STATE_RELPATH)
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(
+        json.dumps(
+            {
+                "gate": "CLEAR",
+                "check_review_loop_called": False,
+                "pr_number": "1290",
+                "set_at": "2026-04-26T04:30:00+00:00",
+            }
+        )
+    )
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            from autoskillit.server.tools_kitchen import _close_kitchen_handler
+
+            _close_kitchen_handler()
+
+    assert not state_path.exists(), "Non-LOOP_REQUIRED gate state must be cleaned up on close"
+
+
+# T5-5
+def test_close_kitchen_removes_review_gate_on_corrupt_json(tmp_path, monkeypatch):
+    """Delete review_gate_state.json when JSON is malformed (fail-safe)."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+
+    state_path = tmp_path.joinpath(*_REVIEW_GATE_STATE_RELPATH)
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text("{not valid json")
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            from autoskillit.server.tools_kitchen import _close_kitchen_handler
+
+            _close_kitchen_handler()
+
+    assert not state_path.exists(), "Corrupt gate state must be deleted (fail-safe)"
 
 
 @pytest.mark.anyio

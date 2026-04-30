@@ -242,7 +242,7 @@ class TestNotifyHelper:
     @pytest.mark.anyio
     async def test_notify_raises_value_error_for_reserved_key_name(self):
         """The 'name' key that caused the original bug must be rejected."""
-        from autoskillit.server.helpers import _notify
+        from autoskillit.server._notify import _notify
 
         ctx = AsyncMock()
         ctx.info = AsyncMock()
@@ -259,9 +259,8 @@ class TestNotifyHelper:
     @pytest.mark.anyio
     async def test_notify_raises_for_all_reserved_keys(self):
         """Every key in RESERVED_LOG_RECORD_KEYS must be rejected."""
-        from autoskillit.server.helpers import _notify
-
         from autoskillit.core.types import RESERVED_LOG_RECORD_KEYS
+        from autoskillit.server._notify import _notify
 
         ctx = AsyncMock()
         ctx.info = AsyncMock()
@@ -272,7 +271,7 @@ class TestNotifyHelper:
     @pytest.mark.anyio
     async def test_notify_accepts_safe_key_recipe_name(self):
         """'recipe_name' (the corrected key for migrate_recipe) must be accepted."""
-        from autoskillit.server.helpers import _notify
+        from autoskillit.server._notify import _notify
 
         ctx = AsyncMock()
         ctx.info = AsyncMock()
@@ -291,7 +290,7 @@ class TestNotifyHelper:
 
     @pytest.mark.anyio
     async def test_notify_accepts_none_extra(self):
-        from autoskillit.server.helpers import _notify
+        from autoskillit.server._notify import _notify
 
         ctx = AsyncMock()
         ctx.info = AsyncMock()
@@ -300,7 +299,7 @@ class TestNotifyHelper:
 
     @pytest.mark.anyio
     async def test_notify_accepts_empty_extra(self):
-        from autoskillit.server.helpers import _notify
+        from autoskillit.server._notify import _notify
 
         ctx = AsyncMock()
         ctx.info = AsyncMock()
@@ -311,7 +310,7 @@ class TestNotifyHelper:
     async def test_notify_swallows_attribute_error_from_ctx(self):
         """Contract: must not raise even when ctx.info raises AttributeError
         (e.g. _CurrentContext sentinel). Test completion is the assertion."""
-        from autoskillit.server.helpers import _notify
+        from autoskillit.server._notify import _notify
 
         ctx = AsyncMock()
         ctx.info = AsyncMock(side_effect=AttributeError("no info"))
@@ -322,7 +321,7 @@ class TestNotifyHelper:
     async def test_notify_swallows_runtime_error_from_ctx(self):
         """Contract: must not raise even when ctx.info raises RuntimeError
         (no active MCP session). Test completion is the assertion."""
-        from autoskillit.server.helpers import _notify
+        from autoskillit.server._notify import _notify
 
         ctx = AsyncMock()
         ctx.info = AsyncMock(side_effect=RuntimeError("session not available"))
@@ -332,7 +331,7 @@ class TestNotifyHelper:
     async def test_notify_swallows_key_error_from_ctx(self):
         """Contract: must not raise even when ctx.info raises KeyError
         (FastMCP stdlib logging path). Test completion is the assertion."""
-        from autoskillit.server.helpers import _notify
+        from autoskillit.server._notify import _notify
 
         ctx = AsyncMock()
         ctx.info = AsyncMock(side_effect=KeyError("Attempt to overwrite 'name' in LogRecord"))
@@ -340,7 +339,7 @@ class TestNotifyHelper:
 
     @pytest.mark.anyio
     async def test_notify_dispatches_error_level(self):
-        from autoskillit.server.helpers import _notify
+        from autoskillit.server._notify import _notify
 
         ctx = AsyncMock()
         ctx.error = AsyncMock()

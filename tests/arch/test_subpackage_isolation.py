@@ -551,9 +551,10 @@ def test_server_file_count_under_limit() -> None:
     tools_ci_watch.py and tools_ci_merge_queue.py submodules.
     Limit updated from 22 to 23 after _guards.py was extracted from helpers.py.
     Limit updated from 23 to 24 after _subprocess.py was extracted from helpers.py.
+    Limit updated from 24 to 25 after _misc.py was extracted from helpers.py.
     """
     py_files = list((SRC_ROOT / "server").glob("*.py"))
-    assert len(py_files) <= 24, f"server/ has {len(py_files)} files, max is 24"
+    assert len(py_files) <= 25, f"server/ has {len(py_files)} files, max is 25"
 
 
 def test_tools_integrations_replaced_by_split_modules() -> None:
@@ -573,9 +574,9 @@ def test_split_files_under_750_lines() -> None:
         assert lines <= 750, f"{name} has {lines} lines, exceeds 750"
 
 
-def test_extract_block_moved_to_helpers() -> None:
-    """_extract_block moved to server/helpers.py after tools_integrations split."""
-    from autoskillit.server.helpers import _extract_block
+def test_extract_block_in_misc() -> None:
+    """_extract_block lives in server/_misc.py."""
+    from autoskillit.server._misc import _extract_block
 
     assert callable(_extract_block)
 
@@ -765,7 +766,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         server/ tests. Exempt at 11 files.
     """
     EXEMPTIONS: dict[str, int] = {
-        "server": 24,
+        "server": 25,
         "recipe": 48,
         "execution": 35,
         "core": 32,

@@ -409,8 +409,7 @@ class TestClearMarkerWritten:
 class TestGetLogRoot:
     def test_returns_resolved_log_dir(self, tool_ctx, tmp_path, monkeypatch):
         """_get_log_root() returns the resolved path for the configured log_dir."""
-        from autoskillit.server.helpers import resolve_log_dir
-
+        from autoskillit.execution import resolve_log_dir
         from autoskillit.server.tools_status import _get_log_root
 
         log_dir = tmp_path / "custom_logs"

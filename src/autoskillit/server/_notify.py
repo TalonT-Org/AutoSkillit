@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import functools
 import json
 from collections.abc import Awaitable, Callable

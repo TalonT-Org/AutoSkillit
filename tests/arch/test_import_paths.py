@@ -15,8 +15,6 @@ from pathlib import Path
 
 import pytest
 
-from tests.arch._helpers import _runtime_import_froms
-
 SRC = Path(__file__).parent.parent.parent / "src" / "autoskillit"
 PACKAGES = frozenset(
     [
@@ -269,22 +267,25 @@ def test_req_imp_007_pretty_output_no_private_recipe_api_import() -> None:
             )
 
 
-def test_req_imp_008_server_helpers_no_execution_process_import() -> None:
-    """server/helpers.py TYPE_CHECKING must import SubprocessResult from autoskillit.core.
+def test_server_helpers_module_deleted():
+    import importlib
 
-    SubprocessResult originates in core._type_subprocess and is re-exported via
-    autoskillit.core.__all__ (line 201). Importing from execution.process bypasses the
-    canonical L0 surface (P14-3).
-    """
-    path = SRC / "server" / "helpers.py"
-    for mod, in_tc in _parse_imports(path):
-        if in_tc and mod == "autoskillit.execution.process":
-            pytest.fail(
-                "server/helpers.py TYPE_CHECKING must use "
-                "'from autoskillit.core import SubprocessResult' "
-                "instead of 'from autoskillit.execution.process import SubprocessResult' "
-                "(P14-3). SubprocessResult is available via autoskillit.core.__all__."
-            )
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("autoskillit.server.helpers")
+
+
+def test_no_server_helpers_imports_in_src():
+    """Verify zero references to the deleted helpers module in production code."""
+    import subprocess
+
+    result = subprocess.run(
+        ["grep", "-r", "server.helpers", "src/"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.stdout == "", (
+        f"Found references to deleted server.helpers module:\n{result.stdout}"
+    )
 
 
 def test_req_imp_009_session_skills_no_config_settings_import() -> None:
@@ -352,18 +353,6 @@ def test_req_imp_007_server_cli_no_unauthorized_cross_submodule_imports() -> Non
                     if other_pkg in forbidden_pkgs and other_pkg != pkg:
                         violations.append(f"{rel} → {mod}")
     assert not violations, "REQ-IMP-007 violations:\n" + "\n".join(violations)
-
-
-def test_helpers_no_recipe_imports() -> None:
-    """server/helpers.py must have zero runtime imports from autoskillit.recipe."""
-    helpers_path = SRC / "server" / "helpers.py"
-    runtime_imports = _runtime_import_froms(helpers_path)
-    recipe_imports = [
-        node.module
-        for node in runtime_imports
-        if node.module and node.module.startswith("autoskillit.recipe")
-    ]
-    assert recipe_imports == [], f"Forbidden recipe imports in helpers.py: {recipe_imports}"
 
 
 def test_req_imp_010_init_helpers_no_toplevel_recipe_imports() -> None:

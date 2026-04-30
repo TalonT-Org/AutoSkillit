@@ -237,3 +237,50 @@ def test_compile_plan_creates_issues_directory(tmp_path: Path) -> None:
     _make_valid_output_dir(tmp_path)
     compile_plan(str(tmp_path), "task", "/src")
     assert (tmp_path / "issues").is_dir()
+
+
+class TestCompilePlanEdgeCases:
+    def test_nonpassing_verdict_returns_dict(self, tmp_path: Path) -> None:
+        _make_valid_output_dir(tmp_path)
+        (tmp_path / "validation.json").write_text(
+            json.dumps(
+                {
+                    "verdict": "fail",
+                    "findings": [{"message": "test", "severity": "error", "check": "test"}],
+                    "warnings": [],
+                    "schema_version": 2,
+                }
+            )
+        )
+
+        result = compile_plan(str(tmp_path), "t", "s")
+
+        assert isinstance(result, dict)
+        assert "plan_path" in result
+
+    def test_wp_references_absent_phase_raises(self, tmp_path: Path) -> None:
+        _make_valid_output_dir(tmp_path)
+        wps_dir = tmp_path / "work_packages"
+        write_json(wps_dir / "P99-A1-WP1_result.json", make_wp_result("P99-A1-WP1"))
+
+        with pytest.raises(RuntimeError, match="references phase"):
+            compile_plan(str(tmp_path), "t", "s")
+
+    def test_wp_references_absent_assignment_raises(self, tmp_path: Path) -> None:
+        _make_valid_output_dir(tmp_path)
+        wps_dir = tmp_path / "work_packages"
+        write_json(wps_dir / "P1-A99-WP1_result.json", make_wp_result("P1-A99-WP1"))
+
+        with pytest.raises(RuntimeError, match="references assignment"):
+            compile_plan(str(tmp_path), "t", "s")
+
+    def test_malformed_wp_id_raises(self, tmp_path: Path) -> None:
+        _make_valid_output_dir(tmp_path)
+        wps_dir = tmp_path / "work_packages"
+        write_json(
+            wps_dir / "BADID_result.json",
+            {"id": "BADID", "name": "Bad", "deliverables": ["x.py"]},
+        )
+
+        with pytest.raises(ValueError, match="Invalid WP id format"):
+            compile_plan(str(tmp_path), "t", "s")

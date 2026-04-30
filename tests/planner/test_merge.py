@@ -4,7 +4,14 @@ import json
 
 import pytest
 
-from autoskillit.planner.merge import build_plan_snapshot, extract_item, merge_files, replace_item
+from autoskillit.planner.merge import (
+    build_plan_snapshot,
+    extract_item,
+    merge_files,
+    merge_tier_dir,
+    replace_item,
+)
+from tests.planner.conftest import make_phase_result
 
 pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.feature("planner")]
 
@@ -348,3 +355,117 @@ def test_build_plan_snapshot_projects_ordering(tmp_path) -> None:
     doc = json.loads(out.read_text())
     phase = doc["phases"][0]
     assert phase["ordering"] == 1
+
+
+# ---------------------------------------------------------------------------
+# WP1: build_plan_snapshot additional tests
+# ---------------------------------------------------------------------------
+
+
+def test_build_plan_snapshot_happy_path_two_phases_sorted(tmp_path) -> None:
+    phases_dir = tmp_path / "phases"
+    phases_dir.mkdir()
+    for phase_num, ordering in [(2, 2), (1, 1)]:
+        (phases_dir / f"P{phase_num}_result.json").write_text(
+            json.dumps(make_phase_result(phase_num))
+        )
+    out = tmp_path / "snapshot.json"
+
+    result = build_plan_snapshot(str(phases_dir), str(out))
+
+    data = json.loads(out.read_text())
+    assert len(data["phases"]) == 2
+    assert data["phases"][0]["ordering"] == 1
+    assert data["phases"][1]["ordering"] == 2
+    assert "P1" in result["phase_ids"]
+    assert "P2" in result["phase_ids"]
+
+
+def test_build_plan_snapshot_corrupt_json_skipped(tmp_path) -> None:
+    phases_dir = tmp_path / "phases"
+    phases_dir.mkdir()
+    (phases_dir / "P1_result.json").write_text(json.dumps(make_phase_result(1)))
+    (phases_dir / "bad_result.json").write_text("{not json")
+    out = tmp_path / "snapshot.json"
+
+    result = build_plan_snapshot(str(phases_dir), str(out))
+
+    data = json.loads(out.read_text())
+    assert len(data["phases"]) == 1
+    assert result["phase_ids"] == "P1"
+
+
+def test_build_plan_snapshot_nonexistent_phases_dir(tmp_path) -> None:
+    out = tmp_path / "snapshot.json"
+
+    result = build_plan_snapshot(str(tmp_path / "nonexistent"), str(out))
+
+    data = json.loads(out.read_text())
+    assert data["phases"] == []
+    assert result["phase_ids"] == ""
+
+
+def test_build_plan_snapshot_empty_dir_produces_empty_phases(tmp_path) -> None:
+    phases_dir = tmp_path / "phases"
+    phases_dir.mkdir()
+    out = tmp_path / "snapshot.json"
+
+    result = build_plan_snapshot(str(phases_dir), str(out))
+
+    data = json.loads(out.read_text())
+    assert data["phases"] == []
+    assert result["phase_ids"] == ""
+
+
+# ---------------------------------------------------------------------------
+# WP3: merge_tier_dir tests
+# ---------------------------------------------------------------------------
+
+
+def test_merge_tier_dir_empty_dir_raises(tmp_path) -> None:
+    empty_dir = tmp_path / "phases"
+    empty_dir.mkdir()
+    out = tmp_path / "combined.json"
+
+    with pytest.raises(ValueError, match="No \\*_result.json files found"):
+        merge_tier_dir(str(empty_dir), str(out), "phases")
+
+
+def test_merge_tier_dir_single_file(tmp_path) -> None:
+    results_dir = tmp_path / "phases"
+    results_dir.mkdir()
+    (results_dir / "P1_result.json").write_text(
+        json.dumps({"id": "P1", "name": "Phase 1", "ordering": 1})
+    )
+    out = tmp_path / "combined.json"
+
+    result = merge_tier_dir(str(results_dir), str(out), "phases")
+
+    assert result["item_count"] == "1"
+    assert out.exists()
+    data = json.loads(out.read_text())
+    assert len(data["phases"]) == 1
+    assert data["phases"][0]["id"] == "P1"
+
+
+# ---------------------------------------------------------------------------
+# WP4: replace_item error branches
+# ---------------------------------------------------------------------------
+
+
+def test_replace_item_nonexistent_replacement_file_raises(tmp_path) -> None:
+    src = tmp_path / "combined.json"
+    src.write_text(json.dumps({"phases": [{"id": "P1", "name": "x"}], "schema_version": 1}))
+
+    with pytest.raises(ValueError, match="Replacement file not found"):
+        replace_item(str(src), "P1", str(tmp_path / "nonexistent.json"))
+
+
+def test_replace_item_corrupt_replacement_json_raises(tmp_path) -> None:
+    src = tmp_path / "combined.json"
+    src.write_text(json.dumps({"phases": [{"id": "P1", "name": "x"}], "schema_version": 1}))
+    corrupt = tmp_path / "corrupt.json"
+    corrupt.write_text("{not json")
+
+    with pytest.raises(ValueError, match="Invalid JSON"):
+        replace_item(str(src), "P1", str(corrupt))

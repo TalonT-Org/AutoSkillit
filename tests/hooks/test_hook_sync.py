@@ -21,7 +21,7 @@ def test_hook_config_path_components_in_sync():
     assert path_from_pretty == path_from_helpers, (
         f"Hook config path mismatch:\n"
         f"  pretty_output: {path_from_pretty}\n"
-        f"  server/helpers: {path_from_helpers}\n"
+        f"  server/_misc: {path_from_helpers}\n"
         "Update the constants to point to the same file."
     )
 

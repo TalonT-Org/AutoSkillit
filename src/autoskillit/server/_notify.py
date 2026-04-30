@@ -5,7 +5,7 @@ from __future__ import annotations
 import functools
 import json
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from autoskillit.core import RESERVED_LOG_RECORD_KEYS, get_logger
 
@@ -23,7 +23,7 @@ def _get_ctx_or_none():  # type: ignore[return]
 
 async def _notify(
     ctx: Context,
-    level: str,
+    level: Literal["info", "error"],
     message: str,
     logger_name: str,
     extra: dict[str, Any] | None = None,

@@ -95,9 +95,7 @@ async def _import_and_call(
         return {"success": False, "error": f"{type(exc).__name__}: {exc}"}
 
     try:
-        import json as _json
-
-        _json.dumps(result)
+        json.dumps(result)
         return {"success": True, "result": result}
     except (TypeError, ValueError):
         return {"success": True, "result": str(result)}

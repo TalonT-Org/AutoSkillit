@@ -268,6 +268,7 @@ def test_req_imp_007_pretty_output_no_private_recipe_api_import() -> None:
 
 
 def test_server_helpers_module_deleted():
+    """helpers.py should be fully removed after extraction."""
     import importlib
 
     with pytest.raises(ModuleNotFoundError):

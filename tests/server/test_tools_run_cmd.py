@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import structlog.testing
 
-from autoskillit.server.helpers import _run_subprocess
+from autoskillit.server._subprocess import _run_subprocess
 from autoskillit.server.tools_execution import run_cmd, run_python
 from tests.conftest import _make_result, _make_timeout_result
 
@@ -65,12 +65,12 @@ class TestRunSubprocessDelegatesToManaged:
 
 
 class TestProcessRunnerResult:
-    """_process_runner_result shared helper lives in server.helpers."""
+    """_process_runner_result shared helper lives in server._subprocess."""
 
     def test_normal_exit_preserves_fields(self):
         from autoskillit.core import TerminationReason
         from autoskillit.execution.process import SubprocessResult
-        from autoskillit.server.helpers import _process_runner_result
+        from autoskillit.server._subprocess import _process_runner_result
 
         result = SubprocessResult(
             returncode=0,
@@ -87,7 +87,7 @@ class TestProcessRunnerResult:
     def test_timed_out_returns_minus_one_with_message(self):
         from autoskillit.core import TerminationReason
         from autoskillit.execution.process import SubprocessResult
-        from autoskillit.server.helpers import _process_runner_result
+        from autoskillit.server._subprocess import _process_runner_result
 
         result = SubprocessResult(
             returncode=-1,

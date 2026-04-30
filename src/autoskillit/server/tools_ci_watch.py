@@ -15,9 +15,9 @@ from autoskillit.core import CIRunScope, get_logger
 from autoskillit.pipeline import ToolContext
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
+from autoskillit.server._subprocess import _run_subprocess
 from autoskillit.server.helpers import (
     _notify,
-    _run_subprocess,
     resolve_repo_from_remote,
     track_response_size,
 )

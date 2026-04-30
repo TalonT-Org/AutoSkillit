@@ -20,12 +20,12 @@ from autoskillit.core import (
     MergeFailedStep,
     MergeState,
     SubprocessRunner,
-    TerminationReason,
     get_logger,
     is_protected_branch,
     truncate_text,
 )
 from autoskillit.server._editable_guard import scan_editable_installs_for_worktree
+from autoskillit.server._subprocess import _process_runner_result
 from autoskillit.workspace import remove_git_worktree, remove_worktree_sidecar
 
 if TYPE_CHECKING:
@@ -71,9 +71,7 @@ async def _run_git(
     Returns (returncode, stdout, stderr). Handles TIMED_OUT termination.
     """
     result = await runner(cmd, cwd=Path(cwd), timeout=timeout)
-    if result.termination == TerminationReason.TIMED_OUT:
-        return -1, result.stdout, f"Process timed out after {timeout}s"
-    return result.returncode, result.stdout, result.stderr
+    return _process_runner_result(result, timeout)
 
 
 @dataclasses.dataclass(frozen=True)

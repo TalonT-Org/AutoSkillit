@@ -477,20 +477,20 @@ class TestGroupDApiContractPreservation:
             f"{runtime_import.group()!r}"
         )
 
-    def test_req_api_004_server_helpers_subprocess_result_under_type_checking(self):
-        """server/helpers.py must import SubprocessResult only under TYPE_CHECKING."""
-        source = (self._pkg_root() / "server" / "helpers.py").read_text()
+    def test_req_api_004_server_subprocess_result_under_type_checking(self):
+        """server/_subprocess.py must import SubprocessResult only under TYPE_CHECKING."""
+        source = (self._pkg_root() / "server" / "_subprocess.py").read_text()
         assert "SubprocessResult" in source, (
-            "SubprocessResult reference vanished from server/helpers.py entirely"
+            "SubprocessResult reference vanished from server/_subprocess.py entirely"
         )
-        assert "TYPE_CHECKING" in source, "TYPE_CHECKING guard removed from server/helpers.py"
+        assert "TYPE_CHECKING" in source, "TYPE_CHECKING guard removed from server/_subprocess.py"
         runtime_import = re.search(
             r"^from\s+\S+\s+import\s+.*SubprocessResult",
             source,
             re.MULTILINE,
         )
         assert runtime_import is None, (
-            f"SubprocessResult has a runtime import in server/helpers.py: "
+            f"SubprocessResult has a runtime import in server/_subprocess.py: "
             f"{runtime_import.group()!r}"
         )
 

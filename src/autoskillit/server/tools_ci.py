@@ -13,8 +13,8 @@ from fastmcp.dependencies import CurrentContext
 from autoskillit.core import DirectInstall, MarketplaceInstall, get_logger
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
+from autoskillit.server._subprocess import _run_subprocess
 from autoskillit.server.helpers import (
-    _run_subprocess,
     fetch_repo_merge_state,
     resolve_repo_from_remote,
     track_response_size,

@@ -28,11 +28,11 @@ from autoskillit.server._guards import (
     _require_orchestrator_or_higher,
     _validate_skill_command,
 )
+from autoskillit.server._subprocess import _run_subprocess
 from autoskillit.server.helpers import (
     SCENARIO_STEP_NAME_ENV,
     _import_and_call,
     _notify,
-    _run_subprocess,
     track_response_size,
 )
 

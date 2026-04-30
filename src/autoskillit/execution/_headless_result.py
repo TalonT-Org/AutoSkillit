@@ -17,6 +17,7 @@ from autoskillit.core import (
     TerminationReason,
     WriteBehaviorSpec,
     get_logger,
+    truncate_text,
 )
 from autoskillit.execution._headless_path_tokens import (
     _extract_output_paths,
@@ -30,21 +31,21 @@ from autoskillit.execution._headless_recovery import (
     _synthesize_from_write_artifacts,
 )
 from autoskillit.execution._headless_scan import _scan_jsonl_write_paths
+from autoskillit.execution._session_content import _check_expected_patterns
+from autoskillit.execution._session_model import (
+    ClaudeSessionResult,
+    parse_session_result,
+)
 from autoskillit.execution._session_outcome import (
     _compute_outcome,
     _compute_success,
-)
-from autoskillit.execution.session import (
-    ClaudeSessionResult,
-    _check_expected_patterns,
-    _truncate,
-    parse_session_result,
 )
 
 if TYPE_CHECKING:
     from autoskillit.core import AuditLog, SubprocessResult
 
 logger = get_logger(__name__)
+_truncate = truncate_text
 
 # Re-export so facade's `from autoskillit.execution._headless_result import _OUTPUT_PATH_PATTERN`
 # resolves correctly even though _OUTPUT_PATH_PATTERN is defined in _headless_path_tokens.

@@ -153,7 +153,7 @@ def _resolve_project_dir() -> Path:
         )
         if result.returncode == 0 and result.stdout.strip():
             return Path(result.stdout.strip())
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
         pass
     return Path.cwd()
 

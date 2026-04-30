@@ -209,6 +209,9 @@ def test_req_imp_005_git_only_core_at_runtime() -> None:
     _ALLOWED = frozenset(
         {
             "autoskillit.server._editable_guard",
+            # _subprocess is a same-package helper with no upward layer imports;
+            # git.py delegates timeout result processing to _process_runner_result.
+            "autoskillit.server._subprocess",
             # workspace is L1; git.py delegates worktree removal to the
             # single L1 implementation rather than inlining subprocess calls.
             "autoskillit.workspace",

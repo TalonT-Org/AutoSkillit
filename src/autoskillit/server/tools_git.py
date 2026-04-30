@@ -13,9 +13,9 @@ from fastmcp.dependencies import CurrentContext
 from autoskillit.core import RestartScope, get_logger
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
+from autoskillit.server._subprocess import _run_subprocess
 from autoskillit.server.helpers import (
     _notify,
-    _run_subprocess,
     track_response_size,
 )
 

@@ -67,3 +67,13 @@ async def test_fleet_semaphore_max1_equivalent_to_serial():
     assert s.at_capacity()  # second would be refused at call site
     s.release()
     assert not s.at_capacity()
+
+
+class TestFleetSemaphoreConstructorGuard:
+    def test_max_concurrent_zero_raises(self) -> None:
+        with pytest.raises(ValueError):
+            FleetSemaphore(max_concurrent=0)
+
+    def test_max_concurrent_negative_raises(self) -> None:
+        with pytest.raises(ValueError):
+            FleetSemaphore(max_concurrent=-1)

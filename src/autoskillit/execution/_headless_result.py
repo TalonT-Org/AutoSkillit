@@ -30,11 +30,13 @@ from autoskillit.execution._headless_recovery import (
     _synthesize_from_write_artifacts,
 )
 from autoskillit.execution._headless_scan import _scan_jsonl_write_paths
+from autoskillit.execution._session_outcome import (
+    _compute_outcome,
+    _compute_success,
+)
 from autoskillit.execution.session import (
     ClaudeSessionResult,
     _check_expected_patterns,
-    _compute_outcome,
-    _compute_success,
     _truncate,
     parse_session_result,
 )

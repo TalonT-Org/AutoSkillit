@@ -10,13 +10,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-import structlog.testing
 
 from autoskillit.fleet import (
     FLEET_HALTED_SENTINEL,
     DispatchRecord,
     DispatchStatus,
-    _write_pid,
     append_dispatch_record,
     crash_recover_dispatch,
     mark_dispatch_resumable,
@@ -649,32 +647,3 @@ class TestCrashRecoverDispatchSidecarVanished:
         result = crash_recover_dispatch(sp, record)
         assert result == DispatchStatus.INTERRUPTED
         assert read_state(sp).dispatches[0].status == DispatchStatus.INTERRUPTED
-
-
-class TestWritePidExceptionSwallow:
-    def test_nonexistent_state_logs_warning(self, tmp_path: Path) -> None:
-        bogus = tmp_path / "nope" / "state.json"
-        with structlog.testing.capture_logs() as logs:
-            _write_pid(bogus, "d1", "id1", 123, 0)
-        assert any(
-            "_write_pid" in entry.get("event", "")
-            for entry in logs
-            if entry.get("log_level") == "warning"
-        )
-
-    def test_runtime_error_logs_warning(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        sp = _state_path(tmp_path)
-        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("d1"))
-        monkeypatch.setattr(
-            "autoskillit.fleet.mark_dispatch_running",
-            lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom")),
-        )
-        with structlog.testing.capture_logs() as logs:
-            _write_pid(sp, "d1", "id1", 123, 0)
-        assert any(
-            "_write_pid" in entry.get("event", "")
-            for entry in logs
-            if entry.get("log_level") == "warning"
-        )

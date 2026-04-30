@@ -396,3 +396,120 @@ def test_finalize_wp_manifest_regenerates_wp_index(tmp_path):
         assert "id" in entry
         assert "name" in entry
         assert "summary" in entry
+
+
+# ---------------------------------------------------------------------------
+# build_phase_assignment_manifest error branches
+# ---------------------------------------------------------------------------
+
+
+def test_build_phase_assignment_manifest_corrupt_json_raises(tmp_path):
+    from autoskillit.planner import build_phase_assignment_manifest
+
+    phases_dir = tmp_path / "phases"
+    phases_dir.mkdir()
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+    (phases_dir / "bad_result.json").write_text("{not json")
+
+    with pytest.raises(json.JSONDecodeError, match="Failed to parse"):
+        build_phase_assignment_manifest(str(phases_dir), str(output_dir))
+
+
+def test_build_phase_assignment_manifest_missing_required_keys_raises(tmp_path):
+    from autoskillit.planner import build_phase_assignment_manifest
+
+    phases_dir = tmp_path / "phases"
+    phases_dir.mkdir()
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+    (phases_dir / "bad_result.json").write_text(json.dumps({"foo": "bar"}))
+
+    with pytest.raises(ValueError, match="Invalid phase result in"):
+        build_phase_assignment_manifest(str(phases_dir), str(output_dir))
+
+
+def test_build_phase_assignment_manifest_empty_string_dir_raises(tmp_path):
+    from autoskillit.planner import build_phase_assignment_manifest
+
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    with pytest.raises(ValueError, match="phases_dir and output_dir must not be empty"):
+        build_phase_assignment_manifest("", str(output_dir))
+
+
+# ---------------------------------------------------------------------------
+# build_phase_wp_manifest error branches
+# ---------------------------------------------------------------------------
+
+
+def test_build_phase_wp_manifest_corrupt_json_raises(tmp_path):
+    from autoskillit.planner import build_phase_wp_manifest
+
+    assignments_dir = tmp_path / "assignments"
+    assignments_dir.mkdir()
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+    (assignments_dir / "bad_result.json").write_text("{not json")
+
+    with pytest.raises(json.JSONDecodeError, match="Failed to parse"):
+        build_phase_wp_manifest(str(assignments_dir), str(output_dir))
+
+
+def test_build_phase_wp_manifest_empty_string_raises(tmp_path):
+    from autoskillit.planner import build_phase_wp_manifest
+
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    with pytest.raises(ValueError, match="assignments_dir and output_dir must not be empty"):
+        build_phase_wp_manifest("", str(output_dir))
+
+
+def test_build_phase_wp_manifest_nonexistent_dir_raises(tmp_path):
+    from autoskillit.planner import build_phase_wp_manifest
+
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    with pytest.raises(FileNotFoundError, match="assignments_dir does not exist"):
+        build_phase_wp_manifest(str(tmp_path / "nonexistent"), str(output_dir))
+
+
+# ---------------------------------------------------------------------------
+# finalize_wp_manifest error branches
+# ---------------------------------------------------------------------------
+
+
+def test_finalize_wp_manifest_corrupt_json_raises(tmp_path):
+    from autoskillit.planner import finalize_wp_manifest
+
+    wp_dir = tmp_path / "work_packages"
+    wp_dir.mkdir()
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+    (wp_dir / "bad_result.json").write_text("{not json")
+
+    with pytest.raises(json.JSONDecodeError, match="Failed to parse"):
+        finalize_wp_manifest(str(wp_dir), str(output_dir))
+
+
+def test_finalize_wp_manifest_empty_string_raises(tmp_path):
+    from autoskillit.planner import finalize_wp_manifest
+
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    with pytest.raises(ValueError, match="work_packages_dir and output_dir must not be empty"):
+        finalize_wp_manifest("", str(output_dir))
+
+
+def test_finalize_wp_manifest_nonexistent_dir_raises(tmp_path):
+    from autoskillit.planner import finalize_wp_manifest
+
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    with pytest.raises(FileNotFoundError, match="work_packages_dir does not exist"):
+        finalize_wp_manifest(str(tmp_path / "nonexistent"), str(output_dir))

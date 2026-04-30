@@ -118,6 +118,13 @@ def test_create_run_dir_unique_across_calls(tmp_path) -> None:
     assert (planner_dir2 / "work_packages").is_dir()
 
 
+def test_create_run_dir_empty_string_raises_value_error() -> None:
+    from autoskillit.planner import create_run_dir
+
+    with pytest.raises(ValueError, match="non-empty"):
+        create_run_dir("")
+
+
 def test_planner_feature_skill_categories() -> None:
     from autoskillit.core._type_constants import FEATURE_REGISTRY
 

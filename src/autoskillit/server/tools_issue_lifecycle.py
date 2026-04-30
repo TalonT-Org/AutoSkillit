@@ -13,11 +13,8 @@ from fastmcp.dependencies import CurrentContext
 from autoskillit.core import RetryReason, _parse_issue_ref, get_logger
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
-from autoskillit.server.helpers import (
-    _extract_block,
-    _notify,
-    track_response_size,
-)
+from autoskillit.server._misc import _extract_block
+from autoskillit.server._notify import _notify, track_response_size
 
 if TYPE_CHECKING:
     from autoskillit.core import SkillResult, WriteBehaviorSpec

@@ -1,4 +1,4 @@
-"""Tests for the track_response_size decorator in autoskillit.server.helpers."""
+"""Tests for the track_response_size decorator in autoskillit.server._notify."""
 
 from __future__ import annotations
 
@@ -19,13 +19,13 @@ class TestTrackResponseSize:
         log = DefaultMcpResponseLog()
         response_str = json.dumps({"steps": [], "total": {}})
 
-        from autoskillit.server.helpers import track_response_size
+        from autoskillit.server._notify import track_response_size
 
         @track_response_size("get_token_summary")
         async def fake_handler():
             return response_str
 
-        with patch("autoskillit.server.helpers._get_ctx_or_none") as mock_ctx:
+        with patch("autoskillit.server._notify._get_ctx_or_none") as mock_ctx:
             mock_ctx.return_value = MagicMock(
                 response_log=log,
                 config=MagicMock(mcp_response=MagicMock(alert_threshold_tokens=0)),
@@ -44,13 +44,13 @@ class TestTrackResponseSize:
         log = DefaultMcpResponseLog()
         response_dict = {"key": "value"}
 
-        from autoskillit.server.helpers import track_response_size
+        from autoskillit.server._notify import track_response_size
 
         @track_response_size("kitchen_status")
         async def fake_handler():
             return response_dict
 
-        with patch("autoskillit.server.helpers._get_ctx_or_none") as mock_ctx:
+        with patch("autoskillit.server._notify._get_ctx_or_none") as mock_ctx:
             mock_ctx.return_value = MagicMock(
                 response_log=log,
                 config=MagicMock(mcp_response=MagicMock(alert_threshold_tokens=0)),
@@ -65,13 +65,13 @@ class TestTrackResponseSize:
     @pytest.mark.anyio
     async def test_decorator_noop_when_ctx_unavailable(self):
         """When _get_ctx_or_none() returns None, decorator is silent."""
-        from autoskillit.server.helpers import track_response_size
+        from autoskillit.server._notify import track_response_size
 
         @track_response_size("run_skill")
         async def fake_handler():
             return "response"
 
-        with patch("autoskillit.server.helpers._get_ctx_or_none", return_value=None):
+        with patch("autoskillit.server._notify._get_ctx_or_none", return_value=None):
             result = await fake_handler()
 
         assert result == "response"  # no error raised
@@ -81,13 +81,13 @@ class TestTrackResponseSize:
         """If the wrapped handler raises, the exception is caught and converted."""
         import json
 
-        from autoskillit.server.helpers import track_response_size
+        from autoskillit.server._notify import track_response_size
 
         @track_response_size("run_skill")
         async def bad_handler():
             raise ValueError("something went wrong")
 
-        with patch("autoskillit.server.helpers._get_ctx_or_none", return_value=None):
+        with patch("autoskillit.server._notify._get_ctx_or_none", return_value=None):
             result = await bad_handler()
 
         data = json.loads(result)
@@ -98,13 +98,13 @@ class TestTrackResponseSize:
     @pytest.mark.anyio
     async def test_track_response_size_exception_envelope_includes_user_visible_message(self):
         """Exception envelope includes non-empty user_visible_message with tool name."""
-        from autoskillit.server.helpers import track_response_size
+        from autoskillit.server._notify import track_response_size
 
         @track_response_size("open_kitchen")
         async def bad_handler():
             raise RuntimeError("boom")
 
-        with patch("autoskillit.server.helpers._get_ctx_or_none", return_value=None):
+        with patch("autoskillit.server._notify._get_ctx_or_none", return_value=None):
             result = await bad_handler()
 
         data = json.loads(result)
@@ -116,13 +116,13 @@ class TestTrackResponseSize:
     @pytest.mark.anyio
     async def test_track_response_size_exception_envelope_preserves_existing_fields(self):
         """Regression guard: success, error, exit_code, subtype keys still present."""
-        from autoskillit.server.helpers import track_response_size
+        from autoskillit.server._notify import track_response_size
 
         @track_response_size("test_tool")
         async def bad_handler():
             raise ValueError("fail")
 
-        with patch("autoskillit.server.helpers._get_ctx_or_none", return_value=None):
+        with patch("autoskillit.server._notify._get_ctx_or_none", return_value=None):
             result = await bad_handler()
 
         data = json.loads(result)

@@ -103,19 +103,19 @@ async def test_open_kitchen_warns_on_missing_hook_scripts(tmp_path, monkeypatch)
 @pytest.mark.anyio
 async def test_prime_quota_cache_catches_typeerror(monkeypatch):
     """_prime_quota_cache must catch TypeError and not propagate — 'fails open' contract."""
-    import autoskillit.server.helpers as _helpers_mod
-    from autoskillit.server.helpers import _prime_quota_cache
+    import autoskillit.server._misc as _misc_mod
+    from autoskillit.server._misc import _prime_quota_cache
 
     async def raise_type_error(*a, **kw):
         raise TypeError("float() argument must be a string or a real number, not 'NoneType'")
 
-    monkeypatch.setattr(_helpers_mod, "check_and_sleep_if_needed", raise_type_error)
+    monkeypatch.setattr(_misc_mod, "check_and_sleep_if_needed", raise_type_error)
 
     mock_ctx = MagicMock()
     mock_ctx.config.quota_guard = MagicMock()
 
-    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
-        with patch("autoskillit.server.helpers.logger") as mock_logger:
+    with patch("autoskillit.server._state._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server._misc.logger") as mock_logger:
             # Must not raise — fails open
             await _prime_quota_cache()
             mock_logger.warning.assert_called_once_with("quota_prime_failed", exc_info=True)

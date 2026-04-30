@@ -138,15 +138,6 @@ def test_gate_error_result_accepts_custom_message():
     assert parsed["needs_retry"] is False
 
 
-def test_helpers_has_no_gate_error_result_duplicate():
-    import autoskillit.server.helpers as helpers_mod
-
-    assert not hasattr(helpers_mod, "_gate_error_result"), (
-        "_gate_error_result must be removed from server.helpers — "
-        "use gate_error_result() from pipeline.gate instead"
-    )
-
-
 def test_gate_imports_only_from_core():
     """gate.py (L1 pipeline) may only import from autoskillit.core (L0)."""
     import ast

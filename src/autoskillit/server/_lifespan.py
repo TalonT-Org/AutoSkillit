@@ -141,7 +141,7 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
 
     from autoskillit.core import register_active_kitchen
     from autoskillit.pipeline import create_background_task
-    from autoskillit.server.helpers import (
+    from autoskillit.server._misc import (
         _prime_quota_cache,
         _quota_refresh_loop,
     )

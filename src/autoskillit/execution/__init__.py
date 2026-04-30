@@ -68,7 +68,7 @@ from autoskillit.execution.process import (
 from autoskillit.execution.quota import (
     QUOTA_CACHE_SCHEMA_VERSION,
     QuotaStatus,
-    _refresh_quota_cache,  # noqa: F401 — imported for re-export via server.helpers; not in __all__
+    _refresh_quota_cache,  # noqa: F401 — re-exported for server consumers; not in __all__
     check_and_sleep_if_needed,
     invalidate_cache,
 )

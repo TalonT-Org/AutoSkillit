@@ -111,7 +111,7 @@ CONTEXT_EXHAUSTION_MARKER = "prompt is too long"
 # Attribute names set unconditionally by logging.LogRecord.__init__ and makeRecord().
 # Passing any of these as keys in the extra={} dict to ctx.info/ctx.error causes
 # FastMCP's stdlib logging bridge to raise KeyError at runtime.
-# Used by server/helpers._notify() for pre-dispatch validation.
+# Used by server/_notify._notify() for pre-dispatch validation.
 RESERVED_LOG_RECORD_KEYS: frozenset[str] = frozenset(
     {
         # Set unconditionally in LogRecord.__init__

@@ -57,7 +57,7 @@ def test_hook_config_path_is_inside_temp_dir(tmp_path):
     whatever entries are present in .gitignore or _AUTOSKILLIT_GITIGNORE_ENTRIES.
     """
     from autoskillit.core.io import resolve_temp_dir
-    from autoskillit.server.helpers import _hook_config_path
+    from autoskillit.server._misc import _hook_config_path
 
     hook_path = _hook_config_path(tmp_path)
     temp_dir = resolve_temp_dir(tmp_path, None)

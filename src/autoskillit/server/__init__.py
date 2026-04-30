@@ -62,7 +62,8 @@ __all__ = [
 # because tool modules import `mcp` from this package at import time.
 from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS  # noqa: E402, F401
 from autoskillit.server import (  # noqa: E402, F401
-    helpers,
+    _misc,
+    _notify,
     tools_ci,
     tools_ci_merge_queue,
     tools_ci_watch,

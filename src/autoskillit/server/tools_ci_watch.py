@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from typing import Any
+from typing import Any, Literal
 
 import structlog
 from fastmcp import Context
@@ -15,12 +15,9 @@ from autoskillit.core import CIRunScope, get_logger
 from autoskillit.pipeline import ToolContext
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
+from autoskillit.server._misc import resolve_repo_from_remote
+from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._subprocess import _run_subprocess
-from autoskillit.server.helpers import (
-    _notify,
-    resolve_repo_from_remote,
-    track_response_size,
-)
 
 logger = get_logger(__name__)
 
@@ -160,7 +157,7 @@ async def wait_for_ci(
                 )
 
             conclusion = result.get("conclusion", "unknown")
-            level = "info" if conclusion == "success" else "error"
+            level: Literal["info", "error"] = "info" if conclusion == "success" else "error"
             await _notify(
                 ctx,
                 level,

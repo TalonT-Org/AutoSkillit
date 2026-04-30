@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import json
 import os
 import re
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 import structlog
@@ -28,15 +30,85 @@ from autoskillit.server._guards import (
     _require_orchestrator_or_higher,
     _validate_skill_command,
 )
+from autoskillit.server._misc import SCENARIO_STEP_NAME_ENV
+from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._subprocess import _run_subprocess
-from autoskillit.server.helpers import (
-    SCENARIO_STEP_NAME_ENV,
-    _import_and_call,
-    _notify,
-    track_response_size,
-)
 
 logger = get_logger(__name__)
+
+
+async def _import_and_call(
+    dotted_path: str,
+    args: dict[str, object] | None = None,
+    timeout: float = 30,
+) -> dict[str, object]:
+    """Import a Python callable by dotted path and invoke it.
+
+    Returns dict with 'success', 'result' (or 'error').
+    Handles sync and async callables, with timeout protection.
+    """
+    import importlib
+    import inspect
+
+    if args is None:
+        args = {}
+
+    if "." not in dotted_path:
+        return {"success": False, "error": f"Invalid dotted path: {dotted_path!r}"}
+
+    module_path, attr_name = dotted_path.rsplit(".", 1)
+
+    try:
+        module = importlib.import_module(module_path)
+    except ImportError as exc:
+        return {"success": False, "error": f"Import failed for {module_path!r}: {exc}"}
+
+    try:
+        func = getattr(module, attr_name)
+    except AttributeError:
+        return {
+            "success": False,
+            "error": f"Module {module_path!r} has no attribute {attr_name!r}",
+        }
+
+    if not callable(func):
+        return {"success": False, "error": f"{dotted_path!r} is not callable"}
+
+    try:
+        if inspect.iscoroutinefunction(func):
+            result = await asyncio.wait_for(func(**args), timeout=timeout)
+        else:
+            result = await asyncio.wait_for(asyncio.to_thread(func, **args), timeout=timeout)
+    except TimeoutError:
+        logger.warning(
+            "run_python timed out; sync thread may continue running",
+            dotted_path=dotted_path,
+            timeout=timeout,
+        )
+        return {"success": False, "error": f"Timeout after {timeout}s calling {dotted_path}"}
+    except Exception as exc:
+        logger.warning(
+            "run_python execution failed",
+            dotted_path=dotted_path,
+            error=type(exc).__name__,
+        )
+        return {"success": False, "error": f"{type(exc).__name__}: {exc}"}
+
+    try:
+        json.dumps(result)
+        return {"success": True, "result": result}
+    except (TypeError, ValueError):
+        return {"success": True, "result": str(result)}
+
+
+def _get_food_truck_prompt_builder() -> Callable[..., str]:
+    """Return the food truck prompt builder with mcp_prefix pre-bound."""
+    from autoskillit.core import detect_autoskillit_mcp_prefix
+    from autoskillit.fleet import _build_food_truck_prompt
+
+    mcp_prefix = detect_autoskillit_mcp_prefix()
+    return functools.partial(_build_food_truck_prompt, mcp_prefix=mcp_prefix)
+
 
 _PURE_SLEEP_RE = re.compile(
     r'^(?:python3?\s+-c\s+["\']import time;\s*time\.sleep\((?P<py_secs>\d+(?:\.\d+)?)\)["\']'
@@ -384,7 +456,9 @@ async def run_skill(
                 )
             if order_id:
                 skill_result.order_id = order_id
-            from autoskillit.server.helpers import _refresh_quota_cache  # noqa: PLC0415
+            from autoskillit.server._misc import (  # noqa: PLC0415
+                _refresh_quota_cache,
+            )
 
             if tool_ctx.background is not None:
                 tool_ctx.background.submit(
@@ -474,8 +548,7 @@ async def dispatch_food_truck(
             )
         from autoskillit.fleet import execute_dispatch
         from autoskillit.server import _get_ctx
-        from autoskillit.server.helpers import (
-            _get_food_truck_prompt_builder,
+        from autoskillit.server._misc import (  # noqa: PLC0415
             _refresh_quota_cache,
             check_and_sleep_if_needed,
             invalidate_cache,

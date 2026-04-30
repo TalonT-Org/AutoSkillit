@@ -1,4 +1,4 @@
-"""Tests for tier-aware guard helpers in server.helpers."""
+"""Tests for tier-aware guard helpers in server._guards."""
 
 from __future__ import annotations
 

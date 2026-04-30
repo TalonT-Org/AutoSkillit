@@ -17,7 +17,7 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 def test_A1_require_orchestrator_or_higher_permits_interactive(monkeypatch) -> None:
     monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
-    from autoskillit.server.helpers import _require_orchestrator_or_higher
+    from autoskillit.server._guards import _require_orchestrator_or_higher
 
     assert _require_orchestrator_or_higher("run_cmd") is None
 
@@ -25,7 +25,7 @@ def test_A1_require_orchestrator_or_higher_permits_interactive(monkeypatch) -> N
 def test_A2_require_orchestrator_or_higher_permits_headless_orchestrator(monkeypatch) -> None:
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
-    from autoskillit.server.helpers import _require_orchestrator_or_higher
+    from autoskillit.server._guards import _require_orchestrator_or_higher
 
     assert _require_orchestrator_or_higher("run_cmd") is None
 
@@ -33,7 +33,7 @@ def test_A2_require_orchestrator_or_higher_permits_headless_orchestrator(monkeyp
 def test_A3_require_orchestrator_or_higher_permits_headless_fleet(monkeypatch) -> None:
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
-    from autoskillit.server.helpers import _require_orchestrator_or_higher
+    from autoskillit.server._guards import _require_orchestrator_or_higher
 
     assert _require_orchestrator_or_higher("run_cmd") is None
 
@@ -41,7 +41,7 @@ def test_A3_require_orchestrator_or_higher_permits_headless_fleet(monkeypatch) -
 def test_A4_require_orchestrator_or_higher_denies_headless_leaf(monkeypatch) -> None:
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaf")
-    from autoskillit.server.helpers import _require_orchestrator_or_higher
+    from autoskillit.server._guards import _require_orchestrator_or_higher
 
     result = _require_orchestrator_or_higher("run_cmd")
     assert result is not None
@@ -54,7 +54,7 @@ def test_A5_require_orchestrator_or_higher_denies_headless_unset_session_type(
 ) -> None:
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
     monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
-    from autoskillit.server.helpers import _require_orchestrator_or_higher
+    from autoskillit.server._guards import _require_orchestrator_or_higher
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -69,7 +69,7 @@ def test_A6_require_orchestrator_or_higher_denies_headless_invalid_session_type(
 ) -> None:
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "bogus")
-    from autoskillit.server.helpers import _require_orchestrator_or_higher
+    from autoskillit.server._guards import _require_orchestrator_or_higher
 
     with warnings.catch_warnings(record=True):
         warnings.simplefilter("always")
@@ -86,7 +86,7 @@ def test_A6_require_orchestrator_or_higher_denies_headless_invalid_session_type(
 
 def test_A7_require_orchestrator_exact_permits_interactive(monkeypatch) -> None:
     monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
-    from autoskillit.server.helpers import _require_orchestrator_exact
+    from autoskillit.server._guards import _require_orchestrator_exact
 
     assert _require_orchestrator_exact("open_kitchen") is None
 
@@ -94,7 +94,7 @@ def test_A7_require_orchestrator_exact_permits_interactive(monkeypatch) -> None:
 def test_A8_require_orchestrator_exact_permits_headless_orchestrator(monkeypatch) -> None:
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
-    from autoskillit.server.helpers import _require_orchestrator_exact
+    from autoskillit.server._guards import _require_orchestrator_exact
 
     assert _require_orchestrator_exact("open_kitchen") is None
 
@@ -102,7 +102,7 @@ def test_A8_require_orchestrator_exact_permits_headless_orchestrator(monkeypatch
 def test_A9_require_orchestrator_exact_denies_headless_fleet(monkeypatch) -> None:
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
-    from autoskillit.server.helpers import _require_orchestrator_exact
+    from autoskillit.server._guards import _require_orchestrator_exact
 
     result = _require_orchestrator_exact("open_kitchen")
     assert result is not None
@@ -115,7 +115,7 @@ def test_A9_require_orchestrator_exact_denies_headless_fleet(monkeypatch) -> Non
 def test_A10_require_orchestrator_exact_denies_headless_leaf(monkeypatch) -> None:
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaf")
-    from autoskillit.server.helpers import _require_orchestrator_exact
+    from autoskillit.server._guards import _require_orchestrator_exact
 
     result = _require_orchestrator_exact("open_kitchen")
     assert result is not None
@@ -131,7 +131,7 @@ def test_A10_require_orchestrator_exact_denies_headless_leaf(monkeypatch) -> Non
 @pytest.mark.feature("fleet")
 def test_A11_require_fleet_permits_fleet_session(monkeypatch) -> None:
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
-    from autoskillit.server.helpers import _require_fleet
+    from autoskillit.server._guards import _require_fleet
 
     assert _require_fleet() is None
 
@@ -139,7 +139,7 @@ def test_A11_require_fleet_permits_fleet_session(monkeypatch) -> None:
 @pytest.mark.feature("fleet")
 def test_A12_require_fleet_denies_orchestrator(monkeypatch) -> None:
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
-    from autoskillit.server.helpers import _require_fleet
+    from autoskillit.server._guards import _require_fleet
 
     result = _require_fleet()
     assert result is not None
@@ -151,7 +151,7 @@ def test_A12_require_fleet_denies_orchestrator(monkeypatch) -> None:
 def test_A13_require_fleet_denies_interactive_no_session_type(monkeypatch) -> None:
     monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
-    from autoskillit.server.helpers import _require_fleet
+    from autoskillit.server._guards import _require_fleet
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")

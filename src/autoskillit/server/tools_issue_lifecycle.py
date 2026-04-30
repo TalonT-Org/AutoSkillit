@@ -12,10 +12,10 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import RetryReason, _parse_issue_ref, get_logger
 from autoskillit.server import mcp
+from autoskillit.server._guards import _require_enabled
 from autoskillit.server.helpers import (
     _extract_block,
     _notify,
-    _require_enabled,
     track_response_size,
 )
 

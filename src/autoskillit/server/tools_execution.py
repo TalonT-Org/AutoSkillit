@@ -22,15 +22,17 @@ from autoskillit.core import (
     validate_add_dir,
 )
 from autoskillit.server import mcp
-from autoskillit.server.helpers import (
-    SCENARIO_STEP_NAME_ENV,
+from autoskillit.server._guards import (
     _check_dry_walkthrough,
-    _import_and_call,
-    _notify,
     _require_enabled,
     _require_orchestrator_or_higher,
-    _run_subprocess,
     _validate_skill_command,
+)
+from autoskillit.server.helpers import (
+    SCENARIO_STEP_NAME_ENV,
+    _import_and_call,
+    _notify,
+    _run_subprocess,
     track_response_size,
 )
 

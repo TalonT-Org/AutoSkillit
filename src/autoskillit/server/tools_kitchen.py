@@ -27,13 +27,13 @@ from autoskillit.core import (
 )
 from autoskillit.pipeline import create_background_task
 from autoskillit.server import mcp
+from autoskillit.server._guards import _require_orchestrator_exact
 from autoskillit.server.helpers import (
     _apply_triage_gate,
     _build_hook_diagnostic_warning,
     _hook_config_path,
     _prime_quota_cache,
     _quota_refresh_loop,
-    _require_orchestrator_exact,
     track_response_size,
 )
 

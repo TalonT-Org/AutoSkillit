@@ -301,6 +301,7 @@ generic_automation_mcp/
 │   ├── __init__.py          #   FastMCP app, kitchen gating, headless tool reveal
 │   ├── git.py               #   Merge workflow for merge_worktree
 │   ├── _editable_guard.py   #   Pre-deletion editable install guard (stdlib-only)
+│   ├── _guards.py           #   Tier/gate guard functions: _require_enabled, _require_orchestrator_*, _require_fleet, _check_dry_walkthrough, _validate_skill_command
 │   ├── _lifespan.py         #   FastMCP lifespan: recorder teardown on shutdown
 │   ├── _session_type.py     #   Session-type tag visibility dispatcher (3-branch startup logic)
 │   ├── _wire_compat.py      #   Claude Code wire-format sanitization middleware

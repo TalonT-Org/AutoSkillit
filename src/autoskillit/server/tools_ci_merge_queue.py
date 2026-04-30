@@ -11,9 +11,9 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import get_logger
 from autoskillit.server import mcp
+from autoskillit.server._guards import _require_enabled
 from autoskillit.server.helpers import (
     _notify,
-    _require_enabled,
     resolve_repo_from_remote,
     track_response_size,
 )

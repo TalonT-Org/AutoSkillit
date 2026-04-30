@@ -13,11 +13,11 @@ from autoskillit.config import resolve_ingredient_defaults
 from autoskillit.core import get_logger, temp_dir_display_str
 from autoskillit.pipeline import GATED_TOOLS, UNGATED_TOOLS  # noqa: F401
 from autoskillit.server import mcp
+from autoskillit.server._guards import _require_enabled
 from autoskillit.server._state import _get_ctx_or_none
 from autoskillit.server.helpers import (
     _apply_triage_gate,
     _notify,
-    _require_enabled,
     track_response_size,
 )
 

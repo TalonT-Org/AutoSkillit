@@ -1,11 +1,10 @@
-"""Subprocess wrapper, dry-walkthrough check, and shared helpers for MCP tools."""
+"""Subprocess wrapper and shared helpers for MCP tools."""
 
 from __future__ import annotations
 
 import asyncio
 import functools
 import json
-import os
 import time
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
@@ -14,11 +13,8 @@ from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
     RESERVED_LOG_RECORD_KEYS,
-    SessionType,
     TerminationReason,
-    extract_path_arg,
     get_logger,
-    session_type,
 )
 from autoskillit.execution import (
     SCENARIO_STEP_NAME_ENV,  # noqa: F401 — re-exported for tools_execution.py
@@ -31,7 +27,6 @@ from autoskillit.execution import (
     write_telemetry_clear_marker,  # noqa: F401 — used by tools_status.py
 )
 from autoskillit.hooks import _HOOK_CONFIG_PATH_COMPONENTS
-from autoskillit.pipeline import gate_error_result, headless_error_result
 from autoskillit.workspace import clone_registry  # noqa: F401 — re-exported for tools_clone.py
 
 if TYPE_CHECKING:
@@ -182,105 +177,6 @@ def track_response_size(
     return decorator
 
 
-def _require_orchestrator_or_higher(tool_name: str = "") -> str | None:
-    """Return headless_error JSON if session is leaf-tier; None if permitted.
-
-    Interactive sessions (HEADLESS not set) always pass.
-    Headless sessions must be orchestrator or fleet tier.
-    Fail-closed: unset/invalid SESSION_TYPE → LEAF → deny.
-    """
-    if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
-        return None
-
-    st = session_type()
-    if st in (SessionType.ORCHESTRATOR, SessionType.FLEET):
-        return None
-
-    msg = (
-        f"{tool_name} cannot be called from leaf sessions. "
-        "Only orchestrator or fleet sessions may call this tool."
-        if tool_name
-        else None
-    )
-    return headless_error_result(msg)
-
-
-def _require_orchestrator_exact(tool_name: str = "") -> str | None:
-    """Return headless_error JSON if session is not orchestrator-tier; None if permitted.
-
-    Interactive sessions (HEADLESS not set) always pass.
-    Headless sessions must be exactly orchestrator tier.
-    Fleet and leaf tiers are denied.
-    """
-    if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
-        return None
-
-    st = session_type()
-    if st is SessionType.ORCHESTRATOR:
-        return None
-
-    if st is SessionType.FLEET:
-        msg = (
-            f"{tool_name} cannot be called from {st.value} sessions. "
-            f"{st.value.capitalize()} sessions have an auto-opened gate."
-            " open_kitchen is unnecessary."
-            if tool_name
-            else None
-        )
-    else:
-        msg = (
-            f"{tool_name} cannot be called from leaf sessions. "
-            "Only the orchestrator may call this tool."
-            if tool_name
-            else None
-        )
-    return headless_error_result(msg)
-
-
-def _require_fleet(tool_name: str = "") -> str | None:
-    """Return headless_error JSON if session is not fleet-tier; None if permitted.
-
-    No interactive bypass — fleet is a specific tier, not a headless guard.
-    """
-    st = session_type()
-    if st is SessionType.FLEET:
-        return None
-
-    msg = (
-        f"{tool_name} requires a fleet session. Current session type is not fleet."
-        if tool_name
-        else None
-    )
-    return headless_error_result(msg)
-
-
-def _require_enabled() -> str | None:
-    """Return error JSON if tools are not enabled, None if OK.
-
-    All tools are gated by default and can only be activated by the user
-    typing the open_kitchen prompt. The prompt name is prefixed by Claude
-    Code based on how the server was loaded (plugin vs --plugin-dir).
-    This survives --dangerously-skip-permissions because MCP prompts are
-    outside the permission system.
-    """
-    if not _get_ctx().gate.enabled:
-        return gate_error_result()
-    return None
-
-
-def _validate_skill_command(skill_command: str) -> str | None:
-    """Return error JSON if skill_command does not start with '/', None if OK."""
-    if not skill_command.strip().startswith("/"):
-        return gate_error_result(
-            "run_skill requires a slash-command as skill_command.\n"
-            f"Got: {skill_command!r}\n"
-            "Expected: skill_command must start with '/' "
-            "(e.g. /autoskillit:investigate, /autoskillit:make-plan, /audit-arch).\n"
-            "Prose task descriptions are not valid skill invocations."
-        )
-    return None
-
-
 def _extract_block(text: str, start_delim: str, end_delim: str) -> list[str]:
     """Return all lines between start_delim and end_delim (exclusive).
 
@@ -377,40 +273,6 @@ async def _run_subprocess(
             )
 
     return returncode, stdout, stderr
-
-
-def _check_dry_walkthrough(skill_command: str, cwd: str) -> str | None:
-    """If skill_command is an implement skill, verify the plan has been dry-walked.
-
-    Returns an error JSON string if validation fails, None if OK.
-    """
-    tokens = skill_command.strip().split()
-    if not tokens or tokens[0] not in _get_config().implement_gate.skill_names:
-        return None
-    skill_name = tokens[0]
-    plan_path_str = extract_path_arg(skill_command)
-    if plan_path_str is None:
-        return gate_error_result(f"Missing plan path argument for {skill_name}")
-    plan_path = Path(cwd) / plan_path_str
-    if not plan_path.is_file():
-        return gate_error_result(f"Plan file not found: {plan_path}")
-
-    # TOCTOU acceptance (option c, per P1-5): This function reads the plan file
-    # once here. If the file is modified or deleted between this gate check and
-    # the headless session acting on it, the gate condition will be stale.
-    # This is an accepted limitation: the plan file is user-controlled, and
-    # modification between check and execution is a user error. Options (a) and
-    # (b) — passing file content via stdin or re-verifying via content hash —
-    # involve significant scope and are deferred.
-    first_line = plan_path.read_text().split("\n", 1)[0].strip()
-    if first_line != _get_config().implement_gate.marker:
-        return gate_error_result(
-            f"Plan has NOT been dry-walked. Run /dry-walkthrough on the plan first. "
-            f"Expected first line: {_get_config().implement_gate.marker!r}, "
-            f"actual: {first_line[:100]!r}"
-        )
-
-    return None
 
 
 async def _import_and_call(

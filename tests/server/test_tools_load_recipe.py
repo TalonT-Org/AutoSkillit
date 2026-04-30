@@ -399,8 +399,9 @@ class TestApplyTriageGate:
         """Second _apply_triage_gate call reads from cache; triage_staleness not re-invoked."""
         import copy
 
-        from autoskillit.recipe.staleness_cache import read_staleness_cache
         from autoskillit.server.helpers import _apply_triage_gate
+
+        from autoskillit.recipe.staleness_cache import read_staleness_cache
 
         monkeypatch.chdir(tmp_path)
         recipes_dir = tmp_path / ".autoskillit" / "recipes"

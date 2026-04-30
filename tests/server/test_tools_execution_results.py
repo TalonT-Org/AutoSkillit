@@ -259,8 +259,9 @@ class TestNotifyHelper:
     @pytest.mark.anyio
     async def test_notify_raises_for_all_reserved_keys(self):
         """Every key in RESERVED_LOG_RECORD_KEYS must be rejected."""
-        from autoskillit.core.types import RESERVED_LOG_RECORD_KEYS
         from autoskillit.server.helpers import _notify
+
+        from autoskillit.core.types import RESERVED_LOG_RECORD_KEYS
 
         ctx = AsyncMock()
         ctx.info = AsyncMock()

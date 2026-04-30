@@ -28,16 +28,56 @@ from autoskillit.core import (
 from autoskillit.pipeline import create_background_task
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_orchestrator_exact
-from autoskillit.server.helpers import (
+from autoskillit.server._misc import (
     _apply_triage_gate,
-    _build_hook_diagnostic_warning,
     _hook_config_path,
     _prime_quota_cache,
     _quota_refresh_loop,
-    track_response_size,
 )
+from autoskillit.server._notify import track_response_size
 
 logger = get_logger(__name__)
+
+
+def _build_hook_diagnostic_warning() -> str | None:
+    """Run hook health and drift checks. Return a warning string if issues are found.
+
+    Only reads; never writes or modifies state. Returns None when all hooks are healthy
+    or when settings.json does not yet exist (nothing to validate).
+    """
+    from autoskillit.hook_registry import (
+        _claude_settings_path,
+        _count_hook_registry_drift,
+        find_broken_hook_scripts,
+    )
+
+    settings_path = _claude_settings_path("user")
+    if not settings_path.exists():
+        return None
+
+    broken = find_broken_hook_scripts(settings_path)
+    drift = _count_hook_registry_drift(settings_path)
+
+    issues: list[str] = []
+    if broken:
+        issues.append(f"Hook scripts not found: {', '.join(broken)}")
+    if drift.orphaned > 0:
+        issues.append(
+            f"{drift.orphaned} orphaned hook entry(ies) in settings.json are not in "
+            f"HOOK_REGISTRY — every matching tool call will be denied with ENOENT."
+        )
+    if drift.missing > 0:
+        issues.append(
+            f"{drift.missing} hook(s) from HOOK_REGISTRY are not deployed in settings.json."
+        )
+    if not issues:
+        return None
+
+    lines = ["\n⚠️  Hook configuration issues detected:"]
+    for issue in issues:
+        lines.append(f"   • {issue}")
+    lines.append("   → Run 'autoskillit install' to regenerate hook configuration.\n")
+    return "\n".join(lines)
 
 
 def _kitchen_failure_envelope(

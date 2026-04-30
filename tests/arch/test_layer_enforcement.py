@@ -886,12 +886,13 @@ def test_hook_config_filename_and_dir_match_quota_check():
     import importlib
     from pathlib import Path
 
-    from autoskillit.hooks._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
     from autoskillit.server.helpers import (
         _HOOK_CONFIG_FILENAME,
         _HOOK_DIR_COMPONENTS,
         _hook_config_path,
     )
+
+    from autoskillit.hooks._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
 
     root = Path("/tmp/project-root")
     expected = root.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)

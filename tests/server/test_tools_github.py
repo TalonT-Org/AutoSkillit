@@ -8,12 +8,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import anyio
 import pytest
+from autoskillit.server.helpers import _extract_block
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason
 from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS, DefaultGateState
-from autoskillit.server.helpers import _extract_block
 from autoskillit.server.tools_github import (
     _FINGERPRINT_END,
     _FINGERPRINT_START,

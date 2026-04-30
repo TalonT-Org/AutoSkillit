@@ -13,11 +13,8 @@ from fastmcp.dependencies import CurrentContext
 from autoskillit.core import RestartScope, get_logger
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
+from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._subprocess import _run_subprocess
-from autoskillit.server.helpers import (
-    _notify,
-    track_response_size,
-)
 
 logger = get_logger(__name__)
 
@@ -58,9 +55,9 @@ async def merge_worktree(
             extra={"worktree": worktree_path, "base": base_branch},
         )
 
+        from autoskillit.execution import resolve_remote_name
         from autoskillit.server import _get_config, _get_ctx
         from autoskillit.server.git import perform_merge
-        from autoskillit.server.helpers import resolve_remote_name
 
         tool_ctx = _get_ctx()
         runner = tool_ctx.runner
@@ -149,9 +146,9 @@ async def classify_fix(
                 }
             )
 
+        from autoskillit.execution import resolve_remote_name
         from autoskillit.server import _get_config, _get_ctx
         from autoskillit.server.git import _filter_changed_files
-        from autoskillit.server.helpers import resolve_remote_name
 
         tool_ctx = _get_ctx()
         _start = time.monotonic()

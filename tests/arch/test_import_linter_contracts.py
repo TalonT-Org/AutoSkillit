@@ -10,22 +10,22 @@ from pathlib import Path
 
 from tests.arch._helpers import SRC_ROOT
 
-# Layer assignments for cross-layer detection.
-_LAYER: dict[str, int] = {
-    "core": 0,
-    "config": 1,
-    "pipeline": 1,
-    "execution": 1,
-    "workspace": 1,
-    "recipe": 2,
-    "migration": 2,
-    "fleet": 2,
-    "server": 3,
-    "cli": 3,
+# IL contract forbidden imports: package -> set of packages it CANNOT import at runtime.
+_FORBIDDEN_BY_CONTRACT: dict[str, frozenset[str]] = {
+    "core": frozenset(
+        {"config", "pipeline", "execution", "workspace", "recipe", "migration", "server", "cli"}
+    ),
+    "config": frozenset(
+        {"pipeline", "execution", "workspace", "recipe", "migration", "server", "cli"}
+    ),
+    "pipeline": frozenset({"execution", "workspace", "recipe", "migration", "server", "cli"}),
+    "execution": frozenset(
+        {"config", "pipeline", "workspace", "recipe", "migration", "server", "cli"}
+    ),
+    "workspace": frozenset(
+        {"config", "pipeline", "execution", "recipe", "migration", "server", "cli"}
+    ),
 }
-
-# IL-008 sibling packages (L1 packages that must be independent).
-_IL008_SIBLINGS: frozenset[str] = frozenset({"config", "pipeline", "execution", "workspace"})
 
 EXPECTED_CROSS_LAYER_GUARDS: dict[str, frozenset[str]] = {
     "core/_type_protocols_recipe.py": frozenset({"recipe"}),
@@ -49,14 +49,15 @@ def _find_cross_layer_type_checking_imports(
     pkg_dir: Path,
     pkg_name: str,
 ) -> dict[str, frozenset[str]]:
-    """Walk *pkg_dir* and return files with cross-layer TYPE_CHECKING imports.
+    """Walk *pkg_dir* and return files with contract-violating TYPE_CHECKING imports.
 
     Returns ``{relative_path: frozenset[imported_package]}`` where each
-    imported_package is at a different layer or is an IL-008 sibling.
+    imported_package would violate the source package's IL contract if it
+    were a runtime import (i.e. it is in _FORBIDDEN_BY_CONTRACT[pkg_name]).
     """
     result: dict[str, frozenset[str]] = {}
-    pkg_layer = _LAYER.get(pkg_name)
-    if pkg_layer is None:
+    forbidden = _FORBIDDEN_BY_CONTRACT.get(pkg_name)
+    if forbidden is None:
         return result
 
     for py_file in sorted(pkg_dir.glob("*.py")):
@@ -76,14 +77,7 @@ def _find_cross_layer_type_checking_imports(
                 if parts[0] != "autoskillit" or len(parts) < 2:
                     continue
                 imported_pkg = parts[1]
-                if imported_pkg == pkg_name:
-                    continue
-                imported_layer = _LAYER.get(imported_pkg)
-                if imported_layer is None:
-                    continue
-                is_cross_layer = imported_layer != pkg_layer
-                is_sibling = pkg_name in _IL008_SIBLINGS and imported_pkg in _IL008_SIBLINGS
-                if is_cross_layer or is_sibling:
+                if imported_pkg in forbidden:
                     cross_pkgs.add(imported_pkg)
 
         if cross_pkgs:

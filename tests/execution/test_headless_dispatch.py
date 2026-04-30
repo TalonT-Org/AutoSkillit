@@ -257,6 +257,68 @@ class TestDispatchFoodTruckPackInjection:
         assert "AUTOSKILLIT_L2_TOOL_TAGS" not in env
 
 
+class TestDispatchFoodTruckGuards:
+    """Guard-path tests for dispatch_food_truck: conflict detection and skip_clone_guard."""
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_l2_tool_tags_conflict_raises(
+        self, minimal_ctx, tmp_path: Path
+    ) -> None:
+        from autoskillit.core._type_plugin_source import DirectInstall
+        from autoskillit.execution.headless import DefaultHeadlessExecutor
+
+        minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
+        executor = DefaultHeadlessExecutor(minimal_ctx)
+
+        with pytest.raises(ValueError, match="AUTOSKILLIT_L2_TOOL_TAGS"):
+            await executor.dispatch_food_truck(
+                "some prompt",
+                str(tmp_path),
+                completion_marker="DONE",
+                requires_packs=["ci"],
+                env_extras={"AUTOSKILLIT_L2_TOOL_TAGS": "ci"},
+            )
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_skip_clone_guard_prevents_snapshot(
+        self, minimal_ctx, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from unittest.mock import AsyncMock
+
+        from autoskillit.core._type_plugin_source import DirectInstall
+        from autoskillit.core.types import SubprocessResult, TerminationReason
+        from autoskillit.execution.headless import DefaultHeadlessExecutor
+        from tests.fakes import MockSubprocessRunner
+
+        mock_snapshot = AsyncMock()
+        monkeypatch.setattr(
+            "autoskillit.execution.headless.snapshot_clone_state",
+            mock_snapshot,
+        )
+
+        runner = MockSubprocessRunner()
+        runner.set_default(
+            SubprocessResult(
+                returncode=0,
+                stdout=_make_success_stdout(),
+                stderr="",
+                termination=TerminationReason.NATURAL_EXIT,
+                pid=12345,
+            )
+        )
+        minimal_ctx.runner = runner
+        minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
+        executor = DefaultHeadlessExecutor(minimal_ctx)
+
+        await executor.dispatch_food_truck(
+            "some prompt",
+            str(tmp_path),
+            completion_marker="DONE",
+        )
+
+        assert mock_snapshot.call_count == 0
+
+
 def test_default_executor_satisfies_protocol_with_dispatch(minimal_ctx) -> None:
     """DefaultHeadlessExecutor satisfies HeadlessExecutor protocol with dispatch_food_truck."""
     from autoskillit.core import HeadlessExecutor

@@ -70,9 +70,14 @@ NEW_SESSION_MODULES = ["_session_model.py", "_session_content.py"]
 NEW_MQ_MODULES = ["_merge_queue_classifier.py", "_merge_queue_repo_state.py"]
 
 SESSION_SIZE_BUDGETS = {
-    "session.py": 420,
+    "session.py": 60,  # was 420; facade is ~40 lines after P2
     "_session_model.py": 370,
     "_session_content.py": 200,
+}
+NEW_SESSION_FSM_MODULES = ["_retry_fsm.py", "_session_outcome.py"]
+SESSION_FSM_SIZE_BUDGETS = {
+    "_retry_fsm.py": 200,
+    "_session_outcome.py": 260,
 }
 MQ_SIZE_BUDGETS = {
     "merge_queue.py": 500,
@@ -119,6 +124,34 @@ def test_session_facade_does_not_define_content_functions():
         "def _strip_markdown_from_tokens",
     ):
         assert sym not in src, f"{sym} must live in _session_content.py"
+
+
+# ---------------------------------------------------------------------------
+# P2: session.py FSM/outcome sub-module guards
+# ---------------------------------------------------------------------------
+
+
+def test_new_session_fsm_modules_exist():
+    for name in NEW_SESSION_FSM_MODULES:
+        assert (SRC_EXECUTION / name).exists(), f"Missing: {name}"
+
+
+def test_session_fsm_modules_under_budget():
+    for name, limit in SESSION_FSM_SIZE_BUDGETS.items():
+        lines = len((SRC_EXECUTION / name).read_text().splitlines())
+        assert lines <= limit, f"{name}: {lines} lines exceeds budget of {limit}"
+
+
+def test_session_facade_does_not_define_retry_outcome():
+    src = (SRC_EXECUTION / "session.py").read_text()
+    for sym in (
+        "_KILL_ANOMALY_SUBTYPES: frozenset",
+        "def _is_kill_anomaly",
+        "def _compute_retry",
+        "def _compute_success",
+        "def _compute_outcome",
+    ):
+        assert sym not in src, f"{sym} must live in _retry_fsm.py or _session_outcome.py"
 
 
 # ---------------------------------------------------------------------------

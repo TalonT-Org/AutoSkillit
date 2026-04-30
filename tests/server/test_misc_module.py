@@ -43,7 +43,7 @@ def test_resolve_repo_from_remote_exists() -> None:
 
 
 def test_notify_module_exports():
-    from autoskillit.server._notify import _notify, track_response_size, _get_ctx_or_none
+    from autoskillit.server._notify import _get_ctx_or_none, _notify, track_response_size
 
     assert callable(_notify)
     assert callable(track_response_size)
@@ -52,13 +52,13 @@ def test_notify_module_exports():
 
 def test_misc_module_exports():
     from autoskillit.server._misc import (
-        _prime_quota_cache,
-        _quota_refresh_loop,
-        _apply_triage_gate,
-        _hook_config_path,
         _HOOK_CONFIG_FILENAME,
         _HOOK_DIR_COMPONENTS,
+        _apply_triage_gate,
         _extract_block,
+        _hook_config_path,
+        _prime_quota_cache,
+        _quota_refresh_loop,
         resolve_repo_from_remote,
     )
 

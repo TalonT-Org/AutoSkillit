@@ -32,7 +32,7 @@ class TestGateDisabledSchema:
     def test_gate_disabled_schema(self, tool_ctx):
         """Gate-disabled response has standard keys."""
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server.helpers import _require_enabled
+        from autoskillit.server._guards import _require_enabled
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         response = json.loads(_require_enabled())

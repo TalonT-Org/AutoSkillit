@@ -26,7 +26,7 @@ class TestGateErrorSchemaNormalization:
     def test_require_enabled_gate_returns_standard_schema(self, tool_ctx):
         """Gate errors must use the same schema as normal responses."""
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server.helpers import _require_enabled
+        from autoskillit.server._guards import _require_enabled
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         gate_result = _require_enabled()
@@ -39,7 +39,7 @@ class TestGateErrorSchemaNormalization:
 
     def test_dry_walkthrough_gate_returns_standard_schema(self, tool_ctx, tmp_path):
         """Dry-walkthrough gate errors must use the standard response schema."""
-        from autoskillit.server.helpers import _check_dry_walkthrough
+        from autoskillit.server._guards import _check_dry_walkthrough
 
         plan = tmp_path / "plan.md"
         plan.write_text("No marker here")

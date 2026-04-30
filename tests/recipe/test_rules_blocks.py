@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import pytest
 
+from autoskillit.core import Severity
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
+from autoskillit.recipe.schema import Recipe, RecipeStep
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -61,8 +63,6 @@ def _make_synthetic_recipe_with_two_gh_api_run_cmds_in_block(block_name: str):
 
     Used by the synthetic block budget test below.
     """
-    from autoskillit.recipe.schema import Recipe, RecipeStep
-
     step_a = RecipeStep(
         tool="run_cmd",
         with_args={"cmd": "gh api /repos/o/r/pulls"},
@@ -95,3 +95,168 @@ def test_synthetic_block_with_two_run_cmds_emits_block_run_cmd_budget_finding():
     matching = [f for f in findings if f.rule == "block-run-cmd-budget"]
     assert len(matching) == 1
     assert "test_block" in matching[0].message
+
+
+def _make_block_recipe(steps: dict[str, RecipeStep]) -> Recipe:
+    """Minimal Recipe factory for block rule tests."""
+    return Recipe(
+        name="synthetic",
+        description="synthetic test recipe",
+        ingredients={},
+        steps=steps,
+        kitchen_rules=[],
+        version=None,
+        experimental=False,
+        requires_packs=[],
+    )
+
+
+class TestBlockMcpToolBudget:
+    def test_two_mcp_tools_in_pre_queue_gate_fires_error(self):
+        step_a = RecipeStep(
+            tool="check_repo_merge_state", block="pre_queue_gate", on_success="step_b"
+        )
+        step_b = RecipeStep(
+            tool="check_repo_merge_state", block="pre_queue_gate", on_success="done"
+        )
+        stop = RecipeStep(action="stop", message="Pre-queue gate complete.")
+        recipe = _make_block_recipe({"step_a": step_a, "step_b": step_b, "done": stop})
+        findings = run_semantic_rules(recipe)
+        matching = [f for f in findings if f.rule == "block-mcp-tool-budget"]
+        assert len(matching) == 1
+        assert matching[0].severity == Severity.ERROR
+        assert "pre_queue_gate" in matching[0].message
+
+    def test_one_mcp_tool_in_pre_queue_gate_is_clean(self):
+        step_a = RecipeStep(
+            tool="check_repo_merge_state", block="pre_queue_gate", on_success="done"
+        )
+        stop = RecipeStep(action="stop", message="Pre-queue gate complete.")
+        recipe = _make_block_recipe({"step_a": step_a, "done": stop})
+        findings = run_semantic_rules(recipe)
+        matching = [f for f in findings if f.rule == "block-mcp-tool-budget"]
+        assert len(matching) == 0
+
+
+class TestBlockGhApiForbidden:
+    def test_gh_api_in_pre_queue_gate_fires_error(self):
+        step_a = RecipeStep(
+            tool="run_cmd",
+            with_args={"cmd": "gh api /repos/o/r"},
+            block="pre_queue_gate",
+            on_success="done",
+        )
+        stop = RecipeStep(action="stop", message="Pre-queue gate complete.")
+        recipe = _make_block_recipe({"step_a": step_a, "done": stop})
+        findings = run_semantic_rules(recipe)
+        matching = [f for f in findings if f.rule == "block-gh-api-forbidden"]
+        assert len(matching) == 1
+        assert matching[0].severity == Severity.ERROR
+
+    def test_run_cmd_without_gh_api_is_clean(self):
+        step_a = RecipeStep(
+            tool="run_cmd",
+            with_args={"cmd": "echo ok"},
+            block="pre_queue_gate",
+            on_success="done",
+        )
+        stop = RecipeStep(action="stop", message="Pre-queue gate complete.")
+        recipe = _make_block_recipe({"step_a": step_a, "done": stop})
+        findings = run_semantic_rules(recipe)
+        matching = [f for f in findings if f.rule == "block-gh-api-forbidden"]
+        assert len(matching) == 0
+
+
+class TestBlockSingleProducer:
+    def test_duplicate_capture_key_fires_warning(self):
+        step_a = RecipeStep(
+            tool="run_cmd",
+            with_args={"cmd": "echo a"},
+            block="test_block",
+            capture={"shared_key": "a"},
+            on_success="step_b",
+        )
+        step_a.name = "step_a"
+        step_b = RecipeStep(
+            tool="run_cmd",
+            with_args={"cmd": "echo b"},
+            block="test_block",
+            capture={"shared_key": "b"},
+            on_success="done",
+        )
+        step_b.name = "step_b"
+        stop = RecipeStep(action="stop", message="Block single producer test done.")
+        recipe = _make_block_recipe({"step_a": step_a, "step_b": step_b, "done": stop})
+        findings = run_semantic_rules(recipe)
+        matching = [f for f in findings if f.rule == "block-single-producer"]
+        assert len(matching) == 1
+        assert matching[0].severity == Severity.WARNING
+        assert "shared_key" in matching[0].message
+
+    def test_distinct_capture_keys_is_clean(self):
+        step_a = RecipeStep(
+            tool="run_cmd",
+            with_args={"cmd": "echo a"},
+            block="test_block",
+            capture={"key_a": "a"},
+            on_success="step_b",
+        )
+        step_a.name = "step_a"
+        step_b = RecipeStep(
+            tool="run_cmd",
+            with_args={"cmd": "echo b"},
+            block="test_block",
+            capture={"key_b": "b"},
+            on_success="done",
+        )
+        step_b.name = "step_b"
+        stop = RecipeStep(action="stop", message="Block single producer test done.")
+        recipe = _make_block_recipe({"step_a": step_a, "step_b": step_b, "done": stop})
+        findings = run_semantic_rules(recipe)
+        matching = [f for f in findings if f.rule == "block-single-producer"]
+        assert len(matching) == 0
+
+
+class TestBlockEntryExitReachable:
+    def test_disconnected_block_steps_fire_warning(self):
+        step_a = RecipeStep(
+            tool="run_cmd",
+            with_args={"cmd": "echo a"},
+            block="test_block",
+            on_success="done",
+        )
+        step_a.name = "step_a"
+        step_b = RecipeStep(
+            tool="run_cmd",
+            with_args={"cmd": "echo b"},
+            block="test_block",
+            on_success="done",
+        )
+        step_b.name = "step_b"
+        stop = RecipeStep(action="stop", message="Block entry exit test done.")
+        recipe = _make_block_recipe({"step_a": step_a, "step_b": step_b, "done": stop})
+        findings = run_semantic_rules(recipe)
+        matching = [f for f in findings if f.rule == "block-entry-exit-reachable"]
+        assert len(matching) == 2
+        assert all(f.severity == Severity.WARNING for f in matching)
+
+    def test_linear_block_chain_is_clean(self):
+        step_a = RecipeStep(
+            tool="run_cmd",
+            with_args={"cmd": "echo a"},
+            block="test_block",
+            on_success="step_b",
+        )
+        step_a.name = "step_a"
+        step_b = RecipeStep(
+            tool="run_cmd",
+            with_args={"cmd": "echo b"},
+            block="test_block",
+            on_success="done",
+        )
+        step_b.name = "step_b"
+        stop = RecipeStep(action="stop", message="Block entry exit test done.")
+        recipe = _make_block_recipe({"step_a": step_a, "step_b": step_b, "done": stop})
+        findings = run_semantic_rules(recipe)
+        matching = [f for f in findings if f.rule == "block-entry-exit-reachable"]
+        assert len(matching) == 0

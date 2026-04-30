@@ -879,3 +879,49 @@ def test_bundled_recipes_no_literal_merge_group_event() -> None:
             f"Recipe '{yaml_path.stem}' hardcodes event='merge_group': "
             + ", ".join(f.message for f in mg_findings)
         )
+
+
+class TestCiTimeoutMinimum:
+    def test_timeout_below_minimum_fires_warning(self) -> None:
+        steps = {
+            "ci": RecipeStep(
+                tool="wait_for_ci",
+                with_args={"branch": "main", "event": "push", "timeout_seconds": "300"},
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="CI check complete."),
+        }
+        recipe = _make_recipe(steps)
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "ci-timeout-minimum"]
+        assert len(findings) == 1
+        assert findings[0].severity == Severity.WARNING
+        assert "300" in findings[0].message
+
+    def test_timeout_at_boundary_is_clean(self) -> None:
+        steps = {
+            "ci": RecipeStep(
+                tool="wait_for_ci",
+                with_args={"branch": "main", "event": "push", "timeout_seconds": "600"},
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="CI check complete."),
+        }
+        recipe = _make_recipe(steps)
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "ci-timeout-minimum"]
+        assert len(findings) == 0
+
+    def test_missing_timeout_key_is_clean(self) -> None:
+        steps = {
+            "ci": RecipeStep(
+                tool="wait_for_ci",
+                with_args={"branch": "main", "event": "push"},
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="CI check complete."),
+        }
+        recipe = _make_recipe(steps)
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "ci-timeout-minimum"]
+        assert len(findings) == 0

@@ -388,3 +388,42 @@ def test_tool_params_matches_mcp_handler_signatures() -> None:
     assert not mismatches, (
         "_TOOL_PARAMS is out of sync with MCP handler signatures:\n" + "\n".join(mismatches)
     )
+
+
+class TestConstantStepWithArgs:
+    def test_constant_with_args_fires_error(self):
+        recipe = Recipe(
+            name="test-recipe",
+            description="Test constant rule",
+            steps={
+                "s": RecipeStep(constant="val", with_args={"x": "1"}, on_success="done"),
+                "done": RecipeStep(action="stop", message="Done checking constant."),
+            },
+        )
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "constant-step-with-args"]
+        assert len(findings) == 1
+        assert findings[0].severity == Severity.ERROR
+
+    def test_constant_only_is_clean(self):
+        recipe = Recipe(
+            name="test-recipe",
+            description="Test constant rule",
+            steps={
+                "s": RecipeStep(constant="val", on_success="done"),
+                "done": RecipeStep(action="stop", message="Done checking constant."),
+            },
+        )
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "constant-step-with-args"]
+        assert len(findings) == 0
+
+    def test_with_args_only_is_clean(self):
+        recipe = Recipe(
+            name="test-recipe",
+            description="Test constant rule",
+            steps={
+                "s": RecipeStep(tool="run_cmd", with_args={"cmd": "echo hi"}, on_success="done"),
+                "done": RecipeStep(action="stop", message="Done checking constant."),
+            },
+        )
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "constant-step-with-args"]
+        assert len(findings) == 0

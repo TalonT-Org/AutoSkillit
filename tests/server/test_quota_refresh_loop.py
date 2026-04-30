@@ -1,4 +1,4 @@
-"""Tests for _quota_refresh_loop in server/helpers.py."""
+"""Tests for _quota_refresh_loop in server/_misc.py."""
 
 from __future__ import annotations
 

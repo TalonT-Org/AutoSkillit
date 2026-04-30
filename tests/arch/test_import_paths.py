@@ -279,9 +279,12 @@ def test_no_server_helpers_imports_in_src():
     import subprocess
 
     result = subprocess.run(
-        ["grep", "-r", "server.helpers", "src/"],
+        ["grep", "-r", "server.helpers", str(SRC.parent)],
         capture_output=True,
         text=True,
+    )
+    assert result.returncode in (0, 1), (
+        f"grep failed with exit code {result.returncode}: {result.stderr}"
     )
     assert result.stdout == "", (
         f"Found references to deleted server.helpers module:\n{result.stdout}"

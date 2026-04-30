@@ -7,7 +7,7 @@ from pathlib import Path
 
 def test_hook_config_path_components_in_sync():
     """pretty_output._HOOK_CONFIG_PATH_COMPONENTS must resolve to the same path as
-    server/helpers._HOOK_DIR_COMPONENTS + _HOOK_CONFIG_FILENAME.
+    server/_misc._HOOK_DIR_COMPONENTS + _HOOK_CONFIG_FILENAME.
 
     Both scripts must address the same config file. This test guards against
     independent evolution of the two constant sets.

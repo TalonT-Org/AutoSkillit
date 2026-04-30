@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import json
 import os
 import re
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 import structlog
@@ -101,10 +103,8 @@ async def _import_and_call(
         return {"success": True, "result": str(result)}
 
 
-def _get_food_truck_prompt_builder():  # type: ignore[return]
+def _get_food_truck_prompt_builder() -> Callable[..., str]:
     """Return the food truck prompt builder with mcp_prefix pre-bound."""
-    import functools
-
     from autoskillit.core import detect_autoskillit_mcp_prefix
     from autoskillit.fleet import _build_food_truck_prompt
 

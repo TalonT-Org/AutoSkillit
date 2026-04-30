@@ -711,7 +711,7 @@ def test_no_raw_ctx_notification_calls_in_tool_handlers() -> None:
             ):
                 violations.append(f"{path.name}:{node.lineno}")
     assert not violations, (
-        "Raw ctx notification calls found — use _notify() from server/helpers.py:\n"
+        "Raw ctx notification calls found — use _notify() from server/_notify.py:\n"
         + "\n".join(violations)
     )
 

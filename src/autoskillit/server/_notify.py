@@ -15,18 +15,6 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-def _get_ctx():  # type: ignore[return]
-    from autoskillit.server._state import _get_ctx as _ctx_fn
-
-    return _ctx_fn()
-
-
-def _get_config():  # type: ignore[return]
-    from autoskillit.server._state import _get_config as _cfg_fn
-
-    return _cfg_fn()
-
-
 def _get_ctx_or_none():  # type: ignore[return]
     from autoskillit.server._state import _get_ctx_or_none as _ctx_none_fn
 

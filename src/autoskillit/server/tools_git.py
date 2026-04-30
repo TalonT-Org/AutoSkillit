@@ -55,8 +55,8 @@ async def merge_worktree(
             extra={"worktree": worktree_path, "base": base_branch},
         )
 
-        from autoskillit.execution import resolve_remote_name
         from autoskillit.server import _get_config, _get_ctx
+        from autoskillit.server._misc import resolve_remote_name
         from autoskillit.server.git import perform_merge
 
         tool_ctx = _get_ctx()
@@ -146,8 +146,8 @@ async def classify_fix(
                 }
             )
 
-        from autoskillit.execution import resolve_remote_name
         from autoskillit.server import _get_config, _get_ctx
+        from autoskillit.server._misc import resolve_remote_name
         from autoskillit.server.git import _filter_changed_files
 
         tool_ctx = _get_ctx()

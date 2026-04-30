@@ -21,7 +21,6 @@ from autoskillit.core import (
     truncate_text,
     validate_add_dir,
 )
-from autoskillit.execution import SCENARIO_STEP_NAME_ENV
 from autoskillit.server import mcp
 from autoskillit.server._guards import (
     _check_dry_walkthrough,
@@ -29,6 +28,7 @@ from autoskillit.server._guards import (
     _require_orchestrator_or_higher,
     _validate_skill_command,
 )
+from autoskillit.server._misc import SCENARIO_STEP_NAME_ENV
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._subprocess import _run_subprocess
 
@@ -458,7 +458,9 @@ async def run_skill(
                 )
             if order_id:
                 skill_result.order_id = order_id
-            from autoskillit.execution import _refresh_quota_cache  # noqa: PLC0415
+            from autoskillit.server._misc import (  # noqa: PLC0415
+                _refresh_quota_cache,
+            )
 
             if tool_ctx.background is not None:
                 tool_ctx.background.submit(
@@ -546,13 +548,13 @@ async def dispatch_food_truck(
                 FleetErrorCode.FLEET_HARD_REFUSAL_HEADLESS,
                 "dispatch_food_truck cannot be called from headless sessions.",
             )
-        from autoskillit.execution import (
+        from autoskillit.fleet import execute_dispatch
+        from autoskillit.server import _get_ctx
+        from autoskillit.server._misc import (  # noqa: PLC0415
             _refresh_quota_cache,
             check_and_sleep_if_needed,
             invalidate_cache,
         )
-        from autoskillit.fleet import execute_dispatch
-        from autoskillit.server import _get_ctx
 
         tool_ctx = _get_ctx()
         result = await execute_dispatch(

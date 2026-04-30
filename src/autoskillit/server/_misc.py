@@ -1,4 +1,9 @@
-"""Quota, hook-config, triage, and miscellaneous server utilities."""
+"""Quota, hook-config, triage, and miscellaneous server utilities.
+
+Also re-exports selected execution/workspace symbols so that tools_*.py files
+(which are restricted to autoskillit.{core,pipeline,server,config,fleet} by
+REQ-IMP-003 / REQ-ARCH-003) can access them without violating layer rules.
+"""
 
 from __future__ import annotations
 
@@ -7,8 +12,32 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import get_logger
-from autoskillit.execution import check_and_sleep_if_needed
+from autoskillit.execution import (
+    SCENARIO_STEP_NAME_ENV as SCENARIO_STEP_NAME_ENV,
+)
+from autoskillit.execution import (
+    _refresh_quota_cache as _refresh_quota_cache,
+)
+from autoskillit.execution import (
+    check_and_sleep_if_needed as check_and_sleep_if_needed,
+)
+from autoskillit.execution import (
+    fetch_repo_merge_state as fetch_repo_merge_state,
+)
+from autoskillit.execution import (
+    invalidate_cache as invalidate_cache,
+)
+from autoskillit.execution import (
+    resolve_log_dir as resolve_log_dir,
+)
+from autoskillit.execution import (
+    resolve_remote_name as resolve_remote_name,
+)
+from autoskillit.execution import (
+    write_telemetry_clear_marker as write_telemetry_clear_marker,
+)
 from autoskillit.hooks import _HOOK_CONFIG_PATH_COMPONENTS
+from autoskillit.workspace import clone_registry as clone_registry
 
 if TYPE_CHECKING:
     from autoskillit.config import QuotaGuardConfig
@@ -43,6 +72,43 @@ def _extract_block(text: str, start_delim: str, end_delim: str) -> list[str]:
         if in_block:
             block_lines.append(line)
     return []
+
+
+def _build_hook_diagnostic_warning() -> str | None:
+    """Run hook health and drift checks. Return a warning string if issues are found."""
+    from autoskillit.hook_registry import (
+        _claude_settings_path,
+        _count_hook_registry_drift,
+        find_broken_hook_scripts,
+    )
+
+    settings_path = _claude_settings_path("user")
+    if not settings_path.exists():
+        return None
+
+    broken = find_broken_hook_scripts(settings_path)
+    drift = _count_hook_registry_drift(settings_path)
+
+    issues: list[str] = []
+    if broken:
+        issues.append(f"Hook scripts not found: {', '.join(broken)}")
+    if drift.orphaned > 0:
+        issues.append(
+            f"{drift.orphaned} orphaned hook entry(ies) in settings.json are not in "
+            f"HOOK_REGISTRY — every matching tool call will be denied with ENOENT."
+        )
+    if drift.missing > 0:
+        issues.append(
+            f"{drift.missing} hook(s) from HOOK_REGISTRY are not deployed in settings.json."
+        )
+    if not issues:
+        return None
+
+    lines = ["\n⚠️  Hook configuration issues detected:"]
+    for issue in issues:
+        lines.append(f"   • {issue}")
+    lines.append("   → Run 'autoskillit install' to regenerate hook configuration.\n")
+    return "\n".join(lines)
 
 
 async def _apply_triage_gate(
@@ -101,8 +167,6 @@ async def _quota_refresh_loop(config: QuotaGuardConfig) -> None:
     loop tick will still be fresh when the next tick fires. The hook never sees a stale
     cache as long as this loop is running.
     """
-    from autoskillit.execution import _refresh_quota_cache
-
     while True:
         await asyncio.sleep(config.cache_refresh_interval)
         try:

@@ -13,11 +13,10 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import atomic_write, get_logger
-from autoskillit.execution import resolve_log_dir
 from autoskillit.pipeline import write_status
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
-from autoskillit.server._misc import _extract_block
+from autoskillit.server._misc import _extract_block, resolve_log_dir
 from autoskillit.server._notify import _notify, track_response_size
 
 if TYPE_CHECKING:

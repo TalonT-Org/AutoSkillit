@@ -305,7 +305,8 @@ generic_automation_mcp/
 │   ├── _lifespan.py         #   FastMCP lifespan: recorder teardown on shutdown
 │   ├── _session_type.py     #   Session-type tag visibility dispatcher (3-branch startup logic)
 │   ├── _wire_compat.py      #   Claude Code wire-format sanitization middleware
-│   ├── helpers.py
+│   ├── _notify.py           #   _notify, track_response_size, _get_ctx_or_none
+│   ├── _misc.py             #   Quota/hook/triage utilities + re-exports for tools_*.py layer compliance
 │   ├── tools_kitchen.py     #   open_kitchen, close_kitchen + recipe:// resource
 │   ├── tools_ci.py          #   set_commit_status + check_repo_merge_state
 │   ├── tools_ci_watch.py    #   wait_for_ci + get_ci_status + _auto_trigger_ci

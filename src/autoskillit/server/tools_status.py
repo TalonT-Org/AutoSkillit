@@ -12,10 +12,10 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import atomic_write, get_logger
-from autoskillit.execution import resolve_log_dir, write_telemetry_clear_marker
 from autoskillit.pipeline import TelemetryFormatter
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
+from autoskillit.server._misc import resolve_log_dir, write_telemetry_clear_marker
 from autoskillit.server._notify import _notify, track_response_size
 
 logger = get_logger(__name__)

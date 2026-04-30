@@ -16,8 +16,8 @@ from fastmcp.dependencies import CurrentContext
 from autoskillit.core import CAMPAIGN_ID_ENV_VAR, get_logger
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
+from autoskillit.server._misc import clone_registry
 from autoskillit.server._notify import _notify, track_response_size
-from autoskillit.workspace import clone_registry
 
 logger = get_logger(__name__)
 

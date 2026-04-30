@@ -76,7 +76,7 @@ def test_quota_refresh_task_satisfied_by_minimal_cancel_class():
 
 def test_token_factory_satisfied_by_server_concrete_class():
     from autoskillit.core import TokenFactory
-    from autoskillit.server._factory import TokenFactory as ConcreteTokenFactory
+    from autoskillit.server._factory import _LazyTokenFactory as ConcreteTokenFactory
 
     instance = ConcreteTokenFactory(lambda: None)
     assert isinstance(instance, TokenFactory)

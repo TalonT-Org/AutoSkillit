@@ -74,7 +74,7 @@ logger = get_logger(__name__)
 _UNSET: Any = object()
 
 
-class TokenFactory:
+class _LazyTokenFactory:
     """Lazy-resolving, caching token factory.
 
     Wraps the config -> env -> gh CLI token resolution chain.  Does NOT
@@ -137,6 +137,25 @@ def _gh_cli_token() -> str | None:
 def _check_plugin_installed() -> bool:
     """Detect if autoskillit is marketplace-installed via installed_plugins.json."""
     return detect_autoskillit_mcp_prefix() == MARKETPLACE_PREFIX
+
+
+def _resolve_project_dir() -> Path:
+    """Resolve the project root: AUTOSKILLIT_PROJECT_DIR env -> git toplevel -> cwd."""
+    env_project_dir = os.environ.get("AUTOSKILLIT_PROJECT_DIR", "")
+    if env_project_dir:
+        return Path(env_project_dir)
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return Path(result.stdout.strip())
+    except Exception:
+        pass
+    return Path.cwd()
 
 
 def make_context(
@@ -229,7 +248,7 @@ def make_context(
     # The _gh_cli_token() subprocess (up to 5s) is deferred until the first
     # gated tool actually needs a GitHub token, keeping the MCP server startup
     # path free of subprocess calls (REQ-STARTUP-001).
-    token_factory = TokenFactory(
+    token_factory = _LazyTokenFactory(
         lambda: config.github.token or os.environ.get("GITHUB_TOKEN") or _gh_cli_token()
     )
 
@@ -254,8 +273,7 @@ def make_context(
     plugin_source = resolved_plugin_source
     gate = DefaultGateState(enabled=False)
 
-    env_project_dir = os.environ.get("AUTOSKILLIT_PROJECT_DIR", "")
-    project_dir = Path(env_project_dir) if env_project_dir else Path.cwd()
+    project_dir = _resolve_project_dir()
     temp_dir = resolve_temp_dir(project_dir, config.workspace.temp_dir)
     temp_dir_relpath = temp_dir_display_str(config.workspace.temp_dir)
 

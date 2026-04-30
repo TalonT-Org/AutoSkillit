@@ -132,9 +132,9 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/server/tools_kitchen.py", 117),
     ("src/autoskillit/server/tools_kitchen.py", 558),
     # tools_status.py — mcp_data dict
-    ("src/autoskillit/server/tools_status.py", 486),
+    ("src/autoskillit/server/tools_status.py", 482),
     # tools_github.py — bug report dict
-    ("src/autoskillit/server/tools_github.py", 283),
+    ("src/autoskillit/server/tools_github.py", 279),
     # _hooks.py — settings.json dict (co-owned with Claude CLI)
     ("src/autoskillit/cli/_hooks.py", 23),
     # _init_helpers.py — ~/.claude.json (co-owned)

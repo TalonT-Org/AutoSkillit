@@ -94,7 +94,7 @@ LAYER_RULES: dict[str, RuleDescriptor] = {
         lens="module-dependency",
         description=(
             "All ctx.info/error/warning/debug calls in server/tools_*.py must be "
-            "replaced by _notify() from server/helpers.py."
+            "replaced by _notify() from server/_notify.py."
         ),
         rationale=(
             "Raw ctx.* notification calls bypass the _notify() validation layer that "
@@ -599,7 +599,7 @@ def test_migration_no_forbidden_imports() -> None:
 def test_no_cross_package_submodule_imports() -> None:
     """REQ-ARCH-001: No module outside package X may import from autoskillit.X.<submodule>.
 
-    Intra-package imports (e.g., server/__init__.py importing autoskillit.server.helpers)
+    Intra-package imports (e.g., server/__init__.py importing autoskillit.server._notify)
     are explicitly allowed. TYPE_CHECKING-guarded imports are excluded.
     """
     AUTOSKILLIT_ROOT = SRC_ROOT
@@ -711,7 +711,7 @@ def test_no_raw_ctx_notification_calls_in_tool_handlers() -> None:
             ):
                 violations.append(f"{path.name}:{node.lineno}")
     assert not violations, (
-        "Raw ctx notification calls found — use _notify() from server/helpers.py:\n"
+        "Raw ctx notification calls found — use _notify() from server/_notify.py:\n"
         + "\n".join(violations)
     )
 
@@ -880,14 +880,14 @@ def test_hook_config_filename_and_dir_match_quota_check():
 
     The server (tools_kitchen.py) writes the config; all hooks read it.
     Two reader contracts must hold:
-    - _fmt_primitives._HOOK_CONFIG_PATH_COMPONENTS == server.helpers._hook_config_path
-    - _hook_settings.py constants == server.helpers constants
+    - _fmt_primitives._HOOK_CONFIG_PATH_COMPONENTS == server._misc._hook_config_path
+    - _hook_settings.py constants == server._misc constants
     """
     import importlib
     from pathlib import Path
 
     from autoskillit.hooks._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
-    from autoskillit.server.helpers import (
+    from autoskillit.server._misc import (
         _HOOK_CONFIG_FILENAME,
         _HOOK_DIR_COMPONENTS,
         _hook_config_path,
@@ -898,7 +898,7 @@ def test_hook_config_filename_and_dir_match_quota_check():
     actual = _hook_config_path(root)
 
     assert actual == expected, (
-        f"server.helpers._hook_config_path({root!r})={actual!r} "
+        f"server._misc._hook_config_path({root!r})={actual!r} "
         f"does not match path derived from "
         f"_fmt_primitives._HOOK_CONFIG_PATH_COMPONENTS={expected!r}"
     )
@@ -907,11 +907,11 @@ def test_hook_config_filename_and_dir_match_quota_check():
 
     assert settings_mod.HOOK_CONFIG_FILENAME == _HOOK_CONFIG_FILENAME, (
         f"_hook_settings.HOOK_CONFIG_FILENAME={settings_mod.HOOK_CONFIG_FILENAME!r} "
-        f"does not match tools_kitchen._HOOK_CONFIG_FILENAME={_HOOK_CONFIG_FILENAME!r}"
+        f"does not match server._misc._HOOK_CONFIG_FILENAME={_HOOK_CONFIG_FILENAME!r}"
     )
     assert settings_mod.HOOK_DIR_COMPONENTS == _HOOK_DIR_COMPONENTS, (
         f"_hook_settings.HOOK_DIR_COMPONENTS={settings_mod.HOOK_DIR_COMPONENTS!r} "
-        f"does not match tools_kitchen._HOOK_DIR_COMPONENTS={_HOOK_DIR_COMPONENTS!r}"
+        f"does not match server._misc._HOOK_DIR_COMPONENTS={_HOOK_DIR_COMPONENTS!r}"
     )
 
 

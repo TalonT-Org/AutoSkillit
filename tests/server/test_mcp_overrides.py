@@ -47,7 +47,7 @@ async def test_load_recipe_tool_accepts_overrides_param(tmp_path: Path) -> None:
             return_value={},
         ),
         patch(
-            "autoskillit.server.helpers._apply_triage_gate",
+            "autoskillit.server._misc._apply_triage_gate",
             new_callable=AsyncMock,
             return_value={"content": "test", "valid": True, "suggestions": []},
         ),
@@ -94,7 +94,7 @@ async def test_open_kitchen_accepts_overrides_param(tmp_path: Path) -> None:
             return_value={},
         ),
         patch(
-            "autoskillit.server.helpers._apply_triage_gate",
+            "autoskillit.server._misc._apply_triage_gate",
             new_callable=AsyncMock,
             return_value={"content": "test", "valid": True, "suggestions": []},
         ),

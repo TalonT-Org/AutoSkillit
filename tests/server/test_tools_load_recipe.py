@@ -400,7 +400,7 @@ class TestApplyTriageGate:
         import copy
 
         from autoskillit.recipe.staleness_cache import read_staleness_cache
-        from autoskillit.server.helpers import _apply_triage_gate
+        from autoskillit.server._misc import _apply_triage_gate
 
         monkeypatch.chdir(tmp_path)
         recipes_dir = tmp_path / ".autoskillit" / "recipes"

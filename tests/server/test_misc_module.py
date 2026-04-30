@@ -1,4 +1,4 @@
-"""Contract tests: server.helpers module."""
+"""Contract tests: server._misc module."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ async def test_resolve_repo_from_remote_returns_empty_for_file_url(tmp_path: Pat
 
     Creates a minimal git repo with only a file:// origin remote (no upstream).
     """
-    from autoskillit.server.helpers import resolve_repo_from_remote
+    from autoskillit.server._misc import resolve_repo_from_remote
 
     repo = tmp_path / "clone"
     repo.mkdir()
@@ -37,13 +37,36 @@ def test_resolve_repo_from_remote_exists() -> None:
     """Function renamed from infer_repo_from_remote must exist at new name."""
     import inspect
 
-    from autoskillit.server.helpers import resolve_repo_from_remote
+    from autoskillit.server._misc import resolve_repo_from_remote
 
     assert inspect.iscoroutinefunction(resolve_repo_from_remote)
 
 
-def test_infer_repo_from_remote_removed() -> None:
-    """Old name must not exist after rename."""
-    import autoskillit.server.helpers as helpers
+def test_notify_module_exports():
+    from autoskillit.server._notify import _get_ctx_or_none, _notify, track_response_size
 
-    assert not hasattr(helpers, "infer_repo_from_remote")
+    assert callable(_notify)
+    assert callable(track_response_size)
+    assert callable(_get_ctx_or_none)
+
+
+def test_misc_module_exports():
+    from autoskillit.server._misc import (
+        _HOOK_CONFIG_FILENAME,
+        _HOOK_DIR_COMPONENTS,
+        _apply_triage_gate,
+        _extract_block,
+        _hook_config_path,
+        _prime_quota_cache,
+        _quota_refresh_loop,
+        resolve_repo_from_remote,
+    )
+
+    assert callable(_prime_quota_cache)
+    assert callable(_quota_refresh_loop)
+    assert callable(_apply_triage_gate)
+    assert callable(_hook_config_path)
+    assert callable(_extract_block)
+    assert callable(resolve_repo_from_remote)
+    assert isinstance(_HOOK_CONFIG_FILENAME, str)
+    assert isinstance(_HOOK_DIR_COMPONENTS, tuple)

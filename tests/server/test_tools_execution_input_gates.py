@@ -7,7 +7,7 @@ import json
 import pytest
 
 from autoskillit.server._guards import _check_dry_walkthrough
-from autoskillit.server.helpers import _get_config
+from autoskillit.server._state import _get_config
 from autoskillit.server.tools_execution import run_skill
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]

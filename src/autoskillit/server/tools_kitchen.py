@@ -28,14 +28,14 @@ from autoskillit.core import (
 from autoskillit.pipeline import create_background_task
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_orchestrator_exact
-from autoskillit.server.helpers import (
+from autoskillit.server._misc import (
     _apply_triage_gate,
     _build_hook_diagnostic_warning,
     _hook_config_path,
     _prime_quota_cache,
     _quota_refresh_loop,
-    track_response_size,
 )
+from autoskillit.server._notify import track_response_size
 
 logger = get_logger(__name__)
 

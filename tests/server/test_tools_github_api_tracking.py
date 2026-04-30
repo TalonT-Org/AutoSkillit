@@ -25,9 +25,9 @@ async def test_gh_cli_call_is_recorded(build_ctx):
     )
     ctx.runner = runner
 
-    from autoskillit.server.helpers import _run_subprocess
+    from autoskillit.server._subprocess import _run_subprocess
 
-    with patch("autoskillit.server.helpers._get_ctx", return_value=ctx):
+    with patch("autoskillit.server._subprocess._get_ctx", return_value=ctx):
         await _run_subprocess(["gh", "pr", "list", "--json", "number"], cwd="/tmp", timeout=30)
 
     usage = log.to_usage("sess-1")
@@ -53,9 +53,9 @@ async def test_non_gh_command_is_not_recorded(build_ctx):
     )
     ctx.runner = runner
 
-    from autoskillit.server.helpers import _run_subprocess
+    from autoskillit.server._subprocess import _run_subprocess
 
-    with patch("autoskillit.server.helpers._get_ctx", return_value=ctx):
+    with patch("autoskillit.server._subprocess._get_ctx", return_value=ctx):
         await _run_subprocess(["git", "status"], cwd="/tmp", timeout=30)
 
     assert log.to_usage("sess-1") is None
@@ -78,7 +78,7 @@ async def test_gh_cli_records_exit_code_and_latency(build_ctx):
     )
     ctx.runner = runner
 
-    from autoskillit.server.helpers import _run_subprocess
+    from autoskillit.server._subprocess import _run_subprocess
 
     _tick = 0.0
 
@@ -88,8 +88,8 @@ async def test_gh_cli_records_exit_code_and_latency(build_ctx):
         return _tick
 
     with (
-        patch("autoskillit.server.helpers._get_ctx", return_value=ctx),
-        patch("autoskillit.server.helpers.time.monotonic", _fake_monotonic),
+        patch("autoskillit.server._subprocess._get_ctx", return_value=ctx),
+        patch("autoskillit.server._subprocess.time.monotonic", _fake_monotonic),
     ):
         await _run_subprocess(["gh", "api", "repos/o/r/issues"], cwd="/tmp", timeout=30)
 

@@ -13,7 +13,7 @@ from autoskillit.core import (
     TerminationReason,
     get_logger,
 )
-from autoskillit.execution._retry_fsm import _compute_retry, _is_kill_anomaly
+from autoskillit.execution._retry_fsm import _compute_retry
 from autoskillit.execution._session_content import (
     _check_expected_patterns,
     _check_session_content,

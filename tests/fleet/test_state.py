@@ -16,6 +16,7 @@ from autoskillit.fleet import (
     FLEET_HALTED_SENTINEL,
     DispatchRecord,
     DispatchStatus,
+    _write_pid,
     append_dispatch_record,
     crash_recover_dispatch,
     mark_dispatch_resumable,
@@ -26,7 +27,6 @@ from autoskillit.fleet import (
     write_captured_values,
     write_initial_state,
 )
-from autoskillit.fleet._api import _write_pid
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 

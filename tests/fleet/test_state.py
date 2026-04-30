@@ -668,7 +668,7 @@ class TestWritePidExceptionSwallow:
         sp = _state_path(tmp_path)
         write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("d1"))
         monkeypatch.setattr(
-            "autoskillit.fleet.state.mark_dispatch_running",
+            "autoskillit.fleet.mark_dispatch_running",
             lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom")),
         )
         with structlog.testing.capture_logs() as logs:

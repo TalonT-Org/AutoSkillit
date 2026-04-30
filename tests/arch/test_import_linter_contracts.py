@@ -45,6 +45,18 @@ def _is_type_checking_guard(node: ast.If) -> bool:
     )
 
 
+def _collect_type_checking_modules(tree: ast.AST) -> set[str]:
+    """Return all module paths imported under any TYPE_CHECKING guard in *tree*."""
+    modules: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.If) or not _is_type_checking_guard(node):
+            continue
+        for child in ast.walk(ast.Module(body=node.body, type_ignores=[])):
+            if isinstance(child, ast.ImportFrom) and child.module:
+                modules.add(child.module)
+    return modules
+
+
 def _find_cross_layer_type_checking_imports(
     pkg_dir: Path,
     pkg_name: str,
@@ -60,29 +72,24 @@ def _find_cross_layer_type_checking_imports(
     if forbidden is None:
         return result
 
-    for py_file in sorted(pkg_dir.glob("*.py")):
+    for py_file in sorted(pkg_dir.rglob("*.py")):
         try:
             tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
         except SyntaxError:
             continue
 
-        cross_pkgs: set[str] = set()
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.If) or not _is_type_checking_guard(node):
-                continue
-            for child in ast.walk(ast.Module(body=node.body, type_ignores=[])):
-                if not isinstance(child, ast.ImportFrom) or not child.module:
-                    continue
-                parts = child.module.split(".")
-                if parts[0] != "autoskillit" or len(parts) < 2:
-                    continue
-                imported_pkg = parts[1]
-                if imported_pkg in forbidden:
-                    cross_pkgs.add(imported_pkg)
+        tc_modules = _collect_type_checking_modules(tree)
+        cross_pkgs = frozenset(
+            parts[1]
+            for m in tc_modules
+            if (parts := m.split("."))[0] == "autoskillit"
+            and len(parts) >= 2
+            and parts[1] in forbidden
+        )
 
         if cross_pkgs:
-            rel = f"{pkg_name}/{py_file.name}"
-            result[rel] = frozenset(cross_pkgs)
+            rel = f"{pkg_name}/{py_file.relative_to(pkg_dir)}"
+            result[rel] = cross_pkgs
 
     return result
 
@@ -215,27 +222,27 @@ def test_execution_forbidden_imports_are_guarded() -> None:
     forbidden_pkgs = {"autoskillit.config", "autoskillit.pipeline"}
     violations: list[str] = []
 
-    for py_file in sorted(execution_dir.glob("*.py")):
+    for py_file in sorted(execution_dir.rglob("*.py")):
         try:
             tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
         except SyntaxError:
             continue
 
-        tc_import_modules: set[str] = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.If) and _is_type_checking_guard(node):
-                for child in ast.walk(ast.Module(body=node.body, type_ignores=[])):
-                    if isinstance(child, ast.ImportFrom) and child.module:
-                        tc_import_modules.add(child.module)
+        tc_import_modules = _collect_type_checking_modules(tree)
+        tc_top_pkgs = {".".join(m.split(".")[:2]) for m in tc_import_modules}
 
-        for node in tree.body:
-            if isinstance(node, ast.ImportFrom) and node.module:
-                top_pkg = ".".join(node.module.split(".")[:2])
-                if top_pkg in forbidden_pkgs and node.module not in tc_import_modules:
-                    violations.append(
-                        f"{py_file.name}:{node.lineno} imports {node.module} "
-                        f"at module level without TYPE_CHECKING guard"
-                    )
+        rel = py_file.relative_to(execution_dir)
+        for top_node in tree.body:
+            if isinstance(top_node, ast.If) and _is_type_checking_guard(top_node):
+                continue
+            for node in ast.walk(top_node):
+                if isinstance(node, ast.ImportFrom) and node.module:
+                    top_pkg = ".".join(node.module.split(".")[:2])
+                    if top_pkg in forbidden_pkgs and top_pkg not in tc_top_pkgs:
+                        violations.append(
+                            f"{rel}:{node.lineno} imports {node.module} "
+                            f"at module level without TYPE_CHECKING guard"
+                        )
 
     assert not violations, "Unguarded config/pipeline imports found in execution/:\n" + "\n".join(
         f"  - {v}" for v in violations

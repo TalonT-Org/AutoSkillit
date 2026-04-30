@@ -9,7 +9,7 @@ import pytest
 
 from autoskillit.core import Severity
 from autoskillit.recipe.registry import run_semantic_rules
-from autoskillit.recipe.schema import Recipe, RecipeStep
+from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeStep
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -171,3 +171,61 @@ def test_required_hidden_ingredient_without_default_no_warning():
     findings = run_semantic_rules(recipe)
     warning_findings = [f for f in findings if f.rule == "required-ingredient-no-default"]
     assert len(warning_findings) == 0
+
+
+class TestResearchOutputModeEnum:
+    def test_bogus_default_fires_error(self):
+        recipe = Recipe(
+            name="research",
+            description="Test research recipe",
+            ingredients={
+                "output_mode": RecipeIngredient(
+                    description="Output mode for research results",
+                    default="bogus",
+                )
+            },
+            steps={"done": RecipeStep(action="stop", message="Research complete.")},
+        )
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "research-output-mode-enum"]
+        assert len(findings) == 1
+        assert findings[0].severity == Severity.ERROR
+
+    def test_valid_pr_default_is_clean(self):
+        recipe = Recipe(
+            name="research",
+            description="Test research recipe",
+            ingredients={
+                "output_mode": RecipeIngredient(
+                    description="Output mode for research results",
+                    default="pr",
+                )
+            },
+            steps={"done": RecipeStep(action="stop", message="Research complete.")},
+        )
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "research-output-mode-enum"]
+        assert len(findings) == 0
+
+    def test_no_output_mode_ingredient_is_clean(self):
+        recipe = Recipe(
+            name="research",
+            description="Test research recipe",
+            ingredients={},
+            steps={"done": RecipeStep(action="stop", message="Research complete.")},
+        )
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "research-output-mode-enum"]
+        assert len(findings) == 0
+
+    def test_non_research_recipe_is_clean(self):
+        recipe = Recipe(
+            name="other",
+            description="Test other recipe",
+            ingredients={
+                "output_mode": RecipeIngredient(
+                    description="Output mode",
+                    default="bogus",
+                )
+            },
+            steps={"done": RecipeStep(action="stop", message="Other recipe complete.")},
+        )
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "research-output-mode-enum"]
+        assert len(findings) == 0

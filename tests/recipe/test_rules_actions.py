@@ -93,3 +93,24 @@ def test_route_step_with_on_result_passes():
     )
     findings = [f for f in run_semantic_rules(recipe) if f.rule == "route-step-requires-on-result"]
     assert len(findings) == 0
+
+
+class TestStopStepMessageQuality:
+    def test_short_message_fires_warning(self):
+        recipe = _make_recipe({"done": {"action": "stop", "message": "bye"}})
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "stop-step-message-quality"]
+        assert len(findings) == 1
+        assert findings[0].severity == Severity.WARNING
+
+    def test_placeholder_message_fires_warning(self):
+        recipe = _make_recipe({"done": {"action": "stop", "message": "done"}})
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "stop-step-message-quality"]
+        assert len(findings) == 1
+        assert findings[0].severity == Severity.WARNING
+
+    def test_meaningful_message_is_clean(self):
+        recipe = _make_recipe(
+            {"done": {"action": "stop", "message": "Pipeline completed successfully"}}
+        )
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "stop-step-message-quality"]
+        assert len(findings) == 0

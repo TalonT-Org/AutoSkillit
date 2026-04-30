@@ -272,6 +272,7 @@ def minimal_ctx(tmp_path):
         plugin_source=DirectInstall(plugin_dir=tmp_path),
         runner=None,
         temp_dir=tmp_path / ".autoskillit" / "temp",
+        project_dir=tmp_path,
     )
     return ctx
 

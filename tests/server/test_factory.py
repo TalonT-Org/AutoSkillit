@@ -20,7 +20,7 @@ from autoskillit.recipe.contracts import (
     resolve_skill_name,
 )
 from autoskillit.recipe.repository import DefaultRecipeRepository
-from autoskillit.server._factory import TokenFactory, _gh_cli_token, make_context
+from autoskillit.server._factory import _gh_cli_token, _LazyTokenFactory, make_context
 from autoskillit.workspace import DefaultCloneManager, SkillResolver
 from autoskillit.workspace.cleanup import DefaultWorkspaceManager
 from tests.fakes import MockSubprocessRunner
@@ -381,7 +381,7 @@ def test_token_factory_resolves_lazily():
         call_count += 1
         return "ghp_test_token"
 
-    factory = TokenFactory(_resolver)
+    factory = _LazyTokenFactory(_resolver)
     assert call_count == 0, "TokenFactory resolved eagerly at construction"
     assert not factory.is_resolved
 
@@ -405,7 +405,7 @@ def test_token_factory_caches_none():
         call_count += 1
         return None
 
-    factory = TokenFactory(_resolver)
+    factory = _LazyTokenFactory(_resolver)
     assert factory() is None
     assert call_count == 1
     assert factory() is None
@@ -482,8 +482,55 @@ def test_make_context_reads_project_dir_env(tmp_path, monkeypatch):
     assert ctx.project_dir == tmp_path
 
 
-def test_make_context_project_dir_cwd_fallback(monkeypatch):
-    """make_context falls back to Path.cwd() when AUTOSKILLIT_PROJECT_DIR is not set."""
+def test_make_context_project_dir_git_root_fallback(monkeypatch):
+    """make_context resolves project_dir via git toplevel when env var is not set."""
     monkeypatch.delenv("AUTOSKILLIT_PROJECT_DIR", raising=False)
     ctx = make_context(AutomationConfig(), runner=_runner())
-    assert ctx.project_dir == Path.cwd()
+    import subprocess as _sp
+
+    expected = Path(
+        _sp.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    )
+    assert ctx.project_dir == expected
+
+
+# --- _resolve_project_dir unit tests ---
+
+
+def test_resolve_project_dir_env_var(tmp_path, monkeypatch):
+    from autoskillit.server._factory import _resolve_project_dir
+
+    monkeypatch.setenv("AUTOSKILLIT_PROJECT_DIR", str(tmp_path))
+    assert _resolve_project_dir() == tmp_path
+
+
+def test_resolve_project_dir_git_root(monkeypatch):
+    import subprocess as _subprocess
+
+    from autoskillit.server._factory import _resolve_project_dir
+
+    monkeypatch.delenv("AUTOSKILLIT_PROJECT_DIR", raising=False)
+
+    def fake_run(cmd, *, capture_output, text, timeout):
+        return _subprocess.CompletedProcess(cmd, 0, stdout="/fake/git/root\n", stderr="")
+
+    monkeypatch.setattr("autoskillit.server._factory.subprocess.run", fake_run)
+    assert _resolve_project_dir() == Path("/fake/git/root")
+
+
+def test_resolve_project_dir_cwd_fallback(monkeypatch):
+    import subprocess as _subprocess
+
+    from autoskillit.server._factory import _resolve_project_dir
+
+    monkeypatch.delenv("AUTOSKILLIT_PROJECT_DIR", raising=False)
+
+    def fake_run(cmd, *, capture_output, text, timeout):
+        return _subprocess.CompletedProcess(cmd, 1, stdout="", stderr="not a git repo")
+
+    monkeypatch.setattr("autoskillit.server._factory.subprocess.run", fake_run)
+    assert _resolve_project_dir() == Path.cwd()

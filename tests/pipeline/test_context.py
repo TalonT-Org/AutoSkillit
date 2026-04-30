@@ -29,13 +29,15 @@ def test_tool_context_fields_accessible(tmp_path):
         gate=DefaultGateState(enabled=True),
         plugin_source=DirectInstall(plugin_dir=tmp_path),
         runner=None,
+        temp_dir=tmp_path / ".autoskillit" / "temp",
+        project_dir=tmp_path,
     )
     assert ctx.gate.enabled is True
     assert isinstance(ctx.plugin_source, DirectInstall)
     assert ctx.plugin_source.plugin_dir == tmp_path
 
 
-def test_tool_context_audit_isolation():
+def test_tool_context_audit_isolation(tmp_path):
     """Two ToolContext instances have independent AuditLog instances."""
     ctx_a = ToolContext(
         config=AutomationConfig(),
@@ -43,8 +45,10 @@ def test_tool_context_audit_isolation():
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=DefaultGateState(),
-        plugin_source=DirectInstall(plugin_dir=Path("/a")),
+        plugin_source=DirectInstall(plugin_dir=tmp_path / "a"),
         runner=None,
+        temp_dir=tmp_path / "a" / ".autoskillit" / "temp",
+        project_dir=tmp_path / "a",
     )
     ctx_b = ToolContext(
         config=AutomationConfig(),
@@ -52,8 +56,10 @@ def test_tool_context_audit_isolation():
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=DefaultGateState(),
-        plugin_source=DirectInstall(plugin_dir=Path("/b")),
+        plugin_source=DirectInstall(plugin_dir=tmp_path / "b"),
         runner=None,
+        temp_dir=tmp_path / "b" / ".autoskillit" / "temp",
+        project_dir=tmp_path / "b",
     )
     ctx_a.audit.record_failure(
         FailureRecord(
@@ -70,7 +76,7 @@ def test_tool_context_audit_isolation():
     assert len(ctx_b.audit.get_report()) == 0
 
 
-def test_gate_state_replacement():
+def test_gate_state_replacement(tmp_path):
     """ToolContext allows gate field replacement via plain assignment."""
     ctx = ToolContext(
         config=AutomationConfig(),
@@ -78,8 +84,10 @@ def test_gate_state_replacement():
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=DefaultGateState(enabled=False),
-        plugin_source=DirectInstall(plugin_dir=Path("/x")),
+        plugin_source=DirectInstall(plugin_dir=tmp_path),
         runner=None,
+        temp_dir=tmp_path / ".autoskillit" / "temp",
+        project_dir=tmp_path,
     )
     assert ctx.gate.enabled is False
     ctx.gate = DefaultGateState(enabled=True)
@@ -96,6 +104,8 @@ def test_toolcontext_new_optional_fields_default_none(tmp_path):
         gate=DefaultGateState(enabled=True),
         plugin_source=DirectInstall(plugin_dir=tmp_path),
         runner=None,
+        temp_dir=tmp_path / ".autoskillit" / "temp",
+        project_dir=tmp_path,
     )
     assert ctx.executor is None
     assert ctx.tester is None
@@ -194,6 +204,8 @@ def _make_ctx(tmp_path: Path) -> ToolContext:
         gate=DefaultGateState(enabled=True),
         plugin_source=DirectInstall(plugin_dir=tmp_path),
         runner=None,
+        temp_dir=tmp_path / ".autoskillit" / "temp",
+        project_dir=tmp_path,
     )
 
 
@@ -245,6 +257,8 @@ async def test_toolcontext_default_background_wired_with_audit(tmp_path):
         gate=DefaultGateState(),
         plugin_source=DirectInstall(plugin_dir=tmp_path),
         runner=None,
+        temp_dir=tmp_path / ".autoskillit" / "temp",
+        project_dir=tmp_path,
     )
     assert isinstance(ctx.background, DefaultBackgroundSupervisor)
 
@@ -311,3 +325,50 @@ def test_toolcontext_has_project_dir_field():
 
     field_names = {f.name for f in dataclasses.fields(ToolContext)}
     assert "project_dir" in field_names
+
+
+# --- Sentinel guard tests ---
+
+
+def test_toolcontext_raises_typeerror_when_temp_dir_unset(tmp_path):
+    with pytest.raises(TypeError, match="temp_dir"):
+        ToolContext(
+            config=AutomationConfig(),
+            audit=DefaultAuditLog(),
+            token_log=DefaultTokenLog(),
+            timing_log=DefaultTimingLog(),
+            gate=DefaultGateState(),
+            plugin_source=DirectInstall(plugin_dir=tmp_path),
+            runner=None,
+            project_dir=tmp_path,
+        )
+
+
+def test_toolcontext_raises_typeerror_when_project_dir_unset(tmp_path):
+    with pytest.raises(TypeError, match="project_dir"):
+        ToolContext(
+            config=AutomationConfig(),
+            audit=DefaultAuditLog(),
+            token_log=DefaultTokenLog(),
+            timing_log=DefaultTimingLog(),
+            gate=DefaultGateState(),
+            plugin_source=DirectInstall(plugin_dir=tmp_path),
+            runner=None,
+            temp_dir=tmp_path / ".autoskillit" / "temp",
+        )
+
+
+def test_toolcontext_accepts_explicit_path_fields(tmp_path):
+    ctx = ToolContext(
+        config=AutomationConfig(),
+        audit=DefaultAuditLog(),
+        token_log=DefaultTokenLog(),
+        timing_log=DefaultTimingLog(),
+        gate=DefaultGateState(),
+        plugin_source=DirectInstall(plugin_dir=tmp_path),
+        runner=None,
+        temp_dir=tmp_path / ".autoskillit" / "temp",
+        project_dir=tmp_path,
+    )
+    assert ctx.temp_dir == tmp_path / ".autoskillit" / "temp"
+    assert ctx.project_dir == tmp_path

@@ -1,7 +1,7 @@
 name: merge-prs
 description: Analyze open PRs, determine merge order, collapse them sequentially into an integration branch, and open a single review PR for human approval. Handles conflict resolution via plan+implement for complex PRs.
 summary: "clone > setup_remote > analyze_prs > create_integration_branch > [loop per PR: merge_pr or (plan > verify > implement > test > push_worktree_branch > create_conflict_pr > wait_for_conflict_ci > merge_conflict_pr)] > push_integration_branch > collect_artifacts > check_impl_plans > (audit_impl?) > open_integration_pr > wait_for_review_pr_mergeability > check_mergeability > (resolve_integration_conflicts > force_push_after_rebase)? > review_pr_integration > (resolve_review_integration > re_push_review_integration)? > ci_watch_pr > cleanup"
-autoskillit_version: "0.9.276"
+autoskillit_version: "0.9.277"
 recipe_version: "1.0.0"
 requires_packs: [github, ci, clone, telemetry]
 

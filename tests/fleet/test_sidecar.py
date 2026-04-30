@@ -8,6 +8,7 @@ from autoskillit.fleet.sidecar import (
     append_sidecar_entry,
     compute_remaining_issues,
     read_sidecar,
+    read_sidecar_from_path,
     sidecar_path,
 )
 
@@ -153,3 +154,26 @@ class TestComputeRemainingIssues:
             )
         remaining = compute_remaining_issues("d15", originals, tmp_path)
         assert remaining == originals[2:]
+
+
+class TestReadSidecarFromPath:
+    def test_nonexistent_parent_returns_empty(self) -> None:
+        result = read_sidecar_from_path(Path("/nonexistent/dir/issues.jsonl"))
+        assert result == []
+
+    def test_valid_jsonl_parsed_correctly(self, tmp_path: Path) -> None:
+        p = tmp_path / "issues.jsonl"
+        lines = [
+            json.dumps({"issue_url": URL1, "status": "completed", "ts": TS}),
+            json.dumps(
+                {"issue_url": URL2, "status": "failed", "reason": "tests failed", "ts": TS}
+            ),
+        ]
+        p.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        entries = read_sidecar_from_path(p)
+
+        assert len(entries) == 2
+        assert all(isinstance(e, IssueSidecarEntry) for e in entries)
+        assert entries[0].issue_url == URL1
+        assert entries[1].issue_url == URL2

@@ -10,12 +10,14 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+import structlog.testing
 
 from autoskillit.fleet import (
     FLEET_HALTED_SENTINEL,
     DispatchRecord,
     DispatchStatus,
     append_dispatch_record,
+    crash_recover_dispatch,
     mark_dispatch_resumable,
     mark_dispatch_running,
     read_all_campaign_captures,
@@ -24,6 +26,7 @@ from autoskillit.fleet import (
     write_captured_values,
     write_initial_state,
 )
+from autoskillit.fleet._api import _write_pid
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -543,3 +546,135 @@ class TestSidecarPathSetOnMarkRunning:
         assert state is not None
         latest = next(d for d in reversed(state.dispatches) if d.name == "impl")
         assert latest.sidecar_path == expected_sidecar
+
+
+class TestAppendDispatchRecordIllegalTransition:
+    def test_success_to_running_raises_valueerror(self, tmp_path: Path) -> None:
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("A"))
+        append_dispatch_record(sp, DispatchRecord(name="A", status=DispatchStatus.SUCCESS))
+        with pytest.raises(ValueError, match="Invalid transition"):
+            append_dispatch_record(sp, DispatchRecord(name="A", status=DispatchStatus.RUNNING))
+        state = read_state(sp)
+        assert state is not None
+        assert state.dispatches[0].status == DispatchStatus.SUCCESS
+
+    def test_pending_to_interrupted_raises_valueerror(self, tmp_path: Path) -> None:
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("A"))
+        with pytest.raises(ValueError, match="Invalid transition"):
+            append_dispatch_record(sp, DispatchRecord(name="A", status=DispatchStatus.INTERRUPTED))
+
+    def test_running_to_success_succeeds(self, tmp_path: Path) -> None:
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("A"))
+        mark_dispatch_running(sp, "A", dispatch_id="d-a", l2_pid=99)
+        append_dispatch_record(sp, DispatchRecord(name="A", status=DispatchStatus.SUCCESS))
+        state = read_state(sp)
+        assert state is not None
+        latest = next(d for d in reversed(state.dispatches) if d.name == "A")
+        assert latest.status == DispatchStatus.SUCCESS
+
+
+class TestResumeSkipsRefusedDispatch:
+    def test_refused_dispatch_skipped_next_is_b(self, tmp_path: Path) -> None:
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("A", "B"))
+        append_dispatch_record(sp, DispatchRecord(name="A", status=DispatchStatus.REFUSED))
+        decision = resume_campaign_from_state(sp, continue_on_failure=True)
+        assert decision is not None
+        assert decision.next_dispatch_name == "B"
+        assert "A" not in decision.completed_dispatches_block
+
+
+class TestResumeSkipsReleasedDispatch:
+    def test_released_dispatch_skipped_next_is_b(self, tmp_path: Path) -> None:
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("A", "B"))
+        append_dispatch_record(sp, DispatchRecord(name="A", status=DispatchStatus.RELEASED))
+        decision = resume_campaign_from_state(sp, continue_on_failure=True)
+        assert decision is not None
+        assert decision.next_dispatch_name == "B"
+        assert "A" not in decision.completed_dispatches_block
+
+
+class TestWriteCapturedValuesCorruptStateNoOp:
+    def test_invalid_json_returns_none_file_unchanged(self, tmp_path: Path) -> None:
+        sp = _state_path(tmp_path)
+        sp.parent.mkdir(parents=True, exist_ok=True)
+        sp.write_text("not-valid-json{{", encoding="utf-8")
+        original = sp.read_text(encoding="utf-8")
+        write_captured_values(sp, {"key": "val"})
+        assert sp.read_text(encoding="utf-8") == original
+
+
+class TestReadAllCampaignCapturesMixedSuccessFailure:
+    def test_mixed_success_failure_returns_empty(self, tmp_path: Path) -> None:
+        d = tmp_path / "dispatches"
+        d.mkdir()
+        state = {
+            "campaign_id": "c1",
+            "captured_values": {"k": "v"},
+            "dispatches": [
+                {"name": "A", "status": DispatchStatus.SUCCESS},
+                {"name": "B", "status": DispatchStatus.FAILURE},
+            ],
+        }
+        (d / "state.json").write_text(json.dumps(state), encoding="utf-8")
+        result = read_all_campaign_captures(d, "c1")
+        assert result == {}
+
+
+class TestCrashRecoverDispatchSidecarVanished:
+    def test_sidecar_oserror_yields_interrupted(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("impl"))
+        sidecar = tmp_path / "sidecar.jsonl"
+        sidecar.write_text('{"issue_url":"x","status":"completed"}\n', encoding="utf-8")
+        mark_dispatch_running(sp, "impl", dispatch_id="d-1", l2_pid=99, sidecar_path=str(sidecar))
+
+        record = read_state(sp).dispatches[0]
+
+        original_read_text = Path.read_text
+
+        def _oserror_read_text(self_path, *a, **kw):
+            if str(self_path) == str(sidecar):
+                raise OSError("TOCTOU race")
+            return original_read_text(self_path, *a, **kw)
+
+        monkeypatch.setattr(Path, "read_text", _oserror_read_text)
+
+        result = crash_recover_dispatch(sp, record)
+        assert result == DispatchStatus.INTERRUPTED
+        assert read_state(sp).dispatches[0].status == DispatchStatus.INTERRUPTED
+
+
+class TestWritePidExceptionSwallow:
+    def test_nonexistent_state_logs_warning(self, tmp_path: Path) -> None:
+        bogus = tmp_path / "nope" / "state.json"
+        with structlog.testing.capture_logs() as logs:
+            _write_pid(bogus, "d1", "id1", 123, 0)
+        assert any(
+            "_write_pid" in entry.get("event", "")
+            for entry in logs
+            if entry.get("log_level") == "warning"
+        )
+
+    def test_runtime_error_logs_warning(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("d1"))
+        monkeypatch.setattr(
+            "autoskillit.fleet.state.mark_dispatch_running",
+            lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom")),
+        )
+        with structlog.testing.capture_logs() as logs:
+            _write_pid(sp, "d1", "id1", 123, 0)
+        assert any(
+            "_write_pid" in entry.get("event", "")
+            for entry in logs
+            if entry.get("log_level") == "warning"
+        )

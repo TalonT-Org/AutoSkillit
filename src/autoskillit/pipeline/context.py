@@ -46,6 +46,7 @@ from autoskillit.core import (
 from autoskillit.pipeline.background import DefaultBackgroundSupervisor
 from autoskillit.pipeline.mcp_response import DefaultMcpResponseLog
 
+# Must-supply-or-raise: fields defaulting to _MISSING are required by __post_init__.
 _MISSING: Any = object()
 
 

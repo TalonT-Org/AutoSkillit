@@ -70,7 +70,7 @@ from autoskillit.workspace import (
 
 logger = get_logger(__name__)
 
-# Sentinel: distinguish "caller passed runner=None explicitly" from "not provided"
+# Optional-override: _UNSET means "not provided, use factory-computed default" (None is valid).
 _UNSET: Any = object()
 
 

@@ -125,6 +125,27 @@ class TestExecuteClaudeHeadlessIdleEnv:
         actual = kwargs.get("idle_output_timeout")
         assert actual is None, f"Expected idle_output_timeout=None when env=0, got {actual!r}"
 
+    @pytest.mark.anyio
+    async def test_idle_output_env_invalid_float_falls_back_to_config(
+        self, minimal_ctx, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.execution.headless import run_headless_core
+
+        monkeypatch.setenv("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", "not-a-number")
+        minimal_ctx.config.run_skill.idle_output_timeout = 45
+
+        runner = MockSubprocessRunner()
+        runner.set_default(_success_result())
+        minimal_ctx.runner = runner
+
+        await run_headless_core(
+            "/autoskillit:some-skill",
+            str(tmp_path),
+            minimal_ctx,
+        )
+        idle = runner.call_args_list[-1][3].get("idle_output_timeout")
+        assert idle == 45.0
+
 
 class TestDispatchFoodTruckIdleEnvInjection:
     @pytest.mark.anyio

@@ -170,6 +170,76 @@ class TestSessionLogDir:
         assert result.exists()
         assert result.is_dir()
 
+    def test_session_log_dir_mkdir_oserror_reraises(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from unittest.mock import Mock
+
+        from autoskillit.execution.headless import _session_log_dir
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "nonexistent_home")
+        monkeypatch.setattr(Path, "mkdir", Mock(side_effect=OSError("disk full")))
+
+        with pytest.raises(OSError, match="disk full"):
+            _session_log_dir(str(tmp_path / "some_project"))
+
+
+class TestRunHeadlessCoreFilesystemWrites:
+    """Tests that fs_writes_detected reflects filesystem changes in the skill temp dir."""
+
+    @pytest.mark.anyio
+    async def test_fs_writes_detected_true_when_file_created(
+        self, minimal_ctx, tmp_path: Path
+    ) -> None:
+        from autoskillit.execution.headless import run_headless_core
+        from tests.fakes import MockSubprocessRunner
+
+        skill_temp = tmp_path / ".autoskillit" / "temp" / "probe"
+        skill_temp.mkdir(parents=True)
+
+        class _FileSideEffectRunner:
+            def __init__(self, inner: MockSubprocessRunner, write_file: Path) -> None:
+                self._inner = inner
+                self._write_file = write_file
+
+            async def __call__(self, cmd, *, cwd, timeout, **kwargs):
+                self._write_file.touch()
+                return await self._inner(cmd, cwd=cwd, timeout=timeout, **kwargs)
+
+        base_runner = MockSubprocessRunner()
+        base_runner.set_default(_sr(0, _success_session_json("done"), ""))
+        minimal_ctx.runner = _FileSideEffectRunner(base_runner, skill_temp / "output.txt")
+
+        result = await run_headless_core(
+            "/autoskillit:probe",
+            str(tmp_path),
+            minimal_ctx,
+        )
+
+        assert result.fs_writes_detected is True
+
+    @pytest.mark.anyio
+    async def test_fs_writes_detected_false_when_no_file_created(
+        self, minimal_ctx, tmp_path: Path
+    ) -> None:
+        from autoskillit.execution.headless import run_headless_core
+        from tests.fakes import MockSubprocessRunner
+
+        skill_temp = tmp_path / ".autoskillit" / "temp" / "probe"
+        skill_temp.mkdir(parents=True)
+
+        runner = MockSubprocessRunner()
+        runner.set_default(_sr(0, _success_session_json("done"), ""))
+        minimal_ctx.runner = runner
+
+        result = await run_headless_core(
+            "/autoskillit:probe",
+            str(tmp_path),
+            minimal_ctx,
+        )
+
+        assert result.fs_writes_detected is False
+
 
 class TestResolveSessionId:
     """Unit tests for _resolve_skill_session_id — the session UUID resolution helper."""

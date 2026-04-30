@@ -549,9 +549,10 @@ def test_server_file_count_under_limit() -> None:
     session-type tag visibility dispatch (3-branch startup logic).
     Limit updated from 20 to 22 after tools_ci.py was split into
     tools_ci_watch.py and tools_ci_merge_queue.py submodules.
+    Limit updated from 22 to 23 after _guards.py was extracted from helpers.py.
     """
     py_files = list((SRC_ROOT / "server").glob("*.py"))
-    assert len(py_files) <= 22, f"server/ has {len(py_files)} files, max is 22"
+    assert len(py_files) <= 23, f"server/ has {len(py_files)} files, max is 23"
 
 
 def test_tools_integrations_replaced_by_split_modules() -> None:
@@ -763,7 +764,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         server/ tests. Exempt at 11 files.
     """
     EXEMPTIONS: dict[str, int] = {
-        "server": 22,
+        "server": 23,
         "recipe": 48,
         "execution": 35,
         "core": 32,

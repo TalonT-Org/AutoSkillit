@@ -130,6 +130,7 @@ def build_ctx(tmp_path):
             plugin_source=DirectInstall(plugin_dir=tmp_path),
             runner=None,
             temp_dir=tmp_path / ".autoskillit" / "temp",
+            project_dir=tmp_path,
         )
         for field_name, value in overrides.items():
             setattr(ctx, field_name, value)

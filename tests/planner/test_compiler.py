@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
+import structlog.testing
 
 from autoskillit.planner.compiler import compile_plan
 from tests.planner.conftest import (
@@ -253,10 +254,15 @@ class TestCompilePlanEdgeCases:
             )
         )
 
-        result = compile_plan(str(tmp_path), "t", "s")
+        with structlog.testing.capture_logs() as logs:
+            result = compile_plan(str(tmp_path), "t", "s")
 
-        assert isinstance(result, dict)
-        assert "plan_path" in result
+        assert {"plan_path", "plan_json_path", "plan_parts"} == result.keys()
+        warning_logs = [e for e in logs if e.get("log_level") == "warning"]
+        assert any(
+            "non-passing" in e.get("event", "") and e.get("verdict") == "fail"
+            for e in warning_logs
+        ), f"expected non-passing warning log, got: {warning_logs}"
 
     def test_wp_references_absent_phase_raises(self, tmp_path: Path) -> None:
         _make_valid_output_dir(tmp_path)

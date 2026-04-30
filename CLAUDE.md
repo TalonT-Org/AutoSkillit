@@ -199,6 +199,8 @@ generic_automation_mcp/
 │   ├── _merge_queue_repo_state.py #  fetch_repo_merge_state, _text_has_push_trigger, _has_merge_group_trigger
 │   ├── github.py            #   GitHub issue fetcher
 │   ├── session.py           #   ClaudeSessionResult, extract_token_usage (facade)
+│   ├── _retry_fsm.py        #   _KILL_ANOMALY_SUBTYPES, _is_kill_anomaly, _compute_retry
+│   ├── _session_outcome.py  #   _compute_success, _compute_outcome
 │   ├── _session_model.py    #   ContentState, ClaudeSessionResult, extract_token_usage, parse_session_result
 │   ├── _session_content.py  #   _check_expected_patterns, _check_session_content, _evaluate_content_state
 │   ├── remote_resolver.py   #   upstream > origin, clone-aware

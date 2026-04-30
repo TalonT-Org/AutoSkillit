@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 import pytest
@@ -51,3 +52,39 @@ class TestWritePidExceptionSwallow:
             for entry in logs
             if entry.get("log_level") == "warning"
         )
+
+
+class TestExecuteDispatchCancelledErrorLockRelease:
+    @pytest.mark.anyio
+    async def test_cancelled_error_propagates_and_releases_lock(
+        self, tool_ctx, monkeypatch
+    ) -> None:
+        from tests.fleet._helpers import _setup_dispatch
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+        fleet_lock = tool_ctx.fleet_lock
+        active_count_at_cancel: list[int] = []
+
+        async def _raise_cancelled(**_kwargs):
+            active_count_at_cancel.append(fleet_lock.active_count)
+            raise asyncio.CancelledError
+
+        monkeypatch.setattr("autoskillit.fleet._api._run_dispatch", _raise_cancelled)
+
+        with pytest.raises(asyncio.CancelledError):
+            from autoskillit.fleet import execute_dispatch
+
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="do something",
+                ingredients=None,
+                dispatch_name="test-dispatch",
+                timeout_sec=None,
+                prompt_builder=lambda *a, **kw: "prompt",
+                quota_checker=lambda *a, **kw: None,
+                quota_refresher=lambda *a, **kw: None,
+            )
+
+        assert active_count_at_cancel == [1], "lock must be held when _run_dispatch is called"
+        assert fleet_lock.active_count == 0

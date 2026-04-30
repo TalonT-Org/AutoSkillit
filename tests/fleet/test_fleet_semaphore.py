@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
-
 import pytest
 
 from autoskillit.core import FleetLock
@@ -79,36 +77,3 @@ class TestFleetSemaphoreConstructorGuard:
     def test_max_concurrent_negative_raises(self) -> None:
         with pytest.raises(ValueError):
             FleetSemaphore(max_concurrent=-1)
-
-
-class TestExecuteDispatchCancelledErrorLockRelease:
-    @pytest.mark.anyio
-    async def test_cancelled_error_propagates_and_releases_lock(
-        self, tool_ctx, monkeypatch
-    ) -> None:
-        from tests.fleet._helpers import _setup_dispatch
-
-        _setup_dispatch(tool_ctx, monkeypatch)
-        fleet_lock = tool_ctx.fleet_lock
-
-        async def _raise_cancelled(**_kwargs):
-            raise asyncio.CancelledError
-
-        monkeypatch.setattr("autoskillit.fleet._api._run_dispatch", _raise_cancelled)
-
-        with pytest.raises(asyncio.CancelledError):
-            from autoskillit.fleet import execute_dispatch
-
-            await execute_dispatch(
-                tool_ctx=tool_ctx,
-                recipe="test-recipe",
-                task="do something",
-                ingredients=None,
-                dispatch_name="test-dispatch",
-                timeout_sec=None,
-                prompt_builder=lambda *a, **kw: "prompt",
-                quota_checker=lambda *a, **kw: None,
-                quota_refresher=lambda *a, **kw: None,
-            )
-
-        assert fleet_lock.active_count == 0

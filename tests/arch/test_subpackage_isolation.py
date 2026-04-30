@@ -550,9 +550,10 @@ def test_server_file_count_under_limit() -> None:
     Limit updated from 20 to 22 after tools_ci.py was split into
     tools_ci_watch.py and tools_ci_merge_queue.py submodules.
     Limit updated from 22 to 23 after _guards.py was extracted from helpers.py.
+    Limit updated from 23 to 24 after _subprocess.py was extracted from helpers.py.
     """
     py_files = list((SRC_ROOT / "server").glob("*.py"))
-    assert len(py_files) <= 23, f"server/ has {len(py_files)} files, max is 23"
+    assert len(py_files) <= 24, f"server/ has {len(py_files)} files, max is 24"
 
 
 def test_tools_integrations_replaced_by_split_modules() -> None:

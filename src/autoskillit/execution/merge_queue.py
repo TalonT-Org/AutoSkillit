@@ -18,6 +18,7 @@ import httpx
 
 from autoskillit.core import PRState, get_logger
 from autoskillit.execution._merge_queue_classifier import (
+    _QUERY_FIELD_MAP,  # noqa: F401 — re-export: tests access merge_queue._QUERY_FIELD_MAP
     KNOWN_MQ_MERGE_STATE_STATUSES,  # noqa: F401 — re-export for callers
     CIStillRunning,
     ClassificationResult,  # noqa: F401 — re-export for callers

@@ -320,7 +320,7 @@ class SkillsDirectoryProvider:
         """Return SKILL.md content with gating frontmatter injected when required.
 
         - gated=True  → ensure disable-model-invocation: true is present
-        - gated=False → return unmodified content (cook session or Tier 1)
+        - gated=False → return unmodified content (cook session or Tier 1 skills)
 
         Substitutes ``{{AUTOSKILLIT_TEMP}}`` with the configured temp dir relpath.
         Tier 1 skills (which contain no placeholder) are unaffected.

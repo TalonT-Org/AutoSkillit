@@ -621,7 +621,7 @@ Write to `{{AUTOSKILLIT_TEMP}}/review-pr/diff_context_{pr_number}.json`:
 
 ```json
 {
-  "pr_number": "{pr_number}",
+  "pr_number": 1234,
   "schema_version": 1,
   "written_at": "{ISO-8601 timestamp}",
   "context_entries": [

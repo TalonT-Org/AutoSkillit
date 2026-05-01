@@ -241,10 +241,10 @@ the Task tool (`model: "sonnet"`).
 
 **Building sub-agent prompts with pre-built context:**
 
-When `diff_context_map` has an entry for `(comment.path, comment.line)`:
+When `diff_context_map.get((comment.path, comment.line))` returns a value:
 ```
 Pre-built code region (from review-pr, ±50 diff lines):
-{diff_context_map[(comment.path, comment.line)]}
+{diff_context_map.get((comment.path, comment.line), "")}
 
 Use the above region for context. Do NOT read the file — the region is already provided.
 Run `git log --follow -p --max-count=5 -- {path}` for history context as usual.
@@ -277,7 +277,7 @@ Initialize `addressed_thread_ids: list[str] = []` before processing findings.
 For each finding where the classification map shows `verdict = ACCEPT`
 (process critical findings first, then warnings):
 
-1. **Context for understanding:** If `diff_context_map[(path, line)]` is present,
+1. **Context for understanding:** If `diff_context_map.get((path, line))` returns a value,
    use the pre-built code_region for initial understanding — skip the ±20 line read.
    The pre-built region is already available from the review-pr handoff.
    If `diff_context_map` has no entry, read the referenced file and ±20 lines of

@@ -40,8 +40,8 @@ a summary verdict. Called by the recipe pipeline after `open_research_pr` opens 
 - Review files outside the PR diff — scope all audit to diff content only
 - Modify any source code
 - Flag the absence of a clear experimental conclusion as a deficiency — inconclusive
-- Run subagents in the background (`run_in_background: true` is prohibited)
   results are valid outcomes for research PRs (do not flag them)
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Find the PR by feature branch at invocation time (not from a pre-captured URL)

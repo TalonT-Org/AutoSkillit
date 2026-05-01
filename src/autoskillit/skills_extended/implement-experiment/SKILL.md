@@ -49,8 +49,8 @@ tokens after the skill name for the first path-like token (starts with `/`,
   (the orchestrator handles full test execution via test_check)
 - Create experiment files outside the planned `research/` subfolder
 - Execute `git merge` commands (all branch content must be applied via
-- Run subagents in the background (`run_in_background: true` is prohibited)
   `git cherry-pick` or `git checkout <branch> -- <file>`)
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Create a new worktree from the current branch

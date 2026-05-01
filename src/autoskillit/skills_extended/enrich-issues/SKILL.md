@@ -229,8 +229,8 @@ After processing all candidates, emit to stdout:
 - Skip the result block — always emit it, even on dry-run or when all issues were
   skipped
 - Use `--body` shell substitution (`--body "$(...)`) for `gh issue edit` — always write to
-- Run subagents in the background (`run_in_background: true` is prohibited)
   `{{AUTOSKILLIT_TEMP}}/enrich-issues/edit_body_{timestamp}.md` and use `--body-file`
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Respect `--dry-run`: never call `gh issue edit` when this flag is set

@@ -136,6 +136,26 @@ If the GraphQL call fails (e.g., token lacks `read:discussion` scope), log a war
 set `comment_id_to_thread_id = {}`. Thread resolution will be silently skipped in Step 6.
 Flag this in the Step 7 report for human review.
 
+**Load Pre-Built Context (if available):**
+
+After saving the raw review responses, check for the handoff file from review-pr:
+
+```bash
+DIFF_CONTEXT_PATH="{{AUTOSKILLIT_TEMP}}/review-pr/diff_context_${PR_NUMBER}.json"
+```
+
+If the file exists:
+- Parse it as JSON
+- Build `diff_context_map: dict[tuple[str, int], str]` where key is `(entry.path, entry.line)`
+  and value is `entry.code_region`
+- Log: `"Loaded pre-built context for N findings from review-pr handoff (schema_version: {v})"`
+
+If the file is absent or cannot be parsed:
+- Set `diff_context_map = {}`
+- Log: `"No pre-built context file found — will read files in Step 3.5 (fallback)"`
+
+This lookup is used in Steps 3.5 and 4 to avoid redundant file reads.
+
 ### Step 3: Parse and Classify Findings
 
 From **inline comments**, extract per comment:
@@ -183,7 +203,12 @@ the Task tool (`model: "sonnet"`).
 
 **Sub-agent prompt template** — each sub-agent receives:
 - The list of comments in its domain group (with `path`, `line`, `body`, `diff_hunk`)
-- Instructions to read the actual code at each flagged line (±30 lines context)
+- Instructions for reading code context: if a pre-built code_region for this finding's
+  `(path, line)` is available in `diff_context_map`, include it directly in the prompt
+  under "Pre-built code region (from review-pr, ±50 diff lines):" and instruct the
+  sub-agent to use it — do **not** instruct it to read the file for context. If
+  `diff_context_map` has no entry for this finding, instruct the sub-agent to read
+  the actual code at the flagged line (±30 lines context) as before.
 - Instructions to run `git log --follow -p --max-count=5 -- {path}` to trace original intent via git history
 - Instructions to classify each comment as `ACCEPT`, `REJECT`, or `DISCUSS` with:
   - `verdict`: the classification (`ACCEPT` / `REJECT` / `DISCUSS`)
@@ -214,6 +239,20 @@ the Task tool (`model: "sonnet"`).
 ]
 ```
 
+**Building sub-agent prompts with pre-built context:**
+
+When `diff_context_map` has an entry for `(comment.path, comment.line)`:
+```
+Pre-built code region (from review-pr, ±50 diff lines):
+{diff_context_map[(comment.path, comment.line)]}
+
+Use the above region for context. Do NOT read the file — the region is already provided.
+Run `git log --follow -p --max-count=5 -- {path}` for history context as usual.
+```
+
+When `diff_context_map` has no entry: fall back to current behavior — instruct the
+sub-agent to read `±30 lines` from the file.
+
 **Fallback:** If a sub-agent fails or times out, classify all comments in that group as
 `DISCUSS` (safe fallback — no code is changed, human reviews). Log the failure including
 the error message, domain group name, and affected comment IDs.
@@ -238,7 +277,12 @@ Initialize `addressed_thread_ids: list[str] = []` before processing findings.
 For each finding where the classification map shows `verdict = ACCEPT`
 (process critical findings first, then warnings):
 
-1. Read the referenced file and ±20 lines of context around the comment line
+1. **Context for understanding:** If `diff_context_map[(path, line)]` is present,
+   use the pre-built code_region for initial understanding — skip the ±20 line read.
+   The pre-built region is already available from the review-pr handoff.
+   If `diff_context_map` has no entry, read the referenced file and ±20 lines of
+   context as before. In both cases, still read the file when actually applying
+   the edit — the pre-built context covers understanding only, not the write.
 2. Understand what the reviewer is requesting
 3. Apply the fix
 4. Stage and commit:

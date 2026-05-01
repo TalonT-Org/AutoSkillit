@@ -597,6 +597,50 @@ These findings target lines not in the diff and could not be posted as inline co
 
 Save findings summary to `{{AUTOSKILLIT_TEMP}}/review-pr/summary_{pr_number}_{timestamp}.md`. (relative to the current working directory)
 
+**Write Diff-Scoped Context Handoff (before emitting verdict):**
+
+After writing the summary file and before emitting the verdict token, write the handoff
+file for resolve-review's pre-built context. This costs zero additional API calls or file
+reads — all data is already in the session's context.
+
+For each finding in `FILTERED_FINDINGS` + `UNPOSTABLE_FINDINGS` where severity is
+`"critical"` or `"warning"`, build a context entry:
+- `path` — the finding's `file` field (the finding schema uses `file`, not `path`;
+  map `finding.file` → `path` in the context entry for resolve-review compatibility)
+- `line` — the finding's line number
+- `severity` — `"critical"` or `"warning"`
+- `dimension` — the audit dimension (arch, tests, bugs, etc.)
+- `message` — the finding's message text
+- `code_region` — extract from `ANNOTATED_DIFF`: find the file's section in the
+  annotated diff (between its `diff --git` header and the next), then collect all
+  lines whose `[LX]` marker has X within ±50 of the finding's `line`. Include those
+  raw annotated-diff lines as-is. If ANNOTATED_DIFF is empty or the file section is
+  not found, set `code_region` to `""`.
+
+Write to `{{AUTOSKILLIT_TEMP}}/review-pr/diff_context_{pr_number}.json`:
+
+```json
+{
+  "pr_number": "{pr_number}",
+  "schema_version": 1,
+  "written_at": "{ISO-8601 timestamp}",
+  "context_entries": [
+    {
+      "path": "src/autoskillit/execution/headless.py",
+      "line": 42,
+      "severity": "critical",
+      "dimension": "arch",
+      "message": "...",
+      "code_region": "[L40] ...\n[L41] ...\n[L42] ..."
+    }
+  ]
+}
+```
+
+Log: `"Wrote diff-scoped context handoff: N entries → {path}"`. If the write fails
+(e.g., temp dir unavailable), log a warning and continue — the handoff file is
+best-effort and its absence is handled gracefully by resolve-review.
+
 Output the verdict as the final line:
 
 > **IMPORTANT:** Emit the structured output tokens as **literal plain text with no

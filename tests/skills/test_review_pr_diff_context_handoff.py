@@ -1,17 +1,26 @@
 """Guards: review-pr writes diff_context handoff file in Step 8 before verdict emission."""
+
 from pathlib import Path
 
 SKILL_PATH = (
     Path(__file__).parent.parent.parent
-    / "src" / "autoskillit" / "skills_extended" / "review-pr" / "SKILL.md"
+    / "src"
+    / "autoskillit"
+    / "skills_extended"
+    / "review-pr"
+    / "SKILL.md"
 )
-SKILL_TEXT = SKILL_PATH.read_text()
+
+
+def _skill_text() -> str:
+    return SKILL_PATH.read_text()
 
 
 def _step8_section() -> str:
-    start = SKILL_TEXT.find("### Step 8")
+    text = _skill_text()
+    start = text.find("### Step 8")
     # Step 8 is the last step; take to end of file
-    return SKILL_TEXT[start:]
+    return text[start:]
 
 
 def test_step8_writes_diff_context_file():
@@ -54,9 +63,7 @@ def test_handoff_write_precedes_verdict_emission():
     verdict_pos = section.find("verdict = ")
     assert write_pos != -1, "diff_context not found in Step 8"
     assert verdict_pos != -1, "verdict = not found in Step 8"
-    assert write_pos < verdict_pos, (
-        "diff_context write must precede verdict = emission"
-    )
+    assert write_pos < verdict_pos, "diff_context write must precede verdict = emission"
 
 
 def test_diff_context_covers_critical_and_warning():

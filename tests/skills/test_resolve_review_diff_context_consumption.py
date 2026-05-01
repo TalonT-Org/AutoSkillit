@@ -1,29 +1,40 @@
 """Guards: resolve-review loads and uses diff_context handoff file from review-pr."""
+
 from pathlib import Path
 
 SKILL_PATH = (
     Path(__file__).parent.parent.parent
-    / "src" / "autoskillit" / "skills_extended" / "resolve-review" / "SKILL.md"
+    / "src"
+    / "autoskillit"
+    / "skills_extended"
+    / "resolve-review"
+    / "SKILL.md"
 )
-SKILL_TEXT = SKILL_PATH.read_text()
+
+
+def _skill_text() -> str:
+    return SKILL_PATH.read_text()
 
 
 def _step2_section() -> str:
-    start = SKILL_TEXT.find("### Step 2")
-    end = SKILL_TEXT.find("### Step 3", start)
-    return SKILL_TEXT[start:end]
+    text = _skill_text()
+    start = text.find("### Step 2")
+    end = text.find("### Step 3", start)
+    return text[start:end]
 
 
 def _step35_section() -> str:
-    start = SKILL_TEXT.find("### Step 3.5")
-    end = SKILL_TEXT.find("### Step 4", start)
-    return SKILL_TEXT[start:end]
+    text = _skill_text()
+    start = text.find("### Step 3.5")
+    end = text.find("### Step 4", start)
+    return text[start:end]
 
 
 def _step4_section() -> str:
-    start = SKILL_TEXT.find("### Step 4")
-    end = SKILL_TEXT.find("### Step 5", start)
-    return SKILL_TEXT[start:end]
+    text = _skill_text()
+    start = text.find("### Step 4")
+    end = text.find("### Step 5", start)
+    return text[start:end]
 
 
 def test_step2_checks_for_diff_context_file():
@@ -83,5 +94,5 @@ def test_step4_still_reads_file_for_editing():
 
 def test_diff_context_path_matches_review_pr_output_path():
     """resolve-review's diff_context path must match what review-pr writes."""
-    full = SKILL_TEXT
+    full = _skill_text()
     assert "review-pr/diff_context" in full

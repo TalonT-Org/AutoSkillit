@@ -320,10 +320,10 @@ class SkillsDirectoryProvider:
         """Return SKILL.md content with gating frontmatter injected when required.
 
         - gated=True  → ensure disable-model-invocation: true is present
-        - gated=False → return unmodified content (cook session or Tier 1)
+        - gated=False → return unmodified content (cook session or Tier 1 skill-access tier)
 
         Substitutes ``{{AUTOSKILLIT_TEMP}}`` with the configured temp dir relpath.
-        Tier 1 skills (which contain no placeholder) are unaffected.
+        Tier 1 skill-access tier skills (which contain no placeholder) are unaffected.
         """
         skill_info = self._resolver.resolve(name)
         if skill_info is None:
@@ -365,7 +365,7 @@ class DefaultSessionSkillManager:
         """Create ephemeral skill dir for session_id.
 
         Returns path to the created skills directory.
-        For non-cook sessions, Tier 2 skills (from config.skills.tier2) get
+        For non-cook sessions, Tier 2 skill-access tier skills (from config.skills.tier2) get
         disable-model-invocation injected. Unknown skill names in config are
         logged as warnings and ignored.
         """

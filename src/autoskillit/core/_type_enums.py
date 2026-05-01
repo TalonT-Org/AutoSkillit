@@ -335,11 +335,21 @@ class PRState(StrEnum):
 
 
 class SessionType(StrEnum):
-    """Tier discriminator for fleet session hierarchy.
+    """Orchestration level discriminator for the session hierarchy.
 
-    FLEET — top-level campaign coordinator
-    ORCHESTRATOR — mid-tier recipe runner (interactive or headless)
-    LEAF — bottom-tier single-task worker (headless test_check only)
+    Each level can only call the level directly below it:
+
+        L3 (FLEET) -> L2 (ORCHESTRATOR) -> L1 (headless worker) -> L0 (subagent)
+
+    FLEET        -- L3: top-level campaign dispatcher.
+                    Launches L2 food trucks via dispatch_food_truck.
+    ORCHESTRATOR -- L2: recipe runner (interactive via order, or headless food truck).
+                    Launches L1 headless workers via run_skill.
+    LEAF         -- L1 headless worker (or L0 subagent -- both are terminal from
+                    AutoSkillit's perspective since neither can call run_skill).
+
+    Note: interactive L1 sessions (autoskillit cook, bare Claude Code) have no
+    SessionType value -- they bypass tier checks because AUTOSKILLIT_HEADLESS is unset.
     """
 
     FLEET = "fleet"

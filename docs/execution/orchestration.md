@@ -1,18 +1,21 @@
 # Orchestration
 
-How AutoSkillit routes work between the Tier 1 orchestrator and the Tier 2/3
+> **See also:** [`docs/orchestration-levels.md`](../orchestration-levels.md) for
+> the formal definition of the L0–L3 orchestration hierarchy.
+
+How AutoSkillit routes work between the **L2** orchestrator and the **L1**
 worker sessions, what the orchestrator does on every retry verdict, and how
 the merge pipeline decides whether a worktree is ready to land.
 
-## Two-tier model
+## Multi-level orchestration model
 
 AutoSkillit splits agent execution into two layers:
 
-- **Tier 1 — orchestrator.** A Claude Code session running the
+- **L2 — orchestrator.** A Claude Code session running the
   `autoskillit order` CLI command, with the kitchen pre-opened. Sees all 42
   MCP tools, spawns headless workers, and routes verdicts. Never reads or
   writes code itself.
-- **Tier 2/3 — worker.** A headless Claude session launched by `run_skill`.
+- **L1 — worker.** A headless Claude session launched by `run_skill`.
   Sees the 2 free range tools plus `test_check` (the only `headless`-tagged
   tool). Cannot call `run_skill`, `run_cmd`, or `run_python`.
 

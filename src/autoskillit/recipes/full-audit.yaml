@@ -4,7 +4,7 @@ description: >-
   parallel, validate each report individually, and create a GitHub issue from each
   validated report.
 summary: "branch → audit×5 ∥ → validate×5 ∥ → issue×5 ∥ → done"
-autoskillit_version: "0.9.287"
+autoskillit_version: "0.9.288"
 recipe_version: "1.0.0"
 requires_packs: [audit, github]
 

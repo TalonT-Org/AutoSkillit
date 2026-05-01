@@ -35,6 +35,7 @@ Elaborate a single phase from a high-level migration plan into a complete, self-
 - Elaborate multiple phases at once - one phase per invocation
 - Make assumptions about codebase state without verifying
 - Read previous `Phase#.md` files unless you have a specific question that requires looking up a detail
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Assess current codebase state with subagents FIRST

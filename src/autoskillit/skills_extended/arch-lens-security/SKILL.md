@@ -31,6 +31,7 @@ hooks:
 - Modify any source code files
 - Expose actual secrets or credentials
 - Show implementation details that could aid attacks
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Focus on TRUST BOUNDARIES

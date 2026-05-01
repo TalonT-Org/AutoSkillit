@@ -36,6 +36,7 @@ Does NOT invoke any exp-lens skills or create a PR.
 - Invoke exp-lens skills — they are run in separate sessions by the recipe orchestrator
 - Create files outside `{{AUTOSKILLIT_TEMP}}/prepare-research-pr/` (relative to the current working directory)
 - Fail silently — always emit all three output tokens as your final output
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use Agent subagents (not slash commands) for reading and synthesis

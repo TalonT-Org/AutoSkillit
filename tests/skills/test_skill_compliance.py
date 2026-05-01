@@ -351,3 +351,42 @@ For each issue in the batch (process sequentially):
 """
     violations = _check_loop_boundary(vulnerable_pattern)
     assert len(violations) >= 1, "Detector failed to catch unguarded MCP loop"
+
+
+# Detects skills that instruct Agent/Task subagent spawning.
+# Any such skill MUST contain the run_in_background prohibition.
+_SPAWN_INDICATOR_RE = re.compile(
+    r"Task tool|Explore subagent"
+    r"|spawn.*subagent|subagent.*spawn|launch.*subagent"
+    r"|parallel.*subagent|subagent.*parallel",
+    re.IGNORECASE,
+)
+_BACKGROUND_PROHIBITION_RE = re.compile(r"run_in_background.*prohibited", re.IGNORECASE)
+
+# Skills whose SKILL.md mentions subagents only in a negative/prohibitive context
+# (e.g., "rather than spawning subagents", "do not spawn subagents"). The spawn
+# indicator regex matches these descriptively — they are not spawning skills.
+_NON_SPAWNING_SKILL_DIRS: frozenset[str] = frozenset(
+    {
+        "report-bug",  # "rather than spawning parallel subagents" — describes non-spawning
+        "issue-splitter",  # "do not spawn subagents" — prohibits spawning inline
+    }
+)
+
+
+@pytest.mark.parametrize("skill_dir", _all_skill_dirs(), ids=lambda p: p.name)
+def test_no_background_subagent_in_spawning_skills(skill_dir: Path) -> None:
+    if skill_dir.name in _NON_SPAWNING_SKILL_DIRS:
+        return  # Skill mentions subagents only descriptively/negatively — rule does not apply.
+    skill_md = skill_dir / "SKILL.md"
+    if not skill_md.exists():
+        return
+    content = skill_md.read_text(encoding="utf-8")
+    if not _SPAWN_INDICATOR_RE.search(content):
+        return  # Skill does not spawn subagents — rule does not apply.
+    assert _BACKGROUND_PROHIBITION_RE.search(content), (
+        f"{skill_dir.name}/SKILL.md contains subagent-spawning instructions "
+        "but lacks the background-execution prohibition. "
+        "Add to its NEVER block: "
+        "'- Run subagents in the background (`run_in_background: true` is prohibited)'"
+    )

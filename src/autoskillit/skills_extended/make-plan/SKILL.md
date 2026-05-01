@@ -203,6 +203,7 @@ Before writing the final plan, verify:
 - Reject an approach because it's harder
 - Create files outside `{{AUTOSKILLIT_TEMP}}/make-plan/` directory
 - **Use `git merge` in implementation plans.** When a plan needs to bring in changes from another branch, use `git cherry-pick <commit>` for individual commits or `git checkout <branch> -- <file>` for specific files. `merge_worktree` requires linear commit history — merge commits cannot be rebased and will cause `WORKTREE_INTACT_MERGE_COMMITS_DETECTED` failure. See "Conflict-Resolution Plan Requirements" section for full guidance.
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Write to `{{AUTOSKILLIT_TEMP}}/make-plan/` directory (relative to the current working directory)

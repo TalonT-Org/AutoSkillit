@@ -44,6 +44,7 @@ Bounded by `retries: 2` — on exhaustion routes to `research_complete`.
 - Delete or discard the working directory on failure
 - Modify tests to suppress failures introduced by reviewer fixes
 - Use file-path-segment grouping — research comments are grouped by **dimension**, not by file path
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Find the PR by feature branch at invocation time (not a hardcoded number)

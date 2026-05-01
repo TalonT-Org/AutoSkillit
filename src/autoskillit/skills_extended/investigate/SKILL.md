@@ -73,6 +73,7 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 - Create files outside `{{AUTOSKILLIT_TEMP}}/investigate/` directory
 - Choose or accept approaches, solutions, and/or fixes that are chosen simply because they are easier
 - File GitHub issues automatically (issue filing is always a separate, user-directed action)
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use subagents for parallel exploration

@@ -38,6 +38,7 @@ MCP-only — not user-invocable directly.
 - Create files outside `{{AUTOSKILLIT_TEMP}}/resolve-design-review/`
 - Modify the evaluation dashboard, experiment plan, or any source file
 - Apply fixes — this skill triages fixability only
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Exit 0 in all cases — resolution=revised and resolution=failed are both normal outcomes

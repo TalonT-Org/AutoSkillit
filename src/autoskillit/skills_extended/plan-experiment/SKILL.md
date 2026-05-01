@@ -53,6 +53,7 @@ incorporate the feedback before writing the plan.
   environment is needed or not, and why
 - Omit YAML frontmatter unless a V1–V4 ERROR is triggered — every plan must have frontmatter
 - Write frontmatter after the `# Experiment Plan:` heading — it always goes BEFORE
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool

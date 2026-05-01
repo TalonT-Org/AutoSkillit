@@ -39,6 +39,7 @@ by the recipe pipeline after `open_pr_step` opens the PR.
 - Post review comments when `gh` is unavailable — output `verdict=approved` and exit 0
 - Review files outside the PR diff — scope all audit to diff content only
 - Modify any source code
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Find the PR by feature branch at invocation time (not from a pre-captured URL)

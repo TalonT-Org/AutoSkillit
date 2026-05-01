@@ -46,6 +46,7 @@ compute on doomed downloads.
 - Modify any source files
 - Write files outside `{{AUTOSKILLIT_TEMP}}/stage-data/`
 - Emit a WARN or FAIL verdict without a specific, actionable explanation
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Read the `data_manifest` frontmatter section of the experiment plan

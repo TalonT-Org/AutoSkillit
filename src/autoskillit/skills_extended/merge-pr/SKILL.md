@@ -39,6 +39,7 @@ conflicts from earlier merges in the queue.
 - Close or comment on the PR
 - Leave the git working tree in a dirty state
 - Create files outside `{{AUTOSKILLIT_TEMP}}/merge-prs/` directory
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Run `git status` before any operation to verify clean state

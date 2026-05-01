@@ -29,6 +29,7 @@ Audit the codebase for internal cohesion: how well components integrate and main
 - Modify any source code files
 - Update an existing report — always generate new
 - Duplicate findings that belong in audit-arch (rule violations)
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use subagents for parallel exploration (one per cohesion dimension)

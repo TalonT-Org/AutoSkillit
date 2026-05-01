@@ -31,6 +31,7 @@ hooks:
 - Modify any source code files
 - Conflate with general process flow (that's a different lens)
 - Ignore thread safety implications
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Focus on PARALLEL execution specifically

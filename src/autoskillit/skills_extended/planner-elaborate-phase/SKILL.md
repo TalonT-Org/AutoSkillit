@@ -39,6 +39,7 @@ independently and writes a single elaborated phase result. No dependency on
 - Communicate with other parallel worker instances
 - Read `{{AUTOSKILLIT_TEMP}}` artifacts outside your designated input files and output directory
 - Explore parent directories of your input paths (e.g., `ls $(dirname $1)/..`)
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Derive `relationship_notes` from snapshot context + codebase analysis, NOT from prior result files

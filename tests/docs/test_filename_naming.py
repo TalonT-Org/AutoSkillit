@@ -15,7 +15,12 @@ KEBAB_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*\.md$")
 # Files allow-listed against specific rules. Each entry: rule -> {filenames}.
 ALLOWLIST = {
     "ing_suffix": {"getting-started.md", "contributing.md", "authoring.md"},
-    "segment_count": {"getting-started.md", "end-turn-hazards.md", "research-pipeline.md"},
+    "segment_count": {
+        "getting-started.md",
+        "end-turn-hazards.md",
+        "research-pipeline.md",
+        "0001-prohibit-background-subagent-execution.md",
+    },
 }
 
 # overrides.md is a list-like file (collection of override sites) and is exempt;

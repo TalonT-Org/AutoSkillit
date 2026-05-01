@@ -43,6 +43,7 @@ best available plan.
 - Exit non-zero — GO, REVISE, and STOP are all normal outcomes (exit 0 in all cases)
 - Include code snippets, shell commands, or specific tool invocations in findings or revision guidance — findings describe gaps and risks, not implementation instructions
 - Prescribe HOW to fix an issue — findings must describe WHAT is lacking or at risk; the fix is the plan author's responsibility
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool

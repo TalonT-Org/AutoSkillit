@@ -43,6 +43,7 @@ hooks:
 - Modify any source code files
 - Assume comparability without tracing its source
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-randomization-blocking/`
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Trace the exact mechanism that creates comparability between treatment groups

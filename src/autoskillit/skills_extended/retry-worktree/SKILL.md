@@ -42,6 +42,7 @@ Continue implementing a plan in an **existing** git worktree. This skill is used
 - Re-run tests just to see failures — grep the saved output file instead
 - Pipe test output through `tail`, `head`, or other truncation commands — `tail -N` buffers the entire stream and produces no output if the process is killed before EOF
 - Default to `main` as the base branch — always discover it from git's upstream structure or the explicit base-branch store file
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use the provided worktree path (do NOT create a new one)

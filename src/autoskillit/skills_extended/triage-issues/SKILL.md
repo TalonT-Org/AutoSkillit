@@ -34,6 +34,7 @@ Analyze open GitHub issues, classify each into a recipe route, group them into p
 - Create files outside `{{AUTOSKILLIT_TEMP}}/triage-issues/` directory
 - Use `--body` shell substitution (`--body "$(...)`) for `gh issue edit` — always write to
   `{{AUTOSKILLIT_TEMP}}/triage-issues/edit_body_{timestamp}.md` and use `--body-file`
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool

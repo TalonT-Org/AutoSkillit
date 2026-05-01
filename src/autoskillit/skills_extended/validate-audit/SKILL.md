@@ -46,6 +46,7 @@ subagents. Contested findings are separated into their own file. The validated r
 - Write output files before synthesizing ALL subagent results
 - Subagents must NOT create their own files — they return findings in response text only
 - Do NOT include VALID BUT EXCEPTION WARRANTED findings in the validated report body — they belong in the validation summary only
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool

@@ -45,6 +45,7 @@ suggestions, resolves conflicts, and writes `refined_wps.json`.
 - Spawn more than 6 L0s in a single parallel batch
 - Spawn one L0 per WP — L0s operate per PHASE
 - Read `{{AUTOSKILLIT_TEMP}}` artifacts not passed as positional arguments
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Spawn one L0 per phase (NOT per WP) — each L0 reviews ALL WPs in its phase against the full WP set

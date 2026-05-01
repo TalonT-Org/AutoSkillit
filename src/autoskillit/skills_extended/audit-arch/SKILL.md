@@ -24,6 +24,7 @@ Audit the codebase for adherence to architectural standards and rules.
 **NEVER:**
 - Modify any source code files
 - Update an existing report - always generate new
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use subagents for parallel exploration

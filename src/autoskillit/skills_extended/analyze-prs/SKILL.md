@@ -28,6 +28,7 @@ complexity, and produce machine-readable output for the `merge-prs` recipe.
 - Merge, close, or modify any PR
 - Modify any source code files
 - Create files outside `{{AUTOSKILLIT_TEMP}}/merge-prs/` directory
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use subagents to fetch PR data in parallel

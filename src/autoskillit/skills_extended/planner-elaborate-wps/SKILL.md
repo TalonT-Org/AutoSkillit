@@ -34,6 +34,7 @@ is the sole writer for this phase's WPs — no concurrent write races.
 - Read `{{AUTOSKILLIT_TEMP}}` artifacts outside your designated input files and output directory
 - Explore parent directories of your input paths (e.g., `ls $(dirname $1)/..`)
 - Read result files from other phases
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Spawn all L0 subagents in parallel using the native Agent/Task tool (NOT run_skill — leaf guard blocks it)

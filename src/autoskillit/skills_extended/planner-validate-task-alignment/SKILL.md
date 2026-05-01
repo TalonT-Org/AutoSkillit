@@ -31,6 +31,7 @@ zero findings.
 - Write output outside `$3/`
 - Read files not passed as arguments
 - Modify input files
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Read the `task` field from $1 or $2

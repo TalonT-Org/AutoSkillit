@@ -42,6 +42,7 @@ hooks:
 **NEVER:**
 - Modify any source code files
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-validity-threats/`
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Apply Campbell & Stanley's full threat taxonomy — do not skip threats just because they seem unlikely

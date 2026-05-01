@@ -50,6 +50,7 @@ PR, and output `pr_url=<url>`.
 - Modify any source code
 - Fail the pipeline if `gh` is unavailable or not authenticated — output `pr_url=` (empty) and exit successfully
 - Close original PRs before the integration PR is successfully created
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Check `gh auth status` before attempting any GitHub operations

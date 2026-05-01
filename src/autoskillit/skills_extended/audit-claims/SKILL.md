@@ -46,6 +46,7 @@ comments and emits a verdict for recipe routing.
 - Modify any source code
 - Run deterministic diff annotation (claim positions are report-level, not line-level)
 - Generate findings for `experimental` claims — they are self-evidencing by definition
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use the explicit `pr_url` argument instead of re-discovering via `gh pr list`

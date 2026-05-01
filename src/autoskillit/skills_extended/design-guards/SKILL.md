@@ -30,6 +30,7 @@ Path to a bug pattern audit report (typically under `{{AUTOSKILLIT_TEMP}}/audit-
 - Modify any source code files
 - Propose bandaid fixes or direct-only patches
 - Create files outside `{{AUTOSKILLIT_TEMP}}/design-guards/` directory
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use subagents for parallel codebase exploration

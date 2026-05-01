@@ -8,12 +8,14 @@ Facade: re-exports from _merge_queue_classifier and _merge_queue_repo_state.
 from __future__ import annotations
 
 import asyncio
+import json
+import os
 import random  # noqa: F401 — re-exported for test monkeypatching (_mq.random.uniform)
 import re
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, assert_never
+from typing import TYPE_CHECKING, Any, assert_never, cast
 
 import httpx
 
@@ -29,6 +31,7 @@ from autoskillit.execution._merge_queue_classifier import (
     _classify_pr_state,
     _is_not_enrolled,  # noqa: F401 — re-export for callers
     _is_positive_dropped_healthy,  # noqa: F401 — re-export for callers
+    _is_positive_dropped_merge_group_ci,  # noqa: F401 — re-export for callers
     _is_positive_stall,  # noqa: F401 — re-export for callers
 )
 from autoskillit.execution._merge_queue_repo_state import (
@@ -49,6 +52,53 @@ if TYPE_CHECKING:
     from autoskillit.core._type_protocols_logging import GitHubApiLog
 
 logger = get_logger(__name__)
+
+
+async def _query_merge_group_ci(
+    repo: str,
+    pr_number: int,
+    base_branch: str,
+    github_token: str | None,
+) -> str | None:
+    """Query the most recent workflow run on the merge-group ref for this PR.
+
+    Uses `gh run list` with branch prefix matching for the gh-readonly-queue ref.
+    Returns 'SUCCESS', 'FAILURE', 'ERROR', or None (not found / still running).
+    Never raises.
+    """
+    branch_prefix = f"gh-readonly-queue/{base_branch}/pr-{pr_number}-"
+    env = {**os.environ}
+    if github_token:
+        env["GH_TOKEN"] = github_token
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "gh",
+            "run",
+            "list",
+            "--repo",
+            repo,
+            "--json",
+            "conclusion,headBranch",
+            "--limit",
+            "10",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=env,
+        )
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=15)
+        runs: list[dict[str, str]] = json.loads(stdout.decode())
+        for run in runs:
+            if run.get("headBranch", "").startswith(branch_prefix):
+                conclusion = run.get("conclusion", "")
+                if conclusion in ("failure", "cancelled", "timed_out", "action_required"):
+                    return "FAILURE"
+                if conclusion == "success":
+                    return "SUCCESS"
+        return None
+    except Exception:
+        logger.warning("_query_merge_group_ci failed", exc_info=True)
+        return None
+
 
 _QUERY = """
 query GetPRAndQueueState($owner: String!, $repo: String!, $prNumber: Int!, $branch: String!) {
@@ -189,6 +239,8 @@ class DefaultMergeQueueWatcher:
         not_in_queue_cycles: int = 0
         inconclusive_count: int = 0
         ever_enrolled: bool = False
+        was_in_queue: bool = False
+        merge_group_ci_cache: str | None = None
 
         def _make_result(
             success: bool, pr_state: PRState, reason: str, ejection_cause: str = ""
@@ -217,6 +269,8 @@ class DefaultMergeQueueWatcher:
                 ever_enrolled = True
 
             if state["in_queue"]:
+                was_in_queue = True
+                merge_group_ci_cache = None
                 not_in_queue_cycles = 0
                 inconclusive_count = 0
                 if state["queue_state"] == "UNMERGEABLE":
@@ -225,6 +279,17 @@ class DefaultMergeQueueWatcher:
                 continue
 
             not_in_queue_cycles += 1
+
+            if was_in_queue and state["checks_state"] not in ("FAILURE", "ERROR"):
+                merge_group_ci_cache = await _query_merge_group_ci(
+                    repo=repo,
+                    pr_number=pr_number,
+                    base_branch=target_branch,
+                    github_token=None,
+                )
+            was_in_queue = False
+            if merge_group_ci_cache is not None:
+                state = cast(PRFetchState, {**state, "merge_group_checks_state": merge_group_ci_cache})
 
             try:
                 classification = _classify_pr_state(state, ever_enrolled=ever_enrolled)
@@ -307,6 +372,9 @@ class DefaultMergeQueueWatcher:
             elif classification.terminal == PRState.DROPPED_HEALTHY:
                 return _make_result(False, PRState.DROPPED_HEALTHY, classification.reason)
 
+            elif classification.terminal == PRState.DROPPED_MERGE_GROUP_CI:
+                return _make_result(False, PRState.DROPPED_MERGE_GROUP_CI, classification.reason)
+
             elif classification.terminal == PRState.NOT_ENROLLED:
                 return _make_result(False, PRState.NOT_ENROLLED, classification.reason)
 
@@ -379,6 +447,7 @@ class DefaultMergeQueueWatcher:
             in_queue=queue_entry is not None,
             queue_state=queue_entry["state"] if queue_entry else None,
             checks_state=checks_state,
+            merge_group_checks_state=None,
         )
 
     async def toggle(

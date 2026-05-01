@@ -88,18 +88,31 @@ def test_no_bare_import_layer_labels_in_src() -> None:
         rel = py_file.relative_to(src_root)
         rel_str = rel.as_posix()
 
-        # Skip orchestration-level fleet files and test files
-        if any(rel_str.endswith(skip) for skip in _SKIP_PATHS):
-            continue
-        if rel_str.startswith("tests/"):
+        if rel_str in _SKIP_PATHS:
             continue
 
         source = py_file.read_text()
-        # Only scan docstrings and comments, not string literals in code
+        in_triple_double = False
+        in_triple_single = False
         for lineno, line in enumerate(source.splitlines(), 1):
             stripped = line.strip()
-            # Check comment lines and lines that are part of docstrings
-            if stripped.startswith("#") or '"""' in stripped or stripped.startswith("'"):
+            # Track multi-line docstring state so body lines are also checked
+            if not in_triple_single and '"""' in stripped:
+                # Count unescaped occurrences to determine open/close toggle
+                count = stripped.count('"""')
+                if count % 2 == 1:
+                    in_triple_double = not in_triple_double
+            elif not in_triple_double and "'''" in stripped:
+                count = stripped.count("'''")
+                if count % 2 == 1:
+                    in_triple_single = not in_triple_single
+            inside_docstring = in_triple_double or in_triple_single
+            if (
+                stripped.startswith("#")
+                or '"""' in stripped
+                or stripped.startswith("'")
+                or inside_docstring
+            ):
                 if _IMPORT_LAYER_PATTERNS.search(line):
                     violations.append(f"{rel_str}:{lineno}: {stripped!r}")
 

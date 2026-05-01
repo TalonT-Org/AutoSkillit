@@ -1181,7 +1181,8 @@ def test_wait_for_queue_dropped_healthy_routes_through_circuit_breaker(
     assert cb_step.on_result is not None
     ok_routes = [c for c in cb_step.on_result.conditions if c.when is None]
     assert ok_routes and ok_routes[0].route == "reenter_merge_queue_cheap", (
-        f"{recipe_fixture}: check_dropped_healthy_loop fallthrough must route to reenter_merge_queue_cheap"
+        f"{recipe_fixture}: check_dropped_healthy_loop fallthrough must route to"
+        " reenter_merge_queue_cheap"
     )
 
 

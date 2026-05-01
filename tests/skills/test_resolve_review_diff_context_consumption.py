@@ -63,7 +63,7 @@ def test_step2_fallback_when_file_absent():
 def test_step35_uses_prebuilt_code_region():
     """Step 3.5 sub-agent prompt must use pre-loaded code_region when available."""
     section = _step35_section()
-    assert "diff_context_map" in section or "code_region" in section
+    assert "diff_context_map" in section
 
 
 def test_step35_skips_file_read_when_context_available():

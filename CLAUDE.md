@@ -408,6 +408,11 @@ generic_automation_mcp/
 
 **CRITICAL**: When using subagents, invoke with `CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=120000` to ensure subagents exit when finished.
 
+**Import layer vs. orchestration level:** Module docstrings and import-linter
+contracts use IL-N labels (IL-001–IL-009 in `pyproject.toml`) for the import
+dependency hierarchy — these are separate from the L0–L3 orchestration levels
+defined in `docs/orchestration-levels.md`.
+
 ## 7. Session Diagnostics
 
 **Path components use hyphens, not underscores.** Log directory names and session folder names are hyphen-separated. Never assume underscores when constructing or searching for log paths — hyphen mismatch causes ENOENT (session f9170655 pattern).

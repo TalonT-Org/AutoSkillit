@@ -5,8 +5,8 @@ must use IL-0/IL-1/IL-2/IL-3 for import-layer annotations.  This test
 scans src/autoskillit/ Python files for the patterns that indicate an
 import-layer usage and fails if any bare L-number labels remain.
 """
+
 import re
-from pathlib import Path
 
 import pytest
 

@@ -113,16 +113,10 @@ def _is_positive_dropped_healthy(state: PRFetchState, *, ever_enrolled: bool) ->
 
 
 def _is_positive_dropped_merge_group_ci(state: PRFetchState, *, ever_enrolled: bool) -> bool:
-    """True when the PR was dropped from the queue and merge-group CI is confirmed failed.
-
-    Extends `_is_positive_dropped_healthy` as its first conjunct — all preconditions of
-    that predicate (including `checks_state in (None, 'SUCCESS')`) are inherited here.
-    `_query_merge_group_ci` never returns 'ERROR', so this checks only 'FAILURE'.
-    """
-    return (
-        _is_positive_dropped_healthy(state, ever_enrolled=ever_enrolled)
-        and state["merge_group_checks_state"] == "FAILURE"
-    )
+    """True when PR dropped from queue with CI failure; extends _is_positive_dropped_healthy."""
+    return _is_positive_dropped_healthy(state, ever_enrolled=ever_enrolled) and state[
+        "merge_group_checks_state"
+    ] in ("FAILURE", "ERROR")
 
 
 def _is_not_enrolled(state: PRFetchState, *, ever_enrolled: bool) -> bool:

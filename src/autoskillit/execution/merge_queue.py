@@ -179,7 +179,16 @@ class DefaultMergeQueueWatcher:
                     base_branch=target_branch,
                     github_token=None,
                 )
-            was_in_queue = False
+                # Only stop retrying once we have a result or the confirmation window expires.
+                # If _query_merge_group_ci returns None (run not yet visible), we keep
+                # was_in_queue=True to retry on the next poll cycle.
+                if (
+                    merge_group_ci_cache is not None
+                    or not_in_queue_cycles >= not_in_queue_confirmation_cycles
+                ):
+                    was_in_queue = False
+            else:
+                was_in_queue = False
             if merge_group_ci_cache is not None:
                 state = cast(
                     PRFetchState, {**state, "merge_group_checks_state": merge_group_ci_cache}

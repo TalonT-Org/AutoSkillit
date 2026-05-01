@@ -1,4 +1,4 @@
-"""L1/L2/L3 sub-package isolation, __all__ completeness, size/file-count constraints.
+"""IL-1/IL-2/IL-3 sub-package isolation, __all__ completeness, size/file-count constraints.
 
 Tests:
   - Sync manifest deletion checks

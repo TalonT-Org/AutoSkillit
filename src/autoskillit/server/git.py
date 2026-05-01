@@ -1,6 +1,6 @@
 """Git merge workflow for the merge_worktree MCP tool.
 
-L3 service module. Executes the full merge pipeline:
+IL-3 service module. Executes the full merge pipeline:
 path validation → worktree verification → branch detection → test gate →
 fetch → rebase → main-repo merge → worktree cleanup.
 

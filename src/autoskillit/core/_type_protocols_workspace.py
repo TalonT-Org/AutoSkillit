@@ -87,10 +87,10 @@ class SkillResolver(Protocol):
 
 @runtime_checkable
 class SkillLister(Protocol):
-    """L0 contract for listing all available skills.
+    """IL-0 contract for listing all available skills.
 
-    Allows L2 recipe rules to type their skill-listing dependency
-    against an L0 protocol instead of binding to the L1 workspace
+    Allows IL-2 recipe rules to type their skill-listing dependency
+    against an IL-0 protocol instead of binding to the IL-1 workspace
     concrete class. The default implementation lives at
     autoskillit.workspace.skills.DefaultSkillResolver and satisfies this
     protocol structurally.

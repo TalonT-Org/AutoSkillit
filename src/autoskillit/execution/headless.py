@@ -1,6 +1,6 @@
 """Headless Claude Code session orchestration.
 
-L1 module (execution/). Owns the full lifecycle of a headless claude CLI session:
+IL-1 module (execution/). Owns the full lifecycle of a headless claude CLI session:
 command preparation, subprocess invocation via the injected runner, and
 SkillResult construction.
 

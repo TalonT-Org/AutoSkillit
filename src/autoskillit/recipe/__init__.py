@@ -1,4 +1,4 @@
-"""L2 recipe domain — schema, I/O, validation, and contract management."""
+"""IL-2 recipe domain — schema, I/O, validation, and contract management."""
 
 from __future__ import annotations
 

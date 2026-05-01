@@ -229,8 +229,8 @@ def generate_hooks_json() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Hook diagnostic utilities — shared between cli/ and server/ (both L3).
-# Placed here (package root, L0-accessible) to avoid L3-to-L3 peer imports.
+# Hook diagnostic utilities — shared between cli/ and server/ (both IL-3).
+# Placed here (package root, IL-0-accessible) to avoid IL-3-to-IL-3 peer imports.
 # ---------------------------------------------------------------------------
 
 

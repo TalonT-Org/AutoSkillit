@@ -1,4 +1,4 @@
-"""config/ L1 package: configuration loading with layered YAML resolution.
+"""config/ IL-1 package: configuration loading with layered YAML resolution.
 
 Re-exports the full public surface of config.settings so callers can use
 either `from autoskillit.config import AutomationConfig` or the explicit

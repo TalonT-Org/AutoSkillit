@@ -1,6 +1,6 @@
 """Clone contamination guard — detect and revert direct changes to clone CWD.
 
-L1 module (execution/). Detects when a worktree-based or read-only skill
+IL-1 module (execution/). Detects when a worktree-based or read-only skill
 session modified the clone directory directly and reverts those changes to
 prevent contamination from propagating to retry sessions.
 
@@ -220,7 +220,7 @@ async def check_and_revert_clone_contamination(
 
     For worktree skills, fires only on failure. For read-only skills
     (``readonly_skill=True``), fires on both success and failure to catch
-    any stray writes that bypassed Layer 1.
+    any stray writes that bypassed import layer 1 (IL-1).
 
     Returns (skill_result, reverted) where reverted is True if contamination
     was found and cleaned up.

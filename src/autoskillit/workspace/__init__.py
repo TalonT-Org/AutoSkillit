@@ -1,4 +1,4 @@
-"""workspace/ L1 package: directory cleanup, skill resolution, and clone isolation.
+"""workspace/ IL-1 package: directory cleanup, skill resolution, and clone isolation.
 
 Re-exports the full public surface of cleanup.py, skills.py, and clone.py.
 All sub-modules depend only on autoskillit.core.*.

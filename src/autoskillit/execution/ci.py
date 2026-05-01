@@ -1,6 +1,6 @@
 """GitHub Actions CI watcher service.
 
-L1 module: depends only on stdlib, httpx, and core/logging.
+IL-1 module: depends only on stdlib, httpx, and core/logging.
 Never raises — all errors are captured and returned as structured dicts.
 
 Three-phase algorithm eliminates the race condition where CI completes

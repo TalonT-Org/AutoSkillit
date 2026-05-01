@@ -105,7 +105,7 @@ def test_il003_pipeline_config_exception_documented() -> None:
     in_block = False
     block_lines: list[str] = []
     for line in lines:
-        if 'name = "L1 pipeline does not import L2 or L3"' in line:
+        if 'name = "IL-1 pipeline does not import IL-2 or IL-3"' in line:
             in_block = True
         if in_block:
             block_lines.append(line)

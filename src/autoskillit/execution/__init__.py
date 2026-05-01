@@ -1,4 +1,4 @@
-"""execution/ L1 package: subprocess lifecycle, session parsing, headless runner, testing, DB.
+"""execution/ IL-1 package: subprocess lifecycle, session parsing, headless runner, testing, DB.
 
 Re-exports the full public surface of the six execution sub-modules.
 All sub-modules depend only on autoskillit.core.* at runtime;

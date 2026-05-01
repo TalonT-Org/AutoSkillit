@@ -1,4 +1,4 @@
-"""Process-scoped version snapshot for session telemetry (L0).
+"""Process-scoped version snapshot for session telemetry (IL-0).
 
 collect_version_snapshot() is cached with lru_cache(maxsize=1) so that the
 subprocess call to `claude --version` and filesystem reads happen once per
@@ -18,7 +18,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger(__name__)  # noqa: TID251 — L0 module, no autoskillit imports allowed
+logger = logging.getLogger(__name__)  # noqa: TID251 — IL-0 module, no autoskillit imports allowed
 
 
 @functools.lru_cache(maxsize=1)

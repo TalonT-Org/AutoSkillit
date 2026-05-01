@@ -146,7 +146,7 @@ Return findings as structured text. Do NOT create any files.
 field declaration (e.g., `src/autoskillit/pipeline/context.py:NN`).
 
 For each feature:
-- Grep `src/autoskillit/core/` (L0) for feature-specific constants or imports beyond `FeatureDef`/`FEATURE_REGISTRY`
+- Grep `src/autoskillit/core/` (IL-0) for feature-specific constants or imports beyond `FeatureDef`/`FEATURE_REGISTRY`
 - Check `src/autoskillit/pipeline/context.py` for feature-specific fields unconditionally allocated on `ToolContext`
 - Check `src/autoskillit/config/settings.py` for feature-specific config dataclasses parsed without a validation gate
 - Check `src/autoskillit/execution/headless.py` for unconditional reads of feature config

@@ -1,8 +1,8 @@
 """Pytest output parsing and test pass/fail adjudication.
 
-L3 service module. Used by server.py test_check tool and git_operations.py
+IL-1 module. Used by server.py (IL-3) test_check tool and git_operations.py
 merge test gate. No autoskillit server imports — depends only on stdlib and
-_logging.
+IL-0 _logging.
 """
 
 from __future__ import annotations

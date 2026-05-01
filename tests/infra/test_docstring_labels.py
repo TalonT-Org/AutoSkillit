@@ -7,16 +7,16 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
-def test_session_py_docstring_says_l2():
-    """session.py docstring must carry an L2 label."""
+def test_session_py_docstring_says_il1():
+    """session.py docstring must carry an IL-1 label."""
     src = (_REPO_ROOT / "src/autoskillit/execution/session.py").read_text()
-    assert "L2" in src.split('"""')[1], "session.py docstring must say L2"
+    assert "IL-1" in src.split('"""')[1], "session.py docstring must say IL-1"
 
 
-def test_headless_py_docstring_says_l1():
-    """headless.py docstring must carry an L1 label."""
+def test_headless_py_docstring_says_il1():
+    """headless.py docstring must carry an IL-1 label."""
     src = (_REPO_ROOT / "src/autoskillit/execution/headless.py").read_text()
-    assert "L1" in src.split('"""')[1], "headless.py docstring must say L1"
+    assert "IL-1" in src.split('"""')[1], "headless.py docstring must say IL-1"
 
 
 def test_smoke_utils_documents_limitation():
@@ -36,7 +36,7 @@ def test_claude_md_no_stale_l3_headless_label():
 
 
 def test_planner_init_has_docstring():
-    """planner/__init__.py must have a module-level docstring like other L1 packages."""
+    """planner/__init__.py must have a module-level docstring like other IL-1 packages."""
     import autoskillit.planner as planner_pkg
 
     assert planner_pkg.__doc__ is not None and planner_pkg.__doc__.strip(), (

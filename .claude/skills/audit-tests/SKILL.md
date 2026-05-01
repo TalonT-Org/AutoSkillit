@@ -23,21 +23,21 @@ Audit the test suite to identify useless tests, consolidation opportunities, qua
 
 ## Intended Test Directory Structure
 
-The test suite mirrors the source sub-package hierarchy rather than using a type-based unit/integration split — the project's L0–L3 layer boundaries already encode isolation levels. Each sub-package gets its own test directory. Cross-cutting concerns go in dedicated directories:
+The test suite mirrors the source sub-package hierarchy rather than using a type-based unit/integration split — the project's IL-0–IL-3 layer boundaries already encode isolation levels. Each sub-package gets its own test directory. Cross-cutting concerns go in dedicated directories:
 
 ```
 tests/
 ├── conftest.py          # Shared: MockSubprocessRunner, tool_ctx fixture (wired via make_context)
 ├── CLAUDE.md            # xdist safety guidelines
-├── core/                # L0: tests for autoskillit/core/ (io, logging, paths, types, protocols)
-├── config/              # L1: tests for autoskillit/config/
-├── pipeline/            # L1: tests for autoskillit/pipeline/ (audit, gate, context, tokens)
-├── execution/           # L1: tests for autoskillit/execution/ (db, github, headless, process, quota, session, testing)
-├── workspace/           # L1: tests for autoskillit/workspace/ (cleanup, clone, skills)
-├── recipe/              # L2: tests for autoskillit/recipe/ (io, loader, schema, validator, rules, smoke)
-├── migration/           # L2: tests for autoskillit/migration/ (engine, loader, store)
-├── server/              # L3: tests for autoskillit/server/ (_factory, git, helpers, tools_*)
-├── cli/                 # L3: tests for autoskillit/cli/
+├── core/                # IL-0: tests for autoskillit/core/ (io, logging, paths, types, protocols)
+├── config/              # IL-1: tests for autoskillit/config/
+├── pipeline/            # IL-1: tests for autoskillit/pipeline/ (audit, gate, context, tokens)
+├── execution/           # IL-1: tests for autoskillit/execution/ (db, github, headless, process, quota, session, testing)
+├── workspace/           # IL-1: tests for autoskillit/workspace/ (cleanup, clone, skills)
+├── recipe/              # IL-2: tests for autoskillit/recipe/ (io, loader, schema, validator, rules, smoke)
+├── migration/           # IL-2: tests for autoskillit/migration/ (engine, loader, store)
+├── server/              # IL-3: tests for autoskillit/server/ (_factory, git, helpers, tools_*)
+├── cli/                 # IL-3: tests for autoskillit/cli/
 ├── arch/                # Cross-cutting: AST architecture enforcement, import contracts, layer rules
 ├── contracts/           # Cross-cutting: instruction surface, MCP/API surface, version consistency
 └── infra/               # Cross-cutting: CI/dev config checks (.pre-commit, .gitleaks, .github/)
@@ -162,10 +162,10 @@ Tests placed in the wrong directory relative to the intended sub-package hierarc
 
 **What to look for:**
 - Any test file living at the `tests/` root other than `conftest.py` and `CLAUDE.md` — all test files should be inside sub-directories
-- Tests for L0 (`core/`) modules not in `tests/core/`
-- Tests for L1 modules (`config`, `pipeline`, `execution`, `workspace`) not in their corresponding `tests/<subpackage>/` directory
-- Tests for L2 modules (`recipe`, `migration`) not in their corresponding `tests/<subpackage>/` directory
-- Tests for L3 modules (`server`, `cli`) not in their corresponding `tests/<subpackage>/` directory
+- Tests for IL-0 (`core/`) modules not in `tests/core/`
+- Tests for IL-1 modules (`config`, `pipeline`, `execution`, `workspace`) not in their corresponding `tests/<subpackage>/` directory
+- Tests for IL-2 modules (`recipe`, `migration`) not in their corresponding `tests/<subpackage>/` directory
+- Tests for IL-3 modules (`server`, `cli`) not in their corresponding `tests/<subpackage>/` directory
 - AST-based architecture enforcement tests (import contracts, layer rules, structural checks) outside `tests/arch/`
 - Instruction surface / MCP contract / SKILL.md contract tests outside `tests/contracts/`
 - CI/dev infrastructure tests checking `.pre-commit-config.yaml`, `.gitleaks.toml`, or `.github/workflows/` files outside `tests/infra/`
@@ -234,11 +234,11 @@ Tests and configuration that maintain the path-based test filter's correctness. 
 
 Spawn 6 domain-based subagents. Each covers all issue categories (C1–C11) within its area. Group by source domain, not by issue category. Each subagent must read both test files AND the corresponding production code before making judgements.
 
-- **Group 1 — Core + Config (L0 + L1):** Tests for `core/` and `config/` sub-packages. Also check `conftest.py` for fixture quality.
-- **Group 2 — Pipeline + Workspace (L1):** Tests for `pipeline/` and `workspace/` sub-packages.
-- **Group 3 — Execution (L1):** Tests for `execution/` sub-package.
-- **Group 4 — Recipe + Migration (L2):** Tests for `recipe/` and `migration/` sub-packages.
-- **Group 5 — Server + CLI (L3):** Tests for `server/` and `cli/` sub-packages.
+- **Group 1 — Core + Config (IL-0 + IL-1):** Tests for `core/` and `config/` sub-packages. Also check `conftest.py` for fixture quality.
+- **Group 2 — Pipeline + Workspace (IL-1):** Tests for `pipeline/` and `workspace/` sub-packages.
+- **Group 3 — Execution (IL-1):** Tests for `execution/` sub-package.
+- **Group 4 — Recipe + Migration (IL-2):** Tests for `recipe/` and `migration/` sub-packages.
+- **Group 5 — Server + CLI (IL-3):** Tests for `server/` and `cli/` sub-packages.
 - **Group 6 — Cross-cutting:** Architecture enforcement tests, instruction surface/contract tests, CI/dev infrastructure tests. Also audit `tests/CLAUDE.md` for accuracy against the actual test files on disk. Additionally, perform filter integrity checks: verify filter cascade maps (`LAYER_CASCADE_CONSERVATIVE`, `LAYER_CASCADE_AGGRESSIVE`) against actual source subpackages under `src/autoskillit/`; check manifest completeness against `git ls-files`; verify size marker rollup coverage against `_SIZE_DIRS` in `conftest.py`; check Bucket A minimality (files that could use manifest instead); verify always-run directories (`ALWAYS_RUN_CONSERVATIVE`, `ALWAYS_RUN_AGGRESSIVE`) have appropriate size markers or are exempted from size filtering.
 
 For each finding, note the file, line range, issue category, and a brief explanation of why it's a problem and what should change.

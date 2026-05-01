@@ -1,8 +1,8 @@
 """Composition Root: make_context() is the only location that legally instantiates
 all 22 service contracts simultaneously.
 
-server/ is L3 — the only layer permitted to import from both L1 (pipeline/)
-and L2 (recipe/, migration/) at the same time. This module is the canonical
+server/ is IL-3 — the only layer permitted to import from both IL-1 (pipeline/)
+and IL-2 (recipe/, migration/) at the same time. This module is the canonical
 factory for wiring a fully-populated ToolContext, replacing the ad-hoc
 construction scattered across callers.
 """

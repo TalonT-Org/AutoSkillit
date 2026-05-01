@@ -4,7 +4,7 @@ The sentinel file replaces log-line string matching as the subprocess
 synchronization primitive used by integration tests. File existence is
 atomic — there is no string-parse race and no wall-clock settle-sleep.
 
-This is an L0 module: stdlib-only imports plus core.io for ``atomic_write``.
+This is an IL-0 module: stdlib-only imports plus core.io for ``atomic_write``.
 No anyio, no FastMCP, no higher-layer autoskillit imports.
 
 Path resolution follows the same ``AUTOSKILLIT_STATE_DIR`` override pattern as

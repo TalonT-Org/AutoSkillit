@@ -248,7 +248,7 @@ def build_replay_runner(replay_dir: str) -> ReplayingSubprocessRunner:
     Creates a temporary output directory for the player, then parses the
     scenario manifest and constructs
     the deque-based session map.  All domain logic for replay setup lives here
-    (L1) rather than in the L3 composition root.
+    (IL-1) rather than in the IL-3 composition root.
 
     Args:
         replay_dir: Path to a scenario directory produced by a recording run.

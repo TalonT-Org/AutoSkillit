@@ -2,7 +2,7 @@
 
 Stdlib-only at runtime — runs under any Python interpreter without the
 autoskillit package, so the four ``_fmt_*`` modules and ``pretty_output_hook.py``
-all import directly from this module without going through any L1+ layer.
+all import directly from this module without going through any IL-1+ layer.
 """
 
 from __future__ import annotations

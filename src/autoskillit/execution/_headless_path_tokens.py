@@ -47,7 +47,7 @@ def _build_path_token_set() -> frozenset[str]:
     and "file_path_list"). The outputs section in skill_contracts.yaml is a list
     of dicts with "name" and "type" keys — not a mapping.
 
-    Loads the YAML directly via L0 core utilities to avoid an upward L1→L2 import.
+    Loads the YAML directly via IL-0 core utilities to avoid an upward IL-1→IL-2 import.
     """
     try:
         manifest_path = pkg_root() / "recipe" / "skill_contracts.yaml"

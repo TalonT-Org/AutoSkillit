@@ -139,7 +139,7 @@ def test_gate_error_result_accepts_custom_message():
 
 
 def test_gate_imports_only_from_core():
-    """gate.py (L1 pipeline) may only import from autoskillit.core (L0)."""
+    """gate.py (IL-1 pipeline) may only import from autoskillit.core (IL-0)."""
     import ast
 
     from autoskillit.core.paths import pkg_root
@@ -152,7 +152,7 @@ def test_gate_imports_only_from_core():
                 assert node.module == "autoskillit.core" or node.module.startswith(
                     "autoskillit.core."
                 ), (
-                    f"gate.py (L1) may only import from autoskillit.core (L0): "
+                    f"gate.py (IL-1) may only import from autoskillit.core (IL-0): "
                     f"found 'from {node.module} import ...'"
                 )
             if isinstance(node, ast.Import):

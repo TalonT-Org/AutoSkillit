@@ -136,10 +136,10 @@ root_packages = ["autoskillit"]
 exclude_type_checking_imports = true
 
 # IL-001 | Lens: module-dependency | DS-001
-# Rationale: L0 (core) is the foundation layer; it must have zero upward imports to
+# Rationale: IL-0 (core) is the foundation layer; it must have zero upward imports to
 # remain independently testable and importable outside the autoskillit package.
 [[tool.importlinter.contracts]]
-name = "L0 core has no autoskillit upward imports"
+name = "IL-0 core has no autoskillit upward imports"
 type = "forbidden"
 source_modules = ["autoskillit.core"]
 forbidden_modules = [
@@ -154,11 +154,11 @@ forbidden_modules = [
 ]
 
 # IL-002 | Lens: module-dependency | DS-001
-# Rationale: L1 config resolves settings from layered sources; allowing it to import
+# Rationale: IL-1 config resolves settings from layered sources; allowing it to import
 # pipeline/execution/recipe would create hidden initialization-time coupling that
 # breaks independent layered testing.
 [[tool.importlinter.contracts]]
-name = "L1 config imports only L0"
+name = "IL-1 config imports only IL-0"
 type = "forbidden"
 source_modules = ["autoskillit.config"]
 forbidden_modules = [
@@ -172,11 +172,11 @@ forbidden_modules = [
 ]
 
 # IL-003 | Lens: module-dependency | DS-001
-# Rationale: pipeline/ holds cross-session gate and audit state; importing from L2
-# (recipe, migration) would create initialization-order coupling and prevent L1
-# packages from being tested in isolation without a full L2 import graph.
+# Rationale: pipeline/ holds cross-session gate and audit state; importing from IL-2
+# (recipe, migration) would create initialization-order coupling and prevent IL-1
+# packages from being tested in isolation without a full IL-2 import graph.
 [[tool.importlinter.contracts]]
-name = "L1 pipeline does not import L2 or L3"
+name = "IL-1 pipeline does not import IL-2 or IL-3"
 type = "forbidden"
 source_modules = ["autoskillit.pipeline"]
 # EXCEPTION: autoskillit.config is intentionally omitted from the
@@ -198,10 +198,10 @@ forbidden_modules = [
 
 # IL-004 | Lens: module-dependency | DS-001
 # Rationale: execution/ manages subprocess lifecycle; it must not import config,
-# pipeline, workspace, recipe, migration, server, or cli to remain a leaf L1 service
+# pipeline, workspace, recipe, migration, server, or cli to remain a leaf IL-1 service
 # that can be tested without spinning up the full autoskillit stack.
 [[tool.importlinter.contracts]]
-name = "L1 execution imports only L0"
+name = "IL-1 execution imports only IL-0"
 type = "forbidden"
 source_modules = ["autoskillit.execution"]
 forbidden_modules = [
@@ -219,7 +219,7 @@ forbidden_modules = [
 # or pipeline would introduce a circular risk since config and pipeline both may
 # depend on workspace for path resolution.
 [[tool.importlinter.contracts]]
-name = "L1 workspace imports only L0"
+name = "IL-1 workspace imports only IL-0"
 type = "forbidden"
 source_modules = ["autoskillit.workspace"]
 forbidden_modules = [
@@ -233,11 +233,11 @@ forbidden_modules = [
 ]
 
 # IL-006 | Lens: module-dependency | DS-001
-# Rationale: recipe/ is an L2 service that orchestrates validation over workspace
+# Rationale: recipe/ is an IL-2 service that orchestrates validation over workspace
 # artifacts; importing config, pipeline, execution, migration, server, or cli
 # would conflate recipe semantics with runtime session management.
 [[tool.importlinter.contracts]]
-name = "L2 recipe imports only L0 and workspace"
+name = "IL-2 recipe imports only IL-0 and workspace"
 type = "forbidden"
 source_modules = ["autoskillit.recipe"]
 forbidden_modules = [
@@ -253,7 +253,7 @@ forbidden_modules = [
 # Rationale: migration/ must not import config or pipeline to stay independently
 # runnable as a schema-upgrade step without a live pipeline context.
 [[tool.importlinter.contracts]]
-name = "L2 migration does not import L3 or config"
+name = "IL-2 migration does not import IL-3 or config"
 type = "forbidden"
 source_modules = ["autoskillit.migration"]
 forbidden_modules = [
@@ -264,13 +264,13 @@ forbidden_modules = [
 ]
 
 # IL-008 | Lens: module-dependency | DS-001
-# Rationale: The four L1 peers (config, pipeline, execution, workspace) form an
+# Rationale: The four IL-1 peers (config, pipeline, execution, workspace) form an
 # independent service tier. Lateral imports between them create hidden coupling
 # that prevents each package from being tested and deployed in isolation. The
 # independence contract makes this boundary machine-verifiable and surfaces any
 # future regression immediately via lint-imports.
 [[tool.importlinter.contracts]]
-name = "L1 siblings are independent of each other"
+name = "IL-1 siblings are independent of each other"
 type = "independence"
 modules = [
     "autoskillit.config",
@@ -287,9 +287,9 @@ ignore_imports = [
 ]
 
 # IL-009 | Lens: module-dependency | DS-001
-# Rationale: fleet is L2 — imports L0 (core) only; workspace allowed for path utilities
+# Rationale: fleet is IL-2 — imports IL-0 (core) only; workspace allowed for path utilities
 [[tool.importlinter.contracts]]
-name = "L2 fleet does not import L3 or most L1 peers"
+name = "IL-2 fleet does not import IL-3 or most IL-1 peers"
 type = "forbidden"
 source_modules = ["autoskillit.fleet"]
 forbidden_modules = [

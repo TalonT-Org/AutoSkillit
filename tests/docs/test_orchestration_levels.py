@@ -35,7 +35,7 @@ def test_glossary_has_orchestration_level_entries():
 
 
 def test_glossary_orchestrator_entry_uses_l2():
-    text = GLOSSARY.read_text()
+    text = GLOSSARY.read_text().replace("\r\n", "\n")
     match = re.search(r"### orchestrator\n(.+?)(?=\n###|\Z)", text, re.DOTALL)
     assert match, "Glossary missing ### orchestrator entry"
     section = match.group(1)
@@ -44,7 +44,7 @@ def test_glossary_orchestrator_entry_uses_l2():
 
 
 def test_glossary_worker_entry_uses_l1():
-    text = GLOSSARY.read_text()
+    text = GLOSSARY.read_text().replace("\r\n", "\n")
     match = re.search(r"### worker\n(.+?)(?=\n###|\Z)", text, re.DOTALL)
     assert match, "Glossary missing ### worker entry"
     section = match.group(1)

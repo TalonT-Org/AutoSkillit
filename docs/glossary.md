@@ -54,12 +54,25 @@ A composition pattern (see `recipe/registry.py`) where one recipe references
 sub-recipes via `requires_packs` instead of inlining their steps. Distinct from
 sub-recipes themselves.
 
+### food truck
+
+A headless L2 session dispatched by an L3 fleet orchestrator. Self-contained:
+clones the target repository, runs a full recipe, and returns results via the
+campaign sidecar. Named by analogy — the fleet (L3) dispatches food trucks (L2)
+to remote jobs.
+
 ### free range tools
 
 The 4 MCP tools that are always visible regardless of kitchen state:
 `open_kitchen`, `close_kitchen`, `disable_quota_guard`, and `reload_session`. Tagged
 only with `autoskillit`, never with `kitchen`. Always two words, no hyphen. Common
 mistake: `free-range tools`.
+
+### Ghost Kitchen
+
+The remote compute adapter system for dispatching food trucks to cloud
+infrastructure. An L3 fleet sends work to a Ghost Kitchen when the L2 workers
+need to run outside the local machine.
 
 ### kitchen
 
@@ -76,6 +89,32 @@ Synonym for the 44 kitchen-tagged MCP tools. Two words, no hyphen.
 The unique identifier assigned to a kitchen instance (typically a session
 UUID). Recorded in pipeline telemetry.
 
+### L0
+
+Leaf subagent. Terminal node in the orchestration hierarchy. Cannot launch
+sub-agents or headless sessions. Cannot call `run_skill`, `run_cmd`, or
+`run_python` (enforced by `leaf_orchestration_guard.py`). Spawned by an L1
+via Claude Code's Agent/Task tool. See `docs/orchestration-levels.md`.
+
+### L1
+
+A Claude Code session (interactive or headless) that can launch L0 subagents.
+When headless, spawned by an L2 via `run_skill`. Headless L1 workers cannot
+call `run_skill`, `run_cmd`, or `run_python`. Interactive variant:
+`autoskillit cook`. See `docs/orchestration-levels.md`.
+
+### L2
+
+Orchestrator of sessions. Launches L1 headless sessions via `run_skill`.
+Interactive: `autoskillit order`. Headless: food truck (dispatched by L3).
+See `docs/orchestration-levels.md`.
+
+### L3
+
+Fleet dispatcher. Launches L2 food trucks. Interactive: `autoskillit fleet`.
+No headless variant (no L4 exists to dispatch it).
+See `docs/orchestration-levels.md`.
+
 ### order
 
 A single execution of a recipe via `autoskillit order <recipe>`. The
@@ -88,7 +127,7 @@ and used to correlate logs.
 
 ### orchestrator
 
-The Tier 1 Claude Code session that runs `autoskillit order`. It reads the
+The L2 Claude Code session that runs `autoskillit order`. It reads the
 recipe, calls MCP tools, and spawns headless worker sessions via `run_skill`.
 Never reads or writes code itself.
 
@@ -145,7 +184,7 @@ that runs many sibling implementations in parallel waves rather than serially.
 
 ### worker
 
-A headless Claude session spawned by the orchestrator via `run_skill`. Tier 2
+A headless Claude session spawned by the orchestrator via `run_skill`. L1
 boundary — workers cannot call `run_skill`, `run_cmd`, or `run_python`.
 
 ### worktree

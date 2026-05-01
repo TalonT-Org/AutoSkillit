@@ -1,6 +1,6 @@
 """Minimal /proc filesystem readers for process identity.
 
-Stdlib-only — no psutil, no autoskillit imports. Safe for L0 core.
+Stdlib-only — no psutil, no autoskillit imports. Safe for IL-0 core.
 On non-Linux platforms all functions return None.
 """
 

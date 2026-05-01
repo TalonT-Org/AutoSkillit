@@ -1,4 +1,4 @@
-"""L0 foundation sub-package: types, logging, and I/O primitives.
+"""IL-0 foundation sub-package: types, logging, and I/O primitives.
 
 Re-exports the full public surface so callers can do
 ``from autoskillit.core import get_logger`` etc.  Submodules are loaded

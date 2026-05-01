@@ -1,4 +1,4 @@
-"""Feature flag resolution — L0 (zero autoskillit imports outside core/).
+"""Feature flag resolution — IL-0 (zero autoskillit imports outside core/).
 
 is_feature_enabled() is the single gating primitive for all feature-gated
 code paths. Callers pass config.features (a dict[str, bool]) rather than the

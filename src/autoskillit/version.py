@@ -1,8 +1,8 @@
-"""Version health utilities (Layer 0).
+"""Version health utilities (IL-0 — import layer 0).
 
 Zero autoskillit imports — this module is importable before any other
 autoskillit subpackage.  YAML fields are extracted via regex to avoid
-depending on core/io.py (which would violate the L0 contract).
+depending on core/io.py (which would violate the IL-0 contract).
 """
 
 from __future__ import annotations

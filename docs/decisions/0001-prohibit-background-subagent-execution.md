@@ -51,7 +51,7 @@ indicators and asserts the prohibition string is present. This test runs as part
 
 ## Scope
 
-Applies to 54 SKILL.md files. Listed by group:
+Applies to 77 SKILL.md files. Listed by group:
 
 **Core spawning skills (23):** implement-worktree, implement-worktree-no-merge,
 investigate, make-plan, make-groups, validate-audit, scope, rectify, process-issues,

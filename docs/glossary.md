@@ -99,7 +99,8 @@ via Claude Code's Agent/Task tool. See `docs/orchestration-levels.md`.
 ### L1
 
 A Claude Code session (interactive or headless) that can launch L0 subagents.
-When headless, spawned by an L2 via `run_skill`. Interactive variant:
+When headless, spawned by an L2 via `run_skill`. Headless L1 workers cannot
+call `run_skill`, `run_cmd`, or `run_python`. Interactive variant:
 `autoskillit cook`. See `docs/orchestration-levels.md`.
 
 ### L2

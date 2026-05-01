@@ -12,42 +12,73 @@ assert SKILL_PATH.exists(), f"SKILL.md not found at {SKILL_PATH}"
 SKILL_TEXT = SKILL_PATH.read_text()
 
 
-def test_info_findings_not_filtered_out() -> None:
-    """Step 3 must NOT filter out info findings — no 'skip info findings entirely' instruction."""
-    assert "Skip `info` findings entirely" not in SKILL_TEXT, (
-        "Step 3 must not drop info findings — they must flow to Step 3.5"
-    )
-    assert "skipped — below threshold" not in SKILL_TEXT, (
-        "Step 3 must not mark info findings as 'skipped — below threshold'"
-    )
+def test_info_findings_auto_classified_as_discuss() -> None:
+    """Step 3 must state info findings are auto-classified as DISCUSS, bypassing Step 3.5."""
+    step3_idx = SKILL_TEXT.find("### Step 3:")
+    if step3_idx == -1:
+        step3_idx = SKILL_TEXT.find("### Step 3")
+    assert step3_idx != -1, "SKILL.md must have a Step 3 section"
+    step35_idx = SKILL_TEXT.find("### Step 3.5")
+    assert step35_idx != -1, "SKILL.md must have a Step 3.5 section"
+    step3_section = SKILL_TEXT[step3_idx:step35_idx]
+    assert (
+        "auto-classified" in step3_section.lower()
+        or "auto-classify" in step3_section.lower()
+        or ("discuss" in step3_section and "info" in step3_section.lower())
+    ), "Step 3 must state that info findings are auto-classified as DISCUSS"
+    assert (
+        "do not enter" in step3_section.lower()
+        or "bypass" in step3_section.lower()
+        or (
+            "not enter step 3.5" in step3_section.lower()
+            or "do not enter step" in step3_section.lower()
+        )
+    ), "Step 3 must state that info findings do not enter Step 3.5"
 
 
-def test_info_findings_reach_intent_validation() -> None:
-    """Step 3.5 domain grouping must cover all findings, not just critical+warning."""
-    assert "critical+warning findings" not in SKILL_TEXT, (
-        "Domain grouping instruction must include all severities, not restrict to critical+warning"
-    )
-    # Verify the new all-severity phrasing is present
+def test_intent_validation_restricted_to_critical_and_warning() -> None:
+    """Step 3.5 domain grouping must cover only critical and warning, not all findings."""
     step35_idx = SKILL_TEXT.find("### Step 3.5")
     assert step35_idx != -1, "SKILL.md must have a Step 3.5 section"
     step4_idx = SKILL_TEXT.find("### Step 4")
     step35_section = SKILL_TEXT[step35_idx:step4_idx]
-    assert "Group all findings" in step35_section, (
-        "Step 3.5 domain grouping must say 'Group all findings' (all severities)"
+    assert "Group all findings" not in step35_section, (
+        "Step 3.5 must not say 'Group all findings' — info findings no longer enter Step 3.5"
+    )
+    assert "critical and warning" in step35_section.lower(), (
+        "Step 3.5 domain grouping must restrict to critical and warning findings"
     )
 
 
-def test_intent_validation_scope_includes_all_severities() -> None:
-    """Step 3.5 intro must validate every finding, not just critical and warning."""
-    assert "validate every critical and warning finding" not in SKILL_TEXT, (
-        "Step 3.5 must not restrict validation to only critical and warning findings"
-    )
+def test_info_findings_do_not_enter_step_35() -> None:
+    """Step 3.5 intro must say 'validate every critical and warning finding', not 'every finding'."""
     step35_idx = SKILL_TEXT.find("### Step 3.5")
     assert step35_idx != -1, "SKILL.md must have a Step 3.5 section"
     step4_idx = SKILL_TEXT.find("### Step 4")
     step35_section = SKILL_TEXT[step35_idx:step4_idx]
-    assert "validate every finding" in step35_section, (
-        "Step 3.5 must say 'validate every finding' (all severities)"
+    assert "validate every finding" not in step35_section, (
+        "Step 3.5 must not say 'validate every finding' — info findings are now excluded"
+    )
+    assert "validate every critical and warning finding" in step35_section, (
+        "Step 3.5 must say 'validate every critical and warning finding'"
+    )
+
+
+def test_info_reply_template_uses_acknowledged() -> None:
+    """Step 6.5 must include a templated reply for info (auto-classified) findings."""
+    step65_idx = SKILL_TEXT.find("### Step 6.5")
+    assert step65_idx != -1, "SKILL.md must have a Step 6.5 section"
+    step66_idx = SKILL_TEXT.find("### Step 6.6", step65_idx)
+    step65_section = (
+        SKILL_TEXT[step65_idx:step66_idx]
+        if step66_idx != -1
+        else SKILL_TEXT[step65_idx : step65_idx + 1200]
+    )
+    assert "acknowledged" in step65_section.lower(), (
+        "Step 6.5 must include 'Acknowledged' template for info findings"
+    )
+    assert "minor suggestion" in step65_section.lower(), (
+        "Step 6.5 must include 'minor suggestion noted' in the info reply template"
     )
 
 

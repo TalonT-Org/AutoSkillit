@@ -165,14 +165,14 @@ From **top-level reviews**, extract:
 
 When a finding matches multiple tiers, use the highest severity.
 
-All three severity levels proceed to intent validation.
+Critical and warning findings proceed to intent validation (Step 3.5). Info findings are auto-classified as `DISCUSS` — they do not enter Step 3.5.
 
 ### Step 3.5: Intent Validation (Parallel Sub-Agents — BEFORE any code changes)
 
-Before applying any fix, validate every finding (critical, warning, and info) against the actual
+Before applying any fix, validate every critical and warning finding against the actual
 codebase and git history. This analysis phase runs entirely before code changes are made.
 
-**Domain grouping:** Group all findings by the top-level path segment of
+**Domain grouping:** Group all critical and warning findings by the top-level path segment of
 their `path` field:
 - `src/autoskillit/execution/headless.py` → group `execution`
 - `tests/skills/test_foo.py` → group `tests`
@@ -319,9 +319,9 @@ the overall skill.
 
 ### Step 6.5: Post Inline Replies
 
-For every comment that was analyzed (i.e., every finding that reached intent validation in
-Step 3.5), post an inline reply using the GitHub comment reply API. Each analyzed
-comment receives exactly one reply based on its classification.
+For every finding (those classified via intent validation in Step 3.5 and info findings
+auto-classified as DISCUSS in Step 3), post an inline reply using the GitHub comment reply
+API. Each finding receives exactly one reply based on its classification.
 
 ```bash
 # Build reply body based on classification:
@@ -331,6 +331,8 @@ BODY="Agreed — fixed in ${commit_sha}. ${evidence}"
 BODY="Investigated — this is intentional. ${evidence}"
 # DISCUSS:
 BODY="Valid observation — flagged for design decision. ${evidence}"
+# INFO (auto-classified DISCUSS):
+BODY="Acknowledged — minor suggestion noted."
 
 gh api repos/{owner}/{repo}/pulls/{pr_number}/comments/{comment_id}/replies \
   --method POST \

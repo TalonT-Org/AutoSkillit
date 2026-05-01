@@ -51,7 +51,7 @@ def test_intent_validation_restricted_to_critical_and_warning() -> None:
 
 
 def test_info_findings_do_not_enter_step_35() -> None:
-    """Step 3.5 intro must say 'validate every critical and warning finding', not 'every finding'."""
+    """Step 3.5 intro must say 'validate every critical and warning finding'."""
     step35_idx = SKILL_TEXT.find("### Step 3.5")
     assert step35_idx != -1, "SKILL.md must have a Step 3.5 section"
     step4_idx = SKILL_TEXT.find("### Step 4")

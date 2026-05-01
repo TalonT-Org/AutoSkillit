@@ -170,7 +170,7 @@ From **inline comments**, extract per comment:
 **File-level comment guard:** If `line` is null (file-level comment posted by
 review-pr), skip this finding entirely — file-level comments have no code anchor and
 cannot be resolved by code changes. Record: `(path, null, reason="file-level comment — no
-line anchor")`. Do not add its `thread_node_id` to `addressed_thread_ids`.
+line anchor")`.
 
 From **top-level reviews**, extract:
 - `state` — APPROVED, CHANGES_REQUESTED, COMMENTED
@@ -198,6 +198,12 @@ their `path` field:
 - `tests/skills/test_foo.py` → group `tests`
 - `src/autoskillit/server/tools_ci.py` → group `server`
 
+**Inline classification shortcut:** If there are 3 or fewer findings AND they all
+fall in a single domain group, classify them inline — read each unique file once
+(±30 lines around all flagged lines), run `git log` once per unique path, then
+emit a verdict for each finding — without spawning a Task sub-agent. The
+classification criteria and output format are identical to the sub-agent path.
+
 This produces 3–6 groups on a typical PR. Launch one parallel sub-agent per group using
 the Task tool (`model: "sonnet"`).
 
@@ -207,9 +213,10 @@ the Task tool (`model: "sonnet"`).
   `(path, line)` is available in `diff_context_map`, include it directly in the prompt
   under "Pre-built code region (from review-pr, ±50 diff lines):" and instruct the
   sub-agent to use it — do **not** instruct it to read the file for context. If
-  `diff_context_map` has no entry for this finding, instruct the sub-agent to read
-  the actual code at the flagged line (±30 lines context) as before.
-- Instructions to run `git log --follow -p --max-count=5 -- {path}` to trace original intent via git history
+  `diff_context_map` has no entry for this finding, instruct the sub-agent: "For each unique file in the group, read the file
+  once, spanning all flagged lines with ±30 lines margin. Classify each
+  finding from the already-read content — do not re-read the file per finding."
+- Instructions to run `git log --follow -p --max-count=5 -- {path}` once per unique path (not once per finding) to trace original intent
 - Instructions to classify each comment as `ACCEPT`, `REJECT`, or `DISCUSS` with:
   - `verdict`: the classification (`ACCEPT` / `REJECT` / `DISCUSS`)
   - `evidence`: specific references (line numbers, function names, API docs, contracts)
@@ -224,20 +231,7 @@ the Task tool (`model: "sonnet"`).
 - `DISCUSS` — the comment raises a valid design question that requires a human decision;
   flag for human review, do NOT change the code automatically
 
-**Output from each sub-agent** — a JSON array:
-```json
-[
-  {
-    "comment_id": 123,
-    "path": "src/autoskillit/execution/headless.py",
-    "line": 42,
-    "verdict": "REJECT",
-    "evidence": "The method never raises — this is contractual (see docstring line 12 and callers in tools_execution.py:88)",
-    "category": "false_positive_intentional_pattern",
-    "commit_sha_hint": "abc1234"
-  }
-]
-```
+**Output from each sub-agent** — a JSON array of objects with fields: `comment_id`, `path`, `line`, `verdict`, `evidence`, `category` (REJECT only), `commit_sha_hint`.
 
 **Building sub-agent prompts with pre-built context:**
 
@@ -293,17 +287,10 @@ For each finding where the classification map shows `verdict = ACCEPT`
    git commit -m "fix(review): {brief description of reviewer's request}"
    ```
 
-**Apply the fix flow:** After committing the fix:
-- Append the finding's `thread_node_id` to `addressed_thread_ids` (if not `None`).
-
 **Classification gate — REJECT/DISCUSS bypass:**
 For findings where the classification map shows `verdict = REJECT` or `verdict = DISCUSS`:
 - For REJECT: no code changes are applied; record `(file, line, reason="classifier: REJECT — {evidence}")`.
-  Append the finding's `thread_node_id` to `addressed_thread_ids` (if not `None`) — a resolved
-  thread with an "Investigated — this is intentional" reply is the correct end state.
 - For DISCUSS: record `(file, line, reason="classifier: DISCUSS — {context}")`.
-  Do NOT add DISCUSS findings' `thread_node_id` to `addressed_thread_ids` — these threads
-  remain open for human decision.
 
 **Skip a finding if:**
 - The comment is a file-level comment (`line` is null) — these have no code anchor
@@ -316,7 +303,16 @@ Record each skip with: `(file, line, reason)`.
 
 **Skip a finding flow:** When skipping a finding (stale comment, missing file, unclear guidance, contradiction):
 - Record `(file, line, reason)` as before.
-- Do NOT add the finding's `thread_node_id` to `addressed_thread_ids`.
+
+**`thread_node_id` Tracking:**
+
+| Outcome | Append to `addressed_thread_ids`? |
+|---------|-----------------------------------|
+| ACCEPT — fix committed | Yes (if `thread_node_id` is not `None`) |
+| REJECT — no code change | Yes (if `thread_node_id` is not `None`) |
+| DISCUSS — awaiting human decision | No — thread remains open |
+| Skipped finding (stale, missing file, unclear) | No |
+| File-level comment (`line` is null) | No |
 
 ### Step 5: Run Tests
 
@@ -357,9 +353,8 @@ Track:
 - `resolved_count: int` — successfully resolved threads
 - `resolve_failed_count: int` — threads that could not be resolved (permissions, network)
 
-This step is a best-effort operation. Failure to resolve any thread must never cause the
-overall skill to exit non-zero. Thread resolution failure does not affect the exit code of
-the overall skill.
+This step is best-effort — failure to resolve any thread never affects the exit code.
+The same applies to Step 6.5 (inline replies).
 
 ### Step 6.5: Post Inline Replies
 
@@ -396,8 +391,6 @@ suitable for future automated mining.
 Track:
 - `reply_posted_count: int` — successfully posted replies
 - `reply_failed_count: int` — replies that failed (log warning, continue)
-
-This step is best-effort: failure to post any reply must not affect the exit code.
 
 ### Step 6.6: Persist Reject Patterns
 
@@ -495,7 +488,5 @@ fixes_applied = {N}
 Where `{N}` is the count of ACCEPT findings where code changes were committed.
 `verdict = real_fix` means fixes were applied; `verdict = already_green` means
 all review findings were already addressed and no code changes were needed.
-
-When no PR is found (graceful degradation), no structured tokens are emitted.
 
 Summary written to: `{{AUTOSKILLIT_TEMP}}/resolve-review/report_{pr_number}_{ts}.md` (relative to the current working directory)

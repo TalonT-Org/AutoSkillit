@@ -407,16 +407,28 @@ def test_merge_prs_reenroll_stalled_routes_to_wait(pmp_recipe) -> None:
     assert step.on_success == "check_queue_stall_loop"
 
 
-def test_merge_prs_dropped_healthy_routes_to_reenter(pmp_recipe) -> None:
-    """dropped_healthy in wait_queue_pr must route to reenter_queue."""
+def test_merge_prs_dropped_healthy_routes_through_circuit_breaker(pmp_recipe) -> None:
+    """dropped_healthy in wait_queue_pr must route to check_dropped_healthy_loop,
+    which in turn routes to reenter_queue on DROPPED_OK."""
+    assert "check_dropped_healthy_loop" in pmp_recipe.steps, (
+        "check_dropped_healthy_loop step must exist in merge-prs recipe"
+    )
     step = pmp_recipe.steps["wait_queue_pr"]
     assert step.on_result is not None
     dropped_routes = [
         c
         for c in step.on_result.conditions
-        if c.when is not None and "dropped_healthy" in c.when and c.route == "reenter_queue"
+        if c.when is not None
+        and "dropped_healthy" in c.when
+        and c.route == "check_dropped_healthy_loop"
     ]
-    assert dropped_routes, "dropped_healthy must route to reenter_queue"
+    assert dropped_routes, "dropped_healthy must route to check_dropped_healthy_loop"
+    cb_step = pmp_recipe.steps["check_dropped_healthy_loop"]
+    assert cb_step.on_result is not None
+    ok_routes = [c for c in cb_step.on_result.conditions if c.when is None]
+    assert ok_routes and ok_routes[0].route == "reenter_queue", (
+        "check_dropped_healthy_loop fallthrough must route to reenter_queue"
+    )
 
 
 # ---------------------------------------------------------------------------

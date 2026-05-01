@@ -1153,13 +1153,17 @@ def test_wait_for_queue_on_failure_routes_to_register_clone_unconfirmed(
 
 
 @pytest.mark.parametrize("recipe_fixture", RELEASE_TIMEOUT_RECIPES)
-def test_wait_for_queue_dropped_healthy_routes_to_reenter_merge_queue_cheap(
+def test_wait_for_queue_dropped_healthy_routes_through_circuit_breaker(
     recipe_fixture, request
 ) -> None:
-    """dropped_healthy must route to reenter_merge_queue_cheap."""
+    """dropped_healthy must route to check_dropped_healthy_loop circuit breaker,
+    which in turn routes to reenter_merge_queue_cheap on DROPPED_OK."""
     recipe = request.getfixturevalue(recipe_fixture)
     assert "reenter_merge_queue_cheap" in recipe.steps, (
         f"{recipe_fixture}: reenter_merge_queue_cheap step must exist"
+    )
+    assert "check_dropped_healthy_loop" in recipe.steps, (
+        f"{recipe_fixture}: check_dropped_healthy_loop step must exist"
     )
     step = recipe.steps["wait_for_queue"]
     assert step.on_result is not None
@@ -1168,10 +1172,16 @@ def test_wait_for_queue_dropped_healthy_routes_to_reenter_merge_queue_cheap(
         for c in step.on_result.conditions
         if c.when is not None
         and "dropped_healthy" in c.when
-        and c.route == "reenter_merge_queue_cheap"
+        and c.route == "check_dropped_healthy_loop"
     ]
     assert dropped_routes, (
-        f"{recipe_fixture}: dropped_healthy must route to reenter_merge_queue_cheap"
+        f"{recipe_fixture}: dropped_healthy must route to check_dropped_healthy_loop"
+    )
+    cb_step = recipe.steps["check_dropped_healthy_loop"]
+    assert cb_step.on_result is not None
+    ok_routes = [c for c in cb_step.on_result.conditions if c.when is None]
+    assert ok_routes and ok_routes[0].route == "reenter_merge_queue_cheap", (
+        f"{recipe_fixture}: check_dropped_healthy_loop fallthrough must route to reenter_merge_queue_cheap"
     )
 
 

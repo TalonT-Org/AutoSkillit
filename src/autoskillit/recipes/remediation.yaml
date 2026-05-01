@@ -913,6 +913,8 @@ steps:
         route: release_issue_failure
       - when: "${{ result.pr_state }} == dropped_healthy"
         route: wait_for_queue
+      - when: "${{ result.pr_state }} == dropped_merge_group_ci"
+        route: diagnose_ci
       - when: "${{ result.pr_state }} == ejected"
         route: wait_for_queue
       - when: "${{ result.pr_state }} == stalled"
@@ -924,12 +926,13 @@ steps:
     note: >
       Short probe (60s) after enqueue_to_queue failure. If the PR is already
       merged, route to release_issue_success. If the queue already confirms CI
-      failure (ejected_ci_failure), route directly to diagnose_ci. If enrollment
-      was attempted but the PR never appeared in the queue (not_enrolled), route
-      to release_issue_failure — this is a repo configuration error. For other
-      active queue states (dropped_healthy, ejected, stalled), route to
-      wait_for_queue for full 900s authoritative watch. If the probe timed out
-      or returned an unexpected state, escalate via register_clone_unconfirmed.
+      failure (ejected_ci_failure or dropped_merge_group_ci), route directly to
+      diagnose_ci. If enrollment was attempted but the PR never appeared in the
+      queue (not_enrolled), route to release_issue_failure — this is a repo
+      configuration error. For other active queue states (dropped_healthy, ejected,
+      stalled), route to wait_for_queue for full 900s authoritative watch. If the
+      probe timed out or returned an unexpected state, escalate via
+      register_clone_unconfirmed.
 
   wait_for_queue:
     tool: wait_for_merge_queue
@@ -946,10 +949,12 @@ steps:
         route: release_issue_success
       - when: "${{ result.pr_state }} == ejected_ci_failure"
         route: diagnose_ci
+      - when: "${{ result.pr_state }} == dropped_merge_group_ci"
+        route: diagnose_ci
       - when: "${{ result.pr_state }} == not_enrolled"
         route: release_issue_failure
       - when: "${{ result.pr_state }} == dropped_healthy"
-        route: reenter_merge_queue_cheap
+        route: check_dropped_healthy_loop
       - when: "${{ result.pr_state }} == ejected"
         route: check_eject_limit
       - when: "${{ result.pr_state }} == stalled"
@@ -1026,6 +1031,34 @@ steps:
       Circuit breaker for the queue ejection loop. Tracks ejection count in a
       file-based counter under {{AUTOSKILLIT_TEMP}}/. After 3 ejections, routes
       to release_issue_failure to prevent infinite re-enqueue cycles.
+
+  check_dropped_healthy_loop:
+    tool: run_cmd
+    with:
+      cmd: >
+        COUNTER_FILE="${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/dropped_healthy_count" &&
+        mkdir -p "$(dirname "$COUNTER_FILE")" &&
+        COUNT=$(cat "$COUNTER_FILE" 2>/dev/null || echo 0) &&
+        COUNT=$((COUNT + 1)) &&
+        echo "$COUNT" > "$COUNTER_FILE" &&
+        if [ "$COUNT" -gt 2 ]; then
+          echo "DROPPED_LIMIT_EXCEEDED";
+        else
+          echo "DROPPED_OK";
+        fi
+      cwd: "${{ context.work_dir }}"
+      step_name: "check_dropped_healthy_loop"
+    on_result:
+      - when: "${{ result.stdout | trim }} == DROPPED_LIMIT_EXCEEDED"
+        route: release_issue_failure
+      - route: reenter_merge_queue_cheap
+    on_failure: release_issue_failure
+    note: >
+      Circuit breaker for the dropped_healthy re-enrollment loop. After 2 consecutive
+      unexplained drops with healthy PR-branch CI, escalates to release_issue_failure
+      instead of looping. Matches the check_eject_limit pattern used for the ejected
+      path. DROPPED_MERGE_GROUP_CI (confirmed merge-group CI failure) is routed
+      directly to diagnose_ci and never reaches this step.
 
   queue_ejected_fix:
     tool: run_cmd

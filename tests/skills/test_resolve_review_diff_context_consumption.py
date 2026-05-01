@@ -26,6 +26,7 @@ def _step2_section() -> str:
 def _step35_section() -> str:
     text = _skill_text()
     start = text.find("### Step 3.5")
+    assert start != -1, "### Step 3.5 not found in SKILL.md"
     end = text.find("### Step 4", start)
     return text[start:end]
 
@@ -33,7 +34,9 @@ def _step35_section() -> str:
 def _step4_section() -> str:
     text = _skill_text()
     start = text.find("### Step 4")
+    assert start != -1, "### Step 4 not found in SKILL.md"
     end = text.find("### Step 5", start)
+    end = end if end != -1 else None
     return text[start:end]
 
 

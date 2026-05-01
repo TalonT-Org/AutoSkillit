@@ -91,7 +91,7 @@ async def _query_merge_group_ci(
     """Query the most recent workflow run on the merge-group ref for this PR.
 
     Uses `gh run list` with branch prefix matching for the gh-readonly-queue ref.
-    Returns 'SUCCESS', 'FAILURE', 'ERROR', or None (not found / still running).
+    Returns 'SUCCESS', 'FAILURE', or None (not found / still running / query failed).
     Never raises.
     """
     branch_prefix = f"gh-readonly-queue/{base_branch}/pr-{pr_number}-"
@@ -123,6 +123,6 @@ async def _query_merge_group_ci(
                 if conclusion == "success":
                     return "SUCCESS"
         return None
-    except Exception:
-        logger.warning("_query_merge_group_ci failed", exc_info=True)
+    except Exception as e:
+        logger.warning("_query_merge_group_ci failed: %s", type(e).__name__, exc_info=True)
         return None

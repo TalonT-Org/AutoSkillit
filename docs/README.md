@@ -1,7 +1,7 @@
 # AutoSkillit documentation
 
 AutoSkillit is a Claude Code plugin that runs YAML recipes through a
-two-tier orchestrator. The bundled recipes implement issue → plan → worktree
+multi-level orchestrator. The bundled recipes implement issue → plan → worktree
 → tests → PR → merge pipelines using 49 MCP tools and 127 bundled skills.
 
 ## Start here
@@ -16,6 +16,7 @@ two-tier orchestrator. The bundled recipes implement issue → plan → worktree
 - [update-checks.md](update-checks.md) — update checks, dismissal windows, `autoskillit update`
 - [faq.md](faq.md) — common questions
 - [glossary.md](glossary.md) — canonical terms
+- [orchestration-levels.md](orchestration-levels.md) — L0–L3 orchestration hierarchy
 
 ## Topic-based subdirectories
 

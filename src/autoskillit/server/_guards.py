@@ -1,4 +1,4 @@
-"""Tier/gate guard functions for MCP tool access control."""
+"""Orchestration-level gate functions for MCP tool access control."""
 
 from __future__ import annotations
 
@@ -22,10 +22,10 @@ def _get_config():  # type: ignore[return]
 
 
 def _require_orchestrator_or_higher(tool_name: str = "") -> str | None:
-    """Return headless_error JSON if session is leaf-tier; None if permitted.
+    """Return headless_error JSON if session is L1 (leaf); None if permitted.
 
     Interactive sessions (HEADLESS not set) always pass.
-    Headless sessions must be orchestrator or fleet tier.
+    Headless sessions must be L2 (orchestrator) or L3 (fleet).
     Fail-closed: unset/invalid SESSION_TYPE → LEAF → deny.
     """
     if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
@@ -45,11 +45,11 @@ def _require_orchestrator_or_higher(tool_name: str = "") -> str | None:
 
 
 def _require_orchestrator_exact(tool_name: str = "") -> str | None:
-    """Return headless_error JSON if session is not orchestrator-tier; None if permitted.
+    """Return headless_error JSON if session is not exactly L2; None if permitted.
 
     Interactive sessions (HEADLESS not set) always pass.
-    Headless sessions must be exactly orchestrator tier.
-    Fleet and leaf tiers are denied.
+    Headless sessions must be exactly L2 (orchestrator).
+    L1 (leaf) and L3 (fleet) are both denied.
     """
     if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
         return None
@@ -77,9 +77,10 @@ def _require_orchestrator_exact(tool_name: str = "") -> str | None:
 
 
 def _require_fleet(tool_name: str = "") -> str | None:
-    """Return headless_error JSON if session is not fleet-tier; None if permitted.
+    """Return headless_error JSON if session is not L3 (fleet); None if permitted.
 
-    No interactive bypass — fleet is a specific tier, not a headless guard.
+    No interactive bypass — fleet is a specific orchestration level, not a headless guard.
+    L1 (leaf) and L2 (orchestrator) sessions are both denied.
     """
     st = session_type()
     if st is SessionType.FLEET:

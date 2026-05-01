@@ -163,19 +163,31 @@ The Haiku-assisted contract-card freshness check implemented in
 
 ### Tier 1
 
-The free range tier — 3 skills under `src/autoskillit/skills/`
+The free range **skill access tier** — 3 skills under `src/autoskillit/skills/`
 (`open-kitchen`, `close-kitchen`, `sous-chef`). Capitalised, space between
 `Tier` and the digit. Common mistake: `tier-1`, `tier 1` (lowercase).
+
+> Not to be confused with orchestration levels (L0–L3). Skill access tiers
+> control which skills are visible in which session modes. See
+> `docs/orchestration-levels.md`.
 
 ### Tier 2
 
 Cook + headless skills under `src/autoskillit/skills_extended/`. Same
 capitalisation rules as Tier 1.
 
+> Not to be confused with orchestration levels (L0–L3). Skill access tiers
+> control which skills are visible in which session modes. See
+> `docs/orchestration-levels.md`.
+
 ### Tier 3
 
 Pipeline / automation skills under `src/autoskillit/skills_extended/`. Same
 capitalisation rules as Tier 1.
+
+> Not to be confused with orchestration levels (L0–L3). Skill access tiers
+> control which skills are visible in which session modes. See
+> `docs/orchestration-levels.md`.
 
 ### wavefront scheduling
 

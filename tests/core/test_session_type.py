@@ -161,3 +161,20 @@ def test_session_type_is_defined_in_type_helpers():
 
     assert inspect.getmodule(fn_helpers).__name__ == "autoskillit.core._type_helpers"
     assert inspect.getfile(fn_helpers).endswith("_type_helpers.py")
+
+
+def test_session_type_docstring_references_orchestration_levels():
+    """SessionType docstring must reference L1/L2/L3 level labels."""
+    from autoskillit.core import SessionType
+
+    doc = SessionType.__doc__ or ""
+    assert "L3" in doc
+    assert "L2" in doc
+    assert "L1" in doc
+    assert "L0" in doc
+    assert "FLEET" in doc
+    assert "ORCHESTRATOR" in doc
+    assert "LEAF" in doc
+    assert "mid-tier" not in doc
+    assert "bottom-tier" not in doc
+    assert "Tier discriminator" not in doc

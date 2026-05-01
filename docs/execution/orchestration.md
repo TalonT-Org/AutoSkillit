@@ -10,7 +10,7 @@ the merge pipeline decides whether a worktree is ready to land.
 ## Multi-level orchestration model
 
 AutoSkillit defines four orchestration levels (L0–L3). The recipe execution
-pipeline directly connects the two levels involved in running a recipe:
+pipeline primarily connects the L2 orchestrator and L1 workers:
 
 - **L2 — orchestrator.** A Claude Code session running the
   `autoskillit order` CLI command, with the kitchen pre-opened. Sees all 42

@@ -247,3 +247,12 @@ def test_headless_error_result_accepts_custom_message():
     parsed = json.loads(headless_error_result("Custom headless error"))
     assert parsed["result"] == "Custom headless error"
     assert parsed["subtype"] == "headless_error"
+
+
+def test_headless_message_uses_l_numbers():
+    from autoskillit.pipeline.gate import _DEFAULT_HEADLESS_MESSAGE
+
+    assert "L1" in _DEFAULT_HEADLESS_MESSAGE
+    assert "L2" in _DEFAULT_HEADLESS_MESSAGE
+    assert "Tier 1" not in _DEFAULT_HEADLESS_MESSAGE
+    assert "Tier 2" not in _DEFAULT_HEADLESS_MESSAGE

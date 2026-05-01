@@ -42,6 +42,7 @@ hooks:
 **NEVER:**
 - Modify any source code files
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-exploratory-confirmatory/`
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Map the full analytic timeline — what was decided before vs. after seeing data

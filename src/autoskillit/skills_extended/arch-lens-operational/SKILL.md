@@ -31,6 +31,7 @@ hooks:
 - Modify any source code files
 - Include internal implementation details
 - Show code-level patterns
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Focus on OPERATOR experience

@@ -44,6 +44,7 @@ hooks:
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for themselves
 - Treat "untested" as equivalent to "robust"
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-sensitivity-robustness/`
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Build a full sensitivity matrix (choices x perturbation types)

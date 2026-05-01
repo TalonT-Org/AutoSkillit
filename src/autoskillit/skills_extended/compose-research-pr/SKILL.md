@@ -39,6 +39,7 @@ Does NOT invoke lens skills or other sub-skills.
 - Create files outside `{{AUTOSKILLIT_TEMP}}/compose-research-pr/` (relative to the current working directory)
 - Invent mermaid classDef colors — when embedding validated diagrams, include them verbatim.
   Using ONLY classDef styles from the mermaid skill when composing the PR body.
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Check `gh auth status` before attempting GitHub operations

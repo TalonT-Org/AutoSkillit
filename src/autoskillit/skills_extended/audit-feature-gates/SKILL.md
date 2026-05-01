@@ -38,6 +38,7 @@ to enumerate features.
 - Create files outside `{{AUTOSKILLIT_TEMP}}/audit-feature-gates/`
 - Issue subagent Task calls sequentially — ALL 6 must be in a single parallel message
 - Write output files before synthesizing ALL subagent results
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool

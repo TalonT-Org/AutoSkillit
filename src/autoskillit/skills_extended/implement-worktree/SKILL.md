@@ -33,6 +33,7 @@ Implement a provided plan in an isolated git worktree branched from the current 
 - Consider implementation complete if ANY test fails
 - Blame test failures on "pre-existing issues" — ALL tests must pass
 - Re-run tests just to see failures — grep the saved output file instead
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Create a new worktree from the current branch

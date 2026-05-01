@@ -57,6 +57,7 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 - Drop, split, or rewrite requirements — reference them by original ID
 - Create groups that cannot be independently planned
 - Include implementation steps or technical approach in the group descriptions
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use subagents to verify codebase structure before finalizing groups

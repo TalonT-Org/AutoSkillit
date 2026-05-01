@@ -41,6 +41,7 @@ decomposed PR flow (prepare → run_arch_lenses → compose).
 - Create files outside `{{AUTOSKILLIT_TEMP}}/compose-pr/`
 - Invent mermaid classDef colors — when embedding validated diagrams, include them verbatim.
   Using ONLY classDef styles from the mermaid skill (no invented colors).
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Check `gh auth status` before attempting GitHub operations

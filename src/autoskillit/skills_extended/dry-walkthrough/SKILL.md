@@ -45,6 +45,7 @@ The plan file must remain a **clean, self-contained implementation instruction s
 - Remove or defer goals or phases from the plan
 - Reduce the plan's scope to a "simpler fix" - the plan defines the problem scope, not you
 - Consider effort as a reason for choosing one approach over another
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Keep the plan as clean implementation instructions only (information/background helpful to implementation is okay)

@@ -28,6 +28,7 @@ Standards are added here when `/autoskillit:design-guards` recommends them and t
 **NEVER:**
 - Modify any source code files
 - Update an existing report - always generate new
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use subagents for parallel exploration (one per standard or group)

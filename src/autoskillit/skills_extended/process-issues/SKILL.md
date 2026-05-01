@@ -32,6 +32,7 @@ issues upfront, load recipe, execute session, collect result, report.
 - Modify any source code files
 - Reimplement recipe steps inline — always use `load_recipe` to load the recipe YAML and
   follow it as an orchestrator
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Process batches in ascending order: batch 1 before batch 2 before batch 3

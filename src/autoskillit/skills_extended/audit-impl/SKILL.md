@@ -50,6 +50,7 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
 - Run tests — this skill audits, it does not fix
 - Create files outside `{{AUTOSKILLIT_TEMP}}/audit-impl/`
 - Emit a GO verdict when any `MISSING` or `CONFLICT` finding exists
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use Explore subagents for all file reads and diff retrieval

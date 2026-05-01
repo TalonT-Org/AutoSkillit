@@ -40,6 +40,7 @@ Explore a target project and generate tailored recipes and AutoSkillit config th
 - Suggest `reset_guard_marker` config — that's a workspace concern, not project setup
 - Include install instructions or "Getting Started" sections — user is already running the skill
 - Hardcode `base_branch = main` — detect the current branch
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Read the target project using Glob, Read, and Grep — no shell commands against target

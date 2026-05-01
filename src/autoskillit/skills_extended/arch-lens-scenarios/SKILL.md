@@ -31,6 +31,7 @@ hooks:
 - Modify any source code files
 - Show internal component details
 - Include all possible scenarios (pick key ones)
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Focus on END-TO-END journeys

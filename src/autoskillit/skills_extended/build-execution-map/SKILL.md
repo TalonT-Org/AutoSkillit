@@ -41,6 +41,7 @@ Space-separated issue numbers (required, minimum 2), plus optional flags:
 - Use the `execution_map` or `execution_map_report` token names with unspaced `=` (always use `key = value` format)
 - Override the AI's parallelism judgment with mechanical rules
 - Assume issues conflict based solely on file-name overlap without reading the issue descriptions
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use parallel subagents (up to 8) for issue fetching in Step 1

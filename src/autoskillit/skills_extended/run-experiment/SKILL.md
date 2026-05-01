@@ -49,6 +49,7 @@ plan, executes what the plan describes, and reports what happened.
 - Skip result collection — every run must produce structured output
 - Assume what kind of experiment this is — read the plan and follow it
 - Commit files under `{{AUTOSKILLIT_TEMP}}/` — this directory is gitignored working space, NOT for version control. Do not use `git add -f` or `git add --force` to bypass the gitignore.
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool

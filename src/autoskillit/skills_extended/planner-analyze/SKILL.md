@@ -29,6 +29,7 @@ Detect language, framework, test infrastructure, project structure, and existing
 **NEVER:**
 - Modify any target project files
 - Write analysis.json outside `$1/`
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use Explore subagents for all file reads

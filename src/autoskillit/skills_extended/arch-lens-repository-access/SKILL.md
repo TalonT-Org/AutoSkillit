@@ -31,6 +31,7 @@ hooks:
 - Modify any source code files
 - Focus on data flow (that's data lineage lens)
 - Include business logic details
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Focus on REPOSITORIES and their methods

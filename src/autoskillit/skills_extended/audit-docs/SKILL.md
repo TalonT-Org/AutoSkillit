@@ -30,6 +30,7 @@ Audit all documentation sources for drift, staleness, and inconsistency against 
 - Modify any source files
 - Update an existing report — always generate a new one
 - Compare doc-to-doc without first grounding claims in actual code behavior
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Ground every cross-reference finding in what the code actually does (not what other docs say)

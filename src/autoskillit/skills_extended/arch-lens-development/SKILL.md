@@ -31,6 +31,7 @@ hooks:
 - Modify any source code files
 - Include runtime architecture details
 - Show business logic
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Focus on BUILD and TEST infrastructure

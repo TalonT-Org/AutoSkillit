@@ -31,6 +31,7 @@ hooks:
 - Modify any source code files
 - Show happy path details (that's process flow lens)
 - Ignore validation and fail-fast patterns
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Focus on FAILURE paths and recovery

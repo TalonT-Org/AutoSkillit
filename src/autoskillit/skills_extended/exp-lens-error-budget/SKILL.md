@@ -44,6 +44,7 @@ hooks:
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for themselves
 - Accept default alpha=0.05 without checking whether it is appropriate for the decision context
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-error-budget/`
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Enumerate every statistical test and account for its error contribution

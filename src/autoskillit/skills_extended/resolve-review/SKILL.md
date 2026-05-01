@@ -170,7 +170,7 @@ From **inline comments**, extract per comment:
 **File-level comment guard:** If `line` is null (file-level comment posted by
 review-pr), skip this finding entirely — file-level comments have no code anchor and
 cannot be resolved by code changes. Record: `(path, null, reason="file-level comment — no
-line anchor")`.
+line anchor")`. See the thread_node_id tracking table in Step 4 for the no-add disposition.
 
 From **top-level reviews**, extract:
 - `state` — APPROVED, CHANGES_REQUESTED, COMMENTED

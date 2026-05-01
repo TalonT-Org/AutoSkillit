@@ -8,10 +8,7 @@ Facade: re-exports from _merge_queue_classifier and _merge_queue_repo_state.
 from __future__ import annotations
 
 import asyncio
-import json
-import os
 import random  # noqa: F401 — re-exported for test monkeypatching (_mq.random.uniform)
-import re
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -21,7 +18,6 @@ import httpx
 
 from autoskillit.core import PRState, get_logger
 from autoskillit.execution._merge_queue_classifier import (
-    _QUERY_FIELD_MAP,
     KNOWN_MQ_MERGE_STATE_STATUSES,  # noqa: F401 — re-export for callers
     CIStillRunning,
     ClassificationResult,  # noqa: F401 — re-export for callers
@@ -33,6 +29,13 @@ from autoskillit.execution._merge_queue_classifier import (
     _is_positive_dropped_healthy,  # noqa: F401 — re-export for callers
     _is_positive_dropped_merge_group_ci,  # noqa: F401 — re-export for callers
     _is_positive_stall,  # noqa: F401 — re-export for callers
+)
+from autoskillit.execution._merge_queue_group_ci import (
+    _MUTATION_DISABLE_AUTO_MERGE,
+    _MUTATION_ENABLE_AUTO_MERGE,
+    _MUTATION_ENQUEUE_PR,
+    _QUERY,  # noqa: F401 — re-export: tests assert merge_queue._QUERY exists
+    _query_merge_group_ci,  # noqa: F401 — re-export: tests patch merge_queue._query_merge_group_ci
 )
 from autoskillit.execution._merge_queue_repo_state import (
     _GRAPHQL_ENDPOINT,
@@ -52,118 +55,6 @@ if TYPE_CHECKING:
     from autoskillit.core._type_protocols_logging import GitHubApiLog
 
 logger = get_logger(__name__)
-
-
-async def _query_merge_group_ci(
-    repo: str,
-    pr_number: int,
-    base_branch: str,
-    github_token: str | None,
-) -> str | None:
-    """Query the most recent workflow run on the merge-group ref for this PR.
-
-    Uses `gh run list` with branch prefix matching for the gh-readonly-queue ref.
-    Returns 'SUCCESS', 'FAILURE', 'ERROR', or None (not found / still running).
-    Never raises.
-    """
-    branch_prefix = f"gh-readonly-queue/{base_branch}/pr-{pr_number}-"
-    env = {**os.environ}
-    if github_token:
-        env["GH_TOKEN"] = github_token
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            "gh",
-            "run",
-            "list",
-            "--repo",
-            repo,
-            "--json",
-            "conclusion,headBranch",
-            "--limit",
-            "10",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            env=env,
-        )
-        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=15)
-        runs: list[dict[str, str]] = json.loads(stdout.decode())
-        for run in runs:
-            if run.get("headBranch", "").startswith(branch_prefix):
-                conclusion = run.get("conclusion", "")
-                if conclusion in ("failure", "cancelled", "timed_out", "action_required"):
-                    return "FAILURE"
-                if conclusion == "success":
-                    return "SUCCESS"
-        return None
-    except Exception:
-        logger.warning("_query_merge_group_ci failed", exc_info=True)
-        return None
-
-
-_QUERY = """
-query GetPRAndQueueState($owner: String!, $repo: String!, $prNumber: Int!, $branch: String!) {
-  repository(owner: $owner, name: $repo) {
-    pullRequest(number: $prNumber) {
-      id
-      merged
-      state
-      mergeable
-      mergeStateStatus
-      autoMergeRequest {
-        enabledAt
-      }
-      statusCheckRollup {
-        state
-      }
-    }
-    mergeQueue(branch: $branch) {
-      entries(first: 100) {
-        nodes {
-          pullRequest { number }
-          state
-        }
-      }
-    }
-  }
-}
-"""
-
-# Part 2 of the _QUERY_FIELD_MAP validation: checks that every non-computed field
-# path head appears as a GraphQL field name in _QUERY.
-# Part 1 (keys match PRFetchState) lives in _merge_queue_classifier.py.
-for _key, _path in _QUERY_FIELD_MAP.items():
-    if _path.startswith("<"):
-        continue
-    _head = _path.split(".", 1)[0]
-    # Word-boundary search prevents "state" from matching inside "mergeStateStatus".
-    if not re.search(r"\b" + re.escape(_head) + r"\b", _QUERY):
-        raise RuntimeError(
-            f"_QUERY is missing GraphQL field {_head!r} required by PRFetchState[{_key!r}]"
-        )
-
-_MUTATION_DISABLE_AUTO_MERGE = """
-mutation DisableAutoMerge($prId: ID!) {
-  disablePullRequestAutoMerge(input: {pullRequestId: $prId}) {
-    pullRequest { number }
-  }
-}
-"""
-
-_MUTATION_ENABLE_AUTO_MERGE = """
-mutation EnableAutoMerge($prId: ID!, $mergeMethod: PullRequestMergeMethod!) {
-  enablePullRequestAutoMerge(input: {pullRequestId: $prId, mergeMethod: $mergeMethod}) {
-    pullRequest { number }
-  }
-}
-"""
-
-_MUTATION_ENQUEUE_PR = """
-mutation EnqueuePullRequest($prId: ID!) {
-  enqueuePullRequest(input: {pullRequestId: $prId}) {
-    mergeQueueEntry { id }
-  }
-}
-"""
 
 
 class DefaultMergeQueueWatcher:

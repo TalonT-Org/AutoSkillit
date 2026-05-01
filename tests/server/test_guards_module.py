@@ -46,6 +46,8 @@ def test_require_orchestrator_or_higher_doc_mentions_l1():
 
     doc = _require_orchestrator_or_higher.__doc__ or ""
     assert "L1" in doc
+    assert "L2" in doc
+    assert "L3" in doc
 
 
 def test_require_orchestrator_exact_doc_mentions_l2():

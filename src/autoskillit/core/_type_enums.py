@@ -347,6 +347,8 @@ class SessionType(StrEnum):
                     Launches L1 headless workers via run_skill.
     LEAF         -- L1 headless worker (or L0 subagent -- both are terminal from
                     AutoSkillit's perspective since neither can call run_skill).
+                    L0 subagents never set AUTOSKILLIT_SESSION_TYPE so they share
+                    this terminal slot rather than having a distinct enum value.
 
     Note: interactive L1 sessions (autoskillit cook, bare Claude Code) have no
     SessionType value -- they bypass tier checks because AUTOSKILLIT_HEADLESS is unset.

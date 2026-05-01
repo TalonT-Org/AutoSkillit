@@ -36,11 +36,12 @@ def test_addressed_thread_ids_consolidated_decision_table() -> None:
 def test_addressed_thread_ids_not_repeated_in_accept_flow() -> None:
     """After ACCEPT fix commit, inline 'append addressed_thread_ids' must be removed."""
     step4_idx = SKILL_TEXT.find("### Step 4")
+    assert step4_idx != -1, "### Step 4 must exist in SKILL.md"
     step5_idx = SKILL_TEXT.find("### Step 5", step4_idx)
     step4_text = SKILL_TEXT[step4_idx:step5_idx]
-    # Count occurrences of the old inline rule inside Step 4's commit block
+    # Verify absence of the old inline rule inside Step 4's commit block
     accept_block_end = step4_text.find("**Classification gate")
-    accept_block = step4_text[:accept_block_end] if accept_block_end != -1 else step4_text[:800]
+    accept_block = step4_text[:accept_block_end] if accept_block_end != -1 else step4_text
     assert "Append the finding's `thread_node_id` to `addressed_thread_ids`" not in accept_block, (
         "The inline 'append thread_node_id' after ACCEPT commit must be removed; "
         "use the consolidated decision table instead"
@@ -51,7 +52,10 @@ def test_addressed_thread_ids_not_in_skip_flow() -> None:
     """The 'skip a finding' flow must not repeat addressed_thread_ids guidance."""
     skip_idx = SKILL_TEXT.lower().find("skip a finding flow")
     assert skip_idx != -1, "SKILL.md must have a 'skip a finding flow' section"
-    skip_section = SKILL_TEXT[skip_idx : skip_idx + 400]
+    next_section_idx = SKILL_TEXT.find("\n###", skip_idx + 1)
+    skip_section = (
+        SKILL_TEXT[skip_idx:next_section_idx] if next_section_idx != -1 else SKILL_TEXT[skip_idx:]
+    )
     assert "`addressed_thread_ids`" not in skip_section, (
         "The 'skip a finding flow' section must not repeat thread_node_id guidance; "
         "all cases are covered by the consolidated decision table"
@@ -182,7 +186,7 @@ def test_inline_classification_shortcut_documented() -> None:
     assert (
         "3 or fewer" in step35_section.lower()
         or "≤3" in step35_section
-        or "inline" in step35_section.lower()
+        or "inline classification" in step35_section.lower()
     ), "Step 3.5 must document an inline classification shortcut for PRs with 3 or fewer findings"
 
 
@@ -192,7 +196,9 @@ def test_inline_shortcut_requires_single_domain_group() -> None:
     assert step35_idx != -1
     step4_idx = SKILL_TEXT.find("### Step 4", step35_idx)
     step35_section = SKILL_TEXT[step35_idx:step4_idx]
-    inline_idx = step35_section.lower().find("inline")
+    inline_idx = step35_section.lower().find("inline classification")
+    if inline_idx == -1:
+        inline_idx = step35_section.lower().find("inline")
     assert inline_idx != -1, "Step 3.5 must mention 'inline' classification"
     inline_context = step35_section[max(0, inline_idx - 200) : inline_idx + 400].lower()
     assert (
@@ -200,3 +206,7 @@ def test_inline_shortcut_requires_single_domain_group() -> None:
         or "one domain" in inline_context
         or ("single" in inline_context and "group" in inline_context)
     ), "The inline classification shortcut must require a single domain group condition"
+    assert "3 or fewer" in inline_context or "≤3" in inline_context, (
+        "The inline classification shortcut must co-locate the ≤3 findings count condition "
+        "with the domain condition"
+    )

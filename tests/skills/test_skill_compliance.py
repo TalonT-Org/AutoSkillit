@@ -356,12 +356,12 @@ For each issue in the batch (process sequentially):
 # Detects skills that instruct Agent/Task subagent spawning.
 # Any such skill MUST contain the run_in_background prohibition.
 _SPAWN_INDICATOR_RE = re.compile(
-    r"Task tool|Explore subagent|Agent/Task tool"
-    r"|spawn.*subagent|subagent.*spawn"
+    r"Task tool|Explore subagent"
+    r"|spawn.*subagent|subagent.*spawn|launch.*subagent"
     r"|parallel.*subagent|subagent.*parallel",
     re.IGNORECASE,
 )
-_BACKGROUND_PROHIBITION_RE = re.compile(r"run_in_background", re.IGNORECASE)
+_BACKGROUND_PROHIBITION_RE = re.compile(r"run_in_background.*prohibited", re.IGNORECASE)
 
 # Skills whose SKILL.md mentions subagents only in a negative/prohibitive context
 # (e.g., "rather than spawning subagents", "do not spawn subagents"). The spawn
@@ -378,7 +378,10 @@ _NON_SPAWNING_SKILL_DIRS: frozenset[str] = frozenset(
 def test_no_background_subagent_in_spawning_skills(skill_dir: Path) -> None:
     if skill_dir.name in _NON_SPAWNING_SKILL_DIRS:
         return  # Skill mentions subagents only descriptively/negatively — rule does not apply.
-    content = (skill_dir / "SKILL.md").read_text()
+    skill_md = skill_dir / "SKILL.md"
+    if not skill_md.exists():
+        return
+    content = skill_md.read_text(encoding="utf-8")
     if not _SPAWN_INDICATOR_RE.search(content):
         return  # Skill does not spawn subagents — rule does not apply.
     assert _BACKGROUND_PROHIBITION_RE.search(content), (

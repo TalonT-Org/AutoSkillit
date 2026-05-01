@@ -3,7 +3,7 @@
 Extracted from headless.py to keep that module below the 1100-line
 architectural limit (REQ-CNST-010-E2).
 
-L1 module (execution/). No autoskillit imports — stdlib only.
+IL-1 module (execution/). No autoskillit imports — stdlib only.
 """
 
 from __future__ import annotations

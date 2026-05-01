@@ -1,4 +1,4 @@
-"""Merge queue polling service (L1) — monitors GitHub merge queue for a PR.
+"""Merge queue polling service (IL-1) — monitors GitHub merge queue for a PR.
 
 Never raises. All errors are returned as structured results.
 

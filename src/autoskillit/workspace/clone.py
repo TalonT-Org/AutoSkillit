@@ -5,7 +5,7 @@ not be touched for any purpose except reading its remote URL in push_to_remote.
 This prohibits git checkout, git fetch, git reset, git pull, run_cmd, run_skill,
 and every other command in source_dir. All pipeline work runs in clone_path.
 
-L1 module: depends only on stdlib and autoskillit.core.logging.
+IL-1 module: depends only on stdlib and autoskillit.core.logging.
 Three callables are registered as run_python entry points in bundled recipes.
 
 Note: The ``clone_local`` strategy (``shutil.copytree``) leverages hardlinks when

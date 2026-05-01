@@ -1,4 +1,4 @@
-"""planner/ L1 package: progressive resolution planner — manifests, merge, validation, compiler."""
+"""planner/ IL-1 package: progressive resolution planner — manifests, merge, validation, compiler."""
 
 from __future__ import annotations
 

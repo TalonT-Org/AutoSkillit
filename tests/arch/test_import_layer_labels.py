@@ -70,6 +70,9 @@ _SKIP_PATHS = frozenset(
         "fleet/_semaphore.py",
         "fleet/_sidecar_rpc.py",
         "fleet/_findings_rpc.py",
+        # cli/_prompts.py builds orchestration-level prompts for L1/L3 sessions;
+        # all L-number references in this file are orchestration-level, not import-layer.
+        "cli/_prompts.py",
     ]
 )
 

@@ -112,10 +112,10 @@ PROCESS_EXIT_THEN_CHANNEL_B_FIRES_SCRIPT = textwrap.dedent("""\
 """)
 
 
-@pytest.mark.timeout(180)
 class TestChannelBDrainWait:
     """Channel B (session monitor) winning before Channel A triggers bounded drain wait."""
 
+    @pytest.mark.timeout(90)
     @pytest.mark.anyio
     async def test_channel_b_wins_then_channel_a_confirms_within_drain(self, tmp_path):
         """Channel B fires first; drain wait allows Channel A to confirm stdout data.
@@ -152,6 +152,7 @@ class TestChannelBDrainWait:
         # Drain wait confirmed Channel A fired: stdout is non-empty
         assert result.stdout.strip()
 
+    @pytest.mark.timeout(90)
     @pytest.mark.anyio
     async def test_channel_b_wins_drain_timeout_still_kills(self, tmp_path):
         """Channel B fires; Channel A never fires; drain times out and process is killed.
@@ -193,6 +194,7 @@ class TestChannelBDrainWait:
         # Drain timed out: CLI hung and never flushed its result record
         assert not result.stdout.strip()
 
+    @pytest.mark.timeout(90)
     @pytest.mark.anyio
     async def test_channel_a_wins_unchanged_behavior(self, tmp_path):
         """Channel A (heartbeat) wins before any session monitor: no drain wait needed.
@@ -216,6 +218,7 @@ class TestChannelBDrainWait:
         assert result.termination == TerminationReason.COMPLETED
         assert result.stdout.strip()  # Channel A confirmed: stdout is non-empty
 
+    @pytest.mark.timeout(90)
     @pytest.mark.anyio
     async def test_data_confirmed_false_set_on_drain_timeout(self, tmp_path):
         """Channel B wins the race; drain timeout expires without Channel A confirming.
@@ -252,6 +255,7 @@ class TestChannelBDrainWait:
         assert result.termination == TerminationReason.COMPLETED
         assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B
 
+    @pytest.mark.timeout(90)
     @pytest.mark.anyio
     async def test_data_confirmed_true_when_channel_a_wins(self, tmp_path):
         """Channel A (heartbeat) wins; data_confirmed must be True.
@@ -273,6 +277,7 @@ class TestChannelBDrainWait:
         assert result.termination == TerminationReason.COMPLETED
         assert result.channel_confirmation == ChannelConfirmation.CHANNEL_A
 
+    @pytest.mark.timeout(90)
     @pytest.mark.anyio
     async def test_channel_b_then_a_empty_result_data_confirmed_is_false(self, tmp_path):
         """Channel B fires (%%ORDER_UP%% in JSONL).
@@ -435,10 +440,10 @@ class TestNaturalExitWithChannelConfirmation:
         assert skill_result.needs_retry is False
 
 
-@pytest.mark.timeout(180)
 class TestPostExitDrainWindow:
     """Symmetric drain window: process exits first, Channel B gets a bounded window to deposit."""
 
+    @pytest.mark.timeout(120)
     @pytest.mark.anyio
     async def test_drain_window_allows_channel_b_to_deposit(self, tmp_path):
         """Process exits before Phase 1 polls; drain window lets Channel B detect marker.
@@ -481,6 +486,7 @@ class TestPostExitDrainWindow:
 
         assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B
 
+    @pytest.mark.timeout(30)
     @pytest.mark.anyio
     async def test_drain_window_times_out_when_no_session_jsonl(self, tmp_path):
         """Process exits with no session JSONL; drain window times out, UNMONITORED preserved.

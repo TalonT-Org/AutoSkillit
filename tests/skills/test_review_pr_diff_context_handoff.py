@@ -26,7 +26,7 @@ def _step8_section() -> str:
 def test_step8_writes_diff_context_file():
     """Step 8 must declare writing diff_context_{pr_number}.json."""
     section = _step8_section()
-    assert "diff_context_{pr_number}.json" in section or "diff_context_" in section
+    assert "diff_context_{pr_number}.json" in section
 
 
 def test_diff_context_path_uses_review_pr_temp_dir():

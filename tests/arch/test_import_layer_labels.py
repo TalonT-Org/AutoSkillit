@@ -51,7 +51,7 @@ _IMPORT_LAYER_PATTERNS = re.compile(
         \bboth\s+L[0-3]\b
         |
         # "L2 + L1", "L0 + L1"
-        L[0-3]\s*\+\s*L[0-3]
+        \bL[0-3]\s*\+\s*L[0-3]
     )
     """,
     re.VERBOSE,

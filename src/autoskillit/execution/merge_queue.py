@@ -9,17 +9,16 @@ from __future__ import annotations
 
 import asyncio
 import random  # noqa: F401 — re-exported for test monkeypatching (_mq.random.uniform)
-import re
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, assert_never
+from typing import TYPE_CHECKING, Any, assert_never, cast
 
 import httpx
 
 from autoskillit.core import PRState, get_logger
 from autoskillit.execution._merge_queue_classifier import (
-    _QUERY_FIELD_MAP,
+    _QUERY_FIELD_MAP,  # noqa: F401 — re-export: tests access merge_queue._QUERY_FIELD_MAP
     KNOWN_MQ_MERGE_STATE_STATUSES,  # noqa: F401 — re-export for callers
     CIStillRunning,
     ClassificationResult,  # noqa: F401 — re-export for callers
@@ -29,7 +28,15 @@ from autoskillit.execution._merge_queue_classifier import (
     _classify_pr_state,
     _is_not_enrolled,  # noqa: F401 — re-export for callers
     _is_positive_dropped_healthy,  # noqa: F401 — re-export for callers
+    _is_positive_dropped_merge_group_ci,  # noqa: F401 — re-export for callers
     _is_positive_stall,  # noqa: F401 — re-export for callers
+)
+from autoskillit.execution._merge_queue_group_ci import (
+    _MUTATION_DISABLE_AUTO_MERGE,
+    _MUTATION_ENABLE_AUTO_MERGE,
+    _MUTATION_ENQUEUE_PR,
+    _QUERY,  # noqa: F401 — re-export: tests assert merge_queue._QUERY exists
+    _query_merge_group_ci,  # noqa: F401 — re-export: tests patch merge_queue._query_merge_group_ci
 )
 from autoskillit.execution._merge_queue_repo_state import (
     _GRAPHQL_ENDPOINT,
@@ -49,71 +56,6 @@ if TYPE_CHECKING:
     from autoskillit.core._type_protocols_logging import GitHubApiLog
 
 logger = get_logger(__name__)
-
-_QUERY = """
-query GetPRAndQueueState($owner: String!, $repo: String!, $prNumber: Int!, $branch: String!) {
-  repository(owner: $owner, name: $repo) {
-    pullRequest(number: $prNumber) {
-      id
-      merged
-      state
-      mergeable
-      mergeStateStatus
-      autoMergeRequest {
-        enabledAt
-      }
-      statusCheckRollup {
-        state
-      }
-    }
-    mergeQueue(branch: $branch) {
-      entries(first: 100) {
-        nodes {
-          pullRequest { number }
-          state
-        }
-      }
-    }
-  }
-}
-"""
-
-# Part 2 of the _QUERY_FIELD_MAP validation: checks that every non-computed field
-# path head appears as a GraphQL field name in _QUERY.
-# Part 1 (keys match PRFetchState) lives in _merge_queue_classifier.py.
-for _key, _path in _QUERY_FIELD_MAP.items():
-    if _path.startswith("<"):
-        continue
-    _head = _path.split(".", 1)[0]
-    # Word-boundary search prevents "state" from matching inside "mergeStateStatus".
-    if not re.search(r"\b" + re.escape(_head) + r"\b", _QUERY):
-        raise RuntimeError(
-            f"_QUERY is missing GraphQL field {_head!r} required by PRFetchState[{_key!r}]"
-        )
-
-_MUTATION_DISABLE_AUTO_MERGE = """
-mutation DisableAutoMerge($prId: ID!) {
-  disablePullRequestAutoMerge(input: {pullRequestId: $prId}) {
-    pullRequest { number }
-  }
-}
-"""
-
-_MUTATION_ENABLE_AUTO_MERGE = """
-mutation EnableAutoMerge($prId: ID!, $mergeMethod: PullRequestMergeMethod!) {
-  enablePullRequestAutoMerge(input: {pullRequestId: $prId, mergeMethod: $mergeMethod}) {
-    pullRequest { number }
-  }
-}
-"""
-
-_MUTATION_ENQUEUE_PR = """
-mutation EnqueuePullRequest($prId: ID!) {
-  enqueuePullRequest(input: {pullRequestId: $prId}) {
-    mergeQueueEntry { id }
-  }
-}
-"""
 
 
 class DefaultMergeQueueWatcher:
@@ -189,6 +131,8 @@ class DefaultMergeQueueWatcher:
         not_in_queue_cycles: int = 0
         inconclusive_count: int = 0
         ever_enrolled: bool = False
+        was_in_queue: bool = False
+        merge_group_ci_cache: str | None = None
 
         def _make_result(
             success: bool, pr_state: PRState, reason: str, ejection_cause: str = ""
@@ -217,6 +161,8 @@ class DefaultMergeQueueWatcher:
                 ever_enrolled = True
 
             if state["in_queue"]:
+                was_in_queue = True
+                merge_group_ci_cache = None
                 not_in_queue_cycles = 0
                 inconclusive_count = 0
                 if state["queue_state"] == "UNMERGEABLE":
@@ -225,6 +171,28 @@ class DefaultMergeQueueWatcher:
                 continue
 
             not_in_queue_cycles += 1
+
+            if was_in_queue and state["checks_state"] not in ("FAILURE", "ERROR"):
+                merge_group_ci_cache = await _query_merge_group_ci(
+                    repo=repo,
+                    pr_number=pr_number,
+                    base_branch=target_branch,
+                    github_token=None,
+                )
+                # Only stop retrying once we have a result or the confirmation window expires.
+                # If _query_merge_group_ci returns None (run not yet visible), we keep
+                # was_in_queue=True to retry on the next poll cycle.
+                if (
+                    merge_group_ci_cache is not None
+                    or not_in_queue_cycles >= not_in_queue_confirmation_cycles
+                ):
+                    was_in_queue = False
+            else:
+                was_in_queue = False
+            if merge_group_ci_cache is not None:
+                state = cast(
+                    PRFetchState, {**state, "merge_group_checks_state": merge_group_ci_cache}
+                )
 
             try:
                 classification = _classify_pr_state(state, ever_enrolled=ever_enrolled)
@@ -307,6 +275,9 @@ class DefaultMergeQueueWatcher:
             elif classification.terminal == PRState.DROPPED_HEALTHY:
                 return _make_result(False, PRState.DROPPED_HEALTHY, classification.reason)
 
+            elif classification.terminal == PRState.DROPPED_MERGE_GROUP_CI:
+                return _make_result(False, PRState.DROPPED_MERGE_GROUP_CI, classification.reason)
+
             elif classification.terminal == PRState.NOT_ENROLLED:
                 return _make_result(False, PRState.NOT_ENROLLED, classification.reason)
 
@@ -379,6 +350,7 @@ class DefaultMergeQueueWatcher:
             in_queue=queue_entry is not None,
             queue_state=queue_entry["state"] if queue_entry else None,
             checks_state=checks_state,
+            merge_group_checks_state=None,
         )
 
     async def toggle(

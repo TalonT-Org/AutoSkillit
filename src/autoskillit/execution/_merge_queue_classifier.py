@@ -38,6 +38,7 @@ class PRFetchState(TypedDict):
     in_queue: bool
     queue_state: str | None
     checks_state: str | None  # statusCheckRollup.state; None = no checks configured
+    merge_group_checks_state: str | None  # None = not queried; populated on in_queue True→False
 
 
 # Maps PRFetchState keys to GraphQL source paths. Validated at import time.
@@ -52,6 +53,7 @@ _QUERY_FIELD_MAP: dict[str, str] = {
     "in_queue": "<computed>",
     "queue_state": "<computed>",
     "checks_state": "statusCheckRollup.state",
+    "merge_group_checks_state": "<computed>",
 }
 
 _ALL_FETCH_STATE_KEYS = PRFetchState.__required_keys__ | PRFetchState.__optional_keys__
@@ -110,6 +112,13 @@ def _is_positive_dropped_healthy(state: PRFetchState, *, ever_enrolled: bool) ->
     )
 
 
+def _is_positive_dropped_merge_group_ci(state: PRFetchState, *, ever_enrolled: bool) -> bool:
+    """True when PR dropped from queue with CI failure; extends _is_positive_dropped_healthy."""
+    return _is_positive_dropped_healthy(state, ever_enrolled=ever_enrolled) and state[
+        "merge_group_checks_state"
+    ] in ("FAILURE", "ERROR")
+
+
 def _is_not_enrolled(state: PRFetchState, *, ever_enrolled: bool) -> bool:
     """True when the PR is healthy but was never enrolled in the merge queue."""
     if ever_enrolled:
@@ -145,6 +154,12 @@ def _classify_pr_state(state: PRFetchState, *, ever_enrolled: bool) -> Classific
 
     if state["mergeable"] == "CONFLICTING":
         return ClassificationResult(PRState.EJECTED, "conflicting changes prevent merge")
+
+    if _is_positive_dropped_merge_group_ci(state, ever_enrolled=ever_enrolled):
+        return ClassificationResult(
+            PRState.DROPPED_MERGE_GROUP_CI,
+            "merge-group CI failed; PR ejected from queue (merge-group check run FAILURE)",
+        )
 
     if _is_positive_dropped_healthy(state, ever_enrolled=ever_enrolled):
         return ClassificationResult(PRState.DROPPED_HEALTHY, "PR healthy but auto_merge cleared")

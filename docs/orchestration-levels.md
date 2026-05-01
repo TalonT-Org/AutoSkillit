@@ -28,7 +28,8 @@ an L2 orchestrator.
 Key properties:
 
 - Interactive variant: `autoskillit cook`
-- Headless variant: `run_skill` worker (SessionType `LEAF`)
+- Headless variant: `run_skill` worker
+- SessionType: `LEAF` (both interactive and headless)
 - Can spawn L0 subagents via Agent/Task tool
 - Cannot call `run_skill` (enforced by `leaf_orchestration_guard.py` and
   `skill_cmd_guard.py`)
@@ -90,7 +91,7 @@ L3 (interactive fleet)
 | Orchestration Level | SessionType enum | CLI command | Headless variant |
 |---|---|---|---|
 | L0 (leaf) | n/a — Claude Agent | n/a | Always headless |
-| L1 (session) | `LEAF` (when headless) | `autoskillit cook` | `run_skill` worker |
+| L1 (session) | `LEAF` | `autoskillit cook` | `run_skill` worker |
 | L2 (orchestrator) | `ORCHESTRATOR` | `autoskillit order` | Food truck |
 | L3 (fleet) | `FLEET` | `autoskillit fleet` | None — no L4 exists |
 
@@ -100,8 +101,10 @@ L3 (interactive fleet)
   FastMCP visibility tags, the `leaf_orchestration_guard.py` PreToolUse hook,
   and the `_require_orchestrator_or_higher()` runtime guard in
   `tools_execution.py`. All three must independently agree.
-- **L0 agents cannot launch anything.** They are terminal nodes — no
-  `run_skill`, no Agent tool, no sub-sessions.
+- **L0 agents cannot launch anything.** They are terminal nodes — they cannot
+  call `run_skill`, cannot invoke the Agent tool to spawn sub-agents, and
+  cannot open sub-sessions. (L0 agents are themselves spawned via Agent/Task
+  by an L1 — the constraint is on outbound calls only.)
 - **L3 has no headless variant.** There is no L4 to dispatch an L3. Fleet
   always runs interactively.
 - **Spawning is strictly downward.** An L2 dispatches L1, an L1 spawns L0.

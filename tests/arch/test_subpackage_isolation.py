@@ -698,7 +698,12 @@ def test_no_subpackage_exceeds_10_files() -> None:
         _session_model.py and _session_content.py split session.py (P8-F3),
         _merge_queue_classifier.py and _merge_queue_repo_state.py split merge_queue.py
         (P8-F4), bringing the count to 33.
-        Exempt at 33 files.
+        _retry_fsm.py and _session_outcome.py split session retry and outcome logic,
+        bringing the count to 35.
+        _merge_queue_group_ci.py extracts merge-group CI helpers and GraphQL mutation/query
+        strings from merge_queue.py to satisfy the 500-line size budget (P8-F4 follow-up),
+        bringing the count to 36.
+        Exempt at 36 files.
       core/ — REQ-CNST-003-E4: core/ types split into per-concern type modules
         (_type_enums, _type_protocols_logging, _type_protocols_execution,
         _type_protocols_github, _type_protocols_workspace, _type_protocols_recipe,
@@ -768,7 +773,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
     EXEMPTIONS: dict[str, int] = {
         "server": 25,
         "recipe": 48,
-        "execution": 35,
+        "execution": 36,
         "core": 32,
         "cli": 42,
         "hooks": 28,

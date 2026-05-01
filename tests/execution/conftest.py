@@ -181,6 +181,7 @@ def _queue_state(
     in_queue: bool = False,
     queue_state: str | None = None,
     checks_state: str | None = None,
+    merge_group_checks_state: str | None = None,
 ) -> PRFetchState:
     return {
         "merged": merged,
@@ -193,6 +194,7 @@ def _queue_state(
         "in_queue": in_queue,
         "queue_state": queue_state,
         "checks_state": checks_state,
+        "merge_group_checks_state": merge_group_checks_state,
     }
 
 

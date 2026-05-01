@@ -267,6 +267,8 @@ steps:
         route: advance_queue_pr
       - when: "${{ result.pr_state }} == ejected_ci_failure"
         route: diagnose_queue_ci
+      - when: "${{ result.pr_state }} == dropped_merge_group_ci"
+        route: diagnose_queue_ci
       - when: "${{ result.pr_state }} == not_enrolled"
         route: register_clone_failure
       - when: "${{ result.pr_state }} == ejected"
@@ -274,13 +276,14 @@ steps:
       - when: "${{ result.pr_state }} == stalled"
         route: reenroll_stalled_queue_pr
       - when: "${{ result.pr_state }} == dropped_healthy"
-        route: reenter_queue
+        route: check_dropped_healthy_loop
       - when: "${{ result.pr_state }} == timeout"
         route: register_clone_failure
       - route: register_clone_failure
     on_failure: register_clone_failure
     note: >
-      Queue mode monitor. All 6 non-error PRState values are explicitly routed.
+      Queue mode monitor. All non-error PRState values are explicitly routed.
+      ejected_ci_failure and dropped_merge_group_ci both route to diagnose_queue_ci;
       ejected_ci_failure must precede ejected (both match CLOSED state).
 
   check_eject_limit:
@@ -307,6 +310,34 @@ steps:
     note: >
       Circuit breaker for the queue ejection loop. After 3 ejections, routes
       to register_clone_failure to prevent infinite re-enqueue cycles.
+
+  check_dropped_healthy_loop:
+    tool: run_cmd
+    with:
+      cmd: >
+        COUNTER_FILE="${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/dropped_healthy_count" &&
+        mkdir -p "$(dirname "$COUNTER_FILE")" &&
+        COUNT=$(cat "$COUNTER_FILE" 2>/dev/null || echo 0) &&
+        COUNT=$((COUNT + 1)) &&
+        echo "$COUNT" > "$COUNTER_FILE" &&
+        if [ "$COUNT" -gt 2 ]; then
+          echo "DROPPED_LIMIT_EXCEEDED";
+        else
+          echo "DROPPED_OK";
+        fi
+      cwd: "${{ context.work_dir }}"
+      step_name: "check_dropped_healthy_loop"
+    on_result:
+      - when: "${{ result.stdout | trim }} == DROPPED_LIMIT_EXCEEDED"
+        route: register_clone_failure
+      - route: reenter_queue
+    on_failure: register_clone_failure
+    note: >
+      Circuit breaker for the dropped_healthy re-enrollment loop. After 2 consecutive
+      unexplained drops with healthy PR-branch CI, escalates to register_clone_failure
+      instead of looping. Matches the check_eject_limit pattern used for the ejected
+      path. DROPPED_MERGE_GROUP_CI (confirmed merge-group CI failure) is routed
+      directly to diagnose_queue_ci and never reaches this step.
 
   get_ejected_pr_branch:
     tool: run_cmd

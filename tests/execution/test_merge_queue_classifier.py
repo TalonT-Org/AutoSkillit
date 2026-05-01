@@ -576,6 +576,20 @@ class TestClassifierImmunity:
                     checks_state="SUCCESS",
                     auto_merge_present=False,
                     in_queue=False,
+                    merge_group_checks_state=None,
+                ),
+            ),
+            (
+                PRState.DROPPED_MERGE_GROUP_CI,
+                _queue_state(
+                    merged=False,
+                    state="OPEN",
+                    mergeable="MERGEABLE",
+                    merge_state_status="CLEAN",
+                    checks_state="SUCCESS",
+                    auto_merge_present=False,
+                    in_queue=False,
+                    merge_group_checks_state="FAILURE",
                 ),
             ),
         ],
@@ -629,3 +643,56 @@ class TestMergeQueueVocabularyContract:
             f"Positive stall statuses not in KNOWN_MQ_MERGE_STATE_STATUSES: "
             f"{positive_stall_statuses - KNOWN_MQ_MERGE_STATE_STATUSES}"
         )
+
+
+class TestDroppedMergeGroupCI:
+    """Tests for the DROPPED_MERGE_GROUP_CI classifier state (merge-group CI blind spot fix)."""
+
+    def test_dropped_healthy_not_returned_when_merge_group_ci_failed(self):
+        """When a PR exits the queue with PR-branch CI SUCCESS but merge-group CI FAILURE,
+        the classifier must return DROPPED_MERGE_GROUP_CI, not DROPPED_HEALTHY."""
+        state = _queue_state(
+            merged=False,
+            state="OPEN",
+            mergeable="MERGEABLE",
+            merge_state_status="CLEAN",
+            auto_merge_present=False,
+            in_queue=False,
+            checks_state="SUCCESS",
+            merge_group_checks_state="FAILURE",
+        )
+        result = _mq._classify_pr_state(state, ever_enrolled=True)
+        assert result.terminal == PRState.DROPPED_MERGE_GROUP_CI
+        assert result.terminal != PRState.DROPPED_HEALTHY
+
+    def test_dropped_healthy_fires_when_merge_group_ci_unknown(self):
+        """When merge-group CI result is unknown (None), DROPPED_HEALTHY is still valid —
+        we cannot confirm the ejection was CI-caused, so the conservative classification
+        (re-enroll) is correct."""
+        state = _queue_state(
+            merged=False,
+            state="OPEN",
+            mergeable="MERGEABLE",
+            merge_state_status="CLEAN",
+            auto_merge_present=False,
+            in_queue=False,
+            checks_state="SUCCESS",
+            merge_group_checks_state=None,
+        )
+        result = _mq._classify_pr_state(state, ever_enrolled=True)
+        assert result.terminal == PRState.DROPPED_HEALTHY
+
+    def test_dropped_merge_group_ci_also_fires_on_error_conclusion(self):
+        """merge_group_checks_state='ERROR' is treated the same as 'FAILURE'."""
+        state = _queue_state(
+            merged=False,
+            state="OPEN",
+            mergeable="MERGEABLE",
+            merge_state_status="CLEAN",
+            auto_merge_present=False,
+            in_queue=False,
+            checks_state="SUCCESS",
+            merge_group_checks_state="ERROR",
+        )
+        result = _mq._classify_pr_state(state, ever_enrolled=True)
+        assert result.terminal == PRState.DROPPED_MERGE_GROUP_CI

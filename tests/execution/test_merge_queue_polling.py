@@ -595,3 +595,66 @@ class TestMergeQueueReliability:
         )
         assert result["success"] is True
         assert result["pr_state"] == "merged"
+
+    @pytest.mark.anyio
+    async def test_transition_gate_queries_merge_group_ci_on_in_to_out_with_success_checks(self):
+        """When the watcher observes in_queue True→False with checks_state=SUCCESS,
+        it must call _query_merge_group_ci and surface DROPPED_MERGE_GROUP_CI if CI failed."""
+        import autoskillit.execution.merge_queue as _mq
+
+        watcher = _make_watcher()
+        call_count = 0
+
+        async def _fetch(*_a, **_kw):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return _queue_state(in_queue=True, checks_state="SUCCESS")
+            return _queue_state(
+                in_queue=False,
+                checks_state="SUCCESS",
+                state="OPEN",
+                mergeable="MERGEABLE",
+                merge_state_status="CLEAN",
+                auto_merge_present=False,
+                merge_group_checks_state=None,
+            )
+
+        watcher._fetch_pr_and_queue_state = _fetch  # type: ignore[method-assign]
+        with (
+            patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock),
+            patch.object(
+                _mq, "_query_merge_group_ci", new_callable=AsyncMock, return_value="FAILURE"
+            ) as mock_query,
+        ):
+            result = await watcher.wait(pr_number=7, target_branch="main", repo="owner/repo")
+
+        mock_query.assert_called_once()
+        assert result["pr_state"] == "dropped_merge_group_ci"
+
+    @pytest.mark.anyio
+    async def test_transition_gate_not_triggered_when_checks_already_failed(self):
+        """When checks_state is FAILURE on exit, the transition gate must NOT query
+        merge-group CI — the classifier already handles this as EJECTED_CI_FAILURE."""
+        import autoskillit.execution.merge_queue as _mq
+
+        watcher = _make_watcher()
+        call_count = 0
+
+        async def _fetch(*_a, **_kw):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return _queue_state(in_queue=True, checks_state="SUCCESS")
+            return _queue_state(in_queue=False, checks_state="FAILURE", state="OPEN")
+
+        watcher._fetch_pr_and_queue_state = _fetch  # type: ignore[method-assign]
+        with (
+            patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock),
+            patch.object(
+                _mq, "_query_merge_group_ci", new_callable=AsyncMock, return_value="FAILURE"
+            ) as mock_query,
+        ):
+            await watcher.wait(pr_number=7, target_branch="main", repo="owner/repo")
+
+        mock_query.assert_not_called()

@@ -196,6 +196,7 @@ generic_automation_mcp/
 │   ├── ci.py                #   GitHub Actions CI watcher (httpx, never raises)
 │   ├── merge_queue.py       #   GitHub merge queue watcher (facade)
 │   ├── _merge_queue_classifier.py #  PRFetchState, ClassificationResult, ClassifierInconclusive, _classify_pr_state
+│   ├── _merge_queue_group_ci.py #   _query_merge_group_ci, _QUERY, mutation strings — extracted from merge_queue.py for size budget
 │   ├── _merge_queue_repo_state.py #  fetch_repo_merge_state, _text_has_push_trigger, _has_merge_group_trigger
 │   ├── github.py            #   GitHub issue fetcher
 │   ├── session.py           #   ClaudeSessionResult, extract_token_usage (facade)

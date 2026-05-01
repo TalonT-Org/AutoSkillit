@@ -378,11 +378,13 @@ def test_pr_state_enum_members_are_locked():
         PRState.EJECTED_CI_FAILURE,
         PRState.STALLED,
         PRState.DROPPED_HEALTHY,
+        PRState.DROPPED_MERGE_GROUP_CI,
         PRState.NOT_ENROLLED,
         PRState.TIMEOUT,
         PRState.ERROR,
     }
     assert PRState.DROPPED_HEALTHY.value == "dropped_healthy"
+    assert PRState.DROPPED_MERGE_GROUP_CI.value == "dropped_merge_group_ci"
 
 
 class TestSkillResultCrashedFactory:

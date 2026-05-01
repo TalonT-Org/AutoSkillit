@@ -73,6 +73,8 @@ _SKIP_PATHS = frozenset(
         # cli/_prompts.py builds orchestration-level prompts for L1/L3 sessions;
         # all L-number references in this file are orchestration-level, not import-layer.
         "cli/_prompts.py",
+        # leaf_orchestration_guard.py describes session-type invariants (orchestration L2/L3).
+        "hooks/leaf_orchestration_guard.py",
     ]
 )
 

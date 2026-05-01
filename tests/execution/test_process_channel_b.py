@@ -112,6 +112,7 @@ PROCESS_EXIT_THEN_CHANNEL_B_FIRES_SCRIPT = textwrap.dedent("""\
 """)
 
 
+@pytest.mark.timeout(180)
 class TestChannelBDrainWait:
     """Channel B (session monitor) winning before Channel A triggers bounded drain wait."""
 
@@ -434,6 +435,7 @@ class TestNaturalExitWithChannelConfirmation:
         assert skill_result.needs_retry is False
 
 
+@pytest.mark.timeout(180)
 class TestPostExitDrainWindow:
     """Symmetric drain window: process exits first, Channel B gets a bounded window to deposit."""
 

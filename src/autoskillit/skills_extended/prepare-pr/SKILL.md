@@ -39,6 +39,7 @@ in the decomposed PR flow (prepare → run_arch_lenses → compose).
 - Invoke arch-lens skills or any other sub-skills
 - Create files outside `{{AUTOSKILLIT_TEMP}}/prepare-pr/`
 - Fail if closing_issue is absent or gh is unavailable — degrade gracefully
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Emit all three output tokens (`prep_path`, `selected_lenses`, `lens_context_paths`)

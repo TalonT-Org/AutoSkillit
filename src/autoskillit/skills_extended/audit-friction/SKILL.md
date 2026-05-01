@@ -32,6 +32,7 @@ The user may provide a "since" date (e.g., `2/7`, `2026-02-07`, `last month`). I
 - Create files outside `{{AUTOSKILLIT_TEMP}}/audit-friction/` directory
 - Have subagents write files — they return all findings in response text only
 - Analyze subagent log subdirectories (`*/subagents/`) — top-level session files only
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use subagents heavily for parallel log analysis

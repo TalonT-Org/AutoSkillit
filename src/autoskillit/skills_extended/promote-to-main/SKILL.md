@@ -41,6 +41,7 @@ and creates a comprehensive promotion PR.
 - Skip pre-flight checks — a failing pre-flight must block PR creation
 - Use the Bash tool for file reads — use Read, Grep, Glob for all codebase inspection
 - Use `gh pr create --body` inline — always use `--body-file`
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Run ALL pre-flight checks before any analysis work

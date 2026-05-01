@@ -112,11 +112,11 @@ generic_automation_mcp/
 ├── smoke_utils.py           # Callables for smoke-test pipeline run_python steps
 ├── hook_registry.py         # HookDef, HOOK_REGISTRY, generate_hooks_json
 ├── _test_filter.py          # Test filter manifest: glob-to-test-directory mapping
-├── version.py               # Version health utilities (L0)
+├── version.py               # Version health utilities (IL-0)
 ├── .claude-plugin/          # plugin.json
 ├── .mcp.json
 │
-├── core/                    # L0 foundation (zero autoskillit imports)
+├── core/                    # IL-0 foundation (zero autoskillit imports)
 │   ├── __init__.py          #   Re-exports public surface
 │   ├── io.py                #   atomic_write, ensure_project_temp, YAML helpers
 │   ├── logging.py
@@ -135,9 +135,9 @@ generic_automation_mcp/
 │   ├── _type_helpers.py
 │   ├── _type_resume.py      #   ResumeSpec discriminated union: NoResume, BareResume, NamedResume
 │   ├── _type_plugin_source.py #  PluginSource discriminated union: DirectInstall | MarketplaceInstall
-│   ├── _linux_proc.py       #   read_boot_id, read_starttime_ticks — Linux /proc helpers (L0)
+│   ├── _linux_proc.py       #   read_boot_id, read_starttime_ticks — Linux /proc helpers (IL-0)
 │   ├── _claude_env.py       #   IDE-scrubbing canonical env builder for claude subprocesses
-│   ├── _terminal_table.py   #   L0 color-agnostic terminal table primitive
+│   ├── _terminal_table.py   #   IL-0 color-agnostic terminal table primitive
 │   ├── _version_snapshot.py #   Process-scoped version snapshot for session telemetry (lru_cache'd)
 │   ├── branch_guard.py
 │   ├── claude_conventions.py #  Skill discovery directory layout constants
@@ -145,12 +145,12 @@ generic_automation_mcp/
 │   ├── kitchen_state.py     #   Kitchen-open session marker (stdlib-only; readable from hooks)
 │   ├── _plugin_cache.py     #   Plugin cache lifecycle: retiring cache, install locking, kitchen registry
 │   ├── _plugin_ids.py       #   DIRECT_PREFIX, MARKETPLACE_PREFIX, detect_autoskillit_mcp_prefix (stdlib-only)
-│   ├── feature_flags.py     #   is_feature_enabled() — L0 feature gate resolution primitive
-│   ├── readiness.py         #   Filesystem readiness sentinel primitives for MCP server startup (L0)
+│   ├── feature_flags.py     #   is_feature_enabled() — IL-0 feature gate resolution primitive
+│   ├── readiness.py         #   Filesystem readiness sentinel primitives for MCP server startup (IL-0)
 │   ├── session_registry.py  #   Session registry: maps autoskillit launch IDs to Claude Code session UUIDs
-│   └── tool_sequence_analysis.py #  Cross-session tool call sequence DFG analysis (stdlib-only, L0)
+│   └── tool_sequence_analysis.py #  Cross-session tool call sequence DFG analysis (stdlib-only, IL-0)
 │
-├── config/                  # L1
+├── config/                  # IL-1
 │   ├── __init__.py
 │   ├── defaults.yaml
 │   ├── ingredient_defaults.py
@@ -158,7 +158,7 @@ generic_automation_mcp/
 │   ├── _config_dataclasses.py #  22 leaf dataclasses + ConfigSchemaError
 │   └── _config_loader.py    #   _make_dynaconf + load_config layer helpers
 │
-├── pipeline/                # L1 pipeline state
+├── pipeline/                # IL-1 pipeline state
 │   ├── __init__.py
 │   ├── audit.py             #   FailureRecord, DefaultAuditLog
 │   ├── background.py        #   DefaultBackgroundSupervisor
@@ -171,7 +171,7 @@ generic_automation_mcp/
 │   ├── tokens.py
 │   └── pr_gates.py          #   is_ci_passing, is_review_passing, partition_prs
 │
-├── execution/               # L1
+├── execution/               # IL-1
 │   ├── __init__.py
 │   ├── commands.py          #   Claude{Interactive,Headless}Cmd builders
 │   ├── db.py                #   Read-only SQLite with defence-in-depth
@@ -208,7 +208,7 @@ generic_automation_mcp/
 │   ├── clone_guard.py       #   Clone contamination guard — detect and revert direct changes to clone CWD
 │   └── pr_analysis.py       #   extract_linked_issues, DOMAIN_PATHS, partition_files_by_domain
 │
-├── workspace/               # L1
+├── workspace/               # IL-1
 │   ├── __init__.py
 │   ├── cleanup.py           #   CleanupResult, preserve list
 │   ├── clone.py             #   clone_repo + push_to_remote + DefaultCloneManager
@@ -219,7 +219,7 @@ generic_automation_mcp/
 │   ├── skills.py            #   SkillResolver — bundled skill listing
 │   └── worktree.py
 │
-├── planner/                 # L1
+├── planner/                 # IL-1
 │   ├── __init__.py          #   Progressive resolution planner — re-exports expand_assignments, expand_wps, finalize_wp_manifest, validate_plan, compile_plan
 │   ├── manifests.py         #   expand_assignments, expand_wps, finalize_wp_manifest, build_phase_assignment_manifest, build_phase_wp_manifest — manifest callables
 │   ├── merge.py             #   merge_tier_dir, merge_files, build_plan_snapshot, extract_item, replace_item — JSON interchange merge tooling
@@ -227,7 +227,7 @@ generic_automation_mcp/
 │   ├── schema.py            #   planner data contracts — PhaseResult, AssignmentResult, WPResult, PlanDocument TypedDicts
 │   └── compiler.py          #   compile_plan — topological sort, issue body generation, milestone definitions, plan artifacts
 │
-├── recipe/                  # L2
+├── recipe/                  # IL-2
 │   ├── __init__.py
 │   ├── contracts.py         #   Contract card generation + staleness triage
 │   ├── io.py                #   load_recipe, list_recipes, iter_steps_with_context
@@ -277,14 +277,14 @@ generic_automation_mcp/
 │   ├── staleness_cache.py
 │   └── validator.py         #   validate_recipe, analyze_dataflow
 │
-├── migration/               # L2
+├── migration/               # IL-2
 │   ├── __init__.py
 │   ├── engine.py            #   MigrationEngine, adapter ABC hierarchy
 │   ├── _api.py              #   check_and_migrate
 │   ├── loader.py            #   Migration note discovery + version chaining
 │   └── store.py             #   FailureStore (JSON, atomic writes)
 │
-├── fleet/                   # L2
+├── fleet/                   # IL-2
 │   ├── __init__.py          #   Re-exports: CampaignSummary, parse_campaign_summary, etc.
 │   ├── _api.py              #   Fleet campaign execution engine — dispatches L2 sessions, resolves campaign/result variable references
 │   ├── _prompts.py          #   Prompt builder for L2 fleet dispatch sessions — assembles sous-chef instruction block from SKILL.md sections
@@ -297,7 +297,7 @@ generic_automation_mcp/
 │   ├── state.py             #   Campaign state persistence — DispatchRecord, DispatchStatus, atomic writes, resume algorithm
 │   └── summary.py           #   Campaign summary schema v1: frozen dataclasses, sentinel parser, validator
 │
-├── server/                  # L3 FastMCP server
+├── server/                  # IL-3 FastMCP server
 │   ├── __init__.py          #   FastMCP app, kitchen gating, headless tool reveal
 │   ├── git.py               #   Merge workflow for merge_worktree
 │   ├── _editable_guard.py   #   Pre-deletion editable install guard (stdlib-only)
@@ -323,7 +323,7 @@ generic_automation_mcp/
 │   ├── _factory.py          #   Composition Root: make_context()
 │   └── _state.py            #   Lazy init, plugin dir resolution
 │
-├── cli/                     # L3 CLI
+├── cli/                     # IL-3 CLI
 │   ├── __init__.py
 │   ├── _ansi.py             #   supports_color, NO_COLOR/TERM=dumb
 │   ├── _terminal.py         #   terminal_guard() TTY restore

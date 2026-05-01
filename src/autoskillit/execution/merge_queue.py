@@ -289,7 +289,9 @@ class DefaultMergeQueueWatcher:
                 )
             was_in_queue = False
             if merge_group_ci_cache is not None:
-                state = cast(PRFetchState, {**state, "merge_group_checks_state": merge_group_ci_cache})
+                state = cast(
+                    PRFetchState, {**state, "merge_group_checks_state": merge_group_ci_cache}
+                )
 
             try:
                 classification = _classify_pr_state(state, ever_enrolled=ever_enrolled)

@@ -183,7 +183,7 @@ source_modules = ["autoskillit.pipeline"]
 # forbidden_modules list. pipeline.context.ToolContext owns
 # AutomationConfig as the DI wiring point — see the docstrings on
 # pipeline/context.py and pipeline/__init__.py. The coupling is safe
-# because config/ depends only on L0 (enforced by IL-002), so no
+# because config/ depends only on IL-0 (enforced by IL-002), so no
 # cycle is possible. This exception is asserted by
 # tests/arch/test_import_linter_contracts.py
 #     ::test_il003_pipeline_config_exception_documented.
@@ -280,7 +280,7 @@ modules = [
 ]
 # EXCEPTION: autoskillit.pipeline.context may import autoskillit.config.
 # pipeline.context.ToolContext owns AutomationConfig as the DI wiring point.
-# config/ depends only on L0 (IL-002), so no cycle is introduced.
+# config/ depends only on IL-0 (IL-002), so no cycle is introduced.
 # This exception mirrors the one already documented in IL-003.
 ignore_imports = [
     "autoskillit.pipeline.context -> autoskillit.config",

@@ -172,6 +172,9 @@ def test_session_type_docstring_references_orchestration_levels():
     assert "L2" in doc
     assert "L1" in doc
     assert "L0" in doc
+    assert "FLEET" in doc
+    assert "ORCHESTRATOR" in doc
+    assert "LEAF" in doc
     assert "mid-tier" not in doc
     assert "bottom-tier" not in doc
     assert "Tier discriminator" not in doc

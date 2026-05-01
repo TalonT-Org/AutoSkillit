@@ -388,7 +388,7 @@ def test_req_imp_010_init_helpers_no_toplevel_recipe_imports() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_il008_l1_independence() -> None:
+def test_il008_il1_independence() -> None:
     """IL-008: IL-1 sibling packages (config, pipeline, execution, workspace) must
     not import from each other at runtime.
 

@@ -30,6 +30,7 @@ Extract domain knowledge, naming conventions, and structural patterns specific t
 **NEVER:**
 - Modify any target project files
 - Abort the calling recipe on failure — log a warning and return gracefully
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Read the analysis file from the path in the PLANNER_ANALYSIS_FILE environment variable before spawning subagents

@@ -31,6 +31,7 @@ hooks:
 - Modify any source code files
 - Include static structure details (that's C4 lens)
 - Show data storage details (that's data lineage lens)
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Focus on BEHAVIOR and STATE TRANSITIONS

@@ -31,6 +31,7 @@ issues upfront, load recipe, execute session, collect result, report.
   in the manifest JSON, not on GitHub objects)
 - Modify any source code files
 - Reimplement recipe steps inline — always use `load_recipe` to load the recipe YAML and
+- Run subagents in the background (`run_in_background: true` is prohibited)
   follow it as an orchestrator
 
 **ALWAYS:**

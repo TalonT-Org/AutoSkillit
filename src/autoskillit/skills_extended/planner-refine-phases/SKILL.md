@@ -39,6 +39,7 @@ conflicts, applies field-level edits to the plan, and writes `refined_plan.json`
 - Emit `refined_plan_path` before writing `refined_plan.json`
 - Skip emitting `refined_plan_path` even if all L0s fail (write unchanged plan, still emit)
 - Read `{{AUTOSKILLIT_TEMP}}` artifacts not passed as positional arguments
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Validate each L0 response for `phase_id`, `changes` (array), `conflicts` (array)

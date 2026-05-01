@@ -42,6 +42,7 @@ hooks:
 **NEVER:**
 - Modify any source code files
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-governance-risk/`
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Identify subgroups for whom the experimental evidence may not generalize

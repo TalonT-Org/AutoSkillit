@@ -28,6 +28,7 @@ Audit the test suite to identify useless tests, consolidation opportunities, qua
 - Flag tests as useless without reading and understanding them
 - Recommend removing tests that guard against real regressions
 - Recommend changes that would reduce meaningful coverage
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use subagents for parallel exploration

@@ -41,6 +41,7 @@ branch already checked out.
 - Exceed 3 fix-and-retest iterations
 - Delete or discard the working directory on failure
 - Modify tests to suppress failures introduced by reviewer fixes
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Find the PR by feature branch at invocation time (not a hardcoded number)

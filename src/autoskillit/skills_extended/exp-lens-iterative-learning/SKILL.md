@@ -43,6 +43,7 @@ hooks:
 - Modify any source code files
 - Recommend one-factor-at-a-time exploration when interactions are plausible
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-iterative-learning/`
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Evaluate exploration efficiency against the key uncertainty being reduced

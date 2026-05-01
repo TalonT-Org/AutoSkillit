@@ -36,6 +36,7 @@ outputs, and synthesizes a complete visualization plan.
 - Run vis-lens calls across multiple assistant messages — all selected lens calls must
   appear in a SINGLE assistant message to execute in parallel
 - Write outputs outside `{{AUTOSKILLIT_TEMP}}/plan-visualization/`
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool

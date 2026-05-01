@@ -33,6 +33,7 @@ Analyze open GitHub issues, classify each into a recipe route, group them into p
 - Add useless comments to the codebase — do not use the codebase as a notepad
 - Create files outside `{{AUTOSKILLIT_TEMP}}/triage-issues/` directory
 - Use `--body` shell substitution (`--body "$(...)`) for `gh issue edit` — always write to
+- Run subagents in the background (`run_in_background: true` is prohibited)
   `{{AUTOSKILLIT_TEMP}}/triage-issues/edit_body_{timestamp}.md` and use `--body-file`
 
 **ALWAYS:**

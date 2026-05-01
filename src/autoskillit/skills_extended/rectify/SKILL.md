@@ -38,6 +38,7 @@ Do not change any code.
 - Propose bandaid fixes, fallbacks, or direct-only fixes
 - Suggest backward compatibility shims
 - Create files outside `{{AUTOSKILLIT_TEMP}}/rectify/` directory
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Use subagents for parallel exploration

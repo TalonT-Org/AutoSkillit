@@ -31,6 +31,7 @@ hooks:
 - Modify any source code files
 - Focus on runtime behavior (that's process flow lens)
 - Show static structure without data context
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Trace data from INPUT to STORAGE

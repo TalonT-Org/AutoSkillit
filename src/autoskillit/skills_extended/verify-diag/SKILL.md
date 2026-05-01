@@ -26,6 +26,7 @@ Verify an architecture diagram's factual accuracy against the actual codebase. A
 **NEVER:**
 - Modify source code files
 - Modify the diagram during verification (report findings only)
+- Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
 - Verify every named component exists in the codebase

@@ -1,6 +1,6 @@
 """Migration API: top-level check_and_migrate convenience function.
 
-Cross-L2 coupling note: migration/ (L2) imports from recipe/ (L2). This is
+Cross-IL-2 coupling note: migration/ (IL-2) imports from recipe/ (IL-2). This is
 architecturally correct — migration inherently needs to discover, parse, and
 validate recipes. The coupling is not extractable without inverting control in a
 way that would complicate callers. The # noqa: PLC0415 comments on the deferred

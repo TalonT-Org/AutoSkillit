@@ -292,6 +292,16 @@ For findings where the classification map shows `verdict = REJECT` or `verdict =
 - For REJECT: no code changes are applied; record `(file, line, reason="classifier: REJECT — {evidence}")`.
 - For DISCUSS: record `(file, line, reason="classifier: DISCUSS — {context}")`.
 
+**`thread_node_id` Tracking:**
+
+| Outcome | Append to `addressed_thread_ids`? |
+|---------|-----------------------------------|
+| ACCEPT — fix committed | Yes (if `thread_node_id` is not `None`) |
+| REJECT — no code change | Yes (if `thread_node_id` is not `None`) |
+| DISCUSS — awaiting human decision | No — do not add DISCUSS findings to `addressed_thread_ids` |
+| Skipped finding (stale, missing file, unclear) | No |
+| File-level comment (`line` is null) | No |
+
 **Skip a finding if:**
 - The comment is a file-level comment (`line` is null) — these have no code anchor
 - The referenced file does not exist in the current branch
@@ -303,16 +313,6 @@ Record each skip with: `(file, line, reason)`.
 
 **Skip a finding flow:** When skipping a finding (stale comment, missing file, unclear guidance, contradiction):
 - Record `(file, line, reason)` as before.
-
-**`thread_node_id` Tracking:**
-
-| Outcome | Append to `addressed_thread_ids`? |
-|---------|-----------------------------------|
-| ACCEPT — fix committed | Yes (if `thread_node_id` is not `None`) |
-| REJECT — no code change | Yes (if `thread_node_id` is not `None`) |
-| DISCUSS — awaiting human decision | No — thread remains open |
-| Skipped finding (stale, missing file, unclear) | No |
-| File-level comment (`line` is null) | No |
 
 ### Step 5: Run Tests
 

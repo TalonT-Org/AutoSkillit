@@ -23,6 +23,7 @@ SKILL_TEXT = SKILL_PATH.read_text()
 
 # ── 1. addressed_thread_ids decision table ────────────────────────────────────
 
+
 def test_addressed_thread_ids_consolidated_decision_table() -> None:
     """All thread_node_id tracking rules must live in a single decision table."""
     # The plan collapses 5 scattered rules into one table.
@@ -70,6 +71,7 @@ def test_addressed_thread_ids_not_in_file_level_guard() -> None:
 
 # ── 2. Best-effort language unified ──────────────────────────────────────────
 
+
 def test_best_effort_unified_across_steps_6_and_65() -> None:
     """Step 6 best-effort statement must cover both Steps 6 and 6.5."""
     step6_idx = SKILL_TEXT.find("### Step 6:")
@@ -92,13 +94,17 @@ def test_step65_no_standalone_best_effort_statement() -> None:
         if step66_idx != -1
         else SKILL_TEXT[step65_idx : step65_idx + 1200]
     )
-    assert "best-effort: failure to post any reply must not affect the exit code" not in step65_section, (
+    assert (
+        "best-effort: failure to post any reply must not affect the exit code"
+        not in step65_section
+    ), (
         "Step 6.5 must not contain a standalone best-effort/exit-code statement; "
         "that is now unified in Step 6"
     )
 
 
 # ── 3. Output section pruned ─────────────────────────────────────────────────
+
 
 def test_output_section_no_graceful_degradation_detail() -> None:
     """The ## Output section must not repeat 'graceful degradation' detail."""
@@ -113,6 +119,7 @@ def test_output_section_no_graceful_degradation_detail() -> None:
 
 # ── 4. Step 3.5 JSON example removed ─────────────────────────────────────────
 
+
 def test_step35_json_example_removed() -> None:
     """The illustrative JSON example block (comment_id: 123) must be removed from Step 3.5."""
     assert '"comment_id": 123' not in SKILL_TEXT, (
@@ -122,6 +129,7 @@ def test_step35_json_example_removed() -> None:
 
 
 # ── 5. Per-unique-file read in sub-agent instructions ────────────────────────
+
 
 def test_per_unique_file_read_instruction() -> None:
     """Sub-agent instructions must say to read each unique file once, not once per finding."""
@@ -149,6 +157,7 @@ def test_per_finding_read_instruction_removed() -> None:
 
 # ── 6. Per-unique-path git log ────────────────────────────────────────────────
 
+
 def test_per_unique_path_git_log() -> None:
     """Git log instruction must say 'once per unique path, not once per finding'."""
     step35_idx = SKILL_TEXT.find("### Step 3.5")
@@ -158,12 +167,11 @@ def test_per_unique_path_git_log() -> None:
     assert (
         "once per unique path" in step35_section.lower()
         or "per unique path" in step35_section.lower()
-    ), (
-        "Step 3.5 git log instruction must say 'once per unique path' (not once per finding)"
-    )
+    ), "Step 3.5 git log instruction must say 'once per unique path' (not once per finding)"
 
 
 # ── 7. Inline classification shortcut for simple PRs ─────────────────────────
+
 
 def test_inline_classification_shortcut_documented() -> None:
     """Step 3.5 must document an inline classification path for ≤3 findings."""
@@ -175,9 +183,7 @@ def test_inline_classification_shortcut_documented() -> None:
         "3 or fewer" in step35_section.lower()
         or "≤3" in step35_section
         or "inline" in step35_section.lower()
-    ), (
-        "Step 3.5 must document an inline classification shortcut for PRs with 3 or fewer findings"
-    )
+    ), "Step 3.5 must document an inline classification shortcut for PRs with 3 or fewer findings"
 
 
 def test_inline_shortcut_requires_single_domain_group() -> None:
@@ -189,8 +195,8 @@ def test_inline_shortcut_requires_single_domain_group() -> None:
     inline_idx = step35_section.lower().find("inline")
     assert inline_idx != -1, "Step 3.5 must mention 'inline' classification"
     inline_context = step35_section[max(0, inline_idx - 200) : inline_idx + 400].lower()
-    assert "single domain" in inline_context or "one domain" in inline_context or (
-        "single" in inline_context and "group" in inline_context
-    ), (
-        "The inline classification shortcut must require a single domain group condition"
-    )
+    assert (
+        "single domain" in inline_context
+        or "one domain" in inline_context
+        or ("single" in inline_context and "group" in inline_context)
+    ), "The inline classification shortcut must require a single domain group condition"

@@ -23,8 +23,8 @@ def test_arch_lenses_is_not_hidden(recipe):
     assert recipe.ingredients["arch_lenses"].hidden is False
 
 
-def test_arch_lenses_defaults_to_true(recipe):
-    assert recipe.ingredients["arch_lenses"].default == "true"
+def test_arch_lenses_defaults_to_false(recipe):
+    assert recipe.ingredients["arch_lenses"].default == "false"
 
 
 def test_prepare_pr_routes_to_compose_pr_when_arch_lenses_false(recipe):

@@ -55,7 +55,8 @@ def test_resumed_session_injects_context(tmp_path: Path) -> None:
     transcript = tmp_path / "session.jsonl"
     transcript.write_text('{"type":"say","text":"hello"}\n')
     payload = json.dumps({"session_id": "abc", "transcript_path": str(transcript)})
-    rc, out = _run(payload)
+    env = {**os.environ, "AUTOSKILLIT_STATE_DIR": str(tmp_path / "empty_state")}
+    rc, out = _run(payload, env=env)
     assert rc == 0
     data = json.loads(out.strip())
     assert "additionalContext" in data

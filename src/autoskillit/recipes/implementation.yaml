@@ -30,7 +30,7 @@ ingredients:
     default: "true"
   arch_lenses:
     description: Generate architecture lens diagrams for the PR
-    default: "true"
+    default: "false"
   auto_merge:
     description: >-
       Automatically merge the PR after required checks pass —
@@ -67,9 +67,10 @@ kitchen_rules:
     directly. The push step publishes the feature branch, then prepare_pr → run_arch_lenses → compose_pr
     opens a PR to base_branch. When open_pr=false, merges target base_branch
     directly and prepare_pr is skipped."
-  - "When arch_lenses=false (and open_pr=true), prepare_pr still runs but
-    routes directly to compose_pr, skipping run_arch_lenses. The PR is
-    created without architecture lens diagrams."
+  - "When arch_lenses=true (and open_pr=true), prepare_pr routes through
+    run_arch_lenses before compose_pr, adding architecture lens diagrams
+    to the PR. By default arch_lenses is off and prepare_pr routes
+    directly to compose_pr."
   - "SOURCE ISOLATION: After clone_repo returns, the source_dir is strictly
     off-limits. Never run any command in source_dir — no git checkout, git
     fetch, git reset, git pull, run_cmd, run_skill, or any other operation.
@@ -448,7 +449,7 @@ steps:
       selected_lenses: "${{ result.selected_lenses }}"
       lens_context_paths: "${{ result.lens_context_paths }}"
     on_result:
-      - when: "${{ result.prep_path }} and ${{ inputs.arch_lenses }} != 'false'"
+      - when: "${{ result.prep_path }} and ${{ inputs.arch_lenses }} == 'true'"
         route: run_arch_lenses
       - when: "${{ result.prep_path }}"
         route: compose_pr

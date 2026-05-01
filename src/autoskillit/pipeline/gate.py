@@ -1,10 +1,10 @@
 """Gate policy constants for AutoSkillit MCP tools.
 
-L1 pipeline module. Declares which tools are gated vs. ungated and provides
+IL-1 pipeline module. Declares which tools are gated vs. ungated and provides
 the canonical error response for a closed gate.
 
-GATED_TOOLS and UNGATED_TOOLS are sourced from autoskillit.core.types (L0)
-so that L2 modules (recipe, migration) can also reference the tool registry
+GATED_TOOLS and UNGATED_TOOLS are sourced from autoskillit.core.types (IL-0)
+so that IL-2 modules (recipe, migration) can also reference the tool registry
 without violating layer ordering.
 """
 
@@ -45,7 +45,7 @@ def gate_error_result(message: str | None = None) -> str:
     'tools not enabled' message for gate-closed errors.
 
     Hardcodes retry_reason as "none" (the StrEnum value of RetryReason.NONE)
-    to preserve the L0 zero-internal-imports constraint.
+    to preserve the IL-0 zero-internal-imports constraint.
     """
     return json.dumps(
         {

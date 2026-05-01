@@ -210,8 +210,8 @@ def test_req_imp_005_git_only_core_at_runtime() -> None:
             # _subprocess is a same-package helper with no upward layer imports;
             # git.py delegates timeout result processing to _process_runner_result.
             "autoskillit.server._subprocess",
-            # workspace is L1; git.py delegates worktree removal to the
-            # single L1 implementation rather than inlining subprocess calls.
+            # workspace is IL-1; git.py delegates worktree removal to the
+            # single IL-1 implementation rather than inlining subprocess calls.
             "autoskillit.workspace",
         }
     )
@@ -312,13 +312,13 @@ def test_req_imp_009_session_skills_no_config_settings_import() -> None:
 
 # ---------------------------------------------------------------------------
 # REQ-IMP-007: server/ and cli/ files must not import cross-package sub-modules
-# (Finding 13.3) — extends REQ-IMP-001 coverage to L3 layers
+# (Finding 13.3) — extends REQ-IMP-001 coverage to IL-3 layers
 # ---------------------------------------------------------------------------
 
 
 def test_req_imp_007_server_cli_no_unauthorized_cross_submodule_imports() -> None:
     """REQ-IMP-007: every file in server/ and cli/ must obey the same
-    cross-package submodule rule that REQ-IMP-001 enforces for the L0–L2
+    cross-package submodule rule that REQ-IMP-001 enforces for the IL-0–IL-2
     layers, with a small explicit allowlist:
 
       server/_factory.py     — Composition Root, may import any layer
@@ -362,7 +362,7 @@ def test_req_imp_007_server_cli_no_unauthorized_cross_submodule_imports() -> Non
 def test_req_imp_010_init_helpers_no_toplevel_recipe_imports() -> None:
     """cli/_init_helpers.py must not import autoskillit.recipe at module level.
 
-    list_recipes is an L2 dependency; deferring it to the function body
+    list_recipes is an IL-2 dependency; deferring it to the function body
     (_prompt_recipe_choice) keeps _init_helpers.py importable without
     pulling in the recipe subpackage at startup (issue #930).
     """
@@ -384,18 +384,18 @@ def test_req_imp_010_init_helpers_no_toplevel_recipe_imports() -> None:
 
 
 # ---------------------------------------------------------------------------
-# IL-008: L1 sibling packages must not import from each other at runtime
+# IL-008: IL-1 sibling packages must not import from each other at runtime
 # ---------------------------------------------------------------------------
 
 
-def test_il008_l1_independence() -> None:
-    """IL-008: L1 sibling packages (config, pipeline, execution, workspace) must
+def test_il008_il1_independence() -> None:
+    """IL-008: IL-1 sibling packages (config, pipeline, execution, workspace) must
     not import from each other at runtime.
 
     Exception: autoskillit.pipeline.context may import autoskillit.config.
     pipeline.context.ToolContext owns AutomationConfig as the DI wiring point
     (see pipeline/context.py and the IL-003 inline EXCEPTION comment).
-    config/ depends only on L0 (IL-002), so no cycle is introduced.
+    config/ depends only on IL-0 (IL-002), so no cycle is introduced.
 
     TYPE_CHECKING imports are excluded — pyproject.toml sets
     exclude_type_checking_imports = true and _parse_imports() respects
@@ -418,5 +418,5 @@ def test_il008_l1_independence() -> None:
                 if (pkg, parts[1]) not in ALLOWED:
                     violations.append(f"{path.relative_to(SRC)}: {mod}")
     assert not violations, (
-        "IL-008 violations (unauthorized L1 sibling runtime imports):\n" + "\n".join(violations)
+        "IL-008 violations (unauthorized IL-1 sibling runtime imports):\n" + "\n".join(violations)
     )

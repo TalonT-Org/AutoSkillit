@@ -1,4 +1,4 @@
-"""pipeline/ L1 package: audit log, token tracking, gate policy, and ToolContext.
+"""pipeline/ IL-1 package: audit log, token tracking, gate policy, and ToolContext.
 
 Re-exports the full public surface of the four pipeline sub-modules.
 Only pipeline/context.py imports from config/; the other three modules

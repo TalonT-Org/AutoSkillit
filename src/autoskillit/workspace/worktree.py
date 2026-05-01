@@ -1,4 +1,4 @@
-"""Git worktree lifecycle utilities (L1 workspace service layer).
+"""Git worktree lifecycle utilities (IL-1 workspace service layer).
 
 Provides the single source of truth for worktree creation metadata,
 enumeration via `git worktree list --porcelain`, and removal via

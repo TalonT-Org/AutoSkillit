@@ -1,6 +1,6 @@
 """Domain model for Claude Code headless session results.
 
-L2 module: imports only from L0 (types, _logging). No server side-effects.
+IL-1 module: imports only from IL-0 (types, _logging). No server side-effects.
 Centralizes all session-parsing concerns so callers can work with typed
 objects instead of raw JSON strings.
 

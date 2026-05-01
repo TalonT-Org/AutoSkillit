@@ -30,7 +30,7 @@ _MCP_RETRY_INSTRUCTION: str = (
 
 
 def _read_full_sous_chef() -> str:
-    """Read the full sous-chef SKILL.md for L1/L3 injection."""
+    """Read the full sous-chef SKILL.md for injection into L1/L3 orchestration sessions."""
     path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
     try:
         return path.read_text()

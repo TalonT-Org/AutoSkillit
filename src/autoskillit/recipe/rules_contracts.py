@@ -350,7 +350,7 @@ def _check_result_field_drift(ctx: ValidationContext) -> list[RuleFinding]:
     Comparison is one-directional: contract required fields vs TypedDict required keys.
     """
     # Deferred import: recipe/ must not import planner/ at module level (REQ-COMP-009).
-    # planner/ is L1 and does not import recipe/, so no circular risk.
+    # planner/ is IL-1 and does not import recipe/, so no circular risk.
     from autoskillit.planner import (  # noqa: PLC0415
         PHASE_REQUIRED_KEYS,
     )

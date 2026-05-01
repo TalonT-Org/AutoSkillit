@@ -1,4 +1,4 @@
-"""Terminal color utilities (L3 — CLI layer only)."""
+"""Terminal color utilities (IL-3 — CLI layer only)."""
 
 from __future__ import annotations
 

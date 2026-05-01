@@ -1,6 +1,6 @@
 """Canonical GitHub remote repository resolver.
 
-L1 module: resolves 'owner/repo' from a git working directory,
+IL-1 module: resolves 'owner/repo' from a git working directory,
 encoding the clone isolation contract (upstream > origin priority).
 """
 

@@ -1,8 +1,8 @@
 """Shared terminal table primitive — color-agnostic, pure stdlib.
 
 This module contains no autoskillit imports and no ANSI sequences. It lives
-at L0 (core/) so it can be imported safely from any layer: cli/ (L3),
-pipeline/ (L1), server/ (L3), etc.
+at IL-0 (core/) so it can be imported safely from any layer: cli/ (IL-3),
+pipeline/ (IL-1), server/ (IL-3), etc.
 
 Public surface: TerminalColumn, _render_terminal_table, _render_gfm_table.
 """

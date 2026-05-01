@@ -1,6 +1,6 @@
 """Quota-aware check for long-running pipeline recipes.
 
-L1 module: depends only on stdlib, httpx (FastMCP transitive dep), and core/logging.
+IL-1 module: depends only on stdlib, httpx (FastMCP transitive dep), and core/logging.
 Does NOT sleep. Returns metadata; the orchestrator sleeps via run_cmd.
 """
 

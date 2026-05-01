@@ -162,8 +162,8 @@ PIPELINE_FORBIDDEN_TOOLS: tuple[str, ...] = (
 # recipe_validator.py.
 SKILL_TOOLS: frozenset[str] = frozenset({"run_skill"})
 
-# Authoritative MCP tool registries. Defined here (L0) so both pipeline/ (L1)
-# and recipe/ (L2) can reference them without cross-layer import violations.
+# Authoritative MCP tool registries. Defined here (IL-0) so both pipeline/ (IL-1)
+# and recipe/ (IL-2) can reference them without cross-layer import violations.
 GATED_TOOLS: frozenset[str] = frozenset(
     {
         "run_cmd",
@@ -238,7 +238,7 @@ FLEET_DISPATCH_TOOLS: frozenset[str] = frozenset(
 )
 
 # Tools that appear in the Fleet group in the cook menu and open_kitchen response.
-# Defined here (L0) so menu modules can import the constant without loading the fleet package.
+# Defined here (IL-0) so menu modules can import the constant without loading the fleet package.
 FLEET_MENU_TOOLS: tuple[str, ...] = ("dispatch_food_truck", "record_gate_dispatch")
 
 FLEET_ERROR_CODES: frozenset[str] = frozenset(FleetErrorCode)

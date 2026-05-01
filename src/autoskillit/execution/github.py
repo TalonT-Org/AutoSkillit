@@ -1,6 +1,6 @@
 """GitHub issue fetcher.
 
-L1 module: depends only on stdlib, httpx, and core/logging.
+IL-1 module: depends only on stdlib, httpx, and core/logging.
 Never raises — all errors are captured and returned as {"success": False, "error": "..."}.
 """
 

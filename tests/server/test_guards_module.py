@@ -64,3 +64,5 @@ def test_require_fleet_doc_mentions_l3():
 
     doc = _require_fleet.__doc__ or ""
     assert "L3" in doc
+    assert "L1" in doc
+    assert "L2" in doc

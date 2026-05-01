@@ -80,6 +80,7 @@ def _require_fleet(tool_name: str = "") -> str | None:
     """Return headless_error JSON if session is not L3 (fleet); None if permitted.
 
     No interactive bypass — fleet is a specific orchestration level, not a headless guard.
+    L1 (leaf) and L2 (orchestrator) sessions are both denied.
     """
     st = session_type()
     if st is SessionType.FLEET:

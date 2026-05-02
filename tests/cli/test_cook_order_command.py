@@ -10,60 +10,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from autoskillit import cli
-from autoskillit.cli._prompts import _OPEN_KITCHEN_CHOICE, _resolve_recipe_input
 from autoskillit.core import ClaudeFlags
 from tests.cli.conftest import _SCRIPT_YAML
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
-
-
-class TestResolveRecipeInput:
-    """Unit tests for the _resolve_recipe_input picker resolution helper."""
-
-    def _make_recipe(self, name: str) -> MagicMock:
-        r = MagicMock()
-        r.name = name
-        return r
-
-    def test_zero_returns_open_kitchen_sentinel(self) -> None:
-        available = [self._make_recipe("smoke-test")]
-        result = _resolve_recipe_input("0", available)
-        assert result is _OPEN_KITCHEN_CHOICE
-
-    def test_zero_with_empty_list_returns_open_kitchen_sentinel(self) -> None:
-        result = _resolve_recipe_input("0", [])
-        assert result is _OPEN_KITCHEN_CHOICE
-
-    def test_valid_number_first_returns_first_recipe(self) -> None:
-        r1 = self._make_recipe("implementation")
-        r2 = self._make_recipe("remediation")
-        assert _resolve_recipe_input("1", [r1, r2]) is r1
-
-    def test_valid_number_last_returns_last_recipe(self) -> None:
-        r1 = self._make_recipe("implementation")
-        r2 = self._make_recipe("remediation")
-        assert _resolve_recipe_input("2", [r1, r2]) is r2
-
-    def test_out_of_range_too_high_returns_none(self) -> None:
-        available = [self._make_recipe("smoke-test")]
-        assert _resolve_recipe_input("99", available) is None
-
-    def test_out_of_range_negative_digit_treated_as_name(self) -> None:
-        # "-1".isdigit() is False in Python — treated as name lookup, returns None
-        available = [self._make_recipe("smoke-test")]
-        assert _resolve_recipe_input("-1", available) is None
-
-    def test_name_match_returns_recipe(self) -> None:
-        r = self._make_recipe("smoke-test")
-        assert _resolve_recipe_input("smoke-test", [r, self._make_recipe("other")]) is r
-
-    def test_name_no_match_returns_none(self) -> None:
-        available = [self._make_recipe("smoke-test")]
-        assert _resolve_recipe_input("nonexistent", available) is None
-
-    def test_empty_string_returns_none(self) -> None:
-        available = [self._make_recipe("smoke-test")]
-        assert _resolve_recipe_input("", available) is None
 
 
 class TestCLIOrderCommand:

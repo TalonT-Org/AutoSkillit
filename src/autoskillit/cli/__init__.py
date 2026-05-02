@@ -19,7 +19,6 @@ from autoskillit.cli._prompts import (
     _OPEN_KITCHEN_CHOICE,
     _build_open_kitchen_prompt,
     _build_orchestrator_prompt,
-    _resolve_recipe_input,
 )
 from autoskillit.cli.app import (
     _generate_config_yaml,
@@ -60,7 +59,6 @@ __all__ = [
     "_generate_config_yaml",
     "_prompt_recipe_choice",
     "_prompt_test_command",
-    "_resolve_recipe_input",
     "app",
     "config_app",
     "config_show",

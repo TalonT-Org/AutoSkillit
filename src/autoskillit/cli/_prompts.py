@@ -15,7 +15,6 @@ if TYPE_CHECKING:
     from autoskillit.recipe.schema import Recipe
 
 
-# Sentinel returned by _resolve_recipe_input when the user selects option 0.
 _OPEN_KITCHEN_CHOICE: str = "__open_kitchen__"
 
 # Shared retry instruction for both orchestrator and open-kitchen prompts.
@@ -349,15 +348,6 @@ Emit at each dispatch state transition:
 - <dispatch_id>: per-dispatch UUID assigned before calling dispatch_food_truck
 - <state>: one of queued, running, success, failure, skipped
 """
-
-
-def _resolve_recipe_input(raw: str, available: list[RecipeInfo]) -> RecipeInfo | str | None:
-    from autoskillit.cli._menu import SLOT_ZERO_SELECTED, resolve_menu_input
-
-    result = resolve_menu_input(raw, available, name_key=lambda r: r.name, slot_zero=True)
-    if result is SLOT_ZERO_SELECTED:
-        return _OPEN_KITCHEN_CHOICE
-    return result
 
 
 def _get_ingredients_table(

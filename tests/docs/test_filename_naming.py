@@ -20,6 +20,7 @@ ALLOWLIST = {
         "end-turn-hazards.md",
         "research-pipeline.md",
         "0001-prohibit-background-subagent-execution.md",
+        "0002-ban-inline-shell-scripts-from-cmd.md",
     },
 }
 

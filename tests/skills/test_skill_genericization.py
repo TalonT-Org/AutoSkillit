@@ -82,3 +82,12 @@ def test_plan_experiment_has_no_hardcoded_metrics_rs() -> None:
         "plan-experiment/SKILL.md hardcodes 'src/metrics.rs'. "
         "Use generic evaluation framework language (REQ-GEN-005)."
     )
+
+
+def test_make_plan_uses_generic_branch_terminology() -> None:
+    """make-plan/SKILL.md must not use 'integration branch' — project-specific terminology."""
+    content = (SKILLS_EXTENDED_DIR / "make-plan" / "SKILL.md").read_text()
+    assert "integration branch" not in content, (
+        "make-plan/SKILL.md uses 'integration branch' — project-specific terminology "
+        "from the merge-prs workflow. Use generic language instead (REQ-GEN-006)."
+    )

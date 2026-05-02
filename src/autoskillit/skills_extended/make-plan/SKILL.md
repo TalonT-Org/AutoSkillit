@@ -142,7 +142,7 @@ More than one lens diagram is okay if it is complex plan (don't do more than 3, 
 
 ## Conflict-Resolution Plan Requirements
 
-When the task involves applying changes from a PR branch to an integration branch
+When the task involves resolving conflicts to apply changes from one branch onto another
 (i.e., the input is a conflict report produced by `merge-pr`), the plan
 **MUST produce a worktree with a linear commit history**.
 

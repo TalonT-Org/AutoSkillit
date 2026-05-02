@@ -27,7 +27,6 @@ __all__ = [
     "SkillResult",
     "CleanupResult",
     "CIRunScope",
-    "KNOWN_CI_EVENTS",
     "CloneSuccessResult",
     "CloneGateUncommitted",
     "CloneGateUnpublished",

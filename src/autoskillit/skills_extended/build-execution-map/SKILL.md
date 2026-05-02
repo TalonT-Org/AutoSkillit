@@ -325,12 +325,12 @@ structured output tokens. If context is exhausted mid-execution:
 {
   "generated_at": "ISO-8601",
   "base_ref": "main",
-  "total_issues": 5,
-  "dispatched_count": 4,
+  "total_issues": 3,
+  "dispatched_count": 2,
   "deferred_count": 1,
   "has_deferred": true,
   "max_parallel": 6,
-  "group_count": 2,
+  "group_count": 1,
   "groups": [
     {
       "group": 1,
@@ -341,7 +341,7 @@ structured output tokens. If context is exhausted mid-execution:
       ]
     }
   ],
-  "merge_order": [1155, 1156, 1157],
+  "merge_order": [1155, 1156],
   "in_progress_context": [
     {"number": 887, "title": "franchise: per-recipe tool-surface test suite"}
   ],

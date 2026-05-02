@@ -589,6 +589,61 @@ class TestRunHeadlessCoreFlushTelemetry:
         assert report[0]["step_name"] == "plan"
         assert report[0]["total_seconds"] >= 0.0
 
+    @pytest.mark.anyio
+    async def test_passes_github_api_log_to_flush(self, tool_ctx, monkeypatch):
+        """headless.py passes github_api_log=ctx.github_api_log to flush_session_log."""
+        import autoskillit.execution.session_log as sl_mod
+        from autoskillit.pipeline.github_api_log import DefaultGitHubApiLog
+
+        log = DefaultGitHubApiLog()
+        await log.record_gh_cli(
+            subcommand="gh issue list",
+            exit_code=0,
+            latency_ms=50.0,
+            timestamp="2026-05-02T10:00:00Z",
+        )
+        tool_ctx.github_api_log = log
+
+        calls = []
+
+        def mock_flush(**kwargs):
+            calls.append(kwargs)
+
+        monkeypatch.setattr(sl_mod, "flush_session_log", mock_flush)
+        tool_ctx.runner.push(_make_result(returncode=0, stdout=self._make_ndjson_with_usage()))
+        await run_skill("/investigate foo", "/tmp", step_name="implement")
+        assert len(calls) == 1
+        assert "github_api_log" in calls[0], "flush_session_log was not called with github_api_log"
+        assert calls[0]["github_api_log"] is not None
+
+    @pytest.mark.anyio
+    async def test_flush_telemetry_kwargs_exhaustive(self, tool_ctx, monkeypatch):
+        """Every expected telemetry kwarg is forwarded from headless.py to flush_session_log."""
+        import autoskillit.execution.session_log as sl_mod
+
+        EXPECTED_TELEMETRY_KEYS = frozenset(
+            {
+                "token_usage",
+                "timing_seconds",
+                "audit_record",
+                "github_api_log",
+                "loc_insertions",
+                "loc_deletions",
+            }
+        )
+
+        calls = []
+
+        def mock_flush(**kwargs):
+            calls.append(kwargs)
+
+        monkeypatch.setattr(sl_mod, "flush_session_log", mock_flush)
+        tool_ctx.runner.push(_make_result(returncode=0, stdout=self._make_ndjson_with_usage()))
+        await run_skill("/investigate foo", "/tmp", step_name="implement")
+        assert len(calls) == 1
+        missing = EXPECTED_TELEMETRY_KEYS - calls[0].keys()
+        assert not missing, f"flush_session_log missing telemetry kwargs: {missing}"
+
 
 @pytest.mark.anyio
 async def test_run_skill_returns_structured_error_when_executor_raises(

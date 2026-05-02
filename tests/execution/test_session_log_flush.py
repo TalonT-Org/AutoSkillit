@@ -597,3 +597,68 @@ def test_write_clear_marker_is_atomic(tmp_path):
     assert t1 is not None
     assert t2 is not None
     assert t2 >= t1
+
+
+# --- github_api_log integration tests ---
+
+
+@pytest.mark.anyio
+async def test_flush_writes_github_api_usage_from_populated_log(tmp_path):
+    """flush_session_log writes github_api_usage.json and non-zero github_api_requests."""
+    from autoskillit.pipeline.github_api_log import DefaultGitHubApiLog
+
+    log = DefaultGitHubApiLog()
+    await log.record_gh_cli(
+        subcommand="gh issue list",
+        exit_code=0,
+        latency_ms=50.0,
+        timestamp="2026-05-02T10:00:00Z",
+    )
+
+    _flush(tmp_path, github_api_log=log)
+
+    usage_file = tmp_path / "sessions" / "test-session-001" / "github_api_usage.json"
+    assert usage_file.exists(), "github_api_usage.json must be written when log has entries"
+    data = json.loads(usage_file.read_text())
+    assert data["total_requests"] == 1
+
+    summary = json.loads((tmp_path / "sessions" / "test-session-001" / "summary.json").read_text())
+    assert summary["github_api_requests"] == 1
+
+
+def test_flush_helper_default_keys_cover_all_telemetry():
+    """The _flush() helper includes all telemetry parameters in its defaults dict.
+
+    When flush_session_log gains a new telemetry parameter, it must also be added
+    to _flush()'s defaults so tests using the helper exercise that write path.
+    """
+    import tempfile
+    import unittest.mock as mock
+
+    EXPECTED_TELEMETRY_KEYS = frozenset(
+        {
+            "token_usage",
+            "timing_seconds",
+            "audit_record",
+            "github_api_log",
+            "loc_insertions",
+            "loc_deletions",
+        }
+    )
+
+    captured: dict = {}
+
+    def _capture(**kwargs):
+        captured.update(kwargs)
+
+    # _flush() does a local import from autoskillit.execution.session_log.
+    # Patch the function at its source module so the local import picks up the mock.
+    with mock.patch("autoskillit.execution.session_log.flush_session_log", side_effect=_capture):
+        with tempfile.TemporaryDirectory() as td:
+            _flush(Path(td))
+
+    missing = EXPECTED_TELEMETRY_KEYS - captured.keys()
+    assert not missing, (
+        f"_flush() helper missing telemetry keys: {missing}. "
+        "Add them to the defaults dict in tests/execution/conftest.py."
+    )

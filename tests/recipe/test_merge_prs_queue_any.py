@@ -1320,3 +1320,43 @@ def test_unbounded_cycle_severity_downgraded_by_eject_limit(any_recipe) -> None:
         f"unbounded-cycle must not be ERROR for queue ejection cycle after check_eject_limit; "
         f"got ERROR on: {[f.step_name for f in queue_cycle_error_findings]}"
     )
+
+
+@pytest.mark.parametrize("recipe_fixture", RELEASE_TIMEOUT_RECIPES)
+def test_ci_watch_post_queue_fix_no_runs_routes_to_failure(recipe_fixture, request):
+    """ci_watch_post_queue_fix no_runs must route to release_issue_failure."""
+    recipe = request.getfixturevalue(recipe_fixture)
+    step = recipe.steps["ci_watch_post_queue_fix"]
+    no_runs_routes = [
+        c.route for c in step.on_result.conditions if c.when and "'no_runs'" in c.when
+    ]
+    assert "release_issue_failure" in no_runs_routes, (
+        f"{recipe_fixture}: ci_watch_post_queue_fix no_runs must route to release_issue_failure"
+    )
+
+
+@pytest.mark.parametrize("recipe_fixture", RELEASE_TIMEOUT_RECIPES)
+def test_ci_watch_post_queue_fix_timed_out_is_bounded(recipe_fixture, request):
+    """ci_watch_post_queue_fix timed_out must route through check_ci_post_queue_loop."""
+    recipe = request.getfixturevalue(recipe_fixture)
+    step = recipe.steps["ci_watch_post_queue_fix"]
+    timed_out_routes = [
+        c.route for c in step.on_result.conditions if c.when and "'timed_out'" in c.when
+    ]
+    assert timed_out_routes, f"{recipe_fixture}: missing timed_out routing"
+    assert timed_out_routes[0] == "check_ci_post_queue_loop", (
+        f"{recipe_fixture}: timed_out must route through check_ci_post_queue_loop, "
+        f"not {timed_out_routes[0]}"
+    )
+
+
+@pytest.mark.parametrize("recipe_fixture", RELEASE_TIMEOUT_RECIPES)
+def test_check_ci_post_queue_loop_exists_and_bounded(recipe_fixture, request):
+    """check_ci_post_queue_loop step must exist and be bounded."""
+    recipe = request.getfixturevalue(recipe_fixture)
+    assert "check_ci_post_queue_loop" in recipe.steps, (
+        f"{recipe_fixture}: check_ci_post_queue_loop step must exist"
+    )
+    step = recipe.steps["check_ci_post_queue_loop"]
+    assert step.with_args.get("callable") == "autoskillit.smoke_utils.check_loop_iteration"
+    assert int(step.with_args.get("max_iterations", 0)) >= 2

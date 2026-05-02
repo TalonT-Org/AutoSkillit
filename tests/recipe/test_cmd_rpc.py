@@ -75,26 +75,36 @@ def test_check_dropped_healthy_loop_exceeded(tmp_path):
     assert result["count"] == "3"
 
 
-def test_commit_guard_clean_tree(tmp_path):
+def _init_git_repo(tmp_path):
     subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@test.local"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
     subprocess.run(
         ["git", "commit", "--allow-empty", "-m", "init"],
         cwd=tmp_path,
         check=True,
         capture_output=True,
     )
+
+
+def test_commit_guard_clean_tree(tmp_path):
+    _init_git_repo(tmp_path)
     result = commit_guard(worktree_path=str(tmp_path))
     assert result["committed"] == "false"
 
 
 def test_commit_guard_dirty_tree(tmp_path):
-    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "commit", "--allow-empty", "-m", "init"],
-        cwd=tmp_path,
-        check=True,
-        capture_output=True,
-    )
+    _init_git_repo(tmp_path)
     (tmp_path / "newfile.txt").write_text("content")
     result = commit_guard(worktree_path=str(tmp_path))
     assert result["committed"] == "true"

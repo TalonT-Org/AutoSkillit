@@ -406,6 +406,34 @@ class TestRunModeIngredient:
         )
 
 
+class TestMaxParallelIngredient:
+    """REQ-ING-001, REQ-ING-002, REQ-ING-003: max_parallel presence, default, and hidden flag."""
+
+    @pytest.mark.parametrize("recipe_name", ["implementation", "remediation"])
+    def test_recipe_has_max_parallel_ingredient(self, recipe_name: str) -> None:
+        recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+        assert "max_parallel" in recipe.ingredients
+
+    @pytest.mark.parametrize("recipe_name", ["implementation", "remediation"])
+    def test_max_parallel_defaults_to_six(self, recipe_name: str) -> None:
+        recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+        ing = recipe.ingredients["max_parallel"]
+        assert ing.default == "6"
+
+    @pytest.mark.parametrize("recipe_name", ["implementation", "remediation"])
+    def test_max_parallel_is_hidden(self, recipe_name: str) -> None:
+        recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+        ing = recipe.ingredients["max_parallel"]
+        assert ing.hidden is True
+
+    @pytest.mark.parametrize("recipe_name", ["implementation", "remediation"])
+    def test_max_parallel_description_mentions_parallel_groups(self, recipe_name: str) -> None:
+        recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+        ing = recipe.ingredients["max_parallel"]
+        assert "parallel" in ing.description.lower()
+        assert "group" in ing.description.lower()
+
+
 def test_no_bare_temp_paths_in_bundled_recipe_notes() -> None:
     """No bundled recipe YAML should reference temp/ without .autoskillit/ prefix.
 

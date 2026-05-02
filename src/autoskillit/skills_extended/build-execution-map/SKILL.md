@@ -28,8 +28,9 @@ into dependency-ordered dispatch groups.
 Space-separated issue numbers (required, minimum 2), plus optional flags:
 - `--base-ref <branch>` — base branch to compare against (default: `main`)
 - `--assess-review-approach` — assess whether each issue would benefit from a review-approach research pass before implementation (default: inactive)
+- `--max-parallel <N>` — maximum number of issues in any single parallel group (default: `6`). Groups exceeding this cap are split into sequential sub-groups of at most N issues each.
 
-**Example:** `101 103 102 --base-ref main --assess-review-approach`
+**Example:** `101 103 102 --base-ref main --max-parallel 4 --assess-review-approach`
 
 ## Critical Constraints
 
@@ -60,7 +61,9 @@ Space-separated issue numbers (required, minimum 2), plus optional flags:
 Accept issue numbers as space-separated or comma-separated values. Parse `--base-ref`
 if present (default: `main`). Parse `--assess-review-approach` if present (default:
 inactive). When this flag is active, Step 2 will additionally assess each issue for
-review-approach benefit. Validate the issue count:
+review-approach benefit. Parse `--max-parallel` if present (default: `6`). Validate that
+it is a positive integer ≥ 1; if a non-positive or non-integer value is provided, abort
+with `"Error: --max-parallel must be a positive integer"`. Validate the issue count:
 - **Zero issues**: abort immediately with `"Error: build-execution-map requires at least 1 issue number"` and exit non-zero.
 - **One issue**: emit a warning and write a trivial single-group map (single issue always gets `parallel: false`).
 - **Two or more issues**: proceed to Step 0.5.
@@ -161,6 +164,32 @@ others merges last).
 The `merge_order` list is the flattened sequence of issue numbers across groups in dispatch
 order.
 
+### Step 3.5 — Apply Parallel Cap
+
+After groups are assembled in Step 3, enforce the `max_parallel` cap:
+
+1. For each **parallel** group (`parallel: true`) where `len(issues) > max_parallel`:
+   - Chunk the issue list into sub-lists of at most `max_parallel` issues each, preserving
+     the existing order determined in Step 3.
+   - Each sub-list becomes its own group. Set `parallel: true` if `len(sub-list) > 1`;
+     set `parallel: false` if `len(sub-list) == 1` (single-issue groups are never parallel).
+   - The original group's `parallel_safe` ordering is preserved — do not re-sort.
+   - Sequential groups (`parallel: false`) are never split — they are passed through unchanged
+     regardless of size.
+
+2. Renumber all groups sequentially (1, 2, 3, …) after splitting. If original Group 1
+   splits into 2 sub-groups and original Group 2 remains intact, the result is:
+   Group 1 (sub-group A of original Group 1), Group 2 (sub-group B of original Group 1),
+   Group 3 (original Group 2).
+
+3. Update `merge_order` to reflect the new group ordering: issues in Group 1 appear before
+   Group 2, which appears before Group 3, etc. Within each sub-group, the relative order
+   from Step 3 is preserved.
+
+4. Update `group_count` to the total count of groups after splitting.
+
+When no group exceeds `max_parallel`, this step is a no-op — groups pass through unchanged.
+
 ### Step 4 — Write Output
 
 Compute timestamp `{YYYY-MM-DD_HHMMSS}` (current local time, second precision).
@@ -217,6 +246,7 @@ structured output tokens. If context is exhausted mid-execution:
   "generated_at": "ISO-8601",
   "base_ref": "main",
   "total_issues": 5,
+  "max_parallel": 6,
   "group_count": 2,
   "groups": [
     {

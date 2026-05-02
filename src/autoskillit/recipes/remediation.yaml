@@ -82,6 +82,14 @@ ingredients:
       step scheduling — fast steps for all pipelines before any slow step).
     default: "sequential"
     hidden: true
+  max_parallel:
+    description: >-
+      Maximum number of issues to run in parallel within a single execution-map
+      group. Groups exceeding this cap are split into sequential sub-groups.
+      Passed to build-execution-map. Must be a positive integer (expressed as a
+      string).
+    default: "6"
+    hidden: true
   depth:
     description: "Investigation depth mode"
     default: "standard"

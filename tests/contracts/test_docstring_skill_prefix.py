@@ -9,9 +9,7 @@ import re
 
 from autoskillit.core import SkillSource
 from autoskillit.core.paths import pkg_root
-
 from autoskillit.workspace.skills import DefaultSkillResolver
-
 
 _PKG = pkg_root()
 _SCAN_DIRS_AND_GLOBS: list[tuple[str, list[str]]] = [

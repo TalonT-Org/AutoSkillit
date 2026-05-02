@@ -98,9 +98,9 @@ def test_without_success_key_no_success_is_noop() -> None:
 
 
 def test_build_prepare_skill_command_basic() -> None:
-    """No labels, no dry_run → '/autoskillit:prepare-issue\\n\\nTitle: T\\n\\nBody:\\nB'."""
+    """No labels, no dry_run → '/prepare-issue\\n\\nTitle: T\\n\\nBody:\\nB'."""
     cmd = _build_prepare_skill_command("T", "B", "", None, False, False)
-    assert cmd == "/autoskillit:prepare-issue\n\nTitle: T\n\nBody:\nB"
+    assert cmd == "/prepare-issue\n\nTitle: T\n\nBody:\nB"
 
 
 def test_build_prepare_skill_command_with_flags() -> None:
@@ -137,7 +137,7 @@ def test_parse_prepare_result_invalid_json() -> None:
 def test_build_enrich_skill_command_with_all_args() -> None:
     """All args provided → assembled command includes all flags."""
     cmd = _build_enrich_skill_command(42, 3, True, "owner/repo")
-    assert "/autoskillit:enrich-issues" in cmd
+    assert "/enrich-issues" in cmd
     assert "--issue 42" in cmd
     assert "--batch 3" in cmd
     assert "--dry-run" in cmd

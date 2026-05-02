@@ -362,11 +362,11 @@ class TestConfigDrivenBehavior:
 
         plan = tmp_path / "plan.md"
         plan.write_text("CUSTOM MARKER\n# Plan content")
-        result = _check_dry_walkthrough(f"/autoskillit:implement-worktree {plan}", str(tmp_path))
+        result = _check_dry_walkthrough(f"/implement-worktree {plan}", str(tmp_path))
         assert result is None  # passes with custom marker
 
         plan.write_text("Dry-walkthrough verified = TRUE\n# Plan content")
-        result = _check_dry_walkthrough(f"/autoskillit:implement-worktree {plan}", str(tmp_path))
+        result = _check_dry_walkthrough(f"/implement-worktree {plan}", str(tmp_path))
         assert result is not None  # fails — marker doesn't match
 
     def test_dry_walkthrough_uses_config_skill_names(self, tool_ctx, tmp_path):
@@ -540,9 +540,7 @@ class TestSafetyConfigWiring:
         plan = tmp_path / "plan.md"
         plan.write_text("# No marker plan")
 
-        result = json.loads(
-            await run_skill(f"/autoskillit:implement-worktree {plan}", str(tmp_path))
-        )
+        result = json.loads(await run_skill(f"/implement-worktree {plan}", str(tmp_path)))
         assert result["success"] is False
         assert result["is_error"] is True
         assert "dry-walked" in result["result"].lower()

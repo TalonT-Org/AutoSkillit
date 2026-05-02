@@ -21,7 +21,7 @@ from autoskillit.cli._update_checks import (
     run_update_checks,
 )
 
-from ._update_checks_helpers import _make_integration_info, _make_stable_info
+from ._update_checks_helpers import _make_develop_info, _make_stable_info
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
@@ -415,7 +415,7 @@ def test_integration_install_dismissal_silent_within_eleven_hours(
         monkeypatch,
         tmp_path,
         binary_signal=True,
-        info=_make_integration_info(),
+        info=_make_develop_info(),
         state=state,
     )
     run_update_checks(home=tmp_path)
@@ -430,7 +430,7 @@ def test_integration_install_dismissal_reprompts_after_thirteen_hours(
         monkeypatch,
         tmp_path,
         binary_signal=True,
-        info=_make_integration_info(),
+        info=_make_develop_info(),
         state=state,
     )
     run_update_checks(home=tmp_path)
@@ -448,7 +448,7 @@ def test_dismissal_window_chosen_from_current_install_not_stored(
         monkeypatch,
         tmp_path,
         binary_signal=True,
-        info=_make_integration_info(),
+        info=_make_develop_info(),
         state=state,
     )
     run_update_checks(home=tmp_path)

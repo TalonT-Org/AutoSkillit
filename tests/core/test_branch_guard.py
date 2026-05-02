@@ -6,12 +6,12 @@ from autoskillit.core.branch_guard import is_protected_branch
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
-_DEFAULTS = ["main", "integration", "stable"]
+_DEFAULTS = ["main", "develop", "stable"]
 
 # ---------- standard protected list ----------
 
 
-@pytest.mark.parametrize("branch", ["main", "integration", "stable"])
+@pytest.mark.parametrize("branch", ["main", "develop", "stable"])
 def test_default_protected_branches_are_rejected(branch: str) -> None:
     assert is_protected_branch(branch, protected=_DEFAULTS) is True
 

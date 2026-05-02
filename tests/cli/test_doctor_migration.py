@@ -184,7 +184,7 @@ class TestDoctorInstallClassification:
         "revision,expected_fragment",
         [
             ("stable", "stable"),
-            ("integration", "integration"),
+            ("develop", "develop"),
         ],
     )
     def test_doctor_reports_install_classification_git_vcs(

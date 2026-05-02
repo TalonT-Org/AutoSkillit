@@ -634,14 +634,14 @@ async def test_default_test_runner_no_sidecar_means_no_filter_stats(tmp_path: Pa
 @pytest.mark.anyio
 async def test_resolve_base_ref_default_base_branch_fallback(tmp_path: Path) -> None:
     """AC5: When no config, sidecar, or upstream, default_base_branch is used."""
-    result = await _resolve_base_ref(None, tmp_path, default_base_branch="integration")
-    assert result == "integration"
+    result = await _resolve_base_ref(None, tmp_path, default_base_branch="develop")
+    assert result == "develop"
 
 
 @pytest.mark.anyio
 async def test_resolve_base_ref_config_wins_over_default_base_branch(tmp_path: Path) -> None:
     """Config base_ref takes precedence over default_base_branch."""
-    result = await _resolve_base_ref("origin/main", tmp_path, default_base_branch="integration")
+    result = await _resolve_base_ref("origin/main", tmp_path, default_base_branch="develop")
     assert result == "origin/main"
 
 
@@ -674,10 +674,10 @@ async def test_default_test_runner_passes_default_base_branch(
     config = make_test_config(
         test_check=make_test_check_config(filter_mode="conservative"),
     )
-    config.branching.default_base_branch = "integration"
+    config.branching.default_base_branch = "develop"
     runner = DefaultTestRunner(config=config, runner=capturing_runner)
     await runner.run(cwd=tmp_path)
-    assert captured_kwargs["env"].get("AUTOSKILLIT_TEST_BASE_REF") == "integration"
+    assert captured_kwargs["env"].get("AUTOSKILLIT_TEST_BASE_REF") == "develop"
 
 
 # ---------------------------------------------------------------------------

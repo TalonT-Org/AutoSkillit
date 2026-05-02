@@ -283,13 +283,13 @@ async def test_delegates_to_merge_queue_watcher(tool_ctx):
         mock_proc.return_value = proc_inst
 
         result = json.loads(
-            await wait_for_merge_queue(pr_number=42, target_branch="integration", cwd=".")
+            await wait_for_merge_queue(pr_number=42, target_branch="develop", cwd=".")
         )
 
     assert result["pr_state"] == "merged"
     assert len(watcher.wait_calls) == 1
     assert watcher.wait_calls[-1]["pr_number"] == 42
-    assert watcher.wait_calls[-1]["target_branch"] == "integration"
+    assert watcher.wait_calls[-1]["target_branch"] == "develop"
 
 
 @pytest.mark.anyio

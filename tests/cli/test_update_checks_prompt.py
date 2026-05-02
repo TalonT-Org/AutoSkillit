@@ -407,7 +407,7 @@ def test_stable_install_dismissal_reprompts_after_eight_days(
     assert len(input_calls) == 1
 
 
-def test_integration_install_dismissal_silent_within_eleven_hours(
+def test_develop_install_dismissal_silent_within_eleven_hours(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     state = _dismissed_state(ago=timedelta(hours=11))
@@ -422,7 +422,7 @@ def test_integration_install_dismissal_silent_within_eleven_hours(
     assert not input_calls
 
 
-def test_integration_install_dismissal_reprompts_after_thirteen_hours(
+def test_develop_install_dismissal_reprompts_after_thirteen_hours(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     state = _dismissed_state(ago=timedelta(hours=13))

@@ -906,7 +906,7 @@ def test_verify_update_result_prints_git_vcs_stable_command(
     assert "autoskillit update" in out
 
 
-def test_verify_update_result_prints_git_vcs_integration_command(
+def test_verify_update_result_prints_git_vcs_develop_command(
     tmp_path: Path, capsys: pytest.CaptureFixture
 ) -> None:
     import importlib.metadata

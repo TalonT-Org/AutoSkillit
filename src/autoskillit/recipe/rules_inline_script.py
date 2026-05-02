@@ -11,34 +11,36 @@ from autoskillit.recipe.registry import RuleFinding, semantic_rule
 # Grandfathered violations — to be removed as Part B externalizes them.
 # Populated mechanically by running the rule without the allowlist against all
 # bundled recipe files and collecting every step name that fires.
-_INLINE_SCRIPT_ALLOWLIST: frozenset[str] = frozenset({
-    "advance_queue_pr",
-    "attempt_cheap_rebase",
-    "check_dropped_healthy_loop",
-    "check_eject_limit",
-    "commit_guard",
-    "compute_branch",
-    "create_artifact_branch",
-    "create_persistent_integration",
-    "create_worktree",
-    "direct_merge_conflict_fix",
-    "emit_fallback_map",
-    "ensure_results",
-    "export_local_bundle",
-    "finalize_bundle",
-    "force_push_and_wait_mergeability",
-    "immediate_merge_conflict_fix",
-    "open_artifact_pr",
-    "proactive_rebase_next_pr",
-    "queue_ejected_fix",
-    "re_stage_bundle",
-    "refetch_issues",
-    "stage_bundle",
-    "tag_experiment_branch",
-    "wait_for_direct_merge",
-    "wait_for_immediate_merge",
-    "wait_for_review_pr_mergeability",
-})
+_INLINE_SCRIPT_ALLOWLIST: frozenset[str] = frozenset(
+    {
+        "advance_queue_pr",
+        "attempt_cheap_rebase",
+        "check_dropped_healthy_loop",
+        "check_eject_limit",
+        "commit_guard",
+        "compute_branch",
+        "create_artifact_branch",
+        "create_persistent_integration",
+        "create_worktree",
+        "direct_merge_conflict_fix",
+        "emit_fallback_map",
+        "ensure_results",
+        "export_local_bundle",
+        "finalize_bundle",
+        "force_push_and_wait_mergeability",
+        "immediate_merge_conflict_fix",
+        "open_artifact_pr",
+        "proactive_rebase_next_pr",
+        "queue_ejected_fix",
+        "re_stage_bundle",
+        "refetch_issues",
+        "stage_bundle",
+        "tag_experiment_branch",
+        "wait_for_direct_merge",
+        "wait_for_immediate_merge",
+        "wait_for_review_pr_mergeability",
+    }
+)
 
 # ---------------------------------------------------------------------------
 # Detection patterns
@@ -86,9 +88,7 @@ def _strip_jq_blocks(cmd: str) -> str:
 
 def _count_logical_lines(cmd: str) -> int:
     """Count non-blank, non-comment lines."""
-    return sum(
-        1 for line in cmd.splitlines() if line.strip() and not line.strip().startswith("#")
-    )
+    return sum(1 for line in cmd.splitlines() if line.strip() and not line.strip().startswith("#"))
 
 
 @semantic_rule(
@@ -193,8 +193,7 @@ def _check_inline_script_in_cmd(ctx: ValidationContext) -> list[RuleFinding]:
 @semantic_rule(
     name="inline-python-in-cmd",
     description=(
-        "Detects python3 -c usage in run_cmd cmd fields "
-        "(must use run_python callable instead)"
+        "Detects python3 -c usage in run_cmd cmd fields (must use run_python callable instead)"
     ),
     severity=Severity.ERROR,
 )
@@ -216,8 +215,7 @@ def _check_inline_python_in_cmd(ctx: ValidationContext) -> list[RuleFinding]:
                     severity=Severity.ERROR,
                     step_name=name,
                     message=(
-                        f"Step '{name}' uses python3 -c in cmd. "
-                        "Convert to a run_python callable."
+                        f"Step '{name}' uses python3 -c in cmd. Convert to a run_python callable."
                     ),
                 )
             )

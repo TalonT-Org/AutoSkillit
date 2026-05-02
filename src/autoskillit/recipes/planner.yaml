@@ -265,6 +265,32 @@ steps:
       cwd: "${{ inputs.source_dir }}"
     capture:
       refined_wps_path: "${{ result.refined_wps_path }}"
+    on_success: consolidate_wps_analyze
+    on_failure: escalate_stop
+
+  consolidate_wps_analyze:
+    tool: run_skill
+    with:
+      skill_command: >
+        /autoskillit:planner-consolidate-wps
+        ${{ context.refined_wps_path }}
+        ${{ context.planner_dir }}
+      cwd: "${{ inputs.source_dir }}"
+    on_success: consolidate_wps_merge
+    on_failure: consolidate_wps_merge
+    note: >
+      Analysis-only step: always routes to consolidate_wps_merge regardless of success
+      or failure. If the skill fails, the merge callable falls back to passing all WPs
+      through unchanged (no consolidation manifests = no-op merge).
+
+  consolidate_wps_merge:
+    tool: run_python
+    with:
+      callable: autoskillit.planner.consolidate_wps
+      refined_wps_path: "${{ context.refined_wps_path }}"
+      planner_dir: "${{ context.planner_dir }}"
+    capture:
+      consolidated_wps_path: "${{ result.consolidated_wps_path }}"
     on_success: validate_task_alignment
     on_failure: escalate_stop
 
@@ -273,7 +299,7 @@ steps:
     with:
       skill_command: >
         /autoskillit:planner-validate-task-alignment
-        ${{ context.refined_wps_path }}
+        ${{ context.consolidated_wps_path }}
         ${{ context.refined_plan_path }}
         ${{ context.planner_dir }}
       cwd: "${{ inputs.source_dir }}"
@@ -289,7 +315,7 @@ steps:
     with:
       skill_command: "/autoskillit:planner-reconcile-deps ${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"
-      refined_wps_path: "${{ context.refined_wps_path }}"
+      consolidated_wps_path: "${{ context.consolidated_wps_path }}"
     on_success: validate
     on_failure: escalate_stop
 

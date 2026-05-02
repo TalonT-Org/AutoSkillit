@@ -226,7 +226,8 @@ generic_automation_mcp/
 │   ├── merge.py             #   merge_tier_dir, merge_files, build_plan_snapshot, extract_item, replace_item — JSON interchange merge tooling
 │   ├── validation.py        #   validate_plan — DAG cycle check, structural completeness, sizing bounds, duplicate-deliverable detection
 │   ├── schema.py            #   planner data contracts — PhaseResult, AssignmentResult, WPResult, PlanDocument TypedDicts
-│   └── compiler.py          #   compile_plan — topological sort, issue body generation, milestone definitions, plan artifacts
+│   ├── compiler.py          #   compile_plan — topological sort, issue body generation, milestone definitions, plan artifacts
+│   └── consolidation.py     #   consolidate_wps — post-elaboration WP consolidation: reads manifests, merges trivial WPs, rewrites dep IDs
 │
 ├── recipe/                  # IL-2
 │   ├── __init__.py

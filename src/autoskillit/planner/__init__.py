@@ -5,6 +5,7 @@ Exports: manifests, merge, validation, compiler."""
 from __future__ import annotations
 
 from autoskillit.planner.compiler import compile_plan
+from autoskillit.planner.consolidation import consolidate_wps
 from autoskillit.planner.manifests import (
     build_phase_assignment_manifest,
     build_phase_wp_manifest,
@@ -42,6 +43,7 @@ from autoskillit.planner.validation import validate_plan
 
 __all__ = [
     "build_phase_assignment_manifest",
+    "consolidate_wps",
     "build_phase_wp_manifest",
     "compile_plan",
     "create_run_dir",

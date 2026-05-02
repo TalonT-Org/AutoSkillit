@@ -14,6 +14,7 @@ PLANNER_FINALIZATION_SKILLS = [
 
 ALL_PLANNER_SKILLS = [
     "planner-analyze",
+    "planner-consolidate-wps",
     "planner-extract-domain",
     "planner-generate-phases",
     "planner-elaborate-phase",

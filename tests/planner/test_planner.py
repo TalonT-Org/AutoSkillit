@@ -22,6 +22,7 @@ def test_planner_all_exports() -> None:
         "build_phase_assignment_manifest",
         "build_phase_wp_manifest",
         "compile_plan",
+        "consolidate_wps",
         "create_run_dir",
         "expand_assignments",
         "expand_wps",

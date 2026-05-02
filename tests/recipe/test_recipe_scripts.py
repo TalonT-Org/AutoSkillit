@@ -14,7 +14,7 @@ from autoskillit.recipe.validator import run_semantic_rules
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
-SCRIPTS_DIR = pkg_root().parent.parent.parent / "scripts" / "recipe"
+SCRIPTS_DIR = pkg_root().parent.parent / "scripts" / "recipe"
 
 
 def test_recipe_scripts_are_executable():

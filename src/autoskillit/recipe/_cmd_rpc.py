@@ -327,10 +327,7 @@ def advance_queue_pr(
 ) -> dict[str, str]:
     """Find next PR in queue order file. Callable via run_python."""
     if not current_pr_number:
-        return {
-            "error": f"current_pr_number is required, got {current_pr_number!r}",
-            "current_pr_number": "done",
-        }
+        return {"error": f"current_pr_number is required, got {current_pr_number!r}"}
     try:
         with open(pr_order_file) as f:
             order = json.load(f)

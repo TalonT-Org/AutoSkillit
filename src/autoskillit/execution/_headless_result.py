@@ -48,8 +48,6 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 _truncate = truncate_text
 
-# Re-export so facade's `from autoskillit.execution._headless_result import _OUTPUT_PATH_PATTERN`
-# resolves correctly even though _OUTPUT_PATH_PATTERN is defined in _headless_path_tokens.
 __all__ = [
     "_build_error_path_telemetry",
     "_build_session_telemetry",

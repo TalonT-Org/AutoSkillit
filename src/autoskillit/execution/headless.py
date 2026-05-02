@@ -206,6 +206,27 @@ def _compute_loc_changed(cwd: str, pre_sha: str) -> tuple[int, int]:
         return 0, 0
 
 
+@dataclasses.dataclass(frozen=True)
+class PostSessionMetrics:
+    loc_insertions: int
+    loc_deletions: int
+    effective_cwd: str
+
+
+def _compute_post_session_metrics(
+    cwd: str,
+    pre_session_sha: str,
+    skill_result: SkillResult,
+) -> PostSessionMetrics:
+    effective_cwd = skill_result.worktree_path or cwd
+    loc_ins, loc_del = _compute_loc_changed(effective_cwd, pre_session_sha)
+    return PostSessionMetrics(
+        loc_insertions=loc_ins,
+        loc_deletions=loc_del,
+        effective_cwd=effective_cwd,
+    )
+
+
 async def _execute_claude_headless(
     spec: ClaudeHeadlessCmd,
     cwd: str,
@@ -383,7 +404,6 @@ async def _execute_claude_headless(
             logger.debug("flush_session_log during cancel failed", exc_info=True)
         raise
     _elapsed = time.monotonic() - _start_mono
-    _loc_insertions, _loc_deletions = _compute_loc_changed(cwd, _pre_session_sha)
     _end_ts = (datetime.fromisoformat(_start_ts) + timedelta(seconds=_elapsed)).isoformat()
     result = dataclasses.replace(  # type: ignore[arg-type]
         _result, start_ts=_start_ts, end_ts=_end_ts, elapsed_seconds=_elapsed
@@ -440,6 +460,8 @@ async def _execute_claude_headless(
             readonly_skill=_readonly_skill,
         )
 
+    _metrics = _compute_post_session_metrics(cwd, _pre_session_sha, skill_result)
+
     # Use monotonic elapsed_seconds — authoritative wall-clock timing set by time.monotonic()
     # brackets in run_managed_async. Never re-derive from ISO strings (backward-clock risk).
     timing_seconds: float = result.elapsed_seconds
@@ -495,8 +517,8 @@ async def _execute_claude_headless(
                 recipe_content_hash=recipe_content_hash,
                 recipe_composite_hash=recipe_composite_hash,
                 recipe_version=recipe_version,
-                loc_insertions=_loc_insertions,
-                loc_deletions=_loc_deletions,
+                loc_insertions=_metrics.loc_insertions,
+                loc_deletions=_metrics.loc_deletions,
             )
         except Exception:
             logger.debug("session_log_flush_failed", exc_info=True)
@@ -518,8 +540,8 @@ async def _execute_claude_headless(
                 end_ts=result.end_ts,
                 elapsed_seconds=result.elapsed_seconds,
                 order_id=order_id,
-                loc_insertions=_loc_insertions,
-                loc_deletions=_loc_deletions,
+                loc_insertions=_metrics.loc_insertions,
+                loc_deletions=_metrics.loc_deletions,
             )
         except Exception:
             logger.debug("token_log_record_failed", exc_info=True)

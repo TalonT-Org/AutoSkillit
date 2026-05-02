@@ -122,7 +122,7 @@ def fleet_campaign(
             sys.exit(1)
         campaign_name = selected.name
 
-    if campaign_name is None and resume_campaign is not None:
+    elif campaign_name is None and resume_campaign is not None:
         from autoskillit.fleet import TERMINAL_DISPATCH_STATUSES, read_state
 
         fleet_dir = Path.cwd() / ".autoskillit" / "temp" / "fleet"
@@ -160,7 +160,8 @@ def fleet_campaign(
         campaign_name = resolved_state.campaign_name
         resume_campaign = resolved_state.campaign_id
 
-    assert campaign_name is not None
+    if campaign_name is None:
+        raise RuntimeError("campaign_name must be set before launching fleet session")
 
     from autoskillit.core import YAMLError
     from autoskillit.fleet import (

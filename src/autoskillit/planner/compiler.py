@@ -155,7 +155,10 @@ def compile_plan(output_dir: str, task: str, source_dir: str) -> dict[str, str]:
         except (json.JSONDecodeError, OSError) as exc:
             raise RuntimeError(f"Malformed assessment file {assessment_path}: {exc}") from exc
         for entry in data.get("assessments", []):
-            assessment_by_wp_id[entry["wp_id"]] = entry
+            wp_id = entry.get("wp_id")
+            if wp_id is None:
+                continue
+            assessment_by_wp_id[wp_id] = entry
 
     execution_order = _topological_sort(wp_results)
     phase_lookup = _build_phase_lookup(phase_results)

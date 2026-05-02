@@ -351,3 +351,25 @@ def test_compile_plan_raises_on_malformed_assessment_file(tmp_path: Path) -> Non
     (output_dir / "review_approach_assessment.json").write_text("not valid json")
     with pytest.raises(RuntimeError, match="Malformed assessment file"):
         compile_plan(str(output_dir), task="Test task", source_dir=str(tmp_path))
+
+
+def test_compile_plan_skips_assessment_entries_missing_wp_id(tmp_path: Path) -> None:
+    output_dir = _make_valid_output_dir(
+        tmp_path, num_phases=1, with_dep_graph=False, dependency_chain=False
+    )
+    assessment = {
+        "schema_version": 1,
+        "assessments": [
+            {"review_approach_recommended": True, "review_approach_reasoning": "no wp_id"},
+            {
+                "wp_id": "P1-A1-WP1",
+                "review_approach_recommended": True,
+                "review_approach_reasoning": "valid entry",
+            },
+        ],
+    }
+    write_json(output_dir / "review_approach_assessment.json", assessment)
+    compile_plan(str(output_dir), task="Test task", source_dir=str(tmp_path))
+    issue_body = (output_dir / "issues" / "P1-A1-WP1_issue.md").read_text()
+    assert "## Review Approach" in issue_body
+    assert "valid entry" in issue_body

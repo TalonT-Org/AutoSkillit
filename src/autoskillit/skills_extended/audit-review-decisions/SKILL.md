@@ -323,6 +323,6 @@ For every finding processed in Steps 2–3 (all classifications — VALID, RESOL
 
 4. **Thread reply constraint**: These calls cannot be batched via the reviews API — each
    requires an individual POST. The 1s delay between calls is mandatory per GitHub API
-   discipline (GitHub API discipline rules require `sleep 1` between consecutive POST/PATCH/PUT/DELETE calls).
+   discipline.
 
 5. Log progress per finding: `[AUDIT] Posted marker on PR #{number} thread {comment_id}: {marker_body}`

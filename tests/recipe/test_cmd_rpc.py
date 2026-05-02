@@ -144,7 +144,7 @@ def test_export_local_bundle(tmp_path):
 
 
 def test_refetch_issues_builds_query():
-    with patch("subprocess.run") as mock_run:
+    with patch("autoskillit.recipe._cmd_rpc.subprocess.run") as mock_run:
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="1 2", stderr=""
         )

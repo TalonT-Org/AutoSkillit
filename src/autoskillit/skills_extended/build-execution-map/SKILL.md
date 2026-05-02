@@ -163,7 +163,7 @@ For each pair that requires assessment, produce:
 - `medium` — Significant overlap or potential indirect dependency, resolvable. Recommendation: `proceed` with a warning annotation in the report.
 - `critical` — Semantic conflict, undeclared dependency, or architectural tension where implementing the target issue now will produce incorrect results or be discarded. Recommendation: `defer`.
 
-When the in-progress context is empty, skip Step 2b entirely — `cross_assessments` is `[]`.
+When the in-progress context is empty, omit Step 2b entirely — `cross_assessments` is `[]`.
 
 #### Review-Approach Benefit Assessment (conditional)
 

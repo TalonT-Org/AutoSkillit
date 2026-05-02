@@ -1753,9 +1753,7 @@ skills:
     - "execution_map\\s*=\\s*/.+"
     pattern_examples:
     - "execution_map = /tmp/build-execution-map/execution_map_2026-04-22_190000.json\nexecution_map_report = /tmp/build-execution-map/execution_map_report_2026-04-22_190000.md\ngroup_count = 3\ntotal_issues = 5\ndispatched_count = 4\ndeferred_count = 1\nhas_deferred = true"
-    write_behavior: conditional
-    write_expected_when:
-    - "execution_map\\s*=\\s*/.+"
+    write_behavior: always
   bundle-local-report:
     inputs:
     - name: research_dir

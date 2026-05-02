@@ -531,4 +531,5 @@ def test_merge_prs_ci_watch_post_queue_fix_timed_out_bounded(pmp_recipe) -> None
     timed_out_routes = [
         c.route for c in step.on_result.conditions if c.when and "'timed_out'" in c.when
     ]
+    assert timed_out_routes, "ci_watch_post_queue_fix: missing timed_out routing"
     assert timed_out_routes[0] == "check_ci_post_queue_loop"

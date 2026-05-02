@@ -561,7 +561,7 @@ def _build_session_telemetry(
         timing_seconds=timing_seconds,
         audit_record=audit_record,
         github_api_usage=_api_usage,
-        github_api_requests=_api_usage["total_requests"] if _api_usage else 0,
+        github_api_requests=_api_usage.get("total_requests", 0) if _api_usage else 0,
         loc_insertions=loc_insertions,
         loc_deletions=loc_deletions,
     )

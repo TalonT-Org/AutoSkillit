@@ -317,7 +317,7 @@ async def _execute_claude_headless(
                     timing_seconds=None,
                     audit_record=None,
                     github_api_usage=_api_usage,
-                    github_api_requests=_api_usage["total_requests"] if _api_usage else 0,
+                    github_api_requests=_api_usage.get("total_requests", 0) if _api_usage else 0,
                     loc_insertions=0,
                     loc_deletions=0,
                 ),
@@ -369,7 +369,9 @@ async def _execute_claude_headless(
                         timing_seconds=None,
                         audit_record=None,
                         github_api_usage=_api_usage,
-                        github_api_requests=_api_usage["total_requests"] if _api_usage else 0,
+                        github_api_requests=_api_usage.get("total_requests", 0)
+                        if _api_usage
+                        else 0,
                         loc_insertions=0,
                         loc_deletions=0,
                     ),

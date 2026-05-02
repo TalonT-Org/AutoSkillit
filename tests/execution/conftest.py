@@ -150,7 +150,7 @@ def _flush(tmp_path: Path, **overrides) -> None:
         timing_seconds=defaults.pop("timing_seconds"),
         audit_record=defaults.pop("audit_record"),
         github_api_usage=_api_usage,
-        github_api_requests=_api_usage["total_requests"] if _api_usage else 0,
+        github_api_requests=_api_usage.get("total_requests", 0) if _api_usage else 0,
         loc_insertions=defaults.pop("loc_insertions"),
         loc_deletions=defaults.pop("loc_deletions"),
     )

@@ -135,7 +135,7 @@ async def test_flush_session_log_writes_github_api_usage(tmp_path):
             timing_seconds=None,
             audit_record=None,
             github_api_usage=_usage,
-            github_api_requests=_usage["total_requests"] if _usage else 0,
+            github_api_requests=_usage.get("total_requests", 0) if _usage else 0,
             loc_insertions=0,
             loc_deletions=0,
         ),

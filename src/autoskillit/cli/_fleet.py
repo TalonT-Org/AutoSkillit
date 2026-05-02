@@ -123,7 +123,7 @@ def fleet_campaign(
         campaign_name = selected.name
 
     if campaign_name is None and resume_campaign is not None:
-        from autoskillit.fleet import _TERMINAL_DISPATCH_STATUSES, read_state
+        from autoskillit.fleet import TERMINAL_DISPATCH_STATUSES, read_state
 
         fleet_dir = Path.cwd() / ".autoskillit" / "temp" / "fleet"
         active: list[CampaignState] = []
@@ -135,7 +135,7 @@ def fleet_campaign(
                 if state is None:
                     continue
                 has_non_terminal = any(
-                    d.status not in _TERMINAL_DISPATCH_STATUSES for d in state.dispatches
+                    d.status not in TERMINAL_DISPATCH_STATUSES for d in state.dispatches
                 )
                 if has_non_terminal:
                     active.append(state)

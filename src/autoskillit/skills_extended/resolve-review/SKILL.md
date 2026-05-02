@@ -114,7 +114,7 @@ cursor-based pagination to handle PRs with more than 100 threads:
 ```bash
 # Fetch all pages; repeat with after=$endCursor while hasNextPage is true
 gh api graphql \
-  -f query='query($owner:String!,$repo:String!,$number:Int!,$after:String){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor}nodes{id isResolved comments(first:1){nodes{databaseId}}}}}}}' \
+  -f query='query($owner:String!,$repo:String!,$number:Int!,$after:String){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor}nodes{id isResolved comments(first:5){nodes{databaseId body}}}}}}}' \
   -F owner="$owner" \
   -F repo="$repo" \
   -F number=$number \
@@ -136,6 +136,36 @@ Build a lookup map from the threads response:
 If the GraphQL call fails (e.g., token lacks `read:discussion` scope), log a warning and
 set `comment_id_to_thread_id = {}`. Thread resolution will be silently skipped in Step 6.
 Flag this in the Step 7 report for human review.
+
+**Build `already_replied_ids` (idempotency guard):**
+
+```python
+RESOLVED_MARKER_RE = re.compile(r"<!--\s*autoskillit:resolved\b")
+
+already_replied_ids: set[int] = set()
+for thread in all_thread_nodes:
+    if thread.get("isResolved"):
+        continue  # Already resolved — Step 3 will not see these comments anyway
+    comments_in_thread = thread.get("comments", {}).get("nodes", [])
+    if len(comments_in_thread) < 2:
+        continue  # No replies yet
+    first_comment_id = comments_in_thread[0].get("databaseId")
+    if first_comment_id is None:
+        continue
+    for reply in comments_in_thread[1:]:
+        if RESOLVED_MARKER_RE.search(reply.get("body", "")):
+            already_replied_ids.add(first_comment_id)
+            log(f"Skipping comment {first_comment_id} — already resolved by prior resolve-review run")
+            break
+```
+
+`already_replied_ids` is a set of original-comment `databaseId` integers for which a prior
+resolve-review invocation already posted a reply. Comments in this set are skipped in Step 3
+before classification.
+
+If the GraphQL call failed and `all_thread_nodes` is empty, `already_replied_ids` defaults to
+`set()` — no skipping occurs (safe degradation: worst case is a duplicate reply on the next
+run, same as the current behavior).
 
 **Load Pre-Built Context (if available):**
 
@@ -172,6 +202,14 @@ From **inline comments**, extract per comment:
 review-pr), skip this finding entirely — file-level comments have no code anchor and
 cannot be resolved by code changes. Record: `(path, null, reason="file-level comment — no
 line anchor")`. See the thread_node_id tracking table in Step 4 for the no-add disposition.
+
+**Idempotency guard — already-replied comments:**
+If `comment["id"]` (the REST `id` integer) is in `already_replied_ids`, skip this
+comment entirely. Do not classify it, do not apply fixes, do not post a reply.
+Record: `(path, line, reason="already replied in prior round — skipped")`.
+These skipped comments do not count toward `accept_count`, `reject_count`, or
+`discuss_count`, and must not appear in the Step 7 report's "Findings fetched" total
+(they were fetched but filtered before classification).
 
 From **top-level reviews**, extract:
 - `state` — APPROVED, CHANGES_REQUESTED, COMMENTED
@@ -366,13 +404,17 @@ API. Each finding receives exactly one reply based on its classification.
 ```bash
 # Build reply body based on classification:
 # ACCEPT:
-BODY="Agreed — fixed in ${commit_sha}. ${evidence}"
+BODY="Agreed — fixed in ${commit_sha}. ${evidence}
+<!-- autoskillit:resolved comment_id=${comment_id} verdict=ACCEPT -->"
 # REJECT:
-BODY="Investigated — this is intentional. ${evidence}"
+BODY="Investigated — this is intentional. ${evidence}
+<!-- autoskillit:resolved comment_id=${comment_id} verdict=REJECT -->"
 # DISCUSS:
-BODY="Valid observation — flagged for design decision. ${evidence}"
+BODY="Valid observation — flagged for design decision. ${evidence}
+<!-- autoskillit:resolved comment_id=${comment_id} verdict=DISCUSS -->"
 # INFO (auto-classified DISCUSS):
-BODY="Acknowledged — minor suggestion noted."
+BODY="Acknowledged — minor suggestion noted.
+<!-- autoskillit:resolved comment_id=${comment_id} verdict=INFO -->"
 
 gh api repos/{owner}/{repo}/pulls/{pr_number}/comments/{comment_id}/replies \
   --method POST \

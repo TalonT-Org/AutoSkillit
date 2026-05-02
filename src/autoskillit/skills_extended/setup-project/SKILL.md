@@ -185,9 +185,9 @@ Interactive config suggestion flow:
 3. Track approvals — do NOT write to disk yet
 4. Do NOT suggest `reset_guard_marker` — that's a workspace concern, not project setup
 5. Ask the user for their preferred default base branch:
-   > "What is your default base branch? (e.g., 'integration' for the 3-tier model, 'main' for the classic model)"
-   > Default: `integration`
-   If the user selects a value different from the package default (`integration`), add it to the config diff as:
+   > "What is your default base branch? (e.g., 'develop' for the 3-tier model, 'main' for the classic model)"
+   > Default: `develop`
+   If the user selects a value different from the package default (`develop`), add it to the config diff as:
    ```yaml
    branching:
      default_base_branch: {user_choice}

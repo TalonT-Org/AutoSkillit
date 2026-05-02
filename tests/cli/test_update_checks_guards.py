@@ -13,7 +13,7 @@ import pytest
 from autoskillit.cli._install_info import InstallInfo, InstallType
 from autoskillit.cli._update_checks import run_update_checks
 
-from ._update_checks_helpers import _make_integration_info, _make_stable_info
+from ._update_checks_helpers import _make_develop_info, _make_stable_info
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
@@ -209,19 +209,19 @@ def test_binary_signal_uses_releases_url_for_stable(
     assert targets == ["releases/latest"]
 
 
-def test_binary_signal_uses_integration_url_for_integration(
+def test_binary_signal_uses_develop_url_for_develop(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     from autoskillit.cli._update_checks import _binary_signal
 
-    info = _make_integration_info()
+    info = _make_develop_info()
     targets: list[str] = []
     monkeypatch.setattr(
         "autoskillit.cli._update_checks._fetch_latest_version",
         lambda target, home: targets.append(target) or "0.9.0",
     )
     _binary_signal(info, tmp_path, "0.7.77")
-    assert targets == ["integration"]
+    assert targets == ["develop"]
 
 
 def test_hooks_signal_fires_on_missing_hooks(

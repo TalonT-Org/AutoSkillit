@@ -83,7 +83,7 @@ class TestReleaseIssueWhitelist:
         result = json.loads(
             await release_issue(
                 issue_url="https://github.com/owner/repo/issues/1",
-                target_branch="integration",
+                target_branch="develop",
                 staged_label="unlisted-staged",
             )
         )

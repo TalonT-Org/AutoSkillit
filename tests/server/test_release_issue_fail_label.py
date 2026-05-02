@@ -51,7 +51,7 @@ class TestReleaseIssueFailLabel:
         result = json.loads(
             await release_issue(
                 issue_url="https://github.com/owner/repo/issues/42",
-                target_branch="integration",
+                target_branch="develop",
             )
         )
 

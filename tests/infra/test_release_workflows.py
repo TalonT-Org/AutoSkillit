@@ -1,6 +1,6 @@
 """Structural contract tests for the release CI workflows.
 
-Ensures version-bump.yml, patch-bump-integration.yml, and release.yml are
+Ensures version-bump.yml, patch-bump-develop.yml, and release.yml are
 correctly shaped, guarded, and consistent with repo conventions.
 """
 
@@ -12,9 +12,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 VERSION_BUMP_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "version-bump.yml"
-PATCH_BUMP_INTEGRATION_WORKFLOW = (
-    REPO_ROOT / ".github" / "workflows" / "patch-bump-integration.yml"
-)
+PATCH_BUMP_DEVELOP_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "patch-bump-develop.yml"
 RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "release.yml"
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -43,13 +41,13 @@ def _find_step(job: dict, name_fragment: str) -> dict | None:
     )
 
 
-def _find_integration_commit_step(job: dict) -> dict | None:
-    """Return the integration version commit/push step."""
+def _find_develop_commit_step(job: dict) -> dict | None:
+    """Return the develop version commit/push step."""
     return next(
         (
             s
             for s in job.get("steps", [])
-            if "integration version" in s.get("name", "").lower()
+            if "develop version" in s.get("name", "").lower()
             and ("commit" in s.get("name", "").lower() or "push" in s.get("name", "").lower())
         ),
         None,
@@ -80,15 +78,15 @@ class TestVersionBumpWorkflow:
             "version-bump.yml must not have a push trigger — it is PR-event-based"
         )
 
-    def test_job_has_integration_branch_guard(self):
-        """Job must only run when head.ref == 'integration'."""
+    def test_job_has_develop_branch_guard(self):
+        """Job must only run when head.ref == 'develop'."""
         wf = _load(VERSION_BUMP_WORKFLOW)
         jobs = wf.get("jobs", {})
         assert len(jobs) >= 1
         job = next(iter(jobs.values()))
         condition = job.get("if", "")
         assert "merged" in condition, "Job must check github.event.pull_request.merged"
-        assert "integration" in condition, "Job must guard on head.ref == 'integration'"
+        assert "develop" in condition, "Job must guard on head.ref == 'develop'"
 
     def test_contents_write_permission(self):
         wf = _load(VERSION_BUMP_WORKFLOW)
@@ -168,32 +166,30 @@ class TestVersionBumpWorkflow:
         ref = checkout_step.get("with", {}).get("ref", "")
         assert "main" in ref, "Checkout must use ref: main (not the default detached PR merge ref)"
 
-    def test_integration_checkout_step_exists(self):
+    def test_develop_checkout_step_exists(self):
         wf = _load(VERSION_BUMP_WORKFLOW)
         job = next(iter(wf.get("jobs", {}).values()))
-        assert _find_step(job, "Checkout integration branch") is not None
+        assert _find_step(job, "Checkout develop branch") is not None
 
-    def test_integration_read_version_step_exists(self):
+    def test_develop_read_version_step_exists(self):
         wf = _load(VERSION_BUMP_WORKFLOW)
         job = next(iter(wf.get("jobs", {}).values()))
-        assert _find_step(job, "Read integration current version") is not None
+        assert _find_step(job, "Read develop current version") is not None
 
-    def test_integration_commit_push_step_exists(self):
+    def test_develop_commit_push_step_exists(self):
         wf = _load(VERSION_BUMP_WORKFLOW)
         job = next(iter(wf.get("jobs", {}).values()))
-        assert _find_integration_commit_step(job) is not None
+        assert _find_develop_commit_step(job) is not None
 
-    def test_integration_push_is_not_force_push(self):
+    def test_develop_push_is_not_force_push(self):
         wf = _load(VERSION_BUMP_WORKFLOW)
         job = next(iter(wf.get("jobs", {}).values()))
-        int_commit_step = _find_integration_commit_step(job)
-        assert int_commit_step is not None, (
-            "Workflow must have an integration version commit/push step"
-        )
+        int_commit_step = _find_develop_commit_step(job)
+        assert int_commit_step is not None, "Workflow must have a develop version commit/push step"
         run_script = int_commit_step.get("run", "")
         assert "push --force" not in run_script
         assert "push -f " not in run_script
-        assert "integration" in run_script
+        assert "develop" in run_script
 
     def test_minor_version_bump_on_main(self):
         """version-bump.yml must increment MINOR and reset PATCH to 0 for main."""
@@ -205,14 +201,14 @@ class TestVersionBumpWorkflow:
         assert "$((MINOR + 1))" in run_block, "Must increment MINOR for main"
         assert ".$((MINOR + 1)).0" in run_block, "main version must end in .0"
 
-    def test_integration_reset_to_patch_one(self):
-        """version-bump.yml must set integration to X.(Y+1).1 after promotion."""
+    def test_develop_reset_to_patch_one(self):
+        """version-bump.yml must set develop to X.(Y+1).1 after promotion."""
         wf = _load(VERSION_BUMP_WORKFLOW)
         job = next(iter(wf.get("jobs", {}).values()))
         step = _find_step(job, "Compute new minor version")
         assert step is not None, "Workflow must have a 'Compute new minor version' step"
         run_block = step.get("run", "")
-        assert ".$((MINOR + 1)).1" in run_block, "integration version must end in .1"
+        assert ".$((MINOR + 1)).1" in run_block, "develop version must end in .1"
 
     def test_no_force_push(self):
         """version-bump.yml must not contain any force-push."""
@@ -224,93 +220,93 @@ class TestVersionBumpWorkflow:
     def test_no_branch_protection_api_calls(self):
         """version-bump.yml must not call the GitHub branch protection API."""
         text = VERSION_BUMP_WORKFLOW.read_text()
-        assert "branches/integration/protection" not in text, (
+        assert "branches/develop/protection" not in text, (
             "version-bump.yml must not manipulate branch protection — "
             "no force-push means no protection changes are needed"
         )
 
 
-# ── patch-bump-integration.yml ────────────────────────────────────────────────
+# ── patch-bump-develop.yml ────────────────────────────────────────────────────
 
 
-class TestPatchBumpIntegrationWorkflow:
+class TestPatchBumpDevelopWorkflow:
     def test_workflow_file_exists(self):
-        assert PATCH_BUMP_INTEGRATION_WORKFLOW.exists(), (
-            f"patch-bump-integration workflow not found at {PATCH_BUMP_INTEGRATION_WORKFLOW}"
+        assert PATCH_BUMP_DEVELOP_WORKFLOW.exists(), (
+            f"patch-bump-develop workflow not found at {PATCH_BUMP_DEVELOP_WORKFLOW}"
         )
 
-    def test_triggered_on_pull_request_closed_to_integration(self):
-        wf = _load(PATCH_BUMP_INTEGRATION_WORKFLOW)
+    def test_triggered_on_pull_request_closed_to_develop(self):
+        wf = _load(PATCH_BUMP_DEVELOP_WORKFLOW)
         pr_trigger = wf.get(True, {}).get("pull_request", {})
         assert "closed" in pr_trigger.get("types", [])
-        assert "integration" in pr_trigger.get("branches", [])
+        assert "develop" in pr_trigger.get("branches", [])
 
     def test_not_triggered_on_push(self):
-        wf = _load(PATCH_BUMP_INTEGRATION_WORKFLOW)
+        wf = _load(PATCH_BUMP_DEVELOP_WORKFLOW)
         assert "push" not in wf.get(True, {}), (
-            "patch-bump-integration.yml must not have a push trigger"
+            "patch-bump-develop.yml must not have a push trigger"
         )
 
     def test_job_has_merged_guard(self):
-        wf = _load(PATCH_BUMP_INTEGRATION_WORKFLOW)
+        wf = _load(PATCH_BUMP_DEVELOP_WORKFLOW)
         job = next(iter(wf.get("jobs", {}).values()))
         condition = job.get("if", "")
         assert "merged" in condition, "Job must check github.event.pull_request.merged"
 
     def test_contents_write_permission(self):
-        wf = _load(PATCH_BUMP_INTEGRATION_WORKFLOW)
+        wf = _load(PATCH_BUMP_DEVELOP_WORKFLOW)
         job = next(iter(wf.get("jobs", {}).values()))
         perms = job.get("permissions", {})
         assert perms.get("contents") == "write"
 
     def test_setup_uv_has_version_pin(self):
-        wf = _load(PATCH_BUMP_INTEGRATION_WORKFLOW)
+        wf = _load(PATCH_BUMP_DEVELOP_WORKFLOW)
         pins = _uv_version_pins(wf)
-        assert pins, "patch-bump-integration.yml must use astral-sh/setup-uv with a version pin"
+        assert pins, "patch-bump-develop.yml must use astral-sh/setup-uv with a version pin"
         assert all(p for p in pins)
 
     def test_uv_version_consistent_with_tests_yml(self):
         tests_wf = yaml.safe_load((REPO_ROOT / ".github" / "workflows" / "tests.yml").read_text())
-        bump_wf = _load(PATCH_BUMP_INTEGRATION_WORKFLOW)
+        bump_wf = _load(PATCH_BUMP_DEVELOP_WORKFLOW)
         tests_pins = _uv_version_pins(tests_wf)
         bump_pins = _uv_version_pins(bump_wf)
         assert tests_pins and bump_pins
         assert bump_pins[0] == tests_pins[0], (
-            f"uv-version in patch-bump-integration.yml ({bump_pins[0]}) must match "
+            f"uv-version in patch-bump-develop.yml ({bump_pins[0]}) must match "
             f"tests.yml ({tests_pins[0]})"
         )
 
     def test_pyproject_toml_is_updated(self):
-        wf = _load(PATCH_BUMP_INTEGRATION_WORKFLOW)
+        wf = _load(PATCH_BUMP_DEVELOP_WORKFLOW)
         job = next(iter(wf.get("jobs", {}).values()))
         step = _find_step(job, "Update pyproject.toml")
         assert step is not None, "Workflow must have an 'Update pyproject.toml' step"
         assert "pyproject.toml" in step.get("run", ""), "Update step must reference pyproject.toml"
 
     def test_patch_bump_workflow_uses_sync_versions_script(self):
-        wf = _load(PATCH_BUMP_INTEGRATION_WORKFLOW)
+        wf = _load(PATCH_BUMP_DEVELOP_WORKFLOW)
         job = next(iter(wf.get("jobs", {}).values()))
         sync_step = _find_step(job, "sync version")
         assert sync_step is not None, (
-            "patch-bump-integration.yml must have a 'Sync version artifacts' step"
+            "patch-bump-develop.yml must have a 'Sync version artifacts' step"
         )
         assert "sync_versions" in sync_step.get("run", ""), (
             "Sync step must call scripts/sync_versions.py"
         )
 
     def test_uv_lock_is_regenerated(self):
-        wf = _load(PATCH_BUMP_INTEGRATION_WORKFLOW)
+        wf = _load(PATCH_BUMP_DEVELOP_WORKFLOW)
         job = next(iter(wf.get("jobs", {}).values()))
         step = _find_step(job, "Regenerate uv.lock")
         assert step is not None, "Workflow must have a 'Regenerate uv.lock' step"
         assert "uv lock" in step.get("run", ""), "Regenerate step must run 'uv lock'"
 
     def test_uses_github_actions_bot_identity(self):
-        text = PATCH_BUMP_INTEGRATION_WORKFLOW.read_text()
+        text = PATCH_BUMP_DEVELOP_WORKFLOW.read_text()
         assert "github-actions[bot]" in text
 
-    def test_checkout_uses_integration_ref(self):
-        wf = _load(PATCH_BUMP_INTEGRATION_WORKFLOW)
+    def test_checkout_uses_develop_ref(self):
+        wf = _load(PATCH_BUMP_DEVELOP_WORKFLOW)
         job = next(iter(wf.get("jobs", {}).values()))
         checkout_step = next(
             (s for s in job.get("steps", []) if "actions/checkout" in s.get("uses", "")),
@@ -318,11 +314,11 @@ class TestPatchBumpIntegrationWorkflow:
         )
         assert checkout_step is not None
         ref = checkout_step.get("with", {}).get("ref", "")
-        assert "integration" in ref
+        assert "develop" in ref
 
     def test_patch_increment_logic(self):
         """Patch bump uses $((PATCH + 1)) arithmetic."""
-        wf = _load(PATCH_BUMP_INTEGRATION_WORKFLOW)
+        wf = _load(PATCH_BUMP_DEVELOP_WORKFLOW)
         job = next(iter(wf.get("jobs", {}).values()))
         step = _find_step(job, "Compute new patch version")
         assert step is not None, "Workflow must have a 'Compute new patch version' step"
@@ -331,7 +327,7 @@ class TestPatchBumpIntegrationWorkflow:
 
     def test_patch_increment_does_not_overflow_minor(self):
         """Patch bump must not touch MINOR."""
-        wf = _load(PATCH_BUMP_INTEGRATION_WORKFLOW)
+        wf = _load(PATCH_BUMP_DEVELOP_WORKFLOW)
         job = next(iter(wf.get("jobs", {}).values()))
         step = _find_step(job, "Compute new patch version")
         assert step is not None
@@ -339,32 +335,30 @@ class TestPatchBumpIntegrationWorkflow:
         assert "$((MINOR + 1))" not in run_block
 
     def test_push_is_not_force_push(self):
-        text = PATCH_BUMP_INTEGRATION_WORKFLOW.read_text()
-        assert "--force" not in text, (
-            "patch-bump-integration.yml must not force-push to integration"
-        )
+        text = PATCH_BUMP_DEVELOP_WORKFLOW.read_text()
+        assert "--force" not in text, "patch-bump-develop.yml must not force-push to develop"
 
     def test_has_concurrency_group(self):
         """Workflow must declare a concurrency group to serialize merge-queue batches."""
-        wf = _load(PATCH_BUMP_INTEGRATION_WORKFLOW)
+        wf = _load(PATCH_BUMP_DEVELOP_WORKFLOW)
         assert wf.get("concurrency") is not None, (
-            "patch-bump-integration.yml must declare a concurrency group — "
+            "patch-bump-develop.yml must declare a concurrency group — "
             "without it, batched merge queue PRs race and silently skip version bumps"
         )
 
     def test_concurrency_group_name(self):
         """Concurrency group name must be a fixed string (not PR-number-scoped)."""
-        wf = _load(PATCH_BUMP_INTEGRATION_WORKFLOW)
+        wf = _load(PATCH_BUMP_DEVELOP_WORKFLOW)
         concurrency = wf.get("concurrency", {})
         group = concurrency.get("group", "")
-        assert group == "patch-bump-integration", (
-            f"concurrency.group must be 'patch-bump-integration' (got {group!r}) — "
+        assert group == "patch-bump-develop", (
+            f"concurrency.group must be 'patch-bump-develop' (got {group!r}) — "
             "a fixed group name ensures all simultaneous batch runs queue behind one another"
         )
 
     def test_concurrency_cancel_in_progress_is_false(self):
         """cancel-in-progress must be false so every queued run executes its bump."""
-        wf = _load(PATCH_BUMP_INTEGRATION_WORKFLOW)
+        wf = _load(PATCH_BUMP_DEVELOP_WORKFLOW)
         concurrency = wf.get("concurrency", {})
         cancel = concurrency.get("cancel-in-progress", None)
         assert cancel is False, (

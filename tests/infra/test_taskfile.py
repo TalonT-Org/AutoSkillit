@@ -54,12 +54,12 @@ class TestTaskfile:
         data = self._load()
         assert "install-dev" in data["tasks"], "install-dev task missing from Taskfile.yml"
 
-    def test_install_dev_task_uses_integration_branch(self):
-        """TF-7 — install-dev installs from @integration and runs autoskillit install."""
+    def test_install_dev_task_uses_develop_branch(self):
+        """TF-7 — install-dev installs from @develop and runs autoskillit install."""
         data = self._load()
         task = data["tasks"]["install-dev"]
         cmds = " ".join(str(c) for c in task.get("cmds", []))
-        assert "@integration" in cmds, "install-dev must install from @integration branch"
+        assert "@develop" in cmds, "install-dev must install from @develop branch"
         assert "autoskillit install" in cmds, "install-dev must run autoskillit install after uv"
 
     def test_vendor_mermaid_task_exists(self) -> None:

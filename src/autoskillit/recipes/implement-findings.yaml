@@ -18,7 +18,7 @@ ingredients:
     required: true
   base_branch:
     description: "Target branch for implementation PRs"
-    default: "integration"
+    default: "develop"
   source_dir:
     description: "Source repository path"
     required: false

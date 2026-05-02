@@ -17,7 +17,7 @@ from autoskillit.cli._update_checks_fetch import (
 )
 
 from ._update_checks_helpers import (
-    _make_integration_info,
+    _make_develop_info,
     _make_mock_client,
     _make_stable_info,
 )
@@ -435,7 +435,7 @@ def test_stale_fetch_cache_after_install_resolve_reference_sha_path2(
 
     from autoskillit.cli._update_checks import resolve_reference_sha
 
-    url = "https://api.github.com/repos/TalonT-Org/AutoSkillit/git/refs/heads/integration"
+    url = "https://api.github.com/repos/TalonT-Org/AutoSkillit/git/refs/heads/develop"
     stale_sha = "a" * 40
     fresh_sha = "b" * 40
 
@@ -443,7 +443,7 @@ def test_stale_fetch_cache_after_install_resolve_reference_sha_path2(
         url: {
             "body": {
                 "object": {"sha": stale_sha, "type": "commit"},
-                "ref": "refs/heads/integration",
+                "ref": "refs/heads/develop",
             },
             "etag": '"old-etag"',
             "cached_at": time.time() - 1,
@@ -472,12 +472,12 @@ def test_stale_fetch_cache_after_install_resolve_reference_sha_path2(
             r.status_code = 200
             r.json.return_value = {
                 "object": {"sha": fresh_sha, "type": "commit"},
-                "ref": "refs/heads/integration",
+                "ref": "refs/heads/develop",
             }
             r.headers = {"ETag": '"fresh-etag"'}
             return r
 
-    info = _make_integration_info(commit_id=stale_sha)
+    info = _make_develop_info(commit_id=stale_sha)
     with patch("httpx.Client", FreshClient):
         result = resolve_reference_sha(info, tmp_path)
 
@@ -604,10 +604,10 @@ def test_api_sha_with_seeded_cache_returns_cached_sha(tmp_path: Path) -> None:
     from autoskillit.core import AUTOSKILLIT_INSTALLED_VERSION
 
     sha = "c" * 40
-    url = "https://api.github.com/repos/TalonT-Org/AutoSkillit/git/refs/heads/integration"
+    url = "https://api.github.com/repos/TalonT-Org/AutoSkillit/git/refs/heads/develop"
     cache_data = {
         url: {
-            "body": {"object": {"sha": sha, "type": "commit"}, "ref": "refs/heads/integration"},
+            "body": {"object": {"sha": sha, "type": "commit"}, "ref": "refs/heads/develop"},
             "etag": '"test-etag"',
             "cached_at": time.time() - 1,
             "installed_version": AUTOSKILLIT_INSTALLED_VERSION,
@@ -632,7 +632,7 @@ def test_api_sha_with_seeded_cache_returns_cached_sha(tmp_path: Path) -> None:
             raise AssertionError("Should not hit network when epoch matches")
 
     with patch("httpx.Client", NoNetworkClient):
-        result = _api_sha("integration", tmp_path)
+        result = _api_sha("develop", tmp_path)
 
     assert result == sha
 
@@ -647,12 +647,12 @@ def test_api_sha_with_stale_epoch_forces_network(
 
     stale_sha = "d" * 40
     fresh_sha = "e" * 40
-    url = "https://api.github.com/repos/TalonT-Org/AutoSkillit/git/refs/heads/integration"
+    url = "https://api.github.com/repos/TalonT-Org/AutoSkillit/git/refs/heads/develop"
     cache_data = {
         url: {
             "body": {
                 "object": {"sha": stale_sha, "type": "commit"},
-                "ref": "refs/heads/integration",
+                "ref": "refs/heads/develop",
             },
             "etag": '"old-etag"',
             "cached_at": time.time() - 1,
@@ -682,13 +682,13 @@ def test_api_sha_with_stale_epoch_forces_network(
             r.status_code = 200
             r.json.return_value = {
                 "object": {"sha": fresh_sha, "type": "commit"},
-                "ref": "refs/heads/integration",
+                "ref": "refs/heads/develop",
             }
             r.headers = {"ETag": '"fresh-etag"'}
             return r
 
     with patch("httpx.Client", FreshClient):
-        result = _api_sha("integration", tmp_path)
+        result = _api_sha("develop", tmp_path)
 
     assert network_hit[0], "Stale epoch must force network fetch"
     assert result == fresh_sha
@@ -701,10 +701,10 @@ def test_api_sha_network_false_reads_raw_cache_no_epoch(tmp_path: Path) -> None:
     from autoskillit.cli._update_checks_source import _api_sha
 
     sha = "f" * 40
-    url = "https://api.github.com/repos/TalonT-Org/AutoSkillit/git/refs/heads/integration"
+    url = "https://api.github.com/repos/TalonT-Org/AutoSkillit/git/refs/heads/develop"
     cache_data = {
         url: {
-            "body": {"object": {"sha": sha, "type": "commit"}, "ref": "refs/heads/integration"},
+            "body": {"object": {"sha": sha, "type": "commit"}, "ref": "refs/heads/develop"},
             "etag": '"cached-etag"',
             "cached_at": time.time() - 1,
             "installed_version": "0.0.0",
@@ -715,7 +715,7 @@ def test_api_sha_network_false_reads_raw_cache_no_epoch(tmp_path: Path) -> None:
         json.dumps(cache_data), encoding="utf-8"
     )
 
-    result = _api_sha("integration", tmp_path, network=False)
+    result = _api_sha("develop", tmp_path, network=False)
     assert result == sha, "Doctor mode must read cache body regardless of epoch"
 
 
@@ -776,7 +776,7 @@ def test_full_lifecycle_install_clears_stale_cache_then_check_detects_new_versio
             "cached_at": time.time(),
             "installed_version": stale_version,
         },
-        "https://api.github.com/repos/TalonT-Org/AutoSkillit/git/refs/heads/integration": {
+        "https://api.github.com/repos/TalonT-Org/AutoSkillit/git/refs/heads/develop": {
             "body": {"object": {"sha": "a" * 40}},
             "etag": '"ref-etag"',
             "cached_at": time.time(),
@@ -906,14 +906,14 @@ def test_verify_update_result_prints_git_vcs_stable_command(
     assert "autoskillit update" in out
 
 
-def test_verify_update_result_prints_git_vcs_integration_command(
+def test_verify_update_result_prints_git_vcs_develop_command(
     tmp_path: Path, capsys: pytest.CaptureFixture
 ) -> None:
     import importlib.metadata
 
     from autoskillit.cli._update_checks import _verify_update_result
 
-    info = _make_integration_info()
+    info = _make_develop_info()
     with patch.object(importlib.metadata, "version", return_value="0.9.0"):
         result = _verify_update_result(info, "0.9.0", "0.9.1", tmp_path, {})
     assert result is False

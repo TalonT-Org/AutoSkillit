@@ -36,7 +36,7 @@ async def toggle_auto_merge(
 
     Args:
         pr_number: PR number to re-enroll.
-        target_branch: Branch the merge queue targets (e.g. "integration").
+        target_branch: Branch the merge queue targets (e.g. "develop").
         cwd: Working directory for git remote resolution when repo is not provided.
         repo: Optional "owner/name" string. Inferred from git remote if empty.
         remote_url: Full GitHub remote URL. Parsed to owner/repo before inference.
@@ -107,7 +107,7 @@ async def enqueue_pr(
 
     Args:
         pr_number: PR number to enqueue.
-        target_branch: Branch the merge queue targets (e.g. "integration").
+        target_branch: Branch the merge queue targets (e.g. "develop").
         cwd: Working directory for git remote resolution when repo is not provided.
         auto_merge_available: Whether the repository allows auto-merge.
         repo: Optional "owner/name" string. Inferred from git remote if empty.
@@ -192,7 +192,7 @@ async def wait_for_merge_queue(
 
     Args:
         pr_number: PR number to monitor.
-        target_branch: Branch the merge queue targets (e.g. "integration").
+        target_branch: Branch the merge queue targets (e.g. "develop").
         cwd: Working directory for git remote resolution when repo is not provided.
         repo: Optional "owner/name" string. Inferred from git remote if empty.
         remote_url: Full GitHub remote URL (e.g. "https://github.com/owner/repo.git").

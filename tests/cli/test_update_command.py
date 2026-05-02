@@ -83,7 +83,7 @@ def test_update_subcommand_registered_in_help() -> None:
         ("stable", ["uv", "tool", "upgrade", "autoskillit"]),
         ("main", ["uv", "tool", "upgrade", "autoskillit"]),
         ("v0.7.75", ["uv", "tool", "upgrade", "autoskillit"]),
-        ("integration", ["uv", "tool", "install", "--force"]),
+        ("develop", ["uv", "tool", "install", "--force"]),
     ],
 )
 def test_update_runs_upgrade_command_for_git_vcs_install(

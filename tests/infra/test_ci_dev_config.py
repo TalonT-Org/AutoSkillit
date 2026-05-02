@@ -165,24 +165,24 @@ class TestCIWorkflow:
                         " from minor releases"
                     )
 
-    def test_ci_push_trigger_excludes_integration(self) -> None:
-        """Push trigger must NOT include integration — PRs from integration already
+    def test_ci_push_trigger_excludes_develop(self) -> None:
+        """Push trigger must NOT include develop — PRs from develop already
         get CI via pull_request trigger, and including it in push causes duplicate checks."""
         workflow = yaml.safe_load(CI_WORKFLOW.read_text())
         # PyYAML parses the YAML 'on:' key as Python True (boolean)
         triggers = workflow.get(True, workflow.get("on", {}))
         push_branches = triggers["push"]["branches"]
-        assert "integration" not in push_branches, (
-            "integration must not be in push branches — "
-            "it causes duplicate CI checks when a PR is open from integration"
+        assert "develop" not in push_branches, (
+            "develop must not be in push branches — "
+            "it causes duplicate CI checks when a PR is open from develop"
         )
 
-    def test_ci_pull_request_trigger_includes_integration(self) -> None:
-        """PR trigger must include integration so PRs targeting it get CI."""
+    def test_ci_pull_request_trigger_includes_develop(self) -> None:
+        """PR trigger must include develop so PRs targeting it get CI."""
         workflow = yaml.safe_load(CI_WORKFLOW.read_text())
         triggers = workflow.get(True, workflow.get("on", {}))
         pr_branches = triggers["pull_request"]["branches"]
-        assert "integration" in pr_branches, "CI must trigger on PRs targeting integration branch"
+        assert "develop" in pr_branches, "CI must trigger on PRs targeting develop branch"
 
     def test_ci_preflight_outputs_os_matrix(self) -> None:
         """preflight job must export an os-matrix output computed from base_ref."""

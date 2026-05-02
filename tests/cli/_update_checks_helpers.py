@@ -18,11 +18,11 @@ def _make_stable_info(commit_id: str = "abc123", revision: str = "stable") -> In
     )
 
 
-def _make_integration_info(commit_id: str = "def456") -> InstallInfo:
+def _make_develop_info(commit_id: str = "def456") -> InstallInfo:
     return InstallInfo(
         install_type=InstallType.GIT_VCS,
         commit_id=commit_id,
-        requested_revision="integration",
+        requested_revision="develop",
         url="https://github.com/TalonT-Org/AutoSkillit.git",
         editable_source=None,
     )

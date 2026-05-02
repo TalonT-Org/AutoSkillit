@@ -22,7 +22,7 @@ ingredients:
     required: true
   integration_branch:
     description: "Integration branch to promote"
-    default: "integration"
+    default: "develop"
   base_branch:
     description: "Target branch for promotion PR"
     default: "main"

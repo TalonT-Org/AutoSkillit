@@ -29,7 +29,7 @@ class TestDefaultConfig:
         assert cfg.safety.test_gate_on_merge is True
         assert isinstance(cfg.safety.protected_branches, list)
         assert "main" in cfg.safety.protected_branches
-        assert "integration" in cfg.safety.protected_branches
+        assert "develop" in cfg.safety.protected_branches
         assert "stable" in cfg.safety.protected_branches
         assert cfg.worktree_setup.command is None
 
@@ -814,8 +814,8 @@ class TestBranchingConfig:
         """promotion_target can be set independently of default_base_branch."""
         from autoskillit.config.settings import BranchingConfig
 
-        cfg = BranchingConfig(default_base_branch="integration", promotion_target="main")
-        assert cfg.default_base_branch == "integration"
+        cfg = BranchingConfig(default_base_branch="develop", promotion_target="main")
+        assert cfg.default_base_branch == "develop"
         assert cfg.promotion_target == "main"
 
     def test_branching_config_promotion_target_defaults_match_yaml(self, tmp_path) -> None:

@@ -16,11 +16,11 @@ def test_project_config_has_filter_mode_conservative():
 
 
 def test_project_config_has_base_ref():
-    """AC1: .autoskillit/config.yaml must set base_ref to integration."""
+    """AC1: .autoskillit/config.yaml must set base_ref to develop."""
     from autoskillit.core.io import load_yaml
 
     cfg = load_yaml(REPO_ROOT / ".autoskillit/config.yaml")
-    assert cfg["test_check"]["base_ref"] == "integration"
+    assert cfg["test_check"]["base_ref"] == "develop"
 
 
 def test_hook_registry_tests_in_infra():
@@ -52,7 +52,7 @@ def test_ci_filter_codepath_produces_scope():
         manifest=manifest,
         tests_root=REPO_ROOT / "tests",
         cwd=REPO_ROOT,
-        base_ref="integration",
+        base_ref="develop",
     )
     assert scope is not None, (
         "build_test_scope must return a non-None scope for conservative mode "

@@ -27,8 +27,8 @@ and creates a comprehensive promotion PR.
 
 ## When to Use
 
-- When the integration branch is stable and ready to be promoted to main
-- After feature PRs, bug fixes, and cleanup work have been collected and tested on integration
+- When the develop branch is stable and ready to be promoted to main
+- After feature PRs, bug fixes, and cleanup work have been collected and tested on develop
 - This is the final gate before changes land on main
 
 ## Critical Constraints
@@ -57,7 +57,7 @@ and creates a comprehensive promotion PR.
 #### Step 0.1: Parse Arguments
 
 Parse optional positional arguments and flags:
-- `integration_branch` — default `"integration"` if absent or empty
+- `integration_branch` — default `"develop"` if absent or empty
 - `base_branch` — default `"main"` if absent or empty
 - `dry_run` — `true` if `--dry-run` present in ARGUMENTS
 

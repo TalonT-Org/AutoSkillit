@@ -306,7 +306,7 @@ def push_to_remote(
             "error_type": "protected_branch_push",
             "stderr": (
                 f"Refusing to push to protected branch '{branch}'. "
-                f"Protected branches: {protected_branches or ['main', 'integration', 'stable']}"
+                f"Protected branches: {protected_branches or ['main', 'develop', 'stable']}"
             ),
         }
 

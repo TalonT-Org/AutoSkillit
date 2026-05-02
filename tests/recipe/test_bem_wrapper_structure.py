@@ -34,7 +34,7 @@ def test_bem_wrapper_ingredients_declared():
     assert "issue_urls" in recipe.ingredients
     assert recipe.ingredients["issue_urls"].required is True
     assert "base_branch" in recipe.ingredients
-    assert recipe.ingredients["base_branch"].default == "integration"
+    assert recipe.ingredients["base_branch"].default == "develop"
 
 
 def test_bem_wrapper_routing_chain():

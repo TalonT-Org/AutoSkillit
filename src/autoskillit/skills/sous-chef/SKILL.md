@@ -377,7 +377,7 @@ headless session):
 ```bash
 REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner) &&
 OWNER=${REPO%%/*} && REPO_NAME=${REPO##*/} &&
-BRANCH="<base_branch>" &&    # substitute the PR's target branch (e.g. "main", "integration")
+BRANCH="<base_branch>" &&    # substitute the PR's target branch (e.g. "main", "develop")
 gh api graphql -f query="query {
   repository(owner:\"$OWNER\", name:\"$REPO_NAME\") {
     mergeQueue(branch:\"$BRANCH\") { id }

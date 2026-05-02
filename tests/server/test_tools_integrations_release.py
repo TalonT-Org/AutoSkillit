@@ -23,7 +23,7 @@ class TestReleaseIssueStagedLifecycle:
         result = json.loads(
             await release_issue(
                 issue_url="https://github.com/owner/repo/issues/42",
-                target_branch="integration",
+                target_branch="develop",
             )
         )
         assert result["success"] is True
@@ -83,7 +83,7 @@ class TestReleaseIssueStagedLifecycle:
         result = json.loads(
             await release_issue(
                 issue_url="https://github.com/owner/repo/issues/42",
-                target_branch="integration",
+                target_branch="develop",
             )
         )
         assert result["success"] is True
@@ -102,7 +102,7 @@ class TestReleaseIssueStagedLifecycle:
         result = json.loads(
             await release_issue(
                 issue_url="https://github.com/owner/repo/issues/42",
-                target_branch="integration",
+                target_branch="develop",
                 staged_label="awaiting-promotion",
             )
         )
@@ -126,7 +126,7 @@ class TestReleaseIssueStagedLifecycle:
         result = json.loads(
             await release_issue(
                 issue_url="https://github.com/owner/repo/issues/42",
-                target_branch="integration",
+                target_branch="develop",
             )
         )
         assert result["success"] is False
@@ -143,7 +143,7 @@ class TestReleaseIssueStagedLifecycle:
         result = json.loads(
             await release_issue(
                 issue_url="https://github.com/owner/repo/issues/42",
-                target_branch="integration",
+                target_branch="develop",
             )
         )
         assert result["success"] is False
@@ -167,15 +167,15 @@ class TestReleaseIssueStagedLifecycle:
     @pytest.mark.parametrize(
         "default_base_branch,promotion_target,target_branch,expected_staged",
         [
-            # production scenario: default_base_branch overridden to integration for routing
-            ("integration", "main", "integration", True),
-            # integration explicitly set as promotion_target: landing there = done
-            ("integration", "integration", "integration", False),
+            # production scenario: default_base_branch overridden to develop for routing
+            ("develop", "main", "develop", True),
+            # develop explicitly set as promotion_target: landing there = done
+            ("develop", "develop", "develop", False),
             # non-default target against main promotion target
-            ("main", "main", "integration", True),
+            ("main", "main", "develop", True),
             # promotion_target overridden to something other than main
             ("main", "stable", "stable", False),
-            ("main", "stable", "integration", True),
+            ("main", "stable", "develop", True),
         ],
     )
     async def test_release_issue_staging_uses_promotion_target(
@@ -189,7 +189,7 @@ class TestReleaseIssueStagedLifecycle:
     ):
         """Regression: staging comparison uses promotion_target, not default_base_branch.
 
-        When default_base_branch == target_branch (e.g. both "integration"),
+        When default_base_branch == target_branch (e.g. both "develop"),
         staged label must still be applied if promotion_target != target_branch.
         Conversely, no staged label when target_branch == promotion_target, regardless
         of default_base_branch.
@@ -235,7 +235,7 @@ class TestReleaseIssueStagedLifecycle:
         result = json.loads(
             await release_issue(
                 issue_url="https://github.com/owner/repo/issues/42",
-                target_branch="integration",
+                target_branch="develop",
             )
         )
         assert result["success"] is True

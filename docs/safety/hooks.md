@@ -12,7 +12,7 @@ materializes the canonical `hooks.json` that Claude Code reads.
 ### `branch_protection_guard.py`
 **Guarded tools:** `merge_worktree`, `push_to_remote`
 Denies merges and pushes targeting branches in `safety.protected_branches`
-(`main`, `integration`, `stable` by default). Pure-function check via
+(`main`, `develop`, `stable` by default). Pure-function check via
 `core/branch_guard.is_protected_branch`.
 
 ### `quota_guard.py`
@@ -172,7 +172,7 @@ the global Python.
 ```yaml
 # .autoskillit/config.yaml
 safety:
-  protected_branches: ["main", "integration", "stable"]
+  protected_branches: ["main", "develop", "stable"]
   require_dry_walkthrough: true
   test_gate_on_merge: true
   reset_guard_marker: ".autoskillit-workspace"

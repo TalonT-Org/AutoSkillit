@@ -138,3 +138,31 @@ def test_review_approach_candidates_contract_registered() -> None:
     assert "review_approach_candidates" in output_names, (
         "build-execution-map contract must register review_approach_candidates output"
     )
+
+
+def test_skill_declares_max_parallel_argument() -> None:
+    """REQ-MAP-001: SKILL.md must document --max-parallel as an accepted input."""
+    skill_md = _skill_md_text()
+    assert "--max-parallel" in skill_md
+
+
+def test_skill_documents_max_parallel_default() -> None:
+    """REQ-MAP-002: Default of 6 must appear in the SKILL.md arguments section."""
+    skill_md = _skill_md_text()
+    assert "default" in skill_md.lower() and "6" in skill_md
+
+
+def test_output_schema_includes_max_parallel_field() -> None:
+    """REQ-OUT-001: JSON schema section must include max_parallel field."""
+    skill_md = _skill_md_text()
+    schema_section_start = skill_md.find("## Output JSON Schema")
+    assert schema_section_start != -1
+    schema_section = skill_md[schema_section_start:]
+    assert '"max_parallel"' in schema_section
+
+
+def test_skill_documents_group_splitting_logic() -> None:
+    """REQ-MAP-003/004/005/006: Group splitting instructions must appear in SKILL.md."""
+    skill_md = _skill_md_text()
+    assert "split" in skill_md.lower()
+    assert "sub-group" in skill_md.lower() or "subgroup" in skill_md.lower()

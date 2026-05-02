@@ -258,6 +258,7 @@ generic_automation_mcp/
 │   ├── rules_features.py
 │   ├── rules_fixing.py
 │   ├── rules_graph.py
+│   ├── rules_inline_script.py  #   inline-script-in-cmd + inline-python-in-cmd lint rules
 │   ├── rules_inputs.py
 │   ├── rules_isolation.py
 │   ├── rules_merge.py

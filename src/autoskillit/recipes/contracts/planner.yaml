@@ -162,6 +162,18 @@ skills:
 
       %%ORDER_UP%%'
     write_behavior: always
+  planner-consolidate-wps:
+    inputs:
+    - name: refined_wps_path
+      type: file_path
+      required: true
+      recommended: false
+    - name: planner_dir
+      type: directory_path
+      required: true
+      recommended: false
+    outputs: []
+    write_behavior: always
   planner-validate-task-alignment:
     inputs:
     - name: refined_wps_path

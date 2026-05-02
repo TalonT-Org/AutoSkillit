@@ -128,6 +128,9 @@ def test_full_audit_semantic_rules_no_errors() -> None:
             "audit-tests",
             "audit-cohesion",
             "audit-arch",
+            "audit-feature-gates",
+            "audit-docs",
+            "audit-review-decisions",
             "validate-audit",
             "prepare-issue",
         }
@@ -136,3 +139,37 @@ def test_full_audit_semantic_rules_no_errors() -> None:
     findings = run_semantic_rules(ctx)
     errors = [f for f in findings if f.severity == Severity.ERROR]
     assert not errors, f"Semantic rule errors: {[f.rule + ': ' + f.message for f in errors]}"
+
+
+def test_full_audit_description_mentions_review_decisions() -> None:
+    """full-audit description must mention audit-review-decisions."""
+    import yaml
+
+    data = yaml.safe_load(RECIPE_PATH.read_text())
+    assert "audit-review-decisions" in data["description"]
+
+
+def test_full_audit_summary_mentions_six() -> None:
+    """full-audit summary must reference 6 parallel chains."""
+    import yaml
+
+    data = yaml.safe_load(RECIPE_PATH.read_text())
+    assert "6" in data["summary"]
+
+
+def test_full_audit_run_audits_note_mentions_review_decisions() -> None:
+    """run_audits note must include audit-review-decisions as the 6th skill."""
+    import yaml
+
+    data = yaml.safe_load(RECIPE_PATH.read_text())
+    note = data["steps"]["run_audits"]["note"]
+    assert "audit-review-decisions" in note
+
+
+def test_full_audit_validate_audits_note_mentions_review_decisions() -> None:
+    """validate_audits note must include review_decisions validation."""
+    import yaml
+
+    data = yaml.safe_load(RECIPE_PATH.read_text())
+    note = data["steps"]["validate_audits"]["note"]
+    assert "review_decisions" in note

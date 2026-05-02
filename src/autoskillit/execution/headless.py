@@ -178,7 +178,6 @@ def _compute_post_session_metrics(
     )
 
 
-
 async def _execute_claude_headless(
     spec: ClaudeHeadlessCmd,
     cwd: str,

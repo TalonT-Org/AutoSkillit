@@ -197,6 +197,7 @@ AUDIT_SKILL_NAMES = [
     "audit-defense-standards",
     "validate-audit",
     "audit-docs",
+    "audit-review-decisions",
 ]
 
 BUNDLED_SKILL_NAMES = set(BUNDLED_SKILLS)
@@ -569,6 +570,7 @@ class TestSkillCategories:
             "audit-impl",
             "validate-audit",
             "audit-docs",
+            "audit-review-decisions",
         ]:
             info = resolver.resolve(name)
             assert info is not None

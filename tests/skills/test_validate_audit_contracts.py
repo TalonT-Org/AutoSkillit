@@ -55,11 +55,14 @@ class TestValidateAuditContent:
         assert "contested_findings_" in text
 
     # T-VAL-012
-    def test_handles_all_three_audit_formats(self) -> None:
+    def test_handles_all_six_audit_formats(self) -> None:
         text = _skill_text()
         assert "audit-arch" in text
         assert "audit-tests" in text
         assert "audit-cohesion" in text
+        assert "audit-feature-gates" in text or "feature_gates" in text
+        assert "audit-docs" in text or "docs" in text
+        assert "audit-review-decisions" in text or "review_decisions" in text
 
     # T-VAL-013
     def test_interactive_headless_distinction(self) -> None:
@@ -131,3 +134,34 @@ class TestValidateAuditFeatureGates:
             "produce table-format findings without file:line and must be handled in the "
             "cross-cutting batch with direct file verification"
         )
+
+
+class TestValidateAuditReviewDecisions:
+    # T-VAL-022
+    def test_handles_review_decisions_audit_format(self) -> None:
+        """validate-audit must recognize 'Review Decisions Audit' as a source format."""
+        text = _skill_text()
+        assert "Review Decisions Audit" in text
+
+    # T-VAL-023
+    def test_review_decisions_source_name(self) -> None:
+        """validate-audit must use 'review_decisions' as the source name."""
+        text = _skill_text()
+        assert "review_decisions" in text
+
+    # T-VAL-024
+    def test_review_decisions_pr_provenance_preserved(self) -> None:
+        """validate-audit must preserve PR provenance metadata for review_decisions findings."""
+        text = _skill_text().lower()
+        assert "pr number" in text or "pr provenance" in text or "pr #" in text
+
+    # T-VAL-025
+    def test_error_message_lists_six_formats(self) -> None:
+        """Error message for unrecognized format must list all 6 recognized formats."""
+        text = _skill_text()
+        assert "Review Decisions Audit" in text
+        assert "Architectural Audit" in text
+        assert "Test Suite Audit" in text
+        assert "Cohesion Audit" in text
+        assert "Feature Gate Audit" in text
+        assert "Documentation Audit" in text

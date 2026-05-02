@@ -1103,6 +1103,7 @@ steps:
       timeout_seconds: 600
       cwd: "${{ context.work_dir }}"
       remote_url: "${{ context.remote_url }}"
+      auto_trigger: "true"
     capture:
       ci_conclusion: "${{ result.conclusion }}"
       ci_failed_jobs: "${{ result.failed_jobs }}"
@@ -1112,15 +1113,38 @@ steps:
       - when: "${{ result.conclusion }} == 'no_runs'"
         route: release_issue_failure
       - when: "${{ result.conclusion }} == 'timed_out'"
-        route: ci_watch_post_queue_fix
+        route: check_ci_post_queue_loop
       - route: detect_ci_conflict
     on_failure: detect_ci_conflict
     skip_when_false: "inputs.open_pr"
     note: >
       Validates CI on the rebased feature branch after queue ejection fix and re-push.
       Routes on result.conclusion: success → reenter_merge_queue,
-      no_runs → release_issue_failure (post-queue-fix is already a retry path),
-      timed_out → self (re-watch), failure → detect_ci_conflict.
+      no_runs → release_issue_failure (auto_trigger fires first: empty commit +
+      force-push + re-poll; no_runs reached only when trigger recovery fails),
+      timed_out → check_ci_post_queue_loop, failure → detect_ci_conflict.
+
+  check_ci_post_queue_loop:
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.check_loop_iteration"
+      current_iteration: "${{ context.ci_post_queue_loop_count }}"
+      max_iterations: "2"
+    capture:
+      ci_post_queue_loop_count: "${{ result.next_iteration }}"
+    on_result:
+      - when: "${{ result.max_exceeded }} == true"
+        route: release_issue_failure
+      - route: ci_watch_post_queue_fix
+    on_failure: release_issue_failure
+    optional_context_refs:
+      - ci_post_queue_loop_count
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Iteration guard for the ci_watch_post_queue_fix timed_out self-loop.
+      Caps at 2 iterations (initial + 1 retry). On budget exhaustion,
+      routes to release_issue_failure — this is already a post-ejection
+      retry path so further escalation is not warranted.
 
   reenter_merge_queue:
     tool: enqueue_pr

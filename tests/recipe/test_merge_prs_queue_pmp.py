@@ -503,3 +503,33 @@ def test_check_eject_limit_routes_to_register_clone_failure_in_merge_prs(pmp_rec
     limit_conds = [c for c in conds if c.when and "EJECT_LIMIT_EXCEEDED" in c.when]
     assert len(limit_conds) == 1
     assert limit_conds[0].route == "register_clone_failure"
+
+
+def test_merge_prs_ci_watch_post_queue_fix_no_runs_routes_to_failure(pmp_recipe) -> None:
+    """ci_watch_post_queue_fix no_runs must route to register_clone_failure in merge-prs."""
+    step = pmp_recipe.steps["ci_watch_post_queue_fix"]
+    no_runs_routes = [
+        c.route for c in step.on_result.conditions if c.when and "'no_runs'" in c.when
+    ]
+    assert "register_clone_failure" in no_runs_routes
+
+
+def test_merge_prs_ci_watch_post_queue_fix_uses_branch_param(pmp_recipe) -> None:
+    """ci_watch_post_queue_fix must use 'branch' parameter, not 'pr_number'."""
+    step = pmp_recipe.steps["ci_watch_post_queue_fix"]
+    assert "branch" in step.with_args, (
+        "ci_watch_post_queue_fix must use 'branch' parameter, not 'pr_number'"
+    )
+    assert "pr_number" not in step.with_args, (
+        "ci_watch_post_queue_fix must not pass pr_number to wait_for_ci"
+    )
+
+
+def test_merge_prs_ci_watch_post_queue_fix_timed_out_bounded(pmp_recipe) -> None:
+    """ci_watch_post_queue_fix timed_out must route through check_ci_post_queue_loop."""
+    step = pmp_recipe.steps["ci_watch_post_queue_fix"]
+    timed_out_routes = [
+        c.route for c in step.on_result.conditions if c.when and "'timed_out'" in c.when
+    ]
+    assert timed_out_routes, "ci_watch_post_queue_fix: missing timed_out routing"
+    assert timed_out_routes[0] == "check_ci_post_queue_loop"

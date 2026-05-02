@@ -925,3 +925,24 @@ class TestCiTimeoutMinimum:
         recipe = _make_recipe(steps)
         findings = [f for f in run_semantic_rules(recipe) if f.rule == "ci-timeout-minimum"]
         assert len(findings) == 0
+
+
+def test_ci_watch_post_queue_fix_has_auto_trigger() -> None:
+    """ci_watch_post_queue_fix steps using wait_for_ci must have auto_trigger."""
+    target_recipes = [
+        "implementation.yaml",
+        "remediation.yaml",
+        "implementation-groups.yaml",
+        "merge-prs.yaml",
+    ]
+    for name in target_recipes:
+        recipe = load_recipe(builtin_recipes_dir() / name)
+        for step_name in ("ci_watch", "ci_watch_post_queue_fix"):
+            if step_name not in recipe.steps:
+                continue
+            step = recipe.steps[step_name]
+            if step.tool != "wait_for_ci":
+                continue
+            assert step.with_args.get("auto_trigger") in ("true", True), (
+                f"{name}: {step_name} missing auto_trigger: true"
+            )

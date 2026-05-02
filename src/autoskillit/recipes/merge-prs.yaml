@@ -379,23 +379,50 @@ steps:
   ci_watch_post_queue_fix:
     tool: wait_for_ci
     with:
-      pr_number: "${{ context.current_pr_number }}"
-      cwd: "${{ context.work_dir }}"
-      remote_url: "${{ context.remote_url }}"
+      branch: "${{ context.ejected_pr_branch }}"
       event: "${{ context.ci_event }}"
       timeout_seconds: 600
+      cwd: "${{ context.work_dir }}"
+      remote_url: "${{ context.remote_url }}"
+      auto_trigger: "true"
+    capture:
+      ci_conclusion: "${{ result.conclusion }}"
+      ci_failed_jobs: "${{ result.failed_jobs }}"
     on_result:
       - when: "${{ result.conclusion }} == 'success'"
         route: reenter_queue
+      - when: "${{ result.conclusion }} == 'no_runs'"
+        route: register_clone_failure
       - when: "${{ result.conclusion }} == 'timed_out'"
-        route: ci_watch_post_queue_fix
+        route: check_ci_post_queue_loop
       - route: register_clone_failure
     on_failure: register_clone_failure
     note: >
       Validates CI passes on the rebased branch before re-entering the merge queue.
       Prevents re-enqueue of a broken branch that would be ejected again.
       Routes on result.conclusion: success → reenter_queue,
-      timed_out → self (re-watch), no_runs/failure → register_clone_failure.
+      no_runs → register_clone_failure (auto_trigger fires first: empty commit +
+      force-push + re-poll; no_runs reached only when trigger recovery fails),
+      timed_out → check_ci_post_queue_loop, failure → register_clone_failure.
+
+  check_ci_post_queue_loop:
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.check_loop_iteration"
+      current_iteration: "${{ context.ci_post_queue_loop_count }}"
+      max_iterations: "2"
+    capture:
+      ci_post_queue_loop_count: "${{ result.next_iteration }}"
+    on_result:
+      - when: "${{ result.max_exceeded }} == true"
+        route: register_clone_failure
+      - route: ci_watch_post_queue_fix
+    on_failure: register_clone_failure
+    optional_context_refs:
+      - ci_post_queue_loop_count
+    note: >
+      Iteration guard for the ci_watch_post_queue_fix timed_out self-loop.
+      Caps at 2 iterations. On budget exhaustion, routes to register_clone_failure.
 
   reenter_queue:
     tool: enqueue_pr

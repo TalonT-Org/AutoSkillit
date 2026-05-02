@@ -1,7 +1,7 @@
 ---
 name: validate-audit
 categories: [audit]
-description: Validate audit findings from audit-arch, audit-tests, audit-cohesion, audit-feature-gates, or audit-review-decisions against actual code, git history, and design intent using 9–10 parallel subagents. Removes contested findings, documents exceptions, adjusts severities. Use when user says "validate audit", "validate findings", "validate report", or "check audit results".
+description: Validate audit findings from audit-arch, audit-tests, audit-cohesion, audit-feature-gates, audit-docs, or audit-review-decisions against actual code, git history, and design intent using 9–10 parallel subagents. Removes contested findings, documents exceptions, adjusts severities. Use when user says "validate audit", "validate findings", "validate report", or "check audit results".
 hooks:
   PreToolUse:
     - matcher: "*"
@@ -14,14 +14,14 @@ hooks:
 # Validate Audit Findings Skill
 
 Validate audit findings from `audit-arch`, `audit-tests`, `audit-cohesion`,
-`audit-feature-gates`, or `audit-review-decisions` against actual code, git history, and design
+`audit-feature-gates`, `audit-docs`, or `audit-review-decisions` against actual code, git history, and design
 intent using 9–10 parallel subagents. Contested findings are separated into their own file. The
 validated report carries a `validated: true` marker to signal downstream processing.
 
 ## When to Use
 
 - User says "validate audit", "validate findings", "validate report", "check audit results"
-- After running `audit-arch`, `audit-tests`, `audit-cohesion`, `audit-feature-gates`, or `audit-review-decisions` to filter noise before acting
+- After running `audit-arch`, `audit-tests`, `audit-cohesion`, `audit-feature-gates`, `audit-docs`, or `audit-review-decisions` to filter noise before acting
 
 ## Arguments
 
@@ -30,11 +30,12 @@ validated report carries a `validated: true` marker to signal downstream process
 ```
 
 - `audit_report_path` — absolute path to an audit report produced by `audit-arch`,
-  `audit-tests`, `audit-cohesion`, `audit-feature-gates`, or `audit-review-decisions`. If
+  `audit-tests`, `audit-cohesion`, `audit-feature-gates`, `audit-docs`, or `audit-review-decisions`. If
   omitted, use the most recent file under `{{AUTOSKILLIT_TEMP}}/audit-arch/`,
   `{{AUTOSKILLIT_TEMP}}/audit-tests/`, `{{AUTOSKILLIT_TEMP}}/audit-cohesion/`,
-  `{{AUTOSKILLIT_TEMP}}/audit-feature-gates/`, or `{{AUTOSKILLIT_TEMP}}/audit-review-decisions/`
-  (most recent mtime wins across all five).
+  `{{AUTOSKILLIT_TEMP}}/audit-feature-gates/`, `{{AUTOSKILLIT_TEMP}}/audit-docs/`,
+  or `{{AUTOSKILLIT_TEMP}}/audit-review-decisions/`
+  (most recent mtime wins across all six).
   If no files exist under any of these directories, print an error message and exit
   with a non-zero status.
 
@@ -106,8 +107,12 @@ Read the audit report file. Detect its source by examining the document title or
   - **VALID BUT EXCEPTION WARRANTED**: The code pattern persists but a documented constraint,
     ADR, or design decision justifies the current approach.
 
-If none of the five patterns match, print:
-`"Error: unrecognized audit report format — expected title 'Architectural Audit', 'Test Suite Audit', 'Cohesion Audit', 'Feature Gate Audit', or 'Review Decisions Audit'. Aborting."`
+- **audit-docs**: Title contains "Documentation Audit".
+  Source = `docs`. Findings describe documentation drift, staleness, or inconsistency against the
+  codebase. Apply standard VALID / CONTESTED / VALID BUT EXCEPTION WARRANTED verdicts.
+
+If none of the six patterns match, print:
+`"Error: unrecognized audit report format — expected title 'Architectural Audit', 'Test Suite Audit', 'Cohesion Audit', 'Feature Gate Audit', 'Documentation Audit', or 'Review Decisions Audit'. Aborting."`
 and exit with a non-zero status.
 
 For each finding, extract:
@@ -130,7 +135,7 @@ These additional fields must be preserved through validation and into ticket bod
 so that the PR provenance is traceable in the resulting GitHub issues.
 
 Collect all findings into a flat list. Record the source audit skill (`arch`, `tests`,
-`cohesion`, `feature_gates`, or `review_decisions`) for use in output filenames.
+`cohesion`, `feature_gates`, `docs`, or `review_decisions`) for use in output filenames.
 
 ### Step 2 — Group into Thematic Batches
 
@@ -494,7 +499,7 @@ All output files are written relative to the current working directory under `{{
 └── ticket_body_{source}_{N}_{YYYY-MM-DD_HHMMSS}.md       (one per ticket group, N ≥ 1)
 ```
 
-`{source}` is `arch`, `tests`, `cohesion`, `feature_gates`, or `review_decisions` based on the input report.
+`{source}` is `arch`, `tests`, `cohesion`, `feature_gates`, `docs`, or `review_decisions` based on the input report.
 
 ## Related Skills
 
@@ -502,5 +507,6 @@ All output files are written relative to the current working directory under `{{
 - `/autoskillit:audit-tests` — produces reports this skill validates
 - `/autoskillit:audit-cohesion` — produces reports this skill validates
 - `/autoskillit:audit-feature-gates` — produces reports this skill validates
+- `/autoskillit:audit-docs` — produces reports this skill validates
 - `/autoskillit:audit-review-decisions` — produces reports this skill validates
 - `/autoskillit:prepare-issue` — offered interactively for contested findings

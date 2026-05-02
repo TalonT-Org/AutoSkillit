@@ -276,5 +276,4 @@ fleet:
   default_timeout_sec: 3600
   max_concurrent_dispatches: 1
 
-features:
-  experimental_enabled: true
+features: {}

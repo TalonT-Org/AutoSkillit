@@ -727,7 +727,10 @@ def test_no_subpackage_exceeds_10_files() -> None:
         tool_sequence_analysis.py adds the stdlib-only cross-session tool call
         sequence DFG analysis (L0; must live in core/ to be importable by server/).
         Monolithic protocol module split into 6 domain-grouped shard files (net +5 files).
-        Exempt at 32 files.
+        _install_detect.py adds the is_dev_install() predicate for config resolution
+        to auto-detect whether the install is editable when experimental_enabled is absent,
+        bringing the count to 33.
+        Exempt at 33 files.
       cli/ — REQ-CNST-003-E5: cli/ retains _terminal_table.py as a re-export shim
         for backward-compatible cli/ imports; canonical implementation lives in
         core/_terminal_table.py. Also contains _terminal.py — the terminal state
@@ -774,7 +777,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "server": 25,
         "recipe": 50,
         "execution": 36,
-        "core": 32,
+        "core": 33,
         "cli": 42,
         "hooks": 28,
         "pipeline": 12,

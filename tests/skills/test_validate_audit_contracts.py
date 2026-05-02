@@ -55,12 +55,13 @@ class TestValidateAuditContent:
         assert "contested_findings_" in text
 
     # T-VAL-012
-    def test_handles_all_five_audit_formats(self) -> None:
+    def test_handles_all_six_audit_formats(self) -> None:
         text = _skill_text()
         assert "audit-arch" in text
         assert "audit-tests" in text
         assert "audit-cohesion" in text
         assert "audit-feature-gates" in text or "feature_gates" in text
+        assert "audit-docs" in text or "docs" in text
         assert "audit-review-decisions" in text or "review_decisions" in text
 
     # T-VAL-013
@@ -155,11 +156,12 @@ class TestValidateAuditReviewDecisions:
         assert "pr number" in text or "pr provenance" in text or "pr #" in text
 
     # T-VAL-025
-    def test_error_message_lists_five_formats(self) -> None:
-        """Error message for unrecognized format must list all 5 recognized formats."""
+    def test_error_message_lists_six_formats(self) -> None:
+        """Error message for unrecognized format must list all 6 recognized formats."""
         text = _skill_text()
         assert "Review Decisions Audit" in text
         assert "Architectural Audit" in text
         assert "Test Suite Audit" in text
         assert "Cohesion Audit" in text
         assert "Feature Gate Audit" in text
+        assert "Documentation Audit" in text

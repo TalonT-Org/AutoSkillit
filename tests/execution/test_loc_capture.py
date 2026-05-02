@@ -18,19 +18,19 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 
 def _parse_numstat(numstat_output: str):
-    from autoskillit.execution.headless import _parse_numstat
+    from autoskillit.execution._headless_git import _parse_numstat
 
     return _parse_numstat(numstat_output)
 
 
 def _compute_loc_changed(cwd: str, pre_sha: str):
-    from autoskillit.execution.headless import _compute_loc_changed
+    from autoskillit.execution._headless_git import _compute_loc_changed
 
     return _compute_loc_changed(cwd, pre_sha)
 
 
 def _capture_git_head_sha(cwd: str):
-    from autoskillit.execution.headless import _capture_git_head_sha
+    from autoskillit.execution._headless_git import _capture_git_head_sha
 
     return _capture_git_head_sha(cwd)
 

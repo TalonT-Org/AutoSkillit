@@ -13,6 +13,7 @@ from autoskillit.core import (
     FailureRecord,
     RetryReason,
     SessionOutcome,
+    SessionTelemetry,
     SkillResult,
     TerminationReason,
     WriteBehaviorSpec,
@@ -42,14 +43,14 @@ from autoskillit.execution._session_outcome import (
 )
 
 if TYPE_CHECKING:
-    from autoskillit.core import AuditLog, SubprocessResult
+    from autoskillit.core import AuditLog, GitHubApiLog, SubprocessResult
 
 logger = get_logger(__name__)
 _truncate = truncate_text
 
-# Re-export so facade's `from autoskillit.execution._headless_result import _OUTPUT_PATH_PATTERN`
-# resolves correctly even though _OUTPUT_PATH_PATTERN is defined in _headless_path_tokens.
 __all__ = [
+    "_build_error_path_telemetry",
+    "_build_session_telemetry",
     "_capture_failure",
     "_apply_budget_guard",
     "_resolve_skill_session_id",
@@ -540,3 +541,43 @@ def _build_skill_result(
         write_call_count=sr.write_call_count,
     )
     return sr
+
+
+def _build_session_telemetry(
+    *,
+    skill_result: SkillResult,
+    timing_seconds: float | None,
+    audit_record: dict | None,
+    github_api_log: GitHubApiLog | None,
+    loc_insertions: int,
+    loc_deletions: int,
+) -> SessionTelemetry:
+    _api_usage = (
+        github_api_log.drain(skill_result.session_id) if github_api_log is not None else None
+    )
+    return SessionTelemetry(
+        token_usage=skill_result.token_usage,
+        timing_seconds=timing_seconds,
+        audit_record=audit_record,
+        github_api_usage=_api_usage,
+        github_api_requests=_api_usage.get("total_requests", 0) if _api_usage else 0,
+        loc_insertions=loc_insertions,
+        loc_deletions=loc_deletions,
+    )
+
+
+def _build_error_path_telemetry(
+    github_api_log: GitHubApiLog | None,
+    session_id: str = "",
+) -> SessionTelemetry:
+    """Build SessionTelemetry for crash/cancel paths where no SkillResult exists."""
+    _api_usage = github_api_log.drain(session_id) if github_api_log is not None else None
+    return SessionTelemetry(
+        token_usage=None,
+        timing_seconds=None,
+        audit_record=None,
+        github_api_usage=_api_usage,
+        github_api_requests=_api_usage.get("total_requests", 0) if _api_usage else 0,
+        loc_insertions=0,
+        loc_deletions=0,
+    )

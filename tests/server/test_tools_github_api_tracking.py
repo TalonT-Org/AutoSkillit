@@ -2,6 +2,7 @@ from unittest.mock import patch
 
 import pytest
 
+from autoskillit.core._type_results import SessionTelemetry
 from autoskillit.core._type_subprocess import SubprocessResult, TerminationReason
 from tests.fakes import MockSubprocessRunner
 
@@ -117,6 +118,7 @@ async def test_flush_session_log_writes_github_api_usage(tmp_path):
         timestamp="2026-04-27T10:00:00Z",
     )
 
+    _usage = log.drain("test-session")
     flush_session_log(
         log_dir=str(tmp_path),
         cwd="/tmp",
@@ -128,7 +130,15 @@ async def test_flush_session_log_writes_github_api_usage(tmp_path):
         exit_code=0,
         start_ts="2026-04-27T10:00:00Z",
         proc_snapshots=None,
-        github_api_log=log,
+        telemetry=SessionTelemetry(
+            token_usage=None,
+            timing_seconds=None,
+            audit_record=None,
+            github_api_usage=_usage,
+            github_api_requests=_usage.get("total_requests", 0) if _usage else 0,
+            loc_insertions=0,
+            loc_deletions=0,
+        ),
     )
 
     usage_file = tmp_path / "sessions" / "test-session" / "github_api_usage.json"

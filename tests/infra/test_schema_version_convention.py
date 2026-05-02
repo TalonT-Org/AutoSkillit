@@ -112,11 +112,11 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/core/io.py", 118),
     # session_log.py — github_api_usage dict, summary dict, meta.json sidecar,
     # token_usage dict, step_timing dict
-    ("src/autoskillit/execution/session_log.py", 307),
-    ("src/autoskillit/execution/session_log.py", 368),
-    ("src/autoskillit/execution/session_log.py", 372),
+    ("src/autoskillit/execution/session_log.py", 305),
+    ("src/autoskillit/execution/session_log.py", 365),
+    ("src/autoskillit/execution/session_log.py", 369),
     ("src/autoskillit/execution/session_log.py", 396),
-    ("src/autoskillit/execution/session_log.py", 399),
+    ("src/autoskillit/execution/session_log.py", 393),
     # migration/store.py — failure store dicts
     ("src/autoskillit/migration/store.py", 54),
     ("src/autoskillit/migration/store.py", 64),

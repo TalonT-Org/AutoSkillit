@@ -84,8 +84,8 @@ suppressing already-resolved findings on re-reviews and for focusing subagents o
 known-unresolved items.
 
 Fetch all review threads using cursor-based pagination (same GraphQL query as
-resolve-review Step 2, but also fetching `comments(first:2)` to see both the original
-finding and any reply):
+resolve-review Step 2, but also fetching `comments(first:5)` to see the original
+finding and up to 4 replies):
 
 ```graphql
 query($owner:String!, $repo:String!, $number:Int!, $after:String) {
@@ -98,8 +98,8 @@ query($owner:String!, $repo:String!, $number:Int!, $after:String) {
           path
           line
           originalLine
-          comments(first:2) {
-            nodes { body author { login } }
+          comments(first:5) {
+            nodes { databaseId body author { login } }
           }
         }
       }
@@ -118,14 +118,33 @@ skip this thread — do not add it to `prior_resolved_findings` or `prior_unreso
 File-level threads have no line anchor and must not suppress line-anchored findings via the
 ±5 proximity match.
 
-**`prior_resolved_findings`** — threads where `isResolved=true` AND the first comment body
+**`prior_resolved_findings`** — threads meeting EITHER condition, AND where the first comment body
 contains `[critical]` or `[warning]` (autoskillit-posted finding):
+- `isResolved=true` (ACCEPT/REJECT findings resolved by resolve-review), OR
+- Any reply comment (`comments[1:]`) contains `<!-- autoskillit:resolved` (DISCUSS/INFO findings
+  acknowledged by resolve-review but intentionally left unresolved)
+
+Check for the marker using:
+```python
+RESOLVED_MARKER_RE = re.compile(r"<!--\s*autoskillit:resolved\b")
+
+has_marker_reply = any(
+    RESOLVED_MARKER_RE.search(c.get("body", ""))
+    for c in thread_comments[1:]
+)
+
+if thread.get("isResolved") or has_marker_reply:
+    prior_resolved_findings.append({"file": path, "line": line, "body": first_body})
+else:
+    prior_unresolved_findings.append({"file": path, "line": line, "body": first_body})
+```
+
 ```json
 [{"file": "src/foo.py", "line": 42, "body": "[critical] arch: ..."}]
 ```
 
-**`prior_unresolved_findings`** — threads where `isResolved=false` AND first comment
-contains `[critical]` or `[warning]`:
+**`prior_unresolved_findings`** — threads where `isResolved=false` AND no reply contains the
+`<!-- autoskillit:resolved` marker AND the first comment contains `[critical]` or `[warning]`:
 ```json
 [{"file": "src/bar.py", "line": 17, "body": "[warning] tests: ..."}]
 ```

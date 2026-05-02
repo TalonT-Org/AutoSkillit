@@ -158,7 +158,7 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # planner/manifests.py — finalize_wp_manifest: wp_index.json rebuild (list payload)
     ("src/autoskillit/planner/manifests.py", 243),
     # _cmd_rpc.py — emit_fallback_map: BEM fallback execution map (recipe-internal)
-    ("src/autoskillit/recipe/_cmd_rpc.py", 448),
+    ("src/autoskillit/recipe/_cmd_rpc.py", 445),
 }
 
 

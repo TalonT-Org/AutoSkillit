@@ -244,7 +244,7 @@ When dispatching from an execution map:
 
    **6a. Pre-dispatch freshness check.** Before presenting any escalation question,
    re-query the current label state of ALL unique blocker issue numbers across all
-   deferred issues in a single batched GraphQL request using aliases:
+   `deferred_issues` entries in a single batched GraphQL request using aliases:
 
    ```graphql
    query {

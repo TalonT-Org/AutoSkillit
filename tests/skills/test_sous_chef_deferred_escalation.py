@@ -8,7 +8,11 @@ from pathlib import Path
 def _sous_chef_text() -> str:
     return (
         Path(__file__).resolve().parent.parent.parent
-        / "src" / "autoskillit" / "skills" / "sous-chef" / "SKILL.md"
+        / "src"
+        / "autoskillit"
+        / "skills"
+        / "sous-chef"
+        / "SKILL.md"
     ).read_text()
 
 

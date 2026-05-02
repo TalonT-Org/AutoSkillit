@@ -115,8 +115,6 @@ def test_fleet_campaign_exits_when_disabled(
 
 def _stub_list_campaign_recipes(monkeypatch: pytest.MonkeyPatch, names: list[str]) -> list[object]:
     """Stub list_campaign_recipes to return mock items with given names."""
-    from unittest.mock import MagicMock
-
     items = []
     for name in names:
         r = MagicMock()
@@ -142,6 +140,12 @@ def test_fleet_campaign_no_name_shows_menu_and_launches(
     captured = _capture_subprocess(monkeypatch)
     _fleet_campaign(campaign_name=None)
     assert "AUTOSKILLIT_CAMPAIGN_ID" in captured["env"]
+    assert "AUTOSKILLIT_CAMPAIGN_STATE_PATH" in captured["env"]
+    from autoskillit.fleet import read_state
+
+    state = read_state(Path(captured["env"]["AUTOSKILLIT_CAMPAIGN_STATE_PATH"]))
+    assert state is not None
+    assert state.campaign_name == "campaign-alpha"
     out = capsys.readouterr().out
     assert "Available campaigns:" in out
     assert "campaign-alpha" in out
@@ -192,10 +196,11 @@ def test_fleet_campaign_resume_no_name_lists_active_campaigns(
             completed_dispatches_block="", next_dispatch_name="", is_resumable=False
         ),
     )
-    _capture_subprocess(monkeypatch)
+    captured = _capture_subprocess(monkeypatch)
 
     _fleet_campaign(campaign_name=None, resume_campaign="__pick__")
 
+    assert captured["env"].get("AUTOSKILLIT_CAMPAIGN_ID") == "active-id-1111111"
     out = capsys.readouterr().out
     assert "Active campaigns (resumable):" in out
     assert "campaign-active-1" in out

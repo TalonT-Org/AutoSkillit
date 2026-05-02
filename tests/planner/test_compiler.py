@@ -373,3 +373,23 @@ def test_compile_plan_skips_assessment_entries_missing_wp_id(tmp_path: Path) -> 
     issue_body = (output_dir / "issues" / "P1-A1-WP1_issue.md").read_text()
     assert "## Review Approach" in issue_body
     assert "valid entry" in issue_body
+
+
+def test_compile_plan_reads_task_from_file(tmp_path: Path) -> None:
+    output_dir = _make_valid_output_dir(tmp_path)
+    task_file = tmp_path / "task_desc.txt"
+    task_file.write_text("Full task description from file")
+    result = compile_plan(
+        str(output_dir), task="label", source_dir="/src", task_file=str(task_file)
+    )
+    plan_json = json.loads((output_dir / "plan.json").read_text())
+    assert plan_json["task"] == "Full task description from file"
+    plan_md = Path(result["plan_path"]).read_text()
+    assert plan_md.startswith("# Plan: label")
+
+
+def test_compile_plan_falls_back_to_task_when_no_file(tmp_path: Path) -> None:
+    output_dir = _make_valid_output_dir(tmp_path)
+    compile_plan(str(output_dir), task="inline task", source_dir="/src")
+    plan_json = json.loads((output_dir / "plan.json").read_text())
+    assert plan_json["task"] == "inline task"

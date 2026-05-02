@@ -469,3 +469,47 @@ def test_replace_item_corrupt_replacement_json_raises(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="Invalid JSON"):
         replace_item(str(src), "P1", str(corrupt))
+
+
+def test_build_plan_snapshot_reads_task_from_file(tmp_path) -> None:
+    phases_dir = tmp_path / "phases"
+    phases_dir.mkdir()
+    (phases_dir / "P1_result.json").write_text(json.dumps(make_phase_result(1)))
+    out = tmp_path / "snapshot.json"
+    task_file = tmp_path / "task_desc.txt"
+    task_file.write_text("Full task from file")
+
+    build_plan_snapshot(str(phases_dir), str(out), task="label", task_file=str(task_file))
+
+    data = json.loads(out.read_text())
+    assert data["task"] == "Full task from file"
+
+
+def test_merge_tier_dir_reads_task_from_file(tmp_path) -> None:
+    results_dir = tmp_path / "phases"
+    results_dir.mkdir()
+    (results_dir / "P1_result.json").write_text(
+        json.dumps({"id": "P1", "name": "Phase 1", "ordering": 1})
+    )
+    out = tmp_path / "combined.json"
+    task_file = tmp_path / "task_desc.txt"
+    task_file.write_text("Full task from file")
+
+    merge_tier_dir(str(results_dir), str(out), "phases", task="label", task_file=str(task_file))
+
+    data = json.loads(out.read_text())
+    assert data["task"] == "Full task from file"
+
+
+def test_merge_files_reads_task_from_file(tmp_path) -> None:
+    item = {"id": "P1", "name": "Phase 1"}
+    p = tmp_path / "P1_result.json"
+    p.write_text(json.dumps(item))
+    out = tmp_path / "combined.json"
+    task_file = tmp_path / "task_desc.txt"
+    task_file.write_text("Full task from file")
+
+    merge_files([str(p)], str(out), "phases", task="label", task_file=str(task_file))
+
+    data = json.loads(out.read_text())
+    assert data["task"] == "Full task from file"

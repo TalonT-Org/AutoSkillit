@@ -29,7 +29,8 @@ Pass 1 entry point. Read the analysis file (and optionally domain knowledge) and
 
 ### Environment Variables
 
-- **PLANNER_TASK** (required) — The user's task description. Every phase MUST serve this task.
+- **PLANNER_TASK** (required unless PLANNER_TASK_FILE is set) — The user's task description. Every phase MUST serve this task.
+- **PLANNER_TASK_FILE** (env-var, optional) — Absolute path to a file containing the task description. When set, read the file content and use it as the task. Takes precedence over `PLANNER_TASK`.
 
 ## Critical Constraints
 
@@ -51,7 +52,7 @@ Pass 1 entry point. Read the analysis file (and optionally domain knowledge) and
 
 ### Step 0: Read task description
 
-Read the task description from the `PLANNER_TASK` environment variable. This is the user's
+If `PLANNER_TASK_FILE` is set, read the file at that path to obtain the task description. Otherwise read `PLANNER_TASK` from the environment. This is the user's
 statement of what they want planned. Every generated phase MUST serve this task.
 Do not generate phases for work not described in the task. If the task asks for specific
 deliverables (e.g., "split research.yaml into 4 sub-recipes"), the phases should decompose

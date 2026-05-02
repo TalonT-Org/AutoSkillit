@@ -156,7 +156,9 @@ class AutomationConfig:
         Coerces all values to bool.
         """
         raw = dict(raw)  # copy to avoid mutating caller's dict
-        _raw_exp = raw.pop("experimental_enabled", raw.pop("EXPERIMENTAL_ENABLED", _UNSET))
+        _raw_exp = raw.pop("experimental_enabled", _UNSET)
+        if _raw_exp is _UNSET:
+            _raw_exp = raw.pop("EXPERIMENTAL_ENABLED", _UNSET)
         experimental_enabled: bool = is_dev_install() if _raw_exp is _UNSET else bool(_raw_exp)
         result: dict[str, bool] = {}
         for name, value in raw.items():

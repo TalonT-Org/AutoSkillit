@@ -51,12 +51,3 @@ def test_upfront_claimed_is_hidden_in_recipe(recipe_name: str) -> None:
         f"upfront_claimed.hidden must be True in {recipe_name} "
         f"(it is set by process-issues, not by users)"
     )
-
-
-@pytest.mark.parametrize("recipe_name", ["implementation", "remediation"])
-def test_max_parallel_is_hidden_in_recipe(recipe_name: str) -> None:
-    recipe = load_recipe(pkg_root() / "recipes" / f"{recipe_name}.yaml")
-    ing = recipe.ingredients["max_parallel"]
-    assert ing.hidden is True, (
-        f"{recipe_name}.yaml: max_parallel must be hidden=true (pipeline-internal ingredient)"
-    )

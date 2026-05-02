@@ -407,7 +407,7 @@ class TestRunModeIngredient:
 
 
 class TestMaxParallelIngredient:
-    """REQ-ING-001, REQ-ING-002, REQ-ING-003"""
+    """REQ-ING-001, REQ-ING-002, REQ-ING-003: max_parallel presence, default, and hidden flag."""
 
     @pytest.mark.parametrize("recipe_name", ["implementation", "remediation"])
     def test_recipe_has_max_parallel_ingredient(self, recipe_name: str) -> None:

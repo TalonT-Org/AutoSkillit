@@ -37,7 +37,7 @@ ingredients:
   source_dir:
     description: "Absolute path to the repository root to analyze."
     required: true
-  assess_review_approach:
+  planner_assess_review_approach:
     description: >
       When true, run planner-assess-review-approach after reconcile_deps to annotate
       WPs that would benefit from a review-approach research pass before implementation.
@@ -329,7 +329,7 @@ steps:
   assess_review_approach_step:
     tool: run_skill
     optional: true
-    skip_when_false: "inputs.assess_review_approach"
+    skip_when_false: "inputs.planner_assess_review_approach"
     with:
       skill_command: >
         /autoskillit:planner-assess-review-approach
@@ -343,7 +343,7 @@ steps:
     on_context_limit: validate
     note: >
       Optional review-approach benefit assessment pass. Non-fatal: routes to validate
-      on both success and failure. Skipped when assess_review_approach ingredient is false (default).
+      on both success and failure. Skipped when planner_assess_review_approach ingredient is false (default).
 
   validate:
     tool: run_python

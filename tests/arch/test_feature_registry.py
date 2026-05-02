@@ -417,13 +417,43 @@ def test_build_features_dict_extracts_experimental_enabled():
     assert "experimental_enabled" not in result
 
 
-def test_build_features_dict_experimental_enabled_defaults_false():
-    """_build_features_dict returns experimental_enabled=False when key absent."""
+def test_build_features_dict_absent_experimental_enabled_auto_detects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_build_features_dict calls is_dev_install() when experimental_enabled absent."""
     from autoskillit.config.settings import AutomationConfig
 
+    monkeypatch.setattr("autoskillit.config.settings.is_dev_install", lambda: True)
+    result, exp_enabled = AutomationConfig._build_features_dict({})
+    assert exp_enabled is True
+    assert result == {}
+
+    monkeypatch.setattr("autoskillit.config.settings.is_dev_install", lambda: False)
     result, exp_enabled = AutomationConfig._build_features_dict({})
     assert exp_enabled is False
     assert result == {}
+
+
+def test_build_features_dict_explicit_true_overrides_auto_detect(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_build_features_dict returns True when explicit True, ignoring is_dev_install."""
+    from autoskillit.config.settings import AutomationConfig
+
+    monkeypatch.setattr("autoskillit.config.settings.is_dev_install", lambda: False)
+    _, exp_enabled = AutomationConfig._build_features_dict({"experimental_enabled": True})
+    assert exp_enabled is True
+
+
+def test_build_features_dict_explicit_false_overrides_auto_detect(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_build_features_dict returns False when explicit False, ignoring is_dev_install."""
+    from autoskillit.config.settings import AutomationConfig
+
+    monkeypatch.setattr("autoskillit.config.settings.is_dev_install", lambda: True)
+    _, exp_enabled = AutomationConfig._build_features_dict({"experimental_enabled": False})
+    assert exp_enabled is False
 
 
 def test_build_config_schema_accepts_experimental_enabled():
@@ -437,29 +467,103 @@ def test_build_config_schema_accepts_experimental_enabled():
     )
 
 
-# ── T4: defaults.yaml ships experimental_enabled: true ─────────────────────
+# ── T4: defaults.yaml omits experimental_enabled ────────────────────────────
 
 
-def test_defaults_yaml_has_experimental_enabled_true():
-    """Package defaults.yaml sets experimental_enabled=true; no per-feature entries."""
+def test_defaults_yaml_omits_experimental_enabled():
+    """Package defaults.yaml omits experimental_enabled; no per-feature entries."""
     import yaml
 
     from autoskillit.core.paths import pkg_root
 
     defaults = yaml.safe_load((pkg_root() / "config" / "defaults.yaml").read_text())
     features = defaults.get("features", {})
-    assert features.get("experimental_enabled") is True
+    assert "experimental_enabled" not in features
     assert "fleet" not in features, "fleet entry removed from defaults.yaml"
     assert "planner" not in features, "planner entry removed from defaults.yaml"
 
 
-def test_load_config_integration_experimental_enabled(tmp_path):
-    """load_config resolves cfg.experimental_enabled=True from defaults.yaml."""
-    import os
-    from unittest.mock import patch
+def test_load_config_integration_experimental_auto_detects(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """load_config auto-detects experimental_enabled via is_dev_install when unset."""
+    from autoskillit.config.settings import load_config
+
+    monkeypatch.setattr("autoskillit.config.settings.is_dev_install", lambda: True)
+    cfg = load_config(tmp_path)
+    assert cfg.experimental_enabled is True
+
+    monkeypatch.setattr("autoskillit.config.settings.is_dev_install", lambda: False)
+    cfg = load_config(tmp_path)
+    assert cfg.experimental_enabled is False
+
+
+# ── T3: integration tests for install-context gating ───────────────────────
+
+
+def test_load_config_non_dev_install_experimental_disabled(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """load_config defaults experimental_enabled=False for non-dev install."""
+    from autoskillit.config.settings import load_config
+
+    monkeypatch.setattr("autoskillit.config.settings.is_dev_install", lambda: False)
+    cfg = load_config(tmp_path)
+    assert cfg.experimental_enabled is False
+
+
+def test_load_config_dev_install_experimental_enabled(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """load_config defaults experimental_enabled=True for editable dev install."""
+    from autoskillit.config.settings import load_config
+
+    monkeypatch.setattr("autoskillit.config.settings.is_dev_install", lambda: True)
+    cfg = load_config(tmp_path)
+    assert cfg.experimental_enabled is True
+
+
+def test_env_var_override_beats_auto_detect(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED=true overrides non-dev auto-detect."""
+    from autoskillit.config.settings import load_config
+
+    monkeypatch.setattr("autoskillit.config.settings.is_dev_install", lambda: False)
+    monkeypatch.setenv("AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED", "true")
+    cfg = load_config(tmp_path)
+    assert cfg.experimental_enabled is True
+
+
+def test_project_config_override_beats_auto_detect(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """Project config experimental_enabled=true overrides non-dev auto-detect."""
+    import yaml
 
     from autoskillit.config.settings import load_config
 
-    with patch.dict(os.environ, {}, clear=False):
-        cfg = load_config(tmp_path)
+    monkeypatch.setattr("autoskillit.config.settings.is_dev_install", lambda: False)
+    config_dir = tmp_path / ".autoskillit"
+    config_dir.mkdir()
+    (config_dir / "config.yaml").write_text(
+        yaml.dump({"features": {"experimental_enabled": True}})
+    )
+    cfg = load_config(tmp_path)
+    assert cfg.experimental_enabled is True
+
+
+def test_user_config_override_beats_auto_detect(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """User config experimental_enabled=true overrides non-dev auto-detect."""
+    import yaml
+
+    from autoskillit.config.settings import load_config
+
+    monkeypatch.setattr("autoskillit.config.settings.is_dev_install", lambda: False)
+    fake_home = tmp_path / "home"
+    user_config_dir = fake_home / ".autoskillit"
+    user_config_dir.mkdir(parents=True)
+    (user_config_dir / "config.yaml").write_text(
+        yaml.dump({"features": {"experimental_enabled": True}})
+    )
+    monkeypatch.setattr("pathlib.Path.home", lambda: fake_home)
+    cfg = load_config(tmp_path)
     assert cfg.experimental_enabled is True

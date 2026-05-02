@@ -12,6 +12,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Generic, Literal, TypedDict, TypeVar
 
+from ._type_constants import KNOWN_CI_EVENTS
 from ._type_enums import KillReason, RetryReason, SessionOutcome
 
 T = TypeVar("T")
@@ -265,6 +266,12 @@ class CIRunScope:
     workflow: str | None = None  # workflow filename, e.g. "tests.yml"
     head_sha: str | None = None  # commit SHA to pin results to
     event: str | None = None  # trigger event, e.g. "push", "pull_request"
+
+    def __post_init__(self) -> None:
+        if self.event is not None and self.event not in KNOWN_CI_EVENTS:
+            raise ValueError(
+                f"Invalid CI event {self.event!r}. Valid events: {sorted(KNOWN_CI_EVENTS)}"
+            )
 
 
 class CloneSuccessResult(TypedDict):

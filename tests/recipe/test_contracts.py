@@ -808,3 +808,44 @@ def test_result_field_spec_roundtrip() -> None:
     for rf in contract.result_fields:
         assert isinstance(rf, ResultFieldSpec)
         assert rf.required is True
+
+
+def test_callable_contract_nullable_field() -> None:
+    from autoskillit.recipe.contracts import get_callable_contract
+
+    manifest = load_bundled_manifest()
+    contracts = manifest.get("callable_contracts", {})
+    assert "autoskillit.recipe._cmd_rpc.advance_queue_pr" in contracts, (
+        "advance_queue_pr must be declared in callable_contracts"
+    )
+    aq_contract = contracts["autoskillit.recipe._cmd_rpc.advance_queue_pr"]
+    pr_input = next((i for i in aq_contract["inputs"] if i["name"] == "current_pr_number"), None)
+    assert pr_input is not None, "current_pr_number input must be declared"
+    assert pr_input.get("nullable") is False, (
+        "current_pr_number must be explicitly non-nullable (nullable: false)"
+    )
+    parsed = get_callable_contract("autoskillit.recipe._cmd_rpc.advance_queue_pr", manifest)
+    assert parsed is not None
+    pr_parsed = next((i for i in parsed.inputs if i.name == "current_pr_number"), None)
+    assert pr_parsed is not None
+    assert pr_parsed.nullable is False
+
+
+# ---------------------------------------------------------------------------
+# tool_output_contracts
+# ---------------------------------------------------------------------------
+
+
+def test_tool_output_contracts_section_exists() -> None:
+    """skill_contracts.yaml must have a tool_output_contracts section."""
+    manifest = load_bundled_manifest()
+    tool_contracts = manifest.get("tool_output_contracts", {})
+    assert "wait_for_ci" in tool_contracts
+    assert "allowed_values" in tool_contracts["wait_for_ci"]["fields"]["conclusion"]
+
+
+def test_wait_for_ci_conclusion_allowed_values() -> None:
+    manifest = load_bundled_manifest()
+    conclusion = manifest["tool_output_contracts"]["wait_for_ci"]["fields"]["conclusion"]
+    values = set(conclusion["allowed_values"])
+    assert {"success", "failure", "cancelled", "timed_out", "no_runs", "error"}.issubset(values)

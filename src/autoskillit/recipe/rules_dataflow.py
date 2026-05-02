@@ -13,6 +13,7 @@ from autoskillit.core import (
 )
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.contracts import (
+    _CONTEXT_REF_RE,
     RESULT_CAPTURE_RE,
     get_callable_contract,
     get_skill_contract,
@@ -504,6 +505,17 @@ def _get_provided_args(with_args: dict) -> set[str]:
     return nested_args | top_level_args
 
 
+def _get_args_values(with_args: dict) -> dict[str, object]:
+    result: dict[str, object] = {}
+    _nested = with_args.get("args")
+    if isinstance(_nested, dict):
+        result.update(_nested)
+    for key, val in with_args.items():
+        if key not in {"callable", "timeout", "args"}:
+            result[key] = val
+    return result
+
+
 @semantic_rule(
     name="missing-callable-input",
     description="run_python steps must pass all required inputs declared in callable contract",
@@ -576,4 +588,53 @@ def _check_callable_signature_mismatch(ctx: ValidationContext) -> list[RuleFindi
                     ),
                 )
             )
+    return findings
+
+
+@semantic_rule(
+    name="nullable-optional-context-ref",
+    description=(
+        "run_python steps must not pass optional_context_refs values to non-nullable "
+        "callable inputs without null coercion in the callable"
+    ),
+    severity=Severity.ERROR,
+)
+def _check_nullable_optional_context_ref(ctx: ValidationContext) -> list[RuleFinding]:
+    findings = []
+    manifest = load_bundled_manifest()
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_python":
+            continue
+        callable_path = step.with_args.get("callable", "")
+        if not callable_path:
+            continue
+        contract = get_callable_contract(callable_path, manifest)
+        if contract is None:
+            continue
+        non_nullable = {inp.name for inp in contract.inputs if not inp.nullable}
+        if not non_nullable:
+            continue
+        optional_refs = set(step.optional_context_refs)
+        if not optional_refs:
+            continue
+        args_values = _get_args_values(step.with_args)
+        for inp_name in sorted(non_nullable):
+            arg_val = args_values.get(inp_name)
+            if not isinstance(arg_val, str):
+                continue
+            for ref in _CONTEXT_REF_RE.findall(arg_val):
+                if ref in optional_refs:
+                    findings.append(
+                        RuleFinding(
+                            rule="nullable-optional-context-ref",
+                            severity=Severity.ERROR,
+                            step_name=step_name,
+                            message=(
+                                f"Step '{step_name}' passes optional context ref '{ref}' "
+                                f"to non-nullable input '{inp_name}' of callable "
+                                f"'{callable_path}'. Add null coercion in the callable "
+                                f"or remove from optional_context_refs."
+                            ),
+                        )
+                    )
     return findings

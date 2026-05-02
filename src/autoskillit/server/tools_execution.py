@@ -74,6 +74,23 @@ async def _import_and_call(
     if not callable(func):
         return {"success": False, "error": f"{dotted_path!r} is not callable"}
 
+    sig = inspect.signature(func)
+    coerced: dict[str, object] = {}
+    for key, val in args.items():
+        if val is None and key in sig.parameters:
+            param = sig.parameters[key]
+            if param.default is not inspect.Parameter.empty and param.default is not None:
+                logger.warning(
+                    "run_python null-arg coerced to default",
+                    callable=dotted_path,
+                    arg=key,
+                    default=repr(param.default),
+                )
+                coerced[key] = param.default
+                continue
+        coerced[key] = val
+    args = coerced
+
     try:
         if inspect.iscoroutinefunction(func):
             result = await asyncio.wait_for(func(**args), timeout=timeout)

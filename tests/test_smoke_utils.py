@@ -420,3 +420,30 @@ def test_pts_gh_api_patch_failure(mock_run, _mock_sleep, tmp_path: Path) -> None
     result = patch_pr_token_summary(PR_URL, cwd, log_dir=str(tmp_path))
     assert result["success"] == "false"
     assert "Failed to patch PR" in result["error"]
+
+
+# ---------------------------------------------------------------------------
+# Null-safety tests (run_python None-input coercion)
+# ---------------------------------------------------------------------------
+
+
+def test_check_loop_iteration_none_current() -> None:
+    result = check_loop_iteration(current_iteration=None)  # type: ignore[arg-type]
+    assert result["next_iteration"] == "1"
+    assert result["max_exceeded"] == "false"
+
+
+def test_check_loop_iteration_none_max() -> None:
+    result = check_loop_iteration(current_iteration="0", max_iterations=None)  # type: ignore[arg-type]
+    assert result["next_iteration"] == "1"
+    assert result["max_exceeded"] == "false"
+
+
+def test_check_review_loop_none_current(tmp_path: Path) -> None:
+    result = check_review_loop(pr_number="1", cwd=str(tmp_path), current_iteration=None)  # type: ignore[arg-type]
+    assert result["next_iteration"] == "1"
+
+
+def test_check_review_loop_none_verdict(tmp_path: Path) -> None:
+    result = check_review_loop(pr_number="1", cwd=str(tmp_path), previous_verdict=None)  # type: ignore[arg-type]
+    assert result["had_blocking"] == "false"

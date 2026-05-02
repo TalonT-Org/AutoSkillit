@@ -632,3 +632,16 @@ async def test_phase2_recheck_finds_late_completing_run():
     assert result["run_id"] == 77
     assert result["conclusion"] == "failure"
     assert "build" in result["failed_jobs"]
+
+
+def test_known_ci_events_frozenset_exists() -> None:
+    from autoskillit.core._type_constants import KNOWN_CI_EVENTS
+
+    assert isinstance(KNOWN_CI_EVENTS, frozenset)
+    assert len(KNOWN_CI_EVENTS) >= 4
+    assert all(isinstance(e, str) for e in KNOWN_CI_EVENTS)
+    assert all(e == e.lower() for e in KNOWN_CI_EVENTS)
+    assert "push" in KNOWN_CI_EVENTS
+    assert "pull_request" in KNOWN_CI_EVENTS
+    assert "merge_group" in KNOWN_CI_EVENTS
+    assert "workflow_dispatch" in KNOWN_CI_EVENTS

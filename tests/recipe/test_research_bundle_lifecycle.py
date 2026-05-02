@@ -33,7 +33,7 @@ def test_stage_bundle_does_not_compress(recipe):
 
 
 def test_finalize_bundle_pr_mode(recipe):
-    """finalize_bundle must delegate to external script with output_mode, research_dir, worktree."""
+    """finalize_bundle must delegate to external script with output_mode, research_dir."""
     step = recipe.steps["finalize_bundle"]
     cmd = step.with_args.get("cmd", "")
     assert "finalize_bundle.sh" in cmd, (

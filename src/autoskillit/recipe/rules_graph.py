@@ -10,7 +10,7 @@ from autoskillit.core import (
     get_logger,
 )
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe.contracts import _CONTEXT_REF_RE
+from autoskillit.recipe.contracts import _CONTEXT_REF_RE, get_tool_output_contract
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 logger = get_logger(__name__)
@@ -452,4 +452,61 @@ def _check_merge_base_unpublished(ctx: ValidationContext) -> list[RuleFinding]:
                 )
             )
 
+    return findings
+
+
+@semantic_rule(
+    name="on-result-missing-tool-output-value",
+    description=(
+        "Recoverable tool output values falling through to a terminal catch-all "
+        "step. When a tool has declared recoverable_values in tool_output_contracts "
+        "and none of them are explicitly routed in on_result conditions, a catch-all "
+        "that routes to a terminal (action: stop) step silently drops those values."
+    ),
+    severity=Severity.WARNING,
+)
+def _check_on_result_missing_tool_output_value(ctx: ValidationContext) -> list[RuleFinding]:
+    recipe = ctx.recipe
+    findings: list[RuleFinding] = []
+    for step_name, step in recipe.steps.items():
+        if step.tool is None or step.on_result is None:
+            continue
+        contract = get_tool_output_contract(step.tool)
+        if contract is None:
+            continue
+        field_def = contract.fields.get(contract.result_field)
+        if field_def is None or not field_def.recoverable_values:
+            continue
+        conditions = step.on_result.conditions or []
+        explicitly_routed: set[str] = set()
+        catchall_route: str | None = None
+        for cond in conditions:
+            if cond.when is None:
+                catchall_route = cond.route
+            else:
+                for val in field_def.allowed_values:
+                    if val in cond.when:
+                        explicitly_routed.add(val)
+        if catchall_route is None:
+            continue
+        catchall_step = recipe.steps.get(catchall_route)
+        if catchall_step is None or catchall_step.action != "stop":
+            continue
+        unrouted_recoverable = field_def.recoverable_values - explicitly_routed
+        if not unrouted_recoverable:
+            continue
+        findings.append(
+            RuleFinding(
+                rule="on-result-missing-tool-output-value",
+                severity=Severity.WARNING,
+                step_name=step_name,
+                message=(
+                    f"Step '{step_name}' (tool: {step.tool}) has recoverable "
+                    f"output values {sorted(unrouted_recoverable)} not explicitly "
+                    f"routed in on_result. The catch-all routes to terminal step "
+                    f"'{catchall_route}' (action: stop), silently terminating on "
+                    f"these recoverable outcomes."
+                ),
+            )
+        )
     return findings

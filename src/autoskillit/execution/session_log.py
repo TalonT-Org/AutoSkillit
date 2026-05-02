@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from autoskillit.core._type_protocols_logging import GitHubApiLog
+    from autoskillit.core._type_results import SessionTelemetry
 
 import psutil
 
@@ -117,9 +117,6 @@ def flush_session_log(
     kill_reason: str = "",
     snapshot_interval_seconds: float = 0.0,
     step_name: str = "",
-    token_usage: dict[str, Any] | None = None,
-    timing_seconds: float | None = None,
-    audit_record: dict[str, Any] | None = None,
     cli_subtype: str = "",
     write_path_warnings: list[str] | None = None,
     write_call_count: int = 0,
@@ -135,9 +132,7 @@ def flush_session_log(
     recipe_content_hash: str = "",
     recipe_composite_hash: str = "",
     recipe_version: str = "",
-    github_api_log: GitHubApiLog | None = None,
-    loc_insertions: int = 0,
-    loc_deletions: int = 0,
+    telemetry: SessionTelemetry,
 ) -> None:
     """Flush session diagnostics to disk.
 
@@ -145,10 +140,15 @@ def flush_session_log(
     and appends to the global sessions.jsonl index. Applies retention
     to keep at most 500 session directories.
 
-    When step_name is provided along with telemetry kwargs, also writes
-    token_usage.json, step_timing.json, and (if audit_record) audit_log.json
-    to the session directory for recovery at next server startup.
+    When step_name is provided, also writes token_usage.json, step_timing.json,
+    and (if telemetry.audit_record is set) audit_log.json to the session directory
+    for recovery at next server startup.
     """
+    token_usage = telemetry.token_usage
+    timing_seconds = telemetry.timing_seconds
+    audit_record = telemetry.audit_record
+    loc_insertions = telemetry.loc_insertions
+    loc_deletions = telemetry.loc_deletions
     effective_write_path_warnings: list[str] = (
         write_path_warnings if write_path_warnings is not None else []
     )
@@ -299,16 +299,13 @@ def flush_session_log(
         except ValueError:
             pass
 
-    # Compute GitHub API usage and write github_api_usage.json
-    github_api_requests = 0
-    if github_api_log is not None:
-        usage = github_api_log.drain(session_id)
-        if usage is not None:
-            atomic_write(
-                session_dir / "github_api_usage.json",
-                json.dumps(usage, sort_keys=True, indent=2) + "\n",
-            )
-            github_api_requests = usage["total_requests"]
+    # Write github_api_usage.json from pre-computed telemetry bundle
+    github_api_requests = telemetry.github_api_requests
+    if telemetry.github_api_usage is not None:
+        atomic_write(
+            session_dir / "github_api_usage.json",
+            json.dumps(telemetry.github_api_usage, sort_keys=True, indent=2) + "\n",
+        )
 
     # Write summary.json
     summary = {
@@ -610,6 +607,8 @@ def recover_crashed_sessions(tmpfs_path: str = "/dev/shm", log_dir: str = "") ->
             continue
 
         try:
+            from autoskillit.core._type_results import SessionTelemetry
+
             flush_session_log(
                 log_dir=log_dir,
                 cwd="",
@@ -622,6 +621,15 @@ def recover_crashed_sessions(tmpfs_path: str = "/dev/shm", log_dir: str = "") ->
                 start_ts=mtime_ts,
                 proc_snapshots=snapshots if snapshots else None,
                 termination_reason="CRASHED",
+                telemetry=SessionTelemetry(
+                    token_usage=None,
+                    timing_seconds=None,
+                    audit_record=None,
+                    github_api_usage=None,
+                    github_api_requests=0,
+                    loc_insertions=0,
+                    loc_deletions=0,
+                ),
             )
         except Exception:
             logger.debug("recover_crashed_sessions: failed to finalize %s", trace_file)

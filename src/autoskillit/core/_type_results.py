@@ -24,6 +24,7 @@ __all__ = [
     "ValidatedAddDir",
     "WriteBehaviorSpec",
     "FailureRecord",
+    "SessionTelemetry",
     "SkillResult",
     "CleanupResult",
     "CIRunScope",
@@ -133,6 +134,24 @@ class FailureRecord:
 
     def to_dict(self) -> dict:  # type: ignore[type-arg]
         return asdict(self)
+
+
+@dataclass(frozen=True)
+class SessionTelemetry:
+    """Typed bundle of all per-session telemetry fields passed to flush_session_log.
+
+    All fields are required — constructing without any field is a TypeError,
+    making omissions visible at construction time rather than silently defaulting
+    to None and skipping the corresponding write gate inside flush_session_log.
+    """
+
+    token_usage: dict[str, Any] | None
+    timing_seconds: float | None
+    audit_record: dict[str, Any] | None
+    github_api_usage: dict[str, Any] | None
+    github_api_requests: int
+    loc_insertions: int
+    loc_deletions: int
 
 
 @dataclass

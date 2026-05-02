@@ -118,9 +118,10 @@ def _snap(
 
 
 def _flush(tmp_path: Path, **overrides) -> None:
+    from autoskillit.core._type_results import SessionTelemetry
     from autoskillit.execution.session_log import flush_session_log
 
-    defaults = {
+    defaults: dict = {
         "log_dir": str(tmp_path),
         "cwd": "/home/test/project",
         "session_id": "test-session-001",
@@ -132,9 +133,28 @@ def _flush(tmp_path: Path, **overrides) -> None:
         "start_ts": "2026-03-03T12:00:00+00:00",
         "proc_snapshots": [_snap(), _snap(), _snap()],
         "github_api_log": None,
+        "token_usage": None,
+        "timing_seconds": None,
+        "audit_record": None,
+        "loc_insertions": 0,
+        "loc_deletions": 0,
     }
     defaults.update(overrides)
-    flush_session_log(**defaults)
+
+    # Extract telemetry kwargs and build SessionTelemetry before forwarding
+    _github_api_log = defaults.pop("github_api_log")
+    _session_id = defaults.get("session_id", "")
+    _api_usage = _github_api_log.drain(_session_id) if _github_api_log is not None else None
+    telemetry = SessionTelemetry(
+        token_usage=defaults.pop("token_usage"),
+        timing_seconds=defaults.pop("timing_seconds"),
+        audit_record=defaults.pop("audit_record"),
+        github_api_usage=_api_usage,
+        github_api_requests=_api_usage["total_requests"] if _api_usage else 0,
+        loc_insertions=defaults.pop("loc_insertions"),
+        loc_deletions=defaults.pop("loc_deletions"),
+    )
+    flush_session_log(**defaults, telemetry=telemetry)
 
 
 @pytest.fixture

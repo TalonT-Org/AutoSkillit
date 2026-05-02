@@ -529,8 +529,8 @@ class TestRunHeadlessCoreFlushTelemetry:
         await run_skill("/investigate foo", "/tmp", step_name="implement")
         assert len(calls) == 1
         assert calls[0]["step_name"] == "implement"
-        assert calls[0]["token_usage"] is not None
-        assert calls[0]["timing_seconds"] is not None
+        assert calls[0]["telemetry"].token_usage is not None
+        assert calls[0]["telemetry"].timing_seconds is not None
 
     @pytest.mark.anyio
     async def test_flush_session_log_session_id_matches_returned_skill_result(
@@ -591,7 +591,7 @@ class TestRunHeadlessCoreFlushTelemetry:
 
     @pytest.mark.anyio
     async def test_passes_github_api_log_to_flush(self, tool_ctx, monkeypatch):
-        """headless.py passes github_api_log=ctx.github_api_log to flush_session_log."""
+        """headless.py drains github_api_log into telemetry.github_api_usage."""
         import autoskillit.execution.session_log as sl_mod
         from autoskillit.pipeline.github_api_log import DefaultGitHubApiLog
 
@@ -613,24 +613,14 @@ class TestRunHeadlessCoreFlushTelemetry:
         tool_ctx.runner.push(_make_result(returncode=0, stdout=self._make_ndjson_with_usage()))
         await run_skill("/investigate foo", "/tmp", step_name="implement")
         assert len(calls) == 1
-        assert "github_api_log" in calls[0], "flush_session_log was not called with github_api_log"
-        assert calls[0]["github_api_log"] is not None
+        assert calls[0]["telemetry"].github_api_usage is not None
+        assert calls[0]["telemetry"].github_api_requests > 0
 
     @pytest.mark.anyio
     async def test_flush_telemetry_kwargs_exhaustive(self, tool_ctx, monkeypatch):
-        """Every expected telemetry kwarg is forwarded from headless.py to flush_session_log."""
+        """headless.py passes a SessionTelemetry bundle covering all telemetry fields."""
         import autoskillit.execution.session_log as sl_mod
-
-        EXPECTED_TELEMETRY_KEYS = frozenset(
-            {
-                "token_usage",
-                "timing_seconds",
-                "audit_record",
-                "github_api_log",
-                "loc_insertions",
-                "loc_deletions",
-            }
-        )
+        from autoskillit.core._type_results import SessionTelemetry
 
         calls = []
 
@@ -641,8 +631,10 @@ class TestRunHeadlessCoreFlushTelemetry:
         tool_ctx.runner.push(_make_result(returncode=0, stdout=self._make_ndjson_with_usage()))
         await run_skill("/investigate foo", "/tmp", step_name="implement")
         assert len(calls) == 1
-        missing = EXPECTED_TELEMETRY_KEYS - calls[0].keys()
-        assert not missing, f"flush_session_log missing telemetry kwargs: {missing}"
+        assert "telemetry" in calls[0], "flush_session_log must receive telemetry= kwarg"
+        assert isinstance(calls[0]["telemetry"], SessionTelemetry), (
+            "telemetry must be a SessionTelemetry instance"
+        )
 
 
 @pytest.mark.anyio

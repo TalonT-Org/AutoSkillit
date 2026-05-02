@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core._type_results import SessionTelemetry
 from autoskillit.execution.session_log import (
     flush_session_log,
     read_telemetry_clear_marker,
@@ -332,6 +333,15 @@ def test_flush_session_log_backward_clock_produces_non_negative_duration(tmp_pat
         proc_snapshots=[],
         termination_reason="completed",
         snapshot_interval_seconds=5.0,
+        telemetry=SessionTelemetry(
+            token_usage=None,
+            timing_seconds=None,
+            audit_record=None,
+            github_api_usage=None,
+            github_api_requests=0,
+            loc_insertions=0,
+            loc_deletions=0,
+        ),
     )
     session_dir = tmp_path / "sessions" / "backward-clock-test"
     summary = json.loads((session_dir / "summary.json").read_text())
@@ -359,6 +369,15 @@ def test_flush_session_log_uses_elapsed_seconds_over_iso_subtraction(tmp_path):
         proc_snapshots=[],
         termination_reason="completed",
         snapshot_interval_seconds=5.0,
+        telemetry=SessionTelemetry(
+            token_usage=None,
+            timing_seconds=None,
+            audit_record=None,
+            github_api_usage=None,
+            github_api_requests=0,
+            loc_insertions=0,
+            loc_deletions=0,
+        ),
     )
     session_dir = tmp_path / "sessions" / "elapsed-seconds-test"
     summary = json.loads((session_dir / "summary.json").read_text())
@@ -389,6 +408,15 @@ def test_flush_session_log_zero_elapsed_seconds_is_valid(tmp_path):
         proc_snapshots=[],
         termination_reason="completed",
         snapshot_interval_seconds=5.0,
+        telemetry=SessionTelemetry(
+            token_usage=None,
+            timing_seconds=None,
+            audit_record=None,
+            github_api_usage=None,
+            github_api_requests=0,
+            loc_insertions=0,
+            loc_deletions=0,
+        ),
     )
     session_dir = tmp_path / "sessions" / "zero-elapsed-test"
     summary = json.loads((session_dir / "summary.json").read_text())
@@ -626,25 +654,17 @@ async def test_flush_writes_github_api_usage_from_populated_log(tmp_path):
     assert summary["github_api_requests"] == 1
 
 
-def test_flush_helper_default_keys_cover_all_telemetry():
-    """The _flush() helper includes all telemetry parameters in its defaults dict.
+def test_flush_helper_builds_and_passes_session_telemetry():
+    """The _flush() helper builds a SessionTelemetry and passes it to flush_session_log.
 
-    When flush_session_log gains a new telemetry parameter, it must also be added
-    to _flush()'s defaults so tests using the helper exercise that write path.
+    When a new field is added to SessionTelemetry without updating _flush()'s defaults,
+    the SessionTelemetry construction in _flush() will raise TypeError — caught immediately
+    by any test that uses _flush().
     """
     import tempfile
     import unittest.mock as mock
 
-    EXPECTED_TELEMETRY_KEYS = frozenset(
-        {
-            "token_usage",
-            "timing_seconds",
-            "audit_record",
-            "github_api_log",
-            "loc_insertions",
-            "loc_deletions",
-        }
-    )
+    from autoskillit.core._type_results import SessionTelemetry
 
     captured: dict = {}
 
@@ -657,8 +677,7 @@ def test_flush_helper_default_keys_cover_all_telemetry():
         with tempfile.TemporaryDirectory() as td:
             _flush(Path(td))
 
-    missing = EXPECTED_TELEMETRY_KEYS - captured.keys()
-    assert not missing, (
-        f"_flush() helper missing telemetry keys: {missing}. "
-        "Add them to the defaults dict in tests/execution/conftest.py."
+    assert "telemetry" in captured, "_flush() must forward telemetry= to flush_session_log"
+    assert isinstance(captured["telemetry"], SessionTelemetry), (
+        "telemetry must be a SessionTelemetry instance"
     )

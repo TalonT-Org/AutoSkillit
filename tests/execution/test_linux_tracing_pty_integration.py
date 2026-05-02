@@ -99,6 +99,7 @@ async def test_pty_wrapped_tracing_produces_no_script_snapshots_in_proc_trace_js
     Test 1.10 (partial): after the fix, every row in proc_trace.jsonl self-identifies
     the tracked process, and 'script' must never appear there.
     """
+    from autoskillit.core._type_results import SessionTelemetry
     from autoskillit.execution.process import run_managed_async
     from autoskillit.execution.session_log import flush_session_log
 
@@ -126,6 +127,15 @@ async def test_pty_wrapped_tracing_produces_no_script_snapshots_in_proc_trace_js
         exit_code=result.returncode if result.returncode is not None else -1,
         start_ts=result.start_ts or "2026-01-01T00:00:00+00:00",
         proc_snapshots=result.proc_snapshots,
+        telemetry=SessionTelemetry(
+            token_usage=None,
+            timing_seconds=None,
+            audit_record=None,
+            github_api_usage=None,
+            github_api_requests=0,
+            loc_insertions=0,
+            loc_deletions=0,
+        ),
     )
 
     trace_path = tmp_path / "logs" / "sessions" / "pty-trace-test-001" / "proc_trace.jsonl"

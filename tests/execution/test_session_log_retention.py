@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core._type_results import SessionTelemetry
 from autoskillit.execution.linux_tracing import read_boot_id, read_starttime_ticks
 from autoskillit.execution.session_log import (
     flush_session_log,
@@ -479,6 +480,15 @@ def test_retention_protects_active_campaign_sessions(tmp_path, monkeypatch):
         exit_code=0,
         start_ts="2026-04-20T10:00:00+00:00",
         proc_snapshots=None,
+        telemetry=SessionTelemetry(
+            token_usage=None,
+            timing_seconds=None,
+            audit_record=None,
+            github_api_usage=None,
+            github_api_requests=0,
+            loc_insertions=0,
+            loc_deletions=0,
+        ),
     )
 
     # Protected sessions survive — campaign meta.json writes update their mtime so they
@@ -546,6 +556,15 @@ def test_retention_deletes_released_campaign_sessions(tmp_path, monkeypatch):
         exit_code=0,
         start_ts="2026-04-20T10:00:00+00:00",
         proc_snapshots=None,
+        telemetry=SessionTelemetry(
+            token_usage=None,
+            timing_seconds=None,
+            audit_record=None,
+            github_api_usage=None,
+            github_api_requests=0,
+            loc_insertions=0,
+            loc_deletions=0,
+        ),
     )
 
     # Released campaign sessions are NOT protected — oldest 2 should be deleted
@@ -600,6 +619,15 @@ def test_retention_preserves_index_for_protected(tmp_path, monkeypatch):
         exit_code=0,
         start_ts="2026-04-20T10:00:00+00:00",
         proc_snapshots=None,
+        telemetry=SessionTelemetry(
+            token_usage=None,
+            timing_seconds=None,
+            audit_record=None,
+            github_api_usage=None,
+            github_api_requests=0,
+            loc_insertions=0,
+            loc_deletions=0,
+        ),
     )
 
     index_lines = [ln for ln in index_path.read_text().strip().split("\n") if ln.strip()]
@@ -644,6 +672,15 @@ def test_retention_handles_missing_meta_json(tmp_path, monkeypatch):
         exit_code=0,
         start_ts="2026-04-20T10:00:00+00:00",
         proc_snapshots=None,
+        telemetry=SessionTelemetry(
+            token_usage=None,
+            timing_seconds=None,
+            audit_record=None,
+            github_api_usage=None,
+            github_api_requests=0,
+            loc_insertions=0,
+            loc_deletions=0,
+        ),
     )
 
     # Oldest dirs with no meta.json are deleted normally
@@ -690,6 +727,15 @@ def test_retention_handles_missing_franchise_state_dir(tmp_path, monkeypatch):
         exit_code=0,
         start_ts="2026-04-20T10:00:00+00:00",
         proc_snapshots=None,
+        telemetry=SessionTelemetry(
+            token_usage=None,
+            timing_seconds=None,
+            audit_record=None,
+            github_api_usage=None,
+            github_api_requests=0,
+            loc_insertions=0,
+            loc_deletions=0,
+        ),
     )
 
     # Normal retention applies — oldest dirs deleted
@@ -735,6 +781,15 @@ def test_retention_handles_corrupt_meta_json(tmp_path, monkeypatch):
         exit_code=0,
         start_ts="2026-04-20T10:00:00+00:00",
         proc_snapshots=None,
+        telemetry=SessionTelemetry(
+            token_usage=None,
+            timing_seconds=None,
+            audit_record=None,
+            github_api_usage=None,
+            github_api_requests=0,
+            loc_insertions=0,
+            loc_deletions=0,
+        ),
     )
 
     # Corrupt meta.json → not protected → deleted normally
@@ -797,6 +852,15 @@ def test_retention_no_protection_when_callback_is_none(tmp_path: Path, monkeypat
         exit_code=0,
         start_ts="2026-04-20T10:00:00+00:00",
         proc_snapshots=None,
+        telemetry=SessionTelemetry(
+            token_usage=None,
+            timing_seconds=None,
+            audit_record=None,
+            github_api_usage=None,
+            github_api_requests=0,
+            loc_insertions=0,
+            loc_deletions=0,
+        ),
     )
 
     # No protection applied — oldest sessions deleted even though campaign is active
@@ -833,6 +897,15 @@ def test_flush_session_log_passes_callback_to_enforce_retention(
         exit_code=0,
         start_ts="2026-04-20T10:00:00+00:00",
         proc_snapshots=None,
+        telemetry=SessionTelemetry(
+            token_usage=None,
+            timing_seconds=None,
+            audit_record=None,
+            github_api_usage=None,
+            github_api_requests=0,
+            loc_insertions=0,
+            loc_deletions=0,
+        ),
     )
 
     assert (tmp_path / "sessions.jsonl").exists()

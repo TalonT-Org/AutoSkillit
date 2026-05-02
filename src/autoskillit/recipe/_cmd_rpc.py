@@ -28,6 +28,7 @@ def check_eject_limit(
     max_ejects: str = "3",
 ) -> dict[str, str]:
     """Increment counter file; return EJECT_OK or EJECT_LIMIT_EXCEEDED. Callable via run_python."""
+    max_ejects = max_ejects or "3"
     path = Path(counter_file)
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -44,7 +45,8 @@ def check_dropped_healthy_loop(
     counter_file: str,
     max_drops: str = "2",
 ) -> dict[str, str]:
-    """Increment dropped-healthy counter; return DROPPED_OK or DROPPED_LIMIT_EXCEEDED. Callable via run_python."""
+    """Increment dropped-healthy counter; return DROPPED_OK or DROPPED_LIMIT_EXCEEDED."""
+    max_drops = max_drops or "2"
     path = Path(counter_file)
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -131,7 +133,7 @@ def immediate_merge_conflict_fix(
     work_dir: str,
     base_branch: str,
 ) -> dict[str, str]:
-    """Attempt rebase for immediate-merge path; return clean or conflicts. Callable via run_python."""
+    """Attempt rebase for immediate-merge path; return clean or conflicts."""
     return queue_ejected_fix(work_dir=work_dir, base_branch=base_branch)
 
 
@@ -143,6 +145,8 @@ def wait_for_direct_merge(
     """Poll PR state until merged/closed/timeout. Callable via run_python."""
     import time  # noqa: PLC0415
 
+    max_polls = max_polls or "90"
+    poll_interval = poll_interval or "10"
     for _ in range(int(max_polls)):
         result = subprocess.run(
             ["gh", "pr", "view", pr_number, "--json", "state", "--jq", ".state"],
@@ -215,6 +219,8 @@ def wait_for_review_pr_mergeability(
     """Extract PR number and poll until mergeability resolves. Callable via run_python."""
     import time  # noqa: PLC0415
 
+    max_polls = max_polls or "12"
+    poll_interval = poll_interval or "15"
     result = subprocess.run(
         ["gh", "pr", "view", pr_url, "--json", "number", "-q", ".number"],
         capture_output=True,
@@ -245,7 +251,7 @@ def create_persistent_integration(
     work_dir: str,
     base_branch: str,
 ) -> dict[str, str]:
-    """Create and push persistent integration branch from default branch. Callable via run_python."""
+    """Create and push persistent integration branch from default branch."""
     remote = _detect_remote(work_dir)
     result = subprocess.run(
         ["git", "symbolic-ref", "refs/remotes/origin/HEAD"],
@@ -286,6 +292,8 @@ def force_push_and_wait_mergeability(
     """Force-push integration branch and wait for mergeability. Callable via run_python."""
     import time  # noqa: PLC0415
 
+    max_polls = max_polls or "12"
+    poll_interval = poll_interval or "15"
     remote = _detect_remote(work_dir)
     push = subprocess.run(
         ["git", "push", remote, integration_branch, "--force-with-lease"],
@@ -318,6 +326,11 @@ def advance_queue_pr(
     pr_order_file: str,
 ) -> dict[str, str]:
     """Find next PR in queue order file. Callable via run_python."""
+    if not current_pr_number:
+        return {
+            "error": f"current_pr_number is required, got {current_pr_number!r}",
+            "current_pr_number": "done",
+        }
     try:
         with open(pr_order_file) as f:
             order = json.load(f)
@@ -397,7 +410,10 @@ def refetch_issues(issue_urls: str) -> dict[str, str]:
             "-f",
             f"query={query}",
             "--jq",
-            '[.data[] | select(.issue != null and .issue.state == "OPEN") | .issue.number | tostring] | join(" ")',
+            (
+                '[.data[] | select(.issue != null and .issue.state == "OPEN")'
+                ' | .issue.number | tostring] | join(" ")'
+            ),
         ],
         capture_output=True,
         text=True,
@@ -438,7 +454,7 @@ def ensure_results(
     worktree_path: str,
     temp_subdir: str = ".autoskillit/temp",
 ) -> dict[str, str]:
-    """Ensure experiment_results file exists; create placeholder if empty. Callable via run_python."""
+    """Ensure experiment_results file exists; create placeholder if empty."""
     if experiment_results:
         return {"experiment_results": experiment_results}
     results_path = Path(worktree_path) / temp_subdir / "run-experiment" / "results-inconclusive.md"

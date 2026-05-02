@@ -45,6 +45,7 @@ class SkillInput:
     type: str
     required: bool
     recommended: bool = False
+    nullable: bool = True
 
 
 @dataclasses.dataclass
@@ -230,6 +231,7 @@ def get_callable_contract(
             name=inp["name"],
             type=inp["type"],
             required=inp.get("required", True),
+            nullable=inp.get("nullable", True),
         )
         for inp in entry.get("inputs", [])
     ]

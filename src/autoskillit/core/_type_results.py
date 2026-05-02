@@ -26,6 +26,7 @@ __all__ = [
     "SkillResult",
     "CleanupResult",
     "CIRunScope",
+    "KNOWN_CI_EVENTS",
     "CloneSuccessResult",
     "CloneGateUncommitted",
     "CloneGateUnpublished",
@@ -265,6 +266,25 @@ class CIRunScope:
     workflow: str | None = None  # workflow filename, e.g. "tests.yml"
     head_sha: str | None = None  # commit SHA to pin results to
     event: str | None = None  # trigger event, e.g. "push", "pull_request"
+
+    def __post_init__(self) -> None:
+        if self.event is not None and self.event not in KNOWN_CI_EVENTS:
+            raise ValueError(
+                f"Invalid CI event {self.event!r}. Valid events: {sorted(KNOWN_CI_EVENTS)}"
+            )
+
+
+KNOWN_CI_EVENTS: frozenset[str] = frozenset(
+    {
+        "push",
+        "pull_request",
+        "pull_request_target",
+        "merge_group",
+        "workflow_dispatch",
+        "schedule",
+        "workflow_call",
+    }
+)
 
 
 class CloneSuccessResult(TypedDict):

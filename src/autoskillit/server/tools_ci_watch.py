@@ -11,7 +11,7 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import CIRunScope, get_logger
+from autoskillit.core import KNOWN_CI_EVENTS, CIRunScope, get_logger
 from autoskillit.pipeline import ToolContext
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
@@ -75,6 +75,18 @@ async def wait_for_ci(
     """
     if (gate := _require_enabled()) is not None:
         return gate
+    if event == "None":
+        logger.warning("event coerced from string 'None' to null", tool="wait_for_ci")
+        event = None
+    if event is not None and event not in KNOWN_CI_EVENTS:
+        return json.dumps(
+            {
+                "run_id": None,
+                "conclusion": "error",
+                "failed_jobs": [],
+                "error": f"Invalid event {event!r}. Valid events: {sorted(KNOWN_CI_EVENTS)}",
+            }
+        )
     try:
         _start = time.monotonic()
         _timing_ctx = None

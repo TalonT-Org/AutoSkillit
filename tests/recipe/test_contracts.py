@@ -808,3 +808,24 @@ def test_result_field_spec_roundtrip() -> None:
     for rf in contract.result_fields:
         assert isinstance(rf, ResultFieldSpec)
         assert rf.required is True
+
+
+def test_callable_contract_nullable_field() -> None:
+    from autoskillit.recipe.contracts import get_callable_contract
+
+    manifest = load_bundled_manifest()
+    contracts = manifest.get("callable_contracts", {})
+    assert "autoskillit.smoke_utils.check_loop_iteration" in contracts, (
+        "check_loop_iteration must be declared in callable_contracts"
+    )
+    loop_contract = contracts["autoskillit.smoke_utils.check_loop_iteration"]
+    ci_input = next((i for i in loop_contract["inputs"] if i["name"] == "current_iteration"), None)
+    assert ci_input is not None, "current_iteration input must be declared"
+    assert ci_input.get("nullable") is False, (
+        "current_iteration must be explicitly non-nullable (nullable: false)"
+    )
+    parsed = get_callable_contract("autoskillit.smoke_utils.check_loop_iteration", manifest)
+    assert parsed is not None
+    ci_parsed = next((i for i in parsed.inputs if i.name == "current_iteration"), None)
+    assert ci_parsed is not None
+    assert ci_parsed.nullable is False

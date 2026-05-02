@@ -1989,6 +1989,21 @@ skills:
     - "pr_url = \nverdict = dry_run\ncategory_summary = 14 fixes, 3 features\n%%ORDER_UP%%"
     write_behavior: always
 callable_contracts:
+  autoskillit.smoke_utils.check_loop_iteration:
+    inputs:
+    - name: current_iteration
+      type: str
+      required: false
+      nullable: false
+    - name: max_iterations
+      type: str
+      required: false
+      nullable: false
+    outputs:
+    - name: next_iteration
+      type: str
+    - name: max_exceeded
+      type: str
   autoskillit.smoke_utils.check_review_loop:
     inputs:
     - name: pr_number
@@ -1997,10 +2012,24 @@ callable_contracts:
     - name: cwd
       type: directory_path
       required: true
+    - name: current_iteration
+      type: str
+      required: false
+      nullable: false
+    - name: max_iterations
+      type: str
+      required: false
+      nullable: false
+    - name: previous_verdict
+      type: str
+      required: false
+      nullable: false
     outputs:
     - name: next_iteration
       type: str
     - name: max_exceeded
+      type: str
+    - name: had_blocking
       type: str
   autoskillit.smoke_utils.check_bug_report_non_empty:
     inputs:

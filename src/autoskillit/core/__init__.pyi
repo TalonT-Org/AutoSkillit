@@ -122,6 +122,7 @@ from .types import HEADLESS_ENV_VAR as HEADLESS_ENV_VAR
 from .types import HEADLESS_TOOLS as HEADLESS_TOOLS
 from .types import HeadlessExecutor as HeadlessExecutor
 from .types import KITCHEN_SESSION_ID_ENV_VAR as KITCHEN_SESSION_ID_ENV_VAR
+from .types import KNOWN_CI_EVENTS as KNOWN_CI_EVENTS
 from .types import KillReason as KillReason
 from .types import LAUNCH_ID_ENV_VAR as LAUNCH_ID_ENV_VAR
 from .types import LoadReport as LoadReport

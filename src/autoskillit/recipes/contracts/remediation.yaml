@@ -250,6 +250,7 @@ dataflow:
   - auto_merge
   - base_branch
   - issue_url
+  - max_parallel
   - open_pr
   - review_approach
   - run_mode
@@ -267,6 +268,7 @@ dataflow:
   - auto_merge
   - base_branch
   - issue_url
+  - max_parallel
   - open_pr
   - remote_url
   - review_approach
@@ -285,6 +287,7 @@ dataflow:
   - auto_merge
   - base_branch
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - remote_url
@@ -309,6 +312,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - remote_url
@@ -332,6 +336,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - remote_url
@@ -355,6 +360,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - proposed_branch
@@ -379,6 +385,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - proposed_branch
@@ -402,6 +409,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - proposed_branch
@@ -428,6 +436,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - proposed_branch
@@ -453,6 +462,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - plan_path
@@ -479,6 +489,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - plan_path
@@ -505,6 +516,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - plan_path
@@ -536,6 +548,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - plan_path
@@ -568,6 +581,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - plan_path
@@ -597,6 +611,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - plan_path
@@ -626,6 +641,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - plan_path
@@ -656,6 +672,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - plan_path
@@ -686,6 +703,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - plan_path
@@ -717,6 +735,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - plan_path
@@ -750,6 +769,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - plan_path
@@ -781,6 +801,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - plan_path
@@ -814,6 +835,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - plan_path
@@ -846,6 +868,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - plan_path
@@ -880,6 +903,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - plan_path
@@ -914,6 +938,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - plan_path
@@ -947,6 +972,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - plan_path
@@ -984,6 +1010,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - plan_path
@@ -1020,6 +1047,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_target
   - open_pr
   - plan_path
@@ -1057,6 +1085,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -1096,6 +1125,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -1134,6 +1164,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -1172,6 +1203,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -1211,6 +1243,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -1250,6 +1283,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -1292,6 +1326,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -1332,6 +1367,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -1372,6 +1408,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -1412,6 +1449,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -1452,6 +1490,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -1494,6 +1533,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -1534,6 +1574,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -1574,6 +1615,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -1614,6 +1656,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -1654,6 +1697,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -1696,6 +1740,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -1736,6 +1781,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -1776,6 +1822,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -1818,6 +1865,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -1860,6 +1908,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -1901,6 +1950,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -1942,6 +1992,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -1985,6 +2036,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -2026,6 +2078,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -2067,6 +2120,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -2108,6 +2162,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -2149,6 +2204,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -2190,6 +2246,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr
@@ -2231,6 +2288,7 @@ dataflow:
   - issue_slug
   - issue_title
   - issue_url
+  - max_parallel
   - merge_group_trigger
   - merge_target
   - open_pr

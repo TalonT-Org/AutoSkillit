@@ -32,8 +32,8 @@ async def list_recipes() -> str:
     Returns a JSON array of recipes with name, description, and summary.
     Recipes are YAML workflow definitions that agents follow as orchestration
     instructions. Use load_recipe to load a specific recipe.
-    To create a new recipe, use the /autoskillit:write-recipe skill.
-    To generate recipes as part of project onboarding, use /autoskillit:setup-project.
+    To create a new recipe, use the /write-recipe skill.
+    To generate recipes as part of project onboarding, use /setup-project.
 
     IMPORTANT: Recipes are NOT slash commands. They cannot be invoked
     as /autoskillit:<name>. They are loaded via load_recipe and executed
@@ -90,7 +90,7 @@ async def load_recipe(name: str, overrides: dict[str, str] | None = None) -> str
        diagram, or invoke the /render-recipe skill. The canonical visual grammar is
        defined in the render-recipe SKILL.md — do not attempt to render inline.
        (See: .claude/skills/render-recipe/SKILL.md)
-    3. If the user requests changes, use the /autoskillit:write-recipe skill
+    3. If the user requests changes, use the /write-recipe skill
        to apply modifications. That skill has the complete schema, validation rules,
        and formatting constraints needed for correct changes. Do NOT edit the YAML
        file directly — always delegate modifications to write-recipe.
@@ -168,7 +168,7 @@ async def load_recipe(name: str, overrides: dict[str, str] | None = None) -> str
     - NEVER skip a step for any other reason (PR size, diff triviality, etc.).
     - A running optional step that returns success: false MUST follow on_failure.
 
-    To CREATE a new recipe, use the /autoskillit:write-recipe skill.
+    To CREATE a new recipe, use the /write-recipe skill.
     This tool is for loading and executing existing recipes.
 
     IMPORTANT: Recipes are NOT slash commands. They cannot be invoked
@@ -220,11 +220,11 @@ async def validate_recipe(script_path: str) -> str:
     Parses the file, checks all validation rules (name, steps, routing,
     retry fields, ingredient references), and returns structured results.
     Use after generating or modifying a recipe (via write-recipe)
-    to confirm it is valid. The /autoskillit:write-recipe skill
+    to confirm it is valid. The /write-recipe skill
     calls this tool automatically after generating a recipe.
 
     When validation fails ({"valid": false}), do NOT edit the YAML file
-    directly to fix errors. Use the /autoskillit:write-recipe skill
+    directly to fix errors. Use the /write-recipe skill
     to apply corrections — it has the complete schema, validation rules,
     and formatting constraints needed for correct modifications.
 

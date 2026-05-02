@@ -74,6 +74,23 @@ def test_advisory_map_skill_names_resolve() -> None:
     )
 
 
+def test_advisory_hook_message_uses_bare_prefix() -> None:
+    """Advisory message must use /name, not /autoskillit:name, for skills_extended skills."""
+    payload = {
+        "tool_name": "Write",
+        "tool_input": {"file_path": ".autoskillit/recipes/test.yaml"},
+    }
+    rc, stdout = _run_advisor(payload)
+    assert rc == 0
+    assert stdout.strip()
+    data = json.loads(stdout.strip())
+    message = data["hookSpecificOutput"]["message"]
+    assert "/autoskillit:" not in message, (
+        f"Advisory message uses /autoskillit: prefix for a skills_extended skill: {message}"
+    )
+    assert "/write-recipe" in message
+
+
 def test_hook_patterns_match_type_constants() -> None:
     """recipe_write_advisor._ADVISORY_PATTERNS must exactly match SKILL_FILE_ADVISORY_MAP."""
     from autoskillit.hooks.recipe_write_advisor import _ADVISORY_PATTERNS

@@ -31,7 +31,7 @@ async def merge_worktree(
 
     Programmatic gate: runs the configured test command in the worktree before allowing merge.
     If tests fail, returns error without merging.
-    On failure, consider using /autoskillit:resolve-failures via run_skill
+    On failure, consider using /resolve-failures via run_skill
     for automated diagnosis and remediation.
 
     Args:
@@ -109,9 +109,9 @@ async def classify_fix(
 
     Routing guidance:
     - full_restart: The fix touches critical paths. Re-run investigation and
-      plan creation (e.g. call /autoskillit:investigate via run_skill).
+      plan creation (e.g. call /investigate via run_skill).
     - partial_restart: The fix is localized. Re-run implementation only
-      (e.g. call /autoskillit:implement-worktree-no-merge via run_skill).
+      (e.g. call /implement-worktree-no-merge via run_skill).
 
     Args:
         worktree_path: Path to the git worktree with the implemented fix.

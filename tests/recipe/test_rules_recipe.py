@@ -1,4 +1,4 @@
-"""Tests for rules_recipe semantic rules (unknown-sub-recipe, circular-sub-recipe)."""
+"""Tests for rules_recipe semantic rules."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import Severity
 from autoskillit.recipe._analysis import make_validation_context
 from autoskillit.recipe.registry import _RULE_REGISTRY, run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeStep
@@ -123,10 +124,11 @@ def test_circular_sub_recipe_rule_fires(tmp_path: Path) -> None:
 
 
 def test_rules_recipe_registered() -> None:
-    """Both rules_recipe rules are present in the global registry."""
+    """All rules_recipe rules are present in the global registry."""
     rule_names = {spec.name for spec in _RULE_REGISTRY}
     assert "unknown-sub-recipe" in rule_names
     assert "circular-sub-recipe" in rule_names
+    assert "env-key-in-with-args" in rule_names
 
 
 def test_all_bundled_recipes_pass_rules_recipe() -> None:
@@ -168,5 +170,53 @@ def test_rules_recipe_uses_check_prefix() -> None:
 
     assert hasattr(m, "_check_unknown_sub_recipe"), "_check_unknown_sub_recipe not found"
     assert hasattr(m, "_check_circular_sub_recipe"), "_check_circular_sub_recipe not found"
+    assert hasattr(m, "_check_env_key_in_with_args"), "_check_env_key_in_with_args not found"
     assert not hasattr(m, "_unknown_sub_recipe"), "_unknown_sub_recipe should be renamed"
     assert not hasattr(m, "_circular_sub_recipe"), "_circular_sub_recipe should be renamed"
+
+
+# ---------------------------------------------------------------------------
+# env-key-in-with-args rule tests (ADR-0003)
+# ---------------------------------------------------------------------------
+
+
+def test_env_key_in_with_args_rejected() -> None:
+    """A step with env: in with_args must trigger env-key-in-with-args ERROR."""
+    recipe = Recipe(
+        name="test-env-rule",
+        description="test",
+        steps={
+            "bad_step": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/autoskillit:some-skill", "env": {"FOO": "bar"}},  # type: ignore[dict-item]
+                on_success="done",
+            ),
+            "done": RecipeStep(action="stop"),
+        },
+    )
+    ctx = make_validation_context(recipe, available_sub_recipes=frozenset())
+    findings = run_semantic_rules(ctx)
+    env_findings = [f for f in findings if f.rule == "env-key-in-with-args"]
+    assert len(env_findings) == 1
+    assert env_findings[0].severity == Severity.ERROR
+    assert env_findings[0].step_name == "bad_step"
+
+
+def test_env_key_in_with_args_clean_step_passes() -> None:
+    """A step without env: in with_args must not trigger the rule."""
+    recipe = Recipe(
+        name="test-env-rule-clean",
+        description="test",
+        steps={
+            "good_step": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/autoskillit:some-skill"},
+                on_success="done",
+            ),
+            "done": RecipeStep(action="stop"),
+        },
+    )
+    ctx = make_validation_context(recipe, available_sub_recipes=frozenset())
+    findings = run_semantic_rules(ctx)
+    env_findings = [f for f in findings if f.rule == "env-key-in-with-args"]
+    assert len(env_findings) == 0

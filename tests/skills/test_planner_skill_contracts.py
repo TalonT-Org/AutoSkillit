@@ -292,9 +292,9 @@ def test_elaborate_wps_contract_two_inputs() -> None:
 # --- validate_task_alignment skill contract tests ---
 
 
-def test_generate_phases_skill_references_planner_task():
+def test_generate_phases_skill_references_task_file_arg():
     content = (SKILLS_ROOT / "planner-generate-phases" / "SKILL.md").read_text()
-    assert "PLANNER_TASK" in content, "SKILL.md must document PLANNER_TASK env var"
+    assert "$3" in content, "SKILL.md must document $3 positional arg for task file"
     assert "task" in content.lower(), "SKILL.md must instruct task-constrained phase generation"
 
 
@@ -386,6 +386,7 @@ def test_planner_skill_example_paths_are_run_scoped(skill_name: str) -> None:
                 )
 
 
-def test_generate_phases_skill_references_planner_task_file():
+def test_generate_phases_skill_no_env_var_delivery():
     content = (SKILLS_ROOT / "planner-generate-phases" / "SKILL.md").read_text()
-    assert "PLANNER_TASK_FILE" in content, "SKILL.md must document PLANNER_TASK_FILE env var"
+    assert "PLANNER_TASK_FILE" not in content, "Must not reference PLANNER_TASK_FILE env var"
+    assert "PLANNER_TASK" not in content, "Must not reference PLANNER_TASK env var"

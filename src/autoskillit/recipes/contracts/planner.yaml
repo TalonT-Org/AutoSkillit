@@ -1,6 +1,20 @@
-generated_at: '2026-04-27T18:41:27.106723+00:00'
+generated_at: '2026-05-02T22:49:40.845776+00:00'
 bundled_manifest_version: 0.1.0
-skill_hashes: {}
+skill_hashes:
+  planner-analyze: sha256:bc64ba4984d3c1b32231c062e46550bc5e00d94689d5a8967b3f222abfe0e172
+  planner-extract-domain: sha256:dcb246a33465b839a552719dff34684ea9421ad99e021232ae677448a69eff45
+  planner-generate-phases: sha256:15839aa8d27a3874b1c58e25fc4c0803ca8f5328ac6e85c17eb5bf357c6738f2
+  planner-elaborate-phase: sha256:d0127bd85e030eecaabb727730ccb8d80fc05cb55227975320393ba17fcb2238
+  planner-refine-phases: sha256:ce6ead5a4c92520080b0838b6b6c5e8f1d762eeb0e5ee21a2a1fe497a720496a
+  planner-elaborate-assignments: sha256:9e69a1885de8635fc1e22fc67bab388534b37228daaaaf49cc00585694788fea
+  planner-refine-assignments: sha256:584c1715729a91928994d4d18b91a8e48ca03ee94ce70dd1c613c7a5159e6318
+  planner-elaborate-wps: sha256:301bebf89b29e658de254d5790d50878fde417a3359222c5b282065f13aa2b30
+  planner-refine-wps: sha256:17d44c80abb78698c6173c74f6259df65ac09cd87063cfdf3e0e1de763043334
+  planner-consolidate-wps: sha256:384ae024bfc9ef67fd25d4a929badcd5790577364a768d2f655b5172bc13a8e7
+  planner-validate-task-alignment: sha256:f57d27bbf345f2da0c7fe4d8918f63e02b12882fd5fe1f7bb43e6c096f340b2b
+  planner-reconcile-deps: sha256:4ea197d4d0c25af5b734f36c79ddb182bc140d98cdfe811f515ff182961ac9bb
+  planner-assess-review-approach: sha256:4c3dfa00349ab2bec06c089d282f00d3e127e1c794b41daa6a71779612ab3558
+  planner-refine: sha256:31e088ee392a4bee262818c5117eea98c57d910a6aec1363dc1a0c9e9f710e1d
 skills:
   planner-analyze:
     inputs: []
@@ -173,6 +187,8 @@ skills:
       required: true
       recommended: false
     outputs: []
+    expected_output_patterns: []
+    pattern_examples: []
     write_behavior: always
   planner-validate-task-alignment:
     inputs:
@@ -203,23 +219,31 @@ skills:
 
       %%ORDER_UP%%'
     write_behavior: always
-  planner-assess-review-approach:
-    inputs:
-    - name: refined_wps_path
-      required: true
-    - name: planner_dir
-      required: true
-    outputs:
-    - name: review_approach_assessment_path
-      type: file_path
-    expected_output_patterns:
-    - "review_approach_assessment_path\\s*=\\s*\\S+"
-    write_behavior: always
   planner-reconcile-deps:
     inputs: []
     outputs: []
     expected_output_patterns: []
     pattern_examples: []
+  planner-assess-review-approach:
+    inputs:
+    - name: refined_wps_path
+      type: file_path
+      required: true
+      recommended: false
+    - name: planner_dir
+      type: directory_path
+      required: true
+      recommended: false
+    outputs:
+    - name: review_approach_assessment_path
+      type: file_path
+    expected_output_patterns:
+    - review_approach_assessment_path\s*=\s*\S+
+    pattern_examples:
+    - 'review_approach_assessment_path = /tmp/autoskillit/planner/run-20260101-120000/review_approach_assessment.json
+
+      %%ORDER_UP%%'
+    write_behavior: always
   planner-refine:
     inputs: []
     outputs: []
@@ -228,40 +252,51 @@ skills:
 dataflow:
 - step: init
   available:
+  - planner_assess_review_approach
   - source_dir
   - task
+  - task_file
   required: []
   produced:
   - planner_dir
 - step: analyze
   available:
+  - planner_assess_review_approach
   - planner_dir
   - source_dir
   - task
+  - task_file
   required: []
   produced: []
 - step: extract_domain
   available:
+  - planner_assess_review_approach
   - planner_dir
   - source_dir
   - task
+  - task_file
   required: []
   produced: []
+  positional_args: 2
 - step: generate_phases
   available:
+  - planner_assess_review_approach
   - planner_dir
   - source_dir
   - task
+  - task_file
   required: []
   produced:
   - phase_manifest_path
-  positional_args: 2
+  positional_args: 3
 - step: build_plan_snapshot
   available:
   - phase_manifest_path
+  - planner_assess_review_approach
   - planner_dir
   - source_dir
   - task
+  - task_file
   required: []
   produced:
   - plan_snapshot_path
@@ -271,9 +306,11 @@ dataflow:
   - phase_ids
   - phase_manifest_path
   - plan_snapshot_path
+  - planner_assess_review_approach
   - planner_dir
   - source_dir
   - task
+  - task_file
   required: []
   produced: []
   positional_args: 2
@@ -282,9 +319,11 @@ dataflow:
   - phase_ids
   - phase_manifest_path
   - plan_snapshot_path
+  - planner_assess_review_approach
   - planner_dir
   - source_dir
   - task
+  - task_file
   required: []
   produced:
   - combined_phases_path
@@ -294,9 +333,11 @@ dataflow:
   - phase_ids
   - phase_manifest_path
   - plan_snapshot_path
+  - planner_assess_review_approach
   - planner_dir
   - source_dir
   - task
+  - task_file
   required:
   - combined_plan_path
   - output_dir
@@ -308,10 +349,12 @@ dataflow:
   - phase_ids
   - phase_manifest_path
   - plan_snapshot_path
+  - planner_assess_review_approach
   - planner_dir
   - refined_plan_path
   - source_dir
   - task
+  - task_file
   required: []
   produced:
   - assignment_context_paths
@@ -322,10 +365,12 @@ dataflow:
   - phase_ids
   - phase_manifest_path
   - plan_snapshot_path
+  - planner_assess_review_approach
   - planner_dir
   - refined_plan_path
   - source_dir
   - task
+  - task_file
   required: []
   produced: []
   positional_args: 1
@@ -336,10 +381,12 @@ dataflow:
   - phase_ids
   - phase_manifest_path
   - plan_snapshot_path
+  - planner_assess_review_approach
   - planner_dir
   - refined_plan_path
   - source_dir
   - task
+  - task_file
   required: []
   produced:
   - combined_assignments_path
@@ -351,10 +398,12 @@ dataflow:
   - phase_ids
   - phase_manifest_path
   - plan_snapshot_path
+  - planner_assess_review_approach
   - planner_dir
   - refined_plan_path
   - source_dir
   - task
+  - task_file
   required:
   - output_dir
   produced:
@@ -367,11 +416,13 @@ dataflow:
   - phase_ids
   - phase_manifest_path
   - plan_snapshot_path
+  - planner_assess_review_approach
   - planner_dir
   - refined_assignments_path
   - refined_plan_path
   - source_dir
   - task
+  - task_file
   required: []
   produced:
   - wp_context_paths
@@ -383,11 +434,13 @@ dataflow:
   - phase_ids
   - phase_manifest_path
   - plan_snapshot_path
+  - planner_assess_review_approach
   - planner_dir
   - refined_assignments_path
   - refined_plan_path
   - source_dir
   - task
+  - task_file
   - wp_context_paths
   required: []
   produced: []
@@ -400,11 +453,13 @@ dataflow:
   - phase_ids
   - phase_manifest_path
   - plan_snapshot_path
+  - planner_assess_review_approach
   - planner_dir
   - refined_assignments_path
   - refined_plan_path
   - source_dir
   - task
+  - task_file
   - wp_context_paths
   required: []
   produced: []
@@ -416,11 +471,13 @@ dataflow:
   - phase_ids
   - phase_manifest_path
   - plan_snapshot_path
+  - planner_assess_review_approach
   - planner_dir
   - refined_assignments_path
   - refined_plan_path
   - source_dir
   - task
+  - task_file
   - wp_context_paths
   required: []
   produced:
@@ -434,28 +491,19 @@ dataflow:
   - phase_ids
   - phase_manifest_path
   - plan_snapshot_path
+  - planner_assess_review_approach
   - planner_dir
   - refined_assignments_path
   - refined_plan_path
   - source_dir
   - task
+  - task_file
   - wp_context_paths
   required:
   - output_dir
   produced:
   - refined_wps_path
-- step: validate_task_alignment
-  available:
-  - combined_wps_path
-  - planner_dir
-  - refined_assignments_path
-  - refined_plan_path
-  - refined_wps_path
-  - source_dir
-  - task
-  required: []
-  produced: []
-- step: reconcile_deps
+- step: consolidate_wps_analyze
   available:
   - assignment_context_paths
   - combined_assignments_path
@@ -464,16 +512,18 @@ dataflow:
   - phase_ids
   - phase_manifest_path
   - plan_snapshot_path
+  - planner_assess_review_approach
   - planner_dir
   - refined_assignments_path
   - refined_plan_path
   - refined_wps_path
   - source_dir
   - task
+  - task_file
   - wp_context_paths
   required: []
   produced: []
-- step: validate
+- step: consolidate_wps_merge
   available:
   - assignment_context_paths
   - combined_assignments_path
@@ -482,50 +532,156 @@ dataflow:
   - phase_ids
   - phase_manifest_path
   - plan_snapshot_path
+  - planner_assess_review_approach
   - planner_dir
   - refined_assignments_path
   - refined_plan_path
   - refined_wps_path
   - source_dir
   - task
+  - task_file
+  - wp_context_paths
+  required: []
+  produced:
+  - consolidated_wps_path
+- step: validate_task_alignment
+  available:
+  - assignment_context_paths
+  - combined_assignments_path
+  - combined_phases_path
+  - combined_wps_path
+  - consolidated_wps_path
+  - phase_ids
+  - phase_manifest_path
+  - plan_snapshot_path
+  - planner_assess_review_approach
+  - planner_dir
+  - refined_assignments_path
+  - refined_plan_path
+  - refined_wps_path
+  - source_dir
+  - task
+  - task_file
+  - wp_context_paths
+  required:
+  - refined_wps_path
+  - output_dir
+  produced:
+  - alignment_findings_path
+- step: reconcile_deps
+  available:
+  - alignment_findings_path
+  - assignment_context_paths
+  - combined_assignments_path
+  - combined_phases_path
+  - combined_wps_path
+  - consolidated_wps_path
+  - phase_ids
+  - phase_manifest_path
+  - plan_snapshot_path
+  - planner_assess_review_approach
+  - planner_dir
+  - refined_assignments_path
+  - refined_plan_path
+  - refined_wps_path
+  - source_dir
+  - task
+  - task_file
+  - wp_context_paths
+  required: []
+  produced: []
+- step: assess_review_approach_step
+  available:
+  - alignment_findings_path
+  - assignment_context_paths
+  - combined_assignments_path
+  - combined_phases_path
+  - combined_wps_path
+  - consolidated_wps_path
+  - phase_ids
+  - phase_manifest_path
+  - plan_snapshot_path
+  - planner_assess_review_approach
+  - planner_dir
+  - refined_assignments_path
+  - refined_plan_path
+  - refined_wps_path
+  - source_dir
+  - task
+  - task_file
+  - wp_context_paths
+  required:
+  - refined_wps_path
+  produced:
+  - review_approach_assessment_path
+- step: validate
+  available:
+  - alignment_findings_path
+  - assignment_context_paths
+  - combined_assignments_path
+  - combined_phases_path
+  - combined_wps_path
+  - consolidated_wps_path
+  - phase_ids
+  - phase_manifest_path
+  - plan_snapshot_path
+  - planner_assess_review_approach
+  - planner_dir
+  - refined_assignments_path
+  - refined_plan_path
+  - refined_wps_path
+  - review_approach_assessment_path
+  - source_dir
+  - task
+  - task_file
   - wp_context_paths
   required: []
   produced:
   - verdict
 - step: check_verdict
   available:
+  - alignment_findings_path
   - assignment_context_paths
   - combined_assignments_path
   - combined_phases_path
   - combined_wps_path
+  - consolidated_wps_path
   - phase_ids
   - phase_manifest_path
   - plan_snapshot_path
+  - planner_assess_review_approach
   - planner_dir
   - refined_assignments_path
   - refined_plan_path
   - refined_wps_path
+  - review_approach_assessment_path
   - source_dir
   - task
+  - task_file
   - verdict
   - wp_context_paths
   required: []
   produced: []
 - step: refine
   available:
+  - alignment_findings_path
   - assignment_context_paths
   - combined_assignments_path
   - combined_phases_path
   - combined_wps_path
+  - consolidated_wps_path
   - phase_ids
   - phase_manifest_path
   - plan_snapshot_path
+  - planner_assess_review_approach
   - planner_dir
   - refined_assignments_path
   - refined_plan_path
   - refined_wps_path
+  - review_approach_assessment_path
   - source_dir
   - task
+  - task_file
   - verdict
   - wp_context_paths
   required: []
@@ -533,57 +689,72 @@ dataflow:
   positional_args: 1
 - step: compile
   available:
+  - alignment_findings_path
   - assignment_context_paths
   - combined_assignments_path
   - combined_phases_path
   - combined_wps_path
+  - consolidated_wps_path
   - phase_ids
   - phase_manifest_path
   - plan_snapshot_path
+  - planner_assess_review_approach
   - planner_dir
   - refined_assignments_path
   - refined_plan_path
   - refined_wps_path
+  - review_approach_assessment_path
   - source_dir
   - task
+  - task_file
   - verdict
   - wp_context_paths
   required: []
   produced: []
 - step: done
   available:
+  - alignment_findings_path
   - assignment_context_paths
   - combined_assignments_path
   - combined_phases_path
   - combined_wps_path
+  - consolidated_wps_path
   - phase_ids
   - phase_manifest_path
   - plan_snapshot_path
+  - planner_assess_review_approach
   - planner_dir
   - refined_assignments_path
   - refined_plan_path
   - refined_wps_path
+  - review_approach_assessment_path
   - source_dir
   - task
+  - task_file
   - verdict
   - wp_context_paths
   required: []
   produced: []
 - step: escalate_stop
   available:
+  - alignment_findings_path
   - assignment_context_paths
   - combined_assignments_path
   - combined_phases_path
   - combined_wps_path
+  - consolidated_wps_path
   - phase_ids
   - phase_manifest_path
   - plan_snapshot_path
+  - planner_assess_review_approach
   - planner_dir
   - refined_assignments_path
   - refined_plan_path
   - refined_wps_path
+  - review_approach_assessment_path
   - source_dir
   - task
+  - task_file
   - verdict
   - wp_context_paths
   required: []

@@ -26,11 +26,7 @@ Pass 1 entry point. Read the analysis file (and optionally domain knowledge) and
 
 - **$1** — Absolute path to `analysis.json` produced by `planner-analyze`
 - **$2** — (optional) Absolute path to `domain_knowledge.md` produced by `planner-extract-domain`
-
-### Environment Variables
-
-- **PLANNER_TASK** (required unless PLANNER_TASK_FILE is set) — The user's task description. Every phase MUST serve this task.
-- **PLANNER_TASK_FILE** (env-var, optional) — Absolute path to a file containing the task description. When set, read the file content and use it as the task. Takes precedence over `PLANNER_TASK`.
+- **$3** — Absolute path to a file containing the task description
 
 ## Critical Constraints
 
@@ -41,6 +37,7 @@ Pass 1 entry point. Read the analysis file (and optionally domain knowledge) and
 - Read files outside `$(dirname $1)` or the project's git-tracked source tree
 - Explore parent directories of `$(dirname $1)` (e.g., `ls $(dirname $1)/..`)
 - Read `{{AUTOSKILLIT_TEMP}}` artifacts from other planner runs or pipeline steps
+- If `$3` is empty or the file does not exist, STOP immediately and report failure. Do not attempt to infer the task from the codebase, GitHub issues, or any other source.
 
 **ALWAYS:**
 - Write `$(dirname $1)/phases/{phase_id}_result.json` for every phase
@@ -52,8 +49,8 @@ Pass 1 entry point. Read the analysis file (and optionally domain knowledge) and
 
 ### Step 0: Read task description
 
-If `PLANNER_TASK_FILE` is set, read the file at that path to obtain the task description. Otherwise read `PLANNER_TASK` from the environment. This is the user's
-statement of what they want planned. Every generated phase MUST serve this task.
+Read the task description from the file at `$3`. This is the user's statement of what
+they want planned. Every generated phase MUST serve this task.
 Do not generate phases for work not described in the task. If the task asks for specific
 deliverables (e.g., "split research.yaml into 4 sub-recipes"), the phases should decompose
 that work — not decompose the codebase into architectural layers.

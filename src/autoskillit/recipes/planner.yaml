@@ -72,12 +72,11 @@ steps:
   extract_domain:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:planner-extract-domain"
+      skill_command: >
+        /autoskillit:planner-extract-domain
+        ${{ context.planner_dir }}/analysis.json
+        "${{ inputs.task_file }}"
       cwd: "${{ inputs.source_dir }}"
-      env:
-        PLANNER_ANALYSIS_FILE: "${{ context.planner_dir }}/analysis.json"
-        PLANNER_TASK: "${{ inputs.task }}"
-        PLANNER_TASK_FILE: "${{ inputs.task_file }}"
     on_success: generate_phases
     on_failure: generate_phases
 
@@ -88,10 +87,8 @@ steps:
         /autoskillit:planner-generate-phases
         ${{ context.planner_dir }}/analysis.json
         ${{ context.planner_dir }}/domain_knowledge.md
+        "${{ inputs.task_file }}"
       cwd: "${{ inputs.source_dir }}"
-      env:
-        PLANNER_TASK: "${{ inputs.task }}"
-        PLANNER_TASK_FILE: "${{ inputs.task_file }}"
     capture:
       phase_manifest_path: "${{ result.phase_manifest_path }}"
     on_success: build_plan_snapshot

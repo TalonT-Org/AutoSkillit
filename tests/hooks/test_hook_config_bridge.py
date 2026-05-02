@@ -14,6 +14,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 _ENV_VARS = (
     "AUTOSKILLIT_QUOTA_GUARD__CACHE_PATH",
     "AUTOSKILLIT_QUOTA_GUARD__CACHE_MAX_AGE",
@@ -22,7 +24,7 @@ _ENV_VARS = (
 )
 
 
-def _clear_env(monkeypatch) -> None:
+def _clear_env(monkeypatch: pytest.MonkeyPatch) -> None:
     for name in _ENV_VARS:
         monkeypatch.delenv(name, raising=False)
 

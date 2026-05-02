@@ -615,6 +615,17 @@ SKILL_COMMAND FORMATTING — MANDATORY:
   is always a single path token — never a labeled section.
 - If a step note says to pass an extra argument, append it as one space-separated
   token: `/autoskillit:skill /path/arg1 arg2`, NOT `/autoskillit:skill\n## Path\n/path`.
+
+NULL/NONE CONTEXT VARIABLES — MANDATORY:
+- When a ${{{{ context.var_name }}}} or ${{{{ inputs.var_name }}}} value is None, null,
+  or has not been captured yet, you MUST either:
+  (a) OMIT the parameter entirely from the tool call, OR
+  (b) Pass null/None as the value.
+- NEVER substitute a guessed, inferred, or plausible value for an uncaptured
+  context variable. If ci_event is None, pass event=null — do not guess "push"
+  or any other event name.
+- The string "None" is NOT the same as null. If the captured value is the Python
+  None object, do not pass the literal string "None".
 {sous_chef_content}
 """
 

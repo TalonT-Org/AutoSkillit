@@ -487,3 +487,18 @@ def test_version_bump_step_coexists_with_duplicate_files_touched(tmp_path: Path)
     assert "version_bump_step" in checks
     assert "duplicate_files_touched" in checks
     assert len(validation["findings"]) == 0
+
+
+def test_version_bump_step_via_summary(tmp_path: Path) -> None:
+    """T-VB-9: WP with version-bump pattern in summary only → warning."""
+    _make_minimal_output_dir(tmp_path)
+    wp_dir = tmp_path / "work_packages"
+    data = json.loads((wp_dir / "P1-A1-WP1_result.json").read_text())
+    data["summary"] = "Perform a version-bump before releasing."
+    data["technical_steps"] = []
+    (wp_dir / "P1-A1-WP1_result.json").write_text(json.dumps(data))
+
+    result = validate_plan(str(tmp_path))
+    assert result["verdict"] == "pass"
+    validation = json.loads((tmp_path / "validation.json").read_text())
+    assert any(w["check"] == "version_bump_step" for w in validation["warnings"])

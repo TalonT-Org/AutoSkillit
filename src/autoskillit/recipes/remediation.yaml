@@ -86,7 +86,8 @@ ingredients:
     description: >-
       Maximum number of issues to run in parallel within a single execution-map
       group. Groups exceeding this cap are split into sequential sub-groups.
-      Passed to build-execution-map.
+      Passed to build-execution-map. Must be a positive integer (expressed as a
+      string).
     default: "6"
     hidden: true
   depth:

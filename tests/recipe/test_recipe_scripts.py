@@ -9,7 +9,6 @@ import pytest
 
 from autoskillit.core.paths import pkg_root
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
-from autoskillit.recipe.rules_inline_script import _INLINE_SCRIPT_ALLOWLIST
 from autoskillit.recipe.validator import run_semantic_rules
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
@@ -26,12 +25,6 @@ def test_recipe_scripts_pass_syntax_check():
     for sh in SCRIPTS_DIR.glob("*.sh"):
         result = subprocess.run(["bash", "-n", str(sh)], capture_output=True)
         assert result.returncode == 0, f"{sh} has syntax errors: {result.stderr.decode()}"
-
-
-def test_allowlist_is_empty():
-    assert len(_INLINE_SCRIPT_ALLOWLIST) == 0, (
-        f"Allowlist still has {len(_INLINE_SCRIPT_ALLOWLIST)} entries: {_INLINE_SCRIPT_ALLOWLIST}"
-    )
 
 
 @pytest.mark.parametrize(

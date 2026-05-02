@@ -8,8 +8,6 @@ from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
-_INLINE_SCRIPT_ALLOWLIST: frozenset[str] = frozenset()
-
 # ---------------------------------------------------------------------------
 # Detection patterns
 # ---------------------------------------------------------------------------
@@ -71,8 +69,6 @@ def _check_inline_script_in_cmd(ctx: ValidationContext) -> list[RuleFinding]:
     findings: list[RuleFinding] = []
     for name, step in ctx.recipe.steps.items():
         if step.tool != "run_cmd":
-            continue
-        if name in _INLINE_SCRIPT_ALLOWLIST:
             continue
         cmd = (step.with_args or {}).get("cmd", "")
         if not isinstance(cmd, str):
@@ -169,8 +165,6 @@ def _check_inline_python_in_cmd(ctx: ValidationContext) -> list[RuleFinding]:
     findings: list[RuleFinding] = []
     for name, step in ctx.recipe.steps.items():
         if step.tool != "run_cmd":
-            continue
-        if name in _INLINE_SCRIPT_ALLOWLIST:
             continue
         cmd = (step.with_args or {}).get("cmd", "")
         if not isinstance(cmd, str):

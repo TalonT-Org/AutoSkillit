@@ -231,6 +231,7 @@ def wait_for_review_pr_mergeability(
             text=True,
         )
         if r.returncode != 0:
+            time.sleep(int(poll_interval))
             continue
         status = r.stdout.strip()
         if status != "UNKNOWN":
@@ -270,7 +271,8 @@ def create_persistent_integration(
         text=True,
     )
     if push.returncode != 0:
-        return {"ok": "false", "error": push.stderr}
+        msg = f"push failed: {push.stderr}"
+        raise RuntimeError(msg)
     return {"ok": "true"}
 
 
@@ -301,6 +303,7 @@ def force_push_and_wait_mergeability(
             text=True,
         )
         if r.returncode != 0:
+            time.sleep(int(poll_interval))
             continue
         status = r.stdout.strip()
         if status != "UNKNOWN":
@@ -400,7 +403,8 @@ def refetch_issues(issue_urls: str) -> dict[str, str]:
         text=True,
     )
     if result.returncode != 0:
-        return {"ok": "false", "error": result.stderr}
+        msg = f"gh graphql failed: {result.stderr}"
+        raise RuntimeError(msg)
     return {"issue_numbers": result.stdout.strip()}
 
 
@@ -415,7 +419,8 @@ def emit_fallback_map(
         if m:
             nums.append(int(m.group(1)))
     if not nums:
-        return {"ok": "false", "error": "no issue numbers extracted from issue URLs"}
+        msg = "no issue numbers extracted from issue URLs"
+        raise RuntimeError(msg)
     issues = [{"number": n, "title": str(n)} for n in nums]
     data = {
         "groups": [{"group": 1, "parallel": False, "issues": issues}],

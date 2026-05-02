@@ -20,7 +20,7 @@ from autoskillit.recipe._cmd_rpc import (
     refetch_issues,
 )
 
-pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
 
 def test_compute_branch_with_issue():
@@ -128,8 +128,8 @@ def test_emit_fallback_map(tmp_path):
 
 
 def test_emit_fallback_map_no_urls(tmp_path):
-    result = emit_fallback_map(issue_urls="", temp_dir=str(tmp_path))
-    assert result["ok"] == "false"
+    with pytest.raises(RuntimeError, match="no issue numbers"):
+        emit_fallback_map(issue_urls="", temp_dir=str(tmp_path))
 
 
 def test_export_local_bundle(tmp_path):
@@ -155,3 +155,8 @@ def test_refetch_issues_builds_query():
     call_args = mock_run.call_args[0][0]
     assert "gh" in call_args
     assert "graphql" in call_args
+    query_arg = next(a for a in call_args if a.startswith("query="))
+    assert "org" in query_arg
+    assert "repo" in query_arg
+    assert "issue(number: 1)" in query_arg
+    assert "issue(number: 2)" in query_arg

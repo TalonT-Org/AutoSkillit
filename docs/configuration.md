@@ -173,11 +173,11 @@ branching:
   default_base_branch: main   # default base branch for recipes
 ```
 
-Default: `main`. Override if your project uses a different integration branch (e.g. `integration` or `develop`):
+Default: `main`. Override if your project uses a different integration branch (e.g. `develop`):
 
 ```yaml
 branching:
-  default_base_branch: integration
+  default_base_branch: develop
 ```
 
 ## Session Diagnostics (Linux)
@@ -369,7 +369,7 @@ with GitHub's merge queue feature. For best results with automation use cases:
 ### `min_entries_to_merge_wait_minutes` = 0
 
 GitHub branch rulesets expose a `min_entries_to_merge_wait_minutes` setting that adds
-latency before a queued PR is eligible to merge. For the `integration` branch (or any
+latency before a queued PR is eligible to merge. For the `develop` branch (or any
 branch where AutoSkillit manages the PR queue), set this to `0`.
 
 **Why:** AutoSkillit enters PRs one at a time or in small batches. A non-zero wait
@@ -377,7 +377,7 @@ multiplier adds unnecessary latency per PR. Setting it to `0` lets PRs merge as 
 as their CI passes.
 
 **Location:** GitHub → Repository Settings → Branches → Branch protection rules →
-select the integration ruleset → Merge queue → "Minimum entries to merge — wait X minutes".
+select the develop ruleset → Merge queue → "Minimum entries to merge — wait X minutes".
 Set to `0`.
 
 ## Feature Flags
@@ -390,14 +390,14 @@ Features are gated by lifecycle state. The `features:` config section and
 | Lifecycle | Behavior | Can Override? |
 |-----------|----------|---------------|
 | STABLE | On everywhere | Yes — opt out via `features: {name: false}` |
-| EXPERIMENTAL | On when `experimental_enabled: true` (default on integration; off on main) | Yes — per-feature entry overrides blanket |
+| EXPERIMENTAL | On when `experimental_enabled: true` (default on develop; off on main) | Yes — per-feature entry overrides blanket |
 | DEPRECATED | Follows `default_enabled`; may be removed without warning | Yes |
 | DISABLED | Always off; cannot be enabled | No — config entry setting `true` is rejected |
 
 ### Blanket Toggle
 
 `experimental_enabled: true` in `defaults.yaml` means all `EXPERIMENTAL` features are
-active on integration, worktrees, and feature branches without any per-feature config.
+active on develop, worktrees, and feature branches without any per-feature config.
 
 Main and stable branches commit `features: {experimental_enabled: false}` to opt out.
 
@@ -407,7 +407,7 @@ Any config layer can override an individual feature regardless of the blanket to
 
 ```yaml
 features:
-  planner: false    # disable planner even on integration
+  planner: false    # disable planner even on develop
 ```
 
 Env var takes highest priority: `AUTOSKILLIT_FEATURES__PLANNER=false`.

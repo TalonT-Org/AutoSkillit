@@ -594,8 +594,8 @@ def test_build_ingredient_rows_resolved_overrides_literal_default():
         "base_branch",
         RecipeIngredient(description="Base branch", default="main"),
     )
-    rows = build_ingredient_rows(recipe, resolved_defaults={"base_branch": "integration"})
-    assert ("base_branch", "Base branch", "integration") in rows
+    rows = build_ingredient_rows(recipe, resolved_defaults={"base_branch": "develop"})
+    assert ("base_branch", "Base branch", "develop") in rows
 
 
 def test_build_ingredient_rows_literal_default_preserved_when_no_resolved():
@@ -620,8 +620,8 @@ def test_build_ingredient_rows_resolved_overrides_empty_sentinel():
         "base_branch",
         RecipeIngredient(description="Base branch", default=""),
     )
-    rows = build_ingredient_rows(recipe, resolved_defaults={"base_branch": "integration"})
-    assert ("base_branch", "Base branch", "integration") in rows
+    rows = build_ingredient_rows(recipe, resolved_defaults={"base_branch": "develop"})
+    assert ("base_branch", "Base branch", "develop") in rows
 
 
 def test_build_ingredient_rows_empty_sentinel_falls_back_to_auto_detect():

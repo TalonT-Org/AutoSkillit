@@ -187,7 +187,7 @@ async def test_push_trigger_branch_filter_excludes_feature_branch(httpx_mock):
               - main
               - stable
           pull_request:
-            branches: [main, integration, stable]
+            branches: [main, develop, stable]
     """)
     httpx_mock.add_response(
         url="https://api.github.com/graphql",
@@ -212,7 +212,7 @@ async def test_push_excluded_with_merge_group_present_returns_none(httpx_mock):
               - main
               - stable
           pull_request:
-            branches: [main, integration, stable]
+            branches: [main, develop, stable]
           merge_group:
     """)
     httpx_mock.add_response(

@@ -20,7 +20,7 @@ Dismissal windows vary by install type to balance convenience and safety:
 | Install | Window |
 |---------|--------|
 | stable / main / release-tag | 7 days |
-| integration / local-editable | 12 hours |
+| develop / local-editable | 12 hours |
 
 The window is determined at check time from the current `direct_url.json` —
 not from what was stored when you dismissed.

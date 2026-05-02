@@ -1,7 +1,7 @@
 test_check:
   command: ["task", "test-all"]
   filter_mode: "conservative"
-  base_ref: "integration"
+  base_ref: "develop"
   # timeout: 600
 
 safety:
@@ -23,7 +23,7 @@ safety:
 #   skill_names: ["/autoskillit:implement-worktree", "/autoskillit:implement-worktree-no-merge"]
 
 branching:
-  default_base_branch: "integration"
+  default_base_branch: "develop"
 
 ci:
   workflow: "tests.yml"

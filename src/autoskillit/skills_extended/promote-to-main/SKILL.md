@@ -21,14 +21,14 @@ and creates a comprehensive promotion PR.
 /autoskillit:promote-to-main [integration_branch] [base_branch] [--dry-run]
 ```
 
-- `integration_branch` (optional) — source branch to promote. Defaults to `integration`.
+- `integration_branch` (optional) — source branch to promote. Defaults to `develop`.
 - `base_branch` (optional) — target branch. Defaults to `main`.
 - `--dry-run` — generate the full PR body without creating a PR.
 
 ## When to Use
 
-- When the integration branch is stable and ready to be promoted to main
-- After feature PRs, bug fixes, and cleanup work have been collected and tested on integration
+- When the develop branch is stable and ready to be promoted to main
+- After feature PRs, bug fixes, and cleanup work have been collected and tested on develop
 - This is the final gate before changes land on main
 
 ## Critical Constraints
@@ -70,7 +70,7 @@ bypassing the normal completion protocol.
 #### Step 0.1: Parse Arguments
 
 Parse optional positional arguments and flags:
-- `integration_branch` — default `"integration"` if absent or empty
+- `integration_branch` — default `"develop"` if absent or empty
 - `base_branch` — default `"main"` if absent or empty
 - `dry_run` — `true` if `--dry-run` present in ARGUMENTS
 

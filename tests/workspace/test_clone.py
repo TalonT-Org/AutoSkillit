@@ -846,7 +846,7 @@ class TestDetectUncommittedChanges:
 class TestPushToRemoteProtectedBranch:
     """push_to_remote rejects pushes to protected branches."""
 
-    @pytest.mark.parametrize("branch", ["main", "integration", "stable"])
+    @pytest.mark.parametrize("branch", ["main", "develop", "stable"])
     def test_push_to_remote_rejects_protected_branch(self, tmp_path: Path, branch: str) -> None:
         """push_to_remote must reject when branch is a protected branch."""
         clone = tmp_path / "clone"
@@ -856,7 +856,7 @@ class TestPushToRemoteProtectedBranch:
             clone_path=str(clone),
             branch=branch,
             remote_url="https://github.com/example/repo.git",
-            protected_branches=["main", "integration", "stable"],
+            protected_branches=["main", "develop", "stable"],
         )
 
         assert result["success"] is False

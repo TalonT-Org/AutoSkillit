@@ -5,7 +5,7 @@ single dismissable prompt per CLI invocation.
 
 Branch-aware dismissal windows:
 - stable/main/release-tag/UNKNOWN: timedelta(days=7)
-- integration/LOCAL_EDITABLE: timedelta(hours=12)
+- develop/LOCAL_EDITABLE: timedelta(hours=12)
 
 Dismissal expires on two axes: time window elapsed, or version advanced past
 the dismissed_version recorded at dismiss time.
@@ -221,7 +221,7 @@ def _is_dismissed(
     1. ``dismissed_at`` is within the branch-aware ``window`` (time-based,
        never SHA-keyed — a new upstream commit does NOT break the window).
        Window values: 7 days for stable/main/release-tag/UNKNOWN installs;
-       12 hours for integration/LOCAL_EDITABLE installs.
+       12 hours for develop/LOCAL_EDITABLE installs.
     2. ``current_version <= dismissed_version`` (version-delta expiry: when the
        running version advances past what was dismissed, the dismissal expires
        uniformly for all three conditions).

@@ -52,7 +52,7 @@ def test_implement_findings_issue_urls_required(recipe) -> None:
 
 # T5
 def test_implement_findings_base_branch_default(recipe) -> None:
-    assert recipe.ingredients["base_branch"].default == "integration"
+    assert recipe.ingredients["base_branch"].default == "develop"
 
 
 # T6

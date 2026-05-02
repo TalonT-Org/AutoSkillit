@@ -314,7 +314,7 @@ ingredients:
     default: "."
   base_branch:
     description: Branch to merge into
-    default: integration
+    default: develop
 
 steps:
   plan:
@@ -400,7 +400,7 @@ ingredients:
     required: true
   base_branch:
     description: Branch to merge fixes into
-    default: integration
+    default: develop
   helper_dir:
     description: Directory for helper agent sessions
     required: true

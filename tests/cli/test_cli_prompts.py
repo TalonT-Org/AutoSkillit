@@ -224,7 +224,7 @@ def test_show_cook_preview_uses_resolved_base_branch_for_smoke_test(monkeypatch,
     monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
     monkeypatch.setattr(
         "autoskillit.config.resolve_ingredient_defaults",
-        lambda _: {"base_branch": "integration"},
+        lambda _: {"base_branch": "develop"},
     )
 
     recipe_info = find_recipe_by_name("smoke-test", project_dir)
@@ -233,7 +233,7 @@ def test_show_cook_preview_uses_resolved_base_branch_for_smoke_test(monkeypatch,
 
     show_cook_preview("smoke-test", recipe, project_dir, project_dir)
     captured = capsys.readouterr()
-    assert "integration" in captured.out
+    assert "develop" in captured.out
     # base_branch row must NOT show the YAML literal "main"
     base_branch_lines = [line for line in captured.out.splitlines() if "base_branch" in line]
     assert base_branch_lines, "base_branch must appear in the rendered table"

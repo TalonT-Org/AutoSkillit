@@ -31,8 +31,8 @@ _HTTP_TIMEOUT = httpx.Timeout(connect=2.0, read=1.0, write=5.0, pool=1.0)
 _GITHUB_API_VERSION = "2022-11-28"
 
 _GITHUB_RELEASES_URL = "https://api.github.com/repos/TalonT-Org/AutoSkillit/releases/latest"
-_GITHUB_INTEGRATION_PYPROJECT_URL = (
-    "https://api.github.com/repos/TalonT-Org/AutoSkillit/contents/pyproject.toml?ref=integration"
+_GITHUB_DEVELOP_PYPROJECT_URL = (
+    "https://api.github.com/repos/TalonT-Org/AutoSkillit/contents/pyproject.toml?ref=develop"
 )
 
 
@@ -168,13 +168,13 @@ def _fetch_latest_version(target: str, home: Path) -> str | None:
     """Fetch the latest available version for the given target branch.
 
     ``target`` is either ``"releases/latest"`` (for stable/main installs) or
-    ``"integration"`` (for integration installs).
+    ``"develop"`` (for develop installs).
 
     Returns ``None`` on any network error or timeout.
     """
     try:
-        if target == "integration":
-            data = _fetch_with_cache(_GITHUB_INTEGRATION_PYPROJECT_URL, home=home)
+        if target == "develop":
+            data = _fetch_with_cache(_GITHUB_DEVELOP_PYPROJECT_URL, home=home)
             if data is None:
                 return None
             import base64

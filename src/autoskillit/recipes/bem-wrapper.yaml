@@ -23,7 +23,7 @@ ingredients:
     required: true
   base_branch:
     description: "Base branch for dependency analysis"
-    default: "integration"
+    default: "develop"
 
 steps:
   refetch_issues:

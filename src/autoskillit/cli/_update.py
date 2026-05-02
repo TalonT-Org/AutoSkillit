@@ -53,7 +53,7 @@ def run_update_command(home: Path | None = None) -> None:
     if cmd is None:
         print(
             "Unknown install type. "
-            "Reinstall via install.sh (stable) or 'task install-dev' (integration).",
+            "Reinstall via install.sh (stable) or 'task install-dev' (develop).",
             flush=True,
         )
         raise SystemExit(2)

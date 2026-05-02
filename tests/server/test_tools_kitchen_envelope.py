@@ -194,7 +194,7 @@ async def test_open_kitchen_smoke_test_renders_resolved_base_branch(monkeypatch)
     monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
     monkeypatch.setattr(
         "autoskillit.server.tools_kitchen.resolve_ingredient_defaults",
-        lambda _: {"base_branch": "integration"},
+        lambda _: {"base_branch": "develop"},
     )
 
     mock_ctx = _make_mock_ctx()
@@ -215,7 +215,7 @@ async def test_open_kitchen_smoke_test_renders_resolved_base_branch(monkeypatch)
     assert parsed["success"] is True
     ing_table = parsed.get("ingredients_table") or ""
     assert ing_table, "ingredients_table must be present and non-empty"
-    assert "integration" in ing_table
+    assert "develop" in ing_table
     # base_branch row must NOT show the YAML literal "main"
     base_branch_rows = [line for line in ing_table.splitlines() if "base_branch" in line]
     assert base_branch_rows, "base_branch row must appear in ingredients_table"

@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, stable]
   pull_request:
-    branches: [main, integration, stable]
+    branches: [main, integration, develop, stable]
   merge_group:
 
 permissions:
@@ -94,7 +94,7 @@ jobs:
           AUTOSKILLIT_FILTER_STATS_FILE: ${{ github.workspace }}/.autoskillit/temp/filter-stats.json
         run: |
           mkdir -p .autoskillit/temp
-          if [[ "${{ github.event_name }}" == "pull_request" && "${{ github.base_ref }}" == "integration" ]]; then
+          if [[ "${{ github.event_name }}" == "pull_request" && "${{ github.base_ref }}" == "develop" ]]; then
             export AUTOSKILLIT_TEST_FILTER=conservative
           fi
           task test-all

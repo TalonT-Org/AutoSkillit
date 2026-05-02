@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from autoskillit.cli._install_info import (
-    _INSTALL_FROM_INTEGRATION,
+    _INSTALL_FROM_DEVELOP,
     InstallInfo,
     InstallType,
     comparison_branch,
@@ -60,13 +60,13 @@ def test_detect_install_git_vcs_stable(monkeypatch: pytest.MonkeyPatch) -> None:
     assert info.editable_source is None
 
 
-def test_detect_install_git_vcs_integration(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_detect_install_git_vcs_develop(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = json.dumps(
         {
             "url": "https://github.com/TalonT-Org/AutoSkillit.git",
             "vcs_info": {
                 "vcs": "git",
-                "requested_revision": "integration",
+                "requested_revision": "develop",
                 "commit_id": "deadbeef0000",
             },
         }
@@ -77,7 +77,7 @@ def test_detect_install_git_vcs_integration(monkeypatch: pytest.MonkeyPatch) -> 
     )
     info = detect_install()
     assert info.install_type == InstallType.GIT_VCS
-    assert info.requested_revision == "integration"
+    assert info.requested_revision == "develop"
     assert info.commit_id == "deadbeef0000"
 
 
@@ -189,15 +189,15 @@ def test_comparison_branch_unknown_type() -> None:
     assert comparison_branch(info) == "releases/latest"
 
 
-def test_comparison_branch_integration() -> None:
+def test_comparison_branch_develop() -> None:
     info = InstallInfo(
         install_type=InstallType.GIT_VCS,
         commit_id="abc123",
-        requested_revision="integration",
+        requested_revision="develop",
         url=None,
         editable_source=None,
     )
-    assert comparison_branch(info) == "integration"
+    assert comparison_branch(info) == "develop"
 
 
 @pytest.mark.parametrize(
@@ -245,7 +245,7 @@ def test_dismissal_window_seven_days(
 @pytest.mark.parametrize(
     "requested_revision,install_type,editable_source",
     [
-        ("integration", InstallType.GIT_VCS, None),
+        ("develop", InstallType.GIT_VCS, None),
         (None, InstallType.LOCAL_EDITABLE, Path("/tmp/repo")),
     ],
 )
@@ -302,11 +302,11 @@ def test_upgrade_command_release_tag() -> None:
     assert upgrade_command(info) == ["uv", "tool", "upgrade", "autoskillit"]
 
 
-def test_upgrade_command_integration() -> None:
+def test_upgrade_command_develop() -> None:
     info = InstallInfo(
         install_type=InstallType.GIT_VCS,
         commit_id="abc123",
-        requested_revision="integration",
+        requested_revision="develop",
         url=None,
         editable_source=None,
     )
@@ -315,7 +315,7 @@ def test_upgrade_command_integration() -> None:
         "tool",
         "install",
         "--force",
-        _INSTALL_FROM_INTEGRATION,
+        _INSTALL_FROM_DEVELOP,
     ]
 
 

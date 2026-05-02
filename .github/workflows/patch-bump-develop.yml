@@ -1,12 +1,12 @@
-name: Auto Patch Version Bump on Integration PR
+name: Auto Patch Version Bump on Develop PR
 
 on:
   pull_request:
     types: [closed]
-    branches: [integration]
+    branches: [develop]
 
 concurrency:
-  group: patch-bump-integration
+  group: patch-bump-develop
   cancel-in-progress: false
 
 jobs:
@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: integration
+          ref: develop
           fetch-depth: 0
           token: ${{ secrets.GH_PAT }}
 
@@ -75,7 +75,7 @@ jobs:
       - name: Regenerate uv.lock
         run: uv lock
 
-      - name: Commit and push version bump to integration
+      - name: Commit and push version bump to develop
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
@@ -85,5 +85,5 @@ jobs:
             echo "Nothing to commit"
           else
             git commit -m "chore: bump version to ${{ steps.version.outputs.new }}"
-            git push origin integration
+            git push origin develop
           fi

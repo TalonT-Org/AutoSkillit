@@ -18,7 +18,7 @@ kitchen_rules:
 ingredients:
   integration_branch:
     description: "Branch to promote (must exist ahead of base_branch). Must be a valid git branch name with no spaces or shell metacharacters."
-    default: "integration"
+    default: "develop"
   base_branch:
     description: "Target branch for the promotion PR. Must be a valid git branch name with no spaces or shell metacharacters."
     default: "main"

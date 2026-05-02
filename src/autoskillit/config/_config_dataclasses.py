@@ -76,9 +76,7 @@ class SafetyConfig:
     reset_guard_marker: str = ".autoskillit-workspace"
     require_dry_walkthrough: bool = True
     test_gate_on_merge: bool = True
-    protected_branches: list[str] = field(
-        default_factory=lambda: ["main", "integration", "stable"]
-    )
+    protected_branches: list[str] = field(default_factory=lambda: ["main", "develop", "stable"])
 
 
 @dataclass

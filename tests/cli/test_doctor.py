@@ -1135,7 +1135,7 @@ def test_check_source_version_drift_ok_outside_source_repo(
     info = InstallInfo(
         install_type=InstallType.GIT_VCS,
         commit_id="abc1234",
-        requested_revision="integration",
+        requested_revision="develop",
         url=None,
         editable_source=None,
     )
@@ -1208,7 +1208,7 @@ def test_check_source_version_drift_ok_when_cache_empty(
     info = InstallInfo(
         install_type=InstallType.GIT_VCS,
         commit_id="installed123",
-        requested_revision="integration",
+        requested_revision="develop",
         url=None,
         editable_source=None,
     )
@@ -1239,7 +1239,7 @@ def test_check_source_version_drift_warning_on_drift(
     info = InstallInfo(
         install_type=InstallType.GIT_VCS,
         commit_id=installed_sha,
-        requested_revision="integration",
+        requested_revision="develop",
         url=None,
         editable_source=None,
     )

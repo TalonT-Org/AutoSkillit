@@ -22,7 +22,7 @@ def _decision(out: dict) -> str | None:
 def _run_hook(tool_name: str, tool_input: dict, env_override: dict | None = None) -> dict:
     """Run the hook script with a tool call on stdin, return parsed JSON."""
     payload = json.dumps({"tool_name": tool_name, "tool_input": tool_input})
-    env = {**os.environ, "AUTOSKILLIT_PROTECTED_BRANCHES": "main,integration,stable"}
+    env = {**os.environ, "AUTOSKILLIT_PROTECTED_BRANCHES": "main,develop,stable"}
     if env_override:
         env.update(env_override)
     result = subprocess.run(
@@ -51,10 +51,10 @@ class TestMergeWorktreeGuard:
         )
         assert _decision(out) != "deny"
 
-    def test_denies_merge_into_integration(self) -> None:
+    def test_denies_merge_into_develop(self) -> None:
         out = _run_hook(
             "mcp__autoskillit__merge_worktree",
-            {"worktree_path": "/tmp/wt", "base_branch": "integration"},
+            {"worktree_path": "/tmp/wt", "base_branch": "develop"},
         )
         assert _decision(out) == "deny"
 
@@ -102,10 +102,10 @@ class TestCustomProtectedList:
         assert _decision(out) == "deny"
 
     def test_hook_allows_branch_not_in_custom_list(self) -> None:
-        """Hook allows write to integration when it is not in the injected list."""
+        """Hook allows write to develop when it is not in the injected list."""
         out = _run_hook(
             "mcp__autoskillit__merge_worktree",
-            {"worktree_path": "/tmp/wt", "base_branch": "integration"},
+            {"worktree_path": "/tmp/wt", "base_branch": "develop"},
             env_override={"AUTOSKILLIT_PROTECTED_BRANCHES": "main,release"},
         )
         assert _decision(out) != "deny"

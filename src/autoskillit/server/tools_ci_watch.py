@@ -75,21 +75,21 @@ async def wait_for_ci(
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    if event == "None":
-        logger.warning("event coerced from string 'None' to null", tool="wait_for_ci")
-        event = None
-    if event is not None and event not in KNOWN_CI_EVENTS:
-        return json.dumps(
-            {
-                "run_id": None,
-                "conclusion": "error",
-                "failed_jobs": [],
-                "error": f"Invalid event {event!r}. Valid events: {sorted(KNOWN_CI_EVENTS)}",
-            }
-        )
     try:
         _start = time.monotonic()
         _timing_ctx = None
+        if event == "None":
+            logger.warning("event coerced from string 'None' to null", tool="wait_for_ci")
+            event = None
+        if event is not None and event not in KNOWN_CI_EVENTS:
+            return json.dumps(
+                {
+                    "run_id": None,
+                    "conclusion": "error",
+                    "failed_jobs": [],
+                    "error": f"Invalid event {event!r}. Valid events: {sorted(KNOWN_CI_EVENTS)}",
+                }
+            )
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(tool="wait_for_ci")
         logger.info("wait_for_ci", branch=branch, repo=repo or "(infer)")

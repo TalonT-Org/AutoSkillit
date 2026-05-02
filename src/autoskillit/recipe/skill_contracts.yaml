@@ -1994,11 +1994,9 @@ callable_contracts:
     - name: current_iteration
       type: str
       required: false
-      nullable: false
     - name: max_iterations
       type: str
       required: false
-      nullable: false
     outputs:
     - name: next_iteration
       type: str
@@ -2015,15 +2013,12 @@ callable_contracts:
     - name: current_iteration
       type: str
       required: false
-      nullable: false
     - name: max_iterations
       type: str
       required: false
-      nullable: false
     - name: previous_verdict
       type: str
       required: false
-      nullable: false
     outputs:
     - name: next_iteration
       type: str
@@ -2415,6 +2410,7 @@ callable_contracts:
     - name: current_pr_number
       type: str
       required: true
+      nullable: false
     - name: pr_order_file
       type: str
       required: true

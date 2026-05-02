@@ -815,17 +815,17 @@ def test_callable_contract_nullable_field() -> None:
 
     manifest = load_bundled_manifest()
     contracts = manifest.get("callable_contracts", {})
-    assert "autoskillit.smoke_utils.check_loop_iteration" in contracts, (
-        "check_loop_iteration must be declared in callable_contracts"
+    assert "autoskillit.recipe._cmd_rpc.advance_queue_pr" in contracts, (
+        "advance_queue_pr must be declared in callable_contracts"
     )
-    loop_contract = contracts["autoskillit.smoke_utils.check_loop_iteration"]
-    ci_input = next((i for i in loop_contract["inputs"] if i["name"] == "current_iteration"), None)
-    assert ci_input is not None, "current_iteration input must be declared"
-    assert ci_input.get("nullable") is False, (
-        "current_iteration must be explicitly non-nullable (nullable: false)"
+    aq_contract = contracts["autoskillit.recipe._cmd_rpc.advance_queue_pr"]
+    pr_input = next((i for i in aq_contract["inputs"] if i["name"] == "current_pr_number"), None)
+    assert pr_input is not None, "current_pr_number input must be declared"
+    assert pr_input.get("nullable") is False, (
+        "current_pr_number must be explicitly non-nullable (nullable: false)"
     )
-    parsed = get_callable_contract("autoskillit.smoke_utils.check_loop_iteration", manifest)
+    parsed = get_callable_contract("autoskillit.recipe._cmd_rpc.advance_queue_pr", manifest)
     assert parsed is not None
-    ci_parsed = next((i for i in parsed.inputs if i.name == "current_iteration"), None)
-    assert ci_parsed is not None
-    assert ci_parsed.nullable is False
+    pr_parsed = next((i for i in parsed.inputs if i.name == "current_pr_number"), None)
+    assert pr_parsed is not None
+    assert pr_parsed.nullable is False

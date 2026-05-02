@@ -35,6 +35,10 @@ _EFFICIENCY_COLUMNS = (
 )
 
 
+def _ratio(tokens: int, loc: int) -> str:
+    return f"{tokens / loc:.1f}" if loc > 0 else "—"
+
+
 class TelemetryFormatter:
     """Stateless formatter for token and timing telemetry data."""
 
@@ -210,9 +214,6 @@ class TelemetryFormatter:
         if not any(s.get("loc_insertions", 0) + s.get("loc_deletions", 0) > 0 for s in steps):
             return ""
 
-        def _ratio(tokens: int, loc: int) -> str:
-            return f"{tokens / loc:.1f}" if loc > 0 else "—"
-
         lines = [
             "## Token Efficiency",
             "",
@@ -245,9 +246,6 @@ class TelemetryFormatter:
         """Produce a padded-column plain text efficiency table. Returns '' when all LoC=0."""
         if not any(s.get("loc_insertions", 0) + s.get("loc_deletions", 0) > 0 for s in steps):
             return ""
-
-        def _ratio(tokens: int, loc: int) -> str:
-            return f"{tokens / loc:.1f}" if loc > 0 else "—"
 
         rows: list[tuple[str, str, str, str, str]] = []
         for step in steps:

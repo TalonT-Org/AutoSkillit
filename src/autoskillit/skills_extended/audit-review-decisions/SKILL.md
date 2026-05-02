@@ -36,19 +36,19 @@ implemented. Identify review debt before it compounds.
 
 **NEVER:**
 - Create files outside `${AUTOSKILLIT_TEMP}/audit-review-decisions/`
-- Have triage or validation subagents make GitHub API calls (local data only for Phase 2)
+- Have triage or validation subagents make GitHub API calls (local data only for Step 2)
 - Post duplicate `[AUDIT]` markers — check for existing marker before posting
 - Run subagents in the background (`run_in_background: true` is prohibited)
 - Use `gh pr list` without `--limit` to avoid pagination truncation
 - Use `\|` in Grep patterns — use `|` for alternation (ERE, not BRE)
 
 **ALWAYS:**
-- Save raw PR JSON to temp before any analysis (Phase 1)
+- Save raw PR JSON to temp before any analysis (Step 1)
 - Use GraphQL alias batching (~20 PRs per query) for data collection
 - Include `rateLimit { cost remaining resetAt }` in every GraphQL query
-- Sleep 1s between consecutive mutating GitHub API calls (Phase 5 watermark posts)
-- Phase 2 triage subagents read local JSON files only — zero API calls
-- Phase 3 validation subagents grep the actual current codebase
+- Sleep 1s between consecutive mutating GitHub API calls (Step 5 watermark posts)
+- Step 2 triage subagents read local JSON files only — zero API calls
+- Step 3 validation subagents grep the actual current codebase
 - Skip threads that already contain an `[AUDIT]` comment
 - Resolve owner/repo from `git remote get-url origin` — never hardcode
 - Use `/autoskillit:` prefix when invoking any other skill
@@ -57,7 +57,7 @@ implemented. Identify review debt before it compounds.
 
 ## Workflow
 
-### Phase 0: Watermark Resolution
+### Step 0: Watermark Resolution
 
 1. Parse `$1` for time period. Default `14d`. Compute `PERIOD_DAYS`.
 
@@ -90,7 +90,7 @@ implemented. Identify review debt before it compounds.
 
 ---
 
-### Phase 1: Data Collection (GraphQL Batch)
+### Step 1: Data Collection (GraphQL Batch)
 
 1. List merged PRs in the scan window:
    ```bash
@@ -136,7 +136,7 @@ implemented. Identify review debt before it compounds.
 
 ---
 
-### Phase 2: Triage (Haiku — Broad Pass)
+### Step 2: Triage (Haiku — Broad Pass)
 
 1. List all JSON files in `raw/`. Split into batches of ~5 files per agent.
 
@@ -168,7 +168,7 @@ implemented. Identify review debt before it compounds.
 
 ---
 
-### Phase 3: Validation (Sonnet — Deep Pass)
+### Step 3: Validation (Sonnet — Deep Pass)
 
 1. Group candidates into batches of ~10. Launch **parallel Sonnet subagents**
    (`model: "sonnet"`) per batch.
@@ -201,9 +201,9 @@ implemented. Identify review debt before it compounds.
 
 ---
 
-### Phase 4: Report Generation
+### Step 4: Report Generation
 
-1. Collect all validated findings from Phase 3 subagent responses.
+1. Collect all validated findings from Step 3 subagent responses.
 2. Sort findings: VALID first (by priority HIGH→MEDIUM→LOW), then RESOLVED, then STALE.
 3. Resolve the output path:
    - Use `$2` if provided.
@@ -290,13 +290,13 @@ Same per-finding structure but labeled as pending.}
 
 ---
 
-### Phase 5: Watermark (Thread Annotation)
+### Step 5: Watermark (Thread Annotation)
 
-For every finding processed in Phases 2–3 (all classifications — VALID, RESOLVED, STALE):
+For every finding processed in Steps 2–3 (all classifications — VALID, RESOLVED, STALE):
 
 1. **Re-check for existing audit marker (live)**: fetch the thread's current comments
-   directly from the GitHub API — do not use the Phase 1 JSON cache, which already
-   filtered out `[AUDIT]`-marked threads and cannot detect markers posted after Phase 1:
+   directly from the GitHub API — do not use the Step 1 JSON cache, which already
+   filtered out `[AUDIT]`-marked threads and cannot detect markers posted after Step 1:
    ```bash
    gh api "repos/${OWNER}/${REPO}/pulls/${PR_NUMBER}/comments" \
      --jq "[.[] | select(.id == ${COMMENT_ID} or .in_reply_to_id == ${COMMENT_ID}) | .body | startswith(\"[AUDIT]\")] | any"
@@ -319,7 +319,7 @@ For every finding processed in Phases 2–3 (all classifications — VALID, RESO
      --field body="${MARKER_BODY}"
    sleep 1
    ```
-   `COMMENT_ID` is the `databaseId` of the first comment in the thread (from Phase 1 JSON).
+   `COMMENT_ID` is the `databaseId` of the first comment in the thread (from Step 1 JSON).
 
 4. **Thread reply constraint**: These calls cannot be batched via the reviews API — each
    requires an individual POST. The 1s delay between calls is mandatory per GitHub API

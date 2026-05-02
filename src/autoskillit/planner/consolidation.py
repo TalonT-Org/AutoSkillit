@@ -16,7 +16,7 @@ def _natural_sort_key(s: str) -> list[int | str]:
     return [int(p) if p.isdigit() else p for p in parts]
 
 
-@dataclass
+@dataclass(frozen=True)
 class _ConsolidationGroup:
     merged_id: str
     source_wp_ids: list[str]
@@ -28,7 +28,10 @@ class _ConsolidationGroup:
 def _load_manifests(consolidation_dir: Path) -> list[dict[str, Any]]:
     manifests: list[dict[str, Any]] = []
     for path in sorted(consolidation_dir.glob("*_consolidation.json")):
-        manifests.append(json.loads(path.read_text()))
+        try:
+            manifests.append(json.loads(path.read_text()))
+        except (json.JSONDecodeError, OSError) as exc:
+            raise ValueError(f"failed to load consolidation manifest {path}: {exc}") from exc
     return manifests
 
 
@@ -37,12 +40,24 @@ def _build_group_maps(
 ) -> tuple[dict[str, str], dict[str, _ConsolidationGroup]]:
     source_to_merged: dict[str, str] = {}
     merged_groups: dict[str, _ConsolidationGroup] = {}
-    for manifest in manifests:
-        for g in manifest.get("groups", []):
+    for manifest_idx, manifest in enumerate(manifests):
+        for group_idx, g in enumerate(manifest.get("groups", [])):
+            try:
+                merged_id = g["merged_id"]
+                source_wp_ids = g["source_wp_ids"]
+            except KeyError as exc:
+                raise ValueError(
+                    f"malformed group at manifest[{manifest_idx}]"
+                    f".groups[{group_idx}]: missing key {exc}"
+                ) from exc
+            if merged_id in merged_groups:
+                raise ValueError(
+                    f"duplicate merged_id {merged_id!r} across consolidation manifests"
+                )
             group = _ConsolidationGroup(
-                merged_id=g["merged_id"],
-                source_wp_ids=g["source_wp_ids"],
-                merge_order=g.get("merge_order", g["source_wp_ids"]),
+                merged_id=merged_id,
+                source_wp_ids=source_wp_ids,
+                merge_order=g.get("merge_order", source_wp_ids),
                 name=g.get("name"),
                 goal=g.get("goal"),
             )
@@ -123,11 +138,17 @@ def consolidate_wps(
     Writes ``{planner_dir}/consolidated_wps.json`` and rebuilds
     ``{planner_dir}/wp_index.json``. Returns a result dict with string values.
     """
-    wps_doc: dict[str, Any] = json.loads(Path(refined_wps_path).read_text())
+    try:
+        wps_doc: dict[str, Any] = json.loads(Path(refined_wps_path).read_text())
+    except (json.JSONDecodeError, OSError) as exc:
+        raise ValueError(f"failed to load refined WPs from {refined_wps_path}: {exc}") from exc
     work_packages: list[dict[str, Any]] = wps_doc.get("work_packages", [])
     task = wps_doc.get("task", "")
     source_dir = wps_doc.get("source_dir", "")
 
+    missing_id = [i for i, wp in enumerate(work_packages) if "id" not in wp]
+    if missing_id:
+        raise ValueError(f"work_packages entries at indices {missing_id} are missing 'id' field")
     wp_by_id: dict[str, dict[str, Any]] = {wp["id"]: wp for wp in work_packages}
 
     consolidation_dir = Path(planner_dir) / "work_packages" / "consolidation"
@@ -135,11 +156,16 @@ def consolidate_wps(
 
     source_to_merged, merged_groups = _build_group_maps(manifests)
 
-    # Validate all source IDs exist
+    # Validate all IDs in each group exist in wp_by_id
     for group in merged_groups.values():
+        if group.merged_id not in wp_by_id:
+            raise ValueError(f"unknown merged_id: {group.merged_id}")
         for src_id in group.source_wp_ids:
             if src_id not in wp_by_id:
                 raise ValueError(f"unknown WP: {src_id}")
+        for ord_id in group.merge_order:
+            if ord_id not in wp_by_id:
+                raise ValueError(f"unknown merge_order element: {ord_id}")
 
     # Build the output WP list
     output_wps: list[dict[str, Any]] = []
@@ -172,7 +198,6 @@ def consolidate_wps(
             own_group_sources = set(merged_groups[wp_id].source_wp_ids)
         wp["depends_on"] = _rewrite_deps(wp, source_to_merged, own_group_sources)
 
-    # Write consolidated_wps.json using versioned helper to satisfy schema convention
     planner_path = Path(planner_dir)
     consolidated_path = planner_path / "consolidated_wps.json"
     write_versioned_json(

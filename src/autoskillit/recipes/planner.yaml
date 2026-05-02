@@ -276,8 +276,6 @@ steps:
         ${{ context.refined_wps_path }}
         ${{ context.planner_dir }}
       cwd: "${{ inputs.source_dir }}"
-    capture:
-      consolidation_manifest_dir: "${{ result.consolidation_manifest_dir }}"
     on_success: consolidate_wps_merge
     on_failure: consolidate_wps_merge
     note: >

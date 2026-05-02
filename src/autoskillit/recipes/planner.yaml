@@ -34,6 +34,9 @@ ingredients:
   task:
     description: "High-level task or feature description to decompose into a plan."
     required: true
+  task_file:
+    description: "Absolute path to a file containing the task description. Use instead of task for document-scale inputs."
+    required: false
   source_dir:
     description: "Absolute path to the repository root to analyze."
     required: true
@@ -74,6 +77,7 @@ steps:
       env:
         PLANNER_ANALYSIS_FILE: "${{ context.planner_dir }}/analysis.json"
         PLANNER_TASK: "${{ inputs.task }}"
+        PLANNER_TASK_FILE: "${{ inputs.task_file }}"
     on_success: generate_phases
     on_failure: generate_phases
 
@@ -87,6 +91,7 @@ steps:
       cwd: "${{ inputs.source_dir }}"
       env:
         PLANNER_TASK: "${{ inputs.task }}"
+        PLANNER_TASK_FILE: "${{ inputs.task_file }}"
     capture:
       phase_manifest_path: "${{ result.phase_manifest_path }}"
     on_success: build_plan_snapshot
@@ -102,6 +107,7 @@ steps:
       phase_manifest_path: "${{ context.phase_manifest_path }}"
       output_path: "${{ context.planner_dir }}/plan_snapshot.json"
       task: "${{ inputs.task }}"
+      task_file: "${{ inputs.task_file }}"
       source_dir: "${{ inputs.source_dir }}"
     capture:
       plan_snapshot_path: "${{ result.snapshot_path }}"
@@ -134,6 +140,7 @@ steps:
       output_path: "${{ context.planner_dir }}/combined_plan.json"
       key: "phases"
       task: "${{ inputs.task }}"
+      task_file: "${{ inputs.task_file }}"
       source_dir: "${{ inputs.source_dir }}"
     capture:
       combined_phases_path: "${{ result.merged_path }}"
@@ -187,6 +194,7 @@ steps:
       output_path: "${{ context.planner_dir }}/combined_assignments.json"
       key: "assignments"
       task: "${{ inputs.task }}"
+      task_file: "${{ inputs.task_file }}"
       source_dir: "${{ inputs.source_dir }}"
     capture:
       combined_assignments_path: "${{ result.merged_path }}"
@@ -254,6 +262,7 @@ steps:
       output_path: "${{ context.planner_dir }}/combined_wps.json"
       key: "work_packages"
       task: "${{ inputs.task }}"
+      task_file: "${{ inputs.task_file }}"
       source_dir: "${{ inputs.source_dir }}"
     capture:
       combined_wps_path: "${{ result.merged_path }}"
@@ -381,6 +390,7 @@ steps:
       callable: "autoskillit.planner.compile_plan"
       output_dir: "${{ context.planner_dir }}"
       task: "${{ inputs.task }}"
+      task_file: "${{ inputs.task_file }}"
       source_dir: "${{ inputs.source_dir }}"
     on_success: done
     on_failure: escalate_stop

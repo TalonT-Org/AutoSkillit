@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 from collections import deque
 from pathlib import Path
+from typing import Any
 
 from autoskillit.core import atomic_write, get_logger, write_versioned_json
 from autoskillit.planner.validation import (
@@ -118,7 +119,12 @@ def _render_issue_body(wp: dict, phase: dict, assignment: dict) -> str:
     return body
 
 
-def compile_plan(output_dir: str, task: str, source_dir: str) -> dict[str, str]:
+def compile_plan(
+    output_dir: str, task: str, source_dir: str, task_file: str = "", **kwargs: Any
+) -> dict[str, str]:
+    task_label = task
+    if task_file:
+        task = Path(task_file).read_text()
     root = Path(output_dir)
 
     phase_results = _load_phase_results(root)
@@ -233,7 +239,7 @@ def compile_plan(output_dir: str, task: str, source_dir: str) -> dict[str, str]:
         schema_version=1,
     )
 
-    md_lines = [f"# Plan: {task}", ""]
+    md_lines = [f"# Plan: {task_label}", ""]
     for phase in sorted(phase_results.values(), key=lambda p: p["phase_number"]):
         phase_num = phase["phase_number"]
         md_lines.append(f"## Phase {phase_num}: {phase['name']}")

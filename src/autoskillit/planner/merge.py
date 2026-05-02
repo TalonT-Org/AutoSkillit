@@ -20,8 +20,11 @@ def merge_files(
     task: str = "",
     source_dir: str = "",
     strict: bool = True,
+    task_file: str = "",
     **kwargs: Any,
 ) -> dict[str, Any]:
+    if task_file:
+        task = Path(task_file).read_text()
     if key not in _TIER_KEYS:
         raise ValueError(f"Invalid key {key!r}; must be one of {_TIER_KEYS}")
 
@@ -165,6 +168,7 @@ def merge_tier_dir(
     key: str,
     task: str = "",
     source_dir: str = "",
+    task_file: str = "",
     **kwargs: Any,
 ) -> dict[str, Any]:
     paths = sorted(Path(results_dir).glob("*_result.json"))
@@ -176,6 +180,7 @@ def merge_tier_dir(
         key=key,
         task=task,
         source_dir=source_dir,
+        task_file=task_file,
     )
 
 
@@ -184,8 +189,11 @@ def build_plan_snapshot(
     output_path: str,
     task: str = "",
     source_dir: str = "",
+    task_file: str = "",
     **kwargs: Any,
 ) -> dict[str, Any]:
+    if task_file:
+        task = Path(task_file).read_text()
     phase_pairs: list[tuple[int, dict[str, Any]]] = []
     for p in sorted(Path(phases_dir).glob("*_result.json")):
         try:

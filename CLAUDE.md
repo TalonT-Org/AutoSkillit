@@ -180,7 +180,8 @@ generic_automation_mcp/
 │   ├── headless.py          #   Headless Claude session orchestration (facade)
 │   ├── _headless_recovery.py #  Recovery functions: _recover_from_separate_marker, _synthesize_from_write_artifacts, etc.
 │   ├── _headless_path_tokens.py # Path-token extraction: _build_path_token_set, _extract_output_paths, _validate_output_paths
-│   ├── _headless_result.py  #   Result building: _build_skill_result, _capture_failure, _apply_budget_guard
+│   ├── _headless_result.py  #   Result building: _build_skill_result, _build_session_telemetry, _capture_failure, _apply_budget_guard
+│   ├── _headless_git.py     #   Git helpers for LOC capture: _capture_git_head_sha, _parse_numstat, _compute_loc_changed
 │   ├── _headless_scan.py    #   Write-path JSONL scanning (extracted from headless.py)
 │   ├── linux_tracing.py     #   /proc + psutil process tracing (Linux)
 │   ├── anomaly_detection.py #   Post-hoc anomaly detection over snapshots

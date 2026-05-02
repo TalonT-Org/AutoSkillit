@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from autoskillit.core._type_results import SessionTelemetry
+    from autoskillit.core import SessionTelemetry
 
 import psutil
 
@@ -607,7 +607,7 @@ def recover_crashed_sessions(tmpfs_path: str = "/dev/shm", log_dir: str = "") ->
             continue
 
         try:
-            from autoskillit.core._type_results import SessionTelemetry
+            from autoskillit.core import SessionTelemetry
 
             flush_session_log(
                 log_dir=log_dir,

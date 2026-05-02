@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import dataclasses
 import os
-import subprocess
 import time
 import traceback
 from collections.abc import Callable, Mapping, Sequence
@@ -39,6 +38,10 @@ from autoskillit.core import (
     is_git_worktree,
     temp_dir_display_str,
 )
+from autoskillit.execution._headless_git import (
+    _capture_git_head_sha,
+    _compute_loc_changed,
+)
 from autoskillit.execution._headless_path_tokens import (  # noqa: F401
     _INTENTIONALLY_EXCLUDED_PATH_TOKENS,
     _OUTPUT_PATH_PATTERN,
@@ -62,6 +65,7 @@ from autoskillit.execution._headless_recovery import (
 )
 from autoskillit.execution._headless_result import (
     _apply_budget_guard,  # noqa: F401
+    _build_session_telemetry,
     _build_skill_result,
     _capture_failure,  # noqa: F401
     _resolve_skill_session_id,  # noqa: F401
@@ -82,46 +86,13 @@ if TYPE_CHECKING:
     from autoskillit.config import (
         AutomationConfig,
     )
-    from autoskillit.core import GitHubApiLog, SubprocessResult
+    from autoskillit.core import SubprocessResult
     from autoskillit.execution.commands import ClaudeHeadlessCmd
     from autoskillit.pipeline.context import (
         ToolContext,
     )
 
 logger = get_logger(__name__)
-
-_NO_TELEMETRY = SessionTelemetry(
-    token_usage=None,
-    timing_seconds=None,
-    audit_record=None,
-    github_api_usage=None,
-    github_api_requests=0,
-    loc_insertions=0,
-    loc_deletions=0,
-)
-
-
-def _build_session_telemetry(
-    *,
-    skill_result: SkillResult,
-    timing_seconds: float | None,
-    audit_record: dict | None,
-    github_api_log: GitHubApiLog | None,
-    loc_insertions: int,
-    loc_deletions: int,
-) -> SessionTelemetry:
-    _api_usage = (
-        github_api_log.drain(skill_result.session_id) if github_api_log is not None else None
-    )
-    return SessionTelemetry(
-        token_usage=skill_result.token_usage,
-        timing_seconds=timing_seconds,
-        audit_record=audit_record,
-        github_api_usage=_api_usage,
-        github_api_requests=_api_usage["total_requests"] if _api_usage else 0,
-        loc_insertions=loc_insertions,
-        loc_deletions=loc_deletions,
-    )
 
 
 def _session_log_dir(cwd: str) -> Path:
@@ -186,60 +157,6 @@ def _resolve_skill_temp_dir(cwd: str, skill_command: str) -> Path | None:
     return Path(cwd) / ".autoskillit" / "temp" / name
 
 
-def _capture_git_head_sha(cwd: str) -> str:
-    """Return current HEAD SHA in cwd. Returns '' on any error (non-git dirs)."""
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        return result.stdout.strip() if result.returncode == 0 else ""
-    except Exception:
-        logger.debug("capture_git_head_sha_failed", cwd=cwd, exc_info=True)
-        return ""
-
-
-def _parse_numstat(numstat_output: str) -> tuple[int, int]:
-    """Parse `git diff --numstat` output into (insertions, deletions).
-
-    Binary file lines (-\\t-\\tfilename) are skipped.
-    """
-    insertions = deletions = 0
-    for line in numstat_output.splitlines():
-        parts = line.split("\t", 2)
-        if len(parts) < 2:
-            continue
-        try:
-            insertions += int(parts[0])
-            deletions += int(parts[1])
-        except ValueError:
-            continue  # binary file row: "-\t-\tfilename"
-    return insertions, deletions
-
-
-def _compute_loc_changed(cwd: str, pre_sha: str) -> tuple[int, int]:
-    """Run git diff --numstat <pre_sha> in cwd. Returns (0, 0) on any error."""
-    if not pre_sha:
-        return 0, 0
-    try:
-        result = subprocess.run(
-            ["git", "diff", "--numstat", pre_sha],
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            timeout=15,
-        )
-        if result.returncode != 0:
-            return 0, 0
-        return _parse_numstat(result.stdout)
-    except Exception:
-        logger.debug("compute_loc_changed_failed", cwd=cwd, pre_sha=pre_sha, exc_info=True)
-        return 0, 0
-
-
 @dataclasses.dataclass(frozen=True)
 class PostSessionMetrics:
     loc_insertions: int
@@ -259,6 +176,7 @@ def _compute_post_session_metrics(
         loc_deletions=loc_del,
         effective_cwd=effective_cwd,
     )
+
 
 
 async def _execute_claude_headless(

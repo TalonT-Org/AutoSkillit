@@ -35,6 +35,8 @@ class TestTokenEntry:
             "cache_read_input_tokens",
             "invocation_count",
             "elapsed_seconds",
+            "loc_insertions",
+            "loc_deletions",
         }
 
     def test_default_counts_are_zero(self):
@@ -61,6 +63,8 @@ class TestTokenEntry:
             "cache_read_input_tokens",
             "invocation_count",
             "elapsed_seconds",
+            "loc_insertions",
+            "loc_deletions",
         }
         assert d["step_name"] == "implement"
         assert d["input_tokens"] == 42
@@ -146,6 +150,8 @@ class TestDefaultTokenLog:
             "cache_creation_input_tokens": 0,
             "cache_read_input_tokens": 0,
             "total_elapsed_seconds": 0.0,
+            "loc_insertions": 0,
+            "loc_deletions": 0,
         }
 
     def test_token_entry_has_elapsed_seconds_field(self):

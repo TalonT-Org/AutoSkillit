@@ -69,7 +69,7 @@ implemented. Identify review debt before it compounds.
      query($owner:String!, $name:String!) {
        rateLimit { cost remaining resetAt }
        repository(owner:$owner, name:$name) {
-         pullRequests(first:50, states:MERGED, orderBy:{field:UPDATED_AT,direction:DESC}) {
+         pullRequests(first:500, states:MERGED, orderBy:{field:UPDATED_AT,direction:DESC}) {
            nodes { number
              reviewThreads(first:50) {
                nodes { comments(first:10) { nodes { body createdAt } } }

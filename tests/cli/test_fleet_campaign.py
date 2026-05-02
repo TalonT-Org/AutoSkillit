@@ -9,6 +9,7 @@ import pytest
 from autoskillit.cli._fleet import fleet_campaign as _fleet_campaign
 from tests.cli._fleet_helpers import (
     _capture_subprocess,
+    _setup_campaign_with_status,
     _setup_existing_campaign_state,
     _stub_campaign_resolution,
     _stub_guards,
@@ -109,3 +110,91 @@ def test_fleet_campaign_exits_when_disabled(
         _fleet_campaign("any-campaign")
     assert exc_info.value.code == 1
     assert "fleet" in checked_features
+
+
+def _stub_list_campaign_recipes(monkeypatch: pytest.MonkeyPatch, names: list[str]) -> list[object]:
+    """Stub list_campaign_recipes to return mock items with given names."""
+    from unittest.mock import MagicMock
+
+    items = []
+    for name in names:
+        r = MagicMock()
+        r.name = name
+        r.description = f"Description for {name}"
+        items.append(r)
+
+    result = MagicMock()
+    result.items = items
+    monkeypatch.setattr("autoskillit.recipe.list_campaign_recipes", lambda *a, **kw: result)
+    return items
+
+
+def test_fleet_campaign_no_name_shows_menu_and_launches(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """When campaign_name is omitted, menu is shown and selected campaign launches."""
+    _stub_guards(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    _stub_list_campaign_recipes(monkeypatch, ["campaign-alpha", "campaign-beta"])
+    _stub_campaign_resolution(monkeypatch, tmp_path, "campaign-alpha")
+    monkeypatch.setattr("autoskillit.cli._menu.timed_prompt", lambda *a, **kw: "1")
+    captured = _capture_subprocess(monkeypatch)
+    _fleet_campaign(campaign_name=None)
+    assert "AUTOSKILLIT_CAMPAIGN_ID" in captured["env"]
+    out = capsys.readouterr().out
+    assert "Available campaigns:" in out
+    assert "campaign-alpha" in out
+    assert "campaign-beta" in out
+
+
+def test_fleet_campaign_no_name_no_campaigns_exits(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """When no campaigns exist and name is omitted, exits with message."""
+    _stub_guards(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    _stub_list_campaign_recipes(monkeypatch, [])
+    with pytest.raises(SystemExit, match="1"):
+        _fleet_campaign(campaign_name=None)
+
+
+def test_fleet_campaign_no_name_invalid_selection_exits(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Empty selection from menu exits with code 1."""
+    _stub_guards(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    _stub_list_campaign_recipes(monkeypatch, ["campaign-alpha"])
+    monkeypatch.setattr("autoskillit.cli._menu.timed_prompt", lambda *a, **kw: "")
+    with pytest.raises(SystemExit, match="1"):
+        _fleet_campaign(campaign_name=None)
+
+
+def test_fleet_campaign_resume_no_name_lists_active_campaigns(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Resume without name shows only active (non-terminal) campaigns."""
+    _stub_guards(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+
+    _setup_existing_campaign_state(tmp_path, "active-id-1111111", "campaign-active-1")
+    _setup_existing_campaign_state(tmp_path, "active-id-2222222", "campaign-active-2")
+    _setup_campaign_with_status(
+        tmp_path, "terminal-id-333333", "campaign-terminal", status="success"
+    )
+
+    _stub_campaign_resolution(monkeypatch, tmp_path, "campaign-active-1")
+    monkeypatch.setattr("autoskillit.cli._menu.timed_prompt", lambda *a, **kw: "1")
+    monkeypatch.setattr(
+        "autoskillit.fleet.resume_campaign_from_state",
+        lambda *a, **kw: object(),
+    )
+    _capture_subprocess(monkeypatch)
+
+    _fleet_campaign(campaign_name=None, resume_campaign="__pick__")
+
+    out = capsys.readouterr().out
+    assert "Active campaigns (resumable):" in out
+    assert "campaign-active-1" in out
+    assert "campaign-active-2" in out
+    assert "campaign-terminal" not in out

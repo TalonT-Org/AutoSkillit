@@ -23,6 +23,7 @@ from autoskillit.core import (
     ResumeSpec,
     ValidatedAddDir,
     build_claude_env,
+    extract_skill_name,
     temp_dir_display_str,
 )
 
@@ -159,6 +160,7 @@ _HEADLESS_EXCLUSIVE_VARS: frozenset[str] = frozenset(
         "AUTOSKILLIT_KITCHEN_SESSION_ID",
         "AUTOSKILLIT_LAUNCH_ID",
         "AUTOSKILLIT_SESSION_TYPE",
+        "AUTOSKILLIT_SKILL_NAME",
         "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY",
         "MAX_MCP_OUTPUT_TOKENS",
         "SCENARIO_STEP_NAME",
@@ -334,6 +336,7 @@ def build_leaf_headless_cmd(
         extras[KITCHEN_SESSION_ID_ENV_VAR] = kitchen_session_id
     if allowed_write_prefix:
         extras["AUTOSKILLIT_ALLOWED_WRITE_PREFIX"] = allowed_write_prefix
+    extras["AUTOSKILLIT_SKILL_NAME"] = extract_skill_name(skill_command) or ""
 
     filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
     spec = build_headless_cmd(prompt, model=model, env_extras=extras, base=filtered_base)

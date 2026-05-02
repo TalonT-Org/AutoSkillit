@@ -387,6 +387,7 @@ generic_automation_mcp/
 │   ├── ask_user_question_guard.py #  Blocks AskUserQuestion if kitchen is not open
 │   ├── open_kitchen_guard.py
 │   ├── unsafe_install_guard.py
+│   ├── planner_gh_discovery_guard.py #  Blocks GitHub discovery commands in planner skill sessions
 │   ├── pr_create_guard.py       #  Blocks gh pr create via run_cmd when kitchen is open
 │   ├── generated_file_write_guard.py
 │   ├── recipe_write_advisor.py  #   Advisory: Write/Edit to recipe YAMLs → suggests /autoskillit:write-recipe (non-blocking)

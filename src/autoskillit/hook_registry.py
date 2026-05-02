@@ -66,6 +66,11 @@ HOOK_REGISTRY: list[HookDef] = [
         scripts=["unsafe_install_guard.py", "pr_create_guard.py"],
     ),
     HookDef(
+        matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
+        scripts=["planner_gh_discovery_guard.py"],
+        session_scope="headless_only",
+    ),
+    HookDef(
         matcher=r"Write|Edit",
         scripts=["generated_file_write_guard.py"],
     ),

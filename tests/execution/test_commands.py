@@ -686,6 +686,55 @@ def test_allowed_write_prefix_in_headless_exclusive_vars() -> None:
     assert "AUTOSKILLIT_ALLOWED_WRITE_PREFIX" in _HEADLESS_EXCLUSIVE_VARS
 
 
+def test_skill_name_in_headless_exclusive_vars() -> None:
+    assert "AUTOSKILLIT_SKILL_NAME" in _HEADLESS_EXCLUSIVE_VARS
+
+
+def test_leaf_cmd_includes_skill_name() -> None:
+    spec = build_leaf_headless_cmd(
+        "/autoskillit:planner-analyze some task",
+        cwd="/repo",
+        completion_marker="DONE",
+        model=None,
+        plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
+        output_format_value="stream-json",
+        output_format_required_flags=["--verbose"],
+        add_dirs=[],
+        exit_after_stop_delay_ms=2000,
+    )
+    assert spec.env["AUTOSKILLIT_SKILL_NAME"] == "planner-analyze"
+
+
+def test_leaf_cmd_skill_name_strips_namespace() -> None:
+    spec = build_leaf_headless_cmd(
+        "/autoskillit:investigate some issue",
+        cwd="/repo",
+        completion_marker="DONE",
+        model=None,
+        plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
+        output_format_value="stream-json",
+        output_format_required_flags=["--verbose"],
+        add_dirs=[],
+        exit_after_stop_delay_ms=2000,
+    )
+    assert spec.env["AUTOSKILLIT_SKILL_NAME"] == "investigate"
+
+
+def test_leaf_cmd_skill_name_empty_for_non_slash() -> None:
+    spec = build_leaf_headless_cmd(
+        "some prompt without slash",
+        cwd="/repo",
+        completion_marker="DONE",
+        model=None,
+        plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
+        output_format_value="stream-json",
+        output_format_required_flags=["--verbose"],
+        add_dirs=[],
+        exit_after_stop_delay_ms=2000,
+    )
+    assert spec.env["AUTOSKILLIT_SKILL_NAME"] == ""
+
+
 class TestBuildLeafAllowedWritePrefix:
     BASE = dict(
         cwd="/repo",

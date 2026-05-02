@@ -108,13 +108,12 @@ def test_planner_recipe_contract_exists():
     assert (contracts_dir / "planner.yaml").exists(), "Run: autoskillit recipes validate planner"
 
 
-def test_planner_recipe_extract_domain_uses_env_var(planner_recipe):
+def test_planner_recipe_extract_domain_uses_positional_args(planner_recipe):
     step = planner_recipe.steps["extract_domain"]
     skill_cmd = step.with_args.get("skill_command", "")
-    assert "$3" not in skill_cmd, "Must not use positional $3"
-    assert "_ _" not in skill_cmd, "Must not have reserved-slot placeholders"
-    env = step.with_args.get("env", {})
-    assert "PLANNER_ANALYSIS_FILE" in env, "env must declare PLANNER_ANALYSIS_FILE"
+    assert "analysis.json" in skill_cmd, "Must pass analysis.json as positional arg"
+    assert "inputs.task_file" in skill_cmd, "Must pass task_file as positional arg"
+    assert "env" not in step.with_args, "Must not use env: block (ADR-0003)"
 
 
 def test_planner_init_captures_planner_dir(planner_recipe):
@@ -252,18 +251,18 @@ def test_merge_steps_use_merge_tier_dir(planner_recipe, step_name):
 # --- validate_task_alignment step integration ---
 
 
-def test_generate_phases_receives_planner_task_env(planner_recipe):
+def test_generate_phases_receives_task_file_as_arg(planner_recipe):
     step = planner_recipe.steps["generate_phases"]
-    env = step.with_args.get("env", {})
-    assert "PLANNER_TASK" in env, "generate_phases must pass PLANNER_TASK env var"
-    assert "inputs.task" in env["PLANNER_TASK"], "PLANNER_TASK must reference inputs.task"
+    skill_cmd = step.with_args.get("skill_command", "")
+    assert "inputs.task_file" in skill_cmd, "Must pass task_file as positional arg"
+    assert "env" not in step.with_args, "Must not use env: block (ADR-0003)"
 
 
-def test_extract_domain_receives_planner_task_env(planner_recipe):
+def test_extract_domain_receives_task_file_as_arg(planner_recipe):
     step = planner_recipe.steps["extract_domain"]
-    env = step.with_args.get("env", {})
-    assert "PLANNER_TASK" in env, "extract_domain must pass PLANNER_TASK env var"
-    assert "inputs.task" in env["PLANNER_TASK"], "PLANNER_TASK must reference inputs.task"
+    skill_cmd = step.with_args.get("skill_command", "")
+    assert "inputs.task_file" in skill_cmd, "Must pass task_file as positional arg"
+    assert "env" not in step.with_args, "Must not use env: block (ADR-0003)"
 
 
 def test_validate_task_alignment_step_exists(planner_recipe):
@@ -296,18 +295,18 @@ def test_planner_recipe_has_task_file_ingredient(planner_recipe):
     assert ingredients["task_file"].required is False
 
 
-def test_extract_domain_receives_planner_task_file_env(planner_recipe):
+def test_extract_domain_passes_task_file_positionally(planner_recipe):
     step = planner_recipe.steps["extract_domain"]
-    env = step.with_args.get("env", {})
-    assert "PLANNER_TASK_FILE" in env, "extract_domain must pass PLANNER_TASK_FILE env var"
-    assert "inputs.task_file" in env["PLANNER_TASK_FILE"]
+    skill_cmd = step.with_args.get("skill_command", "")
+    assert "inputs.task_file" in skill_cmd, "Must pass task_file as positional arg"
+    assert "env" not in step.with_args, "Must not use env: block (ADR-0003)"
 
 
-def test_generate_phases_receives_planner_task_file_env(planner_recipe):
+def test_generate_phases_passes_task_file_positionally(planner_recipe):
     step = planner_recipe.steps["generate_phases"]
-    env = step.with_args.get("env", {})
-    assert "PLANNER_TASK_FILE" in env, "generate_phases must pass PLANNER_TASK_FILE env var"
-    assert "inputs.task_file" in env["PLANNER_TASK_FILE"]
+    skill_cmd = step.with_args.get("skill_command", "")
+    assert "inputs.task_file" in skill_cmd, "Must pass task_file as positional arg"
+    assert "env" not in step.with_args, "Must not use env: block (ADR-0003)"
 
 
 def test_build_plan_snapshot_receives_task_file(planner_recipe):

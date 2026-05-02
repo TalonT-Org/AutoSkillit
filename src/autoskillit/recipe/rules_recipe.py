@@ -1,4 +1,4 @@
-"""Semantic rules for sub-recipe reference validity."""
+"""Semantic rules for sub-recipe reference validity and with_args hygiene."""
 
 from __future__ import annotations
 
@@ -13,6 +13,31 @@ if TYPE_CHECKING:
     from autoskillit.recipe.schema import Recipe
 
 logger = get_logger(__name__)
+
+
+@semantic_rule(
+    name="env-key-in-with-args",
+    description="step with_args must not contain an env: key (ADR-0003)",
+    severity=Severity.ERROR,
+)
+def _check_env_key_in_with_args(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if "env" in step.with_args:
+            findings.append(
+                RuleFinding(
+                    rule="env-key-in-with-args",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"step '{step_name}' contains an env: key in with_args. "
+                        f"Environment variables are not delivered to headless "
+                        f"subprocesses — use positional arguments in skill_command "
+                        f"instead. See ADR-0003."
+                    ),
+                )
+            )
+    return findings
 
 
 @semantic_rule(

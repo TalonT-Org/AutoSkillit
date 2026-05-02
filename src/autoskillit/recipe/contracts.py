@@ -74,16 +74,16 @@ class SkillContract:
 
 
 @dataclasses.dataclass(frozen=True)
-class ToolOutputFieldDef:
+class ToolOutputFieldSpec:
     allowed_values: tuple[str, ...]
     terminal_values: frozenset[str]
     recoverable_values: frozenset[str]
 
 
 @dataclasses.dataclass(frozen=True)
-class ToolOutputContractDef:
+class ToolOutputContractSpec:
     result_field: str
-    fields: dict[str, ToolOutputFieldDef]
+    fields: dict[str, ToolOutputFieldSpec]
 
 
 @dataclasses.dataclass
@@ -254,22 +254,27 @@ def get_callable_contract(
 
 def get_tool_output_contract(
     tool_name: str, manifest: dict[str, Any] | None = None
-) -> ToolOutputContractDef | None:
-    """Return the ToolOutputContractDef for a named MCP tool, or None if not declared."""
+) -> ToolOutputContractSpec | None:
+    """Return the ToolOutputContractSpec for a named MCP tool, or None if not declared."""
     if manifest is None:
         manifest = load_bundled_manifest()
     entry = manifest.get("tool_output_contracts", {}).get(tool_name)
     if entry is None:
         return None
     fields = {
-        field_name: ToolOutputFieldDef(
+        field_name: ToolOutputFieldSpec(
             allowed_values=tuple(field_data.get("allowed_values", [])),
             terminal_values=frozenset(field_data.get("terminal_values", [])),
             recoverable_values=frozenset(field_data.get("recoverable_values", [])),
         )
         for field_name, field_data in entry.get("fields", {}).items()
     }
-    return ToolOutputContractDef(result_field=entry.get("result_field", ""), fields=fields)
+    result_field = entry.get("result_field")
+    if not result_field:
+        raise ValueError(
+            f"tool_output_contracts entry for {tool_name!r} is missing required 'result_field'"
+        )
+    return ToolOutputContractSpec(result_field=result_field, fields=fields)
 
 
 def compute_skill_hash(skill_name: str, *, skills_dir: Path) -> str:

@@ -26,4 +26,8 @@ async def test_wait_for_ci_coerces_string_none_to_null(tool_ctx) -> None:
         wait_result={"run_id": 42, "conclusion": "success", "failed_jobs": []}
     )
     result = json.loads(await wait_for_ci("main", event="None"))
-    assert result["conclusion"] != "error" or "event" not in result.get("error", "").lower()
+    assert result["conclusion"] == "success", (
+        f"String 'None' must be coerced to null before event validation — "
+        f"KNOWN_CI_EVENTS would reject 'None' as invalid if coercion did not occur. "
+        f"Got: {result}"
+    )

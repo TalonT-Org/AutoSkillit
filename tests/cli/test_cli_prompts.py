@@ -579,9 +579,14 @@ def test_orchestrator_prompt_includes_null_context_handling():
     from autoskillit.cli._prompts import _build_orchestrator_prompt
 
     prompt = _build_orchestrator_prompt("my-recipe", mcp_prefix=DIRECT_PREFIX)
-    prompt_lower = prompt.lower()
-    assert "null" in prompt_lower or "none" in prompt_lower
-    assert "never" in prompt_lower and ("guess" in prompt_lower or "substitute" in prompt_lower)
+    assert "NULL/NONE CONTEXT VARIABLES" in prompt, (
+        "Orchestrator prompt must contain a NULL/NONE CONTEXT VARIABLES section that "
+        "instructs the model not to guess or substitute when context values are null."
+    )
+    assert "do not guess" in prompt.lower(), (
+        "Null handling section must explicitly instruct the model not to guess values "
+        "for null/None context variables."
+    )
 
 
 def test_campaign_prompt_tool_claim_has_after_startup_qualifier():

@@ -1,6 +1,7 @@
 """Tests verifying the check_ci_already_passed safety net step in CI watch recipes."""
 
 import json
+import shutil
 import subprocess
 
 import pytest
@@ -8,6 +9,10 @@ import pytest
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
+
+_requires_jq = pytest.mark.skipif(
+    shutil.which("jq") is None, reason="jq binary not available in PATH"
+)
 
 RECIPE_NAMES = ["implementation", "remediation", "implementation-groups"]
 
@@ -37,23 +42,27 @@ def _run_jq(rollup: list[dict]) -> str:
 
 
 @pytest.mark.medium
+@_requires_jq
 def test_jq_produces_failed_for_failure_state():
     """When statusCheckRollup contains FAILURE, jq must output 'failed' not 'false'."""
     assert _run_jq([{"state": "SUCCESS"}, {"state": "FAILURE"}]) == "failed"
 
 
 @pytest.mark.medium
+@_requires_jq
 def test_jq_produces_no_checks_for_empty_rollup():
     """When statusCheckRollup is empty, jq must output 'no_checks' not 'false'."""
     assert _run_jq([]) == "no_checks"
 
 
 @pytest.mark.medium
+@_requires_jq
 def test_jq_produces_passed_for_all_success():
     assert _run_jq([{"state": "SUCCESS"}, {"state": "NEUTRAL"}]) == "passed"
 
 
 @pytest.mark.medium
+@_requires_jq
 def test_jq_produces_pending_for_in_progress():
     assert _run_jq([{"state": "SUCCESS"}, {"state": "IN_PROGRESS"}]) == "pending"
 

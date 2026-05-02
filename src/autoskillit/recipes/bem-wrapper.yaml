@@ -4,7 +4,7 @@ description: >-
   and compact dispatch plan. Used by the promote-to-main campaign to compute
   issue distribution before dispatching implementation L2s.
 kind: standard
-autoskillit_version: "0.9.310"
+autoskillit_version: "0.9.311"
 recipe_version: "1.0.0"
 
 requires_packs: [github]

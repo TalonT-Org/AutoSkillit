@@ -9,7 +9,6 @@ from typing import Any
 import pytest
 
 from autoskillit.planner.consolidation import consolidate_wps
-
 from tests.planner.conftest import make_wp_result, write_json
 
 pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.feature("planner")]
@@ -24,7 +23,10 @@ def _make_refined_wps(tmp_path: Path, wps: list[dict[str, Any]]) -> Path:
 
 def _make_manifest(consolidation_dir: Path, phase_id: str, groups: list[dict[str, Any]]) -> None:
     consolidation_dir.mkdir(parents=True, exist_ok=True)
-    write_json(consolidation_dir / f"{phase_id}_consolidation.json", {"phase_id": phase_id, "groups": groups})
+    write_json(
+        consolidation_dir / f"{phase_id}_consolidation.json",
+        {"phase_id": phase_id, "groups": groups},
+    )
 
 
 def test_passthrough_unchanged_when_no_manifests(tmp_path: Path) -> None:
@@ -35,7 +37,11 @@ def test_passthrough_unchanged_when_no_manifests(tmp_path: Path) -> None:
 
     consolidated = json.loads((tmp_path / "consolidated_wps.json").read_text())
     assert len(consolidated["work_packages"]) == 3
-    assert {wp["id"] for wp in consolidated["work_packages"]} == {"P1-A1-WP1", "P1-A1-WP2", "P1-A1-WP3"}
+    assert {wp["id"] for wp in consolidated["work_packages"]} == {
+        "P1-A1-WP1",
+        "P1-A1-WP2",
+        "P1-A1-WP3",
+    }
     index = json.loads((tmp_path / "wp_index.json").read_text())
     assert {e["id"] for e in index} == {"P1-A1-WP1", "P1-A1-WP2", "P1-A1-WP3"}
     assert result["total_count"] == "3"
@@ -332,7 +338,9 @@ def test_multiple_phases_multiple_manifests(tmp_path: Path) -> None:
     assert ids == {"P1-A1-WP1", "P2-A1-WP1", "P3-A1-WP1"}
     # Cross-phase deps must not be affected
     for wp in consolidated["work_packages"]:
-        assert not any(dep.startswith(wp["id"][:2]) and dep != wp["id"] for dep in wp["depends_on"])
+        assert not any(
+            dep.startswith(wp["id"][:2]) and dep != wp["id"] for dep in wp["depends_on"]
+        )
     assert result["merged_count"] == "3"
 
 

@@ -18,7 +18,7 @@ from autoskillit.core import get_logger
 
 logger = get_logger(__name__)
 
-_INSTALL_FROM_INTEGRATION = "git+https://github.com/TalonT-Org/AutoSkillit.git@integration"
+_INSTALL_FROM_DEVELOP = "git+https://github.com/TalonT-Org/AutoSkillit.git@develop"
 
 
 class InstallType(StrEnum):
@@ -102,14 +102,14 @@ def comparison_branch(info: InstallInfo) -> str | None:
     """Return the GitHub branch/tag to compare for update availability.
 
     - ``stable`` / ``main`` / release-tag / ``UNKNOWN`` → ``"releases/latest"``
-    - ``integration`` → ``"integration"``
+    - ``develop`` → ``"develop"``
     - ``LOCAL_EDITABLE`` / ``LOCAL_PATH`` → ``None`` (not applicable)
     """
     if info.install_type in (InstallType.LOCAL_EDITABLE, InstallType.LOCAL_PATH):
         return None
     rev = info.requested_revision or ""
-    if rev == "integration":
-        return "integration"
+    if rev == "develop":
+        return "develop"
     return "releases/latest"
 
 
@@ -119,11 +119,11 @@ def dismissal_window(info: InstallInfo) -> timedelta:
     Branch-aware windows:
 
     - ``stable`` / ``main`` / release-tag / ``UNKNOWN`` → ``timedelta(days=7)``
-    - ``integration`` / ``LOCAL_EDITABLE`` → ``timedelta(hours=12)``
+    - ``develop`` / ``LOCAL_EDITABLE`` → ``timedelta(hours=12)``
     """
     rev = info.requested_revision or ""
     # LOCAL_EDITABLE is reachable only via AUTOSKILLIT_FORCE_UPDATE_CHECK; not dead code.
-    if rev == "integration" or info.install_type == InstallType.LOCAL_EDITABLE:
+    if rev == "develop" or info.install_type == InstallType.LOCAL_EDITABLE:
         return timedelta(hours=12)
     return timedelta(days=7)
 
@@ -132,14 +132,14 @@ def upgrade_command(info: InstallInfo) -> list[str] | None:
     """Return the subprocess command to upgrade autoskillit for this install.
 
     - ``stable`` / ``main`` / release-tag → ``["uv", "tool", "upgrade", "autoskillit"]``
-    - ``integration`` → ``["uv", "tool", "install", "--force", <git URL>]``
+    - ``develop`` → ``["uv", "tool", "install", "--force", <git URL>]``
     - ``LOCAL_EDITABLE`` → ``["uv", "pip", "install", "-e", str(info.editable_source)]``
     - ``UNKNOWN`` / ``LOCAL_PATH`` → ``None``
     """
     if info.install_type == InstallType.GIT_VCS:
         rev = info.requested_revision or ""
-        if rev == "integration":
-            return ["uv", "tool", "install", "--force", _INSTALL_FROM_INTEGRATION]
+        if rev == "develop":
+            return ["uv", "tool", "install", "--force", _INSTALL_FROM_DEVELOP]
         return ["uv", "tool", "upgrade", "autoskillit"]
     if info.install_type == InstallType.LOCAL_EDITABLE and info.editable_source is not None:
         return ["uv", "pip", "install", "-e", str(info.editable_source)]

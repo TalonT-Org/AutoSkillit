@@ -2,7 +2,7 @@
 """PreToolUse hook: branch protection guard for merge_worktree and push_to_remote.
 
 Reads AUTOSKILLIT_PROTECTED_BRANCHES env var (comma-separated, default:
-main,integration,stable). Denies tool calls that target a protected branch.
+main,develop,stable). Denies tool calls that target a protected branch.
 
 Matched tools:
   - merge_worktree: checks base_branch parameter
@@ -41,7 +41,7 @@ def main() -> None:
         return
 
     # Read protected branches from env (comma-separated)
-    env_val = os.environ.get("AUTOSKILLIT_PROTECTED_BRANCHES", "main,integration,stable")
+    env_val = os.environ.get("AUTOSKILLIT_PROTECTED_BRANCHES", "main,develop,stable")
     protected = [b.strip() for b in env_val.split(",") if b.strip()]
 
     if branch in protected:

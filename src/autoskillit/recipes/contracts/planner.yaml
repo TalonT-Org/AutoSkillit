@@ -203,6 +203,18 @@ skills:
 
       %%ORDER_UP%%'
     write_behavior: always
+  planner-assess-review-approach:
+    inputs:
+    - name: refined_wps_path
+      required: true
+    - name: planner_dir
+      required: true
+    outputs:
+    - name: review_approach_assessment_path
+      type: file_path
+    expected_output_patterns:
+    - "review_approach_assessment_path\\s*=\\s*\\S+"
+    write_behavior: always
   planner-reconcile-deps:
     inputs: []
     outputs: []

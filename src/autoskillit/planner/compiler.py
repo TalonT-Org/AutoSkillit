@@ -89,7 +89,7 @@ def _render_issue_body(wp: dict, phase: dict, assignment: dict) -> str:
     steps_md = "\n".join(f"{i + 1}. {s}" for i, s in enumerate(wp.get("technical_steps", [])))
     criteria_md = "\n".join(f"- {c}" for c in wp.get("acceptance_criteria", []))
 
-    return f"""## Goal
+    body = f"""## Goal
 
 {wp.get("goal", wp.get("summary", ""))}
 
@@ -112,6 +112,10 @@ def _render_issue_body(wp: dict, phase: dict, assignment: dict) -> str:
 
 {criteria_md}
 """
+    if wp.get("review_approach_recommended"):
+        reasoning = wp.get("review_approach_reasoning", "")
+        body += f"\n## Review Approach\n\n> **review-approach recommended**: {reasoning}\n"
+    return body
 
 
 def compile_plan(output_dir: str, task: str, source_dir: str) -> dict[str, str]:
@@ -143,6 +147,19 @@ def compile_plan(output_dir: str, task: str, source_dir: str) -> dict[str, str]:
 
     _inject_forward_deps(wp_results, dep_graph)
 
+    assessment_path = root / "review_approach_assessment.json"
+    assessment_by_wp_id: dict[str, dict] = {}
+    if assessment_path.exists():
+        try:
+            data = json.loads(assessment_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            raise RuntimeError(f"Malformed assessment file {assessment_path}: {exc}") from exc
+        for entry in data.get("assessments", []):
+            wp_id = entry.get("wp_id")
+            if wp_id is None:
+                continue
+            assessment_by_wp_id[wp_id] = entry
+
     execution_order = _topological_sort(wp_results)
     phase_lookup = _build_phase_lookup(phase_results)
     assign_lookup = _build_assignment_lookup(assignment_results)
@@ -165,6 +182,15 @@ def compile_plan(output_dir: str, task: str, source_dir: str) -> dict[str, str]:
                 " not in loaded assignment results"
             )
         assignment = assign_lookup[(phase_num, assign_num)]
+        if wp_id in assessment_by_wp_id:
+            wp = {
+                **wp,
+                **{
+                    k: assessment_by_wp_id[wp_id][k]
+                    for k in ("review_approach_recommended", "review_approach_reasoning")
+                    if k in assessment_by_wp_id[wp_id]
+                },
+            }
         body = _render_issue_body(wp, phase, assignment)
         issue_path = issues_dir / f"{wp_id}_issue.md"
         atomic_write(issue_path, body)

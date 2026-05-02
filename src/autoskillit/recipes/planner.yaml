@@ -37,6 +37,13 @@ ingredients:
   source_dir:
     description: "Absolute path to the repository root to analyze."
     required: true
+  planner_assess_review_approach:
+    description: >
+      When true, run planner-assess-review-approach after reconcile_deps to annotate
+      WPs that would benefit from a review-approach research pass before implementation.
+    required: false
+    default: "false"
+    hidden: false
 
 steps:
 
@@ -316,8 +323,27 @@ steps:
       skill_command: "/autoskillit:planner-reconcile-deps ${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"
       consolidated_wps_path: "${{ context.consolidated_wps_path }}"
-    on_success: validate
+    on_success: assess_review_approach_step
     on_failure: escalate_stop
+
+  assess_review_approach_step:
+    tool: run_skill
+    optional: true
+    skip_when_false: "inputs.planner_assess_review_approach"
+    with:
+      skill_command: >
+        /autoskillit:planner-assess-review-approach
+        ${{ context.consolidated_wps_path }}
+        ${{ context.planner_dir }}
+      cwd: "${{ inputs.source_dir }}"
+    capture:
+      review_approach_assessment_path: "${{ result.review_approach_assessment_path }}"
+    on_success: validate
+    on_failure: validate
+    on_context_limit: validate
+    note: >
+      Optional review-approach benefit assessment pass. Non-fatal: routes to validate
+      on both success and failure. Skipped when planner_assess_review_approach ingredient is false (default).
 
   validate:
     tool: run_python

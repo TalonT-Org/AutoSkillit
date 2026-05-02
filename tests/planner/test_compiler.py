@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 import structlog.testing
 
-from autoskillit.planner.compiler import compile_plan
+from autoskillit.planner.compiler import _render_issue_body, compile_plan
 from tests.planner.conftest import (
     make_assignment_result,
     make_phase_result,
@@ -290,3 +290,86 @@ class TestCompilePlanEdgeCases:
 
         with pytest.raises(ValueError, match="Invalid WP id format"):
             compile_plan(str(tmp_path), "t", "s")
+
+
+def test_render_issue_body_includes_research_section_when_recommended() -> None:
+    phase = make_phase_result(1)
+    assignment = make_assignment_result(1, 1)
+    wp = make_wp_result(
+        "P1-A1-WP1",
+        review_approach_recommended=True,
+        review_approach_reasoning="Multiple viable architectural approaches exist.",
+    )
+    body = _render_issue_body(wp, phase, assignment)
+    assert "## Review Approach" in body
+    assert "review-approach recommended" in body
+    assert "Multiple viable architectural approaches exist." in body
+
+
+def test_render_issue_body_omits_research_section_when_not_recommended() -> None:
+    phase = make_phase_result(1)
+    assignment = make_assignment_result(1, 1)
+    wp = make_wp_result("P1-A1-WP1")
+    body = _render_issue_body(wp, phase, assignment)
+    assert "## Review Approach" not in body
+
+
+def test_compile_plan_merges_assessment_when_file_present(tmp_path: Path) -> None:
+    output_dir = _make_valid_output_dir(
+        tmp_path, num_phases=1, with_dep_graph=False, dependency_chain=False
+    )
+    assessment = {
+        "schema_version": 1,
+        "assessments": [
+            {
+                "wp_id": "P1-A1-WP1",
+                "review_approach_recommended": True,
+                "review_approach_reasoning": "Unfamiliar external API integration.",
+            }
+        ],
+    }
+    write_json(output_dir / "review_approach_assessment.json", assessment)
+    compile_plan(str(output_dir), task="Test task", source_dir=str(tmp_path))
+    issue_body = (output_dir / "issues" / "P1-A1-WP1_issue.md").read_text()
+    assert "## Review Approach" in issue_body
+    assert "Unfamiliar external API integration." in issue_body
+
+
+def test_compile_plan_omits_research_when_assessment_file_absent(tmp_path: Path) -> None:
+    output_dir = _make_valid_output_dir(
+        tmp_path, num_phases=1, with_dep_graph=False, dependency_chain=False
+    )
+    compile_plan(str(output_dir), task="Test task", source_dir=str(tmp_path))
+    issue_body = (output_dir / "issues" / "P1-A1-WP1_issue.md").read_text()
+    assert "## Review Approach" not in issue_body
+
+
+def test_compile_plan_raises_on_malformed_assessment_file(tmp_path: Path) -> None:
+    output_dir = _make_valid_output_dir(
+        tmp_path, num_phases=1, with_dep_graph=False, dependency_chain=False
+    )
+    (output_dir / "review_approach_assessment.json").write_text("not valid json")
+    with pytest.raises(RuntimeError, match="Malformed assessment file"):
+        compile_plan(str(output_dir), task="Test task", source_dir=str(tmp_path))
+
+
+def test_compile_plan_skips_assessment_entries_missing_wp_id(tmp_path: Path) -> None:
+    output_dir = _make_valid_output_dir(
+        tmp_path, num_phases=1, with_dep_graph=False, dependency_chain=False
+    )
+    assessment = {
+        "schema_version": 1,
+        "assessments": [
+            {"review_approach_recommended": True, "review_approach_reasoning": "no wp_id"},
+            {
+                "wp_id": "P1-A1-WP1",
+                "review_approach_recommended": True,
+                "review_approach_reasoning": "valid entry",
+            },
+        ],
+    }
+    write_json(output_dir / "review_approach_assessment.json", assessment)
+    compile_plan(str(output_dir), task="Test task", source_dir=str(tmp_path))
+    issue_body = (output_dir / "issues" / "P1-A1-WP1_issue.md").read_text()
+    assert "## Review Approach" in issue_body
+    assert "valid entry" in issue_body

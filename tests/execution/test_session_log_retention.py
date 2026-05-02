@@ -750,10 +750,10 @@ def test_session_log_removed_build_protected_function() -> None:
 
 
 def test_session_log_removed_terminal_statuses_constant() -> None:
-    """SL_CB_2: _TERMINAL_DISPATCH_STATUSES must not exist on session_log module."""
+    """SL_CB_2: TERMINAL_DISPATCH_STATUSES must not exist on session_log module."""
     import autoskillit.execution.session_log as sl_module
 
-    assert not hasattr(sl_module, "_TERMINAL_DISPATCH_STATUSES")
+    assert not hasattr(sl_module, "TERMINAL_DISPATCH_STATUSES")
 
 
 def test_retention_no_protection_when_callback_is_none(tmp_path: Path, monkeypatch) -> None:

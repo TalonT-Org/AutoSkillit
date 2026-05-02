@@ -147,11 +147,8 @@ def order(
     from autoskillit.cli._timed_input import timed_prompt
 
     if recipe is None:
-        from autoskillit.cli._prompts import (
-            _OPEN_KITCHEN_CHOICE,
-            _build_open_kitchen_prompt,
-            _resolve_recipe_input,
-        )
+        from autoskillit.cli._menu import SLOT_ZERO_SELECTED, run_selection_menu
+        from autoskillit.cli._prompts import _build_open_kitchen_prompt
         from autoskillit.recipe import GROUP_LABELS, group_rank
 
         available = list_recipes(Path.cwd()).items
@@ -159,23 +156,17 @@ def order(
             print("No recipes found. Run 'autoskillit recipes list' to check.")
             sys.exit(1)
 
-        print("Available recipes:")
-        print("  0. Open kitchen (no recipe)")
-        current_rank: int = -1
-        for i, r in enumerate(available, 1):
-            rank = group_rank(r)
-            if rank != current_rank:
-                current_rank = rank
-                print(f"\n  {GROUP_LABELS.get(rank, str(rank))}")
-            print(f"  {i}. {r.name}")
-        raw = timed_prompt(
-            f"Select recipe [0-{len(available)}]:",
-            default="",
+        resolved = run_selection_menu(
+            available,
+            header="Available recipes:",
+            slot_zero_label="Open kitchen (no recipe)",
+            group_classifier=group_rank,
+            group_labels=GROUP_LABELS,
+            name_key=lambda r: r.name,
             timeout=120,
             label="autoskillit order",
         )
-        resolved = _resolve_recipe_input(raw, available)
-        if resolved is _OPEN_KITCHEN_CHOICE:
+        if resolved is SLOT_ZERO_SELECTED:
             from autoskillit.cli._prompts import _OPEN_KITCHEN_GREETINGS
 
             _launch_cook_session(
@@ -187,7 +178,7 @@ def order(
             )
             return
         elif resolved is None:
-            print(f"Invalid selection: '{raw}'")
+            print("Invalid selection.")
             sys.exit(1)
         else:
             if isinstance(resolved, str):

@@ -360,6 +360,7 @@ generic_automation_mcp/
 │   ├── _onboarding.py       #   First-run detection + guided menu
 │   ├── _prompts.py          #   Orchestrator prompt builder
 │   ├── _timed_input.py      #   timed_prompt() and status_line() CLI primitives
+│   ├── _menu.py             #   Shared numbered selection menu primitive: run_selection_menu(), render_numbered_menu(), resolve_menu_input()
 │   ├── _update.py           #   run_update_command(): first-class upgrade path for `autoskillit update`
 │   ├── _update_checks.py    #   Unified startup update check: version/hook/source-drift signals, branch-aware dismissal (facade)
 │   ├── _update_checks_fetch.py #  HTTP cache + fetch machinery: _fetch_with_cache, _fetch_latest_version, invalidate_fetch_cache

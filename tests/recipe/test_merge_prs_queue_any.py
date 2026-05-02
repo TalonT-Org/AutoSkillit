@@ -145,11 +145,12 @@ def test_implementation_queue_ejected_fix_exists(impl_recipe) -> None:
     assert "queue_ejected_fix" in impl_recipe.steps
 
 
-def test_queue_ejected_fix_tool_is_run_cmd(impl_recipe) -> None:
+def test_queue_ejected_fix_tool_is_run_python(impl_recipe) -> None:
     step = impl_recipe.steps["queue_ejected_fix"]
-    assert step.tool == "run_cmd", (
-        "queue_ejected_fix must be a run_cmd cheap-rebase step, not a run_skill"
+    assert step.tool == "run_python", (
+        "queue_ejected_fix must be a run_python callable step, not a run_skill or run_cmd"
     )
+    assert step.with_args.get("callable") == "autoskillit.recipe._cmd_rpc.queue_ejected_fix"
 
 
 def test_queue_ejected_fix_clean_routes_to_re_push(impl_recipe) -> None:
@@ -446,7 +447,7 @@ def test_direct_merge_failure_routes_to_release_issue_failure(any_recipe) -> Non
 def test_wait_for_direct_merge_step_exists(any_recipe) -> None:
     assert "wait_for_direct_merge" in any_recipe.steps
     step = any_recipe.steps["wait_for_direct_merge"]
-    assert step.tool == "run_cmd"
+    assert step.tool == "run_python"
 
 
 def test_wait_for_direct_merge_merged_routes_to_success(any_recipe) -> None:
@@ -470,7 +471,7 @@ def test_wait_for_direct_merge_closed_routes_to_conflict_fix(any_recipe) -> None
 def test_direct_merge_conflict_fix_exists(any_recipe) -> None:
     assert "direct_merge_conflict_fix" in any_recipe.steps
     step = any_recipe.steps["direct_merge_conflict_fix"]
-    assert step.tool == "run_cmd"
+    assert step.tool == "run_python"
 
 
 def test_direct_merge_conflict_fix_clean_routes_to_re_push(any_recipe) -> None:
@@ -602,17 +603,13 @@ def test_immediate_merge_failure_routes_to_release_issue_failure(any_recipe) -> 
 def test_wait_for_immediate_merge_step_exists(any_recipe) -> None:
     assert "wait_for_immediate_merge" in any_recipe.steps
     step = any_recipe.steps["wait_for_immediate_merge"]
-    assert step.tool == "run_cmd"
+    assert step.tool == "run_python"
 
 
 def test_wait_for_immediate_merge_merged_routes_to_success(any_recipe) -> None:
     step = any_recipe.steps["wait_for_immediate_merge"]
     merged_cond = next(
-        (
-            c
-            for c in step.on_result.conditions
-            if c.when == "${{ result.stdout | trim }} == merged"
-        ),
+        (c for c in step.on_result.conditions if c.when and "merged" in c.when),
         None,
     )
     assert merged_cond is not None
@@ -622,11 +619,7 @@ def test_wait_for_immediate_merge_merged_routes_to_success(any_recipe) -> None:
 def test_wait_for_immediate_merge_closed_routes_to_conflict_fix(any_recipe) -> None:
     step = any_recipe.steps["wait_for_immediate_merge"]
     closed_cond = next(
-        (
-            c
-            for c in step.on_result.conditions
-            if c.when == "${{ result.stdout | trim }} == closed"
-        ),
+        (c for c in step.on_result.conditions if c.when and "closed" in c.when),
         None,
     )
     assert closed_cond is not None
@@ -636,7 +629,7 @@ def test_wait_for_immediate_merge_closed_routes_to_conflict_fix(any_recipe) -> N
 def test_immediate_merge_conflict_fix_exists(any_recipe) -> None:
     assert "immediate_merge_conflict_fix" in any_recipe.steps
     step = any_recipe.steps["immediate_merge_conflict_fix"]
-    assert step.tool == "run_cmd"
+    assert step.tool == "run_python"
 
 
 def test_immediate_merge_conflict_fix_clean_routes_to_re_push(any_recipe) -> None:
@@ -1277,20 +1270,18 @@ def test_check_eject_limit_routes_to_failure_when_exceeded(any_recipe) -> None:
     assert limit_conds[0].route == "release_issue_failure"
 
 
-def test_check_eject_limit_cmd_reads_writes_counter_file(any_recipe) -> None:
-    """check_eject_limit cmd must read/write a counter file under .autoskillit/temp/."""
+def test_check_eject_limit_callable_references_counter_file(any_recipe) -> None:
+    """check_eject_limit callable must receive counter_file arg under .autoskillit/temp/."""
     step = any_recipe.steps["check_eject_limit"]
-    cmd = step.with_args.get("cmd", "")
-    assert "eject_count" in cmd, "cmd must reference the eject_count counter file"
-    assert ".autoskillit/temp/" in cmd, "counter file must be under .autoskillit/temp/"
-    assert "cat " in cmd, "cmd must read the counter with cat"
+    counter_file = step.with_args.get("counter_file", "")
+    assert "eject_count" in counter_file, "counter_file must reference eject_count"
+    assert ".autoskillit/temp" in counter_file, "counter_file must be under .autoskillit/temp"
 
 
-def test_check_eject_limit_cmd_uses_limit_3(any_recipe) -> None:
-    """check_eject_limit cmd must cap at 3 ejections."""
+def test_check_eject_limit_callable_uses_limit_3(any_recipe) -> None:
+    """check_eject_limit callable must cap at 3 ejections."""
     step = any_recipe.steps["check_eject_limit"]
-    cmd = step.with_args.get("cmd", "")
-    assert "-gt 3" in cmd, "limit check must use -gt 3"
+    assert step.with_args.get("max_ejects") == "3", "max_ejects must be '3'"
 
 
 def test_check_eject_limit_on_result_uses_exact_eq_match(any_recipe) -> None:
@@ -1305,28 +1296,27 @@ def test_check_eject_limit_on_result_uses_exact_eq_match(any_recipe) -> None:
 
 
 def test_unbounded_cycle_severity_downgraded_by_eject_limit(any_recipe) -> None:
-    """After check_eject_limit, unbounded-cycle for queue ejection cycle must be at most WARNING.
+    """After check_eject_limit, unbounded-cycle must not fire ERROR for queue ejection cycle.
 
-    check_eject_limit.on_failure routes to release_issue_failure (outside the cycle),
-    satisfying has_failure_exit in rules_graph.py → severity is downgraded from ERROR to WARNING.
+    check_eject_limit is a run_python step in _STRUCTURAL_ON_RESULT_TOOLS with an on_result
+    condition routing to release_issue_failure (outside the cycle). The has_on_result_exit
+    path in rules_graph.py recognises this as a structural bound and suppresses the finding
+    entirely — so zero unbounded-cycle findings are expected for the queue ejection cycle.
     """
     from autoskillit.core.types import Severity
     from autoskillit.recipe.validator import run_semantic_rules
 
     findings = run_semantic_rules(any_recipe)
     cycle_findings = [f for f in findings if f.rule == "unbounded-cycle"]
-    queue_cycle_findings = [
+    queue_cycle_error_findings = [
         f
         for f in cycle_findings
-        if any(
+        if f.severity == Severity.ERROR
+        and any(
             kw in f.message for kw in ("wait_for_queue", "queue_ejected_fix", "check_eject_limit")
         )
     ]
-    assert len(queue_cycle_findings) >= 1, (
-        "unbounded-cycle rule must fire for queue ejection cycle steps"
+    assert queue_cycle_error_findings == [], (
+        f"unbounded-cycle must not be ERROR for queue ejection cycle after check_eject_limit; "
+        f"got ERROR on: {[f.step_name for f in queue_cycle_error_findings]}"
     )
-    for finding in queue_cycle_findings:
-        assert finding.severity != Severity.ERROR, (
-            f"unbounded-cycle for queue ejection must be WARNING after check_eject_limit, "
-            f"got ERROR on step {finding.step_name!r}: {finding.message[:120]}"
-        )

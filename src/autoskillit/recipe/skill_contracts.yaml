@@ -2213,3 +2213,240 @@ callable_contracts:
       type: str
     - name: item_ids
       type: str
+  autoskillit.recipe._cmd_rpc.compute_branch:
+    inputs:
+    - name: issue_slug
+      type: str
+      required: false
+    - name: run_name
+      type: str
+      required: false
+    - name: issue_number
+      type: str
+      required: false
+    outputs:
+    - name: branch_name
+      type: str
+  autoskillit.recipe._cmd_rpc.check_eject_limit:
+    inputs:
+    - name: counter_file
+      type: str
+      required: true
+    - name: max_ejects
+      type: str
+      required: false
+    outputs:
+    - name: status
+      type: str
+    - name: count
+      type: str
+  autoskillit.recipe._cmd_rpc.check_dropped_healthy_loop:
+    inputs:
+    - name: counter_file
+      type: str
+      required: true
+    - name: max_drops
+      type: str
+      required: false
+    outputs:
+    - name: status
+      type: str
+    - name: count
+      type: str
+  autoskillit.recipe._cmd_rpc.commit_guard:
+    inputs:
+    - name: worktree_path
+      type: str
+      required: true
+    outputs:
+    - name: committed
+      type: str
+  autoskillit.recipe._cmd_rpc.queue_ejected_fix:
+    inputs:
+    - name: work_dir
+      type: str
+      required: true
+    - name: base_branch
+      type: str
+      required: true
+    outputs:
+    - name: status
+      type: str
+  autoskillit.recipe._cmd_rpc.direct_merge_conflict_fix:
+    inputs:
+    - name: work_dir
+      type: str
+      required: true
+    - name: base_branch
+      type: str
+      required: true
+    outputs:
+    - name: status
+      type: str
+  autoskillit.recipe._cmd_rpc.immediate_merge_conflict_fix:
+    inputs:
+    - name: work_dir
+      type: str
+      required: true
+    - name: base_branch
+      type: str
+      required: true
+    outputs:
+    - name: status
+      type: str
+  autoskillit.recipe._cmd_rpc.wait_for_direct_merge:
+    inputs:
+    - name: pr_number
+      type: str
+      required: true
+    - name: max_polls
+      type: str
+      required: false
+    - name: poll_interval
+      type: str
+      required: false
+    outputs:
+    - name: state
+      type: str
+  autoskillit.recipe._cmd_rpc.wait_for_immediate_merge:
+    inputs:
+    - name: pr_number
+      type: str
+      required: true
+    - name: max_polls
+      type: str
+      required: false
+    - name: poll_interval
+      type: str
+      required: false
+    outputs:
+    - name: state
+      type: str
+  autoskillit.recipe._cmd_rpc.attempt_cheap_rebase:
+    inputs:
+    - name: work_dir
+      type: str
+      required: true
+    - name: ejected_pr_branch
+      type: str
+      required: true
+    - name: base_branch
+      type: str
+      required: true
+    outputs:
+    - name: status
+      type: str
+  autoskillit.recipe._cmd_rpc.wait_for_review_pr_mergeability:
+    inputs:
+    - name: pr_url
+      type: str
+      required: true
+    - name: max_polls
+      type: str
+      required: false
+    - name: poll_interval
+      type: str
+      required: false
+    outputs:
+    - name: pr_number
+      type: str
+  autoskillit.recipe._cmd_rpc.create_persistent_integration:
+    inputs:
+    - name: work_dir
+      type: str
+      required: true
+    - name: base_branch
+      type: str
+      required: true
+    outputs:
+    - name: ok
+      type: str
+  autoskillit.recipe._cmd_rpc.force_push_and_wait_mergeability:
+    inputs:
+    - name: work_dir
+      type: str
+      required: true
+    - name: integration_branch
+      type: str
+      required: true
+    - name: review_pr_number
+      type: str
+      required: true
+    - name: max_polls
+      type: str
+      required: false
+    - name: poll_interval
+      type: str
+      required: false
+    outputs:
+    - name: ok
+      type: str
+  autoskillit.recipe._cmd_rpc.advance_queue_pr:
+    inputs:
+    - name: current_pr_number
+      type: str
+      required: true
+    - name: pr_order_file
+      type: str
+      required: true
+    outputs:
+    - name: current_pr_number
+      type: str
+  autoskillit.recipe._cmd_rpc.proactive_rebase_next_pr:
+    inputs:
+    - name: work_dir
+      type: str
+      required: true
+    - name: next_pr_branch
+      type: str
+      required: true
+    - name: base_branch
+      type: str
+      required: true
+    outputs:
+    - name: status
+      type: str
+  autoskillit.recipe._cmd_rpc.refetch_issues:
+    inputs:
+    - name: issue_urls
+      type: str
+      required: true
+    outputs:
+    - name: issue_numbers
+      type: str
+  autoskillit.recipe._cmd_rpc.emit_fallback_map:
+    inputs:
+    - name: issue_urls
+      type: str
+      required: true
+    - name: temp_dir
+      type: str
+      required: true
+    outputs:
+    - name: execution_map
+      type: str
+  autoskillit.recipe._cmd_rpc.ensure_results:
+    inputs:
+    - name: experiment_results
+      type: str
+      required: true
+    - name: worktree_path
+      type: str
+      required: true
+    - name: temp_subdir
+      type: str
+      required: false
+    outputs:
+    - name: experiment_results
+      type: str
+  autoskillit.recipe._cmd_rpc.export_local_bundle:
+    inputs:
+    - name: source_dir
+      type: str
+      required: true
+    - name: research_dir
+      type: str
+      required: true
+    outputs:
+    - name: local_bundle_path
+      type: str

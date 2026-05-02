@@ -61,12 +61,12 @@ class TestImplementationPipelineIssueUrl:
         assert data["steps"]["capture_base_sha"]["on_success"] == "get_issue_title"
         assert data["steps"]["get_issue_title"]["on_success"] == "claim_issue"
 
-    def test_create_branch_uses_slug_fallback(self):
-        """create_branch shell uses ${SLUG:-$RUN} pattern."""
+    def test_create_branch_uses_callable(self):
+        """compute_branch uses run_python callable for slug/run_name branching."""
         data = yaml.safe_load(_recipe_path("implementation").read_text())
-        cmd = data["steps"]["compute_branch"]["with"]["cmd"]
-        assert "SLUG" in cmd
-        assert "${SLUG:-" in cmd
+        step = data["steps"]["compute_branch"]
+        assert step["tool"] == "run_python"
+        assert step["with"]["callable"] == "autoskillit.recipe._cmd_rpc.compute_branch"
 
     def test_issue_url_referenced_in_downstream_skill_step(self):
         """plan step must reference inputs.issue_url, not issue_content."""
@@ -151,12 +151,12 @@ class TestInvestigateFirstIssueUrl:
         assert data["steps"]["set_merge_target"]["on_success"] == "get_issue_title"
         assert data["steps"]["get_issue_title"]["on_success"] == "claim_issue"
 
-    def test_create_branch_uses_slug_fallback(self):
-        """create_branch shell uses ${SLUG:-$RUN} pattern."""
+    def test_create_branch_uses_callable(self):
+        """compute_branch uses run_python callable for slug/run_name branching."""
         data = yaml.safe_load(_recipe_path("remediation").read_text())
-        cmd = data["steps"]["compute_branch"]["with"]["cmd"]
-        assert "SLUG" in cmd
-        assert "${SLUG:-" in cmd
+        step = data["steps"]["compute_branch"]
+        assert step["tool"] == "run_python"
+        assert step["with"]["callable"] == "autoskillit.recipe._cmd_rpc.compute_branch"
 
     def test_issue_url_referenced_in_downstream_skill_step(self):
         """investigate step must reference inputs.issue_url, not issue_content."""
@@ -227,11 +227,11 @@ class TestImplementationGroupsIssueTitle:
         assert step.get("skip_when_false") == "inputs.issue_url"
         assert step.get("optional") is True
 
-    def test_create_branch_uses_slug_fallback(self):
+    def test_create_branch_uses_callable(self):
         data = yaml.safe_load(_recipe_path("implementation-groups").read_text())
-        cmd = data["steps"]["compute_branch"]["with"]["cmd"]
-        assert "SLUG" in cmd
-        assert "${SLUG:-" in cmd
+        step = data["steps"]["compute_branch"]
+        assert step["tool"] == "run_python"
+        assert step["with"]["callable"] == "autoskillit.recipe._cmd_rpc.compute_branch"
 
     def test_no_issue_content_capture(self):
         """issue_content must not be captured anywhere in the recipe."""

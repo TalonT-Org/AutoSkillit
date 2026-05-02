@@ -112,19 +112,26 @@ def test_export_local_bundle_exists(recipe):
 
 def test_export_local_bundle_emits_local_bundle_path(recipe):
     step = recipe.steps["export_local_bundle"]
-    cmd = step.with_args.get("cmd", "")
-    assert "local_bundle_path=" in cmd, (
-        "export_local_bundle cmd must emit local_bundle_path= for capture"
+    # export_local_bundle is a run_python callable step — no inline cmd.
+    # Verify the callable is registered and the captured output key is declared.
+    assert step.tool == "run_python", "export_local_bundle must use run_python"
+    assert step.with_args.get("callable") == "autoskillit.recipe._cmd_rpc.export_local_bundle", (
+        "export_local_bundle must reference the export_local_bundle callable"
+    )
+    assert "local_bundle_path" in (step.capture or {}), (
+        "export_local_bundle must capture local_bundle_path"
     )
 
 
 def test_export_local_bundle_uses_source_dir_research_bundles(recipe):
     step = recipe.steps["export_local_bundle"]
-    cmd = step.with_args.get("cmd", "")
-    assert "research-bundles" in cmd, (
-        "export_local_bundle must export to {source_dir}/research-bundles/"
+    # export_local_bundle is a run_python callable step — verify with_args keys.
+    assert "source_dir" in step.with_args, (
+        "export_local_bundle must pass source_dir to the callable"
     )
-    assert "source_dir" in cmd, "export_local_bundle cmd must reference inputs.source_dir"
+    assert "research_dir" in step.with_args, (
+        "export_local_bundle must pass research_dir to the callable"
+    )
 
 
 def test_export_local_bundle_routes_to_patch_token_summary(recipe):
@@ -141,34 +148,42 @@ def test_export_local_bundle_routes_to_patch_token_summary(recipe):
 
 
 def test_finalize_bundle_reads_output_mode(recipe):
-    """finalize_bundle cmd must read OUTPUT_MODE from inputs.output_mode."""
+    """finalize_bundle cmd must pass output_mode to the external script."""
     step = recipe.steps["finalize_bundle"]
     cmd = step.with_args.get("cmd", "")
-    assert "OUTPUT_MODE" in cmd, "finalize_bundle must set OUTPUT_MODE from inputs.output_mode"
-    assert "inputs.output_mode" in cmd or "inputs.output_mode" in cmd, (
-        "finalize_bundle cmd must reference ${{ inputs.output_mode }}"
+    assert "finalize_bundle.sh" in cmd, (
+        "finalize_bundle must delegate to scripts/recipe/finalize_bundle.sh"
+    )
+    assert "inputs.output_mode" in cmd, (
+        "finalize_bundle cmd must pass ${{ inputs.output_mode }} as first script argument"
     )
 
 
 def test_finalize_bundle_skips_commit_in_local_mode(recipe):
-    """finalize_bundle cmd must gate git commit behind OUTPUT_MODE != local."""
+    """finalize_bundle delegates local/pr branching to external script."""
     step = recipe.steps["finalize_bundle"]
     cmd = step.with_args.get("cmd", "")
-    # git commit must exist (for pr mode) but be conditional
-    assert "git commit" in cmd, "finalize_bundle must still have git commit (for pr mode)"
-    commit_pos = cmd.find("git commit")
-    output_mode_check_pos = cmd.rfind("OUTPUT_MODE", 0, commit_pos)
-    assert output_mode_check_pos != -1, (
-        "git commit block in finalize_bundle must be guarded by OUTPUT_MODE check"
+    # The script receives output_mode as its first positional arg and handles mode branching.
+    assert "finalize_bundle.sh" in cmd, (
+        "finalize_bundle must delegate to scripts/recipe/finalize_bundle.sh"
+    )
+    assert "inputs.output_mode" in cmd, (
+        "finalize_bundle must pass output_mode so the script can gate the git commit"
     )
 
 
 def test_finalize_bundle_preserves_html_in_local_mode(recipe):
-    """finalize_bundle tar exclusion must include report.html for local mode browsing."""
+    """finalize_bundle delegates local-mode HTML preservation to the external script."""
     step = recipe.steps["finalize_bundle"]
     cmd = step.with_args.get("cmd", "")
-    assert r"report\.html" in cmd, (
-        r"finalize_bundle must reference report\.html (escaped) in tar exclusion for local mode"
+    # The script (finalize_bundle.sh) handles report.html exclusion for local mode.
+    # The recipe cmd passes output_mode so the script can apply the correct exclusion.
+    assert "finalize_bundle.sh" in cmd, (
+        "finalize_bundle must delegate to scripts/recipe/finalize_bundle.sh "
+        "(which excludes report.html from tar in local mode)"
+    )
+    assert "inputs.output_mode" in cmd, (
+        "finalize_bundle must pass output_mode so the script preserves report.html in local mode"
     )
 
 

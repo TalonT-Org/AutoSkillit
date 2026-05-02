@@ -47,18 +47,14 @@ def test_plan_visualization_step_captures_paths(recipe) -> None:
 
 
 def test_create_worktree_copies_viz_plan(recipe) -> None:
-    """create_worktree cmd must copy visualization-plan.md and report-plan.md."""
+    """create_worktree cmd must pass visualization_plan_path and report_plan_path."""
     step = recipe.steps["create_worktree"]
     cmd = step.with_args.get("cmd", "")
-    assert "VISUALIZATION_PLAN" in cmd, (
-        "create_worktree must reference VISUALIZATION_PLAN context variable"
+    assert "visualization_plan_path" in cmd, (
+        "create_worktree must pass context.visualization_plan_path to the script"
     )
-    assert "REPORT_PLAN" in cmd, "create_worktree must reference REPORT_PLAN context variable"
-    assert "visualization-plan.md" in cmd, (
-        "create_worktree must copy visualization-plan.md into the research dir"
-    )
-    assert "report-plan.md" in cmd, (
-        "create_worktree must copy report-plan.md into the research dir"
+    assert "report_plan_path" in cmd, (
+        "create_worktree must pass context.report_plan_path to the script"
     )
 
 

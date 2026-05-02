@@ -250,16 +250,20 @@ def test_pmp_confirm_create_integration_routes_to_escalate_on_failure(recipe) ->
 
 
 def test_pmp_has_create_persistent_integration_step(recipe) -> None:
-    """create_persistent_integration must exist and use run_cmd."""
+    """create_persistent_integration must exist and use run_python callable."""
     assert "create_persistent_integration" in recipe.steps
-    assert recipe.steps["create_persistent_integration"].tool == "run_cmd"
+    step = recipe.steps["create_persistent_integration"]
+    assert step.tool == "run_python"
+    assert (
+        step.with_args["callable"] == "autoskillit.recipe._cmd_rpc.create_persistent_integration"
+    )
 
 
-def test_pmp_create_persistent_integration_auto_detects_default_branch(recipe) -> None:
-    """create_persistent_integration cmd must auto-detect the repo's default branch."""
-    cmd = recipe.steps["create_persistent_integration"].with_args["cmd"]
-    assert "symbolic-ref" in cmd
-    assert "upstream_branch" not in cmd
+def test_pmp_create_persistent_integration_passes_required_args(recipe) -> None:
+    """create_persistent_integration must pass work_dir and base_branch."""
+    args = recipe.steps["create_persistent_integration"].with_args
+    assert "work_dir" in args
+    assert "base_branch" in args
 
 
 def test_pmp_create_persistent_integration_routes_to_analyze_prs(recipe) -> None:
@@ -384,10 +388,13 @@ def test_pmp_open_integration_pr_routes_to_wait_for_mergeability(recipe) -> None
 
 
 def test_pmp_has_wait_for_review_pr_mergeability_step(recipe) -> None:
-    """B2: wait_for_review_pr_mergeability step must exist and use run_cmd tool."""
+    """B2: wait_for_review_pr_mergeability step must exist and use run_python callable."""
     assert "wait_for_review_pr_mergeability" in recipe.steps
     step = recipe.steps["wait_for_review_pr_mergeability"]
-    assert step.tool == "run_cmd"
+    assert step.tool == "run_python"
+    assert (
+        step.with_args["callable"] == "autoskillit.recipe._cmd_rpc.wait_for_review_pr_mergeability"
+    )
 
 
 def test_pmp_wait_for_mergeability_captures_review_pr_number(recipe) -> None:
@@ -448,11 +455,14 @@ def test_pmp_resolve_integration_conflicts_routes_to_force_push(recipe) -> None:
 
 
 def test_pmp_has_force_push_and_wait_mergeability_step(recipe) -> None:
-    """B10: force_push_and_wait_mergeability must exist with run_cmd and --force-with-lease."""
+    """B10: force_push_and_wait_mergeability must exist with run_python callable."""
     assert "force_push_and_wait_mergeability" in recipe.steps
     step = recipe.steps["force_push_and_wait_mergeability"]
-    assert step.tool == "run_cmd"
-    assert "--force-with-lease" in step.with_args.get("cmd", "")
+    assert step.tool == "run_python"
+    assert (
+        step.with_args["callable"]
+        == "autoskillit.recipe._cmd_rpc.force_push_and_wait_mergeability"
+    )
 
 
 def test_pmp_force_push_and_wait_mergeability_routes_to_check_post_rebase(

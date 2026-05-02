@@ -73,19 +73,16 @@ def test_bem_wrapper_fallback_references_autoskillit_temp():
 
 
 def test_bem_wrapper_fallback_writes_file_not_json_to_stdout():
-    """emit_fallback_map must echo the FILE PATH to stdout (not raw JSON).
+    """emit_fallback_map must write JSON to a file and return the path.
 
-    The campaign captures the path via result.stdout. If raw JSON were echoed,
-    implement-findings would get ENOENT when opening it as a file path.
+    The campaign captures the path via result.execution_map. If raw JSON were
+    returned, implement-findings would get ENOENT when opening it as a file path.
     """
     recipe = _load()
     step = recipe.steps["emit_fallback_map"]
-    cmd = step.with_args["cmd"]
-    # cmd must write JSON to a file via Python open() and print the path
-    assert "open(map_file" in cmd, "cmd must write JSON to a file via Python open()"
-    assert "print(map_file)" in cmd, "cmd must echo the file path, not raw JSON"
-    # capture must use result.stdout (the echoed path), not a structured key
-    assert step.capture.get("execution_map") == "${{ result.stdout | trim }}"
+    assert step.tool == "run_python"
+    assert step.with_args["callable"] == "autoskillit.recipe._cmd_rpc.emit_fallback_map"
+    assert step.capture.get("execution_map") == "${{ result.execution_map }}"
 
 
 def test_bem_wrapper_emit_result_consumes_execution_map_context():

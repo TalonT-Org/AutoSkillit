@@ -337,12 +337,12 @@ class TestResearchRecipeStructure:
         assert step.on_success == "open_artifact_pr"
         assert step.on_failure == "patch_token_summary"
 
-    def test_archival_create_artifact_branch_uses_research_checkout(self, recipe) -> None:
-        """create_artifact_branch must use git checkout <branch> -- research/ pattern."""
+    def test_archival_create_artifact_branch_uses_external_script(self, recipe) -> None:
+        """create_artifact_branch must invoke the externalized shell script."""
         step = recipe.steps["create_artifact_branch"]
         cmd = step.with_args["cmd"]
-        assert "research/" in cmd, "Must checkout research/ directory from experiment branch"
-        assert "worktree add" in cmd, "Must create a temporary worktree"
+        assert "create_artifact_branch.sh" in cmd
+        assert "context.research_dir" in cmd
 
     def test_archival_open_artifact_pr_step(self, recipe) -> None:
         """open_artifact_pr creates the artifact-only PR and captures artifact_pr_url."""
@@ -362,11 +362,11 @@ class TestResearchRecipeStructure:
         assert step.on_success == "close_experiment_pr"
         assert step.on_failure == "patch_token_summary"
 
-    def test_archival_tag_uses_archive_prefix(self, recipe) -> None:
-        """Tag name must use archive/research/ prefix convention."""
+    def test_archival_tag_uses_external_script(self, recipe) -> None:
+        """tag_experiment_branch must invoke the externalized shell script."""
         step = recipe.steps["tag_experiment_branch"]
         cmd = step.with_args["cmd"]
-        assert "archive/research/" in cmd
+        assert "tag_experiment_branch.sh" in cmd
 
     def test_archival_close_experiment_pr_step(self, recipe) -> None:
         """close_experiment_pr closes the original PR and routes to research_complete."""
@@ -417,30 +417,18 @@ class TestResearchRecipeStructure:
         assert step.on_success == "route_archive_or_export"
         assert step.on_failure == "route_archive_or_export"
 
-    def test_create_worktree_copies_review_cycle_artifacts(self, recipe) -> None:
-        """create_worktree must copy review-design dashboards and revision guidance."""
+    def test_create_worktree_uses_external_script(self, recipe) -> None:
+        """create_worktree must invoke the externalized shell script."""
         step = recipe.steps["create_worktree"]
         cmd = step.with_args["cmd"]
-        assert "review-cycles" in cmd, (
-            "create_worktree must create artifacts/review-cycles/ subdirectory"
-        )
-        assert "evaluation_dashboard" in cmd and "review-cycles" in cmd, (
-            "create_worktree must copy evaluation dashboards to review-cycles/"
-        )
-        assert "revision_guidance" in cmd and "review-cycles" in cmd, (
-            "create_worktree must copy revision guidance to review-cycles/"
-        )
+        assert "create_worktree.sh" in cmd
+        assert "context.experiment_plan" in cmd
 
-    def test_create_worktree_copies_plan_version_artifacts(self, recipe) -> None:
-        """create_worktree must copy intermediate plan versions."""
+    def test_create_worktree_passes_source_dir(self, recipe) -> None:
+        """create_worktree must pass source_dir to the external script."""
         step = recipe.steps["create_worktree"]
         cmd = step.with_args["cmd"]
-        assert "plan-versions" in cmd, (
-            "create_worktree must create artifacts/plan-versions/ subdirectory"
-        )
-        assert "experiment_plan" in cmd and "plan-versions" in cmd, (
-            "create_worktree must copy plan versions to plan-versions/"
-        )
+        assert "inputs.source_dir" in cmd
 
     def test_stage_bundle_step_exists(self, recipe) -> None:
         """A stage_bundle step must exist to organize phase artifacts."""
@@ -449,8 +437,7 @@ class TestResearchRecipeStructure:
         )
         step = recipe.steps["stage_bundle"]
         cmd = step.with_args["cmd"]
-        assert "phase-groups" in cmd, "Must copy make-groups output"
-        assert "phase-plans" in cmd, "Must copy make-plan output"
+        assert "stage_bundle.sh" in cmd, "Must invoke externalized stage_bundle script"
 
     def test_test_routes_to_push_branch(self, recipe) -> None:
         """test step must route to push_branch now that commit_research_artifacts is removed."""

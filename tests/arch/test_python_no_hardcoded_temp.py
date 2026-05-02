@@ -57,6 +57,7 @@ _TEMP_PATH_WHITELIST: dict[str, str] = {
     # Justification: docstring for _write_hook_config() references the canonical
     # hook config path so callers know where the file is written.
     "server/tools_kitchen.py": "docstring example",
+    "recipe/_cmd_rpc.py": "ensure_results default temp_subdir matches canonical default",
 }
 
 _LITERAL = ".autoskillit/temp"

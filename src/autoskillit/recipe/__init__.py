@@ -19,6 +19,7 @@ from autoskillit.recipe import rules_dataflow as _rules_dataflow  # noqa: E402 F
 from autoskillit.recipe import rules_features as _rules_features  # noqa: E402 F401
 from autoskillit.recipe import rules_fixing as _rules_fixing  # noqa: E402 F401
 from autoskillit.recipe import rules_graph as _rules_graph  # noqa: E402 F401
+from autoskillit.recipe import rules_inline_script as _rules_inline_script  # noqa: E402 F401
 from autoskillit.recipe import rules_inputs as _rules_inputs  # noqa: E402 F401
 from autoskillit.recipe import rules_isolation as _rules_isolation  # noqa: E402 F401
 from autoskillit.recipe import rules_merge as _rules_merge  # noqa: E402 F401

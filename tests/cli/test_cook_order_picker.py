@@ -306,7 +306,7 @@ class TestCLIOrderPicker:
             "autoskillit.recipe.list_recipes",
             lambda *a, **kw: type("R", (), {"items": [project_recipe]})(),
         )
-        monkeypatch.setattr("autoskillit.cli._timed_input.timed_prompt", lambda *a, **kw: "0")
+        monkeypatch.setattr("autoskillit.cli._menu.timed_prompt", lambda *a, **kw: "0")
         monkeypatch.setattr(shutil, "which", lambda cmd: None)
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
@@ -336,7 +336,7 @@ class TestCLIOrderPicker:
             "autoskillit.recipe.list_recipes",
             lambda *a, **kw: type("R", (), {"items": [builtin_recipe]})(),
         )
-        monkeypatch.setattr("autoskillit.cli._timed_input.timed_prompt", lambda *a, **kw: "0")
+        monkeypatch.setattr("autoskillit.cli._menu.timed_prompt", lambda *a, **kw: "0")
         monkeypatch.setattr(shutil, "which", lambda cmd: None)
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
@@ -365,7 +365,7 @@ class TestCLIOrderPicker:
             "autoskillit.recipe.list_recipes",
             lambda *a, **kw: type("R", (), {"items": [exp_recipe]})(),
         )
-        monkeypatch.setattr("autoskillit.cli._timed_input.timed_prompt", lambda *a, **kw: "0")
+        monkeypatch.setattr("autoskillit.cli._menu.timed_prompt", lambda *a, **kw: "0")
         monkeypatch.setattr(shutil, "which", lambda cmd: None)
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
@@ -394,7 +394,7 @@ class TestCLIOrderPicker:
             "autoskillit.recipe.list_recipes",
             lambda *a, **kw: type("R", (), {"items": [builtin_recipe]})(),
         )
-        monkeypatch.setattr("autoskillit.cli._timed_input.timed_prompt", lambda *a, **kw: "0")
+        monkeypatch.setattr("autoskillit.cli._menu.timed_prompt", lambda *a, **kw: "0")
         monkeypatch.setattr(shutil, "which", lambda cmd: None)
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
@@ -424,7 +424,7 @@ class TestCLIOrderPicker:
             "autoskillit.recipe.list_recipes",
             lambda *a, **kw: type("R", (), {"items": [addon_recipe]})(),
         )
-        monkeypatch.setattr("autoskillit.cli._timed_input.timed_prompt", lambda *a, **kw: "0")
+        monkeypatch.setattr("autoskillit.cli._menu.timed_prompt", lambda *a, **kw: "0")
         monkeypatch.setattr(shutil, "which", lambda cmd: None)
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
@@ -468,7 +468,7 @@ class TestCLIOrderPicker:
         monkeypatch.setattr(
             "autoskillit.recipe.list_recipes", lambda *a, **kw: type("R", (), {"items": recipes})()
         )
-        monkeypatch.setattr("autoskillit.cli._timed_input.timed_prompt", lambda *a, **kw: "0")
+        monkeypatch.setattr("autoskillit.cli._menu.timed_prompt", lambda *a, **kw: "0")
         monkeypatch.setattr(shutil, "which", lambda cmd: None)
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)

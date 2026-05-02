@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -187,7 +188,9 @@ def test_fleet_campaign_resume_no_name_lists_active_campaigns(
     monkeypatch.setattr("autoskillit.cli._menu.timed_prompt", lambda *a, **kw: "1")
     monkeypatch.setattr(
         "autoskillit.fleet.resume_campaign_from_state",
-        lambda *a, **kw: object(),
+        lambda *a, **kw: MagicMock(
+            completed_dispatches_block="", next_dispatch_name="", is_resumable=False
+        ),
     )
     _capture_subprocess(monkeypatch)
 

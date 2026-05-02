@@ -1,9 +1,4 @@
-"""Install-type detection for feature gating — IL-0 (zero autoskillit imports).
-
-is_dev_install() is the canonical predicate for determining whether the
-current autoskillit install is a development (editable) install. Used by
-config resolution to auto-detect the experimental_enabled default.
-"""
+"""Install-type detection for feature gating — IL-0."""
 
 from __future__ import annotations
 
@@ -14,13 +9,7 @@ logger = logging.getLogger(__name__)  # noqa: TID251 — IL-0 module, no autoski
 
 
 def is_dev_install() -> bool:
-    """Return True if autoskillit is installed in editable (development) mode.
-
-    Reads direct_url.json from package metadata — the same mechanism used
-    by _version_snapshot._install_info() and cli._install_info.detect_install().
-
-    Returns False on any error (missing metadata, malformed JSON, etc.).
-    """
+    """Return True if installed in editable mode; False on any error."""
     try:
         import importlib.metadata
 

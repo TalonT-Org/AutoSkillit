@@ -27,8 +27,8 @@ logger = get_logger(__name__)
 _VERSION_BUMP_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
     re.compile(p, re.IGNORECASE)
     for p in [
-        r"pyproject\.toml.*version",
-        r"version.*pyproject\.toml",
+        r"(?:bump|edit|set|update|modify|change)\s[\s\S]{0,40}pyproject\.toml",
+        r"pyproject\.toml[\s\S]{0,40}version\s*=",
         r"sync[-_]versions",
         r"task\s+sync-versions",
         r"\bversion[\s_-]*bump\b",

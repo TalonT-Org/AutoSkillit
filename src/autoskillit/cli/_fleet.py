@@ -99,9 +99,9 @@ def fleet_campaign(
 
     cfg = load_config(Path.cwd())
     _require_fleet(cfg)
+    from autoskillit.cli._menu import run_selection_menu
 
     if campaign_name is None and resume_campaign is None:
-        from autoskillit.cli._menu import run_selection_menu
         from autoskillit.recipe import list_campaign_recipes
 
         result = list_campaign_recipes(Path.cwd())
@@ -123,9 +123,7 @@ def fleet_campaign(
         campaign_name = selected.name
 
     if campaign_name is None and resume_campaign is not None:
-        from autoskillit.cli._menu import run_selection_menu
-        from autoskillit.fleet import read_state
-        from autoskillit.fleet.state import _TERMINAL_DISPATCH_STATUSES
+        from autoskillit.fleet import _TERMINAL_DISPATCH_STATUSES, read_state
 
         fleet_dir = Path.cwd() / ".autoskillit" / "temp" / "fleet"
         active: list[CampaignState] = []

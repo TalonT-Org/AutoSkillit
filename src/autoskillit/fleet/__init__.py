@@ -20,6 +20,7 @@ from .sidecar import (
     sidecar_path,
 )
 from .state import (
+    _TERMINAL_DISPATCH_STATUSES,
     FLEET_HALTED_SENTINEL,
     CampaignState,
     DispatchRecord,
@@ -71,6 +72,7 @@ __all__ = [
     "parse_campaign_summary",
     "serialize_campaign_summary",
     "validate_campaign_summary",
+    "_TERMINAL_DISPATCH_STATUSES",
     "FLEET_HALTED_SENTINEL",
     "CampaignState",
     "DispatchRecord",

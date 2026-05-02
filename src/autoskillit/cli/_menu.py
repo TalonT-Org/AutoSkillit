@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from typing import TypeVar
 
+from autoskillit.cli._timed_input import timed_prompt
+
 T = TypeVar("T")
 
 SLOT_ZERO_SELECTED: str = "__slot_zero__"
@@ -66,8 +68,6 @@ def run_selection_menu(
     timeout: int = 120,
     label: str = "selection",
 ) -> T | str | None:
-    from autoskillit.cli._timed_input import timed_prompt
-
     render_numbered_menu(
         items,
         header=header,

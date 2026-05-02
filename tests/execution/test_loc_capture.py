@@ -153,9 +153,10 @@ def test_compute_loc_changed_clone_root_vs_worktree(tmp_path: Path):
     # Clone root is untouched — LoC should be (0, 0)
     assert _compute_loc_changed(str(repo_path), pre_sha) == (0, 0)
 
-    # Worktree has new commits — LoC should be non-zero
+    # Worktree has new commits — LoC should be non-zero insertions, zero deletions
     wt_ins, wt_del = _compute_loc_changed(str(worktree_path), pre_sha)
     assert wt_ins > 0
+    assert wt_del == 0
 
 
 # T-GIT-6

@@ -285,3 +285,45 @@ def test_planner_recipe_assess_review_approach_routes_to_validate_on_failure(pla
     step = planner_recipe.steps["assess_review_approach_step"]
     assert step.on_success == "validate"
     assert step.on_failure == "validate"
+
+
+# --- task_file ingredient tests ---
+
+
+def test_planner_recipe_has_task_file_ingredient(planner_recipe):
+    ingredients = planner_recipe.ingredients
+    assert "task_file" in ingredients, "planner recipe must have task_file ingredient"
+    assert ingredients["task_file"].required is False
+
+
+def test_extract_domain_receives_planner_task_file_env(planner_recipe):
+    step = planner_recipe.steps["extract_domain"]
+    env = step.with_args.get("env", {})
+    assert "PLANNER_TASK_FILE" in env, "extract_domain must pass PLANNER_TASK_FILE env var"
+    assert "inputs.task_file" in env["PLANNER_TASK_FILE"]
+
+
+def test_generate_phases_receives_planner_task_file_env(planner_recipe):
+    step = planner_recipe.steps["generate_phases"]
+    env = step.with_args.get("env", {})
+    assert "PLANNER_TASK_FILE" in env, "generate_phases must pass PLANNER_TASK_FILE env var"
+    assert "inputs.task_file" in env["PLANNER_TASK_FILE"]
+
+
+def test_build_plan_snapshot_receives_task_file(planner_recipe):
+    step = planner_recipe.steps["build_plan_snapshot"]
+    assert "task_file" in step.with_args, "build_plan_snapshot must receive task_file"
+    assert "inputs.task_file" in step.with_args["task_file"]
+
+
+@pytest.mark.parametrize("step_name", ["merge_phases", "merge_assignments", "merge_wps"])
+def test_merge_steps_receive_task_file(planner_recipe, step_name):
+    step = planner_recipe.steps[step_name]
+    assert "task_file" in step.with_args, f"{step_name} must receive task_file"
+    assert "inputs.task_file" in step.with_args["task_file"]
+
+
+def test_compile_step_receives_task_file(planner_recipe):
+    step = planner_recipe.steps["compile"]
+    assert "task_file" in step.with_args, "compile must receive task_file"
+    assert "inputs.task_file" in step.with_args["task_file"]

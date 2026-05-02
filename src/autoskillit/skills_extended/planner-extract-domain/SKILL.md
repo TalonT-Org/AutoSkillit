@@ -24,6 +24,7 @@ Extract domain knowledge, naming conventions, and structural patterns specific t
 
 - **`PLANNER_ANALYSIS_FILE`** (env-var) — Absolute path to `analysis.json` produced by `planner-analyze`. Set by the recipe via the step's `env:` block.
 - **`PLANNER_TASK`** (env-var, optional) — The user's task description. When set, focus domain extraction on areas relevant to the stated task rather than performing a full-codebase survey.
+- **`PLANNER_TASK_FILE`** (env-var, optional) — Absolute path to a file containing the task description. When set, read the file content and use it as the task. Takes precedence over `PLANNER_TASK`.
 
 ## Critical Constraints
 
@@ -45,8 +46,10 @@ Read the `analysis.json` file from the path in the PLANNER_ANALYSIS_FILE environ
 
 ### Step 2: Launch 3–5 parallel Explore subagents
 
-If `PLANNER_TASK` is set, include it in each subagent's prompt: "Focus exploration on
-domain vocabulary, abstractions, and integration points relevant to this task: {PLANNER_TASK}.
+Read the task description: if `PLANNER_TASK_FILE` is set, read the file at that path; otherwise use `PLANNER_TASK`.
+
+If the task description is available, include it in each subagent's prompt: "Focus exploration on
+domain vocabulary, abstractions, and integration points relevant to this task: {task}.
 Prioritize areas the task will touch over exhaustive full-codebase coverage."
 
 Spawn all concurrently with `model: "sonnet"`. Always spawn agents 1–3; spawn agents 4–5 only when the project has >20 modules or architecture_style is layered/hexagonal:

@@ -384,3 +384,8 @@ def test_planner_skill_example_paths_are_run_scoped(skill_name: str) -> None:
                     f"'{{{{AUTOSKILLIT_TEMP}}}}/planner' as example. "
                     f"Use run-scoped form: '{{{{AUTOSKILLIT_TEMP}}}}/planner/run-YYYYMMDD-HHMMSS'"
                 )
+
+
+def test_generate_phases_skill_references_planner_task_file():
+    content = (SKILLS_ROOT / "planner-generate-phases" / "SKILL.md").read_text()
+    assert "PLANNER_TASK_FILE" in content, "SKILL.md must document PLANNER_TASK_FILE env var"

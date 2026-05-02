@@ -66,10 +66,10 @@ def test_merge_prs_reenter_queue_exists(pmp_recipe) -> None:
 
 
 def test_merge_prs_advance_queue_pr_exists(pmp_recipe) -> None:
-    """advance_queue_pr step must exist with tool=run_cmd."""
+    """advance_queue_pr step must exist with tool=run_python."""
     assert "advance_queue_pr" in pmp_recipe.steps
     step = pmp_recipe.steps["advance_queue_pr"]
-    assert step.tool == "run_cmd"
+    assert step.tool == "run_python"
 
 
 # ---------------------------------------------------------------------------
@@ -152,19 +152,11 @@ def test_merge_prs_get_first_pr_number_routes_to_enqueue(pmp_recipe) -> None:
 
 
 def test_merge_prs_attempt_cheap_rebase_exists(pmp_recipe) -> None:
-    """attempt_cheap_rebase step must exist with tool=run_cmd."""
+    """attempt_cheap_rebase step must exist with tool=run_python."""
     assert "attempt_cheap_rebase" in pmp_recipe.steps
     step = pmp_recipe.steps["attempt_cheap_rebase"]
-    assert step.tool == "run_cmd"
-
-
-def test_merge_prs_attempt_cheap_rebase_cmd_uses_rebase(pmp_recipe) -> None:
-    """attempt_cheap_rebase cmd must contain git rebase and clean/conflicts output."""
-    step = pmp_recipe.steps["attempt_cheap_rebase"]
-    cmd = step.with_args.get("cmd", "")
-    assert "git rebase" in cmd
-    assert "clean" in cmd
-    assert "conflicts" in cmd
+    assert step.tool == "run_python"
+    assert step.with_args.get("callable") == "autoskillit.recipe._cmd_rpc.attempt_cheap_rebase"
 
 
 def test_merge_prs_attempt_cheap_rebase_routing(pmp_recipe) -> None:
@@ -237,14 +229,9 @@ def test_merge_prs_get_next_pr_branch_on_failure_routes_to_enqueue(pmp_recipe) -
 
 def test_merge_prs_proactive_rebase_next_pr_exists(pmp_recipe) -> None:
     assert "proactive_rebase_next_pr" in pmp_recipe.steps
-    assert pmp_recipe.steps["proactive_rebase_next_pr"].tool == "run_cmd"
-
-
-def test_merge_prs_proactive_rebase_next_pr_cmd_uses_rebase(pmp_recipe) -> None:
-    cmd = pmp_recipe.steps["proactive_rebase_next_pr"].with_args.get("cmd", "")
-    assert "git rebase" in cmd
-    assert "clean" in cmd
-    assert "conflicts" in cmd
+    step = pmp_recipe.steps["proactive_rebase_next_pr"]
+    assert step.tool == "run_python"
+    assert step.with_args.get("callable") == "autoskillit.recipe._cmd_rpc.proactive_rebase_next_pr"
 
 
 def test_merge_prs_proactive_rebase_next_pr_routing(pmp_recipe) -> None:
@@ -341,11 +328,11 @@ def test_merge_prs_ci_watch_routes_to_reenter(pmp_recipe) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_merge_prs_advance_queue_pr_is_run_cmd(pmp_recipe) -> None:
-    """advance_queue_pr step must exist with tool=run_cmd."""
+def test_merge_prs_advance_queue_pr_is_run_python(pmp_recipe) -> None:
+    """advance_queue_pr step must exist with tool=run_python."""
     assert "advance_queue_pr" in pmp_recipe.steps
     step = pmp_recipe.steps["advance_queue_pr"]
-    assert step.tool == "run_cmd"
+    assert step.tool == "run_python"
 
 
 def test_merge_prs_next_queue_pr_or_done_removed(pmp_recipe) -> None:
@@ -353,20 +340,19 @@ def test_merge_prs_next_queue_pr_or_done_removed(pmp_recipe) -> None:
     assert "next_queue_pr_or_done" not in pmp_recipe.steps
 
 
-def test_merge_prs_advance_queue_pr_cmd_references_pr_order(pmp_recipe) -> None:
-    """advance_queue_pr cmd must reference pr_order_file and current_pr_number."""
+def test_merge_prs_advance_queue_pr_callable_references_pr_order(pmp_recipe) -> None:
+    """advance_queue_pr callable args must reference pr_order_file and current_pr_number."""
     step = pmp_recipe.steps["advance_queue_pr"]
-    cmd = step.with_args.get("cmd", "")
-    assert "pr_order_file" in cmd
-    assert "current_pr_number" in cmd
+    args = step.with_args
+    assert "pr_order_file" in args
+    assert "current_pr_number" in args
 
 
 def test_merge_prs_advance_queue_pr_captures_pr_number(pmp_recipe) -> None:
-    """advance_queue_pr must have a capture block for current_pr_number using | trim."""
+    """advance_queue_pr must have a capture block for current_pr_number."""
     step = pmp_recipe.steps["advance_queue_pr"]
     capture = step.capture or {}
     assert "current_pr_number" in capture
-    assert "trim" in capture["current_pr_number"]
 
 
 def test_merge_prs_advance_queue_pr_routing(pmp_recipe) -> None:

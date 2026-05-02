@@ -158,15 +158,11 @@ steps:
       proceed without the target branch.
 
   create_persistent_integration:
-    tool: run_cmd
+    tool: run_python
     with:
-      cmd: |
-        REMOTE=$(git remote get-url upstream 2>/dev/null | grep -qv "^file://" && echo upstream || echo origin)
-        DEFAULT_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||')
-        DEFAULT_BRANCH=${DEFAULT_BRANCH:-main}
-        git checkout "$DEFAULT_BRANCH" && git pull && git checkout -b '${{ inputs.base_branch }}' && git push "$REMOTE" '${{ inputs.base_branch }}'
-      cwd: "${{ context.work_dir }}"
-      step_name: "create_persistent_integration"
+      callable: "autoskillit.recipe._cmd_rpc.create_persistent_integration"
+      work_dir: "${{ context.work_dir }}"
+      base_branch: "${{ inputs.base_branch }}"
     on_success: fetch_merge_queue_data
     on_failure: register_clone_failure
     note: >
@@ -287,23 +283,13 @@ steps:
       ejected_ci_failure must precede ejected (both match CLOSED state).
 
   check_eject_limit:
-    tool: run_cmd
+    tool: run_python
     with:
-      cmd: >
-        COUNTER_FILE="${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/eject_count" &&
-        mkdir -p "$(dirname "$COUNTER_FILE")" &&
-        COUNT=$(cat "$COUNTER_FILE" 2>/dev/null || echo 0) &&
-        COUNT=$((COUNT + 1)) &&
-        echo "$COUNT" > "$COUNTER_FILE" &&
-        if [ "$COUNT" -gt 3 ]; then
-          echo "EJECT_LIMIT_EXCEEDED";
-        else
-          echo "EJECT_OK";
-        fi
-      cwd: "${{ context.work_dir }}"
-      step_name: "check_eject_limit"
+      callable: "autoskillit.recipe._cmd_rpc.check_eject_limit"
+      counter_file: "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/eject_count"
+      max_ejects: "3"
     on_result:
-      - when: "${{ result.stdout | trim }} == EJECT_LIMIT_EXCEEDED"
+      - when: "${{ result.status }} == EJECT_LIMIT_EXCEEDED"
         route: register_clone_failure
       - route: get_ejected_pr_branch
     on_failure: register_clone_failure
@@ -312,23 +298,13 @@ steps:
       to register_clone_failure to prevent infinite re-enqueue cycles.
 
   check_dropped_healthy_loop:
-    tool: run_cmd
+    tool: run_python
     with:
-      cmd: >
-        COUNTER_FILE="${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/dropped_healthy_count" &&
-        mkdir -p "$(dirname "$COUNTER_FILE")" &&
-        COUNT=$(cat "$COUNTER_FILE" 2>/dev/null || echo 0) &&
-        COUNT=$((COUNT + 1)) &&
-        echo "$COUNT" > "$COUNTER_FILE" &&
-        if [ "$COUNT" -gt 2 ]; then
-          echo "DROPPED_LIMIT_EXCEEDED";
-        else
-          echo "DROPPED_OK";
-        fi
-      cwd: "${{ context.work_dir }}"
-      step_name: "check_dropped_healthy_loop"
+      callable: "autoskillit.recipe._cmd_rpc.check_dropped_healthy_loop"
+      counter_file: "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/dropped_healthy_count"
+      max_drops: "2"
     on_result:
-      - when: "${{ result.stdout | trim }} == DROPPED_LIMIT_EXCEEDED"
+      - when: "${{ result.status }} == DROPPED_LIMIT_EXCEEDED"
         route: register_clone_failure
       - route: reenter_queue
     on_failure: register_clone_failure
@@ -351,20 +327,14 @@ steps:
     on_failure: register_clone_failure
 
   attempt_cheap_rebase:
-    tool: run_cmd
+    tool: run_python
     with:
-      cmd: |
-        REMOTE=$(git remote get-url upstream 2>/dev/null | grep -qv "^file://" && echo upstream || echo origin)
-        git fetch "$REMOTE" '${{ context.ejected_pr_branch }}' &&
-        git checkout '${{ context.ejected_pr_branch }}' &&
-        if git rebase "$REMOTE"/${{ inputs.base_branch }};
-        then echo "clean";
-        else git rebase --abort 2>/dev/null || true; echo "conflicts";
-        fi
-      cwd: "${{ context.work_dir }}"
-      step_name: "attempt_cheap_rebase"
+      callable: "autoskillit.recipe._cmd_rpc.attempt_cheap_rebase"
+      work_dir: "${{ context.work_dir }}"
+      ejected_pr_branch: "${{ context.ejected_pr_branch }}"
+      base_branch: "${{ inputs.base_branch }}"
     on_result:
-      - when: "${{ result.stdout | trim }} == clean"
+      - when: "${{ result.status }} == clean"
         route: push_ejected_fix
       - route: resolve_ejected_conflicts
     on_failure: resolve_ejected_conflicts
@@ -441,23 +411,15 @@ steps:
       Routes back to wait_queue_pr to continue monitoring.
 
   advance_queue_pr:
-    tool: run_cmd
+    tool: run_python
     with:
-      cmd: >
-        CURRENT='${{ context.current_pr_number }}' &&
-        NEXT=$(jq -r --arg cur "$CURRENT" '
-          (to_entries | map(select(.value.number == ($cur | tonumber))) | .[0].key) as $idx |
-          if ($idx + 1) < length then .[$idx + 1].number | tostring
-          else "done"
-          end
-        ' '${{ context.pr_order_file }}') &&
-        echo "$NEXT"
-      cwd: "${{ context.work_dir }}"
-      step_name: "advance_queue_pr"
+      callable: "autoskillit.recipe._cmd_rpc.advance_queue_pr"
+      current_pr_number: "${{ context.current_pr_number }}"
+      pr_order_file: "${{ context.pr_order_file }}"
     capture:
-      current_pr_number: "${{ result.stdout | trim }}"
+      current_pr_number: "${{ result.current_pr_number }}"
     on_result:
-      - when: "${{ result.stdout | trim }} == done"
+      - when: "${{ result.current_pr_number }} == done"
         route: collect_and_check_impl_plans
       - route: get_next_pr_branch
     on_failure: register_clone_failure
@@ -485,20 +447,14 @@ steps:
       falls through to enqueue_current_pr — the queue cycle proceeds normally without rebase.
 
   proactive_rebase_next_pr:
-    tool: run_cmd
+    tool: run_python
     with:
-      cmd: |
-        REMOTE=$(git remote | grep -q "^upstream$" && echo upstream || echo origin)
-        git fetch "$REMOTE" '${{ context.next_pr_branch }}' &&
-        git checkout -B '${{ context.next_pr_branch }}' "$REMOTE"/'${{ context.next_pr_branch }}' &&
-        if git rebase "$REMOTE"/${{ inputs.base_branch }};
-        then echo "clean";
-        else git rebase --abort 2>/dev/null || true; echo "conflicts";
-        fi
-      cwd: "${{ context.work_dir }}"
-      step_name: "proactive_rebase_next_pr"
+      callable: "autoskillit.recipe._cmd_rpc.proactive_rebase_next_pr"
+      work_dir: "${{ context.work_dir }}"
+      next_pr_branch: "${{ context.next_pr_branch }}"
+      base_branch: "${{ inputs.base_branch }}"
     on_result:
-      - when: "${{ result.stdout | trim }} == clean"
+      - when: "${{ result.status }} == clean"
         route: push_rebased_next_pr
       - route: resolve_proactive_rebase_conflicts
     on_failure: enqueue_current_pr
@@ -950,21 +906,14 @@ steps:
     on_failure: register_clone_failure
 
   wait_for_review_pr_mergeability:
-    tool: run_cmd
+    tool: run_python
     with:
-      cmd: >
-        PR_NUM=$(gh pr view "${{ context.pr_url }}" --json number -q .number) &&
-        for i in $(seq 1 12); do
-          STATUS=$(gh pr view "$PR_NUM" --json mergeable -q .mergeable);
-          [ "$STATUS" != "UNKNOWN" ] && break;
-          sleep 15;
-        done &&
-        [ "$STATUS" != "UNKNOWN" ] || { echo "Timed out waiting for mergeability" >&2; exit 1; } &&
-        echo "$PR_NUM"
-      cwd: "${{ context.work_dir }}"
-      step_name: "wait_for_review_pr_mergeability"
+      callable: "autoskillit.recipe._cmd_rpc.wait_for_review_pr_mergeability"
+      pr_url: "${{ context.pr_url }}"
+      max_polls: "12"
+      poll_interval: "15"
     capture:
-      review_pr_number: "${{ result.stdout | trim }}"
+      review_pr_number: "${{ result.pr_number }}"
     on_success: check_mergeability
     on_failure: register_clone_failure
     note: >
@@ -1014,20 +963,14 @@ steps:
       On failure, escalates to register_clone_failure with diagnostics (REQ-MERGE-004).
 
   force_push_and_wait_mergeability:
-    tool: run_cmd
+    tool: run_python
     with:
-      cmd: |
-        REMOTE=$(git remote get-url upstream 2>/dev/null | grep -qv "^file://" && echo upstream || echo origin)
-        git push "$REMOTE" "${{ context.integration_branch }}" --force-with-lease &&
-        PR_NUM="${{ context.review_pr_number }}" &&
-        for i in $(seq 1 12); do
-          STATUS=$(gh pr view "$PR_NUM" --json mergeable -q .mergeable);
-          [ "$STATUS" != "UNKNOWN" ] && break;
-          sleep 15;
-        done &&
-        [ "$STATUS" != "UNKNOWN" ] || { echo "Timed out waiting for post-rebase mergeability" >&2; exit 1; }
-      cwd: "${{ context.work_dir }}"
-      step_name: "force_push_and_wait_mergeability"
+      callable: "autoskillit.recipe._cmd_rpc.force_push_and_wait_mergeability"
+      work_dir: "${{ context.work_dir }}"
+      integration_branch: "${{ context.integration_branch }}"
+      review_pr_number: "${{ context.review_pr_number }}"
+      max_polls: "12"
+      poll_interval: "15"
     on_success: check_mergeability_post_rebase
     on_failure: register_clone_failure
     note: >

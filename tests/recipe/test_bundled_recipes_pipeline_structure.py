@@ -442,24 +442,23 @@ class TestImplementationPipelineStructure:
         create_branch = recipe.steps["create_branch"]
         assert create_branch.skip_when_false == "inputs.open_pr"
 
-    def test_create_branch_does_not_use_run_name_verbatim(self, recipe) -> None:
-        """compute_branch must not use inputs.run_name as the full branch name."""
-        cmd = recipe.steps["compute_branch"].with_args["cmd"]
-        assert "git checkout -b ${{ inputs.run_name }} &&" not in cmd
+    def test_create_branch_uses_callable(self, recipe) -> None:
+        """compute_branch must use run_python with _cmd_rpc.compute_branch callable."""
+        step = recipe.steps["compute_branch"]
+        assert step.tool == "run_python"
+        assert step.with_args["callable"] == "autoskillit.recipe._cmd_rpc.compute_branch"
 
     def test_create_branch_checks_remote_for_collisions(self, recipe) -> None:
         """create_branch must use create_unique_branch tool (which always checks ls-remote)."""
         assert recipe.steps["create_branch"].tool == "create_unique_branch"
 
     def test_create_branch_references_issue_number(self, recipe) -> None:
-        """compute_branch cmd must reference context.issue_number for branch naming."""
-        cmd = recipe.steps["compute_branch"].with_args["cmd"]
-        assert "context.issue_number" in cmd
+        """compute_branch with_args must include issue_number for branch naming."""
+        assert "issue_number" in recipe.steps["compute_branch"].with_args
 
     def test_create_branch_uses_run_name_as_prefix(self, recipe) -> None:
-        """compute_branch must use inputs.run_name as a prefix in branch naming."""
-        cmd = recipe.steps["compute_branch"].with_args["cmd"]
-        assert "inputs.run_name" in cmd
+        """compute_branch with_args must include run_name for branch naming."""
+        assert "run_name" in recipe.steps["compute_branch"].with_args
 
     def test_ip_main_push_step_not_reachable_after_compose_pr(self, recipe) -> None:
         """The main `push` step must not be reachable after compose_pr —
@@ -690,24 +689,23 @@ class TestImplementationGroupsStructure:
         )
         assert "inputs.base_branch" in with_args["target_branch"]
 
-    def test_create_branch_does_not_use_run_name_verbatim(self, recipe) -> None:
-        """compute_branch must not use inputs.run_name as the full branch name."""
-        cmd = recipe.steps["compute_branch"].with_args["cmd"]
-        assert "git checkout -b ${{ inputs.run_name }} &&" not in cmd
+    def test_create_branch_uses_callable(self, recipe) -> None:
+        """compute_branch must use run_python with _cmd_rpc.compute_branch callable."""
+        step = recipe.steps["compute_branch"]
+        assert step.tool == "run_python"
+        assert step.with_args["callable"] == "autoskillit.recipe._cmd_rpc.compute_branch"
 
     def test_create_branch_checks_remote_for_collisions(self, recipe) -> None:
         """create_branch must use create_unique_branch tool (which always checks ls-remote)."""
         assert recipe.steps["create_branch"].tool == "create_unique_branch"
 
     def test_create_branch_references_issue_number(self, recipe) -> None:
-        """compute_branch cmd must reference context.issue_number for branch naming."""
-        cmd = recipe.steps["compute_branch"].with_args["cmd"]
-        assert "context.issue_number" in cmd
+        """compute_branch with_args must include issue_number for branch naming."""
+        assert "issue_number" in recipe.steps["compute_branch"].with_args
 
     def test_create_branch_uses_run_name_as_prefix(self, recipe) -> None:
-        """compute_branch must use inputs.run_name as a prefix in branch naming."""
-        cmd = recipe.steps["compute_branch"].with_args["cmd"]
-        assert "inputs.run_name" in cmd
+        """compute_branch with_args must include run_name for branch naming."""
+        assert "run_name" in recipe.steps["compute_branch"].with_args
 
 
 # ---------------------------------------------------------------------------
@@ -793,24 +791,23 @@ class TestInvestigateFirstStructure:
             "it must capture branch_name for downstream audit_impl use"
         )
 
-    def test_create_branch_does_not_use_run_name_verbatim(self, recipe) -> None:
-        """compute_branch must not use inputs.run_name as the full branch name."""
-        cmd = recipe.steps["compute_branch"].with_args["cmd"]
-        assert "git checkout -b ${{ inputs.run_name }} &&" not in cmd
+    def test_create_branch_uses_callable(self, recipe) -> None:
+        """compute_branch must use run_python with _cmd_rpc.compute_branch callable."""
+        step = recipe.steps["compute_branch"]
+        assert step.tool == "run_python"
+        assert step.with_args["callable"] == "autoskillit.recipe._cmd_rpc.compute_branch"
 
     def test_create_branch_checks_remote_for_collisions(self, recipe) -> None:
         """create_branch must use create_unique_branch tool (which always checks ls-remote)."""
         assert recipe.steps["create_branch"].tool == "create_unique_branch"
 
     def test_create_branch_references_issue_number(self, recipe) -> None:
-        """compute_branch cmd must reference context.issue_number for branch naming."""
-        cmd = recipe.steps["compute_branch"].with_args["cmd"]
-        assert "context.issue_number" in cmd
+        """compute_branch with_args must include issue_number for branch naming."""
+        assert "issue_number" in recipe.steps["compute_branch"].with_args
 
     def test_create_branch_uses_run_name_as_prefix(self, recipe) -> None:
-        """compute_branch must use inputs.run_name as a prefix in branch naming."""
-        cmd = recipe.steps["compute_branch"].with_args["cmd"]
-        assert "inputs.run_name" in cmd
+        """compute_branch with_args must include run_name for branch naming."""
+        assert "run_name" in recipe.steps["compute_branch"].with_args
 
     def test_if_push_after_audit_warning_fires(self, recipe) -> None:
         """push-before-audit semantic rule fires as WARNING (audit has skip_when_false)."""

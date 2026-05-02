@@ -201,6 +201,7 @@ def test_fleet_campaign_resume_no_name_lists_active_campaigns(
     _fleet_campaign(campaign_name=None, resume_campaign="__pick__")
 
     assert captured["env"].get("AUTOSKILLIT_CAMPAIGN_ID") == "active-id-1111111"
+    assert "terminal-id-333333" not in captured["env"].get("AUTOSKILLIT_CAMPAIGN_ID", "")
     out = capsys.readouterr().out
     assert "Active campaigns (resumable):" in out
     assert "campaign-active-1" in out

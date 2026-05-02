@@ -147,7 +147,7 @@ def fleet_campaign(
         selected_state = run_selection_menu(  # type: ignore[arg-type]
             active,
             header="Active campaigns (resumable):",
-            display_fn=lambda s: f"{s.campaign_name}  [{s.campaign_id[:8]}…]",  # type: ignore[union-attr]
+            display_fn=lambda s: f"{s.campaign_name}  [{(s.campaign_id or '')[:8]}…]",
             name_key=lambda s: s.campaign_name,  # type: ignore[union-attr]
             timeout=120,
             label="autoskillit fleet campaign --resume",

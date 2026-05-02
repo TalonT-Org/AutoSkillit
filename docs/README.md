@@ -17,6 +17,7 @@ multi-level orchestrator. The bundled recipes implement issue → plan → workt
 - [faq.md](faq.md) — common questions
 - [glossary.md](glossary.md) — canonical terms
 - [orchestration-levels.md](orchestration-levels.md) — L0–L3 orchestration hierarchy
+- [version-pipeline.md](version-pipeline.md) — CI versioning pipeline, sync_versions.py, workflow reference
 
 ## Topic-based subdirectories
 

@@ -12,6 +12,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Generic, Literal, TypedDict, TypeVar
 
+from ._type_constants import KNOWN_CI_EVENTS
 from ._type_enums import KillReason, RetryReason, SessionOutcome
 
 T = TypeVar("T")
@@ -272,19 +273,6 @@ class CIRunScope:
             raise ValueError(
                 f"Invalid CI event {self.event!r}. Valid events: {sorted(KNOWN_CI_EVENTS)}"
             )
-
-
-KNOWN_CI_EVENTS: frozenset[str] = frozenset(
-    {
-        "push",
-        "pull_request",
-        "pull_request_target",
-        "merge_group",
-        "workflow_dispatch",
-        "schedule",
-        "workflow_call",
-    }
-)
 
 
 class CloneSuccessResult(TypedDict):

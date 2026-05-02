@@ -176,3 +176,10 @@ def test_no_ci_failure_chain_complete(recipe):
 
     reg_step = recipe.steps["register_clone_no_ci"]
     assert reg_step.on_success == "escalate_stop_no_ci"
+
+
+def test_escalate_stop_message_accurate_for_no_checks_case(recipe):
+    """The escalation stop message must not claim 'no CI runs found' unconditionally."""
+    step = recipe.steps["escalate_stop_no_ci"]
+    msg = (step.message or "").lower()
+    assert "no ci runs found" not in msg

@@ -830,12 +830,11 @@ steps:
 
   escalate_stop_no_ci:
     action: stop
-    message: >
-      CI watch loop exhausted — no CI runs found after re-deriving ci_event
-      and retrying. Likely causes: merge conflict suppressing pull_request
-      trigger, workflow not configured for this branch, or GitHub webhook
-      delivery failure. Check PR mergeable state and .github/workflows
-      trigger configuration.
+    message: >-
+      CI safety net: statusCheckRollup returned no checks for PR
+      ${{ context.pr_number }}. This typically means no workflow is
+      configured to trigger on this branch pattern. Check .github/workflows/
+      trigger configuration. This is NOT a test failure — CI never started.
 
   check_repo_merge_state:
     tool: check_repo_merge_state

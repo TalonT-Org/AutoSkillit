@@ -22,10 +22,11 @@ _HEADLESS_PATH = (
 def _find_first_call_line(func_body: list[ast.stmt], call_name: str) -> int | None:
     """Return the first line number of a direct Call to call_name in func_body.
 
-    Walks all nodes under each statement in source order and returns the first
-    matching call's line number, or None if no match.
+    Uses a source-order DFS (children sorted by lineno) so nested calls are
+    visited in the order they appear in the source file rather than BFS order.
     """
-    for node in ast.walk(ast.Module(body=func_body, type_ignores=[])):
+
+    def _dfs(node: ast.AST) -> int | None:
         if isinstance(node, ast.Call):
             func = node.func
             name = None
@@ -35,7 +36,17 @@ def _find_first_call_line(func_body: list[ast.stmt], call_name: str) -> int | No
                 name = func.attr
             if name == call_name:
                 return node.lineno
-    return None
+        children = sorted(
+            ast.iter_child_nodes(node),
+            key=lambda n: getattr(n, "lineno", 0),
+        )
+        for child in children:
+            result = _dfs(child)
+            if result is not None:
+                return result
+        return None
+
+    return _dfs(ast.Module(body=func_body, type_ignores=[]))
 
 
 # T-ORD-1
@@ -65,6 +76,9 @@ def test_compute_loc_changed_called_after_build_skill_result():
     # After the fix, it should not appear at all in _execute_claude_headless (it is
     # delegated to _compute_post_session_metrics).
     loc_changed_line = _find_first_call_line(target_func.body, "_compute_loc_changed")
+    # Expected post-fix state: _compute_loc_changed is absent from _execute_claude_headless
+    # (delegated to _compute_post_session_metrics). If it reappears, the ordering
+    # assertion below catches it. If it is absent, that is intentional and correct.
     if loc_changed_line is not None:
         assert loc_changed_line > build_result_line, (
             f"_compute_loc_changed (line {loc_changed_line}) must appear after "

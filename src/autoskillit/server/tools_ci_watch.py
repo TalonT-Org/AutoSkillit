@@ -11,7 +11,7 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import CIRunScope, get_logger
+from autoskillit.core import KNOWN_CI_EVENTS, CIRunScope, get_logger
 from autoskillit.pipeline import ToolContext
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
@@ -20,6 +20,14 @@ from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._subprocess import _run_subprocess
 
 logger = get_logger(__name__)
+
+
+def _coerce_none_string(value: str | None, *, tool: str) -> str | None:
+    """Coerce the string literal 'None' to Python None, logging a warning when coercion occurs."""
+    if value == "None":
+        logger.warning("event coerced from string 'None' to null", tool=tool)
+        return None
+    return value
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "ci"}, annotations={"readOnlyHint": True})
@@ -78,6 +86,16 @@ async def wait_for_ci(
     try:
         _start = time.monotonic()
         _timing_ctx = None
+        event = _coerce_none_string(event, tool="wait_for_ci")
+        if event is not None and event not in KNOWN_CI_EVENTS:
+            return json.dumps(
+                {
+                    "run_id": None,
+                    "conclusion": "error",
+                    "failed_jobs": [],
+                    "error": f"Invalid event {event!r}. Valid events: {sorted(KNOWN_CI_EVENTS)}",
+                }
+            )
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(tool="wait_for_ci")
         logger.info("wait_for_ci", branch=branch, repo=repo or "(infer)")

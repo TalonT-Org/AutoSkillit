@@ -1989,6 +1989,19 @@ skills:
     - "pr_url = \nverdict = dry_run\ncategory_summary = 14 fixes, 3 features\n%%ORDER_UP%%"
     write_behavior: always
 callable_contracts:
+  autoskillit.smoke_utils.check_loop_iteration:
+    inputs:
+    - name: current_iteration
+      type: str
+      required: false
+    - name: max_iterations
+      type: str
+      required: false
+    outputs:
+    - name: next_iteration
+      type: str
+    - name: max_exceeded
+      type: str
   autoskillit.smoke_utils.check_review_loop:
     inputs:
     - name: pr_number
@@ -1997,10 +2010,21 @@ callable_contracts:
     - name: cwd
       type: directory_path
       required: true
+    - name: current_iteration
+      type: str
+      required: false
+    - name: max_iterations
+      type: str
+      required: false
+    - name: previous_verdict
+      type: str
+      required: false
     outputs:
     - name: next_iteration
       type: str
     - name: max_exceeded
+      type: str
+    - name: had_blocking
       type: str
   autoskillit.smoke_utils.check_bug_report_non_empty:
     inputs:
@@ -2386,6 +2410,7 @@ callable_contracts:
     - name: current_pr_number
       type: str
       required: true
+      nullable: false
     - name: pr_order_file
       type: str
       required: true
@@ -2450,3 +2475,55 @@ callable_contracts:
     outputs:
     - name: local_bundle_path
       type: str
+
+tool_output_contracts:
+  wait_for_ci:
+    result_field: conclusion
+    fields:
+      conclusion:
+        type: str
+        allowed_values:
+          - success
+          - failure
+          - cancelled
+          - action_required
+          - timed_out
+          - startup_failure
+          - stale
+          - no_runs
+          - error
+          - unknown
+        terminal_values:
+          - error
+          - unknown
+        recoverable_values:
+          - failure
+          - cancelled
+          - timed_out
+          - no_runs
+          - action_required
+  get_ci_status:
+    result_field: conclusion
+    fields:
+      conclusion:
+        type: str
+        allowed_values:
+          - success
+          - failure
+          - cancelled
+          - action_required
+          - timed_out
+          - startup_failure
+          - stale
+          - no_runs
+          - error
+          - unknown
+        terminal_values:
+          - error
+          - unknown
+        recoverable_values:
+          - failure
+          - cancelled
+          - timed_out
+          - no_runs
+          - action_required

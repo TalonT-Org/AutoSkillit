@@ -503,3 +503,35 @@ def test_merge_base_literal_is_clean() -> None:
     findings = run_semantic_rules(recipe)
     flagged = [f for f in findings if f.rule == "merge-base-unpublished"]
     assert flagged == []
+
+
+# ---------------------------------------------------------------------------
+# on-result-missing-tool-output-value
+# ---------------------------------------------------------------------------
+
+
+def test_on_result_missing_tool_output_value_catches_terminal_catchall() -> None:
+    """Recoverable tool output values falling through to a terminal step trigger WARNING."""
+    recipe = _make_recipe(
+        {
+            "watch": RecipeStep(
+                tool="wait_for_ci",
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(
+                            route="merge", when="${{ result.conclusion }} == success"
+                        ),
+                        StepResultCondition(route="fail"),
+                    ],
+                ),
+                on_failure="fail",
+            ),
+            "merge": RecipeStep(on_success="done"),
+            "fail": RecipeStep(action="stop"),
+            "done": RecipeStep(action="stop"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "on-result-missing-tool-output-value"]
+    assert len(flagged) >= 1
+    assert all(f.severity == Severity.WARNING for f in flagged)

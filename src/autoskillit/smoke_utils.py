@@ -107,6 +107,9 @@ def check_review_loop(
     ``approved_with_comments`` intentionally yields ``had_blocking=false`` — the
     resolve_review pass is one-shot and does not trigger a re-review cycle.
     """
+    current_iteration = current_iteration or ""
+    max_iterations = max_iterations or ""
+    previous_verdict = previous_verdict or ""
     iteration = int(current_iteration.strip()) if current_iteration.strip() else 0
     next_iteration = iteration + 1
     max_iter = int(max_iterations.strip()) if max_iterations.strip() else 3
@@ -128,6 +131,8 @@ def check_loop_iteration(
     Designed to be called via run_python in a recipe step with on_result routing
     based on max_exceeded.
     """
+    current_iteration = current_iteration or ""
+    max_iterations = max_iterations or ""
     try:
         iteration = int(current_iteration.strip()) if current_iteration.strip() else 0
     except ValueError as exc:

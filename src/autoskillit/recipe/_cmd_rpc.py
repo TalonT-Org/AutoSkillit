@@ -16,7 +16,7 @@ def compute_branch(
     run_name: str = "",
     issue_number: str = "",
 ) -> dict[str, str]:
-    """Compute branch name from slug + issue or date. Callable via run_python."""
+    """Compute branch name from slug + issue or date."""
     prefix = issue_slug or run_name
     if issue_number:
         return {"branch_name": f"{prefix}/{issue_number}"}
@@ -27,7 +27,8 @@ def check_eject_limit(
     counter_file: str,
     max_ejects: str = "3",
 ) -> dict[str, str]:
-    """Increment counter file; return EJECT_OK or EJECT_LIMIT_EXCEEDED. Callable via run_python."""
+    """Increment counter file; return EJECT_OK or EJECT_LIMIT_EXCEEDED."""
+    max_ejects = max_ejects or "3"
     path = Path(counter_file)
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -44,7 +45,8 @@ def check_dropped_healthy_loop(
     counter_file: str,
     max_drops: str = "2",
 ) -> dict[str, str]:
-    """Increment dropped-healthy counter; return DROPPED_OK or DROPPED_LIMIT_EXCEEDED. Callable via run_python."""
+    """Increment dropped-healthy counter; return DROPPED_OK or DROPPED_LIMIT_EXCEEDED."""
+    max_drops = max_drops or "2"
     path = Path(counter_file)
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -58,7 +60,7 @@ def check_dropped_healthy_loop(
 
 
 def commit_guard(worktree_path: str) -> dict[str, str]:
-    """Auto-commit pending changes if worktree is dirty. Callable via run_python."""
+    """Auto-commit pending changes if worktree is dirty."""
     result = subprocess.run(
         ["git", "status", "--porcelain"],
         cwd=worktree_path,
@@ -93,7 +95,7 @@ def queue_ejected_fix(
     work_dir: str,
     base_branch: str,
 ) -> dict[str, str]:
-    """Fetch and rebase onto base branch; return clean or conflicts. Callable via run_python."""
+    """Fetch and rebase onto base branch; return clean or conflicts."""
     remote = _detect_remote(work_dir)
     fetch = subprocess.run(
         ["git", "fetch", remote, base_branch],
@@ -123,7 +125,7 @@ def direct_merge_conflict_fix(
     work_dir: str,
     base_branch: str,
 ) -> dict[str, str]:
-    """Attempt rebase for direct-merge path; return clean or conflicts. Callable via run_python."""
+    """Attempt rebase for direct-merge path; return clean or conflicts."""
     return queue_ejected_fix(work_dir=work_dir, base_branch=base_branch)
 
 
@@ -131,7 +133,7 @@ def immediate_merge_conflict_fix(
     work_dir: str,
     base_branch: str,
 ) -> dict[str, str]:
-    """Attempt rebase for immediate-merge path; return clean or conflicts. Callable via run_python."""
+    """Attempt rebase for immediate-merge path; return clean or conflicts."""
     return queue_ejected_fix(work_dir=work_dir, base_branch=base_branch)
 
 
@@ -140,9 +142,11 @@ def wait_for_direct_merge(
     max_polls: str = "90",
     poll_interval: str = "10",
 ) -> dict[str, str]:
-    """Poll PR state until merged/closed/timeout. Callable via run_python."""
+    """Poll PR state until merged/closed/timeout."""
     import time  # noqa: PLC0415
 
+    max_polls = max_polls or "90"
+    poll_interval = poll_interval or "10"
     for _ in range(int(max_polls)):
         result = subprocess.run(
             ["gh", "pr", "view", pr_number, "--json", "state", "--jq", ".state"],
@@ -166,7 +170,7 @@ def wait_for_immediate_merge(
     max_polls: str = "30",
     poll_interval: str = "10",
 ) -> dict[str, str]:
-    """Poll PR state until merged/closed/timeout (shorter). Callable via run_python."""
+    """Poll PR state until merged/closed/timeout (shorter)."""
     return wait_for_direct_merge(
         pr_number=pr_number, max_polls=max_polls, poll_interval=poll_interval
     )
@@ -177,7 +181,7 @@ def attempt_cheap_rebase(
     ejected_pr_branch: str,
     base_branch: str,
 ) -> dict[str, str]:
-    """Checkout ejected branch and attempt rebase. Callable via run_python."""
+    """Checkout ejected branch and attempt rebase."""
     remote = _detect_remote(work_dir)
     subprocess.run(
         ["git", "fetch", remote, ejected_pr_branch],
@@ -212,9 +216,11 @@ def wait_for_review_pr_mergeability(
     max_polls: str = "12",
     poll_interval: str = "15",
 ) -> dict[str, str]:
-    """Extract PR number and poll until mergeability resolves. Callable via run_python."""
+    """Extract PR number and poll until mergeability resolves."""
     import time  # noqa: PLC0415
 
+    max_polls = max_polls or "12"
+    poll_interval = poll_interval or "15"
     result = subprocess.run(
         ["gh", "pr", "view", pr_url, "--json", "number", "-q", ".number"],
         capture_output=True,
@@ -245,7 +251,7 @@ def create_persistent_integration(
     work_dir: str,
     base_branch: str,
 ) -> dict[str, str]:
-    """Create and push persistent integration branch from default branch. Callable via run_python."""
+    """Create and push persistent integration branch from default branch."""
     remote = _detect_remote(work_dir)
     result = subprocess.run(
         ["git", "symbolic-ref", "refs/remotes/origin/HEAD"],
@@ -283,9 +289,11 @@ def force_push_and_wait_mergeability(
     max_polls: str = "12",
     poll_interval: str = "15",
 ) -> dict[str, str]:
-    """Force-push integration branch and wait for mergeability. Callable via run_python."""
+    """Force-push integration branch and wait for mergeability."""
     import time  # noqa: PLC0415
 
+    max_polls = max_polls or "12"
+    poll_interval = poll_interval or "15"
     remote = _detect_remote(work_dir)
     push = subprocess.run(
         ["git", "push", remote, integration_branch, "--force-with-lease"],
@@ -317,7 +325,9 @@ def advance_queue_pr(
     current_pr_number: str,
     pr_order_file: str,
 ) -> dict[str, str]:
-    """Find next PR in queue order file. Callable via run_python."""
+    """Find next PR in queue order file."""
+    if not current_pr_number:
+        return {"error": f"current_pr_number is required, got {current_pr_number!r}"}
     try:
         with open(pr_order_file) as f:
             order = json.load(f)
@@ -341,7 +351,7 @@ def proactive_rebase_next_pr(
     next_pr_branch: str,
     base_branch: str,
 ) -> dict[str, str]:
-    """Fetch, checkout, and rebase next PR branch. Callable via run_python."""
+    """Fetch, checkout, and rebase next PR branch."""
     remote = _detect_remote(work_dir)
     subprocess.run(
         ["git", "fetch", remote, next_pr_branch],
@@ -372,7 +382,7 @@ def proactive_rebase_next_pr(
 
 
 def refetch_issues(issue_urls: str) -> dict[str, str]:
-    """Build GraphQL query from issue URLs, fetch open issues. Callable via run_python."""
+    """Build GraphQL query from issue URLs, fetch open issues."""
     urls = issue_urls.split(",")
     parts = []
     for i, url in enumerate(urls):
@@ -397,7 +407,10 @@ def refetch_issues(issue_urls: str) -> dict[str, str]:
             "-f",
             f"query={query}",
             "--jq",
-            '[.data[] | select(.issue != null and .issue.state == "OPEN") | .issue.number | tostring] | join(" ")',
+            (
+                '[.data[] | select(.issue != null and .issue.state == "OPEN")'
+                ' | .issue.number | tostring] | join(" ")'
+            ),
         ],
         capture_output=True,
         text=True,
@@ -412,7 +425,7 @@ def emit_fallback_map(
     issue_urls: str,
     temp_dir: str,
 ) -> dict[str, str]:
-    """Build fallback execution map JSON from issue URLs. Callable via run_python."""
+    """Build fallback execution map JSON from issue URLs."""
     nums: list[int] = []
     for url in issue_urls.split(","):
         m = re.search(r"issues/(\d+)", url.strip())
@@ -438,7 +451,7 @@ def ensure_results(
     worktree_path: str,
     temp_subdir: str = ".autoskillit/temp",
 ) -> dict[str, str]:
-    """Ensure experiment_results file exists; create placeholder if empty. Callable via run_python."""
+    """Ensure experiment_results file exists; create placeholder if empty."""
     if experiment_results:
         return {"experiment_results": experiment_results}
     results_path = Path(worktree_path) / temp_subdir / "run-experiment" / "results-inconclusive.md"
@@ -455,7 +468,7 @@ def export_local_bundle(
     source_dir: str,
     research_dir: str,
 ) -> dict[str, str]:
-    """Copy research dir to source_dir/research-bundles/{slug}/. Callable via run_python."""
+    """Copy research dir to source_dir/research-bundles/{slug}/."""
     import shutil  # noqa: PLC0415
 
     local_root = Path(source_dir) / "research-bundles"

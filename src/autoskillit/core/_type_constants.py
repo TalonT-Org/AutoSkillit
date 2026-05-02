@@ -59,6 +59,7 @@ __all__ = [
     "SKILL_ACTIVATE_DEPS_REQUIRED",
     "SOUS_CHEF_MANDATORY_SECTIONS",
     "SOUS_CHEF_L2_SECTIONS",
+    "KNOWN_CI_EVENTS",
 ]
 
 AUTOSKILLIT_INSTALLED_VERSION: str = version("autoskillit")
@@ -486,3 +487,15 @@ SOUS_CHEF_L2_SECTIONS: tuple[str, ...] = (
     "QUOTA WAIT PROTOCOL",
 )
 assert set(SOUS_CHEF_L2_SECTIONS).issubset(set(SOUS_CHEF_MANDATORY_SECTIONS))
+
+KNOWN_CI_EVENTS: frozenset[str] = frozenset(
+    {
+        "push",
+        "pull_request",
+        "pull_request_target",
+        "merge_group",
+        "workflow_dispatch",
+        "schedule",
+        "workflow_call",
+    }
+)

@@ -45,6 +45,7 @@ class SkillInput:
     type: str
     required: bool
     recommended: bool = False
+    nullable: bool = True
 
 
 @dataclasses.dataclass
@@ -70,6 +71,19 @@ class SkillContract:
     write_expected_when: list[str] = dataclasses.field(default_factory=list)
     read_only: bool = False
     result_fields: list[ResultFieldSpec] = dataclasses.field(default_factory=list)
+
+
+@dataclasses.dataclass(frozen=True)
+class ToolOutputFieldSpec:
+    allowed_values: tuple[str, ...]
+    terminal_values: frozenset[str]
+    recoverable_values: frozenset[str]
+
+
+@dataclasses.dataclass(frozen=True)
+class ToolOutputContractSpec:
+    result_field: str
+    fields: dict[str, ToolOutputFieldSpec]
 
 
 @dataclasses.dataclass
@@ -230,11 +244,41 @@ def get_callable_contract(
             name=inp["name"],
             type=inp["type"],
             required=inp.get("required", True),
+            nullable=inp.get("nullable", True),
         )
         for inp in entry.get("inputs", [])
     ]
     outputs = [SkillOutput(name=out["name"], type=out["type"]) for out in entry.get("outputs", [])]
     return SkillContract(inputs=inputs, outputs=outputs)
+
+
+def get_tool_output_contract(
+    tool_name: str, manifest: dict[str, Any] | None = None
+) -> ToolOutputContractSpec | None:
+    """Return the ToolOutputContractSpec for a named MCP tool, or None if not declared."""
+    if manifest is None:
+        manifest = load_bundled_manifest()
+    entry = manifest.get("tool_output_contracts", {}).get(tool_name)
+    if entry is None:
+        return None
+    fields = {}
+    for field_name, field_data in entry.get("fields", {}).items():
+        if not isinstance(field_data, dict):
+            raise ValueError(
+                f"tool_output_contracts entry for {tool_name!r}: "
+                f"field {field_name!r} must be a mapping, got {type(field_data).__name__!r}"
+            )
+        fields[field_name] = ToolOutputFieldSpec(
+            allowed_values=tuple(field_data.get("allowed_values", [])),
+            terminal_values=frozenset(field_data.get("terminal_values", [])),
+            recoverable_values=frozenset(field_data.get("recoverable_values", [])),
+        )
+    result_field = entry.get("result_field")
+    if not result_field:
+        raise ValueError(
+            f"tool_output_contracts entry for {tool_name!r} is missing required 'result_field'"
+        )
+    return ToolOutputContractSpec(result_field=result_field, fields=fields)
 
 
 def compute_skill_hash(skill_name: str, *, skills_dir: Path) -> str:

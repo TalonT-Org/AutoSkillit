@@ -785,14 +785,19 @@ steps:
     with:
       cmd: >-
         gh pr view '${{ context.pr_number }}' --json statusCheckRollup
-        --jq '.statusCheckRollup | if length == 0 then "false" elif
+        --jq '.statusCheckRollup | if length == 0 then "no_checks" elif
         all(.state == "SUCCESS" or .state == "NEUTRAL" or .state == "SKIPPED")
-        then "true" else "false" end'
+        then "passed" elif any(.state == "FAILURE" or .state == "ERROR")
+        then "failed" else "pending" end'
       cwd: "${{ context.work_dir }}"
       step_name: "check_ci_already_passed"
     on_result:
-      - when: "${{ result.stdout | trim }} == true"
+      - when: "${{ result.stdout | trim }} == passed"
         route: check_repo_merge_state
+      - when: "${{ result.stdout | trim }} == failed"
+        route: detect_ci_conflict
+      - when: "${{ result.stdout | trim }} == pending"
+        route: ci_watch
       - route: mark_issue_failed_no_ci
     on_failure: mark_issue_failed_no_ci
     skip_when_false: "inputs.open_pr"
@@ -800,8 +805,9 @@ steps:
       Safety net before terminal escalation: checks if CI already passed
       despite the watcher failing to observe it (e.g. post-force-push SHA
       staleness). Uses statusCheckRollup as the authoritative signal.
-      Routes to merge queue gate if all checks are SUCCESS/NEUTRAL/SKIPPED;
-      otherwise falls through to the terminal stop.
+      Outputs passed/failed/no_checks/pending: passed goes to merge gate,
+      failed routes to CI conflict remediation, pending re-enters the CI
+      watcher, no_checks falls through to terminal stop.
 
   mark_issue_failed_no_ci:
     description: "Swap in-progress → fail label before CI failure escalation"
@@ -826,12 +832,11 @@ steps:
 
   escalate_stop_no_ci:
     action: stop
-    message: >
-      CI watch loop exhausted — no CI runs found after re-deriving ci_event
-      and retrying. Likely causes: merge conflict suppressing pull_request
-      trigger, workflow not configured for this branch, or GitHub webhook
-      delivery failure. Check PR mergeable state and .github/workflows
-      trigger configuration.
+    message: >-
+      CI safety net: statusCheckRollup returned no checks for PR
+      ${{ context.pr_number }}. This typically means no workflow is
+      configured to trigger on this branch pattern. Check .github/workflows/
+      trigger configuration. This is NOT a test failure — CI never started.
 
   check_repo_merge_state:
     tool: check_repo_merge_state

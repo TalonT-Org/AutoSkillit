@@ -15,11 +15,7 @@ import pytest
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 _HEADLESS_PATH = (
-    Path(__file__).parent.parent.parent
-    / "src"
-    / "autoskillit"
-    / "execution"
-    / "headless.py"
+    Path(__file__).parent.parent.parent / "src" / "autoskillit" / "execution" / "headless.py"
 )
 
 
@@ -54,10 +50,7 @@ def test_compute_loc_changed_called_after_build_skill_result():
 
     target_func: ast.AsyncFunctionDef | None = None
     for node in ast.walk(tree):
-        if (
-            isinstance(node, ast.AsyncFunctionDef)
-            and node.name == "_execute_claude_headless"
-        ):
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "_execute_claude_headless":
             target_func = node
             break
 

@@ -214,6 +214,12 @@ def _clear_session_type_env(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _clear_skill_name_env(monkeypatch):
+    """Prevent AUTOSKILLIT_SKILL_NAME leaking between tests."""
+    monkeypatch.delenv("AUTOSKILLIT_SKILL_NAME", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _clear_skip_stale_check_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("AUTOSKILLIT_SKIP_STALE_CHECK", raising=False)
 

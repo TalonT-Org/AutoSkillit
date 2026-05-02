@@ -621,15 +621,7 @@ def recover_crashed_sessions(tmpfs_path: str = "/dev/shm", log_dir: str = "") ->
                 start_ts=mtime_ts,
                 proc_snapshots=snapshots if snapshots else None,
                 termination_reason="CRASHED",
-                telemetry=SessionTelemetry(
-                    token_usage=None,
-                    timing_seconds=None,
-                    audit_record=None,
-                    github_api_usage=None,
-                    github_api_requests=0,
-                    loc_insertions=0,
-                    loc_deletions=0,
-                ),
+                telemetry=SessionTelemetry.empty(),
             )
         except Exception:
             logger.debug("recover_crashed_sessions: failed to finalize %s", trace_file)

@@ -27,7 +27,6 @@ from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
     KillReason,
     RetryReason,
-    SessionTelemetry,
     SkillResult,
     ValidatedAddDir,
     WriteBehaviorSpec,
@@ -65,6 +64,7 @@ from autoskillit.execution._headless_recovery import (
 )
 from autoskillit.execution._headless_result import (
     _apply_budget_guard,  # noqa: F401
+    _build_error_path_telemetry,
     _build_session_telemetry,
     _build_skill_result,
     _capture_failure,  # noqa: F401
@@ -287,7 +287,6 @@ async def _execute_claude_headless(
             # a top-level import of autoskillit.execution would be circular.
             from autoskillit.execution import flush_session_log
 
-            _api_usage = ctx.github_api_log.drain("") if ctx.github_api_log is not None else None
             flush_session_log(
                 log_dir=_log_dir,
                 cwd=str(cwd),
@@ -312,15 +311,7 @@ async def _execute_claude_headless(
                 recipe_content_hash=recipe_content_hash,
                 recipe_composite_hash=recipe_composite_hash,
                 recipe_version=recipe_version,
-                telemetry=SessionTelemetry(
-                    token_usage=None,
-                    timing_seconds=None,
-                    audit_record=None,
-                    github_api_usage=_api_usage,
-                    github_api_requests=_api_usage.get("total_requests", 0) if _api_usage else 0,
-                    loc_insertions=0,
-                    loc_deletions=0,
-                ),
+                telemetry=_build_error_path_telemetry(ctx.github_api_log),
             )
         except Exception:
             logger.debug("flush_session_log during crash failed", exc_info=True)
@@ -337,9 +328,6 @@ async def _execute_claude_headless(
             from autoskillit.execution import flush_session_log
 
             with anyio.CancelScope(shield=True):
-                _api_usage = (
-                    ctx.github_api_log.drain("") if ctx.github_api_log is not None else None
-                )
                 flush_session_log(
                     log_dir=_log_dir,
                     cwd=str(cwd),
@@ -364,17 +352,7 @@ async def _execute_claude_headless(
                     recipe_content_hash=recipe_content_hash,
                     recipe_composite_hash=recipe_composite_hash,
                     recipe_version=recipe_version,
-                    telemetry=SessionTelemetry(
-                        token_usage=None,
-                        timing_seconds=None,
-                        audit_record=None,
-                        github_api_usage=_api_usage,
-                        github_api_requests=_api_usage.get("total_requests", 0)
-                        if _api_usage
-                        else 0,
-                        loc_insertions=0,
-                        loc_deletions=0,
-                    ),
+                    telemetry=_build_error_path_telemetry(ctx.github_api_log),
                 )
         except Exception:
             logger.debug("flush_session_log during cancel failed", exc_info=True)

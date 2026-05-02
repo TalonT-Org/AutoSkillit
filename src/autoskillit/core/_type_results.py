@@ -153,6 +153,19 @@ class SessionTelemetry:
     loc_insertions: int
     loc_deletions: int
 
+    @classmethod
+    def empty(cls) -> SessionTelemetry:
+        """Zero-value sentinel for error paths where no telemetry is available."""
+        return cls(
+            token_usage=None,
+            timing_seconds=None,
+            audit_record=None,
+            github_api_usage=None,
+            github_api_requests=0,
+            loc_insertions=0,
+            loc_deletions=0,
+        )
+
 
 @dataclass
 class SkillResult:

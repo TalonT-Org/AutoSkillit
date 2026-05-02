@@ -186,11 +186,6 @@ def test_skill_documents_group_splitting_logic() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
-# T1 — Contract: New Output Tokens Registered
-# ---------------------------------------------------------------------------
-
-
 def test_build_execution_map_new_tokens_registered() -> None:
     """has_deferred, deferred_count, dispatched_count must appear in the BEM contract."""
     from autoskillit.recipe.contracts import get_skill_contract, load_bundled_manifest
@@ -202,11 +197,6 @@ def test_build_execution_map_new_tokens_registered() -> None:
     assert "has_deferred" in output_names
     assert "deferred_count" in output_names
     assert "dispatched_count" in output_names
-
-
-# ---------------------------------------------------------------------------
-# T2 — Schema Arithmetic Invariant
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture()
@@ -248,11 +238,6 @@ def test_bem_count_invariant(sample_bem_json_with_deferrals: str) -> None:
     assert data["dispatched_count"] + data["deferred_count"] == data["total_issues"]
 
 
-# ---------------------------------------------------------------------------
-# T3 — Critical Cross-Assessment → Deferred
-# ---------------------------------------------------------------------------
-
-
 @pytest.fixture()
 def sample_bem_json_with_critical_deferral() -> str:
     return json.dumps(
@@ -292,11 +277,6 @@ def test_critical_cross_assessment_defers_issue(
     )
 
 
-# ---------------------------------------------------------------------------
-# T4 — No In-Progress Issues → No Regression
-# ---------------------------------------------------------------------------
-
-
 @pytest.fixture()
 def sample_bem_json_no_in_progress() -> str:
     return json.dumps(
@@ -330,11 +310,6 @@ def test_no_in_progress_produces_no_deferrals(sample_bem_json_no_in_progress: st
     assert data["cross_assessments"] == []
 
 
-# ---------------------------------------------------------------------------
-# T5 — blocked_by Is An Array
-# ---------------------------------------------------------------------------
-
-
 def test_blocked_by_is_array(sample_bem_json_with_deferrals: str) -> None:
     data = json.loads(sample_bem_json_with_deferrals)
     for deferred in data["deferred_issues"]:
@@ -343,22 +318,12 @@ def test_blocked_by_is_array(sample_bem_json_with_deferrals: str) -> None:
         )
 
 
-# ---------------------------------------------------------------------------
-# T6 (BEM) — SKILL.md Contains Required New Sections
-# ---------------------------------------------------------------------------
-
-
 def test_bem_skillmd_has_cross_assessment_section() -> None:
     content = _skill_md_text()
     assert "cross_assessments" in content
     assert "in_progress_context" in content
     assert "deferred_issues" in content
     assert "has_deferred" in content
-
-
-# ---------------------------------------------------------------------------
-# T8 — Contract Pattern Example Updated
-# ---------------------------------------------------------------------------
 
 
 def test_bem_contract_pattern_example_includes_new_tokens() -> None:

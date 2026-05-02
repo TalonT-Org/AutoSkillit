@@ -16,11 +16,6 @@ def _sous_chef_text() -> str:
     ).read_text()
 
 
-# ---------------------------------------------------------------------------
-# T6 (sous-chef) — SKILL.md Contains Required Deferred Escalation Sections
-# ---------------------------------------------------------------------------
-
-
 def test_sous_chef_skillmd_has_deferred_escalation() -> None:
     content = _sous_chef_text()
     assert "deferred_issues" in content
@@ -28,11 +23,6 @@ def test_sous_chef_skillmd_has_deferred_escalation() -> None:
     assert "Wait" in content and "Proceed" in content and "Drop" in content
     assert "release_issue" in content
     assert "headless" in content.lower()
-
-
-# ---------------------------------------------------------------------------
-# T7 — Headless Denied AskUserQuestion → Wait Rule Present
-# ---------------------------------------------------------------------------
 
 
 def test_sous_chef_has_headless_wait_rule() -> None:

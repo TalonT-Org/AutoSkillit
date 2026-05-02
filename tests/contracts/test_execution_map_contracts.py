@@ -149,7 +149,15 @@ def test_skill_declares_max_parallel_argument() -> None:
 def test_skill_documents_max_parallel_default() -> None:
     """REQ-MAP-002: Default of 6 must appear in the SKILL.md arguments section."""
     skill_md = _skill_md_text()
-    assert "default" in skill_md.lower() and "6" in skill_md
+    args_start = skill_md.find("## Arguments")
+    assert args_start != -1, "SKILL.md must have an ## Arguments section"
+    next_section = skill_md.find("\n##", args_start + 1)
+    args_section = (
+        skill_md[args_start:next_section] if next_section != -1 else skill_md[args_start:]
+    )
+    assert "default" in args_section.lower() and "6" in args_section, (
+        "SKILL.md Arguments section must document the default value of 6 for --max-parallel"
+    )
 
 
 def test_output_schema_includes_max_parallel_field() -> None:
@@ -162,7 +170,13 @@ def test_output_schema_includes_max_parallel_field() -> None:
 
 
 def test_skill_documents_group_splitting_logic() -> None:
-    """REQ-MAP-003/004/005/006: Group splitting instructions must appear in SKILL.md."""
+    """REQ-MAP-003/004/005/006: Group splitting instructions must appear in Step 3.5."""
     skill_md = _skill_md_text()
-    assert "split" in skill_md.lower()
-    assert "sub-group" in skill_md.lower() or "subgroup" in skill_md.lower()
+    step35_start = skill_md.find("Step 3.5")
+    assert step35_start != -1, "SKILL.md must document Step 3.5 group-splitting logic"
+    next_heading = skill_md.find("\n###", step35_start + 1)
+    step35 = skill_md[step35_start:next_heading] if next_heading != -1 else skill_md[step35_start:]
+    assert "split" in step35.lower(), "Step 3.5 section must describe splitting groups"
+    assert "sub-group" in step35.lower() or "subgroup" in step35.lower(), (
+        "Step 3.5 section must describe sub-groups"
+    )

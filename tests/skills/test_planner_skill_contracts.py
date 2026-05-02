@@ -26,6 +26,7 @@ ALL_PLANNER_SKILLS = [
     "planner-refine-assignments",
     "planner-refine-wps",
     "planner-validate-task-alignment",
+    "planner-assess-review-approach",
 ]
 
 

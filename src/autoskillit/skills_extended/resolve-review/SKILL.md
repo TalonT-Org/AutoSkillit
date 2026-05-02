@@ -292,6 +292,12 @@ the error message, domain group name, and affected comment IDs.
 
 **Merge results** into a `classification_map: dict[comment_id, verdict_entry]`.
 
+Each entry must also carry two additional fields populated at merge time (not delegated to sub-agents):
+- `severity` — `diff_context_map.get((path, line), {}).get("severity", locally_classified_severity)` where `locally_classified_severity` is the severity computed in Step 3 (`critical`/`warning`/`info` from keyword matching). This ensures a meaningful value even when no review-pr handoff entry exists for this `(path, line)`.
+- `dimension` — `diff_context_map.get((path, line), {}).get("dimension", "unknown")` (`arch|tests|bugs|defense|cohesion|slop|deletion_regression|unknown`). `"unknown"` is the correct sentinel when `diff_context_map` has no entry.
+
+For auto-classified INFO findings (those classified as DISCUSS in Step 3 without entering Step 3.5): add them to `classification_map` with `severity="info"` and `dimension=diff_context_map.get((path, line), {}).get("dimension", "unknown")`.
+
 **Write analysis report** to `{{AUTOSKILLIT_TEMP}}/resolve-review/analysis_{pr_number}_{ts}.md` before
 any code changes are made. The report must include a summary banner:
 ```
@@ -411,9 +417,11 @@ BODY="Investigated — this is intentional. ${evidence}
 <!-- autoskillit:resolved comment_id=${comment_id} verdict=REJECT -->"
 # DISCUSS:
 BODY="Valid observation — flagged for design decision. ${evidence}
+<!-- REVIEW-FLAG: severity=${severity} dimension=${dimension} -->
 <!-- autoskillit:resolved comment_id=${comment_id} verdict=DISCUSS -->"
 # INFO (auto-classified DISCUSS):
 BODY="Acknowledged — minor suggestion noted.
+<!-- REVIEW-FLAG: severity=info dimension=${dimension} -->
 <!-- autoskillit:resolved comment_id=${comment_id} verdict=INFO -->"
 
 gh api repos/{owner}/{repo}/pulls/{pr_number}/comments/{comment_id}/replies \

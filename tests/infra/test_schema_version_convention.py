@@ -220,7 +220,7 @@ class TestSchemaVersionConvention:
         # These sites write list payloads through function calls but are caught by the scanner
         list_sites = [
             ("src/autoskillit/smoke_utils.py", 87),
-            ("src/autoskillit/smoke_utils.py", 272),
+            ("src/autoskillit/smoke_utils.py", 277),
         ]
         for site in list_sites:
             assert site in _LEGACY_JSON_WRITES, (

@@ -10,6 +10,7 @@ and are never consumed here.
 from __future__ import annotations
 
 import json
+import re
 from collections import deque
 from pathlib import Path
 
@@ -22,6 +23,18 @@ from autoskillit.planner.schema import (
 )
 
 logger = get_logger(__name__)
+
+_VERSION_BUMP_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
+    re.compile(p, re.IGNORECASE)
+    for p in [
+        r"pyproject\.toml.*version",
+        r"version.*pyproject\.toml",
+        r"sync[-_]versions",
+        r"sync_versions\.py",
+        r"task\s+sync-versions",
+        r"\bversion[\s_-]*bump\b",
+    ]
+)
 
 
 def _load_phase_results(root: Path) -> dict[str, dict]:
@@ -243,6 +256,28 @@ def _check_duplicate_files_touched(wp_results: dict[str, dict]) -> list[Validati
     return findings
 
 
+def _check_version_bump_steps(
+    wp_results: dict[str, dict],
+) -> list[ValidationFinding]:
+    findings: list[ValidationFinding] = []
+    for wp_id, wp in wp_results.items():
+        steps: list[str] = wp.get("technical_steps") or []
+        searchable = " ".join([wp.get("name") or "", wp.get("summary") or ""] + steps)
+        if any(pattern.search(searchable) for pattern in _VERSION_BUMP_PATTERNS):
+            findings.append(
+                {
+                    "message": (
+                        f"{wp_id}: contains manual version-bump steps; "
+                        "CI handles version bumps automatically on merge — "
+                        "remove these steps."
+                    ),
+                    "severity": "warning",
+                    "check": "version_bump_step",
+                }
+            )
+    return findings
+
+
 def _check_failed_wps(wp_manifest: dict | None) -> list[ValidationFinding]:
     if wp_manifest is None:
         return []
@@ -282,6 +317,7 @@ def validate_plan(output_dir: str) -> dict[str, str]:
     all_findings.extend(_check_sizing_bounds(wp_results))
     all_findings.extend(_check_duplicate_deliverables(wp_results))
     all_findings.extend(_check_duplicate_files_touched(wp_results))
+    all_findings.extend(_check_version_bump_steps(wp_results))
     all_findings.extend(_check_failed_wps(wp_manifest))
 
     errors = [f for f in all_findings if f["severity"] == "error"]

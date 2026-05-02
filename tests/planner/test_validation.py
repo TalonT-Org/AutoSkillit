@@ -356,3 +356,134 @@ def test_check_duplicate_files_touched_returns_structured_findings() -> None:
     assert findings[0]["severity"] == "warning"
     assert findings[0]["check"] == "duplicate_files_touched"
     assert "message" in findings[0]
+
+
+# ---------------------------------------------------------------------------
+# _check_version_bump_steps tests (T-VB-1 through T-VB-8)
+# ---------------------------------------------------------------------------
+
+
+def test_version_bump_step_pyproject(tmp_path: Path) -> None:
+    """T-VB-1: WP with technical_steps referencing pyproject.toml version edit → warning."""
+    _make_minimal_output_dir(tmp_path)
+    wp_dir = tmp_path / "work_packages"
+    data = json.loads((wp_dir / "P1-A1-WP1_result.json").read_text())
+    data["technical_steps"] = ["Edit pyproject.toml version field to X.Y.Z"]
+    (wp_dir / "P1-A1-WP1_result.json").write_text(json.dumps(data))
+
+    result = validate_plan(str(tmp_path))
+    assert result["verdict"] == "pass"
+    validation = json.loads((tmp_path / "validation.json").read_text())
+    assert validation["findings"] == []
+    assert any(w["check"] == "version_bump_step" for w in validation["warnings"])
+
+
+def test_version_bump_step_sync_versions_task(tmp_path: Path) -> None:
+    """T-VB-2: WP with technical_steps containing sync-versions → warning."""
+    _make_minimal_output_dir(tmp_path)
+    wp_dir = tmp_path / "work_packages"
+    data = json.loads((wp_dir / "P1-A1-WP1_result.json").read_text())
+    data["technical_steps"] = ["Run task sync-versions"]
+    (wp_dir / "P1-A1-WP1_result.json").write_text(json.dumps(data))
+
+    result = validate_plan(str(tmp_path))
+    assert result["verdict"] == "pass"
+    validation = json.loads((tmp_path / "validation.json").read_text())
+    assert any(w["check"] == "version_bump_step" for w in validation["warnings"])
+
+
+def test_version_bump_step_sync_versions_py(tmp_path: Path) -> None:
+    """T-VB-3: WP with technical_steps containing sync_versions.py → warning."""
+    _make_minimal_output_dir(tmp_path)
+    wp_dir = tmp_path / "work_packages"
+    data = json.loads((wp_dir / "P1-A1-WP1_result.json").read_text())
+    data["technical_steps"] = ["python3 scripts/sync_versions.py"]
+    (wp_dir / "P1-A1-WP1_result.json").write_text(json.dumps(data))
+
+    result = validate_plan(str(tmp_path))
+    assert result["verdict"] == "pass"
+    validation = json.loads((tmp_path / "validation.json").read_text())
+    assert any(w["check"] == "version_bump_step" for w in validation["warnings"])
+
+
+def test_version_bump_step_no_match(tmp_path: Path) -> None:
+    """T-VB-4: WP with unrelated technical_steps → no version_bump_step warning."""
+    _make_minimal_output_dir(tmp_path)
+    wp_dir = tmp_path / "work_packages"
+    data = json.loads((wp_dir / "P1-A1-WP1_result.json").read_text())
+    data["technical_steps"] = ["Refactor the API handler"]
+    (wp_dir / "P1-A1-WP1_result.json").write_text(json.dumps(data))
+
+    result = validate_plan(str(tmp_path))
+    assert result["verdict"] == "pass"
+    validation = json.loads((tmp_path / "validation.json").read_text())
+    assert not any(w["check"] == "version_bump_step" for w in validation["warnings"])
+
+
+def test_version_bump_step_in_name(tmp_path: Path) -> None:
+    """T-VB-5: WP with version-bump pattern in name → warning."""
+    _make_minimal_output_dir(tmp_path)
+    wp_dir = tmp_path / "work_packages"
+    data = json.loads((wp_dir / "P1-A1-WP1_result.json").read_text())
+    data["name"] = "WP3: Version Bump"
+    data["technical_steps"] = []
+    (wp_dir / "P1-A1-WP1_result.json").write_text(json.dumps(data))
+
+    result = validate_plan(str(tmp_path))
+    assert result["verdict"] == "pass"
+    validation = json.loads((tmp_path / "validation.json").read_text())
+    assert any(w["check"] == "version_bump_step" for w in validation["warnings"])
+
+
+def test_version_bump_step_no_technical_steps_key(tmp_path: Path) -> None:
+    """T-VB-6: WP with no technical_steps at all → no crash, no warning."""
+    _make_minimal_output_dir(tmp_path)
+    wp_dir = tmp_path / "work_packages"
+    data = json.loads((wp_dir / "P1-A1-WP1_result.json").read_text())
+    data.pop("technical_steps", None)
+    (wp_dir / "P1-A1-WP1_result.json").write_text(json.dumps(data))
+
+    result = validate_plan(str(tmp_path))
+    assert result["verdict"] == "pass"
+    validation = json.loads((tmp_path / "validation.json").read_text())
+    assert not any(w["check"] == "version_bump_step" for w in validation["warnings"])
+
+
+def test_version_bump_step_only_flagged_wp(tmp_path: Path) -> None:
+    """T-VB-7: Multiple WPs, only one triggers the warning → one entry per flagged WP."""
+    _make_minimal_output_dir(tmp_path, wps_per_assignment=2)
+    wp_dir = tmp_path / "work_packages"
+    data1 = json.loads((wp_dir / "P1-A1-WP1_result.json").read_text())
+    data1["technical_steps"] = ["Edit pyproject.toml version field to 1.2.3"]
+    (wp_dir / "P1-A1-WP1_result.json").write_text(json.dumps(data1))
+    data2 = json.loads((wp_dir / "P1-A1-WP2_result.json").read_text())
+    data2["technical_steps"] = ["Implement the feature"]
+    (wp_dir / "P1-A1-WP2_result.json").write_text(json.dumps(data2))
+
+    result = validate_plan(str(tmp_path))
+    assert result["verdict"] == "pass"
+    validation = json.loads((tmp_path / "validation.json").read_text())
+    vb_warnings = [w for w in validation["warnings"] if w["check"] == "version_bump_step"]
+    assert len(vb_warnings) == 1
+    assert "P1-A1-WP1" in vb_warnings[0]["message"]
+
+
+def test_version_bump_step_coexists_with_duplicate_files_touched(tmp_path: Path) -> None:
+    """T-VB-8: version_bump_step warning coexists with duplicate_files_touched warning."""
+    _make_minimal_output_dir(tmp_path, wps_per_assignment=2)
+    wp_dir = tmp_path / "work_packages"
+    data1 = json.loads((wp_dir / "P1-A1-WP1_result.json").read_text())
+    data1["technical_steps"] = ["Edit pyproject.toml version field to 1.2.3"]
+    data1["files_touched"] = ["src/shared.py"]
+    (wp_dir / "P1-A1-WP1_result.json").write_text(json.dumps(data1))
+    data2 = json.loads((wp_dir / "P1-A1-WP2_result.json").read_text())
+    data2["files_touched"] = ["src/shared.py"]
+    (wp_dir / "P1-A1-WP2_result.json").write_text(json.dumps(data2))
+
+    result = validate_plan(str(tmp_path))
+    assert result["verdict"] == "pass"
+    validation = json.loads((tmp_path / "validation.json").read_text())
+    checks = {w["check"] for w in validation["warnings"]}
+    assert "version_bump_step" in checks
+    assert "duplicate_files_touched" in checks
+    assert len(validation["findings"]) == 0

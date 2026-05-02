@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
+
+import pytest
+import yaml
 
 
 def _skill_md_text() -> str:
@@ -180,3 +184,159 @@ def test_skill_documents_group_splitting_logic() -> None:
     assert "sub-group" in step35.lower() or "subgroup" in step35.lower(), (
         "Step 3.5 section must describe sub-groups"
     )
+
+
+def test_build_execution_map_new_tokens_registered() -> None:
+    """has_deferred, deferred_count, dispatched_count must appear in the BEM contract."""
+    from autoskillit.recipe.contracts import get_skill_contract, load_bundled_manifest
+
+    manifest = load_bundled_manifest()
+    contract = get_skill_contract("build-execution-map", manifest)
+    assert contract is not None
+    output_names = [o.name for o in contract.outputs]
+    assert "has_deferred" in output_names
+    assert "deferred_count" in output_names
+    assert "dispatched_count" in output_names
+
+
+@pytest.fixture()
+def sample_bem_json_with_deferrals() -> str:
+    return json.dumps(
+        {
+            "total_issues": 3,
+            "dispatched_count": 2,
+            "deferred_count": 1,
+            "has_deferred": True,
+            "groups": [
+                {
+                    "group": 1,
+                    "parallel": True,
+                    "issues": [{"number": 1155, "title": "A"}, {"number": 1156, "title": "B"}],
+                }
+            ],
+            "merge_order": [1155, 1156],
+            "in_progress_context": [{"number": 887, "title": "X"}],
+            "cross_assessments": [
+                {
+                    "target_issue": 1158,
+                    "in_progress_issue": 887,
+                    "conflict_severity": "critical",
+                    "conflict_type": "undeclared_dependency",
+                    "reasoning": "...",
+                    "recommendation": "defer",
+                }
+            ],
+            "deferred_issues": [
+                {"number": 1158, "title": "C", "blocked_by": [887], "reason": "..."}
+            ],
+        }
+    )
+
+
+def test_bem_count_invariant(sample_bem_json_with_deferrals: str) -> None:
+    data = json.loads(sample_bem_json_with_deferrals)
+    assert data["dispatched_count"] + data["deferred_count"] == data["total_issues"]
+
+
+@pytest.fixture()
+def sample_bem_json_with_critical_deferral() -> str:
+    return json.dumps(
+        {
+            "total_issues": 2,
+            "dispatched_count": 1,
+            "deferred_count": 1,
+            "has_deferred": True,
+            "groups": [{"group": 1, "parallel": True, "issues": [{"number": 1155, "title": "A"}]}],
+            "merge_order": [1155],
+            "in_progress_context": [{"number": 887, "title": "X"}],
+            "cross_assessments": [
+                {
+                    "target_issue": 1158,
+                    "in_progress_issue": 887,
+                    "conflict_severity": "critical",
+                    "conflict_type": "undeclared_dependency",
+                    "reasoning": "...",
+                    "recommendation": "defer",
+                }
+            ],
+            "deferred_issues": [
+                {"number": 1158, "title": "B", "blocked_by": [887], "reason": "..."}
+            ],
+        }
+    )
+
+
+def test_critical_cross_assessment_defers_issue(
+    sample_bem_json_with_critical_deferral: str,
+) -> None:
+    data = json.loads(sample_bem_json_with_critical_deferral)
+    deferred_numbers = {d["number"] for d in data["deferred_issues"]}
+    grouped_numbers = {i["number"] for g in data["groups"] for i in g["issues"]}
+    assert deferred_numbers.isdisjoint(grouped_numbers), (
+        "Deferred issues must not appear in any dispatch group"
+    )
+
+
+@pytest.fixture()
+def sample_bem_json_no_in_progress() -> str:
+    return json.dumps(
+        {
+            "total_issues": 2,
+            "dispatched_count": 2,
+            "deferred_count": 0,
+            "has_deferred": False,
+            "groups": [
+                {
+                    "group": 1,
+                    "parallel": True,
+                    "issues": [{"number": 1155, "title": "A"}, {"number": 1156, "title": "B"}],
+                }
+            ],
+            "merge_order": [1155, 1156],
+            "in_progress_context": [],
+            "cross_assessments": [],
+            "deferred_issues": [],
+        }
+    )
+
+
+def test_no_in_progress_produces_no_deferrals(sample_bem_json_no_in_progress: str) -> None:
+    data = json.loads(sample_bem_json_no_in_progress)
+    assert data["has_deferred"] is False
+    assert data["deferred_count"] == 0
+    assert data["dispatched_count"] == data["total_issues"]
+    assert data["deferred_issues"] == []
+    assert data["in_progress_context"] == []
+    assert data["cross_assessments"] == []
+
+
+def test_blocked_by_is_array(sample_bem_json_with_deferrals: str) -> None:
+    data = json.loads(sample_bem_json_with_deferrals)
+    for deferred in data["deferred_issues"]:
+        assert isinstance(deferred["blocked_by"], list), (
+            f"blocked_by for issue {deferred['number']} must be an array"
+        )
+
+
+def test_bem_skillmd_has_cross_assessment_section() -> None:
+    content = _skill_md_text()
+    assert "cross_assessments" in content
+    assert "in_progress_context" in content
+    assert "deferred_issues" in content
+    assert "has_deferred" in content
+
+
+def test_bem_contract_pattern_example_includes_new_tokens() -> None:
+    contracts_yaml = (
+        Path(__file__).resolve().parent.parent.parent
+        / "src"
+        / "autoskillit"
+        / "recipe"
+        / "skill_contracts.yaml"
+    )
+    raw = yaml.safe_load(contracts_yaml.read_text())
+    skills = raw.get("skills", {})
+    example = skills["build-execution-map"]["pattern_examples"][0]
+    assert "has_deferred" in example
+    assert "deferred_count" in example
+    assert "dispatched_count" in example

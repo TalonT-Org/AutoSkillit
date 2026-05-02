@@ -11,18 +11,22 @@ from autoskillit.core.paths import pkg_root
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.validator import run_semantic_rules
 
-pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
 SCRIPTS_DIR = pkg_root().parent.parent / "scripts" / "recipe"
 
 
 def test_recipe_scripts_are_executable():
-    for sh in SCRIPTS_DIR.glob("*.sh"):
+    scripts = list(SCRIPTS_DIR.glob("*.sh"))
+    assert scripts, f"No .sh scripts found in {SCRIPTS_DIR}"
+    for sh in scripts:
         assert os.access(sh, os.X_OK), f"{sh} is not executable"
 
 
 def test_recipe_scripts_pass_syntax_check():
-    for sh in SCRIPTS_DIR.glob("*.sh"):
+    scripts = list(SCRIPTS_DIR.glob("*.sh"))
+    assert scripts, f"No .sh scripts found in {SCRIPTS_DIR}"
+    for sh in scripts:
         result = subprocess.run(["bash", "-n", str(sh)], capture_output=True)
         assert result.returncode == 0, f"{sh} has syntax errors: {result.stderr.decode()}"
 

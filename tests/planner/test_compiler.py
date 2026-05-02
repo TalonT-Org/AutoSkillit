@@ -342,3 +342,12 @@ def test_compile_plan_omits_research_when_assessment_file_absent(tmp_path: Path)
     compile_plan(str(output_dir), task="Test task", source_dir=str(tmp_path))
     issue_body = (output_dir / "issues" / "P1-A1-WP1_issue.md").read_text()
     assert "## Review Approach" not in issue_body
+
+
+def test_compile_plan_raises_on_malformed_assessment_file(tmp_path: Path) -> None:
+    output_dir = _make_valid_output_dir(
+        tmp_path, num_phases=1, with_dep_graph=False, dependency_chain=False
+    )
+    (output_dir / "review_approach_assessment.json").write_text("not valid json")
+    with pytest.raises(RuntimeError, match="Malformed assessment file"):
+        compile_plan(str(output_dir), task="Test task", source_dir=str(tmp_path))

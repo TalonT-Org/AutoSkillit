@@ -150,7 +150,10 @@ def compile_plan(output_dir: str, task: str, source_dir: str) -> dict[str, str]:
     assessment_path = root / "review_approach_assessment.json"
     assessment_by_wp_id: dict[str, dict] = {}
     if assessment_path.exists():
-        data = json.loads(assessment_path.read_text(encoding="utf-8"))
+        try:
+            data = json.loads(assessment_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            raise RuntimeError(f"Malformed assessment file {assessment_path}: {exc}") from exc
         for entry in data.get("assessments", []):
             assessment_by_wp_id[entry["wp_id"]] = entry
 

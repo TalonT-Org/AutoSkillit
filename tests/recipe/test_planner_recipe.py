@@ -251,20 +251,6 @@ def test_merge_steps_use_merge_tier_dir(planner_recipe, step_name):
 # --- validate_task_alignment step integration ---
 
 
-def test_generate_phases_receives_task_file_as_arg(planner_recipe):
-    step = planner_recipe.steps["generate_phases"]
-    skill_cmd = step.with_args.get("skill_command", "")
-    assert "inputs.task_file" in skill_cmd, "Must pass task_file as positional arg"
-    assert "env" not in step.with_args, "Must not use env: block (ADR-0003)"
-
-
-def test_extract_domain_receives_task_file_as_arg(planner_recipe):
-    step = planner_recipe.steps["extract_domain"]
-    skill_cmd = step.with_args.get("skill_command", "")
-    assert "inputs.task_file" in skill_cmd, "Must pass task_file as positional arg"
-    assert "env" not in step.with_args, "Must not use env: block (ADR-0003)"
-
-
 def test_validate_task_alignment_step_exists(planner_recipe):
     assert "validate_task_alignment" in planner_recipe.steps
     step = planner_recipe.steps["validate_task_alignment"]

@@ -15,22 +15,22 @@ Pre-commit enforcement: `sync_versions.py --check` (exits 1 if any artifact is o
 
 ## CI Workflows
 
-### `patch-bump-integration.yml`
+### `patch-bump-develop.yml`
 
-- **Trigger:** any PR merged into `integration`
-- **Action:** `MAJOR.MINOR.(PATCH+1)` on `integration`
+- **Trigger:** any PR merged into `develop`
+- **Action:** `MAJOR.MINOR.(PATCH+1)` on `develop`
 - **Calls `sync_versions.py`:** yes
 - **Staged files:** `pyproject.toml`, `src/autoskillit/.claude-plugin/plugin.json`, `src/autoskillit/recipes/`, `uv.lock`
 - **Concurrency:** serialized (`cancel-in-progress: false`)
 
 ### `version-bump.yml`
 
-- **Trigger:** PR merged into `main` from `integration` (promotion)
+- **Trigger:** PR merged into `main` from `develop` (promotion)
 - **Action:**
   - `main` → `MAJOR.(MINOR+1).0`
-  - `integration` → `MAJOR.(MINOR+1).1` (forward-bumped to stay ahead of main)
-- **Calls `sync_versions.py`:** yes (on both `main` and `integration` in sequence)
-- **Guard:** rejects if `new_integration <= old_integration` (downgrade protection)
+  - `develop` → `MAJOR.(MINOR+1).1` (forward-bumped to stay ahead of main)
+- **Calls `sync_versions.py`:** yes (on both `main` and `develop` in sequence)
+- **Guard:** rejects if `new_develop <= old_develop` (downgrade protection)
 
 ### `release.yml`
 
@@ -51,7 +51,7 @@ Returns `match` (`package_version == plugin_json_version`) and `recipe_versions_
 
 ## Known Gap: `release.yml` Did Not Sync Recipes
 
-`patch-bump-integration.yml` and `version-bump.yml` both call `sync_versions.py`, keeping `plugin.json` and recipe YAMLs in sync. Previously, `release.yml` updated `plugin.json` inline but skipped `sync_versions.py`, so recipe YAML `autoskillit_version` fields were not updated on `stable`. This gap has been closed: `release.yml` now calls `python3 scripts/sync_versions.py` and stages `src/autoskillit/recipes/` in the commit step, consistent with the other two workflows.
+`patch-bump-develop.yml` and `version-bump.yml` both call `sync_versions.py`, keeping `plugin.json` and recipe YAMLs in sync. Previously, `release.yml` updated `plugin.json` inline but skipped `sync_versions.py`, so recipe YAML `autoskillit_version` fields were not updated on `stable`. This gap has been closed: `release.yml` now calls `python3 scripts/sync_versions.py` and stages `src/autoskillit/recipes/` in the commit step, consistent with the other two workflows.
 
 ## Invariant for PRs
 

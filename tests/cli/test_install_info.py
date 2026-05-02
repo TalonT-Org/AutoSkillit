@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from autoskillit.cli._install_info import (
-    _INSTALL_FROM_INTEGRATION,
+    _INSTALL_FROM_DEVELOP,
     InstallInfo,
     InstallType,
     comparison_branch,
@@ -315,7 +315,7 @@ def test_upgrade_command_develop() -> None:
         "tool",
         "install",
         "--force",
-        _INSTALL_FROM_INTEGRATION,
+        _INSTALL_FROM_DEVELOP,
     ]
 
 

@@ -1,9 +1,9 @@
 name: full-audit
 description: >-
-  Run audit-tests, audit-cohesion, audit-arch, audit-feature-gates, and audit-docs in
-  parallel, validate each report individually, and create a GitHub issue from each
-  validated report.
-summary: "branch → audit×5 ∥ → validate×5 ∥ → issue×5 ∥ → done"
+  Run audit-tests, audit-cohesion, audit-arch, audit-feature-gates, audit-docs, and
+  audit-review-decisions in parallel, validate each report individually, and create a
+  GitHub issue from each validated report.
+summary: "branch → audit×6 ∥ → validate×6 ∥ → issue×6 ∥ → done"
 autoskillit_version: "0.9.313"
 recipe_version: "1.0.0"
 requires_packs: [audit, github]
@@ -22,9 +22,9 @@ kitchen_rules:
     WebFetch, WebSearch, NotebookEdit) from the orchestrator. All work is delegated
     through run_skill.
   - >-
-    Each audit chain (tests, cohesion, arch, feature-gates, docs) is independent. A
-    failure in one chain MUST NOT block or affect the other four chains. Continue with
-    successful chains and note failures for escalation.
+    Each audit chain (tests, cohesion, arch, feature-gates, docs, review-decisions) is
+    independent. A failure in one chain MUST NOT block or affect the other five chains.
+    Continue with successful chains and note failures for escalation.
   - >-
     Within each wave, fire all run_skill calls in a single message to achieve
     parallelism. Do not serialize audit/validate/issue calls.
@@ -52,19 +52,20 @@ steps:
 
   run_audits:
     tool: run_skill
-    description: "Run five audit skills in parallel"
+    description: "Run six audit skills in parallel"
     with:
       skill_command: "/autoskillit:audit-tests"
       cwd: "${{ inputs.workspace }}"
       step_name: "run_audits"
     note: >
-      PARALLEL AUDIT WAVE — Fire five run_skill calls in a single message:
+      PARALLEL AUDIT WAVE — Fire six run_skill calls in a single message:
 
       1. run_skill(skill_command="/autoskillit:audit-tests", cwd="${{ inputs.workspace }}", step_name="audit_tests")
       2. run_skill(skill_command="/autoskillit:audit-cohesion", cwd="${{ inputs.workspace }}", step_name="audit_cohesion")
       3. run_skill(skill_command="/autoskillit:audit-arch", cwd="${{ inputs.workspace }}", step_name="audit_arch")
       4. run_skill(skill_command="/autoskillit:audit-feature-gates", cwd="${{ inputs.workspace }}", step_name="audit_feature_gates")
       5. run_skill(skill_command="/autoskillit:audit-docs", cwd="${{ inputs.workspace }}", step_name="audit_docs")
+      6. run_skill(skill_command="/autoskillit:audit-review-decisions", cwd="${{ inputs.workspace }}", step_name="audit_review_decisions")
 
       Each audit writes its report to a well-known temp directory:
       - {{AUTOSKILLIT_TEMP}}/audit-tests/{name}_{timestamp}.md
@@ -72,14 +73,15 @@ steps:
       - {{AUTOSKILLIT_TEMP}}/audit-arch/arch_audit_{timestamp}.md
       - {{AUTOSKILLIT_TEMP}}/audit-feature-gates/feature_gate_audit_{timestamp}.md
       - {{AUTOSKILLIT_TEMP}}/audit-docs/docs_audit_{timestamp}.md
+      - {{AUTOSKILLIT_TEMP}}/audit-review-decisions/review_decisions_audit_{timestamp}.md
 
-      After all five complete, discover the most-recently-modified .md file in
+      After all six complete, discover the most-recently-modified .md file in
       each temp directory from the session output. Record which audits succeeded
       and their report paths for the validation wave.
 
-      If any audit fails, note the failure but continue with the other four.
-      Proceed to validate_audits even if only one, two, three, or four audits succeeded.
-      Route to escalate_stop ONLY if all five audits fail.
+      If any audit fails, note the failure but continue with the other five.
+      Proceed to validate_audits even if only one, two, three, four, or five audits succeeded.
+      Route to escalate_stop ONLY if all six audits fail.
     capture_list:
       audit_report_paths: "${{ result.audit_report_path }}"
     on_success: validate_audits
@@ -104,6 +106,7 @@ steps:
       3. run_skill(skill_command="/autoskillit:validate-audit {arch_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_arch")
       4. run_skill(skill_command="/autoskillit:validate-audit {feature_gates_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_feature_gates")
       5. run_skill(skill_command="/autoskillit:validate-audit {docs_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_docs")
+      6. run_skill(skill_command="/autoskillit:validate-audit {review_decisions_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_review_decisions")
 
       Skip validation for any audit that failed in wave 1.
       Each validation writes to {{AUTOSKILLIT_TEMP}}/validate-audit/:
@@ -114,7 +117,7 @@ steps:
       output. Record paths for the issue creation wave.
 
       If any validation fails, note it but continue with the others.
-      Route to escalate_stop ONLY if all five validations fail.
+      Route to escalate_stop ONLY if all six validations fail.
     capture_list:
       validated_report_paths: "${{ result.validated_report_path }}"
     on_success: create_issues
@@ -146,6 +149,7 @@ steps:
         run_skill("/autoskillit:prepare-issue {ticket_body_tests_2_path}", step_name="issue_tests_2")
         run_skill("/autoskillit:prepare-issue {ticket_body_tests_3_path}", step_name="issue_tests_3")
         run_skill("/autoskillit:prepare-issue {ticket_body_cohesion_1_path}", step_name="issue_cohesion_1")
+        run_skill("/autoskillit:prepare-issue {ticket_body_review_decisions_1_path}", step_name="issue_review_decisions_1")
         ... (all ticket bodies across all audit types in a single message)
 
       After all issues are created, append the validation summary to each issue body

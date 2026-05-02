@@ -21,7 +21,7 @@ def resolve_menu_input(
 ) -> T | str | None:
     if not raw:
         return None
-    if raw.isdigit():
+    if raw.isdecimal():
         n = int(raw)
         if n == 0:
             return SLOT_ZERO_SELECTED if slot_zero else None
@@ -44,7 +44,7 @@ def render_numbered_menu(
     print(header)
     if slot_zero_label is not None:
         print(f"  0. {slot_zero_label}")
-    current_rank: int = -1
+    current_rank: int | None = None
     for i, item in enumerate(items, 1):
         if group_classifier is not None:
             rank = group_classifier(item)

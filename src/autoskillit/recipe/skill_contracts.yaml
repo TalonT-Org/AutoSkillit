@@ -2475,3 +2475,55 @@ callable_contracts:
     outputs:
     - name: local_bundle_path
       type: str
+
+tool_output_contracts:
+  wait_for_ci:
+    result_field: conclusion
+    fields:
+      conclusion:
+        type: str
+        allowed_values:
+          - success
+          - failure
+          - cancelled
+          - action_required
+          - timed_out
+          - startup_failure
+          - stale
+          - no_runs
+          - error
+          - unknown
+        terminal_values:
+          - error
+          - unknown
+        recoverable_values:
+          - failure
+          - cancelled
+          - timed_out
+          - no_runs
+          - action_required
+  get_ci_status:
+    result_field: conclusion
+    fields:
+      conclusion:
+        type: str
+        allowed_values:
+          - success
+          - failure
+          - cancelled
+          - action_required
+          - timed_out
+          - startup_failure
+          - stale
+          - no_runs
+          - error
+          - unknown
+        terminal_values:
+          - error
+          - unknown
+        recoverable_values:
+          - failure
+          - cancelled
+          - timed_out
+          - no_runs
+          - action_required

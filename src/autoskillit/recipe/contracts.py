@@ -73,6 +73,19 @@ class SkillContract:
     result_fields: list[ResultFieldSpec] = dataclasses.field(default_factory=list)
 
 
+@dataclasses.dataclass(frozen=True)
+class ToolOutputFieldDef:
+    allowed_values: tuple[str, ...]
+    terminal_values: frozenset[str]
+    recoverable_values: frozenset[str]
+
+
+@dataclasses.dataclass(frozen=True)
+class ToolOutputContractDef:
+    result_field: str
+    fields: dict[str, ToolOutputFieldDef]
+
+
 @dataclasses.dataclass
 class StaleItem:
     skill: str
@@ -237,6 +250,26 @@ def get_callable_contract(
     ]
     outputs = [SkillOutput(name=out["name"], type=out["type"]) for out in entry.get("outputs", [])]
     return SkillContract(inputs=inputs, outputs=outputs)
+
+
+def get_tool_output_contract(
+    tool_name: str, manifest: dict[str, Any] | None = None
+) -> ToolOutputContractDef | None:
+    """Return the ToolOutputContractDef for a named MCP tool, or None if not declared."""
+    if manifest is None:
+        manifest = load_bundled_manifest()
+    entry = manifest.get("tool_output_contracts", {}).get(tool_name)
+    if entry is None:
+        return None
+    fields = {
+        field_name: ToolOutputFieldDef(
+            allowed_values=tuple(field_data.get("allowed_values", [])),
+            terminal_values=frozenset(field_data.get("terminal_values", [])),
+            recoverable_values=frozenset(field_data.get("recoverable_values", [])),
+        )
+        for field_name, field_data in entry.get("fields", {}).items()
+    }
+    return ToolOutputContractDef(result_field=entry.get("result_field", ""), fields=fields)
 
 
 def compute_skill_hash(skill_name: str, *, skills_dir: Path) -> str:

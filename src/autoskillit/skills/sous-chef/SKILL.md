@@ -306,7 +306,7 @@ When dispatching from an execution map:
    dispatch groups exist (group_count is 0 after removing deferred issues), skip group
    dispatch entirely. Enter an explicit poll loop:
 
-   1. Wait a configurable interval (default: 60 seconds between checks).
+   1. Wait `github.deferred_poll_interval_seconds` (default: 60 seconds between checks).
    2. Re-query ALL outstanding blocker labels via a single batched GraphQL aliases query.
    3. If at least one deferred issue becomes unblocked (all its blockers cleared), proceed
       to step 6e for those issues.
@@ -327,9 +327,13 @@ When dispatching from an execution map:
       issue numbers as arguments. This is a full analysis (pairwise + cross-assessment),
       not a passthrough. The supplementary map may itself produce new deferrals if
       remaining in-progress issues conflict with the eligible set.
-   2. Dispatch the resulting groups as additional sequential group(s) appended after the
-      last completed group.
-   3. Apply the same group-boundary merge-wait rule before dispatching the supplementary
+   2. If the supplementary map returns `has_deferred=true`, apply steps 6b and 6c to
+      the newly deferred issues before dispatching the supplementary groups. In headless
+      mode, treat all new deferrals as Wait (same rule as 6b). Issues that remain deferred
+      after this re-entry are skipped and reported in the session result.
+   3. Dispatch the resulting dispatch groups as additional sequential group(s) appended
+      after the last completed group.
+   4. Apply the same group-boundary merge-wait rule before dispatching the supplementary
       groups.
 
 ---

@@ -101,3 +101,14 @@ Example path: `{{AUTOSKILLIT_TEMP}}/planner/run-20260502-120000/review_approach_
 ```
 review_approach_assessment_path = $2/review_approach_assessment.json
 ```
+
+## Context Limit Behavior
+
+This skill writes `$2/review_approach_assessment.json` before emitting structured output
+tokens. If context is exhausted mid-execution:
+
+1. Before emitting any structured output tokens, verify that `review_approach_assessment.json`
+   exists in `$2/`.
+2. If the file exists, emit the structured token and exit normally.
+3. If context exhaustion interrupts before the file is written, the caller's
+   `on_context_limit` routing handles escalation — do not attempt partial output.

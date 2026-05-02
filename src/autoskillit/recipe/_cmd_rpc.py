@@ -317,12 +317,12 @@ def advance_queue_pr(
     current_pr_number: str,
     pr_order_file: str,
 ) -> dict[str, str]:
-    """Find next PR in queue order file via jq. Callable via run_python."""
+    """Find next PR in queue order file. Callable via run_python."""
     try:
         with open(pr_order_file) as f:
             order = json.load(f)
     except (OSError, json.JSONDecodeError) as exc:
-        return {"ok": "false", "error": str(exc)}
+        raise RuntimeError(str(exc)) from exc
     current = int(current_pr_number)
     idx = None
     for i, entry in enumerate(order):

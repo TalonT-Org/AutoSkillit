@@ -340,6 +340,7 @@ steps:
       review_approach_assessment_path: "${{ result.review_approach_assessment_path }}"
     on_success: validate
     on_failure: validate
+    on_context_limit: validate
     note: >
       Optional review-approach benefit assessment pass. Non-fatal: routes to validate
       on both success and failure. Skipped when assess_review_approach ingredient is false (default).

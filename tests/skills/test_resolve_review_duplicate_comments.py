@@ -138,5 +138,5 @@ def test_step15_marker_bearing_threads_are_resolved() -> None:
 def test_marker_format_consistent_across_skills() -> None:
     resolve_mentions = RESOLVE_SKILL_MD.count("autoskillit:resolved")
     review_mentions = REVIEW_PR_SKILL_MD.count("autoskillit:resolved")
-    assert resolve_mentions >= 4, "resolve-review must reference the marker at least 4 times"
-    assert review_mentions >= 2, "review-pr must reference the marker at least 2 times"
+    assert resolve_mentions >= 5, "resolve-review must reference the marker at least 5 times"
+    assert review_mentions >= 3, "review-pr must reference the marker at least 3 times"

@@ -244,5 +244,6 @@ async def test_drain_returns_usage_and_clears():
     assert usage["session_id"] == "sess-drain"
 
     # After drain the accumulator is empty — to_usage and drain both return None
+    assert len(log._entries) == 0
     assert log.to_usage("sess-drain") is None
     assert log.drain("sess-drain") is None

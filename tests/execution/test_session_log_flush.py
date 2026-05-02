@@ -678,6 +678,9 @@ def test_flush_helper_builds_and_passes_session_telemetry():
             _flush(Path(td))
 
     assert "telemetry" in captured, "_flush() must forward telemetry= to flush_session_log"
-    assert isinstance(captured["telemetry"], SessionTelemetry), (
-        "telemetry must be a SessionTelemetry instance"
-    )
+    telemetry = captured["telemetry"]
+    assert isinstance(telemetry, SessionTelemetry), "telemetry must be a SessionTelemetry instance"
+    assert telemetry.github_api_requests == 0
+    assert telemetry.github_api_usage is None
+    assert telemetry.loc_insertions == 0
+    assert telemetry.loc_deletions == 0

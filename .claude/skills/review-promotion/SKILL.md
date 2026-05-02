@@ -21,7 +21,7 @@ posts the review report as a PR comment.
 /autoskillit:review-promotion [integration_branch] [base_branch] [--post-to-pr]
 ```
 
-- `integration_branch` (optional) — source branch to analyze. Defaults to `integration`.
+- `integration_branch` (optional) — source branch to analyze. Defaults to `develop`.
 - `base_branch` (optional) — target branch. Defaults to `main`.
 - `--post-to-pr` — if present, post the review report as a comment on the open promotion PR.
 
@@ -49,7 +49,7 @@ posts the review report as a PR comment.
 #### Step 0.1: Parse Arguments
 
 Parse optional positional arguments and flags:
-- `integration_branch` — default `"integration"` if absent or empty
+- `integration_branch` — default `"develop"` if absent or empty
 - `base_branch` — default `"main"` if absent or empty
 - `post_to_pr` — `true` if `--post-to-pr` present in ARGUMENTS
 

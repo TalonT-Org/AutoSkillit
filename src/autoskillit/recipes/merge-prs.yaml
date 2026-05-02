@@ -36,7 +36,7 @@ kitchen_rules:
     push_worktree_branch → create_conflict_pr → wait_for_conflict_ci → merge_conflict_pr)
     per plan part before advancing to the next part or PR."
   - "INTEGRATION BRANCH: Two distinct branches exist. inputs.base_branch is the
-    target branch that PRs point to (e.g. main, integration).
+    target branch that PRs point to (e.g. main, develop).
     context.integration_branch is the per-run batch branch
     (e.g. pr-batch/pr-merge-{ts}) created from base_branch for this pipeline run.
     All PR merges and worktree merges target context.integration_branch. The final

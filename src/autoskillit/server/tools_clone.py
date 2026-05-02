@@ -196,7 +196,7 @@ async def push_to_remote(
 
     Args:
         clone_path: Absolute path to the clone directory to push from.
-        branch: Branch name to push (e.g. "integration").
+        branch: Branch name to push (e.g. "develop").
         source_dir: Source repo path (read-only URL lookup when remote_url is empty).
         remote_url: Pre-resolved upstream remote URL. When provided, source_dir is skipped.
         step_name: Optional YAML step key for wall-clock timing accumulation.

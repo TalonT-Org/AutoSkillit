@@ -38,7 +38,7 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
   stable after merge_worktree destroys named refs); a branch name is also accepted for
   standalone invocations. A live worktree path is accepted for legacy use (Step 0 extracts
   the branch name automatically).
-- `base_branch` — branch to diff against (default: `integration`)
+- `base_branch` — branch to diff against (default: `develop`)
 - `conflict_report_paths` (optional) — comma-separated list of absolute paths to conflict
   resolution reports produced by `resolve-merge-conflicts`. When provided and non-empty,
   cross-reference resolution decisions against plan intent in Step 2.5.

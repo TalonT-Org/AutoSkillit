@@ -40,7 +40,7 @@ hooks:
 ### Target Resolution
 
 **Branch name:**
-- Detect base branch via `git merge-base` against `main` and `integration`
+- Detect base branch via `git merge-base` against `main` and `develop`
 - Use the closer base (fewer commits ahead)
 - Diff: `git diff {merge_base}...{branch}`
 

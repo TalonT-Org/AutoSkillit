@@ -44,6 +44,7 @@ def test_passthrough_unchanged_when_no_manifests(tmp_path: Path) -> None:
     }
     index = json.loads((tmp_path / "wp_index.json").read_text())
     assert {e["id"] for e in index} == {"P1-A1-WP1", "P1-A1-WP2", "P1-A1-WP3"}
+    # consolidate_wps returns str values (compatible with run_python result passing)
     assert result["total_count"] == "3"
     assert result["merged_count"] == "0"
 
@@ -198,7 +199,7 @@ def test_dep_rewriting_intra_group_removed(tmp_path: Path) -> None:
 
     consolidated = json.loads((tmp_path / "consolidated_wps.json").read_text())
     merged = consolidated["work_packages"][0]
-    assert "P1-A1-WP2" not in merged["depends_on"]
+    assert merged["depends_on"] == []
 
 
 def test_dep_rewriting_source_to_merged_id(tmp_path: Path) -> None:
@@ -336,11 +337,10 @@ def test_multiple_phases_multiple_manifests(tmp_path: Path) -> None:
     assert len(consolidated["work_packages"]) == 3
     ids = {wp["id"] for wp in consolidated["work_packages"]}
     assert ids == {"P1-A1-WP1", "P2-A1-WP1", "P3-A1-WP1"}
-    # Cross-phase deps must not be affected
+    # Cross-phase deps must not be affected; absorbed source IDs must not appear
+    absorbed_ids = {"P1-A1-WP2", "P2-A1-WP2", "P3-A1-WP2"}
     for wp in consolidated["work_packages"]:
-        assert not any(
-            dep.startswith(wp["id"][:2]) and dep != wp["id"] for dep in wp["depends_on"]
-        )
+        assert not any(dep in absorbed_ids for dep in wp["depends_on"])
     assert result["merged_count"] == "3"
 
 

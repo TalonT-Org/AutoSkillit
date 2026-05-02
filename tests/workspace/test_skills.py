@@ -447,10 +447,12 @@ class TestSkillResolver:
             for d in bundled_skills_extended_dir().iterdir()
             if d.is_dir() and (d / "SKILL.md").is_file()
         ]
+        # Update when adding/removing skills in skills_extended/
         assert len(skills) == 125
 
     def test_skill_resolver_list_all_total_count(self) -> None:
         """list_all() returns 127 public skills (2 Tier-1 + 125 extended)."""
+        # 2 Tier-1 (open-kitchen, close-kitchen) + 125 extended; update when skill count changes
         assert len(DefaultSkillResolver().list_all()) == 127
 
     def test_skill_resolver_resolve_extended_skill(self) -> None:

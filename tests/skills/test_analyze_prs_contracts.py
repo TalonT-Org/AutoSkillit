@@ -26,7 +26,7 @@ def test_analyze_prs_batch_branch_uses_pr_batch_prefix(skill_text: str) -> None:
     to the branch-computation context rather than any incidental occurrence.
     """
     assert "pr-batch/pr-merge-" in skill_text, (
-        "analyze-prs must use 'pr-batch/pr-merge-{ts}' naming for integration_branch — "
+        "analyze-prs must use 'pr-batch/pr-merge-{ts}' naming for batch_branch — "
         "using 'develop/' prefix conflicts with the permanent 'develop' branch"
     )
 

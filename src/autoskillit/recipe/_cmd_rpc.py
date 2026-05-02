@@ -284,7 +284,7 @@ def create_persistent_integration(
 
 def force_push_and_wait_mergeability(
     work_dir: str,
-    integration_branch: str,
+    batch_branch: str,
     review_pr_number: str,
     max_polls: str = "12",
     poll_interval: str = "15",
@@ -296,7 +296,7 @@ def force_push_and_wait_mergeability(
     poll_interval = poll_interval or "15"
     remote = _detect_remote(work_dir)
     push = subprocess.run(
-        ["git", "push", remote, integration_branch, "--force-with-lease"],
+        ["git", "push", remote, batch_branch, "--force-with-lease"],
         cwd=work_dir,
         capture_output=True,
         text=True,

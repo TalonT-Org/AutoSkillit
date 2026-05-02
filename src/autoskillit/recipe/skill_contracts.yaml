@@ -357,7 +357,7 @@ skills:
       type: file_path
     - name: analysis_file
       type: file_path
-    - name: integration_branch
+    - name: batch_branch
       type: string
     - name: pr_count
       type: string
@@ -485,7 +485,7 @@ skills:
 
   open-integration-pr:
     inputs:
-    - name: integration_branch
+    - name: batch_branch
       type: string
       required: true
     - name: base_branch
@@ -1998,7 +1998,7 @@ skills:
       - "verdict\\s*=\\s*validated"
   promote-to-main:
     inputs:
-    - name: integration_branch
+    - name: batch_branch
       type: string
       required: false
     - name: base_branch
@@ -2084,7 +2084,7 @@ callable_contracts:
       type: file_path
   autoskillit.smoke_utils.compute_domain_partitions:
     inputs:
-    - name: integration_branch
+    - name: batch_branch
       type: str
       required: true
     - name: base_branch
@@ -2422,7 +2422,7 @@ callable_contracts:
     - name: work_dir
       type: str
       required: true
-    - name: integration_branch
+    - name: batch_branch
       type: str
       required: true
     - name: review_pr_number

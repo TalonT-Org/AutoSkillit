@@ -283,7 +283,7 @@ Ensure `{{AUTOSKILLIT_TEMP}}/merge-prs/` exists.
 
 ```json
 {
-    "integration_branch": "pr-batch/pr-merge-YYYYMMDD-HHMMSS",
+    "batch_branch": "pr-batch/pr-merge-YYYYMMDD-HHMMSS",
     "base_branch": "{base_branch}",
     "generated_at": "{ISO timestamp}",
     "pr_count": 5,
@@ -386,7 +386,7 @@ This file is named `*_plan_*.md` so `audit-impl` can discover it as the baseline
 Verify:
 - `pr_order_{ts}.json` is valid JSON and parseable
 - Every listed PR number appears exactly once
-- `integration_branch` field is set
+- `batch_branch` field is set
 
 Report to terminal:
 - Order file path
@@ -416,7 +416,7 @@ structured output tokens as the very last lines of your text output:
 ```
 pr_order_file = {absolute_path_to_pr_order_json}
 analysis_file = {absolute_path_to_pr_analysis_plan_md}
-integration_branch = {integration_branch_name}
+batch_branch = {batch_branch_name}
 pr_count = {eligible_pr_count}
 simple_count = {simple_pr_count}
 needs_check_count = {needs_check_pr_count}

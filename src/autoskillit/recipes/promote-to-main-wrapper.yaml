@@ -16,7 +16,7 @@ kitchen_rules:
   - "Route to on_failure — never investigate or fix directly from the orchestrator."
 
 ingredients:
-  integration_branch:
+  batch_branch:
     description: "Branch to promote (must exist ahead of base_branch). Must be a valid git branch name with no spaces or shell metacharacters."
     default: "develop"
   base_branch:
@@ -32,7 +32,7 @@ steps:
   promote:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:promote-to-main ${{ inputs.integration_branch }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:promote-to-main ${{ inputs.batch_branch }} ${{ inputs.base_branch }}"
       cwd: "${{ inputs.source_dir }}"
       step_name: "promote"
     capture:

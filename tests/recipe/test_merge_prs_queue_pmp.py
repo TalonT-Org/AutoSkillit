@@ -96,9 +96,9 @@ def test_merge_prs_analyze_prs_routes_to_route_by_queue_mode(pmp_recipe) -> None
 # ---------------------------------------------------------------------------
 
 
-def test_merge_prs_classic_path_create_integration_branch_present(pmp_recipe) -> None:
-    """create_integration_branch step must still be present (classic path)."""
-    assert "create_integration_branch" in pmp_recipe.steps
+def test_merge_prs_classic_path_create_batch_branch_present(pmp_recipe) -> None:
+    """create_batch_branch step must still be present (classic path)."""
+    assert "create_batch_branch" in pmp_recipe.steps
 
 
 def test_merge_prs_classic_path_merge_pr_present(pmp_recipe) -> None:
@@ -106,9 +106,9 @@ def test_merge_prs_classic_path_merge_pr_present(pmp_recipe) -> None:
     assert "merge_pr" in pmp_recipe.steps
 
 
-def test_merge_prs_classic_path_push_integration_branch_present(pmp_recipe) -> None:
-    """push_integration_branch step must still be present (classic path)."""
-    assert "push_integration_branch" in pmp_recipe.steps
+def test_merge_prs_classic_path_push_batch_branch_present(pmp_recipe) -> None:
+    """push_batch_branch step must still be present (classic path)."""
+    assert "push_batch_branch" in pmp_recipe.steps
 
 
 # ---------------------------------------------------------------------------

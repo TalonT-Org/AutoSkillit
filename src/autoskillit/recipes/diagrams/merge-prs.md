@@ -15,7 +15,7 @@ fetch_merge_queue_data → analyze_prs → route_by_queue_mode
 |     → resolve ejected conflicts on failure
 |
 +-- [integration mode]:
-|     create_integration_branch → publish
+|     create_batch_branch → publish
 |     |
 |     ┌────┤ FOR EACH PR:
 |     │    merge_pr → plan → verify → implement → test

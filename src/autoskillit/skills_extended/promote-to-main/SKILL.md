@@ -18,10 +18,10 @@ and creates a comprehensive promotion PR.
 ## Arguments
 
 ```
-/autoskillit:promote-to-main [integration_branch] [base_branch] [--dry-run]
+/autoskillit:promote-to-main [batch_branch] [base_branch] [--dry-run]
 ```
 
-- `integration_branch` (optional) — source branch to promote. Defaults to `develop`.
+- `batch_branch` (optional) — source branch to promote. Defaults to `develop`.
 - `base_branch` (optional) — target branch. Defaults to `main`.
 - `--dry-run` — generate the full PR body without creating a PR.
 
@@ -70,32 +70,32 @@ bypassing the normal completion protocol.
 #### Step 0.1: Parse Arguments
 
 Parse optional positional arguments and flags:
-- `integration_branch` — default `"develop"` if absent or empty
+- `batch_branch` — default `"develop"` if absent or empty
 - `base_branch` — default `"main"` if absent or empty
 - `dry_run` — `true` if `--dry-run` present in ARGUMENTS
 
 Validate that both branches exist locally:
 ```bash
-git rev-parse --verify {integration_branch} 2>/dev/null
+git rev-parse --verify {batch_branch} 2>/dev/null
 git rev-parse --verify {base_branch} 2>/dev/null
 ```
 If either fails, try fetching:
 ```bash
-git fetch origin {integration_branch}:{integration_branch} 2>/dev/null
+git fetch origin {batch_branch}:{batch_branch} 2>/dev/null
 ```
 If still missing, print error to stderr and exit 1.
 
 #### Step 0.2: Compute Divergence Point
 
 ```bash
-git merge-base {base_branch} {integration_branch}
+git merge-base {base_branch} {batch_branch}
 ```
 
 Store as `$MERGE_BASE_SHA`.
 
 Get commit count and timestamp:
 ```bash
-git rev-list --count $MERGE_BASE_SHA..{integration_branch}
+git rev-list --count $MERGE_BASE_SHA..{batch_branch}
 git show -s --format=%cI $MERGE_BASE_SHA
 ```
 Store as `$COMMIT_COUNT` and `$MERGE_BASE_DATE`.
@@ -146,10 +146,10 @@ and exit 1. Do NOT create a PR when pre-flight fails.
 
 Check:
 1. CI is green on the integration branch — run `gh pr checks` for any open PR from
-   integration, or `gh run list --branch {integration_branch} --workflow tests.yml --limit 1 --json conclusion`
-2. The integration branch is not behind base — run `git rev-list --count {integration_branch}..{base_branch}`
+   integration, or `gh run list --branch {batch_branch} --workflow tests.yml --limit 1 --json conclusion`
+2. The integration branch is not behind base — run `git rev-list --count {batch_branch}..{base_branch}`
    to check if base has commits not in integration (if > 0, warn that a rebase may be needed)
-3. No open PRs targeting integration with failing CI — `gh pr list --base {integration_branch} --state open --json number,title,statusCheckRollup`
+3. No open PRs targeting integration with failing CI — `gh pr list --base {batch_branch} --state open --json number,title,statusCheckRollup`
 
 Return JSON:
 ```json
@@ -185,7 +185,7 @@ Return JSON:
 
 Check:
 1. No open PRs targeting integration with `CHANGES_REQUESTED` reviews —
-   `gh pr list --base {integration_branch} --state open --json number,title,reviews`
+   `gh pr list --base {batch_branch} --state open --json number,title,reviews`
 2. No `in-progress` labeled issues that might indicate incomplete work —
    `gh issue list --label in-progress --state open --json number,title`
 
@@ -210,7 +210,7 @@ Spawn four parallel Task subagents (model: sonnet).
 
 Receive the output of:
 ```bash
-git log $MERGE_BASE_SHA..{integration_branch} --format="%H %s"
+git log $MERGE_BASE_SHA..{batch_branch} --format="%H %s"
 ```
 
 Categorize each commit into exactly one category based on its subject line:
@@ -241,13 +241,13 @@ Return JSON:
 
 Run:
 ```bash
-gh pr list --base {integration_branch} --state merged --limit 200 --json number,title,author,mergedAt,body,headRefName,additions,deletions,labels,url
+gh pr list --base {batch_branch} --state merged --limit 200 --json number,title,author,mergedAt,body,headRefName,additions,deletions,labels,url
 ```
 
 Filter to PRs merged after `$MERGE_BASE_DATE`. If empty, fall back to commit-subject
 discovery:
 ```bash
-git log $MERGE_BASE_SHA..{integration_branch} --oneline --grep="(#" --format="%s"
+git log $MERGE_BASE_SHA..{batch_branch} --oneline --grep="(#" --format="%s"
 ```
 
 For each PR, extract `Closes|Fixes|Resolves #N` references (case-insensitive).
@@ -273,12 +273,12 @@ Return JSON:
 
 Run:
 ```bash
-git diff --name-only {base_branch}..{integration_branch}
-git diff --diff-filter=A --name-only {base_branch}..{integration_branch}
-git diff --diff-filter=M --name-only {base_branch}..{integration_branch}
-git diff --diff-filter=D --name-only {base_branch}..{integration_branch}
-git diff --diff-filter=R --name-only {base_branch}..{integration_branch}
-git diff --stat {base_branch}..{integration_branch} | tail -1
+git diff --name-only {base_branch}..{batch_branch}
+git diff --diff-filter=A --name-only {base_branch}..{batch_branch}
+git diff --diff-filter=M --name-only {base_branch}..{batch_branch}
+git diff --diff-filter=D --name-only {base_branch}..{batch_branch}
+git diff --diff-filter=R --name-only {base_branch}..{batch_branch}
+git diff --stat {base_branch}..{batch_branch} | tail -1
 ```
 
 Return JSON:
@@ -421,7 +421,7 @@ Write to `{{AUTOSKILLIT_TEMP}}/promote-to-main/pr_body_{YYYY-MM-DD_HHMMSS}.md`
 (relative to the current working directory).
 
 Sections in order:
-1. `## Promotion: {integration_branch} to {base_branch}` — executive summary + stats (`diff_stat_summary`, `$COMMIT_COUNT`, PR count)
+1. `## Promotion: {batch_branch} to {base_branch}` — executive summary + stats (`diff_stat_summary`, `$COMMIT_COUNT`, PR count)
 2. `### Highlights` — from synthesis
 3. `## Release Notes` — from synthesis
 4. `## Merged PRs` — table (PR, Title, Author, Labels) from Subagent 2B
@@ -443,12 +443,12 @@ gh auth status 2>/dev/null
 If exit code non-zero: output `pr_url = ` and exit successfully.
 
 Construct PR title using actual branch names:
-`Promote {integration_branch} to {base_branch} ($PR_COUNT PRs, $ISSUE_COUNT issues, $CATEGORY_SUMMARY)`
+`Promote {batch_branch} to {base_branch} ($PR_COUNT PRs, $ISSUE_COUNT issues, $CATEGORY_SUMMARY)`
 
 ```bash
 gh pr create \
   --base {base_branch} \
-  --head {integration_branch} \
+  --head {batch_branch} \
   --title "$PR_TITLE" \
   --body-file {{AUTOSKILLIT_TEMP}}/promote-to-main/pr_body_$TIMESTAMP.md
 ```

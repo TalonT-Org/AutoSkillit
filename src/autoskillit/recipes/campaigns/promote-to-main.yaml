@@ -20,7 +20,7 @@ ingredients:
   source_dir:
     description: "Source repository path"
     required: true
-  integration_branch:
+  batch_branch:
     description: "Integration branch to promote"
     default: "develop"
   base_branch:
@@ -41,7 +41,7 @@ dispatches:
     task: "Run comprehensive audit on integration branch"
     ingredients:
       workspace: "${{ inputs.source_dir }}"
-      branch: "${{ inputs.integration_branch }}"
+      branch: "${{ inputs.batch_branch }}"
     capture:
       issue_urls: "${{ result.issue_urls }}"
     depends_on: []
@@ -59,7 +59,7 @@ dispatches:
     task: "Analyze issue dependencies and compute distribution plan"
     ingredients:
       issue_urls: "${{ campaign.issue_urls }}"
-      base_branch: "${{ inputs.integration_branch }}"
+      base_branch: "${{ inputs.batch_branch }}"
     capture:
       execution_map: "${{ result.execution_map }}"
     depends_on:
@@ -71,7 +71,7 @@ dispatches:
     ingredients:
       issue_urls: "${{ campaign.issue_urls }}"
       execution_map: "${{ campaign.execution_map }}"
-      base_branch: "${{ inputs.integration_branch }}"
+      base_branch: "${{ inputs.batch_branch }}"
       source_dir: "${{ inputs.source_dir }}"
       max_parallel: "${{ inputs.max_issues_per_l2 }}"
       model_context_window: "${{ inputs.model_context_window }}"
@@ -82,7 +82,7 @@ dispatches:
     recipe: promote-to-main-wrapper
     task: "Create promotion PR from integration branch to main"
     ingredients:
-      integration_branch: "${{ inputs.integration_branch }}"
+      batch_branch: "${{ inputs.batch_branch }}"
       base_branch: "${{ inputs.base_branch }}"
       source_dir: "${{ inputs.source_dir }}"
     capture:

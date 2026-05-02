@@ -391,7 +391,7 @@ _COMPLETED_STATUSES = frozenset(
     {DispatchStatus.SUCCESS, DispatchStatus.SKIPPED, DispatchStatus.FAILURE}
 )
 
-_TERMINAL_DISPATCH_STATUSES: frozenset[str] = frozenset(
+TERMINAL_DISPATCH_STATUSES: frozenset[str] = frozenset(
     {
         DispatchStatus.SUCCESS,
         DispatchStatus.FAILURE,
@@ -427,7 +427,7 @@ def build_protected_campaign_ids(project_dir: Path) -> frozenset[str]:
                     continue
                 for record in dispatches:
                     status = record.get("status", "")
-                    if status not in _TERMINAL_DISPATCH_STATUSES:
+                    if status not in TERMINAL_DISPATCH_STATUSES:
                         protected.add(cid)
                         break
             except (json.JSONDecodeError, OSError):

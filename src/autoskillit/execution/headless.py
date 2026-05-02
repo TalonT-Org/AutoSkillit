@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import dataclasses
 import os
+import subprocess
 import time
 import traceback
 from collections.abc import Callable, Mapping, Sequence
@@ -151,6 +152,60 @@ def _resolve_skill_temp_dir(cwd: str, skill_command: str) -> Path | None:
     return Path(cwd) / ".autoskillit" / "temp" / name
 
 
+def _capture_git_head_sha(cwd: str) -> str:
+    """Return current HEAD SHA in cwd. Returns '' on any error (non-git dirs)."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        return result.stdout.strip() if result.returncode == 0 else ""
+    except Exception:
+        logger.debug("capture_git_head_sha_failed", cwd=cwd, exc_info=True)
+        return ""
+
+
+def _parse_numstat(numstat_output: str) -> tuple[int, int]:
+    """Parse `git diff --numstat` output into (insertions, deletions).
+
+    Binary file lines (-\\t-\\tfilename) are skipped.
+    """
+    insertions = deletions = 0
+    for line in numstat_output.splitlines():
+        parts = line.split("\t", 2)
+        if len(parts) < 2:
+            continue
+        try:
+            insertions += int(parts[0])
+            deletions += int(parts[1])
+        except ValueError:
+            continue  # binary file row: "-\t-\tfilename"
+    return insertions, deletions
+
+
+def _compute_loc_changed(cwd: str, pre_sha: str) -> tuple[int, int]:
+    """Run git diff --numstat <pre_sha> in cwd. Returns (0, 0) on any error."""
+    if not pre_sha:
+        return 0, 0
+    try:
+        result = subprocess.run(
+            ["git", "diff", "--numstat", pre_sha],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        if result.returncode != 0:
+            return 0, 0
+        return _parse_numstat(result.stdout)
+    except Exception:
+        logger.debug("compute_loc_changed_failed", cwd=cwd, pre_sha=pre_sha, exc_info=True)
+        return 0, 0
+
+
 async def _execute_claude_headless(
     spec: ClaudeHeadlessCmd,
     cwd: str,
@@ -232,6 +287,7 @@ async def _execute_claude_headless(
         except OSError:
             _temp_snapshot_pre = set()
 
+    _pre_session_sha = _capture_git_head_sha(cwd)
     _result: SubprocessResult | None = None
     try:
         _result = await runner(
@@ -327,6 +383,7 @@ async def _execute_claude_headless(
             logger.debug("flush_session_log during cancel failed", exc_info=True)
         raise
     _elapsed = time.monotonic() - _start_mono
+    _loc_insertions, _loc_deletions = _compute_loc_changed(cwd, _pre_session_sha)
     _end_ts = (datetime.fromisoformat(_start_ts) + timedelta(seconds=_elapsed)).isoformat()
     result = dataclasses.replace(  # type: ignore[arg-type]
         _result, start_ts=_start_ts, end_ts=_end_ts, elapsed_seconds=_elapsed
@@ -438,6 +495,8 @@ async def _execute_claude_headless(
                 recipe_content_hash=recipe_content_hash,
                 recipe_composite_hash=recipe_composite_hash,
                 recipe_version=recipe_version,
+                loc_insertions=_loc_insertions,
+                loc_deletions=_loc_deletions,
             )
         except Exception:
             logger.debug("session_log_flush_failed", exc_info=True)
@@ -459,6 +518,8 @@ async def _execute_claude_headless(
                 end_ts=result.end_ts,
                 elapsed_seconds=result.elapsed_seconds,
                 order_id=order_id,
+                loc_insertions=_loc_insertions,
+                loc_deletions=_loc_deletions,
             )
         except Exception:
             logger.debug("token_log_record_failed", exc_info=True)

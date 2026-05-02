@@ -136,6 +136,8 @@ def flush_session_log(
     recipe_composite_hash: str = "",
     recipe_version: str = "",
     github_api_log: GitHubApiLog | None = None,
+    loc_insertions: int = 0,
+    loc_deletions: int = 0,
 ) -> None:
     """Flush session diagnostics to disk.
 
@@ -388,6 +390,8 @@ def flush_session_log(
             "cache_read_input_tokens": token_usage.get("cache_read_input_tokens", 0),
             "timing_seconds": timing_seconds if timing_seconds is not None else 0.0,
             "order_id": order_id,
+            "loc_insertions": loc_insertions,
+            "loc_deletions": loc_deletions,
         }
         atomic_write(session_dir / "token_usage.json", json.dumps(tu_data))
 

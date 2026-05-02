@@ -58,6 +58,8 @@ class TokenLog(Protocol):
         end_ts: str = "",
         elapsed_seconds: float | None = None,
         order_id: str = "",
+        loc_insertions: int = 0,
+        loc_deletions: int = 0,
     ) -> None: ...
 
     def get_report(self, *, order_id: str = "") -> list[dict[str, Any]]: ...

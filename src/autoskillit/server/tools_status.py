@@ -196,7 +196,11 @@ async def get_token_summary(clear: bool = False, format: str = "json", order_id:
                 except Exception:
                     logger.debug("write_telemetry_clear_marker failed", exc_info=True)
             if format == "table":
-                return TelemetryFormatter.format_token_table(steps, total)
+                token_table = TelemetryFormatter.format_token_table(steps, total)
+                efficiency_table = TelemetryFormatter.format_efficiency_table(steps, total)
+                if efficiency_table:
+                    return token_table + "\n\n" + efficiency_table
+                return token_table
             return json.dumps(
                 {
                     "steps": steps,

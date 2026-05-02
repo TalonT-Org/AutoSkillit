@@ -234,6 +234,7 @@ skills:
     - planner-refine-wps
     - planner-consolidate-wps
     - planner-validate-task-alignment
+    - planner-assess-review-approach
     - reload-session
   tier3:
     - prepare-pr

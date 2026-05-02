@@ -118,6 +118,7 @@ _OBSERVABILITY_CAPTURES: frozenset[tuple[str, str]] = frozenset(
         ("html_path", "bundle-local-report"),
         ("resource_report", "stage-data"),
         ("alignment_findings_path", "planner-validate-task-alignment"),
+        ("review_approach_assessment_path", "planner-assess-review-approach"),
     }
 )
 

@@ -267,6 +267,8 @@ def test_output_path_tokens_synchronized() -> None:
             "pr_body_path",
             # planner-validate-task-alignment output
             "alignment_findings_path",
+            # planner-assess-review-approach output
+            "review_approach_assessment_path",
         }
     )
 

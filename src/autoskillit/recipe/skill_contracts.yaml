@@ -1946,6 +1946,22 @@ skills:
     pattern_examples:
       - "alignment_findings_path = /tmp/autoskillit/planner/run-20260101-120000/task_alignment.json\nalignment_finding_count = 0\n%%ORDER_UP%%"
     write_behavior: always
+  planner-assess-review-approach:
+    inputs:
+      - name: refined_wps_path
+        type: file_path
+        required: true
+      - name: planner_dir
+        type: directory_path
+        required: true
+    outputs:
+      - name: review_approach_assessment_path
+        type: file_path
+    expected_output_patterns:
+      - "review_approach_assessment_path\\s*=\\s*\\S+"
+    pattern_examples:
+      - "review_approach_assessment_path = /tmp/autoskillit/planner/run-20260101-120000/review_approach_assessment.json\n%%ORDER_UP%%"
+    write_behavior: always
   audit-tests:
     inputs: []
     outputs:

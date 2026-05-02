@@ -1,7 +1,7 @@
 # Skill catalog
 
-The complete list of bundled skills (128 total: 3 in `src/autoskillit/skills/`,
-125 in `src/autoskillit/skills_extended/`). Filesystem walk this directory if
+The complete list of bundled skills (129 total: 3 in `src/autoskillit/skills/`,
+126 in `src/autoskillit/skills_extended/`). Filesystem walk this directory if
 you need an exhaustive listing; this catalog groups by purpose.
 
 ## Tier 1 — free range (3)
@@ -119,12 +119,13 @@ figure set:
 | 11 | `vis-lens-story-arc` | Narrative | Do the figures tell a coherent story across the report? | P2 |
 | 12 | `vis-lens-reproducibility` | Replicative | Can the figures be reproduced from the data and code? | P2 |
 
-## Planner family (13)
+## Planner family (14)
 
-13 progressive-decomposition sub-skills under `skills_extended/planner-*/`. Invoked
+14 progressive-decomposition sub-skills under `skills_extended/planner-*/`. Invoked
 internally by the `planner` recipe to break a roadmap into GitHub milestones and issues:
 
-`planner-analyze`, `planner-consolidate-wps`, `planner-elaborate-assignments`, `planner-elaborate-phase`,
+`planner-analyze`, `planner-assess-review-approach`, `planner-consolidate-wps`,
+`planner-elaborate-assignments`, `planner-elaborate-phase`,
 `planner-elaborate-wps`, `planner-extract-domain`, `planner-generate-phases`,
 `planner-reconcile-deps`, `planner-refine`, `planner-refine-assignments`,
 `planner-refine-phases`, `planner-refine-wps`, `planner-validate-task-alignment`
@@ -138,8 +139,8 @@ symptom, and the audit suite is updated so the same class of bug cannot
 recur. Commit messages prefix with `Rectify:` for traceability; the count of
 `Rectify:` commits is reported in `docs/developer/contributing.md`.
 
-## Total: 125
+## Total: 129
 
-3 (Tier 1) + 122 (`skills_extended/`) = 125 bundled skills. The total is
+3 (Tier 1) + 126 (`skills_extended/`) = 129 bundled skills. The total is
 verified by `tests/docs/test_doc_counts.py` against a filesystem walk so any
 addition or removal is caught immediately.

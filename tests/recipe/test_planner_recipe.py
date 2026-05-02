@@ -271,3 +271,17 @@ def test_validate_task_alignment_step_exists(planner_recipe):
     step = planner_recipe.steps["validate_task_alignment"]
     assert step.tool == "run_skill"
     assert "planner-validate-task-alignment" in step.with_args.get("skill_command", "")
+
+
+def test_planner_recipe_has_assess_review_approach_step(planner_recipe):
+    assert "assess_review_approach_step" in planner_recipe.steps
+    step = planner_recipe.steps["assess_review_approach_step"]
+    assert step.tool == "run_skill"
+    assert "planner-assess-review-approach" in (step.with_args.get("skill_command") or "")
+    assert step.optional is True
+
+
+def test_planner_recipe_assess_review_approach_routes_to_validate_on_failure(planner_recipe):
+    step = planner_recipe.steps["assess_review_approach_step"]
+    assert step.on_success == "validate"
+    assert step.on_failure == "validate"

@@ -31,7 +31,7 @@ class TestAuditReviewDecisionsExists:
 class TestAuditReviewDecisionsContent:
     def test_graphql_alias_batching(self) -> None:
         text = _skill_text().lower()
-        assert "alias" in text or "batch" in text
+        assert "alias" in text
 
     def test_ratelimit_in_queries(self) -> None:
         assert "rateLimit" in _skill_text()

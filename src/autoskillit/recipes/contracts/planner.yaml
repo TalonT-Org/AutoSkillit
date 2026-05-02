@@ -181,9 +181,7 @@ skills:
     - 'consolidation_manifest_dir = /tmp/autoskillit/planner/run-20260101-120000/work_packages/consolidation
 
       %%ORDER_UP%%'
-    write_behavior: conditional
-    write_expected_when:
-    - consolidation_manifest_dir\s*=\s*\S+
+    write_behavior: always
   planner-validate-task-alignment:
     inputs:
     - name: refined_wps_path

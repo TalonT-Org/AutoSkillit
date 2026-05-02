@@ -276,6 +276,8 @@ steps:
         ${{ context.refined_wps_path }}
         ${{ context.planner_dir }}
       cwd: "${{ inputs.source_dir }}"
+    capture:
+      consolidation_manifest_dir: "${{ result.consolidation_manifest_dir }}"
     on_success: consolidate_wps_merge
     on_failure: consolidate_wps_merge
     note: >
@@ -289,6 +291,7 @@ steps:
       callable: autoskillit.planner.consolidate_wps
       refined_wps_path: "${{ context.refined_wps_path }}"
       planner_dir: "${{ context.planner_dir }}"
+      consolidation_manifest_dir: "${{ context.consolidation_manifest_dir }}"
     capture:
       consolidated_wps_path: "${{ result.consolidated_wps_path }}"
     on_success: validate_task_alignment

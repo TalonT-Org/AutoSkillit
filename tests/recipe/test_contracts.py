@@ -645,6 +645,7 @@ ALWAYS_WRITE_SKILLS = {
     "make-plan",
     "plan-experiment",
     "plan-visualization",
+    "planner-consolidate-wps",
     "planner-elaborate-assignments",
     "planner-elaborate-phase",
     "planner-elaborate-wps",

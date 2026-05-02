@@ -77,7 +77,7 @@ For each phase, assemble a context packet containing:
 - `phase_id` — the phase being analyzed
 - `wps` — the full list of WP objects in this phase (id, name, goal, technical_steps,
   files_touched, deliverables, acceptance_criteria, depends_on, estimated_files, scope)
-- `all_wp_ids` — all WP IDs across all phases (for cross-phase dep awareness)
+- `all_wp_ids` — WP IDs from every phase (for cross-phase dep awareness)
 - Complexity thresholds:
   - trivial: ≤ 3 technical_steps AND ≤ 2 files_touched entries
   - high: ≥ 10 technical_steps OR ≥ 6 files_touched entries

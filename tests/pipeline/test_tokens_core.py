@@ -416,3 +416,155 @@ class TestDefaultTokenLogLoadFromLogDir:
         assert n == 1
         report = log.get_report()
         assert report[0]["elapsed_seconds"] == 0.0
+
+
+# ---------------------------------------------------------------------------
+# T-LOC: LoC (lines-of-code-changed) fields
+# ---------------------------------------------------------------------------
+
+
+# T-LOC-1
+def test_token_entry_has_loc_fields():
+    """TokenEntry carries loc_insertions and loc_deletions defaulting to 0."""
+    e = TokenEntry(step_name="implement")
+    assert e.loc_insertions == 0
+    assert e.loc_deletions == 0
+
+
+# T-LOC-2
+def test_token_log_record_accumulates_loc():
+    """record() accumulates loc_insertions and loc_deletions across invocations."""
+    log = DefaultTokenLog()
+    log.record(
+        "implement",
+        {
+            "input_tokens": 100,
+            "output_tokens": 10,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+        },
+        loc_insertions=50,
+        loc_deletions=20,
+    )
+    log.record(
+        "implement",
+        {
+            "input_tokens": 200,
+            "output_tokens": 20,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+        },
+        loc_insertions=30,
+        loc_deletions=5,
+    )
+    report = log.get_report()
+    assert report[0]["loc_insertions"] == 80
+    assert report[0]["loc_deletions"] == 25
+
+
+# T-LOC-3
+def test_token_log_compute_total_includes_loc():
+    """compute_total() aggregates loc_insertions and loc_deletions."""
+    log = DefaultTokenLog()
+    log.record(
+        "implement",
+        {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+        },
+        loc_insertions=100,
+        loc_deletions=30,
+    )
+    log.record(
+        "test-fix",
+        {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+        },
+        loc_insertions=20,
+        loc_deletions=5,
+    )
+    total = log.compute_total()
+    assert total["loc_insertions"] == 120
+    assert total["loc_deletions"] == 35
+
+
+# T-LOC-4
+def test_token_log_load_from_log_dir_reads_loc(tmp_path):
+    """load_from_log_dir() reads loc_insertions / loc_deletions from token_usage.json."""
+    sessions_dir = tmp_path / "sessions" / "sess-abc"
+    sessions_dir.mkdir(parents=True)
+    (tmp_path / "sessions.jsonl").write_text(
+        json.dumps(
+            {
+                "dir_name": "sess-abc",
+                "kitchen_id": "k1",
+                "cwd": "/repo",
+                "order_id": "",
+                "campaign_id": "",
+            }
+        )
+        + "\n"
+    )
+    (sessions_dir / "token_usage.json").write_text(
+        json.dumps(
+            {
+                "step_name": "implement",
+                "input_tokens": 100,
+                "output_tokens": 10,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "timing_seconds": 5.0,
+                "order_id": "",
+                "loc_insertions": 42,
+                "loc_deletions": 8,
+            }
+        )
+    )
+    log = DefaultTokenLog()
+    log.load_from_log_dir(tmp_path)
+    report = log.get_report()
+    assert report[0]["loc_insertions"] == 42
+    assert report[0]["loc_deletions"] == 8
+
+
+# T-LOC-5
+def test_token_log_load_from_log_dir_missing_loc_defaults_to_zero(tmp_path):
+    """Old token_usage.json without loc fields loads with loc_insertions=0, loc_deletions=0."""
+    sessions_dir = tmp_path / "sessions" / "sess-old"
+    sessions_dir.mkdir(parents=True)
+    (tmp_path / "sessions.jsonl").write_text(
+        json.dumps(
+            {
+                "dir_name": "sess-old",
+                "kitchen_id": "k1",
+                "cwd": "/repo",
+                "order_id": "",
+                "campaign_id": "",
+            }
+        )
+        + "\n"
+    )
+    (sessions_dir / "token_usage.json").write_text(
+        json.dumps(
+            {
+                "step_name": "plan",
+                "input_tokens": 500,
+                "output_tokens": 50,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "timing_seconds": 3.0,
+                "order_id": "",
+                # NO loc_insertions or loc_deletions
+            }
+        )
+    )
+    log = DefaultTokenLog()
+    log.load_from_log_dir(tmp_path)
+    report = log.get_report()
+    assert report[0]["loc_insertions"] == 0
+    assert report[0]["loc_deletions"] == 0

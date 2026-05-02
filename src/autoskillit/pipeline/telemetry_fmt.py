@@ -26,6 +26,14 @@ _TIMING_COLUMNS = (
     TerminalColumn("INVOCATIONS", max_width=11, align=">"),
 )
 
+_EFFICIENCY_COLUMNS = (
+    TerminalColumn("STEP", max_width=40, align="<"),
+    TerminalColumn("LOC_CHG", max_width=8, align=">"),
+    TerminalColumn("RD/LOC", max_width=8, align=">"),
+    TerminalColumn("WR/LOC", max_width=8, align=">"),
+    TerminalColumn("OUT/LOC", max_width=8, align=">"),
+)
+
 
 class TelemetryFormatter:
     """Stateless formatter for token and timing telemetry data."""
@@ -195,3 +203,74 @@ class TelemetryFormatter:
                 est_tokens = mcp_total.get("total_estimated_response_tokens", 0)
                 lines.append(f"mcp_response_tokens: ~{h(est_tokens)}")
         return "\n".join(lines)
+
+    @staticmethod
+    def format_efficiency_table(steps: list[dict], total: dict) -> str:
+        """Produce a markdown Token Efficiency table. Returns '' when all LoC=0."""
+        if not any(s.get("loc_insertions", 0) + s.get("loc_deletions", 0) > 0 for s in steps):
+            return ""
+
+        def _ratio(tokens: int, loc: int) -> str:
+            return f"{tokens / loc:.1f}" if loc > 0 else "—"
+
+        lines = [
+            "## Token Efficiency",
+            "",
+            "| Step | LoC Changed | cache_read/LoC | cache_write/LoC | output/LoC |",
+            "|------|-------------|----------------|-----------------|------------|",
+        ]
+        for step in steps:
+            loc = step.get("loc_insertions", 0) + step.get("loc_deletions", 0)
+            cr = step.get("cache_read_input_tokens", 0)
+            cw = step.get("cache_creation_input_tokens", 0)
+            out = step.get("output_tokens", 0)
+            lines.append(
+                f"| {step.get('step_name', '?')} | {loc}"
+                f" | {_ratio(cr, loc)} | {_ratio(cw, loc)} | {_ratio(out, loc)} |"
+            )
+
+        total_loc = total.get("loc_insertions", 0) + total.get("loc_deletions", 0)
+        total_cr = total.get("cache_read_input_tokens", 0)
+        total_cw = total.get("cache_creation_input_tokens", 0)
+        total_out = total.get("output_tokens", 0)
+        lines.append(
+            f"| **Total** | **{total_loc}**"
+            f" | {_ratio(total_cr, total_loc)} | {_ratio(total_cw, total_loc)}"
+            f" | {_ratio(total_out, total_loc)} |"
+        )
+        return "\n".join(lines)
+
+    @staticmethod
+    def format_efficiency_table_terminal(steps: list[dict], total: dict) -> str:
+        """Produce a padded-column plain text efficiency table. Returns '' when all LoC=0."""
+        if not any(s.get("loc_insertions", 0) + s.get("loc_deletions", 0) > 0 for s in steps):
+            return ""
+
+        def _ratio(tokens: int, loc: int) -> str:
+            return f"{tokens / loc:.1f}" if loc > 0 else "—"
+
+        rows: list[tuple[str, str, str, str, str]] = []
+        for step in steps:
+            loc = step.get("loc_insertions", 0) + step.get("loc_deletions", 0)
+            cr = step.get("cache_read_input_tokens", 0)
+            cw = step.get("cache_creation_input_tokens", 0)
+            out = step.get("output_tokens", 0)
+            rows.append(
+                (
+                    step.get("step_name", "?"),
+                    str(loc),
+                    _ratio(cr, loc),
+                    _ratio(cw, loc),
+                    _ratio(out, loc),
+                )
+            )
+
+        total_loc = total.get("loc_insertions", 0) + total.get("loc_deletions", 0)
+        total_row = (
+            "Total",
+            str(total_loc),
+            _ratio(total.get("cache_read_input_tokens", 0), total_loc),
+            _ratio(total.get("cache_creation_input_tokens", 0), total_loc),
+            _ratio(total.get("output_tokens", 0), total_loc),
+        )
+        return _render_terminal_table(_EFFICIENCY_COLUMNS, rows + [total_row])

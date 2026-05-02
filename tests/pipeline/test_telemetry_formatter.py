@@ -329,3 +329,178 @@ class TestFmtDuration:
 
     def test_hours(self) -> None:
         assert TelemetryFormatter._fmt_duration(3720.0) == "1h 2m"
+
+
+# ---------------------------------------------------------------------------
+# T-EFF: Token Efficiency table
+# ---------------------------------------------------------------------------
+
+
+# T-EFF-1
+def test_efficiency_table_omitted_when_no_loc() -> None:
+    """format_efficiency_table returns '' when all steps have loc_changed=0."""
+    steps = [
+        {
+            "step_name": "plan",
+            "cache_read_input_tokens": 1000,
+            "cache_creation_input_tokens": 200,
+            "output_tokens": 50,
+            "loc_insertions": 0,
+            "loc_deletions": 0,
+        }
+    ]
+    total = {
+        "loc_insertions": 0,
+        "loc_deletions": 0,
+        "cache_read_input_tokens": 1000,
+        "cache_creation_input_tokens": 200,
+        "output_tokens": 50,
+    }
+    assert TelemetryFormatter.format_efficiency_table(steps, total) == ""
+
+
+# T-EFF-2
+def test_efficiency_table_columns() -> None:
+    """Markdown efficiency table has correct header columns."""
+    steps = [
+        {
+            "step_name": "implement",
+            "cache_read_input_tokens": 1000,
+            "cache_creation_input_tokens": 200,
+            "output_tokens": 50,
+            "loc_insertions": 80,
+            "loc_deletions": 20,
+        }
+    ]
+    total = {
+        "loc_insertions": 80,
+        "loc_deletions": 20,
+        "cache_read_input_tokens": 1000,
+        "cache_creation_input_tokens": 200,
+        "output_tokens": 50,
+    }
+    result = TelemetryFormatter.format_efficiency_table(steps, total)
+    assert "## Token Efficiency" in result
+    assert "LoC Changed" in result
+    assert "cache_read/LoC" in result
+    assert "cache_write/LoC" in result
+    assert "output/LoC" in result
+
+
+# T-EFF-3
+def test_efficiency_table_ratios() -> None:
+    """Ratio columns = token_count / loc_changed, rounded to 1 decimal place."""
+    steps = [
+        {
+            "step_name": "implement",
+            "cache_read_input_tokens": 1000,
+            "cache_creation_input_tokens": 200,
+            "output_tokens": 50,
+            "loc_insertions": 80,
+            "loc_deletions": 20,
+        }
+    ]
+    total = {
+        "loc_insertions": 80,
+        "loc_deletions": 20,
+        "cache_read_input_tokens": 1000,
+        "cache_creation_input_tokens": 200,
+        "output_tokens": 50,
+    }
+    result = TelemetryFormatter.format_efficiency_table(steps, total)
+    # loc_changed = 100; cache_read/LoC = 10.0; cache_write/LoC = 2.0; output/LoC = 0.5
+    assert "10.0" in result
+    assert "2.0" in result
+    assert "0.5" in result
+    assert "100" in result  # LoC Changed column
+
+
+# T-EFF-4
+def test_efficiency_table_zero_loc_step_shows_dash() -> None:
+    """Steps with loc_changed=0 show — in ratio columns."""
+    steps = [
+        {
+            "step_name": "no-change",
+            "cache_read_input_tokens": 500,
+            "cache_creation_input_tokens": 100,
+            "output_tokens": 20,
+            "loc_insertions": 0,
+            "loc_deletions": 0,
+        },
+        {
+            "step_name": "implement",
+            "cache_read_input_tokens": 1000,
+            "cache_creation_input_tokens": 200,
+            "output_tokens": 50,
+            "loc_insertions": 50,
+            "loc_deletions": 10,
+        },
+    ]
+    total = {
+        "loc_insertions": 50,
+        "loc_deletions": 10,
+        "cache_read_input_tokens": 1500,
+        "cache_creation_input_tokens": 300,
+        "output_tokens": 70,
+    }
+    result = TelemetryFormatter.format_efficiency_table(steps, total)
+    assert "—" in result  # zero-LoC step
+
+
+# T-EFF-5
+def test_efficiency_table_total_row_uses_aggregate_totals() -> None:
+    """Total row ratios are computed from aggregate totals, not averaged per-step."""
+    steps = [
+        {
+            "step_name": "plan",
+            "cache_read_input_tokens": 200,
+            "cache_creation_input_tokens": 0,
+            "output_tokens": 10,
+            "loc_insertions": 10,
+            "loc_deletions": 0,
+        },
+        {
+            "step_name": "implement",
+            "cache_read_input_tokens": 800,
+            "cache_creation_input_tokens": 100,
+            "output_tokens": 40,
+            "loc_insertions": 90,
+            "loc_deletions": 10,
+        },
+    ]
+    total = {
+        "loc_insertions": 100,
+        "loc_deletions": 10,
+        "cache_read_input_tokens": 1000,
+        "cache_creation_input_tokens": 100,
+        "output_tokens": 50,
+    }
+    result = TelemetryFormatter.format_efficiency_table(steps, total)
+    # Total loc_changed=110; cache_read/LoC=1000/110≈9.1
+    assert "9.1" in result
+    assert "**Total**" in result
+
+
+# T-EFF-6
+def test_efficiency_table_terminal_no_markdown() -> None:
+    """Terminal efficiency table uses padded columns, no markdown syntax."""
+    steps = [
+        {
+            "step_name": "implement",
+            "cache_read_input_tokens": 1000,
+            "cache_creation_input_tokens": 200,
+            "output_tokens": 50,
+            "loc_insertions": 80,
+            "loc_deletions": 20,
+        }
+    ]
+    total = {
+        "loc_insertions": 80,
+        "loc_deletions": 20,
+        "cache_read_input_tokens": 1000,
+        "cache_creation_input_tokens": 200,
+        "output_tokens": 50,
+    }
+    result = TelemetryFormatter.format_efficiency_table_terminal(steps, total)
+    assert "|" not in result  # no markdown pipes
+    assert "LOC" in result  # column header present

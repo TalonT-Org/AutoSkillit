@@ -53,8 +53,8 @@ async def fetch_github_issue(
 
     Returns JSON with: success, issue_number, title, url, state, labels,
     and content (Markdown). The content field is suitable for passing directly
-    as a prompt argument to skills like /autoskillit:make-plan,
-    /autoskillit:make-groups, or /autoskillit:investigate.
+    as a prompt argument to skills like /make-plan,
+    /make-groups, or /investigate.
 
     On failure: {"success": false, "error": "..."} — never raises.
 
@@ -173,7 +173,7 @@ async def report_bug(
 ) -> str:
     """Run a headless investigation session for a bug and file or update a GitHub issue.
 
-    Launches /autoskillit:report-bug in a headless session to investigate the error,
+    Launches /report-bug in a headless session to investigate the error,
     produce a structured markdown report, and extract a deduplication fingerprint.
     The report is written to disk. If github.default_repo and a token are configured,
     the tool searches for an existing open issue matching the fingerprint:
@@ -232,7 +232,7 @@ async def report_bug(
 
             effective_model = model or cfg.model or ""
             skill_command = (
-                f"/autoskillit:report-bug\n\n"
+                f"/report-bug\n\n"
                 f"Error context:\n{error_context}\n\n"
                 f"Report output path: {report_path}"
             )

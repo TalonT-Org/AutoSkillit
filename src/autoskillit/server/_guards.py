@@ -115,7 +115,7 @@ def _validate_skill_command(skill_command: str) -> str | None:
             "run_skill requires a slash-command as skill_command.\n"
             f"Got: {skill_command!r}\n"
             "Expected: skill_command must start with '/' "
-            "(e.g. /autoskillit:investigate, /autoskillit:make-plan, /audit-arch).\n"
+            "(e.g. /autoskillit:open-kitchen, /make-plan, /audit-arch).\n"
             "Prose task descriptions are not valid skill invocations."
         )
     return None

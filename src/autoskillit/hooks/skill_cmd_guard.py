@@ -4,7 +4,7 @@
 Denies run_skill calls where a path-argument skill is
 invoked with extra descriptive text before the actual file path, e.g.:
 
-    /autoskillit:implement-worktree-no-merge the verified plan .autoskillit/temp/plan.md
+    /implement-worktree-no-merge the verified plan .autoskillit/temp/plan.md
                                               ^^^^^^^^^^^^^^^^^^^ extra words
 
 Detection logic:
@@ -52,7 +52,7 @@ PATH_ARG_SKILLS: frozenset[str] = frozenset(
 _PATH_PREFIXES: tuple[str, ...] = ("/", "./", ".autoskillit/")
 
 # Captures the skill short-name from a skill_command string such as:
-#   /autoskillit:implement-worktree-no-merge ...
+#   /implement-worktree-no-merge ...
 #   implement-worktree-no-merge ...
 _SKILL_RE = re.compile(r"^/?(?:autoskillit:)?(\S+)")
 
@@ -123,10 +123,10 @@ def main() -> None:
     path_part = " ".join(path_tokens)
     if has_newlines and non_path_tokens:
         prose_block = " ".join(non_path_tokens)
-        correct_cmd = f"/autoskillit:{skill_name} {path_part}\n\n{prose_block}"
+        correct_cmd = f"/{skill_name} {path_part}\n\n{prose_block}"
     else:
         tail = (" " + " ".join(non_path_tokens)) if non_path_tokens else ""
-        correct_cmd = f"/autoskillit:{skill_name} {path_part}{tail}"
+        correct_cmd = f"/{skill_name} {path_part}{tail}"
     _deny(
         f"skill_command format error for '{skill_name}': "
         f"found extra descriptive text '{first}...' before the path argument "

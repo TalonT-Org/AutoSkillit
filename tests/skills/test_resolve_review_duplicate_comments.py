@@ -37,8 +37,12 @@ def _extract_graphql_block(section_text: str) -> str:
     m = re.search(r"```graphql\n(.*?)```", section_text, re.DOTALL)
     if m:
         return m.group(1)
-    m = re.search(r"```[^\n]*\n(.*?)```", section_text, re.DOTALL)
-    return m.group(1) if m else ""
+    # Fall back to any triple-backtick block containing 'query' or 'mutation'
+    for block_match in re.finditer(r"```[^\n]*\n(.*?)```", section_text, re.DOTALL):
+        content = block_match.group(1)
+        if "query" in content or "mutation" in content:
+            return content
+    return ""
 
 
 def _extract_reply_block(text: str, verdict: str) -> str:

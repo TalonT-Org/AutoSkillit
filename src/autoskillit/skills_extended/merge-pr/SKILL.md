@@ -293,7 +293,7 @@ semantic conflicts with previously merged PRs.
 
 **PR:** #{pr_number}
 **Branch:** {pr_branch}
-**Integration Branch:** {integration_branch (current HEAD)}
+**Integration Branch:** {batch_branch (current HEAD)}
 
 ## PR Changes Inventory
 

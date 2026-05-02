@@ -1,6 +1,6 @@
 name: merge-prs
 description: Analyze open PRs, determine merge order, collapse them sequentially into an integration branch, and open a single review PR for human approval. Handles conflict resolution via plan+implement for complex PRs.
-summary: "clone > setup_remote > analyze_prs > create_integration_branch > [loop per PR: merge_pr or (plan > verify > implement > test > push_worktree_branch > create_conflict_pr > wait_for_conflict_ci > merge_conflict_pr)] > push_integration_branch > collect_artifacts > check_impl_plans > (audit_impl?) > open_integration_pr > wait_for_review_pr_mergeability > check_mergeability > (resolve_integration_conflicts > force_push_after_rebase)? > review_pr_integration > (resolve_review_integration > re_push_review_integration)? > ci_watch_pr > cleanup"
+summary: "clone > setup_remote > analyze_prs > create_batch_branch > [loop per PR: merge_pr or (plan > verify > implement > test > push_worktree_branch > create_conflict_pr > wait_for_conflict_ci > merge_conflict_pr)] > push_batch_branch > collect_artifacts > check_impl_plans > (audit_impl?) > open_integration_pr > wait_for_review_pr_mergeability > check_mergeability > (resolve_integration_conflicts > force_push_after_rebase)? > review_pr_integration > (resolve_review_integration > re_push_review_integration)? > ci_watch_pr > cleanup"
 autoskillit_version: "0.9.308"
 recipe_version: "1.0.0"
 requires_packs: [github, ci, clone, telemetry]
@@ -37,10 +37,10 @@ kitchen_rules:
     per plan part before advancing to the next part or PR."
   - "INTEGRATION BRANCH: Two distinct branches exist. inputs.base_branch is the
     target branch that PRs point to (e.g. main, develop).
-    context.integration_branch is the per-run batch branch
+    context.batch_branch is the per-run batch branch
     (e.g. pr-batch/pr-merge-{ts}) created from base_branch for this pipeline run.
-    All PR merges and worktree merges target context.integration_branch. The final
-    review PR opens from context.integration_branch into inputs.base_branch."
+    All PR merges and worktree merges target context.batch_branch. The final
+    review PR opens from context.batch_branch into inputs.base_branch."
   - "PR QUEUE: The agent reads context.pr_order_file once at analyze_prs and
     maintains an ordered queue. context.current_pr_number tracks the current PR.
     advance_queue_pr captures the next PR number at the recipe level after each
@@ -60,14 +60,14 @@ kitchen_rules:
     interface (gh pr merge --squash). This enforces the branch ruleset required status checks.
     Never use merge_worktree or local git merge to merge into the integration batch branch."
   - "PUSH DISCIPLINE: push_worktree_branch (inside the complex PR cycle),
-    publish_integration_branch / push_integration_branch, force_push_and_wait_mergeability
+    publish_batch_branch / push_batch_branch, force_push_and_wait_mergeability
     (authorized for conflict-resolution rebases), and push_rebased_next_pr
     (authorized for proactive pre-enqueue rebase) are the only authorized push steps.
     Never add ad-hoc run_cmd git push calls elsewhere in the loop."
   - "QUEUE MODE: When context.queue_mode == true, PRs merge directly into base_branch via the
-    merge queue. The batch branch (context.integration_branch) is the same as base_branch.
-    Never invoke create_integration_branch, publish_integration_branch, merge_pr, or
-    push_integration_branch in queue mode."
+    merge queue. The batch branch (context.batch_branch) is the same as base_branch.
+    Never invoke create_batch_branch, publish_batch_branch, merge_pr, or
+    push_batch_branch in queue mode."
   - "QUEUE LOOP: In queue mode, context.current_pr_number tracks the current PR being waited on.
     Initialized by get_first_pr_number from pr_order_file[0]. advance_queue_pr looks up
     the current number in pr_order_file and captures the next entry's number."
@@ -196,13 +196,13 @@ steps:
       step_name: "analyze_prs"
     capture:
       pr_order_file: "${{ result.pr_order_file }}"
-      integration_branch: "${{ result.integration_branch }}"
+      batch_branch: "${{ result.batch_branch }}"
       queue_mode: "${{ result.queue_mode }}"
     on_success: route_by_queue_mode
     on_failure: register_clone_failure
     note: >
       Captures pr_order_file (path to JSON with ordered PRs + complexity tags),
-      integration_branch (e.g. integration/pr-merge-20250228-143052), and
+      batch_branch (e.g. integration/pr-merge-20250228-143052), and
       queue_mode ("true" when a GitHub merge queue with MERGEABLE entries is active
       on base_branch; "false" otherwise). If the skill reports pr_count=0 (no open
       PRs), skip directly to cleanup_success — no integration branch is needed.
@@ -213,7 +213,7 @@ steps:
     on_result:
       - when: "${{ context.queue_mode }} == true"
         route: get_first_pr_number
-      - route: create_integration_branch
+      - route: create_batch_branch
     note: >
       Routes to queue mode (get_first_pr_number) when analyze-prs detected a merge queue
       on the target branch. Falls back to the classic batch-branch path otherwise.
@@ -552,30 +552,30 @@ steps:
       Caps stall re-enrollment at 3 attempts. On budget exhaustion, routes
       to register_clone_failure (merge outcome unconfirmed).
 
-  create_integration_branch:
+  create_batch_branch:
     tool: run_cmd
     with:
-      cmd: "git checkout ${{ inputs.base_branch }} && git pull && git checkout -b ${{ context.integration_branch }}"
+      cmd: "git checkout ${{ inputs.base_branch }} && git pull && git checkout -b ${{ context.batch_branch }}"
       cwd: "${{ context.work_dir }}"
-      step_name: "create_integration_branch"
-    on_success: publish_integration_branch
+      step_name: "create_batch_branch"
+    on_success: publish_batch_branch
     on_failure: register_clone_failure
     note: >
       Creates the integration branch from the latest base_branch HEAD.
-      context.integration_branch was computed by analyze_prs.
+      context.batch_branch was computed by analyze_prs.
 
-  publish_integration_branch:
+  publish_batch_branch:
     tool: push_to_remote
     with:
       clone_path: "${{ context.work_dir }}"
       remote_url: "${{ context.remote_url }}"
-      branch: "${{ context.integration_branch }}"
+      branch: "${{ context.batch_branch }}"
     on_success: merge_pr
     on_failure: register_clone_failure
     note: >
       Publishes the integration branch to origin immediately after creation so
-      that merge_worktree can verify refs/remotes/origin/integration_branch exists
-      before rebasing. The branch is re-pushed at push_integration_branch after all
+      that merge_worktree can verify refs/remotes/origin/batch_branch exists
+      before rebasing. The branch is re-pushed at push_batch_branch after all
       merges complete to update the remote with accumulated merge commits.
 
   merge_pr:
@@ -709,7 +709,7 @@ steps:
     with:
       cmd: >
         gh pr create
-        --base "${{ context.integration_branch }}"
+        --base "${{ context.batch_branch }}"
         --head "${{ context.worktree_branch_name }}"
         --title "chore: conflict resolution for PR ${{ context.current_pr_number }}"
         --body "Auto-generated conflict resolution branch. Closes after merge."
@@ -766,7 +766,7 @@ steps:
   fix:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:resolve-failures ${{ context.worktree_path }} ${{ context.pr_plan_path }} ${{ context.integration_branch }}"
+      skill_command: "/autoskillit:resolve-failures ${{ context.worktree_path }} ${{ context.pr_plan_path }} ${{ context.batch_branch }}"
       cwd: "${{ context.worktree_path }}"
       step_name: "fix"
       base_branch: "${{ inputs.base_branch }}"
@@ -799,19 +799,19 @@ steps:
       routes:
         more_parts: verify
         more_prs: merge_pr
-        all_done: push_integration_branch
+        all_done: push_batch_branch
     note: >
       Routing step — no tool call. The agent evaluates what comes next:
       1. If more plan_parts remain for the current PR → verify (next part).
       2. If all parts done, advance current_pr_number. If more PRs remain → merge_pr.
-      3. If all PRs processed → push_integration_branch.
+      3. If all PRs processed → push_batch_branch.
 
-  push_integration_branch:
+  push_batch_branch:
     tool: push_to_remote
     with:
       clone_path: "${{ context.work_dir }}"
       remote_url: "${{ context.remote_url }}"
-      branch: "${{ context.integration_branch }}"
+      branch: "${{ context.batch_branch }}"
     on_success: collect_and_check_impl_plans
     on_failure: register_clone_failure
     note: >
@@ -842,7 +842,7 @@ steps:
   audit_impl:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:audit-impl \"${{ context.all_plan_paths }}\" ${{ context.integration_branch }} ${{ inputs.base_branch }} \"${{ context.all_conflict_report_paths }}\""
+      skill_command: "/autoskillit:audit-impl \"${{ context.all_plan_paths }}\" ${{ context.batch_branch }} ${{ inputs.base_branch }} \"${{ context.all_conflict_report_paths }}\""
       cwd: "${{ context.work_dir }}"
       step_name: "audit_impl"
     capture:
@@ -867,7 +867,7 @@ steps:
       open_integration_pr. Passes context.all_plan_paths (comma-separated list of plan file
       paths accumulated across the PR loop) as plans_input. audit-impl splits on commas
       and audits each plan file.
-      implementation_ref is context.integration_branch (no worktree remains).
+      implementation_ref is context.batch_branch (no worktree remains).
       GO → open_integration_pr. NO GO → remediate (re-enters plan with remediation file).
 
   remediate:
@@ -880,7 +880,7 @@ steps:
     tool: run_python
     with:
       callable: "autoskillit.smoke_utils.compute_domain_partitions"
-      integration_branch: "${{ context.integration_branch }}"
+      batch_branch: "${{ context.batch_branch }}"
       base_branch: "${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
       output_dir: "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/open-integration-pr"
@@ -897,7 +897,7 @@ steps:
   open_integration_pr:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:open-integration-pr ${{ context.integration_branch }} ${{ inputs.base_branch }} ${{ context.pr_order_file }} ${{ context.verdict }} \"${{ context.all_conflict_report_paths }}\" domain_partitions_path=${{ context.domain_partitions_path }}"
+      skill_command: "/autoskillit:open-integration-pr ${{ context.batch_branch }} ${{ inputs.base_branch }} ${{ context.pr_order_file }} ${{ context.verdict }} \"${{ context.all_conflict_report_paths }}\" domain_partitions_path=${{ context.domain_partitions_path }}"
       cwd: "${{ context.work_dir }}"
       step_name: "open_integration_pr"
     capture:
@@ -943,7 +943,7 @@ steps:
   resolve_integration_conflicts:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:resolve-merge-conflicts ${{ context.integration_branch }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:resolve-merge-conflicts ${{ context.batch_branch }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
       step_name: "resolve_integration_conflicts"
     capture:
@@ -958,7 +958,7 @@ steps:
     on_failure: register_clone_failure
     note: >
       Automated conflict resolution when the integration PR is CONFLICTING (REQ-MERGE-003).
-      Rebases context.integration_branch onto inputs.base_branch and resolves merge conflicts.
+      Rebases context.batch_branch onto inputs.base_branch and resolves merge conflicts.
       Single attempt only — no retries — to prevent looping on unresolvable conflicts.
       On failure, escalates to register_clone_failure with diagnostics (REQ-MERGE-004).
 
@@ -967,7 +967,7 @@ steps:
     with:
       callable: "autoskillit.recipe._cmd_rpc.force_push_and_wait_mergeability"
       work_dir: "${{ context.work_dir }}"
-      integration_branch: "${{ context.integration_branch }}"
+      batch_branch: "${{ context.batch_branch }}"
       review_pr_number: "${{ context.review_pr_number }}"
       max_polls: "12"
       poll_interval: "15"
@@ -1019,7 +1019,7 @@ steps:
   review_pr_integration:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:review-pr ${{ context.integration_branch }} ${{ inputs.base_branch }} annotated_diff_path=${{ context.annotated_diff_path }} hunk_ranges_path=${{ context.hunk_ranges_path }}"
+      skill_command: "/autoskillit:review-pr ${{ context.batch_branch }} ${{ inputs.base_branch }} annotated_diff_path=${{ context.annotated_diff_path }} hunk_ranges_path=${{ context.hunk_ranges_path }}"
       cwd: "${{ context.work_dir }}"
       step_name: "review_pr_integration"
     capture:
@@ -1034,7 +1034,7 @@ steps:
     on_failure: resolve_review_integration
     note: >
       Automated review of the integration PR (REQ-REVIEW-001). Invokes review-pr against
-      context.integration_branch. All three verdicts have explicit routes: changes_requested
+      context.batch_branch. All three verdicts have explicit routes: changes_requested
       → resolve_review_integration, needs_human → ci_watch_pr (human reviews inline),
       approved → ci_watch_pr. On tool-level failure, routes to resolve_review_integration
       (matches implementation.yaml pattern). needs_human is explicitly routed to satisfy
@@ -1043,7 +1043,7 @@ steps:
   resolve_review_integration:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:resolve-review ${{ context.integration_branch }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:resolve-review ${{ context.batch_branch }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
       step_name: "resolve_review_integration"
     capture:
@@ -1073,7 +1073,7 @@ steps:
     with:
       clone_path: "${{ context.work_dir }}"
       remote_url: "${{ context.remote_url }}"
-      branch: "${{ context.integration_branch }}"
+      branch: "${{ context.batch_branch }}"
     on_success: ci_watch_pr
     on_failure: register_clone_failure
     note: >
@@ -1083,7 +1083,7 @@ steps:
   ci_watch_pr:
     tool: wait_for_ci
     with:
-      branch: "${{ context.integration_branch }}"
+      branch: "${{ context.batch_branch }}"
       event: "${{ context.ci_event }}"
       timeout_seconds: 600
       cwd: "${{ context.work_dir }}"
@@ -1096,7 +1096,7 @@ steps:
       - route: register_clone_failure
     on_failure: diagnose_ci
     note: >
-      Waits for the GitHub Actions CI run on context.integration_branch to complete
+      Waits for the GitHub Actions CI run on context.batch_branch to complete
       using the wait_for_ci MCP tool (timeout: 300 s). Routes on result.conclusion:
       success → register_clone_success, timed_out → self (re-watch),
       no_runs/failure → register_clone_failure.
@@ -1105,7 +1105,7 @@ steps:
   diagnose_ci:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:diagnose-ci ${{ context.integration_branch }} - - - ${{ context.ci_event }}"
+      skill_command: "/autoskillit:diagnose-ci ${{ context.batch_branch }} - - - ${{ context.ci_event }}"
       cwd: "${{ context.work_dir }}"
       step_name: "diagnose_ci"
     capture:

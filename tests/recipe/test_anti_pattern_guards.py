@@ -94,11 +94,11 @@ def test_implementation_create_branch_uses_create_unique_branch_tool():
 
 
 def test_merge_prs_no_run_cmd_push():
-    """AP2: merge-prs.yaml push_integration_branch must use push_to_remote, not run_cmd."""
+    """AP2: merge-prs.yaml push_batch_branch must use push_to_remote, not run_cmd."""
     recipe = load_recipe(builtin_recipes_dir() / "merge-prs.yaml")
-    step = recipe.steps["push_integration_branch"]
+    step = recipe.steps["push_batch_branch"]
     assert step.tool == "push_to_remote", (
-        "push_integration_branch must use push_to_remote MCP tool, not run_cmd"
+        "push_batch_branch must use push_to_remote MCP tool, not run_cmd"
     )
 
 
@@ -108,8 +108,8 @@ def test_merge_prs_has_no_loop_push_kitchen_rule():
     steps = raw.get("steps", {})
     push_steps = {name for name, step in steps.items() if step.get("tool") == "push_to_remote"}
     unexpected = push_steps - {
-        "publish_integration_branch",
-        "push_integration_branch",
+        "publish_batch_branch",
+        "push_batch_branch",
         "re_push_review_integration",  # authorized: re-pushes after review fixes
         "push_ejected_fix",  # authorized: pushes conflict-resolved ejected PR branch back
         "push_rebased_next_pr",  # authorized: proactive rebase push before enqueue

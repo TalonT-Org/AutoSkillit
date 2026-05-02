@@ -28,10 +28,10 @@ PR, and output `pr_url=<url>`.
 ## Arguments
 
 ```
-/autoskillit:open-integration-pr {integration_branch} {base_branch} {pr_order_file} [audit_verdict] [conflict_report_paths] [domain_partitions_path]
+/autoskillit:open-integration-pr {batch_branch} {base_branch} {pr_order_file} [audit_verdict] [conflict_report_paths] [domain_partitions_path]
 ```
 
-- `integration_branch` — integration branch name (e.g. `pr-batch/pr-merge-20250228-143052`)
+- `batch_branch` — integration branch name (e.g. `pr-batch/pr-merge-20250228-143052`)
 - `base_branch` — PR target branch (e.g. `main`)
 - `pr_order_file` — absolute path to JSON produced by `analyze-prs`
 - `audit_verdict` (optional) — `GO`, `NO GO`, or empty string when audit was skipped
@@ -62,7 +62,7 @@ PR, and output `pr_url=<url>`.
 
 ### Step 1: Parse Arguments
 
-Parse four positional args: `integration_branch`, `base_branch`, `pr_order_file`,
+Parse four positional args: `batch_branch`, `base_branch`, `pr_order_file`,
 `audit_verdict` (last one may be absent or empty string). Parse the optional fifth
 positional argument `conflict_report_paths` (may be absent or empty string). Split on `,`
 to get a list of paths; filter out any empty strings. Store as `conflict_report_path_list`.
@@ -108,9 +108,9 @@ Skip gracefully if `gh` is unavailable — `closing_refs` remains empty.
 ### Step 4: Get Changed Files
 
 ```bash
-git diff --name-only {base_branch}..{integration_branch}
-git diff --diff-filter=A --name-only {base_branch}..{integration_branch}
-git diff --diff-filter=M --name-only {base_branch}..{integration_branch}
+git diff --name-only {base_branch}..{batch_branch}
+git diff --diff-filter=A --name-only {base_branch}..{batch_branch}
+git diff --diff-filter=M --name-only {base_branch}..{batch_branch}
 ```
 
 Store as `changed_files`, `new_files`, `modified_files`.
@@ -148,7 +148,7 @@ For each domain name `D` in `domain_partitions` where `domain_partitions[D]` is 
 run the following in parallel (issue all Bash calls in a single message):
 
 ```bash
-git diff {base_branch}..{integration_branch} -- {space-separated list of files in domain D}
+git diff {base_branch}..{batch_branch} -- {space-separated list of files in domain D}
 ```
 
 Store results as `domain_diffs: dict[str, str]` mapping domain name → diff text.
@@ -180,7 +180,7 @@ For each domain `D` in `domain_diffs` (domains that actually have diff content),
 parallel (all Bash calls in a single message):
 
 ```bash
-git log {base_branch}..{integration_branch} --oneline -- {space-separated files in domain D}
+git log {base_branch}..{batch_branch} --oneline -- {space-separated files in domain D}
 ```
 
 Store as `domain_commits: dict[str, list[str]]` (each entry is a list of `"sha message"` strings).
@@ -277,7 +277,7 @@ Write to `{{AUTOSKILLIT_TEMP}}/open-integration-pr/pr_body_{timestamp}.md`. (rel
 ```markdown
 ## Integration Summary
 
-Collapsed {N} PRs into `{integration_branch}` targeting `{base_branch}`.
+Collapsed {N} PRs into `{batch_branch}` targeting `{base_branch}`.
 
 ## Merged PRs
 
@@ -342,7 +342,7 @@ If exit code non-zero: output `pr_url=` and exit successfully.
 ```bash
 gh pr create \
   --base {base_branch} \
-  --head {integration_branch} \
+  --head {batch_branch} \
   --title "Integration: collapsed PRs #{numbers} into {base_branch}" \
   --body-file {{AUTOSKILLIT_TEMP}}/open-integration-pr/pr_body_{timestamp}.md
 ```

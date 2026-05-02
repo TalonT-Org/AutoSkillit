@@ -167,11 +167,11 @@ def test_pmp_open_integration_pr_captures_pr_url(recipe) -> None:
 
 
 def test_pmp_open_integration_pr_passes_four_args(recipe) -> None:
-    """skill_command must supply integration_branch, base_branch, pr_order_file, verdict."""
+    """skill_command must supply batch_branch, base_branch, pr_order_file, verdict."""
     step = recipe.steps["open_integration_pr"]
     cmd = step.with_args.get("skill_command", "")
     for arg in [
-        "context.integration_branch",
+        "context.batch_branch",
         "inputs.base_branch",
         "context.pr_order_file",
         "context.verdict",
@@ -351,10 +351,10 @@ def test_ci_watch_pr_exists_with_correct_tool(recipe) -> None:
     assert step.tool == "wait_for_ci"
 
 
-def test_ci_watch_pr_uses_integration_branch(recipe) -> None:
-    """ci_watch_pr must use context.integration_branch as the branch parameter."""
+def test_ci_watch_pr_uses_batch_branch(recipe) -> None:
+    """ci_watch_pr must use context.batch_branch as the branch parameter."""
     step = recipe.steps["ci_watch_pr"]
-    assert "context.integration_branch" in step.with_args["branch"]
+    assert "context.batch_branch" in step.with_args["branch"]
 
 
 def test_ci_watch_pr_routing(recipe) -> None:
@@ -503,10 +503,10 @@ def test_pmp_has_review_pr_integration_step(recipe) -> None:
     assert "review-pr" in step.with_args.get("skill_command", "")
 
 
-def test_pmp_review_pr_integration_uses_integration_branch(recipe) -> None:
-    """B14: review_pr_integration skill_command must reference context.integration_branch."""
+def test_pmp_review_pr_integration_uses_batch_branch(recipe) -> None:
+    """B14: review_pr_integration skill_command must reference context.batch_branch."""
     step = recipe.steps["review_pr_integration"]
-    assert "context.integration_branch" in step.with_args.get("skill_command", "")
+    assert "context.batch_branch" in step.with_args.get("skill_command", "")
 
 
 def test_pmp_review_pr_integration_routes_changes_requested_to_resolve_review(recipe) -> None:
@@ -564,10 +564,10 @@ def test_pmp_has_re_push_review_integration_step(recipe) -> None:
     assert step.tool == "push_to_remote"
 
 
-def test_pmp_re_push_review_integration_uses_integration_branch(recipe) -> None:
-    """B21: re_push_review_integration must pass context.integration_branch as branch arg."""
+def test_pmp_re_push_review_integration_uses_batch_branch(recipe) -> None:
+    """B21: re_push_review_integration must pass context.batch_branch as branch arg."""
     step = recipe.steps["re_push_review_integration"]
-    assert "context.integration_branch" in step.with_args.get("branch", "")
+    assert "context.batch_branch" in step.with_args.get("branch", "")
 
 
 def test_pmp_re_push_review_integration_routes_to_ci_watch(recipe) -> None:

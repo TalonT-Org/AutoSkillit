@@ -18,10 +18,10 @@ posts the review report as a PR comment.
 ## Arguments
 
 ```
-/autoskillit:review-promotion [integration_branch] [base_branch] [--post-to-pr]
+/autoskillit:review-promotion [batch_branch] [base_branch] [--post-to-pr]
 ```
 
-- `integration_branch` (optional) — source branch to analyze. Defaults to `develop`.
+- `batch_branch` (optional) — source branch to analyze. Defaults to `develop`.
 - `base_branch` (optional) — target branch. Defaults to `main`.
 - `--post-to-pr` — if present, post the review report as a comment on the open promotion PR.
 
@@ -49,17 +49,17 @@ posts the review report as a PR comment.
 #### Step 0.1: Parse Arguments
 
 Parse optional positional arguments and flags:
-- `integration_branch` — default `"develop"` if absent or empty
+- `batch_branch` — default `"develop"` if absent or empty
 - `base_branch` — default `"main"` if absent or empty
 - `post_to_pr` — `true` if `--post-to-pr` present in ARGUMENTS
 
 #### Step 0.2: Compute Divergence Point
 
 ```bash
-git merge-base {base_branch} {integration_branch}
-git diff --name-only {base_branch}..{integration_branch}
-git diff --name-only --diff-filter=A {base_branch}..{integration_branch}
-git diff --name-only --diff-filter=M {base_branch}..{integration_branch}
+git merge-base {base_branch} {batch_branch}
+git diff --name-only {base_branch}..{batch_branch}
+git diff --name-only --diff-filter=A {base_branch}..{batch_branch}
+git diff --name-only --diff-filter=M {base_branch}..{batch_branch}
 ```
 
 Store as `merge_base_sha`, `changed_files`, `new_files` (added files), and
@@ -69,14 +69,14 @@ If the `git merge-base` or `git diff` command exits non-zero (e.g., unknown bran
 emit a clear error and exit 1:
 
 ```
-Error: could not compute divergence point between '{base_branch}' and '{integration_branch}'.
+Error: could not compute divergence point between '{base_branch}' and '{batch_branch}'.
 Check that both branches exist locally or are fetchable.
 ```
 
 If `changed_files` is empty after a successful `git diff`, emit:
 
 ```
-Error: no changed files found between '{base_branch}' and '{integration_branch}'.
+Error: no changed files found between '{base_branch}' and '{batch_branch}'.
 Verify the branches are not identical and that the correct branch names were supplied.
 ```
 
@@ -85,7 +85,7 @@ Then exit 1.
 #### Step 0.3: Find PR (only if --post-to-pr)
 
 ```bash
-gh pr list --base {base_branch} --head {integration_branch} --state open --json number,url --limit 1
+gh pr list --base {base_branch} --head {batch_branch} --state open --json number,url --limit 1
 ```
 
 Store `pr_number` and `pr_url`. If none found, warn and continue — the review report will
@@ -112,7 +112,7 @@ Store as `domain_partitions`. Skip if `changed_files` is empty.
 For each domain `D` in `domain_partitions` with a non-empty file list, run in parallel:
 
 ```bash
-git diff {base_branch}..{integration_branch} -- {space-separated files in domain D}
+git diff {base_branch}..{batch_branch} -- {space-separated files in domain D}
 ```
 
 Truncate diffs exceeding 12,000 characters. Drop domains with empty diffs.
@@ -122,7 +122,7 @@ Truncate diffs exceeding 12,000 characters. Drop domains with empty diffs.
 For each domain in `domain_diffs`, run in parallel:
 
 ```bash
-git log {base_branch}..{integration_branch} --oneline -- {space-separated files in domain D}
+git log {base_branch}..{batch_branch} --oneline -- {space-separated files in domain D}
 ```
 
 #### Step 1.4: Identify PRs per Domain
@@ -302,7 +302,7 @@ Write to `.autoskillit/temp/review-promotion/review_report_{YYYY-MM-DD_HHMMSS}.m
 (relative to the current working directory):
 
 ```markdown
-# Promotion Review: {integration_branch} → {base_branch}
+# Promotion Review: {batch_branch} → {base_branch}
 
 ## Verdict: {verdict}
 

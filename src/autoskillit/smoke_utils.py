@@ -30,7 +30,7 @@ def check_bug_report_non_empty(workspace: str) -> dict[str, str]:
 
 
 def compute_domain_partitions(
-    integration_branch: str, base_branch: str, cwd: str, output_dir: str
+    batch_branch: str, base_branch: str, cwd: str, output_dir: str
 ) -> dict[str, str]:
     """Pre-compute domain partitions for open-integration-pr and write to disk.
 
@@ -44,7 +44,7 @@ def compute_domain_partitions(
     from autoskillit.execution import partition_files_by_domain  # noqa: PLC0415
 
     result = subprocess.run(
-        ["git", "diff", "--name-only", f"{base_branch}..{integration_branch}"],
+        ["git", "diff", "--name-only", f"{base_branch}..{batch_branch}"],
         capture_output=True,
         text=True,
         check=True,

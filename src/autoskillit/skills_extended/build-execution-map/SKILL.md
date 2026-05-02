@@ -168,11 +168,14 @@ order.
 
 After groups are assembled in Step 3, enforce the `max_parallel` cap:
 
-1. For each group where `len(issues) > max_parallel`:
+1. For each **parallel** group (`parallel: true`) where `len(issues) > max_parallel`:
    - Chunk the issue list into sub-lists of at most `max_parallel` issues each, preserving
      the existing order determined in Step 3.
-   - Each sub-list becomes its own group with `parallel: true`.
+   - Each sub-list becomes its own group. Set `parallel: true` if `len(sub-list) > 1`;
+     set `parallel: false` if `len(sub-list) == 1` (single-issue groups are never parallel).
    - The original group's `parallel_safe` ordering is preserved — do not re-sort.
+   - Sequential groups (`parallel: false`) are never split — they are passed through unchanged
+     regardless of size.
 
 2. Renumber all groups sequentially (1, 2, 3, …) after splitting. If original Group 1
    splits into 2 sub-groups and original Group 2 remains intact, the result is:

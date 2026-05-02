@@ -102,13 +102,9 @@ def _if_body_has_any_kitchen_open_call(if_node: ast.If) -> bool:
 
 def _if_test_references_kitchen_guarded_commands(if_node: ast.If) -> bool:
     """Return True if the if-node's test references KITCHEN_GUARDED_COMMANDS."""
-    test_src = ast.dump(if_node.test)
-    return "KITCHEN_GUARDED_COMMANDS" in test_src or (
-        isinstance(if_node.test, ast.Compare)
-        and any(
-            isinstance(c, ast.Name) and c.id == "KITCHEN_GUARDED_COMMANDS"
-            for c in ast.walk(if_node.test)
-        )
+    return any(
+        isinstance(node, ast.Name) and node.id == "KITCHEN_GUARDED_COMMANDS"
+        for node in ast.walk(if_node.test)
     )
 
 

@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, stable]
   pull_request:
-    branches: [main, develop, stable]
+    branches: [main, integration, develop, stable]
   merge_group:
 
 permissions:

@@ -443,5 +443,5 @@ def main() -> None:
 
         from autoskillit.cli._update_checks import run_update_checks
 
-        run_update_checks()
+        run_update_checks(command=_first_arg)
     app()

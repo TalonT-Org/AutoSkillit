@@ -59,15 +59,7 @@ async def test_full_tracing_pipeline_writes_distinct_timestamps(tmp_path):
         termination_reason="natural_exit",
         snapshot_interval_seconds=0.05,
         proc_snapshots=snap_dicts,
-        telemetry=SessionTelemetry(
-            token_usage=None,
-            timing_seconds=None,
-            audit_record=None,
-            github_api_usage=None,
-            github_api_requests=0,
-            loc_insertions=0,
-            loc_deletions=0,
-        ),
+        telemetry=SessionTelemetry.empty(),
     )
 
     session_dir = tmp_path / "sessions" / "integration-test-001"
@@ -122,15 +114,7 @@ def _flush_with_snaps(tmp_path, session_id: str, snaps: list[dict]) -> None:
         exit_code=0,
         start_ts="2026-01-01T00:00:00+00:00",
         proc_snapshots=snaps,
-        telemetry=SessionTelemetry(
-            token_usage=None,
-            timing_seconds=None,
-            audit_record=None,
-            github_api_usage=None,
-            github_api_requests=0,
-            loc_insertions=0,
-            loc_deletions=0,
-        ),
+        telemetry=SessionTelemetry.empty(),
     )
 
 
@@ -209,15 +193,7 @@ async def test_peak_rss_kb_above_sanity_floor(tmp_path):
         exit_code=0,
         start_ts=result.start_ts or "2026-01-01T00:00:00+00:00",
         proc_snapshots=result.proc_snapshots,
-        telemetry=SessionTelemetry(
-            token_usage=None,
-            timing_seconds=None,
-            audit_record=None,
-            github_api_usage=None,
-            github_api_requests=0,
-            loc_insertions=0,
-            loc_deletions=0,
-        ),
+        telemetry=SessionTelemetry.empty(),
     )
 
     summary_path = tmp_path / "logs" / "sessions" / "sanity-floor-001" / "summary.json"

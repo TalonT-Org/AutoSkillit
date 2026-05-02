@@ -80,15 +80,7 @@ def test_flush_session_log_writes_kitchen_id(tmp_path):
         exit_code=0,
         start_ts="2026-03-27T08:00:00",
         proc_snapshots=None,
-        telemetry=SessionTelemetry(
-            token_usage=None,
-            timing_seconds=None,
-            audit_record=None,
-            github_api_usage=None,
-            github_api_requests=0,
-            loc_insertions=0,
-            loc_deletions=0,
-        ),
+        telemetry=SessionTelemetry.empty(),
     )
 
     index = (tmp_path / "sessions.jsonl").read_text()
@@ -111,15 +103,7 @@ def test_flush_session_log_writes_order_id_to_index(tmp_path):
         exit_code=0,
         start_ts="2026-03-27T08:00:00",
         proc_snapshots=None,
-        telemetry=SessionTelemetry(
-            token_usage=None,
-            timing_seconds=None,
-            audit_record=None,
-            github_api_usage=None,
-            github_api_requests=0,
-            loc_insertions=0,
-            loc_deletions=0,
-        ),
+        telemetry=SessionTelemetry.empty(),
     )
 
     entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
@@ -140,15 +124,7 @@ def test_flush_session_log_order_id_defaults_to_empty(tmp_path):
         exit_code=0,
         start_ts="2026-03-27T08:00:00",
         proc_snapshots=None,
-        telemetry=SessionTelemetry(
-            token_usage=None,
-            timing_seconds=None,
-            audit_record=None,
-            github_api_usage=None,
-            github_api_requests=0,
-            loc_insertions=0,
-            loc_deletions=0,
-        ),
+        telemetry=SessionTelemetry.empty(),
     )
 
     entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
@@ -171,15 +147,7 @@ def test_flush_writes_crash_exception_file(tmp_path):
         proc_snapshots=None,
         termination_reason="CRASHED",
         exception_text="RuntimeError: boom\n  at headless.py:1023",
-        telemetry=SessionTelemetry(
-            token_usage=None,
-            timing_seconds=None,
-            audit_record=None,
-            github_api_usage=None,
-            github_api_requests=0,
-            loc_insertions=0,
-            loc_deletions=0,
-        ),
+        telemetry=SessionTelemetry.empty(),
     )
     session_dir = tmp_path / "sessions" / "test-session"
     crash_file = session_dir / "crash_exception.txt"
@@ -206,15 +174,7 @@ def test_flush_session_log_writes_raw_stdout_on_failure(tmp_path):
         start_ts="2026-04-15T07:00:00Z",
         proc_snapshots=None,
         raw_stdout=raw,
-        telemetry=SessionTelemetry(
-            token_usage=None,
-            timing_seconds=None,
-            audit_record=None,
-            github_api_usage=None,
-            github_api_requests=0,
-            loc_insertions=0,
-            loc_deletions=0,
-        ),
+        telemetry=SessionTelemetry.empty(),
     )
     raw_file = tmp_path / "sessions" / "test-session" / "raw_stdout.jsonl"
     assert raw_file.exists()
@@ -234,15 +194,7 @@ def test_flush_session_log_no_raw_stdout_on_success(tmp_path):
         start_ts="2026-04-15T07:00:00Z",
         proc_snapshots=None,
         raw_stdout='{"type": "result"}',
-        telemetry=SessionTelemetry(
-            token_usage=None,
-            timing_seconds=None,
-            audit_record=None,
-            github_api_usage=None,
-            github_api_requests=0,
-            loc_insertions=0,
-            loc_deletions=0,
-        ),
+        telemetry=SessionTelemetry.empty(),
     )
     raw_file = tmp_path / "sessions" / "ok-session" / "raw_stdout.jsonl"
     assert not raw_file.exists()
@@ -276,15 +228,7 @@ def test_flush_session_log_summary_contains_per_turn_fields(tmp_path, monkeypatc
         start_ts="2026-04-15T07:00:00Z",
         proc_snapshots=None,
         last_stop_reason="end_turn",
-        telemetry=SessionTelemetry(
-            token_usage=None,
-            timing_seconds=None,
-            audit_record=None,
-            github_api_usage=None,
-            github_api_requests=0,
-            loc_insertions=0,
-            loc_deletions=0,
-        ),
+        telemetry=SessionTelemetry.empty(),
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
     assert summary["last_stop_reason"] == "end_turn"
@@ -327,15 +271,7 @@ def test_flush_session_log_summary_contains_turn_tool_calls(tmp_path, monkeypatc
         exit_code=0,
         start_ts="2026-04-15T07:00:00Z",
         proc_snapshots=None,
-        telemetry=SessionTelemetry(
-            token_usage=None,
-            timing_seconds=None,
-            audit_record=None,
-            github_api_usage=None,
-            github_api_requests=0,
-            loc_insertions=0,
-            loc_deletions=0,
-        ),
+        telemetry=SessionTelemetry.empty(),
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
     assert summary["turn_tool_calls"] == [["ToolA", "ToolB"]]
@@ -368,15 +304,7 @@ def test_turn_tool_calls_capped_at_8_per_turn(tmp_path, monkeypatch):
         exit_code=0,
         start_ts="2026-04-15T07:00:00Z",
         proc_snapshots=None,
-        telemetry=SessionTelemetry(
-            token_usage=None,
-            timing_seconds=None,
-            audit_record=None,
-            github_api_usage=None,
-            github_api_requests=0,
-            loc_insertions=0,
-            loc_deletions=0,
-        ),
+        telemetry=SessionTelemetry.empty(),
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
     assert len(summary["turn_tool_calls"][0]) == 8
@@ -409,15 +337,7 @@ def test_turn_tool_calls_empty_for_text_only_turn(tmp_path, monkeypatch):
         exit_code=0,
         start_ts="2026-04-15T07:00:00Z",
         proc_snapshots=None,
-        telemetry=SessionTelemetry(
-            token_usage=None,
-            timing_seconds=None,
-            audit_record=None,
-            github_api_usage=None,
-            github_api_requests=0,
-            loc_insertions=0,
-            loc_deletions=0,
-        ),
+        telemetry=SessionTelemetry.empty(),
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
     assert summary["turn_tool_calls"] == [[]]
@@ -450,15 +370,7 @@ def test_turn_tool_calls_parallel_to_request_ids(tmp_path, monkeypatch):
         exit_code=0,
         start_ts="2026-04-15T07:00:00Z",
         proc_snapshots=None,
-        telemetry=SessionTelemetry(
-            token_usage=None,
-            timing_seconds=None,
-            audit_record=None,
-            github_api_usage=None,
-            github_api_requests=0,
-            loc_insertions=0,
-            loc_deletions=0,
-        ),
+        telemetry=SessionTelemetry.empty(),
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
     assert len(summary["turn_tool_calls"]) == len(summary["request_ids"]) == 3

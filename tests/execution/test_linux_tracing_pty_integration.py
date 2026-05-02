@@ -127,15 +127,7 @@ async def test_pty_wrapped_tracing_produces_no_script_snapshots_in_proc_trace_js
         exit_code=result.returncode if result.returncode is not None else -1,
         start_ts=result.start_ts or "2026-01-01T00:00:00+00:00",
         proc_snapshots=result.proc_snapshots,
-        telemetry=SessionTelemetry(
-            token_usage=None,
-            timing_seconds=None,
-            audit_record=None,
-            github_api_usage=None,
-            github_api_requests=0,
-            loc_insertions=0,
-            loc_deletions=0,
-        ),
+        telemetry=SessionTelemetry.empty(),
     )
 
     trace_path = tmp_path / "logs" / "sessions" / "pty-trace-test-001" / "proc_trace.jsonl"

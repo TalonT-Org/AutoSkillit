@@ -333,15 +333,7 @@ def test_flush_session_log_backward_clock_produces_non_negative_duration(tmp_pat
         proc_snapshots=[],
         termination_reason="completed",
         snapshot_interval_seconds=5.0,
-        telemetry=SessionTelemetry(
-            token_usage=None,
-            timing_seconds=None,
-            audit_record=None,
-            github_api_usage=None,
-            github_api_requests=0,
-            loc_insertions=0,
-            loc_deletions=0,
-        ),
+        telemetry=SessionTelemetry.empty(),
     )
     session_dir = tmp_path / "sessions" / "backward-clock-test"
     summary = json.loads((session_dir / "summary.json").read_text())
@@ -369,15 +361,7 @@ def test_flush_session_log_uses_elapsed_seconds_over_iso_subtraction(tmp_path):
         proc_snapshots=[],
         termination_reason="completed",
         snapshot_interval_seconds=5.0,
-        telemetry=SessionTelemetry(
-            token_usage=None,
-            timing_seconds=None,
-            audit_record=None,
-            github_api_usage=None,
-            github_api_requests=0,
-            loc_insertions=0,
-            loc_deletions=0,
-        ),
+        telemetry=SessionTelemetry.empty(),
     )
     session_dir = tmp_path / "sessions" / "elapsed-seconds-test"
     summary = json.loads((session_dir / "summary.json").read_text())
@@ -408,15 +392,7 @@ def test_flush_session_log_zero_elapsed_seconds_is_valid(tmp_path):
         proc_snapshots=[],
         termination_reason="completed",
         snapshot_interval_seconds=5.0,
-        telemetry=SessionTelemetry(
-            token_usage=None,
-            timing_seconds=None,
-            audit_record=None,
-            github_api_usage=None,
-            github_api_requests=0,
-            loc_insertions=0,
-            loc_deletions=0,
-        ),
+        telemetry=SessionTelemetry.empty(),
     )
     session_dir = tmp_path / "sessions" / "zero-elapsed-test"
     summary = json.loads((session_dir / "summary.json").read_text())

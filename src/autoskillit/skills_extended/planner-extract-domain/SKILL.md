@@ -22,9 +22,8 @@ Extract domain knowledge, naming conventions, and structural patterns specific t
 
 ## Arguments
 
-- **`PLANNER_ANALYSIS_FILE`** (env-var) — Absolute path to `analysis.json` produced by `planner-analyze`. Set by the recipe via the step's `env:` block.
-- **`PLANNER_TASK`** (env-var, optional) — The user's task description. When set, focus domain extraction on areas relevant to the stated task rather than performing a full-codebase survey.
-- **`PLANNER_TASK_FILE`** (env-var, optional) — Absolute path to a file containing the task description. When set, read the file content and use it as the task. Takes precedence over `PLANNER_TASK`.
+- **$1** — Absolute path to `analysis.json` produced by `planner-analyze`
+- **$2** — Absolute path to a file containing the task description. When provided and non-empty, focus domain extraction on areas relevant to the stated task. When empty, perform a full-codebase survey.
 
 ## Critical Constraints
 
@@ -32,9 +31,10 @@ Extract domain knowledge, naming conventions, and structural patterns specific t
 - Modify any target project files
 - Abort the calling recipe on failure — log a warning and return gracefully
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- If `$1` is empty or the file does not exist, STOP immediately and report failure
 
 **ALWAYS:**
-- Read the analysis file from the path in the PLANNER_ANALYSIS_FILE environment variable before spawning subagents
+- Read the analysis file from argument $1 before spawning subagents
 - Use Explore subagents for all file reads
 - Spawn subagents in parallel
 
@@ -42,11 +42,11 @@ Extract domain knowledge, naming conventions, and structural patterns specific t
 
 ### Step 1: Read analysis
 
-Read the `analysis.json` file from the path in the PLANNER_ANALYSIS_FILE environment variable. Use its `language`, `framework`, `architecture_style`, and `key_patterns` fields to focus subagent queries.
+Read the `analysis.json` file from argument $1. Use its `language`, `framework`, `architecture_style`, and `key_patterns` fields to focus subagent queries.
 
 ### Step 2: Launch 3–5 parallel Explore subagents
 
-Read the task description: if `PLANNER_TASK_FILE` is set, read the file at that path; otherwise use `PLANNER_TASK`.
+Read the task description: if $2 is provided and non-empty, read the file at that path.
 
 If the task description is available, include it in each subagent's prompt: "Focus exploration on
 domain vocabulary, abstractions, and integration points relevant to this task: {task}.
@@ -70,12 +70,4 @@ Merge all agent outputs into a coherent `domain_knowledge.md` Markdown document 
 
 ### Step 4: Write output (non-fatal)
 
-Before computing the write path, validate that `PLANNER_ANALYSIS_FILE` is non-empty:
-```bash
-if [ -z "$PLANNER_ANALYSIS_FILE" ]; then
-  echo "[planner-extract-domain] WARNING: PLANNER_ANALYSIS_FILE is unset — skipping domain knowledge write"
-  exit 0
-fi
-```
-
-Write to `$(dirname $PLANNER_ANALYSIS_FILE)/domain_knowledge.md`. If any step fails, log a warning to stdout and exit with code 0 — do not propagate the error to the recipe.
+Write to `$(dirname $1)/domain_knowledge.md`. If any step fails, log a warning to stdout and exit with code 0 — do not propagate the error to the recipe.

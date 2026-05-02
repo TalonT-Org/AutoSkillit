@@ -22,6 +22,14 @@ from autoskillit.server._subprocess import _run_subprocess
 logger = get_logger(__name__)
 
 
+def _coerce_none_string(value: str | None, *, tool: str) -> str | None:
+    """Coerce the string literal 'None' to Python None, logging a warning when coercion occurs."""
+    if value == "None":
+        logger.warning("event coerced from string 'None' to null", tool=tool)
+        return None
+    return value
+
+
 @mcp.tool(tags={"autoskillit", "kitchen", "ci"}, annotations={"readOnlyHint": True})
 @track_response_size("wait_for_ci")
 async def wait_for_ci(
@@ -78,9 +86,7 @@ async def wait_for_ci(
     try:
         _start = time.monotonic()
         _timing_ctx = None
-        if event == "None":
-            logger.warning("event coerced from string 'None' to null", tool="wait_for_ci")
-            event = None
+        event = _coerce_none_string(event, tool="wait_for_ci")
         if event is not None and event not in KNOWN_CI_EVENTS:
             return json.dumps(
                 {

@@ -15,8 +15,6 @@ if TYPE_CHECKING:
     from autoskillit.recipe.schema import Recipe
 
 
-_OPEN_KITCHEN_CHOICE: str = "__open_kitchen__"
-
 # Shared retry instruction for both orchestrator and open-kitchen prompts.
 _MCP_RETRY_INSTRUCTION: str = (
     "If calling open_kitchen produces ANY error — including"

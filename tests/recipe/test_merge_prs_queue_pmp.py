@@ -66,10 +66,10 @@ def test_merge_prs_reenter_queue_exists(pmp_recipe) -> None:
 
 
 def test_merge_prs_advance_queue_pr_exists(pmp_recipe) -> None:
-    """advance_queue_pr step must exist with tool=run_cmd."""
+    """advance_queue_pr step must exist with tool=run_python."""
     assert "advance_queue_pr" in pmp_recipe.steps
     step = pmp_recipe.steps["advance_queue_pr"]
-    assert step.tool == "run_cmd"
+    assert step.tool == "run_python"
 
 
 # ---------------------------------------------------------------------------
@@ -328,11 +328,11 @@ def test_merge_prs_ci_watch_routes_to_reenter(pmp_recipe) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_merge_prs_advance_queue_pr_is_run_cmd(pmp_recipe) -> None:
-    """advance_queue_pr step must exist with tool=run_cmd."""
+def test_merge_prs_advance_queue_pr_is_run_python(pmp_recipe) -> None:
+    """advance_queue_pr step must exist with tool=run_python."""
     assert "advance_queue_pr" in pmp_recipe.steps
     step = pmp_recipe.steps["advance_queue_pr"]
-    assert step.tool == "run_cmd"
+    assert step.tool == "run_python"
 
 
 def test_merge_prs_next_queue_pr_or_done_removed(pmp_recipe) -> None:
@@ -340,20 +340,19 @@ def test_merge_prs_next_queue_pr_or_done_removed(pmp_recipe) -> None:
     assert "next_queue_pr_or_done" not in pmp_recipe.steps
 
 
-def test_merge_prs_advance_queue_pr_cmd_references_pr_order(pmp_recipe) -> None:
-    """advance_queue_pr cmd must reference pr_order_file and current_pr_number."""
+def test_merge_prs_advance_queue_pr_callable_references_pr_order(pmp_recipe) -> None:
+    """advance_queue_pr callable args must reference pr_order_file and current_pr_number."""
     step = pmp_recipe.steps["advance_queue_pr"]
-    cmd = step.with_args.get("cmd", "")
-    assert "pr_order_file" in cmd
-    assert "current_pr_number" in cmd
+    args = step.with_args
+    assert "pr_order_file" in args
+    assert "current_pr_number" in args
 
 
 def test_merge_prs_advance_queue_pr_captures_pr_number(pmp_recipe) -> None:
-    """advance_queue_pr must have a capture block for current_pr_number using | trim."""
+    """advance_queue_pr must have a capture block for current_pr_number."""
     step = pmp_recipe.steps["advance_queue_pr"]
     capture = step.capture or {}
     assert "current_pr_number" in capture
-    assert "trim" in capture["current_pr_number"]
 
 
 def test_merge_prs_advance_queue_pr_routing(pmp_recipe) -> None:

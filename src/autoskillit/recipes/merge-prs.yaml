@@ -411,15 +411,15 @@ steps:
       Routes back to wait_queue_pr to continue monitoring.
 
   advance_queue_pr:
-    tool: run_cmd
+    tool: run_python
     with:
-      cmd: "bash scripts/recipe/advance_queue_pr.sh '${{ context.current_pr_number }}' '${{ context.pr_order_file }}'"
-      cwd: "${{ context.work_dir }}"
-      step_name: "advance_queue_pr"
+      callable: "autoskillit.recipe._cmd_rpc.advance_queue_pr"
+      current_pr_number: "${{ context.current_pr_number }}"
+      pr_order_file: "${{ context.pr_order_file }}"
     capture:
-      current_pr_number: "${{ result.stdout | trim }}"
+      current_pr_number: "${{ result.current_pr_number }}"
     on_result:
-      - when: "${{ result.stdout | trim }} == done"
+      - when: "${{ result.current_pr_number }} == done"
         route: collect_and_check_impl_plans
       - route: get_next_pr_branch
     on_failure: register_clone_failure

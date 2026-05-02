@@ -30,7 +30,6 @@ _VERSION_BUMP_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
         r"pyproject\.toml.*version",
         r"version.*pyproject\.toml",
         r"sync[-_]versions",
-        r"sync_versions\.py",
         r"task\s+sync-versions",
         r"\bversion[\s_-]*bump\b",
     ]

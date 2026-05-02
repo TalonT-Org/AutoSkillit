@@ -73,5 +73,7 @@ def _write_sessions(log_root: Path, entries: list[dict]) -> None:
             "cache_creation_input_tokens": entry.get("cache_creation_input_tokens", 100),
             "cache_read_input_tokens": entry.get("cache_read_input_tokens", 200),
             "timing_seconds": entry.get("timing_seconds", 10.0),
+            "loc_insertions": entry.get("loc_insertions", 0),
+            "loc_deletions": entry.get("loc_deletions", 0),
         }
         (session_dir / "token_usage.json").write_text(json.dumps(token_data))

@@ -91,6 +91,8 @@ def _write_sessions(log_root: Path, entries: list[dict]) -> None:
             "cache_creation_input_tokens": entry.get("cache_creation_input_tokens", 100),
             "cache_read_input_tokens": entry.get("cache_read_input_tokens", 200),
             "timing_seconds": entry.get("timing_seconds", 10.0),
+            "loc_insertions": entry.get("loc_insertions", 0),
+            "loc_deletions": entry.get("loc_deletions", 0),
         }
         (session_dir / "token_usage.json").write_text(json.dumps(token_data))
 
@@ -964,3 +966,178 @@ def test_hook_subprocess_calls_have_timeout() -> None:
             assert "timeout" in kw_names, (
                 f"subprocess.run() at line {node.lineno} in token_summary_hook.py missing timeout="
             )
+
+
+# ---------------------------------------------------------------------------
+# T-HOOK-EFF: Token Efficiency table in hook output
+# ---------------------------------------------------------------------------
+
+
+# T-HOOK-EFF-1
+def test_efficiency_table_appended_when_loc_present(tmp_path: Path) -> None:
+    """Hook appends efficiency table after token table when LoC data exists."""
+    log_root = tmp_path / "logs"
+    log_root.mkdir()
+    kitchen_id = "kitchen-eff-1"
+
+    _write_sessions(
+        log_root,
+        [
+            {
+                "dir_name": "s1",
+                "cwd": "/w",
+                "kitchen_id": kitchen_id,
+                "step_name": "implement",
+                "input_tokens": 1000,
+                "output_tokens": 500,
+                "cache_creation_input_tokens": 100,
+                "cache_read_input_tokens": 200,
+                "timing_seconds": 10.0,
+                "loc_insertions": 80,
+                "loc_deletions": 20,
+            }
+        ],
+    )
+
+    hook_config = tmp_path / ".autoskillit_hook_config.json"
+    hook_config.write_text(json.dumps({"kitchen_id": kitchen_id}))
+    pr_url = "https://github.com/owner/repo/pull/42"
+    event = _make_run_skill_event(f"pr_url={pr_url}\n%%ORDER_UP%%")
+
+    view_result = MagicMock(returncode=0, stdout="Existing PR body.")
+    edit_calls: list = []
+
+    def run_side(args, **kwargs):
+        if "api" in args and "--method" not in args:
+            return view_result
+        if "api" in args and "--method" in args:
+            edit_calls.append(args)
+            return MagicMock(returncode=0)
+        return MagicMock(returncode=0)
+
+    with patch("subprocess.run", side_effect=run_side):
+        _, exit_code = _run_hook(event, log_root=log_root, hook_config_path=hook_config)
+
+    assert exit_code == 0
+    assert len(edit_calls) == 1
+    body_arg = edit_calls[0][edit_calls[0].index("--raw-field") + 1]
+    body_content = body_arg[len("body=") :]
+    assert "## Token Efficiency" in body_content
+
+
+# T-HOOK-EFF-2
+def test_efficiency_table_omitted_when_no_loc_data(tmp_path: Path) -> None:
+    """Hook omits efficiency table when all sessions have loc_insertions=loc_deletions=0."""
+    log_root = tmp_path / "logs"
+    log_root.mkdir()
+    kitchen_id = "kitchen-eff-2"
+
+    _write_sessions(
+        log_root,
+        [
+            {
+                "dir_name": "s1",
+                "cwd": "/w",
+                "kitchen_id": kitchen_id,
+                "step_name": "plan",
+                "input_tokens": 1000,
+                "output_tokens": 500,
+                "cache_creation_input_tokens": 100,
+                "cache_read_input_tokens": 200,
+                "timing_seconds": 10.0,
+                "loc_insertions": 0,
+                "loc_deletions": 0,
+            }
+        ],
+    )
+
+    hook_config = tmp_path / ".autoskillit_hook_config.json"
+    hook_config.write_text(json.dumps({"kitchen_id": kitchen_id}))
+    pr_url = "https://github.com/owner/repo/pull/42"
+    event = _make_run_skill_event(f"pr_url={pr_url}\n%%ORDER_UP%%")
+
+    view_result = MagicMock(returncode=0, stdout="Existing PR body.")
+    edit_calls: list = []
+
+    def run_side(args, **kwargs):
+        if "api" in args and "--method" not in args:
+            return view_result
+        if "api" in args and "--method" in args:
+            edit_calls.append(args)
+            return MagicMock(returncode=0)
+        return MagicMock(returncode=0)
+
+    with patch("subprocess.run", side_effect=run_side):
+        _, exit_code = _run_hook(event, log_root=log_root, hook_config_path=hook_config)
+
+    assert exit_code == 0
+    assert len(edit_calls) == 1
+    body_arg = edit_calls[0][edit_calls[0].index("--raw-field") + 1]
+    body_content = body_arg[len("body=") :]
+    assert "## Token Efficiency" not in body_content
+
+
+# T-HOOK-EFF-3
+def test_efficiency_table_zero_loc_step_shows_dash(tmp_path: Path) -> None:
+    """Steps with zero LoC changed show — in the hook-generated efficiency table."""
+    log_root = tmp_path / "logs"
+    log_root.mkdir()
+    kitchen_id = "kitchen-eff-3"
+
+    _write_sessions(
+        log_root,
+        [
+            {
+                "dir_name": "s1",
+                "cwd": "/w",
+                "kitchen_id": kitchen_id,
+                "step_name": "plan",
+                "input_tokens": 500,
+                "output_tokens": 100,
+                "cache_creation_input_tokens": 50,
+                "cache_read_input_tokens": 100,
+                "timing_seconds": 5.0,
+                "loc_insertions": 0,
+                "loc_deletions": 0,
+            },
+            {
+                "dir_name": "s2",
+                "cwd": "/w",
+                "kitchen_id": kitchen_id,
+                "step_name": "implement",
+                "input_tokens": 1000,
+                "output_tokens": 500,
+                "cache_creation_input_tokens": 100,
+                "cache_read_input_tokens": 200,
+                "timing_seconds": 10.0,
+                "loc_insertions": 50,
+                "loc_deletions": 10,
+            },
+        ],
+    )
+
+    hook_config = tmp_path / ".autoskillit_hook_config.json"
+    hook_config.write_text(json.dumps({"kitchen_id": kitchen_id}))
+    pr_url = "https://github.com/owner/repo/pull/42"
+    event = _make_run_skill_event(f"pr_url={pr_url}\n%%ORDER_UP%%")
+
+    view_result = MagicMock(returncode=0, stdout="Existing PR body.")
+    edit_calls: list = []
+
+    def run_side(args, **kwargs):
+        if "api" in args and "--method" not in args:
+            return view_result
+        if "api" in args and "--method" in args:
+            edit_calls.append(args)
+            return MagicMock(returncode=0)
+        return MagicMock(returncode=0)
+
+    with patch("subprocess.run", side_effect=run_side):
+        _, exit_code = _run_hook(event, log_root=log_root, hook_config_path=hook_config)
+
+    assert exit_code == 0
+    assert len(edit_calls) == 1
+    body_arg = edit_calls[0][edit_calls[0].index("--raw-field") + 1]
+    body_content = body_arg[len("body=") :]
+    assert "## Token Efficiency" in body_content
+    assert "—" in body_content

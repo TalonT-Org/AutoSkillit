@@ -53,6 +53,8 @@ class TokenEntry:
     cache_read_input_tokens: int = 0
     invocation_count: int = 0
     elapsed_seconds: float = 0.0
+    loc_insertions: int = 0
+    loc_deletions: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -85,6 +87,8 @@ class DefaultTokenLog:
         end_ts: str = "",
         elapsed_seconds: float | None = None,
         order_id: str = "",
+        loc_insertions: int = 0,
+        loc_deletions: int = 0,
     ) -> None:
         """Accumulate token usage for a step.
 
@@ -103,6 +107,8 @@ class DefaultTokenLog:
         e.cache_creation_input_tokens += token_usage.get("cache_creation_input_tokens", 0)
         e.cache_read_input_tokens += token_usage.get("cache_read_input_tokens", 0)
         e.invocation_count += 1
+        e.loc_insertions += loc_insertions
+        e.loc_deletions += loc_deletions
         if elapsed_seconds is not None:
             e.elapsed_seconds += elapsed_seconds
         elif start_ts and end_ts:
@@ -141,6 +147,8 @@ class DefaultTokenLog:
             agg.cache_read_input_tokens += e.cache_read_input_tokens
             agg.elapsed_seconds += e.elapsed_seconds
             agg.invocation_count += e.invocation_count
+            agg.loc_insertions += e.loc_insertions
+            agg.loc_deletions += e.loc_deletions
         return [e.to_dict() for e in aggregated.values()]
 
     def compute_total(self, *, order_id: str = "") -> dict[str, Any]:
@@ -155,6 +163,8 @@ class DefaultTokenLog:
             "cache_creation_input_tokens": 0,
             "cache_read_input_tokens": 0,
             "total_elapsed_seconds": 0.0,
+            "loc_insertions": 0,
+            "loc_deletions": 0,
         }
         for (oid, _step), entry in self._entries.items():
             if order_id and oid != order_id:
@@ -164,6 +174,8 @@ class DefaultTokenLog:
             total["cache_creation_input_tokens"] += entry.cache_creation_input_tokens
             total["cache_read_input_tokens"] += entry.cache_read_input_tokens
             total["total_elapsed_seconds"] += entry.elapsed_seconds
+            total["loc_insertions"] += entry.loc_insertions
+            total["loc_deletions"] += entry.loc_deletions
         return total
 
     def clear(self) -> None:
@@ -220,6 +232,8 @@ class DefaultTokenLog:
             # elapsed_seconds is the in-memory field name on TokenEntry.
             _raw_timing = data.get("timing_seconds")
             e.elapsed_seconds += float(_raw_timing) if _raw_timing is not None else 0.0
+            e.loc_insertions += data.get("loc_insertions", 0)
+            e.loc_deletions += data.get("loc_deletions", 0)
             # Each token_usage.json file represents a single run_skill invocation
             # (one file = one invocation). Incrementing here reconstructs the
             # invocation count that was accumulated live via record().

@@ -227,6 +227,8 @@ def _load_sessions(
                 "cache_read_input_tokens": 0,
                 "elapsed_seconds": 0.0,
                 "invocation_count": 0,
+                "loc_insertions": 0,
+                "loc_deletions": 0,
             }
         entry = aggregated[key]
         entry["input_tokens"] += data.get("input_tokens", 0)
@@ -236,6 +238,8 @@ def _load_sessions(
         _raw_timing = data.get("timing_seconds")
         entry["elapsed_seconds"] += float(_raw_timing) if _raw_timing is not None else 0.0
         entry["invocation_count"] += 1
+        entry["loc_insertions"] = entry.get("loc_insertions", 0) + data.get("loc_insertions", 0)
+        entry["loc_deletions"] = entry.get("loc_deletions", 0) + data.get("loc_deletions", 0)
 
     return aggregated
 
@@ -281,6 +285,49 @@ def _format_table(aggregated: dict[str, dict[str, Any]]) -> str:
         f" | | {_fmt_duration(total_time)} |"
     )
 
+    return "\n".join(lines)
+
+
+def _format_efficiency_table(aggregated: dict[str, dict[str, Any]]) -> str:
+    """Format aggregated token data as a markdown ## Token Efficiency table.
+
+    Returns '' when no session has LoC data (all zero).
+    """
+    has_loc = any(
+        e.get("loc_insertions", 0) + e.get("loc_deletions", 0) > 0 for e in aggregated.values()
+    )
+    if not has_loc:
+        return ""
+
+    def _ratio(tokens: int, loc: int) -> str:
+        return f"{tokens / loc:.1f}" if loc > 0 else "—"
+
+    lines = [
+        "## Token Efficiency",
+        "",
+        "| Step | LoC Changed | cache_read/LoC | cache_write/LoC | output/LoC |",
+        "|------|-------------|----------------|-----------------|------------|",
+    ]
+    total_loc = total_cr = total_cw = total_out = 0
+    for entry in aggregated.values():
+        loc = entry.get("loc_insertions", 0) + entry.get("loc_deletions", 0)
+        cr = entry.get("cache_read_input_tokens", 0)
+        cw = entry.get("cache_creation_input_tokens", 0)
+        out = entry.get("output_tokens", 0)
+        lines.append(
+            f"| {entry['step_name']} | {loc}"
+            f" | {_ratio(cr, loc)} | {_ratio(cw, loc)} | {_ratio(out, loc)} |"
+        )
+        total_loc += loc
+        total_cr += cr
+        total_cw += cw
+        total_out += out
+
+    lines.append(
+        f"| **Total** | **{total_loc}**"
+        f" | {_ratio(total_cr, total_loc)} | {_ratio(total_cw, total_loc)}"
+        f" | {_ratio(total_out, total_loc)} |"
+    )
     return "\n".join(lines)
 
 
@@ -330,7 +377,10 @@ def main() -> None:
             sys.exit(0)
 
         token_table = _format_table(aggregated)
+        efficiency_table = _format_efficiency_table(aggregated)
         new_body = current_body + "\n\n" + token_table
+        if efficiency_table:
+            new_body += "\n\n" + efficiency_table
 
         try:
             subprocess.run(

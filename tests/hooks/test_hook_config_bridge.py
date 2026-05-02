@@ -119,7 +119,7 @@ def test_deny_message_contains_sleep_from_payload_buffer_seconds(tmp_path, monke
 def test_stale_cache_fails_open_with_hook_config_max_age(tmp_path, monkeypatch):
     """Cache older than max_age from hook config treated as stale → fail-open approve."""
     cache = tmp_path / "quota_cache.json"
-    old_fetched_at = (datetime.now(UTC) - timedelta(seconds=31)).isoformat()
+    old_fetched_at = (datetime.now(UTC) - timedelta(seconds=65)).isoformat()
     _write_blocking_cache(cache, fetched_at=old_fetched_at)
     _write_hook_config(
         tmp_path,
@@ -133,9 +133,10 @@ def test_stale_cache_fails_open_with_hook_config_max_age(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     _clear_env(monkeypatch)
 
-    out, _ = _run_hook(event={"tool_name": "run_skill"})
+    out, exit_code = _run_hook(event={"tool_name": "run_skill"})
 
     assert out == ""  # no deny JSON → approve (fail-open on stale cache)
+    assert exit_code == 0
 
 
 # T-BRIDGE-4
@@ -155,9 +156,10 @@ def test_disabled_true_unconditionally_approves(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     _clear_env(monkeypatch)
 
-    out, _ = _run_hook(event={"tool_name": "run_skill"})
+    out, exit_code = _run_hook(event={"tool_name": "run_skill"})
 
     assert out == ""  # guard bypassed entirely — no cache logic runs
+    assert exit_code == 0
 
 
 # T-BRIDGE-5

@@ -224,9 +224,9 @@ tasks:
         echo "Done: $(python --version 2>/dev/null || .venv/bin/python --version)"
 
   install-dev:
-    desc: Install dev version of autoskillit from the integration branch
+    desc: Install dev version of autoskillit from the develop branch
     cmds:
-      - uv tool install --force "autoskillit[dev] @ git+https://github.com/TalonT-Org/AutoSkillit.git@integration"
+      - uv tool install --force "autoskillit[dev] @ git+https://github.com/TalonT-Org/AutoSkillit.git@develop"
       - "$(uv tool dir)/autoskillit/bin/autoskillit install"
 
   vendor-mermaid:

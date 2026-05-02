@@ -113,16 +113,19 @@ implemented. Identify review debt before it compounds.
      nodes { author { login } body state submittedAt }
    }
    reviewThreads(first: 100) {
-     pageInfo { hasNextPage }
+     pageInfo { hasNextPage endCursor }
      nodes {
        isResolved
-       comments(first: 20) {
+       comments(first: 100) {
          nodes { databaseId author { login } body path line createdAt }
        }
      }
    }
    ```
    Include `rateLimit { cost remaining resetAt }` at query root.
+   After the initial fetch, for each PR where `reviewThreads.pageInfo.hasNextPage` is
+   `true`, issue additional aliased queries with `reviewThreads(first:100, after:$endCursor)`
+   until `hasNextPage` is `false`. Merge the `nodes` arrays across pages before filtering.
 
 4. For each PR in the batch response:
    - Filter out threads whose `comments` list contains any comment with `body`

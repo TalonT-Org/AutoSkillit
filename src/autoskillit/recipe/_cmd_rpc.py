@@ -149,6 +149,9 @@ def wait_for_direct_merge(
             capture_output=True,
             text=True,
         )
+        if result.returncode != 0:
+            time.sleep(int(poll_interval))
+            continue
         state = result.stdout.strip()
         if state == "MERGED":
             return {"state": "merged"}
@@ -218,7 +221,8 @@ def wait_for_review_pr_mergeability(
         text=True,
     )
     if result.returncode != 0:
-        return {"ok": "false", "error": f"failed to resolve PR number: {result.stderr}"}
+        msg = f"failed to resolve PR number: {result.stderr}"
+        raise RuntimeError(msg)
     pr_number = result.stdout.strip()
     for _ in range(int(max_polls)):
         r = subprocess.run(
@@ -226,11 +230,14 @@ def wait_for_review_pr_mergeability(
             capture_output=True,
             text=True,
         )
+        if r.returncode != 0:
+            continue
         status = r.stdout.strip()
         if status != "UNKNOWN":
             return {"pr_number": pr_number}
         time.sleep(int(poll_interval))
-    return {"ok": "false", "error": "Timed out waiting for mergeability"}
+    msg = "Timed out waiting for mergeability"
+    raise RuntimeError(msg)
 
 
 def create_persistent_integration(
@@ -285,18 +292,22 @@ def force_push_and_wait_mergeability(
         text=True,
     )
     if push.returncode != 0:
-        return {"ok": "false", "error": push.stderr}
+        msg = f"force-push failed: {push.stderr}"
+        raise RuntimeError(msg)
     for _ in range(int(max_polls)):
         r = subprocess.run(
             ["gh", "pr", "view", review_pr_number, "--json", "mergeable", "-q", ".mergeable"],
             capture_output=True,
             text=True,
         )
+        if r.returncode != 0:
+            continue
         status = r.stdout.strip()
         if status != "UNKNOWN":
             return {"ok": "true"}
         time.sleep(int(poll_interval))
-    return {"ok": "false", "error": "Timed out waiting for post-rebase mergeability"}
+    msg = "Timed out waiting for post-rebase mergeability"
+    raise RuntimeError(msg)
 
 
 def advance_queue_pr(
@@ -328,13 +339,7 @@ def proactive_rebase_next_pr(
     base_branch: str,
 ) -> dict[str, str]:
     """Fetch, checkout, and rebase next PR branch. Callable via run_python."""
-    result = subprocess.run(
-        ["git", "remote"],
-        cwd=work_dir,
-        capture_output=True,
-        text=True,
-    )
-    remote = "upstream" if "upstream" in result.stdout.splitlines() else "origin"
+    remote = _detect_remote(work_dir)
     subprocess.run(
         ["git", "fetch", remote, next_pr_branch],
         cwd=work_dir,

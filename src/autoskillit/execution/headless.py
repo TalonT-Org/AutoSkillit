@@ -359,6 +359,7 @@ async def _execute_claude_headless(
                 recipe_content_hash=recipe_content_hash,
                 recipe_composite_hash=recipe_composite_hash,
                 recipe_version=recipe_version,
+                github_api_log=ctx.github_api_log,
             )
         except Exception:
             logger.debug("flush_session_log during crash failed", exc_info=True)
@@ -399,6 +400,7 @@ async def _execute_claude_headless(
                     recipe_content_hash=recipe_content_hash,
                     recipe_composite_hash=recipe_composite_hash,
                     recipe_version=recipe_version,
+                    github_api_log=ctx.github_api_log,
                 )
         except Exception:
             logger.debug("flush_session_log during cancel failed", exc_info=True)
@@ -501,6 +503,7 @@ async def _execute_claude_headless(
                 token_usage=skill_result.token_usage,
                 timing_seconds=timing_seconds,
                 audit_record=audit_record,
+                github_api_log=ctx.github_api_log,
                 write_path_warnings=skill_result.write_path_warnings,
                 write_call_count=skill_result.write_call_count,
                 clone_contamination_reverted=_clone_reverted,

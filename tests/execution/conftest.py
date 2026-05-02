@@ -131,6 +131,7 @@ def _flush(tmp_path: Path, **overrides) -> None:
         "exit_code": 0,
         "start_ts": "2026-03-03T12:00:00+00:00",
         "proc_snapshots": [_snap(), _snap(), _snap()],
+        "github_api_log": None,
     }
     defaults.update(overrides)
     flush_session_log(**defaults)

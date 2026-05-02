@@ -302,7 +302,7 @@ def flush_session_log(
     # Compute GitHub API usage and write github_api_usage.json
     github_api_requests = 0
     if github_api_log is not None:
-        usage = github_api_log.to_usage(session_id)
+        usage = github_api_log.drain(session_id)
         if usage is not None:
             atomic_write(
                 session_dir / "github_api_usage.json",

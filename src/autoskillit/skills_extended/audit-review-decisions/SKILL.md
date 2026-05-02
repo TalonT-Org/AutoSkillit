@@ -188,3 +188,126 @@ implemented. Identify review debt before it compounds.
      `MEDIUM` = severity=warning; `LOW` = severity=info or unknown.
 
 3. Collect and parse validated findings from all agent responses.
+
+---
+
+### Phase 4: Report Generation
+
+1. Collect all validated findings from Phase 3 subagent responses.
+2. Sort findings: VALID first (by priority HIGH→MEDIUM→LOW), then RESOLVED, then STALE.
+3. Resolve the output path:
+   - Use `$2` if provided.
+   - Otherwise: `${AUTOSKILLIT_TEMP}/audit-review-decisions/review_decisions_audit_$(date +%Y-%m-%d_%H%M%S).md`
+4. Create parent directory: `mkdir -p "$(dirname "${OUTPUT_PATH}")"`
+5. Write the markdown report to `${OUTPUT_PATH}`. Structure:
+
+---
+
+# PR Review Decisions Audit — {PERIOD_DAYS}d window
+
+**Generated:** {ISO timestamp}
+**Scan window:** {SCAN_SINCE} to {now}
+**PRs scanned:** {N} | **Threads examined:** {M} | **Threads skipped (already audited):** {K}
+
+## Summary
+
+| Classification | Count |
+|---|---|
+| VALID (ticket-worthy) | {N} |
+| RESOLVED (already fixed) | {N} |
+| STALE (no longer applicable) | {N} |
+
+## Priority Triage
+
+### HIGH Priority
+
+For each HIGH VALID finding, write a section:
+
+```
+### {suggested_title}
+
+**PR:** #{number} | **File:** {path}:{line} | **Severity:** {severity} | **Dimension:** {dimension}
+
+> {reviewer_quote}
+
+**Current relevance:** VALID — {impact}
+
+**Suggested issue title:** {suggested_title}
+**Affected files:** {path}
+```
+
+### MEDIUM Priority
+{Same structure}
+
+### LOW Priority
+{Same structure}
+
+## RESOLVED Findings
+
+{List: PR, file, one-line description of what was fixed}
+
+## STALE Findings
+
+{List: PR, file, one-line description of why no longer applicable}
+
+## Open PR Findings
+
+{Findings from PRs that were open (not merged) at scan time — may still be addressed.
+Same per-finding structure but labeled as pending.}
+
+## Pattern Analysis
+
+**Most common deferral phrases (by frequency):**
+{Table: phrase | count | % of all candidates}
+
+**Dimensions with highest VALID rate:**
+{Table: dimension | valid | resolved | stale | valid_rate}
+
+**Systemic escape hatches detected:**
+{Narrative: which phrases act as systematic blockers to tracking, with counts}
+
+**Recommendations:**
+{2–4 concrete process recommendations based on the pattern data}
+
+---
+6. After writing the file, print a terminal summary:
+   ```
+   audit-review-decisions complete
+   Output: {OUTPUT_PATH}
+   VALID: {N} | RESOLVED: {N} | STALE: {N}
+   Top finding: {first HIGH priority suggested_title, or "none"}
+   ```
+
+---
+
+### Phase 5: Watermark (Thread Annotation)
+
+For every finding processed in Phases 2–3 (all classifications — VALID, RESOLVED, STALE):
+
+1. **Re-check for existing audit marker**: using the raw JSON data saved in Phase 1,
+   check if any comment in the thread already starts with `[AUDIT]`. If yes: skip this
+   thread (idempotent — no duplicate post).
+
+2. **Determine marker body** based on classification and ticket status:
+
+   | Classification | Ticket created? | Marker body |
+   |---|---|---|
+   | VALID | Yes | `[AUDIT] — tracked in #{issue_number}` |
+   | VALID | No | `[AUDIT] — acknowledged, no action taken` |
+   | RESOLVED | — | `[AUDIT] — verified resolved in current codebase` |
+   | STALE | — | `[AUDIT] — no longer applicable` |
+
+3. **Post reply comment**:
+   ```bash
+   gh api "repos/${OWNER}/${REPO}/pulls/${PR_NUMBER}/comments/${COMMENT_ID}/replies" \
+     --method POST \
+     --field body="${MARKER_BODY}"
+   sleep 1
+   ```
+   `COMMENT_ID` is the `databaseId` of the first comment in the thread (from Phase 1 JSON).
+
+4. **Thread reply constraint**: These calls cannot be batched via the reviews API — each
+   requires an individual POST. The 1s delay between calls is mandatory per GitHub API
+   discipline (GitHub API discipline rules require `sleep 1` between consecutive POST/PATCH/PUT/DELETE calls).
+
+5. Log progress per finding: `[AUDIT] Posted marker on PR #{number} thread {comment_id}: {marker_body}`

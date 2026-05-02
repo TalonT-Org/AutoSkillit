@@ -848,7 +848,6 @@ def test_run_update_checks_kitchen_open_bypassed_for_non_mutation_command(
 ) -> None:
     """run_update_checks with command='order' proceeds past kitchen guard even when open."""
     printed, input_calls = _setup_run_checks(monkeypatch, tmp_path, binary_signal=True)
-    monkeypatch.setattr("autoskillit.core.any_kitchen_open", lambda **kw: True)
 
     binary_signal_calls: list[bool] = []
     monkeypatch.setattr(

@@ -1919,7 +1919,7 @@ skills:
       - name: refined_wps_path
         type: file_path
         required: true
-      - name: output_dir
+      - name: planner_dir
         type: directory_path
         required: true
     outputs:

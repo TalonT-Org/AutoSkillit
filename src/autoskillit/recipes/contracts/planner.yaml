@@ -168,7 +168,7 @@ skills:
       type: file_path
       required: true
       recommended: false
-    - name: output_dir
+    - name: planner_dir
       type: directory_path
       required: true
       recommended: false

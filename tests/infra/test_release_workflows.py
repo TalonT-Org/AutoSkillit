@@ -12,9 +12,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 VERSION_BUMP_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "version-bump.yml"
-PATCH_BUMP_DEVELOP_WORKFLOW = (
-    REPO_ROOT / ".github" / "workflows" / "patch-bump-develop.yml"
-)
+PATCH_BUMP_DEVELOP_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "patch-bump-develop.yml"
 RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "release.yml"
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -187,9 +185,7 @@ class TestVersionBumpWorkflow:
         wf = _load(VERSION_BUMP_WORKFLOW)
         job = next(iter(wf.get("jobs", {}).values()))
         int_commit_step = _find_develop_commit_step(job)
-        assert int_commit_step is not None, (
-            "Workflow must have a develop version commit/push step"
-        )
+        assert int_commit_step is not None, "Workflow must have a develop version commit/push step"
         run_script = int_commit_step.get("run", "")
         assert "push --force" not in run_script
         assert "push -f " not in run_script
@@ -340,9 +336,7 @@ class TestPatchBumpDevelopWorkflow:
 
     def test_push_is_not_force_push(self):
         text = PATCH_BUMP_DEVELOP_WORKFLOW.read_text()
-        assert "--force" not in text, (
-            "patch-bump-develop.yml must not force-push to develop"
-        )
+        assert "--force" not in text, "patch-bump-develop.yml must not force-push to develop"
 
     def test_has_concurrency_group(self):
         """Workflow must declare a concurrency group to serialize merge-queue batches."""

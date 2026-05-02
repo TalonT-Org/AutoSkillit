@@ -829,3 +829,23 @@ def test_callable_contract_nullable_field() -> None:
     pr_parsed = next((i for i in parsed.inputs if i.name == "current_pr_number"), None)
     assert pr_parsed is not None
     assert pr_parsed.nullable is False
+
+
+# ---------------------------------------------------------------------------
+# tool_output_contracts
+# ---------------------------------------------------------------------------
+
+
+def test_tool_output_contracts_section_exists() -> None:
+    """skill_contracts.yaml must have a tool_output_contracts section."""
+    manifest = load_bundled_manifest()
+    tool_contracts = manifest.get("tool_output_contracts", {})
+    assert "wait_for_ci" in tool_contracts
+    assert "allowed_values" in tool_contracts["wait_for_ci"]["fields"]["conclusion"]
+
+
+def test_wait_for_ci_conclusion_allowed_values() -> None:
+    manifest = load_bundled_manifest()
+    conclusion = manifest["tool_output_contracts"]["wait_for_ci"]["fields"]["conclusion"]
+    values = set(conclusion["allowed_values"])
+    assert {"success", "failure", "cancelled", "timed_out", "no_runs", "error"}.issubset(values)

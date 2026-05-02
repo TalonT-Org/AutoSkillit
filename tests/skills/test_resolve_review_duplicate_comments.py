@@ -1,7 +1,6 @@
 import re
 from pathlib import Path
 
-
 RESOLVE_SKILL_MD = (
     Path(__file__).parent.parent.parent
     / "src"
@@ -57,17 +56,23 @@ def _extract_reply_block(text: str, verdict: str) -> str:
 
 def test_accept_reply_has_marker() -> None:
     accept_block = _extract_reply_block(RESOLVE_SKILL_MD, "ACCEPT")
-    assert MARKER_RE.search(accept_block), "ACCEPT reply template missing autoskillit:resolved marker"
+    assert MARKER_RE.search(accept_block), (
+        "ACCEPT reply template missing autoskillit:resolved marker"
+    )
 
 
 def test_reject_reply_has_marker() -> None:
     reject_block = _extract_reply_block(RESOLVE_SKILL_MD, "REJECT")
-    assert MARKER_RE.search(reject_block), "REJECT reply template missing autoskillit:resolved marker"
+    assert MARKER_RE.search(reject_block), (
+        "REJECT reply template missing autoskillit:resolved marker"
+    )
 
 
 def test_discuss_reply_has_marker() -> None:
     discuss_block = _extract_reply_block(RESOLVE_SKILL_MD, "DISCUSS")
-    assert MARKER_RE.search(discuss_block), "DISCUSS reply template missing autoskillit:resolved marker"
+    assert MARKER_RE.search(discuss_block), (
+        "DISCUSS reply template missing autoskillit:resolved marker"
+    )
 
 
 def test_info_reply_has_marker() -> None:
@@ -99,24 +104,32 @@ def test_step3_skips_already_replied_ids() -> None:
 
 
 def test_step15_graphql_fetches_five_comments() -> None:
-    step15_section = _extract_section(REVIEW_PR_SKILL_MD, "Step 1.5: Fetch Prior Review Thread Context")
+    step15_section = _extract_section(
+        REVIEW_PR_SKILL_MD, "Step 1.5: Fetch Prior Review Thread Context"
+    )
     assert "comments(first:5)" in step15_section, "Step 1.5 GraphQL must use comments(first:5)"
 
 
 def test_step15_graphql_includes_body_field() -> None:
-    step15_section = _extract_section(REVIEW_PR_SKILL_MD, "Step 1.5: Fetch Prior Review Thread Context")
+    step15_section = _extract_section(
+        REVIEW_PR_SKILL_MD, "Step 1.5: Fetch Prior Review Thread Context"
+    )
     graphql_block = _extract_graphql_block(step15_section)
     assert "body" in graphql_block
 
 
 def test_step15_graphql_includes_database_id() -> None:
-    step15_section = _extract_section(REVIEW_PR_SKILL_MD, "Step 1.5: Fetch Prior Review Thread Context")
+    step15_section = _extract_section(
+        REVIEW_PR_SKILL_MD, "Step 1.5: Fetch Prior Review Thread Context"
+    )
     graphql_block = _extract_graphql_block(step15_section)
     assert "databaseId" in graphql_block
 
 
 def test_step15_marker_bearing_threads_are_resolved() -> None:
-    step15_section = _extract_section(REVIEW_PR_SKILL_MD, "Step 1.5: Fetch Prior Review Thread Context")
+    step15_section = _extract_section(
+        REVIEW_PR_SKILL_MD, "Step 1.5: Fetch Prior Review Thread Context"
+    )
     assert "autoskillit:resolved" in step15_section
     assert "prior_resolved_findings" in step15_section
     assert "has_marker_reply" in step15_section or "marker" in step15_section.lower()

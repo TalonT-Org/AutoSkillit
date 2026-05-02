@@ -137,5 +137,16 @@ class DefaultGitHubApiLog:
             "last_request_ts": max(timestamps) if timestamps else None,
         }
 
+    def drain(self, session_id: str) -> dict[str, Any] | None:
+        """Snapshot current entries as a usage dict and clear the accumulator.
+
+        List replacement (not .clear()) is used so a concurrent record_* call that
+        appended to the old list after drain() snapshotted it will appear in the
+        next session's drain rather than being silently dropped.
+        """
+        usage = self.to_usage(session_id)
+        self._entries = []
+        return usage
+
     def clear(self) -> None:
         self._entries = []

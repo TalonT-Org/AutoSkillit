@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import dataclasses
 import os
-import subprocess
 import time
 import traceback
 from collections.abc import Callable, Mapping, Sequence
@@ -38,6 +37,10 @@ from autoskillit.core import (
     is_git_worktree,
     temp_dir_display_str,
 )
+from autoskillit.execution._headless_git import (
+    _capture_git_head_sha,
+    _compute_loc_changed,
+)
 from autoskillit.execution._headless_path_tokens import (  # noqa: F401
     _INTENTIONALLY_EXCLUDED_PATH_TOKENS,
     _OUTPUT_PATH_PATTERN,
@@ -61,6 +64,8 @@ from autoskillit.execution._headless_recovery import (
 )
 from autoskillit.execution._headless_result import (
     _apply_budget_guard,  # noqa: F401
+    _build_error_path_telemetry,
+    _build_session_telemetry,
     _build_skill_result,
     _capture_failure,  # noqa: F401
     _resolve_skill_session_id,  # noqa: F401
@@ -152,60 +157,6 @@ def _resolve_skill_temp_dir(cwd: str, skill_command: str) -> Path | None:
     return Path(cwd) / ".autoskillit" / "temp" / name
 
 
-def _capture_git_head_sha(cwd: str) -> str:
-    """Return current HEAD SHA in cwd. Returns '' on any error (non-git dirs)."""
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        return result.stdout.strip() if result.returncode == 0 else ""
-    except Exception:
-        logger.debug("capture_git_head_sha_failed", cwd=cwd, exc_info=True)
-        return ""
-
-
-def _parse_numstat(numstat_output: str) -> tuple[int, int]:
-    """Parse `git diff --numstat` output into (insertions, deletions).
-
-    Binary file lines (-\\t-\\tfilename) are skipped.
-    """
-    insertions = deletions = 0
-    for line in numstat_output.splitlines():
-        parts = line.split("\t", 2)
-        if len(parts) < 2:
-            continue
-        try:
-            insertions += int(parts[0])
-            deletions += int(parts[1])
-        except ValueError:
-            continue  # binary file row: "-\t-\tfilename"
-    return insertions, deletions
-
-
-def _compute_loc_changed(cwd: str, pre_sha: str) -> tuple[int, int]:
-    """Run git diff --numstat <pre_sha> in cwd. Returns (0, 0) on any error."""
-    if not pre_sha:
-        return 0, 0
-    try:
-        result = subprocess.run(
-            ["git", "diff", "--numstat", pre_sha],
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            timeout=15,
-        )
-        if result.returncode != 0:
-            return 0, 0
-        return _parse_numstat(result.stdout)
-    except Exception:
-        logger.debug("compute_loc_changed_failed", cwd=cwd, pre_sha=pre_sha, exc_info=True)
-        return 0, 0
-
-
 @dataclasses.dataclass(frozen=True)
 class PostSessionMetrics:
     loc_insertions: int
@@ -225,6 +176,7 @@ def _compute_post_session_metrics(
         loc_deletions=loc_del,
         effective_cwd=effective_cwd,
     )
+
 
 
 async def _execute_claude_headless(
@@ -359,6 +311,7 @@ async def _execute_claude_headless(
                 recipe_content_hash=recipe_content_hash,
                 recipe_composite_hash=recipe_composite_hash,
                 recipe_version=recipe_version,
+                telemetry=_build_error_path_telemetry(ctx.github_api_log),
             )
         except Exception:
             logger.debug("flush_session_log during crash failed", exc_info=True)
@@ -399,6 +352,7 @@ async def _execute_claude_headless(
                     recipe_content_hash=recipe_content_hash,
                     recipe_composite_hash=recipe_composite_hash,
                     recipe_version=recipe_version,
+                    telemetry=_build_error_path_telemetry(ctx.github_api_log),
                 )
         except Exception:
             logger.debug("flush_session_log during cancel failed", exc_info=True)
@@ -498,9 +452,14 @@ async def _execute_claude_headless(
                 snapshot_interval_seconds=ctx.config.linux_tracing.proc_interval,
                 proc_snapshots=result.proc_snapshots,
                 step_name=step_name,
-                token_usage=skill_result.token_usage,
-                timing_seconds=timing_seconds,
-                audit_record=audit_record,
+                telemetry=_build_session_telemetry(
+                    skill_result=skill_result,
+                    timing_seconds=timing_seconds,
+                    audit_record=audit_record,
+                    github_api_log=ctx.github_api_log,
+                    loc_insertions=_metrics.loc_insertions,
+                    loc_deletions=_metrics.loc_deletions,
+                ),
                 write_path_warnings=skill_result.write_path_warnings,
                 write_call_count=skill_result.write_call_count,
                 clone_contamination_reverted=_clone_reverted,
@@ -517,8 +476,6 @@ async def _execute_claude_headless(
                 recipe_content_hash=recipe_content_hash,
                 recipe_composite_hash=recipe_composite_hash,
                 recipe_version=recipe_version,
-                loc_insertions=_metrics.loc_insertions,
-                loc_deletions=_metrics.loc_deletions,
             )
         except Exception:
             logger.debug("session_log_flush_failed", exc_info=True)

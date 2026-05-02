@@ -149,6 +149,7 @@ class TestInitializeClearMarker:
     def test_initialize_uses_clear_marker_as_since_bound(self, tool_ctx, tmp_path, monkeypatch):
         from datetime import UTC, datetime, timedelta
 
+        from autoskillit.core._type_results import SessionTelemetry
         from autoskillit.execution.session_log import (
             flush_session_log,
         )
@@ -171,13 +172,20 @@ class TestInitializeClearMarker:
             start_ts=five_hours_ago.isoformat(),
             proc_snapshots=None,
             step_name="old-step",
-            token_usage={
-                "input_tokens": 1000,
-                "output_tokens": 500,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-            },
-            timing_seconds=10.0,
+            telemetry=SessionTelemetry(
+                token_usage={
+                    "input_tokens": 1000,
+                    "output_tokens": 500,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                },
+                timing_seconds=10.0,
+                audit_record=None,
+                github_api_usage=None,
+                github_api_requests=0,
+                loc_insertions=0,
+                loc_deletions=0,
+            ),
         )
 
         # Write a clear marker 3 hours ago (after the session completed)

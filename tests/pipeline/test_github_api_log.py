@@ -222,3 +222,28 @@ async def test_session_id_in_usage():
     )
     usage = log.to_usage("my-session-123")
     assert usage["session_id"] == "my-session-123"
+
+
+async def test_drain_returns_usage_and_clears():
+    log = DefaultGitHubApiLog()
+    await log.record_httpx(
+        method="GET",
+        path="/repos/o/r/issues/1",
+        status_code=200,
+        latency_ms=10.0,
+        rate_limit_remaining=4999,
+        rate_limit_used=1,
+        rate_limit_reset=0,
+        timestamp="2026-04-27T10:00:00Z",
+    )
+
+    usage = log.drain("sess-drain")
+
+    assert usage is not None
+    assert usage["total_requests"] == 1
+    assert usage["session_id"] == "sess-drain"
+
+    # After drain the accumulator is empty — to_usage and drain both return None
+    assert len(log._entries) == 0
+    assert log.to_usage("sess-drain") is None
+    assert log.drain("sess-drain") is None

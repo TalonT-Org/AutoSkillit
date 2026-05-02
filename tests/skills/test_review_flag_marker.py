@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import re
 
-REVIEW_FLAG_RE = re.compile(
-    r"<!--\s*REVIEW-FLAG:\s*severity=(\w+)\s+dimension=(\w+)\s*-->"
-)
+REVIEW_FLAG_RE = re.compile(r"<!--\s*REVIEW-FLAG:\s*severity=(\w+)\s+dimension=(\w+)\s*-->")
 
 
 def test_review_flag_re_matches_discuss_comment():

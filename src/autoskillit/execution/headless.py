@@ -164,6 +164,7 @@ def _capture_git_head_sha(cwd: str) -> str:
         )
         return result.stdout.strip() if result.returncode == 0 else ""
     except Exception:
+        logger.debug("capture_git_head_sha_failed", cwd=cwd, exc_info=True)
         return ""
 
 
@@ -201,6 +202,7 @@ def _compute_loc_changed(cwd: str, pre_sha: str) -> tuple[int, int]:
             return 0, 0
         return _parse_numstat(result.stdout)
     except Exception:
+        logger.debug("compute_loc_changed_failed", cwd=cwd, pre_sha=pre_sha, exc_info=True)
         return 0, 0
 
 

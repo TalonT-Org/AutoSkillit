@@ -27,15 +27,13 @@ def _patch_uuid4(monkeypatch):
 
 
 class TestCheckDryWalkthrough:
-    """Dry-walkthrough gate blocks both /autoskillit:implement-worktree variants."""
+    """Dry-walkthrough gate blocks both /implement-worktree variants."""
 
     def test_dry_walkthrough_gate_blocks_implement_no_merge(self, tool_ctx, tmp_path):
-        """Gate blocks /autoskillit:implement-worktree-no-merge when plan lacks marker."""
+        """Gate blocks /implement-worktree-no-merge when plan lacks marker."""
         plan = tmp_path / "plan.md"
         plan.write_text("# My Plan\n\nSome content")
-        result = _check_dry_walkthrough(
-            f"/autoskillit:implement-worktree-no-merge {plan}", str(tmp_path)
-        )
+        result = _check_dry_walkthrough(f"/implement-worktree-no-merge {plan}", str(tmp_path))
         assert result is not None
         parsed = json.loads(result)
         assert parsed["success"] is False
@@ -43,19 +41,17 @@ class TestCheckDryWalkthrough:
         assert "dry-walked" in parsed["result"].lower()
 
     def test_dry_walkthrough_gate_passes_implement_no_merge(self, tool_ctx, tmp_path):
-        """Gate allows /autoskillit:implement-worktree-no-merge when plan has marker."""
+        """Gate allows /implement-worktree-no-merge when plan has marker."""
         plan = tmp_path / "plan.md"
         plan.write_text("Dry-walkthrough verified = TRUE\n# My Plan")
-        result = _check_dry_walkthrough(
-            f"/autoskillit:implement-worktree-no-merge {plan}", str(tmp_path)
-        )
+        result = _check_dry_walkthrough(f"/implement-worktree-no-merge {plan}", str(tmp_path))
         assert result is None
 
     def test_dry_walkthrough_gate_still_works_for_implement_worktree(self, tool_ctx, tmp_path):
-        """Original /autoskillit:implement-worktree gating is not broken."""
+        """Original /implement-worktree gating is not broken."""
         plan = tmp_path / "plan.md"
         plan.write_text("# No marker plan")
-        result = _check_dry_walkthrough(f"/autoskillit:implement-worktree {plan}", str(tmp_path))
+        result = _check_dry_walkthrough(f"/implement-worktree {plan}", str(tmp_path))
         assert result is not None
         parsed = json.loads(result)
         assert parsed["success"] is False
@@ -70,18 +66,14 @@ class TestCheckDryWalkthrough:
         """Gate accepts _part_a.md file when marker is present."""
         plan = tmp_path / "task_plan_2026-01-01_part_a.md"
         plan.write_text("Dry-walkthrough verified = TRUE\n\nContent here")
-        result = _check_dry_walkthrough(
-            f"/autoskillit:implement-worktree-no-merge {plan}", str(tmp_path)
-        )
+        result = _check_dry_walkthrough(f"/implement-worktree-no-merge {plan}", str(tmp_path))
         assert result is None
 
     def test_dry_walkthrough_gate_with_part_b_named_file_unmarked(self, tmp_path, tool_ctx):
         """Gate blocks _part_b.md file when marker is absent."""
         plan = tmp_path / "task_plan_2026-01-01_part_b.md"
         plan.write_text("> **PART B ONLY.**\n\nNo walkthrough marker here")
-        result = _check_dry_walkthrough(
-            f"/autoskillit:implement-worktree-no-merge {plan}", str(tmp_path)
-        )
+        result = _check_dry_walkthrough(f"/implement-worktree-no-merge {plan}", str(tmp_path))
         assert result is not None
         parsed = json.loads(result)
         assert parsed["subtype"] == "gate_error"
@@ -93,12 +85,8 @@ class TestCheckDryWalkthrough:
         part_a.write_text("Dry-walkthrough verified = TRUE\n\nPart A content")
         part_b.write_text("> **PART B ONLY.**\n\nPart B content — no marker")
 
-        result_a = _check_dry_walkthrough(
-            f"/autoskillit:implement-worktree-no-merge {part_a}", str(tmp_path)
-        )
-        result_b = _check_dry_walkthrough(
-            f"/autoskillit:implement-worktree-no-merge {part_b}", str(tmp_path)
-        )
+        result_a = _check_dry_walkthrough(f"/implement-worktree-no-merge {part_a}", str(tmp_path))
+        result_b = _check_dry_walkthrough(f"/implement-worktree-no-merge {part_b}", str(tmp_path))
         assert result_a is None
         assert result_b is not None
         assert json.loads(result_b)["subtype"] == "gate_error"
@@ -107,21 +95,21 @@ class TestCheckDryWalkthrough:
         """Trailing markdown headers must not corrupt the plan path."""
         plan = tmp_path / "plan.md"
         plan.write_text(_get_config().implement_gate.marker + "\n\nrest")
-        cmd = f"/autoskillit:implement-worktree-no-merge {plan}\n\n## Base Branch\nimpl-926"
+        cmd = f"/implement-worktree-no-merge {plan}\n\n## Base Branch\nimpl-926"
         assert _check_dry_walkthrough(cmd, str(tmp_path)) is None
 
     def test_gate_with_extra_token_after_path(self, tmp_path, tool_ctx):
         """Space-separated token after path must not corrupt the plan path."""
         plan = tmp_path / "plan.md"
         plan.write_text(_get_config().implement_gate.marker + "\n\nrest")
-        cmd = f"/autoskillit:implement-worktree-no-merge {plan} impl-926"
+        cmd = f"/implement-worktree-no-merge {plan} impl-926"
         assert _check_dry_walkthrough(cmd, str(tmp_path)) is None
 
     def test_gate_multiline_no_marker_reports_dry_walk_error(self, tmp_path, tool_ctx):
         """With trailing headers and plan missing marker: dry-walk error, not file-not-found."""
         plan = tmp_path / "plan.md"
         plan.write_text("# Plan title\n\nNo marker here")
-        cmd = f"/autoskillit:implement-worktree-no-merge {plan}\n\n## Base Branch\nimpl-926"
+        cmd = f"/implement-worktree-no-merge {plan}\n\n## Base Branch\nimpl-926"
         result = _check_dry_walkthrough(cmd, str(tmp_path))
         assert result is not None
         data = json.loads(result)
@@ -259,9 +247,7 @@ class TestDryWalkthroughGateWithPrefix:
     async def test_gate_still_fires_for_implement_skill(self, tool_ctx, tmp_path):
         plan = tmp_path / "plan.md"
         plan.write_text("# No marker plan")
-        result = json.loads(
-            await run_skill(f"/autoskillit:implement-worktree {plan}", str(tmp_path))
-        )
+        result = json.loads(await run_skill(f"/implement-worktree {plan}", str(tmp_path)))
         assert result["success"] is False
         assert result["is_error"] is True
         assert "dry-walked" in result["result"].lower()

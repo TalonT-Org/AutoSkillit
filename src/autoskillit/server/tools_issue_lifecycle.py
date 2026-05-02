@@ -98,8 +98,8 @@ def _build_prepare_skill_command(
     dry_run: bool,
     split: bool,
 ) -> str:
-    """Assemble the skill_command string for /autoskillit:prepare-issue."""
-    parts = [f"/autoskillit:prepare-issue\n\nTitle: {title}\n\nBody:\n{body}"]
+    """Assemble the skill_command string for /prepare-issue."""
+    parts = [f"/prepare-issue\n\nTitle: {title}\n\nBody:\n{body}"]
     if repo:
         parts.append(f"--repo {repo}")
     if labels:
@@ -129,8 +129,8 @@ def _build_enrich_skill_command(
     dry_run: bool,
     repo: str | None,
 ) -> str:
-    """Assemble the skill_command string for /autoskillit:enrich-issues."""
-    parts = ["/autoskillit:enrich-issues"]
+    """Assemble the skill_command string for /enrich-issues."""
+    parts = ["/enrich-issues"]
     if issue_number is not None:
         parts.append(f"--issue {issue_number}")
     if batch is not None:
@@ -171,7 +171,7 @@ async def prepare_issue(
 ) -> str:
     """Create a GitHub issue and immediately triage it with LLM classification.
 
-    Launches /autoskillit:prepare-issue in a headless session to perform the
+    Launches /prepare-issue in a headless session to perform the
     full triage workflow: dedup check, create or adopt the issue, LLM
     classification (bug vs enhancement, implementation vs remediation route),
     mixed-concern detection, and label application.
@@ -276,7 +276,7 @@ async def enrich_issues(
 ) -> str:
     """Backfill structured requirements on existing recipe:implementation issues.
 
-    Launches /autoskillit:enrich-issues in a headless session to scan candidate
+    Launches /enrich-issues in a headless session to scan candidate
     issues, filter out already-enriched ones, perform codebase-grounded analysis,
     and append a Requirements section in REQ-{GRP}-NNN format via gh issue edit.
 

@@ -320,7 +320,7 @@ safety:
 #
 # implement_gate:
 #   marker: "Dry-walkthrough verified = TRUE"
-#   skill_names: ["/autoskillit:implement-worktree", "/autoskillit:implement-worktree-no-merge"]
+#   skill_names: ["/implement-worktree", "/implement-worktree-no-merge"]
 #
 # run_skill:
 #   timeout: 7200

@@ -54,7 +54,7 @@ def main() -> None:
                     "hookSpecificOutput": {
                         "hookEventName": "PreToolUse",
                         "message": (
-                            f"Consider using /autoskillit:{skill_name} for this file. "
+                            f"Consider using /{skill_name} for this file. "
                             f"It provides schema validation, worked examples, and "
                             f"prevents common recipe errors."
                         ),

@@ -172,9 +172,7 @@ class TestSkillCmdCheckDeny:
         result = _run_hook({"skill_command": _CANONICAL_BUG})
         reason = result["hookSpecificOutput"]["permissionDecisionReason"]
         # Should show the extracted path in the corrected format
-        assert (
-            "/autoskillit:implement-worktree-no-merge .autoskillit/temp/rectify/plan.md" in reason
-        )
+        assert "/implement-worktree-no-merge .autoskillit/temp/rectify/plan.md" in reason
 
     def test_extra_words_before_absolute_path(self):
         result = _run_hook({"skill_command": _WORKTREE_ABSOLUTE})

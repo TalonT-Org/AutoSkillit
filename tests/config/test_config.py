@@ -21,8 +21,8 @@ class TestDefaultConfig:
         assert cfg.reset_workspace.preserve_dirs == set()
         assert cfg.implement_gate.marker == "Dry-walkthrough verified = TRUE"
         assert cfg.implement_gate.skill_names == {
-            "/autoskillit:implement-worktree",
-            "/autoskillit:implement-worktree-no-merge",
+            "/implement-worktree",
+            "/implement-worktree-no-merge",
         }
         assert cfg.safety.reset_guard_marker == ".autoskillit-workspace"
         assert cfg.safety.require_dry_walkthrough is True

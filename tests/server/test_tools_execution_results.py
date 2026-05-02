@@ -43,7 +43,7 @@ class TestGateErrorSchemaNormalization:
 
         plan = tmp_path / "plan.md"
         plan.write_text("No marker here")
-        skill_cmd = f"/autoskillit:implement-worktree {plan}"
+        skill_cmd = f"/implement-worktree {plan}"
         result = _check_dry_walkthrough(skill_cmd, str(tmp_path))
         assert result is not None
         response = json.loads(result)

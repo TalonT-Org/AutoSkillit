@@ -234,6 +234,108 @@ When dispatching from an execution map:
    Group N PRs have merged, dispatch Group N+1 immediately. NEVER use
    AskUserQuestion to ask whether to proceed to the next group.
 
+6. **Handle deferred issues before dispatching any group.**
+
+   After reading the execution map, check for `has_deferred: true`.
+
+   **If `has_deferred` is false** (no deferrals): proceed directly to Group 1 dispatch.
+
+   **If `has_deferred` is true:**
+
+   **6a. Pre-dispatch freshness check.** Before presenting any escalation question,
+   re-query the current label state of ALL unique blocker issue numbers across all
+   `deferred_issues` entries in a single batched GraphQL request using aliases:
+
+   ```graphql
+   query {
+     i887: repository(owner:"<OWNER>", name:"<REPO>") {
+       issue(number:887) { labels(first:20) { nodes { name } } }
+     }
+     i912: repository(owner:"<OWNER>", name:"<REPO>") {
+       issue(number:912) { labels(first:20) { nodes { name } } }
+     }
+   }
+   ```
+
+   For each blocker, check whether the `in-progress` label is still present. If a
+   blocker's label has been removed since the map was built, remove it from that deferred
+   issue's `blocked_by` list. If all blockers for a given deferred issue have cleared,
+   that issue is no longer deferred — collect it in an "auto-cleared" list for the
+   supplementary map (step 6e). **Never issue individual `gh issue view` calls per blocker
+   — always batch into a single GraphQL request.**
+
+   **6b. Present AskUserQuestion for each still-deferred issue.** For each deferred issue
+   where at least one blocker's `in-progress` label is still present, call
+   `AskUserQuestion`:
+
+   > "Issue #N (title) cannot be dispatched safely. It conflicts with in-progress
+   > issue(s): #M1 (title1), #M2 (title2).
+   > Conflict: {reasoning}
+   >
+   > Choose:
+   > 1. **Wait** — Hold #N; retry after the blocking issues complete
+   > 2. **Proceed anyway** — Dispatch #N now, accepting conflict risk
+   > 3. **Drop** — Remove #N from this session entirely"
+
+   **Headless-mode rule (MANDATORY):** When `AskUserQuestion` is denied by the hook
+   (the deny message says "proceed without user confirmation" — this refers to general
+   tool behavior, NOT this decision), treat the response as **Wait**. Do NOT interpret
+   the deny message as permission to proceed. This is the explicit safe default for
+   unattended sessions.
+
+   **6c. Route based on user answer (or Wait default):**
+
+   - **Wait**: Hold the issue. At each group-completion barrier (after all `run_skill`
+     calls in a group return — the natural inter-group barrier in both queue-mode and
+     classic-mode), re-check ALL outstanding Wait-path blockers via a single batched
+     GraphQL aliases query. When all blockers for a Wait issue have cleared, move it to
+     the auto-cleared list for step 6e. After the final group completes, if any Wait
+     issues remain uncleared, report them as skipped in the session result.
+
+   - **Proceed**: Add the issue to a **new sequential group** inserted at the end of the
+     dispatch sequence (after all other groups). This is transparent in both merge modes:
+     in queue-mode (#1268), the pipeline self-merges; in classic mode, `merge-prs` handles
+     it. Do not create one group per Proceed issue — batch all Proceed issues into the
+     single final group together.
+
+   - **Drop**: If the issue has already been claimed (its `in-progress` label is set by
+     this session), call `release_issue` to remove it. Then exclude the issue from all
+     dispatch, merge, and reporting. Do not mark it as failed — it is not a failure.
+
+   **6d. Zero-non-deferred-groups edge case.** When all target issues are deferred and no
+   dispatch groups exist (group_count is 0 after removing deferred issues), skip group
+   dispatch entirely. Enter an explicit poll loop:
+
+   1. Wait `github.deferred_poll_interval_seconds` (default: 60 seconds between checks).
+   2. Re-query ALL outstanding blocker labels via a single batched GraphQL aliases query.
+   3. If at least one deferred issue becomes unblocked (all its blockers cleared), proceed
+      to step 6e for those issues.
+   4. Repeat until the first unblocked issue is found OR the elapsed time exceeds
+      `github.deferred_poll_timeout_seconds` (default: 1800 seconds / 30 minutes).
+   5. On timeout: report all deferred issues as skipped. Set session result
+      `success: false` with `failure_reason: "All target issues deferred due to
+      in-progress conflicts — human decision required"`. Exit.
+
+   **If in headless mode and all issues default to Wait with zero dispatch groups:**
+   skip the poll loop and immediately set `success: false` with the above
+   `failure_reason`. Do not poll indefinitely in unattended sessions.
+
+   **6e. Supplementary map for auto-cleared and freshness-cleared issues.** When one or
+   more Wait/freshness-cleared issues become eligible:
+
+   1. Re-run `build-execution-map` for the newly eligible issues **only** — pass their
+      issue numbers as arguments. This is a full analysis (pairwise + cross-assessment),
+      not a passthrough. The supplementary map may itself produce new deferrals if
+      remaining in-progress issues conflict with the eligible set.
+   2. If the supplementary map returns `has_deferred=true`, apply steps 6b and 6c to
+      the newly deferred issues before dispatching the supplementary groups. In headless
+      mode, treat all new deferrals as Wait (same rule as 6b). Issues that remain deferred
+      after this re-entry are skipped and reported in the session result.
+   3. Dispatch the resulting dispatch groups as additional sequential group(s) appended
+      after the last completed group.
+   4. Apply the same group-boundary merge-wait rule before dispatching the supplementary
+      groups.
+
 ---
 
 ## STEP NAME IMMUTABILITY — MANDATORY

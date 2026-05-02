@@ -43,6 +43,8 @@ Space-separated issue numbers (required, minimum 2), plus optional flags:
 - Override the AI's parallelism judgment with mechanical rules
 - Assume issues conflict based solely on file-name overlap without reading the issue descriptions
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Treat a medium-severity cross-assessment as grounds for deferral — only critical severity defers
+- Emit has_deferred / deferred_count / dispatched_count with markdown decorators
 
 **ALWAYS:**
 - Use parallel subagents (up to 8) for issue fetching in Step 1
@@ -77,6 +79,26 @@ Launch up to 8 parallel `sonnet` subagents, one per issue. Each subagent:
 2. Returns raw issue data: `{"number": N, "title": "..."}` — no structured extraction of
    `affected_files` or `depends_on`. The issue body is read directly by the parent in Step 2.
 
+In the same parallel wave, launch **one additional task** to fetch the ambient in-progress
+context:
+
+```bash
+gh issue list --state open --label "{{github.in_progress_label}}" \
+  --json number,title,body,labels,updatedAt --limit 50
+```
+
+Use the config value `github.in_progress_label` (default: `"in-progress"`) as the label
+name. From the returned list:
+- **Exclude** any issue whose number appears in the current target set — those are being
+  handled by this session and are already represented in the pairwise assessment.
+- **Exclude** any issue whose labels contain the staged label (`github.staged_label`,
+  default: `"staged"`) — staged issues have already landed on the integration branch.
+- The remaining issues form the **in-progress context** set.
+
+If the `gh issue list` call fails (auth error, network failure), log the error and set the
+in-progress context to an empty list — do not abort the skill. An empty in-progress context
+is always safe: the skill behaves identically to today.
+
 Do not output any prose between subagent launches — immediately collect results when all
 subagents complete. **All subagents must succeed** before advancing to Step 2. If any
 subagent fails or returns no JSON block, abort the skill with the subagent's error message
@@ -110,6 +132,38 @@ Constraints:
   issue context, not parsed by regex
 - Cross-references in "Files NOT to Change", code blocks, or diagnostic sections are context,
   not dependency signals
+
+#### Step 2b — Cross-Assessment (in-progress context)
+
+When the in-progress context set is non-empty, perform a second assessment pass: for each
+(target issue, in-progress issue) pair, evaluate conflict potential.
+
+Apply a **higher tolerance threshold** than pairwise assessment — simple file-level overlap
+is not sufficient to flag. Target: semantic conflicts, undeclared dependencies, or
+architectural tensions where implementing the target issue against the pre-in-progress
+codebase will produce incorrect results or wasted effort. Factor `updatedAt` recency: issues
+with no activity in 30+ days carry lower conflict weight — their in-progress label may be
+stale.
+
+For each pair that requires assessment, produce:
+
+```json
+{
+  "target_issue": 1155,
+  "in_progress_issue": 887,
+  "conflict_severity": "low" | "medium" | "critical",
+  "conflict_type": "file_overlap" | "semantic_dependency" | "undeclared_dependency" | "architectural_tension",
+  "reasoning": "one-sentence explanation",
+  "recommendation": "proceed" | "defer" | "escalate"
+}
+```
+
+**Severity definitions:**
+- `low` — Minor file overlap. `resolve-merge-conflicts` will handle this. Recommendation: `proceed`. Only record in JSON; suppress from the report to reduce noise.
+- `medium` — Significant overlap or potential indirect dependency, resolvable. Recommendation: `proceed` with a warning annotation in the report.
+- `critical` — Semantic conflict, undeclared dependency, or architectural tension where implementing the target issue now will produce incorrect results or be discarded. Recommendation: `defer`.
+
+When the in-progress context is empty, omit Step 2b entirely — `cross_assessments` is `[]`.
 
 #### Review-Approach Benefit Assessment (conditional)
 
@@ -164,6 +218,23 @@ others merges last).
 The `merge_order` list is the flattened sequence of issue numbers across groups in dispatch
 order.
 
+#### Step 3b — Deferred Issue Routing
+
+After assembling dispatch groups, separate issues flagged as `critical` in Step 2b:
+
+1. For each target issue that has at least one `critical` cross-assessment, **remove it from
+   its dispatch group** and add it to the `deferred_issues` array.
+2. If removing a deferred issue leaves a group empty, remove that group and renumber.
+3. Compute:
+   - `deferred_count` = count of issues in `deferred_issues`
+   - `dispatched_count` = `total_issues` − `deferred_count`
+   - `has_deferred` = `true` if `deferred_count > 0`, else `false`
+4. Each `deferred_issues` entry includes `blocked_by` as an **array** — a target issue may
+   have critical conflicts with multiple in-progress issues.
+
+When no cross-assessments produce `critical` severity, this step is a no-op: `deferred_issues`
+is `[]`, `has_deferred` is `false`, `dispatched_count` equals `total_issues`.
+
 ### Step 3.5 — Apply Parallel Cap
 
 After groups are assembled in Step 3, enforce the `max_parallel` cap:
@@ -212,6 +283,9 @@ working directory):
    - Any warnings (single-issue shortcut, low-confidence overrides, etc.)
    - Review-approach recommendations table (issue | recommended | reasoning) — only when
      `--assess-review-approach` is active
+   - **"## Deferred Issues — Awaiting In-Progress Resolution"** section (only when
+     `has_deferred = true`) listing: deferred issue number and title, blocking in-progress
+     issue number(s) and title(s), conflict type and reasoning, recommendation
 
 Emit structured output tokens as the last lines of text output:
 ```
@@ -219,8 +293,14 @@ execution_map = {absolute_path_to_json}
 execution_map_report = {absolute_path_to_report}
 group_count = {int}
 total_issues = {int}
+dispatched_count = {int}
+deferred_count = {int}
+has_deferred = {true|false}
 review_approach_candidates = {comma-separated issue numbers}
 ```
+
+Emit `dispatched_count`, `deferred_count`, and `has_deferred` unconditionally (even when
+`has_deferred = false` and `deferred_count = 0`).
 
 The `review_approach_candidates` token is conditional: emit it only when
 `--assess-review-approach` is active AND at least one issue has
@@ -245,9 +325,12 @@ structured output tokens. If context is exhausted mid-execution:
 {
   "generated_at": "ISO-8601",
   "base_ref": "main",
-  "total_issues": 5,
+  "total_issues": 3,
+  "dispatched_count": 2,
+  "deferred_count": 1,
+  "has_deferred": true,
   "max_parallel": 6,
-  "group_count": 2,
+  "group_count": 1,
   "groups": [
     {
       "group": 1,
@@ -256,16 +339,12 @@ structured output tokens. If context is exhausted mid-execution:
         {"number": 1155, "title": "..."},
         {"number": 1156, "title": "..."}
       ]
-    },
-    {
-      "group": 2,
-      "parallel": false,
-      "issues": [
-        {"number": 1157, "title": "..."}
-      ]
     }
   ],
-  "merge_order": [1155, 1156, 1157],
+  "merge_order": [1155, 1156],
+  "in_progress_context": [
+    {"number": 887, "title": "franchise: per-recipe tool-surface test suite"}
+  ],
   "pairwise_assessments": [
     {
       "pair": [1155, 1156],
@@ -273,9 +352,32 @@ structured output tokens. If context is exhausted mid-execution:
       "confidence": "high",
       "reasoning": "#1156 modifies _build_l3_orchestrator_prompt() at lines 70-106. #1155 adds new function at end of file. Different symbols, non-adjacent."
     }
+  ],
+  "cross_assessments": [
+    {
+      "target_issue": 1158,
+      "in_progress_issue": 887,
+      "conflict_severity": "critical",
+      "conflict_type": "undeclared_dependency",
+      "reasoning": "...",
+      "recommendation": "defer"
+    }
+  ],
+  "deferred_issues": [
+    {
+      "number": 1158,
+      "title": "...",
+      "blocked_by": [887],
+      "reason": "..."
+    }
   ]
 }
 ```
+
+**Schema notes:**
+- `total_issues` counts ALL input issues (backward-compatible — callers expect `total_issues == len(input_issues)`)
+- `in_progress_context`, `cross_assessments`, `deferred_issues` are JSON-body-only — NOT emitted as terminal output tokens
+- `has_deferred`, `deferred_count`, `dispatched_count` ARE emitted as terminal output tokens
 
 When `--assess-review-approach` is active, each issue object gains two additional fields:
 

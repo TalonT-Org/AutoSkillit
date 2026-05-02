@@ -261,14 +261,18 @@ def get_tool_output_contract(
     entry = manifest.get("tool_output_contracts", {}).get(tool_name)
     if entry is None:
         return None
-    fields = {
-        field_name: ToolOutputFieldSpec(
+    fields = {}
+    for field_name, field_data in entry.get("fields", {}).items():
+        if not isinstance(field_data, dict):
+            raise ValueError(
+                f"tool_output_contracts entry for {tool_name!r}: "
+                f"field {field_name!r} must be a mapping, got {type(field_data).__name__!r}"
+            )
+        fields[field_name] = ToolOutputFieldSpec(
             allowed_values=tuple(field_data.get("allowed_values", [])),
             terminal_values=frozenset(field_data.get("terminal_values", [])),
             recoverable_values=frozenset(field_data.get("recoverable_values", [])),
         )
-        for field_name, field_data in entry.get("fields", {}).items()
-    }
     result_field = entry.get("result_field")
     if not result_field:
         raise ValueError(

@@ -35,6 +35,11 @@ _VERSION_BUMP_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
     ]
 )
 
+_NEGATION_PREFIX_RE: re.Pattern[str] = re.compile(
+    r"^\s*(?:no|not|skip|avoid|omit|don'?t|do\s+not)\b",
+    re.IGNORECASE,
+)
+
 
 def _load_phase_results(root: Path) -> dict[str, dict]:
     results: dict[str, dict] = {}
@@ -261,8 +266,13 @@ def _check_version_bump_steps(
     findings: list[ValidationFinding] = []
     for wp_id, wp in wp_results.items():
         steps: list[str] = wp.get("technical_steps") or []
-        searchable = " ".join([wp.get("name") or "", wp.get("summary") or ""] + steps)
-        if any(pattern.search(searchable) for pattern in _VERSION_BUMP_PATTERNS):
+        fragments = [wp.get("name") or "", wp.get("summary") or ""] + steps
+        if any(
+            fragment
+            and not _NEGATION_PREFIX_RE.search(fragment)
+            and any(pattern.search(fragment) for pattern in _VERSION_BUMP_PATTERNS)
+            for fragment in fragments
+        ):
             findings.append(
                 {
                     "message": (

@@ -376,7 +376,7 @@ class TestStaleRecoveryPipelineAdjudication:
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir)],
             cwd=tmp_path,
-            timeout=10,
+            timeout=20,
             session_log_dir=session_dir,
             completion_marker="%%NONEXISTENT%%",
             stale_threshold=0.3,

@@ -160,7 +160,7 @@ def test_finalize_bundle_reads_output_mode(recipe):
 
 
 def test_finalize_bundle_skips_commit_in_local_mode(recipe):
-    """finalize_bundle delegates local/pr branching (including commit gating) to external script."""
+    """finalize_bundle delegates local/pr branching to external script."""
     step = recipe.steps["finalize_bundle"]
     cmd = step.with_args.get("cmd", "")
     # The script receives output_mode as its first positional arg and handles mode branching.

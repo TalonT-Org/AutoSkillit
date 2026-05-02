@@ -8,7 +8,7 @@ import subprocess
 from datetime import date
 from pathlib import Path
 
-from autoskillit.core.io import atomic_write
+from autoskillit.core import atomic_write
 
 
 def compute_branch(

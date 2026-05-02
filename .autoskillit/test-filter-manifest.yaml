@@ -139,6 +139,9 @@ src/autoskillit/.mcp.json:
   - server/
   - cli/
 
+scripts/recipe/*.sh:
+  - recipe/
+
 src/autoskillit/core/__init__.pyi:
   - core/
   - arch/

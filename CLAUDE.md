@@ -235,6 +235,7 @@ generic_automation_mcp/
 │   ├── order.py             #   BUNDLED_RECIPE_ORDER — stable display order registry for Group 0 recipes
 │   ├── loader.py            #   Path-based recipe metadata utilities
 │   ├── _api.py              #   Orchestration API
+│   ├── _cmd_rpc.py          #   run_python callables for externalized recipe cmd scripts
 │   ├── _recipe_ingredients.py #  format_ingredients_table + LoadRecipeResult TypedDicts
 │   ├── _recipe_composition.py #  _build_active_recipe + sub-recipe merging
 │   ├── diagrams.py          #   Flow diagram generation + staleness detection

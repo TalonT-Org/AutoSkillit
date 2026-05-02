@@ -36,8 +36,6 @@ _JQ_BLOCK_RE = re.compile(
     re.DOTALL,
 )
 
-_LOOP_RE = re.compile(r"\bfor\s+\w+\s+in\s+.*;\s*do\b|\bwhile\s+.*;\s*do\b")
-
 _BASH_BUILTINS_RE = re.compile(r"\b(?:mapfile|read\s+-r|declare|local|export)\b")
 
 _VAR_ASSIGN_RE = re.compile(r"^[A-Z_][A-Z0-9_]*=", re.MULTILINE)
@@ -84,20 +82,6 @@ def _check_inline_script_in_cmd(ctx: ValidationContext) -> list[RuleFinding]:
                     step_name=name,
                     message=(
                         f"Step '{name}' contains shell control flow in cmd. "
-                        "Extract to a .sh script or run_python callable."
-                    ),
-                )
-            )
-            continue
-
-        if _LOOP_RE.search(stripped):
-            findings.append(
-                RuleFinding(
-                    rule="inline-script-in-cmd",
-                    severity=Severity.ERROR,
-                    step_name=name,
-                    message=(
-                        f"Step '{name}' contains a shell loop in cmd. "
                         "Extract to a .sh script or run_python callable."
                     ),
                 )

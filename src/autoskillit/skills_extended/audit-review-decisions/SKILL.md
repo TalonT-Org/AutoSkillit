@@ -7,6 +7,13 @@ description: >
   from resolve-review and legacy keyword signals. Produces a structured markdown report
   with VALID/RESOLVED/STALE classifications and annotates processed threads with [AUDIT]
   markers to prevent re-identification on future runs.
+hooks:
+  PreToolUse:
+    - matcher: "*"
+      hooks:
+        - type: command
+          command: "echo 'Auditing PR review decisions...'"
+          once: true
 ---
 
 # Audit Review Decisions Skill

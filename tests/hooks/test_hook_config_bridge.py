@@ -61,7 +61,7 @@ def _run_hook(event: dict | None = None) -> tuple[str, int]:
             try:
                 main()
             except SystemExit as e:
-                exit_code = e.code if e.code is not None else 0
+                exit_code = e.code if isinstance(e.code, int) else 0
     return buf.getvalue(), exit_code
 
 
@@ -84,6 +84,7 @@ def test_hook_reads_cache_path_from_hook_config_and_denies(tmp_path, monkeypatch
 
     out, _ = _run_hook(event={"tool_name": "run_skill"})
 
+    assert out != "", "hook failed-open unexpectedly (empty output)"
     data = json.loads(out)
     assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
 
@@ -107,6 +108,7 @@ def test_deny_message_contains_sleep_from_payload_buffer_seconds(tmp_path, monke
 
     out, _ = _run_hook(event={"tool_name": "run_skill"})
 
+    assert out != "", "hook failed-open unexpectedly (empty output)"
     data = json.loads(out)
     reason = data["hookSpecificOutput"]["permissionDecisionReason"]
     assert "time.sleep(77)" in reason
@@ -177,6 +179,7 @@ def test_disabled_false_blocks_normally(tmp_path, monkeypatch):
 
     out, _ = _run_hook(event={"tool_name": "run_skill"})
 
+    assert out != "", "hook failed-open unexpectedly (empty output)"
     data = json.loads(out)
     assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
 

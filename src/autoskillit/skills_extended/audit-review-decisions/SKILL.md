@@ -294,9 +294,14 @@ Same per-finding structure but labeled as pending.}
 
 For every finding processed in Phases 2–3 (all classifications — VALID, RESOLVED, STALE):
 
-1. **Re-check for existing audit marker**: using the raw JSON data saved in Phase 1,
-   check if any comment in the thread already starts with `[AUDIT]`. If yes: skip this
-   thread (idempotent — no duplicate post).
+1. **Re-check for existing audit marker (live)**: fetch the thread's current comments
+   directly from the GitHub API — do not use the Phase 1 JSON cache, which already
+   filtered out `[AUDIT]`-marked threads and cannot detect markers posted after Phase 1:
+   ```bash
+   gh api "repos/${OWNER}/${REPO}/pulls/${PR_NUMBER}/comments" \
+     --jq "[.[] | select(.id == ${COMMENT_ID} or .in_reply_to_id == ${COMMENT_ID}) | .body | startswith(\"[AUDIT]\")] | any"
+   ```
+   If the result is `true`: skip this thread (idempotent — no duplicate post).
 
 2. **Determine marker body** based on classification and ticket status:
 

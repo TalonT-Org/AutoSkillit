@@ -172,15 +172,7 @@ skills:
       type: directory_path
       required: true
       recommended: false
-    outputs:
-    - name: consolidation_manifest_dir
-      type: directory_path
-    expected_output_patterns:
-    - consolidation_manifest_dir\s*=\s*\S+
-    pattern_examples:
-    - 'consolidation_manifest_dir = /tmp/autoskillit/planner/run-20260101-120000/work_packages/consolidation
-
-      %%ORDER_UP%%'
+    outputs: []
     write_behavior: always
   planner-validate-task-alignment:
     inputs:

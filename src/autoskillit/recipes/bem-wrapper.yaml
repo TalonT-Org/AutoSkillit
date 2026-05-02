@@ -27,29 +27,12 @@ ingredients:
 
 steps:
   refetch_issues:
-    tool: run_cmd
+    tool: run_python
     with:
-      cmd: |
-        ISSUE_URLS="${{ inputs.issue_urls }}"
-        QUERY=$(ISSUE_URLS="$ISSUE_URLS" python3 -c "
-        import os, re
-        urls = os.environ['ISSUE_URLS'].split(',')
-        parts = []
-        for i, url in enumerate(urls):
-            url = url.strip()
-            if not url:
-                continue
-            m = re.match(r'https://github\.com/([^/]+)/([^/]+)/issues/(\d+)', url)
-            if m:
-                owner, repo, num = m.groups()
-                parts.append(f'i{i}: repository(owner: \"{owner}\", name: \"{repo}\") {{ issue(number: {num}) {{ number state }} }}')
-        print('{' + ' '.join(parts) + '}')
-        ")
-        gh api graphql -f query="$QUERY" \
-          --jq '[.data[] | select(.issue != null and .issue.state == "OPEN") | .issue.number | tostring] | join(" ")' && echo ""
-      step_name: refetch_issues
+      callable: "autoskillit.recipe._cmd_rpc.refetch_issues"
+      issue_urls: "${{ inputs.issue_urls }}"
     capture:
-      issue_numbers: "${{ result.stdout | trim }}"
+      issue_numbers: "${{ result.issue_numbers }}"
     on_success: check_issue_count
     on_failure: emit_fallback_map
 
@@ -72,33 +55,13 @@ steps:
     on_failure: emit_fallback_map
 
   emit_fallback_map:
-    tool: run_cmd
+    tool: run_python
     with:
-      cmd: |
-        MAP_FILE="{{AUTOSKILLIT_TEMP}}/bem-fallback-map.json"
-        ISSUE_URLS="${{ inputs.issue_urls }}"
-        NUMS=$(echo "$ISSUE_URLS" | tr ',' '\n' | grep -oE 'issues/[0-9]+' | grep -oE '[0-9]+' | tr '\n' ',' | sed 's/,$//')
-        NUMS="$NUMS" MAP_FILE="$MAP_FILE" python3 -c "
-        import json, os, sys
-        nums_str = os.environ['NUMS']
-        map_file = os.environ['MAP_FILE']
-        nums = [int(n) for n in nums_str.split(',') if n.strip()]
-        if not nums:
-            print('ERROR: no issue numbers extracted from issue URLs', file=sys.stderr)
-            sys.exit(1)
-        issues = [{'number': n, 'title': str(n)} for n in nums]
-        data = {
-            'groups': [{'group': 1, 'parallel': False, 'issues': issues}],
-            'merge_order': nums,
-            'pairwise_assessments': []
-        }
-        with open(map_file, 'w') as f:
-            json.dump(data, f)
-        print(map_file)
-        "
-      step_name: emit_fallback_map
+      callable: "autoskillit.recipe._cmd_rpc.emit_fallback_map"
+      issue_urls: "${{ inputs.issue_urls }}"
+      temp_dir: "{{AUTOSKILLIT_TEMP}}"
     capture:
-      execution_map: "${{ result.stdout | trim }}"
+      execution_map: "${{ result.execution_map }}"
     on_success: emit_result
     on_failure: escalate_stop
 

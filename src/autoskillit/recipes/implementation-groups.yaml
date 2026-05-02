@@ -148,22 +148,14 @@ steps:
     on_failure: escalate_stop
 
   compute_branch:
-    tool: run_cmd
+    tool: run_python
     with:
-      cmd: >-
-        SLUG="${{ context.issue_slug }}" &&
-        RUN="${{ inputs.run_name }}" &&
-        PREFIX="${SLUG:-$RUN}" &&
-        ISSUE="${{ context.issue_number }}" &&
-        if [ -n "$ISSUE" ]; then
-          printf '%s' "${PREFIX}/${ISSUE}"
-        else
-          printf '%s' "${PREFIX}/$(date +%Y%m%d)"
-        fi
-      cwd: "${{ context.work_dir }}"
-      step_name: "compute_branch"
+      callable: "autoskillit.recipe._cmd_rpc.compute_branch"
+      issue_slug: "${{ context.issue_slug }}"
+      run_name: "${{ inputs.run_name }}"
+      issue_number: "${{ context.issue_number }}"
     capture:
-      proposed_branch: "${{ result.stdout | trim }}"
+      proposed_branch: "${{ result.branch_name }}"
     on_success: create_branch
     on_failure: release_issue_failure
     optional: true
@@ -323,11 +315,10 @@ steps:
     on_failure: fix
 
   commit_guard:
-    tool: run_cmd
+    tool: run_python
     with:
-      cmd: "cd ${{ context.worktree_path }} && if [ -n \"$(git status --porcelain)\" ]; then git add -A && git commit -m 'chore: commit pending session changes'; fi"
-      cwd: "${{ context.worktree_path }}"
-      step_name: commit_guard
+      callable: "autoskillit.recipe._cmd_rpc.commit_guard"
+      worktree_path: "${{ context.worktree_path }}"
     on_success: merge
     on_failure: merge
     note: >
@@ -1106,23 +1097,13 @@ steps:
       to register_clone_unconfirmed (merge outcome unconfirmed).
 
   check_eject_limit:
-    tool: run_cmd
+    tool: run_python
     with:
-      cmd: >
-        COUNTER_FILE="${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/eject_count" &&
-        mkdir -p "$(dirname "$COUNTER_FILE")" &&
-        COUNT=$(cat "$COUNTER_FILE" 2>/dev/null || echo 0) &&
-        COUNT=$((COUNT + 1)) &&
-        echo "$COUNT" > "$COUNTER_FILE" &&
-        if [ "$COUNT" -gt 3 ]; then
-          echo "EJECT_LIMIT_EXCEEDED";
-        else
-          echo "EJECT_OK";
-        fi
-      cwd: "${{ context.work_dir }}"
-      step_name: "check_eject_limit"
+      callable: "autoskillit.recipe._cmd_rpc.check_eject_limit"
+      counter_file: "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/eject_count"
+      max_ejects: "3"
     on_result:
-      - when: "${{ result.stdout | trim }} == EJECT_LIMIT_EXCEEDED"
+      - when: "${{ result.status }} == EJECT_LIMIT_EXCEEDED"
         route: release_issue_failure
       - route: queue_ejected_fix
     on_failure: release_issue_failure
@@ -1132,23 +1113,13 @@ steps:
       to release_issue_failure to prevent infinite re-enqueue cycles.
 
   check_dropped_healthy_loop:
-    tool: run_cmd
+    tool: run_python
     with:
-      cmd: >
-        COUNTER_FILE="${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/dropped_healthy_count" &&
-        mkdir -p "$(dirname "$COUNTER_FILE")" &&
-        COUNT=$(cat "$COUNTER_FILE" 2>/dev/null || echo 0) &&
-        COUNT=$((COUNT + 1)) &&
-        echo "$COUNT" > "$COUNTER_FILE" &&
-        if [ "$COUNT" -gt 2 ]; then
-          echo "DROPPED_LIMIT_EXCEEDED";
-        else
-          echo "DROPPED_OK";
-        fi
-      cwd: "${{ context.work_dir }}"
-      step_name: "check_dropped_healthy_loop"
+      callable: "autoskillit.recipe._cmd_rpc.check_dropped_healthy_loop"
+      counter_file: "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/dropped_healthy_count"
+      max_drops: "2"
     on_result:
-      - when: "${{ result.stdout | trim }} == DROPPED_LIMIT_EXCEEDED"
+      - when: "${{ result.status }} == DROPPED_LIMIT_EXCEEDED"
         route: release_issue_failure
       - route: reenter_merge_queue_cheap
     on_failure: release_issue_failure
@@ -1160,18 +1131,13 @@ steps:
       directly to diagnose_ci and never reaches this step.
 
   queue_ejected_fix:
-    tool: run_cmd
+    tool: run_python
     with:
-      cmd: |
-        REMOTE=$(git remote get-url upstream 2>/dev/null | grep -qv "^file://" && echo upstream || echo origin) &&
-        if git fetch "$REMOTE" ${{ inputs.base_branch }} && git rebase "$REMOTE"/${{ inputs.base_branch }};
-        then echo 'clean';
-        else git rebase --abort 2>/dev/null || true; echo 'conflicts';
-        fi
-      cwd: "${{ context.work_dir }}"
-      step_name: "queue_ejected_fix"
+      callable: "autoskillit.recipe._cmd_rpc.queue_ejected_fix"
+      work_dir: "${{ context.work_dir }}"
+      base_branch: "${{ inputs.base_branch }}"
     on_result:
-      - when: "${{ result.stdout | trim }} == clean"
+      - when: "${{ result.status }} == clean"
         route: re_push_queue_fix
       - route: resolve_queue_merge_conflicts
     on_failure: resolve_queue_merge_conflicts
@@ -1287,21 +1253,16 @@ steps:
       reports an error rather than silently succeeding.
 
   wait_for_direct_merge:
-    tool: run_cmd
+    tool: run_python
     with:
-      cmd: >
-        for i in $(seq 1 90); do
-          STATE=$(gh pr view '${{ context.pr_number }}' --json state --jq '.state');
-          if [ "$STATE" = "MERGED" ]; then echo "merged"; exit 0; fi;
-          if [ "$STATE" = "CLOSED" ]; then echo "closed"; exit 0; fi;
-          sleep 10;
-        done; echo "timeout"
-      cwd: "${{ context.work_dir }}"
-      step_name: "wait_for_direct_merge"
+      callable: "autoskillit.recipe._cmd_rpc.wait_for_direct_merge"
+      pr_number: "${{ context.pr_number }}"
+      max_polls: "90"
+      poll_interval: "10"
     on_result:
-      - when: "${{ result.stdout | trim }} == merged"
+      - when: "${{ result.state }} == merged"
         route: release_issue_success
-      - when: "${{ result.stdout | trim }} == closed"
+      - when: "${{ result.state }} == closed"
         route: direct_merge_conflict_fix
       - route: register_clone_unconfirmed
     on_failure: register_clone_unconfirmed
@@ -1313,18 +1274,13 @@ steps:
       timeout / unexpected → register_clone_unconfirmed.
 
   direct_merge_conflict_fix:
-    tool: run_cmd
+    tool: run_python
     with:
-      cmd: |
-        REMOTE=$(git remote get-url upstream 2>/dev/null | grep -qv "^file://" && echo upstream || echo origin) &&
-        if git fetch "$REMOTE" ${{ inputs.base_branch }} && git rebase "$REMOTE"/${{ inputs.base_branch }};
-        then echo 'clean';
-        else git rebase --abort 2>/dev/null || true; echo 'conflicts';
-        fi
-      cwd: "${{ context.work_dir }}"
-      step_name: "direct_merge_conflict_fix"
+      callable: "autoskillit.recipe._cmd_rpc.direct_merge_conflict_fix"
+      work_dir: "${{ context.work_dir }}"
+      base_branch: "${{ inputs.base_branch }}"
     on_result:
-      - when: "${{ result.stdout | trim }} == clean"
+      - when: "${{ result.status }} == clean"
         route: re_push_direct_fix
       - route: resolve_direct_merge_conflicts
     on_failure: resolve_direct_merge_conflicts
@@ -1398,21 +1354,16 @@ steps:
       pipeline reports an error rather than silently succeeding.
 
   wait_for_immediate_merge:
-    tool: run_cmd
+    tool: run_python
     with:
-      cmd: >
-        for i in $(seq 1 30); do
-          STATE=$(gh pr view '${{ context.pr_number }}' --json state --jq '.state');
-          if [ "$STATE" = "MERGED" ]; then echo "merged"; exit 0; fi;
-          if [ "$STATE" = "CLOSED" ]; then echo "closed"; exit 0; fi;
-          sleep 10;
-        done; echo "timeout"
-      cwd: "${{ context.work_dir }}"
-      step_name: "wait_for_immediate_merge"
+      callable: "autoskillit.recipe._cmd_rpc.wait_for_immediate_merge"
+      pr_number: "${{ context.pr_number }}"
+      max_polls: "30"
+      poll_interval: "10"
     on_result:
-      - when: "${{ result.stdout | trim }} == merged"
+      - when: "${{ result.state }} == merged"
         route: release_issue_success
-      - when: "${{ result.stdout | trim }} == closed"
+      - when: "${{ result.state }} == closed"
         route: immediate_merge_conflict_fix
       - route: register_clone_unconfirmed
     on_failure: register_clone_unconfirmed
@@ -1426,18 +1377,13 @@ steps:
       timeout → register_clone_unconfirmed.
 
   immediate_merge_conflict_fix:
-    tool: run_cmd
+    tool: run_python
     with:
-      cmd: |
-        REMOTE=$(git remote get-url upstream 2>/dev/null | grep -qv "^file://" && echo upstream || echo origin) &&
-        if git fetch "$REMOTE" ${{ inputs.base_branch }} && git rebase "$REMOTE"/${{ inputs.base_branch }};
-        then echo 'clean';
-        else git rebase --abort 2>/dev/null || true; echo 'conflicts';
-        fi
-      cwd: "${{ context.work_dir }}"
-      step_name: "immediate_merge_conflict_fix"
+      callable: "autoskillit.recipe._cmd_rpc.immediate_merge_conflict_fix"
+      work_dir: "${{ context.work_dir }}"
+      base_branch: "${{ inputs.base_branch }}"
     on_result:
-      - when: "${{ result.stdout | trim }} == clean"
+      - when: "${{ result.status }} == clean"
         route: re_push_immediate_fix
       - route: resolve_immediate_merge_conflicts
     on_failure: resolve_immediate_merge_conflicts

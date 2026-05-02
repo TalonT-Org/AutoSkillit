@@ -152,19 +152,11 @@ def test_merge_prs_get_first_pr_number_routes_to_enqueue(pmp_recipe) -> None:
 
 
 def test_merge_prs_attempt_cheap_rebase_exists(pmp_recipe) -> None:
-    """attempt_cheap_rebase step must exist with tool=run_cmd."""
+    """attempt_cheap_rebase step must exist with tool=run_python."""
     assert "attempt_cheap_rebase" in pmp_recipe.steps
     step = pmp_recipe.steps["attempt_cheap_rebase"]
-    assert step.tool == "run_cmd"
-
-
-def test_merge_prs_attempt_cheap_rebase_cmd_uses_rebase(pmp_recipe) -> None:
-    """attempt_cheap_rebase cmd must contain git rebase and clean/conflicts output."""
-    step = pmp_recipe.steps["attempt_cheap_rebase"]
-    cmd = step.with_args.get("cmd", "")
-    assert "git rebase" in cmd
-    assert "clean" in cmd
-    assert "conflicts" in cmd
+    assert step.tool == "run_python"
+    assert step.with_args.get("callable") == "autoskillit.recipe._cmd_rpc.attempt_cheap_rebase"
 
 
 def test_merge_prs_attempt_cheap_rebase_routing(pmp_recipe) -> None:
@@ -237,14 +229,9 @@ def test_merge_prs_get_next_pr_branch_on_failure_routes_to_enqueue(pmp_recipe) -
 
 def test_merge_prs_proactive_rebase_next_pr_exists(pmp_recipe) -> None:
     assert "proactive_rebase_next_pr" in pmp_recipe.steps
-    assert pmp_recipe.steps["proactive_rebase_next_pr"].tool == "run_cmd"
-
-
-def test_merge_prs_proactive_rebase_next_pr_cmd_uses_rebase(pmp_recipe) -> None:
-    cmd = pmp_recipe.steps["proactive_rebase_next_pr"].with_args.get("cmd", "")
-    assert "git rebase" in cmd
-    assert "clean" in cmd
-    assert "conflicts" in cmd
+    step = pmp_recipe.steps["proactive_rebase_next_pr"]
+    assert step.tool == "run_python"
+    assert step.with_args.get("callable") == "autoskillit.recipe._cmd_rpc.proactive_rebase_next_pr"
 
 
 def test_merge_prs_proactive_rebase_next_pr_routing(pmp_recipe) -> None:

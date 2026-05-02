@@ -13,10 +13,10 @@ def recipe():
 
 
 def test_stage_bundle_is_idempotent(recipe):
-    """stage_bundle cmd uses cp (idempotent); no mv/rename, no compression."""
+    """stage_bundle invokes an external script; no inline compression or commit."""
     step = recipe.steps["stage_bundle"]
     cmd = step.with_args.get("cmd", "")
-    assert "cp " in cmd, "stage_bundle must use cp for idempotent file copying"
+    assert "stage_bundle.sh" in cmd, "stage_bundle must delegate to scripts/recipe/stage_bundle.sh"
     assert "tar czf" not in cmd and "tar -czf" not in cmd, (
         "stage_bundle must NOT compress — second run must be a no-op"
     )
@@ -33,39 +33,20 @@ def test_stage_bundle_does_not_compress(recipe):
 
 
 def test_finalize_bundle_pr_mode(recipe):
-    """finalize_bundle must rename report.md→README.md, compress, append manifest, commit."""
+    """finalize_bundle must delegate to external script with output_mode, research_dir, worktree."""
     step = recipe.steps["finalize_bundle"]
     cmd = step.with_args.get("cmd", "")
-    # rename
-    assert "README.md" in cmd and "report.md" in cmd, (
-        "finalize_bundle must rename report.md to README.md"
+    assert "finalize_bundle.sh" in cmd, (
+        "finalize_bundle must delegate to scripts/recipe/finalize_bundle.sh"
     )
-    # compression
-    assert "tar czf" in cmd or "tar -czf" in cmd, "finalize_bundle must create tarball"
-    assert "-C" in cmd or "--directory" in cmd, "finalize_bundle must use -C for relative paths"
-    # manifest
-    assert "tar tzf" in cmd, "finalize_bundle must generate archive manifest"
-    assert "Archive Manifest" in cmd, "finalize_bundle manifest section header required"
-    assert ">> " in cmd and "README.md" in cmd, "manifest must be appended (>>) to README.md"
-    # post-compression guard
-    assert "artifacts.tar.gz" in cmd and "exit 1" in cmd, (
-        "finalize_bundle must guard that artifacts.tar.gz exists or exit 1"
+    assert "inputs.output_mode" in cmd, (
+        "finalize_bundle script must receive output_mode as first argument"
     )
-    # commit
-    assert "git commit" in cmd, "finalize_bundle must commit the result"
-    # dynamic tar inputs
-    assert "ls -1" in cmd and "grep -vE" in cmd, (
-        "finalize_bundle must use ls -1 | grep -vE for dynamic TAR_ITEMS"
+    assert "context.research_dir" in cmd, (
+        "finalize_bundle script must receive research_dir as argument"
     )
-    # cleanup loop
-    assert "for item in" in cmd and "rm -rf" in cmd, (
-        "finalize_bundle must rm -rf each archived item"
-    )
-    # rename before archive (rename_pos < tar_pos)
-    rename_pos = cmd.find("report.md")
-    tar_pos = cmd.find("tar czf")
-    assert rename_pos < tar_pos, (
-        "report.md rename must appear before tar czf so README.md is excluded"
+    assert "context.worktree_path" in cmd, (
+        "finalize_bundle script must receive worktree_path as argument"
     )
 
 

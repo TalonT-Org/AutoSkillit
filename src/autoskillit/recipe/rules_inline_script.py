@@ -8,39 +8,7 @@ from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
-# Grandfathered violations — to be removed as Part B externalizes them.
-# Populated mechanically by running the rule without the allowlist against all
-# bundled recipe files and collecting every step name that fires.
-_INLINE_SCRIPT_ALLOWLIST: frozenset[str] = frozenset(
-    {
-        "advance_queue_pr",
-        "attempt_cheap_rebase",
-        "check_dropped_healthy_loop",
-        "check_eject_limit",
-        "commit_guard",
-        "compute_branch",
-        "create_artifact_branch",
-        "create_persistent_integration",
-        "create_worktree",
-        "direct_merge_conflict_fix",
-        "emit_fallback_map",
-        "ensure_results",
-        "export_local_bundle",
-        "finalize_bundle",
-        "force_push_and_wait_mergeability",
-        "immediate_merge_conflict_fix",
-        "open_artifact_pr",
-        "proactive_rebase_next_pr",
-        "queue_ejected_fix",
-        "re_stage_bundle",
-        "refetch_issues",
-        "stage_bundle",
-        "tag_experiment_branch",
-        "wait_for_direct_merge",
-        "wait_for_immediate_merge",
-        "wait_for_review_pr_mergeability",
-    }
-)
+_INLINE_SCRIPT_ALLOWLIST: frozenset[str] = frozenset()
 
 # ---------------------------------------------------------------------------
 # Detection patterns

@@ -215,7 +215,7 @@ def test_inline_script_clean_for_jq_expressions():
     assert all(f.rule != "inline-script-in-cmd" for f in findings)
 
 
-def test_inline_script_clean_for_allowlisted_steps():
+def test_inline_script_fires_for_formerly_allowlisted_steps():
     recipe = _make_recipe(
         {
             "compute_branch": {
@@ -226,7 +226,7 @@ def test_inline_script_clean_for_allowlisted_steps():
         }
     )
     findings = run_semantic_rules(recipe)
-    assert all(f.rule != "inline-script-in-cmd" for f in findings)
+    assert any(f.rule == "inline-script-in-cmd" for f in findings)
 
 
 def test_inline_script_ignores_non_run_cmd_steps():

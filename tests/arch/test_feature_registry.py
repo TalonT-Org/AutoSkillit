@@ -285,7 +285,8 @@ def test_fleet_feature_default_disabled():
     assert FEATURE_REGISTRY["fleet"].default_enabled is False
 
 
-def test_build_features_dict_accepts_fleet_key():
+def test_build_features_dict_accepts_fleet_key(monkeypatch):
+    monkeypatch.setattr("autoskillit.config.settings.is_dev_install", lambda: False)
     from autoskillit.config.settings import AutomationConfig
 
     result, exp_enabled = AutomationConfig._build_features_dict({"fleet": True})

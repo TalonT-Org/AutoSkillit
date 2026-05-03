@@ -68,9 +68,24 @@ class TestReviewPrRecipeIntegration:
         ]
         assert any(c.route == "resolve_review" for c in changes_conditions)
 
-    def test_review_pr_routes_to_resolve_review_on_failure(self, recipe: object) -> None:
-        """T_RP5: review_pr.on_failure routes to resolve_review."""
-        assert recipe.steps["review_pr"].on_failure == "resolve_review"  # type: ignore[attr-defined]
+    def test_review_pr_routes_to_check_repo_ci_event_on_failure(self, recipe: object) -> None:
+        """T_RP5: review_pr.on_failure routes to check_repo_ci_event (no review to resolve)."""
+        assert recipe.steps["review_pr"].on_failure == "check_repo_ci_event"  # type: ignore[attr-defined]
+
+    def test_resolve_review_only_reachable_via_verdict(self, recipe: object) -> None:
+        """T_RP5b: resolve_review only reachable via on_result verdicts, not on_failure."""
+        step = recipe.steps["review_pr"]  # type: ignore[attr-defined]
+        assert step.on_failure != "resolve_review"
+        assert step.on_context_limit != "resolve_review"
+        verdict_routes = [
+            c.route for c in step.on_result.conditions if c.route == "resolve_review"
+        ]
+        assert len(verdict_routes) >= 1, "resolve_review must still be reachable via on_result"
+
+    def test_review_pr_failure_and_context_limit_converge(self, recipe: object) -> None:
+        """T_RP5c: on_failure and on_context_limit both route to check_repo_ci_event."""
+        step = recipe.steps["review_pr"]  # type: ignore[attr-defined]
+        assert step.on_failure == step.on_context_limit == "check_repo_ci_event"
 
     def test_resolve_review_has_retries(self, recipe: object) -> None:
         """T_RP6: resolve_review has retries=2 matching resolve_ci pattern."""

@@ -90,7 +90,7 @@ class TestGatedToolAccess:
         """After open_kitchen prompt handler sets the flag, tools execute normally."""
         from unittest.mock import AsyncMock
 
-        from autoskillit.server import tools_kitchen as tools_kitchen_mod
+        from autoskillit.server.tools import tools_kitchen as tools_kitchen_mod
         from autoskillit.server.tools.tools_execution import run_cmd
         from tests.conftest import _make_result
 
@@ -106,7 +106,7 @@ class TestGatedToolAccess:
         """After close_kitchen prompt handler, tools return error again."""
         from unittest.mock import AsyncMock
 
-        from autoskillit.server import tools_kitchen as tools_kitchen_mod
+        from autoskillit.server.tools import tools_kitchen as tools_kitchen_mod
         from autoskillit.server.tools.tools_execution import run_cmd
 
         with patch.object(tools_kitchen_mod, "_prime_quota_cache", new=AsyncMock()):
@@ -169,7 +169,7 @@ class TestGateTransitionLogs:
     async def test_open_kitchen_logs_gate_open(self, tool_ctx):
         from unittest.mock import AsyncMock
 
-        from autoskillit.server import tools_kitchen as tools_kitchen_mod
+        from autoskillit.server.tools import tools_kitchen as tools_kitchen_mod
 
         with patch.object(tools_kitchen_mod, "_prime_quota_cache", new=AsyncMock()):
             with patch.object(tools_kitchen_mod, "_write_hook_config"):
@@ -250,7 +250,7 @@ class TestOpenKitchenVersionReporting:
     async def test_open_kitchen_instructs_status_call(self):
         from unittest.mock import AsyncMock, MagicMock
 
-        from autoskillit.server import tools_kitchen as tools_kitchen_mod
+        from autoskillit.server.tools import tools_kitchen as tools_kitchen_mod
         from autoskillit.server.tools.tools_kitchen import open_kitchen
 
         mock_ctx = MagicMock()
@@ -267,7 +267,7 @@ class TestOpenKitchenVersionReporting:
         from unittest.mock import AsyncMock, MagicMock
 
         from autoskillit.server import PIPELINE_FORBIDDEN_TOOLS
-        from autoskillit.server import tools_kitchen as tools_kitchen_mod
+        from autoskillit.server.tools import tools_kitchen as tools_kitchen_mod
         from autoskillit.server.tools.tools_kitchen import open_kitchen
 
         mock_ctx = MagicMock()
@@ -298,7 +298,7 @@ class TestOpenKitchenVersionReporting:
     async def test_open_kitchen_still_enables_on_mismatch(self, tmp_path, tool_ctx):
         from unittest.mock import AsyncMock, MagicMock
 
-        from autoskillit.server import tools_kitchen as tools_kitchen_mod
+        from autoskillit.server.tools import tools_kitchen as tools_kitchen_mod
         from autoskillit.server.tools.tools_kitchen import open_kitchen
 
         mock_ctx = MagicMock()
@@ -376,7 +376,7 @@ async def test_open_kitchen_has_no_update_advisory(tool_ctx):
     from unittest.mock import AsyncMock, MagicMock
 
     from autoskillit.pipeline.gate import DefaultGateState
-    from autoskillit.server import tools_kitchen as tools_kitchen_mod
+    from autoskillit.server.tools import tools_kitchen as tools_kitchen_mod
     from autoskillit.server.tools.tools_kitchen import open_kitchen
 
     # Ensure kitchen is closed before calling open_kitchen

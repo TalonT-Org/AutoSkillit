@@ -560,11 +560,11 @@ class TestGroupMFranchiseDoctorChecks:
         from autoskillit.core import Severity
 
         hooks_dir = tmp_path / "hooks"
-        hooks_dir.mkdir()
-        (hooks_dir / "fleet_dispatch_guard.py").write_text("")
+        (hooks_dir / "guards").mkdir(parents=True)
+        (hooks_dir / "guards" / "fleet_dispatch_guard.py").write_text("")
         monkeypatch.setattr(
             "autoskillit.cli.doctor._doctor_fleet.canonical_script_basenames",
-            lambda: frozenset({"fleet_dispatch_guard.py"}),
+            lambda: frozenset({"guards/fleet_dispatch_guard.py"}),
         )
         monkeypatch.setattr("autoskillit.hook_registry.HOOKS_DIR", hooks_dir)
         result = _check_fleet_dispatch_guard_registered()

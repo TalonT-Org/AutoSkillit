@@ -78,14 +78,14 @@ def _check_fleet_dispatch_guard_registered() -> DoctorResult:
     from autoskillit.hook_registry import HOOKS_DIR
 
     check_name = "fleet_dispatch_guard_registered"
-    if "fleet_dispatch_guard.py" not in canonical_script_basenames():
+    if "guards/fleet_dispatch_guard.py" not in canonical_script_basenames():
         return DoctorResult(
             Severity.ERROR,
             check_name,
             "Fleet dispatch guard not registered in hooks.json. "
             "Run: autoskillit config sync-hooks",
         )
-    if not (HOOKS_DIR / "fleet_dispatch_guard.py").is_file():
+    if not (HOOKS_DIR / "guards" / "fleet_dispatch_guard.py").is_file():
         return DoctorResult(
             Severity.ERROR,
             check_name,

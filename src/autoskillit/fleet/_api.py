@@ -305,6 +305,7 @@ async def _run_dispatch(
         dispatch_id=dispatch_id,
         campaign_id=campaign_id,
         l2_timeout_sec=timeout_sec or 1800,
+        capture=capture,
     )
 
     state_path = tool_ctx.temp_dir / "dispatches" / f"{dispatch_id}.json"

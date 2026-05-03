@@ -228,6 +228,52 @@ class TestSentinelFormat:
         assert '"success"' in prompt
         assert '"reason"' in prompt
 
+    @pytest.mark.parametrize(
+        "capture_dict",
+        [
+            {"worktree_path": "/repo"},
+            {"worktree_path": "/repo", "pr_url": "https://github.com/org/repo/pull/1"},
+        ],
+        ids=["1-key", "2-key"],
+    )
+    def test_sentinel_capture_fields_injected(self, capture_dict: dict[str, str]) -> None:
+        from autoskillit.fleet._prompts import _build_food_truck_prompt
+
+        prompt = _build_food_truck_prompt(
+            recipe=_RECIPE,
+            task=_TASK,
+            ingredients=_INGREDIENTS,
+            mcp_prefix=_MCP_PREFIX,
+            dispatch_id=_DISPATCH_ID,
+            campaign_id=_CAMPAIGN_ID,
+            l2_timeout_sec=_L2_TIMEOUT,
+            capture=capture_dict,
+        )
+        section8 = prompt[prompt.index("--- SECTION 8") :]
+        for key in capture_dict:
+            assert f"capture_{key}" in section8
+        assert '"success"' in section8
+        assert '"reason"' in section8
+
+    @pytest.mark.parametrize("capture_arg", [None, {}], ids=["none", "empty-dict"])
+    def test_sentinel_section8_unchanged_when_capture_none(
+        self, capture_arg: dict[str, str] | None
+    ) -> None:
+        from autoskillit.fleet._prompts import _build_food_truck_prompt
+
+        prompt = _build_food_truck_prompt(
+            recipe=_RECIPE,
+            task=_TASK,
+            ingredients=_INGREDIENTS,
+            mcp_prefix=_MCP_PREFIX,
+            dispatch_id=_DISPATCH_ID,
+            campaign_id=_CAMPAIGN_ID,
+            l2_timeout_sec=_L2_TIMEOUT,
+            capture=capture_arg,
+        )
+        section8 = prompt[prompt.index("--- SECTION 8") :]
+        assert "capture_" not in section8
+
 
 # --- Group E-6: No First-Action Bootstrap ---
 

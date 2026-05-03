@@ -52,6 +52,7 @@ def _build_food_truck_prompt(
     dispatch_id: str,
     campaign_id: str,
     l2_timeout_sec: int,
+    capture: dict[str, str] | None = None,
 ) -> str:
     """Build the system prompt for an L2 food truck headless session.
 
@@ -60,12 +61,29 @@ def _build_food_truck_prompt(
     filtered sous-chef discipline, headless directives, routing/predicates,
     budget guidance, quota awareness, campaign task, ingredient values,
     and a sentinel-anchored result contract.
+
+    ``capture`` is an optional mapping of captured field names to their
+    descriptions, used by Section 8 sentinel format injection to instruct
+    the L2 session to emit those fields in its result block.
     """
     dispatch_id_short = dispatch_id[:8]
     ingredients_json = json.dumps(ingredients)
     ingredients_pretty_json = json.dumps(ingredients, indent=2)
 
     sous_chef_block = _build_l2_sous_chef_block()
+
+    extra_fields_example = (
+        (", " + ", ".join(f'"capture_{k}": "<{k}_value>"' for k in capture)) if capture else ""
+    )
+    extra_fields_docs = (
+        ("\n" + "\n".join(f"- capture_{k}: captured value for {k}" for k in capture))
+        if capture
+        else ""
+    )
+    sentinel_json_example = (
+        '{"success": <true|false>, "reason": "<completion_reason>", '
+        '"summary": "<one_line_summary>"' + extra_fields_example + "}"
+    )
 
     return f"""\
 You are an L2 food truck orchestrator. Execute the recipe '{recipe}' autonomously.
@@ -251,7 +269,7 @@ as your final output. No other text after the sentinel.
 
 ```
 ---l2-result::{dispatch_id}---
-{{"success": <true|false>, "reason": "<completion_reason>", "summary": "<one_line_summary>"}}
+{sentinel_json_example}
 ---end-l2-result::{dispatch_id}---
 %%L2_DONE::{dispatch_id_short}%%
 ```
@@ -260,7 +278,7 @@ Fields:
 - success: true if all mandatory steps completed without unresolved failures
 - reason: "completed", "failed", "quota_exhausted", "timeout",
   "open_kitchen_failed", "missing_on_failure"
-- summary: One-line description of what happened
+- summary: One-line description of what happened{extra_fields_docs}
 
 The sentinel markers ---l2-result::{dispatch_id}--- and ---end-l2-result::{dispatch_id}---
 are parsed by the fleet dispatcher. The %%L2_DONE::{dispatch_id_short}%% marker

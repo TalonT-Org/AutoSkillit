@@ -242,7 +242,11 @@ def make_context(
                     recorder = make_scenario_recorder(
                         output_dir=scenario_dir, recipe_name=recipe_name
                     )
-                    runner = RecordingSubprocessRunner(recorder=recorder, inner=runner)
+                    runner = RecordingSubprocessRunner(
+                        recorder=recorder,
+                        inner=runner,
+                        scenario_dir=Path(scenario_dir),
+                    )
 
     # Lazy token resolution: config → GITHUB_TOKEN env var → gh CLI → None.
     # The _gh_cli_token() subprocess (up to 5s) is deferred until the first

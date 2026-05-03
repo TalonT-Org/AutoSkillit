@@ -74,8 +74,11 @@ class RecordingSubprocessRunner(SubprocessRunner):
         self,
         recorder: ScenarioRecorder,
         inner: SubprocessRunner | None = None,
+        *,
+        scenario_dir: Path | None = None,
     ) -> None:
         self.recorder = recorder
+        self._scenario_dir = scenario_dir
         if inner is None:
             from autoskillit.execution.process import DefaultSubprocessRunner
 
@@ -169,7 +172,11 @@ class RecordingSubprocessRunner(SubprocessRunner):
 
         ephemeral_dir = _extract_ephemeral_add_dir(cmd)
         if ephemeral_dir is not None and step_result.cassette_path:
-            _scenario_dir = Path(step_result.cassette_path).parent.parent
+            _scenario_dir = (
+                self._scenario_dir
+                if self._scenario_dir is not None
+                else Path(step_result.cassette_path).parent.parent
+            )
             _snap = snapshot_skill_dir(_scenario_dir, step_name, ephemeral_dir)
             if _snap:
                 logger.debug("skill_dir_snapshot_written", step=step_name, path=str(_snap))

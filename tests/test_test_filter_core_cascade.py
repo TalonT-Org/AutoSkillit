@@ -55,7 +55,6 @@ class TestModuleCascadeCore:
         for stem, consumers in MODULE_CASCADE_CORE.items():
             assert "core" in consumers, f"{stem} cascade missing 'core'"
 
-
     def test_feature_flags_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["feature_flags"] == frozenset(
             {"core", "cli", "config", "recipe", "server", "workspace"}
@@ -232,7 +231,7 @@ class TestBuildTestScopeCoreCascade:
         """readiness.py only used by server → {core, server} + always-run."""
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
-            changed_files={"src/autoskillit/core/readiness.py"},
+            changed_files={"src/autoskillit/core/runtime/readiness.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )

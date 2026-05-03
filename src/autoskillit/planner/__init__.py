@@ -24,9 +24,12 @@ from autoskillit.planner.merge import (
     replace_item,
 )
 from autoskillit.planner.schema import (
+    ASSIGN_RESULT_FILE_RE,
     ASSIGNMENT_REQUIRED_KEYS,
     PHASE_REQUIRED_KEYS,
+    PHASE_RESULT_FILE_RE,
     WP_REQUIRED_KEYS,
+    WP_RESULT_FILE_RE,
     AssignmentElaborated,
     AssignmentShort,
     PhaseElaborated,
@@ -44,6 +47,9 @@ from autoskillit.planner.schema import (
 from autoskillit.planner.validation import validate_plan
 
 __all__ = [
+    "ASSIGN_RESULT_FILE_RE",
+    "PHASE_RESULT_FILE_RE",
+    "WP_RESULT_FILE_RE",
     "build_phase_assignment_manifest",
     "consolidate_wps",
     "build_phase_wp_manifest",

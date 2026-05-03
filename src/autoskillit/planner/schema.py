@@ -153,6 +153,10 @@ _PHASE_ID_RE = re.compile(r"^P\d+$")
 _ASSIGN_ID_RE = re.compile(r"^P\d+-A\d+$")
 _WP_ID_RE = re.compile(r"^P\d+-A\d+-WP\d+$")
 
+PHASE_RESULT_FILE_RE = re.compile(r"^P\d+_result\.json$")
+ASSIGN_RESULT_FILE_RE = re.compile(r"^P\d+-A\d+_result\.json$")
+WP_RESULT_FILE_RE = re.compile(r"^P\d+-A\d+-WP\d+_result\.json$")
+
 PHASE_REQUIRED_KEYS: frozenset[str] = frozenset({"id", "name", "ordering"})
 ASSIGNMENT_REQUIRED_KEYS: frozenset[str] = frozenset({"id", "name", "proposed_work_packages"})
 WP_REQUIRED_KEYS: frozenset[str] = frozenset({"id", "name", "deliverables"})

@@ -12,10 +12,14 @@ from __future__ import annotations
 import json
 import re
 from collections import deque
+from collections.abc import Iterator
 from pathlib import Path
 
 from autoskillit.core import get_logger, write_versioned_json
 from autoskillit.planner.schema import (
+    ASSIGN_RESULT_FILE_RE,
+    PHASE_RESULT_FILE_RE,
+    WP_RESULT_FILE_RE,
     ValidationFinding,
     validate_assignment_result,
     validate_phase_result,
@@ -41,9 +45,16 @@ _NEGATION_PREFIX_RE: re.Pattern[str] = re.compile(
 )
 
 
+def _iter_tier_files(directory: Path, filename_re: re.Pattern[str]) -> Iterator[Path]:
+    """Yield *_result.json files whose names match the tier's naming convention."""
+    for f in sorted(directory.glob("*_result.json")):
+        if filename_re.match(f.name):
+            yield f
+
+
 def _load_phase_results(root: Path) -> dict[str, dict]:
     results: dict[str, dict] = {}
-    for f in sorted((root / "phases").glob("*_result.json")):
+    for f in _iter_tier_files(root / "phases", PHASE_RESULT_FILE_RE):
         try:
             raw = json.loads(f.read_text())
             data = validate_phase_result(raw)
@@ -59,7 +70,7 @@ def _load_assignment_results(root: Path) -> dict[str, dict]:
     assign_dir = root / "assignments"
     if not assign_dir.exists():
         return results
-    for f in sorted(assign_dir.glob("*_result.json")):
+    for f in _iter_tier_files(assign_dir, ASSIGN_RESULT_FILE_RE):
         try:
             raw = json.loads(f.read_text())
             data = validate_assignment_result(raw)
@@ -75,9 +86,7 @@ def _load_wp_results(root: Path) -> dict[str, dict]:
     wp_dir = root / "work_packages"
     if not wp_dir.exists():
         return results
-    for f in sorted(wp_dir.glob("*_result.json")):
-        if f.name in ("wp_manifest.json", "wp_index.json"):
-            continue
+    for f in _iter_tier_files(wp_dir, WP_RESULT_FILE_RE):
         try:
             raw = json.loads(f.read_text())
             data = validate_wp_result(raw)

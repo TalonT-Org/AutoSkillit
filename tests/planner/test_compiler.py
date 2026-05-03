@@ -285,7 +285,7 @@ class TestCompilePlanEdgeCases:
         _make_valid_output_dir(tmp_path)
         wps_dir = tmp_path / "work_packages"
         write_json(
-            wps_dir / "BADID_result.json",
+            wps_dir / "P1-A1-WP99_result.json",
             {"id": "BADID", "name": "Bad", "deliverables": ["x.py"]},
         )
 

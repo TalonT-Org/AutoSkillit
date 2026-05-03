@@ -9,6 +9,9 @@ from typing import TypedDict
 
 from autoskillit.core import atomic_write, write_versioned_json
 from autoskillit.planner.schema import (
+    ASSIGN_RESULT_FILE_RE,
+    PHASE_RESULT_FILE_RE,
+    WP_RESULT_FILE_RE,
     RunDirResult,
     TaskResolutionResult,
     validate_assignment_result,
@@ -61,7 +64,9 @@ def build_phase_assignment_manifest(phases_dir: str, output_dir: str) -> dict[st
     out_dir = Path(output_dir)
     assign_dir = out_dir.resolve()
 
-    phase_files = sorted(phases_path.glob("*_result.json"))
+    phase_files = [
+        f for f in sorted(phases_path.glob("*_result.json")) if PHASE_RESULT_FILE_RE.match(f.name)
+    ]
     parsed_phases = []
     for f in phase_files:
         try:
@@ -123,7 +128,9 @@ def build_phase_wp_manifest(
         else (out_dir / "work_packages").resolve()
     )
 
-    assign_files = list(assign_path.glob("*_result.json"))
+    assign_files = [
+        f for f in assign_path.glob("*_result.json") if ASSIGN_RESULT_FILE_RE.match(f.name)
+    ]
     parsed_assignments: list[dict] = []
     for f in assign_files:
         try:
@@ -205,7 +212,10 @@ def finalize_wp_manifest(work_packages_dir: str, output_dir: str) -> dict[str, s
         raise FileNotFoundError(f"work_packages_dir does not exist: {wp_dir}")
     out_dir = Path(output_dir)
 
-    result_files = sorted(wp_dir.glob("*_result.json"), key=lambda p: _natural_sort_key(p.name))
+    result_files = sorted(
+        (f for f in wp_dir.glob("*_result.json") if WP_RESULT_FILE_RE.match(f.name)),
+        key=lambda p: _natural_sort_key(p.name),
+    )
     items = []
     index_entries = []
     for f in result_files:
@@ -398,9 +408,11 @@ def expand_wps(refined_assignments_path: str, output_dir: str, **kwargs: object)
         context_paths.append(str(ctx_path))
         item_ids.append(str(phase_id))
 
+    sentinel_dir = wp_dir / "wp_sentinels"
+    sentinel_dir.mkdir(parents=True, exist_ok=True)
     manifest = {
         "pass_name": "phase_work_packages",
-        "result_dir": str(wp_dir),
+        "result_dir": str(sentinel_dir),
         "created_at": datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "items": items,
     }

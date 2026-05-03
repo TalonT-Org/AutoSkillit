@@ -1,7 +1,7 @@
 name: implementation
 description: Plan, verify, implement, test, and merge a task end-to-end. Use when user says "run pipeline", "implement task", or "auto implement".
 summary: "clone > capture_base_sha > set_merge_target > (create_branch?) > make-plan > (review-approach?) > dry-walkthrough > implement > test > merge (per plan part) > (audit-impl?) > (open_pr?) > push > cleanup"
-autoskillit_version: "0.9.328"
+autoskillit_version: "0.9.329"
 recipe_version: "1.0.0"
 requires_packs: [github, ci, clone, telemetry]
 

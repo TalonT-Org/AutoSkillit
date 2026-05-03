@@ -73,6 +73,7 @@ class HeadlessExecutor(Protocol):
         env_extras: Mapping[str, str] | None = None,
         requires_packs: Sequence[str] = (),
         on_spawn: Callable[[int, int], None] | None = None,
+        allowed_write_prefix: str = "",
     ) -> SkillResult: ...
 
 

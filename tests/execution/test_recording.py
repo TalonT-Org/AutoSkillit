@@ -9,7 +9,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from autoskillit.core.types import DirectInstall, SubprocessRunner, TerminationReason
+from autoskillit.core.types import DirectInstall, OutputFormat, SubprocessRunner, TerminationReason
 from autoskillit.execution.commands import build_leaf_headless_cmd
 from autoskillit.execution.recording import (
     RecordingSubprocessRunner,
@@ -176,7 +176,7 @@ _BASE_CMD_ARGS = dict(
     completion_marker="DONE",
     model=None,
     plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
-    output_format_value="stream-json",
+    output_format=OutputFormat.STREAM_JSON,
 )
 
 

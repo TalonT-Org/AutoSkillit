@@ -851,3 +851,20 @@ def test_expand_functions_call_validators() -> None:
         if isinstance(node, ast.FunctionDef) and node.name == "expand_assignments":
             body_source = ast.dump(node)
             assert "validate_refined_plan" in body_source
+
+
+def test_no_build_cmd_accepts_output_format_value_string() -> None:
+    """No cmd builder should accept output_format_value: str — use OutputFormat enum (ARCH-011)."""
+    source = (SRC_ROOT / "execution" / "commands.py").read_text()
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.FunctionDef)
+            and node.name.startswith("build_")
+            and node.name.endswith("_cmd")
+        ):
+            param_names = [a.arg for a in node.args.args + node.args.kwonlyargs]
+            assert "output_format_value" not in param_names, (
+                f"{node.name} still accepts 'output_format_value' (raw string). "
+                f"Use 'output_format: OutputFormat' instead."
+            )

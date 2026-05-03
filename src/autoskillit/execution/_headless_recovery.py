@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.core import CliSubtype, RetryReason, SkillResult, get_logger
+from autoskillit.core import CliSubtype, OutputFormat, RetryReason, SkillResult, get_logger
 from autoskillit.execution.commands import build_headless_resume_cmd
 from autoskillit.execution.process import _marker_is_standalone
 from autoskillit.execution.session import (
@@ -209,7 +209,7 @@ async def _attempt_contract_nudge(
     spec = build_headless_resume_cmd(
         resume_session_id=skill_result.session_id,
         prompt=prompt,
-        output_format="json",
+        output_format=OutputFormat.JSON,
     )
 
     try:

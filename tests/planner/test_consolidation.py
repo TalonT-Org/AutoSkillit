@@ -364,3 +364,29 @@ def test_missing_source_wp_in_manifest_raises(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="unknown WP"):
         consolidate_wps(refined_wps_path=str(refined_path), planner_dir=str(tmp_path))
+
+
+def test_consolidate_wps_rejects_merge_with_empty_deliverables(tmp_path: Path) -> None:
+    """Merging WPs where all sources have empty deliverables must raise ValueError."""
+    wps = [
+        make_wp_result("P1-A1-WP1", allow_stub=True, deliverables=[]),
+        make_wp_result("P1-A1-WP2", allow_stub=True, deliverables=[]),
+    ]
+    refined_path = _make_refined_wps(tmp_path, wps)
+    consolidation_dir = tmp_path / "work_packages" / "consolidation"
+    _make_manifest(
+        consolidation_dir,
+        "P1",
+        [
+            {
+                "merged_id": "P1-A1-WP1",
+                "source_wp_ids": ["P1-A1-WP1", "P1-A1-WP2"],
+                "merge_order": ["P1-A1-WP1", "P1-A1-WP2"],
+                "name": None,
+                "goal": None,
+            }
+        ],
+    )
+
+    with pytest.raises(ValueError, match="has 0 deliverables"):
+        consolidate_wps(refined_wps_path=str(refined_path), planner_dir=str(tmp_path))

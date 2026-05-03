@@ -6,6 +6,7 @@ import pytest
 
 from autoskillit.planner.schema import (
     ASSIGNMENT_REQUIRED_KEYS,
+    DELIVERABLE_BOUNDS,
     PHASE_REQUIRED_KEYS,
     WP_REQUIRED_KEYS,
     AssignmentResult,
@@ -144,3 +145,27 @@ def test_phase_short_includes_ordering() -> None:
     hints = typing.get_type_hints(PhaseShort)
     assert "ordering" in hints, "PhaseShort must include ordering per Issue 02 spec"
     assert hints["ordering"] is int
+
+
+def test_validate_wp_result_rejects_empty_deliverables() -> None:
+    with pytest.raises(ValueError, match="has 0 deliverables"):
+        validate_wp_result({"id": "P1-A1-WP1", "name": "WP", "deliverables": []})
+
+
+def test_validate_wp_result_accepts_empty_deliverables_with_allow_stub() -> None:
+    result = validate_wp_result(
+        {"id": "P1-A1-WP1", "name": "WP", "deliverables": []}, allow_stub=True
+    )
+    assert result["deliverables"] == []
+
+
+def test_validate_wp_result_rejects_too_many_deliverables() -> None:
+    _, hi = DELIVERABLE_BOUNDS
+    with pytest.raises(ValueError, match=f"has {hi + 1} deliverables"):
+        validate_wp_result(
+            {
+                "id": "P1-A1-WP1",
+                "name": "WP",
+                "deliverables": [f"f{i}.py" for i in range(hi + 1)],
+            }
+        )

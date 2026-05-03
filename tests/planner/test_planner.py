@@ -20,6 +20,7 @@ def test_planner_all_exports() -> None:
 
     assert set(__all__) == {
         "ASSIGN_RESULT_FILE_RE",
+        "DELIVERABLE_BOUNDS",
         "PHASE_RESULT_FILE_RE",
         "WP_RESULT_FILE_RE",
         "build_phase_assignment_manifest",

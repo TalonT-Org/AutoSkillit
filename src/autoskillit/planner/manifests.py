@@ -226,7 +226,7 @@ def finalize_wp_manifest(work_packages_dir: str, output_dir: str) -> dict[str, s
                 f"Failed to parse {f}: {exc.msg}", exc.doc, exc.pos
             ) from exc
         try:
-            data = validate_wp_result(raw)
+            data = validate_wp_result(raw, allow_stub=bool(raw.get("elaboration_failed")))
         except (ValueError, KeyError) as exc:
             raise ValueError(f"Invalid WP result in {f}: {exc}") from exc
         items.append(

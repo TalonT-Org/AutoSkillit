@@ -92,6 +92,18 @@ Write this to stdout. Do NOT attempt WP splitting or merging.
 - For each duplicated file path, assign ownership to the WP whose scope most directly
   implements that file (strongest semantic claim)
 - Remove the duplicate from the lower-priority WP's `deliverables` (keep in `files_touched`)
+- **Post-deduplication orphan check:** After resolving all duplicate deliverables, scan every
+  modified WP. If any WP now has `deliverables: []`, that WP is an orphan. For each orphan:
+  1. Identify the WP(s) that received this orphan's former deliverables (the "owner WPs")
+  2. Promote the orphan's `files_touched` entries as deliverables to the most relevant owner
+     WP (the one with the most scope overlap), selecting at most
+     `DELIVERABLE_BOUNDS[1] - len(owner.deliverables)` entries. Any remaining entries stay
+     in `files_touched` only.
+  3. Merge the orphan's `technical_steps` and `acceptance_criteria` into the owner WP
+  4. Remove the orphan WP from the plan and update all `depends_on` references
+  5. Update `wp_manifest.json` and `wp_index.json` accordingly
+  This is a deduplication side-effect resolved in the same step, not a sizing violation.
+  Deliverable count bounds are defined in `schema.py::DELIVERABLE_BOUNDS`.
 - Write updated `_result.json` for the affected WPs
 
 **Dependency reference errors** — fix broken dep IDs:

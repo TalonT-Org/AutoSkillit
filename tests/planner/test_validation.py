@@ -7,7 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.planner.validation import validate_plan
+from autoskillit.planner.schema import DELIVERABLE_BOUNDS
+from autoskillit.planner.validation import (
+    _check_duplicate_deliverables,
+    _check_sizing_bounds,
+    validate_plan,
+)
 from tests.planner.conftest import (
     make_assignment_result,
     make_phase_result,
@@ -149,13 +154,21 @@ def test_validate_plan_assignment_no_wps_fails(tmp_path: Path) -> None:
 
 
 def test_validate_plan_wp_zero_deliverables_fails(tmp_path: Path) -> None:
-    _make_minimal_output_dir(tmp_path, deliverables_override=[])
+    _make_minimal_output_dir(tmp_path)
+    wp_path = tmp_path / "work_packages" / "P1-A1-WP1_result.json"
+    raw = json.loads(wp_path.read_text())
+    raw["deliverables"] = []
+    wp_path.write_text(json.dumps(raw))
     result = validate_plan(str(tmp_path))
     assert result["verdict"] == "fail"
 
 
 def test_validate_plan_wp_too_many_deliverables_fails(tmp_path: Path) -> None:
-    _make_minimal_output_dir(tmp_path, deliverables_override=["a", "b", "c", "d", "e", "f"])
+    _make_minimal_output_dir(tmp_path)
+    wp_path = tmp_path / "work_packages" / "P1-A1-WP1_result.json"
+    raw = json.loads(wp_path.read_text())
+    raw["deliverables"] = ["a", "b", "c", "d", "e", "f"]
+    wp_path.write_text(json.dumps(raw))
     result = validate_plan(str(tmp_path))
     assert result["verdict"] == "fail"
 
@@ -317,11 +330,12 @@ def test_error_findings_have_structured_fields(tmp_path: Path) -> None:
 
 def test_mixed_errors_and_warnings(tmp_path: Path) -> None:
     """T17: Sizing violation (error) + files_touched overlap (warning) coexist."""
-    _make_minimal_output_dir(tmp_path, wps_per_assignment=2, deliverables_override=[])
+    _make_minimal_output_dir(tmp_path, wps_per_assignment=2)
     wp_dir = tmp_path / "work_packages"
     for wp_id in ("P1-A1-WP1", "P1-A1-WP2"):
         result_path = wp_dir / f"{wp_id}_result.json"
         data = json.loads(result_path.read_text())
+        data["deliverables"] = []
         data["files_touched"] = ["src/shared.py"]
         result_path.write_text(json.dumps(data))
 
@@ -522,3 +536,95 @@ def test_validate_plan_ignores_non_wp_file_in_work_packages_dir(tmp_path: Path) 
 
     result = validate_plan(str(tmp_path))
     assert result["verdict"] == "pass"
+
+
+# ---------------------------------------------------------------------------
+# Direct unit tests for _check_sizing_bounds
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("count", "expected_findings"),
+    [
+        (0, 1),
+        (1, 0),
+        (5, 0),
+        (6, 1),
+    ],
+)
+def test_check_sizing_bounds_boundary_values(count: int, expected_findings: int) -> None:
+    wp_results = {
+        "P1-A1-WP1": {"deliverables": [f"f{i}.py" for i in range(count)]},
+    }
+    findings = _check_sizing_bounds(wp_results)
+    assert len(findings) == expected_findings
+    if expected_findings:
+        assert findings[0]["check"] == "sizing_bounds"
+        assert findings[0]["severity"] == "error"
+
+
+def test_check_sizing_bounds_uses_deliverable_bounds_constant() -> None:
+    lo, hi = DELIVERABLE_BOUNDS
+    wp_at_lo = {"P1-A1-WP1": {"deliverables": [f"f{i}.py" for i in range(lo)]}}
+    wp_at_hi = {"P1-A1-WP2": {"deliverables": [f"f{i}.py" for i in range(hi)]}}
+    assert _check_sizing_bounds(wp_at_lo) == []
+    assert _check_sizing_bounds(wp_at_hi) == []
+
+
+# ---------------------------------------------------------------------------
+# Direct unit tests for _check_duplicate_deliverables
+# ---------------------------------------------------------------------------
+
+
+def test_check_duplicate_deliverables_detects_shared() -> None:
+    wp_results = {
+        "P1-A1-WP1": {"deliverables": ["src/shared.py", "src/a.py"]},
+        "P1-A1-WP2": {"deliverables": ["src/shared.py", "src/b.py"]},
+    }
+    findings = _check_duplicate_deliverables(wp_results)
+    assert len(findings) == 1
+    assert findings[0]["check"] == "duplicate_deliverables"
+    assert "src/shared.py" in findings[0]["message"]
+
+
+def test_check_duplicate_deliverables_no_false_positives() -> None:
+    wp_results = {
+        "P1-A1-WP1": {"deliverables": ["src/a.py"]},
+        "P1-A1-WP2": {"deliverables": ["src/b.py"]},
+    }
+    findings = _check_duplicate_deliverables(wp_results)
+    assert findings == []
+
+
+def test_check_duplicate_deliverables_returns_structured_findings() -> None:
+    wp_results = {
+        "P1-A1-WP1": {"deliverables": ["src/shared.py"]},
+        "P1-A1-WP2": {"deliverables": ["src/shared.py"]},
+    }
+    findings = _check_duplicate_deliverables(wp_results)
+    assert len(findings) == 1
+    f = findings[0]
+    assert "message" in f
+    assert f["severity"] == "error"
+    assert f["check"] == "duplicate_deliverables"
+
+
+# ---------------------------------------------------------------------------
+# Deduplication-to-orphan cascade
+# ---------------------------------------------------------------------------
+
+
+def test_deduplication_orphan_cascade(tmp_path: Path) -> None:
+    """Simulates dedup removing WP-B's only deliverable → sizing_bounds error."""
+    _make_minimal_output_dir(tmp_path, wps_per_assignment=2)
+    wp_dir = tmp_path / "work_packages"
+    wp_b = json.loads((wp_dir / "P1-A1-WP2_result.json").read_text())
+    wp_b["deliverables"] = []
+    (wp_dir / "P1-A1-WP2_result.json").write_text(json.dumps(wp_b))
+
+    result = validate_plan(str(tmp_path))
+    assert result["verdict"] == "fail"
+    validation = json.loads((tmp_path / "validation.json").read_text())
+    sizing_findings = [f for f in validation["findings"] if f["check"] == "sizing_bounds"]
+    assert len(sizing_findings) == 1
+    assert "P1-A1-WP2" in sizing_findings[0]["message"]

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit.core import atomic_write, write_versioned_json
+from autoskillit.planner.schema import validate_wp_result
 
 
 def _natural_sort_key(s: str) -> list[int | str]:
@@ -186,6 +187,7 @@ def consolidate_wps(
             if len(group.source_wp_ids) > 1:
                 groups_applied += 1
             merged_wp = _merge_group(group, wp_by_id)
+            validate_wp_result(merged_wp)
             output_wps.append(merged_wp)
         else:
             output_wps.append(dict(wp))

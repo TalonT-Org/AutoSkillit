@@ -47,7 +47,8 @@ def parse_direct_url() -> DirectUrlInfo:
                 "url": "",
             }
         data = json.loads(raw)
-        url = data.get("url", "") or ""
+        raw_url = data.get("url")
+        url = raw_url if isinstance(raw_url, str) else ""
         vcs_info = data.get("vcs_info", {})
         if isinstance(vcs_info, dict) and vcs_info.get("vcs") == "git":
             return {

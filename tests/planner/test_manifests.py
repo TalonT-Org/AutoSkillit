@@ -523,6 +523,7 @@ def test_resolve_task_input_file_with_heading(tmp_path):
     planner_dir = tmp_path / "planner"
     planner_dir.mkdir()
     result = resolve_task_input(str(task_file), str(planner_dir))
+    assert list(planner_dir.iterdir()) == []
     assert result["task_file_path"] == str(task_file)
     assert result["task_label"] == "Deploy Auth Service"
 

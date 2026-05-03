@@ -410,7 +410,7 @@ def test_build_phase_assignment_manifest_corrupt_json_raises(tmp_path):
     phases_dir.mkdir()
     output_dir = tmp_path / "out"
     output_dir.mkdir()
-    (phases_dir / "bad_result.json").write_text("{not json")
+    (phases_dir / "P1_result.json").write_text("{not json")
 
     with pytest.raises(json.JSONDecodeError, match="Failed to parse"):
         build_phase_assignment_manifest(str(phases_dir), str(output_dir))
@@ -423,7 +423,7 @@ def test_build_phase_assignment_manifest_missing_required_keys_raises(tmp_path):
     phases_dir.mkdir()
     output_dir = tmp_path / "out"
     output_dir.mkdir()
-    (phases_dir / "bad_result.json").write_text(json.dumps({"foo": "bar"}))
+    (phases_dir / "P1_result.json").write_text(json.dumps({"foo": "bar"}))
 
     with pytest.raises(ValueError, match="Invalid phase result in"):
         build_phase_assignment_manifest(str(phases_dir), str(output_dir))
@@ -451,7 +451,7 @@ def test_build_phase_wp_manifest_corrupt_json_raises(tmp_path):
     assignments_dir.mkdir()
     output_dir = tmp_path / "out"
     output_dir.mkdir()
-    (assignments_dir / "bad_result.json").write_text("{not json")
+    (assignments_dir / "P1-A1_result.json").write_text("{not json")
 
     with pytest.raises(json.JSONDecodeError, match="Failed to parse"):
         build_phase_wp_manifest(str(assignments_dir), str(output_dir))
@@ -489,7 +489,7 @@ def test_finalize_wp_manifest_corrupt_json_raises(tmp_path):
     wp_dir.mkdir()
     output_dir = tmp_path / "out"
     output_dir.mkdir()
-    (wp_dir / "bad_result.json").write_text("{not json")
+    (wp_dir / "P1-A1-WP1_result.json").write_text("{not json")
 
     with pytest.raises(json.JSONDecodeError, match="Failed to parse"):
         finalize_wp_manifest(str(wp_dir), str(output_dir))
@@ -571,3 +571,58 @@ def test_resolve_task_input_long_inline_truncates_label(tmp_path):
     result = resolve_task_input(text, str(planner_dir))
     assert len(result["task_label"]) <= 80
     assert text.startswith(result["task_label"])
+
+
+def test_build_phase_wp_manifest_ignores_phase_sentinel_in_assignments(tmp_path):
+    """Phase sentinel files in assignments/ must not crash build_phase_wp_manifest."""
+    from autoskillit.planner import build_phase_wp_manifest
+
+    assign_dir = tmp_path / "assignments"
+    assign_dir.mkdir()
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+
+    (assign_dir / "P1-A1_result.json").write_text(
+        json.dumps(make_assignment_result(1, 1, proposed_work_packages=[]))
+    )
+    (assign_dir / "P1_result.json").write_text(
+        json.dumps({"id": "P1", "status": "complete", "assignment_count": 1, "failed_count": 0})
+    )
+
+    result = build_phase_wp_manifest(str(assign_dir), str(out_dir))
+    assert "manifest_path" in result
+
+
+def test_expand_wps_result_dir_points_to_wp_sentinels(tmp_path):
+    """expand_wps must create wp_sentinels/ and point result_dir there."""
+    from autoskillit.planner import expand_wps
+
+    refined = {
+        "assignments": [
+            {
+                "id": "P1-A1",
+                "name": "Assignment 1",
+                "phase_id": "P1",
+                "phase_name": "Phase 1",
+                "goal": "test",
+                "technical_approach": "test",
+                "proposed_work_packages": [
+                    {
+                        "id_suffix": "WP1",
+                        "name": "WP 1",
+                        "scope": "core",
+                        "estimated_files": ["f.py"],
+                    }
+                ],
+            }
+        ],
+        "task": "test task",
+    }
+    refined_path = tmp_path / "refined_assignments.json"
+    refined_path.write_text(json.dumps(refined))
+
+    result = expand_wps(str(refined_path), str(tmp_path))
+
+    manifest = json.loads(Path(result["manifest_path"]).read_text())
+    assert manifest["result_dir"].endswith("wp_sentinels")
+    assert (tmp_path / "work_packages" / "wp_sentinels").is_dir()

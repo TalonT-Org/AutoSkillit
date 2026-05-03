@@ -7,11 +7,22 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit.core import get_logger, write_versioned_json
-from autoskillit.planner.schema import validate_phase_result
+from autoskillit.planner.schema import (
+    ASSIGN_RESULT_FILE_RE,
+    PHASE_RESULT_FILE_RE,
+    WP_RESULT_FILE_RE,
+    validate_phase_result,
+)
 
 logger = get_logger(__name__)
 
 _TIER_KEYS = ("phases", "assignments", "work_packages")
+
+_TIER_FILE_RE: dict[str, re.Pattern[str]] = {
+    "phases": PHASE_RESULT_FILE_RE,
+    "assignments": ASSIGN_RESULT_FILE_RE,
+    "work_packages": WP_RESULT_FILE_RE,
+}
 
 
 def merge_files(
@@ -215,7 +226,12 @@ def merge_tier_results(
     source_dir: str = "",
     **kwargs: Any,
 ) -> dict[str, Any]:
-    paths = sorted(Path(results_dir).glob("*_result.json"))
+    tier_re = _TIER_FILE_RE.get(key)
+    paths = sorted(
+        f
+        for f in Path(results_dir).glob("*_result.json")
+        if tier_re is None or tier_re.match(f.name)
+    )
     if not paths:
         raise ValueError(f"No *_result.json files found in {results_dir}")
     result = merge_files(
@@ -319,7 +335,9 @@ def build_plan_snapshot(
 ) -> dict[str, Any]:
     task = Path(task_file_path).read_text(encoding="utf-8") if task_file_path else ""
     phase_pairs: list[tuple[int, dict[str, Any]]] = []
-    for p in sorted(Path(phases_dir).glob("*_result.json")):
+    for p in sorted(
+        f for f in Path(phases_dir).glob("*_result.json") if PHASE_RESULT_FILE_RE.match(f.name)
+    ):
         try:
             raw = json.loads(p.read_text())
             validated = validate_phase_result(raw)

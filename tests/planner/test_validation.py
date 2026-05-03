@@ -502,3 +502,23 @@ def test_version_bump_step_via_summary(tmp_path: Path) -> None:
     assert result["verdict"] == "pass"
     validation = json.loads((tmp_path / "validation.json").read_text())
     assert any(w["check"] == "version_bump_step" for w in validation["warnings"])
+
+
+def test_validate_plan_ignores_phase_sentinel_in_assignments_dir(tmp_path: Path) -> None:
+    """Phase sentinel files in assignments/ must not crash validate_plan."""
+    _make_minimal_output_dir(tmp_path)
+    sentinel = {"id": "P1", "status": "complete", "assignment_count": 1, "failed_count": 0}
+    write_json(tmp_path / "assignments" / "P1_result.json", sentinel)
+
+    result = validate_plan(str(tmp_path))
+    assert result["verdict"] == "pass"
+
+
+def test_validate_plan_ignores_non_wp_file_in_work_packages_dir(tmp_path: Path) -> None:
+    """Non-WP files at top level of work_packages/ must not crash validate_plan."""
+    _make_minimal_output_dir(tmp_path)
+    sentinel = {"id": "P1", "status": "complete", "assignment_count": 1, "failed_count": 0}
+    write_json(tmp_path / "work_packages" / "P1_result.json", sentinel)
+
+    result = validate_plan(str(tmp_path))
+    assert result["verdict"] == "pass"

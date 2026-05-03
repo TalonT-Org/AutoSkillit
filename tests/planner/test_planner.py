@@ -19,6 +19,9 @@ def test_planner_all_exports() -> None:
     from autoskillit.planner import __all__
 
     assert set(__all__) == {
+        "ASSIGN_RESULT_FILE_RE",
+        "PHASE_RESULT_FILE_RE",
+        "WP_RESULT_FILE_RE",
         "build_phase_assignment_manifest",
         "build_phase_wp_manifest",
         "compile_plan",

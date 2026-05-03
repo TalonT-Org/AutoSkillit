@@ -310,3 +310,34 @@ def test_skill_output_through_full_pipeline(tmp_path: Path) -> None:
     assert Path(compile_result["plan_path"]).exists()
     milestones = json.loads((tmp_path / "milestones.json").read_text())
     assert milestones["milestones"][0]["name_slug"] == "foundation"
+
+
+# ---------------------------------------------------------------------------
+# Tier filename regex contracts
+# ---------------------------------------------------------------------------
+
+
+def test_tier_filename_regexes_match_expected_patterns() -> None:
+    """Filename regexes accept tier-correct names and reject foreign ones."""
+    from autoskillit.planner.schema import (
+        ASSIGN_RESULT_FILE_RE,
+        PHASE_RESULT_FILE_RE,
+        WP_RESULT_FILE_RE,
+    )
+
+    assert PHASE_RESULT_FILE_RE.match("P1_result.json")
+    assert PHASE_RESULT_FILE_RE.match("P99_result.json")
+    assert not PHASE_RESULT_FILE_RE.match("P1-A1_result.json")
+
+    assert ASSIGN_RESULT_FILE_RE.match("P1-A1_result.json")
+    assert ASSIGN_RESULT_FILE_RE.match("P12-A3_result.json")
+    assert not ASSIGN_RESULT_FILE_RE.match("P1_result.json")
+
+    assert WP_RESULT_FILE_RE.match("P1-A1-WP1_result.json")
+    assert WP_RESULT_FILE_RE.match("P2-A3-WP14_result.json")
+    assert not WP_RESULT_FILE_RE.match("P1-A1_result.json")
+
+    for name in ("context_P1.json", "phase_assignment_manifest.json", "wp_manifest.json"):
+        assert not PHASE_RESULT_FILE_RE.match(name)
+        assert not ASSIGN_RESULT_FILE_RE.match(name)
+        assert not WP_RESULT_FILE_RE.match(name)

@@ -198,6 +198,7 @@ def _is_skill_disabled(
             return True
 
     # Union model: suppress a category only when ALL features that gate it are disabled.
+    _in_allow_only: bool = allow_only is not None and skill_info.name in allow_only
     enabled_cats: set[str] = set()
     disabled_cats: set[str] = set()
     for feat_name, feat_def in FEATURE_REGISTRY.items():
@@ -207,7 +208,7 @@ def _is_skill_disabled(
             disabled_cats |= feat_def.skill_categories
     for cat in disabled_cats - enabled_cats:
         if cat in skill_info.categories:
-            if allow_only is not None and skill_info.name in allow_only:
+            if _in_allow_only:
                 logger.info(
                     "feature_gate_bypassed_by_allow_only",
                     skill=skill_info.name,

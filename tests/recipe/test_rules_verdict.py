@@ -68,12 +68,20 @@ def _explicit_all_steps() -> dict[str, RecipeStep]:
     review_step = steps["review_pr"]
     existing = review_step.on_result.conditions
     review_step.on_result.conditions = [
-        existing[0],
+        existing[0],  # changes_requested → fix
+        StepResultCondition(
+            route="fix",
+            when="${{ result.verdict }} == approved_with_comments",
+        ),
+        StepResultCondition(
+            route="done",
+            when="${{ result.verdict }} == approved",
+        ),
         StepResultCondition(
             route="escalate",
             when="${{ result.verdict }} == needs_human",
         ),
-        existing[1],
+        existing[1],  # true → done (catch-all)
     ]
     steps["escalate"] = RecipeStep(
         tool="run_skill",

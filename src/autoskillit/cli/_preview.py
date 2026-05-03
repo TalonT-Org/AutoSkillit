@@ -33,3 +33,32 @@ def show_campaign_preview(
     recipe_name: str, parsed_recipe: object, recipes_dir: Path, project_dir: Path
 ) -> None:
     _render_pre_launch_preview(recipe_name, parsed_recipe, recipes_dir, project_dir)
+
+
+def _pre_launch_campaign(
+    campaign_name: str,
+    parsed_recipe: object,
+    match: object,
+    project_dir: Path,
+    *,
+    is_resume: bool,
+) -> tuple[str | None, bool]:
+    """Get ingredients table; show preview + confirmation for new launches.
+
+    Returns (itable, proceed). proceed=False means the user declined the launch.
+    """
+    from autoskillit.cli._prompts import _get_ingredients_table  # noqa: PLC0415
+
+    if not is_resume:
+        show_campaign_preview(campaign_name, parsed_recipe, match.path.parent, project_dir)  # type: ignore[attr-defined]
+
+    itable = _get_ingredients_table(campaign_name, match, project_dir)  # type: ignore[arg-type]
+    if is_resume:
+        return itable, True
+
+    from autoskillit.cli._timed_input import timed_prompt  # noqa: PLC0415
+
+    confirm = timed_prompt(
+        "Launch campaign? [Enter/n]", default="", timeout=120, label="autoskillit fleet campaign"
+    )
+    return itable, confirm.lower() not in ("n", "no")

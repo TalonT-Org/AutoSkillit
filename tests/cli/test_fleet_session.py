@@ -39,11 +39,9 @@ class TestLaunchFleetSessionIngredientsTable:
             captured["ingredients_table"] = kwargs.get("ingredients_table")
             return "fake-prompt"
 
+        monkeypatch.setattr("autoskillit.cli._prompts._build_fleet_campaign_prompt", _fake_build)
         monkeypatch.setattr(
-            "autoskillit.cli._prompts._build_fleet_campaign_prompt", _fake_build
-        )
-        monkeypatch.setattr(
-            "autoskillit.cli._fleet_session._run_interactive_session",
+            "autoskillit.cli._session_launch._run_interactive_session",
             lambda *a, **kw: None,
         )
         monkeypatch.chdir(tmp_path)

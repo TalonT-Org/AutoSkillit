@@ -17,7 +17,7 @@ pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 class TestCLIOrderWorkspace:
     @pytest.fixture(autouse=True)
     def _stub_preview(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("autoskillit.cli._prompts.show_cook_preview", lambda *a, **kw: None)
+        monkeypatch.setattr("autoskillit.cli._preview.show_cook_preview", lambda *a, **kw: None)
 
     @pytest.fixture(autouse=True)
     def _interactive_stdin(self, monkeypatch: pytest.MonkeyPatch) -> None:

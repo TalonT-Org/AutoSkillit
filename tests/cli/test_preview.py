@@ -23,7 +23,9 @@ def _make_recipe(monkeypatch: pytest.MonkeyPatch, *, has_ingredients: bool = Tru
         "autoskillit.config.resolve_ingredient_defaults",
         lambda _: {"source_dir": "https://github.com/test/repo"},
     )
-    ingredients = {"task": {"description": "What to build", "required": True}} if has_ingredients else {}
+    ingredients = (
+        {"task": {"description": "What to build", "required": True}} if has_ingredients else {}
+    )
     return _parse_recipe(
         {
             "name": "preview-test",

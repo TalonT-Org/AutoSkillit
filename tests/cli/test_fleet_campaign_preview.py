@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -52,7 +51,9 @@ class TestFleetCampaignPreview:
         _stub_guards(monkeypatch)
         monkeypatch.chdir(tmp_path)
         _stub_campaign_resolution(monkeypatch, tmp_path, "test-campaign")
-        calls = _stub_preview_layer(monkeypatch, ingredients_table="| Name | Desc |\n| task | ... |")
+        calls = _stub_preview_layer(
+            monkeypatch, ingredients_table="| Name | Desc |\n| task | ... |"
+        )
         _fleet_campaign("test-campaign")
         assert len(calls["preview"]) == 1
 

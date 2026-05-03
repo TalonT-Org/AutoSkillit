@@ -31,7 +31,7 @@ def _stub_guards(monkeypatch: pytest.MonkeyPatch) -> None:
 def _stub_campaign_resolution(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, name: str
 ) -> MagicMock:
-    """Stub find_campaign_by_name, load_recipe, and validate_recipe."""
+    """Stub find_campaign_by_name, load_recipe, validate_recipe, and pre-launch steps."""
     campaign_path = tmp_path / f"{name}.yaml"
     campaign_path.write_text("")
 
@@ -48,6 +48,9 @@ def _stub_campaign_resolution(
     monkeypatch.setattr("autoskillit.recipe.find_campaign_by_name", lambda *a, **kw: recipe_info)
     monkeypatch.setattr("autoskillit.recipe.load_recipe", lambda *a, **kw: recipe)
     monkeypatch.setattr("autoskillit.recipe.validate_recipe", lambda *a: [])
+    monkeypatch.setattr("autoskillit.cli._preview.show_campaign_preview", lambda *a, **kw: None)
+    monkeypatch.setattr("autoskillit.cli._prompts._get_ingredients_table", lambda *a, **kw: None)
+    monkeypatch.setattr("autoskillit.cli._timed_input.timed_prompt", lambda *a, **kw: "")
     return recipe
 
 

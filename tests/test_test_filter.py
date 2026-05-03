@@ -19,6 +19,7 @@ from tests._test_filter import (
     LAYER_CASCADE_CONSERVATIVE,
     ASTImportWalker,
     FilterMode,
+    FullRunReason,
     ImportContext,
     _expand_reexport_closure,
     apply_manifest,
@@ -133,30 +134,30 @@ class TestCheckBucketA:
 
 
 class TestBuildTestScope:
-    def test_scope_none_changed_returns_none(self, tmp_path: Path) -> None:
+    def test_scope_none_changed_returns_git_unavailable(self, tmp_path: Path) -> None:
         result = build_test_scope(
             changed_files=None,
             mode=FilterMode.CONSERVATIVE,
             tests_root=tmp_path / "tests",
         )
-        assert result is None
+        assert result is FullRunReason.GIT_UNAVAILABLE
 
-    def test_scope_large_changeset_returns_none(self, tmp_path: Path) -> None:
+    def test_scope_large_changeset_returns_full_run_reason(self, tmp_path: Path) -> None:
         files = {f"src/autoskillit/core/f{i}.py" for i in range(31)}
         result = build_test_scope(
             changed_files=files,
             mode=FilterMode.CONSERVATIVE,
             tests_root=tmp_path / "tests",
         )
-        assert result is None
+        assert result is FullRunReason.LARGE_CHANGESET
 
-    def test_scope_bucket_a_returns_none(self, tmp_path: Path) -> None:
+    def test_scope_bucket_a_returns_full_run_reason(self, tmp_path: Path) -> None:
         result = build_test_scope(
             changed_files={"pyproject.toml"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tmp_path / "tests",
         )
-        assert result is None
+        assert result is FullRunReason.BUCKET_A
 
     def test_scope_l0_core_conservative(self, tmp_path: Path) -> None:
         tests_root = tmp_path / "tests"
@@ -349,7 +350,7 @@ class TestBuildTestScope:
         assert Path("tests/core/test_io.py") in result
 
     def test_scope_nonpython_no_manifest_only_alwaysrun(self, tmp_path: Path) -> None:
-        """Non-Python file with manifest=None → fail-open → result is None."""
+        """Non-Python file with manifest=None → fail-open → FullRunReason.UNMAPPED_FILE."""
         tests_root = tmp_path / "tests"
         for d in ["arch", "contracts", "infra", "docs"]:
             (tests_root / d).mkdir(parents=True, exist_ok=True)
@@ -359,10 +360,12 @@ class TestBuildTestScope:
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
-        assert result is None
+        assert result is FullRunReason.UNMAPPED_FILE
 
-    def test_scope_nonpython_unmatched_manifest_returns_none(self, tmp_path: Path) -> None:
-        """A non-Python changed file with no manifest match must return None (full run)."""
+    def test_scope_nonpython_unmatched_manifest_returns_full_run_reason(
+        self, tmp_path: Path
+    ) -> None:
+        """Non-Python file with no manifest match → FullRunReason.UNMAPPED_FILE (full run)."""
         tests_root = tmp_path / "tests"
         for d in ["arch", "contracts", "infra", "docs"]:
             (tests_root / d).mkdir(parents=True, exist_ok=True)
@@ -373,7 +376,7 @@ class TestBuildTestScope:
             manifest=manifest,
             tests_root=tests_root,
         )
-        assert result is None
+        assert result is FullRunReason.UNMAPPED_FILE
 
     def test_scope_nonpython_matched_manifest_adds_dirs(self, tmp_path: Path) -> None:
         """A non-Python file that DOES match a manifest pattern contributes its test dirs."""
@@ -399,13 +402,13 @@ class TestBuildTestScope:
         for fname in _INFRA_UNCONDITIONAL_FILES:
             assert fname in result_names
 
-    def test_scope_none_mode_returns_none(self, tmp_path: Path) -> None:
+    def test_scope_none_mode_returns_disabled(self, tmp_path: Path) -> None:
         result = build_test_scope(
             changed_files={"src/autoskillit/core/io.py"},
             mode=FilterMode.NONE,
             tests_root=tmp_path / "tests",
         )
-        assert result is None
+        assert result is FullRunReason.DISABLED
 
     def test_scope_empty_changeset(self, tmp_path: Path) -> None:
         tests_root = tmp_path / "tests"

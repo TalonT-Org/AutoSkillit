@@ -599,20 +599,3 @@ def test_bundled_recipes_pass_all_new_contract_rules() -> None:
         "New contract immunity rules fired on bundled recipes "
         "(ensure Part A contract fixes are applied):\n" + "\n".join(violations)
     )
-
-
-def test_excluded_tokens_match_intentionally_excluded() -> None:
-    """_PATH_RECOVERY_EXCLUDED_TOKENS must equal _INTENTIONALLY_EXCLUDED_PATH_TOKENS.
-
-    Both constants exclude the same token names for the same reason, but live in
-    different layers (recipe IL-2 vs execution IL-1) so cannot be shared via import.
-    This test guards against them drifting apart.
-    """
-    from autoskillit.execution._headless_path_tokens import _INTENTIONALLY_EXCLUDED_PATH_TOKENS
-    from autoskillit.recipe.rules_contracts import _PATH_RECOVERY_EXCLUDED_TOKENS
-
-    assert _PATH_RECOVERY_EXCLUDED_TOKENS == _INTENTIONALLY_EXCLUDED_PATH_TOKENS, (
-        f"Constants diverged.\n"
-        f"_PATH_RECOVERY_EXCLUDED_TOKENS: {_PATH_RECOVERY_EXCLUDED_TOKENS}\n"
-        f"_INTENTIONALLY_EXCLUDED_PATH_TOKENS: {_INTENTIONALLY_EXCLUDED_PATH_TOKENS}"
-    )

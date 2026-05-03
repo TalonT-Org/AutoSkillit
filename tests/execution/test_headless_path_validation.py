@@ -1279,6 +1279,21 @@ class TestPathCaptureCoversAllContractPatterns:
 
 
 class TestRecoverablePathTokensCoverage:
+    def test_excluded_tokens_match_intentionally_excluded(self) -> None:
+        """_PATH_RECOVERY_EXCLUDED_TOKENS must equal _INTENTIONALLY_EXCLUDED_PATH_TOKENS.
+
+        Both constants exclude the same token names but live in different layers
+        (recipe IL-2 vs execution IL-1) and cannot be imported across.
+        """
+        from autoskillit.execution._headless_path_tokens import _INTENTIONALLY_EXCLUDED_PATH_TOKENS
+        from autoskillit.recipe.rules_contracts import _PATH_RECOVERY_EXCLUDED_TOKENS
+
+        assert _PATH_RECOVERY_EXCLUDED_TOKENS == _INTENTIONALLY_EXCLUDED_PATH_TOKENS, (
+            f"Constants diverged.\n"
+            f"_PATH_RECOVERY_EXCLUDED_TOKENS: {_PATH_RECOVERY_EXCLUDED_TOKENS}\n"
+            f"_INTENTIONALLY_EXCLUDED_PATH_TOKENS: {_INTENTIONALLY_EXCLUDED_PATH_TOKENS}"
+        )
+
     def test_recoverable_path_tokens_includes_directory_path_outputs(self) -> None:
         from autoskillit.execution.headless import _RECOVERABLE_PATH_TOKENS
         from autoskillit.recipe.contracts import load_bundled_manifest

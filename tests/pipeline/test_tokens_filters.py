@@ -383,3 +383,55 @@ def test_token_load_campaign_id_filter(tmp_path):
     log3 = DefaultTokenLog()
     n3 = log3.load_from_log_dir(tmp_path, campaign_id_filter="")
     assert n3 == 3
+
+
+# --- Group B: order_id_filter tests ---
+
+
+def _write_session_order_id(
+    log_root: Path,
+    dir_name: str,
+    step_name: str,
+    order_id: str,
+    cwd: str = "/clone/test",
+    timestamp: str = "2026-05-01T00:00:00+00:00",
+) -> None:
+    """Write a token_usage session with order_id in the sessions.jsonl index."""
+    session_dir = log_root / "sessions" / dir_name
+    session_dir.mkdir(parents=True, exist_ok=True)
+    tu_data = {
+        "step_name": step_name,
+        "input_tokens": 100,
+        "output_tokens": 50,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "timing_seconds": 5.0,
+        "order_id": order_id,
+    }
+    (session_dir / "token_usage.json").write_text(json.dumps(tu_data))
+    index_entry = {
+        "dir_name": dir_name,
+        "timestamp": timestamp,
+        "session_id": dir_name,
+        "cwd": cwd,
+        "order_id": order_id,
+    }
+    with (log_root / "sessions.jsonl").open("a") as f:
+        f.write(json.dumps(index_entry) + "\n")
+
+
+def test_load_from_log_dir_order_id_filter_cross_cwd(tmp_path):
+    """Sessions from two cwd paths with same order_id are ALL loaded when order_id_filter is used."""
+    _write_session_order_id(tmp_path, "s-a", "rectify", order_id="issue-42", cwd="/clone-A")
+    _write_session_order_id(tmp_path, "s-b", "implement", order_id="issue-42", cwd="/clone-B")
+    _write_session_order_id(tmp_path, "s-c", "review", order_id="issue-99", cwd="/clone-B")
+
+    log = DefaultTokenLog()
+    n = log.load_from_log_dir(tmp_path, order_id_filter="issue-42")
+
+    assert n == 2, "order_id_filter should load both clones for the same order"
+    steps = log.get_report(order_id="issue-42")
+    step_names = {s["step_name"] for s in steps}
+    assert "rectify" in step_names
+    assert "implement" in step_names
+    assert "review" not in step_names

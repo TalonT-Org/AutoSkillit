@@ -54,20 +54,20 @@ def test_returns_false_when_bug_report_malformed(tmp_path: Path) -> None:
 # T_CRL6
 def test_crl_next_iteration_increments() -> None:
     """next_iteration increments from current_iteration: "" → "1", "1" → "2", "2" → "3"."""
-    r1 = check_review_loop("1", "/tmp", current_iteration="")
+    r1 = check_review_loop("1", current_iteration="")
     assert r1["next_iteration"] == "1"
 
-    r2 = check_review_loop("1", "/tmp", current_iteration="1")
+    r2 = check_review_loop("1", current_iteration="1")
     assert r2["next_iteration"] == "2"
 
-    r3 = check_review_loop("1", "/tmp", current_iteration="2")
+    r3 = check_review_loop("1", current_iteration="2")
     assert r3["next_iteration"] == "3"
 
 
 # T_CRL7
 def test_crl_max_exceeded_when_next_iteration_ge_max() -> None:
     """max_exceeded=true when next_iteration >= max_iterations."""
-    result = check_review_loop("1", "/tmp", current_iteration="2", max_iterations="3")
+    result = check_review_loop("1", current_iteration="2", max_iterations="3")
     assert result["max_exceeded"] == "true"
     assert result["next_iteration"] == "3"
 
@@ -75,7 +75,7 @@ def test_crl_max_exceeded_when_next_iteration_ge_max() -> None:
 # T_CRL8
 def test_crl_max_not_exceeded_when_below_max() -> None:
     """max_exceeded=false when next_iteration < max_iterations."""
-    result = check_review_loop("1", "/tmp", current_iteration="1", max_iterations="3")
+    result = check_review_loop("1", current_iteration="1", max_iterations="3")
     assert result["max_exceeded"] == "false"
 
 
@@ -88,7 +88,6 @@ def test_check_review_loop_always_continues_when_iterations_remain() -> None:
     """
     result = check_review_loop(
         pr_number="42",
-        cwd="/tmp",
         current_iteration="0",
         max_iterations="3",
     )
@@ -100,7 +99,6 @@ def test_check_review_loop_stops_at_max_iterations() -> None:
     """When current_iteration reaches max_iterations, max_exceeded must be true."""
     result = check_review_loop(
         pr_number="42",
-        cwd="/tmp",
         current_iteration="2",
         max_iterations="3",
     )
@@ -110,7 +108,7 @@ def test_check_review_loop_stops_at_max_iterations() -> None:
 
 def test_check_review_loop_returns_expected_fields() -> None:
     """check_review_loop must return next_iteration, max_exceeded, and had_blocking."""
-    result = check_review_loop(pr_number="42", cwd="/tmp")
+    result = check_review_loop(pr_number="42")
     assert set(result.keys()) == {"next_iteration", "max_exceeded", "had_blocking"}
 
 
@@ -138,21 +136,21 @@ def test_check_review_loop_has_no_subprocess_calls() -> None:
 # T_CRL12
 def test_crl_had_blocking_true_when_changes_requested() -> None:
     """had_blocking=true when previous_verdict is changes_requested."""
-    result = check_review_loop("42", "/tmp", previous_verdict="changes_requested")
+    result = check_review_loop("42", previous_verdict="changes_requested")
     assert result["had_blocking"] == "true"
 
 
 # T_CRL13
 def test_crl_had_blocking_false_when_approved_with_comments() -> None:
     """had_blocking=false when previous_verdict is approved_with_comments."""
-    result = check_review_loop("42", "/tmp", previous_verdict="approved_with_comments")
+    result = check_review_loop("42", previous_verdict="approved_with_comments")
     assert result["had_blocking"] == "false"
 
 
 # T_CRL14
 def test_crl_had_blocking_false_when_empty_verdict() -> None:
     """had_blocking=false when previous_verdict is absent (first-pass guard)."""
-    result = check_review_loop("42", "/tmp")
+    result = check_review_loop("42")
     assert result["had_blocking"] == "false"
 
 
@@ -223,6 +221,7 @@ def _write_test_sessions(log_root: Path, entries: list[dict]) -> None:
             "dir_name": entry["dir_name"],
             "cwd": entry.get("cwd", ""),
             "kitchen_id": entry.get("kitchen_id", ""),
+            "order_id": entry.get("order_id", ""),
             "timestamp": entry.get("timestamp", "2026-01-01T00:00:00+00:00"),
         }
         lines.append(json.dumps(index_entry))
@@ -236,6 +235,8 @@ def _write_test_sessions(log_root: Path, entries: list[dict]) -> None:
             "cache_read_input_tokens": entry.get("cache_read_input_tokens", 200),
             "timing_seconds": entry.get("timing_seconds", 10.0),
             "order_id": entry.get("order_id", ""),
+            "loc_insertions": entry.get("loc_insertions", 0),
+            "loc_deletions": entry.get("loc_deletions", 0),
         }
         (session_dir / "token_usage.json").write_text(json.dumps(token_data))
     (log_root / "sessions.jsonl").write_text("\n".join(lines) + "\n")
@@ -439,11 +440,147 @@ def test_check_loop_iteration_none_max() -> None:
     assert result["max_exceeded"] == "false"
 
 
-def test_check_review_loop_none_current(tmp_path: Path) -> None:
-    result = check_review_loop(pr_number="1", cwd=str(tmp_path), current_iteration=None)  # type: ignore[arg-type]
+def test_check_review_loop_none_current() -> None:
+    result = check_review_loop(pr_number="1", current_iteration=None)  # type: ignore[arg-type]
     assert result["next_iteration"] == "1"
 
 
-def test_check_review_loop_none_verdict(tmp_path: Path) -> None:
-    result = check_review_loop(pr_number="1", cwd=str(tmp_path), previous_verdict=None)  # type: ignore[arg-type]
+def test_check_review_loop_none_verdict() -> None:
+    result = check_review_loop(pr_number="1", previous_verdict=None)  # type: ignore[arg-type]
     assert result["had_blocking"] == "false"
+
+
+# ---------------------------------------------------------------------------
+# T_PTS8–T_PTS11: order_id, efficiency table, and env-based scoping tests
+# ---------------------------------------------------------------------------
+
+
+# T_PTS8
+@patch("time.sleep")
+@patch("subprocess.run")
+def test_pts_order_id_captures_cross_clone_sessions(
+    mock_run, _mock_sleep, tmp_path: Path
+) -> None:
+    """patch_pr_token_summary with order_id loads sessions from multiple cwd paths."""
+    _write_test_sessions(
+        tmp_path,
+        [
+            {
+                "dir_name": "s-clone-a",
+                "cwd": "/clone-A",
+                "order_id": "issue-42",
+                "step_name": "rectify",
+                "input_tokens": 1000,
+            },
+            {
+                "dir_name": "s-clone-b",
+                "cwd": "/clone-B",
+                "order_id": "issue-42",
+                "step_name": "implement",
+                "input_tokens": 2000,
+            },
+        ],
+    )
+    mock_run.side_effect = _make_gh_mock(get_body="## Summary\nBody")
+    result = patch_pr_token_summary(PR_URL, order_id="issue-42", log_dir=str(tmp_path))
+    assert result["success"] == "true"
+    assert result["sessions_loaded"] == "2"
+    patch_call = mock_run.call_args_list[-1]
+    body_arg = [a for a in patch_call[0][0] if a.startswith("body=")][0]
+    assert "rectify" in body_arg
+    assert "implement" in body_arg
+
+
+# T_PTS9
+@patch("time.sleep")
+@patch("subprocess.run")
+def test_pts_generates_efficiency_table_when_loc_data_present(
+    mock_run, _mock_sleep, tmp_path: Path
+) -> None:
+    """patch_pr_token_summary emits Token Efficiency table when LoC data exists."""
+    _write_test_sessions(
+        tmp_path,
+        [
+            {
+                "dir_name": "s1",
+                "cwd": "/clone/test",
+                "step_name": "implement",
+                "input_tokens": 1000,
+                "output_tokens": 500,
+                "loc_insertions": 120,
+            },
+        ],
+    )
+    mock_run.side_effect = _make_gh_mock(get_body="## Summary\nBody")
+    result = patch_pr_token_summary(PR_URL, cwd="/clone/test", log_dir=str(tmp_path))
+    assert result["success"] == "true"
+    patch_call = mock_run.call_args_list[-1]
+    body_arg = [a for a in patch_call[0][0] if a.startswith("body=")][0]
+    assert "## Token Efficiency" in body_arg
+
+
+# T_PTS10
+@patch("time.sleep")
+@patch("subprocess.run")
+def test_pts_preserves_or_regenerates_efficiency_table(
+    mock_run, _mock_sleep, tmp_path: Path
+) -> None:
+    """When overwriting existing summary, efficiency table is regenerated, not lost."""
+    _write_test_sessions(
+        tmp_path,
+        [
+            {
+                "dir_name": "s1",
+                "cwd": "/clone/test",
+                "step_name": "implement",
+                "input_tokens": 1000,
+                "output_tokens": 500,
+                "loc_insertions": 100,
+            },
+        ],
+    )
+    existing_body = (
+        "## Summary\nSome text\n\n## Token Usage Summary\n\n"
+        "| Step | old |\n\n"
+        "## Token Efficiency\n\n| Step | old eff |\n"
+    )
+    mock_run.side_effect = _make_gh_mock(get_body=existing_body)
+    result = patch_pr_token_summary(PR_URL, cwd="/clone/test", log_dir=str(tmp_path))
+    assert result["success"] == "true"
+    patch_call = mock_run.call_args_list[-1]
+    body_arg = [a for a in patch_call[0][0] if a.startswith("body=")][0]
+    assert body_arg.count("## Token Usage Summary") == 1
+    assert "## Token Efficiency" in body_arg
+
+
+# T_PTS11
+@patch("time.sleep")
+@patch("subprocess.run")
+def test_pts_reads_order_id_from_dispatch_env(
+    mock_run, _mock_sleep, tmp_path: Path, monkeypatch
+) -> None:
+    """patch_pr_token_summary auto-reads AUTOSKILLIT_DISPATCH_ID when order_id not passed."""
+    monkeypatch.setenv("AUTOSKILLIT_DISPATCH_ID", "issue-42")
+    _write_test_sessions(
+        tmp_path,
+        [
+            {
+                "dir_name": "s-clone-a",
+                "cwd": "/clone-A",
+                "order_id": "issue-42",
+                "step_name": "rectify",
+                "input_tokens": 1000,
+            },
+            {
+                "dir_name": "s-clone-b",
+                "cwd": "/clone-B",
+                "order_id": "issue-42",
+                "step_name": "implement",
+                "input_tokens": 2000,
+            },
+        ],
+    )
+    mock_run.side_effect = _make_gh_mock(get_body="## Summary\nBody")
+    result = patch_pr_token_summary(PR_URL, cwd="", log_dir=str(tmp_path))
+    assert result["success"] == "true"
+    assert result["sessions_loaded"] == "2"

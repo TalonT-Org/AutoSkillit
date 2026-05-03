@@ -2061,9 +2061,6 @@ callable_contracts:
     - name: pr_number
       type: str
       required: true
-    - name: cwd
-      type: directory_path
-      required: true
     - name: current_iteration
       type: str
       required: false

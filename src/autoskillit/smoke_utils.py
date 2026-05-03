@@ -93,7 +93,6 @@ def annotate_pr_diff(pr_number: str, cwd: str, output_dir: str) -> dict[str, str
 
 def check_review_loop(
     pr_number: str,
-    cwd: str,
     current_iteration: str = "",
     max_iterations: str = "3",
     previous_verdict: str = "",
@@ -148,7 +147,13 @@ def check_loop_iteration(
     }
 
 
-def patch_pr_token_summary(pr_url: str, cwd: str, log_dir: str = "") -> dict[str, str]:
+def patch_pr_token_summary(
+    pr_url: str,
+    cwd: str = "",
+    order_id: str = "",
+    log_dir: str = "",
+) -> dict[str, str]:
+    import os  # noqa: PLC0415
     import re  # noqa: PLC0415
     import subprocess  # noqa: PLC0415
     import time  # noqa: PLC0415
@@ -162,16 +167,28 @@ def patch_pr_token_summary(pr_url: str, cwd: str, log_dir: str = "") -> dict[str
 
     owner, repo, pr_number = m.group(1), m.group(2), m.group(3)
 
+    # Auto-discover order_id from environment when not explicitly provided.
+    # AUTOSKILLIT_DISPATCH_ID is set by the fleet dispatcher on all L2 sessions
+    # and inherited by L3 sub-sessions, providing correct multi-clone scoping
+    # without requiring recipe authors to pass order_id explicitly.
+    effective_order_id = order_id or os.environ.get("AUTOSKILLIT_DISPATCH_ID", "")
+
     log_root = resolve_log_dir(log_dir)
     token_log = DefaultTokenLog()
-    count = token_log.load_from_log_dir(log_root, cwd_filter=cwd)
+    if effective_order_id:
+        count = token_log.load_from_log_dir(log_root, order_id_filter=effective_order_id)
+    else:
+        count = token_log.load_from_log_dir(log_root, cwd_filter=cwd)
 
     if count == 0:
         return {"success": "false", "error": "No sessions found", "sessions_loaded": "0"}
 
-    steps = token_log.get_report()
-    total = token_log.compute_total()
+    scope_kwargs: dict[str, str] = {"order_id": effective_order_id} if effective_order_id else {}
+    steps = token_log.get_report(**scope_kwargs)
+    total = token_log.compute_total(**scope_kwargs)
     table = TelemetryFormatter.format_token_table(steps, total)
+    efficiency = TelemetryFormatter.format_efficiency_table(steps, total)
+    combined = table + ("\n\n" + efficiency if efficiency else "")
 
     try:
         read_result = subprocess.run(
@@ -190,11 +207,16 @@ def patch_pr_token_summary(pr_url: str, cwd: str, log_dir: str = "") -> dict[str
     if not current_body or current_body == "null":
         return {"success": "false", "error": "PR body is empty"}
 
-    section_re = re.compile(r"\n*## Token Usage Summary\n.*?(?=\n## |\Z)", re.DOTALL)
+    # Match from "## Token Usage Summary" through an optional "## Token Efficiency"
+    # block, stopping at the next "## " heading or end-of-string.
+    section_re = re.compile(
+        r"\n*## Token Usage Summary\n.*?(?:\n## Token Efficiency\n.*?)?(?=\n## |\Z)",
+        re.DOTALL,
+    )
     if section_re.search(current_body):
-        new_body = section_re.sub("\n\n" + table, current_body)
+        new_body = section_re.sub("\n\n" + combined, current_body)
     else:
-        new_body = current_body + "\n\n" + table
+        new_body = current_body + "\n\n" + combined
 
     time.sleep(1)
 

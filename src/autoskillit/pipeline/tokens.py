@@ -190,6 +190,7 @@ class DefaultTokenLog:
         cwd_filter: str = "",
         kitchen_id_filter: str = "",
         campaign_id_filter: str = "",
+        order_id_filter: str = "",
     ) -> int:
         """Reconstruct token entries from persisted session logs.
 
@@ -202,12 +203,19 @@ class DefaultTokenLog:
         kitchen_id_filter: if non-empty, only sessions whose kitchen_id matches are loaded.
             Falls back to pipeline_id for sessions written before the rename.
         campaign_id_filter: if non-empty, only sessions whose campaign_id matches are loaded.
+        order_id_filter: if non-empty, only sessions whose order_id matches are loaded.
 
         Returns the count of session directories successfully loaded.
         """
         count = 0
         for tu_path in _iter_session_log_entries(
-            log_root, since, "token_usage.json", cwd_filter, kitchen_id_filter, campaign_id_filter
+            log_root,
+            since,
+            "token_usage.json",
+            cwd_filter,
+            kitchen_id_filter,
+            campaign_id_filter,
+            order_id_filter,
         ):
             try:
                 data = json.loads(tu_path.read_text(encoding="utf-8"))

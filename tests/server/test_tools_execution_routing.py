@@ -121,8 +121,10 @@ async def test_run_skill_result_includes_order_id_when_passed(tool_ctx, monkeypa
 
 
 @pytest.mark.anyio
-async def test_run_skill_result_no_order_id_field_when_empty(tool_ctx, monkeypatch) -> None:
-    """run_skill does NOT inject order_id into result JSON when order_id is empty."""
+async def test_run_skill_result_order_id_empty_string_when_not_passed(
+    tool_ctx, monkeypatch
+) -> None:
+    """run_skill emits order_id as empty string in result JSON when none provided."""
     import json as _json
 
     from tests.fakes import InMemoryHeadlessExecutor
@@ -132,7 +134,7 @@ async def test_run_skill_result_no_order_id_field_when_empty(tool_ctx, monkeypat
 
     result_json = await run_skill("/test skill", "/tmp")  # no order_id
     data = _json.loads(result_json)
-    assert "order_id" not in data
+    assert data.get("order_id") == ""
 
 
 @pytest.mark.anyio

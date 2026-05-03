@@ -21,7 +21,7 @@ class TestCheckQuotaCacheSchema:
     """Tests for _check_quota_cache_schema doctor check."""
 
     def test_check_quota_cache_schema_ok_when_current(self, tmp_path):
-        from autoskillit.cli._doctor import Severity, _check_quota_cache_schema
+        from autoskillit.cli.doctor import Severity, _check_quota_cache_schema
         from autoskillit.execution import QUOTA_CACHE_SCHEMA_VERSION
 
         cache = tmp_path / "cache.json"
@@ -35,7 +35,7 @@ class TestCheckQuotaCacheSchema:
         assert f"v{QUOTA_CACHE_SCHEMA_VERSION}" in result.message
 
     def test_check_quota_cache_schema_ok_when_missing(self, tmp_path):
-        from autoskillit.cli._doctor import Severity, _check_quota_cache_schema
+        from autoskillit.cli.doctor import Severity, _check_quota_cache_schema
 
         cache = tmp_path / "nonexistent.json"
         result = _check_quota_cache_schema(cache_path=cache)
@@ -43,7 +43,7 @@ class TestCheckQuotaCacheSchema:
         assert "No quota cache" in result.message
 
     def test_check_quota_cache_schema_warning_when_no_schema_version_key(self, tmp_path):
-        from autoskillit.cli._doctor import Severity, _check_quota_cache_schema
+        from autoskillit.cli.doctor import Severity, _check_quota_cache_schema
 
         cache = tmp_path / "cache.json"
         cache.write_text(json.dumps({"fetched_at": "2026-01-01T00:00:00"}))
@@ -54,7 +54,7 @@ class TestCheckQuotaCacheSchema:
     def test_check_quota_cache_schema_warning_includes_cache_path_and_observed_value(
         self, tmp_path
     ):
-        from autoskillit.cli._doctor import Severity, _check_quota_cache_schema
+        from autoskillit.cli.doctor import Severity, _check_quota_cache_schema
 
         cache = tmp_path / "cache.json"
         cache.write_text(json.dumps({"schema_version": 1}))
@@ -68,7 +68,7 @@ def test_doctor_reports_drift_in_project_scope(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """_check_hook_registry_drift must report drift found in project scope."""
-    from autoskillit.cli._doctor_hooks import _check_hook_registry_drift
+    from autoskillit.cli.doctor._doctor_hooks import _check_hook_registry_drift
     from autoskillit.core import Severity
 
     # Seed a stale pretty_output.py in project scope
@@ -116,7 +116,7 @@ class TestCheckClaudeProcessStateBreakdown:
         """Single sleeping claude process → Severity.OK with state breakdown."""
         import subprocess
 
-        from autoskillit.cli._doctor import Severity, _check_claude_process_state_breakdown
+        from autoskillit.cli.doctor import Severity, _check_claude_process_state_breakdown
 
         header = "PID STAT %CPU COMMAND\n"
         monkeypatch.setattr(
@@ -132,7 +132,7 @@ class TestCheckClaudeProcessStateBreakdown:
         """claude process in D state → Severity.WARNING with pid and pcpu in message."""
         import subprocess
 
-        from autoskillit.cli._doctor import Severity, _check_claude_process_state_breakdown
+        from autoskillit.cli.doctor import Severity, _check_claude_process_state_breakdown
 
         header = "PID STAT %CPU COMMAND\n"
         monkeypatch.setattr(
@@ -149,7 +149,7 @@ class TestCheckClaudeProcessStateBreakdown:
         """Empty ps output (no claude rows) → Severity.OK, 'No claude processes running'."""
         import subprocess
 
-        from autoskillit.cli._doctor import Severity, _check_claude_process_state_breakdown
+        from autoskillit.cli.doctor import Severity, _check_claude_process_state_breakdown
 
         header = "PID STAT %CPU COMMAND\n"
         monkeypatch.setattr(
@@ -165,7 +165,7 @@ class TestCheckClaudeProcessStateBreakdown:
         """FileNotFoundError from ps → Severity.OK explaining ps unavailability."""
         import subprocess
 
-        from autoskillit.cli._doctor import Severity, _check_claude_process_state_breakdown
+        from autoskillit.cli.doctor import Severity, _check_claude_process_state_breakdown
 
         def _raise(*a, **kw):
             raise FileNotFoundError("ps")
@@ -190,7 +190,7 @@ class TestDoctorInstallClassification:
     def test_doctor_reports_install_classification_git_vcs(
         self, monkeypatch: pytest.MonkeyPatch, revision: str, expected_fragment: str
     ) -> None:
-        from autoskillit.cli._doctor import Severity, _check_install_classification
+        from autoskillit.cli.doctor import Severity, _check_install_classification
 
         fake_direct_url = json.dumps(
             {
@@ -219,7 +219,7 @@ class TestDoctorInstallClassification:
     ) -> None:
         from unittest.mock import MagicMock
 
-        from autoskillit.cli._doctor import Severity, _check_install_classification
+        from autoskillit.cli.doctor import Severity, _check_install_classification
 
         fake_dist = MagicMock()
         fake_dist.read_text.return_value = None
@@ -236,7 +236,7 @@ class TestDoctorUpdateDismissalState:
     """Tests for _check_update_dismissal_state doctor check."""
 
     def test_doctor_reports_dismissal_state_empty(self, tmp_path: Path) -> None:
-        from autoskillit.cli._doctor import Severity, _check_update_dismissal_state
+        from autoskillit.cli.doctor import Severity, _check_update_dismissal_state
 
         result = _check_update_dismissal_state(home=tmp_path)
         assert result.severity == Severity.OK
@@ -248,8 +248,8 @@ class TestDoctorUpdateDismissalState:
         from datetime import UTC, datetime
         from unittest.mock import MagicMock
 
-        from autoskillit.cli._doctor import Severity, _check_update_dismissal_state
-        from autoskillit.cli._update_checks import _write_dismiss_state
+        from autoskillit.cli.doctor import Severity, _check_update_dismissal_state
+        from autoskillit.cli.update._update_checks import _write_dismiss_state
 
         # Seed state
         dismissed_at = datetime.now(UTC).isoformat()
@@ -297,7 +297,7 @@ class TestDoctorSourceVersionDriftUsesNetwork:
         """_check_source_version_drift must call resolve_reference_sha with network=True."""
         from unittest.mock import MagicMock
 
-        from autoskillit.cli._doctor import _check_source_version_drift
+        from autoskillit.cli.doctor import _check_source_version_drift
 
         fake_direct_url = json.dumps(
             {
@@ -333,7 +333,7 @@ class TestDoctorSourceVersionDriftUsesNetwork:
         """Network error (resolve_reference_sha returns None) → OK, not hard failure."""
         from unittest.mock import MagicMock
 
-        from autoskillit.cli._doctor import _check_source_version_drift
+        from autoskillit.cli.doctor import _check_source_version_drift
 
         fake_direct_url = json.dumps(
             {
@@ -356,7 +356,7 @@ class TestDoctorSourceVersionDriftUsesNetwork:
             lambda info, home, **kw: None,
         )
 
-        from autoskillit.cli._doctor import Severity
+        from autoskillit.cli.doctor import Severity
 
         result = _check_source_version_drift(home=tmp_path)
         assert result.severity == Severity.OK, (
@@ -370,7 +370,7 @@ def test_doctor_dual_mcp_registration_warns(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """_check_dual_mcp_registration() warns when both direct and marketplace entries exist."""
-    from autoskillit.cli._doctor import _check_dual_mcp_registration
+    from autoskillit.cli.doctor import _check_dual_mcp_registration
     from autoskillit.core import Severity
 
     claude_json = tmp_path / ".claude.json"
@@ -388,7 +388,7 @@ def test_doctor_dual_mcp_registration_warns(
 
 def test_doctor_no_dual_when_only_direct(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """_check_dual_mcp_registration() returns OK when only the direct entry exists."""
-    from autoskillit.cli._doctor import _check_dual_mcp_registration
+    from autoskillit.cli.doctor import _check_dual_mcp_registration
     from autoskillit.core import Severity
 
     claude_json = tmp_path / ".claude.json"
@@ -400,7 +400,7 @@ def test_doctor_no_dual_when_only_direct(tmp_path: Path, monkeypatch: pytest.Mon
 
 def test_check_installed_plugins_entry_real_structure_is_ok(tmp_path: Path) -> None:
     """With the real nested format, the check must report OK."""
-    from autoskillit.cli._doctor import _check_installed_plugins_entry
+    from autoskillit.cli.doctor import _check_installed_plugins_entry
     from autoskillit.core import Severity
 
     p = tmp_path / "installed_plugins.json"
@@ -418,7 +418,7 @@ def test_check_installed_plugins_entry_real_structure_is_ok(tmp_path: Path) -> N
 
 def test_check_installed_plugins_entry_flat_structure_is_warning(tmp_path: Path) -> None:
     """A flat structure (wrong format) must not be silently treated as OK."""
-    from autoskillit.cli._doctor import _check_installed_plugins_entry
+    from autoskillit.cli.doctor import _check_installed_plugins_entry
     from autoskillit.core import Severity
 
     p = tmp_path / "installed_plugins.json"
@@ -435,7 +435,7 @@ class TestGroupMFranchiseDoctorChecks:
     def test_check_ambient_session_type_leaf_ok_when_unset(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from autoskillit.cli._doctor import _check_ambient_session_type_leaf
+        from autoskillit.cli.doctor import _check_ambient_session_type_leaf
         from autoskillit.core import Severity
 
         monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
@@ -447,7 +447,7 @@ class TestGroupMFranchiseDoctorChecks:
     def test_check_ambient_session_type_leaf_warns_when_leaf(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from autoskillit.cli._doctor import _check_ambient_session_type_leaf
+        from autoskillit.cli.doctor import _check_ambient_session_type_leaf
         from autoskillit.core import Severity
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaf")
@@ -458,7 +458,7 @@ class TestGroupMFranchiseDoctorChecks:
     def test_check_ambient_session_type_leaf_ok_when_orchestrator(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from autoskillit.cli._doctor import _check_ambient_session_type_leaf
+        from autoskillit.cli.doctor import _check_ambient_session_type_leaf
         from autoskillit.core import Severity
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
@@ -469,7 +469,7 @@ class TestGroupMFranchiseDoctorChecks:
     def test_check_ambient_session_type_orchestrator_warns(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from autoskillit.cli._doctor import _check_ambient_session_type_orchestrator
+        from autoskillit.cli.doctor import _check_ambient_session_type_orchestrator
         from autoskillit.core import Severity
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
@@ -479,7 +479,7 @@ class TestGroupMFranchiseDoctorChecks:
 
     # M5: SESSION_TYPE=fleet → WARN from fleet check
     def test_check_ambient_session_type_fleet_warns(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from autoskillit.cli._doctor import _check_ambient_session_type_fleet
+        from autoskillit.cli.doctor import _check_ambient_session_type_fleet
         from autoskillit.core import Severity
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
@@ -491,7 +491,7 @@ class TestGroupMFranchiseDoctorChecks:
     def test_check_ambient_session_type_orchestrator_ok_when_unset(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from autoskillit.cli._doctor import _check_ambient_session_type_orchestrator
+        from autoskillit.cli.doctor import _check_ambient_session_type_orchestrator
         from autoskillit.core import Severity
 
         monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
@@ -501,7 +501,7 @@ class TestGroupMFranchiseDoctorChecks:
     def test_check_ambient_session_type_fleet_ok_when_unset(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from autoskillit.cli._doctor import _check_ambient_session_type_fleet
+        from autoskillit.cli.doctor import _check_ambient_session_type_fleet
         from autoskillit.core import Severity
 
         monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
@@ -512,7 +512,7 @@ class TestGroupMFranchiseDoctorChecks:
     def test_check_ambient_campaign_id_warns_when_set(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from autoskillit.cli._doctor import _check_ambient_campaign_id
+        from autoskillit.cli.doctor import _check_ambient_campaign_id
         from autoskillit.core import Severity
 
         monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_ID", "camp-123")
@@ -525,7 +525,7 @@ class TestGroupMFranchiseDoctorChecks:
     def test_check_ambient_campaign_id_ok_when_unset(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from autoskillit.cli._doctor import _check_ambient_campaign_id
+        from autoskillit.cli.doctor import _check_ambient_campaign_id
         from autoskillit.core import Severity
 
         monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
@@ -534,7 +534,7 @@ class TestGroupMFranchiseDoctorChecks:
 
     # M9: sous-chef skill dir exists → OK
     def test_check_sous_chef_bundled_ok(self) -> None:
-        from autoskillit.cli._doctor import _check_sous_chef_bundled
+        from autoskillit.cli.doctor import _check_sous_chef_bundled
         from autoskillit.core import Severity
 
         result = _check_sous_chef_bundled()
@@ -544,7 +544,7 @@ class TestGroupMFranchiseDoctorChecks:
     def test_check_sous_chef_bundled_error_when_missing(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from autoskillit.cli._doctor import _check_sous_chef_bundled
+        from autoskillit.cli.doctor import _check_sous_chef_bundled
         from autoskillit.core import Severity
 
         monkeypatch.setattr("autoskillit.cli._doctor_fleet.pkg_root", lambda: tmp_path)
@@ -556,7 +556,7 @@ class TestGroupMFranchiseDoctorChecks:
     def test_check_fleet_dispatch_guard_registered_ok(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from autoskillit.cli._doctor import _check_fleet_dispatch_guard_registered
+        from autoskillit.cli.doctor import _check_fleet_dispatch_guard_registered
         from autoskillit.core import Severity
 
         hooks_dir = tmp_path / "hooks"
@@ -574,7 +574,7 @@ class TestGroupMFranchiseDoctorChecks:
     def test_check_fleet_dispatch_guard_registered_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from autoskillit.cli._doctor import _check_fleet_dispatch_guard_registered
+        from autoskillit.cli.doctor import _check_fleet_dispatch_guard_registered
         from autoskillit.core import Severity
 
         monkeypatch.setattr(
@@ -587,7 +587,7 @@ class TestGroupMFranchiseDoctorChecks:
 
     # M13: No state files → OK
     def test_check_stale_fleet_state_ok_when_no_state(self, tmp_path: Path) -> None:
-        from autoskillit.cli._doctor import _check_stale_fleet_state
+        from autoskillit.cli.doctor import _check_stale_fleet_state
         from autoskillit.core import Severity
 
         result = _check_stale_fleet_state(project_dir=tmp_path)
@@ -598,7 +598,7 @@ class TestGroupMFranchiseDoctorChecks:
         import os
         import time
 
-        from autoskillit.cli._doctor import _check_stale_fleet_state
+        from autoskillit.cli.doctor import _check_stale_fleet_state
         from autoskillit.core import Severity
 
         state_dir = tmp_path / ".autoskillit" / "temp" / "fleet" / "camp-1"
@@ -624,7 +624,7 @@ class TestGroupMFranchiseDoctorChecks:
 
     # M15: State file with running dispatch and mtime < 7d → OK
     def test_check_stale_fleet_state_ok_when_fresh(self, tmp_path: Path) -> None:
-        from autoskillit.cli._doctor import _check_stale_fleet_state
+        from autoskillit.cli.doctor import _check_stale_fleet_state
         from autoskillit.core import Severity
 
         state_dir = tmp_path / ".autoskillit" / "temp" / "fleet" / "camp-1"
@@ -647,7 +647,7 @@ class TestGroupMFranchiseDoctorChecks:
 
     # M16: No campaigns/ dir → INFO onboarding hint
     def test_check_campaign_onboarding_hint_info_when_empty(self, tmp_path: Path) -> None:
-        from autoskillit.cli._doctor import _check_campaign_onboarding_hint
+        from autoskillit.cli.doctor import _check_campaign_onboarding_hint
         from autoskillit.core import Severity
 
         result = _check_campaign_onboarding_hint(project_dir=tmp_path)
@@ -656,7 +656,7 @@ class TestGroupMFranchiseDoctorChecks:
 
     # M17: campaigns/ has YAML files → OK
     def test_check_campaign_onboarding_hint_ok_when_populated(self, tmp_path: Path) -> None:
-        from autoskillit.cli._doctor import _check_campaign_onboarding_hint
+        from autoskillit.cli.doctor import _check_campaign_onboarding_hint
         from autoskillit.core import Severity
 
         campaigns_dir = tmp_path / ".autoskillit" / "recipes" / "campaigns"
@@ -667,7 +667,7 @@ class TestGroupMFranchiseDoctorChecks:
 
     # M18: Duplicate clone destinations across dispatches → WARN
     def test_check_campaign_manifest_clone_dests_warns_on_duplicates(self, tmp_path: Path) -> None:
-        from autoskillit.cli._doctor import _check_campaign_manifest_clone_dests
+        from autoskillit.cli.doctor import _check_campaign_manifest_clone_dests
         from autoskillit.core import Severity
 
         campaigns_dir = tmp_path / ".autoskillit" / "recipes" / "campaigns"
@@ -690,7 +690,7 @@ class TestGroupMFranchiseDoctorChecks:
 
     # M19: Unique clone destinations → OK
     def test_check_campaign_manifest_clone_dests_ok_unique(self, tmp_path: Path) -> None:
-        from autoskillit.cli._doctor import _check_campaign_manifest_clone_dests
+        from autoskillit.cli.doctor import _check_campaign_manifest_clone_dests
         from autoskillit.core import Severity
 
         campaigns_dir = tmp_path / ".autoskillit" / "recipes" / "campaigns"
@@ -837,7 +837,7 @@ class TestGroupNFeatureGateDoctorChecks:
     def test_feature_dependency_check_fires_on_unsatisfied_dep(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from autoskillit.cli._doctor import _check_feature_dependencies
+        from autoskillit.cli.doctor import _check_feature_dependencies
         from autoskillit.core import Severity
         from autoskillit.core.types._type_constants import FeatureDef, FeatureLifecycle
 
@@ -863,7 +863,7 @@ class TestGroupNFeatureGateDoctorChecks:
     def test_feature_dependency_check_passes_when_deps_satisfied(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from autoskillit.cli._doctor import _check_feature_dependencies
+        from autoskillit.cli.doctor import _check_feature_dependencies
         from autoskillit.core import Severity
         from autoskillit.core.types._type_constants import FeatureDef, FeatureLifecycle
 
@@ -888,7 +888,7 @@ class TestGroupNFeatureGateDoctorChecks:
     def test_feature_dependency_check_passes_with_empty_features(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from autoskillit.cli._doctor import _check_feature_dependencies
+        from autoskillit.cli.doctor import _check_feature_dependencies
         from autoskillit.core import Severity
 
         monkeypatch.setattr("autoskillit.core.FEATURE_REGISTRY", {})
@@ -897,7 +897,7 @@ class TestGroupNFeatureGateDoctorChecks:
 
     # N7: Feature registry consistency passes for real registry
     def test_feature_registry_consistency_passes(self) -> None:
-        from autoskillit.cli._doctor import _check_feature_registry_consistency
+        from autoskillit.cli.doctor import _check_feature_registry_consistency
         from autoskillit.core import Severity
 
         result = _check_feature_registry_consistency()
@@ -907,7 +907,7 @@ class TestGroupNFeatureGateDoctorChecks:
     def test_feature_registry_consistency_errors_on_bad_import(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from autoskillit.cli._doctor import _check_feature_registry_consistency
+        from autoskillit.cli.doctor import _check_feature_registry_consistency
         from autoskillit.core import Severity
         from autoskillit.core.types._type_constants import FeatureDef, FeatureLifecycle
 
@@ -999,7 +999,7 @@ def test_source_version_drift_remediation_contains_upgrade_command(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """_check_source_version_drift WARNING message contains the install-type-specific command."""
-    from autoskillit.cli._doctor import _check_source_version_drift
+    from autoskillit.cli.doctor import _check_source_version_drift
     from autoskillit.cli._install_info import InstallInfo, InstallType
     from autoskillit.core import Severity
 

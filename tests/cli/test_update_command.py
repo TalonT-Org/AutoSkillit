@@ -92,7 +92,7 @@ def test_update_runs_upgrade_command_for_git_vcs_install(
     revision: str,
     expected_cmd_prefix: list[str],
 ) -> None:
-    from autoskillit.cli._update import run_update_command
+    from autoskillit.cli.update._update import run_update_command
 
     info = _make_info(InstallType.GIT_VCS, revision=revision)
     run_calls = _setup_run_update(monkeypatch, info, tmp_path)
@@ -105,7 +105,7 @@ def test_update_runs_upgrade_command_for_git_vcs_install(
 def test_update_runs_upgrade_command_for_local_editable(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    from autoskillit.cli._update import run_update_command
+    from autoskillit.cli.update._update import run_update_command
 
     editable_source = tmp_path / "repo"
     editable_source.mkdir()
@@ -120,7 +120,7 @@ def test_update_runs_upgrade_command_for_local_editable(
 def test_update_runs_autoskillit_install_after_upgrade_command(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    from autoskillit.cli._update import run_update_command
+    from autoskillit.cli.update._update import run_update_command
 
     info = _make_info(InstallType.GIT_VCS, revision="stable")
     run_calls = _setup_run_update(monkeypatch, info, tmp_path)
@@ -131,7 +131,7 @@ def test_update_runs_autoskillit_install_after_upgrade_command(
 def test_update_passes_skip_env_to_subprocess(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    from autoskillit.cli._update import run_update_command
+    from autoskillit.cli.update._update import run_update_command
 
     info = _make_info(InstallType.GIT_VCS, revision="stable")
     monkeypatch.setattr("autoskillit.cli._update.detect_install", lambda: info)
@@ -164,7 +164,7 @@ def test_update_passes_skip_env_to_subprocess(
 def test_update_verifies_version_advance_and_warns_on_failure(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    from autoskillit.cli._update import run_update_command
+    from autoskillit.cli.update._update import run_update_command
 
     info = _make_info(InstallType.GIT_VCS, revision="stable")
     monkeypatch.setattr("autoskillit.cli._update.detect_install", lambda: info)
@@ -198,8 +198,8 @@ def test_update_verifies_version_advance_and_warns_on_failure(
 def test_update_clears_dismissal_state_on_success(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    from autoskillit.cli._update import run_update_command
-    from autoskillit.cli._update_checks import _read_dismiss_state, _write_dismiss_state
+    from autoskillit.cli.update._update import run_update_command
+    from autoskillit.cli.update._update_checks import _read_dismiss_state, _write_dismiss_state
 
     # Seed dismissal state
     (tmp_path / ".autoskillit").mkdir(parents=True, exist_ok=True)
@@ -240,7 +240,7 @@ def test_update_clears_dismissal_state_on_success(
 def test_update_reports_actionable_error_on_unknown_install_type(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    from autoskillit.cli._update import run_update_command
+    from autoskillit.cli.update._update import run_update_command
 
     info = _make_info(InstallType.UNKNOWN)
     monkeypatch.setattr("autoskillit.cli._update.detect_install", lambda: info)
@@ -259,7 +259,7 @@ def test_run_update_command_warns_on_install_failure(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture, tmp_path: Path
 ) -> None:
     """run_update_command warns user when autoskillit install step exits non-zero."""
-    from autoskillit.cli._update import run_update_command
+    from autoskillit.cli.update._update import run_update_command
 
     info = _make_info(InstallType.GIT_VCS, revision="stable")
     monkeypatch.setattr("autoskillit.cli._update.detect_install", lambda: info)
@@ -290,7 +290,7 @@ def test_run_update_command_restarts_on_success(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """After a successful upgrade, run_update_command must call perform_restart."""
-    from autoskillit.cli._update import run_update_command
+    from autoskillit.cli.update._update import run_update_command
 
     info = _make_info(InstallType.GIT_VCS, revision="stable")
     monkeypatch.setattr("autoskillit.cli._update.detect_install", lambda: info)
@@ -327,7 +327,7 @@ def test_run_update_command_restarts_on_success(
 def test_run_update_command_blocks_when_same_project_kitchen_open(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    from autoskillit.cli._update import run_update_command
+    from autoskillit.cli.update._update import run_update_command
 
     monkeypatch.setattr("autoskillit.core.any_kitchen_open", lambda **kw: True)
     with pytest.raises(SystemExit) as exc_info:
@@ -338,7 +338,7 @@ def test_run_update_command_blocks_when_same_project_kitchen_open(
 def test_run_update_command_passes_project_path_to_kitchen_check(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    from autoskillit.cli._update import run_update_command
+    from autoskillit.cli.update._update import run_update_command
 
     calls: list[dict] = []
 

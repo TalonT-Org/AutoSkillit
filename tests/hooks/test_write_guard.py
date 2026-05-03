@@ -17,7 +17,7 @@ def _build_event(tool_name: str, file_path: str) -> dict:
 
 
 def _run_hook(event: dict | str) -> str:
-    from autoskillit.hooks.write_guard import main
+    from autoskillit.hooks.guards.write_guard import main
 
     stdin_text = json.dumps(event) if isinstance(event, dict) else event
     buf = io.StringIO()

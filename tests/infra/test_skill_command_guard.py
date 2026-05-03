@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 def _run_hook(event: dict) -> str:
     """Run main() with the given event JSON, return captured stdout."""
-    from autoskillit.hooks.skill_command_guard import main
+    from autoskillit.hooks.guards.skill_command_guard import main
 
     with patch("sys.stdin", io.StringIO(json.dumps(event))):
         buf = io.StringIO()
@@ -87,7 +87,7 @@ def test_approve_multiline_slash_command():
 
 def test_approve_on_malformed_json():
     """Malformed stdin → fail-open (empty stdout, no crash)."""
-    from autoskillit.hooks.skill_command_guard import main
+    from autoskillit.hooks.guards.skill_command_guard import main
 
     with patch("sys.stdin", io.StringIO("not-json")):
         buf = io.StringIO()
@@ -109,7 +109,7 @@ def test_hook_uses_skill_command_prefix_constant():
     """Hook must define SKILL_COMMAND_PREFIX, not hardcode '/' inline."""
     import inspect
 
-    import autoskillit.hooks.skill_command_guard as mod
+    import autoskillit.hooks.guards.skill_command_guard as mod
 
     src = inspect.getsource(mod)
     assert "SKILL_COMMAND_PREFIX" in src

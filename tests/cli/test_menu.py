@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from autoskillit.cli._menu import (
+from autoskillit.cli.ui._menu import (
     SLOT_ZERO_SELECTED,
     render_numbered_menu,
     resolve_menu_input,

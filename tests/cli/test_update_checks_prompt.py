@@ -14,7 +14,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from autoskillit.cli._install_info import InstallInfo, InstallType
-from autoskillit.cli._update_checks import (
+from autoskillit.cli.update._update_checks import (
     _is_dismissed,
     _read_dismiss_state,
     _write_dismiss_state,
@@ -45,7 +45,7 @@ def _setup_run_checks(
     """Set up mocks for run_update_checks and return (printed_lines, input_calls)."""
     import select as _select_mod
 
-    from autoskillit.cli._update_checks import Signal
+    from autoskillit.cli.update._update_checks import Signal
 
     monkeypatch.delenv("CLAUDECODE", raising=False)
     monkeypatch.delenv("CI", raising=False)
@@ -624,7 +624,7 @@ def test_timed_prompt_returns_default_on_timeout(monkeypatch: pytest.MonkeyPatch
     """timed_prompt returns the default value when select.select times out."""
     import select as _select_mod
 
-    from autoskillit.cli._timed_input import timed_prompt
+    from autoskillit.cli.ui._timed_input import timed_prompt
 
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("sys.stdout.isatty", lambda: True)
@@ -647,7 +647,7 @@ def test_timed_prompt_applies_ansi_formatting(monkeypatch: pytest.MonkeyPatch) -
     """timed_prompt output includes ANSI escape sequences when color is supported."""
     import select as _select_mod
 
-    from autoskillit.cli._timed_input import timed_prompt
+    from autoskillit.cli.ui._timed_input import timed_prompt
 
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("sys.stdout.isatty", lambda: True)
@@ -674,7 +674,7 @@ def test_timed_prompt_respects_no_color(monkeypatch: pytest.MonkeyPatch) -> None
     """timed_prompt output has no ANSI sequences when NO_COLOR is set."""
     import select as _select_mod
 
-    from autoskillit.cli._timed_input import timed_prompt
+    from autoskillit.cli.ui._timed_input import timed_prompt
 
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("sys.stdout.isatty", lambda: True)
@@ -895,7 +895,7 @@ def test_run_update_checks_kitchen_guard_active_for_update_command(
 
 def test_kitchen_guarded_commands_registry() -> None:
     """KITCHEN_GUARDED_COMMANDS must contain exactly the mutation commands."""
-    from autoskillit.cli._update_checks import KITCHEN_GUARDED_COMMANDS
+    from autoskillit.cli.update._update_checks import KITCHEN_GUARDED_COMMANDS
 
     assert KITCHEN_GUARDED_COMMANDS == frozenset({"update", "install", "init"}), (
         f"KITCHEN_GUARDED_COMMANDS must be exactly {{'update', 'install', 'init'}}, "

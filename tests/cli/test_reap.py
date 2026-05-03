@@ -51,7 +51,7 @@ def _make_running_state(
 
 
 def _reap(state_path: Path, *, dry_run: bool = False) -> None:
-    from autoskillit.cli._fleet import _reap_stale_dispatches
+    from autoskillit.cli.fleet import _reap_stale_dispatches
 
     _reap_stale_dispatches(state_path, dry_run=dry_run)
 

@@ -447,7 +447,7 @@ class TestIntegration:
             QuotaWindowEntry,
             _write_cache,
         )
-        from autoskillit.hooks.quota_guard import main
+        from autoskillit.hooks.guards.quota_guard import main
 
         cache_path = tmp_path / "quota_cache.json"
         _write_cache(

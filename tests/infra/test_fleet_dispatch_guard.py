@@ -19,7 +19,7 @@ def _run_guard(
     raw_stdin: str | None = None,
 ) -> str:
     """Run main() with the given event payload."""
-    from autoskillit.hooks.fleet_dispatch_guard import main
+    from autoskillit.hooks.guards.fleet_dispatch_guard import main
 
     stdin_content = raw_stdin if raw_stdin is not None else json.dumps(tool_input)
     env_updates: dict[str, str] = {}

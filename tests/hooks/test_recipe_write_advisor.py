@@ -1,4 +1,4 @@
-"""Tests for autoskillit.hooks.recipe_write_advisor."""
+"""Tests for autoskillit.hooks.guards.recipe_write_advisor."""
 
 from __future__ import annotations
 
@@ -109,7 +109,7 @@ def _run_advisor_inprocess(
     *,
     headless: bool = False,
 ) -> str:
-    from autoskillit.hooks.recipe_write_advisor import main
+    from autoskillit.hooks.guards.recipe_write_advisor import main
 
     payload = json.dumps({"tool_name": tool_name, "tool_input": {"file_path": file_path}})
     env_clean = {"AUTOSKILLIT_HEADLESS": "1"} if headless else {}

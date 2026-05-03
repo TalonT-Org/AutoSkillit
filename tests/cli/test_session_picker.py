@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.cli._session_picker import (
+from autoskillit.cli.session._session_picker import (
     _classify_session,
     _run_picker,
     pick_session,

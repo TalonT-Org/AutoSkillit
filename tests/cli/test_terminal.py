@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 import pytest
 
-from autoskillit.cli._terminal import _RESET_SPEC
+from autoskillit.cli.ui._terminal import _RESET_SPEC
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
@@ -22,7 +22,7 @@ class TestTerminalGuardTTYRestore:
 
     def test_restores_on_normal_exit(self):
         """tcsetattr(TCSAFLUSH, saved_attrs) is called after normal yield exit."""
-        from autoskillit.cli._terminal import terminal_guard
+        from autoskillit.cli.ui._terminal import terminal_guard
 
         fake_attrs = [0, 0, 0, 0, 0, 0, [b"\x00"] * 32]
         with (
@@ -43,7 +43,7 @@ class TestTerminalGuardTTYRestore:
 
     def test_restores_on_keyboard_interrupt(self):
         """tcsetattr is called even when KeyboardInterrupt is raised inside the guard."""
-        from autoskillit.cli._terminal import terminal_guard
+        from autoskillit.cli.ui._terminal import terminal_guard
 
         fake_attrs = [0, 0, 0, 0, 0, 0, [b"\x00"] * 32]
         with (
@@ -65,7 +65,7 @@ class TestTerminalGuardTTYRestore:
 
     def test_restores_on_system_exit(self):
         """tcsetattr is called when SystemExit is raised (non-zero subprocess returncode)."""
-        from autoskillit.cli._terminal import terminal_guard
+        from autoskillit.cli.ui._terminal import terminal_guard
 
         fake_attrs = [0, 0, 0, 0, 0, 0, [b"\x00"] * 32]
         with (
@@ -88,7 +88,7 @@ class TestTerminalGuardTTYRestore:
     @pytest.mark.parametrize("entry", _RESET_SPEC, ids=lambda e: e.name)
     def test_emits_all_spec_sequences_on_normal_exit(self, entry):
         """Every sequence in _RESET_SPEC is emitted by terminal_guard() on normal exit."""
-        from autoskillit.cli._terminal import terminal_guard
+        from autoskillit.cli.ui._terminal import terminal_guard
 
         with (
             patch("autoskillit.cli._terminal.sys.stdin") as mock_stdin,
@@ -109,7 +109,7 @@ class TestTerminalGuardTTYRestore:
     @pytest.mark.parametrize("entry", _RESET_SPEC, ids=lambda e: e.name)
     def test_emits_all_spec_sequences_on_exception(self, entry):
         """Every sequence in _RESET_SPEC is emitted by terminal_guard() on exception."""
-        from autoskillit.cli._terminal import terminal_guard
+        from autoskillit.cli.ui._terminal import terminal_guard
 
         with (
             patch("autoskillit.cli._terminal.sys.stdin") as mock_stdin,
@@ -130,7 +130,7 @@ class TestTerminalGuardTTYRestore:
 
     def test_noop_in_non_tty_environment(self):
         """When stdin is not a TTY, tcgetattr and tcsetattr are never called."""
-        from autoskillit.cli._terminal import terminal_guard
+        from autoskillit.cli.ui._terminal import terminal_guard
 
         with (
             patch("autoskillit.cli._terminal.sys.stdin") as mock_stdin,
@@ -146,7 +146,7 @@ class TestTerminalGuardTTYRestore:
 
     def test_handles_tcgetattr_error_gracefully(self):
         """termios.error from tcgetattr does not propagate — guard becomes no-op."""
-        from autoskillit.cli._terminal import terminal_guard
+        from autoskillit.cli.ui._terminal import terminal_guard
 
         with (
             patch("autoskillit.cli._terminal.sys.stdin") as mock_stdin,
@@ -165,7 +165,7 @@ class TestTerminalGuardTTYRestore:
 
     def test_stty_fallback_on_tcsetattr_error(self):
         """os.system('stty sane') is called if tcsetattr raises termios.error."""
-        from autoskillit.cli._terminal import terminal_guard
+        from autoskillit.cli.ui._terminal import terminal_guard
 
         fake_attrs = [0, 0, 0, 0, 0, 0, [b"\x00"] * 32]
         with (
@@ -198,7 +198,7 @@ class TestTerminalGuardTTYRestore:
 
         Regression guard for: investigation_terminal_guard_alt_screen_scrollbar
         """
-        from autoskillit.cli._terminal import terminal_guard
+        from autoskillit.cli.ui._terminal import terminal_guard
 
         writes_before_yield: list[str] = []
         all_writes: list[str] = []
@@ -223,7 +223,7 @@ class TestTerminalGuardTTYRestore:
 
     def test_emits_exit_alt_screen_on_system_exit(self):
         """terminal_guard() emits \\033[?1049l in finally even when SystemExit raised."""
-        from autoskillit.cli._terminal import terminal_guard
+        from autoskillit.cli.ui._terminal import terminal_guard
 
         with (
             patch("autoskillit.cli._terminal.sys.stdin") as mock_stdin,
@@ -244,7 +244,7 @@ class TestTerminalGuardTTYRestore:
 
     def test_noop_does_not_emit_escape_sequences(self):
         """When stdin is not a TTY, no VT100 escape sequences are written to stdout."""
-        from autoskillit.cli._terminal import terminal_guard
+        from autoskillit.cli.ui._terminal import terminal_guard
 
         with (
             patch("autoskillit.cli._terminal.sys.stdin") as mock_stdin,
@@ -260,7 +260,7 @@ class TestTerminalGuardTTYRestore:
 
     def test_kitty_sequences_emitted_on_supported_terminal(self):
         """Kitty KBP sequences are emitted when TERM_PROGRAM indicates support."""
-        from autoskillit.cli._terminal import terminal_guard
+        from autoskillit.cli.ui._terminal import terminal_guard
 
         with (
             patch("autoskillit.cli._terminal.sys.stdin") as mock_stdin,
@@ -283,7 +283,7 @@ class TestTerminalGuardTTYRestore:
 
         JediTerm (JetBrains IDEs) echoes literal garbage from \\033[<99u.
         """
-        from autoskillit.cli._terminal import terminal_guard
+        from autoskillit.cli.ui._terminal import terminal_guard
 
         env = os.environ.copy()
         env.pop("TERM_PROGRAM", None)
@@ -314,7 +314,7 @@ class TestTerminalGuardTTYRestore:
 
     def test_kitty_sequences_emitted_via_kitty_window_id(self):
         """KITTY_WINDOW_ID triggers Kitty KBP sequences regardless of TERM_PROGRAM."""
-        from autoskillit.cli._terminal import terminal_guard
+        from autoskillit.cli.ui._terminal import terminal_guard
 
         with (
             patch("autoskillit.cli._terminal.sys.stdin") as mock_stdin,
@@ -333,7 +333,7 @@ class TestTerminalGuardTTYRestore:
 
     def test_kitty_protocol_sequences_emitted_after_decstr(self):
         """Kitty KBP sequences must follow DECSTR to avoid being reset."""
-        from autoskillit.cli._terminal import terminal_guard
+        from autoskillit.cli.ui._terminal import terminal_guard
 
         with (
             patch("autoskillit.cli._terminal.sys.stdin") as mock_stdin,
@@ -364,7 +364,7 @@ class TestResetSpecificationCompleteness:
 
     def test_reset_spec_covers_all_layers(self):
         """Every ResetLayer enum member must have >= 1 entry in _RESET_SPEC."""
-        from autoskillit.cli._terminal import _RESET_SPEC, ResetLayer
+        from autoskillit.cli.ui._terminal import _RESET_SPEC, ResetLayer
 
         covered_layers = {entry.layer for entry in _RESET_SPEC}
         missing = set(ResetLayer) - covered_layers
@@ -377,7 +377,7 @@ class TestResetSpecificationCompleteness:
         """_BASE_RESET must contain exactly the sequences in _RESET_SPEC."""
         import re
 
-        from autoskillit.cli._terminal import _BASE_RESET, _RESET_SPEC
+        from autoskillit.cli.ui._terminal import _BASE_RESET, _RESET_SPEC
 
         spec_sequences = {entry.sequence for entry in _RESET_SPEC}
         for seq in spec_sequences:
@@ -392,7 +392,7 @@ class TestResetSpecificationCompleteness:
 
     def test_content_layer_sequences_are_last(self):
         """CONTENT layer sequences must follow all other layers in _BASE_RESET."""
-        from autoskillit.cli._terminal import _BASE_RESET, _RESET_SPEC, ResetLayer
+        from autoskillit.cli.ui._terminal import _BASE_RESET, _RESET_SPEC, ResetLayer
 
         content_seqs = [e.sequence for e in _RESET_SPEC if e.layer == ResetLayer.CONTENT]
         other_seqs = [e.sequence for e in _RESET_SPEC if e.layer != ResetLayer.CONTENT]
@@ -408,7 +408,7 @@ class TestResetSpecificationCompleteness:
 
     def test_reset_spec_has_no_duplicate_sequences(self):
         """Each escape sequence must appear exactly once in _RESET_SPEC."""
-        from autoskillit.cli._terminal import _RESET_SPEC
+        from autoskillit.cli.ui._terminal import _RESET_SPEC
 
         sequences = [e.sequence for e in _RESET_SPEC]
         duplicates = [s for s in sequences if sequences.count(s) > 1]

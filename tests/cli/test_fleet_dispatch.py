@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.cli._fleet import fleet_dispatch as _fleet_dispatch
+from autoskillit.cli.fleet import fleet_dispatch as _fleet_dispatch
 from tests.cli._fleet_helpers import (
     _capture_subprocess,
     _stub_guards,

@@ -50,7 +50,7 @@ class TestLaunchFleetSessionIngredientsTable:
         state_path = tmp_path / ".autoskillit" / "temp" / "fleet" / "test-id" / "state.json"
         state_path.write_text("{}")
 
-        from autoskillit.cli._fleet_session import _launch_fleet_session
+        from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
 
         _launch_fleet_session(
             _make_campaign_recipe(),
@@ -99,7 +99,7 @@ class TestLaunchFleetSessionContinueOnFailureEnv:
         recipe = _make_campaign_recipe()
         recipe.continue_on_failure = continue_on_failure
 
-        from autoskillit.cli._fleet_session import _launch_fleet_session
+        from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
 
         _launch_fleet_session(recipe, "test-id", state_path, None, fleet_mode="campaign")
         return captured
@@ -169,7 +169,7 @@ class TestReloadLoopRefreshesMetadata:
             lambda *a, **kw: "fake-prompt",
         )
 
-        from autoskillit.cli._fleet_session import _launch_fleet_session
+        from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
 
         _launch_fleet_session(
             _make_campaign_recipe(),
@@ -230,7 +230,7 @@ class TestReloadLoopRefreshesMetadata:
             _fake_build,
         )
 
-        from autoskillit.cli._fleet_session import _launch_fleet_session
+        from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
 
         _launch_fleet_session(
             _make_campaign_recipe(),
@@ -287,7 +287,7 @@ class TestReloadLoopSentinelGuard:
             lambda *a, **kw: "fake-prompt",
         )
 
-        from autoskillit.cli._fleet_session import _launch_fleet_session
+        from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
 
         # Must not raise SystemExit
         _launch_fleet_session(
@@ -339,7 +339,7 @@ class TestReloadLoopSafetyGuards:
             lambda *a, **kw: "fake-prompt",
         )
 
-        from autoskillit.cli._fleet_session import _launch_fleet_session
+        from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
 
         with pytest.raises(SystemExit):
             _launch_fleet_session(
@@ -350,7 +350,7 @@ class TestReloadLoopSafetyGuards:
                 fleet_mode="campaign",
             )
 
-        from autoskillit.cli._fleet_session import _MAX_RELOADS
+        from autoskillit.cli.fleet._fleet_session import _MAX_RELOADS
 
         assert counter["n"] == _MAX_RELOADS + 1
 
@@ -389,7 +389,7 @@ class TestReloadLoopSafetyGuards:
             lambda *a, **kw: "fake-prompt",
         )
 
-        from autoskillit.cli._fleet_session import _launch_fleet_session
+        from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
 
         with pytest.raises(SystemExit):
             _launch_fleet_session(
@@ -442,7 +442,7 @@ class TestReloadLoopUsesNamedResume:
             lambda *a, **kw: "fake-prompt",
         )
 
-        from autoskillit.cli._fleet_session import _launch_fleet_session
+        from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
 
         _launch_fleet_session(
             _make_campaign_recipe(),

@@ -64,14 +64,14 @@ def _extract_tool_decorators(text: str) -> list[str]:
 
 def _count_mcp_tools() -> int:
     total = 0
-    for f in (SRC_DIR / "server").glob("tools_*.py"):
+    for f in (SRC_DIR / "server" / "tools").glob("tools_*.py"):
         total += len(_extract_tool_decorators(_read(f)))
     return total
 
 
 def _count_kitchen_tools() -> int:
     total = 0
-    for f in (SRC_DIR / "server").glob("tools_*.py"):
+    for f in (SRC_DIR / "server" / "tools").glob("tools_*.py"):
         for dec in _extract_tool_decorators(_read(f)):
             if '"kitchen"' in dec:
                 total += 1
@@ -80,7 +80,7 @@ def _count_kitchen_tools() -> int:
 
 def _count_free_range_tools() -> int:
     total = 0
-    for f in (SRC_DIR / "server").glob("tools_*.py"):
+    for f in (SRC_DIR / "server" / "tools").glob("tools_*.py"):
         for dec in _extract_tool_decorators(_read(f)):
             if '"kitchen"' not in dec:
                 total += 1
@@ -89,7 +89,7 @@ def _count_free_range_tools() -> int:
 
 def _count_headless_tools() -> int:
     total = 0
-    for f in (SRC_DIR / "server").glob("tools_*.py"):
+    for f in (SRC_DIR / "server" / "tools").glob("tools_*.py"):
         for dec in _extract_tool_decorators(_read(f)):
             if '"headless"' in dec:
                 total += 1
@@ -193,7 +193,7 @@ def _retry_reason_values() -> list[str]:
 
 
 def _count_semantic_rule_files() -> int:
-    return sum(1 for p in (SRC_DIR / "recipe").glob("rules_*.py"))
+    return sum(1 for p in (SRC_DIR / "recipe" / "rules").glob("rules_*.py"))
 
 
 # ----- tests ------------------------------------------------------------------

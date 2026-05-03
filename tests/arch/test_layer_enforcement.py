@@ -5,7 +5,7 @@ Tests:
   - Import layer contract (each module only imports from same or lower layer)
   - L1 package runtime isolation
   - Cross-package submodule import restrictions
-  - server/tools_*.py import constraints
+  - server/tools/tools_*.py import constraints
   - Notification and convention guards
 """
 
@@ -93,7 +93,7 @@ LAYER_RULES: dict[str, RuleDescriptor] = {
         name="no-raw-ctx-notification-calls-in-tool-handlers",
         lens="module-dependency",
         description=(
-            "All ctx.info/error/warning/debug calls in server/tools_*.py must be "
+            "All ctx.info/error/warning/debug calls in server/tools/tools_*.py must be "
             "replaced by _notify() from server/_notify.py."
         ),
         rationale=(
@@ -110,7 +110,7 @@ LAYER_RULES: dict[str, RuleDescriptor] = {
         name="no-reserved-keys-in-notify-extra-dicts",
         lens="module-dependency",
         description=(
-            "No literal extra={} dict passed to _notify() in tools_*.py may contain "
+            "No literal extra={} dict passed to _notify() in server/tools/tools_*.py may contain "
             "a key that matches a reserved LogRecord attribute."
         ),
         rationale=(
@@ -195,7 +195,7 @@ def test_all_mcp_tools_are_registered() -> None:
     expected = GATED_TOOLS | UNGATED_TOOLS | HEADLESS_TOOLS
     server_dir = SRC_ROOT / "server"
     decorated: set[str] = set()
-    for py_file in server_dir.glob("*.py"):
+    for py_file in list(server_dir.glob("*.py")) + list((server_dir / "tools").glob("*.py")):
         tree = ast.parse(py_file.read_text())
         for node in ast.walk(tree):
             if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
@@ -217,7 +217,7 @@ def test_gated_tools_call_require_enabled_first() -> None:
     server_dir = SRC_ROOT / "server"
     violations: list[str] = []
 
-    for py_file in server_dir.glob("*.py"):
+    for py_file in list(server_dir.glob("*.py")) + list((server_dir / "tools").glob("*.py")):
         src = py_file.read_text()
         tree = ast.parse(src)
         for node in ast.walk(tree):
@@ -266,7 +266,7 @@ def test_ungated_tools_do_not_call_require_enabled() -> None:
     import textwrap
 
     from autoskillit.pipeline.gate import UNGATED_TOOLS
-    from autoskillit.server import (
+    from autoskillit.server.tools import (
         tools_clone,
         tools_execution,
         tools_git,
@@ -313,7 +313,7 @@ def test_server_imports_gate_registry() -> None:
     """
     server_dir = SRC_ROOT / "server"
     imported: set[str] = set()
-    for py_file in server_dir.glob("*.py"):
+    for py_file in list(server_dir.glob("*.py")) + list((server_dir / "tools").glob("*.py")):
         tree = ast.parse(py_file.read_text())
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.module in (
@@ -629,17 +629,17 @@ def test_no_cross_package_submodule_imports() -> None:
     )
 
 
-# ── REQ-ARCH-003: server/tools_*.py import only allowed packages ──────────────
+# ── REQ-ARCH-003: server/tools/tools_*.py import only allowed packages ─────────
 
 
 def test_server_tools_import_only_allowed_packages() -> None:
-    """REQ-ARCH-003: server/tools_*.py may only import from autoskillit.core,
+    """REQ-ARCH-003: server/tools/tools_*.py may only import from autoskillit.core,
     autoskillit.pipeline, autoskillit.config, and intra-package autoskillit.server.*.
     TYPE_CHECKING exempt.
     """
     ALLOWED = {"core", "pipeline", "server", "config", "fleet"}
     tools_files = [
-        p for p in _SOURCE_FILES if p.parent.name == "server" and p.stem.startswith("tools_")
+        p for p in _SOURCE_FILES if p.parent.name == "tools" and p.stem.startswith("tools_")
     ]
     violations: list[str] = []
 
@@ -656,7 +656,7 @@ def test_server_tools_import_only_allowed_packages() -> None:
                     )
 
     assert not violations, (
-        "server/tools_*.py files import from disallowed autoskillit sub-packages:\n"
+        "server/tools/tools_*.py files import from disallowed autoskillit sub-packages:\n"
         + "\n".join(violations)
     )
 
@@ -693,13 +693,13 @@ def test_server_non_tools_no_cli_imports() -> None:
 
 
 def test_no_raw_ctx_notification_calls_in_tool_handlers() -> None:
-    """Architecture guard: all ctx.info/error/warning/debug calls in tools_*.py
+    """Architecture guard: all ctx.info/error/warning/debug calls in server/tools/tools_*.py
     must be replaced by _notify. If any raw ctx.* call exists, a developer has
     bypassed the validation layer and this test fails immediately.
     """
     server_dir = SRC_ROOT / "server"
     violations = []
-    for path in sorted(server_dir.glob("tools_*.py")):
+    for path in sorted((server_dir / "tools").glob("tools_*.py")):
         tree = ast.parse(path.read_text(), filename=str(path))
         for node in ast.walk(tree):
             if (
@@ -718,14 +718,14 @@ def test_no_raw_ctx_notification_calls_in_tool_handlers() -> None:
 
 def test_all_tool_extra_keys_are_not_reserved() -> None:
     """Architecture guard: statically verify that no literal extra={} dict passed
-    to _notify() in tools_*.py contains a key matching a reserved LogRecord
+    to _notify() in server/tools/tools_*.py contains a key matching a reserved LogRecord
     attribute. Catches reserved-key collisions at test time, before any runtime.
     """
     from autoskillit.core.types import RESERVED_LOG_RECORD_KEYS
 
     server_dir = SRC_ROOT / "server"
     violations = []
-    for path in sorted(server_dir.glob("tools_*.py")):
+    for path in sorted((server_dir / "tools").glob("tools_*.py")):
         tree = ast.parse(path.read_text(), filename=str(path))
         for node in ast.walk(tree):
             # Find: _notify(ctx, level, msg, logger_name, extra={...})
@@ -983,7 +983,7 @@ def test_tool_subset_tags_match_decorators() -> None:
     server_dir = SRC_ROOT / "server"
     decorator_tags: dict[str, frozenset[str]] = {}
 
-    for py_file in server_dir.glob("tools_*.py"):
+    for py_file in (server_dir / "tools").glob("tools_*.py"):
         tree = ast.parse(py_file.read_text())
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):

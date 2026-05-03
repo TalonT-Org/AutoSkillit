@@ -16,7 +16,7 @@ def _make_proc(returncode: int, stdout: str) -> subprocess.CompletedProcess:  # 
 
 def _run_hook_mocked(event: dict, side_effects: list) -> str:
     """Run main() with the given event and subprocess.run side effects."""
-    from autoskillit.hooks.remove_clone_guard import main
+    from autoskillit.hooks.guards.remove_clone_guard import main
 
     with (
         patch("subprocess.run", side_effect=side_effects),
@@ -39,7 +39,7 @@ def _run_hook_with_git(event: dict, git_responses: list[tuple[int, str]]) -> str
 
 def _run_hook(event: dict) -> str:
     """Run main() with no subprocess calls (keep=true or no clone_path path)."""
-    from autoskillit.hooks.remove_clone_guard import main
+    from autoskillit.hooks.guards.remove_clone_guard import main
 
     with patch("sys.stdin", io.StringIO(json.dumps(event))):
         buf = io.StringIO()
@@ -62,7 +62,7 @@ def test_approve_silently_when_keep_true():
 
 def test_approve_on_malformed_json():
     """Any parse error silently approves."""
-    from autoskillit.hooks.remove_clone_guard import main
+    from autoskillit.hooks.guards.remove_clone_guard import main
 
     with patch("sys.stdin", io.StringIO("not-json")):
         buf = io.StringIO()

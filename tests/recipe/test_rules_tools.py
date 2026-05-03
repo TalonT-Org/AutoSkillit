@@ -265,7 +265,7 @@ def test_wait_for_ci_rejects_poll_interval() -> None:
 
 def test_rules_tools_batch_cleanup_clones_accepts_all_owners_param() -> None:
     """T20 — batch_cleanup_clones with all_owners param must not trigger dead-with-param."""
-    from autoskillit.recipe.rules_tools import _TOOL_PARAMS
+    from autoskillit.recipe.rules.rules_tools import _TOOL_PARAMS
 
     assert "all_owners" in _TOOL_PARAMS["batch_cleanup_clones"]
 
@@ -364,7 +364,7 @@ def _build_handler_map() -> dict[str, object]:
 
 def test_tool_params_matches_mcp_handler_signatures() -> None:
     """T8: _TOOL_PARAMS keys match actual MCP handler signatures — drift fails CI."""
-    from autoskillit.recipe.rules_tools import _TOOL_PARAMS
+    from autoskillit.recipe.rules.rules_tools import _TOOL_PARAMS
 
     handler_map = _build_handler_map()
     mismatches: list[str] = []

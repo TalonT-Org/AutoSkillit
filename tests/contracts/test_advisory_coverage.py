@@ -93,7 +93,7 @@ def test_advisory_hook_message_uses_bare_prefix() -> None:
 
 def test_hook_patterns_match_type_constants() -> None:
     """recipe_write_advisor._ADVISORY_PATTERNS must exactly match SKILL_FILE_ADVISORY_MAP."""
-    from autoskillit.hooks.recipe_write_advisor import _ADVISORY_PATTERNS
+    from autoskillit.hooks.guards.recipe_write_advisor import _ADVISORY_PATTERNS
 
     assert list(SKILL_FILE_ADVISORY_MAP.items()) == _ADVISORY_PATTERNS, (
         "recipe_write_advisor._ADVISORY_PATTERNS is out of sync with "

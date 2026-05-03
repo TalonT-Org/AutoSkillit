@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from autoskillit.cli._update_checks_fetch import (
+from autoskillit.cli.update._update_checks_fetch import (
     _fetch_with_cache,
 )
 
@@ -33,7 +33,7 @@ def test_fetch_latest_version_uses_cache_within_ttl(tmp_path: Path) -> None:
     # Seed a cache entry that is fresh (1 second old, TTL = 30 min)
     import time
 
-    from autoskillit.cli._update_checks import _fetch_latest_version
+    from autoskillit.cli.update._update_checks import _fetch_latest_version
     from autoskillit.core import AUTOSKILLIT_INSTALLED_VERSION
 
     cache_data = {
@@ -74,7 +74,7 @@ def test_fetch_latest_version_uses_cache_within_ttl(tmp_path: Path) -> None:
 def test_fetch_cache_expires_after_ttl(tmp_path: Path) -> None:
     import time
 
-    from autoskillit.cli._update_checks import _fetch_latest_version
+    from autoskillit.cli.update._update_checks import _fetch_latest_version
 
     cache_data = {
         "https://api.github.com/repos/TalonT-Org/AutoSkillit/releases/latest": {
@@ -102,7 +102,7 @@ def test_fetch_cache_expires_after_ttl(tmp_path: Path) -> None:
 def test_fetch_cache_respects_env_var_ttl(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     import time
 
-    from autoskillit.cli._update_checks import _fetch_latest_version
+    from autoskillit.cli.update._update_checks import _fetch_latest_version
 
     # Entry is 61 seconds old — older than the custom 60s TTL
     cache_data = {
@@ -233,7 +233,7 @@ def test_fetch_304_response_returns_cached_payload(tmp_path: Path) -> None:
 
 
 def test_fetch_uses_correct_timeout(tmp_path: Path) -> None:
-    from autoskillit.cli._update_checks_fetch import _HTTP_TIMEOUT
+    from autoskillit.cli.update._update_checks_fetch import _HTTP_TIMEOUT
 
     assert _HTTP_TIMEOUT.connect == 2.0
     assert _HTTP_TIMEOUT.read == 1.0
@@ -345,7 +345,7 @@ def test_fetch_scrubs_authorization_header_from_logged_errors(
 def test_fetch_fails_fast_offline(tmp_path: Path) -> None:
     import httpx as _httpx
 
-    from autoskillit.cli._update_checks import _fetch_latest_version
+    from autoskillit.cli.update._update_checks import _fetch_latest_version
 
     (tmp_path / ".autoskillit").mkdir(parents=True, exist_ok=True)
 
@@ -433,7 +433,7 @@ def test_stale_fetch_cache_after_install_resolve_reference_sha_path2(
     """PATH 2 (no source repo, fallback to _api_sha): stale epoch forces fresh fetch."""
     import time
 
-    from autoskillit.cli._update_checks import resolve_reference_sha
+    from autoskillit.cli.update._update_checks import resolve_reference_sha
 
     url = "https://api.github.com/repos/TalonT-Org/AutoSkillit/git/refs/heads/develop"
     stale_sha = "a" * 40
@@ -488,7 +488,7 @@ def test_run_update_sequence_invalidates_fetch_cache(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """_run_update_sequence must delete github_fetch_cache.json on success."""
-    from autoskillit.cli._update_checks import _run_update_sequence
+    from autoskillit.cli.update._update_checks import _run_update_sequence
 
     cache_file = tmp_path / ".autoskillit" / "github_fetch_cache.json"
     cache_file.parent.mkdir(parents=True, exist_ok=True)
@@ -524,7 +524,7 @@ def test_run_update_command_invalidates_fetch_cache(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """run_update_command must delete github_fetch_cache.json on success."""
-    from autoskillit.cli._update import run_update_command
+    from autoskillit.cli.update._update import run_update_command
 
     cache_file = tmp_path / ".autoskillit" / "github_fetch_cache.json"
     cache_file.parent.mkdir(parents=True, exist_ok=True)
@@ -600,7 +600,7 @@ def test_api_sha_with_seeded_cache_returns_cached_sha(tmp_path: Path) -> None:
     """_api_sha returns cached SHA when cache epoch matches current version."""
     import time
 
-    from autoskillit.cli._update_checks_source import _api_sha
+    from autoskillit.cli.update._update_checks_source import _api_sha
     from autoskillit.core import AUTOSKILLIT_INSTALLED_VERSION
 
     sha = "c" * 40
@@ -643,7 +643,7 @@ def test_api_sha_with_stale_epoch_forces_network(
     """_api_sha issues a network request when cache epoch is stale."""
     import time
 
-    from autoskillit.cli._update_checks_source import _api_sha
+    from autoskillit.cli.update._update_checks_source import _api_sha
 
     stale_sha = "d" * 40
     fresh_sha = "e" * 40
@@ -698,7 +698,7 @@ def test_api_sha_network_false_reads_raw_cache_no_epoch(tmp_path: Path) -> None:
     """_api_sha(network=False) reads raw cache regardless of epoch (doctor mode)."""
     import time
 
-    from autoskillit.cli._update_checks_source import _api_sha
+    from autoskillit.cli.update._update_checks_source import _api_sha
 
     sha = "f" * 40
     url = "https://api.github.com/repos/TalonT-Org/AutoSkillit/git/refs/heads/develop"
@@ -721,7 +721,7 @@ def test_api_sha_network_false_reads_raw_cache_no_epoch(tmp_path: Path) -> None:
 
 def test_api_sha_tags_url_prefix(tmp_path: Path) -> None:
     """_api_sha('v0.9.174', ...) constructs a refs/tags/ URL."""
-    from autoskillit.cli._update_checks_source import _api_sha
+    from autoskillit.cli.update._update_checks_source import _api_sha
 
     (tmp_path / ".autoskillit").mkdir(parents=True, exist_ok=True)
     captured_urls: list[str] = []
@@ -762,7 +762,7 @@ def test_full_lifecycle_install_clears_stale_cache_then_check_detects_new_versio
     """Full lifecycle: install invalidates cache, next binary_signal detects new version."""
     import time
 
-    from autoskillit.cli._update_checks import _binary_signal, invalidate_fetch_cache
+    from autoskillit.cli.update._update_checks import _binary_signal, invalidate_fetch_cache
     from autoskillit.core import AUTOSKILLIT_INSTALLED_VERSION
 
     stale_version = "0.0.0-stale"
@@ -895,7 +895,7 @@ def test_verify_update_result_prints_git_vcs_stable_command(
 ) -> None:
     import importlib.metadata
 
-    from autoskillit.cli._update_checks import _verify_update_result
+    from autoskillit.cli.update._update_checks import _verify_update_result
 
     info = _make_stable_info()
     with patch.object(importlib.metadata, "version", return_value="0.9.0"):
@@ -911,7 +911,7 @@ def test_verify_update_result_prints_git_vcs_develop_command(
 ) -> None:
     import importlib.metadata
 
-    from autoskillit.cli._update_checks import _verify_update_result
+    from autoskillit.cli.update._update_checks import _verify_update_result
 
     info = _make_develop_info()
     with patch.object(importlib.metadata, "version", return_value="0.9.0"):
@@ -930,7 +930,7 @@ def test_verify_update_result_prints_git_vcs_develop_command(
 def test_run_update_sequence_warns_on_install_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
 ) -> None:
-    from autoskillit.cli._update_checks import _run_update_sequence
+    from autoskillit.cli.update._update_checks import _run_update_sequence
 
     class FakeTG:
         def __enter__(self):
@@ -969,7 +969,7 @@ def test_run_update_sequence_restarts_on_success(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """After a successful upgrade, _run_update_sequence must call perform_restart."""
-    from autoskillit.cli._update_checks import _run_update_sequence
+    from autoskillit.cli.update._update_checks import _run_update_sequence
 
     info = _make_stable_info()
     upgrade_ok = subprocess.CompletedProcess([], returncode=0)
@@ -1010,7 +1010,7 @@ def test_verify_update_result_does_not_write_binary_snoozed(
 ) -> None:
     import importlib.metadata
 
-    from autoskillit.cli._update_checks import _verify_update_result
+    from autoskillit.cli.update._update_checks import _verify_update_result
 
     info = _make_stable_info(commit_id="abc")
     state: dict = {}
@@ -1034,7 +1034,7 @@ def test_verify_update_result_does_not_write_binary_snoozed(
 def test_fetch_latest_version_routes_by_target(
     target: str, expected_url_fragment: str, tmp_path: Path
 ) -> None:
-    from autoskillit.cli._update_checks import _fetch_latest_version
+    from autoskillit.cli.update._update_checks import _fetch_latest_version
 
     fetched_urls: list[str] = []
 

@@ -28,7 +28,7 @@ class TestFormatterSchemaConsistency:
     @pytest.mark.anyio
     async def test_list_recipes_tool_output_through_hook(self, tool_ctx):
         """PHK-E1: list_recipes real output contains all recipe names through hook."""
-        from autoskillit.hooks.pretty_output_hook import _format_response
+        from autoskillit.hooks.formatters.pretty_output_hook import _format_response
         from autoskillit.server.tools_recipe import list_recipes
 
         result_json = await list_recipes()
@@ -43,7 +43,7 @@ class TestFormatterSchemaConsistency:
     @pytest.mark.anyio
     async def test_kitchen_status_tool_output_through_hook(self, tool_ctx):
         """PHK-E2: kitchen_status real output contains all key fields through hook."""
-        from autoskillit.hooks.pretty_output_hook import _format_response
+        from autoskillit.hooks.formatters.pretty_output_hook import _format_response
         from autoskillit.server.tools_status import kitchen_status
 
         result_json = await kitchen_status()
@@ -58,7 +58,7 @@ class TestFormatterSchemaConsistency:
     @pytest.mark.anyio
     async def test_integration_get_token_summary_table_not_eaten(self, tool_ctx):
         """T-6: Real get_token_summary(format='table') response must survive _format_response."""
-        from autoskillit.hooks.pretty_output_hook import _format_response
+        from autoskillit.hooks.formatters.pretty_output_hook import _format_response
         from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
 
         # Simulate what the real tool handler returns for format="table"

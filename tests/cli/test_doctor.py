@@ -102,7 +102,7 @@ class TestCLIDoctor:
         # without touching canonical_script_basenames (shared with hook-registration check 4).
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "worker")
         monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
-        from autoskillit.cli._doctor import DoctorResult
+        from autoskillit.cli.doctor import DoctorResult
         from autoskillit.core import Severity
 
         monkeypatch.setattr(
@@ -177,7 +177,7 @@ class TestCLIDoctor:
 
     def test_doctor_info_severity_not_treated_as_problem(self) -> None:
         """INFO findings must not appear in the problems section."""
-        from autoskillit.cli._doctor import _NON_PROBLEM
+        from autoskillit.cli.doctor import _NON_PROBLEM
         from autoskillit.core import Severity
 
         assert Severity.INFO in _NON_PROBLEM, "INFO must be in _NON_PROBLEM"
@@ -427,7 +427,7 @@ class TestGroupFDoctor:
 
     def test_severity_and_doctorresult_in_doctor_module(self):
         """Severity and DoctorResult must be importable from autoskillit.cli._doctor."""
-        from autoskillit.cli._doctor import DoctorResult, Severity
+        from autoskillit.cli.doctor import DoctorResult, Severity
 
         r = DoctorResult(severity=Severity.OK, check="test", message="ok")
         assert r.severity == Severity.OK
@@ -548,7 +548,7 @@ def test_doctor_detects_plugin_registration(monkeypatch: pytest.MonkeyPatch) -> 
     import subprocess
     import tempfile
 
-    from autoskillit.cli._doctor import _check_mcp_server_registered
+    from autoskillit.cli.doctor import _check_mcp_server_registered
     from autoskillit.core import Severity
 
     fake_claude_json_content = _json.dumps({"mcpServers": {}})  # No mcpServers entry
@@ -586,7 +586,7 @@ def test_doctor_warns_on_missing_gitignore_entry(
     (autoskillit_dir / ".secrets.yaml").write_text("github:\n  token: ''\n")
 
     monkeypatch.chdir(tmp_path)
-    from autoskillit.cli._doctor import _check_gitignore_completeness
+    from autoskillit.cli.doctor import _check_gitignore_completeness
     from autoskillit.core import Severity
 
     result = _check_gitignore_completeness(tmp_path)
@@ -610,7 +610,7 @@ def test_doctor_gitignore_ok_when_all_covered(
     (autoskillit_dir / ".secrets.yaml").write_text("github:\n  token: ''\n")
 
     monkeypatch.chdir(tmp_path)
-    from autoskillit.cli._doctor import _check_gitignore_completeness
+    from autoskillit.cli.doctor import _check_gitignore_completeness
     from autoskillit.core import Severity
 
     result = _check_gitignore_completeness(tmp_path)
@@ -666,7 +666,7 @@ def test_doctor_ok_when_scanner_present(
 # SS-DOC-4 (unit test for check function directly)
 def test_check_secret_scanning_hook_ok_with_gitleaks(tmp_path: Path) -> None:
     """_check_secret_scanning_hook returns OK when gitleaks hook is present."""
-    from autoskillit.cli._doctor import _check_secret_scanning_hook
+    from autoskillit.cli.doctor import _check_secret_scanning_hook
     from autoskillit.core import Severity
 
     (tmp_path / ".pre-commit-config.yaml").write_text(
@@ -679,7 +679,7 @@ def test_check_secret_scanning_hook_ok_with_gitleaks(tmp_path: Path) -> None:
 # SS-DOC-5 (unit test for check function directly)
 def test_check_secret_scanning_hook_error_without_scanner(tmp_path: Path) -> None:
     """_check_secret_scanning_hook returns ERROR when no .pre-commit-config.yaml."""
-    from autoskillit.cli._doctor import _check_secret_scanning_hook
+    from autoskillit.cli.doctor import _check_secret_scanning_hook
     from autoskillit.core import Severity
 
     result = _check_secret_scanning_hook(tmp_path)
@@ -694,7 +694,7 @@ def test_doctor_detects_misplaced_token_in_project_config(
 
     home has no config so the function must detect the violation via the project path.
     """
-    from autoskillit.cli._doctor import _check_config_layers_for_secrets
+    from autoskillit.cli.doctor import _check_config_layers_for_secrets
     from autoskillit.core import Severity
 
     home_dir = tmp_path / "home"
@@ -721,7 +721,7 @@ def test_doctor_reports_ok_when_no_misplaced_secrets(
     home has no config; only the project config exists with a clean (non-secret) key.
     This exercises the project path independently of the home path.
     """
-    from autoskillit.cli._doctor import _check_config_layers_for_secrets
+    from autoskillit.cli.doctor import _check_config_layers_for_secrets
     from autoskillit.core import Severity
 
     home_dir = tmp_path / "home"
@@ -739,7 +739,7 @@ def test_doctor_reports_ok_when_no_misplaced_secrets(
 
 # DC-11: _check_hook_registry_drift — deployed matches canonical → OK
 def test_check_hook_registry_drift_ok(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from autoskillit.cli._doctor_hooks import _check_hook_registry_drift
+    from autoskillit.cli.doctor._doctor_hooks import _check_hook_registry_drift
     from autoskillit.cli._hooks import _evict_stale_autoskillit_hooks, sync_hooks_to_settings
     from autoskillit.core import Severity
 
@@ -755,7 +755,7 @@ def test_check_hook_registry_drift_ok(tmp_path: Path, monkeypatch: pytest.Monkey
 def test_check_hook_registry_drift_warning(tmp_path: Path) -> None:
     import json
 
-    from autoskillit.cli._doctor_hooks import _check_hook_registry_drift
+    from autoskillit.cli.doctor._doctor_hooks import _check_hook_registry_drift
     from autoskillit.core import Severity
 
     settings = tmp_path / "settings.json"
@@ -790,7 +790,7 @@ class TestEditableInstallSourceExistsCheck:
         """Non-editable install → OK."""
         import importlib.metadata as meta
 
-        from autoskillit.cli._doctor import _check_editable_install_source_exists
+        from autoskillit.cli.doctor import _check_editable_install_source_exists
 
         class FakeDist:
             def read_text(self, filename: str) -> str | None:
@@ -809,7 +809,7 @@ class TestEditableInstallSourceExistsCheck:
         """Editable install pointing to a deleted directory → ERROR."""
         import importlib.metadata as meta
 
-        from autoskillit.cli._doctor import _check_editable_install_source_exists
+        from autoskillit.cli.doctor import _check_editable_install_source_exists
 
         deleted_path = tmp_path / "deleted-worktree" / "src"
         # Do NOT create deleted_path — it does not exist
@@ -837,7 +837,7 @@ class TestEditableInstallSourceExistsCheck:
         """Editable install pointing to an existing directory → OK."""
         import importlib.metadata as meta
 
-        from autoskillit.cli._doctor import _check_editable_install_source_exists
+        from autoskillit.cli.doctor import _check_editable_install_source_exists
 
         existing_path = tmp_path / "src"
         existing_path.mkdir()
@@ -862,7 +862,7 @@ class TestEditableInstallSourceExistsCheck:
         """PackageNotFoundError → check returns OK (not installed in this env)."""
         import importlib.metadata as meta
 
-        from autoskillit.cli._doctor import _check_editable_install_source_exists
+        from autoskillit.cli.doctor import _check_editable_install_source_exists
 
         monkeypatch.setattr(
             meta.Distribution,
@@ -883,7 +883,7 @@ class TestStaleEntryPointsCheck:
         """Single autoskillit binary at ~/.local/bin → OK."""
         import subprocess
 
-        from autoskillit.cli._doctor import _check_stale_entry_points
+        from autoskillit.cli.doctor import _check_stale_entry_points
 
         local_bin_path = str(Path.home() / ".local/bin/autoskillit")
         monkeypatch.setattr(shutil, "which", lambda name: local_bin_path)
@@ -902,7 +902,7 @@ class TestStaleEntryPointsCheck:
         """autoskillit binary outside ~/.local/bin → WARNING."""
         import subprocess
 
-        from autoskillit.cli._doctor import _check_stale_entry_points
+        from autoskillit.cli.doctor import _check_stale_entry_points
 
         stale_path = "/usr/local/micromamba/bin/autoskillit"
         monkeypatch.setattr(shutil, "which", lambda name: stale_path)
@@ -926,7 +926,7 @@ class TestStaleEntryPointsCheck:
 
 def test_doctor_hook_health_checks_all_event_types(tmp_path: Path) -> None:
     """hook_health must verify PostToolUse and SessionStart scripts exist, not just PreToolUse."""
-    from autoskillit.cli._doctor_hooks import _check_hook_health
+    from autoskillit.cli.doctor._doctor_hooks import _check_hook_health
     from autoskillit.core import Severity
 
     # Write a settings.json that includes token_summary_hook (PostToolUse)
@@ -959,7 +959,7 @@ def test_doctor_hook_health_checks_all_event_types(tmp_path: Path) -> None:
 # T-WT-3: _check_hook_health_all_scopes detects broken paths in project scope
 def test_check_hook_health_detects_broken_paths_in_project_scope(tmp_path: Path) -> None:
     """_check_hook_health_all_scopes must detect broken hooks in project scope, not just user."""
-    from autoskillit.cli._doctor import _check_hook_health_all_scopes
+    from autoskillit.cli.doctor import _check_hook_health_all_scopes
     from autoskillit.core import Severity
 
     # Setup project-scope settings with a broken hook path
@@ -1020,7 +1020,7 @@ def test_count_hook_registry_drift_detects_orphaned_hooks(tmp_path: Path) -> Non
 
 # T-DRIFT-2: _check_hook_registry_drift() returns ERROR for orphaned hooks
 def test_check_hook_registry_drift_error_on_orphaned_hooks(tmp_path: Path) -> None:
-    from autoskillit.cli._doctor_hooks import _check_hook_registry_drift
+    from autoskillit.cli.doctor._doctor_hooks import _check_hook_registry_drift
     from autoskillit.core import Severity
 
     settings = tmp_path / ".claude" / "settings.json"
@@ -1128,7 +1128,7 @@ def test_check_source_version_drift_ok_outside_source_repo(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """GIT_VCS install with empty cache reports OK (no drift observable)."""
-    from autoskillit.cli._doctor import _check_source_version_drift
+    from autoskillit.cli.doctor import _check_source_version_drift
     from autoskillit.cli._install_info import InstallInfo, InstallType
     from autoskillit.core import Severity
 
@@ -1153,7 +1153,7 @@ def test_check_source_version_drift_ok_for_editable_install(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """LOCAL_EDITABLE installs are under active development — drift check is skipped."""
-    from autoskillit.cli._doctor import _check_source_version_drift
+    from autoskillit.cli.doctor import _check_source_version_drift
     from autoskillit.cli._install_info import InstallInfo, InstallType
     from autoskillit.core import Severity
 
@@ -1175,7 +1175,7 @@ def test_check_source_version_drift_ok_for_pinned_sha(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """When requested_revision == commit_id, resolve_reference_sha short-circuits → no drift."""
-    from autoskillit.cli._doctor import _check_source_version_drift
+    from autoskillit.cli.doctor import _check_source_version_drift
     from autoskillit.cli._install_info import InstallInfo, InstallType
     from autoskillit.core import Severity
 
@@ -1201,7 +1201,7 @@ def test_check_source_version_drift_ok_when_cache_empty(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """When SHA cannot be resolved (network/cache miss), doctor reports OK."""
-    from autoskillit.cli._doctor import _check_source_version_drift
+    from autoskillit.cli.doctor import _check_source_version_drift
     from autoskillit.cli._install_info import InstallInfo, InstallType
     from autoskillit.core import Severity
 
@@ -1229,7 +1229,7 @@ def test_check_source_version_drift_warning_on_drift(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """When cache has a different reference SHA than installed, reports WARNING with short SHAs."""
-    from autoskillit.cli._doctor import _check_source_version_drift
+    from autoskillit.cli.doctor import _check_source_version_drift
     from autoskillit.cli._install_info import InstallInfo, InstallType
     from autoskillit.core import Severity
 

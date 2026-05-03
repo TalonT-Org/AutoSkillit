@@ -213,7 +213,7 @@ def test_always_write_skill_with_documented_no_write_exit_flagged() -> None:
     patterns (e.g. 'may be 0' from resolve-failures, graceful degradation from
     resolve-review). An empty or incomplete set would silently miss all bugs.
     """
-    from autoskillit.recipe.rules_contracts import _ALWAYS_WITH_NO_WRITE_EXIT_PHRASES
+    from autoskillit.recipe.rules.rules_contracts import _ALWAYS_WITH_NO_WRITE_EXIT_PHRASES
 
     # Verify the phrase set is populated (not empty — would miss all bugs)
     assert len(_ALWAYS_WITH_NO_WRITE_EXIT_PHRASES) > 0

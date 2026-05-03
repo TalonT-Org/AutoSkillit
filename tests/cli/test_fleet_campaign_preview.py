@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.cli._fleet import fleet_campaign as _fleet_campaign
+from autoskillit.cli.fleet import fleet_campaign as _fleet_campaign
 from tests.cli._fleet_helpers import (
     _stub_campaign_resolution,
     _stub_guards,

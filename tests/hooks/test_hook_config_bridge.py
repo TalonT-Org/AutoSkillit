@@ -52,7 +52,7 @@ def _write_blocking_cache(cache_path: Path, *, fetched_at: str | None = None) ->
 
 def _run_hook(event: dict | None = None) -> tuple[str, int]:
     """Run quota_guard.main() without cache_path_override — exercises the bridge path."""
-    from autoskillit.hooks.quota_guard import main
+    from autoskillit.hooks.guards.quota_guard import main
 
     buf = io.StringIO()
     exit_code = 0

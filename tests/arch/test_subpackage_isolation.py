@@ -782,24 +782,35 @@ def test_no_subpackage_exceeds_10_files() -> None:
         server/ tests. Exempt at 11 files.
     """
     EXEMPTIONS: dict[str, int] = {
-        "server": 25,
-        "recipe": 50,
+        "server": 14,
+        "recipe": 28,
         "execution": 18,
         "core": 20,
         "core/types": 15,
-        "cli": 43,
-        "hooks": 29,
+        "cli": 18,
+        "hooks": 9,
         "pipeline": 12,
         "fleet": 11,
+        "recipe/rules": 26,
+        "server/tools": 14,
+        "hooks/guards": 19,
     }
     violations: list[str] = []
+    dirs_to_check: list[Path] = []
     for sub_dir in sorted(SRC_ROOT.iterdir()):
         if not sub_dir.is_dir() or sub_dir.name.startswith("_") or sub_dir.name == "__pycache__":
             continue
+        dirs_to_check.append(sub_dir)
+        for nested_dir in sorted(sub_dir.iterdir()):
+            if not nested_dir.is_dir() or nested_dir.name.startswith("_") or nested_dir.name == "__pycache__":
+                continue
+            dirs_to_check.append(nested_dir)
+    for sub_dir in dirs_to_check:
+        rel_key = str(sub_dir.relative_to(SRC_ROOT))
         py_files = list(sub_dir.glob("*.py"))
-        limit = EXEMPTIONS.get(sub_dir.name, 10)
+        limit = EXEMPTIONS.get(rel_key, 10)
         if len(py_files) > limit:
-            violations.append(f"{sub_dir.name}/: {len(py_files)} Python files (max {limit})")
+            violations.append(f"{rel_key}/: {len(py_files)} Python files (max {limit})")
     assert not violations, "Sub-packages exceeding 10 Python files:\n" + "\n".join(
         f"  {v}" for v in violations
     )
@@ -967,7 +978,7 @@ def test_server_tool_handlers_have_no_business_logic() -> None:
     """
     server_dir = SRC_ROOT / "server"
     violations: list[str] = []
-    for py_file in sorted(server_dir.glob("tools_*.py")):
+    for py_file in sorted((server_dir / "tools").glob("tools_*.py")):
         tree = ast.parse(py_file.read_text())
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -1149,7 +1160,7 @@ def test_installed_version_in_core_types() -> None:
 
 def test_rule_submodules_no_autoskillit_init_import() -> None:
     """P3-F2: rules_*.py submodules must not import from autoskillit top-level __init__."""
-    rule_files = sorted((SRC_ROOT / "recipe").glob("rules_*.py"))
+    rule_files = sorted((SRC_ROOT / "recipe" / "rules").glob("rules_*.py"))
     assert len(rule_files) >= 5, f"Expected >=5 rules_*.py files, found {len(rule_files)}"
     for rules_path in rule_files:
         assert "from autoskillit import __version__" not in rules_path.read_text(), (

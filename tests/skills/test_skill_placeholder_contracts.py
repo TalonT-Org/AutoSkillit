@@ -22,7 +22,7 @@ from autoskillit.recipe._skill_placeholder_parser import (
     extract_declared_ingredients,
     shell_vars_assigned,
 )
-from autoskillit.recipe.rules_skill_content import (
+from autoskillit.recipe.rules.rules_skill_content import (
     _PSEUDOCODE_ALLOWLIST as _PROD_PSEUDOCODE_ALLOWLIST,
 )
 

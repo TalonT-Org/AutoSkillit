@@ -38,7 +38,7 @@ def test_cook_session_ignores_ide_lock_file(
     monkeypatch.setenv("VSCODE_GIT_ASKPASS_MAIN", "/fake/vscode")
     monkeypatch.setenv("CLAUDE_CODE_IDE_HOST_OVERRIDE", "localhost")
 
-    from autoskillit.cli._session_launch import _launch_cook_session
+    from autoskillit.cli.session._session_launch import _launch_cook_session
 
     with (
         patch("shutil.which", return_value="/usr/bin/claude"),

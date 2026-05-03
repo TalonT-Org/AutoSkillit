@@ -1294,7 +1294,7 @@ class TestRecoverablePathTokensCoverage:
         from autoskillit.execution.headless._headless_path_tokens import (
             _INTENTIONALLY_EXCLUDED_PATH_TOKENS,
         )
-        from autoskillit.recipe.rules_contracts import _PATH_RECOVERY_EXCLUDED_TOKENS
+        from autoskillit.recipe.rules.rules_contracts import _PATH_RECOVERY_EXCLUDED_TOKENS
 
         assert _PATH_RECOVERY_EXCLUDED_TOKENS == _INTENTIONALLY_EXCLUDED_PATH_TOKENS, (
             f"Constants diverged.\n"

@@ -15,7 +15,7 @@ def test_quota_guard_deny_trigger_coupled_to_prompt():
     in the orchestrator prompt's QUOTA DENIAL ROUTING section."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
     from autoskillit.cli._prompts import _build_orchestrator_prompt
-    from autoskillit.hooks.quota_guard import QUOTA_GUARD_DENY_TRIGGER
+    from autoskillit.hooks.guards.quota_guard import QUOTA_GUARD_DENY_TRIGGER
 
     prompt = _build_orchestrator_prompt("test", mcp_prefix=DIRECT_PREFIX)
     assert QUOTA_GUARD_DENY_TRIGGER in prompt, (

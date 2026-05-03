@@ -496,7 +496,7 @@ def test_tools_recipe_does_not_import_raw_ctx():
     import pathlib
 
     source = (
-        pathlib.Path(__file__).parents[2] / "src/autoskillit/server/tools_recipe.py"
+        pathlib.Path(__file__).parents[2] / "src/autoskillit/server/tools/tools_recipe.py"
     ).read_text()
     tree = ast.parse(source)
     for node in ast.walk(tree):

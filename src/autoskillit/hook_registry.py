@@ -288,23 +288,33 @@ def _is_own_hook(command: str) -> bool:
     if "autoskillit" in command:
         return True
     known = canonical_script_basenames() | RETIRED_SCRIPT_BASENAMES
-    return any(command.endswith(script) or f"/{script}" in command for script in known)
+    bare = {Path(s).name for s in known}
+    return any(
+        command.endswith(script) or f"/{script}" in command for script in known | bare
+    )
 
 
 def _extract_script_basenames(hooks_dict: dict) -> set[str]:
-    """Extract autoskillit hook script basenames from a hooks dict.
+    """Extract autoskillit hook script relative paths from a hooks dict.
 
     Filters to autoskillit-owned commands only, then normalizes
-    to bare script filenames for installation-path-agnostic comparison.
+    to hooks-dir-relative paths for installation-path-agnostic comparison.
     """
-    return {
-        Path(cmd.split()[-1]).name
-        for event_entries in hooks_dict.values()
-        if isinstance(event_entries, list)
-        for entry in event_entries
-        for hook in entry.get("hooks", [])
-        if (cmd := hook.get("command", "")) and _is_own_hook(cmd)
-    }
+    result: set[str] = set()
+    for event_entries in hooks_dict.values():
+        if not isinstance(event_entries, list):
+            continue
+        for entry in event_entries:
+            for hook in entry.get("hooks", []):
+                cmd = hook.get("command", "")
+                if not cmd or not _is_own_hook(cmd):
+                    continue
+                script_path = Path(cmd.split()[-1])
+                bare = script_path.name
+                canonical = canonical_script_basenames()
+                matched = next((c for c in canonical if Path(c).name == bare), bare)
+                result.add(matched)
+    return result
 
 
 class HookDriftResult(NamedTuple):

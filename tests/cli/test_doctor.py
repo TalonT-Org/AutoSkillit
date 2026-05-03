@@ -414,7 +414,7 @@ class TestGroupFDoctor:
 
     def test_doctor_delegates_to_doctor_module(self, monkeypatch, capsys):
         """cli.doctor() must delegate to cli._doctor.run_doctor(), not contain the logic itself."""
-        from autoskillit.cli import _doctor
+        from autoskillit.cli import doctor as _doctor
 
         called_with: dict = {}
 

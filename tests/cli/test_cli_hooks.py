@@ -67,7 +67,10 @@ def test_hooks_py_covers_full_registry(tmp_path):
         for entry in data["hooks"].get("PreToolUse", [])
         for h in entry.get("hooks", [])
     ]
-    registered_pretooluse_scripts = {cmd.split("/")[-1] for cmd in registered_pretooluse}
+    registered_pretooluse_scripts = {
+        cmd.split("/hooks/", 1)[1] if "/hooks/" in cmd else cmd.split("/")[-1]
+        for cmd in registered_pretooluse
+    }
     assert pretooluse_scripts == registered_pretooluse_scripts, (
         f"PreToolUse missing: {pretooluse_scripts - registered_pretooluse_scripts}, "
         f"Extra: {registered_pretooluse_scripts - pretooluse_scripts}"
@@ -82,7 +85,10 @@ def test_hooks_py_covers_full_registry(tmp_path):
         for entry in data["hooks"].get("PostToolUse", [])
         for h in entry.get("hooks", [])
     ]
-    registered_posttooluse_scripts = {cmd.split("/")[-1] for cmd in registered_posttooluse}
+    registered_posttooluse_scripts = {
+        cmd.split("/hooks/", 1)[1] if "/hooks/" in cmd else cmd.split("/")[-1]
+        for cmd in registered_posttooluse
+    }
     assert posttooluse_scripts == registered_posttooluse_scripts, (
         f"PostToolUse missing: {posttooluse_scripts - registered_posttooluse_scripts}, "
         f"Extra: {registered_posttooluse_scripts - posttooluse_scripts}"

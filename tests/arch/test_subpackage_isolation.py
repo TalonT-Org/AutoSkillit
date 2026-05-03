@@ -563,16 +563,16 @@ def test_tools_integrations_replaced_by_split_modules() -> None:
     """tools_integrations.py deleted; three replacement modules exist."""
     server = SRC_ROOT / "server"
     assert not (server / "tools_integrations.py").exists()
-    assert (server / "tools_github.py").exists()
-    assert (server / "tools_issue_lifecycle.py").exists()
-    assert (server / "tools_pr_ops.py").exists()
+    assert (server / "tools" / "tools_github.py").exists()
+    assert (server / "tools" / "tools_issue_lifecycle.py").exists()
+    assert (server / "tools" / "tools_pr_ops.py").exists()
 
 
 def test_split_files_under_750_lines() -> None:
     """Each split module must stay under the 750-line threshold."""
     server = SRC_ROOT / "server"
     for name in ("tools_github.py", "tools_issue_lifecycle.py", "tools_pr_ops.py"):
-        lines = len((server / name).read_text().splitlines())
+        lines = len((server / "tools" / name).read_text().splitlines())
         assert lines <= 750, f"{name} has {lines} lines, exceeds 750"
 
 
@@ -1196,7 +1196,7 @@ def test_recipe_lister_callsites_use_protocol_typing() -> None:
     not SkillLister. That is checked separately below.
     """
     lister_targets = {
-        "src/autoskillit/recipe/rules_skills.py",
+        "src/autoskillit/recipe/rules/rules_skills.py",
         "src/autoskillit/recipe/_api.py",
     }
     src_root = Path(__file__).resolve().parents[2]

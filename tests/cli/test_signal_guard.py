@@ -274,7 +274,7 @@ def test_sighup_in_fleet_signal_list() -> None:
     """
     from autoskillit.core.paths import pkg_root
 
-    src_path = pkg_root() / "cli" / "_fleet_lifecycle.py"
+    src_path = pkg_root() / "cli" / "fleet" / "_fleet_lifecycle.py"
     tree = ast.parse(src_path.read_text(encoding="utf-8"))
 
     sighup_found = False
@@ -312,7 +312,7 @@ def test_fleet_signame_uses_sig_name_attribute() -> None:
     """
     from autoskillit.core.paths import pkg_root
 
-    src_path = pkg_root() / "cli" / "_fleet_lifecycle.py"
+    src_path = pkg_root() / "cli" / "fleet" / "_fleet_lifecycle.py"
     tree = ast.parse(src_path.read_text(encoding="utf-8"))
 
     sig_name_attr_found = False

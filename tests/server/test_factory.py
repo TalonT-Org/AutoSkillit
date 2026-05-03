@@ -314,7 +314,7 @@ def test_cook_and_factory_session_skill_manager_ctor_args_in_sync() -> None:
         return -1
 
     root = pkg_root()
-    cook_path = root / "cli" / "_cook.py"
+    cook_path = root / "cli" / "session" / "_cook.py"
     factory_path = root / "server" / "_factory.py"
 
     cook_count = _count_ctor_positional_args(cook_path)

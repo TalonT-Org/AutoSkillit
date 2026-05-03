@@ -481,6 +481,7 @@ class TestSkillCommandParsingContract:
             / "src"
             / "autoskillit"
             / "hooks"
+            / "guards"
             / "skill_cmd_guard.py"
         )
         spec = importlib.util.spec_from_file_location("skill_cmd_guard", hook_path)

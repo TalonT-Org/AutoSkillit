@@ -78,7 +78,7 @@ def test_hook_registry_fleet_dispatch_guard() -> None:
     from autoskillit.hook_registry import HOOK_REGISTRY
 
     scripts = [s for hd in HOOK_REGISTRY for s in hd.scripts]
-    assert "fleet_dispatch_guard.py" in scripts
+    assert "guards/fleet_dispatch_guard.py" in scripts
     assert "franchise_dispatch_guard.py" not in scripts
 
 

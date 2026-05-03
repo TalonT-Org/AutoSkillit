@@ -97,10 +97,10 @@ _HOOKS_DIR = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "hook
 def test_renamed_hook_files_exist() -> None:
     """New hook filenames must exist on disk after rename."""
     for expected in [
-        "quota_guard.py",
+        "guards/quota_guard.py",
         "quota_post_hook.py",
-        "skill_cmd_guard.py",
-        "pretty_output_hook.py",
+        "guards/skill_cmd_guard.py",
+        "formatters/pretty_output_hook.py",
         "session_start_hook.py",
         "token_summary_hook.py",
     ]:

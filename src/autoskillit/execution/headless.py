@@ -676,6 +676,7 @@ class DefaultHeadlessExecutor:
         env_extras: Mapping[str, str] | None = None,
         requires_packs: Sequence[str] = (),
         on_spawn: Callable[[int, int], None] | None = None,
+        allowed_write_prefix: str = "",
     ) -> SkillResult:
         cfg = self._ctx.config
         resolved_model = _resolve_model(model, cfg)
@@ -702,6 +703,10 @@ class DefaultHeadlessExecutor:
             model=resolved_model,
             env_extras=merged_extras or None,
             output_format=cfg.run_skill.output_format,
+            exit_after_stop_delay_ms=cfg.run_skill.exit_after_stop_delay_ms,
+            scenario_step_name=step_name,
+            temp_dir_relpath=temp_dir_display_str(cfg.workspace.temp_dir),
+            allowed_write_prefix=allowed_write_prefix,
         )
 
         effective_timeout = timeout if timeout is not None else fleet_cfg.default_timeout_sec

@@ -136,12 +136,6 @@ def test_planner_feature_skill_categories() -> None:
 # --- T6: New callables importable ---
 
 
-def test_merge_tier_results_importable() -> None:
-    from autoskillit.planner.merge import merge_tier_results
-
-    assert callable(merge_tier_results)
-
-
 def test_expand_assignments_importable() -> None:
     from autoskillit.planner.manifests import expand_assignments
 

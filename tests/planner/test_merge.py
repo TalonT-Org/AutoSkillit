@@ -557,10 +557,14 @@ def test_merge_tier_results_writes_refine_contexts_for_assignments(tmp_path):
     out = tmp_path / "combined_assignments.json"
     result = merge_tier_results(str(results_dir), str(out), "assignments")
     assert "refine_context_paths" in result
-    paths = result["refine_context_paths"].split(",")
+    paths = json.loads(result["refine_context_paths"])
     assert len(paths) == 2
-    assert (tmp_path / "refine_contexts" / "context_P1.json").exists()
-    assert (tmp_path / "refine_contexts" / "context_P2.json").exists()
+    p1_ctx = tmp_path / "refine_contexts" / "context_P1.json"
+    p2_ctx = tmp_path / "refine_contexts" / "context_P2.json"
+    assert p1_ctx.exists()
+    assert p2_ctx.exists()
+    assert str(p1_ctx) in paths
+    assert str(p2_ctx) in paths
 
 
 def test_refine_context_own_assignments_in_full_detail(tmp_path):
@@ -596,6 +600,7 @@ def test_refine_context_own_assignments_in_full_detail(tmp_path):
     assert own["id"] == "P1-A1"
     assert own["technical_approach"] == "JWT"
     assert own["proposed_work_packages"] == [{"id": "wp1"}]
+    assert all(a["id"] != "P2-A1" for a in ctx["assignments"])
 
 
 def test_refine_context_peer_summaries_have_filtered_fields(tmp_path):
@@ -672,9 +677,10 @@ def test_refine_context_paths_returned_sorted(tmp_path):
         )
     out = tmp_path / "combined_assignments.json"
     result = merge_tier_results(str(results_dir), str(out), "assignments")
-    paths = result["refine_context_paths"].split(",")
+    paths = json.loads(result["refine_context_paths"])
     phase_ids = [Path(p).stem.replace("context_", "") for p in paths]
     assert phase_ids == sorted(phase_ids)
+    assert set(phase_ids) == {"P1", "P2", "P3"}
 
 
 def test_merge_tier_results_no_refine_contexts_for_phases_key(tmp_path):

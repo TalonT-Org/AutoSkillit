@@ -1,4 +1,4 @@
-"""WP consolidation pass: merges trivial work packages based on consolidation manifests."""
+"""WP consolidation pass: merges work packages per manifests with file-sharing fallback."""
 
 from __future__ import annotations
 
@@ -10,6 +10,10 @@ from typing import Any
 
 from autoskillit.core import atomic_write, write_versioned_json
 from autoskillit.planner.schema import validate_wp_result
+
+_ASSIGNMENT_RE = re.compile(r"^(P\d+-A\d+)-")
+_FALLBACK_MIN_WPS = 5
+_FALLBACK_MAX_GROUP_SIZE = 5
 
 
 def _natural_sort_key(s: str) -> list[int | str]:
@@ -128,6 +132,81 @@ def _rewrite_deps(
     return result
 
 
+def _cluster_by_shared_files(wps: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+    """Cluster WPs that share at least one files_touched entry."""
+    parent: dict[str, str] = {wp["id"]: wp["id"] for wp in wps}
+
+    def find(x: str) -> str:
+        while parent[x] != x:
+            x = parent[x]
+        return x
+
+    def union(a: str, b: str) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+
+    file_to_wps: dict[str, list[str]] = {}
+    for wp in wps:
+        for f in wp.get("files_touched", []):
+            file_to_wps.setdefault(f, []).append(wp["id"])
+
+    for wp_ids in file_to_wps.values():
+        for i in range(1, len(wp_ids)):
+            union(wp_ids[0], wp_ids[i])
+
+    clusters: dict[str, list[dict[str, Any]]] = {}
+    for wp in wps:
+        root = find(wp["id"])
+        clusters.setdefault(root, []).append(wp)
+
+    return list(clusters.values())
+
+
+def _chunk_list(items: list[dict[str, Any]], size: int) -> list[list[dict[str, Any]]]:
+    return [items[i : i + size] for i in range(0, len(items), size)]
+
+
+def _build_fallback_groups(
+    work_packages: list[dict[str, Any]],
+    existing_merged_groups: dict[str, _ConsolidationGroup],
+) -> list[_ConsolidationGroup]:
+    """Heuristic fallback: merge same-assignment WPs sharing files."""
+    if any(len(g.source_wp_ids) > 1 for g in existing_merged_groups.values()):
+        return []
+    if len(work_packages) < _FALLBACK_MIN_WPS:
+        return []
+
+    by_assignment: dict[str, list[dict[str, Any]]] = {}
+    for wp in work_packages:
+        m = _ASSIGNMENT_RE.match(wp["id"])
+        if m:
+            by_assignment.setdefault(m.group(1), []).append(wp)
+
+    groups: list[_ConsolidationGroup] = []
+    for wps in by_assignment.values():
+        if len(wps) < 2:
+            continue
+        clusters = _cluster_by_shared_files(wps)
+        for cluster in clusters:
+            if len(cluster) < 2:
+                continue
+            for chunk in _chunk_list(cluster, _FALLBACK_MAX_GROUP_SIZE):
+                if len(chunk) < 2:
+                    continue
+                sorted_ids = sorted([wp["id"] for wp in chunk], key=_natural_sort_key)
+                groups.append(
+                    _ConsolidationGroup(
+                        merged_id=sorted_ids[0],
+                        source_wp_ids=sorted_ids,
+                        merge_order=sorted_ids,
+                        name=None,
+                        goal=None,
+                    )
+                )
+    return groups
+
+
 def consolidate_wps(
     refined_wps_path: str,
     planner_dir: str,
@@ -167,6 +246,15 @@ def consolidate_wps(
         for ord_id in group.merge_order:
             if ord_id not in wp_by_id:
                 raise ValueError(f"unknown merge_order element: {ord_id}")
+
+    # Fallback: if manifests produced only singletons, apply heuristic
+    has_real_merges = any(len(g.source_wp_ids) > 1 for g in merged_groups.values())
+    if not has_real_merges:
+        fallback_groups = _build_fallback_groups(work_packages, merged_groups)
+        for fg in fallback_groups:
+            merged_groups[fg.merged_id] = fg
+            for src_id in fg.source_wp_ids:
+                source_to_merged[src_id] = fg.merged_id
 
     # Build the output WP list
     output_wps: list[dict[str, Any]] = []

@@ -34,10 +34,11 @@ A Claude Code plugin that orchestrates automated skill-driven workflows using he
   * **Grep tool uses ripgrep (ERE) syntax**: Use `|` for OR-alternation in Grep tool `pattern`
     arguments. `\|` is Bash grep BRE syntax — ripgrep treats it as a literal backslash-pipe
     and returns 0 results. Example: `Grep(pattern="foo|bar")` not `Grep(pattern="foo\|bar")`.
+    In production, `grep_pattern_lint_guard.py` (hooks/guards/) blocks `\|` calls with a correction hint. The silent zero-results failure described above only occurs in hook-inactive contexts (e.g., raw CLI usage without the plugin installed).
   * **Worktree Init Prohibition**: Never run `autoskillit init` from within a git worktree. `sync_hooks_to_settings()` will raise `RuntimeError` if `pkg_root()` resolves to a worktree. Use `task install-worktree` for worktree setup — it does NOT call `init`.
   * **Naming convention — `*Def` vs `*Spec` suffixes**:
-    - `*Def` — static definition of a registered entity (e.g., `HookDef`, `PackDef`, `FeatureDef`). Typically a `NamedTuple` or `@dataclass(frozen=True)`, used as elements in a registry or lookup table. Lives in `core/`.
-    - `*Spec` — behavioral specification or validation rule (e.g., `RuleSpec`, `ExperimentTypeSpec`, `WriteBehaviorSpec`). Typically a `@dataclass` or `TypedDict` configuring a pipeline or validation stage. Lives in `recipe/` or domain layers.
+    - `*Def` — static definition of a registered entity (e.g., `HookDef`, `PackDef`, `FeatureDef`). Typically a `NamedTuple` or `@dataclass(frozen=True)`, used as elements in a registry or lookup table. Typically lives in `core/`; stdlib-only types importable from hook scripts may live at the package root (e.g., `HookDef` in `hook_registry.py`).
+    - `*Spec` — behavioral specification or validation rule (e.g., `RuleSpec`, `ExperimentTypeSpec`, `WriteBehaviorSpec`). Typically a `@dataclass` or `TypedDict` configuring a pipeline or validation stage. Typically lives in `recipe/` or domain layers; `*Spec` types used by IL-0 core protocols live in `core/` (e.g., `WriteBehaviorSpec` in `core/types/_type_results.py`).
 
 ### **3.2. File System**
 
@@ -70,6 +71,33 @@ A Claude Code plugin that orchestrates automated skill-driven workflows using he
     `gh issue edit {number} --body-file "$FILE"`.
   * The `update_issue_body()` method on `GitHubFetcher` is the Python API equivalent.
 
+### **3.6. Pyright LSP Usage**
+
+The `LSP` tool provides type-aware code intelligence via Pyright. Use it for precise
+navigation instead of grep when tracing symbols through imports, re-exports, or protocols.
+
+**Available operations** (all take `filePath`, `line`, `character` — 1-based):
+
+| Operation | Use case |
+|-----------|----------|
+| `goToDefinition` | Jump to where a symbol is defined (follows imports/re-exports) |
+| `findReferences` | Find all usages of a symbol across the codebase |
+| `documentSymbol` | List all classes, functions, and variables in a file |
+| `goToImplementation` | Find concrete implementations of a Protocol or ABC |
+| `prepareCallHierarchy` | Get the call hierarchy item at a position |
+| `incomingCalls` | Find all callers of a function/method |
+| `outgoingCalls` | Find all functions/methods called by a function |
+
+**When to use LSP over grep:**
+- Tracing a symbol through re-exports (e.g., `core/__init__.py` -> actual definition)
+- Finding all implementations of a Protocol
+- Mapping call hierarchies (who calls X, what does X call)
+- Understanding a file's structure before editing
+
+**When grep is still better:**
+- Searching for string literals, comments, or non-symbol patterns
+- Searching across non-Python files (YAML, JSON, markdown)
+
 ## **4. Testing Guidelines**
 
 The project uses pytest with pytest-asyncio. Tests run in parallel via pytest-xdist (`-n 4`). All tests must be safe for parallel execution.
@@ -83,7 +111,7 @@ The project uses pytest with pytest-asyncio. Tests run in parallel via pytest-xd
 
 ## **5. Pre-commit Hooks**
 
-Install hooks after cloning: `pre-commit install`. Run manually with `pre-commit run --all-files`.
+Run manually with `pre-commit run --all-files`.
 
 Configured hooks: ruff format (auto-fix), ruff check (auto-fix), mypy type checking, uv lock check, gitleaks secret scanning.
 
@@ -159,7 +187,7 @@ generic_automation_mcp/
 │   ├── defaults.yaml
 │   ├── ingredient_defaults.py
 │   ├── settings.py          #   AutomationConfig + schema validate/write API
-│   ├── _config_dataclasses.py #  22 leaf dataclasses + ConfigSchemaError
+│   ├── _config_dataclasses.py #  24 leaf dataclasses + ConfigSchemaError
 │   └── _config_loader.py    #   _make_dynaconf + load_config layer helpers
 │
 ├── pipeline/                # IL-1 pipeline state
@@ -330,7 +358,7 @@ generic_automation_mcp/
 │   │   ├── tools_ci_watch.py    #   wait_for_ci + get_ci_status + _auto_trigger_ci
 │   │   ├── tools_ci_merge_queue.py #  toggle_auto_merge + enqueue_pr + wait_for_merge_queue
 │   │   ├── tools_clone.py
-│   │   ├── tools_execution.py   #   run_cmd, run_python, run_skill
+│   │   ├── tools_execution.py   #   run_cmd, run_python, run_skill, dispatch_food_truck
 │   │   ├── tools_git.py         #   merge_worktree, classify_fix, etc.
 │   │   ├── tools_recipe.py
 │   │   ├── tools_status.py      #   kitchen_status, reports, summaries, quota events, read_db
@@ -338,6 +366,7 @@ generic_automation_mcp/
 │   │   ├── tools_issue_lifecycle.py #  prepare/enrich/claim/release issue
 │   │   ├── tools_pr_ops.py      #   get_pr_reviews, bulk_close_issues
 │   │   └── tools_workspace.py   #   test_check, reset_test_dir, reset_workspace
+│   ├── _subprocess.py       #   Subprocess execution helpers for MCP tools
 │   ├── _factory.py          #   Composition Root: make_context()
 │   └── _state.py            #   Lazy init, plugin dir resolution
 │
@@ -438,7 +467,7 @@ generic_automation_mcp/
                              # incl. arch-lens-* (13), exp-lens-* (18), and vis-lens-* (12) diagram families
 ```
 
-**Session diagnostics logs** live at `~/.local/share/autoskillit/logs/` (Linux) or `~/Library/Application Support/autoskillit/logs/` (macOS). Override with `linux_tracing.log_dir`. Session directories are named by Claude Code session UUID when available (parsed from stdout, or discovered from JSONL filename via Channel B). Fallback: `no_session_{timestamp}`. Query the index: `jq 'select(.success == false)' ~/.local/share/autoskillit/logs/sessions.jsonl`.
+**Session diagnostics logs** live at `~/.local/share/autoskillit/logs/` (Linux) or `~/Library/Application Support/autoskillit/logs/` (macOS). Override with `linux_tracing.log_dir`. Session directories are named by Claude Code session UUID when available (parsed from stdout, or discovered from JSONL filename via Channel B (the JSONL stream written by the Claude Code subprocess)). Fallback: `no_session_{timestamp}`. Query the index: `jq 'select(.success == false)' ~/.local/share/autoskillit/logs/sessions.jsonl`.
 
 **CRITICAL**: When using subagents, invoke with `CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=120000` to ensure subagents exit when finished.
 

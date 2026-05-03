@@ -2224,7 +2224,7 @@ callable_contracts:
       type: file_path
     - name: phase_ids
       type: str
-  autoskillit.planner.merge.merge_tier_dir:
+  autoskillit.planner.merge.merge_tier_results:
     inputs:
     - name: results_dir
       type: directory_path
@@ -2239,6 +2239,8 @@ callable_contracts:
     - name: merged_path
       type: file_path
     - name: item_count
+      type: str
+    - name: refine_context_paths
       type: str
   autoskillit.planner.create_run_dir:
     inputs:

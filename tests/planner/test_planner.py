@@ -31,7 +31,7 @@ def test_planner_all_exports() -> None:
         "PlannerManifest",
         "PlannerManifestItem",
         "merge_files",
-        "merge_tier_dir",
+        "merge_tier_results",
         "extract_item",
         "replace_item",
         "build_plan_snapshot",
@@ -136,10 +136,10 @@ def test_planner_feature_skill_categories() -> None:
 # --- T6: New callables importable ---
 
 
-def test_merge_tier_dir_importable() -> None:
-    from autoskillit.planner.merge import merge_tier_dir
+def test_merge_tier_results_importable() -> None:
+    from autoskillit.planner.merge import merge_tier_results
 
-    assert callable(merge_tier_dir)
+    assert callable(merge_tier_results)
 
 
 def test_expand_assignments_importable() -> None:
@@ -157,8 +157,8 @@ def test_expand_wps_importable() -> None:
 # --- T7: New callables functional tests ---
 
 
-def test_merge_tier_dir_globs_and_merges(tmp_path) -> None:
-    from autoskillit.planner.merge import merge_tier_dir
+def test_merge_tier_results_globs_and_merges(tmp_path) -> None:
+    from autoskillit.planner.merge import merge_tier_results
 
     results_dir = tmp_path / "phases"
     results_dir.mkdir()
@@ -167,7 +167,7 @@ def test_merge_tier_dir_globs_and_merges(tmp_path) -> None:
             json.dumps({"id": pid, "name": f"Phase {pid}", "ordering": int(pid[1])})
         )
     out = tmp_path / "combined.json"
-    result = merge_tier_dir(str(results_dir), str(out), "phases")
+    result = merge_tier_results(str(results_dir), str(out), "phases")
     assert result["item_count"] == "2"
     assert out.exists()
     merged = json.loads(out.read_text())

@@ -13,9 +13,7 @@ from typing import Annotated
 import anyio
 from cyclopts import App, Parameter
 
-from autoskillit.cli._cook import cook as cook_interactive
 from autoskillit.cli._features import features_app
-from autoskillit.cli._fleet import fleet_app
 from autoskillit.cli._init_helpers import (
     _MARKER_CONTENT,
     _check_secret_scanning,
@@ -24,9 +22,11 @@ from autoskillit.cli._init_helpers import (
     _prompt_test_command,
     _register_all,
 )
-from autoskillit.cli._order import _recipes_dir_for, order
 from autoskillit.cli._serve_guard import serve_with_signal_guard
 from autoskillit.cli._sessions import sessions_app
+from autoskillit.cli.fleet import fleet_app
+from autoskillit.cli.session._cook import cook as cook_interactive
+from autoskillit.cli.session._order import _recipes_dir_for, order
 from autoskillit.core import (
     RecipeSource,
     atomic_write,
@@ -209,7 +209,7 @@ def upgrade() -> None:
 @app.command
 def update() -> None:
     """Upgrade autoskillit to the latest version on your install's branch."""
-    from autoskillit.cli._update import run_update_command
+    from autoskillit.cli.update._update import run_update_command
 
     run_update_command()
 
@@ -217,7 +217,7 @@ def update() -> None:
 @app.command
 def doctor(*, output_json: bool = False):
     """Check project setup for common issues."""
-    from autoskillit.cli._doctor import run_doctor
+    from autoskillit.cli.doctor import run_doctor
 
     run_doctor(output_json=output_json)
 
@@ -389,7 +389,7 @@ def workspace_clean(
 @recipes_app.command(name="list")
 def recipes_list():
     """List available recipes with sources."""
-    from autoskillit.cli._cook import _print_recipes_list
+    from autoskillit.cli.session._cook import _print_recipes_list
 
     _print_recipes_list()
 
@@ -441,7 +441,7 @@ def main() -> None:
 
         evict_direct_mcp_entry(_user_claude_json_path())
 
-        from autoskillit.cli._update_checks import run_update_checks
+        from autoskillit.cli.update._update_checks import run_update_checks
 
         run_update_checks(command=_first_arg)
     app()

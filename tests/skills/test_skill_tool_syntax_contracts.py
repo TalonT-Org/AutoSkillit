@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.recipe._skill_placeholder_parser import extract_bash_blocks
-from autoskillit.recipe.rules_skill_content import _GIT_GREP_BRE_RE, _GREP_BRE_ALTERNATION_RE
+from autoskillit.recipe.rules.rules_skill_content import _GIT_GREP_BRE_RE, _GREP_BRE_ALTERNATION_RE
 
 _REPO_ROOT = Path(__file__).parent.parent.parent
 _SKILL_DIRS = [

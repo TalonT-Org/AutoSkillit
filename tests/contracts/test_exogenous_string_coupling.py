@@ -15,7 +15,7 @@ def test_quota_guard_deny_trigger_coupled_to_prompt():
     in the orchestrator prompt's QUOTA DENIAL ROUTING section."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
     from autoskillit.cli._prompts import _build_orchestrator_prompt
-    from autoskillit.hooks.quota_guard import QUOTA_GUARD_DENY_TRIGGER
+    from autoskillit.hooks.guards.quota_guard import QUOTA_GUARD_DENY_TRIGGER
 
     prompt = _build_orchestrator_prompt("test", mcp_prefix=DIRECT_PREFIX)
     assert QUOTA_GUARD_DENY_TRIGGER in prompt, (
@@ -59,7 +59,7 @@ class TestPromptToolReachability:
     def test_prompt_tool_reachability(self):
         """Each MCP tool name in FIRST ACTION must exist in the FastMCP tool registry."""
         from autoskillit.cli._prompts import _build_orchestrator_prompt
-        from autoskillit.core._type_constants import FREE_RANGE_TOOLS, GATED_TOOLS
+        from autoskillit.core.types._type_constants import FREE_RANGE_TOOLS, GATED_TOOLS
 
         registered_tools = {*GATED_TOOLS, *FREE_RANGE_TOOLS}
 
@@ -86,7 +86,7 @@ class TestPromptToolsWhitelistCoupling:
         """FIRST ACTION must not mention any PIPELINE_FORBIDDEN_TOOLS by name."""
         from autoskillit.cli._mcp_names import DIRECT_PREFIX
         from autoskillit.cli._prompts import _build_orchestrator_prompt
-        from autoskillit.core._type_constants import PIPELINE_FORBIDDEN_TOOLS
+        from autoskillit.core.types._type_constants import PIPELINE_FORBIDDEN_TOOLS
 
         prompt = _build_orchestrator_prompt("test", mcp_prefix=DIRECT_PREFIX)
         start = prompt.index("FIRST ACTION")

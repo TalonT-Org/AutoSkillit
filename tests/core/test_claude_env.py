@@ -12,7 +12,7 @@ from autoskillit.core._claude_env import (
     IDE_ENV_DENYLIST,
     IDE_ENV_PREFIX_DENYLIST,
 )
-from autoskillit.core._type_constants import AUTOSKILLIT_PRIVATE_ENV_VARS
+from autoskillit.core.types._type_constants import AUTOSKILLIT_PRIVATE_ENV_VARS
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 

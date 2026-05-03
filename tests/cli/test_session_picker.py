@@ -7,12 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.cli._session_picker import (
+from autoskillit.cli.session._session_picker import (
     _classify_session,
     _run_picker,
     pick_session,
 )
-from autoskillit.core.session_registry import write_registry_entry
+from autoskillit.core.runtime.session_registry import write_registry_entry
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -32,7 +32,7 @@ def test_pick_session_no_sessions_returns_none(
     claude_dir = tmp_path / "claude-projects"
     claude_dir.mkdir()
     monkeypatch.setattr(
-        "autoskillit.cli._session_picker.claude_code_project_dir",
+        "autoskillit.cli.session._session_picker.claude_code_project_dir",
         lambda _: claude_dir,
     )
     result = pick_session("cook", project_dir)
@@ -60,13 +60,13 @@ def test_pick_session_filters_cook(
     write_registry_entry(project_dir, "lid-cook", "cook", None)
     write_registry_entry(project_dir, "lid-order", "order", None)
 
-    from autoskillit.core.session_registry import bridge_claude_session_id
+    from autoskillit.core.runtime.session_registry import bridge_claude_session_id
 
     bridge_claude_session_id(project_dir, "lid-cook", "cook-uuid-1")
     bridge_claude_session_id(project_dir, "lid-order", "order-uuid-1")
 
     monkeypatch.setattr(
-        "autoskillit.cli._session_picker.claude_code_project_dir",
+        "autoskillit.cli.session._session_picker.claude_code_project_dir",
         lambda _: claude_dir,
     )
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
@@ -95,13 +95,13 @@ def test_pick_session_filters_order(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     write_registry_entry(project_dir, "lid-cook", "cook", None)
     write_registry_entry(project_dir, "lid-order", "order", None)
 
-    from autoskillit.core.session_registry import bridge_claude_session_id
+    from autoskillit.core.runtime.session_registry import bridge_claude_session_id
 
     bridge_claude_session_id(project_dir, "lid-cook", "cook-uuid-1")
     bridge_claude_session_id(project_dir, "lid-order", "order-uuid-1")
 
     monkeypatch.setattr(
-        "autoskillit.cli._session_picker.claude_code_project_dir",
+        "autoskillit.cli.session._session_picker.claude_code_project_dir",
         lambda _: claude_dir,
     )
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
@@ -141,7 +141,7 @@ def test_sidechain_sessions_excluded(tmp_path: Path, monkeypatch: pytest.MonkeyP
     (claude_dir / "sessions-index.json").write_text(json.dumps(entries), encoding="utf-8")
 
     monkeypatch.setattr(
-        "autoskillit.cli._session_picker.claude_code_project_dir",
+        "autoskillit.cli.session._session_picker.claude_code_project_dir",
         lambda _: claude_dir,
     )
 

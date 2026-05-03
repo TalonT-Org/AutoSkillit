@@ -10,7 +10,7 @@ import pytest
 
 from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason
-from autoskillit.server.tools_github import (
+from autoskillit.server.tools.tools_github import (
     _format_diagnostics_section,
     _read_session_diagnostics,
     report_bug,

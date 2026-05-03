@@ -12,7 +12,7 @@ import pytest
 
 from autoskillit.core import pkg_root
 from autoskillit.recipe.io import load_recipe
-from autoskillit.recipe.rules_verdict import _classify_route_target
+from autoskillit.recipe.rules.rules_verdict import _classify_route_target
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 

@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from autoskillit.hooks._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
+from autoskillit.hooks.formatters._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
 from tests.infra._pretty_output_helpers import _make_run_skill_event, _run_hook
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
@@ -437,7 +437,7 @@ def test_tool_exception_subtype_routed_before_formatter():
 
 def test_fmt_run_skill_success_with_kill_after_completion_annotates_exit_code() -> None:
     """kill_reason=kill_after_completion must annotate exit_code line."""
-    from autoskillit.hooks._fmt_execution import _fmt_run_skill
+    from autoskillit.hooks.formatters._fmt_execution import _fmt_run_skill
 
     data = {
         "success": True,
@@ -459,7 +459,7 @@ def test_fmt_run_skill_success_with_kill_after_completion_annotates_exit_code() 
 
 def test_fmt_run_skill_success_with_natural_exit_shows_bare_exit_code() -> None:
     """kill_reason=natural_exit must render bare exit_code without annotation."""
-    from autoskillit.hooks._fmt_execution import _fmt_run_skill
+    from autoskillit.hooks.formatters._fmt_execution import _fmt_run_skill
 
     data = {
         "success": True,
@@ -481,7 +481,7 @@ def test_fmt_run_skill_success_with_natural_exit_shows_bare_exit_code() -> None:
 
 def test_fmt_run_skill_infra_kill_annotates_reason() -> None:
     """kill_reason=infra_kill must annotate exit_code with infra-killed."""
-    from autoskillit.hooks._fmt_execution import _fmt_run_skill
+    from autoskillit.hooks.formatters._fmt_execution import _fmt_run_skill
 
     data = {
         "success": False,
@@ -503,7 +503,7 @@ def test_fmt_run_skill_infra_kill_annotates_reason() -> None:
 
 def test_fmt_run_skill_legacy_payload_without_kill_reason_renders_bare() -> None:
     """Payload without kill_reason field must render bare exit_code (backward compat)."""
-    from autoskillit.hooks._fmt_execution import _fmt_run_skill
+    from autoskillit.hooks.formatters._fmt_execution import _fmt_run_skill
 
     data = {
         "success": True,
@@ -523,7 +523,7 @@ def test_fmt_run_skill_legacy_payload_without_kill_reason_renders_bare() -> None
 
 def test_fmt_test_check_displays_duration():
     """Pretty output shows duration when present."""
-    from autoskillit.hooks._fmt_execution import _fmt_test_check
+    from autoskillit.hooks.formatters._fmt_execution import _fmt_test_check
 
     data = {"passed": True, "stdout": "= 10 passed =", "duration_seconds": 12.34}
     out = _fmt_test_check(data, False)
@@ -532,7 +532,7 @@ def test_fmt_test_check_displays_duration():
 
 def test_fmt_test_check_displays_filter_stats():
     """Pretty output shows filter stats when present."""
-    from autoskillit.hooks._fmt_execution import _fmt_test_check
+    from autoskillit.hooks.formatters._fmt_execution import _fmt_test_check
 
     data = {
         "passed": True,
@@ -549,7 +549,7 @@ def test_fmt_test_check_displays_filter_stats():
 
 def test_fmt_test_check_displays_full_run_reason():
     """Pretty output shows full run reason instead of selected/deselected counts."""
-    from autoskillit.hooks._fmt_execution import _fmt_test_check
+    from autoskillit.hooks.formatters._fmt_execution import _fmt_test_check
 
     data = {
         "passed": True,
@@ -565,7 +565,7 @@ def test_fmt_test_check_displays_full_run_reason():
 
 def test_fmt_test_check_shows_question_mark_only_when_stats_truly_unavailable():
     """When filter_mode is set but no counts or reason, output shows '?'."""
-    from autoskillit.hooks._fmt_execution import _fmt_test_check
+    from autoskillit.hooks.formatters._fmt_execution import _fmt_test_check
 
     data = {"passed": True, "stdout": "", "filter_mode": "conservative"}
     out = _fmt_test_check(data, False)

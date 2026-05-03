@@ -6,7 +6,7 @@ import re
 
 import pytest
 
-from autoskillit.cli._ansi import diagram_to_terminal, ingredients_to_terminal, supports_color
+from autoskillit.cli.ui._ansi import diagram_to_terminal, ingredients_to_terminal, supports_color
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 

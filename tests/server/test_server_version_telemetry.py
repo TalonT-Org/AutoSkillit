@@ -47,7 +47,7 @@ class TestPluginDirConstant:
         This test verifies that the fixture wires plugin_source through _ctx correctly.
         """
         import autoskillit
-        from autoskillit.core._type_plugin_source import DirectInstall
+        from autoskillit.core.types._type_plugin_source import DirectInstall
         from autoskillit.server._state import _get_plugin_dir
 
         # The real package dir is what the server sets at startup.
@@ -73,7 +73,7 @@ class TestVersionInfo:
         assert info["match"] is True
 
     def test_version_info_detects_mismatch(self, tmp_path, tool_ctx):
-        from autoskillit.core._type_plugin_source import DirectInstall
+        from autoskillit.core.types._type_plugin_source import DirectInstall
         from autoskillit.server import version_info
 
         plugin_dir = tmp_path / ".claude-plugin"
@@ -88,7 +88,7 @@ class TestVersionInfo:
         assert info["plugin_json_version"] == "0.0.0"
 
     def test_version_info_handles_missing_plugin_json(self, tmp_path, tool_ctx):
-        from autoskillit.core._type_plugin_source import DirectInstall
+        from autoskillit.core.types._type_plugin_source import DirectInstall
         from autoskillit.server import version_info
 
         tool_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
@@ -149,7 +149,7 @@ class TestInitializeClearMarker:
     def test_initialize_uses_clear_marker_as_since_bound(self, tool_ctx, tmp_path, monkeypatch):
         from datetime import UTC, datetime, timedelta
 
-        from autoskillit.core._type_results import SessionTelemetry
+        from autoskillit.core.types._type_results import SessionTelemetry
         from autoskillit.execution.session_log import (
             flush_session_log,
         )

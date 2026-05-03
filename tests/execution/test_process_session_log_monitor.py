@@ -345,7 +345,7 @@ class TestSessionLogMonitorStaleSuppressionGate:
             return call_count["n"] == 1  # True on first call, False on second
 
         with patch(
-            "autoskillit.execution._process_monitor._has_active_api_connection",
+            "autoskillit.execution.process._process_monitor._has_active_api_connection",
             side_effect=side_effect,
         ):
             with anyio.fail_after(5.0):
@@ -387,7 +387,7 @@ class TestSessionLogMonitorStaleSuppressionGate:
         spawn_time = time.time() - 10
 
         with patch(
-            "autoskillit.execution._process_monitor._has_active_api_connection"
+            "autoskillit.execution.process._process_monitor._has_active_api_connection"
         ) as mock_tcp:
             with anyio.fail_after(2.0):
                 result = await _session_log_monitor(
@@ -418,7 +418,7 @@ class TestSessionLogMonitorStaleSuppressionGate:
             return calls["n"] == 1
 
         with patch(
-            "autoskillit.execution._process_monitor._has_active_api_connection",
+            "autoskillit.execution.process._process_monitor._has_active_api_connection",
             side_effect=side_effect,
         ):
             with structlog.testing.capture_logs() as logs:
@@ -463,11 +463,11 @@ class TestSessionLogMonitorStaleSuppressionGate:
             return call_count["cpu"] == 1  # True first, False second
 
         monkeypatch.setattr(
-            "autoskillit.execution._process_monitor._has_active_api_connection",
+            "autoskillit.execution.process._process_monitor._has_active_api_connection",
             fake_api_conn,
         )
         monkeypatch.setattr(
-            "autoskillit.execution._process_monitor._has_active_child_processes",
+            "autoskillit.execution.process._process_monitor._has_active_child_processes",
             fake_child_cpu,
         )
         result = await _session_log_monitor(
@@ -494,7 +494,7 @@ class TestStaleSuppressionBounded:
         spawn_time = time.time() - 10
 
         monkeypatch.setattr(
-            "autoskillit.execution._process_monitor._has_active_api_connection",
+            "autoskillit.execution.process._process_monitor._has_active_api_connection",
             lambda pid: True,
         )
 
@@ -519,7 +519,7 @@ class TestStaleSuppressionBounded:
         spawn_time = time.time() - 10
 
         monkeypatch.setattr(
-            "autoskillit.execution._process_monitor._has_active_api_connection",
+            "autoskillit.execution.process._process_monitor._has_active_api_connection",
             lambda pid: True,
         )
 
@@ -561,7 +561,7 @@ class TestStaleSuppressionBounded:
         spawn_time = time.time() - 10
 
         monkeypatch.setattr(
-            "autoskillit.execution._process_monitor._has_active_api_connection",
+            "autoskillit.execution.process._process_monitor._has_active_api_connection",
             lambda pid: True,
         )
 

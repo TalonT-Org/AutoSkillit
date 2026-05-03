@@ -14,7 +14,7 @@ from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason
 from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS, DefaultGateState
 from autoskillit.server._misc import _extract_block
-from autoskillit.server.tools_github import (
+from autoskillit.server.tools.tools_github import (
     _FINGERPRINT_END,
     _FINGERPRINT_START,
     _parse_fingerprint,
@@ -22,7 +22,7 @@ from autoskillit.server.tools_github import (
     get_issue_title,
     report_bug,
 )
-from autoskillit.server.tools_issue_lifecycle import (
+from autoskillit.server.tools.tools_issue_lifecycle import (
     _ENRICH_RESULT_END,
     _ENRICH_RESULT_START,
     _PREPARE_RESULT_END,

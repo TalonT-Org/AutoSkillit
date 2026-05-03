@@ -55,12 +55,6 @@ class TestModuleCascadeCore:
         for stem, consumers in MODULE_CASCADE_CORE.items():
             assert "core" in consumers, f"{stem} cascade missing 'core'"
 
-    def test_kitchen_state_cascade(self) -> None:
-        assert MODULE_CASCADE_CORE["kitchen_state"] == frozenset({"core", "cli", "server"})
-
-    def test_readiness_cascade(self) -> None:
-        assert MODULE_CASCADE_CORE["readiness"] == frozenset({"core", "server"})
-
     def test_feature_flags_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["feature_flags"] == frozenset(
             {"core", "cli", "config", "recipe", "server", "workspace"}
@@ -76,15 +70,12 @@ class TestModuleCascadeCore:
         overlap = _CORE_UNIVERSAL_MODULES & set(MODULE_CASCADE_CORE.keys())
         assert not overlap, f"Universal modules in MODULE_CASCADE_CORE: {overlap}"
 
-    def test_all_13_entries_present(self) -> None:
+    def test_all_entries_present(self) -> None:
         expected_stems = {
-            "readiness",
             "feature_flags",
-            "kitchen_state",
             "branch_guard",
             "_plugin_ids",
             "_terminal_table",
-            "_linux_proc",
             "_plugin_cache",
             "github_url",
             "paths",
@@ -161,41 +152,19 @@ class TestBuildTestScopeCoreCascade:
         for pkg in ["core", "config", "execution", "server", "cli"]:
             assert pkg in dir_names
 
-    def test_kitchen_state_narrow_cascade(self, tmp_path: Path) -> None:
-        """kitchen_state.py → only {core, cli, server} + always-run."""
+    def test_kitchen_state_fails_open_to_full_cascade(self, tmp_path: Path) -> None:
+        """kitchen_state.py (now in runtime/) → fail-open to full core cascade."""
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
-            changed_files={"src/autoskillit/core/kitchen_state.py"},
+            changed_files={"src/autoskillit/core/runtime/kitchen_state.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
         assert result is not None
         dir_names = {p.name for p in result}
-        assert "core" in dir_names
-        assert "cli" in dir_names
-        assert "server" in dir_names
-        # Must NOT include packages kitchen_state doesn't touch
-        for excluded in [
-            "execution",
-            "pipeline",
-            "workspace",
-            "recipe",
-            "migration",
-            "hooks",
-        ]:
-            assert excluded not in dir_names, (
-                f"kitchen_state narrow cascade should not include {excluded}"
-            )
-        # arch and contracts always present; infra/docs not as dirs for non-triggering change
-        assert "arch" in dir_names
-        assert "contracts" in dir_names
-        assert "infra" not in dir_names  # kitchen_state doesn't touch hooks/CI files
-        assert "docs" not in dir_names  # kitchen_state doesn't touch docs files
-        result_names = {p.name for p in result}
-        from tests._test_filter import _INFRA_UNCONDITIONAL_FILES
-
-        for fname in _INFRA_UNCONDITIONAL_FILES:
-            assert fname in result_names, f"unconditional infra file {fname!r} missing"
+        # Fail-open: kitchen_state stem not in MODULE_CASCADE_CORE → full core cascade
+        for pkg in ["core", "config", "execution", "server", "cli"]:
+            assert pkg in dir_names, f"fail-open should include {pkg}"
 
     def test_unknown_core_module_fails_open_to_full_cascade(self, tmp_path: Path) -> None:
         """An unknown core module stem → full cascade (fail-open, not None)."""
@@ -215,7 +184,7 @@ class TestBuildTestScopeCoreCascade:
         """AGGRESSIVE mode still maps core → {core} regardless of stem."""
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
-            changed_files={"src/autoskillit/core/kitchen_state.py"},
+            changed_files={"src/autoskillit/core/runtime/kitchen_state.py"},
             mode=FilterMode.AGGRESSIVE,
             tests_root=tests_root,
         )
@@ -258,28 +227,28 @@ class TestBuildTestScopeCoreCascade:
         ]:
             assert pkg in dir_names
 
-    def test_readiness_cascade_includes_only_server(self, tmp_path: Path) -> None:
-        """readiness.py only used by server → {core, server} + always-run."""
+    def test_readiness_cascade_fails_open_to_full_cascade(self, tmp_path: Path) -> None:
+        """readiness.py in core/runtime/ subpackage → falls through to full core cascade."""
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
-            changed_files={"src/autoskillit/core/readiness.py"},
+            changed_files={"src/autoskillit/core/runtime/readiness.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
         assert result is not None
         dir_names = {p.name for p in result}
-        assert "core" in dir_names
-        assert "server" in dir_names
-        for excluded in [
-            "execution",
-            "pipeline",
-            "workspace",
-            "recipe",
-            "migration",
+        for pkg in [
+            "core",
             "cli",
-            "hooks",
+            "config",
+            "execution",
+            "fleet",
+            "migration",
+            "recipe",
+            "server",
+            "workspace",
         ]:
-            assert excluded not in dir_names
+            assert pkg in dir_names
 
 
 class TestClosureCoreNarrowCascade:
@@ -319,12 +288,12 @@ class TestClosureCoreNarrowCascade:
         tests_root = self._make_core_layout(
             tmp_path,
             {
-                "kitchen_state.py": "",
-                "__init__.py": "from .kitchen_state import KitchenState\n",
+                "_plugin_ids.py": "",
+                "__init__.py": "from ._plugin_ids import DIRECT_PREFIX\n",
             },
         )
         result = build_test_scope(
-            changed_files={"src/autoskillit/core/kitchen_state.py"},
+            changed_files={"src/autoskillit/core/_plugin_ids.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
@@ -347,24 +316,25 @@ class TestClosureCoreNarrowCascade:
         tests_root = self._make_core_layout(
             tmp_path,
             {
-                "kitchen_state.py": "",
-                "readiness.py": "",
+                "_plugin_ids.py": "",
+                "_plugin_cache.py": "",
                 "__init__.py": (
-                    "from .kitchen_state import KitchenState\nfrom .readiness import is_ready\n"
+                    "from ._plugin_ids import DIRECT_PREFIX\n"
+                    "from ._plugin_cache import is_cached\n"
                 ),
             },
         )
         result = build_test_scope(
             changed_files={
-                "src/autoskillit/core/kitchen_state.py",
-                "src/autoskillit/core/readiness.py",
+                "src/autoskillit/core/_plugin_ids.py",
+                "src/autoskillit/core/_plugin_cache.py",
             },
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
         assert result is not None
         dir_names = {p.name for p in result}
-        # Union: kitchen_state={core,cli,server} ∪ readiness={core,server}
+        # Union: _plugin_ids={core,cli,server} ∪ _plugin_cache={core,cli,server}
         for pkg in ["core", "cli", "server"]:
             assert pkg in dir_names, f"union cascade should include {pkg}"
         for excluded in [

@@ -9,7 +9,7 @@ import pytest
 import structlog.testing
 
 from autoskillit.server._subprocess import _run_subprocess
-from autoskillit.server.tools_execution import run_cmd, run_python
+from autoskillit.server.tools.tools_execution import run_cmd, run_python
 from tests.conftest import _make_result, _make_timeout_result
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]

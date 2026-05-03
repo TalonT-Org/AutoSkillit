@@ -62,7 +62,7 @@ class TestDispatchFoodTruckGates:
     async def test_dispatch_food_truck_hard_refusal_headless(self, tool_ctx, monkeypatch):
         """AUTOSKILLIT_HEADLESS=1 → fleet_hard_refusal_headless, regardless of SESSION_TYPE."""
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-        from autoskillit.server.tools_execution import dispatch_food_truck
+        from autoskillit.server.tools.tools_execution import dispatch_food_truck
 
         result = json.loads(await dispatch_food_truck(recipe="r", task="t"))
         assert result["success"] is False
@@ -72,7 +72,7 @@ class TestDispatchFoodTruckGates:
     async def test_dispatch_food_truck_requires_kitchen_open(self, tool_ctx, monkeypatch):
         """Kitchen closed → gate_error_result JSON."""
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server.tools_execution import dispatch_food_truck
+        from autoskillit.server.tools.tools_execution import dispatch_food_truck
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         result = json.loads(await dispatch_food_truck(recipe="r", task="t"))
@@ -113,7 +113,7 @@ class TestDispatchFoodTruckGates:
         """features.fleet: false in config → fleet_feature_disabled, regardless of gate state."""
         import dataclasses
 
-        from autoskillit.server.tools_execution import dispatch_food_truck
+        from autoskillit.server.tools.tools_execution import dispatch_food_truck
 
         # Gate is open (fleet session already booted), env var absent
         # Only config file has fleet disabled
@@ -802,7 +802,7 @@ class TestDispatchFoodTruckHaltEnforcement:
         monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(state_path))
         monkeypatch.setenv("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false")
 
-        from autoskillit.server.tools_execution import dispatch_food_truck
+        from autoskillit.server.tools.tools_execution import dispatch_food_truck
 
         result = json.loads(await dispatch_food_truck(recipe="r", task="t"))
         assert result["success"] is False
@@ -819,7 +819,7 @@ class TestDispatchFoodTruckHaltEnforcement:
         monkeypatch.setenv("AUTOSKILLIT_CONTINUE_ON_FAILURE", "true")
 
         self._setup_standard_dispatch(tool_ctx, monkeypatch)
-        from autoskillit.server.tools_execution import dispatch_food_truck
+        from autoskillit.server.tools.tools_execution import dispatch_food_truck
 
         result = json.loads(await dispatch_food_truck(recipe="test-recipe", task="t"))
         assert result.get("error") != "fleet_campaign_halted"
@@ -830,7 +830,7 @@ class TestDispatchFoodTruckHaltEnforcement:
         monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", raising=False)
 
         self._setup_standard_dispatch(tool_ctx, monkeypatch)
-        from autoskillit.server.tools_execution import dispatch_food_truck
+        from autoskillit.server.tools.tools_execution import dispatch_food_truck
 
         result = json.loads(await dispatch_food_truck(recipe="test-recipe", task="t"))
         assert result.get("error") != "fleet_campaign_halted"
@@ -846,7 +846,7 @@ class TestDispatchFoodTruckHaltEnforcement:
         monkeypatch.setenv("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false")
 
         self._setup_standard_dispatch(tool_ctx, monkeypatch)
-        from autoskillit.server.tools_execution import dispatch_food_truck
+        from autoskillit.server.tools.tools_execution import dispatch_food_truck
 
         result = json.loads(await dispatch_food_truck(recipe="test-recipe", task="t"))
         assert result.get("error") != "fleet_campaign_halted"
@@ -860,7 +860,7 @@ class TestDispatchFoodTruckHaltEnforcement:
         monkeypatch.setenv("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false")
 
         self._setup_standard_dispatch(tool_ctx, monkeypatch)
-        from autoskillit.server.tools_execution import dispatch_food_truck
+        from autoskillit.server.tools.tools_execution import dispatch_food_truck
 
         result = json.loads(await dispatch_food_truck(recipe="test-recipe", task="t"))
         assert result.get("error") != "fleet_campaign_halted"

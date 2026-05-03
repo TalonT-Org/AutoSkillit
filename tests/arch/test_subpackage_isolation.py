@@ -300,18 +300,18 @@ def test_no_module_level_io_detects_yaml_load(tmp_path: Path) -> None:
 
 
 def test_severity_defined_in_types():
-    """Severity must be a top-level class in core/_type_enums.py (the enums sub-module)."""
-    tree = _get_module_ast("core/_type_enums.py")
+    """Severity must be a top-level class in core/types/_type_enums.py (the enums sub-module)."""
+    tree = _get_module_ast("core/types/_type_enums.py")
     assert "Severity" in _top_level_class_names(tree), (
-        "Severity not found in core/_type_enums.py; it must be defined there"
+        "Severity not found in core/types/_type_enums.py; it must be defined there"
     )
 
 
 def test_skill_tools_defined_in_types():
-    """SKILL_TOOLS must be a top-level assignment in core/_type_constants.py."""
-    tree = _get_module_ast("core/_type_constants.py")
+    """SKILL_TOOLS must be a top-level assignment in core/types/_type_constants.py."""
+    tree = _get_module_ast("core/types/_type_constants.py")
     assert "SKILL_TOOLS" in _top_level_assign_targets(tree), (
-        "SKILL_TOOLS not found in core/_type_constants.py; it must be defined there"
+        "SKILL_TOOLS not found in core/types/_type_constants.py; it must be defined there"
     )
 
 
@@ -371,10 +371,10 @@ def test_severity_not_defined_locally_in_recipe_validator() -> None:
 
 def test_severity_not_locally_defined_in_doctor() -> None:
     """cli/_doctor.py must not define its own Severity — it must import from core."""
-    ast_module = _get_module_ast("cli/_doctor.py")
+    ast_module = _get_module_ast("cli/doctor/__init__.py")
     class_names = _top_level_class_names(ast_module)
     assert "Severity" not in class_names, (
-        "cli/_doctor.py must import Severity from autoskillit.core, not define it locally"
+        "cli/doctor/__init__.py must import Severity from autoskillit.core, not define it locally"
     )
 
 
@@ -563,16 +563,16 @@ def test_tools_integrations_replaced_by_split_modules() -> None:
     """tools_integrations.py deleted; three replacement modules exist."""
     server = SRC_ROOT / "server"
     assert not (server / "tools_integrations.py").exists()
-    assert (server / "tools_github.py").exists()
-    assert (server / "tools_issue_lifecycle.py").exists()
-    assert (server / "tools_pr_ops.py").exists()
+    assert (server / "tools" / "tools_github.py").exists()
+    assert (server / "tools" / "tools_issue_lifecycle.py").exists()
+    assert (server / "tools" / "tools_pr_ops.py").exists()
 
 
 def test_split_files_under_750_lines() -> None:
     """Each split module must stay under the 750-line threshold."""
     server = SRC_ROOT / "server"
     for name in ("tools_github.py", "tools_issue_lifecycle.py", "tools_pr_ops.py"):
-        lines = len((server / name).read_text().splitlines())
+        lines = len((server / "tools" / name).read_text().splitlines())
         assert lines <= 750, f"{name} has {lines} lines, exceeds 750"
 
 
@@ -585,14 +585,18 @@ def test_extract_block_in_misc() -> None:
 
 def test_all_tools_importable_from_split_modules() -> None:
     """All 9 tools are importable from their new home modules."""
-    from autoskillit.server.tools_github import fetch_github_issue, get_issue_title, report_bug
-    from autoskillit.server.tools_issue_lifecycle import (
+    from autoskillit.server.tools.tools_github import (
+        fetch_github_issue,
+        get_issue_title,
+        report_bug,
+    )
+    from autoskillit.server.tools.tools_issue_lifecycle import (
         claim_issue,
         enrich_issues,
         prepare_issue,
         release_issue,
     )
-    from autoskillit.server.tools_pr_ops import bulk_close_issues, get_pr_reviews
+    from autoskillit.server.tools.tools_pr_ops import bulk_close_issues, get_pr_reviews
 
     for name, fn in [
         ("fetch_github_issue", fetch_github_issue),
@@ -617,7 +621,7 @@ def test_git_operations_moved_to_server_package() -> None:
 def test_doctor_moved_to_cli_package() -> None:
     """_doctor.py must be removed; its logic lives in cli/_doctor.py."""
     assert not (SRC_ROOT / "_doctor.py").exists()
-    assert (SRC_ROOT / "cli" / "_doctor.py").exists()
+    assert (SRC_ROOT / "cli" / "doctor" / "__init__.py").exists()
 
 
 # ── New REQ-CNST tests (groupE) ───────────────────────────────────────────────
@@ -782,23 +786,39 @@ def test_no_subpackage_exceeds_10_files() -> None:
         server/ tests. Exempt at 11 files.
     """
     EXEMPTIONS: dict[str, int] = {
-        "server": 25,
-        "recipe": 50,
-        "execution": 38,
-        "core": 33,
-        "cli": 43,
-        "hooks": 29,
+        "server": 14,
+        "recipe": 28,
+        "execution": 18,
+        "core": 20,
+        "core/types": 15,
+        "cli": 18,
+        "hooks": 9,
         "pipeline": 12,
         "fleet": 11,
+        "recipe/rules": 26,
+        "server/tools": 14,
+        "hooks/guards": 19,
     }
     violations: list[str] = []
+    dirs_to_check: list[Path] = []
     for sub_dir in sorted(SRC_ROOT.iterdir()):
         if not sub_dir.is_dir() or sub_dir.name.startswith("_") or sub_dir.name == "__pycache__":
             continue
+        dirs_to_check.append(sub_dir)
+        for nested_dir in sorted(sub_dir.iterdir()):
+            if (
+                not nested_dir.is_dir()
+                or nested_dir.name.startswith("_")
+                or nested_dir.name == "__pycache__"
+            ):
+                continue
+            dirs_to_check.append(nested_dir)
+    for sub_dir in dirs_to_check:
+        rel_key = str(sub_dir.relative_to(SRC_ROOT))
         py_files = list(sub_dir.glob("*.py"))
-        limit = EXEMPTIONS.get(sub_dir.name, 10)
+        limit = EXEMPTIONS.get(rel_key, 10)
         if len(py_files) > limit:
-            violations.append(f"{sub_dir.name}/: {len(py_files)} Python files (max {limit})")
+            violations.append(f"{rel_key}/: {len(py_files)} Python files (max {limit})")
     assert not violations, "Sub-packages exceeding 10 Python files:\n" + "\n".join(
         f"  {v}" for v in violations
     )
@@ -966,7 +986,7 @@ def test_server_tool_handlers_have_no_business_logic() -> None:
     """
     server_dir = SRC_ROOT / "server"
     violations: list[str] = []
-    for py_file in sorted(server_dir.glob("tools_*.py")):
+    for py_file in sorted((server_dir / "tools").glob("tools_*.py")):
         tree = ast.parse(py_file.read_text())
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -1008,14 +1028,14 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
     # shards and SubprocessRunner lives in _type_subprocess.py; types.py is a thin re-export hub.
     core_protocols: set[str] = set()
     for types_filename in (
-        "core/types.py",
-        "core/_type_protocols_logging.py",
-        "core/_type_protocols_execution.py",
-        "core/_type_protocols_github.py",
-        "core/_type_protocols_workspace.py",
-        "core/_type_protocols_recipe.py",
-        "core/_type_protocols_infra.py",
-        "core/_type_subprocess.py",
+        "core/types/__init__.py",
+        "core/types/_type_protocols_logging.py",
+        "core/types/_type_protocols_execution.py",
+        "core/types/_type_protocols_github.py",
+        "core/types/_type_protocols_workspace.py",
+        "core/types/_type_protocols_recipe.py",
+        "core/types/_type_protocols_infra.py",
+        "core/types/_type_subprocess.py",
     ):
         types_path = AUTOSKILLIT_ROOT / types_filename
         if not types_path.exists():
@@ -1136,7 +1156,7 @@ def test_semantic_rule_functions_defined_in_rule_submodules() -> None:
     """P8: Semantic rule functions must be defined in rules_*.py submodules."""
     from autoskillit.recipe.validator import _check_outdated_version
 
-    assert _check_outdated_version.__module__ == "autoskillit.recipe.rules_inputs"
+    assert _check_outdated_version.__module__ == "autoskillit.recipe.rules.rules_inputs"
 
 
 def test_installed_version_in_core_types() -> None:
@@ -1148,7 +1168,7 @@ def test_installed_version_in_core_types() -> None:
 
 def test_rule_submodules_no_autoskillit_init_import() -> None:
     """P3-F2: rules_*.py submodules must not import from autoskillit top-level __init__."""
-    rule_files = sorted((SRC_ROOT / "recipe").glob("rules_*.py"))
+    rule_files = sorted((SRC_ROOT / "recipe" / "rules").glob("rules_*.py"))
     assert len(rule_files) >= 5, f"Expected >=5 rules_*.py files, found {len(rule_files)}"
     for rules_path in rule_files:
         assert "from autoskillit import __version__" not in rules_path.read_text(), (
@@ -1176,7 +1196,7 @@ def test_recipe_lister_callsites_use_protocol_typing() -> None:
     not SkillLister. That is checked separately below.
     """
     lister_targets = {
-        "src/autoskillit/recipe/rules_skills.py",
+        "src/autoskillit/recipe/rules/rules_skills.py",
         "src/autoskillit/recipe/_api.py",
     }
     src_root = Path(__file__).resolve().parents[2]
@@ -1242,51 +1262,51 @@ class TestGroupCMigration:
     """REQ-SIG-001..008: anyio task group replaces asyncio task scaffolding."""
 
     def test_no_asyncio_create_task(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/process/__init__.py").read_text()
         assert "asyncio.create_task(" not in source  # REQ-SIG-001
 
     def test_no_asyncio_wait_call(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/process/__init__.py").read_text()
         assert "asyncio.wait(" not in source  # REQ-SIG-001
 
     def test_no_asyncio_import_at_runtime(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/process/__init__.py").read_text()
         assert "import asyncio" not in source  # REQ-SIG-001
 
     def test_anyio_create_task_group_present(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/process/__init__.py").read_text()
         assert "anyio.create_task_group()" in source  # REQ-SIG-002
 
     def test_scan_done_signals_absent(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/process/__init__.py").read_text()
         assert "def scan_done_signals(" not in source  # REQ-SIG-003
 
     def test_race_accumulator_present(self):
-        source = Path("src/autoskillit/execution/_process_race.py").read_text()
+        source = Path("src/autoskillit/execution/process/_process_race.py").read_text()
         assert "class RaceAccumulator" in source  # REQ-SIG-003
 
     def test_cancel_scope_cancel_present(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/process/__init__.py").read_text()
         assert "cancel_scope.cancel()" in source  # REQ-SIG-004
 
     def test_resolve_termination_preserved(self):
-        source = Path("src/autoskillit/execution/_process_race.py").read_text()
+        source = Path("src/autoskillit/execution/process/_process_race.py").read_text()
         assert "def resolve_termination(" in source  # REQ-SIG-005
 
     def test_channel_b_drain_wait_uses_move_on_after(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/process/__init__.py").read_text()
         assert "anyio.move_on_after(" in source  # REQ-SIG-006
 
     def test_watch_process_present(self):
-        source = Path("src/autoskillit/execution/_process_race.py").read_text()
+        source = Path("src/autoskillit/execution/process/_process_race.py").read_text()
         assert "async def _watch_process(" in source  # REQ-SIG-007
 
     def test_watch_heartbeat_present(self):
-        source = Path("src/autoskillit/execution/_process_race.py").read_text()
+        source = Path("src/autoskillit/execution/process/_process_race.py").read_text()
         assert "async def _watch_heartbeat(" in source  # REQ-SIG-007
 
     def test_watch_session_log_present(self):
-        source = Path("src/autoskillit/execution/_process_race.py").read_text()
+        source = Path("src/autoskillit/execution/process/_process_race.py").read_text()
         assert "async def _watch_session_log(" in source  # REQ-SIG-007
 
     def test_race_signals_fields_unchanged(self):
@@ -1397,7 +1417,7 @@ def test_update_checks_docstring_describes_both_windows() -> None:
     import ast
 
     src_root = Path(__file__).parent.parent.parent / "src"
-    module_path = src_root / "autoskillit" / "cli" / "_update_checks.py"
+    module_path = src_root / "autoskillit" / "cli" / "update" / "_update_checks.py"
     tree = ast.parse(module_path.read_text(encoding="utf-8"))
 
     module_doc = ast.get_docstring(tree) or ""

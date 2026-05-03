@@ -20,10 +20,10 @@ from tests.arch._rules import (
 # ── Path constants ────────────────────────────────────────────────────────────
 # Must be absolute for xdist compatibility -- do not use relative paths.
 SRC_ROOT = Path(__file__).parent.parent.parent / "src" / "autoskillit"
-PROCESS_PY = SRC_ROOT / "execution" / "process.py"
-PROCESS_KILL_PY = SRC_ROOT / "execution" / "_process_kill.py"
-PROCESS_MONITOR_PY = SRC_ROOT / "execution" / "_process_monitor.py"
-PROCESS_RACE_PY = SRC_ROOT / "execution" / "_process_race.py"
+PROCESS_PY = SRC_ROOT / "execution" / "process" / "__init__.py"
+PROCESS_KILL_PY = SRC_ROOT / "execution" / "process" / "_process_kill.py"
+PROCESS_MONITOR_PY = SRC_ROOT / "execution" / "process" / "_process_monitor.py"
+PROCESS_RACE_PY = SRC_ROOT / "execution" / "process" / "_process_race.py"
 
 # ── Section A: AST visitor infrastructure ─────────────────────────────────────
 

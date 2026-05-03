@@ -52,7 +52,7 @@ def _write_blocking_cache(cache_path: Path, *, fetched_at: str | None = None) ->
 
 def _run_hook(event: dict | None = None) -> tuple[str, int]:
     """Run quota_guard.main() without cache_path_override — exercises the bridge path."""
-    from autoskillit.hooks.quota_guard import main
+    from autoskillit.hooks.guards.quota_guard import main
 
     buf = io.StringIO()
     exit_code = 0
@@ -191,7 +191,7 @@ def test_hook_config_quota_guard_keys_match_payload_keys(tmp_path):
     """set(data['quota_guard'].keys()) == QUOTA_GUARD_HOOK_PAYLOAD_KEYS."""
     from autoskillit.config.settings import QuotaGuardConfig
     from autoskillit.hooks._hook_settings import QUOTA_GUARD_HOOK_PAYLOAD_KEYS
-    from autoskillit.server.tools_kitchen import _quota_guard_hook_payload
+    from autoskillit.server.tools.tools_kitchen import _quota_guard_hook_payload
 
     cfg = QuotaGuardConfig()
     payload = {"quota_guard": _quota_guard_hook_payload(cfg)}
@@ -209,7 +209,7 @@ def test_write_hook_config_round_trip_via_resolve_quota_settings(tmp_path, monke
     is correctly read back by resolve_quota_settings()."""
     from autoskillit.config.settings import QuotaGuardConfig
     from autoskillit.hooks._hook_settings import resolve_quota_settings
-    from autoskillit.server.tools_kitchen import _quota_guard_hook_payload
+    from autoskillit.server.tools.tools_kitchen import _quota_guard_hook_payload
 
     monkeypatch.chdir(tmp_path)
     _clear_env(monkeypatch)

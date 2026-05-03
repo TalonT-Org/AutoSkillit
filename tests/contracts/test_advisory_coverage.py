@@ -14,14 +14,14 @@ import os
 import subprocess
 import sys
 
-from autoskillit.core._type_constants import SKILL_FILE_ADVISORY_MAP
 from autoskillit.core.paths import pkg_root
+from autoskillit.core.types._type_constants import SKILL_FILE_ADVISORY_MAP
 from autoskillit.hook_registry import HOOK_REGISTRY
 from autoskillit.workspace.skills import DefaultSkillResolver
 
 
 def _run_advisor(payload: dict, extra_env: dict[str, str] | None = None) -> tuple[int, str]:
-    hook_path = pkg_root() / "hooks" / "recipe_write_advisor.py"
+    hook_path = pkg_root() / "hooks" / "guards" / "recipe_write_advisor.py"
     env = {**os.environ, **(extra_env or {})}
     env.pop("AUTOSKILLIT_HEADLESS", None)
     result = subprocess.run(
@@ -42,8 +42,8 @@ def test_every_advisory_pattern_has_a_hook() -> None:
         if "Write" in hook.matcher and hook.session_scope == "interactive_only"
         for script in hook.scripts
     }
-    assert "recipe_write_advisor.py" in advisory_scripts, (
-        "recipe_write_advisor.py is not registered in HOOK_REGISTRY with "
+    assert "guards/recipe_write_advisor.py" in advisory_scripts, (
+        "guards/recipe_write_advisor.py is not registered in HOOK_REGISTRY with "
         "a Write|Edit matcher and session_scope=interactive_only"
     )
 
@@ -93,7 +93,7 @@ def test_advisory_hook_message_uses_bare_prefix() -> None:
 
 def test_hook_patterns_match_type_constants() -> None:
     """recipe_write_advisor._ADVISORY_PATTERNS must exactly match SKILL_FILE_ADVISORY_MAP."""
-    from autoskillit.hooks.recipe_write_advisor import _ADVISORY_PATTERNS
+    from autoskillit.hooks.guards.recipe_write_advisor import _ADVISORY_PATTERNS
 
     assert list(SKILL_FILE_ADVISORY_MAP.items()) == _ADVISORY_PATTERNS, (
         "recipe_write_advisor._ADVISORY_PATTERNS is out of sync with "

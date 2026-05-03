@@ -9,7 +9,7 @@ import pytest
 
 from autoskillit.config import AutomationConfig, ReadDbConfig
 from autoskillit.pipeline.gate import DefaultGateState
-from autoskillit.server.tools_status import (
+from autoskillit.server.tools.tools_status import (
     get_quota_events,
     read_db,
     write_telemetry_files,

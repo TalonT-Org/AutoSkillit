@@ -12,7 +12,7 @@ from autoskillit.config import AutomationConfig
 from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason
 from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS, DefaultGateState
-from autoskillit.server.tools_recipe import (
+from autoskillit.server.tools.tools_recipe import (
     load_recipe,
     migrate_recipe,
 )
@@ -371,7 +371,7 @@ class TestMigrationSuppression:
     ):
         """SUP4: validate_recipe includes outdated-script-version even when suppressed."""
         from autoskillit.config import MigrationConfig
-        from autoskillit.server.tools_recipe import validate_recipe
+        from autoskillit.server.tools.tools_recipe import validate_recipe
 
         script = tmp_path / "test-script.yaml"
         script.write_text(_MINIMAL_SCRIPT_YAML)

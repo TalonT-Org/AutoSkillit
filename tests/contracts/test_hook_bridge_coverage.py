@@ -10,7 +10,7 @@ to cross the stdlib-only boundary.
 
 from autoskillit.config.settings import QuotaGuardConfig
 from autoskillit.hooks._hook_settings import QUOTA_GUARD_HOOK_PAYLOAD_KEYS
-from autoskillit.server.tools_kitchen import _quota_guard_hook_payload
+from autoskillit.server.tools.tools_kitchen import _quota_guard_hook_payload
 
 
 def test_quota_guard_hook_payload_keys_match_payload_keys() -> None:

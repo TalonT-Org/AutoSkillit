@@ -4,7 +4,7 @@ import json
 from io import StringIO
 from unittest.mock import patch
 
-from autoskillit.hooks.skill_cmd_guard import _looks_like_path, main
+from autoskillit.hooks.guards.skill_cmd_guard import _looks_like_path, main
 
 
 def _run_hook(tool_input: dict) -> dict | None:

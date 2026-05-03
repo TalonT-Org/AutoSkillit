@@ -264,5 +264,5 @@ def validate_recipe(recipe: Recipe) -> list[str]:
 
 
 # Re-export test-access symbols from their new locations.
-from autoskillit.recipe.rules_inputs import _check_outdated_version  # noqa: E402 F401
-from autoskillit.recipe.rules_worktree import _WORKTREE_MODIFYING_SKILLS  # noqa: E402 F401
+from autoskillit.recipe.rules.rules_inputs import _check_outdated_version  # noqa: E402 F401
+from autoskillit.recipe.rules.rules_worktree import _WORKTREE_MODIFYING_SKILLS  # noqa: E402 F401

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-import autoskillit.recipe.rules_verdict as _rv
+import autoskillit.recipe.rules.rules_verdict as _rv
 from autoskillit.core.types import Severity
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.schema import (

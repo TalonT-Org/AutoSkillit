@@ -41,7 +41,7 @@ class TestLaunchFleetSessionIngredientsTable:
 
         monkeypatch.setattr("autoskillit.cli._prompts._build_fleet_campaign_prompt", _fake_build)
         monkeypatch.setattr(
-            "autoskillit.cli._session_launch._run_interactive_session",
+            "autoskillit.cli.session._session_launch._run_interactive_session",
             lambda *a, **kw: None,
         )
         monkeypatch.chdir(tmp_path)
@@ -50,7 +50,7 @@ class TestLaunchFleetSessionIngredientsTable:
         state_path = tmp_path / ".autoskillit" / "temp" / "fleet" / "test-id" / "state.json"
         state_path.write_text("{}")
 
-        from autoskillit.cli._fleet_session import _launch_fleet_session
+        from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
 
         _launch_fleet_session(
             _make_campaign_recipe(),
@@ -86,7 +86,9 @@ class TestLaunchFleetSessionContinueOnFailureEnv:
             captured["extra_env"] = kwargs.get("extra_env", {})
             return None
 
-        monkeypatch.setattr("autoskillit.cli._session_launch._run_interactive_session", _fake_run)
+        monkeypatch.setattr(
+            "autoskillit.cli.session._session_launch._run_interactive_session", _fake_run
+        )
         monkeypatch.setattr(
             "autoskillit.cli._prompts._build_fleet_campaign_prompt",
             lambda *a, **kw: "fake-prompt",
@@ -99,7 +101,7 @@ class TestLaunchFleetSessionContinueOnFailureEnv:
         recipe = _make_campaign_recipe()
         recipe.continue_on_failure = continue_on_failure
 
-        from autoskillit.cli._fleet_session import _launch_fleet_session
+        from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
 
         _launch_fleet_session(recipe, "test-id", state_path, None, fleet_mode="campaign")
         return captured
@@ -157,7 +159,7 @@ class TestReloadLoopRefreshesMetadata:
             return fresh_meta
 
         monkeypatch.setattr(
-            "autoskillit.cli._session_launch._run_interactive_session",
+            "autoskillit.cli.session._session_launch._run_interactive_session",
             _fake_run_session,
         )
         monkeypatch.setattr(
@@ -169,7 +171,7 @@ class TestReloadLoopRefreshesMetadata:
             lambda *a, **kw: "fake-prompt",
         )
 
-        from autoskillit.cli._fleet_session import _launch_fleet_session
+        from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
 
         _launch_fleet_session(
             _make_campaign_recipe(),
@@ -208,7 +210,7 @@ class TestReloadLoopRefreshesMetadata:
             lambda *a, **kw: fresh_meta,
         )
         monkeypatch.setattr(
-            "autoskillit.cli._session_launch._run_interactive_session",
+            "autoskillit.cli.session._session_launch._run_interactive_session",
             _fake_run_session,
         )
 
@@ -230,7 +232,7 @@ class TestReloadLoopRefreshesMetadata:
             _fake_build,
         )
 
-        from autoskillit.cli._fleet_session import _launch_fleet_session
+        from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
 
         _launch_fleet_session(
             _make_campaign_recipe(),
@@ -279,7 +281,7 @@ class TestReloadLoopSentinelGuard:
             lambda *a, **kw: halted_meta,
         )
         monkeypatch.setattr(
-            "autoskillit.cli._session_launch._run_interactive_session",
+            "autoskillit.cli.session._session_launch._run_interactive_session",
             _fake_run_session,
         )
         monkeypatch.setattr(
@@ -287,7 +289,7 @@ class TestReloadLoopSentinelGuard:
             lambda *a, **kw: "fake-prompt",
         )
 
-        from autoskillit.cli._fleet_session import _launch_fleet_session
+        from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
 
         # Must not raise SystemExit
         _launch_fleet_session(
@@ -331,7 +333,7 @@ class TestReloadLoopSafetyGuards:
             lambda *a, **kw: fresh_meta,
         )
         monkeypatch.setattr(
-            "autoskillit.cli._session_launch._run_interactive_session",
+            "autoskillit.cli.session._session_launch._run_interactive_session",
             _fake_run_session,
         )
         monkeypatch.setattr(
@@ -339,7 +341,7 @@ class TestReloadLoopSafetyGuards:
             lambda *a, **kw: "fake-prompt",
         )
 
-        from autoskillit.cli._fleet_session import _launch_fleet_session
+        from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
 
         with pytest.raises(SystemExit):
             _launch_fleet_session(
@@ -350,7 +352,7 @@ class TestReloadLoopSafetyGuards:
                 fleet_mode="campaign",
             )
 
-        from autoskillit.cli._fleet_session import _MAX_RELOADS
+        from autoskillit.cli.fleet._fleet_session import _MAX_RELOADS
 
         assert counter["n"] == _MAX_RELOADS + 1
 
@@ -381,7 +383,7 @@ class TestReloadLoopSafetyGuards:
             lambda *a, **kw: fresh_meta,
         )
         monkeypatch.setattr(
-            "autoskillit.cli._session_launch._run_interactive_session",
+            "autoskillit.cli.session._session_launch._run_interactive_session",
             _fake_run_session,
         )
         monkeypatch.setattr(
@@ -389,7 +391,7 @@ class TestReloadLoopSafetyGuards:
             lambda *a, **kw: "fake-prompt",
         )
 
-        from autoskillit.cli._fleet_session import _launch_fleet_session
+        from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
 
         with pytest.raises(SystemExit):
             _launch_fleet_session(
@@ -434,7 +436,7 @@ class TestReloadLoopUsesNamedResume:
             lambda *a, **kw: fresh_meta,
         )
         monkeypatch.setattr(
-            "autoskillit.cli._session_launch._run_interactive_session",
+            "autoskillit.cli.session._session_launch._run_interactive_session",
             _fake_run_session,
         )
         monkeypatch.setattr(
@@ -442,7 +444,7 @@ class TestReloadLoopUsesNamedResume:
             lambda *a, **kw: "fake-prompt",
         )
 
-        from autoskillit.cli._fleet_session import _launch_fleet_session
+        from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
 
         _launch_fleet_session(
             _make_campaign_recipe(),

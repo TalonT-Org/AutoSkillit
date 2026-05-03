@@ -7,7 +7,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from autoskillit.server.tools_issue_lifecycle import claim_issue, prepare_issue, release_issue
+from autoskillit.server.tools.tools_issue_lifecycle import (
+    claim_issue,
+    prepare_issue,
+    release_issue,
+)
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -135,7 +139,7 @@ class TestPrepareIssueWhitelist:
 
         from autoskillit.core import SkillResult
         from autoskillit.core.types import RetryReason
-        from autoskillit.server.tools_issue_lifecycle import (
+        from autoskillit.server.tools.tools_issue_lifecycle import (
             _PREPARE_RESULT_END,
             _PREPARE_RESULT_START,
         )
@@ -173,7 +177,7 @@ class TestPrepareIssueWhitelist:
 
         from autoskillit.core import SkillResult
         from autoskillit.core.types import RetryReason
-        from autoskillit.server.tools_issue_lifecycle import (
+        from autoskillit.server.tools.tools_issue_lifecycle import (
             _PREPARE_RESULT_END,
             _PREPARE_RESULT_START,
         )

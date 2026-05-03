@@ -195,7 +195,7 @@ class TestPtyWrapCommand:
         cmd = ["claude", "--no-color", "do something"]
         fake_script = "/usr/bin/script"
         with (
-            patch("autoskillit.execution._process_pty.sys.platform", "linux"),
+            patch("autoskillit.execution.process._process_pty.sys.platform", "linux"),
             patch("shutil.which", return_value=fake_script),
         ):
             result = pty_wrap_command(cmd)
@@ -213,7 +213,7 @@ class TestPtyWrapCommand:
         cmd = ["claude", "--no-color", "do something"]
         fake_script = "/usr/bin/script"
         with (
-            patch("autoskillit.execution._process_pty.sys.platform", "darwin"),
+            patch("autoskillit.execution.process._process_pty.sys.platform", "darwin"),
             patch("shutil.which", return_value=fake_script),
         ):
             result = pty_wrap_command(cmd)
@@ -727,7 +727,7 @@ class TestChannelBDrainRaceRecovery:
         Monkeypatches parse_session_result to inject assistant_messages since
         an empty stdout produces no NDJSON records to accumulate from.
         """
-        import autoskillit.execution._headless_result as headless_result_mod
+        import autoskillit.execution.headless._headless_result as headless_result_mod
 
         fake_session = ClaudeSessionResult(
             subtype=CliSubtype.EMPTY_OUTPUT,

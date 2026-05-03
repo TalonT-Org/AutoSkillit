@@ -9,7 +9,7 @@ import pytest
 
 from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason
-from autoskillit.server.tools_issue_lifecycle import (
+from autoskillit.server.tools.tools_issue_lifecycle import (
     _PREPARE_RESULT_END,
     _PREPARE_RESULT_START,
     claim_issue,
@@ -17,7 +17,7 @@ from autoskillit.server.tools_issue_lifecycle import (
     prepare_issue,
     release_issue,
 )
-from autoskillit.server.tools_pr_ops import bulk_close_issues, get_pr_reviews
+from autoskillit.server.tools.tools_pr_ops import bulk_close_issues, get_pr_reviews
 from tests.conftest import _make_result
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]

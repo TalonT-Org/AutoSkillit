@@ -23,35 +23,35 @@ def _make_state(*statuses: DispatchStatus) -> CampaignState:
 
 
 def test_compute_exit_code_all_success_returns_0() -> None:
-    from autoskillit.cli._fleet import _compute_exit_code
+    from autoskillit.cli.fleet import _compute_exit_code
 
     state = _make_state(DispatchStatus.SUCCESS, DispatchStatus.SKIPPED)
     assert _compute_exit_code(state) == 0
 
 
 def test_compute_exit_code_resumable_returns_2() -> None:
-    from autoskillit.cli._fleet import _compute_exit_code
+    from autoskillit.cli.fleet import _compute_exit_code
 
     state = _make_state(DispatchStatus.SUCCESS, DispatchStatus.RESUMABLE)
     assert _compute_exit_code(state) == 2
 
 
 def test_compute_exit_code_failure_beats_resumable() -> None:
-    from autoskillit.cli._fleet import _compute_exit_code
+    from autoskillit.cli.fleet import _compute_exit_code
 
     state = _make_state(DispatchStatus.FAILURE, DispatchStatus.RESUMABLE)
     assert _compute_exit_code(state) == 1
 
 
 def test_compute_exit_code_interrupted_returns_1() -> None:
-    from autoskillit.cli._fleet import _compute_exit_code
+    from autoskillit.cli.fleet import _compute_exit_code
 
     state = _make_state(DispatchStatus.SUCCESS, DispatchStatus.INTERRUPTED)
     assert _compute_exit_code(state) == 1
 
 
 def test_compute_exit_code_pending_returns_2() -> None:
-    from autoskillit.cli._fleet import _compute_exit_code
+    from autoskillit.cli.fleet import _compute_exit_code
 
     state = _make_state(DispatchStatus.SUCCESS, DispatchStatus.PENDING)
     assert _compute_exit_code(state) == 2

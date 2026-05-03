@@ -1,4 +1,4 @@
-"""Tests for autoskillit.hooks._fmt_status."""
+"""Tests for autoskillit.hooks.formatters._fmt_status."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ class TestFmtCloneRepo:
 
     def test_fmt_clone_repo_renders_source_type_key(self) -> None:
         """New clone_source_type key is rendered in the flat-KV output."""
-        from autoskillit.hooks._fmt_status import _fmt_clone_repo
+        from autoskillit.hooks.formatters._fmt_status import _fmt_clone_repo
 
         result = _fmt_clone_repo(
             {
@@ -24,7 +24,7 @@ class TestFmtCloneRepo:
 
     def test_fmt_clone_repo_renders_local_source_type(self) -> None:
         """clone_source_type=local is rendered correctly."""
-        from autoskillit.hooks._fmt_status import _fmt_clone_repo
+        from autoskillit.hooks.formatters._fmt_status import _fmt_clone_repo
 
         result = _fmt_clone_repo(
             {

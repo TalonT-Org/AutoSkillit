@@ -14,8 +14,8 @@ from autoskillit.core.types import ChannelConfirmation
 from autoskillit.execution.github import DefaultGitHubFetcher
 from autoskillit.pipeline.audit import FailureRecord
 from autoskillit.pipeline.gate import DefaultGateState
-from autoskillit.server.tools_execution import run_skill
-from autoskillit.server.tools_status import (
+from autoskillit.server.tools.tools_execution import run_skill
+from autoskillit.server.tools.tools_status import (
     get_pipeline_report,
     get_timing_summary,
     get_token_summary,
@@ -61,7 +61,7 @@ class TestKitchenStatus:
     @pytest.mark.anyio
     async def test_status_returns_version_info(self, tool_ctx):
         import autoskillit
-        from autoskillit.core._type_plugin_source import DirectInstall
+        from autoskillit.core.types._type_plugin_source import DirectInstall
 
         tool_ctx.plugin_source = DirectInstall(plugin_dir=Path(autoskillit.__file__).parent)
         from autoskillit import __version__
@@ -79,7 +79,7 @@ class TestKitchenStatus:
         (plugin_dir / "plugin.json").write_text(
             json.dumps({"name": "autoskillit", "version": "0.0.0"})
         )
-        from autoskillit.core._type_plugin_source import DirectInstall
+        from autoskillit.core.types._type_plugin_source import DirectInstall
 
         tool_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
         result = json.loads(await kitchen_status())

@@ -11,7 +11,7 @@ from autoskillit.core import SKILL_TOOLS
 from autoskillit.recipe._analysis import build_recipe_graph
 from autoskillit.recipe.contracts import load_bundled_manifest
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
-from autoskillit.recipe.rules_merge import _is_commit_guard
+from autoskillit.recipe.rules.rules_merge import _is_commit_guard
 from autoskillit.recipe.validator import run_semantic_rules
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]

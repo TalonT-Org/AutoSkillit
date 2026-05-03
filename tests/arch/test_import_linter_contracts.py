@@ -28,10 +28,10 @@ _FORBIDDEN_BY_CONTRACT: dict[str, frozenset[str]] = {
 }
 
 EXPECTED_CROSS_LAYER_GUARDS: dict[str, frozenset[str]] = {
-    "core/_type_protocols_recipe.py": frozenset({"recipe"}),
-    "execution/headless.py": frozenset({"config", "pipeline"}),
+    "core/types/_type_protocols_recipe.py": frozenset({"recipe"}),
+    "execution/headless/__init__.py": frozenset({"config", "pipeline"}),
     "execution/linux_tracing.py": frozenset({"config"}),
-    "execution/process.py": frozenset({"config"}),
+    "execution/process/__init__.py": frozenset({"config"}),
     "execution/testing.py": frozenset({"config"}),
     "workspace/session_skills.py": frozenset({"config"}),
 }
@@ -188,7 +188,7 @@ def test_core_recipe_guard_is_sole_exception() -> None:
     core_dir = SRC_ROOT / "core"
     files_with_recipe_import: list[str] = []
 
-    for py_file in sorted(core_dir.glob("*.py")):
+    for py_file in sorted(core_dir.rglob("*.py")):
         try:
             tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
         except SyntaxError:

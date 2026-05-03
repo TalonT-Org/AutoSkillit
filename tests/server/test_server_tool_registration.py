@@ -12,7 +12,7 @@ from autoskillit.config import (
     SafetyConfig,
 )
 from autoskillit.pipeline.gate import DefaultGateState
-from autoskillit.server.tools_status import (
+from autoskillit.server.tools.tools_status import (
     get_quota_events,
     get_token_summary,
 )
@@ -237,7 +237,7 @@ class TestConfigDrivenBehavior:
         """S1: test_check runs config.test_check.command."""
         from autoskillit.config import TestCheckConfig
         from autoskillit.execution import DefaultTestRunner
-        from autoskillit.server.tools_workspace import test_check
+        from autoskillit.server.tools.tools_workspace import test_check
         from tests.conftest import _make_result
 
         tool_ctx.config = AutomationConfig(
@@ -257,7 +257,7 @@ class TestConfigDrivenBehavior:
         """S2: classify_fix uses config.classify_fix.path_prefixes."""
         from autoskillit.config import ClassifyFixConfig
         from autoskillit.core.types import RestartScope
-        from autoskillit.server.tools_git import classify_fix
+        from autoskillit.server.tools.tools_git import classify_fix
         from tests.conftest import _make_result
 
         tool_ctx.config = AutomationConfig(
@@ -277,7 +277,7 @@ class TestConfigDrivenBehavior:
         """S3: Empty prefix list -> always returns partial_restart."""
         from autoskillit.config import ClassifyFixConfig
         from autoskillit.core.types import RestartScope
-        from autoskillit.server.tools_git import classify_fix
+        from autoskillit.server.tools.tools_git import classify_fix
         from tests.conftest import _make_result
 
         tool_ctx.config = AutomationConfig(classify_fix=ClassifyFixConfig(path_prefixes=[]))
@@ -293,7 +293,7 @@ class TestConfigDrivenBehavior:
     async def test_reset_workspace_uses_config_command(self, tool_ctx, tmp_path):
         """S4: reset_workspace runs config.reset_workspace.command."""
         from autoskillit.config import ResetWorkspaceConfig
-        from autoskillit.server.tools_workspace import reset_workspace
+        from autoskillit.server.tools.tools_workspace import reset_workspace
         from tests.conftest import _make_result
 
         tool_ctx.config = AutomationConfig(
@@ -312,7 +312,7 @@ class TestConfigDrivenBehavior:
     async def test_reset_workspace_not_configured_returns_error(self, tool_ctx, tmp_path):
         """S5: command=None -> returns not-configured error."""
         from autoskillit.config import ResetWorkspaceConfig
-        from autoskillit.server.tools_workspace import reset_workspace
+        from autoskillit.server.tools.tools_workspace import reset_workspace
 
         tool_ctx.config = AutomationConfig(reset_workspace=ResetWorkspaceConfig(command=None))
 
@@ -327,7 +327,7 @@ class TestConfigDrivenBehavior:
     async def test_reset_workspace_uses_config_preserve_dirs(self, tool_ctx, tmp_path):
         """S6: Preserves config.reset_workspace.preserve_dirs."""
         from autoskillit.config import ResetWorkspaceConfig
-        from autoskillit.server.tools_workspace import reset_workspace
+        from autoskillit.server.tools.tools_workspace import reset_workspace
         from tests.conftest import _make_result
 
         tool_ctx.config = AutomationConfig(
@@ -393,7 +393,7 @@ class TestConfigDrivenBehavior:
         from autoskillit.config import TestCheckConfig
         from autoskillit.core.types import MergeFailedStep
         from autoskillit.execution import DefaultTestRunner
-        from autoskillit.server.tools_git import merge_worktree
+        from autoskillit.server.tools.tools_git import merge_worktree
         from tests.conftest import _make_result
 
         tool_ctx.config = AutomationConfig(
@@ -421,7 +421,7 @@ class TestConfigDrivenBehavior:
     @pytest.mark.anyio
     async def test_require_enabled_still_gates_execution(self, tool_ctx):
         """S10: _require_enabled() defense-in-depth still works with config."""
-        from autoskillit.server.tools_execution import run_cmd
+        from autoskillit.server.tools.tools_execution import run_cmd
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         result = json.loads(await run_cmd(cmd="echo hi", cwd="/tmp"))
@@ -436,7 +436,7 @@ class TestSafetyConfigWiring:
     @pytest.mark.anyio
     async def test_reset_test_dir_allows_with_marker(self, tool_ctx, tmp_path):
         """2a: Directory with marker passes the reset guard."""
-        from autoskillit.server.tools_workspace import reset_test_dir
+        from autoskillit.server.tools.tools_workspace import reset_test_dir
 
         target = tmp_path / "my_project"
         target.mkdir()
@@ -449,7 +449,7 @@ class TestSafetyConfigWiring:
     @pytest.mark.anyio
     async def test_reset_test_dir_enforces_marker_when_missing(self, tool_ctx, tmp_path):
         """2b: Missing marker blocks reset_test_dir."""
-        from autoskillit.server.tools_workspace import reset_test_dir
+        from autoskillit.server.tools.tools_workspace import reset_test_dir
 
         target = tmp_path / "unmarked"
         target.mkdir()
@@ -461,7 +461,7 @@ class TestSafetyConfigWiring:
     async def test_reset_workspace_enforces_marker(self, tool_ctx, tmp_path):
         """2c: reset_workspace requires marker, then checks command config."""
         from autoskillit.config import ResetWorkspaceConfig
-        from autoskillit.server.tools_workspace import reset_workspace
+        from autoskillit.server.tools.tools_workspace import reset_workspace
 
         tool_ctx.config = AutomationConfig(reset_workspace=ResetWorkspaceConfig(command=None))
 
@@ -476,7 +476,7 @@ class TestSafetyConfigWiring:
     @pytest.mark.anyio
     async def test_merge_worktree_skips_test_gate_when_disabled(self, tool_ctx, tmp_path):
         """2d: test_gate_on_merge=False skips test execution."""
-        from autoskillit.server.tools_git import merge_worktree
+        from autoskillit.server.tools.tools_git import merge_worktree
         from tests.conftest import _make_result
 
         tool_ctx.config = AutomationConfig(safety=SafetyConfig(test_gate_on_merge=False))
@@ -517,7 +517,7 @@ class TestSafetyConfigWiring:
     @pytest.mark.anyio
     async def test_run_skill_2e_skips_dry_walkthrough_when_disabled(self, tool_ctx, tmp_path):
         """2e: require_dry_walkthrough=False bypasses dry-walkthrough gate (using run_skill)."""
-        from autoskillit.server.tools_execution import run_skill
+        from autoskillit.server.tools.tools_execution import run_skill
         from tests.conftest import _make_result
 
         tool_ctx.config = AutomationConfig(safety=SafetyConfig(require_dry_walkthrough=False))
@@ -535,7 +535,7 @@ class TestSafetyConfigWiring:
     @pytest.mark.anyio
     async def test_run_skill_enforces_dry_walkthrough_when_enabled(self, tool_ctx, tmp_path):
         """2f: run_skill enforces dry-walkthrough gate when enabled (default)."""
-        from autoskillit.server.tools_execution import run_skill
+        from autoskillit.server.tools.tools_execution import run_skill
 
         plan = tmp_path / "plan.md"
         plan.write_text("# No marker plan")

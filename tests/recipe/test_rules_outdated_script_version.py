@@ -23,7 +23,7 @@ class TestOutdatedScriptVersionRule:
     ) -> None:
         import autoskillit
         import autoskillit.core.types as _core_types
-        import autoskillit.recipe.rules_inputs as _rules_mod
+        import autoskillit.recipe.rules.rules_inputs as _rules_mod
 
         monkeypatch.setattr(autoskillit, "__version__", installed_ver)
         monkeypatch.setattr(_core_types, "AUTOSKILLIT_INSTALLED_VERSION", installed_ver)
@@ -43,7 +43,7 @@ class TestOutdatedScriptVersionRule:
     ) -> None:
         import autoskillit
         import autoskillit.core.types as _core_types
-        import autoskillit.recipe.rules_inputs as _rules_mod
+        import autoskillit.recipe.rules.rules_inputs as _rules_mod
 
         monkeypatch.setattr(autoskillit, "__version__", "0.2.0")
         monkeypatch.setattr(_core_types, "AUTOSKILLIT_INSTALLED_VERSION", "0.2.0")

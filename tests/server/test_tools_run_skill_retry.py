@@ -8,7 +8,7 @@ import pytest
 
 from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason, TerminationReason
-from autoskillit.server.tools_execution import run_skill
+from autoskillit.server.tools.tools_execution import run_skill
 from tests.conftest import _make_result
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -32,7 +32,7 @@ class TestRunSkillRetryRemoved:
 
     def test_run_skill_retry_not_in_tools_execution(self):
         """run_skill_retry is not importable from tools_execution."""
-        import autoskillit.server.tools_execution as module
+        import autoskillit.server.tools.tools_execution as module
 
         assert not hasattr(module, "run_skill_retry"), (
             "run_skill_retry still exists in tools_execution — it should be removed"
@@ -40,7 +40,7 @@ class TestRunSkillRetryRemoved:
 
     def test_run_skill_retry_not_in_all(self):
         """run_skill_retry is not in tools_execution.__all__ (if defined)."""
-        import autoskillit.server.tools_execution as module
+        import autoskillit.server.tools.tools_execution as module
 
         # tools_execution does not define __all__; verify via direct attribute check
         assert not hasattr(module, "run_skill_retry"), (

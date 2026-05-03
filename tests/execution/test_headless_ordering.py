@@ -15,7 +15,12 @@ import pytest
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 _HEADLESS_PATH = (
-    Path(__file__).parent.parent.parent / "src" / "autoskillit" / "execution" / "headless.py"
+    Path(__file__).parent.parent.parent
+    / "src"
+    / "autoskillit"
+    / "execution"
+    / "headless"
+    / "__init__.py"
 )
 
 

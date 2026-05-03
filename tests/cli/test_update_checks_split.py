@@ -10,7 +10,7 @@ _CLI_SRC = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "cli"
 
 
 def test_update_checks_fetch_importable():
-    from autoskillit.cli._update_checks_fetch import (  # noqa: F401
+    from autoskillit.cli.update._update_checks_fetch import (  # noqa: F401
         _fetch_latest_version,
         _fetch_with_cache,
         invalidate_fetch_cache,
@@ -18,19 +18,19 @@ def test_update_checks_fetch_importable():
 
 
 def test_update_checks_source_importable():
-    from autoskillit.cli._update_checks_source import (  # noqa: F401
+    from autoskillit.cli.update._update_checks_source import (  # noqa: F401
         find_source_repo,
         resolve_reference_sha,
     )
 
 
 def test_update_checks_facade_public_api():
-    from autoskillit.cli._update_checks import Signal, run_update_checks  # noqa: F401
+    from autoskillit.cli.update._update_checks import Signal, run_update_checks  # noqa: F401
 
 
 def test_order_module_file_exists():
-    assert (_CLI_SRC / "_order.py").exists()
+    assert (_CLI_SRC / "session" / "_order.py").exists()
 
 
 def test_order_importable_from_submodule():
-    from autoskillit.cli._order import _get_subsets_needed, order  # noqa: F401
+    from autoskillit.cli.session._order import _get_subsets_needed, order  # noqa: F401

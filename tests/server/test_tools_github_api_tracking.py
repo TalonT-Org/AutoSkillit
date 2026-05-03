@@ -2,8 +2,8 @@ from unittest.mock import patch
 
 import pytest
 
-from autoskillit.core._type_results import SessionTelemetry
-from autoskillit.core._type_subprocess import SubprocessResult, TerminationReason
+from autoskillit.core.types._type_results import SessionTelemetry
+from autoskillit.core.types._type_subprocess import SubprocessResult, TerminationReason
 from tests.fakes import MockSubprocessRunner
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small, pytest.mark.anyio]

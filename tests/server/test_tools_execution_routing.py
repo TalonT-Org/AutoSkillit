@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.server.tools_execution import run_skill
+from autoskillit.server.tools.tools_execution import run_skill
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 

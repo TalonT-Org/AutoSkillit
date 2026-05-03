@@ -64,14 +64,14 @@ def _extract_tool_decorators(text: str) -> list[str]:
 
 def _count_mcp_tools() -> int:
     total = 0
-    for f in (SRC_DIR / "server").glob("tools_*.py"):
+    for f in (SRC_DIR / "server" / "tools").glob("tools_*.py"):
         total += len(_extract_tool_decorators(_read(f)))
     return total
 
 
 def _count_kitchen_tools() -> int:
     total = 0
-    for f in (SRC_DIR / "server").glob("tools_*.py"):
+    for f in (SRC_DIR / "server" / "tools").glob("tools_*.py"):
         for dec in _extract_tool_decorators(_read(f)):
             if '"kitchen"' in dec:
                 total += 1
@@ -80,7 +80,7 @@ def _count_kitchen_tools() -> int:
 
 def _count_free_range_tools() -> int:
     total = 0
-    for f in (SRC_DIR / "server").glob("tools_*.py"):
+    for f in (SRC_DIR / "server" / "tools").glob("tools_*.py"):
         for dec in _extract_tool_decorators(_read(f)):
             if '"kitchen"' not in dec:
                 total += 1
@@ -89,7 +89,7 @@ def _count_free_range_tools() -> int:
 
 def _count_headless_tools() -> int:
     total = 0
-    for f in (SRC_DIR / "server").glob("tools_*.py"):
+    for f in (SRC_DIR / "server" / "tools").glob("tools_*.py"):
         for dec in _extract_tool_decorators(_read(f)):
             if '"headless"' in dec:
                 total += 1
@@ -127,7 +127,7 @@ def _count_vis_lens_skills() -> int:
 
 
 def _hook_files() -> list[Path]:
-    return sorted(f for f in (SRC_DIR / "hooks").glob("*.py") if f.name not in {"__init__.py"})
+    return sorted(f for f in (SRC_DIR / "hooks").rglob("*.py") if f.name not in {"__init__.py"})
 
 
 def _count_hooks_by_event() -> dict[str, int]:
@@ -172,9 +172,9 @@ def _count_doctor_checks() -> int:
     style for their internal sub-steps; we restrict the count to the body of
     ``run_doctor`` so those comments do not double-count.
     """
-    text = _read(SRC_DIR / "cli" / "_doctor.py")
+    text = _read(SRC_DIR / "cli" / "doctor" / "__init__.py")
     body = re.search(r"def run_doctor\(.*?\n((?:    .*\n|\n)+)", text, re.DOTALL)
-    assert body, "run_doctor not found in _doctor.py"
+    assert body, "run_doctor not found in cli/doctor/__init__.py"
     body_text = body.group(1)
     numbered = len(re.findall(r"# Check \d+:", body_text))
     lettered = len(re.findall(r"# Check \d+[a-z]:", body_text))
@@ -186,14 +186,14 @@ def _bundled_recipes() -> list[str]:
 
 
 def _retry_reason_values() -> list[str]:
-    text = _read(SRC_DIR / "core" / "_type_enums.py")
+    text = _read(SRC_DIR / "core" / "types" / "_type_enums.py")
     block = re.search(r"class RetryReason\(StrEnum\):(.*?)\nclass ", text, re.DOTALL)
     assert block, "RetryReason enum not found"
     return re.findall(r'"([a-z_]+)"', block.group(1))
 
 
 def _count_semantic_rule_files() -> int:
-    return sum(1 for p in (SRC_DIR / "recipe").glob("rules_*.py"))
+    return sum(1 for p in (SRC_DIR / "recipe" / "rules").glob("rules_*.py"))
 
 
 # ----- tests ------------------------------------------------------------------

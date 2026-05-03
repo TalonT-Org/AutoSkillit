@@ -14,7 +14,7 @@ from contextlib import ExitStack, redirect_stdout
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from autoskillit.hooks._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
+from autoskillit.hooks.formatters._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
 
 
 def _run_hook(

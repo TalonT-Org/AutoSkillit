@@ -30,7 +30,7 @@ def _run_guard(
     raw_stdin: str | None = None,
 ) -> str:
     """Invoke planner_gh_discovery_guard.main() and return captured stdout."""
-    from autoskillit.hooks.planner_gh_discovery_guard import main  # noqa: PLC0415
+    from autoskillit.hooks.guards.planner_gh_discovery_guard import main  # noqa: PLC0415
 
     if raw_stdin is not None:
         stdin_content = raw_stdin

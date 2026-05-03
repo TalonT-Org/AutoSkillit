@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from autoskillit.core._type_constants import SOUS_CHEF_MANDATORY_SECTIONS
+from autoskillit.core.types._type_constants import SOUS_CHEF_MANDATORY_SECTIONS
 from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -28,9 +28,11 @@ async def test_open_kitchen_tool_calls_enable_components(tmp_path, monkeypatch):
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
-                    from autoskillit.server.tools_kitchen import open_kitchen
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools.tools_kitchen import open_kitchen
 
                     await open_kitchen(ctx=mock_ctx)
 
@@ -47,7 +49,7 @@ async def test_close_kitchen_tool_calls_reset_visibility(tmp_path, monkeypatch):
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            from autoskillit.server.tools_kitchen import close_kitchen
+            from autoskillit.server.tools.tools_kitchen import close_kitchen
 
             await close_kitchen(ctx=mock_ctx)
 
@@ -67,8 +69,10 @@ async def test_open_kitchen_does_not_write_gate_file(tmp_path, monkeypatch):
     mock_ctx.config.quota_guard.buffer_seconds = 60
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
-                from autoskillit.server.tools_kitchen import _open_kitchen_handler
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                from autoskillit.server.tools.tools_kitchen import _open_kitchen_handler
 
                 await _open_kitchen_handler()
     gate_file = tmp_path / ".autoskillit" / "temp" / ".kitchen_gate"
@@ -81,7 +85,7 @@ def test_close_kitchen_does_not_produce_gate_file(tmp_path, monkeypatch):
     mock_ctx = _make_mock_ctx()
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            from autoskillit.server.tools_kitchen import _close_kitchen_handler
+            from autoskillit.server.tools.tools_kitchen import _close_kitchen_handler
 
             _close_kitchen_handler()
     gate_file = tmp_path / ".autoskillit" / "temp" / ".kitchen_gate"
@@ -92,7 +96,7 @@ def test_close_kitchen_does_not_produce_gate_file(tmp_path, monkeypatch):
 async def test_open_kitchen_includes_categorized_tool_listing(tmp_path, monkeypatch):
     """open_kitchen response contains static categorized tool groups from _DISPLAY_CATEGORIES."""
     from autoskillit.config.ingredient_defaults import _DISPLAY_CATEGORIES
-    from autoskillit.server.tools_kitchen import open_kitchen
+    from autoskillit.server.tools.tools_kitchen import open_kitchen
 
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
@@ -100,8 +104,10 @@ async def test_open_kitchen_includes_categorized_tool_listing(tmp_path, monkeypa
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
                     result_str = await open_kitchen(ctx=mock_ctx)
 
     parsed = json.loads(result_str)
@@ -145,9 +151,11 @@ async def test_open_kitchen_with_recipe_returns_combined_response(tmp_path, monk
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
-                    from autoskillit.server.tools_kitchen import open_kitchen
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools.tools_kitchen import open_kitchen
 
                     result_str = await open_kitchen(name="test-recipe", ctx=mock_ctx)
 
@@ -176,9 +184,11 @@ async def test_open_kitchen_with_recipe_not_found(tmp_path, monkeypatch):
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
-                    from autoskillit.server.tools_kitchen import open_kitchen
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools.tools_kitchen import open_kitchen
 
                     result_str = await open_kitchen(name="nonexistent", ctx=mock_ctx)
 
@@ -199,9 +209,11 @@ async def test_open_kitchen_without_recipe_returns_json_envelope(tmp_path, monke
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
-                    from autoskillit.server.tools_kitchen import open_kitchen
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools.tools_kitchen import open_kitchen
 
                     result = await open_kitchen(ctx=mock_ctx)
 
@@ -217,7 +229,7 @@ async def test_open_kitchen_without_recipe_returns_json_envelope(tmp_path, monke
 async def test_open_kitchen_denied_by_gate_when_headless(tmp_path, monkeypatch):
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
     monkeypatch.chdir(tmp_path)
-    from autoskillit.server.tools_kitchen import open_kitchen
+    from autoskillit.server.tools.tools_kitchen import open_kitchen
 
     result = json.loads(await open_kitchen())
     assert result["success"] is False
@@ -231,7 +243,7 @@ async def test_open_kitchen_denied_by_gate_when_headless(tmp_path, monkeypatch):
 async def test_close_kitchen_denied_when_headless(tmp_path, monkeypatch):
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
     monkeypatch.chdir(tmp_path)
-    from autoskillit.server.tools_kitchen import close_kitchen
+    from autoskillit.server.tools.tools_kitchen import close_kitchen
 
     result = json.loads(await close_kitchen())
     assert result["success"] is False
@@ -252,9 +264,11 @@ async def test_open_kitchen_redisables_subsets(tmp_path, monkeypatch):
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
-                    from autoskillit.server.tools_kitchen import open_kitchen
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools.tools_kitchen import open_kitchen
 
                     await open_kitchen(ctx=mock_ctx)
 
@@ -288,9 +302,11 @@ async def test_open_kitchen_redisable_order(tmp_path, monkeypatch):
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
-                    from autoskillit.server.tools_kitchen import open_kitchen
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools.tools_kitchen import open_kitchen
 
                     await open_kitchen(ctx=mock_ctx)
 
@@ -315,9 +331,11 @@ async def test_open_kitchen_no_redisable_when_empty(tmp_path, monkeypatch):
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
-                    from autoskillit.server.tools_kitchen import open_kitchen
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools.tools_kitchen import open_kitchen
 
                     await open_kitchen(ctx=mock_ctx)
 
@@ -352,9 +370,11 @@ async def test_sous_chef_discipline_injected_on_named_open_kitchen_path(tmp_path
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
-                    from autoskillit.server.tools_kitchen import open_kitchen
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools.tools_kitchen import open_kitchen
 
                     result_str = await open_kitchen(name="implementation", ctx=mock_ctx)
 
@@ -378,9 +398,11 @@ async def test_sous_chef_rules_injected_at_open_kitchen(tmp_path, monkeypatch):
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
-                    from autoskillit.server.tools_kitchen import open_kitchen
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools.tools_kitchen import open_kitchen
 
                     result = await open_kitchen(ctx=mock_ctx)
 
@@ -399,7 +421,7 @@ async def test_open_kitchen_degrades_gracefully_without_sous_chef(tmp_path, monk
     mock_ctx = _make_mock_ctx()
     mock_ctx.enable_components = AsyncMock()
 
-    import autoskillit.server.tools_kitchen as tk_mod
+    import autoskillit.server.tools.tools_kitchen as tk_mod
 
     fake_pkg_root_dir = tmp_path / "fake_pkg"
     (fake_pkg_root_dir / "skills" / "sous-chef").mkdir(parents=True)
@@ -410,10 +432,12 @@ async def test_open_kitchen_degrades_gracefully_without_sous_chef(tmp_path, monk
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
                     with patch.object(tk_mod, "pkg_root", fake_pkg_root):
-                        from autoskillit.server.tools_kitchen import open_kitchen
+                        from autoskillit.server.tools.tools_kitchen import open_kitchen
 
                         result = await open_kitchen(ctx=mock_ctx)
 
@@ -429,7 +453,7 @@ async def test_open_kitchen_degrades_gracefully_without_sous_chef(tmp_path, monk
 @pytest.mark.anyio
 async def test_redisable_subsets_includes_feature_tags() -> None:
     """When fleet feature is disabled, _redisable_subsets disables fleet tag."""
-    from autoskillit.server.tools_kitchen import _redisable_subsets
+    from autoskillit.server.tools.tools_kitchen import _redisable_subsets
 
     mock_ctx = AsyncMock()
 
@@ -450,7 +474,7 @@ async def test_redisable_subsets_does_not_disable_kitchen_core_tag() -> None:
     kitchen-core is not included in the suppressed tag sets so that tools with
     the kitchen-core tag retain visibility after the feature gate pass.
     """
-    from autoskillit.server.tools_kitchen import _redisable_subsets
+    from autoskillit.server.tools.tools_kitchen import _redisable_subsets
 
     disabled_tags: list[set] = []
     mock_ctx = AsyncMock()
@@ -478,11 +502,11 @@ async def test_redisable_subsets_uses_shared_helper() -> None:
     """_redisable_subsets delegates Pass 2 to _collect_disabled_feature_tags."""
     from unittest.mock import AsyncMock, patch
 
-    from autoskillit.server.tools_kitchen import _redisable_subsets
+    from autoskillit.server.tools.tools_kitchen import _redisable_subsets
 
     mock_ctx = AsyncMock()
 
-    with patch("autoskillit.server.tools_kitchen._collect_disabled_feature_tags") as mock_h:
+    with patch("autoskillit.server.tools.tools_kitchen._collect_disabled_feature_tags") as mock_h:
         mock_h.return_value = frozenset({"fleet"})
         await _redisable_subsets(mock_ctx, [], features={"fleet": False})
 

@@ -10,9 +10,9 @@ import pytest
 
 from autoskillit.core import PRState, SubprocessResult, TerminationReason
 from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS, DefaultGateState
-from autoskillit.server.tools_ci import check_repo_merge_state
-from autoskillit.server.tools_ci_merge_queue import wait_for_merge_queue
-from autoskillit.server.tools_ci_watch import get_ci_status, wait_for_ci
+from autoskillit.server.tools.tools_ci import check_repo_merge_state
+from autoskillit.server.tools.tools_ci_merge_queue import wait_for_merge_queue
+from autoskillit.server.tools.tools_ci_watch import get_ci_status, wait_for_ci
 from tests.fakes import InMemoryCIWatcher, InMemoryMergeQueueWatcher
 from tests.server.conftest import assert_no_timing, assert_step_timed
 
@@ -748,9 +748,9 @@ async def test_check_repo_merge_state_uses_token_factory(tool_ctx, monkeypatch):
             "ci_event": None,
         }
 
-    monkeypatch.setattr("autoskillit.server.tools_ci.fetch_repo_merge_state", fake_fetch)
+    monkeypatch.setattr("autoskillit.server.tools.tools_ci.fetch_repo_merge_state", fake_fetch)
     monkeypatch.setattr(
-        "autoskillit.server.tools_ci.resolve_repo_from_remote",
+        "autoskillit.server.tools.tools_ci.resolve_repo_from_remote",
         AsyncMock(return_value="owner/repo"),
     )
 
@@ -778,9 +778,9 @@ async def test_check_repo_merge_state_falls_back_to_config_token_when_no_factory
             "ci_event": None,
         }
 
-    monkeypatch.setattr("autoskillit.server.tools_ci.fetch_repo_merge_state", fake_fetch)
+    monkeypatch.setattr("autoskillit.server.tools.tools_ci.fetch_repo_merge_state", fake_fetch)
     monkeypatch.setattr(
-        "autoskillit.server.tools_ci.resolve_repo_from_remote",
+        "autoskillit.server.tools.tools_ci.resolve_repo_from_remote",
         AsyncMock(return_value="owner/repo"),
     )
 
@@ -799,9 +799,9 @@ async def test_check_repo_merge_state_error_includes_http_status(tool_ctx, monke
         )
         raise httpx.HTTPStatusError("403 Forbidden", request=response.request, response=response)
 
-    monkeypatch.setattr("autoskillit.server.tools_ci.fetch_repo_merge_state", fake_fetch)
+    monkeypatch.setattr("autoskillit.server.tools.tools_ci.fetch_repo_merge_state", fake_fetch)
     monkeypatch.setattr(
-        "autoskillit.server.tools_ci.resolve_repo_from_remote",
+        "autoskillit.server.tools.tools_ci.resolve_repo_from_remote",
         AsyncMock(return_value="owner/repo"),
     )
 

@@ -7,7 +7,7 @@ import pytest
 from autoskillit.core import Severity
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
-from autoskillit.recipe.rules_merge import _RECOVERABLE_FAILED_STEPS
+from autoskillit.recipe.rules.rules_merge import _RECOVERABLE_FAILED_STEPS
 from autoskillit.recipe.schema import Recipe, RecipeStep, StepResultCondition, StepResultRoute
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]

@@ -42,8 +42,12 @@ class TestCollectDisabledFeatureTags:
 
     def test_hypothetical_third_feature_auto_discovered(self, monkeypatch):
         from autoskillit.core import feature_flags as ff
-        from autoskillit.core._type_constants import FEATURE_REGISTRY, FeatureDef, FeatureLifecycle
         from autoskillit.core.feature_flags import _collect_disabled_feature_tags
+        from autoskillit.core.types._type_constants import (
+            FEATURE_REGISTRY,
+            FeatureDef,
+            FeatureLifecycle,
+        )
 
         fake_def = FeatureDef(
             lifecycle=FeatureLifecycle.EXPERIMENTAL,
@@ -61,8 +65,12 @@ class TestCollectDisabledFeatureTags:
 
     def test_union_model_tag_claimed_by_enabled_feature(self, monkeypatch):
         from autoskillit.core import feature_flags as ff
-        from autoskillit.core._type_constants import FEATURE_REGISTRY, FeatureDef, FeatureLifecycle
         from autoskillit.core.feature_flags import _collect_disabled_feature_tags
+        from autoskillit.core.types._type_constants import (
+            FEATURE_REGISTRY,
+            FeatureDef,
+            FeatureLifecycle,
+        )
 
         shared_tag = frozenset({"shared-tag"})
         def_a = FeatureDef(

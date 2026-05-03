@@ -10,6 +10,7 @@ HOOK_SCRIPT = (
     / "src"
     / "autoskillit"
     / "hooks"
+    / "guards"
     / "branch_protection_guard.py"
 )
 

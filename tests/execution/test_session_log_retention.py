@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core._type_results import SessionTelemetry
+from autoskillit.core.types._type_results import SessionTelemetry
 from autoskillit.execution.linux_tracing import read_boot_id, read_starttime_ticks
 from autoskillit.execution.session_log import (
     flush_session_log,

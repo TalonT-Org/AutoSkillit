@@ -43,11 +43,11 @@ def _find_function(tree: ast.Module, name: str) -> ast.FunctionDef | None:
 
 def test_doctor_performs_no_writes() -> None:
     """REQ-DOCTOR-READONLY: run_doctor() must not perform filesystem mutations."""
-    source = (SRC / "cli" / "_doctor.py").read_text()
+    source = (SRC / "cli" / "doctor" / "__init__.py").read_text()
     tree = ast.parse(source)
 
     func = _find_function(tree, "run_doctor")
-    assert func is not None, "run_doctor() not found in _doctor.py"
+    assert func is not None, "run_doctor() not found in cli/doctor/__init__.py"
 
     violations: list[str] = []
     for node in ast.walk(func):

@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from autoskillit.server.tools_ci_watch import wait_for_ci
+from autoskillit.server.tools.tools_ci_watch import wait_for_ci
 from tests.fakes import InMemoryCIWatcher
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]

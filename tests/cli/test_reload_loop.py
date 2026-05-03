@@ -47,9 +47,9 @@ def test_cook_session_no_sentinel_returns_none(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(subprocess, "run", lambda *a, **kw: _make_result(0))
-    monkeypatch.setattr("autoskillit.cli._cook.terminal_guard", _noop_terminal_guard)
+    monkeypatch.setattr("autoskillit.cli.session._cook.terminal_guard", _noop_terminal_guard)
 
-    from autoskillit.cli._cook import _run_cook_session
+    from autoskillit.cli.session._cook import _run_cook_session
 
     result = _run_cook_session(
         cmd=["claude"],
@@ -71,9 +71,9 @@ def test_cook_session_with_sentinel_returns_session_id(
 ) -> None:
     _write_sentinel(tmp_path, "sess-001")
     monkeypatch.setattr(subprocess, "run", lambda *a, **kw: _make_result(0))
-    monkeypatch.setattr("autoskillit.cli._cook.terminal_guard", _noop_terminal_guard)
+    monkeypatch.setattr("autoskillit.cli.session._cook.terminal_guard", _noop_terminal_guard)
 
-    from autoskillit.cli._cook import _run_cook_session
+    from autoskillit.cli.session._cook import _run_cook_session
 
     result = _run_cook_session(
         cmd=["claude"],
@@ -97,9 +97,9 @@ def test_cook_session_sentinel_consumed_after_reload(
     assert sentinel.exists()
 
     monkeypatch.setattr(subprocess, "run", lambda *a, **kw: _make_result(0))
-    monkeypatch.setattr("autoskillit.cli._cook.terminal_guard", _noop_terminal_guard)
+    monkeypatch.setattr("autoskillit.cli.session._cook.terminal_guard", _noop_terminal_guard)
 
-    from autoskillit.cli._cook import _run_cook_session
+    from autoskillit.cli.session._cook import _run_cook_session
 
     _run_cook_session(
         cmd=["claude"],
@@ -139,7 +139,7 @@ def test_cook_reload_loop_uses_named_resume(
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda _prompt="": "")
     monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _: False)
-    monkeypatch.setattr("autoskillit.cli._cook._run_cook_session", fake_run_cook_session)
+    monkeypatch.setattr("autoskillit.cli.session._cook._run_cook_session", fake_run_cook_session)
     monkeypatch.setattr("autoskillit.execution.build_interactive_cmd", fake_build_interactive_cmd)
 
     from autoskillit.workspace.session_skills import DefaultSessionSkillManager
@@ -174,10 +174,10 @@ def test_interactive_session_reload_uses_named_resume(
     _write_sentinel(tmp_path, "isess-001")
     monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/claude")
     monkeypatch.setattr(subprocess, "run", lambda *a, **kw: _make_result(0))
-    monkeypatch.setattr("autoskillit.cli._terminal.terminal_guard", _noop_terminal_guard)
+    monkeypatch.setattr("autoskillit.cli.ui._terminal.terminal_guard", _noop_terminal_guard)
     monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: True)
 
-    from autoskillit.cli._session_launch import _run_interactive_session
+    from autoskillit.cli.session._session_launch import _run_interactive_session
 
     result = _run_interactive_session(system_prompt="test", project_dir=tmp_path)
     assert result == "isess-001"
@@ -207,7 +207,8 @@ def test_fleet_reload_relaunches_without_resume(
         return None
 
     monkeypatch.setattr(
-        "autoskillit.cli._session_launch._run_interactive_session", fake_run_interactive_session
+        "autoskillit.cli.session._session_launch._run_interactive_session",
+        fake_run_interactive_session,
     )
     monkeypatch.setattr("autoskillit.cli.detect_autoskillit_mcp_prefix", lambda: "autoskillit")
     monkeypatch.setattr(
@@ -216,7 +217,7 @@ def test_fleet_reload_relaunches_without_resume(
     )
     monkeypatch.chdir(tmp_path)
 
-    from autoskillit.cli._fleet import _launch_fleet_session
+    from autoskillit.cli.fleet import _launch_fleet_session
 
     _launch_fleet_session(
         campaign_recipe=None,
@@ -241,9 +242,9 @@ def test_non_zero_exit_without_sentinel_raises_system_exit(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(subprocess, "run", lambda *a, **kw: _make_result(42))
-    monkeypatch.setattr("autoskillit.cli._cook.terminal_guard", _noop_terminal_guard)
+    monkeypatch.setattr("autoskillit.cli.session._cook.terminal_guard", _noop_terminal_guard)
 
-    from autoskillit.cli._cook import _run_cook_session
+    from autoskillit.cli.session._cook import _run_cook_session
 
     with pytest.raises(SystemExit) as exc_info:
         _run_cook_session(

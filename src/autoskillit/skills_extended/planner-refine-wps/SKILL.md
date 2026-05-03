@@ -177,7 +177,10 @@ WP CONFLICT: {wp_id_a} vs {wp_id_b} — deliverable {file} assigned to {winner}
 **Post-deduplication orphan check:** After resolving all deliverable conflicts,
 scan every losing WP. If any WP now has `deliverables: []`, merge it into the
 winning WP (the one that received its deliverables):
-1. Move the orphan's `files_touched` entries as deliverables to the winner WP
+1. Promote the orphan's `files_touched` entries as deliverables to the winner WP,
+   selecting at most `DELIVERABLE_BOUNDS[1] - len(winner.deliverables)` entries
+   (prefer entries that overlap with the winner's existing scope). Any remaining
+   entries stay in `files_touched` only.
 2. Append the orphan's `technical_steps` and `acceptance_criteria` to the winner
 3. Remove the orphan WP from the output and update all `depends_on` references
 4. Log: `WP ORPHAN MERGED: {orphan_id} → {winner_id}`

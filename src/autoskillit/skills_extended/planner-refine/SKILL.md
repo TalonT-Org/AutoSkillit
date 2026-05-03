@@ -95,8 +95,10 @@ Write this to stdout. Do NOT attempt WP splitting or merging.
 - **Post-deduplication orphan check:** After resolving all duplicate deliverables, scan every
   modified WP. If any WP now has `deliverables: []`, that WP is an orphan. For each orphan:
   1. Identify the WP(s) that received this orphan's former deliverables (the "owner WPs")
-  2. Reassign the orphan's `files_touched` entries as deliverables to the most relevant owner
-     WP (the one with the most scope overlap)
+  2. Promote the orphan's `files_touched` entries as deliverables to the most relevant owner
+     WP (the one with the most scope overlap), selecting at most
+     `DELIVERABLE_BOUNDS[1] - len(owner.deliverables)` entries. Any remaining entries stay
+     in `files_touched` only.
   3. Merge the orphan's `technical_steps` and `acceptance_criteria` into the owner WP
   4. Remove the orphan WP from the plan and update all `depends_on` references
   5. Update `wp_manifest.json` and `wp_index.json` accordingly

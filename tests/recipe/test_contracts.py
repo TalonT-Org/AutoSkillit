@@ -74,7 +74,7 @@ def test_resolve_skill_name_with_use_prefix() -> None:
 def test_resolve_skill_name_no_prefix() -> None:
     from autoskillit.recipe.contracts import resolve_skill_name
 
-    assert resolve_skill_name("/do-stuff") is None
+    assert resolve_skill_name("/do-stuff") == "do-stuff"
 
 
 def test_resolve_skill_name_dynamic() -> None:

@@ -66,19 +66,6 @@ class TestMultiDirFsSnapshot:
         assert any(explicit_dir.iterdir())
 
 
-class TestOutputDirParameter:
-    """output_dir parameter plumbing from run_skill to executor."""
-
-    def test_run_skill_has_output_dir_parameter(self) -> None:
-        """run_skill() accepts output_dir parameter."""
-        from autoskillit.server.tools_execution import run_skill
-
-        sig = inspect.signature(run_skill)
-        assert "output_dir" in sig.parameters
-        param = sig.parameters["output_dir"]
-        assert param.default == ""
-
-
 class TestHeadlessExecutorProtocol:
     """HeadlessExecutor protocol includes write_watch_dirs."""
 

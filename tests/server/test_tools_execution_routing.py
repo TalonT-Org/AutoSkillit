@@ -266,3 +266,16 @@ async def test_run_skill_idle_output_timeout_defaults_to_none(tool_ctx, monkeypa
 
     await run_skill("/test skill", "/tmp")
     assert executor.calls[0].idle_output_timeout is None
+
+
+class TestOutputDirParameter:
+    """output_dir parameter plumbing from run_skill to executor."""
+
+    def test_run_skill_has_output_dir_parameter(self) -> None:
+        """run_skill() accepts output_dir parameter."""
+        import inspect
+
+        sig = inspect.signature(run_skill)
+        assert "output_dir" in sig.parameters
+        param = sig.parameters["output_dir"]
+        assert param.default == ""

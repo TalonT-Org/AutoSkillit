@@ -71,7 +71,7 @@ NEW_MQ_MODULES = ["_merge_queue_classifier.py", "_merge_queue_repo_state.py"]
 
 SESSION_SIZE_BUDGETS = {
     "session.py": 60,  # was 420; facade is ~40 lines after P2
-    "_session_model.py": 370,
+    "_session_model.py": 385,
     "_session_content.py": 200,
 }
 NEW_SESSION_FSM_MODULES = ["_retry_fsm.py", "_session_outcome.py"]

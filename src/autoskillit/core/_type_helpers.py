@@ -33,6 +33,7 @@ __all__ = [
 ]
 
 _SKILL_CMD_RE = re.compile(r"^/(?:autoskillit:)?([\w-]+)")
+_SKILL_RESOLVE_RE = re.compile(r"/(?:autoskillit:)?([\w-]+)")
 
 _PATH_PREFIXES: tuple[str, ...] = ("/", "./", ".autoskillit/")
 
@@ -78,7 +79,7 @@ def resolve_skill_name(skill_command: str) -> str | None:
     bash-style ``{placeholder}`` token.
     """
     stripped = skill_command.strip()
-    match = _SKILL_CMD_RE.match(stripped)
+    match = _SKILL_RESOLVE_RE.search(stripped)
     if not match:
         return None
     name = match.group(1)

@@ -113,9 +113,10 @@ def restore_skill_snapshot(
 
     session_dir = ephemeral_root / session_id
     dest_skills = session_dir / ".claude" / "skills"
-    dest_skills.mkdir(parents=True, exist_ok=True)
+    shutil.rmtree(dest_skills, ignore_errors=True)
+    dest_skills.parent.mkdir(parents=True, exist_ok=True)
 
-    shutil.copytree(skills_src, dest_skills, dirs_exist_ok=True)
+    shutil.copytree(skills_src, dest_skills)
     return ValidatedAddDir(path=str(session_dir))
 
 

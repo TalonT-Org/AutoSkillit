@@ -103,7 +103,7 @@ For each assignment in `assignments`, build a context packet containing:
 - The `PhaseElaborated` entry for the assignment's `phase_id` from `$2`
 - The `target_assignment_id`
 - `task_file_path` — the path to the task description on disk (pass the path reference only; do NOT read the task text into the L1 context or embed it in the L0 prompt)
-- Instructions: review the target assignment in light of peer_summaries; if scope creep verification is needed, read the task from disk at `task_file_path`; return structured suggestions only — do NOT edit files
+- Instructions: review the target assignment in light of peer_summaries; always read the task from disk at `task_file_path` for scope creep verification (flag scope creep if the assignment's goal, scope, or deliverables introduce work not requested by the task); return structured suggestions only — do NOT edit files
 
 ### Step 3: Spawn parallel L0 subagents
 
@@ -112,9 +112,7 @@ parallel batch via Agent/Task. Do not spawn more than 6 L0s in a single parallel
 if assignment count > 6 (unexpected), spawn sequential batches of 6. Between batches, emit
 anti-prose guard line: `--- next batch ---`.
 
-Spawn each L0 directly from its in-memory context packet — do NOT write the L0 prompts to
-`l0_prompts/*.txt` files and read them back. Reading those files before spawning adds ~15K
-tokens to the L1 context per L0 with no benefit.
+Reading `l0_prompts/*.txt` files back before spawning adds ~15K tokens to the L1 context per L0 with no benefit.
 
 Each L0 must return structured text in this exact format:
 ```

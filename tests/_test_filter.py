@@ -507,32 +507,28 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
         {
             "recipe",
             "_llm_triage",
-            # Server file-level entries (9 of 52 import autoskillit.recipe):
+            "core",
+            "hooks",
+            "migration",
+            # Server file-level entries (8 of 52 import autoskillit.recipe):
             "server/test_factory.py",
             "server/test_tools_load_recipe.py",
             "server/test_server_tool_registration.py",
             "server/test_mcp_overrides.py",
             "server/test_smoke_pipeline.py",
             "server/test_tools_dispatch.py",
-            "server/test_tools_kitchen_gate.py",
             "server/test_tools_kitchen_envelope.py",
             "server/test_service_wrappers.py",
             "server/test_tools_list_recipes.py",
-            # CLI file-level entries (5 of 38 import autoskillit.recipe):
+            # CLI file-level entries (4 of 38 import autoskillit.recipe):
             "cli/test_cli_prompts.py",
             "cli/test_l3_orchestrator_prompt.py",
-            "cli/test_cook_order_command.py",
             "cli/test_cook_order_picker.py",
             "cli/test_fleet_list.py",
             "cli/test_preview.py",
             # Execution file-level entries:
             "execution/test_headless_path_validation.py",
             "execution/test_zero_write_detection.py",
-            # Migration file-level entries (migration/_api.py + engine.py import recipe):
-            "migration/test_api.py",
-            "migration/test_engine.py",
-            # Hooks file-level entries (_fmt_recipe.py imports autoskillit.recipe types):
-            "hooks/test_recipe_write_advisor.py",
             # Fleet file-level entries (5 of N import autoskillit.recipe):
             "fleet/test_fleet_e2e.py",
             "fleet/test_campaign_capture.py",
@@ -546,9 +542,6 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "skills/test_make_campaign_compliance.py",
             "skills/test_review_design_guards.py",
             "skills/test_skill_tool_syntax_contracts.py",
-            "core/test_type_constants.py",
-            "core/test_kitchen_state.py",
-            "core/test_session_registry.py",
         }
     ),
     "migration": frozenset(

@@ -122,7 +122,6 @@ _SERVER_FILE_LEVEL_ENTRIES = [
     "test_mcp_overrides.py",
     "test_smoke_pipeline.py",
     "test_tools_dispatch.py",
-    "test_tools_kitchen_gate.py",
     "test_tools_kitchen_envelope.py",
     "test_service_wrappers.py",
     "test_tools_list_recipes.py",
@@ -131,7 +130,6 @@ _SERVER_FILE_LEVEL_ENTRIES = [
 _CLI_FILE_LEVEL_ENTRIES = [
     "test_cli_prompts.py",
     "test_l3_orchestrator_prompt.py",
-    "test_cook_order_command.py",
     "test_cook_order_picker.py",
 ]
 

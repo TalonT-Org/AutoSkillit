@@ -19,6 +19,10 @@ _FEATURE_SKILL_CATEGORY_PARAMS = [
     for feat_name, feat_def in FEATURE_REGISTRY.items()
     for cat in feat_def.skill_categories
 ]
+assert len(_FEATURE_SKILL_CATEGORY_PARAMS) > 0, (
+    "FEATURE_REGISTRY has no entries with skill_categories — "
+    "test_allow_only_overrides_all_feature_registry_entries would be silently skipped"
+)
 
 
 def _make_synthetic_provider(
@@ -375,6 +379,12 @@ class TestCrossAxisGatingMatrix:
         assert target_written == expected_target_written, (
             f"target (category=planner) written={target_written!r}, "
             f"expected={expected_target_written!r} for "
+            f"allow_only={allow_only!r}, feature_enabled={feature_enabled!r}, "
+            f"subsets_disabled={subsets_disabled!r}, cook_session={cook_session!r}"
+        )
+        sibling_written = (skills_base / "sibling").exists()
+        assert sibling_written, (
+            f"sibling (no categories) must always be written — "
             f"allow_only={allow_only!r}, feature_enabled={feature_enabled!r}, "
             f"subsets_disabled={subsets_disabled!r}, cook_session={cook_session!r}"
         )

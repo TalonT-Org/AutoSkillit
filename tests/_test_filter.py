@@ -149,7 +149,6 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_terminal_table": frozenset({"core", "cli", "pipeline", "recipe"}),
     "_plugin_cache": frozenset({"core", "cli", "server"}),
     "github_url": frozenset({"core", "cli", "execution", "server"}),
-    "runtime": frozenset({"core", "cli", "execution", "fleet", "server"}),
     "paths": frozenset(
         {
             "core",

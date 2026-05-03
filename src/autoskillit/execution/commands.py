@@ -19,6 +19,7 @@ from autoskillit.core import (
     MarketplaceInstall,
     NamedResume,
     NoResume,
+    OutputFormat,
     PluginSource,
     ResumeSpec,
     ValidatedAddDir,
@@ -168,11 +169,19 @@ _HEADLESS_EXCLUSIVE_VARS: frozenset[str] = frozenset(
 )
 
 
+def _apply_output_format(cmd: list[str], output_format: OutputFormat) -> None:
+    """Append --output-format and all required CLI flags, deduplicating."""
+    cmd += [ClaudeFlags.OUTPUT_FORMAT, output_format.value]
+    for flag in output_format.required_cli_flags:
+        if flag not in cmd:
+            cmd.append(flag)
+
+
 def build_headless_resume_cmd(
     *,
     resume_session_id: str,
     prompt: str,
-    output_format: str = "json",
+    output_format: OutputFormat = OutputFormat.JSON,
     plugin_source: PluginSource | None = None,
     env_extras: Mapping[str, str] | None = None,
 ) -> ClaudeHeadlessCmd:
@@ -189,9 +198,8 @@ def build_headless_resume_cmd(
         ClaudeFlags.RESUME,
         resume_session_id,
         ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS,
-        ClaudeFlags.OUTPUT_FORMAT,
-        output_format,
     ]
+    _apply_output_format(cmd, output_format)
     match plugin_source:
         case DirectInstall(plugin_dir=p):
             cmd += [ClaudeFlags.PLUGIN_DIR, str(p)]
@@ -267,8 +275,7 @@ def build_leaf_headless_cmd(
     completion_marker: str,
     model: str | None,
     plugin_source: PluginSource | None,
-    output_format_value: str,
-    output_format_required_flags: Sequence[str] = (),
+    output_format: OutputFormat,
     add_dirs: Sequence[ValidatedAddDir] = (),
     exit_after_stop_delay_ms: int = 0,
     scenario_step_name: str = "",
@@ -300,10 +307,8 @@ def build_leaf_headless_cmd(
     plugin_source
         PluginSource determining the ``--plugin-dir`` flag. DirectInstall uses the
         path; MarketplaceInstall omits the flag.
-    output_format_value
-        String value passed as ``--output-format`` flag.
-    output_format_required_flags
-        Additional CLI flags required by the output format; deduplicated.
+    output_format
+        OutputFormat enum; ``--output-format`` and any required flags are self-applied.
     add_dirs
         Each entry is appended as ``--add-dir <path>``.
     exit_after_stop_delay_ms
@@ -348,10 +353,7 @@ def build_leaf_headless_cmd(
             pass  # parent session already has the marketplace plugin loaded
         case None:
             pass
-    cmd += [ClaudeFlags.OUTPUT_FORMAT, output_format_value]
-    for flag in output_format_required_flags:
-        if flag not in cmd:
-            cmd.append(flag)
+    _apply_output_format(cmd, output_format)
     for validated_dir in add_dirs:
         cmd.extend([ClaudeFlags.ADD_DIR, validated_dir.path])
 
@@ -366,7 +368,7 @@ def build_food_truck_cmd(
     completion_marker: str,
     model: str | None = None,
     env_extras: Mapping[str, str] | None = None,
-    output_format_value: str = "stream-json",
+    output_format: OutputFormat = OutputFormat.STREAM_JSON,
 ) -> ClaudeHeadlessCmd:
     """Build the complete headless command spec for an L2 food truck session.
 
@@ -401,8 +403,9 @@ def build_food_truck_cmd(
         Used for CAMPAIGN_ID, CAMPAIGN_STATE_PATH, PROJECT_DIR, L2_TOOL_TAGS,
         IDLE_OUTPUT_TIMEOUT. These override baseline but cannot override
         SESSION_TYPE or HEADLESS (applied last).
-    output_format_value
-        String value passed as ``--output-format`` flag. Defaults to ``stream-json``.
+    output_format
+        OutputFormat enum; ``--output-format`` and any required flags are self-applied.
+        Defaults to ``STREAM_JSON``.
     """
     # Prompt transformations: completion directive + cwd anchor + narration suppression.
     # No _ensure_skill_prefix — orchestrator_prompt is a complete system prompt.
@@ -437,7 +440,7 @@ def build_food_truck_cmd(
             cmd += [ClaudeFlags.PLUGIN_DIR, str(p)]
         case MarketplaceInstall(cache_path=cp):
             cmd += [ClaudeFlags.PLUGIN_DIR, str(cp)]
-    cmd += [ClaudeFlags.OUTPUT_FORMAT, output_format_value]
+    _apply_output_format(cmd, output_format)
     cmd += [ClaudeFlags.TOOLS, "AskUserQuestion"]
 
     return ClaudeHeadlessCmd(cmd=cmd, env=spec.env)

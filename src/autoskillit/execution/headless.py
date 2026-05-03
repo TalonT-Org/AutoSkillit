@@ -556,8 +556,7 @@ async def run_headless_core(
             completion_marker=effective_marker,
             model=resolved_model,
             plugin_source=ctx.plugin_source,
-            output_format_value=cfg.output_format.value,
-            output_format_required_flags=cfg.output_format.required_cli_flags,
+            output_format=cfg.output_format,
             add_dirs=add_dirs,
             exit_after_stop_delay_ms=cfg.exit_after_stop_delay_ms,
             scenario_step_name=step_name,
@@ -702,7 +701,7 @@ class DefaultHeadlessExecutor:
             completion_marker=completion_marker,
             model=resolved_model,
             env_extras=merged_extras or None,
-            output_format_value=cfg.run_skill.output_format.value,
+            output_format=cfg.run_skill.output_format,
         )
 
         effective_timeout = timeout if timeout is not None else fleet_cfg.default_timeout_sec

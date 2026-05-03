@@ -420,12 +420,19 @@ def _check_example_covers_all_allowed_values(ctx: ValidationContext) -> list[Rul
     example text contains a match for '{output_name}\\s*=\\s*{re.escape(value)}'.
     """
     findings: list[RuleFinding] = []
-    manifest = load_bundled_manifest()
+    try:
+        manifest = load_bundled_manifest()
+    except Exception:
+        logger.warning(
+            "example-covers-all-allowed-values: failed to load bundled manifest; skipping",
+            exc_info=True,
+        )
+        return findings
 
     for step_name, step in ctx.recipe.steps.items():
         if step.tool != "run_skill":
             continue
-        skill_cmd = step.with_args.get("skill_command", "")
+        skill_cmd = (step.with_args or {}).get("skill_command", "")
         name = resolve_skill_name(skill_cmd)
         if not name:
             continue
@@ -475,12 +482,19 @@ def _check_all_examples_match_all_patterns(ctx: ValidationContext) -> list[RuleF
     complete constraint: patterns are both necessary and sufficient for all output paths.
     """
     findings: list[RuleFinding] = []
-    manifest = load_bundled_manifest()
+    try:
+        manifest = load_bundled_manifest()
+    except Exception:
+        logger.warning(
+            "all-examples-match-all-patterns: failed to load bundled manifest; skipping",
+            exc_info=True,
+        )
+        return findings
 
     for step_name, step in ctx.recipe.steps.items():
         if step.tool != "run_skill":
             continue
-        skill_cmd = step.with_args.get("skill_command", "")
+        skill_cmd = (step.with_args or {}).get("skill_command", "")
         name = resolve_skill_name(skill_cmd)
         if not name:
             continue

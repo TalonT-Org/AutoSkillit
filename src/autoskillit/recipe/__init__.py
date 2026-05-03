@@ -7,31 +7,31 @@ from autoskillit.core import get_logger
 logger = get_logger(__name__)
 
 # Rule registration — import triggers @semantic_rule registration.
-from autoskillit.recipe import rules_actions as _rules_actions  # noqa: E402 F401
-from autoskillit.recipe import rules_blocks as _rules_blocks  # noqa: E402 F401
-from autoskillit.recipe import rules_bypass as _rules_bypass  # noqa: E402 F401
-from autoskillit.recipe import rules_campaign as _rules_campaign  # noqa: E402 F401
-from autoskillit.recipe import rules_ci as _rules_ci  # noqa: E402 F401
-from autoskillit.recipe import rules_clone as _rules_clone  # noqa: E402 F401
-from autoskillit.recipe import rules_cmd as _rules_cmd  # noqa: E402 F401
-from autoskillit.recipe import rules_contracts as _rules_contracts  # noqa: E402 F401
-from autoskillit.recipe import rules_dataflow as _rules_dataflow  # noqa: E402 F401
-from autoskillit.recipe import rules_features as _rules_features  # noqa: E402 F401
-from autoskillit.recipe import rules_fixing as _rules_fixing  # noqa: E402 F401
-from autoskillit.recipe import rules_graph as _rules_graph  # noqa: E402 F401
-from autoskillit.recipe import rules_inline_script as _rules_inline_script  # noqa: E402 F401
-from autoskillit.recipe import rules_inputs as _rules_inputs  # noqa: E402 F401
-from autoskillit.recipe import rules_isolation as _rules_isolation  # noqa: E402 F401
-from autoskillit.recipe import rules_merge as _rules_merge  # noqa: E402 F401
-from autoskillit.recipe import rules_packs as _rules_packs  # noqa: E402 F401
-from autoskillit.recipe import rules_reachability as _rules_reachability  # noqa: E402 F401
-from autoskillit.recipe import rules_recipe as _rules_recipe  # noqa: E402 F401
-from autoskillit.recipe import rules_skill_content as _rules_skill_content  # noqa: E402 F401
-from autoskillit.recipe import rules_skills as _rules_skills  # noqa: E402 F401
-from autoskillit.recipe import rules_temp_path as _rules_temp_path  # noqa: E402 F401
-from autoskillit.recipe import rules_tools as _rules_tools  # noqa: E402 F401
-from autoskillit.recipe import rules_verdict as _rules_verdict  # noqa: E402 F401
-from autoskillit.recipe import rules_worktree as _rules_worktree  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_actions as _rules_actions  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_blocks as _rules_blocks  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_bypass as _rules_bypass  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_campaign as _rules_campaign  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_ci as _rules_ci  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_clone as _rules_clone  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_cmd as _rules_cmd  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_contracts as _rules_contracts  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_dataflow as _rules_dataflow  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_features as _rules_features  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_fixing as _rules_fixing  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_graph as _rules_graph  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_inline_script as _rules_inline_script  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_inputs as _rules_inputs  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_isolation as _rules_isolation  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_merge as _rules_merge  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_packs as _rules_packs  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_reachability as _rules_reachability  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_recipe as _rules_recipe  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_skill_content as _rules_skill_content  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_skills as _rules_skills  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_temp_path as _rules_temp_path  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_tools as _rules_tools  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_verdict as _rules_verdict  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_worktree as _rules_worktree  # noqa: E402 F401
 from autoskillit.recipe._api import (  # noqa: E402
     format_recipe_list_response,
     list_all,

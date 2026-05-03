@@ -51,9 +51,12 @@ def _is_path_capture_pattern(pattern: str) -> str | None:
     if not m:
         return None
     token_name = m.group(1)
-    if token_name in _RECOVERABLE_PATH_TOKENS:
-        return token_name
-    return None
+    if token_name not in _RECOVERABLE_PATH_TOKENS:
+        return None
+    remainder = pattern[m.end() :]
+    if not re.match(r"\s*=", remainder):
+        return None
+    return token_name
 
 
 def _recover_from_separate_marker(

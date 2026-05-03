@@ -59,10 +59,12 @@ def _build_path_token_set() -> frozenset[str]:
             return frozenset()
         result = (
             frozenset(
-                out["name"]
+                out.get("name", "")
                 for skill_data in manifest.get("skills", {}).values()
                 for out in skill_data.get("outputs", [])
-                if isinstance(out, dict) and out.get("type", "").startswith("file_path")
+                if isinstance(out, dict)
+                and out.get("name", "")
+                and out.get("type", "").startswith("file_path")
             )
             - _INTENTIONALLY_EXCLUDED_PATH_TOKENS
         )
@@ -95,10 +97,11 @@ def _build_recoverable_path_tokens() -> frozenset[str]:
             return frozenset()
         result = (
             frozenset(
-                out["name"]
+                out.get("name", "")
                 for skill_data in manifest.get("skills", {}).values()
                 for out in skill_data.get("outputs", [])
                 if isinstance(out, dict)
+                and out.get("name", "")
                 and (
                     out.get("type", "").startswith("file_path")
                     or out.get("type") == "directory_path"

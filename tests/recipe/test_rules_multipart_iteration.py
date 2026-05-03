@@ -69,6 +69,64 @@ class TestMultipartIterationRule:
         assert "multipart-sequential-kitchen-rule" not in rule_names
         assert "multipart-route-back" not in rule_names
 
+    def test_mi3_multipart_rule_passes_non_verify_backroute(self) -> None:
+        """T_MI3: multipart-route-back must NOT fire when more_parts routes to dry_walkthrough."""
+        recipe = Recipe(
+            name="test-recipe",
+            description="test",
+            ingredients={},
+            steps={
+                "rectify": RecipeStep(
+                    tool="run_skill",
+                    with_args={"skill_command": "/autoskillit:rectify context.investigation_path"},
+                    on_success="dry_walkthrough",
+                    note="Glob plan_dir for *_part_*.md or single plan file.",
+                ),
+                "dry_walkthrough": RecipeStep(
+                    tool="run_skill",
+                    with_args={"skill_command": "/autoskillit:dry-walkthrough context.plan_path"},
+                    on_success="next_or_done",
+                ),
+                "next_or_done": RecipeStep(
+                    action="route",
+                    on_result=StepResultRoute(
+                        field="next",
+                        routes={"more_parts": "dry_walkthrough", "all_done": "done"},
+                    ),
+                ),
+                "done": RecipeStep(action="stop", message="Done"),
+            },
+            kitchen_rules=["SEQUENTIAL EXECUTION: complete full cycle per part before advancing."],
+        )
+        warnings = run_semantic_rules(recipe)
+        rule_names = [w.rule for w in warnings]
+        assert "multipart-route-back" not in rule_names
+
+    def test_mi4_multipart_rule_fires_when_no_more_parts_route(self) -> None:
+        """T_MI4: multipart-route-back fires when next_or_done has no more_parts condition."""
+        recipe = Recipe(
+            name="test-recipe",
+            description="test",
+            ingredients={},
+            steps={
+                "plan": RecipeStep(
+                    tool="run_skill",
+                    with_args={"skill_command": "/autoskillit:make-plan inputs.task"},
+                    on_success="next_or_done",
+                    note="Glob plan_dir for *_part_*.md or single plan file.",
+                ),
+                "next_or_done": RecipeStep(
+                    action="route",
+                    on_result=StepResultRoute(field="next", routes={"all_done": "done"}),
+                ),
+                "done": RecipeStep(action="stop", message="Done"),
+            },
+            kitchen_rules=["SEQUENTIAL EXECUTION: complete full cycle per part before advancing."],
+        )
+        warnings = run_semantic_rules(recipe)
+        rule_names = [w.rule for w in warnings]
+        assert "multipart-route-back" in rule_names
+
 
 @pytest.fixture
 def compliant_multipart_recipe_no_list() -> Recipe:

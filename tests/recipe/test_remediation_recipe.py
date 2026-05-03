@@ -102,6 +102,50 @@ def test_check_review_loop_with_args_has_previous_verdict(recipe) -> None:
     assert "review_verdict" in step.with_args["previous_verdict"]
 
 
+def test_remediation_next_or_done_step_exists(recipe) -> None:
+    """T_REM_MP1: remediation.yaml must have a next_or_done routing step."""
+    assert "next_or_done" in recipe.steps
+    step = recipe.steps["next_or_done"]
+    assert step.action == "route"
+
+
+def test_remediation_next_or_done_routes_more_parts_to_dry_walkthrough(recipe) -> None:
+    """T_REM_MP2: next_or_done must route more_parts back to dry_walkthrough."""
+    step = recipe.steps["next_or_done"]
+    assert step.on_result is not None
+    conds = step.on_result.conditions
+    assert any(
+        c.route == "dry_walkthrough" and c.when is not None and "more_parts" in c.when
+        for c in conds
+    ), "next_or_done must have a predicate routing more_parts → dry_walkthrough"
+
+
+def test_remediation_next_or_done_routes_done_to_push(recipe) -> None:
+    """T_REM_MP3: next_or_done fallthrough must route to push (all parts complete)."""
+    step = recipe.steps["next_or_done"]
+    assert step.on_result is not None
+    conds = step.on_result.conditions
+    assert any(c.route == "push" for c in conds), (
+        "next_or_done must have a fallthrough condition routing to push"
+    )
+
+
+def test_remediation_merge_routes_to_next_or_done(recipe) -> None:
+    """T_REM_MP4: merge step default route must be next_or_done, not push."""
+    step = recipe.steps["merge"]
+    assert step.on_result is not None
+    default_routes = [c.route for c in step.on_result.conditions if c.when is None]
+    assert default_routes == ["next_or_done"], (
+        f"merge default route must be next_or_done, got {default_routes}"
+    )
+
+
+def test_remediation_validates_clean_after_next_or_done(recipe) -> None:
+    """T_REM_MP5: remediation.yaml must pass full validation with next_or_done step."""
+    errors = validate_recipe(recipe)
+    assert not errors, f"remediation.yaml failed validation: {errors}"
+
+
 def test_remediation_has_no_sprint_mode_ingredient() -> None:
     """remediation.yaml must not declare sprint_mode after sprint-prefix removal."""
     recipe = load_recipe(RECIPE_PATH)

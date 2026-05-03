@@ -39,7 +39,7 @@ merging).
 
 **NEVER:**
 - Merge WPs from different assignments unless they have a direct dependency linking them
-- Create a merged group whose combined complexity would be high (≥ 10 steps OR ≥ 6 files)
+- Create a merged group that would clearly exceed a medium-complexity PR (use judgment — no hard threshold)
 - Skip a WP from a manifest — every WP must appear in exactly one group (singleton = no-op)
 - Use a `merged_id` that is not one of the `source_wp_ids`
 - Allow an L0 to write files outside `$2/work_packages/consolidation/`
@@ -78,10 +78,17 @@ For each phase, assemble a context packet containing:
 - `wps` — the full list of WP objects in this phase (id, name, goal, technical_steps,
   files_touched, deliverables, acceptance_criteria, depends_on, estimated_files, scope)
 - `all_wp_ids` — WP IDs from every phase (for cross-phase dep awareness)
-- Complexity thresholds:
-  - trivial: ≤ 3 technical_steps AND ≤ 2 files_touched entries
-  - high: ≥ 10 technical_steps OR ≥ 6 files_touched entries
-  - medium: everything else
+- Merge guidance:
+  - **Default: merge.** WPs within the same assignment should be merged unless there is
+    a clear reason to keep them separate.
+  - **Merge when:** WPs share files, do closely related work, form a natural unit of
+    implementation, or would be awkward as separate PRs.
+  - **Keep separate when:** WPs represent genuinely independent concerns that a developer
+    would naturally implement and review as separate PRs.
+  - **Soft upper bound:** Avoid merging into a group that would clearly exceed a
+    medium-complexity PR (rough guide: >15 substantive technical steps or >10 distinct
+    files). This is guidance, not a hard gate — use judgment about whether the combined
+    work forms a coherent unit.
 
 ### Step 4: Dispatch parallel L0 subagents
 
@@ -111,10 +118,14 @@ groups = [
 
 L0 grouping rules:
 - Assign each WP to exactly one group (solo or merged).
-- Only merge WPs within the same assignment (`P{N}-A{M}` prefix) unless they share a
-  direct dependency AND both are trivial.
-- Never merge if the combined group would have ≥ 10 total technical_steps or ≥ 6 total
-  files_touched — split into smaller groups instead.
+- **Default to merging** WPs within the same assignment. Only keep WPs as singletons when
+  they represent genuinely distinct concerns.
+- Cross-assignment merges are allowed when WPs share a direct dependency AND touch the
+  same files.
+- Use judgment about combined complexity. Avoid creating groups that would clearly be
+  too large for a single PR, but do not apply hard thresholds on step/file counts.
+  Read the actual work described and decide: "would a developer naturally do these
+  together?"
 - `merged_id` MUST be the lowest-numbered WP ID in the group (primary WP).
 - `merge_order` defines the technical_steps concatenation order; typically
   `[primary, ...others_by_id_order]`.

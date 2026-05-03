@@ -465,13 +465,12 @@ def test_build_replay_runner_stores_player_on_runner(tmp_path, monkeypatch):
 
 @pytest.mark.anyio
 async def test_recording_runner_snapshots_skill_dir(tmp_path):
-    """After _record_session, skill_snapshots/{step_name}/ is written under scenario_dir."""
+    """After _record_session, skill-snapshots/{step_name}/ is written under scenario_dir."""
     ephemeral_dir = tmp_path / "autoskillit-sessions" / "headless-snap01"
     skill_file = ephemeral_dir / ".claude" / "skills" / "investigate" / "SKILL.md"
     skill_file.parent.mkdir(parents=True)
     skill_file.write_text("# investigate\n", encoding="utf-8")
 
-    # cassette_path = scenario_dir / "sessions" / step_name
     cassette_path = tmp_path / "sessions" / "investigate"
     cassette_path.mkdir(parents=True)
 
@@ -506,7 +505,7 @@ async def test_recording_runner_snapshots_skill_dir(tmp_path):
 
 @pytest.mark.anyio
 async def test_recording_runner_no_ephemeral_dir_skips_snapshot(tmp_path):
-    """When cmd has no --add-dir, no skill_snapshots/ directory is created."""
+    """When cmd has no --add-dir, no skill-snapshots/ directory is created."""
     cassette_path = tmp_path / "sessions" / "investigate"
     cassette_path.mkdir(parents=True)
 

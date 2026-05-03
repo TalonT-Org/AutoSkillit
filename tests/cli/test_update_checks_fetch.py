@@ -1017,3 +1017,41 @@ def test_verify_update_result_does_not_write_binary_snoozed(
     with patch.object(importlib.metadata, "version", return_value="0.9.0"):
         _verify_update_result(info, "0.9.0", "0.9.1", tmp_path, state)
     assert "binary_snoozed" not in state
+
+
+# ---------------------------------------------------------------------------
+# Step 1e — _fetch_latest_version contract: target routing
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "target,expected_url_fragment",
+    [
+        ("develop", "contents/pyproject.toml"),
+        ("releases/latest", "releases/latest"),
+    ],
+)
+def test_fetch_latest_version_routes_by_target(
+    target: str, expected_url_fragment: str, tmp_path: Path
+) -> None:
+    from autoskillit.cli._update_checks import _fetch_latest_version
+
+    fetched_urls: list[str] = []
+
+    def _mock_fetch(url: str, *, home: Path) -> dict | None:
+        fetched_urls.append(url)
+        if "pyproject" in url:
+            import base64
+
+            content = base64.b64encode(b'version = "0.9.300"\n').decode()
+            return {"content": content}
+        return {"tag_name": "v0.9.300"}
+
+    with patch("autoskillit.cli._update_checks_fetch._fetch_with_cache", side_effect=_mock_fetch):
+        result = _fetch_latest_version(target, tmp_path)
+
+    assert result is not None
+    assert fetched_urls, "Expected _fetch_with_cache to be called"
+    assert any(expected_url_fragment in url for url in fetched_urls), (
+        f"Expected URL containing '{expected_url_fragment}', got: {fetched_urls}"
+    )

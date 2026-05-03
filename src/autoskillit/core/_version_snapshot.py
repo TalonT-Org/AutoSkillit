@@ -18,7 +18,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core._install_detect import parse_direct_url  # noqa: TID251
+from ._install_detect import parse_direct_url
 
 logger = logging.getLogger(__name__)  # noqa: TID251 — IL-0 module, no autoskillit imports allowed
 

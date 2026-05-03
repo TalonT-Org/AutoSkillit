@@ -415,8 +415,23 @@ steps:
         route: assess
       - when: "result.error"
         route: release_issue_failure
-      - route: push
+      - route: next_or_done
     on_failure: release_issue_failure
+    note: >
+      After merge, route to next_or_done to process remaining parts before pushing.
+
+  next_or_done:
+    action: route
+    on_result:
+      - when: "${{ result.next }} == more_parts"
+        route: dry_walkthrough
+      - route: push
+    note: >
+      Routing step — no tool call. The agent evaluates what comes next:
+      1. If more plan_parts remain for the current plan → go to dry_walkthrough with next part.
+      2. If all plan_parts are complete → go to push.
+      Unlike implementation.yaml (which routes done → audit_impl → push), remediation runs
+      audit_impl pre-merge (GO → commit_guard), so the fallthrough here goes directly to push.
 
   push:
     tool: push_to_remote

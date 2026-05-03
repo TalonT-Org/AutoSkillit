@@ -46,7 +46,7 @@ class TestRecipeIntegrationPredicateRouting:
 
         cond5 = step.on_result.conditions[5]
         assert cond5.when is None
-        assert cond5.route == "push"
+        assert cond5.route == "next_or_done"
 
     def test_investigate_first_merge_step_captures_worktree_path(self) -> None:
         """The merge step captures worktree_path from result.worktree_path."""

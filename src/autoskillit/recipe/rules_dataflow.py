@@ -334,15 +334,16 @@ def _check_multipart_iteration_notes(ctx: ValidationContext) -> list[RuleFinding
 
     next_or_done = wf.steps.get("next_or_done")
     if next_or_done is not None and next_or_done.on_result is not None:
-        # Legacy format: field/routes dict with explicit "more_parts" → "verify"
-        has_more_parts_to_verify = next_or_done.on_result.routes.get("more_parts") == "verify"
-        # Predicate format: condition with "more_parts" in the when clause routing to "verify"
-        if not has_more_parts_to_verify:
-            has_more_parts_to_verify = any(
-                cond.route == "verify" and cond.when is not None and "more_parts" in cond.when
+        # Legacy format: field/routes dict with explicit "more_parts" → any step
+        more_parts_target = next_or_done.on_result.routes.get("more_parts")
+        has_more_parts_route = more_parts_target is not None and more_parts_target in wf.steps
+        # Predicate format: condition with "more_parts" in the when clause routing to any step
+        if not has_more_parts_route:
+            has_more_parts_route = any(
+                cond.route in wf.steps and cond.when is not None and "more_parts" in cond.when
                 for cond in next_or_done.on_result.conditions
             )
-        if not has_more_parts_to_verify:
+        if not has_more_parts_route:
             findings.append(
                 RuleFinding(
                     rule="multipart-route-back",
@@ -350,8 +351,8 @@ def _check_multipart_iteration_notes(ctx: ValidationContext) -> list[RuleFinding
                     step_name="next_or_done",
                     message=(
                         "Recipe uses make-plan or rectify but next_or_done does not route "
-                        "'more_parts' back to 'verify'. Sequential part processing requires "
-                        "more_parts → verify in the on_result routes."
+                        "'more_parts' back to a recipe step. Sequential part processing requires "
+                        "a more_parts → <loop-back-step> condition in the on_result routes."
                     ),
                 )
             )

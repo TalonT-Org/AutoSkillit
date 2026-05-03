@@ -32,8 +32,12 @@ __all__ = [
     "truncate_text",
 ]
 
-_SKILL_CMD_RE = re.compile(r"^/(?:autoskillit:)?([\w-]+)")
-_SKILL_RESOLVE_RE = re.compile(r"/(?:autoskillit:)?([\w-]+)")
+_SKILL_CMD_RE = re.compile(
+    r"^/(?:autoskillit:)?([\w-]+)"
+)  # anchored: strict leading-slash for extraction
+_SKILL_RESOLVE_RE = re.compile(
+    r"/(?:autoskillit:)?([\w-]+)"
+)  # unanchored: supports "Use /..." prefix forms
 
 _PATH_PREFIXES: tuple[str, ...] = ("/", "./", ".autoskillit/")
 

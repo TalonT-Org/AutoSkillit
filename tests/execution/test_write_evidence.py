@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import WriteBehaviorSpec
+from autoskillit.core import HeadlessExecutor, WriteBehaviorSpec
 from tests.conftest import _make_result
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -92,8 +92,6 @@ class TestHeadlessExecutorProtocol:
 
     def test_headless_executor_protocol_has_write_watch_dirs(self) -> None:
         """HeadlessExecutor.run() accepts write_watch_dirs parameter."""
-        from autoskillit.core import HeadlessExecutor
-
         sig = inspect.signature(HeadlessExecutor.run)
         assert "write_watch_dirs" in sig.parameters
 
@@ -107,8 +105,14 @@ class TestUnifiedSkillNameResolution:
             ("/autoskillit:make-plan arg1", "make-plan"),
             ("/make-plan arg1", "make-plan"),
             ("/autoskillit:planner-refine-phases ...", "planner-refine-phases"),
-            ("/autoskillit:exp-lens-{slug}", None),
-            ("/autoskillit:foo-${{ var }}", None),
+            (
+                "/autoskillit:exp-lens-{slug}",
+                None,
+            ),  # regex stops at '{'; remainder.startswith("{") → None
+            (
+                "/autoskillit:foo-${{ var }}",
+                None,
+            ),  # regex stops at '$'; remainder.startswith("${{") → None
             ("not a skill command", None),
         ],
     )

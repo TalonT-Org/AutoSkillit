@@ -5,7 +5,7 @@ description: >-
   GitHub issue from each validated report.
 summary: "branch → audit×6 ∥ → validate×6 ∥ → issue×6 ∥ → done"
 autoskillit_version: "0.9.343"
-recipe_version: "1.0.0"
+recipe_version: "1.1.0"
 requires_packs: [audit, github]
 
 ingredients:
@@ -15,6 +15,10 @@ ingredients:
   branch:
     description: "The branch to audit against"
     required: true
+  max_parallel:
+    description: "Max audits to run in parallel (half the audit count by default)"
+    default: "3"
+    hidden: true
 
 kitchen_rules:
   - >-
@@ -26,8 +30,14 @@ kitchen_rules:
     independent. A failure in one chain MUST NOT block or affect the other five chains.
     Continue with successful chains and note failures for escalation.
   - >-
-    Within each wave, fire all run_skill calls in a single message to achieve
-    parallelism. Do not serialize audit/validate/issue calls.
+    PREFER-COMPLETION SCHEDULING: Maintain up to ${{ inputs.max_parallel }}
+    concurrent run_skill calls. When any call completes, immediately dispatch
+    the next item from the queue. Do not wait for all slots to finish before
+    refilling — fill each freed slot individually.
+  - >-
+    prepare-issue calls MUST be sequential — never call prepare-issue in
+    parallel with itself. It hits the GitHub API and parallel calls create
+    request storms. Other tool types may overlap with prepare-issue.
   - >-
     Report paths are discovered from session output — look for file paths
     in {{AUTOSKILLIT_TEMP}}/ directories. Pass discovered paths as positional
@@ -58,14 +68,24 @@ steps:
       cwd: "${{ inputs.workspace }}"
       step_name: "run_audits"
     note: >
-      PARALLEL AUDIT WAVE — Fire six run_skill calls in a single message:
+      PREFER-COMPLETION AUDIT DISPATCH — Dispatch audits using prefer-completion
+      scheduling capped at ${{ inputs.max_parallel }} concurrent slots:
 
-      1. run_skill(skill_command="/autoskillit:audit-tests", cwd="${{ inputs.workspace }}", step_name="audit_tests")
-      2. run_skill(skill_command="/autoskillit:audit-cohesion", cwd="${{ inputs.workspace }}", step_name="audit_cohesion")
-      3. run_skill(skill_command="/autoskillit:audit-arch", cwd="${{ inputs.workspace }}", step_name="audit_arch")
-      4. run_skill(skill_command="/autoskillit:audit-feature-gates", cwd="${{ inputs.workspace }}", step_name="audit_feature_gates")
-      5. run_skill(skill_command="/autoskillit:audit-docs", cwd="${{ inputs.workspace }}", step_name="audit_docs")
-      6. run_skill(skill_command="/autoskillit:audit-review-decisions", cwd="${{ inputs.workspace }}", step_name="audit_review_decisions")
+      1. Queue all six audits:
+         - run_skill(skill_command="/autoskillit:audit-tests", cwd="${{ inputs.workspace }}", step_name="audit_tests")
+         - run_skill(skill_command="/autoskillit:audit-cohesion", cwd="${{ inputs.workspace }}", step_name="audit_cohesion")
+         - run_skill(skill_command="/autoskillit:audit-arch", cwd="${{ inputs.workspace }}", step_name="audit_arch")
+         - run_skill(skill_command="/autoskillit:audit-feature-gates", cwd="${{ inputs.workspace }}", step_name="audit_feature_gates")
+         - run_skill(skill_command="/autoskillit:audit-docs", cwd="${{ inputs.workspace }}", step_name="audit_docs")
+         - run_skill(skill_command="/autoskillit:audit-review-decisions", cwd="${{ inputs.workspace }}", step_name="audit_review_decisions")
+
+      2. Launch the first ${{ inputs.max_parallel }} audits as run_skill calls
+         in a single message.
+
+      3. When any audit completes (success or failure), immediately launch
+         the next queued audit in the same message as any other pending
+         responses. Maintain ${{ inputs.max_parallel }} in-flight at all times
+         until the queue is empty.
 
       Each audit writes its report to a well-known temp directory:
       - {{AUTOSKILLIT_TEMP}}/audit-tests/{name}_{timestamp}.md
@@ -97,18 +117,22 @@ steps:
       cwd: "${{ inputs.workspace }}"
       step_name: "validate_audits"
     note: >
-      PARALLEL VALIDATION WAVE — For each audit that succeeded in the previous
-      wave, fire a run_skill call in a single message. Pass the audit report
-      path as a positional argument:
+      PREFER-COMPLETION VALIDATION — Start validating as each audit finishes.
+      Do not wait for all audits to complete before beginning validation.
 
-      1. run_skill(skill_command="/autoskillit:validate-audit {tests_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_tests")
-      2. run_skill(skill_command="/autoskillit:validate-audit {cohesion_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_cohesion")
-      3. run_skill(skill_command="/autoskillit:validate-audit {arch_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_arch")
-      4. run_skill(skill_command="/autoskillit:validate-audit {feature_gates_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_feature_gates")
-      5. run_skill(skill_command="/autoskillit:validate-audit {docs_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_docs")
-      6. run_skill(skill_command="/autoskillit:validate-audit {review_decisions_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_review_decisions")
+      For each succeeded audit, queue a validation:
+        1. run_skill(skill_command="/autoskillit:validate-audit {tests_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_tests")
+        2. run_skill(skill_command="/autoskillit:validate-audit {cohesion_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_cohesion")
+        3. run_skill(skill_command="/autoskillit:validate-audit {arch_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_arch")
+        4. run_skill(skill_command="/autoskillit:validate-audit {feature_gates_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_feature_gates")
+        5. run_skill(skill_command="/autoskillit:validate-audit {docs_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_docs")
+        6. run_skill(skill_command="/autoskillit:validate-audit {review_decisions_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_review_decisions")
 
-      Skip validation for any audit that failed in wave 1.
+      Apply the same prefer-completion scheduling as run_audits — maintain up
+      to ${{ inputs.max_parallel }} concurrent slots across validations. As each
+      slot frees, dispatch the next queued validation immediately.
+
+      Skip validation for any audit that failed in the audit dispatch phase.
       Each validation writes to {{AUTOSKILLIT_TEMP}}/validate-audit/:
       - validated_report_{source}_{timestamp}.md (first line: "validated: true")
       - contested_findings_{source}_{timestamp}.md (only if contested > 0)
@@ -133,24 +157,21 @@ steps:
       cwd: "${{ inputs.workspace }}"
       step_name: "create_issues"
     note: >
-      PARALLEL ISSUE CREATION WAVE — validate-audit now splits each validated report
+      SEQUENTIAL ISSUE CREATION — validate-audit splits each validated report
       into per-ticket body files (ticket_body_{source}_{N}_{ts}.md) according to the
-      grouping manifest. Instead of passing validated_report_*.md directly, pass each
-      ticket body file to prepare-issue:
+      grouping manifest.
 
-      For each audit type that succeeded in wave 2:
+      For each audit type that succeeded in validation:
         1. Discover the grouping manifest (grouping_manifest_{source}_{ts}.md) in the
            validate-audit session output.
         2. Read the manifest to get the list of ticket body file paths.
-        3. Fire one run_skill call per ticket body, ALL in a single message:
+        3. Process prepare-issue calls one at a time:
+           - run_skill(skill_command="/autoskillit:prepare-issue {ticket_body_path}", cwd="${{ inputs.workspace }}", step_name="issue_{source}_{N}")
+           - Wait for completion.
+           - Proceed to the next ticket body.
 
-      Example for tests audit with 3 ticket groups:
-        run_skill("/autoskillit:prepare-issue {ticket_body_tests_1_path}", step_name="issue_tests_1")
-        run_skill("/autoskillit:prepare-issue {ticket_body_tests_2_path}", step_name="issue_tests_2")
-        run_skill("/autoskillit:prepare-issue {ticket_body_tests_3_path}", step_name="issue_tests_3")
-        run_skill("/autoskillit:prepare-issue {ticket_body_cohesion_1_path}", step_name="issue_cohesion_1")
-        run_skill("/autoskillit:prepare-issue {ticket_body_review_decisions_1_path}", step_name="issue_review_decisions_1")
-        ... (all ticket bodies across all audit types in a single message)
+      Never call prepare-issue in parallel with itself — it hits the GitHub API
+      and parallel calls create request storms.
 
       After all issues are created, append the validation summary to each issue body
       (sequentially): fetch the current body, verify it is non-empty, append a separator

@@ -172,8 +172,6 @@ def _build_fallback_groups(
     existing_merged_groups: dict[str, _ConsolidationGroup],
 ) -> list[_ConsolidationGroup]:
     """Heuristic fallback: merge same-assignment WPs sharing files."""
-    if any(len(g.source_wp_ids) > 1 for g in existing_merged_groups.values()):
-        return []
     if len(work_packages) < _FALLBACK_MIN_WPS:
         return []
 

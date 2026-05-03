@@ -255,17 +255,27 @@ dataflow:
   - planner_assess_review_approach
   - source_dir
   - task
-  - task_file
   required: []
   produced:
   - planner_dir
+- step: resolve_task
+  available:
+  - planner_assess_review_approach
+  - planner_dir
+  - source_dir
+  - task
+  required: []
+  produced:
+  - task_file_path
+  - task_label
 - step: analyze
   available:
   - planner_assess_review_approach
   - planner_dir
   - source_dir
   - task
-  - task_file
+  - task_file_path
+  - task_label
   required: []
   produced: []
 - step: extract_domain
@@ -274,7 +284,8 @@ dataflow:
   - planner_dir
   - source_dir
   - task
-  - task_file
+  - task_file_path
+  - task_label
   required: []
   produced: []
   positional_args: 2
@@ -284,7 +295,8 @@ dataflow:
   - planner_dir
   - source_dir
   - task
-  - task_file
+  - task_file_path
+  - task_label
   required: []
   produced:
   - phase_manifest_path
@@ -296,7 +308,8 @@ dataflow:
   - planner_dir
   - source_dir
   - task
-  - task_file
+  - task_file_path
+  - task_label
   required: []
   produced:
   - plan_snapshot_path
@@ -310,7 +323,8 @@ dataflow:
   - planner_dir
   - source_dir
   - task
-  - task_file
+  - task_file_path
+  - task_label
   required: []
   produced: []
   positional_args: 2
@@ -323,7 +337,8 @@ dataflow:
   - planner_dir
   - source_dir
   - task
-  - task_file
+  - task_file_path
+  - task_label
   required: []
   produced:
   - combined_phases_path
@@ -337,7 +352,8 @@ dataflow:
   - planner_dir
   - source_dir
   - task
-  - task_file
+  - task_file_path
+  - task_label
   required:
   - combined_plan_path
   - output_dir
@@ -354,7 +370,8 @@ dataflow:
   - refined_plan_path
   - source_dir
   - task
-  - task_file
+  - task_file_path
+  - task_label
   required: []
   produced:
   - assignment_context_paths
@@ -370,7 +387,8 @@ dataflow:
   - refined_plan_path
   - source_dir
   - task
-  - task_file
+  - task_file_path
+  - task_label
   required: []
   produced: []
   positional_args: 1
@@ -386,7 +404,8 @@ dataflow:
   - refined_plan_path
   - source_dir
   - task
-  - task_file
+  - task_file_path
+  - task_label
   required: []
   produced:
   - combined_assignments_path
@@ -403,7 +422,8 @@ dataflow:
   - refined_plan_path
   - source_dir
   - task
-  - task_file
+  - task_file_path
+  - task_label
   required:
   - output_dir
   produced:
@@ -422,7 +442,8 @@ dataflow:
   - refined_plan_path
   - source_dir
   - task
-  - task_file
+  - task_file_path
+  - task_label
   required: []
   produced:
   - wp_context_paths
@@ -440,7 +461,8 @@ dataflow:
   - refined_plan_path
   - source_dir
   - task
-  - task_file
+  - task_file_path
+  - task_label
   - wp_context_paths
   required: []
   produced: []
@@ -459,7 +481,8 @@ dataflow:
   - refined_plan_path
   - source_dir
   - task
-  - task_file
+  - task_file_path
+  - task_label
   - wp_context_paths
   required: []
   produced: []
@@ -477,7 +500,8 @@ dataflow:
   - refined_plan_path
   - source_dir
   - task
-  - task_file
+  - task_file_path
+  - task_label
   - wp_context_paths
   required: []
   produced:
@@ -497,7 +521,8 @@ dataflow:
   - refined_plan_path
   - source_dir
   - task
-  - task_file
+  - task_file_path
+  - task_label
   - wp_context_paths
   required:
   - output_dir
@@ -519,7 +544,8 @@ dataflow:
   - refined_wps_path
   - source_dir
   - task
-  - task_file
+  - task_file_path
+  - task_label
   - wp_context_paths
   required: []
   produced: []
@@ -539,7 +565,8 @@ dataflow:
   - refined_wps_path
   - source_dir
   - task
-  - task_file
+  - task_file_path
+  - task_label
   - wp_context_paths
   required: []
   produced:
@@ -561,7 +588,8 @@ dataflow:
   - refined_wps_path
   - source_dir
   - task
-  - task_file
+  - task_file_path
+  - task_label
   - wp_context_paths
   required:
   - refined_wps_path
@@ -586,7 +614,8 @@ dataflow:
   - refined_wps_path
   - source_dir
   - task
-  - task_file
+  - task_file_path
+  - task_label
   - wp_context_paths
   required: []
   produced: []
@@ -608,7 +637,8 @@ dataflow:
   - refined_wps_path
   - source_dir
   - task
-  - task_file
+  - task_file_path
+  - task_label
   - wp_context_paths
   required:
   - refined_wps_path
@@ -633,7 +663,8 @@ dataflow:
   - review_approach_assessment_path
   - source_dir
   - task
-  - task_file
+  - task_file_path
+  - task_label
   - wp_context_paths
   required: []
   produced:
@@ -657,7 +688,8 @@ dataflow:
   - review_approach_assessment_path
   - source_dir
   - task
-  - task_file
+  - task_file_path
+  - task_label
   - verdict
   - wp_context_paths
   required: []
@@ -681,7 +713,8 @@ dataflow:
   - review_approach_assessment_path
   - source_dir
   - task
-  - task_file
+  - task_file_path
+  - task_label
   - verdict
   - wp_context_paths
   required: []
@@ -706,7 +739,8 @@ dataflow:
   - review_approach_assessment_path
   - source_dir
   - task
-  - task_file
+  - task_file_path
+  - task_label
   - verdict
   - wp_context_paths
   required: []
@@ -730,7 +764,8 @@ dataflow:
   - review_approach_assessment_path
   - source_dir
   - task
-  - task_file
+  - task_file_path
+  - task_label
   - verdict
   - wp_context_paths
   required: []
@@ -754,7 +789,8 @@ dataflow:
   - review_approach_assessment_path
   - source_dir
   - task
-  - task_file
+  - task_file_path
+  - task_label
   - verdict
   - wp_context_paths
   required: []

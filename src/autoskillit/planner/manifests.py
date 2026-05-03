@@ -10,6 +10,7 @@ from typing import TypedDict
 from autoskillit.core import atomic_write, write_versioned_json
 from autoskillit.planner.schema import (
     RunDirResult,
+    TaskResolutionResult,
     validate_assignment_result,
     validate_phase_result,
     validate_refined_assignments,
@@ -411,3 +412,31 @@ def expand_wps(refined_assignments_path: str, output_dir: str, **kwargs: object)
         "context_paths": ",".join(context_paths),
         "item_ids": ",".join(item_ids),
     }
+
+
+def _derive_label(content: str, filename_stem: str) -> str:
+    first_non_empty: str | None = None
+    for line in content.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("# "):
+            return stripped[2:].strip()
+        if first_non_empty is None and stripped:
+            first_non_empty = stripped[:80]
+    return first_non_empty or filename_stem or "Untitled"
+
+
+def resolve_task_input(task: str, planner_dir: str) -> TaskResolutionResult:
+    if not task:
+        raise ValueError("task must be a non-empty string")
+    task_path = Path(task)
+    if task_path.is_file():
+        try:
+            content = task_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise OSError(f"Cannot read task file {task_path}: {exc}") from exc
+        label = _derive_label(content, task_path.stem)
+        return TaskResolutionResult(task_file_path=str(task_path), task_label=label)
+    out = Path(planner_dir) / "task_input.md"
+    atomic_write(out, task)
+    label = _derive_label(task, "")
+    return TaskResolutionResult(task_file_path=str(out), task_label=label)

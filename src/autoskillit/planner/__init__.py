@@ -13,6 +13,7 @@ from autoskillit.planner.manifests import (
     expand_assignments,
     expand_wps,
     finalize_wp_manifest,
+    resolve_task_input,
 )
 from autoskillit.planner.merge import (
     build_plan_snapshot,
@@ -50,6 +51,7 @@ __all__ = [
     "expand_assignments",
     "expand_wps",
     "finalize_wp_manifest",
+    "resolve_task_input",
     "validate_plan",
     "PlannerManifest",
     "PlannerManifestItem",

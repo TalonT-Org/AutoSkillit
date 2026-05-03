@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.planner.validation import _load_assignment_results, _load_phase_results
-from tests.planner.conftest import write_json
+from tests.planner.conftest import write_json, write_task_file
 
 pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.feature("planner")]
 
@@ -167,7 +167,7 @@ def test_compile_plan_derives_name_slug_from_name(tmp_path: Path) -> None:
         {"verdict": "pass", "findings": [], "warnings": [], "schema_version": 2},
     )
 
-    compile_plan(str(tmp_path), "test task", "/src")
+    compile_plan(str(tmp_path), write_task_file(tmp_path), "/src")
 
     issue = (tmp_path / "issues" / "P1-A1-WP1_issue.md").read_text()
     assert "phase-one" in issue
@@ -306,7 +306,7 @@ def test_skill_output_through_full_pipeline(tmp_path: Path) -> None:
     validate_result = validate_plan(str(tmp_path))
     assert validate_result["verdict"] == "pass"
 
-    compile_result = compile_plan(str(tmp_path), "test task", "/src")
+    compile_result = compile_plan(str(tmp_path), write_task_file(tmp_path), "/src")
     assert Path(compile_result["plan_path"]).exists()
     milestones = json.loads((tmp_path / "milestones.json").read_text())
     assert milestones["milestones"][0]["name_slug"] == "foundation"

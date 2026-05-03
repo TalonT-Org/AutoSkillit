@@ -49,6 +49,7 @@ def test_planner_all_exports() -> None:
         "validate_refined_assignments",
         "validate_refined_plan",
         "ValidationFinding",
+        "resolve_task_input",
     }
 
 

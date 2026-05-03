@@ -17,6 +17,7 @@ from tests.planner.conftest import (
     make_phase_result,
     make_wp_result,
     write_json,
+    write_task_file,
 )
 
 pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.feature("planner")]
@@ -162,7 +163,9 @@ def test_multi_phase_pipeline_end_to_end(tmp_path: Path) -> None:
     validate_result = validate_plan(str(tmp_path))
     assert validate_result["verdict"] == "pass", validate_result
 
-    compile_result = compile_plan(str(tmp_path), "integration test task", "/src")
+    compile_result = compile_plan(
+        str(tmp_path), write_task_file(tmp_path, "integration test task"), "/src"
+    )
 
     plan_path = Path(compile_result["plan_path"])
     assert plan_path.exists()
@@ -209,7 +212,7 @@ def test_pipeline_factory_fixtures_are_schema_compliant(tmp_path: Path) -> None:
     validate_result = validate_plan(str(tmp_path))
     assert validate_result["verdict"] == "pass"
 
-    compile_result = compile_plan(str(tmp_path), "factory test", "/src")
+    compile_result = compile_plan(str(tmp_path), write_task_file(tmp_path, "factory test"), "/src")
     assert Path(compile_result["plan_path"]).exists()
 
     milestones = json.loads((tmp_path / "milestones.json").read_text())

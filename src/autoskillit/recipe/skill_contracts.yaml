@@ -2130,8 +2130,8 @@ callable_contracts:
     - name: output_dir
       type: directory_path
       required: true
-    - name: task
-      type: str
+    - name: task_file_path
+      type: file_path
       required: true
     - name: source_dir
       type: directory_path

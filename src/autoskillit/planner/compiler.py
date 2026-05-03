@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit.core import atomic_write, get_logger, write_versioned_json
+from autoskillit.planner.manifests import _derive_label
 from autoskillit.planner.validation import (
     _load_assignment_results,
     _load_phase_results,
@@ -120,11 +121,10 @@ def _render_issue_body(wp: dict, phase: dict, assignment: dict) -> str:
 
 
 def compile_plan(
-    output_dir: str, task: str, source_dir: str, task_file: str = "", **kwargs: Any
+    output_dir: str, task_file_path: str, source_dir: str, task_label: str = "", **kwargs: Any
 ) -> dict[str, str]:
-    task_label = task
-    if task_file:
-        task = Path(task_file).read_text()
+    task = Path(task_file_path).read_text(encoding="utf-8") if task_file_path else ""
+    task_label = task_label or _derive_label(task, "")
     root = Path(output_dir)
 
     phase_results = _load_phase_results(root)

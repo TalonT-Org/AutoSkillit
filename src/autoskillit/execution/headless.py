@@ -266,6 +266,7 @@ async def _execute_claude_headless(
             try:
                 _temp_snapshots_pre[_wd] = {e.name for e in os.scandir(_wd)}
             except OSError:
+                logger.warning("watch_dir_pre_scan_failed", watch_dir=str(_wd), exc_info=True)
                 _temp_snapshots_pre[_wd] = set()
 
     _pre_session_sha = _capture_git_head_sha(cwd)
@@ -379,6 +380,7 @@ async def _execute_claude_headless(
             try:
                 _post = {e.name for e in os.scandir(_wd)}
             except OSError:
+                logger.warning("watch_dir_post_scan_failed", watch_dir=str(_wd), exc_info=True)
                 _post = set()
             _pre = _temp_snapshots_pre.get(_wd, set())
             if _post - _pre:

@@ -53,7 +53,7 @@ from autoskillit.execution.merge_queue._merge_queue_repo_state import (
 )
 
 if TYPE_CHECKING:
-    from autoskillit.core.types._type_protocols_logging import GitHubApiLog
+    from autoskillit.core import GitHubApiLog
 
 logger = get_logger(__name__)
 

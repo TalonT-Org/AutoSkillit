@@ -7,8 +7,8 @@ full AutomationConfig to keep core/ free of config/ imports.
 
 from __future__ import annotations
 
-from ._type_constants import FEATURE_REGISTRY
-from ._type_enums import FeatureLifecycle
+from .types._type_constants import FEATURE_REGISTRY
+from .types._type_enums import FeatureLifecycle
 
 
 def is_feature_enabled(

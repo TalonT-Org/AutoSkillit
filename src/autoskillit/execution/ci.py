@@ -26,7 +26,7 @@ from autoskillit.core import CIRunScope, get_logger
 from autoskillit.execution.github import github_headers, make_tracked_httpx_client
 
 if TYPE_CHECKING:
-    from autoskillit.core.types._type_protocols_logging import GitHubApiLog
+    from autoskillit.core import GitHubApiLog
 
 logger = get_logger(__name__)
 

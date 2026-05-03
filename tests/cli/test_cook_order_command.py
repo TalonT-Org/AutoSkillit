@@ -21,7 +21,7 @@ class TestCLIOrderCommand:
     def _stub_preview(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Stub terminal preview to avoid subprocess.run collision with git calls."""
         monkeypatch.setattr(
-            "autoskillit.cli._prompts.show_cook_preview",
+            "autoskillit.cli._preview.show_cook_preview",
             lambda *a, **kw: None,
         )
 

@@ -783,7 +783,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "recipe": 50,
         "execution": 37,
         "core": 33,
-        "cli": 42,
+        "cli": 43,
         "hooks": 29,
         "pipeline": 12,
         "fleet": 11,

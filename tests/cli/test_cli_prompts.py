@@ -153,7 +153,7 @@ def test_open_kitchen_prompt_does_not_embed_greetings():
 
 def test_show_cook_preview_prints_table(monkeypatch, tmp_path, capsys):
     """show_cook_preview prints ingredients table to stdout."""
-    from autoskillit.cli._prompts import show_cook_preview
+    from autoskillit.cli._preview import show_cook_preview
     from autoskillit.recipe.io import _parse_recipe
 
     monkeypatch.setattr(
@@ -183,7 +183,7 @@ def test_show_cook_preview_prints_table(monkeypatch, tmp_path, capsys):
 
 def test_show_cook_preview_no_diagram(monkeypatch, tmp_path, capsys):
     """show_cook_preview works when no diagram file exists."""
-    from autoskillit.cli._prompts import show_cook_preview
+    from autoskillit.cli._preview import show_cook_preview
     from autoskillit.recipe.io import _parse_recipe
 
     monkeypatch.setattr(
@@ -216,7 +216,7 @@ def test_show_cook_preview_no_diagram(monkeypatch, tmp_path, capsys):
 def test_show_cook_preview_uses_resolved_base_branch_for_smoke_test(monkeypatch, capsys):
     """T8: show_cook_preview renders the config-resolved base_branch for smoke-test."""
     import autoskillit.recipe._api as api_mod
-    from autoskillit.cli._prompts import show_cook_preview
+    from autoskillit.cli._preview import show_cook_preview
     from autoskillit.core import pkg_root
     from autoskillit.recipe.io import find_recipe_by_name, load_recipe
 
@@ -331,7 +331,7 @@ def test_show_cook_preview_line_width_bounded_with_implementation_recipe(tmp_pat
     the real implementation.yaml with its 220-char run_mode description."""
     import re
 
-    from autoskillit.cli._prompts import show_cook_preview
+    from autoskillit.cli._preview import show_cook_preview
     from autoskillit.core import pkg_root
     from autoskillit.recipe.io import find_recipe_by_name, load_recipe
 
@@ -717,7 +717,7 @@ def test_show_cook_preview_no_mermaid_in_output(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """T-PREVIEW-FORMAT: show_cook_preview must not leak Mermaid syntax to terminal."""
-    from autoskillit.cli._prompts import show_cook_preview
+    from autoskillit.cli._preview import show_cook_preview
     from autoskillit.core import pkg_root
     from autoskillit.recipe.io import find_recipe_by_name, load_recipe
 

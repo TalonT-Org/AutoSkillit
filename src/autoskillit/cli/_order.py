@@ -271,7 +271,8 @@ def order(
             else:
                 return
 
-    from autoskillit.cli._prompts import _COOK_GREETINGS, show_cook_preview
+    from autoskillit.cli._preview import show_cook_preview
+    from autoskillit.cli._prompts import _COOK_GREETINGS
 
     _itable = _get_ingredients_table(recipe, _match, Path.cwd())
     show_cook_preview(recipe, parsed, _recipes_dir_for(_match), Path.cwd())

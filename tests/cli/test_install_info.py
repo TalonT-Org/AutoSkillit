@@ -355,14 +355,14 @@ def test_upgrade_command_unknown_and_local_path_returns_none(
 
 @pytest.mark.parametrize("rev", ["v0.7.75", "0.7.75", "v1.0", "1.0.0.0"])
 def test_is_release_tag_positive(rev: str) -> None:
-    from autoskillit.cli._install_info import _is_release_tag
+    from autoskillit.core._install_detect import _is_release_tag
 
     assert _is_release_tag(rev) is True
 
 
 @pytest.mark.parametrize("rev", ["develop", "main", "stable", "feature-foo", "v", "v0.7.75-rc1"])
 def test_is_release_tag_negative(rev: str) -> None:
-    from autoskillit.cli._install_info import _is_release_tag
+    from autoskillit.core._install_detect import _is_release_tag
 
     assert _is_release_tag(rev) is False
 
@@ -374,7 +374,7 @@ def test_is_release_tag_negative(rev: str) -> None:
 
 @pytest.mark.parametrize("rev", [None, "main", "stable", "v0.7.75", "0.9.300", ""])
 def test_is_stable_track_true(rev: str | None) -> None:
-    from autoskillit.cli._install_info import _is_stable_track
+    from autoskillit.core._install_detect import _is_stable_track
 
     assert _is_stable_track(rev) is True
 
@@ -384,7 +384,7 @@ def test_is_stable_track_true(rev: str | None) -> None:
     ["develop", "integration", "feature-foo", "staging", "release-candidate", "develops"],
 )
 def test_is_stable_track_false(rev: str) -> None:
-    from autoskillit.cli._install_info import _is_stable_track
+    from autoskillit.core._install_detect import _is_stable_track
 
     assert _is_stable_track(rev) is False
 

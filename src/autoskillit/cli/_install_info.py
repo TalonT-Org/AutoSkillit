@@ -7,14 +7,12 @@ that drive the unified update check.
 
 from __future__ import annotations
 
-import json
-import re
 from dataclasses import dataclass
 from datetime import timedelta
 from enum import StrEnum
 from pathlib import Path
 
-from autoskillit.core import get_logger
+from autoskillit.core import _is_stable_track, get_logger, parse_direct_url
 
 logger = get_logger(__name__)
 
@@ -53,28 +51,17 @@ def detect_install() -> InstallInfo:
     """
     _unknown = InstallInfo(InstallType.UNKNOWN, None, None, None, None)
     try:
-        import importlib.metadata
-
-        dist = importlib.metadata.Distribution.from_name("autoskillit")
-        raw = dist.read_text("direct_url.json")
-        if not raw:
-            return _unknown
-
-        data = json.loads(raw)
-
-        vcs_info = data.get("vcs_info", {})
-        if isinstance(vcs_info, dict) and vcs_info.get("vcs") == "git":
+        info = parse_direct_url()
+        url = info["url"] or ""
+        if info["install_type"] == "git-vcs":
             return InstallInfo(
                 install_type=InstallType.GIT_VCS,
-                commit_id=vcs_info.get("commit_id") or None,
-                requested_revision=vcs_info.get("requested_revision") or None,
-                url=data.get("url") or None,
+                commit_id=info["commit_id"],
+                requested_revision=info["requested_revision"],
+                url=url or None,
                 editable_source=None,
             )
-
-        dir_info = data.get("dir_info", {})
-        url = data.get("url", "")
-        if isinstance(dir_info, dict) and dir_info.get("editable") is True:
+        if info["install_type"] == "local-editable":
             if isinstance(url, str) and url.startswith("file://"):
                 src_path = url[len("file://") :]
                 return InstallInfo(
@@ -84,30 +71,18 @@ def detect_install() -> InstallInfo:
                     url=url,
                     editable_source=Path(src_path),
                 )
-
-        if isinstance(url, str) and url.startswith("file://"):
+        if info["install_type"] == "local-path":
             return InstallInfo(
                 install_type=InstallType.LOCAL_PATH,
                 commit_id=None,
                 requested_revision=None,
-                url=url,
+                url=url or None,
                 editable_source=None,
             )
-
         return _unknown
-
     except Exception:
         logger.debug("install classification failed", exc_info=True)
         return _unknown
-
-
-def _is_release_tag(rev: str) -> bool:
-    """Return True if ``rev`` looks like a version tag (e.g. 'v0.7.75', '0.7.75')."""
-    return bool(re.fullmatch(r"v?\d+(\.\d+)*", rev))
-
-
-def _is_stable_track(rev: str | None) -> bool:
-    return not rev or rev in ("main", "stable") or _is_release_tag(rev)
 
 
 def classify_track(info: InstallInfo) -> InstallTrack:

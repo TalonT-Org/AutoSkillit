@@ -1,4 +1,4 @@
-"""Tests for core/_install_detect.py — editable install detection."""
+"""Tests for core/_install_detect.py — install-type detection."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ def test_is_dev_install_editable_returns_true(monkeypatch: pytest.MonkeyPatch) -
     assert is_dev_install() is True
 
 
-def test_is_dev_install_git_vcs_returns_false(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_is_dev_install_git_vcs_stable_returns_false(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = json.dumps(
         {
             "url": "https://github.com/TalonT-Org/AutoSkillit.git",
@@ -41,6 +41,37 @@ def test_is_dev_install_git_vcs_returns_false(monkeypatch: pytest.MonkeyPatch) -
     from autoskillit.core._install_detect import is_dev_install
 
     assert is_dev_install() is False
+
+
+@pytest.mark.parametrize(
+    "revision, expected",
+    [
+        ("develop", True),
+        ("feature-foo", True),
+        ("integration", True),
+        ("main", False),
+        ("stable", False),
+        ("v1.0.0", False),
+        ("v0.9.300", False),
+        (None, False),
+    ],
+)
+def test_is_dev_install_git_vcs_revision_matrix(
+    monkeypatch: pytest.MonkeyPatch, revision: str | None, expected: bool
+) -> None:
+    vcs_info: dict = {"vcs": "git", "commit_id": "abc123"}
+    if revision is not None:
+        vcs_info["requested_revision"] = revision
+    payload = json.dumps(
+        {"url": "https://github.com/TalonT-Org/AutoSkillit.git", "vcs_info": vcs_info}
+    )
+    monkeypatch.setattr(
+        "importlib.metadata.Distribution.from_name",
+        lambda _name: _fake_dist(payload),
+    )
+    from autoskillit.core._install_detect import is_dev_install
+
+    assert is_dev_install() is expected
 
 
 def test_is_dev_install_local_path_returns_false(monkeypatch: pytest.MonkeyPatch) -> None:

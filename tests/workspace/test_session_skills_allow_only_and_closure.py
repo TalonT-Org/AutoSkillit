@@ -6,12 +6,23 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import FEATURE_REGISTRY
 from autoskillit.workspace.session_skills import (
     DefaultSessionSkillManager,
     SkillsDirectoryProvider,
 )
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
+
+_FEATURE_SKILL_CATEGORY_PARAMS = [
+    pytest.param(feat_name, cat, id=f"{feat_name}-{cat}")
+    for feat_name, feat_def in FEATURE_REGISTRY.items()
+    for cat in feat_def.skill_categories
+]
+assert len(_FEATURE_SKILL_CATEGORY_PARAMS) > 0, (
+    "FEATURE_REGISTRY has no entries with skill_categories — "
+    "test_allow_only_overrides_all_feature_registry_entries would be silently skipped"
+)
 
 
 def _make_synthetic_provider(
@@ -111,7 +122,7 @@ class TestInitSessionAllowOnly:
         names = {p.parent.name for p in skills_base.glob("*/SKILL.md")}
         assert names == {"alpha", "beta", "gamma"}
 
-    def test_allow_only_intersects_effective_disabled_disabled_wins(self, tmp_path: Path) -> None:
+    def test_allow_only_does_not_override_explicit_subsets_disabled(self, tmp_path: Path) -> None:
         from tests._helpers import make_subsetsconfig, make_test_config
 
         provider = _make_synthetic_provider(
@@ -175,6 +186,208 @@ class TestInitSessionAllowOnly:
             if entry.get("event") == "init_session_allow_only_skip"
         }
         assert skipped == {"beta", "gamma"}
+
+    def test_allow_only_overrides_feature_gate_for_explicitly_requested_skills(
+        self, tmp_path: Path
+    ) -> None:
+        from tests._helpers import make_test_config
+
+        provider = _make_synthetic_provider(
+            tmp_path / "skills",
+            {"planner-skill": {"categories": ["planner"]}},
+        )
+        root = tmp_path / "sessions"
+        root.mkdir()
+        mgr = DefaultSessionSkillManager(provider, ephemeral_root=root)
+        config = make_test_config(features={}, experimental_enabled=False)
+        session_path = mgr.init_session(
+            "s-feat-bypass",
+            allow_only=frozenset({"planner-skill"}),
+            config=config,
+        )
+
+        skills_base = session_path / ".claude" / "skills"
+        assert (skills_base / "planner-skill" / "SKILL.md").exists(), (
+            "planner-skill must be written when allow_only explicitly requests it, "
+            "even though the planner feature gate is off (experimental_enabled=False)"
+        )
+
+    def test_allow_only_nonempty_but_zero_skills_raises(self, tmp_path: Path) -> None:
+        provider = _make_synthetic_provider(
+            tmp_path / "skills",
+            {"alpha": {}, "beta": {}},
+        )
+        root = tmp_path / "sessions"
+        root.mkdir()
+        mgr = DefaultSessionSkillManager(provider, ephemeral_root=root)
+        with pytest.raises(RuntimeError, match="allow_only") as exc_info:
+            mgr.init_session("s-zero", allow_only=frozenset({"ghost-skill"}))
+        assert "zero skills" in str(exc_info.value)
+
+    @pytest.mark.parametrize("feature_name,category", _FEATURE_SKILL_CATEGORY_PARAMS)
+    def test_allow_only_overrides_all_feature_registry_entries(
+        self, tmp_path: Path, feature_name: str, category: str
+    ) -> None:
+        from tests._helpers import make_test_config
+
+        provider = _make_synthetic_provider(
+            tmp_path / "skills",
+            {"test-skill": {"categories": [category]}},
+        )
+        root = tmp_path / "sessions"
+        root.mkdir()
+        mgr = DefaultSessionSkillManager(provider, ephemeral_root=root)
+        config = make_test_config(features={feature_name: False}, experimental_enabled=False)
+        session_path = mgr.init_session(
+            "s-feat-registry",
+            allow_only=frozenset({"test-skill"}),
+            config=config,
+        )
+
+        skills_base = session_path / ".claude" / "skills"
+        assert (skills_base / "test-skill" / "SKILL.md").exists(), (
+            f"test-skill (category={category!r}) must be written when allow_only explicitly "
+            f"requests it, even though feature {feature_name!r} is disabled"
+        )
+
+
+_CROSS_AXIS_PARAMS = [
+    # (allow_only, feature_enabled, subsets_disabled, cook_session, expected_target_written)
+    # allow_only=None cases
+    pytest.param(None, True, [], False, True, id="ao-none_feat-on_disabled-no_cook-no"),
+    pytest.param(None, True, ["planner"], False, False, id="ao-none_feat-on_disabled-yes_cook-no"),
+    pytest.param(None, False, [], False, False, id="ao-none_feat-off_disabled-no_cook-no"),
+    pytest.param(
+        None, False, ["planner"], False, False, id="ao-none_feat-off_disabled-yes_cook-no"
+    ),
+    pytest.param(None, True, [], True, True, id="ao-none_feat-on_disabled-no_cook-yes"),
+    pytest.param(None, True, ["planner"], True, True, id="ao-none_feat-on_disabled-yes_cook-yes"),
+    pytest.param(None, False, [], True, True, id="ao-none_feat-off_disabled-no_cook-yes"),
+    pytest.param(
+        None, False, ["planner"], True, True, id="ao-none_feat-off_disabled-yes_cook-yes"
+    ),
+    # allow_only=frozenset({"target","sibling"}) cases
+    pytest.param(
+        frozenset({"target", "sibling"}),
+        True,
+        [],
+        False,
+        True,
+        id="ao-set_feat-on_disabled-no_cook-no",
+    ),
+    pytest.param(
+        frozenset({"target", "sibling"}),
+        True,
+        ["planner"],
+        False,
+        False,
+        id="ao-set_feat-on_disabled-yes_cook-no",
+    ),
+    pytest.param(
+        frozenset({"target", "sibling"}),
+        False,
+        [],
+        False,
+        True,
+        id="ao-set_feat-off_disabled-no_cook-no",  # THE BUG CASE
+    ),
+    pytest.param(
+        frozenset({"target", "sibling"}),
+        False,
+        ["planner"],
+        False,
+        False,
+        id="ao-set_feat-off_disabled-yes_cook-no",
+    ),
+    pytest.param(
+        frozenset({"target", "sibling"}),
+        True,
+        [],
+        True,
+        True,
+        id="ao-set_feat-on_disabled-no_cook-yes",
+    ),
+    pytest.param(
+        frozenset({"target", "sibling"}),
+        True,
+        ["planner"],
+        True,
+        True,
+        id="ao-set_feat-on_disabled-yes_cook-yes",
+    ),
+    pytest.param(
+        frozenset({"target", "sibling"}),
+        False,
+        [],
+        True,
+        True,
+        id="ao-set_feat-off_disabled-no_cook-yes",
+    ),
+    pytest.param(
+        frozenset({"target", "sibling"}),
+        False,
+        ["planner"],
+        True,
+        True,
+        id="ao-set_feat-off_disabled-yes_cook-yes",
+    ),
+]
+
+
+class TestCrossAxisGatingMatrix:
+    """Cross-axis parametrized test matrix: allow_only × feature_gate × subsets.disabled × cook."""
+
+    @pytest.mark.parametrize(
+        "allow_only,feature_enabled,subsets_disabled,cook_session,expected_target_written",
+        _CROSS_AXIS_PARAMS,
+    )
+    def test_cross_axis_gating_matrix(
+        self,
+        tmp_path: Path,
+        allow_only: frozenset[str] | None,
+        feature_enabled: bool,
+        subsets_disabled: list[str],
+        cook_session: bool,
+        expected_target_written: bool,
+    ) -> None:
+        from tests._helpers import make_subsetsconfig, make_test_config
+
+        provider = _make_synthetic_provider(
+            tmp_path / "skills",
+            {"target": {"categories": ["planner"]}, "sibling": {}},
+        )
+        root = tmp_path / "sessions"
+        root.mkdir()
+        mgr = DefaultSessionSkillManager(provider, ephemeral_root=root)
+
+        features = {"planner": True} if feature_enabled else {}
+        config = make_test_config(
+            features=features,
+            experimental_enabled=False,
+            subsets=make_subsetsconfig(disabled=subsets_disabled),
+        )
+
+        session_path = mgr.init_session(
+            "s-matrix",
+            config=config,
+            allow_only=allow_only,
+            cook_session=cook_session,
+        )
+
+        skills_base = session_path / ".claude" / "skills"
+        target_written = (skills_base / "target").exists()
+        assert target_written == expected_target_written, (
+            f"target (category=planner) written={target_written!r}, "
+            f"expected={expected_target_written!r} for "
+            f"allow_only={allow_only!r}, feature_enabled={feature_enabled!r}, "
+            f"subsets_disabled={subsets_disabled!r}, cook_session={cook_session!r}"
+        )
+        sibling_written = (skills_base / "sibling").exists()
+        assert sibling_written, (
+            f"sibling (no categories) must always be written — "
+            f"allow_only={allow_only!r}, feature_enabled={feature_enabled!r}, "
+            f"subsets_disabled={subsets_disabled!r}, cook_session={cook_session!r}"
+        )
 
 
 class TestComputeSkillClosure:

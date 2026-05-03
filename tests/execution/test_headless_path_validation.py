@@ -359,7 +359,7 @@ class TestOutputPathTokensDerivedFromContracts:
             # planner-refine-phases output
             "refined_plan_path",
             # planner-refine-assignments output
-            "refined_assignments_path",
+            "phase_refined_path",
             # planner-refine-wps output
             "refined_wps_path",
             # planner-validate-task-alignment output

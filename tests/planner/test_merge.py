@@ -558,7 +558,7 @@ def test_merge_tier_results_writes_refine_contexts_for_assignments(tmp_path):
     out = tmp_path / "combined_assignments.json"
     result = merge_tier_results(str(results_dir), str(out), "assignments")
     assert "refine_context_paths" in result
-    paths = json.loads(result["refine_context_paths"])
+    paths = [p for p in result["refine_context_paths"].split(",") if p.strip()]
     assert len(paths) == 2
     p1_ctx = tmp_path / "refine_contexts" / "context_P1.json"
     p2_ctx = tmp_path / "refine_contexts" / "context_P2.json"

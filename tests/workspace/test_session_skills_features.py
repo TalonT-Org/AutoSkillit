@@ -133,3 +133,20 @@ def test_non_cook_session_still_suppresses_feature_gated_skills(tmp_path: Path) 
     assert "make-campaign" not in skill_names, (
         "Non-cook session with fleet=False must suppress make-campaign"
     )
+
+
+def test_feature_gate_suppresses_when_allow_only_is_none(tmp_path: Path) -> None:
+    """Feature gate still suppresses planner skills when allow_only=None."""
+    from tests._helpers import make_test_config
+
+    config = make_test_config(features={}, experimental_enabled=False)
+    provider = SkillsDirectoryProvider()
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
+    session_path = mgr.init_session(
+        "feat-gate-allow-none", cook_session=False, config=config, allow_only=None
+    )
+    skill_names = {p.parent.name for p in session_path.glob(".claude/skills/*/SKILL.md")}
+    assert "planner-elaborate-phase" not in skill_names, (
+        "planner-elaborate-phase must be suppressed by the planner feature gate "
+        "when allow_only=None (no orchestrator-requested override)"
+    )

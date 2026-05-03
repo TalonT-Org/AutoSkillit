@@ -63,6 +63,7 @@ class TestRunSkillSessionOutcome:
                 "errors": ["Max turns reached"],
             }
         )
+        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx.runner.push(_make_result(1, stdout, ""))
         result = json.loads(await run_skill("/investigate plan.md", "/tmp"))
         assert result["needs_retry"] is True
@@ -80,6 +81,7 @@ class TestRunSkillSessionOutcome:
                 "session_id": "s1",
             }
         )
+        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx.runner.push(_make_result(1, stdout, ""))
         result = json.loads(await run_skill("/investigate plan.md", "/tmp"))
         assert result["needs_retry"] is True
@@ -93,7 +95,7 @@ class TestRunSkillSessionOutcome:
         assistant = json.dumps(
             {
                 "type": "assistant",
-                "message": {"content": [{"type": "tool_use", "name": "Edit", "id": "tu1"}]},
+                "message": {"content": [{"type": "tool_use", "name": "Read", "id": "tu1"}]},
             }
         )
         result_record = json.dumps(
@@ -106,6 +108,7 @@ class TestRunSkillSessionOutcome:
             }
         )
         stdout = assistant + "\n" + result_record
+        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx.runner.push(_make_result(0, stdout, ""))
         result = json.loads(await run_skill("/investigate plan.md", "/tmp"))
         assert result["needs_retry"] is False
@@ -123,6 +126,7 @@ class TestRunSkillSessionOutcome:
                 "errors": ["crashed"],
             }
         )
+        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx.runner.push(_make_result(1, stdout, ""))
         result = json.loads(await run_skill("/investigate plan.md", "/tmp"))
         assert result["needs_retry"] is False
@@ -130,6 +134,7 @@ class TestRunSkillSessionOutcome:
     @pytest.mark.anyio
     async def test_unparseable_stdout_not_retriable(self, tool_ctx):
         """Non-JSON stdout -> needs_retry=False."""
+        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx.runner.push(_make_result(1, "crash dump", "segfault"))
         result = json.loads(await run_skill("/investigate plan.md", "/tmp"))
         assert result["needs_retry"] is False
@@ -150,6 +155,7 @@ class TestRunSkillAgentResult:
                 "session_id": "s1",
             }
         )
+        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx.runner.push(_make_result(1, stdout, ""))
         result = json.loads(await run_skill("/retry-worktree plan.md", "/tmp"))
         assert "prompt is too long" not in result["result"].lower()
@@ -167,6 +173,7 @@ class TestRunSkillAgentResult:
                 "session_id": "s1",
             }
         )
+        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx.runner.push(_make_result(0, stdout, ""))
         result = json.loads(await run_skill("/investigate plan.md", "/tmp"))
         assert result["result"] == "Done."
@@ -219,6 +226,7 @@ class TestRunSkillFields:
                 "session_id": "s1",
             }
         )
+        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx.runner.push(_make_result(0, stdout, ""))
         result = json.loads(await run_skill("/investigate error", "/tmp"))
         assert result["needs_retry"] is False
@@ -236,6 +244,7 @@ class TestRunSkillFields:
                 "session_id": "s1",
             }
         )
+        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx.runner.push(_make_result(1, stdout, ""))
         result = json.loads(await run_skill("/investigate error", "/tmp"))
         assert result["needs_retry"] is True

@@ -66,6 +66,7 @@ class TestRunSkillFailurePaths:
                 "session_id": "s1",
             }
         )
+        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx.runner.push(_make_result(1, stdout, ""))
         result = json.loads(await run_skill("/investigate error", "/tmp"))
         assert result["session_id"] == "s1"
@@ -83,6 +84,7 @@ class TestRunSkillFailurePaths:
                 "session_id": "s1",
             }
         )
+        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx.runner.push(_make_result(1, stdout, ""))
         result = json.loads(await run_skill("/investigate error", "/tmp"))
         assert result["is_error"] is True
@@ -92,6 +94,7 @@ class TestRunSkillFailurePaths:
     @pytest.mark.anyio
     async def test_handles_empty_stdout(self, tool_ctx):
         """run_skill returns error result when stdout is empty."""
+        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx.runner.push(
             _make_result(1, "", "segfault", channel_confirmation=ChannelConfirmation.UNMONITORED)
         )
@@ -104,6 +107,7 @@ class TestRunSkillFailurePaths:
     @pytest.mark.anyio
     async def test_empty_stdout_exit_zero_is_retriable(self, tool_ctx):
         """Infrastructure failure (empty stdout, exit 0) is retriable with stderr."""
+        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx.runner.push(
             _make_result(
                 0, "", "session dropped", channel_confirmation=ChannelConfirmation.UNMONITORED
@@ -525,6 +529,7 @@ class TestRunHeadlessCoreFlushTelemetry:
             calls.append(kwargs)
 
         monkeypatch.setattr(sl_mod, "flush_session_log", mock_flush)
+        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx.runner.push(_make_result(returncode=0, stdout=self._make_ndjson_with_usage()))
         await run_skill("/investigate foo", "/tmp", step_name="implement")
         assert len(calls) == 1
@@ -546,6 +551,7 @@ class TestRunHeadlessCoreFlushTelemetry:
             calls.append(kwargs)
 
         monkeypatch.setattr(sl_mod, "flush_session_log", mock_flush)
+        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot
         # Stale result with session_id resolved from Channel B
         stale_result = SubprocessResult(
             returncode=-1,

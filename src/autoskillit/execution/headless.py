@@ -205,6 +205,7 @@ async def _execute_claude_headless(
     on_spawn: Callable[[int, int], None] | None = None,
     skip_clone_guard: bool = False,
     readonly_skill: bool = False,
+    write_watch_dirs: Sequence[Path] = (),
 ) -> SkillResult:
     """Shared subprocess execution for headless Claude sessions.
 
@@ -253,13 +254,20 @@ async def _execute_claude_headless(
     ):
         _clone_snapshot = await snapshot_clone_state(cwd, runner)
 
-    _skill_temp_dir = _resolve_skill_temp_dir(cwd, skill_command)
-    _temp_snapshot_pre: set[str] = set()
-    if _skill_temp_dir and _skill_temp_dir.is_dir():
-        try:
-            _temp_snapshot_pre = {e.name for e in os.scandir(_skill_temp_dir)}
-        except OSError:
-            _temp_snapshot_pre = set()
+    _watch_dirs: list[Path] = list(write_watch_dirs) if write_watch_dirs else []
+    if not _watch_dirs:
+        _default = _resolve_skill_temp_dir(cwd, skill_command)
+        if _default:
+            _watch_dirs.append(_default)
+
+    _temp_snapshots_pre: dict[Path, set[str]] = {}
+    for _wd in _watch_dirs:
+        if _wd.is_dir():
+            try:
+                _temp_snapshots_pre[_wd] = {e.name for e in os.scandir(_wd)}
+            except OSError:
+                logger.warning("watch_dir_pre_scan_failed", watch_dir=str(_wd), exc_info=True)
+                _temp_snapshots_pre[_wd] = set()
 
     _pre_session_sha = _capture_git_head_sha(cwd)
     _result: SubprocessResult | None = None
@@ -367,12 +375,17 @@ async def _execute_claude_headless(
     )
 
     _fs_writes_detected = False
-    if _skill_temp_dir and _skill_temp_dir.is_dir():
-        try:
-            _temp_snapshot_post = {e.name for e in os.scandir(_skill_temp_dir)}
-        except OSError:
-            _temp_snapshot_post = set()
-        _fs_writes_detected = bool(_temp_snapshot_post - _temp_snapshot_pre)
+    for _wd in _watch_dirs:
+        if _wd.is_dir():
+            try:
+                _post = {e.name for e in os.scandir(_wd)}
+            except OSError:
+                logger.warning("watch_dir_post_scan_failed", watch_dir=str(_wd), exc_info=True)
+                _post = set()
+            _pre = _temp_snapshots_pre.get(_wd, set())
+            if _post - _pre:
+                _fs_writes_detected = True
+                break
 
     audit_count_before = len(ctx.audit.get_report())
     skill_result = _build_skill_result(
@@ -534,6 +547,7 @@ async def run_headless_core(
     recipe_version: str = "",
     allowed_write_prefix: str = "",
     readonly_skill: bool = False,
+    write_watch_dirs: Sequence[Path] = (),
 ) -> SkillResult:
     """Shared headless runner used by run_skill.
 
@@ -601,6 +615,7 @@ async def run_headless_core(
             recipe_composite_hash=recipe_composite_hash,
             recipe_version=recipe_version,
             readonly_skill=readonly_skill,
+            write_watch_dirs=write_watch_dirs,
         )
 
 
@@ -632,6 +647,7 @@ class DefaultHeadlessExecutor:
         recipe_version: str = "",
         allowed_write_prefix: str = "",
         readonly_skill: bool = False,
+        write_watch_dirs: Sequence[Path] = (),
     ) -> SkillResult:
         cfg = self._ctx.config.run_skill
         effective_timeout = timeout if timeout is not None else cfg.timeout
@@ -657,6 +673,7 @@ class DefaultHeadlessExecutor:
             recipe_version=recipe_version,
             allowed_write_prefix=allowed_write_prefix,
             readonly_skill=readonly_skill,
+            write_watch_dirs=write_watch_dirs,
         )
 
     async def dispatch_food_truck(

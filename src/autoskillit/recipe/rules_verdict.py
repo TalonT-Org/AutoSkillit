@@ -12,14 +12,12 @@ from __future__ import annotations
 
 import re
 
-from autoskillit.core import Severity, get_logger
+from autoskillit.core import Severity, get_logger, resolve_skill_name
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.contracts import load_bundled_manifest
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 logger = get_logger(__name__)
-
-_SKILL_NAME_RE = re.compile(r"/autoskillit:([\w-]+)")
 
 
 def _get_allowed_values_for_skill(skill_name: str) -> dict[str, list[str]]:
@@ -37,12 +35,6 @@ def _get_allowed_values_for_skill(skill_name: str) -> dict[str, list[str]]:
         if "allowed_values" in output:
             result[output["name"]] = output["allowed_values"]
     return result
-
-
-def _extract_skill_name(skill_command: str) -> str | None:
-    """Extract skill name from a skill_command like /autoskillit:review-pr ..."""
-    m = _SKILL_NAME_RE.match(skill_command.strip())
-    return m.group(1) if m else None
 
 
 def _is_explicit_condition(when: str | None, value: str) -> bool:
@@ -79,7 +71,7 @@ def _check_unrouted_verdict_values(ctx: ValidationContext) -> list[RuleFinding]:
         if step.tool != "run_skill":
             continue
         skill_command = (step.with_args or {}).get("skill_command", "")
-        skill_name = _extract_skill_name(skill_command)
+        skill_name = resolve_skill_name(skill_command)
         if not skill_name:
             continue
 
@@ -166,7 +158,7 @@ def _check_verdict_routing_asymmetry(ctx: ValidationContext) -> list[RuleFinding
         if step.tool != "run_skill":
             continue
         skill_command = (step.with_args or {}).get("skill_command", "")
-        skill_name = _extract_skill_name(skill_command)
+        skill_name = resolve_skill_name(skill_command)
         if not skill_name:
             continue
 
@@ -243,7 +235,7 @@ def _check_on_result_values_in_allowed_values(ctx: ValidationContext) -> list[Ru
         if step.tool != "run_skill":
             continue
         skill_command = (step.with_args or {}).get("skill_command", "")
-        skill_name = _extract_skill_name(skill_command)
+        skill_name = resolve_skill_name(skill_command)
         if not skill_name:
             continue
 

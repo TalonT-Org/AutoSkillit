@@ -52,6 +52,7 @@ class HeadlessExecutor(Protocol):
         recipe_version: str = "",
         allowed_write_prefix: str = "",
         readonly_skill: bool = False,
+        write_watch_dirs: Sequence[Path] = (),
     ) -> SkillResult: ...
 
     async def dispatch_food_truck(

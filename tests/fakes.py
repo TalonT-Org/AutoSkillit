@@ -79,6 +79,7 @@ class ExecutorCall:
     recipe_version: str | None = None
     allowed_write_prefix: str = ""
     readonly_skill: bool = False
+    write_watch_dirs: tuple[Any, ...] = ()
 
 
 @dataclasses.dataclass
@@ -156,6 +157,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         recipe_version: str | None = None,
         allowed_write_prefix: str = "",
         readonly_skill: bool = False,
+        write_watch_dirs: Sequence[Any] = (),
     ) -> SkillResult:
         self.calls.append(
             ExecutorCall(
@@ -178,6 +180,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 recipe_version=recipe_version,
                 allowed_write_prefix=allowed_write_prefix,
                 readonly_skill=readonly_skill,
+                write_watch_dirs=tuple(write_watch_dirs),
             )
         )
         if self._queue:

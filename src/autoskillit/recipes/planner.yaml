@@ -75,6 +75,7 @@ steps:
     with:
       skill_command: "/autoskillit:planner-analyze ${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"
+      output_dir: "${{ context.planner_dir }}"
     on_success: extract_domain
     on_failure: escalate_stop
 
@@ -86,6 +87,7 @@ steps:
         ${{ context.planner_dir }}/analysis.json
         "${{ context.task_file_path }}"
       cwd: "${{ inputs.source_dir }}"
+      output_dir: "${{ context.planner_dir }}"
     on_success: generate_phases
     on_failure: generate_phases
 
@@ -98,6 +100,7 @@ steps:
         ${{ context.planner_dir }}/domain_knowledge.md
         "${{ context.task_file_path }}"
       cwd: "${{ inputs.source_dir }}"
+      output_dir: "${{ context.planner_dir }}"
     capture:
       phase_manifest_path: "${{ result.phase_manifest_path }}"
     on_success: build_plan_snapshot
@@ -125,6 +128,7 @@ steps:
     with:
       skill_command: "/autoskillit:planner-elaborate-phase ${{ context.plan_snapshot_path }} {phase_id} ${{ context.planner_dir }}/phases"
       cwd: "${{ inputs.source_dir }}"
+      output_dir: "${{ context.planner_dir }}"
       dispatch_items: "${{ context.phase_ids }}"
     capture_list:
       elab_result_path: "${{ result.elab_result_path }}"
@@ -156,6 +160,7 @@ steps:
     with:
       skill_command: "/autoskillit:planner-refine-phases ${{ context.combined_phases_path }} ${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"
+      output_dir: "${{ context.planner_dir }}"
     capture:
       refined_plan_path: "${{ result.refined_plan_path }}"
     on_success: expand_assignments
@@ -179,6 +184,7 @@ steps:
     with:
       skill_command: "/autoskillit:planner-elaborate-assignments {context_path} ${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"
+      output_dir: "${{ context.planner_dir }}"
       dispatch_items: "${{ context.assignment_context_paths }}"
     capture_list:
       phase_assignments_result_dir: "${{ result.phase_assignments_result_dir }}"
@@ -213,6 +219,7 @@ steps:
         ${{ context.refined_plan_path }}
         ${{ context.planner_dir }}
       cwd: "${{ inputs.source_dir }}"
+      output_dir: "${{ context.planner_dir }}"
     capture:
       refined_assignments_path: "${{ result.refined_assignments_path }}"
     on_success: expand_wps
@@ -236,6 +243,7 @@ steps:
     with:
       skill_command: "/autoskillit:planner-elaborate-wps {context_path} ${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"
+      output_dir: "${{ context.planner_dir }}"
       dispatch_items: "${{ context.wp_context_paths }}"
     capture_list:
       phase_wps_result_dir: "${{ result.phase_wps_result_dir }}"
@@ -281,6 +289,7 @@ steps:
         ${{ context.refined_assignments_path }}
         ${{ context.planner_dir }}
       cwd: "${{ inputs.source_dir }}"
+      output_dir: "${{ context.planner_dir }}"
     capture:
       refined_wps_path: "${{ result.refined_wps_path }}"
     on_success: consolidate_wps_analyze
@@ -294,6 +303,7 @@ steps:
         ${{ context.refined_wps_path }}
         ${{ context.planner_dir }}
       cwd: "${{ inputs.source_dir }}"
+      output_dir: "${{ context.planner_dir }}"
     on_success: consolidate_wps_merge
     on_failure: consolidate_wps_merge
     note: >
@@ -321,6 +331,7 @@ steps:
         ${{ context.refined_plan_path }}
         ${{ context.planner_dir }}
       cwd: "${{ inputs.source_dir }}"
+      output_dir: "${{ context.planner_dir }}"
     capture:
       alignment_findings_path: "${{ result.alignment_findings_path }}"
     on_success: reconcile_deps
@@ -333,6 +344,7 @@ steps:
     with:
       skill_command: "/autoskillit:planner-reconcile-deps ${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"
+      output_dir: "${{ context.planner_dir }}"
       consolidated_wps_path: "${{ context.consolidated_wps_path }}"
     on_success: assess_review_approach_step
     on_failure: escalate_stop
@@ -347,6 +359,7 @@ steps:
         ${{ context.consolidated_wps_path }}
         ${{ context.planner_dir }}
       cwd: "${{ inputs.source_dir }}"
+      output_dir: "${{ context.planner_dir }}"
     capture:
       review_approach_assessment_path: "${{ result.review_approach_assessment_path }}"
     on_success: validate
@@ -381,6 +394,7 @@ steps:
         ${{ context.planner_dir }}/validation.json
         ${{ context.planner_dir }}
       cwd: "${{ inputs.source_dir }}"
+      output_dir: "${{ context.planner_dir }}"
     retries: 2
     on_success: validate
     on_exhausted: escalate_stop

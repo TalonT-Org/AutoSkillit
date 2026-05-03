@@ -21,6 +21,7 @@ _TOOL_PARAMS: dict[str, frozenset[str]] = {
             "order_id",
             "stale_threshold",
             "idle_output_timeout",
+            "output_dir",
         }
     ),
     "run_cmd": frozenset({"cmd", "cwd", "timeout", "step_name"}),

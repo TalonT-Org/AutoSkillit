@@ -13,6 +13,7 @@ BUNDLED_RECIPE_NAMES = [
     "remediation",
     "implementation-groups",
     "merge-prs",
+    "full-audit",
 ]
 
 

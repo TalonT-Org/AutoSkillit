@@ -262,7 +262,7 @@ async def test_run_skill_replay_uses_snapshot_over_init_session(tool_ctx, tmp_pa
     mock_ssm.init_session.assert_not_called()
     assert len(executor.calls) == 1
     add_dir_paths = [d.path for d in executor.calls[0].add_dirs]
-    assert any("sessions" in p for p in add_dir_paths)
+    assert any(p.startswith(str(ephemeral_root)) for p in add_dir_paths)
 
 
 # --- T-RUN-SKILL-REPLAY-FALLBACK: no snapshot → init_session IS called ---

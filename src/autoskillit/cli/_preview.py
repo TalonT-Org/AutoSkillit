@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from autoskillit.recipe.loader import RecipeInfo
 
 
 def _render_pre_launch_preview(
@@ -38,7 +42,7 @@ def show_campaign_preview(
 def _pre_launch_campaign(
     campaign_name: str,
     parsed_recipe: object,
-    match: object,
+    match: RecipeInfo,
     project_dir: Path,
     *,
     is_resume: bool,
@@ -50,9 +54,9 @@ def _pre_launch_campaign(
     from autoskillit.cli._prompts import _get_ingredients_table  # noqa: PLC0415
 
     if not is_resume:
-        show_campaign_preview(campaign_name, parsed_recipe, match.path.parent, project_dir)  # type: ignore[attr-defined]
+        show_campaign_preview(campaign_name, parsed_recipe, match.path.parent, project_dir)
 
-    itable = _get_ingredients_table(campaign_name, match, project_dir)  # type: ignore[arg-type]
+    itable = _get_ingredients_table(campaign_name, match, project_dir)
     if is_resume:
         return itable, True
 

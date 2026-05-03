@@ -338,7 +338,7 @@ def test_req_imp_007_server_cli_no_unauthorized_cross_submodule_imports() -> Non
         Path("server/git.py"),
         Path("server/tools/tools_kitchen.py"),
         Path("cli/app.py"),
-        Path("cli/_cook.py"),
+        Path("cli/session/_cook.py"),
         Path("cli/_workspace.py"),
     }
     forbidden_pkgs = {"execution", "workspace", "recipe", "migration"}

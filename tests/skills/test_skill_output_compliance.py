@@ -425,19 +425,28 @@ def test_every_contracted_skill_has_emit_instruction() -> None:
 
 
 def test_contracted_path_capture_skills_includes_backslash_s_patterns() -> None:
-    """_get_contracted_path_capture_skills must return skills with \\S+-terminated patterns."""
+    """_get_contracted_path_capture_skills must return all skills with \\S+-terminated patterns."""
+    raw = yaml.safe_load(SKILL_CONTRACTS_PATH.read_text())
+    skills_data = raw.get("skills", {}) if isinstance(raw, dict) else {}
+
+    # Dynamically find skills whose contracts include \S+-terminated path-capture patterns.
+    backslash_s_pattern_re = re.compile(r"\\[Ss]\+\s*$")
+    expected: list[str] = []
+    for skill_name, contract in skills_data.items():
+        if not isinstance(contract, dict):
+            continue
+        for pattern in contract.get("expected_output_patterns", []):
+            if backslash_s_pattern_re.search(pattern):
+                expected.append(skill_name)
+                break
+
+    assert expected, "No skills with \\S+-terminated patterns found in contracts — test is vacuous"
+
     contracted = _get_contracted_path_capture_skills()
-    assert "planner-elaborate-phase" in contracted, (
-        "planner-elaborate-phase uses elab_result_path\\s*=\\s*\\S+ pattern and must be "
-        "returned by _get_contracted_path_capture_skills"
-    )
-    assert "audit-tests" in contracted, (
-        "audit-tests uses audit_report_path\\s*=\\s*\\S+ pattern and must be "
-        "returned by _get_contracted_path_capture_skills"
-    )
-    assert "bundle-local-report" in contracted, (
-        "bundle-local-report uses html_path\\s*=\\s*\\S+ pattern and must be "
-        "returned by _get_contracted_path_capture_skills"
+    missing = [s for s in expected if s not in contracted]
+    assert not missing, (
+        f"Skills with \\S+-terminated patterns not returned by "
+        f"_get_contracted_path_capture_skills: {missing}"
     )
 
 

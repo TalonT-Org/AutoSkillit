@@ -254,7 +254,6 @@ class TestBuildTestScope:
             (tests_root / d).mkdir(parents=True, exist_ok=True)
         for f in [
             "server/test_factory.py",
-            "server/test_tools_kitchen_gate.py",
             "server/test_tools_kitchen_envelope.py",
             "cli/test_cli_prompts.py",
             "cli/test_cook_order_command.py",
@@ -288,7 +287,6 @@ class TestBuildTestScope:
         assert "recipe" in result_names, "recipe missing"
         for expected in [
             "test_factory.py",
-            "test_tools_kitchen_gate.py",
             "test_tools_kitchen_envelope.py",
             "test_cli_prompts.py",
             "test_cook_order_command.py",

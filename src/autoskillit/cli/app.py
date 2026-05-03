@@ -13,7 +13,7 @@ from typing import Annotated
 import anyio
 from cyclopts import App, Parameter
 
-from autoskillit.cli._cook import cook as cook_interactive
+from autoskillit.cli.session._cook import cook as cook_interactive
 from autoskillit.cli._features import features_app
 from autoskillit.cli.fleet import fleet_app
 from autoskillit.cli._init_helpers import (
@@ -24,7 +24,7 @@ from autoskillit.cli._init_helpers import (
     _prompt_test_command,
     _register_all,
 )
-from autoskillit.cli._order import _recipes_dir_for, order
+from autoskillit.cli.session._order import _recipes_dir_for, order
 from autoskillit.cli._serve_guard import serve_with_signal_guard
 from autoskillit.cli._sessions import sessions_app
 from autoskillit.core import (
@@ -389,7 +389,7 @@ def workspace_clean(
 @recipes_app.command(name="list")
 def recipes_list():
     """List available recipes with sources."""
-    from autoskillit.cli._cook import _print_recipes_list
+    from autoskillit.cli.session._cook import _print_recipes_list
 
     _print_recipes_list()
 

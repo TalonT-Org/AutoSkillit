@@ -9,7 +9,7 @@ import shutil  # noqa: F401 — tests patch autoskillit.cli.shutil.which
 import subprocess  # noqa: F401 — tests patch autoskillit.cli.subprocess.run
 from pathlib import Path  # noqa: F401 — tests patch autoskillit.cli.Path.home
 
-from autoskillit.cli._cook import cook
+from autoskillit.cli.session._cook import cook
 from autoskillit.cli.doctor import DoctorResult
 from autoskillit.cli.fleet import fleet_campaign, fleet_dispatch, fleet_list, fleet_status
 from autoskillit.cli._hooks import _claude_settings_path

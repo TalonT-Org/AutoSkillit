@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 from autoskillit.cli._mcp_names import detect_autoskillit_mcp_prefix
 from autoskillit.cli._prompts import _build_orchestrator_prompt, _get_ingredients_table
-from autoskillit.cli._session_launch import _launch_cook_session, _write_order_entry
+from autoskillit.cli.session._session_launch import _launch_cook_session, _write_order_entry
 from autoskillit.core import (
     RecipeSource,
     atomic_write,
@@ -128,7 +128,7 @@ def order(
 
     if _resume and recipe is None:
         from autoskillit.cli._prompts import _OPEN_KITCHEN_GREETINGS
-        from autoskillit.cli._session_picker import pick_session as _pick_session
+        from autoskillit.cli.session._session_picker import pick_session as _pick_session
         from autoskillit.core import BareResume, NamedResume, NoResume
 
         if isinstance(resume_spec, BareResume):

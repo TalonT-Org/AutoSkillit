@@ -42,7 +42,7 @@ def _run_cook_session(
     project_dir: Path,
 ) -> str | None:
     """Run the cook subprocess; return session_id if a reload sentinel was written."""
-    from autoskillit.cli._reload import consume_reload_sentinel
+    from autoskillit.cli.session._reload import consume_reload_sentinel
 
     with terminal_guard():
         result = subprocess.run(cmd, env=env)
@@ -163,7 +163,7 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
         plugin_source = DirectInstall(plugin_dir=pkg_root())
 
     if isinstance(resume_spec, BareResume):
-        from autoskillit.cli._session_picker import pick_session
+        from autoskillit.cli.session._session_picker import pick_session
 
         selected_id = pick_session(SESSION_TYPE_COOK, project_dir)
         if selected_id is not None:

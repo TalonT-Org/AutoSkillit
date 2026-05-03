@@ -26,7 +26,7 @@ def _run_interactive_session(
     if shutil.which("claude") is None:
         print("ERROR: 'claude' not found. Install: https://docs.anthropic.com/en/docs/claude-code")
         sys.exit(1)
-    from autoskillit.cli._reload import consume_reload_sentinel
+    from autoskillit.cli.session._reload import consume_reload_sentinel
     from autoskillit.cli._terminal import terminal_guard
     from autoskillit.core import (
         MARKETPLACE_PREFIX,

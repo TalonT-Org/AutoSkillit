@@ -531,8 +531,6 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             # Migration file-level entries (migration/_api.py + engine.py import recipe):
             "migration/test_api.py",
             "migration/test_engine.py",
-            # Hooks file-level entries (_fmt_recipe.py imports autoskillit.recipe types):
-            "hooks/test_recipe_write_advisor.py",
             # Fleet file-level entries (5 of N import autoskillit.recipe):
             "fleet/test_fleet_e2e.py",
             "fleet/test_campaign_capture.py",
@@ -546,9 +544,6 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "skills/test_make_campaign_compliance.py",
             "skills/test_review_design_guards.py",
             "skills/test_skill_tool_syntax_contracts.py",
-            "core/test_type_constants.py",
-            "core/test_kitchen_state.py",
-            "core/test_session_registry.py",
         }
     ),
     "migration": frozenset(

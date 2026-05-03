@@ -32,11 +32,8 @@ kitchen_rules:
 
 ingredients:
   task:
-    description: "High-level task or feature description to decompose into a plan."
+    description: "Task description to decompose into a plan. Accepts either an absolute file path or inline text."
     required: true
-  task_file:
-    description: "Absolute path to a file containing the task description. Use instead of task for document-scale inputs."
-    required: false
   source_dir:
     description: "Absolute path to the repository root to analyze."
     required: true
@@ -58,6 +55,18 @@ steps:
         temp_dir: "{{AUTOSKILLIT_TEMP}}"
     capture:
       planner_dir: "${{ result.planner_dir }}"
+    on_success: resolve_task
+    on_failure: escalate_stop
+
+  resolve_task:
+    tool: run_python
+    with:
+      callable: "autoskillit.planner.resolve_task_input"
+      task: "${{ inputs.task }}"
+      planner_dir: "${{ context.planner_dir }}"
+    capture:
+      task_file_path: "${{ result.task_file_path }}"
+      task_label: "${{ result.task_label }}"
     on_success: analyze
     on_failure: escalate_stop
 
@@ -75,7 +84,7 @@ steps:
       skill_command: >
         /autoskillit:planner-extract-domain
         ${{ context.planner_dir }}/analysis.json
-        "${{ inputs.task_file }}"
+        "${{ context.task_file_path }}"
       cwd: "${{ inputs.source_dir }}"
     on_success: generate_phases
     on_failure: generate_phases
@@ -87,7 +96,7 @@ steps:
         /autoskillit:planner-generate-phases
         ${{ context.planner_dir }}/analysis.json
         ${{ context.planner_dir }}/domain_knowledge.md
-        "${{ inputs.task_file }}"
+        "${{ context.task_file_path }}"
       cwd: "${{ inputs.source_dir }}"
     capture:
       phase_manifest_path: "${{ result.phase_manifest_path }}"
@@ -103,8 +112,7 @@ steps:
       phases_dir: "${{ context.planner_dir }}/phases"
       phase_manifest_path: "${{ context.phase_manifest_path }}"
       output_path: "${{ context.planner_dir }}/plan_snapshot.json"
-      task: "${{ inputs.task }}"
-      task_file: "${{ inputs.task_file }}"
+      task_file_path: "${{ context.task_file_path }}"
       source_dir: "${{ inputs.source_dir }}"
     capture:
       plan_snapshot_path: "${{ result.snapshot_path }}"
@@ -136,8 +144,7 @@ steps:
       results_dir: "${{ context.planner_dir }}/phases"
       output_path: "${{ context.planner_dir }}/combined_plan.json"
       key: "phases"
-      task: "${{ inputs.task }}"
-      task_file: "${{ inputs.task_file }}"
+      task_file_path: "${{ context.task_file_path }}"
       source_dir: "${{ inputs.source_dir }}"
     capture:
       combined_phases_path: "${{ result.merged_path }}"
@@ -190,8 +197,7 @@ steps:
       results_dir: "${{ context.planner_dir }}/assignments"
       output_path: "${{ context.planner_dir }}/combined_assignments.json"
       key: "assignments"
-      task: "${{ inputs.task }}"
-      task_file: "${{ inputs.task_file }}"
+      task_file_path: "${{ context.task_file_path }}"
       source_dir: "${{ inputs.source_dir }}"
     capture:
       combined_assignments_path: "${{ result.merged_path }}"
@@ -258,8 +264,7 @@ steps:
       results_dir: "${{ context.planner_dir }}/work_packages"
       output_path: "${{ context.planner_dir }}/combined_wps.json"
       key: "work_packages"
-      task: "${{ inputs.task }}"
-      task_file: "${{ inputs.task_file }}"
+      task_file_path: "${{ context.task_file_path }}"
       source_dir: "${{ inputs.source_dir }}"
     capture:
       combined_wps_path: "${{ result.merged_path }}"
@@ -386,8 +391,8 @@ steps:
     with:
       callable: "autoskillit.planner.compile_plan"
       output_dir: "${{ context.planner_dir }}"
-      task: "${{ inputs.task }}"
-      task_file: "${{ inputs.task_file }}"
+      task_file_path: "${{ context.task_file_path }}"
+      task_label: "${{ context.task_label }}"
       source_dir: "${{ inputs.source_dir }}"
     on_success: done
     on_failure: escalate_stop

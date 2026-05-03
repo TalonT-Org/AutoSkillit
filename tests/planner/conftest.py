@@ -61,3 +61,9 @@ def write_json(path: Path, data: object) -> None:
     """Write ``data`` as JSON to ``path``, creating parent dirs as needed."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data))
+
+
+def write_task_file(tmp_path: Path, content: str = "test task") -> str:
+    f = tmp_path / "task_input.md"
+    f.write_text(content)
+    return str(f)

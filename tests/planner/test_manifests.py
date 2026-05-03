@@ -513,3 +513,62 @@ def test_finalize_wp_manifest_nonexistent_dir_raises(tmp_path):
 
     with pytest.raises(FileNotFoundError, match="work_packages_dir does not exist"):
         finalize_wp_manifest(str(tmp_path / "nonexistent"), str(output_dir))
+
+
+# --- resolve_task_input tests (T1a-T1e) ---
+
+
+def test_resolve_task_input_file_with_heading(tmp_path):
+    from autoskillit.planner import resolve_task_input
+
+    task_file = tmp_path / "task.md"
+    task_file.write_text("# Deploy Auth Service\n\nDetailed description...")
+    planner_dir = tmp_path / "planner"
+    planner_dir.mkdir()
+    result = resolve_task_input(str(task_file), str(planner_dir))
+    assert result["task_file_path"] == str(task_file)
+    assert result["task_label"] == "Deploy Auth Service"
+
+
+def test_resolve_task_input_file_no_heading(tmp_path):
+    from autoskillit.planner import resolve_task_input
+
+    task_file = tmp_path / "task.txt"
+    task_file.write_text("Implement the feature flag system for gradual rollout")
+    planner_dir = tmp_path / "planner"
+    planner_dir.mkdir()
+    result = resolve_task_input(str(task_file), str(planner_dir))
+    assert result["task_file_path"] == str(task_file)
+    assert result["task_label"] == "Implement the feature flag system for gradual rollout"
+
+
+def test_resolve_task_input_inline_text(tmp_path):
+    from autoskillit.planner import resolve_task_input
+
+    planner_dir = tmp_path / "planner"
+    planner_dir.mkdir()
+    result = resolve_task_input("Add dark mode toggle", str(planner_dir))
+    assert result["task_file_path"] == str(planner_dir / "task_input.md")
+    assert Path(result["task_file_path"]).read_text() == "Add dark mode toggle"
+    assert result["task_label"] == "Add dark mode toggle"
+
+
+def test_resolve_task_input_inline_with_heading(tmp_path):
+    from autoskillit.planner import resolve_task_input
+
+    planner_dir = tmp_path / "planner"
+    planner_dir.mkdir()
+    text = "# Auth Overhaul\n\nRebuild the entire authentication layer..."
+    result = resolve_task_input(text, str(planner_dir))
+    assert result["task_label"] == "Auth Overhaul"
+    assert Path(result["task_file_path"]).read_text() == text
+
+
+def test_resolve_task_input_long_inline_truncates_label(tmp_path):
+    from autoskillit.planner import resolve_task_input
+
+    planner_dir = tmp_path / "planner"
+    planner_dir.mkdir()
+    text = "A" * 120
+    result = resolve_task_input(text, str(planner_dir))
+    assert len(result["task_label"]) <= 80

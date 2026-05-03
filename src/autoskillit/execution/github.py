@@ -18,7 +18,7 @@ import httpx
 from autoskillit.core import _parse_issue_ref, get_logger
 
 if TYPE_CHECKING:
-    from autoskillit.core._type_protocols_logging import GitHubApiLog
+    from autoskillit.core.types._type_protocols_logging import GitHubApiLog
 
 logger = get_logger(__name__)
 

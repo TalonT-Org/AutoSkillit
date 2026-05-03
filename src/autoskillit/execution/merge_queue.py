@@ -53,7 +53,7 @@ from autoskillit.execution._merge_queue_repo_state import (
 from autoskillit.execution.github import github_headers, make_tracked_httpx_client
 
 if TYPE_CHECKING:
-    from autoskillit.core._type_protocols_logging import GitHubApiLog
+    from autoskillit.core.types._type_protocols_logging import GitHubApiLog
 
 logger = get_logger(__name__)
 

@@ -183,7 +183,7 @@ def patch_pr_token_summary(
     if count == 0:
         return {"success": "false", "error": "No sessions found", "sessions_loaded": "0"}
 
-    scope_kwargs: dict = {"order_id": effective_order_id} if effective_order_id else {}
+    scope_kwargs: dict[str, str] = {"order_id": effective_order_id} if effective_order_id else {}
     steps = token_log.get_report(**scope_kwargs)
     total = token_log.compute_total(**scope_kwargs)
     table = TelemetryFormatter.format_token_table(steps, total)

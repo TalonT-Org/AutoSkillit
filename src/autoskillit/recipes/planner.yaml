@@ -207,19 +207,33 @@ steps:
       source_dir: "${{ inputs.source_dir }}"
     capture:
       combined_assignments_path: "${{ result.merged_path }}"
+      refine_context_paths: "${{ result.refine_context_paths }}"
     on_success: refine_assignments
     on_failure: escalate_stop
 
   refine_assignments:
     tool: run_skill
     with:
-      skill_command: >
-        /autoskillit:planner-refine-assignments
-        ${{ context.combined_assignments_path }}
-        ${{ context.refined_plan_path }}
-        ${{ context.planner_dir }}
+      skill_command: "/autoskillit:planner-refine-assignments {context_path} ${{ context.refined_plan_path }} ${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"
       output_dir: "${{ context.planner_dir }}"
+      dispatch_items: "${{ context.refine_context_paths }}"
+    capture_list:
+      phase_refined_path: "${{ result.phase_refined_path }}"
+    on_success: merge_refined_assignments
+    on_failure: escalate_stop
+    note: >
+      PARALLEL DISPATCH: context.refine_context_paths contains comma-separated
+      paths to per-phase context files produced by merge_tier_results.
+      For each context_path, substitute it into the {context_path} placeholder
+      and issue one run_skill call. Run ALL refinements in parallel.
+      Accumulate results via capture_list.
+
+  merge_refined_assignments:
+    tool: run_python
+    with:
+      callable: "autoskillit.planner.merge.merge_refined_assignments"
+      planner_dir: "${{ context.planner_dir }}"
     capture:
       refined_assignments_path: "${{ result.refined_assignments_path }}"
     on_success: expand_wps

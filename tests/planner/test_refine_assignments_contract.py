@@ -60,39 +60,37 @@ class TestContractRegistration:
             "Without it, a session that never writes is marked successful."
         )
 
-    def test_refined_assignments_path_output_present(self, skill_contract: dict) -> None:
-        """outputs must declare refined_assignments_path."""
+    def test_phase_refined_path_output_present(self, skill_contract: dict) -> None:
+        """outputs must declare phase_refined_path."""
         outputs = skill_contract.get("outputs", [])
         names = [o.get("name") for o in outputs]
-        assert "refined_assignments_path" in names, (
-            f"refined_assignments_path not in outputs. Found: {names}"
-        )
+        assert "phase_refined_path" in names, f"phase_refined_path not in outputs. Found: {names}"
 
-    def test_refined_assignments_path_type_is_file_path(self, skill_contract: dict) -> None:
-        """refined_assignments_path output must have type file_path."""
+    def test_phase_refined_path_type_is_file_path(self, skill_contract: dict) -> None:
+        """phase_refined_path output must have type file_path."""
         outputs = skill_contract.get("outputs", [])
-        token = next((o for o in outputs if o.get("name") == "refined_assignments_path"), None)
+        token = next((o for o in outputs if o.get("name") == "phase_refined_path"), None)
         assert token is not None
         assert token.get("type") == "file_path", (
-            f"refined_assignments_path type must be 'file_path', got {token.get('type')!r}. "
+            f"phase_refined_path type must be 'file_path', got {token.get('type')!r}. "
             "Path-contamination detection requires file_path type."
         )
 
     def test_expected_output_pattern_present(self, skill_contract: dict) -> None:
-        """expected_output_patterns must include a pattern matching refined_assignments_path."""
+        """expected_output_patterns must include a pattern matching phase_refined_path."""
         patterns = skill_contract.get("expected_output_patterns", [])
-        assert any("refined_assignments_path" in p for p in patterns), (
-            f"No expected_output_pattern referencing refined_assignments_path. Found: {patterns}"
+        assert any("phase_refined_path" in p for p in patterns), (
+            f"No expected_output_pattern referencing phase_refined_path. Found: {patterns}"
         )
 
     def test_three_inputs_declared(self, skill_contract: dict) -> None:
-        """Three inputs: combined_assignments_path, refined_plan_path, output_dir."""
+        """Three inputs: context_file, refined_plan_path, output_dir."""
         inputs = skill_contract.get("inputs", [])
         assert len(inputs) == 3, (
             f"Expected exactly 3 inputs, got {len(inputs)}: {[i.get('name') for i in inputs]}"
         )
         input_names = {i.get("name") for i in inputs}
-        assert input_names == {"combined_assignments_path", "refined_plan_path", "output_dir"}, (
+        assert input_names == {"context_file", "refined_plan_path", "output_dir"}, (
             f"Unexpected input names: {input_names}"
         )
 
@@ -125,10 +123,17 @@ class TestSkillMdPresence:
             "SKILL.md NEVER block must restrict write paths to {{AUTOSKILLIT_TEMP}}/planner/."
         )
 
-    def test_skill_md_has_output_token(self, skill_md: str) -> None:
-        """SKILL.md must document the refined_assignments_path output token."""
-        assert "refined_assignments_path" in skill_md, (
-            "SKILL.md must document 'refined_assignments_path = <path>' output token."
+    def test_skill_contains_phase_refined_path(self, skill_md: str) -> None:
+        """SKILL.md must document the phase_refined_path output token."""
+        assert "phase_refined_path" in skill_md, (
+            "SKILL.md must document 'phase_refined_path = <path>' output token."
+        )
+
+    def test_skill_contains_peer_summaries(self, skill_md: str) -> None:
+        """SKILL.md must reference peer_summaries from the context file."""
+        assert "peer_summaries" in skill_md, (
+            "SKILL.md must reference 'peer_summaries' — the per-phase context file provides "
+            "id/name/goal stubs for all assignments in other phases."
         )
 
     def test_skill_md_has_l0_response_fields(self, skill_md: str) -> None:

@@ -9,6 +9,7 @@ from autoskillit.planner.merge import (
     build_plan_snapshot,
     extract_item,
     merge_files,
+    merge_refined_assignments,
     merge_tier_results,
     replace_item,
 )
@@ -677,7 +678,7 @@ def test_refine_context_paths_returned_sorted(tmp_path):
         )
     out = tmp_path / "combined_assignments.json"
     result = merge_tier_results(str(results_dir), str(out), "assignments")
-    paths = json.loads(result["refine_context_paths"])
+    paths = result["refine_context_paths"].split(",")
     phase_ids = [Path(p).stem.replace("context_", "") for p in paths]
     assert phase_ids == sorted(phase_ids)
     assert set(phase_ids) == {"P1", "P2", "P3"}
@@ -737,3 +738,153 @@ def test_write_refine_contexts_rejects_unsafe_phase_id(tmp_path):
     out = tmp_path / "combined.json"
     with pytest.raises(ValueError, match="disallowed characters"):
         merge_tier_results(str(results_dir), str(out), "assignments")
+
+
+# ---------------------------------------------------------------------------
+# merge_refined_assignments tests (B1–B5)
+# ---------------------------------------------------------------------------
+
+
+def _make_assignment(aid: str, phase_id: str, files: list[str]) -> dict:
+    return {
+        "id": aid,
+        "phase_id": phase_id,
+        "name": f"Assignment {aid}",
+        "goal": f"Goal for {aid}",
+        "technical_approach": "",
+        "proposed_work_packages": [
+            {
+                "id": f"{aid}-WP1",
+                "name": "WP1",
+                "summary": "s",
+                "goal": "g",
+                "technical_steps": [],
+                "files_touched": files,
+                "apis_defined": [],
+                "apis_consumed": [],
+                "depends_on": [],
+                "deliverables": ["d1"],
+                "acceptance_criteria": [],
+            }
+        ],
+    }
+
+
+def _write_phase_result(dir_: Path, phase_id: str, assignments: list[dict]) -> None:
+    write_json(
+        dir_ / f"{phase_id}_result.json",
+        {"schema_version": 1, "assignments": assignments},
+    )
+
+
+def test_merge_refined_assignments_basic(tmp_path):
+    ctx_dir = tmp_path / "refine_contexts"
+    ctx_dir.mkdir()
+    _write_phase_result(
+        ctx_dir,
+        "P1",
+        [
+            _make_assignment("P1-A1", "P1", ["src/a.py"]),
+            _make_assignment("P1-A2", "P1", ["src/b.py"]),
+        ],
+    )
+    _write_phase_result(
+        ctx_dir,
+        "P2",
+        [
+            _make_assignment("P2-A1", "P2", ["src/c.py"]),
+            _make_assignment("P2-A2", "P2", ["src/d.py"]),
+        ],
+    )
+
+    result = merge_refined_assignments(planner_dir=str(tmp_path))
+
+    assert "refined_assignments_path" in result
+    out_path = Path(result["refined_assignments_path"])
+    assert out_path.exists()
+    data = json.loads(out_path.read_text())
+    assert len(data["assignments"]) == 4
+    assert result["item_count"] == "4"
+
+
+def test_merge_refined_assignments_wp_conflict_earlier_wins(tmp_path):
+    ctx_dir = tmp_path / "refine_contexts"
+    ctx_dir.mkdir()
+    _write_phase_result(
+        ctx_dir,
+        "P1",
+        [
+            _make_assignment("P1-A1", "P1", ["src/foo.py", "src/bar.py"]),
+        ],
+    )
+    _write_phase_result(
+        ctx_dir,
+        "P2",
+        [
+            _make_assignment("P2-A1", "P2", ["src/foo.py", "src/baz.py"]),
+        ],
+    )
+
+    result = merge_refined_assignments(planner_dir=str(tmp_path))
+
+    data = json.loads(Path(result["refined_assignments_path"]).read_text())
+    assignments = {a["id"]: a for a in data["assignments"]}
+
+    p1_files = assignments["P1-A1"]["proposed_work_packages"][0]["files_touched"]
+    p2_files = assignments["P2-A1"]["proposed_work_packages"][0]["files_touched"]
+
+    assert "src/foo.py" in p1_files
+    assert "src/foo.py" not in p2_files
+    assert "src/baz.py" in p2_files
+    assert result["conflict_count"] == "1"
+
+
+def test_merge_refined_assignments_no_conflict(tmp_path):
+    ctx_dir = tmp_path / "refine_contexts"
+    ctx_dir.mkdir()
+    _write_phase_result(
+        ctx_dir,
+        "P1",
+        [
+            _make_assignment("P1-A1", "P1", ["src/a.py"]),
+        ],
+    )
+    _write_phase_result(
+        ctx_dir,
+        "P2",
+        [
+            _make_assignment("P2-A1", "P2", ["src/b.py"]),
+        ],
+    )
+
+    result = merge_refined_assignments(planner_dir=str(tmp_path))
+
+    data = json.loads(Path(result["refined_assignments_path"]).read_text())
+    assignments = {a["id"]: a for a in data["assignments"]}
+
+    assert assignments["P1-A1"]["proposed_work_packages"][0]["files_touched"] == ["src/a.py"]
+    assert assignments["P2-A1"]["proposed_work_packages"][0]["files_touched"] == ["src/b.py"]
+    assert result["conflict_count"] == "0"
+
+
+def test_merge_refined_assignments_empty_dir_raises(tmp_path):
+    ctx_dir = tmp_path / "refine_contexts"
+    ctx_dir.mkdir()
+    # Only context files (no *_result.json)
+    write_json(ctx_dir / "context_P1.json", {"phase_id": "P1", "assignments": []})
+
+    with pytest.raises(ValueError, match="No.*_result.json"):
+        merge_refined_assignments(planner_dir=str(tmp_path))
+
+
+def test_merge_refined_assignments_writes_to_planner_dir(tmp_path):
+    ctx_dir = tmp_path / "refine_contexts"
+    ctx_dir.mkdir()
+    _write_phase_result(ctx_dir, "P1", [_make_assignment("P1-A1", "P1", ["src/x.py"])])
+    _write_phase_result(ctx_dir, "P2", [_make_assignment("P2-A1", "P2", ["src/y.py"])])
+
+    result = merge_refined_assignments(planner_dir=str(tmp_path))
+
+    expected = tmp_path / "refined_assignments.json"
+    assert Path(result["refined_assignments_path"]) == expected
+    assert expected.exists()

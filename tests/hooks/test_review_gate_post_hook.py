@@ -274,3 +274,42 @@ def test_pr_number_extracted_from_run_python_args(tmp_path):
     state = _read_state(tmp_path)
     assert state is not None
     assert state["pr_number"] == "1290"
+
+
+# ---------------------------------------------------------------------------
+# T2-10: approved_with_comments with no gate tag → no state write, no clear
+# ---------------------------------------------------------------------------
+
+
+def test_approved_with_comments_no_gate_tag_produces_no_state(tmp_path):
+    """T2-10: approved_with_comments emits no %%REVIEW_GATE:: tag — hook must be a no-op."""
+    event = _build_run_skill_event("verdict = approved_with_comments\n%%ORDER_UP::abc%%")
+
+    # Part 1: no state file is created when none existed
+    _run_hook(event, tmp_dir=tmp_path)
+    assert _read_state(tmp_path) is None, (
+        "approved_with_comments with no gate tag must not write review_gate_state.json"
+    )
+
+    # Part 2: pre-existing state is not cleared (no gate tag means no state transition)
+    state_path = tmp_path / _STATE_FILE_RELPATH
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    existing = {
+        "gate": "LOOP_REQUIRED",
+        "review_verdict": "changes_requested",
+        "check_review_loop_called": False,
+        "pr_number": "1290",
+        "set_at": "2026-04-26T04:30:00+00:00",
+    }
+    state_path.write_text(json.dumps(existing))
+
+    _run_hook(event, tmp_dir=tmp_path)
+    state = _read_state(tmp_path)
+    assert state is not None, (
+        "approved_with_comments must not clear an existing LOOP_REQUIRED state — "
+        "only an explicit %%REVIEW_GATE::CLEAR%% tag should do that"
+    )
+    assert state == existing, (
+        "approved_with_comments must leave the full gate state unchanged — "
+        f"expected {existing!r}, got {state!r}"
+    )

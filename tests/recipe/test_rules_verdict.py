@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import pytest
 
+import autoskillit.recipe.rules_verdict as _rv
 from autoskillit.core.types import Severity
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.schema import (
@@ -68,12 +69,20 @@ def _explicit_all_steps() -> dict[str, RecipeStep]:
     review_step = steps["review_pr"]
     existing = review_step.on_result.conditions
     review_step.on_result.conditions = [
-        existing[0],
+        existing[0],  # changes_requested → fix
+        StepResultCondition(
+            route="fix",
+            when="${{ result.verdict }} == approved_with_comments",
+        ),
+        StepResultCondition(
+            route="done",
+            when="${{ result.verdict }} == approved",
+        ),
         StepResultCondition(
             route="escalate",
             when="${{ result.verdict }} == needs_human",
         ),
-        existing[1],
+        existing[1],  # true → done (catch-all)
     ]
     steps["escalate"] = RecipeStep(
         tool="run_skill",
@@ -312,3 +321,145 @@ def test_verdict_routing_asymmetry_severity_is_error() -> None:
         assert finding.severity == Severity.ERROR, (
             f"verdict-routing-asymmetry must be ERROR severity, got {finding.severity}"
         )
+
+
+# ---------------------------------------------------------------------------
+# on-result-values-in-allowed-values rule tests
+# ---------------------------------------------------------------------------
+
+
+def _make_review_pr_recipe(
+    verdict_route: str,
+    allowed_values: list[str],
+) -> tuple[Recipe, dict]:
+    """Helper: recipe routing verdict_route with a manifest restricting allowed_values."""
+    manifest = {
+        "version": "0.1.0",
+        "skills": {
+            "review-pr": {
+                "inputs": [],
+                "outputs": [
+                    {
+                        "name": "verdict",
+                        "type": "string",
+                        "allowed_values": allowed_values,
+                    }
+                ],
+            }
+        },
+    }
+    recipe = _make_recipe(
+        {
+            "review_pr": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/autoskillit:review-pr main main"},
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(
+                            route="fix",
+                            when=f"${{{{ result.verdict }}}} == {verdict_route}",
+                        ),
+                    ]
+                ),
+                on_failure="fix",
+            ),
+            "fix": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/autoskillit:smoke-task"},
+            ),
+        }
+    )
+    return recipe, manifest
+
+
+def test_on_result_values_in_allowed_values_fires_on_unregistered_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """on-result-values-in-allowed-values fires ERROR when recipe routes an unlisted value."""
+    recipe, manifest = _make_review_pr_recipe(
+        verdict_route="approved_with_comments",
+        allowed_values=["approved", "changes_requested"],
+    )
+    monkeypatch.setattr(_rv, "load_bundled_manifest", lambda: manifest)
+    findings = run_semantic_rules(recipe)
+    rule_findings = [f for f in findings if f.rule == "on-result-values-in-allowed-values"]
+    assert len(rule_findings) >= 1, (
+        "on-result-values-in-allowed-values must fire when recipe routes "
+        "'approved_with_comments' but it is not in allowed_values"
+    )
+    assert rule_findings[0].severity == Severity.ERROR
+    assert "approved_with_comments" in rule_findings[0].message
+
+
+def test_on_result_values_in_allowed_values_passes_when_consistent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """on-result-values-in-allowed-values does not fire when all routed values are allowed."""
+    recipe, manifest = _make_review_pr_recipe(
+        verdict_route="approved",
+        allowed_values=["approved", "changes_requested", "approved_with_comments", "needs_human"],
+    )
+    monkeypatch.setattr(_rv, "load_bundled_manifest", lambda: manifest)
+    findings = run_semantic_rules(recipe)
+    rule_findings = [f for f in findings if f.rule == "on-result-values-in-allowed-values"]
+    assert rule_findings == [], (
+        "on-result-values-in-allowed-values must not fire when all routed values "
+        "are present in allowed_values"
+    )
+
+
+def test_on_result_values_in_allowed_values_ignores_non_verdict_conditions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """on-result-values-in-allowed-values must not fire for catch-all or non-output conditions."""
+    manifest = {
+        "version": "0.1.0",
+        "skills": {
+            "review-pr": {
+                "inputs": [],
+                "outputs": [
+                    {
+                        "name": "verdict",
+                        "type": "string",
+                        "allowed_values": ["approved", "changes_requested"],
+                    }
+                ],
+            }
+        },
+    }
+    recipe = _make_recipe(
+        {
+            "review_pr": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/autoskillit:review-pr main main"},
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(
+                            route="fix",
+                            when="${{ result.verdict }} == changes_requested",  # in allowed_values
+                        ),
+                        StepResultCondition(
+                            route="done",
+                            when="true",  # catch-all, no verdict value extracted
+                        ),
+                    ]
+                ),
+                on_failure="fix",
+            ),
+            "fix": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/autoskillit:smoke-task"},
+            ),
+            "done": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/autoskillit:smoke-task"},
+            ),
+        }
+    )
+    monkeypatch.setattr(_rv, "load_bundled_manifest", lambda: manifest)
+    findings = run_semantic_rules(recipe)
+    rule_findings = [f for f in findings if f.rule == "on-result-values-in-allowed-values"]
+    assert rule_findings == [], (
+        "on-result-values-in-allowed-values must not fire for catch-all 'when: true' "
+        "conditions that don't reference a specific verdict value"
+    )

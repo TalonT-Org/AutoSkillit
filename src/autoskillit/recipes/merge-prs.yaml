@@ -1054,6 +1054,8 @@ steps:
     on_result:
       - when: "${{ result.verdict }} == changes_requested"
         route: resolve_review_integration
+      - when: "${{ result.verdict }} == approved_with_comments"
+        route: resolve_review_integration
       - when: "${{ result.verdict }} == needs_human"
         route: ci_watch_pr
       - when: "true"
@@ -1061,11 +1063,12 @@ steps:
     on_failure: resolve_review_integration
     note: >
       Automated review of the integration PR (REQ-REVIEW-001). Invokes review-pr against
-      context.batch_branch. All three verdicts have explicit routes: changes_requested
-      → resolve_review_integration, needs_human → ci_watch_pr (human reviews inline),
-      approved → ci_watch_pr. On tool-level failure, routes to resolve_review_integration
-      (matches implementation.yaml pattern). needs_human is explicitly routed to satisfy
-      the unrouted-verdict-value semantic rule.
+      context.batch_branch. All four verdicts have explicit routes: changes_requested
+      → resolve_review_integration, approved_with_comments → resolve_review_integration,
+      needs_human → ci_watch_pr (human reviews inline), approved → ci_watch_pr. On
+      tool-level failure, routes to resolve_review_integration (matches implementation.yaml
+      pattern). needs_human is explicitly routed to satisfy the unrouted-verdict-value
+      semantic rule.
 
   resolve_review_integration:
     tool: run_skill

@@ -209,3 +209,74 @@ def _check_verdict_routing_asymmetry(ctx: ValidationContext) -> list[RuleFinding
             )
 
     return findings
+
+
+# Regex to extract a literal verdict value from a `when` expression.
+# Handles both template form: ${{ result.verdict }} == value
+# and bare dot-access form:    result.verdict == 'value'
+_VALUE_FROM_WHEN_RE = re.compile(
+    r"result\.(?P<output>[\w]+)"  # result.<output_name>
+    r"\s*\}?\}?"  # optional closing braces from template form
+    r"\s*==\s*"  # equality operator
+    r"(?P<value>'\w+'|\w+)"  # balanced single-quoted or bare value
+)
+
+
+@semantic_rule(
+    name="on-result-values-in-allowed-values",
+    description=(
+        "Every literal verdict value referenced in a recipe on_result condition "
+        "must be present in the skill contract's allowed_values. Catches drift "
+        "between recipe routing and contract definitions."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_on_result_values_in_allowed_values(ctx: ValidationContext) -> list[RuleFinding]:
+    """Error when a recipe routes a verdict value not declared in allowed_values.
+
+    Completes the closed-loop constraint: recipe routes → allowed_values (this rule)
+    → examples (example-covers-all-allowed-values) → patterns (all-examples-match-all-patterns).
+    """
+    findings: list[RuleFinding] = []
+
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        skill_command = (step.with_args or {}).get("skill_command", "")
+        skill_name = _extract_skill_name(skill_command)
+        if not skill_name:
+            continue
+
+        allowed_by_output = _get_allowed_values_for_skill(skill_name)
+        if not allowed_by_output:
+            continue
+
+        if not step.on_result:
+            continue
+
+        conditions = step.on_result.conditions or []
+        for condition in conditions:
+            when = condition.when
+            if not when or when.strip() == "true":
+                continue
+            for m in _VALUE_FROM_WHEN_RE.finditer(when):
+                output_name = m.group("output")
+                value = m.group("value").strip("'")
+                if output_name not in allowed_by_output:
+                    continue
+                if value not in allowed_by_output[output_name]:
+                    findings.append(
+                        RuleFinding(
+                            rule="on-result-values-in-allowed-values",
+                            severity=Severity.ERROR,
+                            step_name=step_name,
+                            message=(
+                                f"Step '{step_name}' routes {output_name} == '{value}' "
+                                f"but skill '{skill_name}' contract allowed_values does "
+                                f"not include '{value}'. Add '{value}' to allowed_values "
+                                f"in skill_contracts.yaml."
+                            ),
+                        )
+                    )
+
+    return findings

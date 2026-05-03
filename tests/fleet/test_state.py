@@ -603,6 +603,7 @@ class TestResumeIncludesInterruptedInBlock:
         sp = _state_path(tmp_path)
         write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("A", "B", "C"))
         append_dispatch_record(sp, DispatchRecord(name="A", status=DispatchStatus.SUCCESS))
+        mark_dispatch_running(sp, "B", dispatch_id="d-b", l2_pid=99)
         append_dispatch_record(sp, DispatchRecord(name="B", status=DispatchStatus.INTERRUPTED))
         decision = resume_campaign_from_state(sp, continue_on_failure=True)
         assert decision is not None

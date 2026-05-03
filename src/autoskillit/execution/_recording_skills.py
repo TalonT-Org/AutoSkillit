@@ -116,7 +116,11 @@ def restore_skill_snapshot(
     shutil.rmtree(dest_skills, ignore_errors=True)
     dest_skills.parent.mkdir(parents=True, exist_ok=True)
 
-    shutil.copytree(skills_src, dest_skills)
+    try:
+        shutil.copytree(skills_src, dest_skills)
+    except Exception:
+        shutil.rmtree(dest_skills, ignore_errors=True)
+        raise
     return ValidatedAddDir(path=str(session_dir))
 
 

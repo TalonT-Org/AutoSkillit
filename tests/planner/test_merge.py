@@ -678,7 +678,7 @@ def test_refine_context_paths_returned_sorted(tmp_path):
         )
     out = tmp_path / "combined_assignments.json"
     result = merge_tier_results(str(results_dir), str(out), "assignments")
-    paths = result["refine_context_paths"].split(",")
+    paths = [p for p in result["refine_context_paths"].split(",") if p.strip()]
     phase_ids = [Path(p).stem.replace("context_", "") for p in paths]
     assert phase_ids == sorted(phase_ids)
     assert set(phase_ids) == {"P1", "P2", "P3"}

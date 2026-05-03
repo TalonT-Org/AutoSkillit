@@ -10,6 +10,11 @@ from autoskillit.execution._process_kill import (
     async_kill_process_tree,
     kill_process_tree,
 )
+from autoskillit.execution._recording_skills import (
+    restore_skill_snapshot,
+    scan_skill_snapshots,
+    snapshot_skill_dir,
+)
 from autoskillit.execution.anomaly_detection import (
     AnomalyKind,
     AnomalySeverity,
@@ -133,6 +138,9 @@ __all__ = [
     "REPLAY_SCENARIO_ENV",
     "REPLAY_SCENARIO_DIR_ENV",
     "SCENARIO_STEP_NAME_ENV",
+    "restore_skill_snapshot",
+    "scan_skill_snapshots",
+    "snapshot_skill_dir",
     # quota
     "QUOTA_CACHE_SCHEMA_VERSION",
     "QuotaStatus",

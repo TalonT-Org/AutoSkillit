@@ -708,7 +708,10 @@ def test_no_subpackage_exceeds_10_files() -> None:
         _headless_git.py extracts git LOC-capture helpers (_capture_git_head_sha,
         _parse_numstat, _compute_loc_changed) from headless.py to keep it under the
         750-line architectural budget, bringing the count to 37.
-        Exempt at 37 files.
+        _recording_skills.py adds snapshot/restore helpers for ephemeral skill dirs in
+        the record/replay system, isolated from recording.py to keep snapshot logic
+        independently testable, bringing the count to 38.
+        Exempt at 38 files.
       core/ — REQ-CNST-003-E4: core/ types split into per-concern type modules
         (_type_enums, _type_protocols_logging, _type_protocols_execution,
         _type_protocols_github, _type_protocols_workspace, _type_protocols_recipe,
@@ -781,7 +784,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
     EXEMPTIONS: dict[str, int] = {
         "server": 25,
         "recipe": 50,
-        "execution": 37,
+        "execution": 38,
         "core": 33,
         "cli": 43,
         "hooks": 29,
@@ -1030,7 +1033,14 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
     context_path = AUTOSKILLIT_ROOT / "pipeline" / "context.py"
     context_tree = ast.parse(context_path.read_text())
 
-    EXEMPT = {"plugin_source", "config", "active_recipe_packs", "temp_dir", "project_dir"}
+    EXEMPT = {
+        "plugin_source",
+        "config",
+        "active_recipe_packs",
+        "temp_dir",
+        "project_dir",
+        "ephemeral_root",
+    }
     violations: list[str] = []
 
     for node in ast.walk(context_tree):

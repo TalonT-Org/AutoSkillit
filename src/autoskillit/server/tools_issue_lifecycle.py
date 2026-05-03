@@ -650,6 +650,10 @@ async def release_issue(
                 }
             )
         else:
+            logger.warning(
+                "release_issue bare removal (no fail_label or target_branch) for %s",
+                issue_url,
+            )
             swap_result = await tool_ctx.github_client.swap_labels(
                 owner,
                 repo,

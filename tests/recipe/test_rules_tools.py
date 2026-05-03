@@ -427,3 +427,46 @@ class TestConstantStepWithArgs:
         )
         findings = [f for f in run_semantic_rules(recipe) if f.rule == "constant-step-with-args"]
         assert len(findings) == 0
+
+
+# ---------------------------------------------------------------------------
+# release-issue-requires-disposition rule tests
+# ---------------------------------------------------------------------------
+
+
+def test_release_issue_requires_disposition_fires_on_bare_call() -> None:
+    """Rule fires when release_issue step has neither fail_label nor target_branch."""
+    recipe = _make_recipe_with_args(
+        "release_issue",
+        {"issue_url": "https://github.com/o/r/issues/1"},
+    )
+    findings = run_semantic_rules(recipe)
+    hits = [f for f in findings if f.rule == "release-issue-requires-disposition"]
+    assert hits
+    assert hits[0].severity == Severity.ERROR
+    assert "run" in hits[0].step_name
+
+
+def test_release_issue_requires_disposition_passes_with_fail_label() -> None:
+    """Rule does NOT fire when fail_label is present."""
+    recipe = _make_recipe_with_args(
+        "release_issue",
+        {"issue_url": "https://github.com/o/r/issues/1", "fail_label": "fail"},
+    )
+    findings = run_semantic_rules(recipe)
+    hits = [f for f in findings if f.rule == "release-issue-requires-disposition"]
+    assert not hits
+
+
+def test_release_issue_requires_disposition_passes_with_target_branch() -> None:
+    """Rule does NOT fire when target_branch is present."""
+    recipe = _make_recipe_with_args(
+        "release_issue",
+        {
+            "issue_url": "https://github.com/o/r/issues/1",
+            "target_branch": "${{ inputs.base_branch }}",
+        },
+    )
+    findings = run_semantic_rules(recipe)
+    hits = [f for f in findings if f.rule == "release-issue-requires-disposition"]
+    assert not hits

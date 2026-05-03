@@ -1566,6 +1566,7 @@ steps:
     skip_when_false: inputs.issue_url
     with:
       issue_url: ${{ inputs.issue_url }}
+      fail_label: "fail"
     on_success: register_clone_failure
     on_failure: register_clone_failure
 

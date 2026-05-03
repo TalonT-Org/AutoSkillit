@@ -7,6 +7,7 @@ import yaml
 
 from autoskillit.recipe._api import validate_from_path
 from autoskillit.recipe.io import load_recipe
+from autoskillit.recipe.registry import run_semantic_rules
 from tests.recipe.conftest import NO_AUTOSKILLIT_IMPORT as _NO_AUTOSKILLIT_IMPORT
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
@@ -424,3 +425,22 @@ class TestClaimReleaseGates:
             assert "escalate_stop" in fallthrough_routes, (
                 f"{name}: claim_issue must have escalate_stop as fallthrough on_result route"
             )
+
+
+def test_release_issue_failure_steps_include_fail_label():
+    """All release_issue_failure steps must pass fail_label for atomic failure marking."""
+    for recipe_name in ("remediation", "implementation", "implementation-groups"):
+        recipe = load_recipe(_recipe_path(recipe_name))
+        step = recipe.steps["release_issue_failure"]
+        assert "fail_label" in step.with_args, (
+            f"{recipe_name}: release_issue_failure missing fail_label"
+        )
+
+
+def test_bundled_recipes_pass_release_issue_disposition_rule():
+    """All bundled recipes pass the release-issue-requires-disposition rule."""
+    for recipe_name in ("remediation", "implementation", "implementation-groups"):
+        recipe = load_recipe(_recipe_path(recipe_name))
+        findings = run_semantic_rules(recipe)
+        hits = [f for f in findings if f.rule == "release-issue-requires-disposition"]
+        assert not hits, f"{recipe_name}: {hits}"

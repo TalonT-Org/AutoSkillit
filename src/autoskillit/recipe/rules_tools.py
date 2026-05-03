@@ -338,3 +338,32 @@ def _check_rebase_then_push_requires_force(ctx: ValidationContext) -> list[RuleF
                 )
                 break  # one finding per push step is sufficient
     return findings
+
+
+@semantic_rule(
+    name="release-issue-requires-disposition",
+    description="release_issue must have fail_label or target_branch to avoid bare removal",
+    severity=Severity.ERROR,
+)
+def _check_release_issue_requires_disposition(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool is None or step.tool != "release_issue":
+            continue
+        has_fail_label = bool(step.with_args.get("fail_label"))
+        has_target_branch = bool(step.with_args.get("target_branch"))
+        if not has_fail_label and not has_target_branch:
+            findings.append(
+                RuleFinding(
+                    rule="release-issue-requires-disposition",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' calls release_issue without fail_label or "
+                        f"target_branch — this performs bare label removal with no "
+                        f"replacement. Add fail_label for failure paths or target_branch "
+                        f"for success/staging paths."
+                    ),
+                )
+            )
+    return findings

@@ -853,7 +853,7 @@ def test_flush_session_log_passes_callback_to_enforce_retention(
 
 
 def test_max_sessions_constant_is_2000():
-    """T5: _MAX_SESSIONS constant updated to 2000."""
+    """T5: _MAX_SESSIONS equals 2000."""
     from autoskillit.execution.session_log import _MAX_SESSIONS
 
     assert _MAX_SESSIONS == 2000

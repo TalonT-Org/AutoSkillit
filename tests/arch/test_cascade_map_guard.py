@@ -477,6 +477,47 @@ class TestFileLevelCascadeDriftGuard:
         )
 
 
+class TestFileLevelCascadeImportGuard:
+    """REQ-GUARD-006: File-level entries must actually import their cascade package."""
+
+    def test_file_level_entries_import_their_cascade_package(self) -> None:
+        """Every dir/file.py entry in a cascade frozenset must import autoskillit.{pkg}."""
+        tests_dir = Path(__file__).parent.parent
+        violations: list[str] = []
+
+        for pkg, entries in LAYER_CASCADE_CONSERVATIVE.items():
+            for entry in entries:
+                if "/" not in entry:
+                    continue
+                test_file = tests_dir / entry
+                if not test_file.exists():
+                    continue
+                try:
+                    tree = ast.parse(test_file.read_text(encoding="utf-8"))
+                except SyntaxError:
+                    continue
+                imported_pkgs: set[str] = set()
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.ImportFrom) and node.module:
+                        if node.module.startswith("autoskillit."):
+                            parts = node.module.split(".")
+                            if len(parts) >= 2:
+                                imported_pkgs.add(parts[1])
+                    elif isinstance(node, ast.Import):
+                        for alias in node.names:
+                            if alias.name.startswith("autoskillit."):
+                                parts = alias.name.split(".")
+                                if len(parts) >= 2:
+                                    imported_pkgs.add(parts[1])
+                if pkg not in imported_pkgs:
+                    violations.append(f"{pkg!r} -> {entry}")
+
+        assert not violations, (
+            "File-level cascade entries that do not import their package:\n"
+            + "\n".join(f"  {v}" for v in sorted(violations))
+        )
+
+
 class TestUnmappedPackageGuard:
     """REQ-GUARD-003: Every package found in src/ must be a key in LAYER_CASCADE_CONSERVATIVE."""
 

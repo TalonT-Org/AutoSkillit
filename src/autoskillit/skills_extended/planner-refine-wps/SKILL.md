@@ -174,6 +174,15 @@ WP with the numerically earlier ID (natural sort: `P1-A1-WP1` < `P1-A2-WP1` <
 WP CONFLICT: {wp_id_a} vs {wp_id_b} — deliverable {file} assigned to {winner}
 ```
 
+**Post-deduplication orphan check:** After resolving all deliverable conflicts,
+scan every losing WP. If any WP now has `deliverables: []`, merge it into the
+winning WP (the one that received its deliverables):
+1. Move the orphan's `files_touched` entries as deliverables to the winner WP
+2. Append the orphan's `technical_steps` and `acceptance_criteria` to the winner
+3. Remove the orphan WP from the output and update all `depends_on` references
+4. Log: `WP ORPHAN MERGED: {orphan_id} → {winner_id}`
+Deliverable count bounds are defined in `schema.py::DELIVERABLE_BOUNDS`.
+
 Process `api_mismatches`: for each mismatch, add the producer WP's `apis_defined`
 signature to the `wp_changes` for the consumer WP to update `apis_consumed` to match.
 

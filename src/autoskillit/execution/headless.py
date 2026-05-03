@@ -310,6 +310,7 @@ async def _execute_claude_headless(
                 recipe_content_hash=recipe_content_hash,
                 recipe_composite_hash=recipe_composite_hash,
                 recipe_version=recipe_version,
+                max_sessions=ctx.config.linux_tracing.max_sessions,
                 telemetry=_build_error_path_telemetry(ctx.github_api_log),
             )
         except Exception:
@@ -351,6 +352,7 @@ async def _execute_claude_headless(
                     recipe_content_hash=recipe_content_hash,
                     recipe_composite_hash=recipe_composite_hash,
                     recipe_version=recipe_version,
+                    max_sessions=ctx.config.linux_tracing.max_sessions,
                     telemetry=_build_error_path_telemetry(ctx.github_api_log),
                 )
         except Exception:
@@ -475,6 +477,7 @@ async def _execute_claude_headless(
                 recipe_content_hash=recipe_content_hash,
                 recipe_composite_hash=recipe_composite_hash,
                 recipe_version=recipe_version,
+                max_sessions=ctx.config.linux_tracing.max_sessions,
             )
         except Exception:
             logger.debug("session_log_flush_failed", exc_info=True)

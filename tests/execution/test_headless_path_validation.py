@@ -1250,6 +1250,8 @@ class TestPathCaptureCoversAllContractPatterns:
                 if m and "=" in pattern[m.end() :]:
                     pattern_token_map.append((m.group(1), pattern))
 
+        assert pattern_token_map, "No patterns found in skill_contracts.yaml — test is vacuous"
+
         recoverable_path_token_names = path_token_names - _INTENTIONALLY_EXCLUDED_PATH_TOKENS
 
         misclassified_path: list[str] = []
@@ -1264,6 +1266,8 @@ class TestPathCaptureCoversAllContractPatterns:
 
         misclassified_non_path: list[str] = []
         for token_name, pattern in pattern_token_map:
+            # Skip tokens that appear as path-type in some skill and non-path-type in another;
+            # cross-skill token name reuse is intentional and not a classification error.
             if token_name in non_path_token_names and token_name not in path_token_names:
                 result = _is_path_capture_pattern(pattern)
                 if result is not None:

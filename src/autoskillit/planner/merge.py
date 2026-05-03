@@ -253,7 +253,11 @@ def merge_refined_assignments(
 
     all_assignments: list[dict[str, Any]] = []
     for path in result_files:
-        data = json.loads(path.read_text())
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning("Skipping malformed result file %s: %s", path, exc)
+            continue
         all_assignments.extend(data.get("assignments", []))
 
     def _sort_key(assignment_id: str) -> tuple[int, ...]:

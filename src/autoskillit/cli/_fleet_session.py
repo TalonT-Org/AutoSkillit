@@ -18,6 +18,15 @@ if TYPE_CHECKING:
 _MAX_RELOADS = 10
 
 
+def _check_reload_guard(reload_id: str, seen_reload_ids: set[str]) -> None:
+    """Enforce max-reload cap and duplicate-ID detection, then register the ID."""
+    if len(seen_reload_ids) >= _MAX_RELOADS:
+        raise SystemExit(f"Too many reloads ({_MAX_RELOADS} max). Check for infinite loop.")
+    if reload_id in seen_reload_ids:
+        raise SystemExit(f"Repeated reload_id {reload_id!r} — aborting.")
+    seen_reload_ids.add(reload_id)
+
+
 def _launch_fleet_session(
     campaign_recipe: Recipe | None,
     campaign_id: str | None,
@@ -56,13 +65,7 @@ def _launch_fleet_session(
             )
             if reload_id is None:
                 break
-            if len(seen_reload_ids) >= _MAX_RELOADS:
-                raise SystemExit(
-                    f"Too many reloads ({_MAX_RELOADS} max). Check for infinite loop."
-                )
-            if reload_id in seen_reload_ids:
-                raise SystemExit(f"Repeated reload_id {reload_id!r} — aborting.")
-            seen_reload_ids.add(reload_id)
+            _check_reload_guard(reload_id, seen_reload_ids)
             current_resume_spec = NamedResume(session_id=reload_id)
     else:
         # Campaign-driven mode: full orchestrator prompt with manifest and state
@@ -105,7 +108,7 @@ def _launch_fleet_session(
             "AUTOSKILLIT_HEADLESS": "0",
         }
 
-        seen_reload_ids = set()
+        seen_reload_ids = set[str]()
         current_resume_spec = NoResume()
 
         while True:
@@ -117,13 +120,7 @@ def _launch_fleet_session(
             )
             if reload_id is None:
                 break
-            if len(seen_reload_ids) >= _MAX_RELOADS:
-                raise SystemExit(
-                    f"Too many reloads ({_MAX_RELOADS} max). Check for infinite loop."
-                )
-            if reload_id in seen_reload_ids:
-                raise SystemExit(f"Repeated reload_id {reload_id!r} — aborting.")
-            seen_reload_ids.add(reload_id)
+            _check_reload_guard(reload_id, seen_reload_ids)
 
             fresh_metadata = resume_campaign_from_state(
                 state_path, campaign_recipe.continue_on_failure

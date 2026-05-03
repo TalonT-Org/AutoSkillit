@@ -54,6 +54,7 @@ _scope_key = pytest.StashKey[set[_Path] | None]()
 _filter_mode_key = pytest.StashKey[str | None]()
 _selected_count_key = pytest.StashKey[int | None]()
 _deselected_count_key = pytest.StashKey[int | None]()
+_full_run_reason_key = pytest.StashKey[str | None]()
 
 # Module-level accumulator for xdist worker-to-controller IPC.
 # Populated by pytest_testnodedown (controller); cleared by pytest_configure
@@ -381,6 +382,7 @@ def pytest_configure(config: pytest.Config) -> None:
 
     config.stash[_scope_key] = None
     config.stash[_filter_mode_key] = None
+    config.stash[_full_run_reason_key] = None
 
     cli_mode = config.getoption("--filter-mode", default=None)
     env_val = os.environ.get("AUTOSKILLIT_TEST_FILTER", "")
@@ -393,6 +395,7 @@ def pytest_configure(config: pytest.Config) -> None:
     try:
         from tests._test_filter import (
             FilterMode,
+            FullRunReason,
             build_test_scope,
             git_changed_files,
             load_manifest,
@@ -429,7 +432,12 @@ def pytest_configure(config: pytest.Config) -> None:
             cwd=config.rootpath,
             base_ref=resolved_base_ref,
         )
-        config.stash[_scope_key] = scope
+
+        if isinstance(scope, FullRunReason):
+            config.stash[_scope_key] = None
+            config.stash[_full_run_reason_key] = scope.value
+        else:
+            config.stash[_scope_key] = scope
         config.stash[_filter_mode_key] = mode.value
 
     except Exception as exc:
@@ -683,12 +691,14 @@ def pytest_sessionfinish(session, exitstatus):
         return
     import json
 
+    full_run_reason = session.config.stash.get(_full_run_reason_key, None)
     _Path(out_path).write_text(
         json.dumps(
             {
                 "filter_mode": filter_mode,
                 "tests_selected": selected,
                 "tests_deselected": deselected,
+                "full_run_reason": full_run_reason,
             }
         )
     )

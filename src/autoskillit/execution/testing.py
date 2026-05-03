@@ -228,6 +228,7 @@ class DefaultTestRunner:
         stat_filter_mode: str | None = None
         stat_tests_selected: int | None = None
         stat_tests_deselected: int | None = None
+        stat_full_run_reason: str | None = None
         start = time.monotonic()
         deadline = start + timeout
 
@@ -257,9 +258,11 @@ class DefaultTestRunner:
                         fm = raw.get("filter_mode")
                         ts = raw.get("tests_selected")
                         td = raw.get("tests_deselected")
+                        fr = raw.get("full_run_reason")
                         stat_filter_mode = fm if isinstance(fm, str) else None
                         stat_tests_selected = ts if isinstance(ts, int) else None
                         stat_tests_deselected = td if isinstance(td, int) else None
+                        stat_full_run_reason = fr if isinstance(fr, str) else None
                 except (json.JSONDecodeError, OSError) as exc:
                     logger.debug("filter stats sidecar read error: %s", exc)
         finally:
@@ -283,4 +286,5 @@ class DefaultTestRunner:
             filter_mode=stat_filter_mode,
             tests_selected=stat_tests_selected,
             tests_deselected=stat_tests_deselected,
+            full_run_reason=stat_full_run_reason,
         )

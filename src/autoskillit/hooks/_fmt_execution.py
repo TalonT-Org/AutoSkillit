@@ -171,9 +171,14 @@ def _fmt_test_check(data: dict, _pipeline: bool) -> str:
 
     filter_mode = data.get("filter_mode")
     if filter_mode:
-        selected = data.get("tests_selected", "?")
-        deselected = data.get("tests_deselected", "?")
-        lines.append(f"filter: {filter_mode} ({selected} selected, {deselected} deselected)")
+        full_run_reason = data.get("full_run_reason")
+        if full_run_reason:
+            reason_display = full_run_reason.replace("_", " ")
+            lines.append(f"filter: {filter_mode} (full run — {reason_display})")
+        else:
+            selected = data.get("tests_selected", "?")
+            deselected = data.get("tests_deselected", "?")
+            lines.append(f"filter: {filter_mode} ({selected} selected, {deselected} deselected)")
 
     stdout = data.get("stdout", "")
     if stdout:

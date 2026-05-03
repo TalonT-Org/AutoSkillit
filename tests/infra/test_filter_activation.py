@@ -43,7 +43,7 @@ def test_skill_preambles_in_skills():
 
 def test_ci_filter_codepath_produces_scope():
     """CI codepath: conservative mode + known source file -> non-None scope."""
-    from tests._test_filter import FilterMode, build_test_scope, load_manifest
+    from tests._test_filter import FilterMode, FullRunReason, build_test_scope, load_manifest
 
     manifest = load_manifest(REPO_ROOT)
     scope = build_test_scope(
@@ -54,8 +54,39 @@ def test_ci_filter_codepath_produces_scope():
         cwd=REPO_ROOT,
         base_ref="develop",
     )
-    assert scope is not None, (
-        "build_test_scope must return a non-None scope for conservative mode "
-        "with a known source file — None means silent fallback to full run"
+    assert not isinstance(scope, FullRunReason), (
+        "build_test_scope must return a set scope for conservative mode "
+        "with a known source file — FullRunReason means silent fallback to full run"
     )
     assert len(scope) > 0, "Scope must contain at least one test path"
+
+
+def test_build_test_scope_returns_full_run_reason_for_large_changeset():
+    from tests._test_filter import FilterMode, FullRunReason, build_test_scope
+
+    changed = {f"src/autoskillit/fake_{i}.py" for i in range(35)}
+    result = build_test_scope(changed_files=changed, mode=FilterMode.CONSERVATIVE)
+    assert result is FullRunReason.LARGE_CHANGESET
+
+
+def test_build_test_scope_returns_full_run_reason_for_git_unavailable():
+    from tests._test_filter import FilterMode, FullRunReason, build_test_scope
+
+    result = build_test_scope(changed_files=None, mode=FilterMode.CONSERVATIVE)
+    assert result is FullRunReason.GIT_UNAVAILABLE
+
+
+def test_build_test_scope_returns_full_run_reason_for_bucket_a():
+    from tests._test_filter import FilterMode, FullRunReason, build_test_scope
+
+    changed = {"pyproject.toml"}
+    result = build_test_scope(changed_files=changed, mode=FilterMode.CONSERVATIVE)
+    assert result is FullRunReason.BUCKET_A
+
+
+def test_build_test_scope_returns_full_run_reason_for_unmapped():
+    from tests._test_filter import FilterMode, FullRunReason, build_test_scope
+
+    changed = {"scripts/random_script.py"}
+    result = build_test_scope(changed_files=changed, mode=FilterMode.CONSERVATIVE)
+    assert result is FullRunReason.UNMAPPED_FILE

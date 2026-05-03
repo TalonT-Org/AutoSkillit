@@ -13,6 +13,7 @@ from autoskillit.core import (
     MarketplaceInstall,
     NamedResume,
     NoResume,
+    OutputFormat,
 )
 from autoskillit.execution.commands import (
     _HEADLESS_EXCLUSIVE_VARS,
@@ -247,8 +248,7 @@ class TestBuildLeafHeadlessCmd:
         completion_marker="DONE",
         model=None,
         plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
-        output_format_value="stream-json",
-        output_format_required_flags=["--verbose"],
+        output_format=OutputFormat.STREAM_JSON,
         add_dirs=[],
         exit_after_stop_delay_ms=2000,
     )
@@ -329,10 +329,9 @@ class TestBuildLeafHeadlessCmd:
         assert "--verbose" in spec.cmd
 
     def test_output_format_required_flags_not_duplicated(self):
-        """If a required flag is already present it must not be added twice."""
-        params = {**self.BASE, "output_format_required_flags": ["--output-format"]}
-        spec = build_leaf_headless_cmd("/investigate foo", **params)
-        assert spec.cmd.count("--output-format") == 1
+        """Required flags must not appear twice even if already present."""
+        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
+        assert spec.cmd.count("--verbose") == 1
 
     def test_add_dirs_injected(self):
         from autoskillit.core import ValidatedAddDir
@@ -458,7 +457,7 @@ class TestBuildFoodTruckCmd:
         completion_marker="%%L2_DONE::abc12345%%",
         model=None,
         env_extras=None,
-        output_format_value="stream-json",
+        output_format=OutputFormat.STREAM_JSON,
     )
 
     def test_returns_claude_headless_cmd(self):
@@ -618,7 +617,7 @@ def test_headless_exclusive_vars_contains_max_mcp_output_tokens() -> None:
             completion_marker="%%DONE%%",
             model=None,
             plugin_source=None,
-            output_format_value="stream-json",
+            output_format=OutputFormat.STREAM_JSON,
         ),
         lambda: build_headless_resume_cmd(resume_session_id="abc", prompt="Emit"),
         lambda: build_food_truck_cmd(
@@ -659,7 +658,7 @@ def test_interactive_cmd_env_has_mcp_connection_nonblocking() -> None:
             completion_marker="%%DONE%%",
             model=None,
             plugin_source=None,
-            output_format_value="stream-json",
+            output_format=OutputFormat.STREAM_JSON,
         ),
         lambda: build_headless_resume_cmd(resume_session_id="abc", prompt="Emit"),
         lambda: build_food_truck_cmd(
@@ -697,8 +696,7 @@ def test_leaf_cmd_includes_skill_name() -> None:
         completion_marker="DONE",
         model=None,
         plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
-        output_format_value="stream-json",
-        output_format_required_flags=["--verbose"],
+        output_format=OutputFormat.STREAM_JSON,
         add_dirs=[],
         exit_after_stop_delay_ms=2000,
     )
@@ -712,8 +710,7 @@ def test_leaf_cmd_skill_name_strips_namespace() -> None:
         completion_marker="DONE",
         model=None,
         plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
-        output_format_value="stream-json",
-        output_format_required_flags=["--verbose"],
+        output_format=OutputFormat.STREAM_JSON,
         add_dirs=[],
         exit_after_stop_delay_ms=2000,
     )
@@ -727,8 +724,7 @@ def test_leaf_cmd_skill_name_empty_for_non_slash() -> None:
         completion_marker="DONE",
         model=None,
         plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
-        output_format_value="stream-json",
-        output_format_required_flags=["--verbose"],
+        output_format=OutputFormat.STREAM_JSON,
         add_dirs=[],
         exit_after_stop_delay_ms=2000,
     )
@@ -741,8 +737,7 @@ class TestBuildLeafAllowedWritePrefix:
         completion_marker="DONE",
         model=None,
         plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
-        output_format_value="stream-json",
-        output_format_required_flags=["--verbose"],
+        output_format=OutputFormat.STREAM_JSON,
         add_dirs=[],
         exit_after_stop_delay_ms=2000,
     )

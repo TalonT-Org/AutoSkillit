@@ -42,7 +42,7 @@ def make_assignment_result(
     return validate_assignment_result(data)
 
 
-def make_wp_result(wp_id: str, **overrides: Any) -> dict[str, Any]:
+def make_wp_result(wp_id: str, *, allow_stub: bool = False, **overrides: Any) -> dict[str, Any]:
     data: dict[str, Any] = {
         "id": wp_id,
         "name": f"WP {wp_id}",
@@ -54,7 +54,7 @@ def make_wp_result(wp_id: str, **overrides: Any) -> dict[str, Any]:
         "depends_on": [],
         **overrides,
     }
-    return validate_wp_result(data)
+    return validate_wp_result(data, allow_stub=allow_stub)
 
 
 def write_json(path: Path, data: object) -> None:

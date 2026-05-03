@@ -18,6 +18,7 @@ from pathlib import Path
 from autoskillit.core import get_logger, write_versioned_json
 from autoskillit.planner.schema import (
     ASSIGN_RESULT_FILE_RE,
+    DELIVERABLE_BOUNDS,
     PHASE_RESULT_FILE_RE,
     WP_RESULT_FILE_RE,
     ValidationFinding,
@@ -89,7 +90,7 @@ def _load_wp_results(root: Path) -> dict[str, dict]:
     for f in _iter_tier_files(wp_dir, WP_RESULT_FILE_RE):
         try:
             raw = json.loads(f.read_text())
-            data = validate_wp_result(raw)
+            data = validate_wp_result(raw, allow_stub=True)
             results[data["id"]] = data
         except (json.JSONDecodeError, KeyError, ValueError) as exc:
             raise RuntimeError(f"Malformed WP result file {f}: {exc}") from exc
@@ -214,13 +215,14 @@ def _check_dag_acyclic(wp_results: dict[str, dict]) -> list[ValidationFinding]:
 
 
 def _check_sizing_bounds(wp_results: dict[str, dict]) -> list[ValidationFinding]:
+    lo, hi = DELIVERABLE_BOUNDS
     findings: list[ValidationFinding] = []
     for wp_id, wp in wp_results.items():
         count = len(wp.get("deliverables", []))
-        if not (1 <= count <= 5):
+        if not (lo <= count <= hi):
             findings.append(
                 {
-                    "message": f"WP {wp_id} has {count} deliverables (must be 1–5)",
+                    "message": f"WP {wp_id} has {count} deliverables (must be {lo}–{hi})",
                     "severity": "error",
                     "check": "sizing_bounds",
                 }

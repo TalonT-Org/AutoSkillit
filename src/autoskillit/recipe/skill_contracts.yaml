@@ -43,11 +43,12 @@ skills:
     - name: is_fixable
       type: string
     expected_output_patterns:
-    - "diagnosis_path\\s*=\\s*/.+"
+    - "diagnosis_path\\s*=\\s*(?:/.+)?"
     - "failure_subtype\\s*=\\s*(flaky|timing_race|deterministic|fixture|import|env|unknown)"
     pattern_examples:
     - "diagnosis_path = /tmp/diagnosis.md\nfailure_type = test\nfailure_subtype = deterministic\nis_fixable = true\n%%ORDER_UP%%"
     - "diagnosis_path = /tmp/diagnosis.md\nfailure_type = test\nfailure_subtype = flaky\nis_fixable = false\n%%ORDER_UP%%"
+    - "diagnosis_path = \nfailure_type = test\nfailure_subtype = unknown\nis_fixable = false\n%%ORDER_UP%%"
     write_behavior: always
   resolve-design-review:
     inputs:
@@ -65,7 +66,7 @@ skills:
       type: file_path
     expected_output_patterns:
     - "resolution\\s*=\\s*(revised|failed)"
-    - "resolution\\s*=\\s*revised[\\s\\S]*?revision_guidance\\s*=\\s*/.+"
+    - "(?:revision_guidance\\s*=\\s*/.+|resolution\\s*=\\s*failed)"
     pattern_examples:
     - "resolution = revised\nrevision_guidance = /tmp/guidance.md\n%%ORDER_UP%%"
     - "resolution = failed\n%%ORDER_UP%%"
@@ -547,13 +548,15 @@ skills:
       type: string
       allowed_values:
         - approved
+        - approved_with_comments
         - changes_requested
         - needs_human
     expected_output_patterns:
-    - "verdict\\s*=\\s*(approved|changes_requested|needs_human)"
-    - "%%REVIEW_GATE::(LOOP_REQUIRED|CLEAR)%%"
+    - "verdict\\s*=\\s*(approved|approved_with_comments|changes_requested|needs_human)"
+    - "(?:%%REVIEW_GATE::(LOOP_REQUIRED|CLEAR)%%|verdict\\s*=\\s*approved_with_comments)"
     pattern_examples:
     - "verdict = approved\n%%REVIEW_GATE::CLEAR%%\n%%ORDER_UP%%"
+    - "verdict = approved_with_comments\n%%ORDER_UP%%"
     - "verdict = changes_requested\n%%REVIEW_GATE::LOOP_REQUIRED%%\n%%ORDER_UP%%"
     - "verdict = needs_human\n%%REVIEW_GATE::CLEAR%%\n%%ORDER_UP%%"
 
@@ -1399,9 +1402,11 @@ skills:
       type: file_path
     expected_output_patterns:
     - "verdict\\s*=\\s*(GO|REVISE|STOP)"
-    - "experiment_type\\s*=\\s*\\S+"
+    - "(?:experiment_type\\s*=\\s*\\S+|verdict\\s*=\\s*STOP)"
     pattern_examples:
     - "verdict = GO\nexperiment_type = benchmark\nevaluation_dashboard = /tmp/eval.md\nrevision_guidance = /tmp/guidance.md\n%%ORDER_UP%%"
+    - "verdict = REVISE\nexperiment_type = benchmark\nrevision_guidance = /tmp/guidance.md\n%%ORDER_UP%%"
+    - "verdict = STOP\n%%ORDER_UP%%"
     write_behavior: always
 
   review-research-pr:

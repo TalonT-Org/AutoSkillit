@@ -369,6 +369,10 @@ def build_food_truck_cmd(
     model: str | None = None,
     env_extras: Mapping[str, str] | None = None,
     output_format: OutputFormat = OutputFormat.STREAM_JSON,
+    exit_after_stop_delay_ms: int = 0,
+    scenario_step_name: str = "",
+    temp_dir_relpath: str | None = None,
+    allowed_write_prefix: str = "",
 ) -> ClaudeHeadlessCmd:
     """Build the complete headless command spec for an L2 food truck session.
 
@@ -406,6 +410,16 @@ def build_food_truck_cmd(
     output_format
         OutputFormat enum; ``--output-format`` and any required flags are self-applied.
         Defaults to ``STREAM_JSON``.
+    exit_after_stop_delay_ms
+        If positive, sets ``CLAUDE_CODE_EXIT_AFTER_STOP_DELAY`` in the subprocess env.
+        Zero (default) means the variable is omitted entirely.
+    scenario_step_name
+        If non-empty, sets ``SCENARIO_STEP_NAME`` in the subprocess env.
+    temp_dir_relpath
+        Relative path to the temp directory injected into the CWD anchor directive.
+        Falls back to the canonical default when None.
+    allowed_write_prefix
+        If non-empty, sets ``AUTOSKILLIT_ALLOWED_WRITE_PREFIX`` in the subprocess env.
     """
     # Prompt transformations: completion directive + cwd anchor + narration suppression.
     # No _ensure_skill_prefix — orchestrator_prompt is a complete system prompt.
@@ -413,6 +427,7 @@ def build_food_truck_cmd(
         _inject_cwd_anchor(
             _inject_completion_directive(orchestrator_prompt, completion_marker),
             cwd,
+            temp_dir_relpath=temp_dir_relpath,
         )
     )
 
@@ -423,6 +438,15 @@ def build_food_truck_cmd(
         "MAX_MCP_OUTPUT_TOKENS": _MAX_MCP_OUTPUT_TOKENS_VALUE,
         "MCP_CONNECTION_NONBLOCKING": "0",
     }
+    if exit_after_stop_delay_ms > 0:
+        extras["CLAUDE_CODE_EXIT_AFTER_STOP_DELAY"] = str(exit_after_stop_delay_ms)
+    if scenario_step_name:
+        extras["SCENARIO_STEP_NAME"] = scenario_step_name
+    kitchen_session_id = os.environ.get(KITCHEN_SESSION_ID_ENV_VAR)
+    if kitchen_session_id:
+        extras[KITCHEN_SESSION_ID_ENV_VAR] = kitchen_session_id
+    if allowed_write_prefix:
+        extras["AUTOSKILLIT_ALLOWED_WRITE_PREFIX"] = allowed_write_prefix
     # Layer caller env_extras (campaign vars) UNDER the mandatory keys.
     # This ensures SESSION_TYPE and HEADLESS cannot be accidentally overridden.
     if env_extras:

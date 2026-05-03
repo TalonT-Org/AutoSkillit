@@ -605,6 +605,78 @@ class TestBuildFoodTruckCmdPackTags:
         assert spec.env["AUTOSKILLIT_L2_TOOL_TAGS"] == "github,ci,clone,telemetry"
 
 
+class TestBuildFoodTruckCmdFeatureParity:
+    """Tests for features ported from build_leaf_headless_cmd (issue #1656)."""
+
+    BASE = dict(
+        orchestrator_prompt="You are an L2 food truck orchestrator...",
+        plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
+        cwd="/repo",
+        completion_marker="%%L2_DONE::abc12345%%",
+        model=None,
+        env_extras=None,
+        output_format=OutputFormat.STREAM_JSON,
+        exit_after_stop_delay_ms=0,
+        scenario_step_name="",
+        temp_dir_relpath=None,
+        allowed_write_prefix="",
+    )
+
+    def test_env_has_exit_delay_when_positive(self):
+        spec = build_food_truck_cmd(**{**self.BASE, "exit_after_stop_delay_ms": 2000})
+        assert spec.env["CLAUDE_CODE_EXIT_AFTER_STOP_DELAY"] == "2000"
+
+    def test_env_omits_exit_delay_when_zero(self):
+        spec = build_food_truck_cmd(**{**self.BASE, "exit_after_stop_delay_ms": 0})
+        assert "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY" not in spec.env
+
+    def test_env_has_scenario_step_name_when_set(self):
+        spec = build_food_truck_cmd(**{**self.BASE, "scenario_step_name": "cook-recipe"})
+        assert spec.env["SCENARIO_STEP_NAME"] == "cook-recipe"
+
+    def test_env_omits_scenario_step_name_when_empty(self):
+        spec = build_food_truck_cmd(**self.BASE)
+        assert "SCENARIO_STEP_NAME" not in spec.env
+
+    def test_env_forwards_kitchen_session_id(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_KITCHEN_SESSION_ID", "ks-abc")
+        spec = build_food_truck_cmd(**self.BASE)
+        assert spec.env["AUTOSKILLIT_KITCHEN_SESSION_ID"] == "ks-abc"
+
+    def test_env_omits_kitchen_session_id_when_absent(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.delenv("AUTOSKILLIT_KITCHEN_SESSION_ID", raising=False)
+        spec = build_food_truck_cmd(**self.BASE)
+        assert "AUTOSKILLIT_KITCHEN_SESSION_ID" not in spec.env
+
+    def test_allowed_write_prefix_in_env(self):
+        spec = build_food_truck_cmd(**{**self.BASE, "allowed_write_prefix": "/tmp/foo/"})
+        assert spec.env["AUTOSKILLIT_ALLOWED_WRITE_PREFIX"] == "/tmp/foo/"
+
+    def test_allowed_write_prefix_absent_when_empty(self):
+        spec = build_food_truck_cmd(**{**self.BASE, "allowed_write_prefix": ""})
+        assert "AUTOSKILLIT_ALLOWED_WRITE_PREFIX" not in spec.env
+
+    def test_allowed_write_prefix_exclusive(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "old")
+        spec = build_food_truck_cmd(**{**self.BASE, "allowed_write_prefix": "new"})
+        assert spec.env["AUTOSKILLIT_ALLOWED_WRITE_PREFIX"] == "new"
+
+    def test_temp_dir_relpath_in_prompt(self):
+        spec = build_food_truck_cmd(**{**self.BASE, "temp_dir_relpath": ".autoskillit/temp"})
+        prompt_text = spec.cmd[2]
+        assert ".autoskillit/temp" in prompt_text
+
+    def test_headless_exclusive_vars_stripped_exit_delay(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("CLAUDE_CODE_EXIT_AFTER_STOP_DELAY", "99999")
+        spec = build_food_truck_cmd(**{**self.BASE, "exit_after_stop_delay_ms": 0})
+        assert "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY" not in spec.env
+
+    def test_headless_exclusive_vars_stripped_scenario_step(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("SCENARIO_STEP_NAME", "outer-step")
+        spec = build_food_truck_cmd(**{**self.BASE, "scenario_step_name": ""})
+        assert "SCENARIO_STEP_NAME" not in spec.env
+
+
 def test_headless_exclusive_vars_contains_max_mcp_output_tokens() -> None:
     """MAX_MCP_OUTPUT_TOKENS must be in _HEADLESS_EXCLUSIVE_VARS."""
     from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS

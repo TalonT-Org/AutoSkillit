@@ -63,6 +63,8 @@ def snapshot_skill_dir(scenario_dir: Path, step_name: str, add_dir_path: Path) -
     Writes manifest.json alongside the .claude/ dir.
     Returns the snapshot dir path, or None if no skills to snapshot.
     """
+    if not step_name or "/" in step_name or ".." in step_name:
+        raise ValueError(f"Invalid step_name for path construction: {step_name!r}")
     skills_src = add_dir_path / ".claude" / "skills"
     if not skills_src.exists() or not skills_src.is_dir():
         return None

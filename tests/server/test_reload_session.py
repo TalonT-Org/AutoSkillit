@@ -17,7 +17,7 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 def test_reload_session_in_free_range_tools() -> None:
-    from autoskillit.core._type_constants import FREE_RANGE_TOOLS
+    from autoskillit.core.types._type_constants import FREE_RANGE_TOOLS
 
     assert "reload_session" in FREE_RANGE_TOOLS
 

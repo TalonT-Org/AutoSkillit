@@ -217,7 +217,7 @@ def test_factory_make_context_returns_toolcontext(monkeypatch):
     assert ctx.gate.enabled is False  # starts closed
     assert isinstance(ctx.audit, DefaultAuditLog)
     assert ctx.token_log is not None
-    from autoskillit.core._type_plugin_source import DirectInstall
+    from autoskillit.core.types._type_plugin_source import DirectInstall
 
     assert isinstance(ctx.plugin_source, DirectInstall)
     assert ctx.plugin_source.plugin_dir == pkg_root()
@@ -233,7 +233,7 @@ def test_factory_make_context_accepts_runner():
 
 def test_factory_make_context_accepts_plugin_dir(tmp_path):
     from autoskillit.config import AutomationConfig
-    from autoskillit.core._type_plugin_source import DirectInstall
+    from autoskillit.core.types._type_plugin_source import DirectInstall
     from autoskillit.server._factory import make_context
 
     ctx = make_context(AutomationConfig(), plugin_dir=str(tmp_path))

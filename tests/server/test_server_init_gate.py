@@ -308,7 +308,7 @@ class TestOpenKitchenVersionReporting:
         (plugin_dir / "plugin.json").write_text(
             json.dumps({"name": "autoskillit", "version": "0.0.0"})
         )
-        from autoskillit.core._type_plugin_source import DirectInstall
+        from autoskillit.core.types._type_plugin_source import DirectInstall
 
         tool_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
         with patch.object(tools_kitchen_mod, "_prime_quota_cache", new=AsyncMock()):

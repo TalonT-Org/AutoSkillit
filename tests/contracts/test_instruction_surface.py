@@ -489,7 +489,7 @@ class TestSkillCommandParsingContract:
         return mod
 
     def test_hook_path_prefixes_match_core(self):
-        from autoskillit.core._type_helpers import _PATH_PREFIXES as core_prefixes
+        from autoskillit.core.types._type_helpers import _PATH_PREFIXES as core_prefixes
 
         mod = self._load_hook_module()
         assert set(mod._PATH_PREFIXES) == set(core_prefixes), (

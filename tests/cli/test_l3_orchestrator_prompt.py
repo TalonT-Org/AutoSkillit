@@ -8,7 +8,7 @@ import pathlib
 import pytest
 
 from autoskillit.cli._mcp_names import DIRECT_PREFIX, MARKETPLACE_PREFIX
-from autoskillit.core._type_constants import SOUS_CHEF_MANDATORY_SECTIONS
+from autoskillit.core.types._type_constants import SOUS_CHEF_MANDATORY_SECTIONS
 from autoskillit.recipe.schema import CampaignDispatch, Recipe, RecipeKind
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small, pytest.mark.feature("fleet")]

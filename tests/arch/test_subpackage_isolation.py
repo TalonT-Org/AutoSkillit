@@ -300,18 +300,18 @@ def test_no_module_level_io_detects_yaml_load(tmp_path: Path) -> None:
 
 
 def test_severity_defined_in_types():
-    """Severity must be a top-level class in core/_type_enums.py (the enums sub-module)."""
-    tree = _get_module_ast("core/_type_enums.py")
+    """Severity must be a top-level class in core/types/_type_enums.py (the enums sub-module)."""
+    tree = _get_module_ast("core/types/_type_enums.py")
     assert "Severity" in _top_level_class_names(tree), (
-        "Severity not found in core/_type_enums.py; it must be defined there"
+        "Severity not found in core/types/_type_enums.py; it must be defined there"
     )
 
 
 def test_skill_tools_defined_in_types():
-    """SKILL_TOOLS must be a top-level assignment in core/_type_constants.py."""
-    tree = _get_module_ast("core/_type_constants.py")
+    """SKILL_TOOLS must be a top-level assignment in core/types/_type_constants.py."""
+    tree = _get_module_ast("core/types/_type_constants.py")
     assert "SKILL_TOOLS" in _top_level_assign_targets(tree), (
-        "SKILL_TOOLS not found in core/_type_constants.py; it must be defined there"
+        "SKILL_TOOLS not found in core/types/_type_constants.py; it must be defined there"
     )
 
 
@@ -784,8 +784,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
     EXEMPTIONS: dict[str, int] = {
         "server": 25,
         "recipe": 50,
-        "execution": 38,
-        "core": 33,
+        "execution": 18,
+        "core": 20,
+        "core/types": 15,
         "cli": 43,
         "hooks": 29,
         "pipeline": 12,
@@ -1008,14 +1009,14 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
     # shards and SubprocessRunner lives in _type_subprocess.py; types.py is a thin re-export hub.
     core_protocols: set[str] = set()
     for types_filename in (
-        "core/types.py",
-        "core/_type_protocols_logging.py",
-        "core/_type_protocols_execution.py",
-        "core/_type_protocols_github.py",
-        "core/_type_protocols_workspace.py",
-        "core/_type_protocols_recipe.py",
-        "core/_type_protocols_infra.py",
-        "core/_type_subprocess.py",
+        "core/types/__init__.py",
+        "core/types/_type_protocols_logging.py",
+        "core/types/_type_protocols_execution.py",
+        "core/types/_type_protocols_github.py",
+        "core/types/_type_protocols_workspace.py",
+        "core/types/_type_protocols_recipe.py",
+        "core/types/_type_protocols_infra.py",
+        "core/types/_type_subprocess.py",
     ):
         types_path = AUTOSKILLIT_ROOT / types_filename
         if not types_path.exists():

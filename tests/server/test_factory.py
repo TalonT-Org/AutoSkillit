@@ -436,7 +436,7 @@ def test_make_context_marketplace_install_yields_marketplace_plugin_source(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """make_context() with a marketplace-detected install produces MarketplaceInstall."""
-    from autoskillit.core._type_plugin_source import MarketplaceInstall
+    from autoskillit.core.types._type_plugin_source import MarketplaceInstall
 
     fake_cache = tmp_path / "cache" / "autoskillit-local" / "autoskillit" / "1.0.0"
     fake_cache.mkdir(parents=True)
@@ -456,7 +456,7 @@ def test_make_context_direct_install_yields_direct_plugin_source(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """make_context() with a direct install produces DirectInstall with pkg_root."""
-    from autoskillit.core._type_plugin_source import DirectInstall
+    from autoskillit.core.types._type_plugin_source import DirectInstall
 
     monkeypatch.setattr("autoskillit.server._factory._check_plugin_installed", lambda: False)
 

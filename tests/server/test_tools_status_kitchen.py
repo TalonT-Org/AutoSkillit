@@ -61,7 +61,7 @@ class TestKitchenStatus:
     @pytest.mark.anyio
     async def test_status_returns_version_info(self, tool_ctx):
         import autoskillit
-        from autoskillit.core._type_plugin_source import DirectInstall
+        from autoskillit.core.types._type_plugin_source import DirectInstall
 
         tool_ctx.plugin_source = DirectInstall(plugin_dir=Path(autoskillit.__file__).parent)
         from autoskillit import __version__
@@ -79,7 +79,7 @@ class TestKitchenStatus:
         (plugin_dir / "plugin.json").write_text(
             json.dumps({"name": "autoskillit", "version": "0.0.0"})
         )
-        from autoskillit.core._type_plugin_source import DirectInstall
+        from autoskillit.core.types._type_plugin_source import DirectInstall
 
         tool_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
         result = json.loads(await kitchen_status())

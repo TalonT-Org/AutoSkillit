@@ -223,7 +223,7 @@ class TestReadTempOutputLogging:
         """
         import structlog
 
-        import autoskillit.execution._process_io as io_mod
+        import autoskillit.execution.process._process_io as io_mod
         import autoskillit.execution.process as proc_mod
 
         structlog.reset_defaults()
@@ -384,7 +384,7 @@ class TestIdleStallWatchdog:
         )
 
         monkeypatch.setattr(
-            "autoskillit.execution._process_monitor._has_active_api_connection",
+            "autoskillit.execution.process._process_monitor._has_active_api_connection",
             lambda pid: True,
         )
 

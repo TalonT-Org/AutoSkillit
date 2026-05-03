@@ -14,7 +14,7 @@ import os
 import subprocess
 import sys
 
-from autoskillit.core._type_constants import SKILL_FILE_ADVISORY_MAP
+from autoskillit.core.types._type_constants import SKILL_FILE_ADVISORY_MAP
 from autoskillit.core.paths import pkg_root
 from autoskillit.hook_registry import HOOK_REGISTRY
 from autoskillit.workspace.skills import DefaultSkillResolver

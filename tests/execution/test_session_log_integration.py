@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 import anyio
 import pytest
 
-from autoskillit.core._type_results import SessionTelemetry
+from autoskillit.core.types._type_results import SessionTelemetry
 from tests.execution.conftest import _ALLOCATE_60MB_SCRIPT
 
 pytestmark = [

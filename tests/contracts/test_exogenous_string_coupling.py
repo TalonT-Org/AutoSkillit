@@ -59,7 +59,7 @@ class TestPromptToolReachability:
     def test_prompt_tool_reachability(self):
         """Each MCP tool name in FIRST ACTION must exist in the FastMCP tool registry."""
         from autoskillit.cli._prompts import _build_orchestrator_prompt
-        from autoskillit.core._type_constants import FREE_RANGE_TOOLS, GATED_TOOLS
+        from autoskillit.core.types._type_constants import FREE_RANGE_TOOLS, GATED_TOOLS
 
         registered_tools = {*GATED_TOOLS, *FREE_RANGE_TOOLS}
 
@@ -86,7 +86,7 @@ class TestPromptToolsWhitelistCoupling:
         """FIRST ACTION must not mention any PIPELINE_FORBIDDEN_TOOLS by name."""
         from autoskillit.cli._mcp_names import DIRECT_PREFIX
         from autoskillit.cli._prompts import _build_orchestrator_prompt
-        from autoskillit.core._type_constants import PIPELINE_FORBIDDEN_TOOLS
+        from autoskillit.core.types._type_constants import PIPELINE_FORBIDDEN_TOOLS
 
         prompt = _build_orchestrator_prompt("test", mcp_prefix=DIRECT_PREFIX)
         start = prompt.index("FIRST ACTION")

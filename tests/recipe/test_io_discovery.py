@@ -50,7 +50,7 @@ class TestListRecipes:
         """Unregistered core bundled recipes are alphabetical after registered ones.
         Add-on bundled recipes remain alphabetical.
         """
-        from autoskillit.core._type_constants import CORE_PACKS
+        from autoskillit.core.types._type_constants import CORE_PACKS
         from autoskillit.recipe.order import BUNDLED_RECIPE_ORDER
 
         result = list_recipes(tmp_path)
@@ -159,7 +159,7 @@ class TestListRecipes:
 
     def test_list_recipes_bundled_before_family_before_experimental(self, tmp_path: Path) -> None:
         """list_recipes must order: BUILTIN-non-experimental → PROJECT → experimental."""
-        from autoskillit.core._type_constants import CORE_PACKS
+        from autoskillit.core.types._type_constants import CORE_PACKS
 
         recipe_dir = tmp_path / ".autoskillit" / "recipes"
         recipe_dir.mkdir(parents=True)
@@ -235,7 +235,7 @@ class TestListRecipes:
 
     def test_core_bundled_before_addon_bundled(self, tmp_path: Path) -> None:
         """Core bundled recipes (CORE_PACKS only) must sort before add-on bundled recipes."""
-        from autoskillit.core._type_constants import CORE_PACKS
+        from autoskillit.core.types._type_constants import CORE_PACKS
 
         result = list_recipes(tmp_path)
         core_indices = [

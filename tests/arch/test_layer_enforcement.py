@@ -940,12 +940,12 @@ def test_display_categories_sync() -> None:
 def test_tool_categories_not_in_core() -> None:
     """TOOL_CATEGORIES must not be exported from the L0 core layer."""
     import autoskillit.core
-    import autoskillit.core._type_constants
+    import autoskillit.core.types._type_constants
 
     assert "TOOL_CATEGORIES" not in dir(autoskillit.core)
-    assert "TOOL_CATEGORIES" not in dir(autoskillit.core._type_constants)
+    assert "TOOL_CATEGORIES" not in dir(autoskillit.core.types._type_constants)
     assert "TOOL_CATEGORIES" not in autoskillit.core.__all__
-    assert "TOOL_CATEGORIES" not in autoskillit.core._type_constants.__all__
+    assert "TOOL_CATEGORIES" not in autoskillit.core.types._type_constants.__all__
 
 
 def test_ci_tools_not_in_github_category() -> None:

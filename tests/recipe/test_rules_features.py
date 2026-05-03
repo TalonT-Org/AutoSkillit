@@ -67,7 +67,7 @@ def test_feature_gate_rule_ignores_non_feature_tools() -> None:
 
 def test_feature_gate_rule_fires_on_disabled_feature_skill(monkeypatch) -> None:
     """ERROR when recipe uses a skill from a feature's skill_categories."""
-    import autoskillit.core._type_constants as _consts
+    import autoskillit.core.types._type_constants as _consts
     from autoskillit.core import FeatureDef, FeatureLifecycle, Severity
     from autoskillit.recipe._analysis import (
         ValidationContext,
@@ -115,7 +115,7 @@ def test_feature_gate_rule_fires_on_disabled_feature_skill(monkeypatch) -> None:
 
 def test_feature_gate_rule_with_multiple_features(monkeypatch) -> None:
     """Each disabled feature independently flags its own tools."""
-    import autoskillit.core._type_constants as _consts
+    import autoskillit.core.types._type_constants as _consts
     from autoskillit.core import FeatureDef, FeatureLifecycle, Severity
     from autoskillit.recipe._analysis import make_validation_context
     from autoskillit.recipe.registry import run_semantic_rules
@@ -203,7 +203,7 @@ def test_feature_gate_rule_no_false_positive_run_python_non_feature_callable() -
 
 def test_feature_gate_run_python_no_finding_when_fdef_has_no_import_package(monkeypatch) -> None:
     """No false positive when feature has no import_package (import_package=None)."""
-    import autoskillit.core._type_constants as _consts
+    import autoskillit.core.types._type_constants as _consts
     from autoskillit.core import FeatureDef, FeatureLifecycle
     from autoskillit.recipe._analysis import make_validation_context
     from autoskillit.recipe.registry import run_semantic_rules

@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from autoskillit.core._type_constants import SOUS_CHEF_MANDATORY_SECTIONS
+from autoskillit.core.types._type_constants import SOUS_CHEF_MANDATORY_SECTIONS
 from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]

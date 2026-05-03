@@ -63,13 +63,13 @@ def test_feature_registry_franchise_entry_gone() -> None:
 
 
 def test_session_type_no_franchise() -> None:
-    from autoskillit.core._type_enums import SessionType
+    from autoskillit.core.types._type_enums import SessionType
 
     assert not hasattr(SessionType, "FRANCHISE")
 
 
 def test_session_type_fleet_canonical() -> None:
-    from autoskillit.core._type_enums import SessionType
+    from autoskillit.core.types._type_enums import SessionType
 
     assert SessionType.FLEET.value == "fleet"
 

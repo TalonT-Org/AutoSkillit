@@ -1222,7 +1222,7 @@ class TestPathCaptureCoversAllContractPatterns:
     def test_classifies_all_path_output_patterns_as_path_capture(self) -> None:
         import re
 
-        from autoskillit.execution._headless_path_tokens import _INTENTIONALLY_EXCLUDED_PATH_TOKENS
+        from autoskillit.execution.headless._headless_path_tokens import _INTENTIONALLY_EXCLUDED_PATH_TOKENS
         from autoskillit.execution.headless import _is_path_capture_pattern
         from autoskillit.recipe.contracts import load_bundled_manifest
 
@@ -1289,7 +1289,7 @@ class TestRecoverablePathTokensCoverage:
         Both constants exclude the same token names but live in different layers
         (recipe IL-2 vs execution IL-1) and cannot be imported across.
         """
-        from autoskillit.execution._headless_path_tokens import _INTENTIONALLY_EXCLUDED_PATH_TOKENS
+        from autoskillit.execution.headless._headless_path_tokens import _INTENTIONALLY_EXCLUDED_PATH_TOKENS
         from autoskillit.recipe.rules_contracts import _PATH_RECOVERY_EXCLUDED_TOKENS
 
         assert _PATH_RECOVERY_EXCLUDED_TOKENS == _INTENTIONALLY_EXCLUDED_PATH_TOKENS, (
@@ -1316,7 +1316,7 @@ class TestRecoverablePathTokensCoverage:
                 if name and (t.startswith("file_path") or t == "directory_path"):
                     declared.add(name)
 
-        from autoskillit.execution._headless_path_tokens import _INTENTIONALLY_EXCLUDED_PATH_TOKENS
+        from autoskillit.execution.headless._headless_path_tokens import _INTENTIONALLY_EXCLUDED_PATH_TOKENS
 
         expected = declared - _INTENTIONALLY_EXCLUDED_PATH_TOKENS
         normalized_actual = {t.strip() for t in _RECOVERABLE_PATH_TOKENS}

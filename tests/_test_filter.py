@@ -279,6 +279,155 @@ MODULE_CASCADE_EXECUTION: dict[str, frozenset[str]] = {
     # headless and process are NOT listed — they fall through to cascade_map["execution"]
 }
 
+MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
+    # --- Narrowest: recipe/ only (no out-of-recipe importers) ---
+    "rules_actions": frozenset({"recipe"}),
+    "rules_blocks": frozenset({"recipe"}),
+    "rules_bypass": frozenset({"recipe"}),
+    "rules_campaign": frozenset({"recipe"}),
+    "rules_ci": frozenset({"recipe"}),
+    "rules_clone": frozenset({"recipe"}),
+    "rules_cmd": frozenset({"recipe"}),
+    "rules_contracts": frozenset({"recipe"}),
+    "rules_dataflow": frozenset({"recipe"}),
+    "rules_features": frozenset({"recipe"}),
+    "rules_fixing": frozenset({"recipe"}),
+    "rules_graph": frozenset({"recipe"}),
+    "rules_inline_script": frozenset({"recipe"}),
+    "rules_inputs": frozenset({"recipe"}),
+    "rules_isolation": frozenset({"recipe"}),
+    "rules_merge": frozenset({"recipe"}),
+    "rules_packs": frozenset({"recipe"}),
+    "rules_reachability": frozenset({"recipe"}),
+    "rules_recipe": frozenset({"recipe"}),
+    "rules_skills": frozenset({"recipe"}),
+    "rules_temp_path": frozenset({"recipe"}),
+    "rules_tools": frozenset({"recipe"}),
+    "rules_verdict": frozenset({"recipe"}),
+    "rules_worktree": frozenset({"recipe"}),
+    "rules_skill_content": frozenset(
+        {
+            "recipe",
+            "skills/test_skill_placeholder_contracts.py",
+            "skills/test_skill_tool_syntax_contracts.py",
+        }
+    ),
+    # --- Internal utility modules (no external src importers) ---
+    "_analysis": frozenset({"recipe"}),
+    "_analysis_bfs": frozenset({"recipe"}),
+    "_analysis_blocks": frozenset({"recipe"}),
+    "_analysis_detectors": frozenset({"recipe"}),
+    "_analysis_graph": frozenset({"recipe"}),
+    "_git_helpers": frozenset({"recipe"}),
+    "_skill_helpers": frozenset({"recipe"}),
+    "_skill_placeholder_parser": frozenset(
+        {
+            "recipe",
+            "skills/test_make_campaign_compliance.py",
+            "skills/test_skill_placeholder_contracts.py",
+            "skills/test_skill_tool_syntax_contracts.py",
+        }
+    ),
+    "_recipe_composition": frozenset({"recipe"}),
+    "_recipe_ingredients": frozenset({"recipe"}),
+    "diagrams": frozenset({"recipe"}),
+    "identity": frozenset({"recipe"}),
+    "order": frozenset({"recipe"}),
+    "loader": frozenset(
+        {
+            "recipe",
+            "cli/test_cli_prompts.py",
+            "cli/test_preview.py",
+        }
+    ),
+    # --- Medium: recipe + specific file-level consumers ---
+    "staleness_cache": frozenset(
+        {
+            "recipe",
+            "server/test_tools_load_recipe.py",
+        }
+    ),
+    "repository": frozenset(
+        {
+            "recipe",
+            "server/test_factory.py",
+            "server/test_tools_kitchen_envelope.py",
+            "server/test_service_wrappers.py",
+            "contracts/test_protocol_satisfaction.py",
+        }
+    ),
+    "validator": frozenset(
+        {
+            "recipe",
+            "server/test_smoke_pipeline.py",
+            "contracts/test_skill_yaml_validation.py",
+        }
+    ),
+    "experiment_type_registry": frozenset(
+        {
+            "recipe",
+            "skills/test_review_design_guards.py",
+        }
+    ),
+    "registry": frozenset(
+        {
+            "recipe",
+            "server/test_smoke_pipeline.py",
+            "contracts/test_skill_yaml_validation.py",
+            "skills/test_skill_placeholder_contracts.py",
+            "skills/test_skill_tool_syntax_contracts.py",
+        }
+    ),
+    # --- Broader: recipe + multiple directory consumers ---
+    "contracts": frozenset(
+        {
+            "recipe",
+            "_llm_triage",
+            "server/test_factory.py",
+            "server/test_tools_load_recipe.py",
+            "server/test_service_wrappers.py",
+            "execution/test_headless_path_validation.py",
+            "execution/test_zero_write_detection.py",
+            "skills/test_planner_skill_contracts.py",
+            "contracts/test_api_surface_alignment.py",
+            "contracts/test_review_pr_diff_annotation.py",
+            "contracts/test_instruction_surface.py",
+        }
+    ),
+    "_api": frozenset(
+        {
+            "recipe",
+            "server/test_tools_list_recipes.py",
+            "server/test_tools_kitchen_envelope.py",
+            "server/test_tools_load_recipe.py",
+            "server/test_mcp_overrides.py",
+            "server/test_service_wrappers.py",
+            "cli/test_cli_prompts.py",
+            "infra/test_pretty_output_recipe.py",
+            "contracts/test_tools_recipe_contracts.py",
+            "contracts/test_package_gateways.py",
+        }
+    ),
+    "io": frozenset(
+        {
+            "recipe",
+            "server/test_server_tool_registration.py",
+            "server/test_smoke_pipeline.py",
+            "server/test_service_wrappers.py",
+            "cli/test_cli_prompts.py",
+            "cli/test_fleet_list.py",
+            "cli/test_preview.py",
+            "fleet/test_pack_enforcement.py",
+            "fleet/test_pack_enforcement_e2e.py",
+            "skills/test_planner_skill_contracts.py",
+            "contracts/test_skill_yaml_validation.py",
+            "contracts/test_target_skill_invocability.py",
+            "contracts/test_package_gateways.py",
+            "contracts/test_instruction_surface.py",
+        }
+    ),
+}
+
 # ---------------------------------------------------------------------------
 # Layer cascade maps
 # ---------------------------------------------------------------------------
@@ -974,6 +1123,12 @@ def build_test_scope(
                     test_dirs.update(
                         cascade_map["execution"]
                     )  # fail-open: headless, process, unknown
+            elif pkg == "recipe" and mode == FilterMode.CONSERVATIVE:
+                stem = Path(f).stem
+                if stem in MODULE_CASCADE_RECIPE:
+                    test_dirs.update(MODULE_CASCADE_RECIPE[stem])
+                else:
+                    test_dirs.update(cascade_map["recipe"])  # fail-open
             elif pkg and pkg in cascade_map:
                 test_dirs.update(cascade_map[pkg])
             else:
@@ -1037,6 +1192,31 @@ def build_test_scope(
                             test_dirs.update(MODULE_CASCADE_EXECUTION[stem])
                         else:
                             test_dirs.update(cascade_map["execution"])  # fail-open
+                    elif pkg == "recipe" and mode == FilterMode.CONSERVATIVE:
+                        stem = Path(f).stem
+                        if stem == "__init__":
+                            recipe_cause_stems = {
+                                Path(c).stem
+                                for c in changed_src_py
+                                if _file_to_package(c) == "recipe" and Path(c).stem != "__init__"
+                            }
+                            if recipe_cause_stems and all(
+                                s in MODULE_CASCADE_RECIPE for s in recipe_cause_stems
+                            ):
+                                for s in recipe_cause_stems:
+                                    test_dirs.update(MODULE_CASCADE_RECIPE[s])
+                            else:
+                                if not recipe_cause_stems:
+                                    logging.getLogger(__name__).debug(  # noqa: TID251
+                                        "recipe/__init__ backtrace: no non-init recipe cause stems"
+                                        " — failing open to full recipe cascade (expected behavior"
+                                        " when only recipe/__init__.py changed)"
+                                    )
+                                test_dirs.update(cascade_map["recipe"])  # fail-open
+                        elif stem in MODULE_CASCADE_RECIPE:
+                            test_dirs.update(MODULE_CASCADE_RECIPE[stem])
+                        else:
+                            test_dirs.update(cascade_map["recipe"])  # fail-open
                     elif pkg and pkg in cascade_map:
                         test_dirs.update(cascade_map[pkg])
         except Exception:

@@ -284,10 +284,15 @@ skills:
     - name: verdict
       type: string
     expected_output_patterns:
-    - verdict\s*=\s*(approved|changes_requested|needs_human)
+    - verdict\s*=\s*(approved|approved_with_comments|changes_requested|needs_human)
     - '%%REVIEW_GATE::(LOOP_REQUIRED|CLEAR)%%'
     pattern_examples:
     - 'verdict = approved
+
+      %%REVIEW_GATE::CLEAR%%
+
+      %%ORDER_UP%%'
+    - 'verdict = approved_with_comments
 
       %%REVIEW_GATE::CLEAR%%
 

@@ -13,18 +13,18 @@ from uuid import uuid4
 
 from cyclopts import App, Parameter
 
-from autoskillit.cli._fleet_display import (
+from autoskillit.cli.fleet._fleet_display import (
     _aggregate_totals,
     _compute_exit_code,
     _cross_check_tokens,
     _render_status_display,
     _watch_loop,
 )
-from autoskillit.cli._fleet_lifecycle import (
+from autoskillit.cli.fleet._fleet_lifecycle import (
     _pick_resume_campaign,
     _reap_stale_dispatches,
 )
-from autoskillit.cli._fleet_session import _launch_fleet_session
+from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
 from autoskillit.core import TerminalColumn, get_logger, is_feature_enabled
 
 logger = get_logger(__name__)

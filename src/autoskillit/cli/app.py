@@ -15,7 +15,7 @@ from cyclopts import App, Parameter
 
 from autoskillit.cli._cook import cook as cook_interactive
 from autoskillit.cli._features import features_app
-from autoskillit.cli._fleet import fleet_app
+from autoskillit.cli.fleet import fleet_app
 from autoskillit.cli._init_helpers import (
     _MARKER_CONTENT,
     _check_secret_scanning,

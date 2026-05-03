@@ -177,20 +177,155 @@ def test_skill_contracts_yaml_open_research_pr_removed(skills):
     assert "open-research-pr" not in skills
 
 
+def test_review_pr_verdict_allowed_values_includes_approved_with_comments(skills):
+    """review-pr allowed_values must include approved_with_comments.
+
+    The skill emits 4 distinct verdicts; the contract previously only listed 3.
+    A missing allowed_value causes unrouted-verdict-value semantic rule failures.
+    """
+    assert "review-pr" in skills
+    verdict_output = next(
+        (o for o in skills["review-pr"].get("outputs", []) if o["name"] == "verdict"),
+        None,
+    )
+    assert verdict_output is not None, "review-pr must declare a verdict output"
+    allowed = verdict_output.get("allowed_values", [])
+    assert "approved_with_comments" in allowed, (
+        f"review-pr allowed_values must include 'approved_with_comments'; got {allowed!r}"
+    )
+
+
+def test_review_pr_pattern_examples_cover_all_verdicts(skills):
+    """Every allowed verdict value for review-pr must appear in at least one pattern_example.
+
+    Ensures the contract's example set is complete: one example per outcome.
+    """
+    assert "review-pr" in skills
+    verdict_output = next(
+        (o for o in skills["review-pr"].get("outputs", []) if o["name"] == "verdict"),
+        None,
+    )
+    assert verdict_output is not None
+    allowed = verdict_output.get("allowed_values", [])
+    examples = skills["review-pr"].get("pattern_examples", [])
+    missing = [v for v in allowed if not any(f"verdict = {v}" in ex for ex in examples)]
+    assert not missing, (
+        f"review-pr pattern_examples missing examples for verdicts: {missing!r}. "
+        "Each allowed_value must be represented by at least one pattern_example."
+    )
+
+
+def test_every_pattern_example_satisfies_all_patterns(skills):
+    """For every skill with expected_output_patterns and pattern_examples,
+    every example must re.search-match ALL patterns (bi-directional check).
+
+    The one-directional check (each pattern matches >=1 example) misses conditional
+    tokens: a pattern may match *some* examples while failing for valid output that
+    legitimately omits a conditional token.
+    """
+    failures = []
+    for skill_name, contract in skills.items():
+        patterns = contract.get("expected_output_patterns", [])
+        examples = contract.get("pattern_examples", [])
+        if not patterns or not examples:
+            continue
+        for i, example in enumerate(examples):
+            for pattern in patterns:
+                if not re.search(pattern, example):
+                    failures.append(
+                        f"Skill '{skill_name}': example[{i}] does not match pattern "
+                        f"{pattern!r}.\n  Example: {example!r}"
+                    )
+    assert not failures, (
+        "Bi-directional pattern/example check failed — "
+        "conditional tokens cause AND-semantics failures at runtime:\n" + "\n".join(failures)
+    )
+
+
+def test_skill_contracts_allowed_values_covers_recipe_routes() -> None:
+    """Every verdict value routed in recipe on_result blocks must appear in allowed_values.
+
+    Scans implementation.yaml, remediation.yaml, implementation-groups.yaml, and
+    merge-prs.yaml for result.verdict routing conditions. Any value routed in a recipe
+    but absent from skill_contracts.yaml allowed_values will trigger the
+    unrouted-verdict-value semantic rule at recipe-load time.
+    """
+    recipes_dir = Path(__file__).parents[2] / "src/autoskillit/recipes"
+    target_files = [
+        "implementation.yaml",
+        "remediation.yaml",
+        "implementation-groups.yaml",
+        "merge-prs.yaml",
+    ]
+    contracts = yaml.safe_load(_CONTRACTS_YAML.read_text())
+    verdict_output = next(
+        (o for o in contracts["skills"]["review-pr"].get("outputs", []) if o["name"] == "verdict"),
+        None,
+    )
+    assert verdict_output is not None
+    allowed = set(verdict_output.get("allowed_values", []))
+
+    # Match only lowercase verdict values (review-pr convention: approved, changes_requested…).
+    # Excludes all-uppercase review-design verdicts (GO, REVISE, STOP) which appear in the
+    # same recipe files under different steps.
+    verdict_route_re = re.compile(r"result\.verdict\s*}}\s*==\s*([a-z][a-z_]*)")
+    routed_values: set[str] = set()
+    for filename in target_files:
+        fpath = recipes_dir / filename
+        if not fpath.exists():
+            continue
+        for m in verdict_route_re.finditer(fpath.read_text()):
+            routed_values.add(m.group(1))
+
+    missing = routed_values - allowed
+    assert not missing, (
+        f"Verdict values routed in recipes but absent from skill_contracts.yaml allowed_values: "
+        f"{sorted(missing)}. Add them to the review-pr outputs[verdict].allowed_values list."
+    )
+
+
 # T3-1
 def test_review_gate_loop_required_pattern_in_review_pr_contracts(skills):
-    """review-pr must have %%REVIEW_GATE::LOOP_REQUIRED%% pattern registered."""
-    _assert_skill_has_patterns(skills, "review-pr", "%%REVIEW_GATE::(LOOP_REQUIRED|CLEAR)%%")
+    """review-pr gate pattern must use OR-conditional form compatible with approved_with_comments.
+
+    The unconditional %%REVIEW_GATE::(LOOP_REQUIRED|CLEAR)%% pattern causes
+    CONTRACT_VIOLATION for sessions that legitimately emit no gate tag
+    (approved_with_comments verdict). The corrected form must be an OR that accepts
+    either a gate tag or an approved_with_comments verdict.
+    """
+    assert "review-pr" in skills
+    patterns = skills["review-pr"].get("expected_output_patterns", [])
+    conditional_pattern = (
+        "(?:%%REVIEW_GATE::(LOOP_REQUIRED|CLEAR)%%|verdict\\s*=\\s*approved_with_comments)"
+    )
+    assert conditional_pattern in patterns, (
+        f"review-pr gate pattern must use OR-conditional form so that approved_with_comments "
+        f"sessions succeed without a %%REVIEW_GATE:: tag. "
+        f"Expected pattern: {conditional_pattern!r}. Got: {patterns!r}"
+    )
 
 
 # T3-2
 def test_review_gate_clear_pattern_in_review_pr_contracts(skills):
-    """review-pr REVIEW_GATE pattern must cover both LOOP_REQUIRED and CLEAR tags."""
+    """review-pr REVIEW_GATE pattern must cover CLEAR and LOOP_REQUIRED; approved_with_comments
+    example must exist WITHOUT a gate tag."""
     assert "review-pr" in skills
     patterns = skills["review-pr"].get("expected_output_patterns", [])
+    examples = skills["review-pr"].get("pattern_examples", [])
+
     gate_patterns = [p for p in patterns if "REVIEW_GATE" in p]
     assert gate_patterns, "No REVIEW_GATE pattern found for review-pr"
     combined = " ".join(gate_patterns)
     assert "LOOP_REQUIRED" in combined and "CLEAR" in combined, (
-        f"REVIEW_GATE pattern must cover both tags; found: {gate_patterns}"
+        f"REVIEW_GATE pattern must reference both tags; found: {gate_patterns}"
     )
+
+    awc_examples = [ex for ex in examples if "approved_with_comments" in ex]
+    assert awc_examples, (
+        "No approved_with_comments example found in pattern_examples — "
+        "add one to document the no-gate-tag path"
+    )
+    for ex in awc_examples:
+        assert "%%REVIEW_GATE::" not in ex, (
+            f"approved_with_comments example must NOT include %%REVIEW_GATE:: tag; found: {ex!r}"
+        )

@@ -412,3 +412,190 @@ class TestResultFieldDriftRule:
         findings = run_semantic_rules(recipe)
         drift = [f for f in findings if f.rule == "result-field-drift"]
         assert drift == [], f"result-field-drift fired on planner recipe: {drift}"
+
+
+# ---------------------------------------------------------------------------
+# example-covers-all-allowed-values rule tests
+# ---------------------------------------------------------------------------
+
+
+def test_example_covers_all_allowed_values_fires_on_missing_example(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """example-covers-all-allowed-values fires ERROR when an allowed_value has no example."""
+    manifest = {
+        "version": "0.1.0",
+        "skills": {
+            "test-skill": {
+                "inputs": [],
+                "outputs": [
+                    {"name": "verdict", "type": "string", "allowed_values": ["go", "stop"]}
+                ],
+                "expected_output_patterns": ["verdict\\s*=\\s*(go|stop)"],
+                "pattern_examples": ["verdict = go\n%%ORDER_UP%%"],  # only "go", missing "stop"
+            }
+        },
+    }
+    monkeypatch.setattr(_rc, "load_bundled_manifest", lambda: manifest)
+    recipe = _make_recipe_with_skill("/autoskillit:test-skill")
+    findings = run_semantic_rules(recipe)
+    rule_findings = [f for f in findings if f.rule == "example-covers-all-allowed-values"]
+    assert len(rule_findings) >= 1, (
+        "example-covers-all-allowed-values must fire when allowed_value 'stop' "
+        "has no corresponding pattern_examples entry"
+    )
+    assert rule_findings[0].severity == Severity.ERROR
+    assert "stop" in rule_findings[0].message
+
+
+def test_example_covers_all_allowed_values_passes_when_complete(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """example-covers-all-allowed-values must not fire when all allowed_values have examples."""
+    manifest = {
+        "version": "0.1.0",
+        "skills": {
+            "test-skill": {
+                "inputs": [],
+                "outputs": [
+                    {"name": "verdict", "type": "string", "allowed_values": ["go", "stop"]}
+                ],
+                "expected_output_patterns": ["verdict\\s*=\\s*(go|stop)"],
+                "pattern_examples": [
+                    "verdict = go\n%%ORDER_UP%%",
+                    "verdict = stop\n%%ORDER_UP%%",
+                ],
+            }
+        },
+    }
+    monkeypatch.setattr(_rc, "load_bundled_manifest", lambda: manifest)
+    recipe = _make_recipe_with_skill("/autoskillit:test-skill")
+    findings = run_semantic_rules(recipe)
+    rule_findings = [f for f in findings if f.rule == "example-covers-all-allowed-values"]
+    assert rule_findings == [], (
+        "example-covers-all-allowed-values must not fire when both 'go' and 'stop' "
+        "appear in pattern_examples"
+    )
+
+
+# ---------------------------------------------------------------------------
+# all-examples-match-all-patterns rule tests
+# ---------------------------------------------------------------------------
+
+
+def test_all_examples_match_all_patterns_fires_on_conditional_pattern(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """all-examples-match-all-patterns fires ERROR when an example fails a pattern."""
+    manifest = {
+        "version": "0.1.0",
+        "skills": {
+            "test-skill": {
+                "inputs": [],
+                "outputs": [{"name": "verdict", "type": "string"}],
+                "expected_output_patterns": [
+                    "verdict\\s*=\\s*(go|stop)",
+                    "%%TAG%%",
+                ],
+                "pattern_examples": [
+                    "verdict = go\n%%TAG%%",  # matches both patterns
+                    "verdict = stop",  # missing %%TAG%% — fails second pattern
+                ],
+            }
+        },
+    }
+    monkeypatch.setattr(_rc, "load_bundled_manifest", lambda: manifest)
+    recipe = _make_recipe_with_skill("/autoskillit:test-skill")
+    findings = run_semantic_rules(recipe)
+    rule_findings = [f for f in findings if f.rule == "all-examples-match-all-patterns"]
+    assert len(rule_findings) >= 1, (
+        "all-examples-match-all-patterns must fire when 'verdict = stop' example "
+        "does not match the '%%TAG%%' pattern"
+    )
+    assert rule_findings[0].severity == Severity.ERROR
+    assert "%%TAG%%" in rule_findings[0].message or "verdict = stop" in rule_findings[0].message
+
+
+def test_all_examples_match_all_patterns_passes_when_all_match(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """all-examples-match-all-patterns must not fire when all examples match all patterns."""
+    manifest = {
+        "version": "0.1.0",
+        "skills": {
+            "test-skill": {
+                "inputs": [],
+                "outputs": [{"name": "verdict", "type": "string"}],
+                "expected_output_patterns": [
+                    "verdict\\s*=\\s*(go|stop)",
+                    "%%TAG%%",
+                ],
+                "pattern_examples": [
+                    "verdict = go\n%%TAG%%",
+                    "verdict = stop\n%%TAG%%",
+                ],
+            }
+        },
+    }
+    monkeypatch.setattr(_rc, "load_bundled_manifest", lambda: manifest)
+    recipe = _make_recipe_with_skill("/autoskillit:test-skill")
+    findings = run_semantic_rules(recipe)
+    rule_findings = [f for f in findings if f.rule == "all-examples-match-all-patterns"]
+    assert rule_findings == [], (
+        "all-examples-match-all-patterns must not fire when all examples match all patterns"
+    )
+
+
+def test_all_examples_match_all_patterns_skips_without_examples(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """all-examples-match-all-patterns must not fire when there are no pattern_examples."""
+    manifest = {
+        "version": "0.1.0",
+        "skills": {
+            "test-skill": {
+                "inputs": [],
+                "outputs": [{"name": "verdict", "type": "string"}],
+                "expected_output_patterns": ["verdict\\s*=\\s*(go|stop)"],
+                # No pattern_examples
+            }
+        },
+    }
+    monkeypatch.setattr(_rc, "load_bundled_manifest", lambda: manifest)
+    recipe = _make_recipe_with_skill("/autoskillit:test-skill")
+    findings = run_semantic_rules(recipe)
+    rule_findings = [f for f in findings if f.rule == "all-examples-match-all-patterns"]
+    assert rule_findings == [], (
+        "all-examples-match-all-patterns must not fire without pattern_examples "
+        "(defer to missing-pattern-examples rule)"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Integration test: all bundled recipes pass the new contract immunity rules
+# ---------------------------------------------------------------------------
+
+
+def test_bundled_recipes_pass_all_new_contract_rules() -> None:
+    """All bundled recipes must pass the three new contract immunity rules with zero ERRORs."""
+    new_rules = {
+        "example-covers-all-allowed-values",
+        "all-examples-match-all-patterns",
+        "on-result-values-in-allowed-values",
+    }
+    recipes_dir = pkg_root() / "recipes"
+    recipe_files = sorted(recipes_dir.glob("*.yaml"))
+    assert recipe_files, "No bundled recipes found"
+
+    violations: list[str] = []
+    for recipe_path in recipe_files:
+        recipe = load_recipe(recipe_path)
+        findings = run_semantic_rules(recipe)
+        for f in findings:
+            if f.rule in new_rules and f.severity == Severity.ERROR:
+                violations.append(f"{recipe_path.name}:{f.step_name}: [{f.rule}] {f.message}")
+
+    assert not violations, (
+        "New contract immunity rules fired on bundled recipes "
+        "(ensure Part A contract fixes are applied):\n" + "\n".join(violations)
+    )

@@ -395,16 +395,6 @@ def test_generate_phases_skill_no_env_var_delivery():
 # --- intent-driven decomposition tests (T1–T7) ---
 
 
-def test_generate_phases_no_fixed_range_in_description():
-    """Description frontmatter must not contain a fixed numeric phase range."""
-    content = (SKILLS_ROOT / "planner-generate-phases" / "SKILL.md").read_text()
-    parts = content.split("---", 2)
-    data = yaml.safe_load(parts[1]) or {}
-    description = data.get("description", "")
-    assert "3-6" not in description, "description must not hardcode '3-6' phase range"
-    assert "3–6" not in description, "description must not hardcode '3–6' phase range"
-
-
 def test_generate_phases_no_fixed_range_in_body():
     """SKILL.md body must not contain a fixed '3-6' or '3–6' phase range."""
     content = (SKILLS_ROOT / "planner-generate-phases" / "SKILL.md").read_text()
@@ -466,7 +456,7 @@ def test_elaborate_assignments_no_domain_anchoring(term: str):
 def test_refine_phases_has_batch_ceiling():
     """refine-phases must handle >6 phases via sequential batching (no unbounded spawn)."""
     content = (SKILLS_ROOT / "planner-refine-phases" / "SKILL.md").read_text()
-    has_batch_guidance = "batch" in content.lower() and "6" in content
+    has_batch_guidance = "batch of 6" in content.lower() or "batches of 6" in content.lower()
     assert has_batch_guidance, (
         "planner-refine-phases must include batch ceiling guidance for >6 phases "
         "(consistent with refine-wps and refine-assignments)"

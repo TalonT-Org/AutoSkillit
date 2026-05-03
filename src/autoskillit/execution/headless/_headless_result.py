@@ -20,18 +20,18 @@ from autoskillit.core import (
     get_logger,
     truncate_text,
 )
-from autoskillit.execution._headless_path_tokens import (
+from autoskillit.execution.headless._headless_path_tokens import (
     _extract_output_paths,
     _extract_worktree_path,
     _validate_output_paths,
 )
-from autoskillit.execution._headless_recovery import (
+from autoskillit.execution.headless._headless_recovery import (
     _CHANNEL_B_RECOVERABLE_SUBTYPES,
     _recover_block_from_assistant_messages,
     _recover_from_separate_marker,
     _synthesize_from_write_artifacts,
 )
-from autoskillit.execution._headless_scan import _scan_jsonl_write_paths
+from autoskillit.execution.headless._headless_scan import _scan_jsonl_write_paths
 from autoskillit.execution.session._session_content import _check_expected_patterns
 from autoskillit.execution.session._session_model import (
     ClaudeSessionResult,

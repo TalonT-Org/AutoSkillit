@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core import CliSubtype, OutputFormat, RetryReason, SkillResult, get_logger
-from autoskillit.execution._headless_path_tokens import _RECOVERABLE_PATH_TOKENS
+from autoskillit.execution.headless._headless_path_tokens import _RECOVERABLE_PATH_TOKENS
 from autoskillit.execution.commands import build_headless_resume_cmd
 from autoskillit.execution.process import _marker_is_standalone
 from autoskillit.execution.session import (

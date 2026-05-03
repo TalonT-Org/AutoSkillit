@@ -37,11 +37,11 @@ from autoskillit.core import (
     is_git_worktree,
     temp_dir_display_str,
 )
-from autoskillit.execution._headless_git import (
+from autoskillit.execution.headless._headless_git import (
     _capture_git_head_sha,
     _compute_loc_changed,
 )
-from autoskillit.execution._headless_path_tokens import (  # noqa: F401
+from autoskillit.execution.headless._headless_path_tokens import (  # noqa: F401
     _INTENTIONALLY_EXCLUDED_PATH_TOKENS,
     _OUTPUT_PATH_PATTERN,
     _OUTPUT_PATH_TOKENS,
@@ -52,7 +52,7 @@ from autoskillit.execution._headless_path_tokens import (  # noqa: F401
     _extract_worktree_path,
     _validate_output_paths,
 )
-from autoskillit.execution._headless_recovery import (
+from autoskillit.execution.headless._headless_recovery import (
     _CHANNEL_B_RECOVERABLE_SUBTYPES,  # noqa: F401
     _NUDGE_TIMEOUT,  # noqa: F401
     _TOKEN_NAME_RE,  # noqa: F401
@@ -64,7 +64,7 @@ from autoskillit.execution._headless_recovery import (
     _recover_from_separate_marker,  # noqa: F401
     _synthesize_from_write_artifacts,  # noqa: F401
 )
-from autoskillit.execution._headless_result import (
+from autoskillit.execution.headless._headless_result import (
     _apply_budget_guard,  # noqa: F401
     _build_error_path_telemetry,
     _build_session_telemetry,
@@ -72,7 +72,7 @@ from autoskillit.execution._headless_result import (
     _capture_failure,  # noqa: F401
     _resolve_skill_session_id,  # noqa: F401
 )
-from autoskillit.execution._headless_scan import _scan_jsonl_write_paths  # noqa: F401
+from autoskillit.execution.headless._headless_scan import _scan_jsonl_write_paths  # noqa: F401
 from autoskillit.execution.clone_guard import (
     check_and_revert_clone_contamination,
     is_worktree_skill,

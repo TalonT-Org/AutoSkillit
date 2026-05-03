@@ -48,6 +48,7 @@ file to `$3/refine_contexts/{phase_id}_result.json`.
 - Spawn more than 6 L0s in a single parallel batch
 - Read `{{AUTOSKILLIT_TEMP}}` artifacts not passed as positional arguments
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Write L0 prompts to intermediate `l0_prompts/` files and read them back into the L1 context — spawn L0 subagents directly from in-memory context packets
 
 **ALWAYS:**
 - Read `phase_id` from the context file to construct the output path
@@ -68,8 +69,6 @@ parse/validation error string:
 ```
 FATAL: failed to parse {path}: {error_detail}
 ```
-
-Read the task description from disk at `task_file_path` (not inline from the context file).
 
 Read `$2` (refined_plan.json). Build a map `phase_id → PhaseElaborated` for L0 context.
 
@@ -98,16 +97,13 @@ Input schema for the per-phase context file:
 
 ### Step 2: Build L0 context packets
 
-Read the task description from `task_file_path`. Each L0 subagent must verify that the
-assignment's goal, scope, and deliverables serve the stated task. Flag assignments that
-introduce work not requested by the task as scope creep.
-
 For each assignment in `assignments`, build a context packet containing:
 - The full serialized assignment object (AssignmentElaborated)
 - The `peer_summaries` list for cross-phase dependency detection
 - The `PhaseElaborated` entry for the assignment's `phase_id` from `$2`
 - The `target_assignment_id`
-- Instructions: review the target assignment in light of peer_summaries; return structured suggestions only — do NOT edit files
+- `task_file_path` — the path to the task description on disk (pass the path reference only; do NOT read the task text into the L1 context or embed it in the L0 prompt)
+- Instructions: review the target assignment in light of peer_summaries; always read the task from disk at `task_file_path` for scope creep verification (flag scope creep if the assignment's goal, scope, or deliverables introduce work not requested by the task); return structured suggestions only — do NOT edit files
 
 ### Step 3: Spawn parallel L0 subagents
 
@@ -115,6 +111,8 @@ Since each phase has 3–5 assignments (always within the 6-L0 ceiling), spawn a
 parallel batch via Agent/Task. Do not spawn more than 6 L0s in a single parallel batch:
 if assignment count > 6 (unexpected), spawn sequential batches of 6. Between batches, emit
 anti-prose guard line: `--- next batch ---`.
+
+Reading `l0_prompts/*.txt` files back before spawning adds ~15K tokens to the L1 context per L0 with no benefit.
 
 Each L0 must return structured text in this exact format:
 ```

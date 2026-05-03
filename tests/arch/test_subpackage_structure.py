@@ -1,7 +1,8 @@
 """REQ-ARCH-010: Validate post-reorganization subpackage structure."""
 
-import pytest
 from pathlib import Path
+
+import pytest
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
 
@@ -34,11 +35,7 @@ class TestCoreSubpackages:
 
     def test_core_runtime_has_expected_modules(self):
         expected = {"kitchen_state", "readiness", "session_registry", "_linux_proc"}
-        actual = {
-            p.stem
-            for p in (SRC / "core" / "runtime").glob("*.py")
-            if p.stem != "__init__"
-        }
+        actual = {p.stem for p in (SRC / "core" / "runtime").glob("*.py") if p.stem != "__init__"}
         assert actual == expected
 
     def test_no_type_modules_remain_flat_in_core(self):
@@ -55,15 +52,11 @@ class TestCoreSubpackages:
             "_linux_proc.py",
         }
         orphans = [SRC / "core" / n for n in names if (SRC / "core" / n).exists()]
-        assert not orphans, (
-            f"Orphan runtime modules in core/: {[p.name for p in orphans]}"
-        )
+        assert not orphans, f"Orphan runtime modules in core/: {[p.name for p in orphans]}"
 
 
 class TestExecutionSubpackages:
-    @pytest.mark.parametrize(
-        "subpkg", ["headless", "process", "session", "merge_queue"]
-    )
+    @pytest.mark.parametrize("subpkg", ["headless", "process", "session", "merge_queue"])
     def test_subpackage_is_package(self, subpkg):
         assert (SRC / "execution" / subpkg / "__init__.py").exists()
 
@@ -75,9 +68,7 @@ class TestExecutionSubpackages:
             "_headless_result",
             "_headless_scan",
         }
-        actual = {
-            p.stem for p in (SRC / "execution" / "headless").glob("_headless_*.py")
-        }
+        actual = {p.stem for p in (SRC / "execution" / "headless").glob("_headless_*.py")}
         assert actual == expected
 
     def test_process_has_expected_modules(self):
@@ -89,9 +80,7 @@ class TestExecutionSubpackages:
             "_process_pty",
             "_process_race",
         }
-        actual = {
-            p.stem for p in (SRC / "execution" / "process").glob("_process_*.py")
-        }
+        actual = {p.stem for p in (SRC / "execution" / "process").glob("_process_*.py")}
         assert actual == expected
 
     def test_session_has_expected_modules(self):
@@ -102,9 +91,7 @@ class TestExecutionSubpackages:
             "_retry_fsm",
         }
         actual = {
-            p.stem
-            for p in (SRC / "execution" / "session").glob("*.py")
-            if p.stem != "__init__"
+            p.stem for p in (SRC / "execution" / "session").glob("*.py") if p.stem != "__init__"
         }
         assert actual == expected
 
@@ -114,10 +101,7 @@ class TestExecutionSubpackages:
             "_merge_queue_group_ci",
             "_merge_queue_repo_state",
         }
-        actual = {
-            p.stem
-            for p in (SRC / "execution" / "merge_queue").glob("_merge_queue_*.py")
-        }
+        actual = {p.stem for p in (SRC / "execution" / "merge_queue").glob("_merge_queue_*.py")}
         assert actual == expected
 
     def test_no_headless_modules_remain_flat(self):
@@ -135,9 +119,7 @@ class TestExecutionSubpackages:
             "_session_outcome.py",
             "_retry_fsm.py",
         }
-        orphans = [
-            SRC / "execution" / n for n in names if (SRC / "execution" / n).exists()
-        ]
+        orphans = [SRC / "execution" / n for n in names if (SRC / "execution" / n).exists()]
         assert not orphans
 
     def test_no_merge_queue_modules_remain_flat(self):

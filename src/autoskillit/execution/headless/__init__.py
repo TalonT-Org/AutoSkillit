@@ -37,6 +37,15 @@ from autoskillit.core import (
     is_git_worktree,
     temp_dir_display_str,
 )
+from autoskillit.execution.clone_guard import (
+    check_and_revert_clone_contamination,
+    is_worktree_skill,
+    snapshot_clone_state,
+)
+from autoskillit.execution.commands import (
+    build_food_truck_cmd,
+    build_leaf_headless_cmd,
+)
 from autoskillit.execution.headless._headless_git import (
     _capture_git_head_sha,
     _compute_loc_changed,
@@ -73,15 +82,6 @@ from autoskillit.execution.headless._headless_result import (
     _resolve_skill_session_id,  # noqa: F401
 )
 from autoskillit.execution.headless._headless_scan import _scan_jsonl_write_paths  # noqa: F401
-from autoskillit.execution.clone_guard import (
-    check_and_revert_clone_contamination,
-    is_worktree_skill,
-    snapshot_clone_state,
-)
-from autoskillit.execution.commands import (
-    build_food_truck_cmd,
-    build_leaf_headless_cmd,
-)
 from autoskillit.execution.recording import RecordingSubprocessRunner
 
 if TYPE_CHECKING:

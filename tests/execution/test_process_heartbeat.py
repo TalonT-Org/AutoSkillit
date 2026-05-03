@@ -207,7 +207,8 @@ class TestHasActiveApiConnection:
             children.append(mock_child)
         mock_parent.children.return_value = children
         return patch(
-            "autoskillit.execution.process._process_monitor.psutil.Process", return_value=mock_parent
+            "autoskillit.execution.process._process_monitor.psutil.Process",
+            return_value=mock_parent,
         )
 
     def test_returns_true_when_parent_has_established_port_443(self):
@@ -269,7 +270,8 @@ class TestHasActiveApiConnection:
         mock_live_child.net_connections.return_value = [self._make_conn(443)]
         mock_parent.children.return_value = [mock_dead_child, mock_live_child]
         with patch(
-            "autoskillit.execution.process._process_monitor.psutil.Process", return_value=mock_parent
+            "autoskillit.execution.process._process_monitor.psutil.Process",
+            return_value=mock_parent,
         ):
             assert _has_active_api_connection(12345) is True
 
@@ -286,7 +288,8 @@ class TestHasActiveApiConnection:
         mock_live_child.net_connections.return_value = [self._make_conn(443)]
         mock_parent.children.return_value = [mock_zombie, mock_live_child]
         with patch(
-            "autoskillit.execution.process._process_monitor.psutil.Process", return_value=mock_parent
+            "autoskillit.execution.process._process_monitor.psutil.Process",
+            return_value=mock_parent,
         ):
             assert _has_active_api_connection(12345) is True
 

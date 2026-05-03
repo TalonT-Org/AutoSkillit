@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any, assert_never, cast
 import httpx
 
 from autoskillit.core import PRState, get_logger
+from autoskillit.execution.github import github_headers, make_tracked_httpx_client
 from autoskillit.execution.merge_queue._merge_queue_classifier import (
     _QUERY_FIELD_MAP,  # noqa: F401 — re-export: tests access merge_queue._QUERY_FIELD_MAP
     KNOWN_MQ_MERGE_STATE_STATUSES,  # noqa: F401 — re-export for callers
@@ -50,7 +51,6 @@ from autoskillit.execution.merge_queue._merge_queue_repo_state import (
     _text_has_push_trigger,  # noqa: F401 — re-export for callers
     fetch_repo_merge_state,  # noqa: F401 — re-export for callers
 )
-from autoskillit.execution.github import github_headers, make_tracked_httpx_client
 
 if TYPE_CHECKING:
     from autoskillit.core.types._type_protocols_logging import GitHubApiLog

@@ -110,8 +110,8 @@ def test_feature_skill_categories_match_real_skills():
     """Every FeatureDef.skill_categories entry must map to a frontmatter category tag."""
     import yaml
 
-    from autoskillit.core.types._type_constants import FEATURE_REGISTRY
     from autoskillit.core.paths import pkg_root
+    from autoskillit.core.types._type_constants import FEATURE_REGISTRY
 
     skills_dirs = [pkg_root() / "skills", pkg_root() / "skills_extended"]
     all_category_tags: set[str] = set()
@@ -150,9 +150,9 @@ def test_feature_skill_categories_match_real_skills():
 
 def test_is_feature_enabled_defaults():
     """is_feature_enabled uses FeatureDef.default_enabled when experimental_enabled=False."""
+    from autoskillit.core.feature_flags import is_feature_enabled
     from autoskillit.core.types._type_constants import FEATURE_REGISTRY
     from autoskillit.core.types._type_enums import FeatureLifecycle
-    from autoskillit.core.feature_flags import is_feature_enabled
 
     for name, defn in FEATURE_REGISTRY.items():
         expected = False if defn.lifecycle == FeatureLifecycle.DISABLED else defn.default_enabled
@@ -165,9 +165,9 @@ def test_is_feature_enabled_defaults():
 
 def test_is_feature_enabled_override():
     """is_feature_enabled respects explicit overrides in the features dict (except DISABLED)."""
+    from autoskillit.core.feature_flags import is_feature_enabled
     from autoskillit.core.types._type_constants import FEATURE_REGISTRY
     from autoskillit.core.types._type_enums import FeatureLifecycle
-    from autoskillit.core.feature_flags import is_feature_enabled
 
     assert len(FEATURE_REGISTRY) > 0, "FEATURE_REGISTRY must not be empty"
     for name, defn in FEATURE_REGISTRY.items():
@@ -328,9 +328,9 @@ def test_build_features_dict_franchise_raises_config_schema_error():
 def test_is_feature_enabled_disabled_lifecycle_always_false(monkeypatch):
     """DISABLED lifecycle features return False regardless of config or experimental_enabled."""
     import autoskillit.core.types._type_constants as tc
+    from autoskillit.core.feature_flags import is_feature_enabled
     from autoskillit.core.types._type_constants import FeatureDef
     from autoskillit.core.types._type_enums import FeatureLifecycle
-    from autoskillit.core.feature_flags import is_feature_enabled
 
     disabled_def = FeatureDef(
         lifecycle=FeatureLifecycle.DISABLED,
@@ -376,9 +376,9 @@ def test_build_features_dict_rejects_enabling_disabled_feature(monkeypatch):
 def test_is_feature_enabled_experimental_blanket(monkeypatch):
     """EXPERIMENTAL feature is True when experimental_enabled=True and no override."""
     import autoskillit.core.types._type_constants as tc
+    from autoskillit.core.feature_flags import is_feature_enabled
     from autoskillit.core.types._type_constants import FeatureDef
     from autoskillit.core.types._type_enums import FeatureLifecycle
-    from autoskillit.core.feature_flags import is_feature_enabled
 
     exp_def = FeatureDef(
         lifecycle=FeatureLifecycle.EXPERIMENTAL,
@@ -400,9 +400,9 @@ def test_is_feature_enabled_experimental_blanket(monkeypatch):
 def test_is_feature_enabled_stable_unaffected_by_experimental_enabled(monkeypatch):
     """experimental_enabled has no effect on STABLE features."""
     import autoskillit.core.types._type_constants as tc
+    from autoskillit.core.feature_flags import is_feature_enabled
     from autoskillit.core.types._type_constants import FeatureDef
     from autoskillit.core.types._type_enums import FeatureLifecycle
-    from autoskillit.core.feature_flags import is_feature_enabled
 
     stable_def = FeatureDef(
         lifecycle=FeatureLifecycle.STABLE,

@@ -13,7 +13,10 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 def test_process_kill_exports():
     """_process_kill.py exports kill/async_kill functions."""
-    from autoskillit.execution.process._process_kill import async_kill_process_tree, kill_process_tree
+    from autoskillit.execution.process._process_kill import (
+        async_kill_process_tree,
+        kill_process_tree,
+    )
 
     assert callable(kill_process_tree)
     assert kill_process_tree.__module__ == "autoskillit.execution.process._process_kill"
@@ -68,7 +71,9 @@ def test_process_monitor_exports():
     assert callable(_session_log_monitor)
     assert _session_log_monitor.__module__ == "autoskillit.execution.process._process_monitor"
     assert callable(_has_active_api_connection)
-    assert _has_active_api_connection.__module__ == "autoskillit.execution.process._process_monitor"
+    assert (
+        _has_active_api_connection.__module__ == "autoskillit.execution.process._process_monitor"
+    )
 
 
 def test_process_race_exports():

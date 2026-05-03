@@ -231,7 +231,9 @@ class TestRunManagedAsyncPassesPidToMonitor:
         session_file = tmp_path / "fake_session.jsonl"
         session_file.write_text("")
 
-        with patch("autoskillit.execution.process._process_race._session_log_monitor", capturing_monitor):
+        with patch(
+            "autoskillit.execution.process._process_race._session_log_monitor", capturing_monitor
+        ):
             result = await run_managed_async(
                 ["sleep", "5"],
                 cwd=tmp_path,

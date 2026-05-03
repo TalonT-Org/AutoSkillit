@@ -285,8 +285,8 @@ class TestDispatchFoodTruckGuards:
     ) -> None:
         from unittest.mock import AsyncMock
 
-        from autoskillit.core.types._type_plugin_source import DirectInstall
         from autoskillit.core.types import SubprocessResult, TerminationReason
+        from autoskillit.core.types._type_plugin_source import DirectInstall
         from autoskillit.execution.headless import DefaultHeadlessExecutor
         from tests.fakes import MockSubprocessRunner
 

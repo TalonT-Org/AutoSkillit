@@ -223,8 +223,8 @@ class TestReadTempOutputLogging:
         """
         import structlog
 
-        import autoskillit.execution.process._process_io as io_mod
         import autoskillit.execution.process as proc_mod
+        import autoskillit.execution.process._process_io as io_mod
 
         structlog.reset_defaults()
         current_procs = structlog.get_config()["processors"]

@@ -80,7 +80,7 @@ def test_full_audit_kitchen_rules() -> None:
     from autoskillit.recipe.io import load_recipe
 
     recipe = load_recipe(RECIPE_PATH)
-    assert len(recipe.kitchen_rules) == 4
+    assert len(recipe.kitchen_rules) == 5
 
 
 def test_full_audit_done_step_has_message() -> None:
@@ -173,3 +173,66 @@ def test_full_audit_validate_audits_note_mentions_review_decisions() -> None:
     data = yaml.safe_load(RECIPE_PATH.read_text())
     note = data["steps"]["validate_audits"]["note"]
     assert "review_decisions" in note
+
+
+def test_full_audit_has_max_parallel_ingredient() -> None:
+    from autoskillit.recipe.io import load_recipe
+
+    recipe = load_recipe(RECIPE_PATH)
+    assert "max_parallel" in recipe.ingredients
+
+
+def test_full_audit_max_parallel_defaults_to_three() -> None:
+    from autoskillit.recipe.io import load_recipe
+
+    recipe = load_recipe(RECIPE_PATH)
+    ing = recipe.ingredients["max_parallel"]
+    assert ing.default == "3"
+
+
+def test_full_audit_max_parallel_is_hidden() -> None:
+    from autoskillit.recipe.io import load_recipe
+
+    recipe = load_recipe(RECIPE_PATH)
+    ing = recipe.ingredients["max_parallel"]
+    assert ing.hidden is True
+
+
+def test_full_audit_kitchen_rule_mentions_prefer_completion() -> None:
+    from autoskillit.recipe.io import load_recipe
+
+    recipe = load_recipe(RECIPE_PATH)
+    rules_text = " ".join(recipe.kitchen_rules).lower()
+    assert "prefer-completion" in rules_text or "prefer completion" in rules_text
+
+
+def test_full_audit_run_audits_note_mentions_max_parallel() -> None:
+    import yaml
+
+    data = yaml.safe_load(RECIPE_PATH.read_text())
+    note = data["steps"]["run_audits"]["note"].lower()
+    assert "max_parallel" in note or "max parallel" in note
+
+
+def test_full_audit_validate_audits_no_wave_barrier() -> None:
+    import yaml
+
+    data = yaml.safe_load(RECIPE_PATH.read_text())
+    note = data["steps"]["validate_audits"]["note"].lower()
+    assert "as each" in note or "as soon as" in note or "slot" in note
+
+
+def test_full_audit_create_issues_sequential_prepare_issue() -> None:
+    import yaml
+
+    data = yaml.safe_load(RECIPE_PATH.read_text())
+    note = data["steps"]["create_issues"]["note"].lower()
+    assert "sequential" in note or "one at a time" in note
+
+
+def test_full_audit_recipe_version_bumped() -> None:
+    import yaml
+    from packaging.version import Version
+
+    data = yaml.safe_load(RECIPE_PATH.read_text())
+    assert Version(data["recipe_version"]) > Version("1.0.0")

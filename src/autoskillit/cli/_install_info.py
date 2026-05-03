@@ -19,6 +19,8 @@ from autoskillit.core import get_logger
 logger = get_logger(__name__)
 
 _INSTALL_FROM_DEVELOP = "git+https://github.com/TalonT-Org/AutoSkillit.git@develop"
+_STABLE_DISMISS_WINDOW = timedelta(days=7)
+_DEV_DISMISS_WINDOW = timedelta(hours=12)
 
 
 class InstallType(StrEnum):
@@ -26,6 +28,12 @@ class InstallType(StrEnum):
     LOCAL_EDITABLE = "local-editable"
     LOCAL_PATH = "local-path"
     UNKNOWN = "unknown"
+
+
+class InstallTrack(StrEnum):
+    STABLE = "stable"
+    DEV = "dev"
+    LOCAL = "local"
 
 
 @dataclass(frozen=True)
@@ -98,17 +106,30 @@ def _is_release_tag(rev: str) -> bool:
     return bool(re.fullmatch(r"v?\d+(\.\d+)*", rev))
 
 
+def _is_stable_track(rev: str | None) -> bool:
+    return not rev or rev in ("main", "stable") or _is_release_tag(rev)
+
+
+def classify_track(info: InstallInfo) -> InstallTrack:
+    if info.install_type in (InstallType.LOCAL_EDITABLE, InstallType.LOCAL_PATH):
+        return InstallTrack.LOCAL
+    rev = info.requested_revision or ""
+    if _is_stable_track(rev):
+        return InstallTrack.STABLE
+    return InstallTrack.DEV
+
+
 def comparison_branch(info: InstallInfo) -> str | None:
     """Return the GitHub branch/tag to compare for update availability.
 
-    - ``stable`` / ``main`` / release-tag / ``UNKNOWN`` → ``"releases/latest"``
-    - ``develop`` → ``"develop"``
+    - stable / main / release-tag / UNKNOWN → ``"releases/latest"``
+    - any other GIT_VCS revision (dev-track) → ``"develop"``
     - ``LOCAL_EDITABLE`` / ``LOCAL_PATH`` → ``None`` (not applicable)
     """
-    if info.install_type in (InstallType.LOCAL_EDITABLE, InstallType.LOCAL_PATH):
+    track = classify_track(info)
+    if track == InstallTrack.LOCAL:
         return None
-    rev = info.requested_revision or ""
-    if rev == "develop":
+    if track == InstallTrack.DEV:
         return "develop"
     return "releases/latest"
 
@@ -118,29 +139,29 @@ def dismissal_window(info: InstallInfo) -> timedelta:
 
     Branch-aware windows:
 
-    - ``stable`` / ``main`` / release-tag / ``UNKNOWN`` → ``timedelta(days=7)``
-    - ``develop`` / ``LOCAL_EDITABLE`` → ``timedelta(hours=12)``
+    - stable / main / release-tag / UNKNOWN → ``timedelta(days=7)``
+    - dev-track / LOCAL → ``timedelta(hours=12)``
     """
-    rev = info.requested_revision or ""
+    track = classify_track(info)
     # LOCAL_EDITABLE is reachable only via AUTOSKILLIT_FORCE_UPDATE_CHECK; not dead code.
-    if rev == "develop" or info.install_type == InstallType.LOCAL_EDITABLE:
-        return timedelta(hours=12)
-    return timedelta(days=7)
+    if track in (InstallTrack.DEV, InstallTrack.LOCAL):
+        return _DEV_DISMISS_WINDOW
+    return _STABLE_DISMISS_WINDOW
 
 
 def upgrade_command(info: InstallInfo) -> list[str] | None:
     """Return the subprocess command to upgrade autoskillit for this install.
 
-    - ``stable`` / ``main`` / release-tag → ``["uv", "tool", "upgrade", "autoskillit"]``
-    - ``develop`` → ``["uv", "tool", "install", "--force", <git URL>]``
+    - stable / main / release-tag → ``["uv", "tool", "upgrade", "autoskillit"]``
+    - dev-track → ``["uv", "tool", "install", "--force", <git URL>]``
     - ``LOCAL_EDITABLE`` → ``["uv", "pip", "install", "-e", str(info.editable_source)]``
     - ``UNKNOWN`` / ``LOCAL_PATH`` → ``None``
     """
-    if info.install_type == InstallType.GIT_VCS:
-        rev = info.requested_revision or ""
-        if rev == "develop":
-            return ["uv", "tool", "install", "--force", _INSTALL_FROM_DEVELOP]
-        return ["uv", "tool", "upgrade", "autoskillit"]
     if info.install_type == InstallType.LOCAL_EDITABLE and info.editable_source is not None:
         return ["uv", "pip", "install", "-e", str(info.editable_source)]
-    return None
+    if info.install_type != InstallType.GIT_VCS:
+        return None
+    track = classify_track(info)
+    if track == InstallTrack.DEV:
+        return ["uv", "tool", "install", "--force", _INSTALL_FROM_DEVELOP]
+    return ["uv", "tool", "upgrade", "autoskillit"]

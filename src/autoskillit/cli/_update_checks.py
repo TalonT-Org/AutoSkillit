@@ -46,8 +46,6 @@ from autoskillit.hook_registry import _count_hook_registry_drift
 logger = get_logger(__name__)
 
 _DISMISS_FILE = "update_check.json"
-_STABLE_DISMISS_WINDOW = timedelta(days=7)
-_DEV_DISMISS_WINDOW = timedelta(hours=12)
 
 KITCHEN_GUARDED_COMMANDS: frozenset[str] = frozenset({"update", "install", "init"})
 

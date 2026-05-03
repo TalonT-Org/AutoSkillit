@@ -346,3 +346,133 @@ def test_upgrade_command_unknown_and_local_path_returns_none(
         editable_source=None,
     )
     assert upgrade_command(info) is None
+
+
+# ---------------------------------------------------------------------------
+# _is_release_tag — unit tests (1a)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("rev", ["v0.7.75", "0.7.75", "v1.0", "1.0.0.0"])
+def test_is_release_tag_positive(rev: str) -> None:
+    from autoskillit.cli._install_info import _is_release_tag
+
+    assert _is_release_tag(rev) is True
+
+
+@pytest.mark.parametrize("rev", ["develop", "main", "stable", "feature-foo", "v", "v0.7.75-rc1"])
+def test_is_release_tag_negative(rev: str) -> None:
+    from autoskillit.cli._install_info import _is_release_tag
+
+    assert _is_release_tag(rev) is False
+
+
+# ---------------------------------------------------------------------------
+# _is_stable_track — unit tests (1b)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("rev", [None, "main", "stable", "v0.7.75", "0.9.300", ""])
+def test_is_stable_track_true(rev: str | None) -> None:
+    from autoskillit.cli._install_info import _is_stable_track
+
+    assert _is_stable_track(rev) is True
+
+
+@pytest.mark.parametrize(
+    "rev",
+    ["develop", "integration", "feature-foo", "staging", "release-candidate", "develops"],
+)
+def test_is_stable_track_false(rev: str) -> None:
+    from autoskillit.cli._install_info import _is_stable_track
+
+    assert _is_stable_track(rev) is False
+
+
+# ---------------------------------------------------------------------------
+# classify_track — unit tests (1c)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "install_type,revision,expected_track",
+    [
+        (InstallType.LOCAL_EDITABLE, "develop", "local"),
+        (InstallType.LOCAL_EDITABLE, None, "local"),
+        (InstallType.LOCAL_PATH, "stable", "local"),
+        (InstallType.LOCAL_PATH, None, "local"),
+        (InstallType.GIT_VCS, "stable", "stable"),
+        (InstallType.GIT_VCS, "main", "stable"),
+        (InstallType.GIT_VCS, "v0.7.75", "stable"),
+        (InstallType.GIT_VCS, None, "stable"),
+        (InstallType.GIT_VCS, "develop", "dev"),
+        (InstallType.GIT_VCS, "integration", "dev"),
+        (InstallType.GIT_VCS, "feature-foo", "dev"),
+        (InstallType.GIT_VCS, "staging", "dev"),
+        (InstallType.GIT_VCS, "", "stable"),
+        (InstallType.UNKNOWN, None, "stable"),
+    ],
+)
+def test_classify_track(
+    install_type: InstallType, revision: str | None, expected_track: str
+) -> None:
+    from autoskillit.cli._install_info import InstallTrack, classify_track
+
+    info = InstallInfo(
+        install_type=install_type,
+        commit_id=None,
+        requested_revision=revision,
+        url=None,
+        editable_source=Path("/tmp/repo") if install_type == InstallType.LOCAL_EDITABLE else None,
+    )
+    assert classify_track(info) == InstallTrack(expected_track)
+
+
+# ---------------------------------------------------------------------------
+# Policy functions with arbitrary branch names (1d)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "revision", ["integration", "feature-foo", "staging", "release-candidate", "my-branch"]
+)
+def test_comparison_branch_arbitrary_dev_revision(revision: str) -> None:
+    info = InstallInfo(
+        install_type=InstallType.GIT_VCS,
+        commit_id="abc123",
+        requested_revision=revision,
+        url=None,
+        editable_source=None,
+    )
+    assert comparison_branch(info) == "develop"
+
+
+@pytest.mark.parametrize(
+    "revision", ["integration", "feature-foo", "staging", "release-candidate", "my-branch"]
+)
+def test_dismissal_window_arbitrary_dev_revision(revision: str) -> None:
+    info = InstallInfo(
+        install_type=InstallType.GIT_VCS,
+        commit_id="abc123",
+        requested_revision=revision,
+        url=None,
+        editable_source=None,
+    )
+    assert dismissal_window(info) == timedelta(hours=12)
+
+
+@pytest.mark.parametrize(
+    "revision", ["integration", "feature-foo", "staging", "release-candidate", "my-branch"]
+)
+def test_upgrade_command_arbitrary_dev_revision(revision: str) -> None:
+    info = InstallInfo(
+        install_type=InstallType.GIT_VCS,
+        commit_id="abc123",
+        requested_revision=revision,
+        url=None,
+        editable_source=None,
+    )
+    result = upgrade_command(info)
+    assert result is not None
+    assert result[:3] == ["uv", "tool", "install"]
+    assert "--force" in result

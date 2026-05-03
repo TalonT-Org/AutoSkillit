@@ -107,6 +107,11 @@ def _write_refine_contexts(
         phase_id = assignment.get("phase_id", "")
         if phase_id:
             phase_groups.setdefault(phase_id, []).append(assignment)
+        else:
+            logger.warning(
+                "Assignment %r has no phase_id — skipped from refine contexts",
+                assignment.get("id", "<unknown>"),
+            )
 
     contexts_dir = planner_dir / "refine_contexts"
     contexts_dir.mkdir(parents=True, exist_ok=True)
@@ -217,9 +222,14 @@ def merge_tier_results(
     if key == "assignments":
         merged_data = json.loads(Path(output_path).read_text(encoding="utf-8"))
         assignments = merged_data.get("assignments", [])
+        if not assignments:
+            logger.warning(
+                "merge_tier_results: no assignments found in %s — refine contexts will be empty",
+                output_path,
+            )
         planner_dir = Path(output_path).parent
         context_paths = _write_refine_contexts(planner_dir, assignments, task_file_path)
-        result["refine_context_paths"] = ",".join(context_paths)
+        result["refine_context_paths"] = json.dumps(context_paths)
     return result
 
 

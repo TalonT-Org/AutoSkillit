@@ -49,6 +49,8 @@ file to `$3/refine_contexts/{phase_id}_result.json`.
 - Read `{{AUTOSKILLIT_TEMP}}` artifacts not passed as positional arguments
 - Run subagents in the background (`run_in_background: true` is prohibited)
 - Write L0 prompts to intermediate `l0_prompts/` files and read them back into the L1 context — spawn L0 subagents directly from in-memory context packets
+- Read source code files, test files, or recipe YAML files directly — codebase exploration is the L0 subagents' responsibility
+- Run Bash, Grep, or Glob commands for codebase exploration between L0 spawns
 
 **ALWAYS:**
 - Read `phase_id` from the context file to construct the output path

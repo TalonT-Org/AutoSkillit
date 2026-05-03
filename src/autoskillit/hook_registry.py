@@ -36,77 +36,77 @@ class HookDef:
 HOOK_REGISTRY: list[HookDef] = [
     HookDef(
         matcher="mcp__.*autoskillit.*__run_skill.*",
-        scripts=["skill_cmd_guard.py", "quota_guard.py", "skill_command_guard.py"],
+        scripts=["guards/skill_cmd_guard.py", "guards/quota_guard.py", "guards/skill_command_guard.py"],
     ),
     HookDef(
         matcher="mcp__.*autoskillit.*__remove_clone",
-        scripts=["remove_clone_guard.py"],
+        scripts=["guards/remove_clone_guard.py"],
     ),
     HookDef(
         matcher=r"mcp__.*autoskillit.*__open_kitchen.*",
-        scripts=["open_kitchen_guard.py"],
+        scripts=["guards/open_kitchen_guard.py"],
         timeout_seconds=5,
     ),
     HookDef(
         matcher="AskUserQuestion",
-        scripts=["ask_user_question_guard.py"],
+        scripts=["guards/ask_user_question_guard.py"],
         timeout_seconds=5,
         session_scope="headless_only",
     ),
     HookDef(
         matcher=r"mcp__.*autoskillit.*__merge_worktree",
-        scripts=["branch_protection_guard.py"],
+        scripts=["guards/branch_protection_guard.py"],
     ),
     HookDef(
         matcher=r"mcp__.*autoskillit.*__push_to_remote",
-        scripts=["branch_protection_guard.py"],
+        scripts=["guards/branch_protection_guard.py"],
     ),
     HookDef(
         matcher=r"mcp__.*autoskillit.*__run_cmd",
-        scripts=["unsafe_install_guard.py", "pr_create_guard.py"],
+        scripts=["guards/unsafe_install_guard.py", "guards/pr_create_guard.py"],
     ),
     HookDef(
         matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
-        scripts=["planner_gh_discovery_guard.py"],
+        scripts=["guards/planner_gh_discovery_guard.py"],
         session_scope="headless_only",
     ),
     HookDef(
         matcher=r"Write|Edit",
-        scripts=["generated_file_write_guard.py"],
+        scripts=["guards/generated_file_write_guard.py"],
     ),
     HookDef(
         matcher=r"Write|Edit",
-        scripts=["write_guard.py"],
+        scripts=["guards/write_guard.py"],
         session_scope="headless_only",
     ),
     HookDef(
         matcher=r"Write|Edit",
-        scripts=["recipe_write_advisor.py"],
+        scripts=["guards/recipe_write_advisor.py"],
         session_scope="interactive_only",
     ),
     HookDef(
         matcher=r"Grep",
-        scripts=["grep_pattern_lint_guard.py"],
+        scripts=["guards/grep_pattern_lint_guard.py"],
     ),
     HookDef(
         matcher=r"Bash|Write|Edit|Read|Glob|Grep",
-        scripts=["mcp_health_guard.py"],
+        scripts=["guards/mcp_health_guard.py"],
         timeout_seconds=5,
         session_scope="interactive_only",
     ),
     HookDef(
         matcher=r"mcp__.*autoskillit.*__(run_skill|run_cmd|run_python).*",
-        scripts=["leaf_orchestration_guard.py"],
+        scripts=["guards/leaf_orchestration_guard.py"],
         session_scope="headless_only",
     ),
     HookDef(
         matcher=r"(mcp__.*autoskillit.*__)?dispatch_food_truck",
-        scripts=["fleet_dispatch_guard.py"],
+        scripts=["guards/fleet_dispatch_guard.py"],
     ),
     HookDef(
         event_type="PostToolUse",
         matcher="mcp__.*autoskillit.*",
-        scripts=["pretty_output_hook.py"],
+        scripts=["formatters/pretty_output_hook.py"],
     ),
     HookDef(
         event_type="PostToolUse",
@@ -120,7 +120,7 @@ HOOK_REGISTRY: list[HookDef] = [
     ),
     HookDef(
         matcher=r"mcp__.*autoskillit.*__(wait_for_ci|enqueue_pr)",
-        scripts=["review_loop_gate.py"],
+        scripts=["guards/review_loop_gate.py"],
     ),
     HookDef(
         event_type="SessionStart",

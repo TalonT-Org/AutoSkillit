@@ -1040,7 +1040,7 @@ def test_fetch_latest_version_routes_by_target(
 
     def _mock_fetch(url: str, *, home: Path) -> dict | None:
         fetched_urls.append(url)
-        if "pyproject" in url:
+        if "pyproject.toml" in url:
             import base64
 
             content = base64.b64encode(b'version = "0.9.300"\n').decode()

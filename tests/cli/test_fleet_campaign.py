@@ -207,3 +207,60 @@ def test_fleet_campaign_resume_no_name_lists_active_campaigns(
     assert "campaign-active-1" in out
     assert "campaign-active-2" in out
     assert "campaign-terminal" not in out
+
+
+class TestFleetCampaignResumeHaltedExits:
+    def test_resume_halted_campaign_exits_with_error(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        _stub_guards(monkeypatch)
+        monkeypatch.chdir(tmp_path)
+        campaign_id = "halted-campaign-id1"
+        _setup_existing_campaign_state(tmp_path, campaign_id, "test-campaign")
+        _stub_campaign_resolution(monkeypatch, tmp_path, "test-campaign")
+
+        from autoskillit.fleet import FLEET_HALTED_SENTINEL
+
+        monkeypatch.setattr(
+            "autoskillit.fleet.resume_campaign_from_state",
+            lambda *a, **kw: MagicMock(
+                completed_dispatches_block=FLEET_HALTED_SENTINEL,
+                next_dispatch_name="",
+                is_resumable=False,
+            ),
+        )
+        with pytest.raises(SystemExit, match="1"):
+            _fleet_campaign("test-campaign", resume_campaign=campaign_id)
+        err = capsys.readouterr().err
+        assert "halted" in err.lower()
+        assert "continue_on_failure" in err
+
+    def test_resume_halted_does_not_launch_session(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        _stub_guards(monkeypatch)
+        monkeypatch.chdir(tmp_path)
+        campaign_id = "halted-campaign-id2"
+        _setup_existing_campaign_state(tmp_path, campaign_id, "test-campaign")
+        _stub_campaign_resolution(monkeypatch, tmp_path, "test-campaign")
+
+        from autoskillit.fleet import FLEET_HALTED_SENTINEL
+
+        monkeypatch.setattr(
+            "autoskillit.fleet.resume_campaign_from_state",
+            lambda *a, **kw: MagicMock(
+                completed_dispatches_block=FLEET_HALTED_SENTINEL,
+                next_dispatch_name="",
+                is_resumable=False,
+            ),
+        )
+        launch_called = False
+
+        def _track_launch(*a: object, **kw: object) -> None:
+            nonlocal launch_called
+            launch_called = True
+
+        monkeypatch.setattr("autoskillit.cli._fleet._launch_fleet_session", _track_launch)
+        with pytest.raises(SystemExit):
+            _fleet_campaign("test-campaign", resume_campaign=campaign_id)
+        assert not launch_called

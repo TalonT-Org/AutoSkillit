@@ -321,6 +321,18 @@ PATH_CAPTURE_SKILLS: dict[str, list[str]] = {
     "vis-lens-temporal": ["diagram_path"],
     "vis-lens-uncertainty": ["diagram_path"],
     "review-design": ["evaluation_dashboard", "revision_guidance"],
+    "planner-assess-review-approach": ["review_approach_assessment_path"],
+    "planner-elaborate-assignments": ["phase_assignments_result_dir"],
+    "planner-elaborate-phase": ["elab_result_path"],
+    "planner-elaborate-wps": ["phase_wps_result_dir"],
+    "planner-generate-phases": ["phase_manifest_path"],
+    "planner-refine-assignments": ["refined_assignments_path"],
+    "planner-refine-phases": ["refined_plan_path"],
+    "planner-refine-wps": ["refined_wps_path"],
+    "planner-validate-task-alignment": ["alignment_findings_path"],
+    "audit-tests": ["audit_report_path"],
+    "validate-audit": ["validated_report_path"],
+    "bundle-local-report": ["html_path"],
 }
 
 ABSOLUTE_PATH_KEYWORDS = ("absolute", "/abs", "$(pwd)", "$(cd")
@@ -349,12 +361,19 @@ def _get_contracted_path_capture_skills() -> dict[str, list[str]]:
     for skill_name, contract in skills_data.items():
         if not isinstance(contract, dict):
             continue
+        path_token_names = {
+            out["name"]
+            for out in contract.get("outputs", [])
+            if isinstance(out, dict)
+            and (
+                out.get("type", "").startswith("file_path") or out.get("type") == "directory_path"
+            )
+        }
         patterns = contract.get("expected_output_patterns", [])
         tokens = []
         for pattern in patterns:
-            # Path-capture: token_name\s*=\s*/.+ (requires leading /)
-            m = re.match(r"^(\w+)\\s\*=\\s\*/.+", pattern)
-            if m:
+            m = re.match(r"^(\w+)", pattern)
+            if m and m.group(1) in path_token_names:
                 tokens.append(m.group(1))
         if tokens:
             result[skill_name] = tokens
@@ -402,6 +421,32 @@ def test_every_contracted_skill_has_emit_instruction() -> None:
     assert not missing, (
         "Skills with path-capture contracts but no emit instruction in SKILL.md:\n"
         + "\n".join(f"  - {m}" for m in missing)
+    )
+
+
+def test_contracted_path_capture_skills_includes_backslash_s_patterns() -> None:
+    """_get_contracted_path_capture_skills must return all skills with \\S+-terminated patterns."""
+    raw = yaml.safe_load(SKILL_CONTRACTS_PATH.read_text())
+    skills_data = raw.get("skills", {}) if isinstance(raw, dict) else {}
+
+    # Dynamically find skills whose contracts include \S+-terminated path-capture patterns.
+    backslash_s_pattern_re = re.compile(r"\\[Ss]\+\s*$")
+    expected: list[str] = []
+    for skill_name, contract in skills_data.items():
+        if not isinstance(contract, dict):
+            continue
+        for pattern in contract.get("expected_output_patterns", []):
+            if backslash_s_pattern_re.search(pattern):
+                expected.append(skill_name)
+                break
+
+    assert expected, "No skills with \\S+-terminated patterns found in contracts — test is vacuous"
+
+    contracted = _get_contracted_path_capture_skills()
+    missing = [s for s in expected if s not in contracted]
+    assert not missing, (
+        f"Skills with \\S+-terminated patterns not returned by "
+        f"_get_contracted_path_capture_skills: {missing}"
     )
 
 

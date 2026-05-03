@@ -38,7 +38,7 @@ is the sole writer for this phase's assignments — no concurrent write races.
 **ALWAYS:**
 - Spawn all L0 subagents in parallel using the native Agent/Task tool (NOT run_skill — leaf guard blocks it)
 - Write the phase sentinel file before emitting the output token
-- Emit `phase_assignments_result_dir`
+- Emit: `phase_assignments_result_dir = <absolute path to assignments/ directory>`
 - Write a stub result for any L0 that fails or returns invalid JSON
 
 ## Workflow

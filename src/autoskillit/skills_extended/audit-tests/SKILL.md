@@ -35,6 +35,7 @@ Audit the test suite to identify useless tests, consolidation opportunities, qua
 - Read both the test AND the code it tests before judging
 - Provide file paths, line numbers, and an explanation for each finding
 - Write the improvement plan to `{{AUTOSKILLIT_TEMP}}/audit-tests/test_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+- Emit: `audit_report_path = <absolute path to test_audit_{YYYY-MM-DD_HHMMSS}.md>`
 - Categorize findings by issue type and severity
 
 ---

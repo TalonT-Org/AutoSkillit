@@ -309,4 +309,7 @@ def test_approved_with_comments_no_gate_tag_produces_no_state(tmp_path):
         "approved_with_comments must not clear an existing LOOP_REQUIRED state — "
         "only an explicit %%REVIEW_GATE::CLEAR%% tag should do that"
     )
-    assert state["gate"] == "LOOP_REQUIRED"
+    assert state == existing, (
+        "approved_with_comments must leave the full gate state unchanged — "
+        f"expected {existing!r}, got {state!r}"
+    )

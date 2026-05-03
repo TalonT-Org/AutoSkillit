@@ -1247,7 +1247,7 @@ class TestPathCaptureCoversAllContractPatterns:
                     non_path_token_names.add(name)
             for pattern in skill_data.get("expected_output_patterns", []):
                 m = re.match(r"^(\w+)", pattern)
-                if m:
+                if m and "=" in pattern[m.end() :]:
                     pattern_token_map.append((m.group(1), pattern))
 
         recoverable_path_token_names = path_token_names - _INTENTIONALLY_EXCLUDED_PATH_TOKENS
@@ -1293,18 +1293,20 @@ class TestRecoverablePathTokensCoverage:
                 if not isinstance(out, dict):
                     continue
                 t = out.get("type", "")
-                if t.startswith("file_path") or t == "directory_path":
-                    declared.add(out["name"])
+                name = out.get("name", "").strip()
+                if name and (t.startswith("file_path") or t == "directory_path"):
+                    declared.add(name)
 
         from autoskillit.execution._headless_path_tokens import _INTENTIONALLY_EXCLUDED_PATH_TOKENS
 
         expected = declared - _INTENTIONALLY_EXCLUDED_PATH_TOKENS
-        assert _RECOVERABLE_PATH_TOKENS == expected, (
+        normalized_actual = {t.strip() for t in _RECOVERABLE_PATH_TOKENS}
+        assert normalized_actual == expected, (
             f"_RECOVERABLE_PATH_TOKENS diverged from derived set.\n"
             f"Extra (in production, not in derived): "
-            f"{_RECOVERABLE_PATH_TOKENS - expected}\n"
+            f"{normalized_actual - expected}\n"
             f"Missing (in derived, not in production): "
-            f"{expected - _RECOVERABLE_PATH_TOKENS}"
+            f"{expected - normalized_actual}"
         )
 
 

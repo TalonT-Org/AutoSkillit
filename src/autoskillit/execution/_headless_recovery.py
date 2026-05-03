@@ -53,8 +53,7 @@ def _is_path_capture_pattern(pattern: str) -> str | None:
     token_name = m.group(1)
     if token_name not in _RECOVERABLE_PATH_TOKENS:
         return None
-    remainder = pattern[m.end() :]
-    if not re.match(r"\s*=", remainder):
+    if "=" not in pattern[m.end() :]:
         return None
     return token_name
 

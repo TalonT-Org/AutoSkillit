@@ -321,7 +321,6 @@ PATH_CAPTURE_SKILLS: dict[str, list[str]] = {
     "vis-lens-temporal": ["diagram_path"],
     "vis-lens-uncertainty": ["diagram_path"],
     "review-design": ["evaluation_dashboard", "revision_guidance"],
-    # Planner pipeline skills (use \S+-terminated patterns)
     "planner-assess-review-approach": ["review_approach_assessment_path"],
     "planner-elaborate-assignments": ["phase_assignments_result_dir"],
     "planner-elaborate-phase": ["elab_result_path"],
@@ -331,10 +330,8 @@ PATH_CAPTURE_SKILLS: dict[str, list[str]] = {
     "planner-refine-phases": ["refined_plan_path"],
     "planner-refine-wps": ["refined_wps_path"],
     "planner-validate-task-alignment": ["alignment_findings_path"],
-    # Audit skills (use \S+-terminated patterns)
     "audit-tests": ["audit_report_path"],
     "validate-audit": ["validated_report_path"],
-    # Report bundling skill (uses \S+-terminated pattern)
     "bundle-local-report": ["html_path"],
 }
 

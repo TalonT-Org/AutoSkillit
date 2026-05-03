@@ -292,18 +292,18 @@ class TestBuildTestScope:
             "test_zero_write_detection.py",
             "test_pretty_output_recipe.py",
             "test_skill_placeholder_contracts.py",
-            "test_recipe_write_advisor.py",
+            # hooks/test_recipe_write_advisor.py is covered by the directory-level "hooks" entry
+            "hooks",
+            "core",
+            "migration",
         ]:
             assert expected in result_names, f"{expected} missing"
         for absent in [
             "execution",
             "infra",
             "skills",
-            "core",
             "server",
             "cli",
-            "migration",
-            "hooks",
         ]:
             assert absent not in result_names, f"{absent} should not be a full directory"
 

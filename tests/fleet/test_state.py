@@ -574,26 +574,67 @@ class TestAppendDispatchRecordIllegalTransition:
         assert latest.status == DispatchStatus.SUCCESS
 
 
-class TestResumeSkipsRefusedDispatch:
-    def test_refused_dispatch_skipped_next_is_b(self, tmp_path: Path) -> None:
+class TestResumeShowsRefusedInBlock:
+    def test_refused_dispatch_visible_next_is_b(self, tmp_path: Path) -> None:
         sp = _state_path(tmp_path)
         write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("A", "B"))
         append_dispatch_record(sp, DispatchRecord(name="A", status=DispatchStatus.REFUSED))
         decision = resume_campaign_from_state(sp, continue_on_failure=True)
         assert decision is not None
         assert decision.next_dispatch_name == "B"
-        assert "A" not in decision.completed_dispatches_block
+        assert "A" in decision.completed_dispatches_block
+        assert "refused" in decision.completed_dispatches_block.lower()
 
 
-class TestResumeSkipsReleasedDispatch:
-    def test_released_dispatch_skipped_next_is_b(self, tmp_path: Path) -> None:
+class TestResumeShowsReleasedInBlock:
+    def test_released_dispatch_visible_next_is_b(self, tmp_path: Path) -> None:
         sp = _state_path(tmp_path)
         write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("A", "B"))
         append_dispatch_record(sp, DispatchRecord(name="A", status=DispatchStatus.RELEASED))
         decision = resume_campaign_from_state(sp, continue_on_failure=True)
         assert decision is not None
         assert decision.next_dispatch_name == "B"
-        assert "A" not in decision.completed_dispatches_block
+        assert "A" in decision.completed_dispatches_block
+        assert "released" in decision.completed_dispatches_block.lower()
+
+
+class TestResumeIncludesInterruptedInBlock:
+    def test_interrupted_dispatch_visible_in_completed_block(self, tmp_path: Path) -> None:
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("A", "B", "C"))
+        append_dispatch_record(sp, DispatchRecord(name="A", status=DispatchStatus.SUCCESS))
+        append_dispatch_record(sp, DispatchRecord(name="B", status=DispatchStatus.INTERRUPTED))
+        decision = resume_campaign_from_state(sp, continue_on_failure=True)
+        assert decision is not None
+        assert "B" in decision.completed_dispatches_block
+        assert "interrupted" in decision.completed_dispatches_block.lower()
+        assert decision.next_dispatch_name == "C"
+
+
+class TestResumeIncludesRunningAliveInBlock:
+    def test_running_alive_dispatch_visible_in_completed_block(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        sp = _state_path(tmp_path)
+        record_a = DispatchRecord(name="A", status=DispatchStatus.SUCCESS)
+        record_b = DispatchRecord(
+            name="B",
+            status=DispatchStatus.RUNNING,
+            l2_pid=12345,
+            l2_boot_id="abc",
+            l2_starttime_ticks=999,
+        )
+        record_c = DispatchRecord(name="C")
+        monkeypatch.setattr(
+            "autoskillit.fleet.is_dispatch_session_alive",
+            lambda r: True,
+        )
+        write_initial_state(sp, "cid", "camp", "/m.yaml", [record_a, record_b, record_c])
+        decision = resume_campaign_from_state(sp, continue_on_failure=True)
+        assert decision is not None
+        assert "B" in decision.completed_dispatches_block
+        assert "running" in decision.completed_dispatches_block.lower()
+        assert decision.next_dispatch_name == "C"
 
 
 class TestWriteCapturedValuesCorruptStateNoOp:

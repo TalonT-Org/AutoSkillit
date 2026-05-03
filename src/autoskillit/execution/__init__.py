@@ -63,12 +63,10 @@ from autoskillit.execution.pr_analysis import (
 )
 from autoskillit.execution.process import (
     DefaultSubprocessRunner,
-    run_managed_async,
-    run_managed_sync,
-)
-from autoskillit.execution.process._process_kill import (
     async_kill_process_tree,
     kill_process_tree,
+    run_managed_async,
+    run_managed_sync,
 )
 from autoskillit.execution.quota import (
     QUOTA_CACHE_SCHEMA_VERSION,

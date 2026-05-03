@@ -390,3 +390,139 @@ def test_consolidate_wps_rejects_merge_with_empty_deliverables(tmp_path: Path) -
 
     with pytest.raises(ValueError, match="has 0 deliverables"):
         consolidate_wps(refined_wps_path=str(refined_path), planner_dir=str(tmp_path))
+
+
+def test_fallback_merges_same_assignment_shared_files(tmp_path: Path) -> None:
+    wps = [
+        make_wp_result("P1-A1-WP1", files_touched=["src/config.yaml"]),
+        make_wp_result("P1-A1-WP2", files_touched=["src/config.yaml"]),
+        make_wp_result("P1-A1-WP3", files_touched=["src/config.yaml"]),
+        make_wp_result("P1-A1-WP4", files_touched=["src/other.py"]),
+        make_wp_result("P1-A1-WP5", files_touched=["src/other.py"]),
+    ]
+    refined_path = _make_refined_wps(tmp_path, wps)
+
+    result = consolidate_wps(refined_wps_path=str(refined_path), planner_dir=str(tmp_path))
+
+    consolidated = json.loads((tmp_path / "consolidated_wps.json").read_text())
+    output_ids = {wp["id"] for wp in consolidated["work_packages"]}
+    assert output_ids == {"P1-A1-WP1", "P1-A1-WP4"}
+    assert len(consolidated["work_packages"]) == 2
+    assert result["merged_count"] == "2"
+
+
+def test_fallback_skipped_when_manifest_has_merges(tmp_path: Path) -> None:
+    wps = [
+        make_wp_result("P1-A1-WP1", files_touched=["src/config.yaml"]),
+        make_wp_result("P1-A1-WP2", files_touched=["src/config.yaml"]),
+        make_wp_result("P1-A1-WP3", files_touched=["src/config.yaml"]),
+        make_wp_result("P1-A1-WP4", files_touched=["src/other.py"]),
+        make_wp_result("P1-A1-WP5", files_touched=["src/other.py"]),
+    ]
+    refined_path = _make_refined_wps(tmp_path, wps)
+    consolidation_dir = tmp_path / "work_packages" / "consolidation"
+    _make_manifest(
+        consolidation_dir,
+        "P1",
+        [
+            {
+                "merged_id": "P1-A1-WP1",
+                "source_wp_ids": ["P1-A1-WP1", "P1-A1-WP2"],
+                "merge_order": ["P1-A1-WP1", "P1-A1-WP2"],
+                "name": None,
+                "goal": None,
+            },
+            {
+                "merged_id": "P1-A1-WP3",
+                "source_wp_ids": ["P1-A1-WP3"],
+                "merge_order": ["P1-A1-WP3"],
+                "name": None,
+                "goal": None,
+            },
+            {
+                "merged_id": "P1-A1-WP4",
+                "source_wp_ids": ["P1-A1-WP4"],
+                "merge_order": ["P1-A1-WP4"],
+                "name": None,
+                "goal": None,
+            },
+            {
+                "merged_id": "P1-A1-WP5",
+                "source_wp_ids": ["P1-A1-WP5"],
+                "merge_order": ["P1-A1-WP5"],
+                "name": None,
+                "goal": None,
+            },
+        ],
+    )
+
+    result = consolidate_wps(refined_wps_path=str(refined_path), planner_dir=str(tmp_path))
+
+    consolidated = json.loads((tmp_path / "consolidated_wps.json").read_text())
+    assert len(consolidated["work_packages"]) == 4
+    assert result["merged_count"] == "1"
+
+
+def test_fallback_skipped_when_wp_count_below_threshold(tmp_path: Path) -> None:
+    wps = [
+        make_wp_result("P1-A1-WP1", files_touched=["src/config.yaml"]),
+        make_wp_result("P1-A1-WP2", files_touched=["src/config.yaml"]),
+        make_wp_result("P1-A1-WP3", files_touched=["src/config.yaml"]),
+    ]
+    refined_path = _make_refined_wps(tmp_path, wps)
+
+    result = consolidate_wps(refined_wps_path=str(refined_path), planner_dir=str(tmp_path))
+
+    consolidated = json.loads((tmp_path / "consolidated_wps.json").read_text())
+    assert len(consolidated["work_packages"]) == 3
+    assert result["merged_count"] == "0"
+
+
+def test_fallback_respects_dependency_ordering(tmp_path: Path) -> None:
+    wps = [
+        make_wp_result("P1-A1-WP1", files_touched=["src/x.py"], depends_on=[]),
+        make_wp_result("P1-A1-WP2", files_touched=["src/x.py"], depends_on=["P1-A1-WP1"]),
+        make_wp_result("P1-A1-WP3", files_touched=["src/x.py"], depends_on=["P1-A1-WP2"]),
+        make_wp_result("P1-A1-WP4", files_touched=["src/y.py"], depends_on=[]),
+        make_wp_result("P1-A1-WP5", files_touched=["src/y.py"], depends_on=[]),
+    ]
+    refined_path = _make_refined_wps(tmp_path, wps)
+
+    consolidate_wps(refined_wps_path=str(refined_path), planner_dir=str(tmp_path))
+
+    consolidated = json.loads((tmp_path / "consolidated_wps.json").read_text())
+    merged_a = next(wp for wp in consolidated["work_packages"] if wp["id"] == "P1-A1-WP1")
+    assert merged_a["id"] == "P1-A1-WP1"
+    assert "P1-A1-WP2" not in merged_a["depends_on"]
+    assert "P1-A1-WP3" not in merged_a["depends_on"]
+
+
+def test_fallback_does_not_cross_assignment_boundary(tmp_path: Path) -> None:
+    wps = [
+        make_wp_result("P1-A1-WP1", files_touched=["src/shared.py"]),
+        make_wp_result("P1-A1-WP2", files_touched=["src/shared.py"]),
+        make_wp_result("P1-A1-WP3", files_touched=["src/shared.py"]),
+        make_wp_result("P1-A2-WP1", files_touched=["src/shared.py"]),
+        make_wp_result("P1-A2-WP2", files_touched=["src/shared.py"]),
+        make_wp_result("P1-A2-WP3", files_touched=["src/shared.py"]),
+    ]
+    refined_path = _make_refined_wps(tmp_path, wps)
+
+    consolidate_wps(refined_wps_path=str(refined_path), planner_dir=str(tmp_path))
+
+    consolidated = json.loads((tmp_path / "consolidated_wps.json").read_text())
+    output_ids = {wp["id"] for wp in consolidated["work_packages"]}
+    assert "P1-A1-WP1" in output_ids
+    assert "P1-A2-WP1" in output_ids
+    assert len(consolidated["work_packages"]) == 2
+
+
+def test_fallback_caps_group_size(tmp_path: Path) -> None:
+    wps = [make_wp_result(f"P1-A1-WP{i}", files_touched=["src/big.py"]) for i in range(1, 9)]
+    refined_path = _make_refined_wps(tmp_path, wps)
+
+    result = consolidate_wps(refined_wps_path=str(refined_path), planner_dir=str(tmp_path))
+
+    consolidated = json.loads((tmp_path / "consolidated_wps.json").read_text())
+    assert len(consolidated["work_packages"]) == 2
+    assert result["merged_count"] == "2"

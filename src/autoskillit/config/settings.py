@@ -392,6 +392,7 @@ class AutomationConfig:
                 proc_interval=float(val(lt, "proc_interval", _lt["proc_interval"])),
                 log_dir=str(val(lt, "log_dir", _lt["log_dir"])),
                 tmpfs_path=str(val(lt, "tmpfs_path", _lt["tmpfs_path"])),
+                max_sessions=int(val(lt, "max_sessions", _lt["max_sessions"])),
             ),
             mcp_response=McpResponseConfig(
                 alert_threshold_tokens=int(

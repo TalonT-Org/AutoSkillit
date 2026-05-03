@@ -183,8 +183,8 @@ def test_flush_session_log_retention_purges_oldest(tmp_path):
         with index_path.open("a") as f:
             f.write(json.dumps({"session_id": dir_name, "dir_name": dir_name}) + "\n")
 
-    # Flush a 503rd session
-    _flush(tmp_path, session_id="session-0502")
+    # Flush a 503rd session with explicit cap
+    _flush(tmp_path, session_id="session-0502", max_sessions=500)
 
     remaining = list(sessions_dir.iterdir())
     assert len(remaining) == 500

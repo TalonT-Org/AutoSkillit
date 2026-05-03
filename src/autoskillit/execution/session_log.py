@@ -37,7 +37,7 @@ from autoskillit.execution.linux_tracing import (
 
 logger = get_logger(__name__)
 
-_MAX_SESSIONS = 500
+_MAX_SESSIONS = 2000
 
 
 def _primary_model_identifier(token_usage: dict[str, Any] | None) -> str:
@@ -132,13 +132,15 @@ def flush_session_log(
     recipe_content_hash: str = "",
     recipe_composite_hash: str = "",
     recipe_version: str = "",
+    max_sessions: int | None = None,
     telemetry: SessionTelemetry,
 ) -> None:
     """Flush session diagnostics to disk.
 
     Writes proc_trace.jsonl, summary.json, anomalies.jsonl (if any),
     and appends to the global sessions.jsonl index. Applies retention
-    to keep at most 500 session directories.
+    to keep at most ``_MAX_SESSIONS`` session directories (default 2000,
+    configurable via ``linux_tracing.max_sessions``).
 
     When step_name is provided, also writes token_usage.json, step_timing.json,
     and (if telemetry.audit_record is set) audit_log.json to the session directory
@@ -451,6 +453,7 @@ def flush_session_log(
         log_root,
         project_dir=project_dir,
         build_protected_campaign_ids=build_protected_campaign_ids,
+        max_sessions=max_sessions if max_sessions is not None else _MAX_SESSIONS,
     )
 
 
@@ -458,8 +461,10 @@ def _enforce_retention(
     log_root: Path,
     project_dir: str | None = None,
     build_protected_campaign_ids: Callable[[Path], frozenset[str]] | None = None,
+    *,
+    max_sessions: int = _MAX_SESSIONS,
 ) -> None:
-    """Delete oldest session directories if count exceeds _MAX_SESSIONS.
+    """Delete oldest session directories if count exceeds *max_sessions*.
 
     When ``project_dir`` is provided, reads fleet state files and ``meta.json``
     sidecars to skip deletion of sessions belonging to active campaigns.
@@ -469,11 +474,11 @@ def _enforce_retention(
         return
 
     dirs = sorted(sessions_dir.iterdir(), key=lambda p: p.stat().st_mtime)
-    if len(dirs) <= _MAX_SESSIONS:
+    if len(dirs) <= max_sessions:
         return
 
-    expired = dirs[: len(dirs) - _MAX_SESSIONS]
-    surviving_names = {d.name for d in dirs[len(dirs) - _MAX_SESSIONS :]}
+    expired = dirs[: len(dirs) - max_sessions]
+    surviving_names = {d.name for d in dirs[len(dirs) - max_sessions :]}
 
     protected_ids = (
         build_protected_campaign_ids(Path(project_dir))

@@ -111,6 +111,7 @@ linux_tracing:
   proc_interval: 5.0
   log_dir: ""  # empty = platform default (~/.local/share/autoskillit/logs on Linux)
   tmpfs_path: "/dev/shm"  # RAM-backed tmpfs for crash-resilient streaming
+  max_sessions: 2000  # retention limit for session diagnostics directories
 
 mcp_response:
   alert_threshold_tokens: 2000

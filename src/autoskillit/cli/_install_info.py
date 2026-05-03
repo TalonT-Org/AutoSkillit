@@ -12,7 +12,8 @@ from datetime import timedelta
 from enum import StrEnum
 from pathlib import Path
 
-from autoskillit.core import _is_stable_track, get_logger, parse_direct_url
+from autoskillit.core import get_logger, parse_direct_url
+from autoskillit.core._install_detect import _is_stable_track
 
 logger = get_logger(__name__)
 

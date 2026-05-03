@@ -13,8 +13,6 @@ del _dir  # replaced below so dir() reflects the filtered __all__
 _PRIVATE_REEXPORTS = frozenset(
     {
         "_InstallLock",
-        "_is_release_tag",
-        "_is_stable_track",
         "_retire_old_versions",
         "_collect_disabled_feature_tags",
         "_AUTOSKILLIT_GITIGNORE_ENTRIES",

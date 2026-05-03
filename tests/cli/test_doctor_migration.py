@@ -724,7 +724,7 @@ class TestGroupMFranchiseDoctorChecks:
         cfg_dir = tmp_path / ".autoskillit"
         cfg_dir.mkdir(parents=True, exist_ok=True)
         (cfg_dir / "config.yaml").write_text("features:\n  fleet: true\n")
-        cli.doctor(output_json=True)
+        cli.doctor_cmd(output_json=True)
         data = json.loads(capsys.readouterr().out)
         check_names = {r["check"] for r in data["results"]}
         fleet_checks = {
@@ -760,7 +760,7 @@ class TestGroupNFeatureGateDoctorChecks:
         monkeypatch.chdir(tmp_path)
         monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
         monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
-        cli.doctor(output_json=True)
+        cli.doctor_cmd(output_json=True)
         data = json.loads(capsys.readouterr().out)
         check_names = {r["check"] for r in data["results"]}
         fleet_infra = {
@@ -790,7 +790,7 @@ class TestGroupNFeatureGateDoctorChecks:
         monkeypatch.chdir(tmp_path)
         monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
         monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
-        cli.doctor(output_json=True)
+        cli.doctor_cmd(output_json=True)
         data = json.loads(capsys.readouterr().out)
         check_names = {r["check"] for r in data["results"]}
         fleet_infra = {
@@ -822,7 +822,7 @@ class TestGroupNFeatureGateDoctorChecks:
         monkeypatch.chdir(tmp_path)
         monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
         monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
-        cli.doctor(output_json=True)
+        cli.doctor_cmd(output_json=True)
         data = json.loads(capsys.readouterr().out)
         check_names = {r["check"] for r in data["results"]}
         ambient_checks = {
@@ -954,7 +954,7 @@ def test_doctor_version_consistency_detects_stale_cache(
     monkeypatch.setattr(importlib.metadata, "version", lambda _: "0.9.0")
     _vi.cache_clear()
     request.addfinalizer(_vi.cache_clear)
-    cli.doctor(output_json=True)
+    cli.doctor_cmd(output_json=True)
     data = json.loads(capsys.readouterr().out)
     vc = next((r for r in data["results"] if r["check"] == "version_consistency"), None)
     assert vc is not None, "version_consistency check not found in doctor results"
@@ -983,7 +983,7 @@ def test_doctor_version_consistency_ok_when_cache_matches(
     monkeypatch.setattr(importlib.metadata, "version", lambda _: "0.9.0")
     _vi.cache_clear()
     request.addfinalizer(_vi.cache_clear)
-    cli.doctor(output_json=True)
+    cli.doctor_cmd(output_json=True)
     data = json.loads(capsys.readouterr().out)
     vc = next((r for r in data["results"] if r["check"] == "version_consistency"), None)
     assert vc is not None, "version_consistency check not found in doctor results"

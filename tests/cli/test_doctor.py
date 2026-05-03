@@ -37,7 +37,7 @@ class TestCLIDoctor:
         )
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
-        cli.doctor()
+        cli.doctor_cmd()
         captured = capsys.readouterr()
         assert "old-server" in captured.out
         assert "ERROR" in captured.out
@@ -120,7 +120,7 @@ class TestCLIDoctor:
                 return_value=type("R", (), {"returncode": 0, "stdout": local_bin})(),
             ),
         ):
-            cli.doctor()
+            cli.doctor_cmd()
         captured = capsys.readouterr()
         assert "WARNING" not in captured.out
         assert "ERROR" not in captured.out
@@ -137,7 +137,7 @@ class TestCLIDoctor:
         )
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
-        cli.doctor()
+        cli.doctor_cmd()
         captured = capsys.readouterr()
         assert "No project config" in captured.out
 
@@ -153,7 +153,7 @@ class TestCLIDoctor:
         )
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
-        cli.doctor(output_json=True)
+        cli.doctor_cmd(output_json=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)
         assert "results" in data
@@ -169,7 +169,7 @@ class TestCLIDoctor:
         """doctor JSON output uses ok/warning/error severity tiers."""
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
-        cli.doctor(output_json=True)
+        cli.doctor_cmd(output_json=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)
         severities = {r["severity"] for r in data["results"]}
@@ -208,7 +208,7 @@ class TestCLIDoctor:
 
         _vi.cache_clear()
         request.addfinalizer(_vi.cache_clear)
-        cli.doctor(output_json=True)
+        cli.doctor_cmd(output_json=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)
         version_checks = [r for r in data["results"] if r["check"] == "version_consistency"]
@@ -224,7 +224,7 @@ class TestCLIDoctor:
         cfg_dir = tmp_path / ".autoskillit"
         cfg_dir.mkdir(parents=True, exist_ok=True)
         (cfg_dir / "config.yaml").write_text("features:\n  fleet: true\n")
-        cli.doctor(output_json=True)
+        cli.doctor_cmd(output_json=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)
         check_names = {r["check"] for r in data["results"]}
@@ -283,7 +283,7 @@ class TestCLIDoctor:
         )
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
-        cli.doctor()
+        cli.doctor_cmd()
         captured = capsys.readouterr()
         assert "ERROR:" in captured.out
 
@@ -294,7 +294,7 @@ class TestCLIDoctor:
         """doctor run_doctor() results include mcp_server_registered check."""
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
-        cli.doctor(output_json=True)
+        cli.doctor_cmd(output_json=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)
         check_names = {r["check"] for r in data["results"]}
@@ -307,7 +307,7 @@ class TestCLIDoctor:
         """doctor run_doctor() results include hook_registration check."""
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
-        cli.doctor(output_json=True)
+        cli.doctor_cmd(output_json=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)
         check_names = {r["check"] for r in data["results"]}
@@ -320,7 +320,7 @@ class TestCLIDoctor:
         """marketplace_freshness does NOT appear in doctor results."""
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
-        cli.doctor(output_json=True)
+        cli.doctor_cmd(output_json=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)
         check_names = {r["check"] for r in data["results"]}
@@ -333,7 +333,7 @@ class TestCLIDoctor:
         """plugin_metadata does NOT appear in doctor results."""
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
-        cli.doctor(output_json=True)
+        cli.doctor_cmd(output_json=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)
         check_names = {r["check"] for r in data["results"]}
@@ -346,7 +346,7 @@ class TestCLIDoctor:
         """duplicate_mcp_server does NOT appear in doctor results."""
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
-        cli.doctor(output_json=True)
+        cli.doctor_cmd(output_json=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)
         check_names = {r["check"] for r in data["results"]}
@@ -369,7 +369,7 @@ class TestCLIDoctor:
             stdout = ""
 
         monkeypatch.setattr(subprocess, "run", lambda *a, **kw: _NoPlugin())
-        cli.doctor(output_json=True)
+        cli.doctor_cmd(output_json=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)
         mcp_checks = [r for r in data["results"] if r["check"] == "mcp_server_registered"]
@@ -384,7 +384,7 @@ class TestCLIDoctor:
         # settings.json does not exist — all hooks missing
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
-        cli.doctor(output_json=True)
+        cli.doctor_cmd(output_json=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)
         hook_checks = [r for r in data["results"] if r["check"] == "hook_registration"]
@@ -398,7 +398,7 @@ class TestCLIDoctor:
         """Doctor JSON output includes new checks but excludes the three removed checks."""
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
-        cli.doctor(output_json=True)
+        cli.doctor_cmd(output_json=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)
         check_names = {r["check"] for r in data["results"]}
@@ -413,16 +413,16 @@ class TestGroupFDoctor:
     """P8-2, P3-2: CLI refactoring — doctor delegation tests from TestGroupFRefactoring."""
 
     def test_doctor_delegates_to_doctor_module(self, monkeypatch, capsys):
-        """cli.doctor() must delegate to cli._doctor.run_doctor(), not contain the logic itself."""
-        from autoskillit.cli import doctor as _doctor
+        """cli.doctor_cmd() must delegate to cli.doctor.run_doctor(), not contain the logic itself."""
+        import autoskillit.cli.doctor as _doctor_mod
 
         called_with: dict = {}
 
         def mock_run_doctor(*, output_json: bool = False) -> None:
             called_with["output_json"] = output_json
 
-        monkeypatch.setattr(_doctor, "run_doctor", mock_run_doctor)
-        cli.doctor(output_json=True)
+        monkeypatch.setattr(_doctor_mod, "run_doctor", mock_run_doctor)
+        cli.doctor_cmd(output_json=True)
         assert called_with == {"output_json": True}
 
     def test_severity_and_doctorresult_in_doctor_module(self):
@@ -440,7 +440,7 @@ def test_doctor_fix_parameter_does_not_exist():
 
     from autoskillit import cli
 
-    sig = inspect.signature(cli.doctor)
+    sig = inspect.signature(cli.doctor_cmd)
     assert "fix" not in sig.parameters, "doctor --fix is a silent no-op and must be removed"
 
 
@@ -476,7 +476,7 @@ def test_doctor_does_not_modify_plugin_state(tmp_path, monkeypatch, capsys):
     )
     retiring_json.write_text(retiring_content)
 
-    cli.doctor()
+    cli.doctor_cmd()
 
     assert cache_dir.exists(), "Doctor must not delete the plugin cache directory"
     data = json.loads(plugins_json.read_text())
@@ -505,7 +505,7 @@ def test_doctor_checks_plugin_cache_exists(tmp_path, monkeypatch, capsys):
             editable_source=None,
         ),
     )
-    cli.doctor(output_json=True)
+    cli.doctor_cmd(output_json=True)
     captured = capsys.readouterr()
     data = json.loads(captured.out)
     checks = [r for r in data["results"] if r["check"] == "plugin_cache_exists"]
@@ -521,7 +521,7 @@ def test_doctor_checks_installed_plugins_entry(tmp_path, monkeypatch, capsys):
     plugins_dir = tmp_path / ".claude" / "plugins"
     plugins_dir.mkdir(parents=True)
     (plugins_dir / "installed_plugins.json").write_text("{}")
-    cli.doctor(output_json=True)
+    cli.doctor_cmd(output_json=True)
     captured = capsys.readouterr()
     data = json.loads(captured.out)
     checks = [r for r in data["results"] if r["check"] == "installed_plugins_entry"]
@@ -535,7 +535,7 @@ def test_stale_gate_check_absent_from_doctor_output(tmp_path, monkeypatch, capsy
     monkeypatch.chdir(tmp_path)
     from autoskillit import cli
 
-    cli.doctor(output_json=True)
+    cli.doctor_cmd(output_json=True)
     captured = capsys.readouterr()
     data = json.loads(captured.out)
     check_names = {r["check"] for r in data["results"]}
@@ -624,7 +624,7 @@ def test_doctor_includes_secret_scanning_hook_check(
     """doctor output includes the secret_scanning_hook check."""
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.chdir(tmp_path)
-    cli.doctor(output_json=True)
+    cli.doctor_cmd(output_json=True)
     data = json.loads(capsys.readouterr().out)
     check_names = {r["check"] for r in data["results"]}
     assert "secret_scanning_hook" in check_names
@@ -638,7 +638,7 @@ def test_doctor_error_when_no_scanner_present(
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.chdir(tmp_path)
     # No .pre-commit-config.yaml
-    cli.doctor(output_json=True)
+    cli.doctor_cmd(output_json=True)
     data = json.loads(capsys.readouterr().out)
     checks = [r for r in data["results"] if r["check"] == "secret_scanning_hook"]
     assert len(checks) == 1
@@ -656,7 +656,7 @@ def test_doctor_ok_when_scanner_present(
         "repos:\n  - repo: https://github.com/gitleaks/gitleaks\n"
         "    hooks:\n      - id: gitleaks\n"
     )
-    cli.doctor(output_json=True)
+    cli.doctor_cmd(output_json=True)
     data = json.loads(capsys.readouterr().out)
     checks = [r for r in data["results"] if r["check"] == "secret_scanning_hook"]
     assert len(checks) == 1
@@ -776,7 +776,7 @@ def test_doctor_json_output_includes_hook_registry_drift(
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.chdir(tmp_path)
-    cli.doctor(output_json=True)
+    cli.doctor_cmd(output_json=True)
     data = json.loads(capsys.readouterr().out)
     drift = next(r for r in data["results"] if r["check"] == "hook_registry_drift")
     # No settings.json in tmp_path → all canonical hooks missing → WARNING

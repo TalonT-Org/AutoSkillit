@@ -46,11 +46,11 @@ from autoskillit.cli.app import (
     doctor as _doctor_cmd,
 )
 from autoskillit.cli.doctor import DoctorResult
-
-doctor = _doctor_cmd
 from autoskillit.cli.fleet import fleet_campaign, fleet_dispatch, fleet_list, fleet_status
 from autoskillit.cli.session._cook import cook
 from autoskillit.hook_registry import HookDriftResult
+
+doctor_cmd = _doctor_cmd
 
 __all__ = [
     "_build_open_kitchen_prompt",
@@ -66,7 +66,7 @@ __all__ = [
     "config_show",
     "cook",
     "detect_autoskillit_mcp_prefix",
-    "doctor",
+    "doctor_cmd",
     "fleet_app",
     "fleet_campaign",
     "fleet_dispatch",

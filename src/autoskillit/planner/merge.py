@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import fcntl
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -131,6 +132,11 @@ def _write_refine_contexts(
             "assignments": own,
             "peer_summaries": peer_summaries,
         }
+        if not re.fullmatch(r"[A-Za-z0-9_\-]+", phase_id):
+            raise ValueError(
+                f"phase_id {phase_id!r} contains disallowed characters — "
+                "only alphanumeric, underscore, and hyphen are permitted in context filenames"
+            )
         ctx_path = contexts_dir / f"context_{phase_id}.json"
         write_versioned_json(ctx_path, context, schema_version=1)
         context_paths.append(str(ctx_path))

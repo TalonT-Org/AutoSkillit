@@ -725,3 +725,15 @@ def test_merge_tier_results_no_refine_contexts_for_work_packages_key(tmp_path):
     result = merge_tier_results(str(results_dir), str(out), "work_packages")
     assert "refine_context_paths" not in result
     assert not (tmp_path / "refine_contexts").exists()
+
+
+def test_write_refine_contexts_rejects_unsafe_phase_id(tmp_path):
+    results_dir = tmp_path / "assignments"
+    results_dir.mkdir()
+    write_json(
+        results_dir / "evil_result.json",
+        {"id": "A1", "phase_id": "../../evil", "name": "x", "goal": "g"},
+    )
+    out = tmp_path / "combined.json"
+    with pytest.raises(ValueError, match="disallowed characters"):
+        merge_tier_results(str(results_dir), str(out), "assignments")

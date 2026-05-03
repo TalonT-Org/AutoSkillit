@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import re
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core import ValidatedAddDir, atomic_write
+from autoskillit.core import ValidatedAddDir, write_versioned_json
 
 SKILLS_SNAPSHOT_DIR = "skill_snapshots"
 _EPHEMERAL_SESSION_PATTERN = "autoskillit-sessions"
@@ -81,7 +80,7 @@ def snapshot_skill_dir(scenario_dir: Path, step_name: str, add_dir_path: Path) -
     shutil.copytree(skills_src, dest_skills)
 
     manifest = build_skills_manifest(skills_src)
-    atomic_write(snapshot_dir / "manifest.json", json.dumps(manifest, indent=2))
+    write_versioned_json(snapshot_dir / "manifest.json", manifest, 1)
 
     return snapshot_dir
 

@@ -22,6 +22,7 @@ def test_planner_recipe_loads(planner_recipe):
 def test_planner_recipe_has_required_steps(planner_recipe):
     required_steps = {
         "init",
+        "resolve_task",
         "analyze",
         "extract_domain",
         "generate_phases",
@@ -112,7 +113,7 @@ def test_planner_recipe_extract_domain_uses_positional_args(planner_recipe):
     step = planner_recipe.steps["extract_domain"]
     skill_cmd = step.with_args.get("skill_command", "")
     assert "analysis.json" in skill_cmd, "Must pass analysis.json as positional arg"
-    assert "inputs.task_file" in skill_cmd, "Must pass task_file as positional arg"
+    assert "context.task_file_path" in skill_cmd, "Must pass task_file_path as positional arg"
     assert "env" not in step.with_args, "Must not use env: block (ADR-0003)"
 
 
@@ -272,43 +273,63 @@ def test_planner_recipe_assess_review_approach_routes_to_validate_on_failure(pla
     assert step.on_failure == "validate"
 
 
-# --- task_file ingredient tests ---
+def test_planner_recipe_no_task_file_ingredient(planner_recipe):
+    assert "task_file" not in planner_recipe.ingredients
 
 
-def test_planner_recipe_has_task_file_ingredient(planner_recipe):
-    ingredients = planner_recipe.ingredients
-    assert "task_file" in ingredients, "planner recipe must have task_file ingredient"
-    assert ingredients["task_file"].required is False
+def test_planner_recipe_has_resolve_task_step(planner_recipe):
+    assert "resolve_task" in planner_recipe.steps
+    step = planner_recipe.steps["resolve_task"]
+    assert step.tool == "run_python"
+    assert step.with_args.get("callable") == "autoskillit.planner.resolve_task_input"
+    assert "task_file_path" in (step.capture or {})
+    assert "task_label" in (step.capture or {})
 
 
-def test_extract_domain_passes_task_file_positionally(planner_recipe):
+def test_planner_init_routes_to_resolve_task(planner_recipe):
+    init_step = planner_recipe.steps["init"]
+    assert init_step.on_success == "resolve_task"
+
+
+def test_planner_resolve_task_routes_to_analyze(planner_recipe):
+    step = planner_recipe.steps["resolve_task"]
+    assert step.on_success == "analyze"
+
+
+def test_extract_domain_passes_task_file_path_positionally(planner_recipe):
     step = planner_recipe.steps["extract_domain"]
     skill_cmd = step.with_args.get("skill_command", "")
-    assert "inputs.task_file" in skill_cmd, "Must pass task_file as positional arg"
+    assert "context.task_file_path" in skill_cmd
     assert "env" not in step.with_args, "Must not use env: block (ADR-0003)"
 
 
-def test_generate_phases_passes_task_file_positionally(planner_recipe):
+def test_generate_phases_passes_task_file_path_positionally(planner_recipe):
     step = planner_recipe.steps["generate_phases"]
     skill_cmd = step.with_args.get("skill_command", "")
-    assert "inputs.task_file" in skill_cmd, "Must pass task_file as positional arg"
+    assert "context.task_file_path" in skill_cmd
     assert "env" not in step.with_args, "Must not use env: block (ADR-0003)"
 
 
-def test_build_plan_snapshot_receives_task_file(planner_recipe):
-    step = planner_recipe.steps["build_plan_snapshot"]
-    assert "task_file" in step.with_args, "build_plan_snapshot must receive task_file"
-    assert "inputs.task_file" in step.with_args["task_file"]
-
-
-@pytest.mark.parametrize("step_name", ["merge_phases", "merge_assignments", "merge_wps"])
-def test_merge_steps_receive_task_file(planner_recipe, step_name):
+@pytest.mark.parametrize(
+    "step_name", ["build_plan_snapshot", "merge_phases", "merge_assignments", "merge_wps"]
+)
+def test_merge_steps_receive_task_file_path(planner_recipe, step_name):
     step = planner_recipe.steps[step_name]
-    assert "task_file" in step.with_args, f"{step_name} must receive task_file"
-    assert "inputs.task_file" in step.with_args["task_file"]
+    assert "task_file_path" in step.with_args, f"{step_name} must receive task_file_path"
+    assert "context.task_file_path" in step.with_args["task_file_path"]
 
 
-def test_compile_step_receives_task_file(planner_recipe):
+def test_compile_step_receives_task_file_path_and_label(planner_recipe):
     step = planner_recipe.steps["compile"]
-    assert "task_file" in step.with_args, "compile must receive task_file"
-    assert "inputs.task_file" in step.with_args["task_file"]
+    assert "task_file_path" in step.with_args
+    assert "task_label" in step.with_args
+    assert "context.task_file_path" in step.with_args["task_file_path"]
+    assert "context.task_label" in step.with_args["task_label"]
+
+
+def test_no_step_references_inputs_task_file(planner_recipe):
+    for name, step in planner_recipe.steps.items():
+        step_str = str(step.with_args)
+        assert "inputs.task_file" not in step_str, (
+            f"Step {name!r} still references inputs.task_file"
+        )

@@ -11,7 +11,7 @@ from autoskillit.planner.merge import (
     merge_tier_dir,
     replace_item,
 )
-from tests.planner.conftest import make_phase_result
+from tests.planner.conftest import make_phase_result, write_task_file
 
 pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.feature("planner")]
 
@@ -31,7 +31,7 @@ def test_merge_files_creates_combined_document(tmp_path):
         file_paths=file_paths,
         output_path=str(out),
         key="phases",
-        task="my task",
+        task_file_path=write_task_file(tmp_path, "my task"),
         source_dir="/src",
     )
 
@@ -297,7 +297,7 @@ def test_build_plan_snapshot_produces_phase_ids(tmp_path):
     result = build_plan_snapshot(
         phases_dir=str(phases_dir),
         output_path=str(out),
-        task="my task",
+        task_file_path=write_task_file(tmp_path, "my task"),
         source_dir="/src",
     )
 
@@ -323,7 +323,10 @@ def test_build_plan_snapshot_writes_short_form_only(tmp_path):
     out = tmp_path / "snapshot.json"
 
     build_plan_snapshot(
-        phases_dir=str(phases_dir), output_path=str(out), task="t", source_dir="/s"
+        phases_dir=str(phases_dir),
+        output_path=str(out),
+        task_file_path=write_task_file(tmp_path, "t"),
+        source_dir="/s",
     )
 
     data = json.loads(out.read_text())
@@ -350,7 +353,12 @@ def test_build_plan_snapshot_projects_ordering(tmp_path) -> None:
     (phases_dir / "P1_result.json").write_text(json.dumps(result))
     out = tmp_path / "snapshot.json"
 
-    build_plan_snapshot(str(phases_dir), str(out), task="test", source_dir="/src")
+    build_plan_snapshot(
+        str(phases_dir),
+        str(out),
+        task_file_path=write_task_file(tmp_path, "test"),
+        source_dir="/src",
+    )
 
     doc = json.loads(out.read_text())
     phase = doc["phases"][0]
@@ -471,7 +479,7 @@ def test_replace_item_corrupt_replacement_json_raises(tmp_path) -> None:
         replace_item(str(src), "P1", str(corrupt))
 
 
-def test_build_plan_snapshot_reads_task_from_file(tmp_path) -> None:
+def test_build_plan_snapshot_reads_task_from_task_file_path(tmp_path) -> None:
     phases_dir = tmp_path / "phases"
     phases_dir.mkdir()
     (phases_dir / "P1_result.json").write_text(json.dumps(make_phase_result(1)))
@@ -479,13 +487,13 @@ def test_build_plan_snapshot_reads_task_from_file(tmp_path) -> None:
     task_file = tmp_path / "task_desc.txt"
     task_file.write_text("Full task from file")
 
-    build_plan_snapshot(str(phases_dir), str(out), task="label", task_file=str(task_file))
+    build_plan_snapshot(str(phases_dir), str(out), task_file_path=str(task_file))
 
     data = json.loads(out.read_text())
     assert data["task"] == "Full task from file"
 
 
-def test_merge_tier_dir_reads_task_from_file(tmp_path) -> None:
+def test_merge_tier_dir_reads_task_from_task_file_path(tmp_path) -> None:
     results_dir = tmp_path / "phases"
     results_dir.mkdir()
     (results_dir / "P1_result.json").write_text(
@@ -495,13 +503,13 @@ def test_merge_tier_dir_reads_task_from_file(tmp_path) -> None:
     task_file = tmp_path / "task_desc.txt"
     task_file.write_text("Full task from file")
 
-    merge_tier_dir(str(results_dir), str(out), "phases", task="label", task_file=str(task_file))
+    merge_tier_dir(str(results_dir), str(out), "phases", task_file_path=str(task_file))
 
     data = json.loads(out.read_text())
     assert data["task"] == "Full task from file"
 
 
-def test_merge_files_reads_task_from_file(tmp_path) -> None:
+def test_merge_files_reads_task_from_task_file_path(tmp_path) -> None:
     item = {"id": "P1", "name": "Phase 1"}
     p = tmp_path / "P1_result.json"
     p.write_text(json.dumps(item))
@@ -509,7 +517,7 @@ def test_merge_files_reads_task_from_file(tmp_path) -> None:
     task_file = tmp_path / "task_desc.txt"
     task_file.write_text("Full task from file")
 
-    merge_files([str(p)], str(out), "phases", task="label", task_file=str(task_file))
+    merge_files([str(p)], str(out), "phases", task_file_path=str(task_file))
 
     data = json.loads(out.read_text())
     assert data["task"] == "Full task from file"

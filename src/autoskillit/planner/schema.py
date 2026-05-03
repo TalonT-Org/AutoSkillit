@@ -138,6 +138,11 @@ class RunDirResult(TypedDict):
     planner_dir: str
 
 
+class TaskResolutionResult(TypedDict):
+    task_file_path: str
+    task_label: str
+
+
 class ValidationFinding(TypedDict):
     message: str
     severity: Literal["error", "warning"]

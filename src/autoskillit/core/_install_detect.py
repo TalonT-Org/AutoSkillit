@@ -5,9 +5,17 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Any
+from typing import TypedDict
 
 logger = logging.getLogger(__name__)  # noqa: TID251 — IL-0 module, no autoskillit imports allowed
+
+
+class DirectUrlInfo(TypedDict):
+    install_type: str
+    requested_revision: str | None
+    commit_id: str | None
+    editable: bool
+    url: str
 
 
 def _is_release_tag(rev: str) -> bool:
@@ -19,7 +27,7 @@ def _is_stable_track(rev: str | None) -> bool:
     return not rev or rev in ("main", "stable") or _is_release_tag(rev)
 
 
-def parse_direct_url() -> dict[str, Any]:
+def parse_direct_url() -> DirectUrlInfo:
     """Parse direct_url.json and return a canonical install descriptor.
 
     Keys: install_type (str), requested_revision (str|None),

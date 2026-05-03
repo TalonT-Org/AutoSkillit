@@ -6,11 +6,11 @@ import hashlib
 import json
 import re
 import shutil
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core import ValidatedAddDir
+from autoskillit.core import ValidatedAddDir, atomic_write
 
 SKILLS_SNAPSHOT_DIR = "skill_snapshots"
 _EPHEMERAL_SESSION_PATTERN = "autoskillit-sessions"
@@ -50,15 +50,13 @@ def build_skills_manifest(skills_dir: Path) -> dict[str, Any]:
         }
     return {
         "schema_version": 1,
-        "captured_at": datetime.now(tz=timezone.utc).isoformat(),
+        "captured_at": datetime.now(tz=UTC).isoformat(),
         "skill_count": len(skills),
         "skills": skills,
     }
 
 
-def snapshot_skill_dir(
-    scenario_dir: Path, step_name: str, add_dir_path: Path
-) -> Path | None:
+def snapshot_skill_dir(scenario_dir: Path, step_name: str, add_dir_path: Path) -> Path | None:
     """Copy the ephemeral skill dir tree into the scenario dir.
 
     Copies {add_dir_path}/.claude/skills/ →
@@ -83,9 +81,7 @@ def snapshot_skill_dir(
     shutil.copytree(skills_src, dest_skills)
 
     manifest = build_skills_manifest(skills_src)
-    (snapshot_dir / "manifest.json").write_text(
-        json.dumps(manifest, indent=2), encoding="utf-8"
-    )
+    atomic_write(snapshot_dir / "manifest.json", json.dumps(manifest, indent=2))
 
     return snapshot_dir
 
@@ -119,8 +115,4 @@ def scan_skill_snapshots(scenario_dir: Path) -> dict[str, Path]:
     snapshots_root = scenario_dir / SKILLS_SNAPSHOT_DIR
     if not snapshots_root.exists() or not snapshots_root.is_dir():
         return {}
-    return {
-        entry.name: entry
-        for entry in sorted(snapshots_root.iterdir())
-        if entry.is_dir()
-    }
+    return {entry.name: entry for entry in sorted(snapshots_root.iterdir()) if entry.is_dir()}

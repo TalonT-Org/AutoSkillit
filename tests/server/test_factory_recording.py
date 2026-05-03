@@ -254,10 +254,7 @@ async def test_run_skill_replay_uses_snapshot_over_init_session(tool_ctx, tmp_pa
     tool_ctx.executor = executor
 
     ephemeral_root = tmp_path / "sessions"
-    monkeypatch.setattr(
-        "autoskillit.server.tools_execution.resolve_ephemeral_root",
-        lambda: ephemeral_root,
-    )
+    tool_ctx.ephemeral_root = ephemeral_root
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
 
     await run_skill("/investigate foo", str(tmp_path), step_name="investigate")

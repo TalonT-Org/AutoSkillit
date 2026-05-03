@@ -1,4 +1,4 @@
-"""Tests for _recording_skills: snapshot_skill_dir, restore_skill_snapshot, scan_skill_snapshots."""
+"""Tests for _recording_skills snapshot/restore helpers."""
 
 from __future__ import annotations
 
@@ -184,9 +184,12 @@ def test_extract_ephemeral_add_dir_skips_non_ephemeral() -> None:
 def test_extract_ephemeral_add_dir_multiple_dirs() -> None:
     cmd = [
         "claude",
-        "--add-dir", "/home/user/project",
-        "--add-dir", "/tmp/autoskillit-sessions/headless-xyz",
-        "--print", "go",
+        "--add-dir",
+        "/home/user/project",
+        "--add-dir",
+        "/tmp/autoskillit-sessions/headless-xyz",
+        "--print",
+        "go",
     ]
     result = _extract_ephemeral_add_dir(cmd)
     assert result == Path("/tmp/autoskillit-sessions/headless-xyz")

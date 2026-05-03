@@ -310,6 +310,7 @@ def make_context(
         github_api_log=github_api_log,
         session_skill_manager=session_mgr,
         skill_resolver=provider.resolver,
+        ephemeral_root=ephemeral_root,
         quota_refresh_task=None,
         fleet_lock=(
             fleet_lock

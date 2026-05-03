@@ -23,7 +23,6 @@ from autoskillit.core import (
     truncate_text,
     validate_add_dir,
 )
-from autoskillit.execution.recording import ReplayingSubprocessRunner
 from autoskillit.server import mcp
 from autoskillit.server._guards import (
     _check_dry_walkthrough,
@@ -34,7 +33,6 @@ from autoskillit.server._guards import (
 from autoskillit.server._misc import SCENARIO_STEP_NAME_ENV
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._subprocess import _run_subprocess
-from autoskillit.workspace.session_skills import resolve_ephemeral_root
 
 logger = get_logger(__name__)
 
@@ -415,14 +413,16 @@ async def run_skill(
 
         skill_add_dirs: list[ValidatedAddDir] = []
         replay_snapshot_used = False
+        _runner = tool_ctx.runner
         if (
             step_name
-            and isinstance(tool_ctx.runner, ReplayingSubprocessRunner)
-            and tool_ctx.runner.skill_snapshots
+            and _runner is not None
+            and getattr(_runner, "skill_snapshots", None)
+            and tool_ctx.ephemeral_root is not None
         ):
-            _ephemeral_root = resolve_ephemeral_root()
+            _ephemeral_root = tool_ctx.ephemeral_root
             session_id = f"headless-{uuid4().hex[:12]}"
-            _restored = tool_ctx.runner.restore_skill_snapshot(
+            _restored = _runner.restore_skill_snapshot(  # type: ignore[attr-defined]
                 step_name, _ephemeral_root, session_id
             )
             if _restored is not None:

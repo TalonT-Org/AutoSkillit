@@ -135,6 +135,7 @@ class ToolContext:
     token_factory: TokenFactory | None = field(default=None)
     fleet_lock: FleetLock | None = field(default=None)
     build_protected_campaign_ids: CampaignProtector | None = field(default=None)
+    ephemeral_root: Path | None = field(default=None)
 
     def __post_init__(self) -> None:
         if self.temp_dir is _MISSING:

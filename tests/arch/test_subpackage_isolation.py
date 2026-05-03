@@ -76,7 +76,9 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "settings",  # config/settings.py: _CONFIG_SCHEMA = _build_config_schema()
         "_headless_path_tokens",  # execution/_headless_path_tokens.py: _OUTPUT_PATH_TOKENS
         # _STABLE_DISMISS_WINDOW = timedelta(days=7), _DEV_DISMISS_WINDOW = timedelta(hours=12)
-        "_update_checks",  # cli/_update_checks.py: window constants (see comment above)
+        "_install_info",  # cli/_install_info.py: window constants (see comment above)
+        # KITCHEN_GUARDED_COMMANDS: frozenset[str]
+        "_update_checks",  # cli/_update_checks.py: module-level frozenset (see comment above)
         # _HTTP_TIMEOUT = httpx.Timeout(...) — module-level httpx client timeout config
         "_update_checks_fetch",  # cli/_update_checks_fetch.py: _HTTP_TIMEOUT constant
         "_terminal",  # cli/_terminal.py: _BASE_RESET = "".join(...) derived from _RESET_SPEC
@@ -1342,10 +1344,10 @@ def test_pipeline_init_no_longer_exports_domain_paths():
 
 
 def test_singleton_exemption_comment_matches_both_windows() -> None:
-    """The _update_checks exemption comment in SINGLETON_ALLOWED_MODULES must
+    """The _install_info exemption comment in SINGLETON_ALLOWED_MODULES must
     accurately reflect both the _STABLE_DISMISS_WINDOW and _DEV_DISMISS_WINDOW values."""
 
-    from autoskillit.cli._update_checks import _DEV_DISMISS_WINDOW, _STABLE_DISMISS_WINDOW
+    from autoskillit.cli._install_info import _DEV_DISMISS_WINDOW, _STABLE_DISMISS_WINDOW
 
     this_file = Path(__file__)
     content = this_file.read_text(encoding="utf-8")
@@ -1369,13 +1371,13 @@ def test_singleton_exemption_comment_matches_both_windows() -> None:
         f"Exemption comment in SINGLETON_ALLOWED_MODULES is stale. "
         f"Expected to find '{stable_fragment}' "
         f"(current _STABLE_DISMISS_WINDOW={_STABLE_DISMISS_WINDOW!r}). "
-        "Update the comment on the '_update_checks' entry."
+        "Update the comment on the '_install_info' entry."
     )
     assert dev_fragment in content, (
         f"Exemption comment in SINGLETON_ALLOWED_MODULES is stale. "
         f"Expected to find '{dev_fragment}' "
         f"(current _DEV_DISMISS_WINDOW={_DEV_DISMISS_WINDOW!r}). "
-        "Update the comment on the '_update_checks' entry."
+        "Update the comment on the '_install_info' entry."
     )
 
 

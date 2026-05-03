@@ -98,19 +98,19 @@ Expected L0 return schema:
 {
   "id": "P1-A2",
   "phase_id": "P1",
-  "name": "Session Management",
-  "goal": "Implement user session persistence",
-  "technical_approach": "SQLite-backed session table with CRUD repository layer",
-  "dependency_notes": "Depends on P1-A1 database schema migration",
+  "name": "<assignment name>",
+  "goal": "<one-sentence goal>",
+  "technical_approach": "<technical approach description>",
+  "dependency_notes": "Depends on P1-A1 for <dependency description>",
   "overlap_notes": "No overlap detected with other assignments",
   "proposed_work_packages": [
     {
       "id_suffix": "WP1",
-      "name": "Create session table migration",
-      "scope": "Database migration and model for sessions",
+      "name": "<work package name>",
+      "scope": "<scope description>",
       "estimated_files": [
-        "src/db/migrations/002_sessions.py",
-        "src/db/models/session.py"
+        "src/<path>/<file_a>.py",
+        "src/<path>/<file_b>.py"
       ]
     }
   ]

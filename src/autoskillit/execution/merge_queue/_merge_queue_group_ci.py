@@ -12,7 +12,7 @@ import os
 import re
 
 from autoskillit.core import get_logger
-from autoskillit.execution._merge_queue_classifier import _QUERY_FIELD_MAP
+from autoskillit.execution.merge_queue._merge_queue_classifier import _QUERY_FIELD_MAP
 
 logger = get_logger(__name__)
 

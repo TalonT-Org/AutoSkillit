@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any, assert_never, cast
 import httpx
 
 from autoskillit.core import PRState, get_logger
-from autoskillit.execution._merge_queue_classifier import (
+from autoskillit.execution.merge_queue._merge_queue_classifier import (
     _QUERY_FIELD_MAP,  # noqa: F401 — re-export: tests access merge_queue._QUERY_FIELD_MAP
     KNOWN_MQ_MERGE_STATE_STATUSES,  # noqa: F401 — re-export for callers
     CIStillRunning,
@@ -31,14 +31,14 @@ from autoskillit.execution._merge_queue_classifier import (
     _is_positive_dropped_merge_group_ci,  # noqa: F401 — re-export for callers
     _is_positive_stall,  # noqa: F401 — re-export for callers
 )
-from autoskillit.execution._merge_queue_group_ci import (
+from autoskillit.execution.merge_queue._merge_queue_group_ci import (
     _MUTATION_DISABLE_AUTO_MERGE,
     _MUTATION_ENABLE_AUTO_MERGE,
     _MUTATION_ENQUEUE_PR,
     _QUERY,  # noqa: F401 — re-export: tests assert merge_queue._QUERY exists
     _query_merge_group_ci,  # noqa: F401 — re-export: tests patch merge_queue._query_merge_group_ci
 )
-from autoskillit.execution._merge_queue_repo_state import (
+from autoskillit.execution.merge_queue._merge_queue_repo_state import (
     _GRAPHQL_ENDPOINT,
     _RATE_LIMIT_MAX_ATTEMPTS,  # noqa: F401 — re-export for callers
     _RATE_LIMIT_SECONDARY_MARKER,  # noqa: F401 — re-export for callers

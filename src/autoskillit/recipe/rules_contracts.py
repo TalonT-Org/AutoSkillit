@@ -402,3 +402,112 @@ def _check_result_field_drift(ctx: ValidationContext) -> list[RuleFinding]:
             )
 
     return findings
+
+
+@semantic_rule(
+    name="example-covers-all-allowed-values",
+    description=(
+        "Every allowed_value declared on a skill output must appear in at least "
+        "one pattern_examples entry, ensuring the example set covers all output paths"
+    ),
+    severity=Severity.ERROR,
+)
+def _check_example_covers_all_allowed_values(ctx: ValidationContext) -> list[RuleFinding]:
+    """Error when any allowed_value has no corresponding pattern_examples entry.
+
+    Reads allowed_values from the raw manifest dict (not SkillContract, which does not
+    promote allowed_values into SkillOutput). An example 'covers' a value when the
+    example text contains a match for '{output_name}\\s*=\\s*{re.escape(value)}'.
+    """
+    findings: list[RuleFinding] = []
+    manifest = load_bundled_manifest()
+
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        skill_cmd = step.with_args.get("skill_command", "")
+        name = resolve_skill_name(skill_cmd)
+        if not name:
+            continue
+        contract = get_skill_contract(name, manifest)
+        if not contract or not contract.pattern_examples:
+            continue
+
+        skill_dict = manifest.get("skills", {}).get(name, {})
+        for output in skill_dict.get("outputs", []):
+            if "allowed_values" not in output:
+                continue
+            output_name: str = output["name"]
+            for value in output["allowed_values"]:
+                pattern = _re.compile(_re.escape(output_name) + r"\s*=\s*" + _re.escape(value))
+                if not any(pattern.search(ex) for ex in contract.pattern_examples):
+                    findings.append(
+                        RuleFinding(
+                            rule="example-covers-all-allowed-values",
+                            severity=Severity.ERROR,
+                            step_name=step_name,
+                            message=(
+                                f"Skill '{name}': allowed_value '{value}' on output "
+                                f"'{output_name}' has no pattern_examples entry. "
+                                f"Add an example containing '{output_name} = {value}' "
+                                f"to skill_contracts.yaml so all output paths are covered."
+                            ),
+                        )
+                    )
+
+    return findings
+
+
+@semantic_rule(
+    name="all-examples-match-all-patterns",
+    description=(
+        "Every pattern_examples entry must satisfy ALL expected_output_patterns. "
+        "An example that fails a pattern indicates the pattern is conditional, "
+        "which will cause CONTRACT_VIOLATION at runtime due to AND semantics."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_all_examples_match_all_patterns(ctx: ValidationContext) -> list[RuleFinding]:
+    """Error when any pattern_examples entry fails any expected_output_pattern.
+
+    The existing pattern-examples-match rule checks ∀ pattern, ∃ example (pattern not dead).
+    This rule checks ∀ example, ∀ pattern (pattern not conditional). Together they form a
+    complete constraint: patterns are both necessary and sufficient for all output paths.
+    """
+    findings: list[RuleFinding] = []
+    manifest = load_bundled_manifest()
+
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        skill_cmd = step.with_args.get("skill_command", "")
+        name = resolve_skill_name(skill_cmd)
+        if not name:
+            continue
+        contract = get_skill_contract(name, manifest)
+        if not contract or not contract.pattern_examples or not contract.expected_output_patterns:
+            continue
+
+        for example in contract.pattern_examples:
+            for pattern in contract.expected_output_patterns:
+                try:
+                    matched = bool(_re.search(pattern, example))
+                except _re.error:
+                    continue  # invalid regex — covered by pattern-examples-match
+                if not matched:
+                    preview = repr(example[:60])
+                    findings.append(
+                        RuleFinding(
+                            rule="all-examples-match-all-patterns",
+                            severity=Severity.ERROR,
+                            step_name=step_name,
+                            message=(
+                                f"Skill '{name}': example {preview} does not match "
+                                f"pattern {pattern!r}. This pattern is conditional — "
+                                f"AND semantics in _check_expected_patterns will reject "
+                                f"sessions producing this output."
+                            ),
+                        )
+                    )
+
+    return findings

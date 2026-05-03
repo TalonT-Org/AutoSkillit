@@ -143,15 +143,13 @@ _CORE_UNIVERSAL_MODULES: frozenset[str] = frozenset(
 )
 
 MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
-    "readiness": frozenset({"core", "server"}),
     "feature_flags": frozenset({"core", "cli", "config", "recipe", "server", "workspace"}),
-    "kitchen_state": frozenset({"core", "cli", "server"}),
     "branch_guard": frozenset({"core", "pipeline", "server", "workspace"}),
     "_plugin_ids": frozenset({"core", "cli", "server"}),
     "_terminal_table": frozenset({"core", "cli", "pipeline", "recipe"}),
-    "_linux_proc": frozenset({"core", "cli", "execution", "fleet"}),
     "_plugin_cache": frozenset({"core", "cli", "server"}),
     "github_url": frozenset({"core", "cli", "execution", "server"}),
+    "runtime": frozenset({"core", "cli", "execution", "fleet", "server"}),
     "paths": frozenset(
         {
             "core",
@@ -177,19 +175,6 @@ MODULE_CASCADE_EXECUTION: dict[str, frozenset[str]] = {
     # --- Narrowest: imports only within tests/execution/ ---
     "anomaly_detection": frozenset({"execution"}),
     "clone_guard": frozenset({"execution"}),
-    "_headless_scan": frozenset({"execution"}),
-    "_headless_recovery": frozenset({"execution"}),
-    "_headless_path_tokens": frozenset({"execution"}),
-    "_headless_result": frozenset({"execution"}),
-    "_session_model": frozenset({"execution"}),
-    "_session_content": frozenset({"execution"}),
-    "_merge_queue_classifier": frozenset({"execution"}),
-    "_merge_queue_repo_state": frozenset({"execution"}),
-    "_process_io": frozenset({"execution"}),
-    "_process_jsonl": frozenset({"execution"}),
-    "_process_monitor": frozenset({"execution"}),
-    "_process_pty": frozenset({"execution"}),
-    "_process_race": frozenset({"execution"}),
     # --- Medium: execution + specific file-level consumers ---
     "ci": frozenset({"execution"}),
     "merge_queue": frozenset({"execution"}),
@@ -253,13 +238,6 @@ MODULE_CASCADE_EXECUTION: dict[str, frozenset[str]] = {
         }
     ),
     "linux_tracing": frozenset(
-        {
-            "execution",
-            "cli",
-            "fleet/test_fleet_e2e.py",
-        }
-    ),
-    "_process_kill": frozenset(
         {
             "execution",
             "cli",

@@ -186,7 +186,7 @@ def _bundled_recipes() -> list[str]:
 
 
 def _retry_reason_values() -> list[str]:
-    text = _read(SRC_DIR / "core" / "_type_enums.py")
+    text = _read(SRC_DIR / "core" / "types" / "_type_enums.py")
     block = re.search(r"class RetryReason\(StrEnum\):(.*?)\nclass ", text, re.DOTALL)
     assert block, "RetryReason enum not found"
     return re.findall(r'"([a-z_]+)"', block.group(1))

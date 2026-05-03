@@ -121,34 +121,37 @@ generic_automation_mcp/
 │   ├── io.py                #   atomic_write, ensure_project_temp, YAML helpers
 │   ├── logging.py
 │   ├── paths.py             #   pkg_root(), is_git_worktree()
-│   ├── types.py             #   Re-export hub for _type_*.py
-│   ├── _type_enums.py       #   StrEnums
-│   ├── _type_subprocess.py
-│   ├── _type_constants.py   #   GATED_TOOLS, FREE_RANGE_TOOLS, SKILL_TOOLS, etc.
-│   ├── _type_results.py     #   LoadResult, SkillResult, FailureRecord, CleanupResult, etc.
-│   ├── _type_protocols_logging.py   #   Protocols: AuditLog, TokenLog, TimingLog, McpResponseLog, GitHubApiLog, SupportsDebug, SupportsLogger
-│   ├── _type_protocols_execution.py #   Protocols: TestRunner, HeadlessExecutor, OutputPatternResolver, WriteExpectedResolver
-│   ├── _type_protocols_github.py    #   Protocols: GitHubFetcher, CIWatcher, MergeQueueWatcher
-│   ├── _type_protocols_workspace.py #   Protocols: WorkspaceManager, CloneManager, SessionSkillManager, SkillLister, SkillResolver
-│   ├── _type_protocols_recipe.py    #   Protocols: RecipeRepository, MigrationService, DatabaseReader, ReadOnlyResolver
-│   ├── _type_protocols_infra.py     #   Protocols: GateState, BackgroundSupervisor, FleetLock, QuotaRefreshTask, TokenFactory, CampaignProtector
-│   ├── _type_helpers.py
-│   ├── _type_resume.py      #   ResumeSpec discriminated union: NoResume, BareResume, NamedResume
-│   ├── _type_plugin_source.py #  PluginSource discriminated union: DirectInstall | MarketplaceInstall
-│   ├── _linux_proc.py       #   read_boot_id, read_starttime_ticks — Linux /proc helpers (IL-0)
+│   ├── types/               #   Type re-export hub + all _type_*.py modules
+│   │   ├── __init__.py      #   Re-export hub (was core/types.py)
+│   │   ├── _type_enums.py   #   StrEnums
+│   │   ├── _type_subprocess.py
+│   │   ├── _type_constants.py   #   GATED_TOOLS, FREE_RANGE_TOOLS, SKILL_TOOLS, etc.
+│   │   ├── _type_results.py     #   LoadResult, SkillResult, FailureRecord, CleanupResult, etc.
+│   │   ├── _type_protocols_logging.py   #   Protocols: AuditLog, TokenLog, TimingLog, McpResponseLog, GitHubApiLog, SupportsDebug, SupportsLogger
+│   │   ├── _type_protocols_execution.py #   Protocols: TestRunner, HeadlessExecutor, OutputPatternResolver, WriteExpectedResolver
+│   │   ├── _type_protocols_github.py    #   Protocols: GitHubFetcher, CIWatcher, MergeQueueWatcher
+│   │   ├── _type_protocols_workspace.py #   Protocols: WorkspaceManager, CloneManager, SessionSkillManager, SkillLister, SkillResolver
+│   │   ├── _type_protocols_recipe.py    #   Protocols: RecipeRepository, MigrationService, DatabaseReader, ReadOnlyResolver
+│   │   ├── _type_protocols_infra.py     #   Protocols: GateState, BackgroundSupervisor, FleetLock, QuotaRefreshTask, TokenFactory, CampaignProtector
+│   │   ├── _type_helpers.py
+│   │   ├── _type_resume.py      #   ResumeSpec discriminated union: NoResume, BareResume, NamedResume
+│   │   └── _type_plugin_source.py #  PluginSource discriminated union: DirectInstall | MarketplaceInstall
+│   ├── runtime/             #   Process-state modules (stdlib-only)
+│   │   ├── __init__.py      #   Re-exports public surface
+│   │   ├── _linux_proc.py   #   read_boot_id, read_starttime_ticks — Linux /proc helpers (IL-0)
+│   │   ├── kitchen_state.py #   Kitchen-open session marker (stdlib-only; readable from hooks)
+│   │   ├── readiness.py     #   Filesystem readiness sentinel primitives for MCP server startup (IL-0)
+│   │   └── session_registry.py  #   Session registry: maps autoskillit launch IDs to Claude Code session UUIDs
 │   ├── _claude_env.py       #   IDE-scrubbing canonical env builder for claude subprocesses
 │   ├── _terminal_table.py   #   IL-0 color-agnostic terminal table primitive
 │   ├── _version_snapshot.py #   Process-scoped version snapshot for session telemetry (lru_cache'd)
 │   ├── branch_guard.py
 │   ├── claude_conventions.py #  Skill discovery directory layout constants
 │   ├── github_url.py        #   parse_github_repo
-│   ├── kitchen_state.py     #   Kitchen-open session marker (stdlib-only; readable from hooks)
 │   ├── _plugin_cache.py     #   Plugin cache lifecycle: retiring cache, install locking, kitchen registry
 │   ├── _plugin_ids.py       #   DIRECT_PREFIX, MARKETPLACE_PREFIX, detect_autoskillit_mcp_prefix (stdlib-only)
 │   ├── _install_detect.py   #   is_dev_install() — editable-install detection for config resolution (IL-0)
 │   ├── feature_flags.py     #   is_feature_enabled() — IL-0 feature gate resolution primitive
-│   ├── readiness.py         #   Filesystem readiness sentinel primitives for MCP server startup (IL-0)
-│   ├── session_registry.py  #   Session registry: maps autoskillit launch IDs to Claude Code session UUIDs
 │   └── tool_sequence_analysis.py #  Cross-session tool call sequence DFG analysis (stdlib-only, IL-0)
 │
 ├── config/                  # IL-1
@@ -177,36 +180,40 @@ generic_automation_mcp/
 │   ├── commands.py          #   Claude{Interactive,Headless}Cmd builders
 │   ├── db.py                #   Read-only SQLite with defence-in-depth
 │   ├── diff_annotator.py    #   Diff annotation + findings filter for review-pr
-│   ├── headless.py          #   Headless Claude session orchestration (facade)
-│   ├── _headless_recovery.py #  Recovery functions: _recover_from_separate_marker, _synthesize_from_write_artifacts, etc.
-│   ├── _headless_path_tokens.py # Path-token extraction: _build_path_token_set, _extract_output_paths, _validate_output_paths
-│   ├── _headless_result.py  #   Result building: _build_skill_result, _build_session_telemetry, _capture_failure, _apply_budget_guard
-│   ├── _headless_git.py     #   Git helpers for LOC capture: _capture_git_head_sha, _parse_numstat, _compute_loc_changed
-│   ├── _headless_scan.py    #   Write-path JSONL scanning (extracted from headless.py)
+│   ├── headless/            #   Headless Claude session orchestration
+│   │   ├── __init__.py      #   Facade (was execution/headless.py)
+│   │   ├── _headless_recovery.py #  Recovery functions: _recover_from_separate_marker, _synthesize_from_write_artifacts, etc.
+│   │   ├── _headless_path_tokens.py # Path-token extraction: _build_path_token_set, _extract_output_paths, _validate_output_paths
+│   │   ├── _headless_result.py  #   Result building: _build_skill_result, _build_session_telemetry, _capture_failure, _apply_budget_guard
+│   │   ├── _headless_git.py     #   Git helpers for LOC capture: _capture_git_head_sha, _parse_numstat, _compute_loc_changed
+│   │   └── _headless_scan.py    #   Write-path JSONL scanning (extracted from headless.py)
 │   ├── linux_tracing.py     #   /proc + psutil process tracing (Linux)
 │   ├── anomaly_detection.py #   Post-hoc anomaly detection over snapshots
 │   ├── session_log.py       #   XDG-aware session diagnostics log writer
 │   ├── recording.py         #   Record/replay subprocess runners via api-simulator
 │   ├── _recording_skills.py #   Skill dir snapshot/restore for record/replay sessions
-│   ├── process.py           #   Facade re-exporting from _process_*.py
-│   ├── _process_io.py
-│   ├── _process_jsonl.py
-│   ├── _process_kill.py
-│   ├── _process_monitor.py
-│   ├── _process_pty.py
-│   ├── _process_race.py     #   RaceAccumulator, resolve_termination
+│   ├── process/             #   Process lifecycle management
+│   │   ├── __init__.py      #   Facade (was execution/process.py)
+│   │   ├── _process_io.py
+│   │   ├── _process_jsonl.py
+│   │   ├── _process_kill.py
+│   │   ├── _process_monitor.py
+│   │   ├── _process_pty.py
+│   │   └── _process_race.py     #   RaceAccumulator, resolve_termination
 │   ├── quota.py             #   QuotaStatus, cache, check_and_sleep_if_needed
 │   ├── ci.py                #   GitHub Actions CI watcher (httpx, never raises)
-│   ├── merge_queue.py       #   GitHub merge queue watcher (facade)
-│   ├── _merge_queue_classifier.py #  PRFetchState, ClassificationResult, ClassifierInconclusive, _classify_pr_state
-│   ├── _merge_queue_group_ci.py #   _query_merge_group_ci, _QUERY, mutation strings — extracted from merge_queue.py for size budget
-│   ├── _merge_queue_repo_state.py #  fetch_repo_merge_state, _text_has_push_trigger, _has_merge_group_trigger
+│   ├── merge_queue/         #   GitHub merge queue watcher
+│   │   ├── __init__.py      #   Facade (was execution/merge_queue.py)
+│   │   ├── _merge_queue_classifier.py #  PRFetchState, ClassificationResult, ClassifierInconclusive, _classify_pr_state
+│   │   ├── _merge_queue_group_ci.py #   _query_merge_group_ci, _QUERY, mutation strings
+│   │   └── _merge_queue_repo_state.py #  fetch_repo_merge_state, _text_has_push_trigger, _has_merge_group_trigger
 │   ├── github.py            #   GitHub issue fetcher
-│   ├── session.py           #   ClaudeSessionResult, extract_token_usage (facade)
-│   ├── _retry_fsm.py        #   _KILL_ANOMALY_SUBTYPES, _is_kill_anomaly, _compute_retry
-│   ├── _session_outcome.py  #   _compute_success, _compute_outcome
-│   ├── _session_model.py    #   ContentState, ClaudeSessionResult, extract_token_usage, parse_session_result
-│   ├── _session_content.py  #   _check_expected_patterns, _check_session_content, _evaluate_content_state
+│   ├── session/             #   Session result processing
+│   │   ├── __init__.py      #   Facade (was execution/session.py)
+│   │   ├── _retry_fsm.py    #   _KILL_ANOMALY_SUBTYPES, _is_kill_anomaly, _compute_retry
+│   │   ├── _session_outcome.py  #   _compute_success, _compute_outcome
+│   │   ├── _session_model.py    #   ContentState, ClaudeSessionResult, extract_token_usage, parse_session_result
+│   │   └── _session_content.py  #   _check_expected_patterns, _check_session_content, _evaluate_content_state
 │   ├── remote_resolver.py   #   upstream > origin, clone-aware
 │   ├── testing.py           #   Pytest output parsing + pass/fail adjudication
 │   ├── clone_guard.py       #   Clone contamination guard — detect and revert direct changes to clone CWD

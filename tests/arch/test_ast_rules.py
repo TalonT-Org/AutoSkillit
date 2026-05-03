@@ -615,8 +615,8 @@ def test_no_direct_async_kill_process_tree_outside_executor() -> None:
     - run_managed_sync in process.py (sync cleanup path)
     """
     allowed_files = {
-        SRC_ROOT / "execution" / "_process_kill.py",
-        SRC_ROOT / "execution" / "process.py",
+        SRC_ROOT / "execution" / "process" / "_process_kill.py",
+        SRC_ROOT / "execution" / "process" / "__init__.py",
         SRC_ROOT / "cli" / "_fleet.py",  # signal guard + reap CLI commands (facade re-export)
         SRC_ROOT / "cli" / "_fleet_lifecycle.py",  # signal guard + reap implementation
     }
@@ -662,7 +662,7 @@ def test_no_direct_termination_dispatch_ifelse_in_run_managed() -> None:
 
     The dispatch must be delegated to decide_termination_action.
     """
-    process_py = SRC_ROOT / "execution" / "process.py"
+    process_py = SRC_ROOT / "execution" / "process" / "__init__.py"
     tree = ast.parse(process_py.read_text())
 
     # Find run_managed_async function body

@@ -188,7 +188,7 @@ def test_core_recipe_guard_is_sole_exception() -> None:
     core_dir = SRC_ROOT / "core"
     files_with_recipe_import: list[str] = []
 
-    for py_file in sorted(core_dir.glob("*.py")):
+    for py_file in sorted(core_dir.rglob("*.py")):
         try:
             tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
         except SyntaxError:

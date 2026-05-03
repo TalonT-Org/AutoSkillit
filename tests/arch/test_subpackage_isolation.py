@@ -1243,51 +1243,51 @@ class TestGroupCMigration:
     """REQ-SIG-001..008: anyio task group replaces asyncio task scaffolding."""
 
     def test_no_asyncio_create_task(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/process/__init__.py").read_text()
         assert "asyncio.create_task(" not in source  # REQ-SIG-001
 
     def test_no_asyncio_wait_call(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/process/__init__.py").read_text()
         assert "asyncio.wait(" not in source  # REQ-SIG-001
 
     def test_no_asyncio_import_at_runtime(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/process/__init__.py").read_text()
         assert "import asyncio" not in source  # REQ-SIG-001
 
     def test_anyio_create_task_group_present(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/process/__init__.py").read_text()
         assert "anyio.create_task_group()" in source  # REQ-SIG-002
 
     def test_scan_done_signals_absent(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/process/__init__.py").read_text()
         assert "def scan_done_signals(" not in source  # REQ-SIG-003
 
     def test_race_accumulator_present(self):
-        source = Path("src/autoskillit/execution/_process_race.py").read_text()
+        source = Path("src/autoskillit/execution/process/_process_race.py").read_text()
         assert "class RaceAccumulator" in source  # REQ-SIG-003
 
     def test_cancel_scope_cancel_present(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/process/__init__.py").read_text()
         assert "cancel_scope.cancel()" in source  # REQ-SIG-004
 
     def test_resolve_termination_preserved(self):
-        source = Path("src/autoskillit/execution/_process_race.py").read_text()
+        source = Path("src/autoskillit/execution/process/_process_race.py").read_text()
         assert "def resolve_termination(" in source  # REQ-SIG-005
 
     def test_channel_b_drain_wait_uses_move_on_after(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/process/__init__.py").read_text()
         assert "anyio.move_on_after(" in source  # REQ-SIG-006
 
     def test_watch_process_present(self):
-        source = Path("src/autoskillit/execution/_process_race.py").read_text()
+        source = Path("src/autoskillit/execution/process/_process_race.py").read_text()
         assert "async def _watch_process(" in source  # REQ-SIG-007
 
     def test_watch_heartbeat_present(self):
-        source = Path("src/autoskillit/execution/_process_race.py").read_text()
+        source = Path("src/autoskillit/execution/process/_process_race.py").read_text()
         assert "async def _watch_heartbeat(" in source  # REQ-SIG-007
 
     def test_watch_session_log_present(self):
-        source = Path("src/autoskillit/execution/_process_race.py").read_text()
+        source = Path("src/autoskillit/execution/process/_process_race.py").read_text()
         assert "async def _watch_session_log(" in source  # REQ-SIG-007
 
     def test_race_signals_fields_unchanged(self):

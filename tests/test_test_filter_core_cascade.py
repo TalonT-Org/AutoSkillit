@@ -55,11 +55,10 @@ class TestModuleCascadeCore:
         for stem, consumers in MODULE_CASCADE_CORE.items():
             assert "core" in consumers, f"{stem} cascade missing 'core'"
 
-    def test_kitchen_state_cascade(self) -> None:
-        assert MODULE_CASCADE_CORE["kitchen_state"] == frozenset({"core", "cli", "server"})
-
-    def test_readiness_cascade(self) -> None:
-        assert MODULE_CASCADE_CORE["readiness"] == frozenset({"core", "server"})
+    def test_runtime_cascade(self) -> None:
+        assert MODULE_CASCADE_CORE["runtime"] == frozenset(
+            {"core", "cli", "execution", "fleet", "server"}
+        )
 
     def test_feature_flags_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["feature_flags"] == frozenset(
@@ -76,21 +75,19 @@ class TestModuleCascadeCore:
         overlap = _CORE_UNIVERSAL_MODULES & set(MODULE_CASCADE_CORE.keys())
         assert not overlap, f"Universal modules in MODULE_CASCADE_CORE: {overlap}"
 
-    def test_all_13_entries_present(self) -> None:
+    def test_all_entries_present(self) -> None:
         expected_stems = {
-            "readiness",
             "feature_flags",
-            "kitchen_state",
             "branch_guard",
             "_plugin_ids",
             "_terminal_table",
-            "_linux_proc",
             "_plugin_cache",
             "github_url",
             "paths",
             "_claude_env",
             "_version_snapshot",
             "claude_conventions",
+            "runtime",
         }
         assert set(MODULE_CASCADE_CORE.keys()) == expected_stems
 
@@ -319,12 +316,12 @@ class TestClosureCoreNarrowCascade:
         tests_root = self._make_core_layout(
             tmp_path,
             {
-                "kitchen_state.py": "",
-                "__init__.py": "from .kitchen_state import KitchenState\n",
+                "_plugin_ids.py": "",
+                "__init__.py": "from ._plugin_ids import DIRECT_PREFIX\n",
             },
         )
         result = build_test_scope(
-            changed_files={"src/autoskillit/core/kitchen_state.py"},
+            changed_files={"src/autoskillit/core/_plugin_ids.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
@@ -347,24 +344,25 @@ class TestClosureCoreNarrowCascade:
         tests_root = self._make_core_layout(
             tmp_path,
             {
-                "kitchen_state.py": "",
-                "readiness.py": "",
+                "_plugin_ids.py": "",
+                "_plugin_cache.py": "",
                 "__init__.py": (
-                    "from .kitchen_state import KitchenState\nfrom .readiness import is_ready\n"
+                    "from ._plugin_ids import DIRECT_PREFIX\n"
+                    "from ._plugin_cache import is_cached\n"
                 ),
             },
         )
         result = build_test_scope(
             changed_files={
-                "src/autoskillit/core/kitchen_state.py",
-                "src/autoskillit/core/readiness.py",
+                "src/autoskillit/core/_plugin_ids.py",
+                "src/autoskillit/core/_plugin_cache.py",
             },
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
         assert result is not None
         dir_names = {p.name for p in result}
-        # Union: kitchen_state={core,cli,server} ∪ readiness={core,server}
+        # Union: _plugin_ids={core,cli,server} ∪ _plugin_cache={core,cli,server}
         for pkg in ["core", "cli", "server"]:
             assert pkg in dir_names, f"union cascade should include {pkg}"
         for excluded in [

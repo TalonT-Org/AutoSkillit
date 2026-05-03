@@ -306,7 +306,7 @@ class TestHasActiveChildProcesses:
     @pytest.fixture(autouse=True)
     def _clear_cache(self, monkeypatch):
         """Reset the module-level Process cache between tests."""
-        from autoskillit.execution import _process_monitor
+        from autoskillit.execution.process import _process_monitor
 
         monkeypatch.setattr(_process_monitor, "_child_process_cache", {})
 

@@ -165,7 +165,7 @@ def test_exclusive_feature_tools_removed() -> None:
 
 def test_exclusive_feature_tools_not_in_all() -> None:
     """EXCLUSIVE_FEATURE_TOOLS must not appear in _type_constants.__all__."""
-    from autoskillit.core import _type_constants
+    from autoskillit.core.types import _type_constants
 
     assert "EXCLUSIVE_FEATURE_TOOLS" not in _type_constants.__all__
 

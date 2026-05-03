@@ -515,9 +515,6 @@ def test_finalize_wp_manifest_nonexistent_dir_raises(tmp_path):
         finalize_wp_manifest(str(tmp_path / "nonexistent"), str(output_dir))
 
 
-# --- resolve_task_input tests (T1a-T1e) ---
-
-
 def test_resolve_task_input_file_with_heading(tmp_path):
     from autoskillit.planner import resolve_task_input
 
@@ -572,3 +569,4 @@ def test_resolve_task_input_long_inline_truncates_label(tmp_path):
     text = "A" * 120
     result = resolve_task_input(text, str(planner_dir))
     assert len(result["task_label"]) <= 80
+    assert text.startswith(result["task_label"])

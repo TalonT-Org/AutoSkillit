@@ -273,9 +273,6 @@ def test_planner_recipe_assess_review_approach_routes_to_validate_on_failure(pla
     assert step.on_failure == "validate"
 
 
-# --- resolve_task ingredient and step tests ---
-
-
 def test_planner_recipe_no_task_file_ingredient(planner_recipe):
     assert "task_file" not in planner_recipe.ingredients
 

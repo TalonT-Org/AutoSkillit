@@ -255,7 +255,6 @@ class TestFleetCampaignResumeHaltedExits:
             ),
         )
         launch_called = False
-        original_launch = None
 
         def _track_launch(*a: object, **kw: object) -> None:
             nonlocal launch_called

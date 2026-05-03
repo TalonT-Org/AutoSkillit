@@ -625,7 +625,7 @@ class TestResumeIncludesRunningAliveInBlock:
             l2_boot_id="abc",
             l2_starttime_ticks=999,
         )
-        record_c = DispatchRecord(name="C")
+        record_c = DispatchRecord(name="C", status=DispatchStatus.PENDING)
         monkeypatch.setattr(
             "autoskillit.fleet.is_dispatch_session_alive",
             lambda r: True,

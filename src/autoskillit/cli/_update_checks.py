@@ -32,7 +32,7 @@ from autoskillit.cli._install_info import (
     upgrade_command,
 )
 from autoskillit.cli._restart import perform_restart
-from autoskillit.cli._terminal import terminal_guard
+from autoskillit.cli.ui._terminal import terminal_guard
 from autoskillit.cli._update_checks_fetch import (
     _fetch_latest_version,
     invalidate_fetch_cache,
@@ -377,7 +377,7 @@ def run_update_checks(home: Path | None = None, *, command: str = "") -> None:
 
     if undismissed:
         # Consolidated interactive prompt — behavior unchanged (REQ-FLOW-002)
-        from autoskillit.cli._timed_input import status_line, timed_prompt
+        from autoskillit.cli.ui._timed_input import status_line, timed_prompt
 
         status_line("Checking for updates...")
 

@@ -100,7 +100,7 @@ def fleet_campaign(
 
     cfg = load_config(Path.cwd())
     _require_fleet(cfg)
-    from autoskillit.cli._menu import run_selection_menu
+    from autoskillit.cli.ui._menu import run_selection_menu
 
     if campaign_name is None and resume_campaign is None:
         from autoskillit.recipe import list_campaign_recipes

@@ -13,7 +13,7 @@ from pathlib import Path
 
 from autoskillit.cli._install_info import comparison_branch, detect_install, upgrade_command
 from autoskillit.cli._restart import perform_restart
-from autoskillit.cli._terminal import terminal_guard
+from autoskillit.cli.ui._terminal import terminal_guard
 
 
 def run_update_command(home: Path | None = None) -> None:

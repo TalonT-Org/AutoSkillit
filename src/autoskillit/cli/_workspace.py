@@ -74,7 +74,7 @@ async def run_workspace_clean(
             print()
 
             if not force:
-                from autoskillit.cli._timed_input import timed_prompt
+                from autoskillit.cli.ui._timed_input import timed_prompt
 
                 suffix = "ies" if len(stale) != 1 else "y"
                 answer = timed_prompt(
@@ -152,7 +152,7 @@ async def run_workspace_clean(
     print()
 
     if not force:
-        from autoskillit.cli._timed_input import timed_prompt
+        from autoskillit.cli.ui._timed_input import timed_prompt
 
         suffix = "ies" if len(stale_wts) != 1 else "y"
         answer = timed_prompt(

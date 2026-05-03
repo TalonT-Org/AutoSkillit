@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from typing import TypeVar
 
-from autoskillit.cli._timed_input import timed_prompt
+from autoskillit.cli.ui._timed_input import timed_prompt
 
 T = TypeVar("T")
 

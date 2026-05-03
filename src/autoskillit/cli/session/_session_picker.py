@@ -101,7 +101,7 @@ def _run_picker(sessions: list[dict], session_type: str, registry: dict[str, dic
         row = _format_session_row(entry, session_type, registry)
         print(f"  {i}. {row}")
 
-    from autoskillit.cli._timed_input import timed_prompt
+    from autoskillit.cli.ui._timed_input import timed_prompt
 
     max_retries = 3
     for _ in range(max_retries):

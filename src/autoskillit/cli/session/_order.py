@@ -144,10 +144,10 @@ def order(
 
     mcp_prefix = detect_autoskillit_mcp_prefix()
 
-    from autoskillit.cli._timed_input import timed_prompt
+    from autoskillit.cli.ui._timed_input import timed_prompt
 
     if recipe is None:
-        from autoskillit.cli._menu import SLOT_ZERO_SELECTED, run_selection_menu
+        from autoskillit.cli.ui._menu import SLOT_ZERO_SELECTED, run_selection_menu
         from autoskillit.cli._prompts import _build_open_kitchen_prompt
         from autoskillit.recipe import GROUP_LABELS, group_rank
 
@@ -277,7 +277,7 @@ def order(
     _itable = _get_ingredients_table(recipe, _match, Path.cwd())
     show_cook_preview(recipe, parsed, _recipes_dir_for(_match), Path.cwd())
 
-    from autoskillit.cli._ansi import permissions_warning
+    from autoskillit.cli.ui._ansi import permissions_warning
 
     print(permissions_warning())
     confirm = timed_prompt(

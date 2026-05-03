@@ -186,7 +186,7 @@ def _render_status_display(state: CampaignState) -> int:
 
     Returns the number of lines printed (for cursor-based screen refresh).
     """
-    from autoskillit.cli._ansi import _render_terminal_table
+    from autoskillit.cli.ui._ansi import _render_terminal_table
 
     started = datetime.fromtimestamp(state.started_at, tz=UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
     header = f"Campaign: {state.campaign_name}  ID: {state.campaign_id}  Started: {started}"

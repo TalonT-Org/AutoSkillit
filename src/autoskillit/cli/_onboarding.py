@@ -50,7 +50,7 @@ def run_onboarding_menu(project_dir: Path, *, color: bool = True) -> str | None:
     _Y = "\x1b[33m" if color else ""
     _R = "\x1b[0m" if color else ""
 
-    from autoskillit.cli._timed_input import timed_prompt
+    from autoskillit.cli.ui._timed_input import timed_prompt
 
     print(f"\n{_B}It looks like this is your first time using AutoSkillit in this project.{_R}")
     ans = timed_prompt(

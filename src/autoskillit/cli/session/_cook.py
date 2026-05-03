@@ -8,7 +8,7 @@ import uuid
 from collections.abc import Mapping
 from pathlib import Path
 
-from autoskillit.cli._terminal import terminal_guard
+from autoskillit.cli.ui._terminal import terminal_guard
 
 
 def _print_recipes_list() -> None:
@@ -72,7 +72,7 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
         raise SystemExit(1)
 
     from autoskillit import __version__
-    from autoskillit.cli._ansi import supports_color
+    from autoskillit.cli.ui._ansi import supports_color
 
     color = supports_color()
     _B = "\x1b[1m" if color else ""
@@ -97,8 +97,8 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
         print(f"  {_Y}{name:>20}{_R}  {tool_list}")
     print()
 
-    from autoskillit.cli._ansi import permissions_warning
-    from autoskillit.cli._timed_input import timed_prompt
+    from autoskillit.cli.ui._ansi import permissions_warning
+    from autoskillit.cli.ui._timed_input import timed_prompt
 
     print(permissions_warning())
     confirm = timed_prompt(

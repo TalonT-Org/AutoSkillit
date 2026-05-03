@@ -177,7 +177,7 @@ def test_open_kitchen_guard_fleet_denial_has_specific_message() -> None:
 
 def test_guard_bridges_launch_id_to_registry(tmp_path: Path) -> None:
     """open_kitchen_guard bridges AUTOSKILLIT_LAUNCH_ID to claude_session_id in registry."""
-    from autoskillit.core.session_registry import read_registry, write_registry_entry
+    from autoskillit.core.runtime.session_registry import read_registry, write_registry_entry
 
     project_dir = tmp_path
     write_registry_entry(project_dir, "abc", "cook", None)
@@ -207,7 +207,7 @@ def test_guard_bridges_launch_id_to_registry(tmp_path: Path) -> None:
 
 def test_guard_bridge_no_op_when_no_launch_id(tmp_path: Path) -> None:
     """open_kitchen_guard bridge is a no-op when AUTOSKILLIT_LAUNCH_ID is not set."""
-    from autoskillit.core.session_registry import read_registry, write_registry_entry
+    from autoskillit.core.runtime.session_registry import read_registry, write_registry_entry
 
     project_dir = tmp_path
     write_registry_entry(project_dir, "abc", "cook", None)

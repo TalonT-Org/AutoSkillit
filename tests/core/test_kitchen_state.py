@@ -12,7 +12,7 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
 def test_kitchen_marker_has_hash_fields():
-    from autoskillit.core.kitchen_state import KitchenMarker
+    from autoskillit.core.runtime.kitchen_state import KitchenMarker
 
     marker = KitchenMarker(
         session_id="s",
@@ -26,7 +26,7 @@ def test_kitchen_marker_has_hash_fields():
 
 
 def test_marker_roundtrip_with_hashes(tmp_path, monkeypatch):
-    from autoskillit.core.kitchen_state import read_marker, write_marker
+    from autoskillit.core.runtime.kitchen_state import read_marker, write_marker
 
     monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
     write_marker("sess1", "recipe", content_hash="sha256:a", composite_hash="sha256:b")
@@ -37,7 +37,7 @@ def test_marker_roundtrip_with_hashes(tmp_path, monkeypatch):
 
 
 def test_marker_backward_compat_no_hashes(tmp_path, monkeypatch):
-    from autoskillit.core.kitchen_state import read_marker
+    from autoskillit.core.runtime.kitchen_state import read_marker
 
     monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
     state_dir = tmp_path / "kitchen_state"
@@ -59,7 +59,7 @@ def test_marker_backward_compat_no_hashes(tmp_path, monkeypatch):
 
 
 def test_kitchen_marker_hash_defaults():
-    from autoskillit.core.kitchen_state import KitchenMarker
+    from autoskillit.core.runtime.kitchen_state import KitchenMarker
 
     marker = KitchenMarker(
         session_id="s",
@@ -75,7 +75,7 @@ def test_kitchen_marker_hash_defaults():
 
 def test_get_state_dir_namespaces_by_campaign_id(tmp_path, monkeypatch):
     """get_state_dir returns campaign-scoped subdirectory when AUTOSKILLIT_CAMPAIGN_ID is set."""
-    from autoskillit.core.kitchen_state import get_state_dir
+    from autoskillit.core.runtime.kitchen_state import get_state_dir
 
     monkeypatch.delenv("AUTOSKILLIT_STATE_DIR", raising=False)
     monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_ID", "camp-42")
@@ -86,7 +86,7 @@ def test_get_state_dir_namespaces_by_campaign_id(tmp_path, monkeypatch):
 
 def test_get_state_dir_no_campaign_id_flat(tmp_path, monkeypatch):
     """get_state_dir returns flat path when AUTOSKILLIT_CAMPAIGN_ID is absent."""
-    from autoskillit.core.kitchen_state import get_state_dir
+    from autoskillit.core.runtime.kitchen_state import get_state_dir
 
     monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
     monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
@@ -96,7 +96,7 @@ def test_get_state_dir_no_campaign_id_flat(tmp_path, monkeypatch):
 
 def test_concurrent_campaigns_disjoint_dirs(tmp_path, monkeypatch):
     """Two different campaign_ids produce completely disjoint marker directories."""
-    from autoskillit.core.kitchen_state import get_state_dir
+    from autoskillit.core.runtime.kitchen_state import get_state_dir
 
     monkeypatch.delenv("AUTOSKILLIT_STATE_DIR", raising=False)
     monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
@@ -114,7 +114,7 @@ def test_concurrent_campaigns_disjoint_dirs(tmp_path, monkeypatch):
 
 def test_state_dir_override_takes_precedence_over_campaign(tmp_path, monkeypatch):
     """AUTOSKILLIT_STATE_DIR override still takes priority even when campaign_id is set."""
-    from autoskillit.core.kitchen_state import get_state_dir
+    from autoskillit.core.runtime.kitchen_state import get_state_dir
 
     monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
     monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_ID", "camp-42")
@@ -125,7 +125,7 @@ def test_state_dir_override_takes_precedence_over_campaign(tmp_path, monkeypatch
 
 def test_marker_roundtrip_with_campaign_namespace(tmp_path, monkeypatch):
     """write_marker + read_marker work correctly under campaign namespacing."""
-    from autoskillit.core.kitchen_state import read_marker, write_marker
+    from autoskillit.core.runtime.kitchen_state import read_marker, write_marker
 
     monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
     monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_ID", "camp-99")
@@ -141,14 +141,14 @@ def test_sweep_stale_markers_scoped_to_namespace(tmp_path, monkeypatch):
     import json
     from datetime import UTC, datetime, timedelta
 
-    from autoskillit.core.kitchen_state import sweep_stale_markers
+    from autoskillit.core.runtime.kitchen_state import sweep_stale_markers
 
     monkeypatch.delenv("AUTOSKILLIT_STATE_DIR", raising=False)
     monkeypatch.chdir(tmp_path)
 
     # Create stale marker in campaign-a namespace
     monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_ID", "campaign-a")
-    from autoskillit.core.kitchen_state import get_state_dir
+    from autoskillit.core.runtime.kitchen_state import get_state_dir
 
     dir_a = get_state_dir()
     dir_a.mkdir(parents=True, exist_ok=True)

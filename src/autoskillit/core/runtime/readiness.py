@@ -17,7 +17,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from .io import atomic_write
+from ..io import atomic_write
 from .kitchen_state import get_state_dir
 
 __all__ = [

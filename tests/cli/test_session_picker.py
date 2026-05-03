@@ -12,7 +12,7 @@ from autoskillit.cli._session_picker import (
     _run_picker,
     pick_session,
 )
-from autoskillit.core.session_registry import write_registry_entry
+from autoskillit.core.runtime.session_registry import write_registry_entry
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -60,7 +60,7 @@ def test_pick_session_filters_cook(
     write_registry_entry(project_dir, "lid-cook", "cook", None)
     write_registry_entry(project_dir, "lid-order", "order", None)
 
-    from autoskillit.core.session_registry import bridge_claude_session_id
+    from autoskillit.core.runtime.session_registry import bridge_claude_session_id
 
     bridge_claude_session_id(project_dir, "lid-cook", "cook-uuid-1")
     bridge_claude_session_id(project_dir, "lid-order", "order-uuid-1")
@@ -95,7 +95,7 @@ def test_pick_session_filters_order(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     write_registry_entry(project_dir, "lid-cook", "cook", None)
     write_registry_entry(project_dir, "lid-order", "order", None)
 
-    from autoskillit.core.session_registry import bridge_claude_session_id
+    from autoskillit.core.runtime.session_registry import bridge_claude_session_id
 
     bridge_claude_session_id(project_dir, "lid-cook", "cook-uuid-1")
     bridge_claude_session_id(project_dir, "lid-order", "order-uuid-1")

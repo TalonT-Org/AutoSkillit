@@ -141,7 +141,7 @@ class FleetTestRunner:
         on_pid_resolved: Any = None,
         **kwargs: Any,
     ) -> Any:
-        from autoskillit.core._linux_proc import read_starttime_ticks
+        from autoskillit.core.runtime._linux_proc import read_starttime_ticks
         from autoskillit.core._type_enums import ChannelConfirmation, KillReason, TerminationReason
         from autoskillit.core._type_subprocess import SubprocessResult
         from autoskillit.execution import kill_process_tree
@@ -710,7 +710,7 @@ def _is_zombie(pid: int) -> bool:
 async def test_orphan_l2_reaping(fleet_runtime: FleetRuntime, tmp_path: Path) -> None:
     """_reap_stale_dispatches kills a real orphan process and marks it interrupted."""
     from autoskillit.cli._fleet import _reap_stale_dispatches
-    from autoskillit.core._linux_proc import read_boot_id, read_starttime_ticks
+    from autoskillit.core.runtime._linux_proc import read_boot_id, read_starttime_ticks
     from autoskillit.fleet.state import (
         DispatchRecord,
         DispatchStatus,

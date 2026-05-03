@@ -19,6 +19,7 @@ from autoskillit.planner.merge import (
     build_plan_snapshot,
     extract_item,
     merge_files,
+    merge_refined_assignments,
     merge_tier_results,
     replace_item,
 )
@@ -56,6 +57,7 @@ __all__ = [
     "PlannerManifest",
     "PlannerManifestItem",
     "merge_files",
+    "merge_refined_assignments",
     "merge_tier_results",
     "extract_item",
     "replace_item",

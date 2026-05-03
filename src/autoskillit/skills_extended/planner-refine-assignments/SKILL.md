@@ -1,107 +1,119 @@
 ---
 name: planner-refine-assignments
 categories: [planner]
-description: Refine elaborated assignments with cross-assignment visibility via parallel L0 subagents (L1+L0 pattern)
+description: Refine elaborated assignments for a single phase via parallel L0 subagents (L1+L0 pattern), using per-phase context file with peer_summaries for cross-phase visibility
 hooks:
   PreToolUse:
     - matcher: "*"
       hooks:
         - type: command
-          command: "echo '[SKILL: planner-refine-assignments] Refining assignments with cross-visibility...'"
+          command: "echo '[SKILL: planner-refine-assignments] Refining phase assignments with cross-visibility...'"
           once: true
 ---
 
 # planner-refine-assignments
 
-L1 session that refines a `combined_assignments.json` (a `PlanDocument` with all
-assignments in `AssignmentElaborated` form) by spawning one L0 subagent per
-assignment in parallel (batched to 6). Each L0 reviews its assigned assignment in
-the context of all other assignments and the phase context from `refined_plan.json`,
-returning structured suggestions. L1 collects these suggestions, resolves
-cross-assignment WP ownership conflicts, applies field-level edits, and writes
-`refined_assignments.json`.
+L1 session that refines the assignments for a single phase by spawning one L0 subagent per
+assignment in parallel (3–5 assignments per phase). Receives a per-phase context file produced
+by `merge_tier_results` → `_write_refine_contexts`, which contains only this phase's assignments
+and `peer_summaries` (id/name/goal stubs) for all other phases. Each L0 reviews its assignment
+in the context of peer_summaries and `refined_plan.json`, returning structured suggestions. L1
+applies suggestions, resolves intra-phase WP ownership conflicts, and writes the phase result
+file to `$3/refine_contexts/{phase_id}_result.json`.
 
 ## When to Use
 
-- Launched by the L2 planner recipe after the parallel assignment elaboration merge step
-- Accepts the `combined_assignments.json` output from the merge step and `refined_plan.json` for phase context
-- Produces `refined_assignments.json` as input for downstream planner steps
+- Dispatched by the L2 planner recipe in parallel — one session per phase
+- Accepts a per-phase context file from `$3/refine_contexts/context_{phase_id}.json` and `refined_plan.json` for phase context
+- Produces `{phase_id}_result.json` as input for the downstream `merge_refined_assignments` step
 
 ## Arguments
 
-- **$1** — Absolute path to `combined_assignments.json` (PlanDocument, all assignments as AssignmentElaborated)
+- **$1** — Absolute path to the per-phase context file (`$3/refine_contexts/context_{phase_id}.json`). The file contains:
+  - `phase_id` — identifier for the phase this session processes
+  - `task_file_path` — path to the task description file (read from disk, not inline)
+  - `assignments` — full AssignmentElaborated objects for this phase only (3–5 entries)
+  - `peer_summaries` — `{id, name, goal}` stubs for all assignments in other phases
 - **$2** — Absolute path to `refined_plan.json` (PlanDocument with phases as PhaseElaborated, for phase context)
-- **$3** — Absolute path to the run-scoped planner directory (e.g., `{{AUTOSKILLIT_TEMP}}/planner/run-YYYYMMDD-HHMMSS`). Output is written to `$3/refined_assignments.json`.
+- **$3** — Absolute path to the run-scoped planner directory (e.g., `{{AUTOSKILLIT_TEMP}}/planner/run-YYYYMMDD-HHMMSS`). Output is written to `$3/refine_contexts/{phase_id}_result.json`.
 
 ## Critical Constraints
 
 **NEVER:**
 - Write any file outside `$3/`
-- Directly modify `combined_assignments.json` ($1) — always write a new `refined_assignments.json`
+- Directly modify the context file ($1) — always write a new result file
 - Allow an L0 subagent to write files directly (L0s return structured text only)
-- Emit `refined_assignments_path` before writing `refined_assignments.json`
-- Skip emitting `refined_assignments_path` even if all L0s fail (write unchanged assignments, still emit)
+- Emit `phase_refined_path` before writing the result file
+- Skip emitting `phase_refined_path` even if all L0s fail (write unchanged assignments, still emit)
 - Spawn more than 6 L0s in a single parallel batch
 - Read `{{AUTOSKILLIT_TEMP}}` artifacts not passed as positional arguments
 - Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
+- Read `phase_id` from the context file to construct the output path
 - Validate each L0 response for `assignment_id`, `changes` (array), `dependency_corrections` (array), `wp_proposal_adjustments` (array)
 - Log `WARNING` to stdout for any L0 response that fails validation (skip that assignment)
-- Log `CRITICAL` to stdout for any L0 subagent that fails entirely (proceed with N-1)
+- Log `CRITICAL` to stdout for any L0 subagent that fails entirely (proceed with N-1, partial result)
 - When two assignments propose WPs covering the same files, assign ownership to the numerically earlier assignment_id using natural sort on numeric suffixes (e.g. `P1-A1` beats `P1-A2`; `P1-A2` beats `P1-A10`); log each resolution
-- Emit: `refined_assignments_path = <absolute path to refined_assignments.json>`
+- Emit: `phase_refined_path = <absolute path to $3/refine_contexts/{phase_id}_result.json>`
 
 ## Workflow
 
 ### Step 1: Parse input and validate
 
-Read `$1` (combined_assignments.json). Parse as a `PlanDocument`. Extract all
-assignment IDs from `assignments[*].id`. Fail immediately (exit non-zero) if
-`assignments` is empty or the file is malformed — do not proceed to spawn L0s.
-The failure message must include the file path and the parse/validation error string:
+Read `$1` (per-phase context file). Extract `phase_id`, `assignments`, `peer_summaries`, and
+`task_file_path`. Fail immediately (exit non-zero) if `assignments` is empty or the file is
+malformed — do not proceed to spawn L0s. The failure message must include the file path and the
+parse/validation error string:
 ```
 FATAL: failed to parse {path}: {error_detail}
 ```
 
+Read the task description from disk at `task_file_path` (not inline from the context file).
+
 Read `$2` (refined_plan.json). Build a map `phase_id → PhaseElaborated` for L0 context.
 
-Input schema (PlanDocument with AssignmentElaborated assignments):
+Input schema for the per-phase context file:
 ```json
 {
-  "schema_version": 1,
-  "task": "...",
-  "source_dir": "...",
+  "phase_id": "P2",
+  "task_file_path": "/path/to/task.md",
   "assignments": [
     {
-      "id": "P1-A1",
-      "phase_id": "P1",
+      "id": "P2-A1",
+      "phase_id": "P2",
       "name": "...",
       "goal": "...",
       "technical_approach": "...",
       "dependency_notes": "...",
       "work_packages": [...]
     }
+  ],
+  "peer_summaries": [
+    {"id": "P1-A1", "name": "...", "goal": "..."},
+    {"id": "P3-A1", "name": "...", "goal": "..."}
   ]
 }
 ```
 
 ### Step 2: Build L0 context packets
 
-Read the `task` field from the combined assignments document. Each L0 subagent must verify
-that the assignment's goal, scope, and deliverables serve the stated task. Flag assignments
-that introduce work not requested by the task as scope creep.
+Read the task description from `task_file_path`. Each L0 subagent must verify that the
+assignment's goal, scope, and deliverables serve the stated task. Flag assignments that
+introduce work not requested by the task as scope creep.
 
-For each assignment, build a context packet containing:
-- The full serialized `combined_assignments.json` content (all peers visible)
+For each assignment in `assignments`, build a context packet containing:
+- The full serialized assignment object (AssignmentElaborated)
+- The `peer_summaries` list for cross-phase dependency detection
 - The `PhaseElaborated` entry for the assignment's `phase_id` from `$2`
 - The `target_assignment_id`
-- Instructions: review the target assignment in light of all other assignments; return structured suggestions only — do NOT edit files
+- Instructions: review the target assignment in light of peer_summaries; return structured suggestions only — do NOT edit files
 
 ### Step 3: Spawn parallel L0 subagents
 
-If assignment count ≤ 6: spawn all in one parallel batch via Agent/Task.
-If assignment count > 6: spawn sequential batches of 6. Between batches, emit
+Since each phase has 3–5 assignments (always within the 6-L0 ceiling), spawn all in one
+parallel batch via Agent/Task. Do not spawn more than 6 L0s in a single parallel batch:
+if assignment count > 6 (unexpected), spawn sequential batches of 6. Between batches, emit
 anti-prose guard line: `--- next batch ---`.
 
 Each L0 must return structured text in this exact format:
@@ -158,8 +170,8 @@ Apply the `remove` action from the losing assignment's `wp_proposal_adjustments`
 ### Step 6: Apply changes
 
 Apply all validated `changes` to the in-memory assignments document, in assignment
-ID order (P1-A1 → P1-AN → P2-A1 ...). Apply conflict resolutions before applying
-changes for affected assignments. Skip unrecognized field names:
+ID order. Apply conflict resolutions before applying changes for affected assignments.
+Skip unrecognized field names:
 ```
 WARNING: Unrecognized field '{field}' in changes for {assignment_id} — skipping
 ```
@@ -167,12 +179,18 @@ Apply `dependency_corrections` by appending to the `dependency_notes` field.
 
 ### Step 7: Write output
 
-Write the updated `PlanDocument` to `$3/refined_assignments.json`. The output
-schema is identical to the input `combined_assignments.json` (a `PlanDocument`
-with `assignments: list[AssignmentElaborated]`).
+Write the phase result file to `$3/refine_contexts/{phase_id}_result.json`, where
+`phase_id` is read from the context file. The output schema:
+```json
+{
+  "schema_version": 1,
+  "assignments": [...]
+}
+```
+The `assignments` list contains only this phase's assignments (3–5 entries) with refinements applied.
 
 ### Step 8: Emit output token
 
 ```
-refined_assignments_path = <absolute path to $3/refined_assignments.json>
+phase_refined_path = <absolute path to $3/refine_contexts/{phase_id}_result.json>
 ```

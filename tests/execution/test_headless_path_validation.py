@@ -536,6 +536,34 @@ class TestSynthesizeFromWriteArtifacts:
         )
         assert "arch_lens_selection" not in result.result
 
+    def test_synthesizes_path_from_backslash_s_plus_pattern(self, make_headless_session):
+        """Synthesis must work for \\S+-terminated patterns, not only /.+-terminated ones."""
+        from autoskillit.execution.headless import _synthesize_from_write_artifacts
+
+        session = make_headless_session(
+            result="",
+            tool_uses=[{"name": "Write", "id": "t1", "file_path": "/abs/planner/elab.json"}],
+        )
+        result = _synthesize_from_write_artifacts(
+            session, [r"elab_result_path\s*=\s*\S+"], write_call_count=1
+        )
+        assert result is not None
+        assert "elab_result_path = /abs/planner/elab.json" in result.result
+
+    def test_synthesizes_path_from_dot_plus_pattern(self, make_headless_session):
+        """Synthesis must work for .+-terminated patterns (no leading /)."""
+        from autoskillit.execution.headless import _synthesize_from_write_artifacts
+
+        session = make_headless_session(
+            result="",
+            tool_uses=[{"name": "Write", "id": "t1", "file_path": "/abs/triage.md"}],
+        )
+        result = _synthesize_from_write_artifacts(
+            session, [r"triage_report\s*=\s*.+"], write_call_count=1
+        )
+        assert result is not None
+        assert "triage_report = /abs/triage.md" in result.result
+
 
 @pytest.fixture
 def make_build_skill_result_kwargs():
@@ -896,6 +924,12 @@ class TestExtractMissingTokenHints:
         hints = _extract_missing_token_hints(stdout, [r"plan_path\s*=\s*/.+"])
         assert hints == [("plan_path", "/tmp/final.md")]
 
+    def test_extracts_hints_for_backslash_s_plus_pattern(self):
+        """_extract_missing_token_hints must work for \\S+-terminated patterns."""
+        stdout = _ndjson_with_write("%%ORDER_UP%%", ["/tmp/out.md"])
+        hints = _extract_missing_token_hints(stdout, [r"elab_result_path\s*=\s*\S+"])
+        assert hints == [("elab_result_path", "/tmp/out.md")]
+
 
 class TestContractNudge:
     """Integration tests for the contract recovery nudge in run_headless_core.
@@ -1180,6 +1214,119 @@ class TestContractNudge:
         )
         assert result.retry_reason == RetryReason.CONTRACT_RECOVERY
         assert result.needs_retry is True
+
+
+class TestPathCaptureCoversAllContractPatterns:
+    """_is_path_capture_pattern must correctly classify all patterns in skill_contracts.yaml."""
+
+    def test_classifies_all_path_output_patterns_as_path_capture(self) -> None:
+        import re
+
+        from autoskillit.execution._headless_path_tokens import _INTENTIONALLY_EXCLUDED_PATH_TOKENS
+        from autoskillit.execution.headless import _is_path_capture_pattern
+        from autoskillit.recipe.contracts import load_bundled_manifest
+
+        manifest = load_bundled_manifest()
+        skills_data = manifest.get("skills", {})
+
+        path_token_names: set[str] = set()
+        non_path_token_names: set[str] = set()
+        pattern_token_map: list[tuple[str, str]] = []
+
+        for skill_data in skills_data.values():
+            if not isinstance(skill_data, dict):
+                continue
+            for out in skill_data.get("outputs", []):
+                if not isinstance(out, dict):
+                    continue
+                t = out.get("type", "")
+                name = out.get("name", "")
+                if t.startswith("file_path") or t == "directory_path":
+                    path_token_names.add(name)
+                elif t:
+                    non_path_token_names.add(name)
+            for pattern in skill_data.get("expected_output_patterns", []):
+                m = re.match(r"^(\w+)", pattern)
+                if m and "=" in pattern[m.end() :]:
+                    pattern_token_map.append((m.group(1), pattern))
+
+        assert pattern_token_map, "No patterns found in skill_contracts.yaml — test is vacuous"
+
+        recoverable_path_token_names = path_token_names - _INTENTIONALLY_EXCLUDED_PATH_TOKENS
+
+        misclassified_path: list[str] = []
+        for token_name, pattern in pattern_token_map:
+            if token_name in recoverable_path_token_names:
+                result = _is_path_capture_pattern(pattern)
+                if result != token_name:
+                    misclassified_path.append(
+                        f"Pattern {pattern!r} (token={token_name!r}) classified as {result!r}, "
+                        f"expected {token_name!r}"
+                    )
+
+        misclassified_non_path: list[str] = []
+        for token_name, pattern in pattern_token_map:
+            # Skip tokens that appear as path-type in some skill and non-path-type in another;
+            # cross-skill token name reuse is intentional and not a classification error.
+            if token_name in non_path_token_names and token_name not in path_token_names:
+                result = _is_path_capture_pattern(pattern)
+                if result is not None:
+                    misclassified_non_path.append(
+                        f"Pattern {pattern!r} (token={token_name!r}) incorrectly classified as "
+                        f"path-capture (returned {result!r})"
+                    )
+
+        errors = misclassified_path + misclassified_non_path
+        assert not errors, "Pattern classification errors:\n" + "\n".join(
+            f"  - {e}" for e in errors
+        )
+
+
+class TestRecoverablePathTokensCoverage:
+    def test_excluded_tokens_match_intentionally_excluded(self) -> None:
+        """_PATH_RECOVERY_EXCLUDED_TOKENS must equal _INTENTIONALLY_EXCLUDED_PATH_TOKENS.
+
+        Both constants exclude the same token names but live in different layers
+        (recipe IL-2 vs execution IL-1) and cannot be imported across.
+        """
+        from autoskillit.execution._headless_path_tokens import _INTENTIONALLY_EXCLUDED_PATH_TOKENS
+        from autoskillit.recipe.rules_contracts import _PATH_RECOVERY_EXCLUDED_TOKENS
+
+        assert _PATH_RECOVERY_EXCLUDED_TOKENS == _INTENTIONALLY_EXCLUDED_PATH_TOKENS, (
+            f"Constants diverged.\n"
+            f"_PATH_RECOVERY_EXCLUDED_TOKENS: {_PATH_RECOVERY_EXCLUDED_TOKENS}\n"
+            f"_INTENTIONALLY_EXCLUDED_PATH_TOKENS: {_INTENTIONALLY_EXCLUDED_PATH_TOKENS}"
+        )
+
+    def test_recoverable_path_tokens_includes_directory_path_outputs(self) -> None:
+        from autoskillit.execution.headless import _RECOVERABLE_PATH_TOKENS
+        from autoskillit.recipe.contracts import load_bundled_manifest
+
+        manifest = load_bundled_manifest()
+        skills_data = manifest.get("skills", {})
+        declared: set[str] = set()
+        for skill_data in skills_data.values():
+            if not isinstance(skill_data, dict):
+                continue
+            for out in skill_data.get("outputs", []):
+                if not isinstance(out, dict):
+                    continue
+                t = out.get("type", "")
+                name = out.get("name", "").strip()
+                if name and (t.startswith("file_path") or t == "directory_path"):
+                    declared.add(name)
+
+        from autoskillit.execution._headless_path_tokens import _INTENTIONALLY_EXCLUDED_PATH_TOKENS
+
+        expected = declared - _INTENTIONALLY_EXCLUDED_PATH_TOKENS
+        normalized_actual = {t.strip() for t in _RECOVERABLE_PATH_TOKENS}
+        assert normalized_actual == expected, (
+            f"_RECOVERABLE_PATH_TOKENS diverged from derived set.\n"
+            f"Extra (in production, not in derived): "
+            f"{normalized_actual - expected}\n"
+            f"Missing (in derived, not in production): "
+            f"{expected - normalized_actual}"
+        )
 
 
 def test_build_skill_result_surfaces_last_stop_reason():

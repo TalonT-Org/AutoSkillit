@@ -13,6 +13,11 @@ from autoskillit.recipe.contracts import (
 )
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
+# Must match _INTENTIONALLY_EXCLUDED_PATH_TOKENS in _headless_path_tokens.py.
+# Cannot import directly: recipe (IL-2) cannot depend on execution (IL-1).
+# test_rules_contracts.py::test_excluded_tokens_match_intentionally_excluded guards drift.
+_PATH_RECOVERY_EXCLUDED_TOKENS: frozenset[str] = frozenset({"worktree_path", "branch_name"})
+
 # Skill names covered by the result-field-drift rule.
 _RESULT_FIELD_DRIFT_SKILLS = frozenset(
     {
@@ -523,5 +528,70 @@ def _check_all_examples_match_all_patterns(ctx: ValidationContext) -> list[RuleF
                             ),
                         )
                     )
+
+    return findings
+
+
+@semantic_rule(
+    name="path-output-recovery-coverage",
+    description=(
+        "Every file_path/directory_path output must have a matching expected_output_pattern"
+    ),
+    severity=Severity.WARNING,
+)
+def _check_path_output_recovery_coverage(ctx: ValidationContext) -> list[RuleFinding]:
+    """Every file_path/directory_path output must have a matching expected_output_pattern.
+
+    Without a matching pattern, the recovery system cannot classify the output as
+    path-capture and synthesis/nudge will be silently disabled.
+    """
+    findings: list[RuleFinding] = []
+    try:
+        manifest = load_bundled_manifest()
+    except Exception:
+        logger.warning(
+            "path-output-recovery-coverage: failed to load bundled manifest; skipping",
+            exc_info=True,
+        )
+        return findings
+
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        skill_cmd = (step.with_args or {}).get("skill_command", "")
+        name = resolve_skill_name(skill_cmd)
+        if not name:
+            continue
+        contract = get_skill_contract(name, manifest)
+        if not contract:
+            continue
+
+        path_outputs = [
+            o
+            for o in contract.outputs
+            if (o.type.startswith("file_path") or o.type == "directory_path")
+            and o.name not in _PATH_RECOVERY_EXCLUDED_TOKENS
+        ]
+        if not path_outputs:
+            continue
+
+        for output in path_outputs:
+            matched = any(
+                _re.match(rf"^{_re.escape(output.name)}\s*=", p)
+                for p in contract.expected_output_patterns
+            )
+            if not matched:
+                findings.append(
+                    RuleFinding(
+                        rule="path-output-recovery-coverage",
+                        severity=Severity.WARNING,
+                        step_name=step_name,
+                        message=(
+                            f"Skill '{name}': output '{output.name}' (type={output.type!r}) "
+                            f"has no matching expected_output_pattern. The write-artifact "
+                            f"recovery system will be silently disabled for this output."
+                        ),
+                    )
+                )
 
     return findings

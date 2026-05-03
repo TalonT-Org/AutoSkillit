@@ -45,7 +45,7 @@ a fully-done `phase_manifest.json` in one shot.
 - Write `$(dirname $1)/phases/{phase_id}_result.json` for every phase
 - Write `$(dirname $1)/phases/phase_manifest.json` with every item status=`done`
 - Use sequential `ordering` values starting at 1
-- Emit `phase_manifest_path`, `phase_count`, and `phase_ids` output tokens
+- Emit: `phase_manifest_path = <absolute path to phase_manifest.json>`; also emit `phase_count` and `phase_ids`
 
 ## Workflow
 

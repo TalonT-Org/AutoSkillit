@@ -55,6 +55,7 @@ validated report carries a `validated: true` marker to signal downstream process
 - Issue all Task calls in a single message to maximize parallelism
 - Write `validated: true` as the **first line** of the validated report file
 - Respect interactive vs headless mode for the approval step (Step 6)
+- Emit: `validated_report_path = <absolute path to the validated report file>`
 
 ## Finding Verdicts
 

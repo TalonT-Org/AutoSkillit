@@ -38,7 +38,7 @@ writes `review_approach_assessment.json` to the planner directory. Does NOT invo
 - Read `$1` to get `task` and `work_packages[]`
 - Read `$2/analysis.json` for codebase technology context
 - Write `$2/review_approach_assessment.json`
-- Emit `review_approach_assessment_path` output token
+- Emit: `review_approach_assessment_path = <absolute path to review_approach_assessment.json>`
 
 ## Workflow
 

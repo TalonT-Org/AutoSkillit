@@ -1344,7 +1344,7 @@ def test_pipeline_init_no_longer_exports_domain_paths():
 
 
 def test_singleton_exemption_comment_matches_both_windows() -> None:
-    """The _update_checks exemption comment in SINGLETON_ALLOWED_MODULES must
+    """The _install_info exemption comment in SINGLETON_ALLOWED_MODULES must
     accurately reflect both the _STABLE_DISMISS_WINDOW and _DEV_DISMISS_WINDOW values."""
 
     from autoskillit.cli._install_info import _DEV_DISMISS_WINDOW, _STABLE_DISMISS_WINDOW
@@ -1371,13 +1371,13 @@ def test_singleton_exemption_comment_matches_both_windows() -> None:
         f"Exemption comment in SINGLETON_ALLOWED_MODULES is stale. "
         f"Expected to find '{stable_fragment}' "
         f"(current _STABLE_DISMISS_WINDOW={_STABLE_DISMISS_WINDOW!r}). "
-        "Update the comment on the '_update_checks' entry."
+        "Update the comment on the '_install_info' entry."
     )
     assert dev_fragment in content, (
         f"Exemption comment in SINGLETON_ALLOWED_MODULES is stale. "
         f"Expected to find '{dev_fragment}' "
         f"(current _DEV_DISMISS_WINDOW={_DEV_DISMISS_WINDOW!r}). "
-        "Update the comment on the '_update_checks' entry."
+        "Update the comment on the '_install_info' entry."
     )
 
 

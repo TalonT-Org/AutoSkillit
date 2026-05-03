@@ -131,6 +131,7 @@ def fleet_campaign(
 
     from autoskillit.core import YAMLError
     from autoskillit.fleet import (
+        FLEET_HALTED_SENTINEL,
         DispatchRecord,
         resume_campaign_from_state,
         write_initial_state,
@@ -169,6 +170,13 @@ def fleet_campaign(
         resume_metadata = resume_campaign_from_state(state_path, parsed.continue_on_failure)
         if resume_metadata is None:
             print(f"ERROR: Campaign state not found or corrupted for '{campaign_id}'")
+            sys.exit(1)
+        if resume_metadata.completed_dispatches_block == FLEET_HALTED_SENTINEL:
+            print(
+                f"ERROR: Campaign '{campaign_id}' halted on dispatch failure. "
+                "Set 'continue_on_failure: true' in the campaign recipe to resume past failures.",
+                file=sys.stderr,
+            )
             sys.exit(1)
     else:
         campaign_id = uuid4().hex[:16]

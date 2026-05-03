@@ -23,6 +23,7 @@ from autoskillit.core import (
     truncate_text,
     validate_add_dir,
 )
+from autoskillit.execution.recording import ReplayingSubprocessRunner
 from autoskillit.server import mcp
 from autoskillit.server._guards import (
     _check_dry_walkthrough,
@@ -33,6 +34,7 @@ from autoskillit.server._guards import (
 from autoskillit.server._misc import SCENARIO_STEP_NAME_ENV
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._subprocess import _run_subprocess
+from autoskillit.workspace.session_skills import resolve_ephemeral_root
 
 logger = get_logger(__name__)
 
@@ -412,7 +414,27 @@ async def run_skill(
         invocation_marker = f"%%ORDER_UP::{uuid4().hex[:8]}%%"
 
         skill_add_dirs: list[ValidatedAddDir] = []
-        if tool_ctx.session_skill_manager is not None:
+        replay_snapshot_used = False
+        if (
+            step_name
+            and isinstance(tool_ctx.runner, ReplayingSubprocessRunner)
+            and tool_ctx.runner.skill_snapshots
+        ):
+            _ephemeral_root = resolve_ephemeral_root()
+            session_id = f"headless-{uuid4().hex[:12]}"
+            _restored = tool_ctx.runner.restore_skill_snapshot(
+                step_name, _ephemeral_root, session_id
+            )
+            if _restored is not None:
+                skill_add_dirs.append(_restored)
+                replay_snapshot_used = True
+                logger.debug(
+                    "replay_skill_snapshot_restored",
+                    step=step_name,
+                    session_id=session_id,
+                )
+
+        if not replay_snapshot_used and tool_ctx.session_skill_manager is not None:
             allow_only: frozenset[str] | None = None
             if target_name:
                 closure = tool_ctx.session_skill_manager.compute_skill_closure(target_name)
@@ -429,7 +451,6 @@ async def run_skill(
             )
             skill_add_dirs.append(session_root)
 
-            # Activate the target skill and its declared dependencies
             if target_name:
                 tool_ctx.session_skill_manager.activate_skill_deps(session_id, target_name)
         try:

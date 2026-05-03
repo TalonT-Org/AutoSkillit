@@ -458,3 +458,109 @@ def test_build_replay_runner_stores_player_on_runner(tmp_path, monkeypatch):
     result = build_replay_runner(str(tmp_path))
     assert result.player is mock_player
     mock_atexit.assert_not_called()
+
+
+# --- T-REC-SNAP: RecordingSubprocessRunner snapshots skill dir after recording ---
+
+
+@pytest.mark.anyio
+async def test_recording_runner_snapshots_skill_dir(tmp_path):
+    """After _record_session, skill_snapshots/{step_name}/ is written under scenario_dir."""
+    ephemeral_dir = tmp_path / "autoskillit-sessions" / "headless-snap01"
+    skill_file = ephemeral_dir / ".claude" / "skills" / "investigate" / "SKILL.md"
+    skill_file.parent.mkdir(parents=True)
+    skill_file.write_text("# investigate\n", encoding="utf-8")
+
+    # cassette_path = scenario_dir / "sessions" / step_name
+    cassette_path = tmp_path / "sessions" / "investigate"
+    cassette_path.mkdir(parents=True)
+
+    mock_recorder = Mock()
+    mock_recorder.record_step.return_value = FakeStepResult(
+        cassette_exit_code=0,
+        cassette_path=str(cassette_path),
+        cassette_duration_ms=1000,
+    )
+
+    runner = RecordingSubprocessRunner(recorder=mock_recorder, inner=Mock())
+    cmd = [
+        "claude",
+        "--add-dir",
+        str(ephemeral_dir),
+        "--model",
+        "sonnet",
+        "--print",
+        "go",
+    ]
+    env = {"SCENARIO_STEP_NAME": "investigate"}
+    await runner(cmd, cwd=tmp_path, timeout=60, env=env, pty_mode=True)
+
+    snapshot_dir = tmp_path / "skill_snapshots" / "investigate"
+    assert snapshot_dir.exists(), "skill_snapshots/investigate/ not created"
+    assert (snapshot_dir / ".claude" / "skills" / "investigate" / "SKILL.md").exists()
+    assert (snapshot_dir / "manifest.json").exists()
+
+
+# --- T-REC-SNAP-SKIP: no --add-dir → no skill_snapshots created ---
+
+
+@pytest.mark.anyio
+async def test_recording_runner_no_ephemeral_dir_skips_snapshot(tmp_path):
+    """When cmd has no --add-dir, no skill_snapshots/ directory is created."""
+    cassette_path = tmp_path / "sessions" / "investigate"
+    cassette_path.mkdir(parents=True)
+
+    mock_recorder = Mock()
+    mock_recorder.record_step.return_value = FakeStepResult(
+        cassette_exit_code=0,
+        cassette_path=str(cassette_path),
+        cassette_duration_ms=500,
+    )
+
+    runner = RecordingSubprocessRunner(recorder=mock_recorder, inner=Mock())
+    cmd = ["claude", "--model", "sonnet", "--print", "go"]
+    env = {"SCENARIO_STEP_NAME": "investigate"}
+    await runner(cmd, cwd=tmp_path, timeout=60, env=env, pty_mode=True)
+
+    assert not (tmp_path / "skill_snapshots").exists()
+
+
+# --- T-REPLAY-SNAP: ReplayingSubprocessRunner stores skill_snapshots ---
+
+
+def test_replaying_runner_stores_skill_snapshots(tmp_path):
+    """ReplayingSubprocessRunner.skill_snapshots is populated when provided."""
+    snap_path = tmp_path / "skill_snapshots" / "investigate"
+    snap_path.mkdir(parents=True)
+    skill_snapshots = {"investigate": snap_path}
+
+    runner = ReplayingSubprocessRunner({}, {}, skill_snapshots=skill_snapshots)
+
+    assert runner.skill_snapshots == {"investigate": snap_path}
+
+
+# --- T-REPLAY-RESTORE: ReplayingSubprocessRunner.restore_skill_snapshot delegates correctly ---
+
+
+def test_replaying_runner_restore_delegates_correctly(tmp_path):
+    """restore_skill_snapshot returns ValidatedAddDir when snapshot exists and files are copied."""
+    snap_dir = tmp_path / "snapshot"
+    skill_md = snap_dir / ".claude" / "skills" / "investigate" / "SKILL.md"
+    skill_md.parent.mkdir(parents=True)
+    skill_md.write_text("# investigate\n", encoding="utf-8")
+
+    runner = ReplayingSubprocessRunner({}, {}, skill_snapshots={"investigate": snap_dir})
+
+    ephemeral_root = tmp_path / "sessions"
+    result = runner.restore_skill_snapshot("investigate", ephemeral_root, "headless-xyz")
+
+    assert result is not None
+    session_dir = ephemeral_root / "headless-xyz"
+    assert (session_dir / ".claude" / "skills" / "investigate" / "SKILL.md").exists()
+
+
+def test_replaying_runner_restore_missing_step_returns_none(tmp_path):
+    """restore_skill_snapshot returns None when no snapshot for step_name."""
+    runner = ReplayingSubprocessRunner({}, {}, skill_snapshots={})
+    result = runner.restore_skill_snapshot("missing", tmp_path / "sessions", "headless-abc")
+    assert result is None

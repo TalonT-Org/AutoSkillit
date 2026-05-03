@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import RetryReason, WriteBehaviorSpec
+from autoskillit.core import WriteBehaviorSpec
 from autoskillit.execution.headless import _build_skill_result, _resolve_skill_temp_dir
 from tests.conftest import _make_result
 
@@ -45,15 +45,16 @@ class TestMultiDirFsSnapshot:
         post_b = {e.name for e in os.scandir(dir_b)}
 
         fs_writes_detected = any(
-            bool(post - pre)
-            for post, pre in [(post_a, pre_a), (post_b, pre_b)]
+            bool(post - pre) for post, pre in [(post_a, pre_a), (post_b, pre_b)]
         )
         assert fs_writes_detected is True
 
     def test_fs_snapshot_watches_explicit_dir_not_skill_name(self, tmp_path: Path) -> None:
         """When write_watch_dirs is provided, _resolve_skill_temp_dir derivation
         is NOT used — the explicit dirs take precedence."""
-        skill_derived = _resolve_skill_temp_dir(str(tmp_path), "/autoskillit:planner-refine-phases arg")
+        skill_derived = _resolve_skill_temp_dir(
+            str(tmp_path), "/autoskillit:planner-refine-phases arg"
+        )
         assert skill_derived is not None
         assert skill_derived.name == "planner-refine-phases"
 
@@ -113,7 +114,6 @@ class TestUnifiedSkillNameResolution:
     def test_no_duplicate_skill_name_regexes(self) -> None:
         """No module in recipe/ defines its own _SKILL_NAME_RE regex — all use core."""
         import ast
-        from pathlib import Path as P
 
         from autoskillit.core import pkg_root
 

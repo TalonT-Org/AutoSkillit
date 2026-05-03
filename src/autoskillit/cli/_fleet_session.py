@@ -6,13 +6,16 @@ import dataclasses
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
-from autoskillit.core import NoResume, get_logger
+from autoskillit.core import NamedResume, NoResume, get_logger
 
 logger = get_logger(__name__)
 
 if TYPE_CHECKING:
+    from autoskillit.core import ResumeSpec
     from autoskillit.fleet import ResumeDecision
     from autoskillit.recipe.schema import Recipe
+
+_MAX_RELOADS = 10
 
 
 def _launch_fleet_session(
@@ -42,12 +45,25 @@ def _launch_fleet_session(
             "AUTOSKILLIT_FLEET_MODE": fleet_mode,
             "AUTOSKILLIT_HEADLESS": "0",
         }
+        seen_reload_ids: set[str] = set()
+        current_resume_spec: ResumeSpec = NoResume()
         while True:
             reload_id = _run_interactive_session(
-                prompt, extra_env=extra_env, resume_spec=NoResume(), project_dir=project_dir
+                prompt,
+                extra_env=extra_env,
+                resume_spec=current_resume_spec,
+                project_dir=project_dir,
             )
             if reload_id is None:
                 break
+            if len(seen_reload_ids) >= _MAX_RELOADS:
+                raise SystemExit(
+                    f"Too many reloads ({_MAX_RELOADS} max). Check for infinite loop."
+                )
+            if reload_id in seen_reload_ids:
+                raise SystemExit(f"Repeated reload_id {reload_id!r} — aborting.")
+            seen_reload_ids.add(reload_id)
+            current_resume_spec = NamedResume(session_id=reload_id)
     else:
         # Campaign-driven mode: full orchestrator prompt with manifest and state
         if campaign_id is None:
@@ -56,6 +72,7 @@ def _launch_fleet_session(
             raise ValueError("state_path must not be None in campaign-driven mode")
         from autoskillit.cli._prompts import _build_fleet_campaign_prompt
         from autoskillit.core import dump_yaml_str
+        from autoskillit.fleet import FLEET_HALTED_SENTINEL, resume_campaign_from_state
 
         manifest_yaml = dump_yaml_str(
             [dataclasses.asdict(d) for d in campaign_recipe.dispatches],
@@ -87,9 +104,48 @@ def _launch_fleet_session(
             "AUTOSKILLIT_CONTINUE_ON_FAILURE": str(campaign_recipe.continue_on_failure).lower(),
             "AUTOSKILLIT_HEADLESS": "0",
         }
+
+        seen_reload_ids = set()
+        current_resume_spec = NoResume()
+
         while True:
             reload_id = _run_interactive_session(
-                prompt, extra_env=extra_env, resume_spec=NoResume(), project_dir=project_dir
+                prompt,
+                extra_env=extra_env,
+                resume_spec=current_resume_spec,
+                project_dir=project_dir,
             )
             if reload_id is None:
                 break
+            if len(seen_reload_ids) >= _MAX_RELOADS:
+                raise SystemExit(
+                    f"Too many reloads ({_MAX_RELOADS} max). Check for infinite loop."
+                )
+            if reload_id in seen_reload_ids:
+                raise SystemExit(f"Repeated reload_id {reload_id!r} — aborting.")
+            seen_reload_ids.add(reload_id)
+
+            fresh_metadata = resume_campaign_from_state(
+                state_path, campaign_recipe.continue_on_failure
+            )
+            if fresh_metadata is None:
+                logger.error("Campaign state corrupted during reload — exiting")
+                break
+            if fresh_metadata.completed_dispatches_block == FLEET_HALTED_SENTINEL:
+                logger.info("Campaign halted on failure during reload — exiting")
+                break
+
+            completed_dispatches = fresh_metadata.completed_dispatches_block
+            resumable_dispatch_name = (
+                fresh_metadata.next_dispatch_name if fresh_metadata.is_resumable else ""
+            )
+            prompt = _build_fleet_campaign_prompt(
+                campaign_recipe,
+                manifest_yaml,
+                completed_dispatches,
+                mcp_prefix,
+                campaign_id,
+                resumable_dispatch_name=resumable_dispatch_name,
+                ingredients_table=ingredients_table,
+            )
+            current_resume_spec = NamedResume(session_id=reload_id)

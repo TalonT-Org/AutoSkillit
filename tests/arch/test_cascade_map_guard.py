@@ -16,6 +16,7 @@ from tests._test_filter import (
     LAYER_CASCADE_CONSERVATIVE,
     MODULE_CASCADE_CORE,
     MODULE_CASCADE_EXECUTION,
+    MODULE_CASCADE_RECIPE,
     _file_to_package,
 )
 
@@ -109,6 +110,10 @@ def _build_pkg_module_reverse_graph(
     through {pkg_name}/__init__.py.
 
     Returns {module_stem: set[consuming_pkg]}.
+
+    Limitation: only captures relative imports in {pkg_name}/__init__.py via the
+    reexport_map. Absolute submodule imports (`from autoskillit.{pkg_name} import X`
+    at level=0) are invisible to this function; callers must handle them separately.
     """
     graph: defaultdict[str, set[str]] = defaultdict(set)
     for filepath in _all_src_files():
@@ -149,6 +154,34 @@ def _build_module_reverse_graph() -> dict[str, set[str]]:
 def _build_execution_module_reverse_graph() -> dict[str, set[str]]:
     """REQ-GUARD-001 (module level, execution). Returns {stem: set[consuming_pkg]}."""
     return _build_pkg_module_reverse_graph("execution", _build_reexport_map("execution"))
+
+
+def _build_recipe_module_reverse_graph() -> dict[str, set[str]]:
+    """REQ-GUARD-001 (module level, recipe). Returns {stem: set[consuming_pkg]}."""
+    graph = _build_pkg_module_reverse_graph("recipe", _build_reexport_map("recipe"))
+    recipe_init = _SRC_ROOT / "recipe" / "__init__.py"
+    if recipe_init.exists():
+        try:
+            tree = ast.parse(recipe_init.read_text(encoding="utf-8"))
+        except SyntaxError as exc:
+            warnings.warn(
+                f"SyntaxError parsing recipe/__init__.py: {exc}"
+                " — absolute-import graph may be incomplete",
+                stacklevel=2,
+            )
+            return graph
+        for node in ast.walk(tree):
+            if not (
+                isinstance(node, ast.ImportFrom)
+                and node.level == 0
+                and node.module == "autoskillit.recipe"
+            ):
+                continue
+            for alias in node.names:
+                stem = alias.name
+                if (recipe_init.parent / f"{stem}.py").exists():
+                    graph.setdefault(stem, set()).add("recipe")
+    return graph
 
 
 class TestModuleCascadeCoreGuard:
@@ -220,6 +253,135 @@ class TestModuleCascadeExecutionGuard:
             f"  {sorted(phantoms)}\n"
             "Remove the stale entry or rename it to match the current module."
         )
+
+
+class TestModuleCascadeRecipeGuard:
+    """REQ-RECIPE-001: Validate MODULE_CASCADE_RECIPE against actual AST imports."""
+
+    def test_module_cascade_recipe_is_superset_of_ast_consumers(self) -> None:
+        graph = _build_recipe_module_reverse_graph()
+        violations: dict[str, dict[str, list[str]]] = {}
+        for stem, declared in MODULE_CASCADE_RECIPE.items():
+            actual = graph.get(stem, set())
+            declared_dirs = {d for d in declared if "/" not in d}
+            file_prefixes = {d.split("/", 1)[0] for d in declared if "/" in d}
+            covered = declared_dirs | file_prefixes
+            missing = actual - covered
+            if missing:
+                violations[stem] = {
+                    "declared": sorted(declared),
+                    "actual": sorted(actual),
+                    "missing": sorted(missing),
+                }
+        assert not violations, (
+            "MODULE_CASCADE_RECIPE entries are too narrow — update tests/_test_filter.py:\n"
+            + "\n".join(
+                f"  {stem}: add {v['missing']} (declared={v['declared']}, actual={v['actual']})"
+                for stem, v in sorted(violations.items())
+            )
+        )
+
+    def test_module_cascade_recipe_has_no_phantom_stems(self) -> None:
+        graph = _build_recipe_module_reverse_graph()
+        phantoms = [stem for stem in MODULE_CASCADE_RECIPE if not graph.get(stem)]
+        assert not phantoms, (
+            "MODULE_CASCADE_RECIPE contains stems with zero AST consumers — "
+            "the source file may have been renamed or deleted:\n"
+            f"  {sorted(phantoms)}\n"
+            "Remove the stale entry or rename it to match the current module."
+        )
+
+
+_TESTS_ROOT = Path(__file__).parent.parent
+
+
+class TestModuleCascadeRecipeNarrowing:
+    """Validate that MODULE_CASCADE_RECIPE actually narrows scope in build_test_scope."""
+
+    def test_rules_module_narrows_to_recipe_dir_only(self) -> None:
+        from tests._test_filter import FilterMode, build_test_scope
+
+        scope = build_test_scope(
+            changed_files={"src/autoskillit/recipe/rules_actions.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=_TESTS_ROOT,
+        )
+        assert not isinstance(scope, str)  # not a FullRunReason
+        assert any("recipe" in str(p) for p in scope)
+        layer_only = {"server", "cli", "fleet", "migration"}
+        dir_scope_names = {p.name for p in scope if p.is_dir()}
+        assert not (layer_only & dir_scope_names), (
+            f"rules_actions.py should narrow to recipe-only but got dirs: {dir_scope_names}"
+        )
+
+    def test_recipe_init_change_fails_open_to_layer_cascade(self) -> None:
+        from tests._test_filter import FilterMode, build_test_scope
+
+        scope = build_test_scope(
+            changed_files={"src/autoskillit/recipe/__init__.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=_TESTS_ROOT,
+        )
+        assert not isinstance(scope, str)
+        assert any("recipe" in str(p) for p in scope)
+        # recipe/__init__ is not in MODULE_CASCADE_RECIPE — fails open to full recipe cascade.
+        # The full cascade includes cross-layer test files as specific file entries, not full
+        # layer directories — confirm recipe/ dir is in scope.
+        dir_scope_names = {p.name for p in scope if p.is_dir()}
+        assert "recipe" in dir_scope_names, (
+            f"recipe/__init__ change should include recipe/ dir but got dirs: {dir_scope_names}"
+        )
+
+    def test_unmapped_recipe_stem_fails_open_to_layer_cascade(self) -> None:
+        from tests._test_filter import (
+            LAYER_CASCADE_CONSERVATIVE,
+            FilterMode,
+            build_test_scope,
+        )
+
+        scope = build_test_scope(
+            changed_files={"src/autoskillit/recipe/some_future_module.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=_TESTS_ROOT,
+        )
+        assert not isinstance(scope, str)
+        scope_strs = {str(p) for p in scope}
+        layer_dirs = {
+            entry
+            for entry in LAYER_CASCADE_CONSERVATIVE["recipe"]
+            if "/" not in entry and (_TESTS_ROOT / entry).is_dir()
+        }
+        for entry in layer_dirs:
+            assert any(entry in s for s in scope_strs), (
+                f"Fail-open should include '{entry}' from LAYER_CASCADE"
+            )
+
+    def test_mixed_mapped_and_unmapped_recipe_stems_fail_open_init(self) -> None:
+        from tests._test_filter import (
+            LAYER_CASCADE_CONSERVATIVE,
+            FilterMode,
+            build_test_scope,
+        )
+
+        scope = build_test_scope(
+            changed_files={
+                "src/autoskillit/recipe/rules_actions.py",
+                "src/autoskillit/recipe/some_future_module.py",
+            },
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=_TESTS_ROOT,
+        )
+        assert not isinstance(scope, str)
+        scope_strs = {str(p) for p in scope}
+        layer_dirs = {
+            entry
+            for entry in LAYER_CASCADE_CONSERVATIVE["recipe"]
+            if "/" not in entry and (_TESTS_ROOT / entry).is_dir()
+        }
+        for entry in layer_dirs:
+            assert any(entry in s for s in scope_strs), (
+                f"Mixed stems should fail-open; missing '{entry}'"
+            )
 
 
 class TestLayerCascadeConservativeGuard:

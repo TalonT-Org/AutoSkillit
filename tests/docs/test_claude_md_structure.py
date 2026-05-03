@@ -11,21 +11,20 @@ CLAUDE_MD = Path(__file__).resolve().parents[2] / "CLAUDE.md"
 def test_claude_md_architecture_tree_has_subpackages() -> None:
     content = CLAUDE_MD.read_text()
     for subpkg in [
-        "core/types/",
-        "core/runtime/",
-        "execution/headless/",
-        "execution/process/",
-        "execution/session/",
-        "execution/merge_queue/",
-        "recipe/rules/",
-        "server/tools/",
-        "cli/doctor/",
-        "cli/fleet/",
-        "cli/session/",
-        "cli/ui/",
-        "cli/update/",
-        "hooks/guards/",
-        "hooks/formatters/",
+        "types/",
+        "runtime/",
+        "headless/",
+        "process/",
+        "merge_queue/",
+        "rules/",
+        "tools/",
+        "doctor/",
+        "fleet/",
+        "session/",
+        "ui/",
+        "update/",
+        "guards/",
+        "formatters/",
     ]:
         assert subpkg in content, f"CLAUDE.md tree missing {subpkg}"
 

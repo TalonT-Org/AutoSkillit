@@ -31,6 +31,7 @@ REQUIRED_FAST_STEPS = [
     "test_check",
     "reset_test_dir",
     "classify_fix",
+    "push_to_remote",
 ]
 
 
@@ -118,6 +119,42 @@ def test_sous_chef_parallel_scheduling_explains_wall_clock_rationale() -> None:
     ), (
         "PARALLEL STEP SCHEDULING section must explain wall-clock rationale "
         "(idle time, slowest step)"
+    )
+
+
+def test_sous_chef_wavefront_has_positive_advancement_mandate() -> None:
+    """REQ-PROMPT-009: Wavefront must mandate advancing every active pipeline each round."""
+    text = _sous_chef_text()
+    section_start = text.find("PARALLEL STEP SCHEDULING")
+    assert section_start != -1
+    next_section = text.find("\n## ", section_start + 1)
+    section_text = text[section_start:next_section] if next_section != -1 else text[section_start:]
+    lower = section_text.lower()
+    has_advancement = (
+        ("every" in lower or "all" in lower)
+        and "active" in lower
+        and ("must" in lower or "advance" in lower or "idle" in lower)
+    )
+    assert has_advancement, (
+        "PARALLEL STEP SCHEDULING section must contain a positive advancement mandate "
+        "requiring every active pipeline to be advanced each round"
+    )
+
+
+def test_sous_chef_wavefront_has_four_rules() -> None:
+    """REQ-PROMPT-010: Wavefront Scheduling Rule must contain exactly 4 numbered rules."""
+    import re
+
+    text = _sous_chef_text()
+    section_start = text.find("### Wavefront Scheduling Rule")
+    assert section_start != -1, "Wavefront Scheduling Rule subsection must exist"
+    next_subsection = text.find("\n### ", section_start + 1)
+    subsection = (
+        text[section_start:next_subsection] if next_subsection != -1 else text[section_start:]
+    )
+    rules = re.findall(r"^\d+\.\s", subsection, re.MULTILINE)
+    assert len(rules) == 4, (
+        f"Wavefront Scheduling Rule must have exactly 4 numbered rules, found {len(rules)}"
     )
 
 

@@ -214,6 +214,7 @@ class LinuxTracingConfig:
     proc_interval: float = 5.0
     log_dir: str = ""  # empty = platform default (~/.local/share/autoskillit/logs on Linux)
     tmpfs_path: str = "/dev/shm"  # RAM-backed tmpfs for crash-resilient streaming
+    max_sessions: int = 2000
 
     def __post_init__(self) -> None:
         if self.tmpfs_path != "/dev/shm" or not os.environ.get("PYTEST_CURRENT_TEST"):

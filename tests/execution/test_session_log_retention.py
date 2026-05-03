@@ -821,7 +821,7 @@ def test_flush_session_log_passes_callback_to_enforce_retention(
     captured: list = []
 
     def fake_enforce_retention(
-        log_root, project_dir="", build_protected_campaign_ids=None
+        log_root, project_dir="", build_protected_campaign_ids=None, **kwargs
     ) -> None:
         captured.append(build_protected_campaign_ids)
 
@@ -847,3 +847,43 @@ def test_flush_session_log_passes_callback_to_enforce_retention(
     assert (tmp_path / "sessions.jsonl").exists()
     assert len(captured) == 1
     assert captured[0] is sentinel
+
+
+# --- max_sessions configurability tests ---
+
+
+def test_max_sessions_constant_is_2000():
+    """T5: _MAX_SESSIONS equals 2000."""
+    from autoskillit.execution.session_log import _MAX_SESSIONS
+
+    assert _MAX_SESSIONS == 2000
+
+
+def test_enforce_retention_respects_max_sessions_param(tmp_path):
+    """T3: Passing max_sessions overrides the module-level _MAX_SESSIONS."""
+    import autoskillit.execution.session_log as sl_module
+
+    _make_sessions(tmp_path, count=10)
+    sl_module._enforce_retention(tmp_path, max_sessions=7)
+    remaining = list((tmp_path / "sessions").iterdir())
+    assert len(remaining) == 7
+
+
+def test_flush_threads_max_sessions_to_enforce_retention(tmp_path, monkeypatch):
+    """T4: flush_session_log passes max_sessions through to _enforce_retention."""
+    import autoskillit.execution.session_log as sl_module
+
+    captured: dict = {}
+
+    def fake_enforce(
+        log_root,
+        project_dir="",
+        build_protected_campaign_ids=None,
+        *,
+        max_sessions=sl_module._MAX_SESSIONS,
+    ) -> None:
+        captured["max_sessions"] = max_sessions
+
+    monkeypatch.setattr(sl_module, "_enforce_retention", fake_enforce)
+    _flush(tmp_path, max_sessions=999)
+    assert captured["max_sessions"] == 999

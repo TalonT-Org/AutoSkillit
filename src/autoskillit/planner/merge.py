@@ -315,6 +315,12 @@ def merge_refined_assignments(
             wp["files_touched"] = [
                 f for f in wp.get("files_touched", []) if file_owner.get(f) == aid
             ]
+            if not wp["files_touched"]:
+                logger.warning(
+                    "WP %s in assignment %s has empty files_touched after conflict resolution",
+                    wp.get("id", wp.get("name", "<unknown>")),
+                    aid,
+                )
 
     output_path = Path(planner_dir) / "refined_assignments.json"
     write_versioned_json(output_path, {"assignments": all_assignments}, schema_version=1)

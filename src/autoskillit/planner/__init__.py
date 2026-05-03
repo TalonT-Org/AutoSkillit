@@ -26,6 +26,7 @@ from autoskillit.planner.merge import (
 from autoskillit.planner.schema import (
     ASSIGN_RESULT_FILE_RE,
     ASSIGNMENT_REQUIRED_KEYS,
+    DELIVERABLE_BOUNDS,
     PHASE_REQUIRED_KEYS,
     PHASE_RESULT_FILE_RE,
     WP_REQUIRED_KEYS,
@@ -48,6 +49,7 @@ from autoskillit.planner.validation import validate_plan
 
 __all__ = [
     "ASSIGN_RESULT_FILE_RE",
+    "DELIVERABLE_BOUNDS",
     "PHASE_RESULT_FILE_RE",
     "WP_RESULT_FILE_RE",
     "build_phase_assignment_manifest",

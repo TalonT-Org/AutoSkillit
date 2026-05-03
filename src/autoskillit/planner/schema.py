@@ -161,6 +161,8 @@ PHASE_REQUIRED_KEYS: frozenset[str] = frozenset({"id", "name", "ordering"})
 ASSIGNMENT_REQUIRED_KEYS: frozenset[str] = frozenset({"id", "name", "proposed_work_packages"})
 WP_REQUIRED_KEYS: frozenset[str] = frozenset({"id", "name", "deliverables"})
 
+DELIVERABLE_BOUNDS: tuple[int, int] = (1, 5)
+
 
 def _slugify(name: str) -> str:
     slug = name.lower()
@@ -229,7 +231,7 @@ def validate_assignment_result(data: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def validate_wp_result(data: dict[str, Any]) -> dict[str, Any]:
+def validate_wp_result(data: dict[str, Any], *, allow_stub: bool = False) -> dict[str, Any]:
     missing = WP_REQUIRED_KEYS - data.keys()
     if missing:
         raise ValueError(f"WP result missing required keys: {sorted(missing)}")
@@ -244,6 +246,12 @@ def validate_wp_result(data: dict[str, Any]) -> dict[str, Any]:
             f"WP id {wp_id!r} does not match expected PX-AY-WPZ format",
             stacklevel=2,
         )
+
+    if not allow_stub:
+        count = len(result.get("deliverables", []))
+        lo, hi = DELIVERABLE_BOUNDS
+        if not (lo <= count <= hi):
+            raise ValueError(f"WP {wp_id} has {count} deliverables (must be {lo}–{hi})")
 
     result.setdefault("summary", "")
     result.setdefault("goal", "")

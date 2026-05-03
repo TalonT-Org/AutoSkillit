@@ -362,10 +362,7 @@ class TestBuildTestScope:
         )
         assert result is FullRunReason.UNMAPPED_FILE
 
-    def test_scope_nonpython_unmatched_manifest_returns_full_run_reason(
-        self, tmp_path: Path
-    ) -> None:
-        """Non-Python file with no manifest match → FullRunReason.UNMAPPED_FILE (full run)."""
+    def test_scope_nonpython_unmatched_manifest_full_run(self, tmp_path: Path) -> None:
         tests_root = tmp_path / "tests"
         for d in ["arch", "contracts", "infra", "docs"]:
             (tests_root / d).mkdir(parents=True, exist_ok=True)

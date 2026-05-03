@@ -23,6 +23,7 @@ class TestRunSkillPluginDir:
     @pytest.mark.anyio
     async def test_run_skill_passes_plugin_dir(self, tool_ctx):
         """run_skill includes --plugin-dir and the plugin_dir from tool_ctx in the command."""
+        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx.runner.push(
             _make_result(
                 0,
@@ -33,20 +34,18 @@ class TestRunSkillPluginDir:
         )
         await run_skill("/investigate some-error", "/tmp")
 
-        cmd = tool_ctx.runner.call_args_list[0][0]
+        cmd = tool_ctx.runner.call_args_list[-1][0]
         assert "--plugin-dir" in cmd
         plugin_dir_idx = cmd.index("--plugin-dir")
         from autoskillit.core._type_plugin_source import DirectInstall
 
         assert isinstance(tool_ctx.plugin_source, DirectInstall)
         assert cmd[plugin_dir_idx + 1] == str(tool_ctx.plugin_source.plugin_dir)
-        # --output-format and stream-json must be present
         assert "--output-format" in cmd
         assert cmd[cmd.index("--output-format") + 1] == "stream-json"
-        # cwd must propagate to the subprocess runner
         from pathlib import Path
 
-        actual_cwd = tool_ctx.runner.call_args_list[0][1]
+        actual_cwd = tool_ctx.runner.call_args_list[-1][1]
         assert actual_cwd == Path("/tmp"), f"Subprocess cwd mismatch: {actual_cwd} != /tmp"
 
 
@@ -61,6 +60,7 @@ class TestRunSkillTimeoutFromConfig:
         cfg.safety.require_dry_walkthrough = False
         tool_ctx.config = cfg
 
+        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx.runner.push(
             _make_result(
                 0,
@@ -84,6 +84,7 @@ class TestRunSkillInjectsCompletionDirective:
         cfg.safety.require_dry_walkthrough = False
         tool_ctx.config = cfg
 
+        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx.runner.push(
             _make_result(
                 0,
@@ -120,9 +121,10 @@ class TestRunSkillEnvPrefix:
 
     @pytest.mark.anyio
     async def test_default_delay_populates_env(self, tool_ctx):
+        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx.runner.push(_make_result(0, _SUCCESS_JSON, ""))
         await run_skill("/investigate something", "/tmp")
-        cmd, _cwd, _timeout, kwargs = tool_ctx.runner.call_args_list[0]
+        cmd, _cwd, _timeout, kwargs = tool_ctx.runner.call_args_list[-1]
         assert cmd[0] == "claude"
         env = kwargs["env"]
         assert env["AUTOSKILLIT_HEADLESS"] == "1"
@@ -134,9 +136,10 @@ class TestRunSkillEnvPrefix:
         cfg.run_skill = RunSkillConfig(exit_after_stop_delay_ms=0)
         cfg.safety.require_dry_walkthrough = False
         tool_ctx.config = cfg
+        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx.runner.push(_make_result(0, _SUCCESS_JSON, ""))
         await run_skill("/investigate something", "/tmp")
-        cmd, _cwd, _timeout, kwargs = tool_ctx.runner.call_args_list[0]
+        cmd, _cwd, _timeout, kwargs = tool_ctx.runner.call_args_list[-1]
         assert cmd[0] == "claude"
         env = kwargs["env"]
         assert env["AUTOSKILLIT_HEADLESS"] == "1"
@@ -150,9 +153,10 @@ class TestRunSkillEnvPrefix:
         )
         cfg.safety.require_dry_walkthrough = False
         tool_ctx.config = cfg
+        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx.runner.push(_make_result(0, _SUCCESS_JSON, ""))
         await run_skill("/investigate something", "/tmp")
-        cmd, _cwd, _timeout, kwargs = tool_ctx.runner.call_args_list[0]
+        cmd, _cwd, _timeout, kwargs = tool_ctx.runner.call_args_list[-1]
         assert cmd[0] == "claude"
         env = kwargs["env"]
         assert env["AUTOSKILLIT_HEADLESS"] == "1"
@@ -169,6 +173,7 @@ class TestRunSkillPassesSessionLogDir:
         cfg.safety.require_dry_walkthrough = False
         tool_ctx.config = cfg
 
+        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx.runner.push(
             _make_result(
                 0,
@@ -196,9 +201,10 @@ class TestRunSkillModel:
     # MOD_S1
     @pytest.mark.anyio
     async def test_run_skill_passes_model_flag(self, tool_ctx):
+        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx.runner.push(_make_result(0, self._MOCK_STDOUT, ""))
         await run_skill("/investigate error", "/tmp", model="sonnet")
-        cmd = tool_ctx.runner.call_args_list[0][0]
+        cmd = tool_ctx.runner.call_args_list[-1][0]
         assert "--model" in cmd
         assert cmd[cmd.index("--model") + 1] == "sonnet"
 
@@ -206,9 +212,10 @@ class TestRunSkillModel:
     @pytest.mark.anyio
     async def test_run_skill_no_model_flag_when_empty(self, tool_ctx):
         tool_ctx.config.model.default = ""  # ← add this line
+        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx.runner.push(_make_result(0, self._MOCK_STDOUT, ""))
         await run_skill("/investigate error", "/tmp", model="")
-        cmd = tool_ctx.runner.call_args_list[0][0]
+        cmd = tool_ctx.runner.call_args_list[-1][0]
         assert "--model" not in cmd
 
 
@@ -222,16 +229,19 @@ class TestRunSkillPerInvocationMarker:
             '{"type": "result", "subtype": "success", "is_error": false,'
             ' "result": "done", "session_id": "s1"}'
         )
+        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot call 1
         tool_ctx.runner.push(_make_result(returncode=0, stdout=success_json))
+        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot call 2
         tool_ctx.runner.push(_make_result(returncode=0, stdout=success_json))
 
         await run_skill("/investigate a", cwd="/tmp")
         await run_skill("/investigate b", cwd="/tmp")
 
         calls = tool_ctx.runner.call_args_list
-        assert len(calls) >= 2
-        marker1 = calls[0][3]["completion_marker"]
-        marker2 = calls[1][3]["completion_marker"]
+        claude_calls = [c for c in calls if c[0][0] == "claude"]
+        assert len(claude_calls) >= 2
+        marker1 = claude_calls[0][3]["completion_marker"]
+        marker2 = claude_calls[1][3]["completion_marker"]
         assert marker1 != marker2
         assert "%%ORDER_UP::" in marker1
         assert "%%ORDER_UP::" in marker2

@@ -84,7 +84,8 @@ def resolve_skill_name(skill_command: str) -> str | None:
     name = match.group(1)
     if "${{" in name:
         return None
-    if match.end() < len(stripped) and stripped[match.end()] == "{":
+    remainder = stripped[match.end() :]
+    if remainder.startswith("{") or remainder.startswith("${{"):
         return None
     return name
 

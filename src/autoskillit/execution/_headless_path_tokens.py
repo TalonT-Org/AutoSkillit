@@ -78,6 +78,48 @@ def _build_path_token_set() -> frozenset[str]:
 
 _OUTPUT_PATH_TOKENS: frozenset[str] = _build_path_token_set()
 
+
+def _build_recoverable_path_tokens() -> frozenset[str]:
+    """Derive token names eligible for write-artifact recovery from skill_contracts.yaml.
+
+    Includes outputs where type starts with "file_path" OR equals "directory_path".
+    Broader than _OUTPUT_PATH_TOKENS (which excludes directory_path). Used by
+    _headless_recovery.py for synthesis and nudge classification.
+
+    Loads the YAML directly via IL-0 core utilities to avoid an upward IL-1→IL-2 import.
+    """
+    try:
+        manifest_path = pkg_root() / "recipe" / "skill_contracts.yaml"
+        manifest = load_yaml(manifest_path)
+        if not isinstance(manifest, dict):
+            return frozenset()
+        result = (
+            frozenset(
+                out["name"]
+                for skill_data in manifest.get("skills", {}).values()
+                for out in skill_data.get("outputs", [])
+                if isinstance(out, dict)
+                and (
+                    out.get("type", "").startswith("file_path")
+                    or out.get("type") == "directory_path"
+                )
+            )
+            - _INTENTIONALLY_EXCLUDED_PATH_TOKENS
+        )
+        logger.debug("_RECOVERABLE_PATH_TOKENS derived from contracts", count=len(result))
+        return result
+    except FileNotFoundError:
+        logger.debug("skill_contracts.yaml not found; _RECOVERABLE_PATH_TOKENS will be empty")
+        return frozenset()
+    except Exception:
+        logger.warning(
+            "Failed to derive _RECOVERABLE_PATH_TOKENS from contracts YAML", exc_info=True
+        )
+        return frozenset()
+
+
+_RECOVERABLE_PATH_TOKENS: frozenset[str] = _build_recoverable_path_tokens()
+
 _OUTPUT_PATH_PATTERN: re.Pattern[str] = (
     re.compile(
         r"^(" + "|".join(re.escape(t) for t in sorted(_OUTPUT_PATH_TOKENS)) + r")\s*=\s*(.+)$",

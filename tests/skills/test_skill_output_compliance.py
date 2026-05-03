@@ -321,6 +321,21 @@ PATH_CAPTURE_SKILLS: dict[str, list[str]] = {
     "vis-lens-temporal": ["diagram_path"],
     "vis-lens-uncertainty": ["diagram_path"],
     "review-design": ["evaluation_dashboard", "revision_guidance"],
+    # Planner pipeline skills (use \S+-terminated patterns)
+    "planner-assess-review-approach": ["review_approach_assessment_path"],
+    "planner-elaborate-assignments": ["phase_assignments_result_dir"],
+    "planner-elaborate-phase": ["elab_result_path"],
+    "planner-elaborate-wps": ["phase_wps_result_dir"],
+    "planner-generate-phases": ["phase_manifest_path"],
+    "planner-refine-assignments": ["refined_assignments_path"],
+    "planner-refine-phases": ["refined_plan_path"],
+    "planner-refine-wps": ["refined_wps_path"],
+    "planner-validate-task-alignment": ["alignment_findings_path"],
+    # Audit skills (use \S+-terminated patterns)
+    "audit-tests": ["audit_report_path"],
+    "validate-audit": ["validated_report_path"],
+    # Report bundling skill (uses \S+-terminated pattern)
+    "bundle-local-report": ["html_path"],
 }
 
 ABSOLUTE_PATH_KEYWORDS = ("absolute", "/abs", "$(pwd)", "$(cd")
@@ -349,12 +364,19 @@ def _get_contracted_path_capture_skills() -> dict[str, list[str]]:
     for skill_name, contract in skills_data.items():
         if not isinstance(contract, dict):
             continue
+        path_token_names = {
+            out["name"]
+            for out in contract.get("outputs", [])
+            if isinstance(out, dict)
+            and (
+                out.get("type", "").startswith("file_path") or out.get("type") == "directory_path"
+            )
+        }
         patterns = contract.get("expected_output_patterns", [])
         tokens = []
         for pattern in patterns:
-            # Path-capture: token_name\s*=\s*/.+ (requires leading /)
-            m = re.match(r"^(\w+)\\s\*=\\s\*/.+", pattern)
-            if m:
+            m = re.match(r"^(\w+)", pattern)
+            if m and m.group(1) in path_token_names:
                 tokens.append(m.group(1))
         if tokens:
             result[skill_name] = tokens
@@ -402,6 +424,23 @@ def test_every_contracted_skill_has_emit_instruction() -> None:
     assert not missing, (
         "Skills with path-capture contracts but no emit instruction in SKILL.md:\n"
         + "\n".join(f"  - {m}" for m in missing)
+    )
+
+
+def test_contracted_path_capture_skills_includes_backslash_s_patterns() -> None:
+    """_get_contracted_path_capture_skills must return skills with \\S+-terminated patterns."""
+    contracted = _get_contracted_path_capture_skills()
+    assert "planner-elaborate-phase" in contracted, (
+        "planner-elaborate-phase uses elab_result_path\\s*=\\s*\\S+ pattern and must be "
+        "returned by _get_contracted_path_capture_skills"
+    )
+    assert "audit-tests" in contracted, (
+        "audit-tests uses audit_report_path\\s*=\\s*\\S+ pattern and must be "
+        "returned by _get_contracted_path_capture_skills"
+    )
+    assert "bundle-local-report" in contracted, (
+        "bundle-local-report uses html_path\\s*=\\s*\\S+ pattern and must be "
+        "returned by _get_contracted_path_capture_skills"
     )
 
 

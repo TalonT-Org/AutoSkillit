@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core import CliSubtype, OutputFormat, RetryReason, SkillResult, get_logger
+from autoskillit.execution._headless_path_tokens import _RECOVERABLE_PATH_TOKENS
 from autoskillit.execution.commands import build_headless_resume_cmd
 from autoskillit.execution.process import _marker_is_standalone
 from autoskillit.execution.session import (
@@ -34,9 +35,25 @@ _CHANNEL_B_RECOVERABLE_SUBTYPES: frozenset[CliSubtype] = frozenset(
     {CliSubtype.UNPARSEABLE, CliSubtype.EMPTY_OUTPUT}
 )
 
-_PATH_CAPTURE: re.Pattern[str] = re.compile(r"^(\w+)\\s\*=\\s\*/.+")
+_TOKEN_NAME_RE: re.Pattern[str] = re.compile(r"^(\w+)")
 
 _NUDGE_TIMEOUT: float = 60.0
+
+
+def _is_path_capture_pattern(pattern: str) -> str | None:
+    """Return the token name if pattern is a path-capture pattern, else None.
+
+    Classification uses outputs[].type metadata from skill_contracts.yaml rather than
+    the pattern string suffix format, so all path-capture patterns are covered regardless
+    of whether they end in /.+, \\S+, .+, or any other suffix.
+    """
+    m = _TOKEN_NAME_RE.match(pattern)
+    if not m:
+        return None
+    token_name = m.group(1)
+    if token_name in _RECOVERABLE_PATH_TOKENS:
+        return token_name
+    return None
 
 
 def _recover_from_separate_marker(
@@ -117,10 +134,9 @@ def _synthesize_from_write_artifacts(
 
     synthesized_lines: list[str] = []
     for pattern in expected_output_patterns:
-        m = _PATH_CAPTURE.match(pattern)
-        if not m:
+        token_name = _is_path_capture_pattern(pattern)
+        if not token_name:
             continue
-        token_name = m.group(1)
         # Skip if the pattern is already satisfied in the current result.
         if re.search(pattern, session.result):
             continue
@@ -155,10 +171,9 @@ def _extract_missing_token_hints(
     hints: list[tuple[str, str]] = []
 
     for pattern in expected_output_patterns:
-        m = _PATH_CAPTURE.match(pattern)
-        if not m:
+        token_name = _is_path_capture_pattern(pattern)
+        if not token_name:
             continue
-        token_name = m.group(1)
         # Skip if already satisfied
         if re.search(pattern, session.result):
             continue

@@ -44,7 +44,7 @@ independently and writes a single elaborated phase result. No dependency on
 **ALWAYS:**
 - Derive `relationship_notes` from snapshot context + codebase analysis, NOT from prior result files
 - Write result to `$3/{phase_id}_result.json` (keep `_result.json` suffix — downstream consumers glob `*_result.json`)
-- Emit `elab_result_path` output token
+- Emit: `elab_result_path = <absolute path to {phase_id}_result.json>`
 - Include all `PhaseElaborated` fields in the result
 
 ## Workflow

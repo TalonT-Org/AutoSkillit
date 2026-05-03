@@ -37,7 +37,7 @@ zero findings.
 - Read the `task` field from $1 or $2
 - Compare every phase goal and every WP description against the task
 - Write `$3/task_alignment.json` with findings array
-- Emit `alignment_findings_path` and `alignment_finding_count` output tokens
+- Emit: `alignment_findings_path = <absolute path to task_alignment.json>`; also emit `alignment_finding_count`
 
 ## Workflow
 

@@ -45,8 +45,10 @@ from autoskillit.execution._headless_path_tokens import (  # noqa: F401
     _INTENTIONALLY_EXCLUDED_PATH_TOKENS,
     _OUTPUT_PATH_PATTERN,
     _OUTPUT_PATH_TOKENS,
+    _RECOVERABLE_PATH_TOKENS,
     _WORKTREE_PATH_PATTERN,
     _build_path_token_set,
+    _build_recoverable_path_tokens,
     _extract_output_paths,
     _extract_worktree_path,
     _validate_output_paths,
@@ -54,9 +56,10 @@ from autoskillit.execution._headless_path_tokens import (  # noqa: F401
 from autoskillit.execution._headless_recovery import (
     _CHANNEL_B_RECOVERABLE_SUBTYPES,  # noqa: F401
     _NUDGE_TIMEOUT,  # noqa: F401
-    _PATH_CAPTURE,  # noqa: F401
+    _TOKEN_NAME_RE,  # noqa: F401
     _attempt_contract_nudge,
     _extract_missing_token_hints,  # noqa: F401
+    _is_path_capture_pattern,  # noqa: F401
     _merge_token_usage,  # noqa: F401
     _recover_block_from_assistant_messages,  # noqa: F401
     _recover_from_separate_marker,  # noqa: F401

@@ -182,7 +182,8 @@ or user says "parallel"). Within each batched round, pipeline steps have two spe
 
 **Fast steps** — MCP tool calls that complete in seconds:
 `run_cmd`, `clone_repo`, `create_unique_branch`, `fetch_github_issue`,
-`claim_issue`, `merge_worktree`, `test_check`, `reset_test_dir`, `classify_fix`
+`claim_issue`, `merge_worktree`, `test_check`, `reset_test_dir`, `classify_fix`,
+`push_to_remote`
 
 **Slow steps** — headless sessions that take minutes:
 Any `run_skill` invocation (investigate, implement, audit, review, etc.)
@@ -201,6 +202,13 @@ Any `run_skill` invocation (investigate, implement, audit, review, etc.)
    pending.** This is the most critical rule: a batched round waits for the slowest step in
    the batch. A fast step launched alongside a slow step completes instantly but sits idle
    until the slow step finishes — wasting wall-clock time and blocking re-inspection.
+
+4. **Advance every active pipeline in every round.** A pipeline is "active" if it has not
+   reached `done` or `escalate_stop`. In every batched round, every active pipeline MUST
+   receive at least one step — either a fast step is drained or a slow step is launched.
+   Never leave an active pipeline idle for an entire round while sibling pipelines are
+   progressing. If a pipeline has completed all its `plan_parts` and only has finalization
+   steps remaining (push, merge, close), it is still active and must be advanced.
 
 ### Rationale
 

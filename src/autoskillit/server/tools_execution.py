@@ -412,7 +412,30 @@ async def run_skill(
         invocation_marker = f"%%ORDER_UP::{uuid4().hex[:8]}%%"
 
         skill_add_dirs: list[ValidatedAddDir] = []
-        if tool_ctx.session_skill_manager is not None:
+        replay_snapshot_used = False
+        _runner = tool_ctx.runner
+        if (
+            step_name
+            and _runner is not None
+            and getattr(_runner, "skill_snapshots", None)
+            and hasattr(_runner, "restore_skill_snapshot")
+            and tool_ctx.ephemeral_root is not None
+        ):
+            _ephemeral_root = tool_ctx.ephemeral_root
+            session_id = f"headless-{uuid4().hex[:12]}"
+            _restored = _runner.restore_skill_snapshot(  # type: ignore[attr-defined]
+                step_name, _ephemeral_root, session_id
+            )
+            if _restored is not None:
+                skill_add_dirs.append(_restored)
+                replay_snapshot_used = True
+                logger.debug(
+                    "replay_skill_snapshot_restored",
+                    step=step_name,
+                    session_id=session_id,
+                )
+
+        if not replay_snapshot_used and tool_ctx.session_skill_manager is not None:
             allow_only: frozenset[str] | None = None
             if target_name:
                 closure = tool_ctx.session_skill_manager.compute_skill_closure(target_name)
@@ -429,7 +452,6 @@ async def run_skill(
             )
             skill_add_dirs.append(session_root)
 
-            # Activate the target skill and its declared dependencies
             if target_name:
                 tool_ctx.session_skill_manager.activate_skill_deps(session_id, target_name)
         try:

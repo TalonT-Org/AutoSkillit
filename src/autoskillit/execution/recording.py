@@ -9,7 +9,21 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from autoskillit.core import SubprocessResult, SubprocessRunner, TerminationReason, get_logger
+from autoskillit.core import (
+    SubprocessResult,
+    SubprocessRunner,
+    TerminationReason,
+    ValidatedAddDir,
+    get_logger,
+)
+from autoskillit.execution._recording_skills import (
+    _extract_ephemeral_add_dir,
+    scan_skill_snapshots,
+    snapshot_skill_dir,
+)
+from autoskillit.execution._recording_skills import (
+    restore_skill_snapshot as _restore_skill_snapshot,
+)
 
 if TYPE_CHECKING:
     from api_simulator.claude import ScenarioPlayer, ScenarioRecorder
@@ -60,8 +74,11 @@ class RecordingSubprocessRunner(SubprocessRunner):
         self,
         recorder: ScenarioRecorder,
         inner: SubprocessRunner | None = None,
+        *,
+        scenario_dir: Path | None = None,
     ) -> None:
         self.recorder = recorder
+        self._scenario_dir = scenario_dir
         if inner is None:
             from autoskillit.execution.process import DefaultSubprocessRunner
 
@@ -153,6 +170,17 @@ class RecordingSubprocessRunner(SubprocessRunner):
             if cassette_stdout.exists():
                 stdout = cassette_stdout.read_text(encoding="utf-8")
 
+        ephemeral_dir = _extract_ephemeral_add_dir(cmd)
+        if ephemeral_dir is not None and step_result.cassette_path:
+            _scenario_dir = (
+                self._scenario_dir
+                if self._scenario_dir is not None
+                else Path(step_result.cassette_path).parent.parent
+            )
+            _snap = snapshot_skill_dir(_scenario_dir, step_name, ephemeral_dir)
+            if _snap:
+                logger.debug("skill_dir_snapshot_written", step=step_name, path=str(_snap))
+
         return SubprocessResult(
             returncode=step_result.cassette_exit_code,
             stdout=stdout,
@@ -180,12 +208,23 @@ class ReplayingSubprocessRunner(SubprocessRunner):
         non_session_results: dict[str, dict[str, Any]],
         *,
         player: ScenarioPlayer | None = None,
+        skill_snapshots: dict[str, Path] | None = None,
     ) -> None:
         self._sessions = session_map
         self._non_session = non_session_results
         self.player: ScenarioPlayer | None = player
+        self.skill_snapshots: dict[str, Path] = skill_snapshots or {}
         self.call_log: list[tuple[str, list[str]]] = []
         self._tmp_replay_dir = None
+
+    def restore_skill_snapshot(
+        self, step_name: str, ephemeral_root: Path, session_id: str
+    ) -> ValidatedAddDir | None:
+        """Restore a skill snapshot for step_name into a fresh ephemeral session dir."""
+        snap_path = self.skill_snapshots.get(step_name)
+        if snap_path is None:
+            return None
+        return _restore_skill_snapshot(snap_path, ephemeral_root, session_id)
 
     async def __call__(
         self,
@@ -298,6 +337,9 @@ def build_replay_runner(replay_dir: str) -> ReplayingSubprocessRunner:
         raise
 
     session_map = {k: deque(v) for k, v in raw_map.items()}
-    runner = ReplayingSubprocessRunner(session_map, non_session, player=player)
+    skill_snapshots = scan_skill_snapshots(Path(replay_dir))
+    runner = ReplayingSubprocessRunner(
+        session_map, non_session, player=player, skill_snapshots=skill_snapshots
+    )
     runner._tmp_replay_dir = _tmp_replay_dir
     return runner

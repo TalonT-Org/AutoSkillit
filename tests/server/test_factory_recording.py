@@ -195,3 +195,102 @@ def test_replay_takes_precedence_over_record(monkeypatch, tmp_path):
     assert isinstance(ctx.runner, ReplayingSubprocessRunner)
     mock_make_recorder.assert_not_called()  # REPLAY takes precedence over RECORD
     mock_atexit.assert_not_called()
+
+
+# --- T-BUILD-REPLAY-SNAP: build_replay_runner scans and surfaces skill_snapshots ---
+
+
+def test_build_replay_runner_scans_skill_snapshots(tmp_path, monkeypatch):
+    """build_replay_runner() populates runner.skill_snapshots from scenario dir."""
+
+    from autoskillit.execution.recording import build_replay_runner
+
+    replay_dir = tmp_path / "replay"
+    replay_dir.mkdir()
+    (replay_dir / "skill-snapshots" / "investigate").mkdir(parents=True)
+
+    mock_scenario = Mock()
+    mock_scenario.step_sequence = []
+    mock_player = Mock()
+    mock_player.scenario.return_value = mock_scenario
+    mock_player.build_session_map.return_value = {}
+
+    import api_simulator.claude as _api_sim_claude
+
+    monkeypatch.setattr(
+        _api_sim_claude, "make_scenario_player", Mock(return_value=mock_player), raising=False
+    )
+
+    runner = build_replay_runner(str(replay_dir))
+
+    assert "investigate" in runner.skill_snapshots
+    assert runner.skill_snapshots["investigate"] == replay_dir / "skill-snapshots" / "investigate"
+
+
+# --- T-RUN-SKILL-REPLAY: snapshot present → init_session NOT called ---
+
+
+@pytest.mark.anyio
+async def test_run_skill_replay_uses_snapshot_over_init_session(tool_ctx, tmp_path, monkeypatch):
+    """With a skill snapshot for the step, run_skill skips init_session."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.execution.recording import ReplayingSubprocessRunner
+    from autoskillit.server.tools_execution import run_skill
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    snap_dir = tmp_path / "snap" / "investigate"
+    skill_md = snap_dir / ".claude" / "skills" / "investigate" / "SKILL.md"
+    skill_md.parent.mkdir(parents=True)
+    skill_md.write_text("# investigate\n", encoding="utf-8")
+
+    replay_runner = ReplayingSubprocessRunner({}, {}, skill_snapshots={"investigate": snap_dir})
+    tool_ctx.runner = replay_runner
+
+    mock_ssm = MagicMock()
+    tool_ctx.session_skill_manager = mock_ssm
+
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx.executor = executor
+
+    ephemeral_root = tmp_path / "sessions"
+    tool_ctx.ephemeral_root = ephemeral_root
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+
+    await run_skill("/investigate foo", str(tmp_path), step_name="investigate")
+
+    mock_ssm.init_session.assert_not_called()
+    assert len(executor.calls) == 1
+    add_dir_paths = [d.path for d in executor.calls[0].add_dirs]
+    assert any(p.startswith(str(ephemeral_root)) for p in add_dir_paths)
+
+
+# --- T-RUN-SKILL-REPLAY-FALLBACK: no snapshot → init_session IS called ---
+
+
+@pytest.mark.anyio
+async def test_run_skill_replay_fallback_to_init_session(tool_ctx, tmp_path, monkeypatch):
+    """With no snapshot for the step, run_skill falls back to init_session."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.core import ValidatedAddDir
+    from autoskillit.execution.recording import ReplayingSubprocessRunner
+    from autoskillit.server.tools_execution import run_skill
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    replay_runner = ReplayingSubprocessRunner({}, {}, skill_snapshots={})
+    tool_ctx.runner = replay_runner
+
+    fake_validated = ValidatedAddDir(path="/fake/session")
+    mock_ssm = MagicMock()
+    mock_ssm.init_session.return_value = fake_validated
+    tool_ctx.session_skill_manager = mock_ssm
+
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx.executor = executor
+
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+
+    await run_skill("/investigate foo", str(tmp_path), step_name="investigate")
+
+    mock_ssm.init_session.assert_called_once()

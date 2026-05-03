@@ -187,6 +187,7 @@ generic_automation_mcp/
 │   ├── anomaly_detection.py #   Post-hoc anomaly detection over snapshots
 │   ├── session_log.py       #   XDG-aware session diagnostics log writer
 │   ├── recording.py         #   Record/replay subprocess runners via api-simulator
+│   ├── _recording_skills.py #   Skill dir snapshot/restore for record/replay sessions
 │   ├── process.py           #   Facade re-exporting from _process_*.py
 │   ├── _process_io.py
 │   ├── _process_jsonl.py

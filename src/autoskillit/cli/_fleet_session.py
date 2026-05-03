@@ -22,6 +22,7 @@ def _launch_fleet_session(
     resume_metadata: ResumeDecision | None,
     *,
     fleet_mode: Literal["dispatch", "campaign"],
+    ingredients_table: str | None = None,
 ) -> None:
     """Build the L3 orchestrator prompt and launch an interactive fleet session."""
     from autoskillit.cli import detect_autoskillit_mcp_prefix  # noqa: PLC0415
@@ -76,6 +77,7 @@ def _launch_fleet_session(
             mcp_prefix,
             campaign_id,
             resumable_dispatch_name=resumable_dispatch_name,
+            ingredients_table=ingredients_table,
         )
         extra_env = {
             "AUTOSKILLIT_SESSION_TYPE": "fleet",

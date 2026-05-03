@@ -212,7 +212,35 @@ def fleet_campaign(
         dispatches = [DispatchRecord(name=d.name) for d in parsed.dispatches]
         write_initial_state(state_path, campaign_id, campaign_name, str(match.path), dispatches)
 
-    _launch_fleet_session(parsed, campaign_id, state_path, resume_metadata, fleet_mode="campaign")
+    if resume_campaign is None:
+        from autoskillit.cli._preview import show_campaign_preview
+        from autoskillit.cli._prompts import _get_ingredients_table
+        from autoskillit.cli._timed_input import timed_prompt
+
+        show_campaign_preview(campaign_name, parsed, match.path.parent, Path.cwd())
+        _itable = _get_ingredients_table(campaign_name, match, Path.cwd())
+
+        confirm = timed_prompt(
+            "Launch campaign? [Enter/n]",
+            default="",
+            timeout=120,
+            label="autoskillit fleet campaign",
+        )
+        if confirm.lower() in ("n", "no"):
+            return
+    else:
+        from autoskillit.cli._prompts import _get_ingredients_table
+
+        _itable = _get_ingredients_table(campaign_name, match, Path.cwd())
+
+    _launch_fleet_session(
+        parsed,
+        campaign_id,
+        state_path,
+        resume_metadata,
+        fleet_mode="campaign",
+        ingredients_table=_itable,
+    )
 
 
 @fleet_app.command(name="list")

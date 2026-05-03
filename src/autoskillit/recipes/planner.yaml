@@ -140,7 +140,7 @@ steps:
   merge_phases:
     tool: run_python
     with:
-      callable: "autoskillit.planner.merge.merge_tier_dir"
+      callable: "autoskillit.planner.merge.merge_tier_results"
       results_dir: "${{ context.planner_dir }}/phases"
       output_path: "${{ context.planner_dir }}/combined_plan.json"
       key: "phases"
@@ -193,7 +193,7 @@ steps:
   merge_assignments:
     tool: run_python
     with:
-      callable: "autoskillit.planner.merge.merge_tier_dir"
+      callable: "autoskillit.planner.merge.merge_tier_results"
       results_dir: "${{ context.planner_dir }}/assignments"
       output_path: "${{ context.planner_dir }}/combined_assignments.json"
       key: "assignments"
@@ -260,7 +260,7 @@ steps:
   merge_wps:
     tool: run_python
     with:
-      callable: "autoskillit.planner.merge.merge_tier_dir"
+      callable: "autoskillit.planner.merge.merge_tier_results"
       results_dir: "${{ context.planner_dir }}/work_packages"
       output_path: "${{ context.planner_dir }}/combined_wps.json"
       key: "work_packages"

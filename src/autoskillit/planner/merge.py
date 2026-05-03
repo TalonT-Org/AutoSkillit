@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import fcntl
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -97,6 +98,52 @@ def merge_files(
     return result
 
 
+def _write_refine_contexts(
+    planner_dir: Path,
+    assignments: list[dict[str, Any]],
+    task_file_path: str,
+) -> list[str]:
+    phase_groups: dict[str, list[dict[str, Any]]] = {}
+    for assignment in assignments:
+        phase_id = assignment.get("phase_id", "")
+        if phase_id:
+            phase_groups.setdefault(phase_id, []).append(assignment)
+        else:
+            logger.warning(
+                "Assignment %r has no phase_id — skipped from refine contexts",
+                assignment.get("id", "<unknown>"),
+            )
+
+    contexts_dir = planner_dir / "refine_contexts"
+    contexts_dir.mkdir(parents=True, exist_ok=True)
+
+    context_paths: list[str] = []
+    for phase_id in sorted(phase_groups):
+        own = phase_groups[phase_id]
+        peer_summaries: list[dict[str, str]] = [
+            {"id": a.get("id", ""), "name": a.get("name", ""), "goal": a.get("goal", "")}
+            for pid, peers in sorted(phase_groups.items())
+            if pid != phase_id
+            for a in peers
+        ]
+        context: dict[str, Any] = {
+            "phase_id": phase_id,
+            "task_file_path": task_file_path,
+            "assignments": own,
+            "peer_summaries": peer_summaries,
+        }
+        if not re.fullmatch(r"[A-Za-z0-9_\-]+", phase_id):
+            raise ValueError(
+                f"phase_id {phase_id!r} contains disallowed characters — "
+                "only alphanumeric, underscore, and hyphen are permitted in context filenames"
+            )
+        ctx_path = contexts_dir / f"context_{phase_id}.json"
+        write_versioned_json(ctx_path, context, schema_version=1)
+        context_paths.append(str(ctx_path))
+
+    return context_paths
+
+
 def extract_item(
     source_path: str,
     item_id: str,
@@ -160,7 +207,7 @@ def replace_item(
     return {"replaced_id": item_id, "updated_path": str(source_path)}
 
 
-def merge_tier_dir(
+def merge_tier_results(
     results_dir: str,
     output_path: str,
     key: str,
@@ -171,13 +218,25 @@ def merge_tier_dir(
     paths = sorted(Path(results_dir).glob("*_result.json"))
     if not paths:
         raise ValueError(f"No *_result.json files found in {results_dir}")
-    return merge_files(
+    result = merge_files(
         file_paths=[str(p) for p in paths],
         output_path=output_path,
         key=key,
         task_file_path=task_file_path,
         source_dir=source_dir,
     )
+    if key == "assignments":
+        merged_data = json.loads(Path(output_path).read_text(encoding="utf-8"))
+        assignments = merged_data.get("assignments", [])
+        if not assignments:
+            logger.warning(
+                "merge_tier_results: no assignments found in %s — refine contexts will be empty",
+                output_path,
+            )
+        planner_dir = Path(output_path).parent
+        context_paths = _write_refine_contexts(planner_dir, assignments, task_file_path)
+        result["refine_context_paths"] = json.dumps(context_paths)
+    return result
 
 
 def build_plan_snapshot(

@@ -169,7 +169,6 @@ def _chunk_list(items: list[dict[str, Any]], size: int) -> list[list[dict[str, A
 
 def _build_fallback_groups(
     work_packages: list[dict[str, Any]],
-    existing_merged_groups: dict[str, _ConsolidationGroup],
 ) -> list[_ConsolidationGroup]:
     """Heuristic fallback: merge same-assignment WPs sharing files."""
     if len(work_packages) < _FALLBACK_MIN_WPS:
@@ -245,10 +244,9 @@ def consolidate_wps(
             if ord_id not in wp_by_id:
                 raise ValueError(f"unknown merge_order element: {ord_id}")
 
-    # Fallback: if manifests produced only singletons, apply heuristic
     has_real_merges = any(len(g.source_wp_ids) > 1 for g in merged_groups.values())
     if not has_real_merges:
-        fallback_groups = _build_fallback_groups(work_packages, merged_groups)
+        fallback_groups = _build_fallback_groups(work_packages)
         for fg in fallback_groups:
             merged_groups[fg.merged_id] = fg
             for src_id in fg.source_wp_ids:

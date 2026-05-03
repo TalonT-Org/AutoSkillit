@@ -350,8 +350,9 @@ class TestReloadLoopSafetyGuards:
                 fleet_mode="campaign",
             )
 
-        # Should have fired exactly _MAX_RELOADS + 1 times (guard triggers after 10 seen)
-        assert counter["n"] == 11
+        from autoskillit.cli._fleet_session import _MAX_RELOADS
+
+        assert counter["n"] == _MAX_RELOADS + 1
 
     def test_duplicate_reload_id_aborts(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -404,7 +405,7 @@ class TestReloadLoopUsesNamedResume:
     """T3d: Reload loop passes NoResume on first call, NamedResume on reload."""
 
     def test_named_resume_on_reload(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-        """First call uses NoResume(); after a reload, NamedResume(session_id=<reload_id>) is used."""
+        """First call uses NoResume(); after reload, NamedResume is used."""
         from autoskillit.core import NamedResume, NoResume
 
         monkeypatch.chdir(tmp_path)

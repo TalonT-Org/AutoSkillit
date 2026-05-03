@@ -29,26 +29,26 @@ from autoskillit.core import (
     get_logger,
     read_starttime_ticks,
 )
-from autoskillit.execution._process_io import create_temp_io, read_temp_output
-from autoskillit.execution._process_jsonl import (
+from autoskillit.execution.process._process_io import create_temp_io, read_temp_output
+from autoskillit.execution.process._process_jsonl import (
     _jsonl_contains_marker,
     _jsonl_has_record_type,
     _jsonl_last_record_type,
     _marker_is_standalone,
 )
-from autoskillit.execution._process_kill import (
+from autoskillit.execution.process._process_kill import (
     _wait_process_dead,
     async_kill_process_tree,
     kill_process_tree,
 )
-from autoskillit.execution._process_monitor import (
+from autoskillit.execution.process._process_monitor import (
     _has_active_api_connection,
     _has_active_child_processes,
     _heartbeat,
     _session_log_monitor,
 )
-from autoskillit.execution._process_pty import pty_wrap_command
-from autoskillit.execution._process_race import (
+from autoskillit.execution.process._process_pty import pty_wrap_command
+from autoskillit.execution.process._process_race import (
     RaceAccumulator,
     RaceSignals,
     _extract_stdout_session_id,

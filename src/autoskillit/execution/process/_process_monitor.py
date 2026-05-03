@@ -10,7 +10,7 @@ import anyio
 import psutil
 
 from autoskillit.core import ChannelBStatus, get_logger
-from autoskillit.execution._process_jsonl import (
+from autoskillit.execution.process._process_jsonl import (
     _jsonl_contains_marker,
     _jsonl_has_record_type,
     _jsonl_last_record_type,

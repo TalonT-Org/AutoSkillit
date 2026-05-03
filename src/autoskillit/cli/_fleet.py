@@ -8,7 +8,7 @@ import shutil
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, cast
+from typing import TYPE_CHECKING, Annotated
 from uuid import uuid4
 
 from cyclopts import App, Parameter
@@ -21,6 +21,7 @@ from autoskillit.cli._fleet_display import (
     _watch_loop,
 )
 from autoskillit.cli._fleet_lifecycle import (
+    _pick_resume_campaign,
     _reap_stale_dispatches,
 )
 from autoskillit.cli._fleet_session import _launch_fleet_session
@@ -45,7 +46,7 @@ def _require_fleet(cfg: AutomationConfig) -> None:
 
 if TYPE_CHECKING:
     from autoskillit.config import AutomationConfig
-    from autoskillit.fleet import CampaignState, ResumeDecision
+    from autoskillit.fleet import ResumeDecision
 
 
 fleet_app = App(name="fleet", help="Campaign fleet management.")
@@ -123,42 +124,7 @@ def fleet_campaign(
         campaign_name = selected.name
 
     elif campaign_name is None and resume_campaign is not None:
-        from autoskillit.fleet import TERMINAL_DISPATCH_STATUSES, read_state
-
-        fleet_dir = Path.cwd() / ".autoskillit" / "temp" / "fleet"
-        active: list[CampaignState] = []
-        if fleet_dir.is_dir():
-            for subdir in sorted(fleet_dir.iterdir()):
-                if not subdir.is_dir():
-                    continue
-                state = read_state(subdir / "state.json")
-                if state is None:
-                    continue
-                has_non_terminal = any(
-                    d.status not in TERMINAL_DISPATCH_STATUSES for d in state.dispatches
-                )
-                if has_non_terminal:
-                    active.append(state)
-
-        if not active:
-            print("No active campaigns to resume.")
-            sys.exit(1)
-
-        selected_state = run_selection_menu(  # type: ignore[arg-type]
-            active,
-            header="Active campaigns (resumable):",
-            display_fn=lambda s: f"{s.campaign_name}  [{(s.campaign_id or '')[:8]}…]",
-            name_key=lambda s: s.campaign_name,  # type: ignore[union-attr]
-            timeout=120,
-            label="autoskillit fleet campaign --resume",
-        )
-        if selected_state is None or isinstance(selected_state, str):
-            print("No campaign selected.")
-            sys.exit(1)
-
-        resolved_state = cast("CampaignState", selected_state)
-        campaign_name = resolved_state.campaign_name
-        resume_campaign = resolved_state.campaign_id
+        campaign_name, resume_campaign = _pick_resume_campaign(Path.cwd())
 
     if campaign_name is None:
         raise RuntimeError("campaign_name must be set before launching fleet session")
@@ -212,7 +178,22 @@ def fleet_campaign(
         dispatches = [DispatchRecord(name=d.name) for d in parsed.dispatches]
         write_initial_state(state_path, campaign_id, campaign_name, str(match.path), dispatches)
 
-    _launch_fleet_session(parsed, campaign_id, state_path, resume_metadata, fleet_mode="campaign")
+    from autoskillit.cli._preview import _pre_launch_campaign  # noqa: PLC0415
+
+    _itable, proceed = _pre_launch_campaign(
+        campaign_name, parsed, match, Path.cwd(), is_resume=resume_campaign is not None
+    )
+    if not proceed:
+        return
+
+    _launch_fleet_session(
+        parsed,
+        campaign_id,
+        state_path,
+        resume_metadata,
+        fleet_mode="campaign",
+        ingredients_table=_itable,
+    )
 
 
 @fleet_app.command(name="list")

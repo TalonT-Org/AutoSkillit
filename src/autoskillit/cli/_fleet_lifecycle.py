@@ -260,3 +260,38 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
                         )
         finally:
             fcntl.flock(_lock_fh, fcntl.LOCK_UN)
+
+
+def _pick_resume_campaign(project_dir: Path) -> tuple[str, str]:
+    """Interactively pick a resumable campaign. Returns (campaign_name, campaign_id) or exits."""
+    from autoskillit.cli._menu import run_selection_menu  # noqa: PLC0415
+    from autoskillit.fleet import TERMINAL_DISPATCH_STATUSES, read_state  # noqa: PLC0415
+
+    fleet_dir = project_dir / ".autoskillit" / "temp" / "fleet"
+    active = []
+    if fleet_dir.is_dir():
+        for subdir in sorted(fleet_dir.iterdir()):
+            if not subdir.is_dir():
+                continue
+            state = read_state(subdir / "state.json")
+            if state is None:
+                continue
+            if any(d.status not in TERMINAL_DISPATCH_STATUSES for d in state.dispatches):
+                active.append(state)
+
+    if not active:
+        print("No active campaigns to resume.")
+        sys.exit(1)
+
+    selected = run_selection_menu(
+        active,
+        header="Active campaigns (resumable):",
+        display_fn=lambda s: f"{s.campaign_name}  [{(s.campaign_id or '')[:8]}…]",
+        name_key=lambda s: s.campaign_name,
+        timeout=120,
+        label="autoskillit fleet campaign --resume",
+    )
+    if selected is None or isinstance(selected, str):
+        print("No campaign selected.")
+        sys.exit(1)
+    return selected.campaign_name, selected.campaign_id  # type: ignore[union-attr]

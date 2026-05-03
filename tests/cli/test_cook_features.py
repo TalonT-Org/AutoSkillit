@@ -20,7 +20,7 @@ class TestOrderSubsetGate:
 
     @pytest.fixture(autouse=True)
     def _stub_preview(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("autoskillit.cli._prompts.show_cook_preview", lambda *a, **kw: None)
+        monkeypatch.setattr("autoskillit.cli._preview.show_cook_preview", lambda *a, **kw: None)
 
     @pytest.fixture(autouse=True)
     def _stub_ingredients_table(self, monkeypatch: pytest.MonkeyPatch) -> None:

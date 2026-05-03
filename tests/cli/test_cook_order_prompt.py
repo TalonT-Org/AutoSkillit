@@ -21,7 +21,7 @@ class TestCLIOrderPrompt:
     def _stub_preview(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Stub terminal preview to avoid subprocess.run collision with git calls."""
         monkeypatch.setattr(
-            "autoskillit.cli._prompts.show_cook_preview",
+            "autoskillit.cli._preview.show_cook_preview",
             lambda *a, **kw: None,
         )
 
@@ -190,7 +190,7 @@ class TestOrderDisplayOwnership:
     def _stub_preview(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Stub terminal preview to avoid subprocess.run collision with git calls."""
         monkeypatch.setattr(
-            "autoskillit.cli._prompts.show_cook_preview",
+            "autoskillit.cli._preview.show_cook_preview",
             lambda *a, **kw: None,
         )
 
@@ -260,7 +260,7 @@ class TestOrderMcpPrefixSelection:
 
     @pytest.fixture(autouse=True)
     def _stub_preview(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("autoskillit.cli._prompts.show_cook_preview", lambda *a, **kw: None)
+        monkeypatch.setattr("autoskillit.cli._preview.show_cook_preview", lambda *a, **kw: None)
 
     @pytest.fixture(autouse=True)
     def _interactive_stdin(self, monkeypatch: pytest.MonkeyPatch) -> None:

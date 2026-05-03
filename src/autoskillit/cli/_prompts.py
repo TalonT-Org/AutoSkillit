@@ -107,6 +107,7 @@ def _build_fleet_campaign_prompt(
     campaign_id: str,
     max_quota_wait_sec: int = 3600,
     resumable_dispatch_name: str = "",
+    ingredients_table: str | None = None,
 ) -> str:
     """Build the system prompt for an L3 campaign dispatcher headless session.
 
@@ -190,6 +191,15 @@ issue_urls=<remaining> and allow_reentry=true as ingredient overrides.
 Do NOT re-dispatch from the full original issue list.
 """
 
+    _ing_section = ""
+    if ingredients_table:
+        _ing_section = (
+            "\n## RECIPE INGREDIENTS — USE THESE EXACT NAMES\n\n"
+            f"{ingredients_table}\n\n"
+            "Before dispatching, collect values for all required ingredients from the user "
+            "via AskUserQuestion. Do not dispatch until all required values are confirmed.\n"
+        )
+
     return f"""\
 You are a fleet campaign dispatcher. Execute campaign '{campaign_recipe.name}' autonomously.
 Campaign ID: {campaign_id}. Dispatches: {dispatch_count}.
@@ -201,7 +211,7 @@ Campaign ID: {campaign_id}. Dispatches: {dispatch_count}.
 - Description: {campaign_recipe.description}
 - Dispatch count: {dispatch_count} dispatches
 - Continue on failure: {campaign_recipe.continue_on_failure}
-
+{_ing_section}
 ## DISPATCH MANIFEST
 
 The following manifest defines all dispatches for this campaign:
@@ -703,26 +713,3 @@ NEVER use run_skill or any non-fleet tool.
 After all dispatches complete, call {mcp_prefix}batch_cleanup_clones() to clean up \
 clone artifacts before ending the session.
 """
-
-
-def show_cook_preview(
-    recipe_name: str, parsed_recipe: object, recipes_dir: Path, project_dir: Path
-) -> None:
-    """Display the terminal preview: flow diagram + ingredients table.
-
-    Owns the entire pre-launch display so ``cook()`` makes one call.
-    Gateway imports only (no cross-package submodule imports).
-    """
-    from autoskillit.cli._ansi import diagram_to_terminal, ingredients_to_terminal
-    from autoskillit.config import resolve_ingredient_defaults
-    from autoskillit.recipe import build_ingredient_rows, load_recipe_diagram
-
-    diagram = load_recipe_diagram(recipe_name, recipes_dir)
-    if diagram:
-        print(diagram_to_terminal(diagram))
-        print()  # blank line between diagram and table
-
-    resolved = resolve_ingredient_defaults(project_dir)
-    rows = build_ingredient_rows(parsed_recipe, resolved_defaults=resolved)
-    if rows:
-        print(ingredients_to_terminal(rows))

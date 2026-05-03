@@ -360,6 +360,7 @@ generic_automation_mcp/
 │   ├── _mcp_names.py        #   MCP prefix detection
 │   ├── _onboarding.py       #   First-run detection + guided menu
 │   ├── _prompts.py          #   Orchestrator prompt builder
+│   ├── _preview.py          #   Shared pre-launch preview: flow diagram + ingredient table display
 │   ├── _timed_input.py      #   timed_prompt() and status_line() CLI primitives
 │   ├── _menu.py             #   Shared numbered selection menu primitive: run_selection_menu(), render_numbered_menu(), resolve_menu_input()
 │   ├── _update.py           #   run_update_command(): first-class upgrade path for `autoskillit update`

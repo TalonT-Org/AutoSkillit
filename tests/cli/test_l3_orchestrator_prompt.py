@@ -441,3 +441,30 @@ class TestDynamicDispatchSection:
         )
         prompt = _build(campaign_recipe=recipe)
         assert "DYNAMIC DISPATCH" not in prompt
+
+
+# --- K-15: TestK15IngredientsTableInjection ---
+
+
+class TestK15IngredientsTableInjection:
+    _TABLE = "| Name | Description | Default |\n| task | What to fix | — |"
+
+    def test_ingredients_section_present_when_provided(self) -> None:
+        prompt = _build(ingredients_table=self._TABLE)
+        assert "RECIPE INGREDIENTS" in prompt
+        assert self._TABLE in prompt
+
+    def test_ingredients_section_absent_when_none(self) -> None:
+        prompt = _build(ingredients_table=None)
+        assert "RECIPE INGREDIENTS" not in prompt
+
+    def test_ask_user_question_instruction_present(self) -> None:
+        prompt = _build(ingredients_table=self._TABLE)
+        assert "AskUserQuestion" in prompt
+
+    def test_ingredients_section_between_overview_and_manifest(self) -> None:
+        prompt = _build(ingredients_table=self._TABLE)
+        overview_pos = prompt.index("CAMPAIGN OVERVIEW")
+        ingredients_pos = prompt.index("RECIPE INGREDIENTS")
+        manifest_pos = prompt.index("DISPATCH MANIFEST")
+        assert overview_pos < ingredients_pos < manifest_pos

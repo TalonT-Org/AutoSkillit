@@ -23,7 +23,7 @@ from pathlib import Path
 # Placing the script's directory first on sys.path lets the bare-name import
 # below resolve to the shared stdlib-only settings module in both subprocess
 # and package-mode invocations.
-_HOOKS_DIR = str(Path(__file__).resolve().parent)
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 

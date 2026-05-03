@@ -103,7 +103,7 @@ For each assignment in `assignments`, build a context packet containing:
 - The `PhaseElaborated` entry for the assignment's `phase_id` from `$2`
 - The `target_assignment_id`
 - `task_file_path` — the path to the task description on disk (pass the path reference only; do NOT read the task text into the L1 context or embed it in the L0 prompt)
-- Instructions: review the target assignment in light of peer_summaries; if scope-creep verification is needed, read the task from disk at `task_file_path`; return structured suggestions only — do NOT edit files
+- Instructions: review the target assignment in light of peer_summaries; if scope creep verification is needed, read the task from disk at `task_file_path`; return structured suggestions only — do NOT edit files
 
 ### Step 3: Spawn parallel L0 subagents
 

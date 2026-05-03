@@ -528,6 +528,14 @@ class TestBuildFoodTruckCmd:
         idx = spec.cmd.index(ClaudeFlags.OUTPUT_FORMAT)
         assert spec.cmd[idx + 1] == "stream-json"
 
+    def test_output_format_required_flags_appended(self):
+        spec = build_food_truck_cmd(**self.BASE)
+        assert "--verbose" in spec.cmd
+
+    def test_output_format_required_flags_not_duplicated(self):
+        spec = build_food_truck_cmd(**self.BASE)
+        assert spec.cmd.count("--verbose") == 1
+
     def test_completion_marker_in_prompt(self):
         spec = build_food_truck_cmd(**self.BASE)
         prompt_idx = spec.cmd.index(ClaudeFlags.PRINT) + 1

@@ -868,3 +868,56 @@ def test_test_check_config_has_commands_field() -> None:
     cfg = make_test_check_config()
     assert hasattr(cfg, "commands")
     assert cfg.commands is None
+
+
+@pytest.mark.anyio
+async def test_default_test_runner_reads_full_run_reason_from_sidecar(tmp_path: Path) -> None:
+    """run() populates full_run_reason when sidecar includes the field."""
+    import json
+
+    sidecar_data = {
+        "filter_mode": "conservative",
+        "tests_selected": None,
+        "tests_deselected": None,
+        "full_run_reason": "bucket_a",
+    }
+
+    async def fake_runner(command, *, cwd, timeout, env, **kwargs):
+        sidecar_path = env.get("AUTOSKILLIT_FILTER_STATS_FILE")
+        assert sidecar_path, "AUTOSKILLIT_FILTER_STATS_FILE must be set in env"
+        Path(sidecar_path).write_text(json.dumps(sidecar_data))
+        return SubprocessResult(
+            returncode=0,
+            stdout="= 100 passed =\n",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+        )
+
+    tester = DefaultTestRunner(config=make_test_config(), runner=fake_runner)
+    result = await tester.run(tmp_path)
+    assert result.full_run_reason == "bucket_a"
+
+
+@pytest.mark.anyio
+async def test_default_test_runner_full_run_reason_none_when_absent(tmp_path: Path) -> None:
+    """run() leaves full_run_reason as None when sidecar omits the field."""
+    import json
+
+    sidecar_data = {"filter_mode": "conservative", "tests_selected": 50, "tests_deselected": 10}
+
+    async def fake_runner(command, *, cwd, timeout, env, **kwargs):
+        sidecar_path = env.get("AUTOSKILLIT_FILTER_STATS_FILE")
+        assert sidecar_path, "AUTOSKILLIT_FILTER_STATS_FILE must be set in env"
+        Path(sidecar_path).write_text(json.dumps(sidecar_data))
+        return SubprocessResult(
+            returncode=0,
+            stdout="= 50 passed =\n",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+        )
+
+    tester = DefaultTestRunner(config=make_test_config(), runner=fake_runner)
+    result = await tester.run(tmp_path)
+    assert result.full_run_reason is None

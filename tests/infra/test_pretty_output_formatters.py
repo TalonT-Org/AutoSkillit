@@ -545,3 +545,29 @@ def test_fmt_test_check_displays_filter_stats():
     assert "conservative" in out
     assert "50" in out
     assert "100" in out
+
+
+def test_fmt_test_check_displays_full_run_reason():
+    """Pretty output shows full run reason instead of selected/deselected counts."""
+    from autoskillit.hooks._fmt_execution import _fmt_test_check
+
+    data = {
+        "passed": True,
+        "stdout": "",
+        "filter_mode": "conservative",
+        "full_run_reason": "bucket_a",
+    }
+    out = _fmt_test_check(data, False)
+    assert "full run" in out
+    assert "bucket" in out.lower()
+    assert "?" not in out
+
+
+def test_fmt_test_check_shows_question_mark_only_when_stats_truly_unavailable():
+    """When filter_mode is set but no counts or reason, output shows '?'."""
+    from autoskillit.hooks._fmt_execution import _fmt_test_check
+
+    data = {"passed": True, "stdout": "", "filter_mode": "conservative"}
+    out = _fmt_test_check(data, False)
+    assert "?" in out
+    assert "full run" not in out

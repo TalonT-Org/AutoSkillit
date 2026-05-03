@@ -90,6 +90,8 @@ async def test_check(
                 response["tests_selected"] = test_result.tests_selected
             if test_result.tests_deselected is not None:
                 response["tests_deselected"] = test_result.tests_deselected
+            if test_result.full_run_reason is not None:
+                response["full_run_reason"] = test_result.full_run_reason
             return json.dumps(response)
         finally:
             if step_name:

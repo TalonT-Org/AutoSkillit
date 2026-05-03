@@ -256,7 +256,7 @@ def test_output_path_tokens_synchronized() -> None:
             # planner-refine-phases output
             "refined_plan_path",
             # planner-refine-assignments output
-            "refined_assignments_path",
+            "phase_refined_path",
             # planner-refine-wps output
             "refined_wps_path",
             # audit-tests output (bundled full-audit recipe)
@@ -326,7 +326,7 @@ PATH_CAPTURE_SKILLS: dict[str, list[str]] = {
     "planner-elaborate-phase": ["elab_result_path"],
     "planner-elaborate-wps": ["phase_wps_result_dir"],
     "planner-generate-phases": ["phase_manifest_path"],
-    "planner-refine-assignments": ["refined_assignments_path"],
+    "planner-refine-assignments": ["phase_refined_path"],
     "planner-refine-phases": ["refined_plan_path"],
     "planner-refine-wps": ["refined_wps_path"],
     "planner-validate-task-alignment": ["alignment_findings_path"],

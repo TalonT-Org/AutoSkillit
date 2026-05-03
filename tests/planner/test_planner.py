@@ -35,6 +35,7 @@ def test_planner_all_exports() -> None:
         "extract_item",
         "replace_item",
         "build_plan_snapshot",
+        "merge_refined_assignments",
         "PlanDocument",
         "PhaseShort",
         "PhaseElaborated",

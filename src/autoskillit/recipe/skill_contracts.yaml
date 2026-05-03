@@ -1902,7 +1902,7 @@ skills:
     write_behavior: always
   planner-refine-assignments:
     inputs:
-      - name: combined_assignments_path
+      - name: context_file
         type: file_path
         required: true
       - name: refined_plan_path
@@ -1912,12 +1912,12 @@ skills:
         type: directory_path
         required: true
     outputs:
-      - name: refined_assignments_path
+      - name: phase_refined_path
         type: file_path
     expected_output_patterns:
-      - "refined_assignments_path\\s*=\\s*\\S+"
+      - "phase_refined_path\\s*=\\s*\\S+"
     pattern_examples:
-      - "refined_assignments_path = /tmp/autoskillit/planner/run-20260101-120000/refined_assignments.json\n%%ORDER_UP%%"
+      - "phase_refined_path = /tmp/autoskillit/planner/run-20260101-120000/refine_contexts/P1_result.json\n%%ORDER_UP%%"
     write_behavior: always
   planner-refine-wps:
     inputs:

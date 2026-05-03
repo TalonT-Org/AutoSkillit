@@ -235,8 +235,79 @@ def merge_tier_results(
             )
         planner_dir = Path(output_path).parent
         context_paths = _write_refine_contexts(planner_dir, assignments, task_file_path)
-        result["refine_context_paths"] = json.dumps(context_paths)
+        result["refine_context_paths"] = ",".join(context_paths)
     return result
+
+
+def merge_refined_assignments(
+    planner_dir: str,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    contexts_dir = Path(planner_dir) / "refine_contexts"
+    result_files = sorted(contexts_dir.glob("*_result.json"))
+    if not result_files:
+        raise ValueError(
+            f"No *_result.json files found in {contexts_dir}. "
+            "Run refine_assignments dispatch before calling this function."
+        )
+
+    all_assignments: list[dict[str, Any]] = []
+    for path in result_files:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning("Skipping malformed result file %s: %s", path, exc)
+            continue
+        all_assignments.extend(data.get("assignments", []))
+
+    valid_assignments: list[dict[str, Any]] = []
+    for a in all_assignments:
+        if not a.get("id"):
+            logger.warning(
+                "merge_refined_assignments: skipping assignment with missing id: %r",
+                a.get("name", "<unknown>"),
+            )
+        else:
+            valid_assignments.append(a)
+    all_assignments = valid_assignments
+
+    def _sort_key(assignment_id: str) -> tuple[int, ...]:
+        return tuple(int(n) for n in re.findall(r"\d+", assignment_id))
+
+    # Single-pass: for each (file, assignment_id) claim, keep the earliest assignment_id
+    file_owner: dict[str, str] = {}
+    for assignment in all_assignments:
+        aid = assignment.get("id", "")
+        for wp in assignment.get("proposed_work_packages", []):
+            for f in wp.get("files_touched", []):
+                if f not in file_owner or _sort_key(aid) < _sort_key(file_owner[f]):
+                    file_owner[f] = aid
+
+    # Count conflicts: files with more than one claimant
+    file_claimants: dict[str, set[str]] = {}
+    for assignment in all_assignments:
+        aid = assignment.get("id", "")
+        for wp in assignment.get("proposed_work_packages", []):
+            for f in wp.get("files_touched", []):
+                file_claimants.setdefault(f, set()).add(aid)
+    conflict_count = sum(1 for claimants in file_claimants.values() if len(claimants) > 1)
+
+    # Strip files from losing assignments
+    for assignment in all_assignments:
+        aid = assignment.get("id", "")
+        for wp in assignment.get("proposed_work_packages", []):
+            wp["files_touched"] = [
+                f for f in wp.get("files_touched", []) if file_owner.get(f) == aid
+            ]
+
+    output_path = Path(planner_dir) / "refined_assignments.json"
+    write_versioned_json(output_path, {"assignments": all_assignments}, schema_version=1)
+
+    return {
+        "refined_assignments_path": str(output_path),
+        "item_count": str(len(all_assignments)),
+        "conflict_count": str(conflict_count),
+    }
 
 
 def build_plan_snapshot(

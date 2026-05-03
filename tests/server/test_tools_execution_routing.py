@@ -266,3 +266,35 @@ async def test_run_skill_idle_output_timeout_defaults_to_none(tool_ctx, monkeypa
 
     await run_skill("/test skill", "/tmp")
     assert executor.calls[0].idle_output_timeout is None
+
+
+class TestOutputDirParameter:
+    """output_dir parameter plumbing from run_skill to executor."""
+
+    def test_run_skill_has_output_dir_parameter(self) -> None:
+        """run_skill() accepts output_dir parameter."""
+        import inspect
+
+        sig = inspect.signature(run_skill)
+        assert "output_dir" in sig.parameters
+        param = sig.parameters["output_dir"]
+        assert param.default == ""
+
+    @pytest.mark.anyio
+    async def test_run_skill_forwards_output_dir_to_write_watch_dirs(
+        self, tool_ctx, monkeypatch, tmp_path
+    ) -> None:
+        """output_dir is resolved and forwarded to executor.run() as write_watch_dirs."""
+        from pathlib import Path
+
+        from tests.fakes import InMemoryHeadlessExecutor
+
+        executor = InMemoryHeadlessExecutor()
+        tool_ctx.executor = executor
+        monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+
+        output_dir = str(tmp_path / "output")
+        await run_skill("/test skill", str(tmp_path), output_dir=output_dir)
+
+        assert len(executor.calls) == 1
+        assert Path(output_dir) in executor.calls[0].write_watch_dirs

@@ -21,6 +21,7 @@ from autoskillit.core import (
     get_logger,
     load_yaml,
     pkg_root,
+    resolve_skill_name,
 )
 from autoskillit.recipe.io import _parse_recipe
 from autoskillit.recipe.schema import Recipe, RecipeBlock
@@ -136,7 +137,6 @@ class RecipeCard:
 # Regex patterns
 # ---------------------------------------------------------------------------
 
-_SKILL_NAME_RE = re.compile(r"/autoskillit:([\w-]+)")
 _CONTEXT_REF_RE = re.compile(r"\$\{\{\s*context\.(\w+)\s*\}\}")
 INPUT_REF_RE = re.compile(r"\$\{\{\s*inputs\.(\w+)\s*\}\}")
 _TEMPLATE_REF_RE = re.compile(r"\$\{\{[^}]+\}\}")
@@ -153,27 +153,6 @@ def load_bundled_manifest() -> dict[str, Any]:
     """Load the bundled skill_contracts.yaml from the package directory."""
     manifest_path = pkg_root() / "recipe" / "skill_contracts.yaml"
     return load_yaml(manifest_path)
-
-
-def resolve_skill_name(skill_command: str) -> str | None:
-    """Extract the skill name from a command string.
-
-    Returns the skill name (e.g. "retry-worktree") or None if the command
-    does not reference an autoskillit skill or contains dynamic expressions.
-    """
-    match = _SKILL_NAME_RE.search(skill_command)
-    if not match:
-        return None
-    name = match.group(1)
-    # Reject dynamic names containing template expressions
-    if "${{" in name:
-        return None
-    # Reject names truncated by a bash-style {placeholder} token immediately
-    # following the match (e.g. "/autoskillit:exp-lens-{slug}" extracts
-    # "exp-lens-" but is dynamic — the true name is resolved at runtime).
-    if match.end() < len(skill_command) and skill_command[match.end()] == "{":
-        return None
-    return name
 
 
 def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContract | None:
@@ -326,13 +305,15 @@ def count_positional_args(skill_command: str) -> int:
 
     Returns 0 if there are no extra tokens after the skill name.
     """
-    match = _SKILL_NAME_RE.search(skill_command)
-    if not match:
+    name = resolve_skill_name(skill_command)
+    if not name:
         return 0
-    after_skill = skill_command[match.end() :].strip()
+    idx = skill_command.find(name)
+    if idx < 0:
+        return 0
+    after_skill = skill_command[idx + len(name) :].strip()
     if not after_skill:
         return 0
-    # Remove template references before counting
     without_templates = _TEMPLATE_REF_RE.sub("", after_skill).strip()
     if not without_templates:
         return 0

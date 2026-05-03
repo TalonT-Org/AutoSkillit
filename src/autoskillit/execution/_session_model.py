@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, assert_never
@@ -16,6 +17,8 @@ from autoskillit.core import (
 )
 
 logger = get_logger(__name__)
+
+_ABS_PATH_RE: re.Pattern[str] = re.compile(r'(?:^|[\s="\'])(/(?:[a-zA-Z0-9._/~@+-]+))')
 
 _TOKEN_FIELDS = (
     "input_tokens",
@@ -294,13 +297,26 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
                         for block in content:
                             if isinstance(block, dict) and block.get("type") == "tool_use":
                                 name = block.get("name", "")
-                                entry: dict[str, str] = {"name": name, "id": block.get("id", "")}
+                                entry: dict[str, str | list[str]] = {
+                                    "name": name,
+                                    "id": block.get("id", ""),
+                                }
                                 if name in {"Write", "Edit"} and isinstance(
                                     block.get("input"), dict
                                 ):
                                     fp = block["input"].get("file_path", "")
                                     if fp:
                                         entry["file_path"] = fp
+                                elif name == "Bash" and isinstance(block.get("input"), dict):
+                                    command = block["input"].get("command", "")
+                                    if isinstance(command, str):
+                                        paths = [
+                                            m.group(1)
+                                            for m in _ABS_PATH_RE.finditer(command)
+                                            if len(m.group(1)) >= 5
+                                        ]
+                                        if paths:
+                                            entry["bash_paths"] = paths
                                 acc.tool_uses.append(entry)
                         text = "\n".join(
                             block.get("text", "") for block in content if isinstance(block, dict)

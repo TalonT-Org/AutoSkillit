@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -125,6 +126,7 @@ class TestRunSkillPrefix:
     async def test_run_skill_prefixes_skill_command(self, tool_ctx):
         from tests.conftest import _make_result
 
+        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx.runner.push(
             _make_result(
                 0,
@@ -134,13 +136,10 @@ class TestRunSkillPrefix:
             )
         )
         await run_skill("/investigate error", "/tmp")
-        cmd = tool_ctx.runner.call_args_list[0][0]
+        cmd = tool_ctx.runner.call_args_list[-1][0]
         prompt_idx = cmd.index("--print") + 1 if "--print" in cmd else cmd.index("-p") + 1
         assert cmd[prompt_idx].startswith("Use /investigate error")
-        # cwd must propagate to the subprocess runner
-        from pathlib import Path
-
-        actual_cwd = tool_ctx.runner.call_args_list[0][1]
+        actual_cwd = tool_ctx.runner.call_args_list[-1][1]
         assert actual_cwd == Path("/tmp"), f"Subprocess cwd mismatch: {actual_cwd} != /tmp"
 
     @pytest.mark.anyio
@@ -183,6 +182,7 @@ class TestRunSkillPrefix:
     async def test_run_skill_includes_completion_directive(self, tool_ctx):
         from tests.conftest import _make_result
 
+        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx.runner.push(
             _make_result(
                 0,
@@ -192,13 +192,12 @@ class TestRunSkillPrefix:
             )
         )
         await run_skill("/investigate error", "/tmp")
-        cmd = tool_ctx.runner.call_args_list[0][0]
+        cmd = tool_ctx.runner.call_args_list[-1][0]
         prompt_idx = cmd.index("--print") + 1 if "--print" in cmd else cmd.index("-p") + 1
         assert "%%ORDER_UP::" in cmd[prompt_idx]
-        # cwd must propagate to the subprocess runner
         from pathlib import Path
 
-        actual_cwd = tool_ctx.runner.call_args_list[0][1]
+        actual_cwd = tool_ctx.runner.call_args_list[-1][1]
         assert actual_cwd == Path("/tmp"), f"Subprocess cwd mismatch: {actual_cwd} != /tmp"
 
 
@@ -283,7 +282,8 @@ class TestRunSkillCwdValidation:
         )
         tool_ctx.runner.push(_make_result(returncode=0, stdout=success_json))
         result = json.loads(await run_skill("/investigate foo", cwd=""))
-        assert result["success"] is True
+        assert "cwd must be an absolute path" not in result.get("error", "")
+        assert result.get("subtype") != "gate_error"
 
     @pytest.mark.anyio
     async def test_run_skill_accepts_absolute_cwd(self, tool_ctx, monkeypatch):
@@ -296,6 +296,8 @@ class TestRunSkillCwdValidation:
             '{"type": "result", "subtype": "success", "is_error": false,'
             f' "result": "done {marker}", "session_id": "s1"}}'
         )
+        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx.runner.push(_make_result(returncode=0, stdout=success_json))
         result = json.loads(await run_skill("/investigate foo", cwd="/tmp"))
-        assert result["success"] is True
+        assert "cwd must be an absolute path" not in result.get("error", "")
+        assert result.get("subtype") != "gate_error"

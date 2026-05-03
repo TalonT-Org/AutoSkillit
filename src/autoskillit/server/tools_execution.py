@@ -283,6 +283,7 @@ async def run_skill(
     order_id: str = "",
     stale_threshold: int | None = None,
     idle_output_timeout: int | None = None,
+    output_dir: str = "",
     ctx: Context = CurrentContext(),
 ) -> str:
     """Run a Claude Code headless session with a skill command.
@@ -393,21 +394,31 @@ async def run_skill(
                 skill_command, tool_ctx.skill_resolver
             )
 
+        write_watch_dirs: list[Path] = []
+        if output_dir:
+            resolved_dir = Path(output_dir)
+            if not resolved_dir.is_absolute():
+                resolved_dir = Path(cwd) / output_dir
+            write_watch_dirs.append(resolved_dir)
+
         is_read_only = bool(
             tool_ctx.read_only_resolver and tool_ctx.read_only_resolver(skill_command)
         )
         allowed_write_prefix = ""
         if is_read_only:
-            _skill_temp_name = target_name or ""
-            if _skill_temp_name:
-                allowed_write_prefix = os.path.join(
-                    cwd, ".autoskillit", "temp", _skill_temp_name, ""
-                )
+            if write_watch_dirs:
+                allowed_write_prefix = str(write_watch_dirs[0]) + "/"
             else:
-                logger.warning(
-                    "read_only_skill_no_target_name",
-                    skill_command=skill_command[:100],
-                )
+                _skill_temp_name = target_name or ""
+                if _skill_temp_name:
+                    allowed_write_prefix = os.path.join(
+                        cwd, ".autoskillit", "temp", _skill_temp_name, ""
+                    )
+                else:
+                    logger.warning(
+                        "read_only_skill_no_target_name",
+                        skill_command=skill_command[:100],
+                    )
 
         invocation_marker = f"%%ORDER_UP::{uuid4().hex[:8]}%%"
 
@@ -482,6 +493,7 @@ async def run_skill(
                 recipe_version=tool_ctx.recipe_version,
                 allowed_write_prefix=allowed_write_prefix,
                 readonly_skill=is_read_only,
+                write_watch_dirs=write_watch_dirs,
             )
             if skill_result.success:
                 tool_ctx.audit.record_success(skill_command)

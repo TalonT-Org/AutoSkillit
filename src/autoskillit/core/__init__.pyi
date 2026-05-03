@@ -1,5 +1,8 @@
 from ._claude_env import build_claude_env as build_claude_env
+from ._install_detect import _is_release_tag as _is_release_tag
+from ._install_detect import _is_stable_track as _is_stable_track
 from ._install_detect import is_dev_install as is_dev_install
+from ._install_detect import parse_direct_url as parse_direct_url
 from ._linux_proc import read_boot_id as read_boot_id
 from ._linux_proc import read_starttime_ticks as read_starttime_ticks
 from ._plugin_cache import _InstallLock as _InstallLock

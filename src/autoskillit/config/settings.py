@@ -166,6 +166,7 @@ class AutomationConfig:
                 raise ConfigSchemaError(
                     f"Feature key must be a string, got {type(name).__name__!r}: {name!r}"
                 )
+            name = name.lower()
             if name not in FEATURE_REGISTRY:
                 known = sorted(FEATURE_REGISTRY.keys())
                 raise ConfigSchemaError(

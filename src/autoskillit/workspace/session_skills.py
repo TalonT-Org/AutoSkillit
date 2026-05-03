@@ -154,6 +154,7 @@ def _is_skill_disabled(
     features: dict[str, bool],
     *,
     experimental_enabled: bool = False,
+    allow_only: frozenset[str] | None = None,
 ) -> bool:
     """Return True if skill should be excluded due to a disabled subset.
 
@@ -164,6 +165,10 @@ def _is_skill_disabled(
     Feature-gate branch: for each feature in FEATURE_REGISTRY that is disabled
     in `features`, suppress any skill whose categories intersect the feature's
     skill_categories. An empty `features` dict uses each feature's default_enabled.
+
+    Policy layering: when `allow_only` is set and `skill_info.name` is in it, the
+    FEATURE_REGISTRY branch is bypassed (allow_only is a higher-priority signal than
+    a background feature default). Explicit `disabled` entries are never bypassed.
     """
     for tag in disabled:
         if tag in custom_tags:
@@ -182,6 +187,13 @@ def _is_skill_disabled(
             disabled_cats |= feat_def.skill_categories
     for cat in disabled_cats - enabled_cats:
         if cat in skill_info.categories:
+            if allow_only is not None and skill_info.name in allow_only:
+                logger.info(
+                    "feature_gate_bypassed_by_allow_only",
+                    skill=skill_info.name,
+                    category=cat,
+                )
+                continue
             return True
 
     return False
@@ -224,6 +236,7 @@ def _should_inject_skill(
     effective_custom_tags: dict[str, list[str]],
     features: dict[str, bool],
     experimental_enabled: bool = False,
+    allow_only: frozenset[str] | None = None,
 ) -> bool:
     """Return True if this skill should be written to the ephemeral session dir.
 
@@ -244,6 +257,7 @@ def _should_inject_skill(
         effective_custom_tags,
         features,
         experimental_enabled=experimental_enabled,
+        allow_only=allow_only,
     ):
         return False
     return True
@@ -461,6 +475,7 @@ class DefaultSessionSkillManager:
                     if config is not None and not cook_session
                     else False
                 ),
+                allow_only=allow_only,
             ):
                 if skill_info.source == SkillSource.BUNDLED:
                     _log.debug("init_session_plugin_dir_skip", skill=skill_info.name)
@@ -474,6 +489,19 @@ class DefaultSessionSkillManager:
             gated = (not cook_session) and (skill_info.name in tier2_skills)
             content = self._provider.get_skill_content(skill_info.name, gated=gated)
             atomic_write(skill_dir / "SKILL.md", content)
+        if allow_only is not None and allow_only:
+            written = {p.name for p in skills_base.iterdir() if p.is_dir()}
+            bundled_names = {
+                s.name for s in self._provider.list_skills() if s.source == SkillSource.BUNDLED
+            }
+            achievable = allow_only - overrides - bundled_names
+            if achievable and not (written & achievable):
+                raise RuntimeError(
+                    f"init_session: allow_only={sorted(allow_only)!r} specified but "
+                    f"zero skills were written to {skills_base}. "
+                    f"This indicates a gating conflict — check feature gates, "
+                    f"disabled categories, or pack visibility."
+                )
         return ValidatedAddDir(path=str(session_skills_dir))
 
     def activate_skill_deps(self, session_id: str, skill_name: str) -> bool:

@@ -258,7 +258,9 @@ async def _run_dispatch(
     missing_required = [
         key
         for key, ing in full_recipe.ingredients.items()
-        if ing.required and ing.default is None and key not in effective_ingredients
+        if getattr(ing, "required", False)
+        and getattr(ing, "default", None) is None
+        and key not in effective_ingredients
     ]
     if missing_required:
         return fleet_error(

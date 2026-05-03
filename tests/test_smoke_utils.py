@@ -458,9 +458,7 @@ def test_check_review_loop_none_verdict() -> None:
 # T_PTS8
 @patch("time.sleep")
 @patch("subprocess.run")
-def test_pts_order_id_captures_cross_clone_sessions(
-    mock_run, _mock_sleep, tmp_path: Path
-) -> None:
+def test_pts_order_id_captures_cross_clone_sessions(mock_run, _mock_sleep, tmp_path: Path) -> None:
     """patch_pr_token_summary with order_id loads sessions from multiple cwd paths."""
     _write_test_sessions(
         tmp_path,

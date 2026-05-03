@@ -633,9 +633,15 @@ def test_iter_session_log_entries_order_id_filter(tmp_path):
     """order_id_filter selects only sessions with matching order_id."""
     from autoskillit.pipeline.audit import _iter_session_log_entries
 
-    _write_audit_session_order_id(tmp_path, "oid-a1", [_valid_failure_record_dict()], order_id="abc")
-    _write_audit_session_order_id(tmp_path, "oid-a2", [_valid_failure_record_dict()], order_id="abc")
-    _write_audit_session_order_id(tmp_path, "oid-xyz", [_valid_failure_record_dict()], order_id="xyz")
+    _write_audit_session_order_id(
+        tmp_path, "oid-a1", [_valid_failure_record_dict()], order_id="abc"
+    )
+    _write_audit_session_order_id(
+        tmp_path, "oid-a2", [_valid_failure_record_dict()], order_id="abc"
+    )
+    _write_audit_session_order_id(
+        tmp_path, "oid-xyz", [_valid_failure_record_dict()], order_id="xyz"
+    )
 
     results = list(
         _iter_session_log_entries(

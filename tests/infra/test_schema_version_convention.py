@@ -154,7 +154,7 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # smoke_utils.py — domain partitions dict, hunk ranges list, merge queue list
     ("src/autoskillit/smoke_utils.py", 57),
     ("src/autoskillit/smoke_utils.py", 87),
-    ("src/autoskillit/smoke_utils.py", 277),
+    ("src/autoskillit/smoke_utils.py", 299),
     # planner/manifests.py — finalize_wp_manifest: wp_index.json rebuild (list payload)
     ("src/autoskillit/planner/manifests.py", 244),
     # _cmd_rpc.py — emit_fallback_map: BEM fallback execution map (recipe-internal)
@@ -220,7 +220,7 @@ class TestSchemaVersionConvention:
         # These sites write list payloads through function calls but are caught by the scanner
         list_sites = [
             ("src/autoskillit/smoke_utils.py", 87),
-            ("src/autoskillit/smoke_utils.py", 277),
+            ("src/autoskillit/smoke_utils.py", 299),
         ]
         for site in list_sites:
             assert site in _LEGACY_JSON_WRITES, (

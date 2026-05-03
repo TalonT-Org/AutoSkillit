@@ -360,6 +360,13 @@ async def run_skill(
 
         from autoskillit.server import _get_config, _get_ctx
 
+        # Auto-enrich order_id from the fleet dispatcher's env variable when the
+        # caller did not pass an explicit value. AUTOSKILLIT_DISPATCH_ID is injected
+        # by fleet/_api.py into every L2 session environment and inherited by all L3
+        # sub-sessions, ensuring token log entries carry the correct order_id without
+        # requiring recipe authors to thread it through every run_skill call.
+        effective_order_id = order_id or os.environ.get("AUTOSKILLIT_DISPATCH_ID", "")
+
         if _get_config().safety.require_dry_walkthrough:
             if (gate_error := _check_dry_walkthrough(skill_command, cwd)) is not None:
                 return gate_error
@@ -479,7 +486,7 @@ async def run_skill(
                 add_dirs=skill_add_dirs,
                 step_name=step_name,
                 kitchen_id=tool_ctx.kitchen_id,
-                order_id=order_id,
+                order_id=effective_order_id,
                 expected_output_patterns=expected_output_patterns,
                 write_behavior=write_spec,
                 stale_threshold=float(stale_threshold) if stale_threshold is not None else None,
@@ -505,8 +512,8 @@ async def run_skill(
                     "autoskillit.run_skill",
                     extra={"exit_code": skill_result.exit_code, "subtype": skill_result.subtype},
                 )
-            if order_id:
-                skill_result.order_id = order_id
+            if effective_order_id:
+                skill_result.order_id = effective_order_id
             from autoskillit.server._misc import (  # noqa: PLC0415
                 _refresh_quota_cache,
             )
@@ -522,11 +529,13 @@ async def run_skill(
             return SkillResult.crashed(
                 exception=exc,
                 skill_command=resolved_command,
-                order_id=order_id,
+                order_id=effective_order_id,
             ).to_json()
         finally:
             if step_name:
-                tool_ctx.timing_log.record(step_name, time.monotonic() - _start, order_id=order_id)
+                tool_ctx.timing_log.record(
+                    step_name, time.monotonic() - _start, order_id=effective_order_id
+                )
     except Exception as exc:
         logger.error("run_skill unhandled exception", exc_info=True)
         return SkillResult.crashed(

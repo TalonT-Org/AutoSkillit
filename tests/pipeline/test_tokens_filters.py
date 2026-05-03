@@ -421,7 +421,7 @@ def _write_session_order_id(
 
 
 def test_load_from_log_dir_order_id_filter_cross_cwd(tmp_path):
-    """Sessions from two cwd paths with same order_id are ALL loaded when order_id_filter is used."""
+    """Sessions from two cwd paths with same order_id are ALL loaded with order_id_filter."""
     _write_session_order_id(tmp_path, "s-a", "rectify", order_id="issue-42", cwd="/clone-A")
     _write_session_order_id(tmp_path, "s-b", "implement", order_id="issue-42", cwd="/clone-B")
     _write_session_order_id(tmp_path, "s-c", "review", order_id="issue-99", cwd="/clone-B")

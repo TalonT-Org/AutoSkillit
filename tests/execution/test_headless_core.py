@@ -884,6 +884,7 @@ class TestBuildSkillResultCrossValidation:
         "lifespan_started",
         "needs_retry",
         "retry_reason",
+        "order_id",
         "stderr",
         "token_usage",
         "write_path_warnings",

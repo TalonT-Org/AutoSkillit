@@ -621,7 +621,6 @@ steps:
     with:
       callable: "autoskillit.smoke_utils.check_review_loop"
       pr_number: "${{ context.pr_number }}"
-      cwd: "${{ context.work_dir }}"
       current_iteration: "${{ context.review_loop_count }}"
       max_iterations: "${{ inputs.review_max_retries }}"
       previous_verdict: "${{ context.review_verdict }}"

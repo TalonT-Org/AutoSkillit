@@ -227,8 +227,8 @@ class TestBuildTestScopeCoreCascade:
         ]:
             assert pkg in dir_names
 
-    def test_readiness_cascade_includes_only_server(self, tmp_path: Path) -> None:
-        """readiness.py only used by server → {core, server} + always-run."""
+    def test_readiness_cascade_fails_open_to_full_cascade(self, tmp_path: Path) -> None:
+        """readiness.py in core/runtime/ subpackage → falls through to full core cascade."""
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
             changed_files={"src/autoskillit/core/runtime/readiness.py"},
@@ -237,18 +237,18 @@ class TestBuildTestScopeCoreCascade:
         )
         assert result is not None
         dir_names = {p.name for p in result}
-        assert "core" in dir_names
-        assert "server" in dir_names
-        for excluded in [
-            "execution",
-            "pipeline",
-            "workspace",
-            "recipe",
-            "migration",
+        for pkg in [
+            "core",
             "cli",
-            "hooks",
+            "config",
+            "execution",
+            "fleet",
+            "migration",
+            "recipe",
+            "server",
+            "workspace",
         ]:
-            assert excluded not in dir_names
+            assert pkg in dir_names
 
 
 class TestClosureCoreNarrowCascade:

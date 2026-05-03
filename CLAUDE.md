@@ -410,7 +410,7 @@ generic_automation_mcp/
 │   │   ├── _reload.py           #   consume_reload_sentinel
 │   │   ├── _session_launch.py   #   _run_interactive_session
 │   │   └── _session_picker.py   #   Scoped resume picker
-│   ���── ui/                  #   Terminal UI primitives
+│   ├── ui/                  #   Terminal UI primitives
 │   │   ├── __init__.py
 │   │   ├── _ansi.py             #   supports_color, NO_COLOR/TERM=dumb
 │   │   ├── _terminal.py         #   terminal_guard() TTY restore

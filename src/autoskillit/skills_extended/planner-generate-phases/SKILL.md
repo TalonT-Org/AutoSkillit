@@ -1,7 +1,7 @@
 ---
 name: planner-generate-phases
 categories: [planner]
-description: Generate 3-6 high-level phases from project analysis (Pass 1 entry point)
+description: Generate high-level phases from project analysis (Pass 1 entry point)
 hooks:
   PreToolUse:
     - matcher: "*"
@@ -14,8 +14,9 @@ hooks:
 # planner-generate-phases
 
 Pass 1 entry point. Read the analysis file (and optionally domain knowledge) and produce
-3–6 phase definitions in a single session. Write all phase results and a fully-done
-`phase_manifest.json` in one shot.
+phase definitions in a single session. The number of phases is determined entirely by the
+task — each phase is an independently verifiable checkpoint. Write all phase results and
+a fully-done `phase_manifest.json` in one shot.
 
 ## When to Use
 
@@ -31,7 +32,8 @@ Pass 1 entry point. Read the analysis file (and optionally domain knowledge) and
 ## Critical Constraints
 
 **NEVER:**
-- Produce fewer than 3 or more than 6 phases
+- Invent phases that do not serve the task description — every phase must map to work requested by the user
+- Anchor phase count to a predetermined number — derive it from the task's natural verification boundaries
 - Write output outside `$(dirname $1)/phases/`
 - Use freeform text instead of the required JSON schema
 - Read files outside `$(dirname $1)` or the project's git-tracked source tree
@@ -63,11 +65,25 @@ and scope.
 
 ### Step 2: Decompose into phases
 
-Identify 3–6 high-level phases that partition the implementation work. Phases should be:
+Decompose the implementation work into phases. A phase is an **independently verifiable
+checkpoint** — a coherent set of features whose functionality can be fully tested once
+implemented. Draw phase boundaries wherever you can stop and validate that everything
+up to that point works.
+
+Phases should be:
 - Coherent (each phase has a single, clear goal)
 - Ordered by dependency (foundational work first)
 - Non-overlapping in scope
-- Named to reflect the task's work units, grounded in the codebase's architecture (e.g., if the task is "add user authentication", phases might be "Auth Data Model", "Auth API Endpoints", "Auth UI Integration")
+- Named to reflect the task's work units, grounded in the codebase's architecture
+
+The number of phases is determined by the task:
+- A single-component change may warrant 1 phase
+- A multi-component feature may warrant one phase per independently testable component
+- There is no minimum or maximum — let the verification boundaries dictate the count
+
+Do NOT provide yourself with concrete domain examples of phase decomposition. Concrete
+examples anchor the decomposition pattern regardless of the actual task (pink elephant
+effect). Derive phase names and boundaries from the task description and codebase analysis.
 
 For each phase, generate:
 - `id`: Sequential `P{N}` identifier (P1, P2, ...)
@@ -85,18 +101,18 @@ For each phase, write to `$(dirname $1)/phases/{phase_id}_result.json`:
 ```json
 {
   "id": "P1",
-  "name": "Database Layer",
-  "goal": "Establish data persistence and schema foundations",
-  "scope": ["models", "migrations", "repositories"],
+  "name": "<descriptive phase name derived from task>",
+  "goal": "<one-sentence statement of what this phase achieves>",
+  "scope": ["<component-a>", "<component-b>"],
   "ordering": 1,
   "relationship_notes": "Foundation phase — no prior dependencies",
-  "assignments_preview": ["Schema design", "Migration framework", "Repository pattern"]
+  "assignments_preview": ["<assignment-1>", "<assignment-2>", "<assignment-3>"]
 }
 ```
 
 The backend derives two additional fields at load time — do not write them:
 - `phase_number` (integer): derived from `ordering`
-- `name_slug` (string): derived by slugifying `name` (e.g., "Database Layer" → "database-layer")
+- `name_slug` (string): derived by slugifying `name` (e.g., "Component Setup" → "component-setup")
 
 ### Step 4: Write phase manifest
 
@@ -112,7 +128,7 @@ Manifest structure:
   "items": [
     {
       "id": "P1",
-      "name": "Database Layer",
+      "name": "<phase name>",
       "status": "done",
       "result_path": "<absolute_path>/phases/P1_result.json",
       "metadata": {"ordering": 1}

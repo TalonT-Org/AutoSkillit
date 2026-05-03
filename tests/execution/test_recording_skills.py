@@ -232,14 +232,14 @@ def test_manifest_detects_gated_skills(tmp_path: Path) -> None:
 
 def test_scan_skill_snapshots_finds_steps(tmp_path: Path) -> None:
     scenario_dir = tmp_path / "scenario"
-    (scenario_dir / "skill_snapshots" / "step_a").mkdir(parents=True)
-    (scenario_dir / "skill_snapshots" / "step_b").mkdir(parents=True)
+    (scenario_dir / "skill-snapshots" / "step_a").mkdir(parents=True)
+    (scenario_dir / "skill-snapshots" / "step_b").mkdir(parents=True)
 
     result = scan_skill_snapshots(scenario_dir)
 
     assert "step_a" in result
     assert "step_b" in result
-    assert result["step_a"] == scenario_dir / "skill_snapshots" / "step_a"
+    assert result["step_a"] == scenario_dir / "skill-snapshots" / "step_a"
 
 
 # --- T-SCAN-2: scan returns empty dict when no skill_snapshots dir ---

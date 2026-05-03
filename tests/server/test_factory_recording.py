@@ -207,7 +207,7 @@ def test_build_replay_runner_scans_skill_snapshots(tmp_path, monkeypatch):
 
     replay_dir = tmp_path / "replay"
     replay_dir.mkdir()
-    (replay_dir / "skill_snapshots" / "investigate").mkdir(parents=True)
+    (replay_dir / "skill-snapshots" / "investigate").mkdir(parents=True)
 
     mock_scenario = Mock()
     mock_scenario.step_sequence = []
@@ -224,7 +224,7 @@ def test_build_replay_runner_scans_skill_snapshots(tmp_path, monkeypatch):
     runner = build_replay_runner(str(replay_dir))
 
     assert "investigate" in runner.skill_snapshots
-    assert runner.skill_snapshots["investigate"] == replay_dir / "skill_snapshots" / "investigate"
+    assert runner.skill_snapshots["investigate"] == replay_dir / "skill-snapshots" / "investigate"
 
 
 # --- T-RUN-SKILL-REPLAY: snapshot present → init_session NOT called ---

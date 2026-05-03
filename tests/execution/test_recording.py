@@ -495,8 +495,8 @@ async def test_recording_runner_snapshots_skill_dir(tmp_path):
     env = {"SCENARIO_STEP_NAME": "investigate"}
     await runner(cmd, cwd=tmp_path, timeout=60, env=env, pty_mode=True)
 
-    snapshot_dir = tmp_path / "skill_snapshots" / "investigate"
-    assert snapshot_dir.exists(), "skill_snapshots/investigate/ not created"
+    snapshot_dir = tmp_path / "skill-snapshots" / "investigate"
+    assert snapshot_dir.exists(), "skill-snapshots/investigate/ not created"
     assert (snapshot_dir / ".claude" / "skills" / "investigate" / "SKILL.md").exists()
     assert (snapshot_dir / "manifest.json").exists()
 
@@ -522,7 +522,7 @@ async def test_recording_runner_no_ephemeral_dir_skips_snapshot(tmp_path):
     env = {"SCENARIO_STEP_NAME": "investigate"}
     await runner(cmd, cwd=tmp_path, timeout=60, env=env, pty_mode=True)
 
-    assert not (tmp_path / "skill_snapshots").exists()
+    assert not (tmp_path / "skill-snapshots").exists()
 
 
 # --- T-REPLAY-SNAP: ReplayingSubprocessRunner stores skill_snapshots ---
@@ -530,7 +530,7 @@ async def test_recording_runner_no_ephemeral_dir_skips_snapshot(tmp_path):
 
 def test_replaying_runner_stores_skill_snapshots(tmp_path):
     """ReplayingSubprocessRunner.skill_snapshots is populated when provided."""
-    snap_path = tmp_path / "skill_snapshots" / "investigate"
+    snap_path = tmp_path / "skill-snapshots" / "investigate"
     snap_path.mkdir(parents=True)
     skill_snapshots = {"investigate": snap_path}
 

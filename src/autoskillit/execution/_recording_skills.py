@@ -11,7 +11,7 @@ from typing import Any
 
 from autoskillit.core import ValidatedAddDir, write_versioned_json
 
-SKILLS_SNAPSHOT_DIR = "skill_snapshots"
+SKILLS_SNAPSHOT_DIR = "skill-snapshots"
 _EPHEMERAL_SESSION_PATTERN = "autoskillit-sessions"
 _GATED_PATTERN = re.compile(r"disable-model-invocation\s*:\s*true", re.IGNORECASE)
 
@@ -59,7 +59,7 @@ def snapshot_skill_dir(scenario_dir: Path, step_name: str, add_dir_path: Path) -
     """Copy the ephemeral skill dir tree into the scenario dir.
 
     Copies {add_dir_path}/.claude/skills/ →
-           {scenario_dir}/skill_snapshots/{step_name}/.claude/skills/
+           {scenario_dir}/skill-snapshots/{step_name}/.claude/skills/
     Writes manifest.json alongside the .claude/ dir.
     Returns the snapshot dir path, or None if no skills to snapshot.
     """
@@ -107,7 +107,7 @@ def restore_skill_snapshot(
 
 
 def scan_skill_snapshots(scenario_dir: Path) -> dict[str, Path]:
-    """Scan {scenario_dir}/skill_snapshots/ for per-step snapshot dirs.
+    """Scan {scenario_dir}/skill-snapshots/ for per-step snapshot dirs.
 
     Returns {step_name: snapshot_path} for each subdirectory.
     """

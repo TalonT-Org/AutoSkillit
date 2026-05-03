@@ -1206,6 +1206,12 @@ def build_test_scope(
                                 for s in recipe_cause_stems:
                                     test_dirs.update(MODULE_CASCADE_RECIPE[s])
                             else:
+                                if not recipe_cause_stems:
+                                    logging.getLogger(__name__).debug(  # noqa: TID251
+                                        "recipe/__init__ backtrace: no non-init recipe cause stems"
+                                        " — failing open to full recipe cascade (expected behavior"
+                                        " when only recipe/__init__.py changed)"
+                                    )
                                 test_dirs.update(cascade_map["recipe"])  # fail-open
                         elif stem in MODULE_CASCADE_RECIPE:
                             test_dirs.update(MODULE_CASCADE_RECIPE[stem])

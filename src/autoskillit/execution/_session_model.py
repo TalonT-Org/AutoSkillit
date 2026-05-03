@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, assert_never
@@ -16,6 +17,8 @@ from autoskillit.core import (
 )
 
 logger = get_logger(__name__)
+
+_ABS_PATH_RE: re.Pattern[str] = re.compile(r'(?:^|[\s="\'])(/(?:[a-zA-Z0-9._/~@+:-]+))')
 
 _TOKEN_FIELDS = (
     "input_tokens",
@@ -301,6 +304,16 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
                                     fp = block["input"].get("file_path", "")
                                     if fp:
                                         entry["file_path"] = fp
+                                elif name == "Bash" and isinstance(block.get("input"), dict):
+                                    command = block["input"].get("command", "")
+                                    if isinstance(command, str):
+                                        paths = [
+                                            m.group(1)
+                                            for m in _ABS_PATH_RE.finditer(command)
+                                            if len(m.group(1)) >= 5
+                                        ]
+                                        if paths:
+                                            entry["bash_paths"] = paths  # type: ignore[assignment]
                                 acc.tool_uses.append(entry)
                         text = "\n".join(
                             block.get("text", "") for block in content if isinstance(block, dict)

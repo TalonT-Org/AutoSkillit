@@ -26,6 +26,7 @@ __all__ = [
     "extract_path_arg",
     "extract_skill_name",
     "fleet_error",
+    "resolve_skill_name",
     "resolve_target_skill",
     "session_type",
     "truncate_text",
@@ -67,6 +68,25 @@ def extract_skill_name(skill_command: str) -> str | None:
     """
     m = _SKILL_CMD_RE.match(skill_command.strip())
     return m.group(1) if m else None
+
+
+def resolve_skill_name(skill_command: str) -> str | None:
+    """Extract and validate skill name from command string.
+
+    Handles both ``/name`` and ``/autoskillit:name`` forms. Returns None if
+    no match, name contains template expressions, or is followed by a
+    bash-style ``{placeholder}`` token.
+    """
+    stripped = skill_command.strip()
+    match = _SKILL_CMD_RE.match(stripped)
+    if not match:
+        return None
+    name = match.group(1)
+    if "${{" in name:
+        return None
+    if match.end() < len(stripped) and stripped[match.end()] == "{":
+        return None
+    return name
 
 
 def resolve_target_skill(

@@ -435,6 +435,6 @@ def resolve_task_input(task: str, planner_dir: str) -> TaskResolutionResult:
         label = _derive_label(content, task_path.stem)
         return TaskResolutionResult(task_file_path=str(task_path), task_label=label)
     out = Path(planner_dir) / "task_input.md"
-    out.write_text(task)
+    atomic_write(out, task)
     label = _derive_label(task, "")
     return TaskResolutionResult(task_file_path=str(out), task_label=label)

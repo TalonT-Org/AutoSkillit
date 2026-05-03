@@ -123,7 +123,7 @@ def _render_issue_body(wp: dict, phase: dict, assignment: dict) -> str:
 def compile_plan(
     output_dir: str, task_file_path: str, source_dir: str, task_label: str = "", **kwargs: Any
 ) -> dict[str, str]:
-    task = Path(task_file_path).read_text() if task_file_path else ""
+    task = Path(task_file_path).read_text(encoding="utf-8") if task_file_path else ""
     task_label = task_label or _derive_label(task, "")
     root = Path(output_dir)
 

@@ -415,15 +415,14 @@ def expand_wps(refined_assignments_path: str, output_dir: str, **kwargs: object)
 
 
 def _derive_label(content: str, filename_stem: str) -> str:
+    first_non_empty: str | None = None
     for line in content.splitlines():
         stripped = line.strip()
         if stripped.startswith("# "):
             return stripped[2:].strip()
-    for line in content.splitlines():
-        stripped = line.strip()
-        if stripped:
-            return stripped[:80]
-    return filename_stem or "Untitled"
+        if first_non_empty is None and stripped:
+            first_non_empty = stripped[:80]
+    return first_non_empty or filename_stem or "Untitled"
 
 
 def resolve_task_input(task: str, planner_dir: str) -> TaskResolutionResult:
@@ -431,7 +430,10 @@ def resolve_task_input(task: str, planner_dir: str) -> TaskResolutionResult:
         raise ValueError("task must be a non-empty string")
     task_path = Path(task)
     if task_path.is_file():
-        content = task_path.read_text()
+        try:
+            content = task_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise OSError(f"Cannot read task file {task_path}: {exc}") from exc
         label = _derive_label(content, task_path.stem)
         return TaskResolutionResult(task_file_path=str(task_path), task_label=label)
     out = Path(planner_dir) / "task_input.md"

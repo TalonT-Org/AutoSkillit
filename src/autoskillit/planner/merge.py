@@ -22,7 +22,7 @@ def merge_files(
     strict: bool = True,
     **kwargs: Any,
 ) -> dict[str, Any]:
-    task = Path(task_file_path).read_text() if task_file_path else ""
+    task = Path(task_file_path).read_text(encoding="utf-8") if task_file_path else ""
     if key not in _TIER_KEYS:
         raise ValueError(f"Invalid key {key!r}; must be one of {_TIER_KEYS}")
 
@@ -187,7 +187,7 @@ def build_plan_snapshot(
     source_dir: str = "",
     **kwargs: Any,
 ) -> dict[str, Any]:
-    task = Path(task_file_path).read_text() if task_file_path else ""
+    task = Path(task_file_path).read_text(encoding="utf-8") if task_file_path else ""
     phase_pairs: list[tuple[int, dict[str, Any]]] = []
     for p in sorted(Path(phases_dir).glob("*_result.json")):
         try:

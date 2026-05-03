@@ -202,6 +202,26 @@ def test_config_rejects_unknown_feature():
         AutomationConfig._build_features_dict({unknown: True})
 
 
+def test_build_features_dict_uppercase_key_normalizes():
+    """_build_features_dict normalizes dynaconf-uppercased keys to lowercase."""
+    from autoskillit.config.settings import AutomationConfig
+
+    result, _ = AutomationConfig._build_features_dict({"FLEET": True})
+    assert result == {"fleet": True}
+
+
+def test_env_var_fleet_uppercase_loads_without_crash(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """AUTOSKILLIT_FEATURES__FLEET=true is accepted and loaded correctly."""
+    from autoskillit.config.settings import load_config
+
+    monkeypatch.setattr("autoskillit.config.settings.is_dev_install", lambda: False)
+    monkeypatch.setenv("AUTOSKILLIT_FEATURES__FLEET", "true")
+    cfg = load_config(tmp_path)
+    assert cfg.features.get("fleet") is True
+
+
 def test_config_dependency_validation(monkeypatch):
     """_build_features_dict raises ConfigSchemaError when B is enabled but dep A is disabled."""
 

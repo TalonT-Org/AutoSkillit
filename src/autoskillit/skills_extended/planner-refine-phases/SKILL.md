@@ -40,6 +40,7 @@ conflicts, applies field-level edits to the plan, and writes `refined_plan.json`
 - Skip emitting `refined_plan_path` even if all L0s fail (write unchanged plan, still emit)
 - Read `{{AUTOSKILLIT_TEMP}}` artifacts not passed as positional arguments
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Spawn more than 6 L0s in a single parallel batch
 
 **ALWAYS:**
 - Validate each L0 response for `phase_id`, `changes` (array), `conflicts` (array)
@@ -83,7 +84,11 @@ Read the `task` field from the combined plan document. Each L0 subagent reviewin
 must verify that the phase's goal and scope serve the stated task. Phases that appear to
 address codebase concerns not mentioned in the task should be flagged for scope creep.
 
-Spawn one L0 subagent per phase in parallel using the Agent/Task tool. Each L0 receives:
+If phase count ≤ 6: spawn one L0 subagent per phase in a single parallel batch.
+If phase count > 6: spawn sequential batches of 6 L0 subagents. Wait for each batch
+to complete before spawning the next. Process phases in ordering sequence.
+
+Each L0 receives:
 - The full serialized `combined_plan.json` content (pasted inline or via file read)
 - Its `target_phase_id` (e.g., `"P2"`)
 - Instructions: review the target phase in light of what all other phases committed

@@ -418,6 +418,7 @@ async def run_skill(
             step_name
             and _runner is not None
             and getattr(_runner, "skill_snapshots", None)
+            and hasattr(_runner, "restore_skill_snapshot")
             and tool_ctx.ephemeral_root is not None
         ):
             _ephemeral_root = tool_ctx.ephemeral_root

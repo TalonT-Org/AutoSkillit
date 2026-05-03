@@ -239,14 +239,14 @@ def test_refine_tier_steps_use_correct_skills(planner_recipe, step_name, skill_n
     assert skill_name in step.with_args.get("skill_command", "")
 
 
-# --- T5: Merge steps use merge_tier_dir ---
+# --- T5: Merge steps use merge_tier_results ---
 
 
 @pytest.mark.parametrize("step_name", ["merge_phases", "merge_assignments", "merge_wps"])
-def test_merge_steps_use_merge_tier_dir(planner_recipe, step_name):
+def test_merge_steps_use_merge_tier_results(planner_recipe, step_name):
     step = planner_recipe.steps[step_name]
     assert step.tool == "run_python"
-    assert step.with_args.get("callable") == "autoskillit.planner.merge.merge_tier_dir"
+    assert step.with_args.get("callable") == "autoskillit.planner.merge.merge_tier_results"
 
 
 # --- validate_task_alignment step integration ---

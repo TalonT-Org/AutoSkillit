@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -8,10 +9,10 @@ from autoskillit.planner.merge import (
     build_plan_snapshot,
     extract_item,
     merge_files,
-    merge_tier_dir,
+    merge_tier_results,
     replace_item,
 )
-from tests.planner.conftest import make_phase_result, write_task_file
+from tests.planner.conftest import make_phase_result, write_json, write_task_file
 
 pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.feature("planner")]
 
@@ -426,20 +427,20 @@ def test_build_plan_snapshot_empty_dir_produces_empty_phases(tmp_path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# WP3: merge_tier_dir tests
+# WP3: merge_tier_results tests
 # ---------------------------------------------------------------------------
 
 
-def test_merge_tier_dir_empty_dir_raises(tmp_path) -> None:
+def test_merge_tier_results_empty_dir_raises(tmp_path) -> None:
     empty_dir = tmp_path / "phases"
     empty_dir.mkdir()
     out = tmp_path / "combined.json"
 
     with pytest.raises(ValueError, match="No \\*_result.json files found"):
-        merge_tier_dir(str(empty_dir), str(out), "phases")
+        merge_tier_results(str(empty_dir), str(out), "phases")
 
 
-def test_merge_tier_dir_single_file(tmp_path) -> None:
+def test_merge_tier_results_single_file(tmp_path) -> None:
     results_dir = tmp_path / "phases"
     results_dir.mkdir()
     (results_dir / "P1_result.json").write_text(
@@ -447,7 +448,7 @@ def test_merge_tier_dir_single_file(tmp_path) -> None:
     )
     out = tmp_path / "combined.json"
 
-    result = merge_tier_dir(str(results_dir), str(out), "phases")
+    result = merge_tier_results(str(results_dir), str(out), "phases")
 
     assert result["item_count"] == "1"
     assert out.exists()
@@ -493,7 +494,7 @@ def test_build_plan_snapshot_reads_task_from_task_file_path(tmp_path) -> None:
     assert data["task"] == "Full task from file"
 
 
-def test_merge_tier_dir_reads_task_from_task_file_path(tmp_path) -> None:
+def test_merge_tier_results_reads_task_from_task_file_path(tmp_path) -> None:
     results_dir = tmp_path / "phases"
     results_dir.mkdir()
     (results_dir / "P1_result.json").write_text(
@@ -503,7 +504,7 @@ def test_merge_tier_dir_reads_task_from_task_file_path(tmp_path) -> None:
     task_file = tmp_path / "task_desc.txt"
     task_file.write_text("Full task from file")
 
-    merge_tier_dir(str(results_dir), str(out), "phases", task_file_path=str(task_file))
+    merge_tier_results(str(results_dir), str(out), "phases", task_file_path=str(task_file))
 
     data = json.loads(out.read_text())
     assert data["task"] == "Full task from file"
@@ -521,3 +522,218 @@ def test_merge_files_reads_task_from_task_file_path(tmp_path) -> None:
 
     data = json.loads(out.read_text())
     assert data["task"] == "Full task from file"
+
+
+# ---------------------------------------------------------------------------
+# Per-phase refine context file tests
+# ---------------------------------------------------------------------------
+
+
+def test_merge_tier_results_writes_refine_contexts_for_assignments(tmp_path):
+    results_dir = tmp_path / "assignments"
+    results_dir.mkdir()
+    write_json(
+        results_dir / "P1_A1_result.json",
+        {
+            "id": "P1-A1",
+            "phase_id": "P1",
+            "name": "Auth",
+            "goal": "Auth goal",
+            "technical_approach": "JWT",
+            "proposed_work_packages": [],
+        },
+    )
+    write_json(
+        results_dir / "P2_A1_result.json",
+        {
+            "id": "P2-A1",
+            "phase_id": "P2",
+            "name": "Data",
+            "goal": "Data goal",
+            "technical_approach": "ORM",
+            "proposed_work_packages": [],
+        },
+    )
+    out = tmp_path / "combined_assignments.json"
+    result = merge_tier_results(str(results_dir), str(out), "assignments")
+    assert "refine_context_paths" in result
+    paths = json.loads(result["refine_context_paths"])
+    assert len(paths) == 2
+    p1_ctx = tmp_path / "refine_contexts" / "context_P1.json"
+    p2_ctx = tmp_path / "refine_contexts" / "context_P2.json"
+    assert p1_ctx.exists()
+    assert p2_ctx.exists()
+    assert str(p1_ctx) in paths
+    assert str(p2_ctx) in paths
+
+
+def test_refine_context_own_assignments_in_full_detail(tmp_path):
+    results_dir = tmp_path / "assignments"
+    results_dir.mkdir()
+    write_json(
+        results_dir / "P1_A1_result.json",
+        {
+            "id": "P1-A1",
+            "phase_id": "P1",
+            "name": "Auth",
+            "goal": "Auth goal",
+            "technical_approach": "JWT",
+            "proposed_work_packages": [{"id": "wp1"}],
+        },
+    )
+    write_json(
+        results_dir / "P2_A1_result.json",
+        {
+            "id": "P2-A1",
+            "phase_id": "P2",
+            "name": "Data",
+            "goal": "Data goal",
+            "technical_approach": "ORM",
+            "proposed_work_packages": [],
+        },
+    )
+    out = tmp_path / "combined_assignments.json"
+    merge_tier_results(str(results_dir), str(out), "assignments")
+    ctx = json.loads((tmp_path / "refine_contexts" / "context_P1.json").read_text())
+    assert len(ctx["assignments"]) == 1
+    own = ctx["assignments"][0]
+    assert own["id"] == "P1-A1"
+    assert own["technical_approach"] == "JWT"
+    assert own["proposed_work_packages"] == [{"id": "wp1"}]
+    assert all(a["id"] != "P2-A1" for a in ctx["assignments"])
+
+
+def test_refine_context_peer_summaries_have_filtered_fields(tmp_path):
+    results_dir = tmp_path / "assignments"
+    results_dir.mkdir()
+    write_json(
+        results_dir / "P1_A1_result.json",
+        {
+            "id": "P1-A1",
+            "phase_id": "P1",
+            "name": "Auth",
+            "goal": "Auth goal",
+            "technical_approach": "JWT",
+            "proposed_work_packages": [],
+        },
+    )
+    write_json(
+        results_dir / "P2_A1_result.json",
+        {
+            "id": "P2-A1",
+            "phase_id": "P2",
+            "name": "Data",
+            "goal": "Data goal",
+            "technical_approach": "ORM",
+            "proposed_work_packages": [{"id": "wp2"}],
+        },
+    )
+    out = tmp_path / "combined_assignments.json"
+    merge_tier_results(str(results_dir), str(out), "assignments")
+    ctx = json.loads((tmp_path / "refine_contexts" / "context_P1.json").read_text())
+    assert len(ctx["peer_summaries"]) == 1
+    peer = ctx["peer_summaries"][0]
+    assert peer == {"id": "P2-A1", "name": "Data", "goal": "Data goal"}
+    assert "technical_approach" not in peer
+    assert "proposed_work_packages" not in peer
+
+
+def test_refine_context_has_task_file_path_not_inline_task(tmp_path):
+    results_dir = tmp_path / "assignments"
+    results_dir.mkdir()
+    task_path = write_task_file(tmp_path, "Build a system")
+    write_json(
+        results_dir / "P1_A1_result.json",
+        {
+            "id": "P1-A1",
+            "phase_id": "P1",
+            "name": "Auth",
+            "goal": "Auth goal",
+            "technical_approach": "",
+            "proposed_work_packages": [],
+        },
+    )
+    out = tmp_path / "combined_assignments.json"
+    merge_tier_results(str(results_dir), str(out), "assignments", task_file_path=task_path)
+    ctx = json.loads((tmp_path / "refine_contexts" / "context_P1.json").read_text())
+    assert ctx["task_file_path"] == task_path
+    assert "task" not in ctx
+
+
+def test_refine_context_paths_returned_sorted(tmp_path):
+    results_dir = tmp_path / "assignments"
+    results_dir.mkdir()
+    for pid in ("P3", "P1", "P2"):
+        write_json(
+            results_dir / f"{pid}_A1_result.json",
+            {
+                "id": f"{pid}-A1",
+                "phase_id": pid,
+                "name": pid,
+                "goal": f"{pid} goal",
+                "technical_approach": "",
+                "proposed_work_packages": [],
+            },
+        )
+    out = tmp_path / "combined_assignments.json"
+    result = merge_tier_results(str(results_dir), str(out), "assignments")
+    paths = json.loads(result["refine_context_paths"])
+    phase_ids = [Path(p).stem.replace("context_", "") for p in paths]
+    assert phase_ids == sorted(phase_ids)
+    assert set(phase_ids) == {"P1", "P2", "P3"}
+
+
+def test_merge_tier_results_no_refine_contexts_for_phases_key(tmp_path):
+    results_dir = tmp_path / "phases"
+    results_dir.mkdir()
+    write_json(
+        results_dir / "P1_result.json",
+        {
+            "id": "P1",
+            "name": "Phase 1",
+            "ordering": 1,
+            "goal": "g",
+            "scope": [],
+        },
+    )
+    out = tmp_path / "combined_plan.json"
+    result = merge_tier_results(str(results_dir), str(out), "phases")
+    assert "refine_context_paths" not in result
+    assert not (tmp_path / "refine_contexts").exists()
+
+
+def test_merge_tier_results_no_refine_contexts_for_work_packages_key(tmp_path):
+    results_dir = tmp_path / "work_packages"
+    results_dir.mkdir()
+    write_json(
+        results_dir / "WP1_result.json",
+        {
+            "id": "P1-A1-WP1",
+            "name": "WP One",
+            "summary": "s",
+            "goal": "g",
+            "technical_steps": [],
+            "files_touched": [],
+            "apis_defined": [],
+            "apis_consumed": [],
+            "depends_on": [],
+            "deliverables": ["d1"],
+            "acceptance_criteria": [],
+        },
+    )
+    out = tmp_path / "combined_wps.json"
+    result = merge_tier_results(str(results_dir), str(out), "work_packages")
+    assert "refine_context_paths" not in result
+    assert not (tmp_path / "refine_contexts").exists()
+
+
+def test_write_refine_contexts_rejects_unsafe_phase_id(tmp_path):
+    results_dir = tmp_path / "assignments"
+    results_dir.mkdir()
+    write_json(
+        results_dir / "evil_result.json",
+        {"id": "A1", "phase_id": "../../evil", "name": "x", "goal": "g"},
+    )
+    out = tmp_path / "combined.json"
+    with pytest.raises(ValueError, match="disallowed characters"):
+        merge_tier_results(str(results_dir), str(out), "assignments")

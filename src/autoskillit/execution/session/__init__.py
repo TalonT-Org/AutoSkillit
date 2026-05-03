@@ -16,24 +16,24 @@ from autoskillit.core import (
     get_logger,
     truncate_text,
 )
-from autoskillit.execution._retry_fsm import (
+from autoskillit.execution.session._retry_fsm import (
     _KILL_ANOMALY_SUBTYPES,  # noqa: F401 — re-export for callers
     _compute_retry,  # noqa: F401 — re-export for callers
     _is_kill_anomaly,  # noqa: F401 — re-export for callers
 )
-from autoskillit.execution._session_content import (
+from autoskillit.execution.session._session_content import (
     _check_expected_patterns,  # noqa: F401 — re-export for callers
     _check_session_content,  # noqa: F401 — re-export for callers
     _evaluate_content_state,  # noqa: F401 — re-export for callers
 )
-from autoskillit.execution._session_model import (
+from autoskillit.execution.session._session_model import (
     FAILURE_SUBTYPES,  # noqa: F401 — re-export for callers
     ClaudeSessionResult,  # noqa: F401 — re-export for callers
     ContentState,  # noqa: F401 — re-export for callers
     extract_token_usage,  # noqa: F401 — re-export for callers
     parse_session_result,  # noqa: F401 — re-export for callers
 )
-from autoskillit.execution._session_outcome import (
+from autoskillit.execution.session._session_outcome import (
     _compute_outcome,  # noqa: F401 — re-export for callers
     _compute_success,  # noqa: F401 — re-export for callers
 )

@@ -11,7 +11,7 @@ from autoskillit.core import (
     TerminationReason,
     get_logger,
 )
-from autoskillit.execution._session_model import ClaudeSessionResult
+from autoskillit.execution.session._session_model import ClaudeSessionResult
 
 logger = get_logger(__name__)
 

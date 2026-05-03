@@ -13,13 +13,13 @@ from autoskillit.core import (
     TerminationReason,
     get_logger,
 )
-from autoskillit.execution._retry_fsm import _compute_retry
-from autoskillit.execution._session_content import (
+from autoskillit.execution.session._retry_fsm import _compute_retry
+from autoskillit.execution.session._session_content import (
     _check_expected_patterns,
     _check_session_content,
     _evaluate_content_state,
 )
-from autoskillit.execution._session_model import ClaudeSessionResult, ContentState
+from autoskillit.execution.session._session_model import ClaudeSessionResult, ContentState
 
 logger = get_logger(__name__)
 

@@ -9,7 +9,7 @@ import re
 from collections.abc import Sequence
 
 from autoskillit.core import get_logger
-from autoskillit.execution._session_model import (
+from autoskillit.execution.session._session_model import (
     FAILURE_SUBTYPES,
     ClaudeSessionResult,
     ContentState,

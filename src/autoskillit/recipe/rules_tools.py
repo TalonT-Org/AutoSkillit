@@ -367,3 +367,49 @@ def _check_release_issue_requires_disposition(ctx: ValidationContext) -> list[Ru
                 )
             )
     return findings
+
+
+@semantic_rule(
+    name="patch-token-summary-requires-order-id",
+    description=(
+        "run_python step calling patch_pr_token_summary should pass order_id "
+        "for correct multi-clone scoping"
+    ),
+    severity=Severity.WARNING,
+)
+def _check_patch_token_summary_order_id(ctx: ValidationContext) -> list[RuleFinding]:
+    """Warn when a patch_pr_token_summary step does not pass order_id.
+
+    patch_pr_token_summary uses order_id as the canonical scoping key for fleet
+    sessions where a single order spans multiple clone directories. Without it,
+    the function falls back to cwd_filter which misses sessions from other clones.
+
+    The env-based auto-propagation (AUTOSKILLIT_DISPATCH_ID) handles runtime
+    scoping for fleet sessions automatically; this rule serves as a documentation
+    guard alerting recipe authors to the scoping requirement when building
+    non-fleet callers or when explicit order_id is needed.
+    """
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_python":
+            continue
+        callable_val = step.with_args.get("callable", "")
+        if "patch_pr_token_summary" not in str(callable_val):
+            continue
+        if "order_id" not in step.with_args:
+            findings.append(
+                RuleFinding(
+                    rule="patch-token-summary-requires-order-id",
+                    severity=Severity.WARNING,
+                    step_name=step_name,
+                    message=(
+                        f"step '{step_name}': patch_pr_token_summary call is missing "
+                        f"'order_id' in with args. "
+                        "Fleet sessions auto-propagate via AUTOSKILLIT_DISPATCH_ID, "
+                        "but non-fleet callers need explicit order_id for cross-clone "
+                        "scoping. Add 'order_id: \"${{{{ context.order_id }}}}\"' or "
+                        "similar to suppress this warning."
+                    ),
+                )
+            )
+    return findings

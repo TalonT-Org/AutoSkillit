@@ -604,3 +604,50 @@ def test_audit_load_campaign_id_filter(tmp_path):
     n = log.load_from_log_dir(tmp_path, campaign_id_filter="c1")
     assert n == 1
     assert log.get_report()[0].skill_command == "/camp1"
+
+
+def _write_audit_session_order_id(
+    log_root: Path,
+    dir_name: str,
+    records: list,
+    order_id: str = "",
+    timestamp: str = "2026-05-01T00:00:00+00:00",
+) -> None:
+    """Write audit session with order_id in the index entry."""
+    from pathlib import Path as _Path
+
+    session_dir = _Path(log_root) / "sessions" / dir_name
+    session_dir.mkdir(parents=True, exist_ok=True)
+    (session_dir / "audit_log.json").write_text(json.dumps(records))
+    index_entry = {
+        "dir_name": dir_name,
+        "timestamp": timestamp,
+        "session_id": dir_name,
+        "order_id": order_id,
+    }
+    with (_Path(log_root) / "sessions.jsonl").open("a") as f:
+        f.write(json.dumps(index_entry) + "\n")
+
+
+def test_iter_session_log_entries_order_id_filter(tmp_path):
+    """order_id_filter selects only sessions with matching order_id."""
+    from autoskillit.pipeline.audit import _iter_session_log_entries
+
+    _write_audit_session_order_id(
+        tmp_path, "oid-a1", [_valid_failure_record_dict()], order_id="abc"
+    )
+    _write_audit_session_order_id(
+        tmp_path, "oid-a2", [_valid_failure_record_dict()], order_id="abc"
+    )
+    _write_audit_session_order_id(
+        tmp_path, "oid-xyz", [_valid_failure_record_dict()], order_id="xyz"
+    )
+
+    results = list(
+        _iter_session_log_entries(
+            tmp_path, since="", filename="audit_log.json", order_id_filter="abc"
+        )
+    )
+    assert len(results) == 2
+    dir_names = {p.parent.name for p in results}
+    assert dir_names == {"oid-a1", "oid-a2"}

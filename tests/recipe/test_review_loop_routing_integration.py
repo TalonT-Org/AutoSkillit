@@ -24,7 +24,6 @@ def test_review_loop_routes_to_review_pr_after_resolve_cycle(recipe_name: str) -
     """
     result = check_review_loop(
         pr_number="42",
-        cwd="/tmp",
         current_iteration="0",
         max_iterations="3",
         previous_verdict="changes_requested",
@@ -51,7 +50,6 @@ def test_review_loop_routes_to_ci_watch_at_max_iterations(recipe_name: str) -> N
     """When max_iterations is exhausted, routing must fall through to check_repo_ci_event."""
     result = check_review_loop(
         pr_number="42",
-        cwd="/tmp",
         current_iteration="2",
         max_iterations="3",
         previous_verdict="changes_requested",
@@ -107,7 +105,6 @@ def test_review_loop_routes_to_ci_watch_when_no_blocking(recipe_name: str) -> No
     """When had_blocking=false, routing proceeds to ci_watch regardless of iteration count."""
     result = check_review_loop(
         pr_number="42",
-        cwd="/tmp",
         current_iteration="0",
         max_iterations="3",
         previous_verdict="approved_with_comments",
@@ -132,7 +129,6 @@ def test_review_loop_routes_to_review_pr_when_had_blocking_and_not_max_exceeded(
     """When had_blocking=true and max_exceeded=false, routing goes back to review_pr."""
     result = check_review_loop(
         pr_number="42",
-        cwd="/tmp",
         current_iteration="0",
         max_iterations="3",
         previous_verdict="changes_requested",

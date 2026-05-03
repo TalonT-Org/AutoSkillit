@@ -220,8 +220,7 @@ class SkillResult:
         }
         if self.worktree_path is not None:
             data["worktree_path"] = self.worktree_path
-        if self.order_id:
-            data["order_id"] = self.order_id
+        data["order_id"] = self.order_id
         return json.dumps(data, default=lambda o: o.value if isinstance(o, Enum) else str(o))
 
     @classmethod

@@ -10,6 +10,7 @@ import pytest
 
 from tests._test_filter import (
     FilterMode,
+    FullRunReason,
     build_test_scope,
 )
 
@@ -191,4 +192,4 @@ class TestBuildTestScopeContentAware:
             tests_root=tests_root,
             # no cwd or base_ref
         )
-        assert result is None  # still full run without cwd
+        assert result is FullRunReason.BUCKET_A  # still full run without cwd

@@ -26,6 +26,14 @@ class FilterMode(enum.StrEnum):
     AGGRESSIVE = "aggressive"
 
 
+class FullRunReason(enum.StrEnum):
+    DISABLED = "disabled"
+    GIT_UNAVAILABLE = "git_unavailable"
+    LARGE_CHANGESET = "large_changeset"
+    BUCKET_A = "bucket_a"
+    UNMAPPED_FILE = "unmapped_file"
+
+
 class ImportContext(enum.StrEnum):
     TOP_LEVEL = "top_level"
     CONDITIONAL = "conditional"
@@ -893,13 +901,13 @@ def build_test_scope(
     coverage_map_path: str | Path | None = None,
     cwd: str | Path | None = None,
     base_ref: str | None = None,
-) -> set[Path] | None:
-    """Compute the set of test paths to run, or None for a full run.
+) -> set[Path] | FullRunReason:
+    """Compute the set of test paths to run, or a FullRunReason for a full run.
 
     Algorithm:
-    1. None changed_files -> None (fail-open)
-    2. >30 files -> None (large changeset)
-    3. Bucket A triggered -> None (full run)
+    1. None changed_files -> FullRunReason.GIT_UNAVAILABLE (fail-open)
+    2. >30 files -> FullRunReason.LARGE_CHANGESET (large changeset)
+    3. Bucket A triggered -> FullRunReason.BUCKET_A (full run)
     4. Classify: src Python -> cascade, test Python -> direct, non-Python -> manifest
     5. Compute always-run set for mode (includes arch/contracts for both modes)
     6. Union all sets
@@ -907,17 +915,17 @@ def build_test_scope(
     8. Resolve to concrete paths
     """
     if mode == FilterMode.NONE:
-        return None
+        return FullRunReason.DISABLED
 
     if changed_files is None:
-        return None
+        return FullRunReason.GIT_UNAVAILABLE
 
     if len(changed_files) > _LARGE_CHANGESET_THRESHOLD:
-        return None
+        return FullRunReason.LARGE_CHANGESET
 
     if cwd is not None and base_ref is not None:
         if check_bucket_a_content_aware(changed_files, cwd, base_ref):
-            return None
+            return FullRunReason.BUCKET_A
         # Exclude version-bump files that passed the content-aware check from classification.
         # Recomputes the same set as `version_hits` inside check_bucket_a_content_aware because
         # that function returns bool; extracting the set here avoids changing its signature.
@@ -926,7 +934,7 @@ def build_test_scope(
             changed_files = changed_files - version_bump_in_bucket_a
     else:
         if check_bucket_a(changed_files):
-            return None
+            return FullRunReason.BUCKET_A
 
     tests_root = Path(tests_root)
 
@@ -963,13 +971,13 @@ def build_test_scope(
             elif pkg and pkg in cascade_map:
                 test_dirs.update(cascade_map[pkg])
             else:
-                return None
+                return FullRunReason.UNMAPPED_FILE
         elif f.endswith(".py"):
-            return None
+            return FullRunReason.UNMAPPED_FILE
         else:
             manifest_dirs = apply_manifest({f}, manifest)
             if manifest_dirs is None:
-                return None
+                return FullRunReason.UNMAPPED_FILE
             test_dirs.update(manifest_dirs)
 
     # Expand src Python files via re-export closure: add __init__.py files that

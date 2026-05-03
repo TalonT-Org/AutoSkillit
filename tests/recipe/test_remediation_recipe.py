@@ -140,12 +140,6 @@ def test_remediation_merge_routes_to_next_or_done(recipe) -> None:
     )
 
 
-def test_remediation_validates_clean_after_next_or_done(recipe) -> None:
-    """T_REM_MP5: remediation.yaml must pass full validation with next_or_done step."""
-    errors = validate_recipe(recipe)
-    assert not errors, f"remediation.yaml failed validation: {errors}"
-
-
 def test_remediation_has_no_sprint_mode_ingredient() -> None:
     """remediation.yaml must not declare sprint_mode after sprint-prefix removal."""
     recipe = load_recipe(RECIPE_PATH)

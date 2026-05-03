@@ -291,6 +291,17 @@ RECIPE_PACK_TAGS: frozenset[str] = frozenset(RECIPE_PACK_REGISTRY.keys())
 
 CORE_PACKS: frozenset[str] = frozenset({"github", "ci", "clone", "telemetry"})
 
+if any(k != k.lower() for k in PACK_REGISTRY):
+    raise AssertionError(
+        "PACK_REGISTRY keys must be lowercase. "
+        f"Offending: {sorted(k for k in PACK_REGISTRY if k != k.lower())}"
+    )
+if any(k != k.lower() for k in RECIPE_PACK_REGISTRY):
+    raise AssertionError(
+        "RECIPE_PACK_REGISTRY keys must be lowercase. "
+        f"Offending: {sorted(k for k in RECIPE_PACK_REGISTRY if k != k.lower())}"
+    )
+
 # Maps each MCP tool name to its functional category subset tags.
 # Mirrors the FastMCP @mcp.tool(tags=...) category assignments in the server layer.
 # Tools with no functional category are absent from this map (empty intersection = no finding).
@@ -410,6 +421,17 @@ FEATURE_REGISTRY: dict[str, FeatureDef] = {
 }
 
 RETIRED_FEATURES: frozenset[str] = frozenset()
+
+if any(k != k.lower() for k in FEATURE_REGISTRY):
+    raise AssertionError(
+        "FEATURE_REGISTRY keys must be lowercase. "
+        f"Offending: {sorted(k for k in FEATURE_REGISTRY if k != k.lower())}"
+    )
+if any(k != k.lower() for k in RETIRED_FEATURES):
+    raise AssertionError(
+        "RETIRED_FEATURES entries must be lowercase. "
+        f"Offending: {sorted(k for k in RETIRED_FEATURES if k != k.lower())}"
+    )
 
 # Guard: FeatureDef.tool_tags must be in TOOL_SUBSET_TAGS — checked at import time.
 _ALL_REGISTERED_TOOL_TAGS: frozenset[str] = frozenset(

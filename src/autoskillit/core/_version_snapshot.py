@@ -18,6 +18,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from ._install_detect import parse_direct_url
+
 logger = logging.getLogger(__name__)  # noqa: TID251 — IL-0 module, no autoskillit imports allowed
 
 
@@ -52,29 +54,9 @@ def _autoskillit_version() -> str:
 
 
 def _install_info() -> dict[str, Any]:
-    """Parse direct_url.json to classify the autoskillit install."""
-    try:
-        dist = importlib.metadata.Distribution.from_name("autoskillit")
-        raw = dist.read_text("direct_url.json")
-        if not raw:
-            return {"install_type": "unknown", "commit_id": None}
-        data = json.loads(raw)
-        vcs = data.get("vcs_info", {})
-        if isinstance(vcs, dict) and vcs.get("vcs") == "git":
-            return {
-                "install_type": "git-vcs",
-                "commit_id": vcs.get("commit_id") or None,
-            }
-        dir_info = data.get("dir_info", {})
-        url = data.get("url", "")
-        if isinstance(dir_info, dict) and dir_info.get("editable") is True:
-            return {"install_type": "local-editable", "commit_id": None}
-        if isinstance(url, str) and url.startswith("file://"):
-            return {"install_type": "local-path", "commit_id": None}
-        return {"install_type": "unknown", "commit_id": None}
-    except Exception:
-        logger.warning("Failed to parse install info from direct_url.json", exc_info=True)
-        return {"install_type": "unknown", "commit_id": None}
+    """Classify the autoskillit install type and commit hash."""
+    info = parse_direct_url()
+    return {"install_type": info["install_type"], "commit_id": info["commit_id"]}
 
 
 def _claude_code_version() -> str:

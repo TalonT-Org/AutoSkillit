@@ -218,7 +218,7 @@ _VALUE_FROM_WHEN_RE = re.compile(
     r"result\.(?P<output>[\w]+)"  # result.<output_name>
     r"\s*\}?\}?"  # optional closing braces from template form
     r"\s*==\s*"  # equality operator
-    r"'?(?P<value>\w+)'?"  # optional single-quoted value
+    r"(?P<value>'\w+'|\w+)"  # balanced single-quoted or bare value
 )
 
 
@@ -261,7 +261,7 @@ def _check_on_result_values_in_allowed_values(ctx: ValidationContext) -> list[Ru
                 continue
             for m in _VALUE_FROM_WHEN_RE.finditer(when):
                 output_name = m.group("output")
-                value = m.group("value")
+                value = m.group("value").strip("'")
                 if output_name not in allowed_by_output:
                     continue
                 if value not in allowed_by_output[output_name]:

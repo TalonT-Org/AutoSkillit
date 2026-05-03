@@ -558,7 +558,7 @@ steps:
         route: check_repo_ci_event
       - when: "true"
         route: check_repo_ci_event
-    on_failure: resolve_review
+    on_failure: check_repo_ci_event
     on_context_limit: check_repo_ci_event
     optional: true
     skip_when_false: "inputs.open_pr"
@@ -570,7 +570,7 @@ steps:
       the open PR by feature branch name (context.merge_target). Captures verdict
       as review_verdict and routes via on_result: changes_requested/approved_with_comments
       → resolve_review, needs_human → check_repo_ci_event (explicit), approved → check_repo_ci_event. On
-      tool-level failure (MCP error, gh unavailable), routes to resolve_review.
+      tool-level failure (MCP error, gh unavailable), routes to check_repo_ci_event (no review to resolve).
       Skipped when open_pr=false.
 
   resolve_review:

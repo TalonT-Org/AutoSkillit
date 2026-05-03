@@ -39,8 +39,8 @@ def _stub_preview_layer(
 
     monkeypatch.setattr("autoskillit.cli._preview.show_campaign_preview", _fake_preview)
     monkeypatch.setattr("autoskillit.cli._prompts._get_ingredients_table", _fake_get_itable)
-    monkeypatch.setattr("autoskillit.cli._timed_input.timed_prompt", _fake_timed_prompt)
-    monkeypatch.setattr("autoskillit.cli._fleet._launch_fleet_session", _fake_launch)
+    monkeypatch.setattr("autoskillit.cli.ui._timed_input.timed_prompt", _fake_timed_prompt)
+    monkeypatch.setattr("autoskillit.cli.fleet._launch_fleet_session", _fake_launch)
     return calls
 
 

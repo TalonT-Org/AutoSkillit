@@ -6,8 +6,9 @@ import json
 import re
 
 import pytest
-from autoskillit.server.tools_recipe import list_recipes as list_recipes_tool
-from autoskillit.server.tools_recipe import validate_recipe
+
+from autoskillit.server.tools.tools_recipe import list_recipes as list_recipes_tool
+from autoskillit.server.tools.tools_recipe import validate_recipe
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -480,7 +481,7 @@ async def test_list_recipes_mcp_tool_hides_campaign_when_fleet_disabled(
 @pytest.mark.anyio
 async def test_list_recipes_returns_error_string_when_context_missing() -> None:
     """list_recipes must return an error message string (not []) when tool_ctx is None."""
-    from autoskillit.server.tools_recipe import list_recipes
+    from autoskillit.server.tools.tools_recipe import list_recipes
 
     result = await list_recipes()
     assert isinstance(result, str)

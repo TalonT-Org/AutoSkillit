@@ -106,7 +106,7 @@ class TestCLIDoctor:
         from autoskillit.core import Severity
 
         monkeypatch.setattr(
-            "autoskillit.cli._doctor._check_fleet_dispatch_guard_registered",
+            "autoskillit.cli.doctor._check_fleet_dispatch_guard_registered",
             lambda: DoctorResult(Severity.OK, "fleet_dispatch_guard_registered", "stubbed"),
         )
         local_bin = str(tmp_path / ".local" / "bin" / "autoskillit")
@@ -426,7 +426,7 @@ class TestGroupFDoctor:
         assert called_with == {"output_json": True}
 
     def test_severity_and_doctorresult_in_doctor_module(self):
-        """Severity and DoctorResult must be importable from autoskillit.cli._doctor."""
+        """Severity and DoctorResult must be importable from autoskillit.cli.doctor."""
         from autoskillit.cli.doctor import DoctorResult, Severity
 
         r = DoctorResult(severity=Severity.OK, check="test", message="ok")
@@ -1142,7 +1142,8 @@ def test_check_source_version_drift_ok_outside_source_repo(
     monkeypatch.setattr("autoskillit.cli._install_info.detect_install", lambda: info)
     # Simulate empty cache and no source repo: resolve returns None
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks.resolve_reference_sha", lambda info, home, **kw: None
+        "autoskillit.cli.update._update_checks.resolve_reference_sha",
+        lambda info, home, **kw: None,
     )
 
     result = _check_source_version_drift(home=tmp_path)
@@ -1190,7 +1191,7 @@ def test_check_source_version_drift_ok_for_pinned_sha(
     monkeypatch.setattr("autoskillit.cli._install_info.detect_install", lambda: info)
     # When requested_revision == commit_id, resolve_reference_sha returns commit_id
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks.resolve_reference_sha", lambda info, home, **kw: sha
+        "autoskillit.cli.update._update_checks.resolve_reference_sha", lambda info, home, **kw: sha
     )
 
     result = _check_source_version_drift(home=tmp_path)
@@ -1214,7 +1215,8 @@ def test_check_source_version_drift_ok_when_cache_empty(
     )
     monkeypatch.setattr("autoskillit.cli._install_info.detect_install", lambda: info)
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks.resolve_reference_sha", lambda info, home, **kw: None
+        "autoskillit.cli.update._update_checks.resolve_reference_sha",
+        lambda info, home, **kw: None,
     )
 
     result = _check_source_version_drift(home=tmp_path)
@@ -1245,7 +1247,8 @@ def test_check_source_version_drift_warning_on_drift(
     )
     monkeypatch.setattr("autoskillit.cli._install_info.detect_install", lambda: info)
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks.resolve_reference_sha", lambda info, home, **kw: ref_sha
+        "autoskillit.cli.update._update_checks.resolve_reference_sha",
+        lambda info, home, **kw: ref_sha,
     )
 
     result = _check_source_version_drift(home=tmp_path)

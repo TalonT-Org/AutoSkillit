@@ -371,10 +371,10 @@ def test_severity_not_defined_locally_in_recipe_validator() -> None:
 
 def test_severity_not_locally_defined_in_doctor() -> None:
     """cli/_doctor.py must not define its own Severity — it must import from core."""
-    ast_module = _get_module_ast("cli/_doctor.py")
+    ast_module = _get_module_ast("cli/doctor/__init__.py")
     class_names = _top_level_class_names(ast_module)
     assert "Severity" not in class_names, (
-        "cli/_doctor.py must import Severity from autoskillit.core, not define it locally"
+        "cli/doctor/__init__.py must import Severity from autoskillit.core, not define it locally"
     )
 
 
@@ -585,14 +585,18 @@ def test_extract_block_in_misc() -> None:
 
 def test_all_tools_importable_from_split_modules() -> None:
     """All 9 tools are importable from their new home modules."""
-    from autoskillit.server.tools_github import fetch_github_issue, get_issue_title, report_bug
-    from autoskillit.server.tools_issue_lifecycle import (
+    from autoskillit.server.tools.tools_github import (
+        fetch_github_issue,
+        get_issue_title,
+        report_bug,
+    )
+    from autoskillit.server.tools.tools_issue_lifecycle import (
         claim_issue,
         enrich_issues,
         prepare_issue,
         release_issue,
     )
-    from autoskillit.server.tools_pr_ops import bulk_close_issues, get_pr_reviews
+    from autoskillit.server.tools.tools_pr_ops import bulk_close_issues, get_pr_reviews
 
     for name, fn in [
         ("fetch_github_issue", fetch_github_issue),
@@ -617,7 +621,7 @@ def test_git_operations_moved_to_server_package() -> None:
 def test_doctor_moved_to_cli_package() -> None:
     """_doctor.py must be removed; its logic lives in cli/_doctor.py."""
     assert not (SRC_ROOT / "_doctor.py").exists()
-    assert (SRC_ROOT / "cli" / "_doctor.py").exists()
+    assert (SRC_ROOT / "cli" / "doctor" / "__init__.py").exists()
 
 
 # ── New REQ-CNST tests (groupE) ───────────────────────────────────────────────
@@ -1152,7 +1156,7 @@ def test_semantic_rule_functions_defined_in_rule_submodules() -> None:
     """P8: Semantic rule functions must be defined in rules_*.py submodules."""
     from autoskillit.recipe.validator import _check_outdated_version
 
-    assert _check_outdated_version.__module__ == "autoskillit.recipe.rules_inputs"
+    assert _check_outdated_version.__module__ == "autoskillit.recipe.rules.rules_inputs"
 
 
 def test_installed_version_in_core_types() -> None:
@@ -1413,7 +1417,7 @@ def test_update_checks_docstring_describes_both_windows() -> None:
     import ast
 
     src_root = Path(__file__).parent.parent.parent / "src"
-    module_path = src_root / "autoskillit" / "cli" / "_update_checks.py"
+    module_path = src_root / "autoskillit" / "cli" / "update" / "_update_checks.py"
     tree = ast.parse(module_path.read_text(encoding="utf-8"))
 
     module_doc = ast.get_docstring(tree) or ""

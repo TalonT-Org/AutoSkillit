@@ -20,7 +20,7 @@ def _run_guard(
     headless: bool = False,
 ) -> tuple[int, dict]:
     """Run mcp_health_guard.py as a subprocess, return (returncode, parsed_stdout)."""
-    hook_path = pkg_root() / "hooks" / "mcp_health_guard.py"
+    hook_path = pkg_root() / "hooks" / "guards" / "mcp_health_guard.py"
     home = tmp_path / "fakehome"
     home.mkdir(exist_ok=True)
     ak_dir = home / ".autoskillit"
@@ -157,7 +157,7 @@ def test_mcp_health_guard_malformed_json_failopen(tmp_path: Path) -> None:
     ak_dir.mkdir(exist_ok=True)
     (ak_dir / "active_kitchens.json").write_text("this is not valid JSON {{{{")
 
-    hook_path = pkg_root() / "hooks" / "mcp_health_guard.py"
+    hook_path = pkg_root() / "hooks" / "guards" / "mcp_health_guard.py"
     env = {**os.environ, "HOME": str(home)}
     result = subprocess.run(
         [sys.executable, str(hook_path)],

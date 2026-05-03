@@ -32,7 +32,7 @@ def test_launch_cook_session_env_excludes_ide_vars(
         patch("shutil.which", return_value="/usr/bin/claude"),
         patch("autoskillit.cli._init_helpers._is_plugin_installed", return_value=False),
         patch(
-            "autoskillit.cli._session_launch.subprocess.run",
+            "autoskillit.cli.session._session_launch.subprocess.run",
             return_value=MagicMock(returncode=0),
         ) as mock_run,
     ):
@@ -58,7 +58,7 @@ def test_launch_cook_session_extra_env_still_applied(
         patch("shutil.which", return_value="/usr/bin/claude"),
         patch("autoskillit.cli._init_helpers._is_plugin_installed", return_value=False),
         patch(
-            "autoskillit.cli._session_launch.subprocess.run",
+            "autoskillit.cli.session._session_launch.subprocess.run",
             return_value=MagicMock(returncode=0),
         ) as mock_run,
     ):
@@ -82,7 +82,7 @@ def test_launch_cook_session_env_has_max_mcp_output_tokens(
         patch("shutil.which", return_value="/usr/bin/claude"),
         patch("autoskillit.cli._init_helpers._is_plugin_installed", return_value=False),
         patch(
-            "autoskillit.cli._session_launch.subprocess.run",
+            "autoskillit.cli.session._session_launch.subprocess.run",
             return_value=MagicMock(returncode=0),
         ) as mock_run,
     ):
@@ -102,7 +102,7 @@ def test_launch_cook_session_env_has_mcp_connection_nonblocking(
         patch("shutil.which", return_value="/usr/bin/claude"),
         patch("autoskillit.cli._init_helpers._is_plugin_installed", return_value=False),
         patch(
-            "autoskillit.cli._session_launch.subprocess.run",
+            "autoskillit.cli.session._session_launch.subprocess.run",
             return_value=MagicMock(returncode=0),
         ) as mock_run,
     ):
@@ -130,10 +130,10 @@ def test_cook_command_env_excludes_ide_vars(
         patch("sys.stdin.isatty", return_value=True),
         patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
         patch(
-            "autoskillit.cli._cook.subprocess.run",
+            "autoskillit.cli.session._cook.subprocess.run",
             return_value=MagicMock(returncode=0),
         ) as mock_run,
-        patch("autoskillit.cli._cook.terminal_guard"),
+        patch("autoskillit.cli.session._cook.terminal_guard"),
     ):
         from autoskillit.cli.session._cook import cook
 
@@ -163,10 +163,10 @@ def test_cook_command_env_has_max_mcp_output_tokens(
         patch("sys.stdin.isatty", return_value=True),
         patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
         patch(
-            "autoskillit.cli._cook.subprocess.run",
+            "autoskillit.cli.session._cook.subprocess.run",
             return_value=MagicMock(returncode=0),
         ) as mock_run,
-        patch("autoskillit.cli._cook.terminal_guard"),
+        patch("autoskillit.cli.session._cook.terminal_guard"),
     ):
         from autoskillit.cli.session._cook import cook
 

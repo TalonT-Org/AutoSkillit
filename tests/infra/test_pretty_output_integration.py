@@ -28,9 +28,8 @@ class TestFormatterSchemaConsistency:
     @pytest.mark.anyio
     async def test_list_recipes_tool_output_through_hook(self, tool_ctx):
         """PHK-E1: list_recipes real output contains all recipe names through hook."""
-        from autoskillit.server.tools_recipe import list_recipes
-
         from autoskillit.hooks.formatters.pretty_output_hook import _format_response
+        from autoskillit.server.tools.tools_recipe import list_recipes
 
         result_json = await list_recipes()
         output = _format_response("mcp__autoskillit__list_recipes", result_json, pipeline=False)
@@ -44,9 +43,8 @@ class TestFormatterSchemaConsistency:
     @pytest.mark.anyio
     async def test_kitchen_status_tool_output_through_hook(self, tool_ctx):
         """PHK-E2: kitchen_status real output contains all key fields through hook."""
-        from autoskillit.server.tools_status import kitchen_status
-
         from autoskillit.hooks.formatters.pretty_output_hook import _format_response
+        from autoskillit.server.tools.tools_status import kitchen_status
 
         result_json = await kitchen_status()
         output = _format_response("mcp__autoskillit__kitchen_status", result_json, pipeline=False)

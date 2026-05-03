@@ -68,7 +68,7 @@ def test_fleet_dispatch_exits_when_disabled(
     _stub_guards(monkeypatch)
     checked_features: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli._fleet.is_feature_enabled",
+        "autoskillit.cli.fleet.is_feature_enabled",
         lambda name, features, *, experimental_enabled=False: (
             checked_features.append(name) or False
         ),
@@ -95,7 +95,7 @@ def test_fleet_dispatch_proceeds_when_enabled(
     _stub_guards(monkeypatch)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
-        "autoskillit.cli._fleet.is_feature_enabled",
+        "autoskillit.cli.fleet.is_feature_enabled",
         lambda name, features, *, experimental_enabled=False: True,
     )
     monkeypatch.setattr(

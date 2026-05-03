@@ -860,10 +860,10 @@ class TestVersionArchitecture:
 
     def test_doctor_imports_version_not_server(self):
         """cli/_doctor.py must not import version_info from autoskillit.server."""
-        src = (SRC_ROOT / "cli" / "_doctor.py").read_text()
+        src = (SRC_ROOT / "cli" / "doctor" / "__init__.py").read_text()
         assert "from autoskillit.server import version_info" not in src
         # Doctor install sub-module uses importlib.metadata for version info
-        install_src = (SRC_ROOT / "cli" / "_doctor_install.py").read_text()
+        install_src = (SRC_ROOT / "cli" / "doctor" / "_doctor_install.py").read_text()
         assert "importlib.metadata" in install_src
 
 
@@ -886,8 +886,7 @@ def test_hook_config_filename_and_dir_match_quota_check():
     import importlib
     from pathlib import Path
 
-    from autoskillit.hooks._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
-
+    from autoskillit.hooks.formatters._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
     from autoskillit.server._misc import (
         _HOOK_CONFIG_FILENAME,
         _HOOK_DIR_COMPONENTS,
@@ -1060,14 +1059,14 @@ def test_default_classes_only_instantiated_inside_factory_or_allowlist() -> None
     allowlist: dict[Path, set[str]] = {
         Path("server/_factory.py"): {"*"},  # Composition Root
         Path("cli/_workspace.py"): {"DefaultSubprocessRunner"},  # CLI worktree listing
-        Path("cli/_cook.py"): {"DefaultSessionSkillManager"},  # interactive cook
-        Path("cli/_fleet.py"): {
+        Path("cli/session/_cook.py"): {"DefaultSessionSkillManager"},  # interactive cook
+        Path("cli/fleet/__init__.py"): {
             "DefaultSessionSkillManager",  # interactive cleanup
         },
-        Path("cli/_fleet_display.py"): {
+        Path("cli/fleet/_fleet_display.py"): {
             "DefaultTokenLog",  # cross-check token diagnostic
         },
-        Path("cli/_fleet_lifecycle.py"): {
+        Path("cli/fleet/_fleet_lifecycle.py"): {
             "DefaultWorkspaceManager",  # signal guard cleanup
         },
         Path("cli/app.py"): {"DefaultSkillResolver"},  # skill listing command

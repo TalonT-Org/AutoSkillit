@@ -25,7 +25,9 @@ def test_main_does_not_call_app_after_update_restart(monkeypatch: pytest.MonkeyP
     def fake_run_update_checks(**kwargs: object) -> None:
         raise SystemExit(0)
 
-    monkeypatch.setattr("autoskillit.cli._update_checks.run_update_checks", fake_run_update_checks)
+    monkeypatch.setattr(
+        "autoskillit.cli.update._update_checks.run_update_checks", fake_run_update_checks
+    )
     monkeypatch.setattr(sys, "argv", ["autoskillit", "order"])
 
     try:
@@ -59,7 +61,9 @@ def test_main_passes_command_to_run_update_checks(
     def spy_run_update_checks(**kwargs: object) -> None:
         captured_kwargs.append(dict(kwargs))
 
-    monkeypatch.setattr("autoskillit.cli._update_checks.run_update_checks", spy_run_update_checks)
+    monkeypatch.setattr(
+        "autoskillit.cli.update._update_checks.run_update_checks", spy_run_update_checks
+    )
     monkeypatch.setattr(sys, "argv", ["autoskillit", argv_command])
 
     app_module.main()

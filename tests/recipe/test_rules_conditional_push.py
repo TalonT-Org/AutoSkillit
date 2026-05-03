@@ -7,9 +7,9 @@ dispatches on a declared verdict-like output.
 
 from __future__ import annotations
 
-import autoskillit.recipe.rules_fixing as _rf
 import pytest
 
+import autoskillit.recipe.rules.rules_fixing as _rf
 from autoskillit.core.types import Severity
 from autoskillit.recipe.schema import (
     Recipe,

@@ -51,7 +51,7 @@ def test_run_update_checks_skips_on_guard_env_var(
             monkeypatch.delenv(other, raising=False)
     fetched: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks_fetch._fetch_with_cache",
+        "autoskillit.cli.update._update_checks_fetch._fetch_with_cache",
         lambda url, **kw: fetched.append(url) or None,
     )
     prompted: list[str] = []
@@ -75,7 +75,7 @@ def test_run_update_checks_skips_non_tty_stdin(
     monkeypatch.setattr(sys, "stdout", fake_stdout)
     fetched: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks_fetch._fetch_with_cache",
+        "autoskillit.cli.update._update_checks_fetch._fetch_with_cache",
         lambda url, **kw: fetched.append(url) or None,
     )
     run_update_checks(home=tmp_path)
@@ -98,7 +98,7 @@ def test_run_update_checks_skips_non_tty_stdout(
     monkeypatch.setattr(sys, "stdout", fake_stdout)
     fetched: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks_fetch._fetch_with_cache",
+        "autoskillit.cli.update._update_checks_fetch._fetch_with_cache",
         lambda url, **kw: fetched.append(url) or None,
     )
     run_update_checks(home=tmp_path)
@@ -133,10 +133,10 @@ def test_run_update_checks_skips_local_and_unknown_install_types(
         url=None,
         editable_source=Path(tmp_path) if install_type == InstallType.LOCAL_EDITABLE else None,
     )
-    monkeypatch.setattr("autoskillit.cli._update_checks.detect_install", lambda: info)
+    monkeypatch.setattr("autoskillit.cli.update._update_checks.detect_install", lambda: info)
     fetched: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks_fetch._fetch_with_cache",
+        "autoskillit.cli.update._update_checks_fetch._fetch_with_cache",
         lambda url, **kw: fetched.append(url) or None,
     )
     prompted: list[str] = []
@@ -158,7 +158,7 @@ def test_binary_signal_fires_when_newer_version_available(
 
     info = _make_stable_info()
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks._fetch_latest_version",
+        "autoskillit.cli.update._update_checks._fetch_latest_version",
         lambda target, home: "0.9.0",
     )
     sig = _binary_signal(info, tmp_path, "0.7.77")
@@ -175,7 +175,7 @@ def test_binary_signal_silent_when_same_version(
 
     info = _make_stable_info()
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks._fetch_latest_version",
+        "autoskillit.cli.update._update_checks._fetch_latest_version",
         lambda target, home: "0.7.77",
     )
     assert _binary_signal(info, tmp_path, "0.7.77") is None
@@ -188,7 +188,7 @@ def test_binary_signal_silent_when_fetch_returns_none(
 
     info = _make_stable_info()
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks._fetch_latest_version",
+        "autoskillit.cli.update._update_checks._fetch_latest_version",
         lambda target, home: None,
     )
     assert _binary_signal(info, tmp_path, "0.7.77") is None
@@ -202,7 +202,7 @@ def test_binary_signal_uses_releases_url_for_stable(
     info = _make_stable_info()
     targets: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks._fetch_latest_version",
+        "autoskillit.cli.update._update_checks._fetch_latest_version",
         lambda target, home: targets.append(target) or "0.9.0",
     )
     _binary_signal(info, tmp_path, "0.7.77")
@@ -217,7 +217,7 @@ def test_binary_signal_uses_develop_url_for_develop(
     info = _make_develop_info()
     targets: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks._fetch_latest_version",
+        "autoskillit.cli.update._update_checks._fetch_latest_version",
         lambda target, home: targets.append(target) or "0.9.0",
     )
     _binary_signal(info, tmp_path, "0.7.77")
@@ -231,7 +231,7 @@ def test_hooks_signal_fires_on_missing_hooks(
     from autoskillit.hook_registry import HookDriftResult
 
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks._count_hook_registry_drift",
+        "autoskillit.cli.update._update_checks._count_hook_registry_drift",
         lambda path: HookDriftResult(missing=3, orphaned=0),
     )
     sig = _hooks_signal(tmp_path / "settings.json")
@@ -247,7 +247,7 @@ def test_hooks_signal_fires_on_orphaned_hooks(
     from autoskillit.hook_registry import HookDriftResult
 
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks._count_hook_registry_drift",
+        "autoskillit.cli.update._update_checks._count_hook_registry_drift",
         lambda path: HookDriftResult(missing=0, orphaned=2),
     )
     sig = _hooks_signal(tmp_path / "settings.json")
@@ -263,7 +263,7 @@ def test_hooks_signal_silent_when_no_drift(
     from autoskillit.hook_registry import HookDriftResult
 
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks._count_hook_registry_drift",
+        "autoskillit.cli.update._update_checks._count_hook_registry_drift",
         lambda path: HookDriftResult(missing=0, orphaned=0),
     )
     assert _hooks_signal(tmp_path / "settings.json") is None
@@ -276,7 +276,7 @@ def test_source_drift_signal_fires_when_commit_lags_ref(
 
     info = _make_stable_info(commit_id="aaaaaa")
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks.resolve_reference_sha",
+        "autoskillit.cli.update._update_checks.resolve_reference_sha",
         lambda info, home, **kw: "bbbbbb",
     )
     sig = _source_drift_signal(info, tmp_path)
@@ -293,7 +293,7 @@ def test_source_drift_signal_silent_when_sha_matches(
 
     info = _make_stable_info(commit_id="aaaaaa")
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks.resolve_reference_sha",
+        "autoskillit.cli.update._update_checks.resolve_reference_sha",
         lambda info, home, **kw: "aaaaaa",
     )
     assert _source_drift_signal(info, tmp_path) is None
@@ -306,7 +306,7 @@ def test_source_drift_signal_silent_when_ref_sha_none(
 
     info = _make_stable_info(commit_id="aaaaaa")
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks.resolve_reference_sha",
+        "autoskillit.cli.update._update_checks.resolve_reference_sha",
         lambda info, home, **kw: None,
     )
     assert _source_drift_signal(info, tmp_path) is None
@@ -318,7 +318,7 @@ def test_dual_mcp_signal_fires_when_both_registered(
     from autoskillit.cli.update._update_checks import _dual_mcp_signal
 
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks._is_dual_mcp_registered",
+        "autoskillit.cli.update._update_checks._is_dual_mcp_registered",
         lambda home: True,
     )
     sig = _dual_mcp_signal(tmp_path)
@@ -333,7 +333,7 @@ def test_dual_mcp_signal_silent_when_only_one_registered(
     from autoskillit.cli.update._update_checks import _dual_mcp_signal
 
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks._is_dual_mcp_registered",
+        "autoskillit.cli.update._update_checks._is_dual_mcp_registered",
         lambda home: False,
     )
     sig = _dual_mcp_signal(tmp_path)
@@ -377,7 +377,7 @@ def test_find_source_repo_env_var_override_invalid_falls_through(
     from autoskillit.cli.update._update_checks_source import find_source_repo
 
     monkeypatch.setenv("AUTOSKILLIT_SOURCE_REPO", str(tmp_path / "nonexistent"))
-    monkeypatch.setattr("autoskillit.cli._update_checks.Path.cwd", lambda: tmp_path)
+    monkeypatch.setattr("autoskillit.cli.update._update_checks.Path.cwd", lambda: tmp_path)
     result = find_source_repo()
     assert result is None
 
@@ -397,7 +397,7 @@ def test_find_source_repo_cwd_walk_finds_pyproject(
     nested_cwd = project_root / "src" / "autoskillit" / "cli"
     nested_cwd.mkdir(parents=True)
     monkeypatch.delenv("AUTOSKILLIT_SOURCE_REPO", raising=False)
-    monkeypatch.setattr("autoskillit.cli._update_checks.Path.cwd", lambda: nested_cwd)
+    monkeypatch.setattr("autoskillit.cli.update._update_checks.Path.cwd", lambda: nested_cwd)
     result = find_source_repo()
     assert result == project_root
 
@@ -409,6 +409,6 @@ def test_find_source_repo_cwd_walk_no_match_returns_none(
     from autoskillit.cli.update._update_checks_source import find_source_repo
 
     monkeypatch.delenv("AUTOSKILLIT_SOURCE_REPO", raising=False)
-    monkeypatch.setattr("autoskillit.cli._update_checks.Path.cwd", lambda: tmp_path)
+    monkeypatch.setattr("autoskillit.cli.update._update_checks.Path.cwd", lambda: tmp_path)
     result = find_source_repo()
     assert result is None

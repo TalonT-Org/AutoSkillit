@@ -83,7 +83,7 @@ def test_non_skill_step_not_checked() -> None:
 
 def test_get_bundled_skill_names_is_not_lru_cached() -> None:
     """_get_bundled_skill_names must not use @lru_cache (Composition Root fix)."""
-    import autoskillit.recipe.rules_skills as mod
+    import autoskillit.recipe.rules.rules_skills as mod
 
     assert not hasattr(mod._get_bundled_skill_names, "cache_clear"), (
         "_get_bundled_skill_names must not be lru_cache-decorated"
@@ -100,7 +100,7 @@ def test_bundled_skill_names_not_computed_at_import_v2() -> None:
     from unittest.mock import patch
 
     # Remove cached module so reload is a fresh import
-    mod_name = "autoskillit.recipe.rules_skills"
+    mod_name = "autoskillit.recipe.rules.rules_skills"
     sys.modules.pop(mod_name, None)
 
     with patch("autoskillit.workspace.skills.DefaultSkillResolver.list_all") as mock_list:

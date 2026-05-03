@@ -10,7 +10,7 @@ def test_load_recipe_instructs_step_name_exact_yaml_key():
     """
     import inspect
 
-    from autoskillit.server.tools_recipe import load_recipe
+    from autoskillit.server.tools.tools_recipe import load_recipe
 
     doc = inspect.getdoc(load_recipe) or ""
     assert "must match the yaml step key exactly" in doc.lower(), (
@@ -22,7 +22,7 @@ def test_load_recipe_instructs_step_name_exact_yaml_key():
 def test_load_recipe_docstring_contains_optional_step_semantics():
     import inspect
 
-    from autoskillit.server.tools_recipe import load_recipe
+    from autoskillit.server.tools.tools_recipe import load_recipe
 
     doc = inspect.getdoc(load_recipe) or ""
     assert "OPTIONAL STEP SEMANTICS" in doc
@@ -45,7 +45,7 @@ def test_load_recipe_does_not_instruct_get_token_summary_pre_staging():
     """
     import inspect
 
-    from autoskillit.server.tools_recipe import load_recipe
+    from autoskillit.server.tools.tools_recipe import load_recipe
 
     doc = inspect.getdoc(load_recipe) or ""
     # Check that the active invocation form is absent. After Step 2b, the replacement

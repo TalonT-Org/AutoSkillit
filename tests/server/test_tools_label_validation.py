@@ -6,7 +6,12 @@ import json
 from unittest.mock import AsyncMock
 
 import pytest
-from autoskillit.server.tools_issue_lifecycle import claim_issue, prepare_issue, release_issue
+
+from autoskillit.server.tools.tools_issue_lifecycle import (
+    claim_issue,
+    prepare_issue,
+    release_issue,
+)
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -132,13 +137,12 @@ class TestPrepareIssueWhitelist:
         """prepare_issue proceeds when all explicit labels are whitelisted."""
         import json as _json
 
-        from autoskillit.server.tools_issue_lifecycle import (
+        from autoskillit.core import SkillResult
+        from autoskillit.core.types import RetryReason
+        from autoskillit.server.tools.tools_issue_lifecycle import (
             _PREPARE_RESULT_END,
             _PREPARE_RESULT_START,
         )
-
-        from autoskillit.core import SkillResult
-        from autoskillit.core.types import RetryReason
 
         tool_ctx.config.github.allowed_labels = ["bug", "enhancement"]
         mock_executor = AsyncMock()
@@ -171,13 +175,12 @@ class TestPrepareIssueWhitelist:
         """prepare_issue with labels=None skips whitelist validation entirely."""
         import json as _json
 
-        from autoskillit.server.tools_issue_lifecycle import (
+        from autoskillit.core import SkillResult
+        from autoskillit.core.types import RetryReason
+        from autoskillit.server.tools.tools_issue_lifecycle import (
             _PREPARE_RESULT_END,
             _PREPARE_RESULT_START,
         )
-
-        from autoskillit.core import SkillResult
-        from autoskillit.core.types import RetryReason
 
         tool_ctx.config.github.allowed_labels = ["bug"]  # restrictive whitelist
         mock_executor = AsyncMock()

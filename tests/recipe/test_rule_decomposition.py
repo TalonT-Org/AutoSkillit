@@ -99,6 +99,6 @@ def test_validator_does_not_import_rules() -> None:
             assert not module.endswith(".rules"), (
                 "validator.py must not import from rules.py (cycle eliminated)"
             )
-            assert "rules_" not in module or module.startswith("autoskillit.recipe.rules_"), (
-                f"validator.py must not import rule sub-modules directly: {module}"
-            )
+            assert "rules_" not in module or module.startswith(
+                "autoskillit.recipe.rules.rules_"
+            ), f"validator.py must not import rule sub-modules directly: {module}"

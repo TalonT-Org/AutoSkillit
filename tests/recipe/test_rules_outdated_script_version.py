@@ -21,10 +21,9 @@ class TestOutdatedScriptVersionRule:
     def test_outdated_recipe_version_rule(
         self, monkeypatch: pytest.MonkeyPatch, script_ver, installed_ver, expected_count
     ) -> None:
-        import autoskillit.recipe.rules_inputs as _rules_mod
-
         import autoskillit
         import autoskillit.core.types as _core_types
+        import autoskillit.recipe.rules.rules_inputs as _rules_mod
 
         monkeypatch.setattr(autoskillit, "__version__", installed_ver)
         monkeypatch.setattr(_core_types, "AUTOSKILLIT_INSTALLED_VERSION", installed_ver)
@@ -42,10 +41,9 @@ class TestOutdatedScriptVersionRule:
     def test_outdated_recipe_version_rule_severity_is_warning(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        import autoskillit.recipe.rules_inputs as _rules_mod
-
         import autoskillit
         import autoskillit.core.types as _core_types
+        import autoskillit.recipe.rules.rules_inputs as _rules_mod
 
         monkeypatch.setattr(autoskillit, "__version__", "0.2.0")
         monkeypatch.setattr(_core_types, "AUTOSKILLIT_INSTALLED_VERSION", "0.2.0")

@@ -505,7 +505,7 @@ class TestGroupFInstall:
         import autoskillit
 
         pkg_dir = Path(autoskillit.__file__).parent
-        hook_script = pkg_dir / "hooks" / "remove_clone_guard.py"
+        hook_script = pkg_dir / "hooks" / "guards" / "remove_clone_guard.py"
         assert hook_script.exists(), f"Expected hook script at {hook_script}"
 
     def test_install_registers_remove_clone_guard_hook(self, tmp_path, monkeypatch):

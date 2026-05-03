@@ -10,9 +10,9 @@ value to the same outcome category (continuation vs escalation).
 
 from __future__ import annotations
 
-import autoskillit.recipe.rules_verdict as _rv
 import pytest
 
+import autoskillit.recipe.rules.rules_verdict as _rv
 from autoskillit.core.types import Severity
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.schema import (

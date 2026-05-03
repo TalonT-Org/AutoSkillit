@@ -7,9 +7,9 @@ import textwrap
 from pathlib import Path
 from unittest.mock import patch
 
-import autoskillit.recipe.rules_skill_content as _rsc
 import pytest
 
+import autoskillit.recipe.rules.rules_skill_content as _rsc
 from autoskillit.core import Severity
 from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
@@ -180,7 +180,7 @@ def test_output_section_no_markdown_rule_fires_when_directive_missing(tmp_path: 
     with (
         patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]),
         patch(
-            "autoskillit.recipe.rules_skill_content.load_bundled_manifest",
+            "autoskillit.recipe.rules.rules_skill_content.load_bundled_manifest",
             return_value=_MOCK_MANIFEST_WITH_PATTERNS,
         ),
     ):
@@ -221,7 +221,7 @@ def test_output_section_no_markdown_rule_passes_when_directive_present(tmp_path:
     with (
         patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]),
         patch(
-            "autoskillit.recipe.rules_skill_content.load_bundled_manifest",
+            "autoskillit.recipe.rules.rules_skill_content.load_bundled_manifest",
             return_value=_MOCK_MANIFEST_WITH_PATTERNS,
         ),
     ):
@@ -696,9 +696,8 @@ def test_git_grep_bre_is_excluded(tmp_path: Path) -> None:
 
 def test_git_remote_command_re_imported_from_git_helpers() -> None:
     """_GIT_REMOTE_COMMAND_RE must be imported from _git_helpers, not defined locally."""
-    import autoskillit.recipe.rules_skill_content as _rsc  # noqa: F401
-
     import autoskillit.recipe._git_helpers as _gh
+    import autoskillit.recipe.rules.rules_skill_content as _rsc  # noqa: F401
 
     # The regex object in rules_skill_content must be the same object as in _git_helpers
     # (identity check confirms it's an import, not a re-definition).
@@ -744,8 +743,7 @@ def test_hardcoded_origin_does_not_fire_on_part_b_fixed_skills(
 
 
 def test_skill_no_issue_comments_rule_registered() -> None:
-    import autoskillit.recipe.rules_skill_content  # noqa: F401 — triggers decorator registration
-
+    import autoskillit.recipe.rules.rules_skill_content  # noqa: F401 — triggers decorator registration
     from autoskillit.recipe.registry import _RULE_REGISTRY
 
     rule_names = [r.name for r in _RULE_REGISTRY]

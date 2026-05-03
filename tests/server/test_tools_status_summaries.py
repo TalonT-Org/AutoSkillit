@@ -7,13 +7,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from autoskillit.server.tools_status import (
+
+from autoskillit.pipeline.gate import DefaultGateState
+from autoskillit.server.tools.tools_status import (
     get_pipeline_report,
     get_timing_summary,
     get_token_summary,
 )
-
-from autoskillit.pipeline.gate import DefaultGateState
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -409,9 +409,8 @@ class TestClearMarkerWritten:
 class TestGetLogRoot:
     def test_returns_resolved_log_dir(self, tool_ctx, tmp_path, monkeypatch):
         """_get_log_root() returns the resolved path for the configured log_dir."""
-        from autoskillit.server.tools_status import _get_log_root
-
         from autoskillit.execution import resolve_log_dir
+        from autoskillit.server.tools.tools_status import _get_log_root
 
         log_dir = tmp_path / "custom_logs"
         monkeypatch.setattr(tool_ctx.config.linux_tracing, "log_dir", str(log_dir))
@@ -420,7 +419,7 @@ class TestGetLogRoot:
 
     def test_returns_path_type(self, tool_ctx, tmp_path, monkeypatch):
         """_get_log_root() returns a Path, not a string."""
-        from autoskillit.server.tools_status import _get_log_root
+        from autoskillit.server.tools.tools_status import _get_log_root
 
         monkeypatch.setattr(tool_ctx.config.linux_tracing, "log_dir", str(tmp_path))
         assert isinstance(_get_log_root(), Path)
@@ -552,9 +551,8 @@ class TestOrderIdFilterOnSummaryTools:
         self, tool_ctx, monkeypatch
     ) -> None:
         """D-3: get_timing_summary(order_id='issue-185') returns only that order's steps."""
-        from autoskillit.server.tools_status import get_timing_summary
-
         from autoskillit.server import _state
+        from autoskillit.server.tools.tools_status import get_timing_summary
 
         monkeypatch.setattr(_state, "_ctx", tool_ctx)
 

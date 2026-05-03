@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
-from autoskillit.hooks._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
+from autoskillit.hooks.formatters._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
 
 _LONG_PATTERNS = ("seven_day", "sonnet", "opus")
 

@@ -29,7 +29,7 @@ def test_update_checks_facade_public_api():
 
 
 def test_order_module_file_exists():
-    assert (_CLI_SRC / "_order.py").exists()
+    assert (_CLI_SRC / "session" / "_order.py").exists()
 
 
 def test_order_importable_from_submodule():

@@ -14,7 +14,7 @@ from autoskillit.core.paths import pkg_root
 
 
 def _run_advisor(payload: dict, extra_env: dict[str, str] | None = None) -> tuple[int, str]:
-    hook_path = pkg_root() / "hooks" / "recipe_write_advisor.py"
+    hook_path = pkg_root() / "hooks" / "guards" / "recipe_write_advisor.py"
     env = {k: v for k, v in os.environ.items() if k != "AUTOSKILLIT_HEADLESS"}
     env.update(extra_env or {})
     result = subprocess.run(

@@ -46,9 +46,11 @@ async def test_open_kitchen_warns_on_orphaned_hooks(tmp_path, monkeypatch):
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
-                    from autoskillit.server.tools_kitchen import open_kitchen
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools.tools_kitchen import open_kitchen
 
                     result = await open_kitchen(ctx=mock_ctx)
 
@@ -87,9 +89,11 @@ async def test_open_kitchen_warns_on_missing_hook_scripts(tmp_path, monkeypatch)
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
-                    from autoskillit.server.tools_kitchen import open_kitchen
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools.tools_kitchen import open_kitchen
 
                     result = await open_kitchen(ctx=mock_ctx)
 
@@ -135,9 +139,11 @@ async def test_open_kitchen_no_name_returns_json_envelope_with_success_true(tmp_
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
-                    from autoskillit.server.tools_kitchen import open_kitchen
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools.tools_kitchen import open_kitchen
 
                     result = await open_kitchen(ctx=mock_ctx)
 
@@ -169,9 +175,11 @@ async def test_open_kitchen_recipe_found_returns_envelope_with_content_and_ingre
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
-                    from autoskillit.server.tools_kitchen import open_kitchen
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools.tools_kitchen import open_kitchen
 
                     result_str = await open_kitchen(name="demo", ctx=mock_ctx)
 
@@ -193,7 +201,7 @@ async def test_open_kitchen_smoke_test_renders_resolved_base_branch(monkeypatch)
     monkeypatch.chdir(project_dir)
     monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
     monkeypatch.setattr(
-        "autoskillit.server.tools_kitchen.resolve_ingredient_defaults",
+        "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
         lambda _: {"base_branch": "develop"},
     )
 
@@ -205,9 +213,11 @@ async def test_open_kitchen_smoke_test_renders_resolved_base_branch(monkeypatch)
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
-                    from autoskillit.server.tools_kitchen import open_kitchen
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools.tools_kitchen import open_kitchen
 
                     result_str = await open_kitchen(name="smoke-test", ctx=mock_ctx)
 
@@ -234,9 +244,11 @@ async def test_open_kitchen_recipe_not_found_returns_failure_envelope(tmp_path, 
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
-                    from autoskillit.server.tools_kitchen import open_kitchen
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools.tools_kitchen import open_kitchen
 
                     result_str = await open_kitchen(name="bad", ctx=mock_ctx)
 
@@ -258,9 +270,11 @@ async def test_open_kitchen_server_not_initialized_returns_failure_envelope(tmp_
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
-                    from autoskillit.server.tools_kitchen import open_kitchen
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools.tools_kitchen import open_kitchen
 
                     result_str = await open_kitchen(name="demo", ctx=mock_ctx)
 
@@ -276,7 +290,7 @@ async def test_open_kitchen_headless_denied_returns_failure_envelope(tmp_path, m
     """AUTOSKILLIT_HEADLESS=1: failure envelope with user_visible_message present."""
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
     monkeypatch.chdir(tmp_path)
-    from autoskillit.server.tools_kitchen import open_kitchen
+    from autoskillit.server.tools.tools_kitchen import open_kitchen
 
     result = json.loads(await open_kitchen())
     assert result["success"] is False
@@ -301,11 +315,11 @@ async def test_open_kitchen_prime_quota_cache_typeerror_returns_failure_envelope
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
             with patch(
-                "autoskillit.server.tools_kitchen._prime_quota_cache",
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache",
                 new=raise_type_error,
             ):
-                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
-                    from autoskillit.server.tools_kitchen import open_kitchen
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools.tools_kitchen import open_kitchen
 
                     result_str = await open_kitchen(ctx=mock_ctx)
 
@@ -332,11 +346,11 @@ async def test_open_kitchen_prime_quota_cache_runtimeerror_returns_failure_envel
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
             with patch(
-                "autoskillit.server.tools_kitchen._prime_quota_cache",
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache",
                 new=raise_runtime,
             ):
-                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
-                    from autoskillit.server.tools_kitchen import open_kitchen
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools.tools_kitchen import open_kitchen
 
                     result_str = await open_kitchen(ctx=mock_ctx)
 
@@ -356,13 +370,15 @@ async def test_open_kitchen_create_background_task_raises_returns_failure_envelo
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
                     with patch(
-                        "autoskillit.server.tools_kitchen.create_background_task",
+                        "autoskillit.server.tools.tools_kitchen.create_background_task",
                         side_effect=RuntimeError("task creation failed"),
                     ):
-                        from autoskillit.server.tools_kitchen import open_kitchen
+                        from autoskillit.server.tools.tools_kitchen import open_kitchen
 
                         result_str = await open_kitchen(ctx=mock_ctx)
 
@@ -385,9 +401,11 @@ async def test_open_kitchen_load_and_validate_raises_returns_failure_envelope(
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
-                    from autoskillit.server.tools_kitchen import open_kitchen
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools.tools_kitchen import open_kitchen
 
                     result_str = await open_kitchen(name="demo", ctx=mock_ctx)
 
@@ -418,13 +436,15 @@ async def test_open_kitchen_apply_triage_gate_raises_returns_failure_envelope(
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
                     with patch(
-                        "autoskillit.server.tools_kitchen._apply_triage_gate",
+                        "autoskillit.server.tools.tools_kitchen._apply_triage_gate",
                         new=raise_apply,
                     ):
-                        from autoskillit.server.tools_kitchen import open_kitchen
+                        from autoskillit.server.tools.tools_kitchen import open_kitchen
 
                         result_str = await open_kitchen(name="demo", ctx=mock_ctx)
 
@@ -444,9 +464,11 @@ async def test_open_kitchen_enable_components_raises_returns_failure_envelope(
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
-                    from autoskillit.server.tools_kitchen import open_kitchen
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools.tools_kitchen import open_kitchen
 
                     result_str = await open_kitchen(ctx=mock_ctx)
 
@@ -462,7 +484,7 @@ async def test_open_kitchen_sous_chef_read_raises_returns_failure_envelope(tmp_p
     mock_ctx = _make_mock_ctx()
     mock_ctx.enable_components = AsyncMock()
 
-    import autoskillit.server.tools_kitchen as tk_mod
+    import autoskillit.server.tools.tools_kitchen as tk_mod
 
     def fake_pkg_root():
         root = tmp_path / "fake_pkg"
@@ -475,10 +497,12 @@ async def test_open_kitchen_sous_chef_read_raises_returns_failure_envelope(tmp_p
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
                     with patch.object(tk_mod, "pkg_root", fake_pkg_root):
-                        from autoskillit.server.tools_kitchen import open_kitchen
+                        from autoskillit.server.tools.tools_kitchen import open_kitchen
 
                         result_str = await open_kitchen(ctx=mock_ctx)
 
@@ -506,7 +530,7 @@ _FAILURE_STAGES = [
 @pytest.mark.parametrize("stage", _FAILURE_STAGES)
 def test_every_failure_envelope_has_user_visible_message(stage):
     """All failure envelopes have a non-empty user_visible_message string."""
-    from autoskillit.server.tools_kitchen import _kitchen_failure_envelope
+    from autoskillit.server.tools.tools_kitchen import _kitchen_failure_envelope
 
     envelope = json.loads(_kitchen_failure_envelope(RuntimeError("test"), stage=stage))
     assert isinstance(envelope["user_visible_message"], str)
@@ -521,7 +545,7 @@ def test_every_failure_envelope_has_user_visible_message(stage):
 )
 def test_every_return_path_parses_as_json_and_has_boolean_success(stage):
     """Every failure envelope parses as JSON with boolean success."""
-    from autoskillit.server.tools_kitchen import _kitchen_failure_envelope
+    from autoskillit.server.tools.tools_kitchen import _kitchen_failure_envelope
 
     envelope = json.loads(_kitchen_failure_envelope(RuntimeError("test"), stage=stage))
     assert isinstance(envelope["success"], bool)

@@ -41,7 +41,7 @@ class TestLaunchFleetSessionIngredientsTable:
 
         monkeypatch.setattr("autoskillit.cli._prompts._build_fleet_campaign_prompt", _fake_build)
         monkeypatch.setattr(
-            "autoskillit.cli._session_launch._run_interactive_session",
+            "autoskillit.cli.session._session_launch._run_interactive_session",
             lambda *a, **kw: None,
         )
         monkeypatch.chdir(tmp_path)
@@ -86,7 +86,9 @@ class TestLaunchFleetSessionContinueOnFailureEnv:
             captured["extra_env"] = kwargs.get("extra_env", {})
             return None
 
-        monkeypatch.setattr("autoskillit.cli._session_launch._run_interactive_session", _fake_run)
+        monkeypatch.setattr(
+            "autoskillit.cli.session._session_launch._run_interactive_session", _fake_run
+        )
         monkeypatch.setattr(
             "autoskillit.cli._prompts._build_fleet_campaign_prompt",
             lambda *a, **kw: "fake-prompt",
@@ -157,7 +159,7 @@ class TestReloadLoopRefreshesMetadata:
             return fresh_meta
 
         monkeypatch.setattr(
-            "autoskillit.cli._session_launch._run_interactive_session",
+            "autoskillit.cli.session._session_launch._run_interactive_session",
             _fake_run_session,
         )
         monkeypatch.setattr(
@@ -208,7 +210,7 @@ class TestReloadLoopRefreshesMetadata:
             lambda *a, **kw: fresh_meta,
         )
         monkeypatch.setattr(
-            "autoskillit.cli._session_launch._run_interactive_session",
+            "autoskillit.cli.session._session_launch._run_interactive_session",
             _fake_run_session,
         )
 
@@ -279,7 +281,7 @@ class TestReloadLoopSentinelGuard:
             lambda *a, **kw: halted_meta,
         )
         monkeypatch.setattr(
-            "autoskillit.cli._session_launch._run_interactive_session",
+            "autoskillit.cli.session._session_launch._run_interactive_session",
             _fake_run_session,
         )
         monkeypatch.setattr(
@@ -331,7 +333,7 @@ class TestReloadLoopSafetyGuards:
             lambda *a, **kw: fresh_meta,
         )
         monkeypatch.setattr(
-            "autoskillit.cli._session_launch._run_interactive_session",
+            "autoskillit.cli.session._session_launch._run_interactive_session",
             _fake_run_session,
         )
         monkeypatch.setattr(
@@ -381,7 +383,7 @@ class TestReloadLoopSafetyGuards:
             lambda *a, **kw: fresh_meta,
         )
         monkeypatch.setattr(
-            "autoskillit.cli._session_launch._run_interactive_session",
+            "autoskillit.cli.session._session_launch._run_interactive_session",
             _fake_run_session,
         )
         monkeypatch.setattr(
@@ -434,7 +436,7 @@ class TestReloadLoopUsesNamedResume:
             lambda *a, **kw: fresh_meta,
         )
         monkeypatch.setattr(
-            "autoskillit.cli._session_launch._run_interactive_session",
+            "autoskillit.cli.session._session_launch._run_interactive_session",
             _fake_run_session,
         )
         monkeypatch.setattr(

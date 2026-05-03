@@ -8,16 +8,16 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 import structlog.testing
-from autoskillit.server.tools_git import (
+
+from autoskillit.config import AutomationConfig, ClassifyFixConfig
+from autoskillit.core import CleanupResult
+from autoskillit.core.types import MergeFailedStep, MergeState, RestartScope
+from autoskillit.server.tools.tools_git import (
     check_pr_mergeable,
     classify_fix,
     create_unique_branch,
     merge_worktree,
 )
-
-from autoskillit.config import AutomationConfig, ClassifyFixConfig
-from autoskillit.core import CleanupResult
-from autoskillit.core.types import MergeFailedStep, MergeState, RestartScope
 from tests.conftest import _make_result
 from tests.server.conftest import assert_no_timing, assert_step_timed
 

@@ -493,7 +493,7 @@ def test_hooks_are_stdlib_only() -> None:
     """
     hooks_dir = SRC_ROOT / "hooks"
     violations: list[str] = []
-    for py_file in sorted(hooks_dir.glob("*.py")):
+    for py_file in sorted(hooks_dir.rglob("*.py")):
         if py_file.name == "__init__.py":
             continue
         tree = ast.parse(py_file.read_text())
@@ -617,8 +617,11 @@ def test_no_direct_async_kill_process_tree_outside_executor() -> None:
     allowed_files = {
         SRC_ROOT / "execution" / "process" / "_process_kill.py",
         SRC_ROOT / "execution" / "process" / "__init__.py",
-        SRC_ROOT / "cli" / "_fleet.py",  # signal guard + reap CLI commands (facade re-export)
-        SRC_ROOT / "cli" / "_fleet_lifecycle.py",  # signal guard + reap implementation
+        SRC_ROOT
+        / "cli"
+        / "fleet"
+        / "__init__.py",  # signal guard + reap CLI commands (facade re-export)
+        SRC_ROOT / "cli" / "fleet" / "_fleet_lifecycle.py",  # signal guard + reap implementation
     }
     violations: list[str] = []
 
@@ -809,7 +812,7 @@ def test_no_is_plugin_installed_in_session_launch() -> None:
     This pre-launch delay widens the MCP first-call race window.
     Replacement: detect_autoskillit_mcp_prefix() == MARKETPLACE_PREFIX (µs filesystem read).
     """
-    source = Path("src/autoskillit/cli/_session_launch.py").read_text()
+    source = Path("src/autoskillit/cli/session/_session_launch.py").read_text()
     tree = ast.parse(source)
     calls = [
         n.func.id
@@ -827,7 +830,7 @@ def test_no_is_plugin_installed_in_cook() -> None:
 
     Same rationale as test_no_is_plugin_installed_in_session_launch.
     """
-    source = Path("src/autoskillit/cli/_cook.py").read_text()
+    source = Path("src/autoskillit/cli/session/_cook.py").read_text()
     tree = ast.parse(source)
     calls = [
         n.func.id

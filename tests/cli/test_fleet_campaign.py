@@ -98,7 +98,7 @@ def test_fleet_campaign_exits_when_disabled(
     _stub_guards(monkeypatch)
     checked_features: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli._fleet.is_feature_enabled",
+        "autoskillit.cli.fleet.is_feature_enabled",
         lambda name, features, *, experimental_enabled=False: (
             checked_features.append(name) or False
         ),
@@ -136,7 +136,7 @@ def test_fleet_campaign_no_name_shows_menu_and_launches(
     monkeypatch.chdir(tmp_path)
     _stub_list_campaign_recipes(monkeypatch, ["campaign-alpha", "campaign-beta"])
     _stub_campaign_resolution(monkeypatch, tmp_path, "campaign-alpha")
-    monkeypatch.setattr("autoskillit.cli._menu.timed_prompt", lambda *a, **kw: "1")
+    monkeypatch.setattr("autoskillit.cli.ui._menu.timed_prompt", lambda *a, **kw: "1")
     captured = _capture_subprocess(monkeypatch)
     _fleet_campaign(campaign_name=None)
     assert "AUTOSKILLIT_CAMPAIGN_ID" in captured["env"]
@@ -170,7 +170,7 @@ def test_fleet_campaign_no_name_invalid_selection_exits(
     _stub_guards(monkeypatch)
     monkeypatch.chdir(tmp_path)
     _stub_list_campaign_recipes(monkeypatch, ["campaign-alpha"])
-    monkeypatch.setattr("autoskillit.cli._menu.timed_prompt", lambda *a, **kw: "")
+    monkeypatch.setattr("autoskillit.cli.ui._menu.timed_prompt", lambda *a, **kw: "")
     with pytest.raises(SystemExit, match="1"):
         _fleet_campaign(campaign_name=None)
 
@@ -189,7 +189,7 @@ def test_fleet_campaign_resume_no_name_lists_active_campaigns(
     )
 
     _stub_campaign_resolution(monkeypatch, tmp_path, "campaign-active-1")
-    monkeypatch.setattr("autoskillit.cli._menu.timed_prompt", lambda *a, **kw: "1")
+    monkeypatch.setattr("autoskillit.cli.ui._menu.timed_prompt", lambda *a, **kw: "1")
     monkeypatch.setattr(
         "autoskillit.fleet.resume_campaign_from_state",
         lambda *a, **kw: MagicMock(
@@ -260,7 +260,7 @@ class TestFleetCampaignResumeHaltedExits:
             nonlocal launch_called
             launch_called = True
 
-        monkeypatch.setattr("autoskillit.cli._fleet._launch_fleet_session", _track_launch)
+        monkeypatch.setattr("autoskillit.cli.fleet._launch_fleet_session", _track_launch)
         with pytest.raises(SystemExit):
             _fleet_campaign("test-campaign", resume_campaign=campaign_id)
         assert not launch_called

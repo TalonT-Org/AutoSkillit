@@ -318,7 +318,7 @@ class TestDoctorSourceVersionDriftUsesNetwork:
 
         network_args: list[bool] = []
         monkeypatch.setattr(
-            "autoskillit.cli._update_checks.resolve_reference_sha",
+            "autoskillit.cli.update._update_checks.resolve_reference_sha",
             lambda info, home, **kw: network_args.append(kw.get("network", True)) or None,
         )
 
@@ -352,7 +352,7 @@ class TestDoctorSourceVersionDriftUsesNetwork:
             lambda _name: fake_dist,
         )
         monkeypatch.setattr(
-            "autoskillit.cli._update_checks.resolve_reference_sha",
+            "autoskillit.cli.update._update_checks.resolve_reference_sha",
             lambda info, home, **kw: None,
         )
 
@@ -547,7 +547,7 @@ class TestGroupMFranchiseDoctorChecks:
         from autoskillit.cli.doctor import _check_sous_chef_bundled
         from autoskillit.core import Severity
 
-        monkeypatch.setattr("autoskillit.cli._doctor_fleet.pkg_root", lambda: tmp_path)
+        monkeypatch.setattr("autoskillit.cli.doctor._doctor_fleet.pkg_root", lambda: tmp_path)
         result = _check_sous_chef_bundled()
         assert result.severity == Severity.ERROR
         assert "sous-chef" in result.message
@@ -563,7 +563,7 @@ class TestGroupMFranchiseDoctorChecks:
         hooks_dir.mkdir()
         (hooks_dir / "fleet_dispatch_guard.py").write_text("")
         monkeypatch.setattr(
-            "autoskillit.cli._doctor_fleet.canonical_script_basenames",
+            "autoskillit.cli.doctor._doctor_fleet.canonical_script_basenames",
             lambda: frozenset({"fleet_dispatch_guard.py"}),
         )
         monkeypatch.setattr("autoskillit.hook_registry.HOOKS_DIR", hooks_dir)
@@ -578,7 +578,7 @@ class TestGroupMFranchiseDoctorChecks:
         from autoskillit.core import Severity
 
         monkeypatch.setattr(
-            "autoskillit.cli._doctor_fleet.canonical_script_basenames",
+            "autoskillit.cli.doctor._doctor_fleet.canonical_script_basenames",
             lambda: frozenset(),
         )
         result = _check_fleet_dispatch_guard_registered()
@@ -755,7 +755,7 @@ class TestGroupNFeatureGateDoctorChecks:
         from autoskillit.config import AutomationConfig
 
         mock_cfg = AutomationConfig(features={"fleet": False})
-        monkeypatch.setattr("autoskillit.cli._doctor.load_config", lambda _: mock_cfg)
+        monkeypatch.setattr("autoskillit.cli.doctor.load_config", lambda _: mock_cfg)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
         monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
@@ -785,7 +785,7 @@ class TestGroupNFeatureGateDoctorChecks:
         from autoskillit.config import AutomationConfig
 
         mock_cfg = AutomationConfig(features={"fleet": True})
-        monkeypatch.setattr("autoskillit.cli._doctor.load_config", lambda _: mock_cfg)
+        monkeypatch.setattr("autoskillit.cli.doctor.load_config", lambda _: mock_cfg)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
         monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
@@ -817,7 +817,7 @@ class TestGroupNFeatureGateDoctorChecks:
         from autoskillit.config import AutomationConfig
 
         mock_cfg = AutomationConfig(features={"fleet": False})
-        monkeypatch.setattr("autoskillit.cli._doctor.load_config", lambda _: mock_cfg)
+        monkeypatch.setattr("autoskillit.cli.doctor.load_config", lambda _: mock_cfg)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
         monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
@@ -1012,7 +1012,7 @@ def test_source_version_drift_remediation_contains_upgrade_command(
     )
     monkeypatch.setattr("autoskillit.cli._install_info.detect_install", lambda: info)
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks.resolve_reference_sha",
+        "autoskillit.cli.update._update_checks.resolve_reference_sha",
         lambda *a, **kw: "bbbb2222cccc",
     )
     result = _check_source_version_drift(home=tmp_path)

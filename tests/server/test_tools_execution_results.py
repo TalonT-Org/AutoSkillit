@@ -8,12 +8,12 @@ from unittest.mock import AsyncMock
 import pytest
 import structlog.contextvars
 import structlog.testing
-from autoskillit.server.tools_execution import run_skill
 
 from autoskillit.core.types import (
     ChannelConfirmation,
     RetryReason,
 )
+from autoskillit.server.tools.tools_execution import run_skill
 from tests.conftest import _make_result
 from tests.server.conftest import _SUCCESS_JSON, assert_no_timing, assert_step_timed
 
@@ -411,7 +411,7 @@ class TestTierAwareGateEnforcement:
     @pytest.mark.anyio
     async def test_open_kitchen_denied_for_fleet_tier(self, tool_ctx, monkeypatch):
         """open_kitchen returns HeadlessDenied for fleet-tier sessions."""
-        from autoskillit.server.tools_kitchen import open_kitchen
+        from autoskillit.server.tools.tools_kitchen import open_kitchen
 
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
@@ -423,7 +423,7 @@ class TestTierAwareGateEnforcement:
     @pytest.mark.anyio
     async def test_close_kitchen_denied_for_fleet_tier(self, tool_ctx, monkeypatch):
         """close_kitchen returns headless_error for fleet-tier sessions."""
-        from autoskillit.server.tools_kitchen import close_kitchen
+        from autoskillit.server.tools.tools_kitchen import close_kitchen
 
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
@@ -657,7 +657,7 @@ async def test_run_skill_returns_structured_error_when_executor_raises(
     tool_ctx.executor = ExplodingExecutor()
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
 
-    from autoskillit.server.tools_execution import run_skill
+    from autoskillit.server.tools.tools_execution import run_skill
 
     result_json = await run_skill("/test cmd", str(tmp_path))
     data = json.loads(result_json)

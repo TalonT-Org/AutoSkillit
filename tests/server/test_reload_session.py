@@ -57,7 +57,7 @@ def test_reload_session_writes_sentinel_from_kitchen_marker(
     monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
     _write_kitchen_marker(tmp_path, "abc123")
 
-    from autoskillit.server.tools_kitchen import _reload_session_handler
+    from autoskillit.server.tools.tools_kitchen import _reload_session_handler
 
     result = _reload_session_handler()
 
@@ -81,9 +81,11 @@ def test_reload_session_falls_back_to_find_latest(
     monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path / "empty"))
 
     with patch(
-        "autoskillit.server.tools_kitchen.find_latest_session_id", return_value="fallback-id"
+        "autoskillit.server.tools.tools_kitchen.find_latest_session_id", return_value="fallback-id"
     ):
-        from autoskillit.server.tools_kitchen import _reload_session_handler as reload_session
+        from autoskillit.server.tools.tools_kitchen import (
+            _reload_session_handler as reload_session,
+        )
 
         result = reload_session()
 
@@ -106,9 +108,11 @@ def test_reload_session_returns_exit_instruction(
     monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path / "empty"))
 
     with patch(
-        "autoskillit.server.tools_kitchen.find_latest_session_id", return_value="sess-exit"
+        "autoskillit.server.tools.tools_kitchen.find_latest_session_id", return_value="sess-exit"
     ):
-        from autoskillit.server.tools_kitchen import _reload_session_handler as reload_session
+        from autoskillit.server.tools.tools_kitchen import (
+            _reload_session_handler as reload_session,
+        )
 
         result = reload_session()
 
@@ -127,8 +131,10 @@ def test_reload_session_raises_when_no_session_id(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path / "empty"))
 
-    with patch("autoskillit.server.tools_kitchen.find_latest_session_id", return_value=None):
-        from autoskillit.server.tools_kitchen import _reload_session_handler as reload_session
+    with patch("autoskillit.server.tools.tools_kitchen.find_latest_session_id", return_value=None):
+        from autoskillit.server.tools.tools_kitchen import (
+            _reload_session_handler as reload_session,
+        )
 
         with pytest.raises(ValueError, match="session ID"):
             reload_session()
@@ -147,9 +153,9 @@ async def test_reload_session_tool_wrapper_returns_str(
     monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path / "empty"))
 
     with patch(
-        "autoskillit.server.tools_kitchen.find_latest_session_id", return_value="sess-wrap"
+        "autoskillit.server.tools.tools_kitchen.find_latest_session_id", return_value="sess-wrap"
     ):
-        from autoskillit.server.tools_kitchen import reload_session
+        from autoskillit.server.tools.tools_kitchen import reload_session
 
         result = await reload_session()
 

@@ -75,12 +75,12 @@ class TestServerToolSurfaceContract:
         """open_kitchen tool text must name every forbidden tool with prohibition framing."""
         from unittest.mock import AsyncMock, MagicMock, patch
 
-        from autoskillit.server.tools_kitchen import open_kitchen
+        from autoskillit.server.tools.tools_kitchen import open_kitchen
 
         mock_ctx = MagicMock()
         mock_ctx.enable_components = AsyncMock()
-        with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
-            with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+        with patch("autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+            with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
                 text = await open_kitchen(ctx=mock_ctx)
 
         missing = [t for t in PIPELINE_FORBIDDEN_TOOLS if t not in text]
@@ -91,7 +91,7 @@ class TestServerToolSurfaceContract:
 
     def test_run_skill_docstring_names_all_forbidden_tools(self):
         """run_skill docstring must name every forbidden tool."""
-        from autoskillit.server.tools_execution import run_skill
+        from autoskillit.server.tools.tools_execution import run_skill
 
         doc = run_skill.__doc__
         assert doc, "run_skill has no docstring"
@@ -100,7 +100,7 @@ class TestServerToolSurfaceContract:
 
     def test_load_recipe_docstring_names_all_forbidden_tools(self):
         """load_recipe docstring must name every forbidden tool."""
-        from autoskillit.server.tools_recipe import load_recipe
+        from autoskillit.server.tools.tools_recipe import load_recipe
 
         doc = load_recipe.__doc__
         assert doc, "load_skill_script has no docstring"
@@ -295,7 +295,7 @@ class TestQuotaGuardStructuralEnforcement:
 
     def test_load_recipe_has_no_quota_guard_instructions(self):
         """Quota guard enforcement is structural (hook), not instructional (docstring)."""
-        from autoskillit.server.tools_recipe import load_recipe
+        from autoskillit.server.tools.tools_recipe import load_recipe
 
         docstring = load_recipe.__doc__ or ""
         assert "QUOTA GUARD" not in docstring, (
@@ -338,7 +338,7 @@ class TestSourceIsolationContract:
 
     def test_clone_repo_tool_docstring_has_source_isolation(self):
         """clone_repo MCP tool docstring must include SOURCE ISOLATION prohibition."""
-        from autoskillit.server.tools_clone import clone_repo
+        from autoskillit.server.tools.tools_clone import clone_repo
 
         doc = clone_repo.__doc__ or ""
         assert self._SENTINEL in doc, "clone_repo docstring must contain 'SOURCE ISOLATION'"

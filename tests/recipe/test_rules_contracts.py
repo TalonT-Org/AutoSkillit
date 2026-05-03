@@ -5,9 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-import autoskillit.recipe.rules_contracts as _rc
 import pytest
 
+import autoskillit.recipe.rules.rules_contracts as _rc
 from autoskillit.core.paths import pkg_root
 from autoskillit.core.types import Severity
 from autoskillit.recipe.contracts import ResultFieldSpec, SkillContract
@@ -138,7 +138,7 @@ def test_write_behavior_invalid_value_flagged() -> None:
     recipe = _make_recipe_with_skill("/autoskillit:make-plan task")
     contract = _make_contract(write_behavior="invalid")
     with patch(
-        "autoskillit.recipe.rules_contracts.get_skill_contract",
+        "autoskillit.recipe.rules.rules_contracts.get_skill_contract",
         return_value=contract,
     ):
         findings = run_semantic_rules(recipe)
@@ -151,7 +151,7 @@ def test_conditional_without_patterns_flagged() -> None:
     recipe = _make_recipe_with_skill("/autoskillit:make-plan task")
     contract = _make_contract(write_behavior="conditional", write_expected_when=[])
     with patch(
-        "autoskillit.recipe.rules_contracts.get_skill_contract",
+        "autoskillit.recipe.rules.rules_contracts.get_skill_contract",
         return_value=contract,
     ):
         findings = run_semantic_rules(recipe)
@@ -164,7 +164,7 @@ def test_always_with_patterns_flagged() -> None:
     recipe = _make_recipe_with_skill("/autoskillit:make-plan task")
     contract = _make_contract(write_behavior="always", write_expected_when=["pattern"])
     with patch(
-        "autoskillit.recipe.rules_contracts.get_skill_contract",
+        "autoskillit.recipe.rules.rules_contracts.get_skill_contract",
         return_value=contract,
     ):
         findings = run_semantic_rules(recipe)
@@ -177,7 +177,7 @@ def test_invalid_regex_in_patterns_flagged() -> None:
     recipe = _make_recipe_with_skill("/autoskillit:make-plan task")
     contract = _make_contract(write_behavior="conditional", write_expected_when=["[invalid"])
     with patch(
-        "autoskillit.recipe.rules_contracts.get_skill_contract",
+        "autoskillit.recipe.rules.rules_contracts.get_skill_contract",
         return_value=contract,
     ):
         findings = run_semantic_rules(recipe)
@@ -286,7 +286,9 @@ def test_unreadable_skill_md_emits_warning_finding(
         return original_read_text(self, *args, **kwargs)  # type: ignore[arg-type]
 
     with (
-        patch("autoskillit.recipe.rules_contracts.get_skill_contract", return_value=contract),
+        patch(
+            "autoskillit.recipe.rules.rules_contracts.get_skill_contract", return_value=contract
+        ),
         patch.object(Path, "read_text", fail_read_text),
     ):
         findings = run_semantic_rules(recipe)
@@ -320,7 +322,7 @@ class TestResultFieldDriftRule:
             ],
         )
         with patch(
-            "autoskillit.recipe.rules_contracts.get_skill_contract",
+            "autoskillit.recipe.rules.rules_contracts.get_skill_contract",
             return_value=contract,
         ):
             findings = run_semantic_rules(recipe)
@@ -343,7 +345,7 @@ class TestResultFieldDriftRule:
             ],
         )
         with patch(
-            "autoskillit.recipe.rules_contracts.get_skill_contract",
+            "autoskillit.recipe.rules.rules_contracts.get_skill_contract",
             return_value=contract,
         ):
             findings = run_semantic_rules(recipe)
@@ -367,7 +369,7 @@ class TestResultFieldDriftRule:
             ],
         )
         with patch(
-            "autoskillit.recipe.rules_contracts.get_skill_contract",
+            "autoskillit.recipe.rules.rules_contracts.get_skill_contract",
             return_value=contract,
         ):
             findings = run_semantic_rules(recipe)
@@ -392,7 +394,7 @@ class TestResultFieldDriftRule:
             ],
         )
         with patch(
-            "autoskillit.recipe.rules_contracts.get_skill_contract",
+            "autoskillit.recipe.rules.rules_contracts.get_skill_contract",
             return_value=contract,
         ):
             findings = run_semantic_rules(recipe)

@@ -335,18 +335,18 @@ def test_rebase_then_push_with_force_true_passes_validation() -> None:
 # ---------------------------------------------------------------------------
 
 _SERVER_TOOL_MODULES = [
-    "autoskillit.server.tools_ci",
-    "autoskillit.server.tools_ci_watch",
-    "autoskillit.server.tools_ci_merge_queue",
-    "autoskillit.server.tools_clone",
-    "autoskillit.server.tools_execution",
-    "autoskillit.server.tools_git",
-    "autoskillit.server.tools_recipe",
-    "autoskillit.server.tools_status",
-    "autoskillit.server.tools_github",
-    "autoskillit.server.tools_issue_lifecycle",
-    "autoskillit.server.tools_pr_ops",
-    "autoskillit.server.tools_workspace",
+    "autoskillit.server.tools.tools_ci",
+    "autoskillit.server.tools.tools_ci_watch",
+    "autoskillit.server.tools.tools_ci_merge_queue",
+    "autoskillit.server.tools.tools_clone",
+    "autoskillit.server.tools.tools_execution",
+    "autoskillit.server.tools.tools_git",
+    "autoskillit.server.tools.tools_recipe",
+    "autoskillit.server.tools.tools_status",
+    "autoskillit.server.tools.tools_github",
+    "autoskillit.server.tools.tools_issue_lifecycle",
+    "autoskillit.server.tools.tools_pr_ops",
+    "autoskillit.server.tools.tools_workspace",
 ]
 
 _FRAMEWORK_PARAMS = frozenset({"ctx"})

@@ -126,7 +126,7 @@ class TestRunSelectionMenu:
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
         items = [_make_item("alpha"), _make_item("beta")]
-        monkeypatch.setattr("autoskillit.cli._menu.timed_prompt", lambda *a, **kw: "1")
+        monkeypatch.setattr("autoskillit.cli.ui._menu.timed_prompt", lambda *a, **kw: "1")
         result = run_selection_menu(items, header="Items:")
         assert result is items[0]
 
@@ -134,7 +134,7 @@ class TestRunSelectionMenu:
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
         items = [_make_item("alpha")]
-        monkeypatch.setattr("autoskillit.cli._menu.timed_prompt", lambda *a, **kw: "0")
+        monkeypatch.setattr("autoskillit.cli.ui._menu.timed_prompt", lambda *a, **kw: "0")
         result = run_selection_menu(items, header="Items:", slot_zero_label="Open kitchen")
         assert result is SLOT_ZERO_SELECTED
 
@@ -142,6 +142,6 @@ class TestRunSelectionMenu:
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
         items = [_make_item("alpha")]
-        monkeypatch.setattr("autoskillit.cli._menu.timed_prompt", lambda *a, **kw: "invalid")
+        monkeypatch.setattr("autoskillit.cli.ui._menu.timed_prompt", lambda *a, **kw: "invalid")
         result = run_selection_menu(items, header="Items:")
         assert result is None

@@ -65,6 +65,7 @@ _PRINT_EXEMPT = frozenset(
         "_fleet_session.py",
         "_session_picker.py",
         "_fleet.py",
+        "__init__.py",
         "_init_helpers.py",
         "_order.py",
         "_onboarding.py",

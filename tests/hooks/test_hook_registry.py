@@ -222,9 +222,9 @@ def test_find_broken_hook_scripts_does_not_flag_user_python_scripts(tmp_path: Pa
 # or auto-correcting (not a hard deny).
 _ADVISORY_HOOKS: frozenset[str] = frozenset(
     {
-        "recipe_write_advisor.py",
-        "grep_pattern_lint_guard.py",
-        "mcp_health_guard.py",
+        "guards/recipe_write_advisor.py",
+        "guards/grep_pattern_lint_guard.py",
+        "guards/mcp_health_guard.py",
     }
 )
 
@@ -248,7 +248,7 @@ def test_deny_path_pretooluse_hooks_export_deny_trigger() -> None:
 
     missing: list[str] = []
     for script in sorted(deny_path_scripts):
-        module_name = script.removesuffix(".py")
+        module_name = script.removesuffix(".py").replace("/", ".")
         module = importlib.import_module(f"autoskillit.hooks.{module_name}")
         has_trigger = any(name.endswith("_DENY_TRIGGER") for name in dir(module))
         if not has_trigger:

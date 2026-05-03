@@ -127,7 +127,7 @@ def _count_vis_lens_skills() -> int:
 
 
 def _hook_files() -> list[Path]:
-    return sorted(f for f in (SRC_DIR / "hooks").glob("*.py") if f.name not in {"__init__.py"})
+    return sorted(f for f in (SRC_DIR / "hooks").rglob("*.py") if f.name not in {"__init__.py"})
 
 
 def _count_hooks_by_event() -> dict[str, int]:

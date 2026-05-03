@@ -455,7 +455,9 @@ def test_stale_fetch_cache_after_install_resolve_reference_sha_path2(
         json.dumps(cache_data), encoding="utf-8"
     )
 
-    monkeypatch.setattr("autoskillit.cli._update_checks_source.find_source_repo", lambda: None)
+    monkeypatch.setattr(
+        "autoskillit.cli.update._update_checks_source.find_source_repo", lambda: None
+    )
 
     class FreshClient:
         def __init__(self, **kw):
@@ -506,16 +508,16 @@ def test_run_update_sequence_invalidates_fetch_cache(
     install_ok = subprocess.CompletedProcess([], returncode=0)
     calls = iter([upgrade_ok, install_ok])
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks.subprocess.run", lambda *a, **kw: next(calls)
+        "autoskillit.cli.update._update_checks.subprocess.run", lambda *a, **kw: next(calls)
     )
-    monkeypatch.setattr("autoskillit.cli._update_checks.terminal_guard", FakeTG)
+    monkeypatch.setattr("autoskillit.cli.update._update_checks.terminal_guard", FakeTG)
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks._fetch_latest_version", lambda *a, **kw: "0.9.1"
+        "autoskillit.cli.update._update_checks._fetch_latest_version", lambda *a, **kw: "0.9.1"
     )
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks._verify_update_result", lambda *a, **kw: True
+        "autoskillit.cli.update._update_checks._verify_update_result", lambda *a, **kw: True
     )
-    monkeypatch.setattr("autoskillit.cli._update_checks.perform_restart", lambda: None)
+    monkeypatch.setattr("autoskillit.cli.update._update_checks.perform_restart", lambda: None)
     _run_update_sequence(info, "0.9.0", tmp_path, {}, {})
     assert not cache_file.exists(), "Fetch cache must be deleted after successful update"
 
@@ -538,14 +540,14 @@ def test_run_update_command_invalidates_fetch_cache(
             return False
 
     info = _make_stable_info()
-    monkeypatch.setattr("autoskillit.cli._update.detect_install", lambda: info)
-    monkeypatch.setattr("autoskillit.cli._update.terminal_guard", FakeTG)
+    monkeypatch.setattr("autoskillit.cli.update._update.detect_install", lambda: info)
+    monkeypatch.setattr("autoskillit.cli.update._update.terminal_guard", FakeTG)
     monkeypatch.setattr("autoskillit.core.any_kitchen_open", lambda **kw: False)
 
     upgrade_ok = subprocess.CompletedProcess([], returncode=0)
     install_ok = subprocess.CompletedProcess([], returncode=0)
     mock_run = MagicMock(side_effect=[upgrade_ok, install_ok])
-    monkeypatch.setattr("autoskillit.cli._update.subprocess.run", mock_run)
+    monkeypatch.setattr("autoskillit.cli.update._update.subprocess.run", mock_run)
 
     import autoskillit as _pkg
 
@@ -555,9 +557,9 @@ def test_run_update_command_invalidates_fetch_cache(
 
     monkeypatch.setattr(importlib.metadata, "version", lambda _: "0.9.1")
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks._fetch_latest_version", lambda *a, **kw: "0.9.1"
+        "autoskillit.cli.update._update_checks._fetch_latest_version", lambda *a, **kw: "0.9.1"
     )
-    monkeypatch.setattr("autoskillit.cli._update.perform_restart", lambda: None)
+    monkeypatch.setattr("autoskillit.cli.update._update.perform_restart", lambda: None)
 
     run_update_command(home=tmp_path)
     assert not cache_file.exists(), "Fetch cache must be deleted after successful update command"
@@ -944,16 +946,16 @@ def test_run_update_sequence_warns_on_install_failure(
     install_fail = subprocess.CompletedProcess([], returncode=1)
     calls = iter([upgrade_ok, install_fail])
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks.subprocess.run", lambda *a, **kw: next(calls)
+        "autoskillit.cli.update._update_checks.subprocess.run", lambda *a, **kw: next(calls)
     )
-    monkeypatch.setattr("autoskillit.cli._update_checks.terminal_guard", FakeTG)
+    monkeypatch.setattr("autoskillit.cli.update._update_checks.terminal_guard", FakeTG)
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks._fetch_latest_version", lambda *a, **kw: "0.9.1"
+        "autoskillit.cli.update._update_checks._fetch_latest_version", lambda *a, **kw: "0.9.1"
     )
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks._verify_update_result", lambda *a, **kw: True
+        "autoskillit.cli.update._update_checks._verify_update_result", lambda *a, **kw: True
     )
-    monkeypatch.setattr("autoskillit.cli._update_checks.perform_restart", lambda: None)
+    monkeypatch.setattr("autoskillit.cli.update._update_checks.perform_restart", lambda: None)
     _run_update_sequence(info, "0.9.0", tmp_path, {}, {})
     out = capsys.readouterr().out
     assert "autoskillit install" in out
@@ -976,7 +978,7 @@ def test_run_update_sequence_restarts_on_success(
     install_ok = subprocess.CompletedProcess([], returncode=0)
     calls = iter([upgrade_ok, install_ok])
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks.subprocess.run", lambda *a, **kw: next(calls)
+        "autoskillit.cli.update._update_checks.subprocess.run", lambda *a, **kw: next(calls)
     )
 
     class FakeTG:
@@ -986,17 +988,18 @@ def test_run_update_sequence_restarts_on_success(
         def __exit__(self, *a):
             return False
 
-    monkeypatch.setattr("autoskillit.cli._update_checks.terminal_guard", FakeTG)
+    monkeypatch.setattr("autoskillit.cli.update._update_checks.terminal_guard", FakeTG)
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks._fetch_latest_version", lambda *a, **kw: "0.9.1"
+        "autoskillit.cli.update._update_checks._fetch_latest_version", lambda *a, **kw: "0.9.1"
     )
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks._verify_update_result", lambda *a, **kw: True
+        "autoskillit.cli.update._update_checks._verify_update_result", lambda *a, **kw: True
     )
 
     restart_called: list[bool] = []
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks.perform_restart", lambda: restart_called.append(True)
+        "autoskillit.cli.update._update_checks.perform_restart",
+        lambda: restart_called.append(True),
     )
 
     _run_update_sequence(info, "0.9.0", tmp_path, {}, {})
@@ -1047,7 +1050,9 @@ def test_fetch_latest_version_routes_by_target(
             return {"content": content}
         return {"tag_name": "v0.9.300"}
 
-    with patch("autoskillit.cli._update_checks_fetch._fetch_with_cache", side_effect=_mock_fetch):
+    with patch(
+        "autoskillit.cli.update._update_checks_fetch._fetch_with_cache", side_effect=_mock_fetch
+    ):
         result = _fetch_latest_version(target, tmp_path)
 
     assert result is not None

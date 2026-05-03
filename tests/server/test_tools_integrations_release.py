@@ -6,7 +6,8 @@ import json
 from unittest.mock import AsyncMock
 
 import pytest
-from autoskillit.server.tools_issue_lifecycle import release_issue
+
+from autoskillit.server.tools.tools_issue_lifecycle import release_issue
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 

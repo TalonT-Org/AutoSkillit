@@ -276,7 +276,7 @@ def test_fleet_status_exits_when_disabled(monkeypatch: pytest.MonkeyPatch, tmp_p
     monkeypatch.chdir(tmp_path)
     checked_features: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli._fleet.is_feature_enabled",
+        "autoskillit.cli.fleet.is_feature_enabled",
         lambda name, features, *, experimental_enabled=False: (
             checked_features.append(name) or False
         ),

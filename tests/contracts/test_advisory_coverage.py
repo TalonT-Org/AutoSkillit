@@ -21,7 +21,7 @@ from autoskillit.workspace.skills import DefaultSkillResolver
 
 
 def _run_advisor(payload: dict, extra_env: dict[str, str] | None = None) -> tuple[int, str]:
-    hook_path = pkg_root() / "hooks" / "recipe_write_advisor.py"
+    hook_path = pkg_root() / "hooks" / "guards" / "recipe_write_advisor.py"
     env = {**os.environ, **(extra_env or {})}
     env.pop("AUTOSKILLIT_HEADLESS", None)
     result = subprocess.run(

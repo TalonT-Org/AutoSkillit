@@ -36,8 +36,8 @@ class TestCLIOrderCommand:
         import importlib
         import sys as _sys
 
-        _app_mod = _sys.modules.get("autoskillit.cli._order") or importlib.import_module(
-            "autoskillit.cli._order"
+        _app_mod = _sys.modules.get("autoskillit.cli.session._order") or importlib.import_module(
+            "autoskillit.cli.session._order"
         )
         monkeypatch.setattr(_app_mod, "_get_ingredients_table", lambda *a, **kw: "| col | val |")
 
@@ -420,7 +420,7 @@ def test_cook_mark_onboarded_not_called_on_failure(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """mark_onboarded() must not be called when the cook subprocess exits non-zero."""
-    import autoskillit.cli._cook as _cook
+    import autoskillit.cli.session._cook as _cook
 
     onboarded_calls: list[Path] = []
     monkeypatch.setattr(

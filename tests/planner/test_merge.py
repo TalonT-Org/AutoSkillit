@@ -534,7 +534,7 @@ def test_merge_tier_results_writes_refine_contexts_for_assignments(tmp_path):
     results_dir = tmp_path / "assignments"
     results_dir.mkdir()
     write_json(
-        results_dir / "P1_A1_result.json",
+        results_dir / "P1-A1_result.json",
         {
             "id": "P1-A1",
             "phase_id": "P1",
@@ -545,7 +545,7 @@ def test_merge_tier_results_writes_refine_contexts_for_assignments(tmp_path):
         },
     )
     write_json(
-        results_dir / "P2_A1_result.json",
+        results_dir / "P2-A1_result.json",
         {
             "id": "P2-A1",
             "phase_id": "P2",
@@ -572,7 +572,7 @@ def test_refine_context_own_assignments_in_full_detail(tmp_path):
     results_dir = tmp_path / "assignments"
     results_dir.mkdir()
     write_json(
-        results_dir / "P1_A1_result.json",
+        results_dir / "P1-A1_result.json",
         {
             "id": "P1-A1",
             "phase_id": "P1",
@@ -583,7 +583,7 @@ def test_refine_context_own_assignments_in_full_detail(tmp_path):
         },
     )
     write_json(
-        results_dir / "P2_A1_result.json",
+        results_dir / "P2-A1_result.json",
         {
             "id": "P2-A1",
             "phase_id": "P2",
@@ -608,7 +608,7 @@ def test_refine_context_peer_summaries_have_filtered_fields(tmp_path):
     results_dir = tmp_path / "assignments"
     results_dir.mkdir()
     write_json(
-        results_dir / "P1_A1_result.json",
+        results_dir / "P1-A1_result.json",
         {
             "id": "P1-A1",
             "phase_id": "P1",
@@ -619,7 +619,7 @@ def test_refine_context_peer_summaries_have_filtered_fields(tmp_path):
         },
     )
     write_json(
-        results_dir / "P2_A1_result.json",
+        results_dir / "P2-A1_result.json",
         {
             "id": "P2-A1",
             "phase_id": "P2",
@@ -644,7 +644,7 @@ def test_refine_context_has_task_file_path_not_inline_task(tmp_path):
     results_dir.mkdir()
     task_path = write_task_file(tmp_path, "Build a system")
     write_json(
-        results_dir / "P1_A1_result.json",
+        results_dir / "P1-A1_result.json",
         {
             "id": "P1-A1",
             "phase_id": "P1",
@@ -666,7 +666,7 @@ def test_refine_context_paths_returned_sorted(tmp_path):
     results_dir.mkdir()
     for pid in ("P3", "P1", "P2"):
         write_json(
-            results_dir / f"{pid}_A1_result.json",
+            results_dir / f"{pid}-A1_result.json",
             {
                 "id": f"{pid}-A1",
                 "phase_id": pid,
@@ -707,7 +707,7 @@ def test_merge_tier_results_no_refine_contexts_for_work_packages_key(tmp_path):
     results_dir = tmp_path / "work_packages"
     results_dir.mkdir()
     write_json(
-        results_dir / "WP1_result.json",
+        results_dir / "P1-A1-WP1_result.json",
         {
             "id": "P1-A1-WP1",
             "name": "WP One",
@@ -732,8 +732,8 @@ def test_write_refine_contexts_rejects_unsafe_phase_id(tmp_path):
     results_dir = tmp_path / "assignments"
     results_dir.mkdir()
     write_json(
-        results_dir / "evil_result.json",
-        {"id": "A1", "phase_id": "../../evil", "name": "x", "goal": "g"},
+        results_dir / "P1-A1_result.json",
+        {"id": "P1-A1", "phase_id": "../../evil", "name": "x", "goal": "g"},
     )
     out = tmp_path / "combined.json"
     with pytest.raises(ValueError, match="disallowed characters"):
@@ -888,3 +888,29 @@ def test_merge_refined_assignments_writes_to_planner_dir(tmp_path):
     expected = tmp_path / "refined_assignments.json"
     assert Path(result["refined_assignments_path"]) == expected
     assert expected.exists()
+
+
+def test_merge_tier_results_skips_non_assignment_files(tmp_path):
+    """Sentinel files in assignments/ must not be included in merge output."""
+    from tests.planner.conftest import make_assignment_result
+
+    assign_dir = tmp_path / "assignments"
+    assign_dir.mkdir()
+    out = tmp_path / "combined.json"
+
+    write_json(
+        assign_dir / "P1-A1_result.json",
+        make_assignment_result(1, 1),
+    )
+    write_json(
+        assign_dir / "P1_result.json",
+        {"id": "P1", "status": "complete", "assignment_count": 1, "failed_count": 0},
+    )
+
+    task_file = write_task_file(tmp_path)
+    merge_tier_results(str(assign_dir), str(out), "assignments", task_file_path=task_file)
+
+    merged = json.loads(out.read_text())
+    ids = [a["id"] for a in merged["assignments"]]
+    assert "P1-A1" in ids
+    assert "P1" not in ids

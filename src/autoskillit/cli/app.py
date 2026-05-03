@@ -217,7 +217,7 @@ def update() -> None:
 @app.command
 def doctor(*, output_json: bool = False):
     """Check project setup for common issues."""
-    from autoskillit.cli._doctor import run_doctor
+    from autoskillit.cli.doctor import run_doctor
 
     run_doctor(output_json=output_json)
 

@@ -7,12 +7,12 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
-
-from autoskillit.core import PRState, SubprocessResult, TerminationReason
-from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS, DefaultGateState
 from autoskillit.server.tools_ci import check_repo_merge_state
 from autoskillit.server.tools_ci_merge_queue import wait_for_merge_queue
 from autoskillit.server.tools_ci_watch import get_ci_status, wait_for_ci
+
+from autoskillit.core import PRState, SubprocessResult, TerminationReason
+from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS, DefaultGateState
 from tests.fakes import InMemoryCIWatcher, InMemoryMergeQueueWatcher
 from tests.server.conftest import assert_no_timing, assert_step_timed
 

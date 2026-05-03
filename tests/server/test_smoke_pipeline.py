@@ -22,9 +22,9 @@ import re
 from pathlib import Path
 
 import pytest
+from autoskillit.server.tools_recipe import list_recipes, validate_recipe
 
 from autoskillit.recipe.io import builtin_recipes_dir
-from autoskillit.server.tools_recipe import list_recipes, validate_recipe
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 

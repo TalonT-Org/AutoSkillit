@@ -8,12 +8,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import anyio
 import pytest
-
-from autoskillit.config import AutomationConfig
-from autoskillit.core import SkillResult
-from autoskillit.core.types import RetryReason
-from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS, DefaultGateState
-from autoskillit.server._misc import _extract_block
 from autoskillit.server.tools_github import (
     _FINGERPRINT_END,
     _FINGERPRINT_START,
@@ -30,6 +24,12 @@ from autoskillit.server.tools_issue_lifecycle import (
     _parse_enrich_result,
     _parse_prepare_result,
 )
+
+from autoskillit.config import AutomationConfig
+from autoskillit.core import SkillResult
+from autoskillit.core.types import RetryReason
+from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS, DefaultGateState
+from autoskillit.server._misc import _extract_block
 from tests.server._helpers import _skill_fail, _skill_ok
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]

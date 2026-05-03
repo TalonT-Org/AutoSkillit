@@ -6,7 +6,6 @@ import json
 import re
 
 import pytest
-
 from autoskillit.server.tools_recipe import list_recipes as list_recipes_tool
 from autoskillit.server.tools_recipe import validate_recipe
 

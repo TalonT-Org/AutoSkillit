@@ -999,8 +999,8 @@ def test_source_version_drift_remediation_contains_upgrade_command(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """_check_source_version_drift WARNING message contains the install-type-specific command."""
-    from autoskillit.cli.doctor import _check_source_version_drift
     from autoskillit.cli._install_info import InstallInfo, InstallType
+    from autoskillit.cli.doctor import _check_source_version_drift
     from autoskillit.core import Severity
 
     info = InstallInfo(

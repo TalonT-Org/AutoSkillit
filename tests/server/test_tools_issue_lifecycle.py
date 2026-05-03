@@ -6,9 +6,6 @@ import json
 from unittest.mock import AsyncMock
 
 import pytest
-
-from autoskillit.core import RetryReason, SkillResult
-from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.server.tools_issue_lifecycle import (
     _build_enrich_skill_command,
     _build_headless_error_response,
@@ -23,6 +20,9 @@ from autoskillit.server.tools_issue_lifecycle import (
     prepare_issue,
     release_issue,
 )
+
+from autoskillit.core import RetryReason, SkillResult
+from autoskillit.pipeline.gate import DefaultGateState
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 

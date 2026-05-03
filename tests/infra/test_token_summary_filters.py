@@ -8,9 +8,9 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from autoskillit.hooks._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
 
 from autoskillit.core.paths import pkg_root
-from autoskillit.hooks._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
 from tests.infra._token_summary_helpers import _run_hook, _write_sessions
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]

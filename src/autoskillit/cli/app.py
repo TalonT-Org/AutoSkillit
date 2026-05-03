@@ -13,9 +13,7 @@ from typing import Annotated
 import anyio
 from cyclopts import App, Parameter
 
-from autoskillit.cli.session._cook import cook as cook_interactive
 from autoskillit.cli._features import features_app
-from autoskillit.cli.fleet import fleet_app
 from autoskillit.cli._init_helpers import (
     _MARKER_CONTENT,
     _check_secret_scanning,
@@ -24,9 +22,11 @@ from autoskillit.cli._init_helpers import (
     _prompt_test_command,
     _register_all,
 )
-from autoskillit.cli.session._order import _recipes_dir_for, order
 from autoskillit.cli._serve_guard import serve_with_signal_guard
 from autoskillit.cli._sessions import sessions_app
+from autoskillit.cli.fleet import fleet_app
+from autoskillit.cli.session._cook import cook as cook_interactive
+from autoskillit.cli.session._order import _recipes_dir_for, order
 from autoskillit.core import (
     RecipeSource,
     atomic_write,

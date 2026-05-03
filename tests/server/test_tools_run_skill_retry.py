@@ -5,10 +5,10 @@ from __future__ import annotations
 import json
 
 import pytest
+from autoskillit.server.tools_execution import run_skill
 
 from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason, TerminationReason
-from autoskillit.server.tools_execution import run_skill
 from tests.conftest import _make_result
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]

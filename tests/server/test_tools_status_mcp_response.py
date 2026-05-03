@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from autoskillit.server.tools_status import get_token_summary, write_telemetry_files
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]

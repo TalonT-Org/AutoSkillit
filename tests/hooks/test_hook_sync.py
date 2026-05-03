@@ -35,6 +35,7 @@ def test_hook_config_path_single_source_of_truth():
     _fmt_primitives._HOOK_CONFIG_PATH_COMPONENTS exactly.
     """
     from autoskillit.hooks._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
+
     from autoskillit.hooks._hook_settings import HOOK_CONFIG_FILENAME, HOOK_DIR_COMPONENTS
 
     assert (*HOOK_DIR_COMPONENTS, HOOK_CONFIG_FILENAME) == _HOOK_CONFIG_PATH_COMPONENTS, (

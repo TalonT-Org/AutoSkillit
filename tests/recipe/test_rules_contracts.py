@@ -5,9 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
+import autoskillit.recipe.rules_contracts as _rc
 import pytest
 
-import autoskillit.recipe.rules_contracts as _rc
 from autoskillit.core.paths import pkg_root
 from autoskillit.core.types import Severity
 from autoskillit.recipe.contracts import ResultFieldSpec, SkillContract

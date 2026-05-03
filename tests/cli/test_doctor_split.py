@@ -97,7 +97,9 @@ def test_doctor_submodule_install_importable():
 
 
 def test_doctor_submodule_config_importable():
-    from autoskillit.cli.doctor._doctor_config import _check_config_layers_for_secrets  # noqa: F401
+    from autoskillit.cli.doctor._doctor_config import (
+        _check_config_layers_for_secrets,  # noqa: F401
+    )
 
 
 def test_doctor_submodule_runtime_importable():

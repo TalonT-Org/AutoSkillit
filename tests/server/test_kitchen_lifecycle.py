@@ -3,13 +3,13 @@ import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from autoskillit.server.tools_kitchen import _close_kitchen_handler, _open_kitchen_handler
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core.types._type_plugin_source import DirectInstall
 from autoskillit.hooks import _HOOK_CONFIG_PATH_COMPONENTS
 from autoskillit.server import _state
 from autoskillit.server._factory import make_context
-from autoskillit.server.tools_kitchen import _close_kitchen_handler, _open_kitchen_handler
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 

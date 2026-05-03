@@ -8,9 +8,9 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from autoskillit.hooks._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
 
 from autoskillit.config.settings import QuotaGuardConfig
-from autoskillit.hooks._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
 from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]

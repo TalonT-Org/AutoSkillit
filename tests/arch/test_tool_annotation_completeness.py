@@ -62,7 +62,9 @@ class TestToolAnnotationCompleteness:
         have no annotation on the wire even when the middleware is fixed.
         """
         tool_files = _tools_files()
-        assert tool_files, "No tool files found — glob path is wrong or tools/ subpackage is missing"
+        assert tool_files, (
+            "No tool files found — glob path is wrong or tools/ subpackage is missing"
+        )
         violations: list[str] = []
         for path in tool_files:
             for func_name, lineno in _collect_missing_annotations(path):

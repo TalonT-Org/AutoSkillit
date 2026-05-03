@@ -13,6 +13,7 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 async def test_raw_skills_extended_excluded_from_run_skill_add_dirs(tool_ctx):
     """T-OVR-014: run_skill passes ephemeral session dir (not raw skills_extended/) as add_dirs."""
     from autoskillit.server.tools_execution import run_skill
+
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()

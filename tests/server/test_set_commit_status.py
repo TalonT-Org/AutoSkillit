@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 
 import pytest
+from autoskillit.server.tools_ci import set_commit_status
 
 from autoskillit.pipeline.gate import GATED_TOOLS, DefaultGateState
-from autoskillit.server.tools_ci import set_commit_status
 from tests.conftest import _make_result
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]

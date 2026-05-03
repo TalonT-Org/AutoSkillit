@@ -147,8 +147,8 @@ def order(
     from autoskillit.cli.ui._timed_input import timed_prompt
 
     if recipe is None:
-        from autoskillit.cli.ui._menu import SLOT_ZERO_SELECTED, run_selection_menu
         from autoskillit.cli._prompts import _build_open_kitchen_prompt
+        from autoskillit.cli.ui._menu import SLOT_ZERO_SELECTED, run_selection_menu
         from autoskillit.recipe import GROUP_LABELS, group_rank
 
         available = list_recipes(Path.cwd()).items

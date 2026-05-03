@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from autoskillit.server.tools_execution import run_skill
 
 from autoskillit.config import (
     AutomationConfig,
@@ -12,7 +13,6 @@ from autoskillit.config import (
 )
 from autoskillit.execution.commands import _inject_completion_directive
 from autoskillit.execution.headless import _session_log_dir
-from autoskillit.server.tools_execution import run_skill
 from tests.conftest import _make_result
 from tests.server.conftest import _SUCCESS_JSON
 

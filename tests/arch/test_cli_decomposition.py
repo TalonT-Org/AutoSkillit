@@ -90,7 +90,14 @@ def test_doctor_py_under_line_limit():
 # CD6
 def test_fleet_py_under_line_limit():
     """CD6: fleet/__init__.py must be ≤400 lines after sub-module extraction."""
-    p = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "cli" / "fleet" / "__init__.py"
+    p = (
+        Path(__file__).parent.parent.parent
+        / "src"
+        / "autoskillit"
+        / "cli"
+        / "fleet"
+        / "__init__.py"
+    )
     lines = len(p.read_text().splitlines())
     assert lines <= 400, f"fleet/__init__.py is {lines} lines — extract display/lifecycle/session"
 
@@ -98,9 +105,18 @@ def test_fleet_py_under_line_limit():
 # CD7
 def test_update_checks_py_under_line_limit():
     """CD7: update/_update_checks.py must be ≤450 lines after sub-module extraction."""
-    p = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "cli" / "update" / "_update_checks.py"
+    p = (
+        Path(__file__).parent.parent.parent
+        / "src"
+        / "autoskillit"
+        / "cli"
+        / "update"
+        / "_update_checks.py"
+    )
     lines = len(p.read_text().splitlines())
-    assert lines <= 450, f"update/_update_checks.py is {lines} lines — extract fetch/source modules"
+    assert lines <= 450, (
+        f"update/_update_checks.py is {lines} lines — extract fetch/source modules"
+    )
 
 
 # CD4

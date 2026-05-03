@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 
 import pytest
-
 from autoskillit.hooks._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
+
 from tests.infra._pretty_output_helpers import _make_run_skill_event, _run_hook
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]

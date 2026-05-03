@@ -887,6 +887,7 @@ def test_hook_config_filename_and_dir_match_quota_check():
     from pathlib import Path
 
     from autoskillit.hooks._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
+
     from autoskillit.server._misc import (
         _HOOK_CONFIG_FILENAME,
         _HOOK_DIR_COMPONENTS,

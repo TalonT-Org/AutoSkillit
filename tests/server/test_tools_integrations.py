@@ -6,9 +6,6 @@ import json
 from unittest.mock import AsyncMock
 
 import pytest
-
-from autoskillit.core import SkillResult
-from autoskillit.core.types import RetryReason
 from autoskillit.server.tools_issue_lifecycle import (
     _PREPARE_RESULT_END,
     _PREPARE_RESULT_START,
@@ -18,6 +15,9 @@ from autoskillit.server.tools_issue_lifecycle import (
     release_issue,
 )
 from autoskillit.server.tools_pr_ops import bulk_close_issues, get_pr_reviews
+
+from autoskillit.core import SkillResult
+from autoskillit.core.types import RetryReason
 from tests.conftest import _make_result
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]

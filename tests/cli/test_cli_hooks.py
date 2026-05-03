@@ -105,7 +105,10 @@ def test_evict_stale_hooks_removes_legacy_formats(tmp_path):
                 {
                     "matcher": "mcp__.*autoskillit.*__run_skill.*",
                     "hooks": [
-                        {"type": "command", "command": "python3 -m autoskillit.hooks.guards.quota_guard"},
+                        {
+                            "type": "command",
+                            "command": "python3 -m autoskillit.hooks.guards.quota_guard",
+                        },
                     ],
                 },
                 {

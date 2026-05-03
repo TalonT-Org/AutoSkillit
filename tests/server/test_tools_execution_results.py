@@ -8,12 +8,12 @@ from unittest.mock import AsyncMock
 import pytest
 import structlog.contextvars
 import structlog.testing
+from autoskillit.server.tools_execution import run_skill
 
 from autoskillit.core.types import (
     ChannelConfirmation,
     RetryReason,
 )
-from autoskillit.server.tools_execution import run_skill
 from tests.conftest import _make_result
 from tests.server.conftest import _SUCCESS_JSON, assert_no_timing, assert_step_timed
 

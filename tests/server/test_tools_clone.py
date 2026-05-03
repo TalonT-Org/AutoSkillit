@@ -7,7 +7,6 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-
 from autoskillit.server.tools_clone import (
     batch_cleanup_clones,
     clone_repo,
@@ -15,6 +14,7 @@ from autoskillit.server.tools_clone import (
     register_clone_status,
     remove_clone,
 )
+
 from autoskillit.workspace import clone_registry
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]

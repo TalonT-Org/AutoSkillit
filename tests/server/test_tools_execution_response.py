@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 import pytest
+from autoskillit.server.tools_execution import run_skill
 
 from autoskillit.core.types import (
     ChannelConfirmation,
@@ -12,7 +13,6 @@ from autoskillit.core.types import (
     SubprocessResult,
     TerminationReason,
 )
-from autoskillit.server.tools_execution import run_skill
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 

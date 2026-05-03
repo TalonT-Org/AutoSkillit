@@ -739,8 +739,8 @@ def test_doctor_reports_ok_when_no_misplaced_secrets(
 
 # DC-11: _check_hook_registry_drift — deployed matches canonical → OK
 def test_check_hook_registry_drift_ok(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from autoskillit.cli.doctor._doctor_hooks import _check_hook_registry_drift
     from autoskillit.cli._hooks import _evict_stale_autoskillit_hooks, sync_hooks_to_settings
+    from autoskillit.cli.doctor._doctor_hooks import _check_hook_registry_drift
     from autoskillit.core import Severity
 
     settings = tmp_path / "settings.json"
@@ -1128,8 +1128,8 @@ def test_check_source_version_drift_ok_outside_source_repo(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """GIT_VCS install with empty cache reports OK (no drift observable)."""
-    from autoskillit.cli.doctor import _check_source_version_drift
     from autoskillit.cli._install_info import InstallInfo, InstallType
+    from autoskillit.cli.doctor import _check_source_version_drift
     from autoskillit.core import Severity
 
     info = InstallInfo(
@@ -1153,8 +1153,8 @@ def test_check_source_version_drift_ok_for_editable_install(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """LOCAL_EDITABLE installs are under active development — drift check is skipped."""
-    from autoskillit.cli.doctor import _check_source_version_drift
     from autoskillit.cli._install_info import InstallInfo, InstallType
+    from autoskillit.cli.doctor import _check_source_version_drift
     from autoskillit.core import Severity
 
     info = InstallInfo(
@@ -1175,8 +1175,8 @@ def test_check_source_version_drift_ok_for_pinned_sha(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """When requested_revision == commit_id, resolve_reference_sha short-circuits → no drift."""
-    from autoskillit.cli.doctor import _check_source_version_drift
     from autoskillit.cli._install_info import InstallInfo, InstallType
+    from autoskillit.cli.doctor import _check_source_version_drift
     from autoskillit.core import Severity
 
     sha = "abcdef1234567890abcdef1234567890"
@@ -1201,8 +1201,8 @@ def test_check_source_version_drift_ok_when_cache_empty(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """When SHA cannot be resolved (network/cache miss), doctor reports OK."""
-    from autoskillit.cli.doctor import _check_source_version_drift
     from autoskillit.cli._install_info import InstallInfo, InstallType
+    from autoskillit.cli.doctor import _check_source_version_drift
     from autoskillit.core import Severity
 
     info = InstallInfo(
@@ -1229,8 +1229,8 @@ def test_check_source_version_drift_warning_on_drift(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """When cache has a different reference SHA than installed, reports WARNING with short SHAs."""
-    from autoskillit.cli.doctor import _check_source_version_drift
     from autoskillit.cli._install_info import InstallInfo, InstallType
+    from autoskillit.cli.doctor import _check_source_version_drift
     from autoskillit.core import Severity
 
     installed_sha = "installed123abc"

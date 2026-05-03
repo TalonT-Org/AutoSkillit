@@ -71,8 +71,9 @@ class TestDispatchFoodTruckGates:
     @pytest.mark.anyio
     async def test_dispatch_food_truck_requires_kitchen_open(self, tool_ctx, monkeypatch):
         """Kitchen closed → gate_error_result JSON."""
-        from autoskillit.pipeline.gate import DefaultGateState
         from autoskillit.server.tools_execution import dispatch_food_truck
+
+        from autoskillit.pipeline.gate import DefaultGateState
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         result = json.loads(await dispatch_food_truck(recipe="r", task="t"))

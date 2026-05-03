@@ -7,15 +7,15 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from autoskillit.server.tools_recipe import (
+    load_recipe,
+    migrate_recipe,
+)
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason
 from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS, DefaultGateState
-from autoskillit.server.tools_recipe import (
-    load_recipe,
-    migrate_recipe,
-)
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -370,8 +370,9 @@ class TestMigrationSuppression:
         self, tmp_path, tool_ctx
     ):
         """SUP4: validate_recipe includes outdated-script-version even when suppressed."""
-        from autoskillit.config import MigrationConfig
         from autoskillit.server.tools_recipe import validate_recipe
+
+        from autoskillit.config import MigrationConfig
 
         script = tmp_path / "test-script.yaml"
         script.write_text(_MINIMAL_SCRIPT_YAML)

@@ -6,8 +6,6 @@ import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
-from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.server.tools_pr_ops import (
     _close_issues_sequentially,
     _map_api_reviews,
@@ -15,6 +13,8 @@ from autoskillit.server.tools_pr_ops import (
     bulk_close_issues,
     get_pr_reviews,
 )
+
+from autoskillit.pipeline.gate import DefaultGateState
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 

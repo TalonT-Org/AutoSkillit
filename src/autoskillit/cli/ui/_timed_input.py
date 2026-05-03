@@ -14,8 +14,8 @@ from __future__ import annotations
 import select
 import sys
 
-from autoskillit.cli.ui._ansi import supports_color
 from autoskillit.cli._init_helpers import _require_interactive_stdin
+from autoskillit.cli.ui._ansi import supports_color
 
 
 def timed_prompt(

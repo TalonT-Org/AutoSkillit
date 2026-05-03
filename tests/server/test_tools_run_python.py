@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock
 import pytest
 import structlog.contextvars
 import structlog.testing
-
 from autoskillit.server.tools_execution import run_python
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]

@@ -6,10 +6,10 @@ import json
 from pathlib import Path
 
 import pytest
+from autoskillit.server.tools_execution import run_skill
 
 from autoskillit.server._guards import _check_dry_walkthrough
 from autoskillit.server._state import _get_config
-from autoskillit.server.tools_execution import run_skill
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 

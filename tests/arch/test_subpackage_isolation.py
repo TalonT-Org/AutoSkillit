@@ -802,7 +802,11 @@ def test_no_subpackage_exceeds_10_files() -> None:
             continue
         dirs_to_check.append(sub_dir)
         for nested_dir in sorted(sub_dir.iterdir()):
-            if not nested_dir.is_dir() or nested_dir.name.startswith("_") or nested_dir.name == "__pycache__":
+            if (
+                not nested_dir.is_dir()
+                or nested_dir.name.startswith("_")
+                or nested_dir.name == "__pycache__"
+            ):
                 continue
             dirs_to_check.append(nested_dir)
     for sub_dir in dirs_to_check:

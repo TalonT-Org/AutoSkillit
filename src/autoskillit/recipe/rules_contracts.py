@@ -5,7 +5,6 @@ from __future__ import annotations
 import re as _re
 
 from autoskillit.core import Severity, get_logger, pkg_root
-from autoskillit.execution._headless_path_tokens import _INTENTIONALLY_EXCLUDED_PATH_TOKENS
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.contracts import (
     get_skill_contract,
@@ -13,6 +12,11 @@ from autoskillit.recipe.contracts import (
     resolve_skill_name,
 )
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
+
+# Must match _INTENTIONALLY_EXCLUDED_PATH_TOKENS in _headless_path_tokens.py.
+# Cannot import directly: recipe (IL-2) cannot depend on execution (IL-1).
+# test_rules_contracts.py::test_excluded_tokens_match_intentionally_excluded guards drift.
+_PATH_RECOVERY_EXCLUDED_TOKENS: frozenset[str] = frozenset({"worktree_path", "branch_name"})
 
 # Skill names covered by the result-field-drift rule.
 _RESULT_FIELD_DRIFT_SKILLS = frozenset(
@@ -566,7 +570,7 @@ def _check_path_output_recovery_coverage(ctx: ValidationContext) -> list[RuleFin
             o
             for o in contract.outputs
             if (o.type.startswith("file_path") or o.type == "directory_path")
-            and o.name not in _INTENTIONALLY_EXCLUDED_PATH_TOKENS
+            and o.name not in _PATH_RECOVERY_EXCLUDED_TOKENS
         ]
         if not path_outputs:
             continue

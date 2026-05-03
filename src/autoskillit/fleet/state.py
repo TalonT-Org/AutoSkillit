@@ -404,6 +404,15 @@ _COMPLETED_STATUSES = frozenset(
     {DispatchStatus.SUCCESS, DispatchStatus.SKIPPED, DispatchStatus.FAILURE}
 )
 
+_VISIBLE_IN_BLOCK_STATUSES = _COMPLETED_STATUSES | frozenset(
+    {
+        DispatchStatus.INTERRUPTED,
+        DispatchStatus.REFUSED,
+        DispatchStatus.RELEASED,
+        DispatchStatus.RUNNING,
+    }
+)
+
 TERMINAL_DISPATCH_STATUSES: frozenset[str] = frozenset(
     {
         DispatchStatus.SUCCESS,
@@ -586,7 +595,7 @@ def resume_campaign_from_state(
             next_name = ""
             is_resumable = False
             for d in state.dispatches:
-                if d.status in _COMPLETED_STATUSES:
+                if d.status in _VISIBLE_IN_BLOCK_STATUSES:
                     completed_lines.append(f"- {d.name}: {d.status}")
                 elif d.status == DispatchStatus.RESUMABLE and not next_name:
                     next_name = d.name

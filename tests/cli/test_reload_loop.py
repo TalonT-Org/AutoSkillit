@@ -192,7 +192,7 @@ def test_interactive_session_reload_uses_named_resume(
 def test_fleet_reload_relaunches_without_resume(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from autoskillit.core import NoResume
+    from autoskillit.core import NamedResume, NoResume
 
     call_count = [0]
     captured_resume_specs: list = []
@@ -227,8 +227,9 @@ def test_fleet_reload_relaunches_without_resume(
     )
 
     assert call_count[0] == 2
-    # Franchise always re-launches with NoResume — no resume on reload
-    assert all(isinstance(r, NoResume) for r in captured_resume_specs)
+    assert isinstance(captured_resume_specs[0], NoResume)
+    assert isinstance(captured_resume_specs[1], NamedResume)
+    assert captured_resume_specs[1].session_id == "franchise-sess"
 
 
 # ---------------------------------------------------------------------------

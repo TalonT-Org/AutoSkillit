@@ -279,3 +279,22 @@ class TestOutputDirParameter:
         assert "output_dir" in sig.parameters
         param = sig.parameters["output_dir"]
         assert param.default == ""
+
+    @pytest.mark.anyio
+    async def test_run_skill_forwards_output_dir_to_write_watch_dirs(
+        self, tool_ctx, monkeypatch, tmp_path
+    ) -> None:
+        """output_dir is resolved and forwarded to executor.run() as write_watch_dirs."""
+        from pathlib import Path
+
+        from tests.fakes import InMemoryHeadlessExecutor
+
+        executor = InMemoryHeadlessExecutor()
+        tool_ctx.executor = executor
+        monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+
+        output_dir = str(tmp_path / "output")
+        await run_skill("/test skill", str(tmp_path), output_dir=output_dir)
+
+        assert len(executor.calls) == 1
+        assert Path(output_dir) in executor.calls[0].write_watch_dirs

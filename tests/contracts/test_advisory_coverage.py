@@ -42,8 +42,8 @@ def test_every_advisory_pattern_has_a_hook() -> None:
         if "Write" in hook.matcher and hook.session_scope == "interactive_only"
         for script in hook.scripts
     }
-    assert "recipe_write_advisor.py" in advisory_scripts, (
-        "recipe_write_advisor.py is not registered in HOOK_REGISTRY with "
+    assert "guards/recipe_write_advisor.py" in advisory_scripts, (
+        "guards/recipe_write_advisor.py is not registered in HOOK_REGISTRY with "
         "a Write|Edit matcher and session_scope=interactive_only"
     )
 

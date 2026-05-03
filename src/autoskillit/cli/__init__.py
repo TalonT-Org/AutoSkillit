@@ -22,7 +22,6 @@ from autoskillit.cli.app import (
     app,
     config_app,
     config_show,
-    doctor,
     fleet_app,
     init,
     install,
@@ -43,7 +42,12 @@ from autoskillit.cli.app import (
     workspace_clean,
     workspace_init,
 )
+from autoskillit.cli.app import (
+    doctor as _doctor_cmd,
+)
 from autoskillit.cli.doctor import DoctorResult
+
+doctor = _doctor_cmd
 from autoskillit.cli.fleet import fleet_campaign, fleet_dispatch, fleet_list, fleet_status
 from autoskillit.cli.session._cook import cook
 from autoskillit.hook_registry import HookDriftResult

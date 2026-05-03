@@ -68,7 +68,8 @@ def test_rules_inputs_terminal_targets_match_schema():
     # Structural check: rules_inputs.py must NOT hardcode sentinel strings via
     # .discard("done") or .discard("escalate"). It must use _TERMINAL_TARGETS instead.
     src_path = (
-        pathlib.Path(__file__).parent.parent.parent / "src/autoskillit/recipe/rules/rules_inputs.py"
+        pathlib.Path(__file__).parent.parent.parent
+        / "src/autoskillit/recipe/rules/rules_inputs.py"
     )
     src = src_path.read_text()
     tree = ast.parse(src)

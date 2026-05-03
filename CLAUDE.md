@@ -258,31 +258,33 @@ generic_automation_mcp/
 │   ├── _analysis_bfs.py     #   bfs_reachable + symbolic BFS fact propagation
 │   ├── _analysis_blocks.py  #   extract_blocks — group steps by block annotation
 │   ├── _analysis_detectors.py #  dead outputs + ref invalidations + implicit handoffs
-│   ├── rules_actions.py     #   Action-type semantic rules (stop-step-has-no-routing, recipe-has-terminal-step, route-step-requires-on-result)
-│   ├── rules_blocks.py      #   Block-level budget rules (block-run-cmd-budget, etc.)
-│   ├── rules_bypass.py
-│   ├── rules_campaign.py
-│   ├── rules_ci.py
-│   ├── rules_clone.py
-│   ├── rules_cmd.py
-│   ├── rules_contracts.py
-│   ├── rules_dataflow.py
-│   ├── rules_features.py
-│   ├── rules_fixing.py
-│   ├── rules_graph.py
-│   ├── rules_inline_script.py  #   inline-script-in-cmd + inline-python-in-cmd lint rules
-│   ├── rules_inputs.py
-│   ├── rules_isolation.py
-│   ├── rules_merge.py
-│   ├── rules_packs.py
-│   ├── rules_reachability.py  #   Symbolic reachability rules (capture-inversion-detection, event-scope-requires-upstream-capture)
-│   ├── rules_recipe.py
-│   ├── rules_skill_content.py
-│   ├── rules_skills.py
-│   ├── rules_temp_path.py
-│   ├── rules_tools.py
-│   ├── rules_verdict.py
-│   ├── rules_worktree.py     #   Semantic validation rule modules
+│   ├── rules/               #   Semantic validation rule modules (25 rules_*.py)
+│   │   ├── __init__.py
+│   │   ├── rules_actions.py     #   Action-type semantic rules
+│   │   ├── rules_blocks.py      #   Block-level budget rules
+│   │   ├── rules_bypass.py
+│   │   ├── rules_campaign.py
+│   │   ├── rules_ci.py
+│   │   ├── rules_clone.py
+│   │   ├── rules_cmd.py
+│   │   ├── rules_contracts.py
+│   │   ├── rules_dataflow.py
+│   │   ├── rules_features.py
+│   │   ├── rules_fixing.py
+│   │   ├── rules_graph.py
+│   │   ├── rules_inline_script.py
+│   │   ├── rules_inputs.py
+│   │   ├── rules_isolation.py
+│   │   ├── rules_merge.py
+│   │   ├── rules_packs.py
+│   │   ├── rules_reachability.py
+│   │   ├── rules_recipe.py
+│   │   ├── rules_skill_content.py
+│   │   ├── rules_skills.py
+│   │   ├── rules_temp_path.py
+│   │   ├── rules_tools.py
+│   │   ├── rules_verdict.py
+│   │   └── rules_worktree.py
 │   ├── _git_helpers.py      #   Shared git-remote regex (_GIT_REMOTE_COMMAND_RE, _LITERAL_ORIGIN_RE) for lint rules
 │   ├── _skill_helpers.py        #   Shared helpers for skill-related semantic rules
 │   ├── _skill_placeholder_parser.py
@@ -321,45 +323,27 @@ generic_automation_mcp/
 │   ├── _wire_compat.py      #   Claude Code wire-format sanitization middleware
 │   ├── _notify.py           #   _notify, track_response_size, _get_ctx_or_none
 │   ├── _misc.py             #   Quota/hook/triage utilities + re-exports for tools_*.py layer compliance
-│   ├── tools_kitchen.py     #   open_kitchen, close_kitchen + recipe:// resource
-│   ├── tools_ci.py          #   set_commit_status + check_repo_merge_state
-│   ├── tools_ci_watch.py    #   wait_for_ci + get_ci_status + _auto_trigger_ci
-│   ├── tools_ci_merge_queue.py #  toggle_auto_merge + enqueue_pr + wait_for_merge_queue
-│   ├── tools_clone.py
-│   ├── tools_execution.py   #   run_cmd, run_python, run_skill
-│   ├── tools_git.py         #   merge_worktree, classify_fix, etc.
-│   ├── tools_recipe.py
-│   ├── tools_status.py      #   kitchen_status, reports, summaries, quota events, read_db
-│   ├── tools_github.py      #   fetch_github_issue, get_issue_title, report_bug
-│   ├── tools_issue_lifecycle.py #  prepare/enrich/claim/release issue
-│   ├── tools_pr_ops.py      #   get_pr_reviews, bulk_close_issues
-│   ├── tools_workspace.py   #   test_check, reset_test_dir, reset_workspace
+│   ├── tools/               #   MCP @mcp.tool handlers (13 tools_*.py modules)
+│   │   ├── __init__.py
+│   │   ├── tools_kitchen.py     #   open_kitchen, close_kitchen + recipe:// resource
+│   │   ├── tools_ci.py          #   set_commit_status + check_repo_merge_state
+│   │   ├── tools_ci_watch.py    #   wait_for_ci + get_ci_status + _auto_trigger_ci
+│   │   ├── tools_ci_merge_queue.py #  toggle_auto_merge + enqueue_pr + wait_for_merge_queue
+│   │   ├── tools_clone.py
+│   │   ├── tools_execution.py   #   run_cmd, run_python, run_skill
+│   │   ├── tools_git.py         #   merge_worktree, classify_fix, etc.
+│   │   ├── tools_recipe.py
+│   │   ├── tools_status.py      #   kitchen_status, reports, summaries, quota events, read_db
+│   │   ├── tools_github.py      #   fetch_github_issue, get_issue_title, report_bug
+│   │   ├── tools_issue_lifecycle.py #  prepare/enrich/claim/release issue
+│   │   ├── tools_pr_ops.py      #   get_pr_reviews, bulk_close_issues
+│   │   └── tools_workspace.py   #   test_check, reset_test_dir, reset_workspace
 │   ├── _factory.py          #   Composition Root: make_context()
 │   └── _state.py            #   Lazy init, plugin dir resolution
 │
 ├── cli/                     # IL-3 CLI
 │   ├── __init__.py
-│   ├── _ansi.py             #   supports_color, NO_COLOR/TERM=dumb
-│   ├── _terminal.py         #   terminal_guard() TTY restore
-│   ├── _terminal_table.py   #   Re-export shim from core/_terminal_table
-│   ├── _cook.py             #   cook: ephemeral skill session launcher
-│   ├── _fleet.py            #   fleet subcommand group: status --reap/--dry-run, run stub; render_fleet_error() (facade)
-│   ├── _fleet_display.py    #   Fleet status display: _STATUS_COLUMNS, _render_status_display, _watch_loop, _build_status_rows
-│   ├── _fleet_lifecycle.py  #   Fleet lifecycle: _fleet_signal_guard, _reap_stale_dispatches
-│   ├── _fleet_session.py    #   Fleet session launcher: _launch_fleet_session
-│   ├── _reload.py           #   consume_reload_sentinel: reload sentinel detection for re-launch loops
 │   ├── _restart.py          #   perform_restart() -> NoReturn: sets SKIP_UPDATE_CHECK, calls os.execv
-│   ├── _session_launch.py   #   _run_interactive_session: shared interactive session launch prelude
-│   ├── _doctor.py           #   Facade: DoctorResult, run_doctor(); delegates to sub-modules
-│   ├── _doctor_types.py     #   DoctorResult dataclass, _NON_PROBLEM frozenset (shared types)
-│   ├── _doctor_mcp.py       #   MCP server registration + plugin cache checks
-│   ├── _doctor_hooks.py     #   Hook registration, registry drift, and health checks
-│   ├── _doctor_install.py   #   Install path, entry points, version drift, update dismissal checks
-│   ├── _doctor_config.py    #   Project config, gitignore, secret scanning checks
-│   ├── _doctor_runtime.py   #   Quota cache schema + claude process state checks
-│   ├── _doctor_env.py       #   Ambient session type + campaign ID env checks
-│   ├── _doctor_features.py  #   Feature dependency + registry consistency checks
-│   ├── _doctor_fleet.py     #   Fleet infrastructure, campaign state, sous-chef checks
 │   ├── _hooks.py            #   PreToolUse hook registration helpers
 │   ├── _init_helpers.py
 │   ├── _installed_plugins.py #  InstalledPluginsFile — canonical accessor for installed_plugins.json
@@ -369,48 +353,81 @@ generic_automation_mcp/
 │   ├── _onboarding.py       #   First-run detection + guided menu
 │   ├── _prompts.py          #   Orchestrator prompt builder
 │   ├── _preview.py          #   Shared pre-launch preview: flow diagram + ingredient table display
-│   ├── _timed_input.py      #   timed_prompt() and status_line() CLI primitives
-│   ├── _menu.py             #   Shared numbered selection menu primitive: run_selection_menu(), render_numbered_menu(), resolve_menu_input()
-│   ├── _update.py           #   run_update_command(): first-class upgrade path for `autoskillit update`
-│   ├── _update_checks.py    #   Unified startup update check: version/hook/source-drift signals, branch-aware dismissal (facade)
-│   ├── _update_checks_fetch.py #  HTTP cache + fetch machinery: _fetch_with_cache, _fetch_latest_version, invalidate_fetch_cache
-│   ├── _update_checks_source.py # Source-repo discovery + SHA resolution: find_source_repo, resolve_reference_sha
 │   ├── _serve_guard.py      #   Async signal-guarded MCP server bootstrap (extracted from app.py)
 │   ├── _features.py         #   features subcommand group: list/status commands for feature gate inspection
 │   ├── _workspace.py        #   Workspace clean helpers
-│   ├── _session_picker.py   #   Scoped resume picker: filters sessions by type (cook/order) via registry + heuristic
 │   ├── _sessions.py         #   sessions analyze CLI subcommand for cross-session DFG visualization
-│   ├── _order.py            #   order command + helpers: _recipes_dir_for, _get_subsets_needed, _get_packs_needed
+│   ├── _terminal_table.py   #   Re-export shim from core/_terminal_table
+│   ├── doctor/              #   Facade: DoctorResult, run_doctor(); delegates to sub-modules
+│   │   ├── __init__.py      #   run_doctor() + check orchestration
+│   │   ├── _doctor_types.py     #   DoctorResult dataclass, _NON_PROBLEM frozenset
+│   │   ├── _doctor_mcp.py       #   MCP server registration + plugin cache checks
+│   │   ├── _doctor_hooks.py     #   Hook registration, registry drift, and health checks
+│   │   ├── _doctor_install.py   #   Install path, entry points, version drift, update dismissal checks
+│   │   ├── _doctor_config.py    #   Project config, gitignore, secret scanning checks
+│   │   ├── _doctor_runtime.py   #   Quota cache schema + claude process state checks
+│   │   ├── _doctor_env.py       #   Ambient session type + campaign ID env checks
+│   │   ├── _doctor_features.py  #   Feature dependency + registry consistency checks
+│   │   └── _doctor_fleet.py     #   Fleet infrastructure, campaign state, sous-chef checks
+│   ├── fleet/               #   Fleet subcommand group
+│   │   ├── __init__.py      #   fleet_campaign, fleet_status, render_fleet_error() (facade)
+│   │   ├── _fleet_display.py    #   _STATUS_COLUMNS, _render_status_display, _watch_loop
+│   │   ├── _fleet_lifecycle.py  #   _fleet_signal_guard, _reap_stale_dispatches
+│   │   └── _fleet_session.py    #   _launch_fleet_session
+│   ├── session/             #   Session management
+│   │   ├── __init__.py
+│   │   ├── _cook.py             #   cook: ephemeral skill session launcher
+│   │   ├── _order.py            #   order command + helpers
+│   │   ├── _reload.py           #   consume_reload_sentinel
+│   │   ├── _session_launch.py   #   _run_interactive_session
+│   │   └── _session_picker.py   #   Scoped resume picker
+│   ���── ui/                  #   Terminal UI primitives
+│   │   ├── __init__.py
+│   │   ├── _ansi.py             #   supports_color, NO_COLOR/TERM=dumb
+│   │   ├── _terminal.py         #   terminal_guard() TTY restore
+│   │   ├── _menu.py             #   run_selection_menu(), render_numbered_menu()
+│   │   └── _timed_input.py      #   timed_prompt() and status_line()
+│   ├── update/              #   Update/upgrade machinery
+│   │   ├── __init__.py
+│   │   ├── _update.py           #   run_update_command()
+│   │   ├── _update_checks.py    #   Unified startup update check (facade)
+│   │   ├── _update_checks_fetch.py #  HTTP cache + fetch machinery
+│   │   └── _update_checks_source.py # Source-repo discovery + SHA resolution
 │   └── app.py               #   CLI entry: serve, init, config, skills, recipes, doctor, update, etc.
 │
 ├── hooks/                   # Claude Code PreToolUse/PostToolUse/SessionStart scripts
 │   ├── __init__.py
 │   ├── hooks.json           #   Plugin hook registration
-│   ├── branch_protection_guard.py
 │   ├── _hook_settings.py    #   Shared stdlib-only settings resolver for quota guard hooks
-│   ├── quota_guard.py       #   Blocks run_skill when threshold exceeded
+│   ├── guards/              #   PreToolUse guard scripts (18 modules)
+│   │   ├── __init__.py
+│   │   ├── ask_user_question_guard.py
+│   │   ├── branch_protection_guard.py
+│   │   ├── fleet_dispatch_guard.py
+│   │   ├── generated_file_write_guard.py
+│   │   ├── grep_pattern_lint_guard.py
+│   │   ├── leaf_orchestration_guard.py
+│   │   ├── mcp_health_guard.py
+│   │   ├── open_kitchen_guard.py
+│   │   ├── planner_gh_discovery_guard.py
+│   │   ├── pr_create_guard.py
+│   │   ├── quota_guard.py       #   Blocks run_skill when threshold exceeded
+│   │   ├── recipe_write_advisor.py  #   Advisory: Write/Edit to recipe YAMLs (non-blocking)
+│   │   ├── remove_clone_guard.py
+│   │   ├── review_loop_gate.py
+│   │   ├── skill_cmd_guard.py
+│   │   ├── skill_command_guard.py
+│   │   ├── unsafe_install_guard.py
+│   │   └── write_guard.py
+│   ├── formatters/          #   PostToolUse output formatters (5 modules)
+│   │   ├── __init__.py
+│   │   ├── _fmt_primitives.py   #   Payload dataclasses, token formatter
+│   │   ├── _fmt_execution.py    #   run_skill, run_cmd, test_check formatters
+│   │   ├── _fmt_status.py       #   token/timing summary, kitchen_status formatters
+│   │   ├── _fmt_recipe.py       #   load_recipe, open_kitchen formatters
+│   │   └── pretty_output_hook.py #  Dispatch entrypoint for MCP JSON → Markdown-KV reformatter
 │   ├── quota_post_hook.py   #   Appends quota warning to run_skill output
-│   ├── remove_clone_guard.py
-│   ├── skill_cmd_guard.py
-│   ├── skill_command_guard.py
-│   ├── ask_user_question_guard.py #  Blocks AskUserQuestion if kitchen is not open
-│   ├── open_kitchen_guard.py
-│   ├── unsafe_install_guard.py
-│   ├── planner_gh_discovery_guard.py #  Blocks GitHub discovery commands in planner skill sessions
-│   ├── pr_create_guard.py       #  Blocks gh pr create via run_cmd when kitchen is open
-│   ├── generated_file_write_guard.py
-│   ├── recipe_write_advisor.py  #   Advisory: Write/Edit to recipe YAMLs → suggests /autoskillit:write-recipe (non-blocking)
-│   ├── grep_pattern_lint_guard.py #  Denies Grep calls with \\| BRE alternation; returns corrected ERE pattern
-│   ├── mcp_health_guard.py  #   Detects MCP server disconnect via PID liveness; injects /MCP reconnect hint
-│   ├── leaf_orchestration_guard.py
-│   ├── fleet_dispatch_guard.py #  Blocks dispatch_food_truck from headless callers (L3→L3 recursion guard)
-│   ├── review_gate_post_hook.py #  PostToolUse: writes/clears review_gate_state.json on run_skill gate tags and check_review_loop calls
-│   ├── review_loop_gate.py  #   PreToolUse: blocks wait_for_ci/enqueue_pr when LOOP_REQUIRED gate is active and check_review_loop not yet called
-│   ├── pretty_output_hook.py #  Dispatch entrypoint for MCP JSON → Markdown-KV reformatter
-│   ├── _fmt_primitives.py   #   Payload dataclasses, token formatter, pipeline-mode + short-name
-│   ├── _fmt_execution.py    #   run_skill, run_cmd, test_check, merge_worktree formatters
-│   ├── _fmt_status.py       #   token/timing summary, kitchen_status, clone_repo formatters
-│   ├── _fmt_recipe.py       #   load_recipe, open_kitchen, list_recipes formatters
+│   ├── review_gate_post_hook.py #  PostToolUse: writes/clears review_gate_state.json
 │   ├── token_summary_hook.py #  Appends Token Usage Summary to PR body
 │   └── session_start_hook.py #  Injects open-kitchen reminder on resume
 │

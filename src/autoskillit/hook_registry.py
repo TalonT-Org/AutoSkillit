@@ -289,9 +289,7 @@ def _is_own_hook(command: str) -> bool:
         return True
     known = canonical_script_basenames() | RETIRED_SCRIPT_BASENAMES
     bare = {Path(s).name for s in known}
-    return any(
-        command.endswith(script) or f"/{script}" in command for script in known | bare
-    )
+    return any(command.endswith(script) or f"/{script}" in command for script in known | bare)
 
 
 def _extract_script_basenames(hooks_dict: dict) -> set[str]:

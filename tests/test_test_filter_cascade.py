@@ -233,7 +233,7 @@ class TestRecipeCascadeNarrowing:
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
-        assert result is not None
+        assert len(result) >= len(_FLEET_FILE_LEVEL_ENTRIES)
         result_names = {p.name for p in result}
         for fname in _FLEET_FILE_LEVEL_ENTRIES:
             assert fname in result_names, f"{fname!r} missing from recipe cascade result"

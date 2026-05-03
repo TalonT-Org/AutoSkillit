@@ -166,15 +166,28 @@ def _is_skill_disabled(
     in `features`, suppress any skill whose categories intersect the feature's
     skill_categories. An empty `features` dict uses each feature's default_enabled.
 
-    Policy layering: when `allow_only` is set and `skill_info.name` is in it, the
-    FEATURE_REGISTRY branch is bypassed (allow_only is a higher-priority signal than
-    a background feature default). Explicit `disabled` entries are never bypassed.
+    Policy layering: when `allow_only` is set and `skill_info.name` is in it, both
+    the FEATURE_REGISTRY branch and any feature-gate-derived tool tags in the
+    `disabled` list (injected via disabled_feature_tags) are bypassed. Explicit
+    `disabled` entries from user config and packs are never bypassed.
     """
+    _feature_tool_tags: frozenset[str] = (
+        frozenset(tag for feat_def in FEATURE_REGISTRY.values() for tag in feat_def.tool_tags)
+        if allow_only is not None and skill_info.name in allow_only
+        else frozenset()
+    )
     for tag in disabled:
         if tag in custom_tags:
             if skill_info.name in custom_tags[tag]:
                 return True
         elif tag in skill_info.categories:
+            if tag in _feature_tool_tags:
+                logger.info(
+                    "feature_gate_bypassed_by_allow_only",
+                    skill=skill_info.name,
+                    category=tag,
+                )
+                continue
             return True
 
     # Union model: suppress a category only when ALL features that gate it are disabled.

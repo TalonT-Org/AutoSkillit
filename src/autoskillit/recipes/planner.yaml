@@ -201,7 +201,6 @@ steps:
       source_dir: "${{ inputs.source_dir }}"
     capture:
       combined_assignments_path: "${{ result.merged_path }}"
-      refine_context_paths: "${{ result.refine_context_paths }}"
     on_success: refine_assignments
     on_failure: escalate_stop
 

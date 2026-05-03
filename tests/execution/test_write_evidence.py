@@ -17,7 +17,6 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import WriteBehaviorSpec
-from autoskillit.execution.headless import _build_skill_result, _resolve_skill_temp_dir
 from tests.conftest import _make_result
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -49,21 +48,43 @@ class TestMultiDirFsSnapshot:
         )
         assert fs_writes_detected is True
 
-    def test_fs_snapshot_watches_explicit_dir_not_skill_name(self, tmp_path: Path) -> None:
-        """When write_watch_dirs is provided, _resolve_skill_temp_dir derivation
-        is NOT used — the explicit dirs take precedence."""
-        skill_derived = _resolve_skill_temp_dir(
-            str(tmp_path), "/autoskillit:planner-refine-phases arg"
-        )
-        assert skill_derived is not None
-        assert skill_derived.name == "planner-refine-phases"
+    @pytest.mark.anyio
+    async def test_fs_snapshot_watches_explicit_dir_not_skill_name(
+        self, tmp_path: Path, minimal_ctx, monkeypatch
+    ) -> None:
+        """When write_watch_dirs is provided, _resolve_skill_temp_dir is NOT called."""
+        import autoskillit.execution.headless as headless_mod
+        from autoskillit.execution.headless import run_headless_core
+
+        resolver_calls: list[str] = []
+        original = headless_mod._resolve_skill_temp_dir
+
+        def recording_resolver(cwd: str, skill_command: str) -> Path | None:
+            resolver_calls.append(skill_command)
+            return original(cwd, skill_command)
+
+        monkeypatch.setattr(headless_mod, "_resolve_skill_temp_dir", recording_resolver)
 
         explicit_dir = tmp_path / "planner" / "run-20260502"
         explicit_dir.mkdir(parents=True)
-        (explicit_dir / "refined_plan.json").write_text("{}")
 
-        assert not (skill_derived.exists() and any(skill_derived.iterdir()))
-        assert any(explicit_dir.iterdir())
+        async def mock_runner(cmd, **kwargs):
+            return _make_result()
+
+        minimal_ctx.runner = mock_runner
+        proj = tmp_path / "proj"
+        proj.mkdir()
+
+        await run_headless_core(
+            "/autoskillit:planner-refine-phases arg",
+            str(proj),
+            minimal_ctx,
+            write_watch_dirs=[explicit_dir],
+        )
+
+        assert resolver_calls == [], (
+            "_resolve_skill_temp_dir must not be called when write_watch_dirs is provided"
+        )
 
 
 class TestHeadlessExecutorProtocol:
@@ -105,8 +126,12 @@ class TestUnifiedSkillNameResolution:
         from autoskillit.core import pkg_root
 
         recipe_dir = pkg_root() / "recipe"
+        py_files = sorted(recipe_dir.glob("*.py"))
+        assert len(py_files) > 0, (
+            f"No .py files found in {recipe_dir} — pkg_root() may have resolved incorrectly"
+        )
         violations: list[str] = []
-        for py_file in sorted(recipe_dir.glob("*.py")):
+        for py_file in py_files:
             try:
                 tree = ast.parse(py_file.read_text())
             except SyntaxError:
@@ -161,41 +186,32 @@ class TestBashFilePathEnrichment:
 class TestPlannerSkillEndToEnd:
     """Planner skill that writes via Bash to run dir detected via write_watch_dirs."""
 
-    def test_planner_skill_bash_write_to_run_dir_detected(self, tmp_path: Path) -> None:
-        """A planner skill writing via Bash to .autoskillit/temp/planner/run-{ts}/
-        produces has_evidence=True via write_watch_dirs override."""
+    @pytest.mark.anyio
+    async def test_planner_skill_bash_write_to_run_dir_detected(
+        self, tmp_path: Path, minimal_ctx
+    ) -> None:
+        """write_watch_dirs detection fires when the skill writes to run_dir during the session."""
+        from autoskillit.execution.headless import run_headless_core
+        from tests.execution.conftest import _success_session_json
+
         run_dir = tmp_path / ".autoskillit" / "temp" / "planner" / "run-20260502"
         run_dir.mkdir(parents=True)
-        (run_dir / "refined_plan.json").write_text("{}")
+        # Pre-snapshot: run_dir is empty at session start
 
-        stdout_lines = []
-        bash_block = {
-            "type": "tool_use",
-            "name": "Bash",
-            "id": "tu_0",
-            "input": {"command": f"echo '{{}}' > {run_dir}/refined_plan.json"},
-        }
-        assistant = {
-            "type": "assistant",
-            "message": {"content": [bash_block]},
-        }
-        stdout_lines.append(json.dumps(assistant))
-        result_record = {
-            "type": "result",
-            "subtype": "success",
-            "is_error": False,
-            "result": "done",
-            "session_id": "test-sess",
-        }
-        stdout_lines.append(json.dumps(result_record))
-        stdout = "\n".join(stdout_lines)
+        async def mock_runner(cmd, **kwargs):
+            # Simulate the skill writing to run_dir during the session
+            (run_dir / "refined_plan.json").write_text("{}")
+            return _make_result(returncode=0, stdout=_success_session_json("done"))
 
-        sr = _build_skill_result(
-            _make_result(returncode=0, stdout=stdout),
-            skill_command="/autoskillit:planner-refine-phases arg",
+        minimal_ctx.runner = mock_runner
+        proj = tmp_path / "proj"
+        proj.mkdir()
+
+        sr = await run_headless_core(
+            "/autoskillit:planner-refine-phases arg",
+            str(proj),
+            minimal_ctx,
+            write_watch_dirs=[run_dir],
             write_behavior=WriteBehaviorSpec(mode="always"),
-            fs_writes_detected=True,
         )
-        assert sr.success is True
-        assert sr.subtype != "zero_writes"
         assert sr.fs_writes_detected is True

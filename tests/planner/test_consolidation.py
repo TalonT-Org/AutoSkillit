@@ -491,6 +491,9 @@ def test_fallback_respects_dependency_ordering(tmp_path: Path) -> None:
     consolidate_wps(refined_wps_path=str(refined_path), planner_dir=str(tmp_path))
 
     consolidated = json.loads((tmp_path / "consolidated_wps.json").read_text())
+    output_ids = {wp["id"] for wp in consolidated["work_packages"]}
+    assert "P1-A1-WP2" not in output_ids
+    assert "P1-A1-WP3" not in output_ids
     merged_a = next(wp for wp in consolidated["work_packages"] if wp["id"] == "P1-A1-WP1")
     assert merged_a["id"] == "P1-A1-WP1"
     assert "P1-A1-WP2" not in merged_a["depends_on"]

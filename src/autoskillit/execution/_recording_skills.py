@@ -86,7 +86,11 @@ def snapshot_skill_dir(scenario_dir: Path, step_name: str, add_dir_path: Path) -
     dest_skills = snapshot_dir / ".claude" / "skills"
     if dest_skills.exists():
         shutil.rmtree(dest_skills)
-    shutil.copytree(skills_src, dest_skills)
+    try:
+        shutil.copytree(skills_src, dest_skills)
+    except Exception:
+        shutil.rmtree(snapshot_dir, ignore_errors=True)
+        raise
 
     manifest = build_skills_manifest(skills_src)
     write_versioned_json(snapshot_dir / "manifest.json", manifest, 1)

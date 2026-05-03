@@ -172,7 +172,14 @@ def _is_skill_disabled(
     `disabled` entries from user config and packs are never bypassed.
     """
     _feature_tool_tags: frozenset[str] = (
-        frozenset(tag for feat_def in FEATURE_REGISTRY.values() for tag in feat_def.tool_tags)
+        frozenset(
+            tag
+            for feat_name, feat_def in FEATURE_REGISTRY.items()
+            for tag in feat_def.tool_tags
+            if not is_feature_enabled(
+                feat_name, features, experimental_enabled=experimental_enabled
+            )
+        )
         if allow_only is not None and skill_info.name in allow_only
         else frozenset()
     )

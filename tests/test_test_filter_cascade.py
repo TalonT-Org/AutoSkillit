@@ -135,6 +135,14 @@ _CLI_FILE_LEVEL_ENTRIES = [
     "test_cook_order_picker.py",
 ]
 
+_FLEET_FILE_LEVEL_ENTRIES = [
+    "test_fleet_e2e.py",
+    "test_campaign_capture.py",
+    "test_pack_enforcement.py",
+    "test_pack_enforcement_e2e.py",
+    "test_dispatch_failure_semantics.py",
+]
+
 
 class TestRecipeCascadeNarrowing:
     """REQ-RECIPE-001/002/003: recipe cascade uses file-level entries for server/cli,
@@ -211,6 +219,25 @@ class TestRecipeCascadeNarrowing:
         assert not any("/hooks/" in str(p) for p in result), (
             f"hooks/test_fmt_status.py (not in cascade) should not appear; got {result}"
         )
+
+    def test_recipe_cascade_fleet_file_level_only(self, tmp_path: Path) -> None:
+        tests_root = tmp_path / "tests"
+        fleet_dir = tests_root / "fleet"
+        fleet_dir.mkdir(parents=True, exist_ok=True)
+        for fname in _FLEET_FILE_LEVEL_ENTRIES:
+            (fleet_dir / fname).touch()
+        (fleet_dir / "test_fleet_cli.py").touch()
+
+        result = build_test_scope(
+            changed_files={"src/autoskillit/recipe/schema.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        result_names = {p.name for p in result}
+        for fname in _FLEET_FILE_LEVEL_ENTRIES:
+            assert fname in result_names, f"{fname!r} missing from recipe cascade result"
+        assert "test_fleet_cli.py" not in result_names
 
 
 class TestServerFleetCascadeNarrowing:

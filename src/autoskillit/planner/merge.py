@@ -260,6 +260,17 @@ def merge_refined_assignments(
             continue
         all_assignments.extend(data.get("assignments", []))
 
+    valid_assignments: list[dict[str, Any]] = []
+    for a in all_assignments:
+        if not a.get("id"):
+            logger.warning(
+                "merge_refined_assignments: skipping assignment with missing id: %r",
+                a.get("name", "<unknown>"),
+            )
+        else:
+            valid_assignments.append(a)
+    all_assignments = valid_assignments
+
     def _sort_key(assignment_id: str) -> tuple[int, ...]:
         return tuple(int(n) for n in re.findall(r"\d+", assignment_id))
 

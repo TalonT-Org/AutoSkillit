@@ -33,11 +33,11 @@ from autoskillit.cli._install_info import (
 )
 from autoskillit.cli._restart import perform_restart
 from autoskillit.cli.ui._terminal import terminal_guard
-from autoskillit.cli._update_checks_fetch import (
+from autoskillit.cli.update._update_checks_fetch import (
     _fetch_latest_version,
     invalidate_fetch_cache,
 )
-from autoskillit.cli._update_checks_source import (
+from autoskillit.cli.update._update_checks_source import (
     resolve_reference_sha,
 )
 from autoskillit.core import atomic_write, get_logger

@@ -209,7 +209,7 @@ def upgrade() -> None:
 @app.command
 def update() -> None:
     """Upgrade autoskillit to the latest version on your install's branch."""
-    from autoskillit.cli._update import run_update_command
+    from autoskillit.cli.update._update import run_update_command
 
     run_update_command()
 
@@ -441,7 +441,7 @@ def main() -> None:
 
         evict_direct_mcp_entry(_user_claude_json_path())
 
-        from autoskillit.cli._update_checks import run_update_checks
+        from autoskillit.cli.update._update_checks import run_update_checks
 
         run_update_checks(command=_first_arg)
     app()

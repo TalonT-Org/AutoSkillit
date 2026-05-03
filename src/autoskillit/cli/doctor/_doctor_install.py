@@ -121,7 +121,7 @@ def _check_source_version_drift(home: Path | None = None) -> DoctorResult:
 
     try:
         from autoskillit.cli._install_info import InstallType, detect_install
-        from autoskillit.cli._update_checks import resolve_reference_sha
+        from autoskillit.cli.update._update_checks import resolve_reference_sha
 
         info = detect_install()
 
@@ -200,7 +200,7 @@ def _check_update_dismissal_state(home: Path | None = None) -> DoctorResult:
     _home = home or Path.home()
     try:
         from autoskillit.cli._install_info import detect_install, dismissal_window
-        from autoskillit.cli._update_checks import _read_dismiss_state
+        from autoskillit.cli.update._update_checks import _read_dismiss_state
 
         state = _read_dismiss_state(_home)
         entry = state.get("update_prompt")

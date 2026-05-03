@@ -23,7 +23,7 @@ def run_update_command(home: Path | None = None) -> None:
     appropriate upgrade command, then runs ``autoskillit install`` to sync hooks
     and plugin state.  Clears any active dismissal state on success.
     """
-    from autoskillit.cli._update_checks import (
+    from autoskillit.cli.update._update_checks import (
         _fetch_latest_version,
         _read_dismiss_state,
         _verify_update_result,

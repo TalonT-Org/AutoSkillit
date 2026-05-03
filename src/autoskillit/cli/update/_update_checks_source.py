@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from autoskillit.cli._update_checks_fetch import _fetch_with_cache, _read_fetch_cache
+from autoskillit.cli.update._update_checks_fetch import _fetch_with_cache, _read_fetch_cache
 from autoskillit.core import get_logger
 
 logger = get_logger(__name__)

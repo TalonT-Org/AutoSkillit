@@ -132,7 +132,7 @@ def flush_session_log(
     recipe_content_hash: str = "",
     recipe_composite_hash: str = "",
     recipe_version: str = "",
-    max_sessions: int = _MAX_SESSIONS,
+    max_sessions: int | None = None,
     telemetry: SessionTelemetry,
 ) -> None:
     """Flush session diagnostics to disk.
@@ -453,7 +453,7 @@ def flush_session_log(
         log_root,
         project_dir=project_dir,
         build_protected_campaign_ids=build_protected_campaign_ids,
-        max_sessions=max_sessions,
+        max_sessions=max_sessions if max_sessions is not None else _MAX_SESSIONS,
     )
 
 

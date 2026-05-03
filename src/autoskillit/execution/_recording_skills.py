@@ -32,6 +32,13 @@ def _extract_ephemeral_add_dir(cmd: list[str]) -> Path | None:
 
 def build_skills_manifest(skills_dir: Path) -> dict[str, Any]:
     """Build a manifest dict from a .claude/skills/ directory."""
+    if not skills_dir.is_dir():
+        return {
+            "schema_version": 1,
+            "captured_at": datetime.now(tz=UTC).isoformat(),
+            "skill_count": 0,
+            "skills": {},
+        }
     skills: dict[str, Any] = {}
     for skill_dir in sorted(skills_dir.iterdir()):
         if not skill_dir.is_dir():

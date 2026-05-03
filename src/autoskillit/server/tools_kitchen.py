@@ -128,7 +128,7 @@ async def _open_kitchen_handler() -> str | None:
 
     ctx = _get_ctx()
     ctx.gate.enable()
-    ctx.kitchen_id = str(uuid4())
+    ctx.kitchen_id = os.environ.get("AUTOSKILLIT_CAMPAIGN_ID") or str(uuid4())
     ctx.active_recipe_packs = frozenset()
     logger.info("open_kitchen", gate_state="open", kitchen_id=ctx.kitchen_id)
 

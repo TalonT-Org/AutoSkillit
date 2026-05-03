@@ -534,3 +534,45 @@ async def test_open_kitchen_has_always_load_meta() -> None:
     assert tool.meta is not None and tool.meta.get("anthropic/alwaysLoad") is True, (
         "open_kitchen missing anthropic/alwaysLoad:true — add to @mcp.tool(meta={...})"
     )
+
+
+# ---------------------------------------------------------------------------
+# Triple-ID unification: kitchen_id inherits AUTOSKILLIT_CAMPAIGN_ID
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_inherits_campaign_id_from_env(tmp_path, monkeypatch):
+    """When AUTOSKILLIT_CAMPAIGN_ID is in env, open_kitchen uses it as kitchen_id."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_ID", "abc123def456")
+    mock_ctx = _make_mock_ctx()
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools_kitchen import _open_kitchen_handler
+
+                    await _open_kitchen_handler()
+
+    assert mock_ctx.kitchen_id == "abc123def456"
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_generates_uuid_without_campaign_env(tmp_path, monkeypatch):
+    """Without AUTOSKILLIT_CAMPAIGN_ID, open_kitchen generates a fresh UUID."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
+    mock_ctx = _make_mock_ctx()
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools_kitchen import _open_kitchen_handler
+
+                    await _open_kitchen_handler()
+
+    kitchen_id = mock_ctx.kitchen_id
+    assert len(kitchen_id) == 36 and kitchen_id.count("-") == 4

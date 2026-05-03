@@ -84,6 +84,7 @@ def _launch_fleet_session(
             "AUTOSKILLIT_FLEET_MODE": fleet_mode,
             "AUTOSKILLIT_CAMPAIGN_ID": campaign_id,
             "AUTOSKILLIT_CAMPAIGN_STATE_PATH": str(state_path),
+            "AUTOSKILLIT_CONTINUE_ON_FAILURE": str(campaign_recipe.continue_on_failure).lower(),
             "AUTOSKILLIT_HEADLESS": "0",
         }
         while True:

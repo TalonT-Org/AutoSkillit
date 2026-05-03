@@ -74,3 +74,44 @@ class TestLaunchFleetSessionIngredientsTable:
     ) -> None:
         captured = self._call(monkeypatch, tmp_path)
         assert captured["ingredients_table"] is None
+
+
+class TestLaunchFleetSessionContinueOnFailureEnv:
+    def _capture_env(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, continue_on_failure: bool
+    ) -> dict:
+        captured: dict = {}
+
+        def _fake_run(*args, **kwargs):
+            captured["extra_env"] = kwargs.get("extra_env", {})
+            return None
+
+        monkeypatch.setattr("autoskillit.cli._session_launch._run_interactive_session", _fake_run)
+        monkeypatch.setattr(
+            "autoskillit.cli._prompts._build_fleet_campaign_prompt",
+            lambda *a, **kw: "fake-prompt",
+        )
+        monkeypatch.chdir(tmp_path)
+
+        state_path = tmp_path / "state.json"
+        state_path.write_text("{}")
+
+        recipe = _make_campaign_recipe()
+        recipe.continue_on_failure = continue_on_failure
+
+        from autoskillit.cli._fleet_session import _launch_fleet_session
+
+        _launch_fleet_session(recipe, "test-id", state_path, None, fleet_mode="campaign")
+        return captured
+
+    def test_continue_on_failure_false_injects_env(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        captured = self._capture_env(monkeypatch, tmp_path, continue_on_failure=False)
+        assert captured["extra_env"]["AUTOSKILLIT_CONTINUE_ON_FAILURE"] == "false"
+
+    def test_continue_on_failure_true_injects_env(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        captured = self._capture_env(monkeypatch, tmp_path, continue_on_failure=True)
+        assert captured["extra_env"]["AUTOSKILLIT_CONTINUE_ON_FAILURE"] == "true"

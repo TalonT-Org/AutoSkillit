@@ -764,3 +764,113 @@ async def test_dispatch_food_truck_marketplace_install_succeeds(tool_ctx_marketp
         )
     )
     assert result["success"] is True
+
+
+# ---------------------------------------------------------------------------
+# Class TestDispatchFoodTruckHaltEnforcement — campaign halt gate
+# ---------------------------------------------------------------------------
+
+
+def _write_campaign_state(state_path: Path, dispatches: list[dict]) -> None:
+    """Write a minimal campaign state file with the given dispatch records."""
+    import time
+
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "campaign_id": "test-campaign",
+                "campaign_name": "test",
+                "manifest_path": "/fake/manifest.yaml",
+                "started_at": time.time(),
+                "dispatches": dispatches,
+                "captured_values": {},
+            }
+        )
+    )
+
+
+class TestDispatchFoodTruckHaltEnforcement:
+    @pytest.mark.anyio
+    async def test_dispatch_refuses_after_failure_when_halt_enabled(
+        self, tool_ctx, monkeypatch, tmp_path
+    ):
+        """Prior FAILURE + continue_on_failure=false → FLEET_CAMPAIGN_HALTED."""
+        state_path = tmp_path / "state.json"
+        _write_campaign_state(state_path, [{"name": "d1", "status": "failure"}])
+        monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(state_path))
+        monkeypatch.setenv("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false")
+
+        from autoskillit.server.tools_execution import dispatch_food_truck
+
+        result = json.loads(await dispatch_food_truck(recipe="r", task="t"))
+        assert result["success"] is False
+        assert result["error"] == "fleet_campaign_halted"
+
+    @pytest.mark.anyio
+    async def test_dispatch_proceeds_after_failure_when_continue_enabled(
+        self, tool_ctx, monkeypatch, tmp_path
+    ):
+        """dispatch_food_truck proceeds when continue_on_failure=true even with prior failure."""
+        state_path = tmp_path / "state.json"
+        _write_campaign_state(state_path, [{"name": "d1", "status": "failure"}])
+        monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(state_path))
+        monkeypatch.setenv("AUTOSKILLIT_CONTINUE_ON_FAILURE", "true")
+
+        self._setup_standard_dispatch(tool_ctx, monkeypatch)
+        from autoskillit.server.tools_execution import dispatch_food_truck
+
+        result = json.loads(await dispatch_food_truck(recipe="test-recipe", task="t"))
+        assert result.get("error") != "fleet_campaign_halted"
+
+    @pytest.mark.anyio
+    async def test_dispatch_proceeds_when_no_campaign_state_path(self, tool_ctx, monkeypatch):
+        """Without AUTOSKILLIT_CAMPAIGN_STATE_PATH, halt check is skipped."""
+        monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", raising=False)
+
+        self._setup_standard_dispatch(tool_ctx, monkeypatch)
+        from autoskillit.server.tools_execution import dispatch_food_truck
+
+        result = json.loads(await dispatch_food_truck(recipe="test-recipe", task="t"))
+        assert result.get("error") != "fleet_campaign_halted"
+
+    @pytest.mark.anyio
+    async def test_dispatch_proceeds_when_no_failures_in_state(
+        self, tool_ctx, monkeypatch, tmp_path
+    ):
+        """dispatch_food_truck proceeds when all prior dispatches are SUCCESS."""
+        state_path = tmp_path / "state.json"
+        _write_campaign_state(state_path, [{"name": "d1", "status": "success"}])
+        monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(state_path))
+        monkeypatch.setenv("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false")
+
+        self._setup_standard_dispatch(tool_ctx, monkeypatch)
+        from autoskillit.server.tools_execution import dispatch_food_truck
+
+        result = json.loads(await dispatch_food_truck(recipe="test-recipe", task="t"))
+        assert result.get("error") != "fleet_campaign_halted"
+
+    @pytest.mark.anyio
+    async def test_dispatch_proceeds_when_state_file_missing(
+        self, tool_ctx, monkeypatch, tmp_path
+    ):
+        """If state file doesn't exist, halt check is skipped (fail-open)."""
+        monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(tmp_path / "nonexistent.json"))
+        monkeypatch.setenv("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false")
+
+        self._setup_standard_dispatch(tool_ctx, monkeypatch)
+        from autoskillit.server.tools_execution import dispatch_food_truck
+
+        result = json.loads(await dispatch_food_truck(recipe="test-recipe", task="t"))
+        assert result.get("error") != "fleet_campaign_halted"
+
+    def _setup_standard_dispatch(self, tool_ctx, monkeypatch):
+        """Wire tool_ctx for a successful standard dispatch."""
+        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        repo = InMemoryRecipeRepository()
+        recipe_info = _make_recipe_info("test-recipe")
+        repo.add_recipe("test-recipe", recipe_info)
+        repo.add_full_recipe(recipe_info.path, _make_standard_recipe("test-recipe"))
+        tool_ctx.recipes = repo
+        tool_ctx.executor = InMemoryHeadlessExecutor()

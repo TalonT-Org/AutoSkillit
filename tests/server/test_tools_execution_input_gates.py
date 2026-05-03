@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -138,8 +139,6 @@ class TestRunSkillPrefix:
         cmd = tool_ctx.runner.call_args_list[-1][0]
         prompt_idx = cmd.index("--print") + 1 if "--print" in cmd else cmd.index("-p") + 1
         assert cmd[prompt_idx].startswith("Use /investigate error")
-        from pathlib import Path
-
         actual_cwd = tool_ctx.runner.call_args_list[-1][1]
         assert actual_cwd == Path("/tmp"), f"Subprocess cwd mismatch: {actual_cwd} != /tmp"
 

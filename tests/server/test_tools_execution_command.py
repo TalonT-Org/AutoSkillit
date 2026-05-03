@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from autoskillit.config import (
@@ -43,8 +45,6 @@ class TestRunSkillPluginDir:
         assert cmd[plugin_dir_idx + 1] == str(tool_ctx.plugin_source.plugin_dir)
         assert "--output-format" in cmd
         assert cmd[cmd.index("--output-format") + 1] == "stream-json"
-        from pathlib import Path
-
         actual_cwd = tool_ctx.runner.call_args_list[-1][1]
         assert actual_cwd == Path("/tmp"), f"Subprocess cwd mismatch: {actual_cwd} != /tmp"
 

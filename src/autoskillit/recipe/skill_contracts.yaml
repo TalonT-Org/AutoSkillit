@@ -2242,6 +2242,7 @@ callable_contracts:
       type: str
     - name: refine_context_paths
       type: str
+      when: "key == 'assignments'"
   autoskillit.planner.create_run_dir:
     inputs:
     - name: temp_dir

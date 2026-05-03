@@ -63,13 +63,13 @@ def test_feature_registry_franchise_entry_gone() -> None:
 
 
 def test_session_type_no_franchise() -> None:
-    from autoskillit.core._type_enums import SessionType
+    from autoskillit.core.types._type_enums import SessionType
 
     assert not hasattr(SessionType, "FRANCHISE")
 
 
 def test_session_type_fleet_canonical() -> None:
-    from autoskillit.core._type_enums import SessionType
+    from autoskillit.core.types._type_enums import SessionType
 
     assert SessionType.FLEET.value == "fleet"
 
@@ -78,7 +78,7 @@ def test_hook_registry_fleet_dispatch_guard() -> None:
     from autoskillit.hook_registry import HOOK_REGISTRY
 
     scripts = [s for hd in HOOK_REGISTRY for s in hd.scripts]
-    assert "fleet_dispatch_guard.py" in scripts
+    assert "guards/fleet_dispatch_guard.py" in scripts
     assert "franchise_dispatch_guard.py" not in scripts
 
 

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core.session_registry import (
+from autoskillit.core.runtime.session_registry import (
     bridge_claude_session_id,
     read_registry,
     registry_path,

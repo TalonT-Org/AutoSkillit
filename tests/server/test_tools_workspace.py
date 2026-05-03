@@ -13,7 +13,7 @@ from autoskillit.config import (
     SafetyConfig,
 )
 from autoskillit.core.types import AUTOSKILLIT_PRIVATE_ENV_VARS
-from autoskillit.server.tools_workspace import reset_test_dir, reset_workspace, test_check
+from autoskillit.server.tools.tools_workspace import reset_test_dir, reset_workspace, test_check
 from autoskillit.workspace import CleanupResult
 from tests.conftest import _make_result
 

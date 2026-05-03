@@ -69,7 +69,7 @@ def _function_body_has_any_kitchen_open_patch(func_node: ast.FunctionDef) -> boo
     return False
 
 
-_UPDATE_CHECKS_FILE = _SRC_ROOT / "cli" / "_update_checks.py"
+_UPDATE_CHECKS_FILE = _SRC_ROOT / "cli" / "update" / "_update_checks.py"
 
 
 def test_run_update_checks_has_command_parameter() -> None:

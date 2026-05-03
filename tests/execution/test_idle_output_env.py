@@ -192,7 +192,7 @@ class TestDispatchFoodTruckIdleEnvInjection:
             _fake_execute,
         )
 
-        from autoskillit.core._type_plugin_source import DirectInstall
+        from autoskillit.core.types._type_plugin_source import DirectInstall
 
         minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path / "plugin")
         executor = DefaultHeadlessExecutor(minimal_ctx)

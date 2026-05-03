@@ -6,10 +6,6 @@ execution/headless.py has TYPE_CHECKING-only references to pipeline/.
 """
 
 from autoskillit.core import SkillResult
-from autoskillit.execution._process_kill import (
-    async_kill_process_tree,
-    kill_process_tree,
-)
 from autoskillit.execution._recording_skills import (
     restore_skill_snapshot,
     scan_skill_snapshots,
@@ -67,6 +63,8 @@ from autoskillit.execution.pr_analysis import (
 )
 from autoskillit.execution.process import (
     DefaultSubprocessRunner,
+    async_kill_process_tree,
+    kill_process_tree,
     run_managed_async,
     run_managed_sync,
 )

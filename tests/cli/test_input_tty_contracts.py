@@ -129,7 +129,7 @@ def test_prompt_recipe_choice_noninteractive_exits(
 
 def test_cook_noninteractive_exits(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """cook() launch-confirm prompt must raise SystemExit(1) when not interactive."""
-    from autoskillit.cli._cook import cook
+    from autoskillit.cli.session._cook import cook
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("sys.stdin.isatty", lambda: False)

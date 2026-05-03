@@ -60,7 +60,10 @@ def test_hook_registry_matches_generated_hooks_json() -> None:
             matcher = entry.get("matcher", "")
             for hook in entry["hooks"]:
                 cmd = hook["command"]
-                script_name = cmd.split("/")[-1]
+                # Extract hooks-dir-relative path (e.g. "guards/quota_guard.py")
+                # Command format: "python3 /path/to/autoskillit/hooks/guards/quota_guard.py"
+                parts = cmd.split("/hooks/", 1)
+                script_name = parts[1] if len(parts) == 2 else cmd.split("/")[-1]
                 generated_pairs.add((matcher, script_name))
 
     registry_pairs: set[tuple[str, str]] = set()

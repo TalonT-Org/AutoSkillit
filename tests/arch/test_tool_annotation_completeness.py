@@ -23,7 +23,7 @@ _SERVER_DIR = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "ser
 
 
 def _tools_files() -> list[Path]:
-    return sorted(_SERVER_DIR.glob("tools_*.py"))
+    return sorted((_SERVER_DIR / "tools").glob("tools_*.py"))
 
 
 def _collect_missing_annotations(path: Path) -> list[tuple[str, int]]:
@@ -61,8 +61,12 @@ class TestToolAnnotationCompleteness:
         This catches tools that omit readOnlyHint entirely, which causes them to
         have no annotation on the wire even when the middleware is fixed.
         """
+        tool_files = _tools_files()
+        assert tool_files, (
+            "No tool files found — glob path is wrong or tools/ subpackage is missing"
+        )
         violations: list[str] = []
-        for path in _tools_files():
+        for path in tool_files:
             for func_name, lineno in _collect_missing_annotations(path):
                 violations.append(
                     f"{path.name}:{lineno}: {func_name!r} is missing annotations= in @mcp.tool()"

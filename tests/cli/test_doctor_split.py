@@ -77,40 +77,42 @@ def test_doctor_core_does_not_contain_quota_cache_class():
 
 
 def test_doctor_facade_exports_run_doctor():
-    from autoskillit.cli._doctor import run_doctor  # noqa: F401
+    from autoskillit.cli.doctor import run_doctor  # noqa: F401
 
 
 def test_doctor_submodule_types_importable():
-    from autoskillit.cli._doctor_types import _NON_PROBLEM, DoctorResult  # noqa: F401
+    from autoskillit.cli.doctor._doctor_types import _NON_PROBLEM, DoctorResult  # noqa: F401
 
 
 def test_doctor_submodule_mcp_importable():
-    from autoskillit.cli._doctor_mcp import _check_mcp_server_registered  # noqa: F401
+    from autoskillit.cli.doctor._doctor_mcp import _check_mcp_server_registered  # noqa: F401
 
 
 def test_doctor_submodule_hooks_importable():
-    from autoskillit.cli._doctor_hooks import _check_hook_registry_drift  # noqa: F401
+    from autoskillit.cli.doctor._doctor_hooks import _check_hook_registry_drift  # noqa: F401
 
 
 def test_doctor_submodule_install_importable():
-    from autoskillit.cli._doctor_install import _check_stale_entry_points  # noqa: F401
+    from autoskillit.cli.doctor._doctor_install import _check_stale_entry_points  # noqa: F401
 
 
 def test_doctor_submodule_config_importable():
-    from autoskillit.cli._doctor_config import _check_config_layers_for_secrets  # noqa: F401
+    from autoskillit.cli.doctor._doctor_config import (
+        _check_config_layers_for_secrets,  # noqa: F401
+    )
 
 
 def test_doctor_submodule_runtime_importable():
-    from autoskillit.cli._doctor_runtime import _check_quota_cache_schema  # noqa: F401
+    from autoskillit.cli.doctor._doctor_runtime import _check_quota_cache_schema  # noqa: F401
 
 
 def test_doctor_submodule_env_importable():
-    from autoskillit.cli._doctor_env import _check_ambient_session_type_leaf  # noqa: F401
+    from autoskillit.cli.doctor._doctor_env import _check_ambient_session_type_leaf  # noqa: F401
 
 
 def test_doctor_submodule_features_importable():
-    from autoskillit.cli._doctor_features import _check_feature_dependencies  # noqa: F401
+    from autoskillit.cli.doctor._doctor_features import _check_feature_dependencies  # noqa: F401
 
 
 def test_doctor_submodule_fleet_importable():
-    from autoskillit.cli._doctor_fleet import _check_stale_fleet_state  # noqa: F401
+    from autoskillit.cli.doctor._doctor_fleet import _check_stale_fleet_state  # noqa: F401

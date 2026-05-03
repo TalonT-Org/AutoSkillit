@@ -73,7 +73,7 @@ class TestTieredAlwaysRun:
         """REQ-TIER-003: hooks source change → full infra directory included."""
         tests_root = _make_tests_root(tmp_path, ALL_DIRS)
         result = build_test_scope(
-            changed_files={"src/autoskillit/hooks/quota_guard.py"},
+            changed_files={"src/autoskillit/hooks/guards/quota_guard.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )

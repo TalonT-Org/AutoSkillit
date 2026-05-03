@@ -39,7 +39,7 @@ class TestDoctorScriptHealth:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
         # No .autoskillit/recipes/ directory created
-        cli.doctor(output_json=True)
+        cli.doctor_cmd(output_json=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)
         script_checks = [r for r in data["results"] if r["check"] == "script_version_health"]
@@ -63,7 +63,7 @@ class TestDoctorScriptHealth:
             f'autoskillit_version: "{current_version}"\n'
             + _MINIMAL_SCRIPT_YAML.split("\n", 2)[2]  # reuse steps/constraints block
         )
-        cli.doctor(output_json=True)
+        cli.doctor_cmd(output_json=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)
         script_checks = [r for r in data["results"] if r["check"] == "script_version_health"]
@@ -88,7 +88,7 @@ class TestDoctorScriptHealth:
         (scripts_dir / "also-old.yaml").write_text(
             'name: also-old\ndescription: Also old\nautoskillit_version: "0.1.0"\n'
         )
-        cli.doctor(output_json=True)
+        cli.doctor_cmd(output_json=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)
         script_checks = [r for r in data["results"] if r["check"] == "script_version_health"]
@@ -108,7 +108,7 @@ class TestDoctorScriptHealth:
         (scripts_dir / "no-version.yaml").write_text(
             "name: no-version\ndescription: No version field\n"
         )
-        cli.doctor(output_json=True)
+        cli.doctor_cmd(output_json=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)
         script_checks = [r for r in data["results"] if r["check"] == "script_version_health"]
@@ -152,7 +152,7 @@ class TestDoctorScriptHealth:
         scripts_dir.mkdir(parents=True)
         self._setup_recipe(scripts_dir, "broken-pipeline")
         self._write_failures_json(tmp_path, "broken-pipeline", retries=3)
-        cli.doctor(output_json=True)
+        cli.doctor_cmd(output_json=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)
         script_checks = [r for r in data["results"] if r["check"] == "script_version_health"]
@@ -173,7 +173,7 @@ class TestDoctorScriptHealth:
         scripts_dir.mkdir(parents=True)
         self._setup_recipe(scripts_dir, "my-pipeline")
         self._write_failures_json(tmp_path, "my-pipeline", retries=3)
-        cli.doctor(output_json=True)
+        cli.doctor_cmd(output_json=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)
         script_checks = [r for r in data["results"] if r["check"] == "script_version_health"]
@@ -194,7 +194,7 @@ class TestDoctorScriptHealth:
         scripts_dir.mkdir(parents=True)
         self._setup_recipe(scripts_dir, "outdated-pipeline")
         # No failures.json written
-        cli.doctor(output_json=True)
+        cli.doctor_cmd(output_json=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)
         script_checks = [r for r in data["results"] if r["check"] == "script_version_health"]
@@ -215,7 +215,7 @@ class TestDoctorScriptHealth:
         scripts_dir.mkdir(parents=True)
         self._setup_recipe(scripts_dir, "current-pipeline", version=current_version)
         # No failures.json written
-        cli.doctor(output_json=True)
+        cli.doctor_cmd(output_json=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)
         script_checks = [r for r in data["results"] if r["check"] == "script_version_health"]
@@ -235,7 +235,7 @@ class TestDoctorScriptHealth:
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
         self._setup_recipe(scripts_dir, "stale-pipeline")
-        cli.doctor(output_json=True)
+        cli.doctor_cmd(output_json=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)
         script_checks = [r for r in data["results"] if r["check"] == "script_version_health"]
@@ -250,6 +250,6 @@ class TestSyncRemovalCLI:
     ):
         """REQ-APP-006: doctor output does not include recipe_sync_status."""
         monkeypatch.chdir(tmp_path)
-        cli.doctor()
+        cli.doctor_cmd()
         captured = capsys.readouterr()
         assert "recipe_sync_status" not in captured.out

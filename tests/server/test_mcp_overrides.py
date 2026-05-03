@@ -40,8 +40,10 @@ async def test_load_recipe_tool_accepts_overrides_param(tmp_path: Path) -> None:
     mock_tool_ctx = _make_mock_ctx(mock_recipes)
 
     with (
-        patch("autoskillit.server.tools_recipe._require_enabled", return_value=None),
-        patch("autoskillit.server.tools_recipe._get_ctx_or_none", return_value=mock_tool_ctx),
+        patch("autoskillit.server.tools.tools_recipe._require_enabled", return_value=None),
+        patch(
+            "autoskillit.server.tools.tools_recipe._get_ctx_or_none", return_value=mock_tool_ctx
+        ),
         patch(
             "autoskillit.config.resolve_ingredient_defaults",
             return_value={},
@@ -52,7 +54,7 @@ async def test_load_recipe_tool_accepts_overrides_param(tmp_path: Path) -> None:
             return_value={"content": "test", "valid": True, "suggestions": []},
         ),
     ):
-        from autoskillit.server.tools_recipe import load_recipe as _load_recipe_tool
+        from autoskillit.server.tools.tools_recipe import load_recipe as _load_recipe_tool
 
         result_str = await _load_recipe_tool(
             name="test-recipe", overrides={"run_mode": "sequential"}
@@ -82,9 +84,11 @@ async def test_open_kitchen_accepts_overrides_param(tmp_path: Path) -> None:
     mock_mcp_ctx.enable_components = AsyncMock()
 
     with (
-        patch("autoskillit.server.tools_kitchen._require_orchestrator_exact", return_value=None),
         patch(
-            "autoskillit.server.tools_kitchen._open_kitchen_handler",
+            "autoskillit.server.tools.tools_kitchen._require_orchestrator_exact", return_value=None
+        ),
+        patch(
+            "autoskillit.server.tools.tools_kitchen._open_kitchen_handler",
             new_callable=AsyncMock,
             return_value=None,
         ),
@@ -98,9 +102,9 @@ async def test_open_kitchen_accepts_overrides_param(tmp_path: Path) -> None:
             new_callable=AsyncMock,
             return_value={"content": "test", "valid": True, "suggestions": []},
         ),
-        patch("autoskillit.server.tools_kitchen.__version__", "0.0.0"),
+        patch("autoskillit.server.tools.tools_kitchen.__version__", "0.0.0"),
     ):
-        from autoskillit.server.tools_kitchen import open_kitchen as _open_kitchen_tool
+        from autoskillit.server.tools.tools_kitchen import open_kitchen as _open_kitchen_tool
 
         result_str = await _open_kitchen_tool(
             name="test-recipe",

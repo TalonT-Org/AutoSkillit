@@ -114,7 +114,7 @@ def test_normalize_retriable_success_jsonl_exhausted_returns_context_exhausted()
 
 def test_normalize_retriable_success_context_exhausted_via_errors_list():
     """Path 2: is_error=True + errors list contains marker → 'context_exhausted'."""
-    from autoskillit.core._type_constants import CONTEXT_EXHAUSTION_MARKER
+    from autoskillit.core.types._type_constants import CONTEXT_EXHAUSTION_MARKER
 
     session = ClaudeSessionResult(
         subtype="success",
@@ -142,7 +142,7 @@ def test_normalize_retriable_success_context_exhausted_via_result_text():
     The old code checked jsonl_context_exhausted directly and returned 'missing_completion_marker'.
     The new code delegates to _is_context_exhausted() and returns 'context_exhausted'.
     """
-    from autoskillit.core._type_constants import CONTEXT_EXHAUSTION_MARKER
+    from autoskillit.core.types._type_constants import CONTEXT_EXHAUSTION_MARKER
 
     session = ClaudeSessionResult(
         subtype="success",

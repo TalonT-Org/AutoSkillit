@@ -93,7 +93,7 @@ def test_terminal_guard_never_emits_smcup_on_entry() -> None:
     See: test_interactive_subprocess_calls_wrapped_in_terminal_guard for the
     analogous structural guard on subprocess call sites.
     """
-    terminal_py = CLI_DIR / "_terminal.py"
+    terminal_py = CLI_DIR / "ui" / "_terminal.py"
     source = terminal_py.read_text()
     assert "?1049h" not in source, (
         f"{terminal_py.name} must not emit \\033[?1049h (smcup). "
@@ -104,7 +104,7 @@ def test_terminal_guard_never_emits_smcup_on_entry() -> None:
     )
 
 
-@pytest.mark.parametrize("py_file", sorted(CLI_DIR.glob("*.py")))
+@pytest.mark.parametrize("py_file", sorted(CLI_DIR.rglob("*.py")))
 def test_interactive_subprocess_calls_wrapped_in_terminal_guard(py_file: Path) -> None:
     """Every non-capturing subprocess.run call in cli/ must be inside terminal_guard().
 
@@ -115,7 +115,7 @@ def test_interactive_subprocess_calls_wrapped_in_terminal_guard(py_file: Path) -
     If this test fails with your change:
         1. You added a subprocess.run call in a CLI module without capture_output=True
         2. Wrap it: `with terminal_guard(): result = subprocess.run(...)`
-        3. Import: `from autoskillit.cli._terminal import terminal_guard`
+        3. Import: `from autoskillit.cli.ui._terminal import terminal_guard`
     """
     source = py_file.read_text()
     if "subprocess.run" not in source:
@@ -126,6 +126,6 @@ def test_interactive_subprocess_calls_wrapped_in_terminal_guard(py_file: Path) -
         f"\n\n{py_file.name}: interactive subprocess.run found at line(s) "
         f"{violations} without terminal_guard() wrapper.\n\n"
         f"Fix: wrap with `with terminal_guard():` and import from "
-        f"`autoskillit.cli._terminal`.\n\n"
+        f"`autoskillit.cli.ui._terminal`.\n\n"
         f"See: tests/cli/test_input_tty_contracts.py for the analogous pattern."
     )

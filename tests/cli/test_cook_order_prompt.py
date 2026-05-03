@@ -36,8 +36,8 @@ class TestCLIOrderPrompt:
         import importlib
         import sys as _sys
 
-        _app_mod = _sys.modules.get("autoskillit.cli._order") or importlib.import_module(
-            "autoskillit.cli._order"
+        _app_mod = _sys.modules.get("autoskillit.cli.session._order") or importlib.import_module(
+            "autoskillit.cli.session._order"
         )
         monkeypatch.setattr(_app_mod, "_get_ingredients_table", lambda *a, **kw: "| col | val |")
 
@@ -272,8 +272,8 @@ class TestOrderMcpPrefixSelection:
         import importlib
         import sys as _sys
 
-        _app_mod = _sys.modules.get("autoskillit.cli._order") or importlib.import_module(
-            "autoskillit.cli._order"
+        _app_mod = _sys.modules.get("autoskillit.cli.session._order") or importlib.import_module(
+            "autoskillit.cli.session._order"
         )
         monkeypatch.setattr(_app_mod, "_get_ingredients_table", lambda *a, **kw: "| col | val |")
 
@@ -367,8 +367,8 @@ class TestOrderMcpPrefixSelection:
         import importlib
         import sys as _sys
 
-        _app_mod = _sys.modules.get("autoskillit.cli._order") or importlib.import_module(
-            "autoskillit.cli._order"
+        _app_mod = _sys.modules.get("autoskillit.cli.session._order") or importlib.import_module(
+            "autoskillit.cli.session._order"
         )
         monkeypatch.setattr(_app_mod, "_build_orchestrator_prompt", _capturing_build)
         mock_run.return_value = subprocess.CompletedProcess(

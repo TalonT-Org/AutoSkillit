@@ -16,7 +16,7 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 def _make_mock_ctx(tmp_path: Path) -> MagicMock:
     """Return a minimal mock ToolContext for _initialize tests."""
-    from autoskillit.core._type_plugin_source import MarketplaceInstall
+    from autoskillit.core.types._type_plugin_source import MarketplaceInstall
 
     ctx = MagicMock()
     ctx.plugin_source = MarketplaceInstall(cache_path=tmp_path)

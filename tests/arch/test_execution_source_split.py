@@ -14,16 +14,16 @@ NEW_HEADLESS_MODULES = [
     "_headless_result.py",
 ]
 HEADLESS_SIZE_BUDGETS = {
-    "headless.py": 780,
-    "_headless_recovery.py": 320,
-    "_headless_path_tokens.py": 175,
-    "_headless_result.py": 595,
+    "headless/__init__.py": 780,
+    "headless/_headless_recovery.py": 320,
+    "headless/_headless_path_tokens.py": 175,
+    "headless/_headless_result.py": 595,
 }
 
 
 def test_new_headless_modules_exist():
     for name in NEW_HEADLESS_MODULES:
-        assert (SRC_EXECUTION / name).exists(), f"Missing: {name}"
+        assert (SRC_EXECUTION / "headless" / name).exists(), f"Missing: headless/{name}"
 
 
 def test_headless_facade_under_budget():
@@ -33,14 +33,14 @@ def test_headless_facade_under_budget():
 
 
 def test_headless_facade_does_not_define_build_skill_result():
-    src = (SRC_EXECUTION / "headless.py").read_text()
+    src = (SRC_EXECUTION / "headless" / "__init__.py").read_text()
     assert "def _build_skill_result" not in src, (
-        "_build_skill_result must live in _headless_result.py, not headless.py"
+        "_build_skill_result must live in _headless_result.py, not headless/__init__.py"
     )
 
 
 def test_headless_facade_does_not_define_recovery_functions():
-    src = (SRC_EXECUTION / "headless.py").read_text()
+    src = (SRC_EXECUTION / "headless" / "__init__.py").read_text()
     for fn in (
         "_recover_from_separate_marker",
         "_recover_block_from_assistant_messages",
@@ -52,7 +52,7 @@ def test_headless_facade_does_not_define_recovery_functions():
 
 
 def test_headless_facade_does_not_define_path_token_functions():
-    src = (SRC_EXECUTION / "headless.py").read_text()
+    src = (SRC_EXECUTION / "headless" / "__init__.py").read_text()
     for fn in (
         "_build_path_token_set",
         "_extract_output_paths",
@@ -70,30 +70,30 @@ NEW_SESSION_MODULES = ["_session_model.py", "_session_content.py"]
 NEW_MQ_MODULES = ["_merge_queue_classifier.py", "_merge_queue_repo_state.py"]
 
 SESSION_SIZE_BUDGETS = {
-    "session.py": 60,  # was 420; facade is ~40 lines after P2
-    "_session_model.py": 385,
-    "_session_content.py": 200,
+    "session/__init__.py": 60,  # was 420; facade is ~40 lines after P2
+    "session/_session_model.py": 385,
+    "session/_session_content.py": 200,
 }
 NEW_SESSION_FSM_MODULES = ["_retry_fsm.py", "_session_outcome.py"]
 SESSION_FSM_SIZE_BUDGETS = {
-    "_retry_fsm.py": 200,
-    "_session_outcome.py": 260,
+    "session/_retry_fsm.py": 200,
+    "session/_session_outcome.py": 260,
 }
 MQ_SIZE_BUDGETS = {
-    "merge_queue.py": 500,
-    "_merge_queue_classifier.py": 175,
-    "_merge_queue_repo_state.py": 280,
+    "merge_queue/__init__.py": 500,
+    "merge_queue/_merge_queue_classifier.py": 175,
+    "merge_queue/_merge_queue_repo_state.py": 280,
 }
 
 
 def test_new_session_modules_exist():
     for name in NEW_SESSION_MODULES:
-        assert (SRC_EXECUTION / name).exists(), f"Missing: {name}"
+        assert (SRC_EXECUTION / "session" / name).exists(), f"Missing: session/{name}"
 
 
 def test_new_mq_modules_exist():
     for name in NEW_MQ_MODULES:
-        assert (SRC_EXECUTION / name).exists(), f"Missing: {name}"
+        assert (SRC_EXECUTION / "merge_queue" / name).exists(), f"Missing: merge_queue/{name}"
 
 
 def test_session_and_mq_under_budget():
@@ -104,7 +104,7 @@ def test_session_and_mq_under_budget():
 
 
 def test_session_facade_does_not_define_model_types():
-    src = (SRC_EXECUTION / "session.py").read_text()
+    src = (SRC_EXECUTION / "session" / "__init__.py").read_text()
     for sym in (
         "class ClaudeSessionResult",
         "class ContentState",
@@ -116,7 +116,7 @@ def test_session_facade_does_not_define_model_types():
 
 
 def test_session_facade_does_not_define_content_functions():
-    src = (SRC_EXECUTION / "session.py").read_text()
+    src = (SRC_EXECUTION / "session" / "__init__.py").read_text()
     for sym in (
         "def _check_expected_patterns",
         "def _check_session_content",
@@ -133,7 +133,7 @@ def test_session_facade_does_not_define_content_functions():
 
 def test_new_session_fsm_modules_exist():
     for name in NEW_SESSION_FSM_MODULES:
-        assert (SRC_EXECUTION / name).exists(), f"Missing: {name}"
+        assert (SRC_EXECUTION / "session" / name).exists(), f"Missing: session/{name}"
 
 
 def test_session_fsm_modules_under_budget():
@@ -143,7 +143,7 @@ def test_session_fsm_modules_under_budget():
 
 
 def test_session_facade_does_not_define_retry_outcome():
-    src = (SRC_EXECUTION / "session.py").read_text()
+    src = (SRC_EXECUTION / "session" / "__init__.py").read_text()
     for sym in (
         "_KILL_ANOMALY_SUBTYPES: frozenset",
         "def _is_kill_anomaly",
@@ -160,7 +160,7 @@ def test_session_facade_does_not_define_retry_outcome():
 
 
 def test_merge_queue_facade_does_not_define_classifier():
-    src = (SRC_EXECUTION / "merge_queue.py").read_text()
+    src = (SRC_EXECUTION / "merge_queue" / "__init__.py").read_text()
     for sym in (
         "def _classify_pr_state",
         "class ClassifierInconclusive",
@@ -171,7 +171,7 @@ def test_merge_queue_facade_does_not_define_classifier():
 
 
 def test_merge_queue_facade_does_not_define_repo_state():
-    src = (SRC_EXECUTION / "merge_queue.py").read_text()
+    src = (SRC_EXECUTION / "merge_queue" / "__init__.py").read_text()
     for sym in (
         "async def fetch_repo_merge_state",
         "def _text_has_push_trigger",

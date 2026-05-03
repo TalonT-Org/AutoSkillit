@@ -74,7 +74,7 @@ class TestCascadeNewEntries:
             # Conservative: quota_guard.py cascades into hooks tests +
             # execution/test_quota_sleep.py
             (
-                "src/autoskillit/hooks/quota_guard.py",
+                "src/autoskillit/hooks/guards/quota_guard.py",
                 FilterMode.CONSERVATIVE,
                 ["hooks", "execution", "execution/test_quota_sleep.py"],
                 ["hooks", "test_quota_sleep.py"],
@@ -254,7 +254,7 @@ class TestServerFleetCascadeNarrowing:
         (server_dir / "test_factory.py").touch()
 
         result = build_test_scope(
-            changed_files={"src/autoskillit/server/tools_kitchen.py"},
+            changed_files={"src/autoskillit/server/tools/tools_kitchen.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )

@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 def _run_guard(cmd: str, raw_stdin: str | None = None) -> str:
     """Run the guard's main() in-process and return captured stdout."""
-    from autoskillit.hooks.unsafe_install_guard import main
+    from autoskillit.hooks.guards.unsafe_install_guard import main
 
     tool_input = {"cmd": cmd, "cwd": "/some/path"}
     stdin_content = (

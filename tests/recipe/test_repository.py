@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from autoskillit.core import RecipeSource
-from autoskillit.core._type_results import LoadResult
+from autoskillit.core.types._type_results import LoadResult
 from autoskillit.recipe.repository import DefaultRecipeRepository
 from autoskillit.recipe.schema import RecipeInfo
 
@@ -202,7 +202,7 @@ def test_recipe_repository_protocol_find_return_type_is_recipe_info() -> None:
     """
     import inspect
 
-    from autoskillit.core._type_protocols_recipe import RecipeRepository
+    from autoskillit.core.types._type_protocols_recipe import RecipeRepository
 
     sig = inspect.signature(RecipeRepository.find)
     ann = sig.return_annotation

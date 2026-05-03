@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core._type_plugin_source import DirectInstall, MarketplaceInstall
+from autoskillit.core.types._type_plugin_source import DirectInstall, MarketplaceInstall
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -264,7 +264,7 @@ class TestDispatchFoodTruckGuards:
     async def test_dispatch_food_truck_l2_tool_tags_conflict_raises(
         self, minimal_ctx, tmp_path: Path
     ) -> None:
-        from autoskillit.core._type_plugin_source import DirectInstall
+        from autoskillit.core.types._type_plugin_source import DirectInstall
         from autoskillit.execution.headless import DefaultHeadlessExecutor
 
         minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
@@ -285,8 +285,8 @@ class TestDispatchFoodTruckGuards:
     ) -> None:
         from unittest.mock import AsyncMock
 
-        from autoskillit.core._type_plugin_source import DirectInstall
         from autoskillit.core.types import SubprocessResult, TerminationReason
+        from autoskillit.core.types._type_plugin_source import DirectInstall
         from autoskillit.execution.headless import DefaultHeadlessExecutor
         from tests.fakes import MockSubprocessRunner
 

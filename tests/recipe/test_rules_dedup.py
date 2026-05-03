@@ -12,7 +12,7 @@ pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
 def test_skill_category_map_not_duplicated() -> None:
-    from autoskillit.recipe import rules_features, rules_skills
+    from autoskillit.recipe.rules import rules_features, rules_skills
 
     assert rules_skills._get_skill_category_map is rules_features._get_skill_category_map, (
         "_get_skill_category_map must be the same object in rules_skills and "

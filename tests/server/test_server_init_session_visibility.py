@@ -310,7 +310,7 @@ class TestFleetAutoGateBoot:
         tool_ctx.quota_refresh_task = None
 
         with patch(
-            "autoskillit.server.tools_kitchen._write_hook_config"
+            "autoskillit.server.tools.tools_kitchen._write_hook_config"
         ) as mock_write_hook_config:
             with patch(
                 "autoskillit.server._misc._prime_quota_cache", new=AsyncMock()
@@ -346,7 +346,7 @@ class TestFleetAutoGateBoot:
         tool_ctx.quota_refresh_task = None
 
         with patch(
-            "autoskillit.server.tools_kitchen._write_hook_config",
+            "autoskillit.server.tools.tools_kitchen._write_hook_config",
             side_effect=OSError("disk full"),
         ):
             with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
@@ -370,7 +370,7 @@ class TestFleetAutoGateBoot:
         tool_ctx.gate = DefaultGateState(enabled=False)
         tool_ctx.quota_refresh_task = None
 
-        with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+        with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
             with patch(
                 "autoskillit.server._misc._prime_quota_cache",
                 new=AsyncMock(side_effect=RuntimeError("quota cache error")),
@@ -395,7 +395,7 @@ class TestFleetAutoGateBoot:
         tool_ctx.gate = DefaultGateState(enabled=False)
         tool_ctx.quota_refresh_task = None
 
-        with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+        with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
             with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
                 with patch(
                     "autoskillit.pipeline.create_background_task",
@@ -417,7 +417,7 @@ class TestFleetAutoGateBoot:
         tool_ctx.gate = DefaultGateState(enabled=False)
         tool_ctx.quota_refresh_task = None
 
-        with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+        with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
             with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
                 with patch(
                     "autoskillit.pipeline.create_background_task",
@@ -442,7 +442,7 @@ class TestFleetAutoGateBoot:
         tool_ctx.gate = DefaultGateState(enabled=False)
         tool_ctx.quota_refresh_task = None
 
-        with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+        with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
             with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
                 with patch(
                     "autoskillit.pipeline.create_background_task",
@@ -481,7 +481,7 @@ class TestFleetAutoGateBoot:
 
         monkeypatch.setattr("autoskillit.server._lifespan._get_ctx_or_none", lambda: tool_ctx)
 
-        with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+        with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
             with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
                 with patch(
                     "autoskillit.pipeline.create_background_task",
@@ -514,7 +514,7 @@ class TestFleetAutoGateBoot:
 
         with patch("autoskillit.core._collect_disabled_feature_tags") as mock_helper:
             mock_helper.return_value = frozenset({"fleet"})
-            with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+            with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
                 with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
                     with patch(
                         "autoskillit.pipeline.create_background_task",

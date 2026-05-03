@@ -207,7 +207,8 @@ class TestHasActiveApiConnection:
             children.append(mock_child)
         mock_parent.children.return_value = children
         return patch(
-            "autoskillit.execution._process_monitor.psutil.Process", return_value=mock_parent
+            "autoskillit.execution.process._process_monitor.psutil.Process",
+            return_value=mock_parent,
         )
 
     def test_returns_true_when_parent_has_established_port_443(self):
@@ -251,7 +252,7 @@ class TestHasActiveApiConnection:
         import psutil as _psutil
 
         with patch(
-            "autoskillit.execution._process_monitor.psutil.Process",
+            "autoskillit.execution.process._process_monitor.psutil.Process",
             side_effect=_psutil.NoSuchProcess(12345),
         ):
             assert _has_active_api_connection(12345) is False
@@ -269,7 +270,8 @@ class TestHasActiveApiConnection:
         mock_live_child.net_connections.return_value = [self._make_conn(443)]
         mock_parent.children.return_value = [mock_dead_child, mock_live_child]
         with patch(
-            "autoskillit.execution._process_monitor.psutil.Process", return_value=mock_parent
+            "autoskillit.execution.process._process_monitor.psutil.Process",
+            return_value=mock_parent,
         ):
             assert _has_active_api_connection(12345) is True
 
@@ -286,7 +288,8 @@ class TestHasActiveApiConnection:
         mock_live_child.net_connections.return_value = [self._make_conn(443)]
         mock_parent.children.return_value = [mock_zombie, mock_live_child]
         with patch(
-            "autoskillit.execution._process_monitor.psutil.Process", return_value=mock_parent
+            "autoskillit.execution.process._process_monitor.psutil.Process",
+            return_value=mock_parent,
         ):
             assert _has_active_api_connection(12345) is True
 
@@ -303,7 +306,7 @@ class TestHasActiveChildProcesses:
     @pytest.fixture(autouse=True)
     def _clear_cache(self, monkeypatch):
         """Reset the module-level Process cache between tests."""
-        from autoskillit.execution import _process_monitor
+        from autoskillit.execution.process import _process_monitor
 
         monkeypatch.setattr(_process_monitor, "_child_process_cache", {})
 
@@ -321,13 +324,13 @@ class TestHasActiveChildProcesses:
         mock_proc = MagicMock()
         if parent_raises:
             monkeypatch.setattr(
-                "autoskillit.execution._process_monitor.psutil.Process",
+                "autoskillit.execution.process._process_monitor.psutil.Process",
                 MagicMock(side_effect=parent_raises(pid=1234)),
             )
             return
         mock_proc.children.return_value = children
         monkeypatch.setattr(
-            "autoskillit.execution._process_monitor.psutil.Process",
+            "autoskillit.execution.process._process_monitor.psutil.Process",
             MagicMock(return_value=mock_proc),
         )
 
@@ -337,7 +340,7 @@ class TestHasActiveChildProcesses:
         # First call primes baseline; second call returns meaningful delta.
         _has_active_child_processes(1234)
         # Cache now holds the child object; second call uses cached.cpu_percent.
-        from autoskillit.execution._process_monitor import _child_process_cache
+        from autoskillit.execution.process._process_monitor import _child_process_cache
 
         _child_process_cache[100] = child
         assert _has_active_child_processes(1234) is True
@@ -351,7 +354,7 @@ class TestHasActiveChildProcesses:
         self._patch_children(children, monkeypatch)
         # Prime baseline
         _has_active_child_processes(1234)
-        from autoskillit.execution._process_monitor import _child_process_cache
+        from autoskillit.execution.process._process_monitor import _child_process_cache
 
         for c in children:
             _child_process_cache[c.pid] = c
@@ -372,7 +375,7 @@ class TestHasActiveChildProcesses:
         ]
         self._patch_children(children, monkeypatch)
         _has_active_child_processes(1234)
-        from autoskillit.execution._process_monitor import _child_process_cache
+        from autoskillit.execution.process._process_monitor import _child_process_cache
 
         for c in children:
             _child_process_cache[c.pid] = c
@@ -386,7 +389,7 @@ class TestHasActiveChildProcesses:
         self._patch_children(children, monkeypatch)
         # Prime baseline
         _has_active_child_processes(1234)
-        from autoskillit.execution._process_monitor import _child_process_cache
+        from autoskillit.execution.process._process_monitor import _child_process_cache
 
         for c in children:
             _child_process_cache[c.pid] = c
@@ -398,7 +401,7 @@ class TestHasActiveChildProcesses:
             monkeypatch,
         )
         _has_active_child_processes(1234)
-        from autoskillit.execution._process_monitor import _child_process_cache
+        from autoskillit.execution.process._process_monitor import _child_process_cache
 
         _child_process_cache[100] = self._make_child(psutil.AccessDenied, pid=100)
         assert _has_active_child_processes(1234) is False

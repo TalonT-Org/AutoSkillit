@@ -4,7 +4,7 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
 def test_logging_shard_all():
-    from autoskillit.core._type_protocols_logging import __all__
+    from autoskillit.core.types._type_protocols_logging import __all__
 
     assert set(__all__) == {
         "AuditLog",
@@ -18,7 +18,7 @@ def test_logging_shard_all():
 
 
 def test_execution_shard_all():
-    from autoskillit.core._type_protocols_execution import __all__
+    from autoskillit.core.types._type_protocols_execution import __all__
 
     assert set(__all__) == {
         "TestRunner",
@@ -29,13 +29,13 @@ def test_execution_shard_all():
 
 
 def test_github_shard_all():
-    from autoskillit.core._type_protocols_github import __all__
+    from autoskillit.core.types._type_protocols_github import __all__
 
     assert set(__all__) == {"GitHubFetcher", "CIWatcher", "MergeQueueWatcher"}
 
 
 def test_workspace_shard_all():
-    from autoskillit.core._type_protocols_workspace import __all__
+    from autoskillit.core.types._type_protocols_workspace import __all__
 
     assert set(__all__) == {
         "WorkspaceManager",
@@ -47,7 +47,7 @@ def test_workspace_shard_all():
 
 
 def test_recipe_shard_all():
-    from autoskillit.core._type_protocols_recipe import __all__
+    from autoskillit.core.types._type_protocols_recipe import __all__
 
     assert set(__all__) == {
         "RecipeRepository",
@@ -58,7 +58,7 @@ def test_recipe_shard_all():
 
 
 def test_infra_shard_all():
-    from autoskillit.core._type_protocols_infra import __all__
+    from autoskillit.core.types._type_protocols_infra import __all__
 
     assert set(__all__) == {
         "GateState",
@@ -97,7 +97,7 @@ def test_pyi_stub_exports_skill_constants():
 
 
 def test_runtime_checkable_flags():
-    from autoskillit.core._type_protocols_logging import SupportsDebug, SupportsLogger
+    from autoskillit.core.types._type_protocols_logging import SupportsDebug, SupportsLogger
 
     for proto in (SupportsDebug, SupportsLogger):
         assert not getattr(proto, "_is_runtime_protocol", False), (

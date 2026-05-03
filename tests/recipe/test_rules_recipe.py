@@ -166,7 +166,7 @@ def test_all_bundled_recipes_pass_rules_recipe() -> None:
 
 def test_rules_recipe_uses_check_prefix() -> None:
     """Rule functions in rules_recipe.py must use the _check_* naming convention."""
-    import autoskillit.recipe.rules_recipe as m
+    import autoskillit.recipe.rules.rules_recipe as m
 
     assert hasattr(m, "_check_unknown_sub_recipe"), "_check_unknown_sub_recipe not found"
     assert hasattr(m, "_check_circular_sub_recipe"), "_check_circular_sub_recipe not found"

@@ -4,7 +4,7 @@ import json
 from io import StringIO
 from unittest.mock import patch
 
-from autoskillit.hooks.grep_pattern_lint_guard import main
+from autoskillit.hooks.guards.grep_pattern_lint_guard import main
 
 
 def _run_hook(tool_name: str, pattern: str) -> dict | None:

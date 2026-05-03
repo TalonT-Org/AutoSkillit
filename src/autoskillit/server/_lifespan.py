@@ -145,7 +145,7 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
         _prime_quota_cache,
         _quota_refresh_loop,
     )
-    from autoskillit.server.tools_kitchen import _write_hook_config
+    from autoskillit.server.tools.tools_kitchen import _write_hook_config
 
     ctx.kitchen_id = str(uuid4())
     ctx.active_recipe_packs = frozenset()

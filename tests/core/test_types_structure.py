@@ -8,7 +8,7 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
 def test_enums_importable_from_sub_module():
-    from autoskillit.core._type_enums import (
+    from autoskillit.core.types._type_enums import (
         RetryReason,
     )
 
@@ -16,13 +16,13 @@ def test_enums_importable_from_sub_module():
 
 
 def test_protocols_importable_from_sub_module():
-    from autoskillit.core._type_protocols_execution import HeadlessExecutor
-    from autoskillit.core._type_protocols_infra import GateState
+    from autoskillit.core.types._type_protocols_execution import HeadlessExecutor
+    from autoskillit.core.types._type_protocols_infra import GateState
 
     assert callable(GateState)
-    assert GateState.__module__ == "autoskillit.core._type_protocols_infra"
+    assert GateState.__module__ == "autoskillit.core.types._type_protocols_infra"
     assert callable(HeadlessExecutor)
-    assert HeadlessExecutor.__module__ == "autoskillit.core._type_protocols_execution"
+    assert HeadlessExecutor.__module__ == "autoskillit.core.types._type_protocols_execution"
 
 
 def test_types_hub_backward_compat():
@@ -61,7 +61,7 @@ def test_types_hub_line_count_under_threshold():
     """After split, core/types.py must be under 200 lines (re-export hub only)."""
     from autoskillit.core import paths
 
-    types_path = paths.pkg_root() / "core" / "types.py"
+    types_path = paths.pkg_root() / "core" / "types" / "__init__.py"
     lines = types_path.read_text().splitlines()
     assert len(lines) < 200, f"types.py has {len(lines)} lines; expected re-export hub only"
 
@@ -87,13 +87,13 @@ def test_supports_debug_in_core_all() -> None:
 
 
 def test_subprocess_shard_all() -> None:
-    from autoskillit.core._type_subprocess import __all__
+    from autoskillit.core.types._type_subprocess import __all__
 
     assert set(__all__) == {"SubprocessResult", "SubprocessRunner"}
     assert "_TERMINATION_CONTRACT" not in __all__
 
 
 def test_subprocess_termination_contract_variable_still_defined() -> None:
-    import autoskillit.core._type_subprocess as m
+    import autoskillit.core.types._type_subprocess as m
 
     assert hasattr(m, "_TERMINATION_CONTRACT")

@@ -29,15 +29,15 @@ _TEMP_PATH_WHITELIST: dict[str, str] = {
     "recipe/repository.py": "validate_from_path default arg mirrors canonical default",
     # Justification: RecipeRepository protocol method includes temp_dir_relpath with
     # the canonical default value for backward compatibility.
-    "core/_type_protocols_recipe.py": "RecipeRepository.validate_from_path default arg",
+    "core/types/_type_protocols_recipe.py": "RecipeRepository.validate_from_path default arg",
     # Justification: SkillsDirectoryProvider default ctor arg matches canonical default.
     "workspace/session_skills.py": "SkillsDirectoryProvider default arg",
     # Justification: docstring example referencing the canonical default path.
-    "hooks/skill_cmd_guard.py": "docstring example",
+    "hooks/guards/skill_cmd_guard.py": "docstring example",
     # Justification: docstring referencing the canonical default path.
     "workspace/worktree.py": "docstring example",
     # Justification: docstring referencing the canonical default path.
-    "server/tools_clone.py": "docstring example",
+    "server/tools/tools_clone.py": "docstring example",
     # Justification: stdlib-only hook module that cannot import resolve_temp_dir().
     # HOOK_DIR_COMPONENTS = (".autoskillit", "temp") mirrors the canonical bridge path
     # defined by _fmt_primitives._HOOK_CONFIG_PATH_COMPONENTS.
@@ -53,10 +53,10 @@ _TEMP_PATH_WHITELIST: dict[str, str] = {
     # Justification: stdlib-only L0 module (no autoskillit imports allowed); uses the
     # canonical .autoskillit/temp path to locate session_registry.json, mirroring the
     # same path construction used by kitchen_state.py and _hook_settings.py.
-    "core/session_registry.py": "stdlib-only L0 registry; cannot use resolve_temp_dir()",
+    "core/runtime/session_registry.py": "stdlib-only L0 registry; cannot use resolve_temp_dir()",
     # Justification: docstring for _write_hook_config() references the canonical
     # hook config path so callers know where the file is written.
-    "server/tools_kitchen.py": "docstring example",
+    "server/tools/tools_kitchen.py": "docstring example",
     "recipe/_cmd_rpc.py": "ensure_results default temp_subdir matches canonical default",
 }
 

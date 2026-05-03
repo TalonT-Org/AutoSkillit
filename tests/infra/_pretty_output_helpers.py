@@ -43,7 +43,7 @@ def _run_hook(
 
     Returns (stdout_output, exit_code).
     """
-    from autoskillit.hooks.pretty_output_hook import main
+    from autoskillit.hooks.formatters.pretty_output_hook import main
 
     stdin_text = raw_stdin if raw_stdin is not None else json.dumps(event or {})
 
@@ -55,7 +55,7 @@ def _run_hook(
         stack.enter_context(redirect_stdout(buf))
         if cwd is not None:
             stack.enter_context(
-                patch("autoskillit.hooks.pretty_output_hook.Path.cwd", return_value=cwd)
+                patch("autoskillit.hooks.formatters.pretty_output_hook.Path.cwd", return_value=cwd)
             )
         try:
             main()

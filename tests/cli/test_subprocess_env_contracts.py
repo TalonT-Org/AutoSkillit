@@ -503,8 +503,8 @@ _CLAUDE_ENV_RULE_ALLOWED: frozenset[tuple[str, str]] = frozenset(
         # to _execute_claude_headless, which internally uses `spec.env` at the
         # runner call site. The checker incorrectly treats _execute_claude_headless(spec, ...)
         # as a direct subprocess call because `spec` resolves to a builder return value.
-        ("headless.py", "run_headless_core"),
-        ("headless.py", "dispatch_food_truck"),
+        ("__init__.py", "run_headless_core"),
+        ("__init__.py", "dispatch_food_truck"),
         # build_headless_resume_cmd constructs cmd = ["claude", ...] then calls
         # _apply_output_format(cmd, ...) — an in-place list mutation, not a subprocess
         # launch. The function returns ClaudeHeadlessCmd(cmd=cmd, env=build_claude_env(...)).

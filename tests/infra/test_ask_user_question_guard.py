@@ -22,7 +22,8 @@ def run_guard(
     hook_input: dict, env_extra: dict | None = None, *, headless: bool = False
 ) -> RunResult:
     hook_path = (
-        Path(__file__).resolve().parents[2] / "src/autoskillit/hooks/ask_user_question_guard.py"
+        Path(__file__).resolve().parents[2]
+        / "src/autoskillit/hooks/guards/ask_user_question_guard.py"
     )
     extra = dict(env_extra or {})
     if headless:

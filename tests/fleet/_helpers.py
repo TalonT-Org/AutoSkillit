@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from autoskillit.core._type_constants import PACK_REGISTRY, TOOL_SUBSET_TAGS
+from autoskillit.core.types._type_constants import PACK_REGISTRY, TOOL_SUBSET_TAGS
 
 # ---------------------------------------------------------------------------
 # Module-level constants — derived from the authoritative TOOL_SUBSET_TAGS map

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-import autoskillit.recipe.rules_fixing as _rf
+import autoskillit.recipe.rules.rules_fixing as _rf
 from autoskillit.core.types import Severity
 from autoskillit.recipe.schema import (
     Recipe,

@@ -37,8 +37,8 @@ class TestCLIOrderPicker:
         import importlib
         import sys as _sys
 
-        _app_mod = _sys.modules.get("autoskillit.cli._order") or importlib.import_module(
-            "autoskillit.cli._order"
+        _app_mod = _sys.modules.get("autoskillit.cli.session._order") or importlib.import_module(
+            "autoskillit.cli.session._order"
         )
         monkeypatch.setattr(_app_mod, "_get_ingredients_table", lambda *a, **kw: "| col | val |")
 
@@ -282,7 +282,7 @@ class TestCLIOrderPicker:
             picker_calls.append(session_type)
             return None
 
-        with patch("autoskillit.cli._session_picker.pick_session", fake_pick_session):
+        with patch("autoskillit.cli.session._session_picker.pick_session", fake_pick_session):
             with patch("autoskillit.core.write_registry_entry"):
                 cli.order(resume=True)
 
@@ -306,7 +306,7 @@ class TestCLIOrderPicker:
             "autoskillit.recipe.list_recipes",
             lambda *a, **kw: type("R", (), {"items": [project_recipe]})(),
         )
-        monkeypatch.setattr("autoskillit.cli._menu.timed_prompt", lambda *a, **kw: "0")
+        monkeypatch.setattr("autoskillit.cli.ui._menu.timed_prompt", lambda *a, **kw: "0")
         monkeypatch.setattr(shutil, "which", lambda cmd: None)
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
@@ -336,7 +336,7 @@ class TestCLIOrderPicker:
             "autoskillit.recipe.list_recipes",
             lambda *a, **kw: type("R", (), {"items": [builtin_recipe]})(),
         )
-        monkeypatch.setattr("autoskillit.cli._menu.timed_prompt", lambda *a, **kw: "0")
+        monkeypatch.setattr("autoskillit.cli.ui._menu.timed_prompt", lambda *a, **kw: "0")
         monkeypatch.setattr(shutil, "which", lambda cmd: None)
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
@@ -365,7 +365,7 @@ class TestCLIOrderPicker:
             "autoskillit.recipe.list_recipes",
             lambda *a, **kw: type("R", (), {"items": [exp_recipe]})(),
         )
-        monkeypatch.setattr("autoskillit.cli._menu.timed_prompt", lambda *a, **kw: "0")
+        monkeypatch.setattr("autoskillit.cli.ui._menu.timed_prompt", lambda *a, **kw: "0")
         monkeypatch.setattr(shutil, "which", lambda cmd: None)
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
@@ -394,7 +394,7 @@ class TestCLIOrderPicker:
             "autoskillit.recipe.list_recipes",
             lambda *a, **kw: type("R", (), {"items": [builtin_recipe]})(),
         )
-        monkeypatch.setattr("autoskillit.cli._menu.timed_prompt", lambda *a, **kw: "0")
+        monkeypatch.setattr("autoskillit.cli.ui._menu.timed_prompt", lambda *a, **kw: "0")
         monkeypatch.setattr(shutil, "which", lambda cmd: None)
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
@@ -424,7 +424,7 @@ class TestCLIOrderPicker:
             "autoskillit.recipe.list_recipes",
             lambda *a, **kw: type("R", (), {"items": [addon_recipe]})(),
         )
-        monkeypatch.setattr("autoskillit.cli._menu.timed_prompt", lambda *a, **kw: "0")
+        monkeypatch.setattr("autoskillit.cli.ui._menu.timed_prompt", lambda *a, **kw: "0")
         monkeypatch.setattr(shutil, "which", lambda cmd: None)
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
@@ -468,7 +468,7 @@ class TestCLIOrderPicker:
         monkeypatch.setattr(
             "autoskillit.recipe.list_recipes", lambda *a, **kw: type("R", (), {"items": recipes})()
         )
-        monkeypatch.setattr("autoskillit.cli._menu.timed_prompt", lambda *a, **kw: "0")
+        monkeypatch.setattr("autoskillit.cli.ui._menu.timed_prompt", lambda *a, **kw: "0")
         monkeypatch.setattr(shutil, "which", lambda cmd: None)
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
@@ -522,7 +522,7 @@ class TestOrderResumeParsing:
             captured["resume_spec"] = resume_spec
 
         with (
-            patch("autoskillit.cli._order._launch_cook_session", side_effect=fake_launch),
+            patch("autoskillit.cli.session._order._launch_cook_session", side_effect=fake_launch),
             patch(
                 "autoskillit.recipe.find_recipe_by_name",
                 return_value=MagicMock(path=tmp_path / "dummy.yaml", name="my-recipe"),
@@ -554,7 +554,7 @@ class TestOrderResumeParsing:
         def fake_launch(prompt, *, initial_message=None, extra_env=None, resume_spec=NoResume()):
             captured["resume_spec"] = resume_spec
 
-        with patch("autoskillit.cli._order._launch_cook_session", side_effect=fake_launch):
+        with patch("autoskillit.cli.session._order._launch_cook_session", side_effect=fake_launch):
             with pytest.raises(SystemExit) as exc_info:
                 app(["order", "--resume", "4b581974-1f19-4aec-8405-78c5ede5e233"])
             assert exc_info.value.code == 0
@@ -579,8 +579,8 @@ class TestOrderResumeParsing:
             captured["resume_spec"] = resume_spec
 
         with (
-            patch("autoskillit.cli._order._launch_cook_session", side_effect=fake_launch),
-            patch("autoskillit.cli._session_picker.pick_session", return_value=None),
+            patch("autoskillit.cli.session._order._launch_cook_session", side_effect=fake_launch),
+            patch("autoskillit.cli.session._session_picker.pick_session", return_value=None),
         ):
             with pytest.raises(SystemExit) as exc_info:
                 app(["order", "--resume"])
@@ -604,7 +604,7 @@ class TestOrderResumeParsing:
             lambda *a, **kw: find_called.append(a) or None,
         )
 
-        with patch("autoskillit.cli._order._launch_cook_session"):
+        with patch("autoskillit.cli.session._order._launch_cook_session"):
             with pytest.raises(SystemExit) as exc_info:
                 app(["order", "--resume", "4b581974-1f19-4aec-8405-78c5ede5e233"])
             assert exc_info.value.code == 0

@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from autoskillit.server.tools_clone import (
+from autoskillit.server.tools.tools_clone import (
     batch_cleanup_clones,
     clone_repo,
     push_to_remote,

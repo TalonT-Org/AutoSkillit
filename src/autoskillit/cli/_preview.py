@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 def _render_pre_launch_preview(
     recipe_name: str, parsed_recipe: object, recipes_dir: Path, project_dir: Path
 ) -> None:
-    from autoskillit.cli._ansi import diagram_to_terminal, ingredients_to_terminal
+    from autoskillit.cli.ui._ansi import diagram_to_terminal, ingredients_to_terminal
     from autoskillit.config import resolve_ingredient_defaults
     from autoskillit.recipe import build_ingredient_rows, load_recipe_diagram
 
@@ -60,7 +60,7 @@ def _pre_launch_campaign(
     if is_resume:
         return itable, True
 
-    from autoskillit.cli._timed_input import timed_prompt  # noqa: PLC0415
+    from autoskillit.cli.ui._timed_input import timed_prompt  # noqa: PLC0415
 
     confirm = timed_prompt(
         "Launch campaign? [Enter/n]", default="", timeout=120, label="autoskillit fleet campaign"

@@ -133,7 +133,7 @@ def test_create_run_dir_empty_string_raises_value_error() -> None:
 
 
 def test_planner_feature_skill_categories() -> None:
-    from autoskillit.core._type_constants import FEATURE_REGISTRY
+    from autoskillit.core.types._type_constants import FEATURE_REGISTRY
 
     assert FEATURE_REGISTRY["planner"].skill_categories == frozenset({"planner"})
 

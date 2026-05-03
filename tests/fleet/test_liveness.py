@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from autoskillit.core._linux_proc import read_boot_id, read_starttime_ticks
+from autoskillit.core.runtime._linux_proc import read_boot_id, read_starttime_ticks
 from autoskillit.fleet import DispatchRecord
 from autoskillit.fleet._liveness import is_dispatch_session_alive
 

@@ -24,7 +24,7 @@ def _state_path(tmp_path: Path) -> Path:
 
 
 def test_reap_stale_dispatches_marks_resumable_when_sidecar_exists(tmp_path: Path) -> None:
-    from autoskillit.cli._fleet import _reap_stale_dispatches
+    from autoskillit.cli.fleet import _reap_stale_dispatches
 
     sp = _state_path(tmp_path)
     write_initial_state(sp, "c1", "camp", "manifest.yaml", [DispatchRecord(name="impl")])
@@ -46,7 +46,7 @@ def test_reap_stale_dispatches_marks_resumable_when_sidecar_exists(tmp_path: Pat
 
 
 def test_reap_stale_dispatches_marks_interrupted_when_no_sidecar(tmp_path: Path) -> None:
-    from autoskillit.cli._fleet import _reap_stale_dispatches
+    from autoskillit.cli.fleet import _reap_stale_dispatches
 
     sp = _state_path(tmp_path)
     write_initial_state(sp, "c1", "camp", "manifest.yaml", [DispatchRecord(name="impl")])
@@ -62,7 +62,7 @@ def test_reap_stale_dispatches_marks_interrupted_when_no_sidecar(tmp_path: Path)
 
 
 def test_reap_stale_dispatches_dry_run_does_not_modify_state(tmp_path: Path) -> None:
-    from autoskillit.cli._fleet import _reap_stale_dispatches
+    from autoskillit.cli.fleet import _reap_stale_dispatches
 
     sp = _state_path(tmp_path)
     write_initial_state(sp, "c1", "camp", "manifest.yaml", [DispatchRecord(name="impl")])

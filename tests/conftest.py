@@ -263,7 +263,7 @@ def minimal_ctx(tmp_path):
     use tool_ctx instead.
     """
     from autoskillit.config import AutomationConfig
-    from autoskillit.core._type_plugin_source import DirectInstall
+    from autoskillit.core.types._type_plugin_source import DirectInstall
     from autoskillit.pipeline.audit import DefaultAuditLog
     from autoskillit.pipeline.context import ToolContext
     from autoskillit.pipeline.gate import DefaultGateState
@@ -300,7 +300,7 @@ def tool_ctx(monkeypatch, tmp_path):
     migrations) are wired via make_context() so routing tests work correctly.
     """
     from autoskillit.config import AutomationConfig
-    from autoskillit.core._type_plugin_source import DirectInstall
+    from autoskillit.core.types._type_plugin_source import DirectInstall
     from autoskillit.pipeline.gate import DefaultGateState
     from autoskillit.server import _state
     from autoskillit.server._factory import make_context
@@ -327,7 +327,7 @@ def tool_ctx(monkeypatch, tmp_path):
 def tool_ctx_marketplace(monkeypatch, tmp_path):
     """ToolContext simulating a marketplace install: plugin_source = MarketplaceInstall."""
     from autoskillit.config import AutomationConfig
-    from autoskillit.core._type_plugin_source import MarketplaceInstall
+    from autoskillit.core.types._type_plugin_source import MarketplaceInstall
     from autoskillit.pipeline.gate import DefaultGateState
     from autoskillit.server import _state
     from autoskillit.server._factory import make_context

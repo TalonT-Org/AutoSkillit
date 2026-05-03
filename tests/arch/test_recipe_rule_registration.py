@@ -13,7 +13,7 @@ def test_every_rules_module_imported_by_recipe_init() -> None:
     recipe/__init__.py so its @semantic_rule decorators register at
     import time. Catches accidental orphan rule modules."""
     src = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "recipe"
-    rules_files = sorted(p.stem for p in src.glob("rules_*.py"))
+    rules_files = sorted(p.stem for p in (src / "rules").glob("rules_*.py"))
     init_text = (src / "__init__.py").read_text()
     init_tree = ast.parse(init_text)
 

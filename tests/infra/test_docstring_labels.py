@@ -9,13 +9,13 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 def test_session_py_docstring_says_il1():
     """session.py docstring must carry an IL-1 label."""
-    src = (_REPO_ROOT / "src/autoskillit/execution/session.py").read_text()
+    src = (_REPO_ROOT / "src/autoskillit/execution/session/__init__.py").read_text()
     assert "IL-1" in src.split('"""')[1], "session.py docstring must say IL-1"
 
 
 def test_headless_py_docstring_says_il1():
     """headless.py docstring must carry an IL-1 label."""
-    src = (_REPO_ROOT / "src/autoskillit/execution/headless.py").read_text()
+    src = (_REPO_ROOT / "src/autoskillit/execution/headless/__init__.py").read_text()
     assert "IL-1" in src.split('"""')[1], "headless.py docstring must say IL-1"
 
 

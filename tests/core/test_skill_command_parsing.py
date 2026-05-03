@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.core._type_helpers import _PATH_PREFIXES, extract_path_arg
+from autoskillit.core.types._type_helpers import _PATH_PREFIXES, extract_path_arg
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 

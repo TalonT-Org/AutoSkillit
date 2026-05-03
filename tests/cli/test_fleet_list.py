@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.cli._fleet import fleet_list as _fleet_list
+from autoskillit.cli.fleet import fleet_list as _fleet_list
 from tests.cli._fleet_helpers import (
     _find_command,
     _get_app,
@@ -46,7 +46,7 @@ def test_fleet_list_exits_when_disabled(monkeypatch: pytest.MonkeyPatch, tmp_pat
     monkeypatch.chdir(tmp_path)
     checked_features: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli._fleet.is_feature_enabled",
+        "autoskillit.cli.fleet.is_feature_enabled",
         lambda name, features, *, experimental_enabled=False: (
             checked_features.append(name) or False
         ),
@@ -73,7 +73,7 @@ class TestFleetCLIRegistration:
         assert "fleet" in names
 
     def test_fleet_status_accepts_reap_flag(self) -> None:
-        from autoskillit.cli._fleet import fleet_app
+        from autoskillit.cli.fleet import fleet_app
 
         status_cmd = _find_command(fleet_app, "status")
         assert status_cmd is not None, "fleet status command not found"
@@ -81,23 +81,23 @@ class TestFleetCLIRegistration:
     def test_fleet_status_accepts_dry_run_flag(self) -> None:
         import inspect
 
-        from autoskillit.cli._fleet import fleet_status
+        from autoskillit.cli.fleet import fleet_status
 
         sig = inspect.signature(fleet_status)
         assert "dry_run" in sig.parameters
         assert "reap" in sig.parameters
 
     def test_fleet_dispatch_command_registered(self) -> None:
-        from autoskillit.cli._fleet import fleet_app
+        from autoskillit.cli.fleet import fleet_app
 
         assert "dispatch" in _subcommand_names(fleet_app)
 
     def test_fleet_campaign_command_registered(self) -> None:
-        from autoskillit.cli._fleet import fleet_app
+        from autoskillit.cli.fleet import fleet_app
 
         assert "campaign" in _subcommand_names(fleet_app)
 
     def test_fleet_run_command_not_registered(self) -> None:
-        from autoskillit.cli._fleet import fleet_app
+        from autoskillit.cli.fleet import fleet_app
 
         assert "run" not in _subcommand_names(fleet_app)

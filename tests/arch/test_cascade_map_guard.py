@@ -171,16 +171,21 @@ def _build_recipe_module_reverse_graph() -> dict[str, set[str]]:
             )
             return graph
         for node in ast.walk(tree):
-            if not (
-                isinstance(node, ast.ImportFrom)
-                and node.level == 0
-                and node.module == "autoskillit.recipe"
-            ):
+            if not (isinstance(node, ast.ImportFrom) and node.level == 0 and node.module):
                 continue
-            for alias in node.names:
-                stem = alias.name
-                if (recipe_init.parent / f"{stem}.py").exists():
-                    graph.setdefault(stem, set()).add("recipe")
+            if node.module == "autoskillit.recipe":
+                for alias in node.names:
+                    stem = alias.name
+                    if (recipe_init.parent / f"{stem}.py").exists():
+                        graph.setdefault(stem, set()).add("recipe")
+            elif node.module.startswith("autoskillit.recipe."):
+                subpkg = node.module.split(".")[2]
+                subpkg_dir = recipe_init.parent / subpkg
+                if subpkg_dir.is_dir():
+                    for alias in node.names:
+                        name = alias.name
+                        if (subpkg_dir / f"{name}.py").exists():
+                            graph.setdefault(name, set()).add("recipe")
     return graph
 
 

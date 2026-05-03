@@ -7,7 +7,7 @@ import subprocess
 
 import pytest
 
-from autoskillit.cli._session_launch import _run_interactive_session
+from autoskillit.cli.session._session_launch import _run_interactive_session
 from autoskillit.core import ClaudeFlags
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]

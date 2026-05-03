@@ -11,10 +11,10 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 _REPO_ROOT = pathlib.Path(__file__).parent.parent
 
 _ORCHESTRATION_FILES = [
-    "src/autoskillit/core/_type_enums.py",
+    "src/autoskillit/core/types/_type_enums.py",
     "src/autoskillit/pipeline/gate.py",
     "src/autoskillit/server/_guards.py",
-    "src/autoskillit/hooks/leaf_orchestration_guard.py",
+    "src/autoskillit/hooks/guards/leaf_orchestration_guard.py",
 ]
 
 _FORBIDDEN = [

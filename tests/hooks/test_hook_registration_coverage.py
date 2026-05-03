@@ -7,6 +7,20 @@ from autoskillit.hook_registry import HOOK_REGISTRY
 HOOKS_DIR = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "hooks"
 
 
+def _all_hook_script_relpaths() -> set[str]:
+    """Return all non-private, non-init .py files under HOOKS_DIR as HOOKS_DIR-relative paths.
+
+    Uses rglob to find scripts in subdirectories (guards/, formatters/) as well
+    as the flat hooks root.  Underscore-prefixed and ``__init__.py`` files are
+    excluded because they are private helper modules, not standalone scripts.
+    """
+    return {
+        str(p.relative_to(HOOKS_DIR))
+        for p in HOOKS_DIR.rglob("*.py")
+        if p.name != "__init__.py" and not p.name.startswith("_")
+    }
+
+
 def test_all_pretooluse_hook_scripts_are_registered() -> None:
     """Every hook .py (excl. PostToolUse, SessionStart, __init__, private helpers)
     is PreToolUse-registered.
@@ -14,6 +28,10 @@ def test_all_pretooluse_hook_scripts_are_registered() -> None:
     Underscore-prefixed modules (e.g. ``_fmt_primitives.py``) are private helper
     modules imported by hook scripts, not standalone hook scripts themselves, and
     are excluded from registration coverage.
+
+    After the guards/formatters subdirectory reorganization, HOOK_REGISTRY entries
+    carry subfolder-prefixed paths (e.g. ``"guards/quota_guard.py"``).  This test
+    compares HOOKS_DIR-relative paths so the comparison is consistent.
     """
     post_or_session_registered = {
         script
@@ -22,11 +40,9 @@ def test_all_pretooluse_hook_scripts_are_registered() -> None:
         for script in hd.scripts
     }
     hook_files = {
-        f.name
-        for f in HOOKS_DIR.glob("*.py")
-        if f.name != "__init__.py"
-        and not f.name.startswith("_")
-        and f.name not in post_or_session_registered
+        relpath
+        for relpath in _all_hook_script_relpaths()
+        if relpath not in post_or_session_registered
     }
     registered_scripts: set[str] = set()
     for hook_def in HOOK_REGISTRY:
@@ -47,11 +63,7 @@ def test_all_posttooluse_hook_scripts_are_registered() -> None:
     registered_post = {
         script for hd in HOOK_REGISTRY if hd.event_type == "PostToolUse" for script in hd.scripts
     }
-    all_scripts = {
-        p.name
-        for p in HOOKS_DIR.glob("*.py")
-        if p.name != "__init__.py" and not p.name.startswith("_")
-    }
+    all_scripts = _all_hook_script_relpaths()
     pre_registered = {
         script for hd in HOOK_REGISTRY if hd.event_type == "PreToolUse" for script in hd.scripts
     }
@@ -71,10 +83,10 @@ def test_all_session_start_hook_scripts_are_registered() -> None:
 
 # T-GUARD-2
 def test_generated_file_write_guard_registered() -> None:
-    """generated_file_write_guard.py must be registered in HOOK_REGISTRY."""
+    """guards/generated_file_write_guard.py must be registered in HOOK_REGISTRY."""
     all_scripts = {s for h in HOOK_REGISTRY for s in h.scripts}
-    assert "generated_file_write_guard.py" in all_scripts, (
-        "generated_file_write_guard.py must be registered in HOOK_REGISTRY"
+    assert "guards/generated_file_write_guard.py" in all_scripts, (
+        "guards/generated_file_write_guard.py must be registered in HOOK_REGISTRY"
     )
 
 
@@ -85,7 +97,7 @@ def test_registry_has_ask_user_question_pre_kitchen_gate():
         h for h in HOOK_REGISTRY if h.event_type == "PreToolUse" and h.matcher == "AskUserQuestion"
     ]
     assert len(ask_matchers) == 1
-    assert ask_matchers[0].scripts == ["ask_user_question_guard.py"]
+    assert ask_matchers[0].scripts == ["guards/ask_user_question_guard.py"]
 
 
 def test_retired_script_basenames_exists_and_complete() -> None:
@@ -182,24 +194,24 @@ def test_review_gate_post_hook_registered_in_hook_registry() -> None:
 
 # T4-2
 def test_review_loop_gate_registered_in_hook_registry() -> None:
-    """review_loop_gate.py must be registered as a PreToolUse hook."""
+    """guards/review_loop_gate.py must be registered as a PreToolUse hook."""
     pre_scripts = {s for hd in HOOK_REGISTRY if hd.event_type == "PreToolUse" for s in hd.scripts}
-    assert "review_loop_gate.py" in pre_scripts, (
-        "review_loop_gate.py must be registered as a PreToolUse hook in HOOK_REGISTRY"
+    assert "guards/review_loop_gate.py" in pre_scripts, (
+        "guards/review_loop_gate.py must be registered as a PreToolUse hook in HOOK_REGISTRY"
     )
 
 
 # T4-3
 def test_review_loop_gate_matcher_covers_wait_for_ci_and_enqueue_pr() -> None:
-    """review_loop_gate.py matcher must cover both wait_for_ci and enqueue_pr."""
+    """guards/review_loop_gate.py matcher must cover both wait_for_ci and enqueue_pr."""
     import re
 
     gate_entries = [
         hd
         for hd in HOOK_REGISTRY
-        if hd.event_type == "PreToolUse" and "review_loop_gate.py" in hd.scripts
+        if hd.event_type == "PreToolUse" and "guards/review_loop_gate.py" in hd.scripts
     ]
-    assert gate_entries, "No PreToolUse entry found for review_loop_gate.py"
+    assert gate_entries, "No PreToolUse entry found for guards/review_loop_gate.py"
     matcher = gate_entries[0].matcher
     assert re.search(r"wait_for_ci", matcher), f"Matcher must cover wait_for_ci; got: {matcher!r}"
     assert re.search(r"enqueue_pr", matcher), f"Matcher must cover enqueue_pr; got: {matcher!r}"

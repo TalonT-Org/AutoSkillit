@@ -23,7 +23,7 @@ _HOOK_CONFIG_RELPATH = ".autoskillit/temp/.hook_config.json"
 
 def _run_guard(cmd: str, kitchen_open: bool, tmpdir, raw_stdin: str | None = None) -> str:
     """Invoke pr_create_guard.main() and return captured stdout."""
-    from autoskillit.hooks.pr_create_guard import main  # noqa: PLC0415
+    from autoskillit.hooks.guards.pr_create_guard import main  # noqa: PLC0415
 
     if raw_stdin is not None:
         stdin_content = raw_stdin

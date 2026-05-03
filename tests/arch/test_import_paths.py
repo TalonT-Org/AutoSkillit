@@ -129,7 +129,7 @@ def test_req_imp_001_no_cross_package_submodule_imports() -> None:
 # REQ-IMP-003: server/tools_*.py imports only core and pipeline (+ intra-server)
 # ---------------------------------------------------------------------------
 
-TOOLS_FILES = list((SRC / "server").glob("tools_*.py"))
+TOOLS_FILES = list((SRC / "server" / "tools").glob("tools_*.py"))
 
 
 @pytest.mark.parametrize("path", TOOLS_FILES, ids=lambda p: p.name)
@@ -235,7 +235,7 @@ def test_req_imp_005_git_only_core_at_runtime() -> None:
 
 def test_req_imp_006_prompts_no_gate_state_import() -> None:
     """server/tools_kitchen.py must not directly import DefaultGateState or pipeline.gate."""
-    path = SRC / "server" / "tools_kitchen.py"
+    path = SRC / "server" / "tools" / "tools_kitchen.py"
     tree = ast.parse(path.read_text())
     violations: list[str] = []
     for node in ast.walk(tree):
@@ -256,7 +256,7 @@ def test_req_imp_007_pretty_output_no_private_recipe_api_import() -> None:
     ListRecipesResult and LoadRecipeResult are re-exported via autoskillit.recipe.__all__.
     Importing from the private recipe._api sub-module bypasses the canonical surface (P14-1).
     """
-    path = SRC / "hooks" / "pretty_output_hook.py"
+    path = SRC / "hooks" / "formatters" / "pretty_output_hook.py"
     for mod, in_tc in _parse_imports(path):
         if in_tc and mod == "autoskillit.recipe._api":
             pytest.fail(
@@ -336,9 +336,9 @@ def test_req_imp_007_server_cli_no_unauthorized_cross_submodule_imports() -> Non
     allowlist = {
         Path("server/_factory.py"),
         Path("server/git.py"),
-        Path("server/tools_kitchen.py"),
+        Path("server/tools/tools_kitchen.py"),
         Path("cli/app.py"),
-        Path("cli/_cook.py"),
+        Path("cli/session/_cook.py"),
         Path("cli/_workspace.py"),
     }
     forbidden_pkgs = {"execution", "workspace", "recipe", "migration"}

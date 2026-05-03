@@ -13,7 +13,7 @@ pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 def test_no_deferred_validator_imports_in_rule_modules() -> None:
     """T1: No rule sub-module should defer-import from validator.py inside a function body."""
     recipe_dir = pathlib.Path(__file__).resolve().parents[2] / "src/autoskillit/recipe"
-    rule_files = list(recipe_dir.glob("rules_*.py"))
+    rule_files = list((recipe_dir / "rules").glob("rules_*.py"))
     assert len(rule_files) >= 5, "Expected at least 5 rule sub-modules"
     for path in rule_files:
         tree = ast.parse(path.read_text())
@@ -99,6 +99,6 @@ def test_validator_does_not_import_rules() -> None:
             assert not module.endswith(".rules"), (
                 "validator.py must not import from rules.py (cycle eliminated)"
             )
-            assert "rules_" not in module or module.startswith("autoskillit.recipe.rules_"), (
-                f"validator.py must not import rule sub-modules directly: {module}"
-            )
+            assert "rules_" not in module or module.startswith(
+                "autoskillit.recipe.rules.rules_"
+            ), f"validator.py must not import rule sub-modules directly: {module}"

@@ -209,7 +209,7 @@ def install(*, scope: str = "user") -> bool:
     sweep_all_scopes_for_orphans(Path.cwd())
     settings_path = _hooks_mod._claude_settings_path(scope)
     sync_hooks_to_settings(settings_path)
-    from autoskillit.cli._update_checks import invalidate_fetch_cache
+    from autoskillit.cli.update._update_checks import invalidate_fetch_cache
 
     invalidate_fetch_cache(Path.home())
     return True

@@ -13,7 +13,8 @@ from autoskillit.workspace.skills import DefaultSkillResolver
 
 _PKG = pkg_root()
 _SCAN_DIRS_AND_GLOBS: list[tuple[str, list[str]]] = [
-    ("server", ["tools_*.py", "_guards.py"]),
+    ("server/tools", ["tools_*.py"]),
+    ("server", ["_guards.py"]),
     ("hooks", ["*.py"]),
 ]
 _PREFIX_RE = re.compile(r"/autoskillit:([a-z][\w-]*)")

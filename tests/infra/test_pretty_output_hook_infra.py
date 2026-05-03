@@ -8,7 +8,7 @@ import pytest
 
 from autoskillit.core.types import ChannelConfirmation, TerminationReason
 from autoskillit.execution.headless import _build_skill_result
-from autoskillit.hooks.pretty_output_hook import _format_response
+from autoskillit.hooks.formatters.pretty_output_hook import _format_response
 from tests.conftest import _make_result
 from tests.infra._pretty_output_helpers import (
     _run_hook,
@@ -24,7 +24,7 @@ def test_hook_script_exists():
     """pretty_output.py must exist in the hooks directory."""
     from autoskillit.core.paths import pkg_root
 
-    assert (pkg_root() / "hooks" / "pretty_output_hook.py").exists()
+    assert (pkg_root() / "hooks" / "formatters" / "pretty_output_hook.py").exists()
 
 
 # PHK-2
@@ -81,7 +81,7 @@ def test_hook_fail_open_on_missing_tool_response():
 def test_formatter_coverage_contract():
     """PHK-41: Every MCP tool is either in _FORMATTERS or explicitly in _UNFORMATTED_TOOLS."""
     from autoskillit.core.types import GATED_TOOLS, UNGATED_TOOLS
-    from autoskillit.hooks.pretty_output_hook import _FORMATTERS, _UNFORMATTED_TOOLS
+    from autoskillit.hooks.formatters.pretty_output_hook import _FORMATTERS, _UNFORMATTED_TOOLS
 
     all_tools = GATED_TOOLS | UNGATED_TOOLS
     covered = set(_FORMATTERS.keys()) | _UNFORMATTED_TOOLS
@@ -111,7 +111,7 @@ def test_wrap_plain_str_helper_produces_correct_shape():
 
 def test_unformatted_tools_and_formatters_are_disjoint():
     """_UNFORMATTED_TOOLS and _FORMATTERS must be mutually exclusive."""
-    from autoskillit.hooks.pretty_output_hook import _FORMATTERS, _UNFORMATTED_TOOLS
+    from autoskillit.hooks.formatters.pretty_output_hook import _FORMATTERS, _UNFORMATTED_TOOLS
 
     overlap = set(_FORMATTERS) & _UNFORMATTED_TOOLS
     assert not overlap, f"Tools in both dispatch tables: {overlap}"
@@ -132,7 +132,7 @@ def test_unformatted_tool_routes_to_generic_not_named_formatter(tmp_path):
 
 def test_pretty_output_public_surface_unchanged() -> None:
     """T-5 (audit finding 8.3): the hook entrypoint and the format router are public surface."""
-    import autoskillit.hooks.pretty_output_hook as p
+    import autoskillit.hooks.formatters.pretty_output_hook as p
 
     assert callable(p.main)
     assert callable(p._format_response)

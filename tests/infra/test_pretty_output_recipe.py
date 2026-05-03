@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from autoskillit.hooks.pretty_output_hook import _format_response
+from autoskillit.hooks.formatters.pretty_output_hook import _format_response
 from tests.infra._pretty_output_helpers import (
     REALISTIC_RECIPE_YAML,
     _make_event,
@@ -139,7 +139,7 @@ def test_fmt_get_token_summary_falls_back_to_elapsed():
 def test_hook_token_summary_output_equivalent_to_canonical():
     """1g: Hook inline _fmt_get_token_summary produces identical output to
     TelemetryFormatter.format_compact_kv for the same input data."""
-    from autoskillit.hooks.pretty_output_hook import _fmt_get_token_summary
+    from autoskillit.hooks.formatters.pretty_output_hook import _fmt_get_token_summary
     from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
 
     data = {
@@ -489,7 +489,7 @@ def test_fmt_list_recipes_compact_representation():
 
 def test_fmt_load_recipe_field_coverage():
     """Every LoadRecipeResult field must be in RENDERED or SUPPRESSED."""
-    from autoskillit.hooks.pretty_output_hook import (
+    from autoskillit.hooks.formatters.pretty_output_hook import (
         _FMT_LOAD_RECIPE_RENDERED,
         _FMT_LOAD_RECIPE_SUPPRESSED,
     )
@@ -510,7 +510,7 @@ def test_fmt_load_recipe_field_coverage():
 
 def test_fmt_load_recipe_derivation_map_coverage():
     """Every key/value in _LOAD_RECIPE_CONTENT_DERIVED_FROM must be in _FMT_LOAD_RECIPE_RENDERED."""  # noqa: E501
-    from autoskillit.hooks.pretty_output_hook import (
+    from autoskillit.hooks.formatters.pretty_output_hook import (
         _FMT_LOAD_RECIPE_RENDERED,
         _LOAD_RECIPE_CONTENT_DERIVED_FROM,
     )
@@ -574,7 +574,7 @@ def test_fmt_load_recipe_suppresses_greeting():
 
 def test_fmt_list_recipes_field_coverage():
     """Every ListRecipesResult field must be in RENDERED or SUPPRESSED."""
-    from autoskillit.hooks.pretty_output_hook import (
+    from autoskillit.hooks.formatters.pretty_output_hook import (
         _FMT_LIST_RECIPES_RENDERED,
         _FMT_LIST_RECIPES_SUPPRESSED,
     )
@@ -594,7 +594,7 @@ def test_fmt_list_recipes_field_coverage():
 
 def test_fmt_recipe_list_item_field_coverage():
     """Every RecipeListItem field must be in RENDERED or SUPPRESSED."""
-    from autoskillit.hooks.pretty_output_hook import (
+    from autoskillit.hooks.formatters.pretty_output_hook import (
         _FMT_RECIPE_LIST_ITEM_RENDERED,
         _FMT_RECIPE_LIST_ITEM_SUPPRESSED,
     )
@@ -636,7 +636,7 @@ def test_fmt_list_recipes_renders_summary():
 
 def test_fmt_recipe_body_ingredients_not_duplicated_when_table_present():
     """When ingredients_table is present, ingredient names must not appear in RECIPE section."""
-    from autoskillit.hooks.pretty_output_hook import _fmt_recipe_body
+    from autoskillit.hooks.formatters.pretty_output_hook import _fmt_recipe_body
 
     data = {
         "content": REALISTIC_RECIPE_YAML,
@@ -663,7 +663,7 @@ def test_fmt_recipe_body_ingredients_not_duplicated_when_table_present():
 
 
 def test_strip_yaml_ingredients_block_removes_ingredients_section():
-    from autoskillit.hooks.pretty_output_hook import _strip_yaml_ingredients_block
+    from autoskillit.hooks.formatters.pretty_output_hook import _strip_yaml_ingredients_block
 
     yaml = "name: test\ningredients:\n  task:\n    description: a task\nsteps:\n  do: {}\n"
     result = _strip_yaml_ingredients_block(yaml)
@@ -674,7 +674,7 @@ def test_strip_yaml_ingredients_block_removes_ingredients_section():
 
 
 def test_strip_yaml_ingredients_block_noop_when_no_ingredients_key():
-    from autoskillit.hooks.pretty_output_hook import _strip_yaml_ingredients_block
+    from autoskillit.hooks.formatters.pretty_output_hook import _strip_yaml_ingredients_block
 
     yaml = "name: test\nsteps:\n  do: {}\n"
     result = _strip_yaml_ingredients_block(yaml)
@@ -682,7 +682,7 @@ def test_strip_yaml_ingredients_block_noop_when_no_ingredients_key():
 
 
 def test_strip_yaml_ingredients_block_at_end_of_file():
-    from autoskillit.hooks.pretty_output_hook import _strip_yaml_ingredients_block
+    from autoskillit.hooks.formatters.pretty_output_hook import _strip_yaml_ingredients_block
 
     yaml = "name: test\nsteps:\n  do: {}\ningredients:\n  foo:\n    description: bar\n"
     result = _strip_yaml_ingredients_block(yaml)
@@ -691,7 +691,7 @@ def test_strip_yaml_ingredients_block_at_end_of_file():
 
 
 def test_strip_yaml_ingredients_block_multiline_description():
-    from autoskillit.hooks.pretty_output_hook import _strip_yaml_ingredients_block
+    from autoskillit.hooks.formatters.pretty_output_hook import _strip_yaml_ingredients_block
 
     yaml = (
         "name: test\n"
@@ -711,7 +711,7 @@ def test_strip_yaml_ingredients_block_multiline_description():
 
 def test_fmt_open_kitchen_ingredients_not_duplicated_when_table_present():
     """open_kitchen routes through _fmt_recipe_body — verify same deduplication applies."""
-    from autoskillit.hooks.pretty_output_hook import _fmt_open_kitchen
+    from autoskillit.hooks.formatters.pretty_output_hook import _fmt_open_kitchen
 
     data = {
         "content": REALISTIC_RECIPE_YAML,

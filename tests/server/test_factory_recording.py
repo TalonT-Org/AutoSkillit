@@ -236,7 +236,7 @@ async def test_run_skill_replay_uses_snapshot_over_init_session(tool_ctx, tmp_pa
     from unittest.mock import MagicMock
 
     from autoskillit.execution.recording import ReplayingSubprocessRunner
-    from autoskillit.server.tools_execution import run_skill
+    from autoskillit.server.tools.tools_execution import run_skill
     from tests.fakes import InMemoryHeadlessExecutor
 
     snap_dir = tmp_path / "snap" / "investigate"
@@ -275,7 +275,7 @@ async def test_run_skill_replay_fallback_to_init_session(tool_ctx, tmp_path, mon
 
     from autoskillit.core import ValidatedAddDir
     from autoskillit.execution.recording import ReplayingSubprocessRunner
-    from autoskillit.server.tools_execution import run_skill
+    from autoskillit.server.tools.tools_execution import run_skill
     from tests.fakes import InMemoryHeadlessExecutor
 
     replay_runner = ReplayingSubprocessRunner({}, {}, skill_snapshots={})

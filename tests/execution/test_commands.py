@@ -158,7 +158,7 @@ class TestBuildInteractiveCmdExtended:
             patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
             patch("subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
         ):
-            import autoskillit.cli._cook as module
+            import autoskillit.cli.session._cook as module
 
             module.cook()
 

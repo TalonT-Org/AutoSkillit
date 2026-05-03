@@ -265,7 +265,7 @@ def test_wait_for_ci_rejects_poll_interval() -> None:
 
 def test_rules_tools_batch_cleanup_clones_accepts_all_owners_param() -> None:
     """T20 — batch_cleanup_clones with all_owners param must not trigger dead-with-param."""
-    from autoskillit.recipe.rules_tools import _TOOL_PARAMS
+    from autoskillit.recipe.rules.rules_tools import _TOOL_PARAMS
 
     assert "all_owners" in _TOOL_PARAMS["batch_cleanup_clones"]
 
@@ -335,18 +335,18 @@ def test_rebase_then_push_with_force_true_passes_validation() -> None:
 # ---------------------------------------------------------------------------
 
 _SERVER_TOOL_MODULES = [
-    "autoskillit.server.tools_ci",
-    "autoskillit.server.tools_ci_watch",
-    "autoskillit.server.tools_ci_merge_queue",
-    "autoskillit.server.tools_clone",
-    "autoskillit.server.tools_execution",
-    "autoskillit.server.tools_git",
-    "autoskillit.server.tools_recipe",
-    "autoskillit.server.tools_status",
-    "autoskillit.server.tools_github",
-    "autoskillit.server.tools_issue_lifecycle",
-    "autoskillit.server.tools_pr_ops",
-    "autoskillit.server.tools_workspace",
+    "autoskillit.server.tools.tools_ci",
+    "autoskillit.server.tools.tools_ci_watch",
+    "autoskillit.server.tools.tools_ci_merge_queue",
+    "autoskillit.server.tools.tools_clone",
+    "autoskillit.server.tools.tools_execution",
+    "autoskillit.server.tools.tools_git",
+    "autoskillit.server.tools.tools_recipe",
+    "autoskillit.server.tools.tools_status",
+    "autoskillit.server.tools.tools_github",
+    "autoskillit.server.tools.tools_issue_lifecycle",
+    "autoskillit.server.tools.tools_pr_ops",
+    "autoskillit.server.tools.tools_workspace",
 ]
 
 _FRAMEWORK_PARAMS = frozenset({"ctx"})
@@ -364,7 +364,7 @@ def _build_handler_map() -> dict[str, object]:
 
 def test_tool_params_matches_mcp_handler_signatures() -> None:
     """T8: _TOOL_PARAMS keys match actual MCP handler signatures — drift fails CI."""
-    from autoskillit.recipe.rules_tools import _TOOL_PARAMS
+    from autoskillit.recipe.rules.rules_tools import _TOOL_PARAMS
 
     handler_map = _build_handler_map()
     mismatches: list[str] = []

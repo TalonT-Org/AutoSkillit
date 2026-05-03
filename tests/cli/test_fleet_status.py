@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.cli._fleet import fleet_status as _fleet_status
+from autoskillit.cli.fleet import fleet_status as _fleet_status
 from tests.cli._fleet_helpers import (
     DispatchDescriptor,
     _make_state,
@@ -88,7 +88,7 @@ def test_fleet_status_table_columns(
 
 def test_status_numeric_columns_right_aligned() -> None:
     """Numeric column definitions use align='>'."""
-    from autoskillit.cli._fleet_display import _STATUS_COLUMNS
+    from autoskillit.cli.fleet._fleet_display import _STATUS_COLUMNS
 
     numeric_labels = {"ELAPSED", "INPUT", "OUTPUT", "CACHE_RD", "CACHE_WR"}
     for col in _STATUS_COLUMNS:
@@ -135,7 +135,7 @@ def test_fleet_status_json_no_ansi(
 
 def test_exit_code_all_success() -> None:
     """_compute_exit_code returns 0 when all dispatches succeed or skip."""
-    from autoskillit.cli._fleet import _compute_exit_code
+    from autoskillit.cli.fleet import _compute_exit_code
 
     state = _make_state(statuses=["success", "skipped", "success"])
     assert _compute_exit_code(state) == 0
@@ -144,7 +144,7 @@ def test_exit_code_all_success() -> None:
 @pytest.mark.parametrize("bad_status", ["failure", "interrupted", "refused", "released"])
 def test_exit_code_any_failure(bad_status: str) -> None:
     """_compute_exit_code returns 1 when any dispatch is in a failure-class status."""
-    from autoskillit.cli._fleet import _compute_exit_code
+    from autoskillit.cli.fleet import _compute_exit_code
 
     state = _make_state(statuses=["success", bad_status])
     assert _compute_exit_code(state) == 1
@@ -153,7 +153,7 @@ def test_exit_code_any_failure(bad_status: str) -> None:
 @pytest.mark.parametrize("progress_status", ["running", "pending"])
 def test_exit_code_in_progress(progress_status: str) -> None:
     """_compute_exit_code returns 2 when any dispatch is in-progress and none failed."""
-    from autoskillit.cli._fleet import _compute_exit_code
+    from autoskillit.cli.fleet import _compute_exit_code
 
     state = _make_state(statuses=["success", progress_status])
     assert _compute_exit_code(state) == 2
@@ -172,7 +172,7 @@ def test_cross_check_warns_on_divergence(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
 ) -> None:
     """_cross_check_tokens emits a stderr warning when divergence exceeds 5%."""
-    from autoskillit.cli._fleet import _aggregate_totals, _cross_check_tokens
+    from autoskillit.cli.fleet import _aggregate_totals, _cross_check_tokens
 
     (tmp_path / "sessions.jsonl").write_text("")
     state = _make_state_with_tokens(input_total=10000)
@@ -246,7 +246,7 @@ def test_status_table_no_ansi_when_no_color(
 
 def test_exit_code_failure_over_in_progress() -> None:
     """_compute_exit_code returns 1 (failure) when mixed with in-progress."""
-    from autoskillit.cli._fleet import _compute_exit_code
+    from autoskillit.cli.fleet import _compute_exit_code
 
     state = _make_state(statuses=["failure", "running"])
     assert _compute_exit_code(state) == 1
@@ -276,7 +276,7 @@ def test_fleet_status_exits_when_disabled(monkeypatch: pytest.MonkeyPatch, tmp_p
     monkeypatch.chdir(tmp_path)
     checked_features: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli._fleet.is_feature_enabled",
+        "autoskillit.cli.fleet.is_feature_enabled",
         lambda name, features, *, experimental_enabled=False: (
             checked_features.append(name) or False
         ),

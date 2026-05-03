@@ -11,7 +11,7 @@ from autoskillit.core.types import (
     ChannelConfirmation,
     TerminationReason,
 )
-from autoskillit.execution._process_race import (
+from autoskillit.execution.process._process_race import (
     RaceAccumulator,
     RaceSignals,
     resolve_termination,
@@ -275,7 +275,7 @@ class TestExitSnapshot:
 
         import anyio
 
-        from autoskillit.execution._process_race import _watch_process
+        from autoskillit.execution.process._process_race import _watch_process
 
         acc = RaceAccumulator()
         trigger = anyio.Event()
@@ -299,7 +299,7 @@ class TestExitSnapshot:
 
         import anyio
 
-        from autoskillit.execution._process_race import _watch_process
+        from autoskillit.execution.process._process_race import _watch_process
 
         acc = RaceAccumulator()
         trigger = anyio.Event()
@@ -325,7 +325,7 @@ class TestProcessExitedEvent:
 
         import anyio
 
-        from autoskillit.execution._process_race import _watch_process
+        from autoskillit.execution.process._process_race import _watch_process
 
         acc = RaceAccumulator()
         trigger = anyio.Event()
@@ -350,7 +350,7 @@ class TestProcessExitedEvent:
 
         import anyio
 
-        from autoskillit.execution._process_race import _watch_process
+        from autoskillit.execution.process._process_race import _watch_process
 
         acc = RaceAccumulator()
         trigger = anyio.Event()

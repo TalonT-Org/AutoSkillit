@@ -12,7 +12,7 @@ import structlog.testing
 from autoskillit.config import AutomationConfig, ClassifyFixConfig
 from autoskillit.core import CleanupResult
 from autoskillit.core.types import MergeFailedStep, MergeState, RestartScope
-from autoskillit.server.tools_git import (
+from autoskillit.server.tools.tools_git import (
     check_pr_mergeable,
     classify_fix,
     create_unique_branch,

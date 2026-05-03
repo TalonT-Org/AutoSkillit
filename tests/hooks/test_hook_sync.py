@@ -12,7 +12,7 @@ def test_hook_config_path_components_in_sync():
     Both scripts must address the same config file. This test guards against
     independent evolution of the two constant sets.
     """
-    from autoskillit.hooks.pretty_output_hook import _HOOK_CONFIG_PATH_COMPONENTS
+    from autoskillit.hooks.formatters.pretty_output_hook import _HOOK_CONFIG_PATH_COMPONENTS
     from autoskillit.server._misc import _HOOK_CONFIG_FILENAME, _HOOK_DIR_COMPONENTS
 
     path_from_pretty = Path(*_HOOK_CONFIG_PATH_COMPONENTS)
@@ -34,8 +34,8 @@ def test_hook_config_path_single_source_of_truth():
     _hook_settings.HOOK_DIR_COMPONENTS + HOOK_CONFIG_FILENAME reconstructs
     _fmt_primitives._HOOK_CONFIG_PATH_COMPONENTS exactly.
     """
-    from autoskillit.hooks._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
     from autoskillit.hooks._hook_settings import HOOK_CONFIG_FILENAME, HOOK_DIR_COMPONENTS
+    from autoskillit.hooks.formatters._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
 
     assert (*HOOK_DIR_COMPONENTS, HOOK_CONFIG_FILENAME) == _HOOK_CONFIG_PATH_COMPONENTS, (
         "_hook_settings path constants must match _fmt_primitives._HOOK_CONFIG_PATH_COMPONENTS"

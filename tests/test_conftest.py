@@ -254,9 +254,9 @@ def test_is_test_feature_enabled_dynaconf_env_overrides(monkeypatch):
 
 def test_is_test_feature_enabled_respects_experimental_enabled(monkeypatch):
     """EXPERIMENTAL feature resolves True via experimental_enabled=True in config."""
-    import autoskillit.core._type_constants as tc
-    from autoskillit.core._type_constants import FeatureDef
-    from autoskillit.core._type_enums import FeatureLifecycle
+    import autoskillit.core.types._type_constants as tc
+    from autoskillit.core.types._type_constants import FeatureDef
+    from autoskillit.core.types._type_enums import FeatureLifecycle
     from tests.conftest import _is_test_feature_enabled, _resolve_test_config
 
     monkeypatch.delenv("AUTOSKILLIT_TEST_FEATURES", raising=False)
@@ -280,9 +280,9 @@ def test_is_test_feature_enabled_respects_experimental_enabled(monkeypatch):
 
 def test_is_test_feature_enabled_disabled_lifecycle_always_false(monkeypatch):
     """_is_test_feature_enabled returns False for DISABLED feature regardless of config."""
-    import autoskillit.core._type_constants as tc
-    from autoskillit.core._type_constants import FeatureDef
-    from autoskillit.core._type_enums import FeatureLifecycle
+    import autoskillit.core.types._type_constants as tc
+    from autoskillit.core.types._type_constants import FeatureDef
+    from autoskillit.core.types._type_enums import FeatureLifecycle
     from tests.conftest import _is_test_feature_enabled, _resolve_test_config
 
     monkeypatch.delenv("AUTOSKILLIT_TEST_FEATURES", raising=False)

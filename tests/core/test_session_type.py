@@ -136,7 +136,7 @@ def test_session_type_enum_fleet_value():
 
 def test_session_type_fleet_constant_matches_enum():
     from autoskillit.core import SessionType
-    from autoskillit.core._type_constants import SESSION_TYPE_FLEET
+    from autoskillit.core.types._type_constants import SESSION_TYPE_FLEET
 
     assert SessionType.FLEET.value == SESSION_TYPE_FLEET
 
@@ -151,15 +151,15 @@ def test_session_type_is_defined_in_type_helpers():
     import importlib
     import inspect
 
-    from autoskillit.core._type_helpers import session_type as fn_helpers
+    from autoskillit.core.types._type_helpers import session_type as fn_helpers
 
-    type_enums = importlib.import_module("autoskillit.core._type_enums")
+    type_enums = importlib.import_module("autoskillit.core.types._type_enums")
     importlib.reload(type_enums)
     assert not hasattr(type_enums, "session_type"), (
         "session_type must not be defined in _type_enums after relocation"
     )
 
-    assert inspect.getmodule(fn_helpers).__name__ == "autoskillit.core._type_helpers"
+    assert inspect.getmodule(fn_helpers).__name__ == "autoskillit.core.types._type_helpers"
     assert inspect.getfile(fn_helpers).endswith("_type_helpers.py")
 
 

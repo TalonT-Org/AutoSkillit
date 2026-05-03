@@ -8,7 +8,7 @@ from autoskillit.core.paths import pkg_root
 
 
 def _run_guard(event: dict) -> dict | None:
-    script = pkg_root() / "hooks" / "generated_file_write_guard.py"
+    script = pkg_root() / "hooks" / "guards" / "generated_file_write_guard.py"
     result = subprocess.run(
         [sys.executable, str(script)],
         input=json.dumps(event),
@@ -57,7 +57,7 @@ def test_write_guard_allows_other_files():
 
 
 def test_write_guard_fail_open_on_invalid_json():
-    script = pkg_root() / "hooks" / "generated_file_write_guard.py"
+    script = pkg_root() / "hooks" / "guards" / "generated_file_write_guard.py"
     result = subprocess.run(
         [sys.executable, str(script)],
         input="not json",

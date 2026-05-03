@@ -129,12 +129,12 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # _lifespan.py — hooks.json self-heal on startup drift (co-owned with Claude plugin system)
     ("src/autoskillit/server/_lifespan.py", 56),
     # tools_kitchen.py — hook config dict
-    ("src/autoskillit/server/tools_kitchen.py", 117),
-    ("src/autoskillit/server/tools_kitchen.py", 558),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 117),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 558),
     # tools_status.py — mcp_data dict
-    ("src/autoskillit/server/tools_status.py", 486),
+    ("src/autoskillit/server/tools/tools_status.py", 486),
     # tools_github.py — bug report dict
-    ("src/autoskillit/server/tools_github.py", 279),
+    ("src/autoskillit/server/tools/tools_github.py", 279),
     # _hooks.py — settings.json dict (co-owned with Claude CLI)
     ("src/autoskillit/cli/_hooks.py", 23),
     # _init_helpers.py — ~/.claude.json (co-owned)
@@ -148,9 +148,9 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # _marketplace.py — hooks.json (co-owned)
     ("src/autoskillit/cli/_marketplace.py", 177),
     # _update_checks.py — dismissal state file
-    ("src/autoskillit/cli/_update_checks.py", 79),
+    ("src/autoskillit/cli/update/_update_checks.py", 79),
     # _update_checks_fetch.py — fetch cache (extracted from _update_checks.py)
-    ("src/autoskillit/cli/_update_checks_fetch.py", 58),
+    ("src/autoskillit/cli/update/_update_checks_fetch.py", 58),
     # smoke_utils.py — domain partitions dict, hunk ranges list, merge queue list
     ("src/autoskillit/smoke_utils.py", 57),
     ("src/autoskillit/smoke_utils.py", 87),

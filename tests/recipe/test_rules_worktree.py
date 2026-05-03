@@ -549,7 +549,7 @@ def test_worktree_modifying_skills_includes_experiment() -> None:
     means recipes using it without on_context_limit silently bypass the
     missing-context-limit-on-worktree rule.
     """
-    from autoskillit.recipe.rules_worktree import _WORKTREE_MODIFYING_SKILLS
+    from autoskillit.recipe.rules.rules_worktree import _WORKTREE_MODIFYING_SKILLS
 
     assert "implement-experiment" in _WORKTREE_MODIFYING_SKILLS, (
         "_WORKTREE_MODIFYING_SKILLS must include implement-experiment so that the "

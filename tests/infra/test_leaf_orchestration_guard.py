@@ -25,7 +25,7 @@ def _run_guard(
     raw_stdin: if provided, passed directly to stdin instead of json.dumps(tool_input).
     Use this to test malformed-input paths without duplicating setup boilerplate.
     """
-    from autoskillit.hooks.leaf_orchestration_guard import main
+    from autoskillit.hooks.guards.leaf_orchestration_guard import main
 
     stdin_content = raw_stdin if raw_stdin is not None else json.dumps(tool_input)
     env_updates: dict[str, str] = {}
@@ -81,7 +81,7 @@ def test_guard_permits_fleet_tier():
 
 def test_guard_denies_when_session_type_unset():
     """Fail-closed: headless with no SESSION_TYPE is treated as leaf → deny."""
-    from autoskillit.hooks.leaf_orchestration_guard import main
+    from autoskillit.hooks.guards.leaf_orchestration_guard import main
 
     stdin_content = json.dumps({"tool_name": "mcp__autoskillit__run_skill"})
     env_without_session_type = {

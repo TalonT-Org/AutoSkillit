@@ -22,9 +22,9 @@ from typing import Any
 
 # stdlib-only subprocess hook: import _fmt_primitives by bare name via sys.path
 # (test_hooks_are_stdlib_only). Venv tests use the autoskillit.hooks package path.
-_HOOKS_DIR = str(pathlib.Path(__file__).resolve().parent)
-if _HOOKS_DIR not in sys.path:
-    sys.path.insert(0, _HOOKS_DIR)
+_FORMATTERS_DIR = str(pathlib.Path(__file__).resolve().parent / "formatters")
+if _FORMATTERS_DIR not in sys.path:
+    sys.path.insert(0, _FORMATTERS_DIR)
 
 from _fmt_primitives import (  # type: ignore[import-not-found]  # noqa: E402
     _HOOK_CONFIG_PATH_COMPONENTS,

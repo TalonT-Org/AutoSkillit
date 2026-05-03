@@ -35,12 +35,6 @@ def test_all_entries_present() -> None:
     expected = {
         "anomaly_detection",
         "clone_guard",
-        "_headless_scan",
-        "_process_io",
-        "_process_jsonl",
-        "_process_monitor",
-        "_process_pty",
-        "_process_race",
         "ci",
         "merge_queue",
         "diff_annotator",
@@ -54,7 +48,6 @@ def test_all_entries_present() -> None:
         "quota",
         "session_log",
         "linux_tracing",
-        "_process_kill",
         "commands",
     }
     assert expected <= set(MODULE_CASCADE_EXECUTION.keys())
@@ -99,17 +92,11 @@ class TestBuildTestScopeExecutionCascade:
         assert "arch" in dir_names
         assert "contracts" in dir_names
 
-    def test_eight_narrow_modules_all_resolve_to_execution_only(self, tmp_path: Path) -> None:
-        """Each of the 8 narrowest stems maps to frozenset({"execution"})."""
+    def test_narrow_modules_all_resolve_to_execution_only(self, tmp_path: Path) -> None:
+        """Each of the narrowest stems maps to frozenset({"execution"})."""
         narrow_stems = [
             "anomaly_detection",
             "clone_guard",
-            "_headless_scan",
-            "_process_io",
-            "_process_jsonl",
-            "_process_monitor",
-            "_process_pty",
-            "_process_race",
         ]
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         for stem in narrow_stems:

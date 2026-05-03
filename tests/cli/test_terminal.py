@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 import pytest
 
-from autoskillit.cli._terminal import _RESET_SPEC
+from autoskillit.cli.ui._terminal import _RESET_SPEC
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
@@ -22,13 +22,13 @@ class TestTerminalGuardTTYRestore:
 
     def test_restores_on_normal_exit(self):
         """tcsetattr(TCSAFLUSH, saved_attrs) is called after normal yield exit."""
-        from autoskillit.cli._terminal import terminal_guard
+        from autoskillit.cli.ui._terminal import terminal_guard
 
         fake_attrs = [0, 0, 0, 0, 0, 0, [b"\x00"] * 32]
         with (
-            patch("autoskillit.cli._terminal.sys.stdin") as mock_stdin,
-            patch("autoskillit.cli._terminal.termios") as mock_termios,
-            patch("autoskillit.cli._terminal.sys.stdout"),
+            patch("autoskillit.cli.ui._terminal.sys.stdin") as mock_stdin,
+            patch("autoskillit.cli.ui._terminal.termios") as mock_termios,
+            patch("autoskillit.cli.ui._terminal.sys.stdout"),
         ):
             mock_stdin.isatty.return_value = True
             mock_stdin.fileno.return_value = 0
@@ -43,13 +43,13 @@ class TestTerminalGuardTTYRestore:
 
     def test_restores_on_keyboard_interrupt(self):
         """tcsetattr is called even when KeyboardInterrupt is raised inside the guard."""
-        from autoskillit.cli._terminal import terminal_guard
+        from autoskillit.cli.ui._terminal import terminal_guard
 
         fake_attrs = [0, 0, 0, 0, 0, 0, [b"\x00"] * 32]
         with (
-            patch("autoskillit.cli._terminal.sys.stdin") as mock_stdin,
-            patch("autoskillit.cli._terminal.termios") as mock_termios,
-            patch("autoskillit.cli._terminal.sys.stdout"),
+            patch("autoskillit.cli.ui._terminal.sys.stdin") as mock_stdin,
+            patch("autoskillit.cli.ui._terminal.termios") as mock_termios,
+            patch("autoskillit.cli.ui._terminal.sys.stdout"),
         ):
             mock_stdin.isatty.return_value = True
             mock_stdin.fileno.return_value = 0
@@ -65,13 +65,13 @@ class TestTerminalGuardTTYRestore:
 
     def test_restores_on_system_exit(self):
         """tcsetattr is called when SystemExit is raised (non-zero subprocess returncode)."""
-        from autoskillit.cli._terminal import terminal_guard
+        from autoskillit.cli.ui._terminal import terminal_guard
 
         fake_attrs = [0, 0, 0, 0, 0, 0, [b"\x00"] * 32]
         with (
-            patch("autoskillit.cli._terminal.sys.stdin") as mock_stdin,
-            patch("autoskillit.cli._terminal.termios") as mock_termios,
-            patch("autoskillit.cli._terminal.sys.stdout"),
+            patch("autoskillit.cli.ui._terminal.sys.stdin") as mock_stdin,
+            patch("autoskillit.cli.ui._terminal.termios") as mock_termios,
+            patch("autoskillit.cli.ui._terminal.sys.stdout"),
         ):
             mock_stdin.isatty.return_value = True
             mock_stdin.fileno.return_value = 0
@@ -88,12 +88,12 @@ class TestTerminalGuardTTYRestore:
     @pytest.mark.parametrize("entry", _RESET_SPEC, ids=lambda e: e.name)
     def test_emits_all_spec_sequences_on_normal_exit(self, entry):
         """Every sequence in _RESET_SPEC is emitted by terminal_guard() on normal exit."""
-        from autoskillit.cli._terminal import terminal_guard
+        from autoskillit.cli.ui._terminal import terminal_guard
 
         with (
-            patch("autoskillit.cli._terminal.sys.stdin") as mock_stdin,
-            patch("autoskillit.cli._terminal.termios"),
-            patch("autoskillit.cli._terminal.sys.stdout") as mock_stdout,
+            patch("autoskillit.cli.ui._terminal.sys.stdin") as mock_stdin,
+            patch("autoskillit.cli.ui._terminal.termios"),
+            patch("autoskillit.cli.ui._terminal.sys.stdout") as mock_stdout,
         ):
             mock_stdin.isatty.return_value = True
             mock_stdin.fileno.return_value = 0
@@ -109,12 +109,12 @@ class TestTerminalGuardTTYRestore:
     @pytest.mark.parametrize("entry", _RESET_SPEC, ids=lambda e: e.name)
     def test_emits_all_spec_sequences_on_exception(self, entry):
         """Every sequence in _RESET_SPEC is emitted by terminal_guard() on exception."""
-        from autoskillit.cli._terminal import terminal_guard
+        from autoskillit.cli.ui._terminal import terminal_guard
 
         with (
-            patch("autoskillit.cli._terminal.sys.stdin") as mock_stdin,
-            patch("autoskillit.cli._terminal.termios"),
-            patch("autoskillit.cli._terminal.sys.stdout") as mock_stdout,
+            patch("autoskillit.cli.ui._terminal.sys.stdin") as mock_stdin,
+            patch("autoskillit.cli.ui._terminal.termios"),
+            patch("autoskillit.cli.ui._terminal.sys.stdout") as mock_stdout,
         ):
             mock_stdin.isatty.return_value = True
             mock_stdin.fileno.return_value = 0
@@ -130,11 +130,11 @@ class TestTerminalGuardTTYRestore:
 
     def test_noop_in_non_tty_environment(self):
         """When stdin is not a TTY, tcgetattr and tcsetattr are never called."""
-        from autoskillit.cli._terminal import terminal_guard
+        from autoskillit.cli.ui._terminal import terminal_guard
 
         with (
-            patch("autoskillit.cli._terminal.sys.stdin") as mock_stdin,
-            patch("autoskillit.cli._terminal.termios") as mock_termios,
+            patch("autoskillit.cli.ui._terminal.sys.stdin") as mock_stdin,
+            patch("autoskillit.cli.ui._terminal.termios") as mock_termios,
         ):
             mock_stdin.isatty.return_value = False
 
@@ -146,12 +146,12 @@ class TestTerminalGuardTTYRestore:
 
     def test_handles_tcgetattr_error_gracefully(self):
         """termios.error from tcgetattr does not propagate — guard becomes no-op."""
-        from autoskillit.cli._terminal import terminal_guard
+        from autoskillit.cli.ui._terminal import terminal_guard
 
         with (
-            patch("autoskillit.cli._terminal.sys.stdin") as mock_stdin,
-            patch("autoskillit.cli._terminal.termios") as mock_termios,
-            patch("autoskillit.cli._terminal.sys.stdout"),
+            patch("autoskillit.cli.ui._terminal.sys.stdin") as mock_stdin,
+            patch("autoskillit.cli.ui._terminal.termios") as mock_termios,
+            patch("autoskillit.cli.ui._terminal.sys.stdout"),
         ):
             mock_stdin.isatty.return_value = True
             mock_stdin.fileno.return_value = 0
@@ -165,14 +165,14 @@ class TestTerminalGuardTTYRestore:
 
     def test_stty_fallback_on_tcsetattr_error(self):
         """os.system('stty sane') is called if tcsetattr raises termios.error."""
-        from autoskillit.cli._terminal import terminal_guard
+        from autoskillit.cli.ui._terminal import terminal_guard
 
         fake_attrs = [0, 0, 0, 0, 0, 0, [b"\x00"] * 32]
         with (
-            patch("autoskillit.cli._terminal.sys.stdin") as mock_stdin,
-            patch("autoskillit.cli._terminal.termios") as mock_termios,
-            patch("autoskillit.cli._terminal.sys.stdout"),
-            patch("autoskillit.cli._terminal.os") as mock_os,
+            patch("autoskillit.cli.ui._terminal.sys.stdin") as mock_stdin,
+            patch("autoskillit.cli.ui._terminal.termios") as mock_termios,
+            patch("autoskillit.cli.ui._terminal.sys.stdout"),
+            patch("autoskillit.cli.ui._terminal.os") as mock_os,
         ):
             mock_stdin.isatty.return_value = True
             mock_stdin.fileno.return_value = 0
@@ -198,15 +198,15 @@ class TestTerminalGuardTTYRestore:
 
         Regression guard for: investigation_terminal_guard_alt_screen_scrollbar
         """
-        from autoskillit.cli._terminal import terminal_guard
+        from autoskillit.cli.ui._terminal import terminal_guard
 
         writes_before_yield: list[str] = []
         all_writes: list[str] = []
 
         with (
-            patch("autoskillit.cli._terminal.sys.stdin") as mock_stdin,
-            patch("autoskillit.cli._terminal.termios"),
-            patch("autoskillit.cli._terminal.sys.stdout") as mock_stdout,
+            patch("autoskillit.cli.ui._terminal.sys.stdin") as mock_stdin,
+            patch("autoskillit.cli.ui._terminal.termios"),
+            patch("autoskillit.cli.ui._terminal.sys.stdout") as mock_stdout,
         ):
             mock_stdin.isatty.return_value = True
             mock_stdin.fileno.return_value = 0
@@ -223,12 +223,12 @@ class TestTerminalGuardTTYRestore:
 
     def test_emits_exit_alt_screen_on_system_exit(self):
         """terminal_guard() emits \\033[?1049l in finally even when SystemExit raised."""
-        from autoskillit.cli._terminal import terminal_guard
+        from autoskillit.cli.ui._terminal import terminal_guard
 
         with (
-            patch("autoskillit.cli._terminal.sys.stdin") as mock_stdin,
-            patch("autoskillit.cli._terminal.termios"),
-            patch("autoskillit.cli._terminal.sys.stdout") as mock_stdout,
+            patch("autoskillit.cli.ui._terminal.sys.stdin") as mock_stdin,
+            patch("autoskillit.cli.ui._terminal.termios"),
+            patch("autoskillit.cli.ui._terminal.sys.stdout") as mock_stdout,
         ):
             mock_stdin.isatty.return_value = True
             mock_stdin.fileno.return_value = 0
@@ -244,12 +244,12 @@ class TestTerminalGuardTTYRestore:
 
     def test_noop_does_not_emit_escape_sequences(self):
         """When stdin is not a TTY, no VT100 escape sequences are written to stdout."""
-        from autoskillit.cli._terminal import terminal_guard
+        from autoskillit.cli.ui._terminal import terminal_guard
 
         with (
-            patch("autoskillit.cli._terminal.sys.stdin") as mock_stdin,
-            patch("autoskillit.cli._terminal.termios"),
-            patch("autoskillit.cli._terminal.sys.stdout") as mock_stdout,
+            patch("autoskillit.cli.ui._terminal.sys.stdin") as mock_stdin,
+            patch("autoskillit.cli.ui._terminal.termios"),
+            patch("autoskillit.cli.ui._terminal.sys.stdout") as mock_stdout,
         ):
             mock_stdin.isatty.return_value = False
 
@@ -260,12 +260,12 @@ class TestTerminalGuardTTYRestore:
 
     def test_kitty_sequences_emitted_on_supported_terminal(self):
         """Kitty KBP sequences are emitted when TERM_PROGRAM indicates support."""
-        from autoskillit.cli._terminal import terminal_guard
+        from autoskillit.cli.ui._terminal import terminal_guard
 
         with (
-            patch("autoskillit.cli._terminal.sys.stdin") as mock_stdin,
-            patch("autoskillit.cli._terminal.termios"),
-            patch("autoskillit.cli._terminal.sys.stdout") as mock_stdout,
+            patch("autoskillit.cli.ui._terminal.sys.stdin") as mock_stdin,
+            patch("autoskillit.cli.ui._terminal.termios"),
+            patch("autoskillit.cli.ui._terminal.sys.stdout") as mock_stdout,
             patch.dict("os.environ", {"TERM_PROGRAM": "kitty"}, clear=False),
         ):
             mock_stdin.isatty.return_value = True
@@ -283,16 +283,16 @@ class TestTerminalGuardTTYRestore:
 
         JediTerm (JetBrains IDEs) echoes literal garbage from \\033[<99u.
         """
-        from autoskillit.cli._terminal import terminal_guard
+        from autoskillit.cli.ui._terminal import terminal_guard
 
         env = os.environ.copy()
         env.pop("TERM_PROGRAM", None)
         env.pop("KITTY_WINDOW_ID", None)
 
         with (
-            patch("autoskillit.cli._terminal.sys.stdin") as mock_stdin,
-            patch("autoskillit.cli._terminal.termios"),
-            patch("autoskillit.cli._terminal.sys.stdout") as mock_stdout,
+            patch("autoskillit.cli.ui._terminal.sys.stdin") as mock_stdin,
+            patch("autoskillit.cli.ui._terminal.termios"),
+            patch("autoskillit.cli.ui._terminal.sys.stdout") as mock_stdout,
             patch.dict("os.environ", env, clear=True),
         ):
             mock_stdin.isatty.return_value = True
@@ -314,12 +314,12 @@ class TestTerminalGuardTTYRestore:
 
     def test_kitty_sequences_emitted_via_kitty_window_id(self):
         """KITTY_WINDOW_ID triggers Kitty KBP sequences regardless of TERM_PROGRAM."""
-        from autoskillit.cli._terminal import terminal_guard
+        from autoskillit.cli.ui._terminal import terminal_guard
 
         with (
-            patch("autoskillit.cli._terminal.sys.stdin") as mock_stdin,
-            patch("autoskillit.cli._terminal.termios"),
-            patch("autoskillit.cli._terminal.sys.stdout") as mock_stdout,
+            patch("autoskillit.cli.ui._terminal.sys.stdin") as mock_stdin,
+            patch("autoskillit.cli.ui._terminal.termios"),
+            patch("autoskillit.cli.ui._terminal.sys.stdout") as mock_stdout,
             patch.dict("os.environ", {"KITTY_WINDOW_ID": "1"}, clear=False),
         ):
             mock_stdin.isatty.return_value = True
@@ -333,12 +333,12 @@ class TestTerminalGuardTTYRestore:
 
     def test_kitty_protocol_sequences_emitted_after_decstr(self):
         """Kitty KBP sequences must follow DECSTR to avoid being reset."""
-        from autoskillit.cli._terminal import terminal_guard
+        from autoskillit.cli.ui._terminal import terminal_guard
 
         with (
-            patch("autoskillit.cli._terminal.sys.stdin") as mock_stdin,
-            patch("autoskillit.cli._terminal.termios"),
-            patch("autoskillit.cli._terminal.sys.stdout") as mock_stdout,
+            patch("autoskillit.cli.ui._terminal.sys.stdin") as mock_stdin,
+            patch("autoskillit.cli.ui._terminal.termios"),
+            patch("autoskillit.cli.ui._terminal.sys.stdout") as mock_stdout,
             patch.dict("os.environ", {"TERM_PROGRAM": "kitty"}, clear=False),
         ):
             mock_stdin.isatty.return_value = True
@@ -364,7 +364,7 @@ class TestResetSpecificationCompleteness:
 
     def test_reset_spec_covers_all_layers(self):
         """Every ResetLayer enum member must have >= 1 entry in _RESET_SPEC."""
-        from autoskillit.cli._terminal import _RESET_SPEC, ResetLayer
+        from autoskillit.cli.ui._terminal import _RESET_SPEC, ResetLayer
 
         covered_layers = {entry.layer for entry in _RESET_SPEC}
         missing = set(ResetLayer) - covered_layers
@@ -377,7 +377,7 @@ class TestResetSpecificationCompleteness:
         """_BASE_RESET must contain exactly the sequences in _RESET_SPEC."""
         import re
 
-        from autoskillit.cli._terminal import _BASE_RESET, _RESET_SPEC
+        from autoskillit.cli.ui._terminal import _BASE_RESET, _RESET_SPEC
 
         spec_sequences = {entry.sequence for entry in _RESET_SPEC}
         for seq in spec_sequences:
@@ -392,7 +392,7 @@ class TestResetSpecificationCompleteness:
 
     def test_content_layer_sequences_are_last(self):
         """CONTENT layer sequences must follow all other layers in _BASE_RESET."""
-        from autoskillit.cli._terminal import _BASE_RESET, _RESET_SPEC, ResetLayer
+        from autoskillit.cli.ui._terminal import _BASE_RESET, _RESET_SPEC, ResetLayer
 
         content_seqs = [e.sequence for e in _RESET_SPEC if e.layer == ResetLayer.CONTENT]
         other_seqs = [e.sequence for e in _RESET_SPEC if e.layer != ResetLayer.CONTENT]
@@ -408,7 +408,7 @@ class TestResetSpecificationCompleteness:
 
     def test_reset_spec_has_no_duplicate_sequences(self):
         """Each escape sequence must appear exactly once in _RESET_SPEC."""
-        from autoskillit.cli._terminal import _RESET_SPEC
+        from autoskillit.cli.ui._terminal import _RESET_SPEC
 
         sequences = [e.sequence for e in _RESET_SPEC]
         duplicates = [s for s in sequences if sequences.count(s) > 1]
@@ -420,23 +420,23 @@ class TestCookTerminalGuard:
 
     def test_cook_restores_terminal_on_keyboard_interrupt(self, monkeypatch, tmp_path):
         """cook() must restore terminal even when subprocess.run raises KeyboardInterrupt."""
-        import autoskillit.cli._cook as cook_mod
+        import autoskillit.cli.session._cook as cook_mod
 
         monkeypatch.setattr("sys.stdin.isatty", lambda: True)
         monkeypatch.setattr("sys.stdin.fileno", lambda: 0)
         tcsetattr_calls = []
 
         monkeypatch.setattr(
-            "autoskillit.cli._terminal.termios.tcgetattr",
+            "autoskillit.cli.ui._terminal.termios.tcgetattr",
             lambda fd: [0, 0, 0, 0, 0, 0, []],
         )
         monkeypatch.setattr(
-            "autoskillit.cli._terminal.termios.tcsetattr",
+            "autoskillit.cli.ui._terminal.termios.tcsetattr",
             lambda fd, when, attrs: tcsetattr_calls.append(attrs),
         )
-        monkeypatch.setattr("autoskillit.cli._terminal.termios.error", termios.error)
+        monkeypatch.setattr("autoskillit.cli.ui._terminal.termios.error", termios.error)
         monkeypatch.setattr(
-            "autoskillit.cli._cook.subprocess.run",
+            "autoskillit.cli.session._cook.subprocess.run",
             lambda *a, **kw: (_ for _ in ()).throw(KeyboardInterrupt()),
         )
         monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/claude")
@@ -466,24 +466,24 @@ class TestCookTerminalGuard:
         """_launch_cook_session() must restore terminal on exception."""
         import importlib
 
-        app_mod = importlib.import_module("autoskillit.cli._session_launch")
+        app_mod = importlib.import_module("autoskillit.cli.session._session_launch")
 
         monkeypatch.setattr("sys.stdin.isatty", lambda: True)
         monkeypatch.setattr("sys.stdin.fileno", lambda: 0)
         tcsetattr_calls = []
 
         monkeypatch.setattr(
-            "autoskillit.cli._terminal.termios.tcgetattr",
+            "autoskillit.cli.ui._terminal.termios.tcgetattr",
             lambda fd: [0, 0, 0, 0, 0, 0, []],
         )
         monkeypatch.setattr(
-            "autoskillit.cli._terminal.termios.tcsetattr",
+            "autoskillit.cli.ui._terminal.termios.tcsetattr",
             lambda fd, when, attrs: tcsetattr_calls.append(attrs),
         )
-        monkeypatch.setattr("autoskillit.cli._terminal.termios.error", termios.error)
+        monkeypatch.setattr("autoskillit.cli.ui._terminal.termios.error", termios.error)
         monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: False)
         monkeypatch.setattr(
-            "autoskillit.cli._session_launch.subprocess.run",
+            "autoskillit.cli.session._session_launch.subprocess.run",
             lambda *a, **kw: (_ for _ in ()).throw(KeyboardInterrupt()),
         )
         monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/claude")

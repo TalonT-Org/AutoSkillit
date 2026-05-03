@@ -9,7 +9,7 @@ import pytest
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import GitHubFetcher
-from autoskillit.core._type_plugin_source import DirectInstall
+from autoskillit.core.types._type_plugin_source import DirectInstall
 from autoskillit.pipeline.audit import DefaultAuditLog, FailureRecord
 from autoskillit.pipeline.context import ToolContext
 from autoskillit.pipeline.gate import DefaultGateState

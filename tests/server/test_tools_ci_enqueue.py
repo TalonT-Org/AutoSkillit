@@ -25,11 +25,11 @@ async def test_enqueue_pr_delegates_to_watcher_enqueue(tool_ctx):
     tool_ctx.merge_queue_watcher = watcher
 
     with patch(
-        "autoskillit.server.tools_ci_merge_queue.resolve_repo_from_remote",
+        "autoskillit.server.tools.tools_ci_merge_queue.resolve_repo_from_remote",
         new_callable=AsyncMock,
         return_value="owner/repo",
     ):
-        from autoskillit.server.tools_ci_merge_queue import enqueue_pr
+        from autoskillit.server.tools.tools_ci_merge_queue import enqueue_pr
 
         raw = await enqueue_pr(
             pr_number=42,
@@ -50,7 +50,7 @@ async def test_enqueue_pr_returns_structured_error_when_watcher_none(tool_ctx):
     """enqueue_pr returns {"success": false} when merge_queue_watcher is None."""
     tool_ctx.merge_queue_watcher = None
 
-    from autoskillit.server.tools_ci_merge_queue import enqueue_pr
+    from autoskillit.server.tools.tools_ci_merge_queue import enqueue_pr
 
     raw = await enqueue_pr(
         pr_number=42,

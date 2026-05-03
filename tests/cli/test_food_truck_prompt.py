@@ -100,7 +100,7 @@ class TestL2SousChefBlock:
             assert f"## {title}" not in block, f"Unretained section present: {title}"
 
     def test_l2_sections_constant_matches_build_output(self) -> None:
-        from autoskillit.core._type_constants import (
+        from autoskillit.core.types._type_constants import (
             SOUS_CHEF_L2_SECTIONS,
             SOUS_CHEF_MANDATORY_SECTIONS,
         )

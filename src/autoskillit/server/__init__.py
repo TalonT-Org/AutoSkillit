@@ -64,23 +64,49 @@ from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS  # noqa: E402, F401
 from autoskillit.server import (  # noqa: E402, F401
     _misc,
     _notify,
-    tools_ci,
-    tools_ci_merge_queue,
-    tools_ci_watch,
-    tools_clone,
-    tools_execution,
-    tools_git,
-    tools_github,
-    tools_issue_lifecycle,
-    tools_kitchen,
-    tools_pr_ops,
-    tools_recipe,
-    tools_status,
-    tools_workspace,
 )
 from autoskillit.server._factory import make_context  # noqa: E402, F401
 from autoskillit.server._session_type import _apply_session_type_visibility  # noqa: E402, F401
-from autoskillit.server.tools_kitchen import _build_tool_category_listing  # noqa: E402, F401
+from autoskillit.server.tools import (  # noqa: E402, F401
+    tools_ci as _tools_ci,
+)
+from autoskillit.server.tools import (  # noqa: E402, F401
+    tools_ci_merge_queue as _tools_ci_merge_queue,
+)
+from autoskillit.server.tools import (  # noqa: E402, F401
+    tools_ci_watch as _tools_ci_watch,
+)
+from autoskillit.server.tools import (  # noqa: E402, F401
+    tools_clone as _tools_clone,
+)
+from autoskillit.server.tools import (  # noqa: E402, F401
+    tools_execution as _tools_execution,
+)
+from autoskillit.server.tools import (  # noqa: E402, F401
+    tools_git as _tools_git,
+)
+from autoskillit.server.tools import (  # noqa: E402, F401
+    tools_github as _tools_github,
+)
+from autoskillit.server.tools import (  # noqa: E402, F401
+    tools_issue_lifecycle as _tools_issue_lifecycle,
+)
+from autoskillit.server.tools import (  # noqa: E402, F401
+    tools_kitchen as _tools_kitchen,
+)
+from autoskillit.server.tools import (  # noqa: E402, F401
+    tools_pr_ops as _tools_pr_ops,
+)
+from autoskillit.server.tools import (  # noqa: E402, F401
+    tools_recipe as _tools_recipe,
+)
+from autoskillit.server.tools import (  # noqa: E402, F401
+    tools_status as _tools_status,
+)
+from autoskillit.server.tools import (  # noqa: E402, F401
+    tools_workspace as _tools_workspace,
+)
+from autoskillit.server.tools.tools_kitchen import _build_tool_category_listing  # noqa: E402, F401
 
 # Apply global visibility transform: all sessions start with kitchen tools hidden.
 # Must appear after all tool module imports so the registered tools are in place.

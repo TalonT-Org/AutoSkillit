@@ -14,7 +14,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from autoskillit.cli._install_info import InstallInfo, InstallType
-from autoskillit.cli._update_checks import (
+from autoskillit.cli.update._update_checks import (
     _is_dismissed,
     _read_dismiss_state,
     _write_dismiss_state,
@@ -45,7 +45,7 @@ def _setup_run_checks(
     """Set up mocks for run_update_checks and return (printed_lines, input_calls)."""
     import select as _select_mod
 
-    from autoskillit.cli._update_checks import Signal
+    from autoskillit.cli.update._update_checks import Signal
 
     monkeypatch.delenv("CLAUDECODE", raising=False)
     monkeypatch.delenv("CI", raising=False)
@@ -68,7 +68,7 @@ def _setup_run_checks(
     )
 
     _info = info or _make_stable_info()
-    monkeypatch.setattr("autoskillit.cli._update_checks.detect_install", lambda: _info)
+    monkeypatch.setattr("autoskillit.cli.update._update_checks.detect_install", lambda: _info)
 
     if state is not None:
         (tmp_path / ".autoskillit").mkdir(parents=True, exist_ok=True)
@@ -81,19 +81,19 @@ def _setup_run_checks(
     monkeypatch.setattr(_pkg, "__version__", current_version)
 
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks._binary_signal",
+        "autoskillit.cli.update._update_checks._binary_signal",
         lambda info, home, current: (
             Signal("binary", "New release: 0.9.0 (you have 0.7.77)") if binary_signal else None
         ),
     )
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks._hooks_signal",
+        "autoskillit.cli.update._update_checks._hooks_signal",
         lambda settings_path: (
             Signal("hooks", "1 new/changed hook(s) detected") if hooks_signal else None
         ),
     )
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks._source_drift_signal",
+        "autoskillit.cli.update._update_checks._source_drift_signal",
         lambda info, home: (
             Signal("source_drift", "A newer version is available on the stable branch (aaa..bbb)")
             if source_drift_signal
@@ -101,7 +101,7 @@ def _setup_run_checks(
         ),
     )
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks._claude_settings_path",
+        "autoskillit.cli.update._update_checks._claude_settings_path",
         lambda scope: tmp_path / "settings.json",
     )
 
@@ -210,17 +210,17 @@ def test_yes_runs_upgrade_command_from_install_info_not_hardcoded(
     )
     run_calls: list[list[str]] = []
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks.subprocess.run",
+        "autoskillit.cli.update._update_checks.subprocess.run",
         lambda cmd, **kw: run_calls.append(list(cmd)) or subprocess.CompletedProcess(cmd, 0),
     )
-    monkeypatch.setattr("autoskillit.cli._update_checks.terminal_guard", MagicMock())
+    monkeypatch.setattr("autoskillit.cli.update._update_checks.terminal_guard", MagicMock())
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks._verify_update_result", lambda *a, **kw: True
+        "autoskillit.cli.update._update_checks._verify_update_result", lambda *a, **kw: True
     )
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks._fetch_latest_version", lambda *a, **kw: "0.9.0"
+        "autoskillit.cli.update._update_checks._fetch_latest_version", lambda *a, **kw: "0.9.0"
     )
-    monkeypatch.setattr("autoskillit.cli._update_checks.perform_restart", lambda: None)
+    monkeypatch.setattr("autoskillit.cli.update._update_checks.perform_restart", lambda: None)
     expected_cmd = upgrade_command(info)
     run_update_checks(home=tmp_path)
     assert expected_cmd in run_calls, (
@@ -241,15 +241,15 @@ def test_yes_runs_autoskillit_install_after_upgrade_command(
         def __exit__(self, *a):
             return False
 
-    monkeypatch.setattr("autoskillit.cli._update_checks.terminal_guard", FakeTG)
+    monkeypatch.setattr("autoskillit.cli.update._update_checks.terminal_guard", FakeTG)
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks.subprocess.run",
+        "autoskillit.cli.update._update_checks.subprocess.run",
         lambda cmd, **kw: run_calls.append(list(cmd)) or subprocess.CompletedProcess(cmd, 0),
     )
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks._verify_update_result", lambda *a, **kw: True
+        "autoskillit.cli.update._update_checks._verify_update_result", lambda *a, **kw: True
     )
-    monkeypatch.setattr("autoskillit.cli._update_checks.perform_restart", lambda: None)
+    monkeypatch.setattr("autoskillit.cli.update._update_checks.perform_restart", lambda: None)
     run_update_checks(home=tmp_path)
     # ["autoskillit", "install"] must be among the calls
     assert any(cmd[:2] == ["autoskillit", "install"] for cmd in run_calls)
@@ -268,17 +268,17 @@ def test_yes_passes_skip_env_to_subprocess(
         def __exit__(self, *a):
             return False
 
-    monkeypatch.setattr("autoskillit.cli._update_checks.terminal_guard", FakeTG)
+    monkeypatch.setattr("autoskillit.cli.update._update_checks.terminal_guard", FakeTG)
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks.subprocess.run",
+        "autoskillit.cli.update._update_checks.subprocess.run",
         lambda cmd, **kw: (
             env_passed.append(kw.get("env", {})) or subprocess.CompletedProcess(cmd, 0)
         ),
     )
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks._verify_update_result", lambda *a, **kw: True
+        "autoskillit.cli.update._update_checks._verify_update_result", lambda *a, **kw: True
     )
-    monkeypatch.setattr("autoskillit.cli._update_checks.perform_restart", lambda: None)
+    monkeypatch.setattr("autoskillit.cli.update._update_checks.perform_restart", lambda: None)
     run_update_checks(home=tmp_path)
     for env in env_passed:
         assert env.get("AUTOSKILLIT_SKIP_STALE_CHECK") == "1"
@@ -300,15 +300,15 @@ def test_yes_single_invocation_exits_without_any_other_prompt(
         def __exit__(self, *a):
             return False
 
-    monkeypatch.setattr("autoskillit.cli._update_checks.terminal_guard", FakeTG)
+    monkeypatch.setattr("autoskillit.cli.update._update_checks.terminal_guard", FakeTG)
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks.subprocess.run",
+        "autoskillit.cli.update._update_checks.subprocess.run",
         lambda *a, **kw: subprocess.CompletedProcess([], 0),
     )
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks._verify_update_result", lambda *a, **kw: True
+        "autoskillit.cli.update._update_checks._verify_update_result", lambda *a, **kw: True
     )
-    monkeypatch.setattr("autoskillit.cli._update_checks.perform_restart", lambda: None)
+    monkeypatch.setattr("autoskillit.cli.update._update_checks.perform_restart", lambda: None)
     run_update_checks(home=tmp_path)
     assert len(input_calls) == 1
 
@@ -624,7 +624,7 @@ def test_timed_prompt_returns_default_on_timeout(monkeypatch: pytest.MonkeyPatch
     """timed_prompt returns the default value when select.select times out."""
     import select as _select_mod
 
-    from autoskillit.cli._timed_input import timed_prompt
+    from autoskillit.cli.ui._timed_input import timed_prompt
 
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("sys.stdout.isatty", lambda: True)
@@ -647,7 +647,7 @@ def test_timed_prompt_applies_ansi_formatting(monkeypatch: pytest.MonkeyPatch) -
     """timed_prompt output includes ANSI escape sequences when color is supported."""
     import select as _select_mod
 
-    from autoskillit.cli._timed_input import timed_prompt
+    from autoskillit.cli.ui._timed_input import timed_prompt
 
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("sys.stdout.isatty", lambda: True)
@@ -674,7 +674,7 @@ def test_timed_prompt_respects_no_color(monkeypatch: pytest.MonkeyPatch) -> None
     """timed_prompt output has no ANSI sequences when NO_COLOR is set."""
     import select as _select_mod
 
-    from autoskillit.cli._timed_input import timed_prompt
+    from autoskillit.cli.ui._timed_input import timed_prompt
 
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("sys.stdout.isatty", lambda: True)
@@ -827,7 +827,7 @@ def test_run_update_checks_shows_notification_when_kitchen_open(
 
     binary_signal_calls: list[bool] = []
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks._binary_signal",
+        "autoskillit.cli.update._update_checks._binary_signal",
         lambda *a, **kw: binary_signal_calls.append(True) or None,
     )
 
@@ -851,7 +851,7 @@ def test_run_update_checks_kitchen_open_bypassed_for_non_mutation_command(
 
     binary_signal_calls: list[bool] = []
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks._binary_signal",
+        "autoskillit.cli.update._update_checks._binary_signal",
         lambda *a, **kw: binary_signal_calls.append(True) or None,
     )
 
@@ -875,7 +875,7 @@ def test_run_update_checks_kitchen_guard_active_for_update_command(
 
     binary_signal_calls: list[bool] = []
     monkeypatch.setattr(
-        "autoskillit.cli._update_checks._binary_signal",
+        "autoskillit.cli.update._update_checks._binary_signal",
         lambda *a, **kw: binary_signal_calls.append(True) or None,
     )
 
@@ -895,7 +895,7 @@ def test_run_update_checks_kitchen_guard_active_for_update_command(
 
 def test_kitchen_guarded_commands_registry() -> None:
     """KITCHEN_GUARDED_COMMANDS must contain exactly the mutation commands."""
-    from autoskillit.cli._update_checks import KITCHEN_GUARDED_COMMANDS
+    from autoskillit.cli.update._update_checks import KITCHEN_GUARDED_COMMANDS
 
     assert KITCHEN_GUARDED_COMMANDS == frozenset({"update", "install", "init"}), (
         f"KITCHEN_GUARDED_COMMANDS must be exactly {{'update', 'install', 'init'}}, "

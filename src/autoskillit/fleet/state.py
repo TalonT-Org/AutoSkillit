@@ -153,6 +153,19 @@ def write_initial_state(
     write_versioned_json(state_path, payload, schema_version=_SCHEMA_VERSION)
 
 
+def has_failed_dispatch(state_path: Path) -> bool:
+    """Check whether any dispatch in *state_path* has FAILURE status.
+
+    Returns False when the file is missing or corrupted (fail-open).
+    """
+    if not state_path.exists():
+        return False
+    state = read_state(state_path)
+    if state is None:
+        return False
+    return any(d.status == DispatchStatus.FAILURE for d in state.dispatches)
+
+
 def read_state(state_path: Path) -> CampaignState | None:
     """Load campaign state from disk.
 

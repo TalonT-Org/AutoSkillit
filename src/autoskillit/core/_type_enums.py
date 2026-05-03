@@ -370,6 +370,8 @@ class FleetErrorCode(StrEnum):
 
     FLEET_PARALLEL_REFUSED = "fleet_parallel_refused"
     FLEET_UNKNOWN_INGREDIENT = "fleet_unknown_ingredient"
+    FLEET_MISSING_INGREDIENT = "fleet_missing_ingredient"
+    FLEET_CAMPAIGN_HALTED = "fleet_campaign_halted"
     FLEET_RECIPE_NOT_FOUND = "fleet_recipe_not_found"
     FLEET_INVALID_RECIPE_KIND = "fleet_invalid_recipe_kind"
     FLEET_HARD_REFUSAL_HEADLESS = "fleet_hard_refusal_headless"

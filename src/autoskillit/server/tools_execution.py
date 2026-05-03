@@ -597,6 +597,20 @@ async def dispatch_food_truck(
                 FleetErrorCode.FLEET_HARD_REFUSAL_HEADLESS,
                 "dispatch_food_truck cannot be called from headless sessions.",
             )
+
+        campaign_state_path_str = os.environ.get("AUTOSKILLIT_CAMPAIGN_STATE_PATH")
+        continue_on_failure_str = os.environ.get("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false")
+        if campaign_state_path_str and continue_on_failure_str.lower() != "true":
+            from autoskillit.fleet import has_failed_dispatch  # noqa: PLC0415
+
+            if has_failed_dispatch(Path(campaign_state_path_str)):
+                return fleet_error(
+                    FleetErrorCode.FLEET_CAMPAIGN_HALTED,
+                    "Campaign halted: a prior dispatch failed and "
+                    "continue_on_failure is false. "
+                    "No further dispatches permitted.",
+                )
+
         from autoskillit.fleet import execute_dispatch
         from autoskillit.server import _get_ctx
         from autoskillit.server._misc import (  # noqa: PLC0415

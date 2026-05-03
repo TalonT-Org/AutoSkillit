@@ -44,6 +44,8 @@ class TestFleetErrorCodeEnum:
             "fleet_gate_unknown_dispatch",
             "fleet_gate_already_recorded",
             "fleet_gate_no_campaign",
+            "fleet_missing_ingredient",
+            "fleet_campaign_halted",
         }
         assert {c.value for c in FleetErrorCode} == expected_values
 

@@ -255,6 +255,18 @@ async def _run_dispatch(
                 f"Valid keys: {sorted(full_recipe.ingredients.keys())}",
             )
 
+    missing_required = [
+        key
+        for key, ing in full_recipe.ingredients.items()
+        if ing.required and ing.default is None and key not in effective_ingredients
+    ]
+    if missing_required:
+        return fleet_error(
+            FleetErrorCode.FLEET_MISSING_INGREDIENT,
+            f"Missing required ingredients: {sorted(missing_required)}. "
+            f"These have no default and must be supplied.",
+        )
+
     from autoskillit.fleet.state import read_all_campaign_captures  # noqa: PLC0415
 
     dispatches_dir = tool_ctx.temp_dir / "dispatches"

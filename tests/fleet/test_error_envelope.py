@@ -78,6 +78,10 @@ class TestFleetErrorCodeEnum:
         from autoskillit.core import FleetErrorCode
 
         old_values = {
+            "l2_timeout",
+            "l2_no_result_block",
+            "l2_parse_failed",
+            "l2_startup_or_crash",
             "l3_timeout",
             "l3_no_result_block",
             "l3_parse_failed",

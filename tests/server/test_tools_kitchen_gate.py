@@ -708,3 +708,5 @@ async def test_open_kitchen_ingredients_only_no_name_ignored(tmp_path, monkeypat
     result = json.loads(result_json)
     assert result["success"] is True
     assert "content" in result
+    assert result["kitchen"] == "open"
+    assert "version" in result

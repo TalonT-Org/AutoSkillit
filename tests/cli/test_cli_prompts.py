@@ -53,6 +53,15 @@ def test_orchestrator_prompt_delegates_ingredient_collection_to_open_kitchen():
     )
 
 
+def test_build_open_kitchen_prompt_includes_dispatch_routing():
+    """_build_open_kitchen_prompt must include dispatch routing instructions."""
+    from autoskillit.cli._prompts import _build_open_kitchen_prompt
+
+    prompt = _build_open_kitchen_prompt(DIRECT_PREFIX)
+    assert "ingredients_only" in prompt
+    assert "dispatch_food_truck" in prompt
+
+
 def test_orchestrator_prompt_documents_confirm_action():
     """The orchestrator system prompt must explain how to handle action:confirm steps."""
     from autoskillit.cli._prompts import _build_orchestrator_prompt

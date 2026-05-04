@@ -834,3 +834,32 @@ async def test_load_recipe_no_ctx_returns_error(monkeypatch):
     monkeypatch.setattr(_state_mod, "_ctx", None)
     result = json.loads(await load_recipe(name="anything"))
     assert "error" in result
+
+
+# ---------------------------------------------------------------------------
+# ingredients_only parameter
+# ---------------------------------------------------------------------------
+
+
+class TestLoadRecipeIngredientsOnly:
+    """load_recipe(ingredients_only=True) strips content, preserves metadata."""
+
+    @pytest.fixture(autouse=True)
+    def _ensure_ctx(self, tool_ctx):
+        """Ensure server context is initialized (gate open by default)."""
+
+    @pytest.mark.anyio
+    async def test_load_recipe_ingredients_only_strips_content(self, tmp_path, monkeypatch):
+        """load_recipe(name=X, ingredients_only=True) must omit content from result."""
+        monkeypatch.chdir(tmp_path)
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        (recipes_dir / "test.yaml").write_text(
+            "name: test\ndescription: Test recipe\nsteps:\n"
+            "  done:\n    action: stop\n    message: Done\n"
+        )
+        result = json.loads(await load_recipe(name="test", ingredients_only=True))
+        assert "content" not in result
+        assert "orchestration_rules" not in result
+        assert "stop_step_semantics" not in result
+        assert "suggestions" in result

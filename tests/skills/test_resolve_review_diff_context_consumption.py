@@ -99,3 +99,15 @@ def test_diff_context_path_matches_review_pr_output_path():
     """resolve-review's diff_context path must match what review-pr writes."""
     full = _skill_text()
     assert "review-pr/diff_context" in full
+
+
+def test_step2_map_type_is_dict_of_dicts():
+    """Step 2 must declare dict[tuple[str, int], dict] not dict[tuple[str, int], str]."""
+    section = _step2_section()
+    assert "dict[tuple[str, int], dict]" in section
+
+
+def test_step35_accesses_code_region_from_dict():
+    """Step 3.5 must access code_region via .get('code_region') on the dict value."""
+    section = _step35_section()
+    assert '.get("code_region"' in section or ".get('code_region'" in section

@@ -151,11 +151,12 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/cli/update/_update_checks.py", 79),
     # _update_checks_fetch.py — fetch cache (extracted from _update_checks.py)
     ("src/autoskillit/cli/update/_update_checks_fetch.py", 58),
-    # smoke_utils.py — partitions dict, ranges list, diff metrics dict, queue list
+    # smoke_utils.py — partitions, ranges, diff metrics, queue, enriched handoff
     ("src/autoskillit/smoke_utils.py", 57),
     ("src/autoskillit/smoke_utils.py", 98),
     ("src/autoskillit/smoke_utils.py", 115),
     ("src/autoskillit/smoke_utils.py", 328),
+    ("src/autoskillit/smoke_utils.py", 376),
     # planner/consolidation.py — write-back of merged WP dicts to per-file results
     ("src/autoskillit/planner/consolidation.py", 310),
     # planner/manifests.py — finalize_wp_manifest: wp_index.json rebuild (list payload)

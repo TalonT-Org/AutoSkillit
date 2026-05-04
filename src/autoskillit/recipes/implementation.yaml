@@ -552,9 +552,9 @@ steps:
       review_verdict: "${{ result.verdict }}"
     on_result:
       - when: "${{ result.verdict }} == changes_requested"
-        route: resolve_review
+        route: enrich_diff_context
       - when: "${{ result.verdict }} == approved_with_comments"
-        route: resolve_review
+        route: enrich_diff_context
       - when: "${{ result.verdict }} == needs_human"
         route: check_repo_ci_event
       - when: "true"
@@ -570,9 +570,24 @@ steps:
       headless session to leave inline review comments on the PR. The skill finds
       the open PR by feature branch name (context.merge_target). Captures verdict
       as review_verdict and routes via on_result: changes_requested/approved_with_comments
-      → resolve_review, needs_human → check_repo_ci_event (explicit), approved → check_repo_ci_event. On
-      tool-level failure (MCP error, gh unavailable), routes to check_repo_ci_event (no review to resolve).
-      Skipped when open_pr=false.
+      → enrich_diff_context → resolve_review, needs_human → check_repo_ci_event (explicit),
+      approved → check_repo_ci_event. On tool-level failure (MCP error, gh unavailable),
+      routes to check_repo_ci_event (no review to resolve). Skipped when open_pr=false.
+
+  enrich_diff_context:
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.enrich_diff_context"
+      pr_number: "${{ context.pr_number }}"
+      work_dir: "${{ context.work_dir }}"
+    on_success: resolve_review
+    on_failure: resolve_review
+    optional: true
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Enriches the review-pr diff_context handoff file with deterministic
+      code_region extraction from the annotated diff. On failure, falls through
+      to resolve_review which uses fallback file-read behavior.
 
   resolve_review:
     tool: run_skill

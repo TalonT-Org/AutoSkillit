@@ -106,16 +106,18 @@ def test_check_review_loop_captures_review_loop_count(recipe) -> None:
 
 # T_IP_LOOP11
 def test_review_pr_routes_approved_with_comments_to_resolve_review(recipe) -> None:
-    """review_pr on_result must route approved_with_comments to resolve_review."""
+    """approved_with_comments routes through enrich_diff_context to resolve_review."""
     step = recipe.steps["review_pr"]
     assert step.on_result is not None
     routes = {c.when: c.route for c in step.on_result.conditions if c.when}
     matching = [
         when
         for when, route in routes.items()
-        if "approved_with_comments" in when and route == "resolve_review"
+        if "approved_with_comments" in when and route == "enrich_diff_context"
     ]
-    assert matching, "No approved_with_comments → resolve_review route found"
+    assert matching, "No approved_with_comments → enrich_diff_context route found"
+    enrich_step = recipe.steps["enrich_diff_context"]
+    assert enrich_step.on_success == "resolve_review"
 
 
 # T_IP_LOOP12

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from tests._test_filter import (
     MODULE_CASCADE_EXECUTION,
+    SUBPKG_CASCADE_EXECUTION,
     FilterMode,
     build_test_scope,
 )
@@ -36,7 +37,6 @@ def test_all_entries_present() -> None:
         "anomaly_detection",
         "clone_guard",
         "ci",
-        "merge_queue",
         "diff_annotator",
         "pr_analysis",
         "testing",
@@ -252,23 +252,23 @@ class TestClosureExecutionNarrowCascade:
 
     def test_init_closure_all_narrow_causes_union(self, tmp_path: Path) -> None:
         """
-        Changing ci.py + merge_queue.py (both narrow to {"execution"}) →
+        Changing ci.py + clone_guard.py (both narrow to {"execution"}) →
         __init__ closure union is still {"execution"}.
         """
         tests_root = self._make_execution_layout(
             tmp_path,
             {
                 "ci.py": "",
-                "merge_queue.py": "",
+                "clone_guard.py": "",
                 "__init__.py": (
-                    "from .ci import CIWatcher\nfrom .merge_queue import MergeQueueWatcher\n"
+                    "from .ci import CIWatcher\nfrom .clone_guard import CloneGuard\n"
                 ),
             },
         )
         result = build_test_scope(
             changed_files={
                 "src/autoskillit/execution/ci.py",
-                "src/autoskillit/execution/merge_queue.py",
+                "src/autoskillit/execution/clone_guard.py",
             },
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
@@ -278,5 +278,111 @@ class TestClosureExecutionNarrowCascade:
         assert "execution" in dir_names
         for excluded in ["core", "cli", "server", "workspace", "migration"]:
             assert excluded not in dir_names, (
-                f"ci+merge_queue union closure should not include {excluded}"
+                f"ci+clone_guard union closure should not include {excluded}"
             )
+
+
+class TestSubpkgCascadeExecution:
+    """REQ-MQ-001..004: subpackage-aware cascade routing for execution/ subpackages."""
+
+    ALL_DIRS = _ALL_DIRS
+
+    def _make_tests_root(self, tmp_path: Path, dirs: list[str]) -> Path:
+        tests_root = tmp_path / "tests"
+        for d in dirs:
+            (tests_root / d).mkdir(parents=True, exist_ok=True)
+        return tests_root
+
+    def _make_execution_subpkg_layout(
+        self,
+        tmp_path: Path,
+        subpkg: str,
+        modules: dict[str, str],
+    ) -> Path:
+        subpkg_dir = tmp_path / "src" / "autoskillit" / "execution" / subpkg
+        subpkg_dir.mkdir(parents=True)
+        for name, content in modules.items():
+            (subpkg_dir / name).write_text(content)
+        tests_root = tmp_path / "tests"
+        for d in self.ALL_DIRS:
+            (tests_root / d).mkdir(parents=True, exist_ok=True)
+        return tests_root
+
+    def test_merge_queue_init_uses_narrow_cascade(self, tmp_path: Path) -> None:
+        """execution/merge_queue/__init__.py → narrow {execution} cascade."""
+        tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
+        result = build_test_scope(
+            changed_files={"src/autoskillit/execution/merge_queue/__init__.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        dir_names = {p.name for p in result}
+        assert "execution" in dir_names
+        for excluded in ["core", "cli", "server", "workspace", "migration"]:
+            assert excluded not in dir_names, (
+                f"merge_queue/__init__ cascade should not include {excluded}"
+            )
+
+    def test_merge_queue_private_module_uses_narrow_cascade(self, tmp_path: Path) -> None:
+        """execution/merge_queue/_merge_queue_classifier.py → narrow {execution} cascade."""
+        tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
+        result = build_test_scope(
+            changed_files={"src/autoskillit/execution/merge_queue/_merge_queue_classifier.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        dir_names = {p.name for p in result}
+        assert "execution" in dir_names
+        for excluded in ["core", "cli", "server", "workspace", "migration"]:
+            assert excluded not in dir_names, (
+                f"merge_queue private module cascade should not include {excluded}"
+            )
+
+    def test_merge_queue_and_non_subpkg_file_fails_open(self, tmp_path: Path) -> None:
+        """merge_queue file + headless.py (not in any map) → full execution cascade."""
+        tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
+        result = build_test_scope(
+            changed_files={
+                "src/autoskillit/execution/merge_queue/_merge_queue_classifier.py",
+                "src/autoskillit/execution/headless.py",
+            },
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        dir_names = {p.name for p in result}
+        for pkg in ["execution", "server", "cli", "workspace"]:
+            assert pkg in dir_names, (
+                f"mixed merge_queue+headless should fail open to include {pkg}"
+            )
+
+    def test_merge_queue_closure_expansion_stays_narrow(self, tmp_path: Path) -> None:
+        """
+        _merge_queue_classifier.py re-exported by merge_queue/__init__.py →
+        closure expansion of __init__ stays narrow to {execution}.
+        """
+        tests_root = self._make_execution_subpkg_layout(
+            tmp_path,
+            "merge_queue",
+            {
+                "__init__.py": ("from ._merge_queue_classifier import MergeQueueClassifier\n"),
+                "_merge_queue_classifier.py": "",
+            },
+        )
+        result = build_test_scope(
+            changed_files={"src/autoskillit/execution/merge_queue/_merge_queue_classifier.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        dir_names = {p.name for p in result}
+        assert "execution" in dir_names
+        for excluded in ["core", "cli", "server", "workspace", "migration"]:
+            assert excluded not in dir_names, f"merge_queue closure should not include {excluded}"
+
+    def test_subpkg_cascade_exported(self) -> None:
+        """SUBPKG_CASCADE_EXECUTION is importable and contains 'merge_queue' key."""
+        assert "merge_queue" in SUBPKG_CASCADE_EXECUTION
+        assert SUBPKG_CASCADE_EXECUTION["merge_queue"] == frozenset({"execution"})

@@ -322,7 +322,7 @@ def test_build_features_dict_franchise_raises_config_schema_error():
         AutomationConfig._build_features_dict({"franchise": True})
 
 
-# ── Providers feature registry tests — T1 shims ──────────────────────────────
+# ── Providers feature registry tests ─────────────────────────────────────────
 
 
 def test_providers_in_feature_registry():
@@ -334,6 +334,7 @@ def test_providers_in_feature_registry():
 def test_providers_feature_default_disabled():
     from autoskillit.core.types._type_constants import FEATURE_REGISTRY
 
+    assert "providers" in FEATURE_REGISTRY
     assert FEATURE_REGISTRY["providers"].default_enabled is False
 
 

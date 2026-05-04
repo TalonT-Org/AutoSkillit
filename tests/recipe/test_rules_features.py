@@ -233,3 +233,130 @@ def test_feature_gate_run_python_no_finding_when_fdef_has_no_import_package(monk
     ctx = make_validation_context(recipe, disabled_features=frozenset({"no-pkg-feature"}))
     findings = [f for f in run_semantic_rules(ctx) if f.rule == "feature-gate-tool-reference"]
     assert not findings, f"unexpected finding when import_package is None: {findings}"
+
+
+def test_provider_requires_profile_fires_on_missing_provider() -> None:
+    from autoskillit.core import Severity
+    from autoskillit.recipe._analysis import make_validation_context
+    from autoskillit.recipe.registry import run_semantic_rules
+    from autoskillit.recipe.schema import Recipe, RecipeStep
+
+    recipe = Recipe(
+        name="r",
+        description="d",
+        version="0.2.0",
+        kitchen_rules="k",
+        steps={
+            "run_step": RecipeStep(
+                tool="run_skill", provider="custom-provider", on_success="done"
+            ),
+            "done": RecipeStep(action="stop", message="Done."),
+        },
+    )
+    ctx = make_validation_context(recipe, provider_profiles=frozenset({"other-provider"}))
+    findings = [f for f in run_semantic_rules(ctx) if f.rule == "provider-requires-profile"]
+    assert len(findings) == 1
+    assert findings[0].severity == Severity.ERROR
+    assert "custom-provider" in findings[0].message
+
+
+def test_provider_requires_profile_passes_when_profile_matches() -> None:
+    from autoskillit.recipe._analysis import make_validation_context
+    from autoskillit.recipe.registry import run_semantic_rules
+    from autoskillit.recipe.schema import Recipe, RecipeStep
+
+    recipe = Recipe(
+        name="r",
+        description="d",
+        version="0.2.0",
+        kitchen_rules="k",
+        steps={
+            "run_step": RecipeStep(tool="run_skill", provider="my-provider", on_success="done"),
+            "done": RecipeStep(action="stop", message="Done."),
+        },
+    )
+    ctx = make_validation_context(recipe, provider_profiles=frozenset({"my-provider"}))
+    findings = [f for f in run_semantic_rules(ctx) if f.rule == "provider-requires-profile"]
+    assert findings == []
+
+
+def test_provider_requires_profile_skips_when_no_profiles_configured() -> None:
+    from autoskillit.recipe._analysis import make_validation_context
+    from autoskillit.recipe.registry import run_semantic_rules
+    from autoskillit.recipe.schema import Recipe, RecipeStep
+
+    recipe = Recipe(
+        name="r",
+        description="d",
+        version="0.2.0",
+        kitchen_rules="k",
+        steps={
+            "run_step": RecipeStep(tool="run_skill", provider="any-provider", on_success="done"),
+            "done": RecipeStep(action="stop", message="Done."),
+        },
+    )
+    ctx = make_validation_context(recipe, provider_profiles=frozenset())
+    findings = [f for f in run_semantic_rules(ctx) if f.rule == "provider-requires-profile"]
+    assert findings == []
+
+
+def test_provider_requires_profile_skips_none_provider_steps() -> None:
+    from autoskillit.recipe._analysis import make_validation_context
+    from autoskillit.recipe.registry import run_semantic_rules
+    from autoskillit.recipe.schema import Recipe, RecipeStep
+
+    recipe = Recipe(
+        name="r",
+        description="d",
+        version="0.2.0",
+        kitchen_rules="k",
+        steps={
+            "run_step": RecipeStep(tool="run_skill", provider=None, on_success="done"),
+            "done": RecipeStep(action="stop", message="Done."),
+        },
+    )
+    ctx = make_validation_context(recipe, provider_profiles=frozenset({"some-profile"}))
+    findings = [f for f in run_semantic_rules(ctx) if f.rule == "provider-requires-profile"]
+    assert findings == []
+
+
+def test_provider_requires_profile_multiple_steps_mixed() -> None:
+    from autoskillit.recipe._analysis import make_validation_context
+    from autoskillit.recipe.registry import run_semantic_rules
+    from autoskillit.recipe.schema import Recipe, RecipeStep
+
+    recipe = Recipe(
+        name="r",
+        description="d",
+        version="0.2.0",
+        kitchen_rules="k",
+        steps={
+            "no_provider_step": RecipeStep(
+                tool="run_skill", provider=None, on_success="valid_step"
+            ),
+            "valid_step": RecipeStep(
+                tool="run_skill", provider="valid", on_success="invalid_step"
+            ),
+            "invalid_step": RecipeStep(tool="run_skill", provider="invalid", on_success="done"),
+            "done": RecipeStep(action="stop", message="Done."),
+        },
+    )
+    ctx = make_validation_context(recipe, provider_profiles=frozenset({"valid"}))
+    findings = [f for f in run_semantic_rules(ctx) if f.rule == "provider-requires-profile"]
+    assert len(findings) == 1
+    assert findings[0].step_name == "invalid_step"
+
+
+def test_validation_context_provider_profiles_default() -> None:
+    from autoskillit.recipe._analysis import make_validation_context
+    from autoskillit.recipe.schema import Recipe, RecipeStep
+
+    recipe = Recipe(
+        name="r",
+        description="d",
+        version="0.2.0",
+        kitchen_rules="k",
+        steps={"done": RecipeStep(action="stop", message="Done.")},
+    )
+    ctx = make_validation_context(recipe)
+    assert ctx.provider_profiles == frozenset()

@@ -114,3 +114,30 @@ def check_feature_gated_tools(ctx: ValidationContext) -> list[RuleFinding]:
                 )
 
     return findings
+
+
+@semantic_rule(
+    name="provider-requires-profile",
+    description="Steps that reference a provider must name a configured provider profile",
+    severity=Severity.ERROR,
+)
+def check_provider_requires_profile(ctx: ValidationContext) -> list[RuleFinding]:
+    if not ctx.provider_profiles:
+        return []
+
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.provider is not None and step.provider not in ctx.provider_profiles:
+            findings.append(
+                RuleFinding(
+                    rule="provider-requires-profile",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"step '{step_name}': provider '{step.provider}' is not a "
+                        f"configured provider profile. Add it under "
+                        f"providers.profiles in .autoskillit/config.yaml."
+                    ),
+                )
+            )
+    return findings

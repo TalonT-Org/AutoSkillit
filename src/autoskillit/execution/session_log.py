@@ -397,8 +397,8 @@ def flush_session_log(
         atomic_write(session_dir / "crash_exception.txt", exception_text)
 
     # Write per-session telemetry files; gate on data presence, not session identity
+    label = _resolve_session_label(step_name, dispatch_id)
     if token_usage is not None:
-        label = _resolve_session_label(step_name, dispatch_id)
         tu_data = {
             "session_label": label,
             "input_tokens": token_usage.get("input_tokens", 0),
@@ -416,7 +416,6 @@ def flush_session_log(
         atomic_write(session_dir / "token_usage.json", json.dumps(tu_data))
 
     if timing_seconds is not None:
-        label = _resolve_session_label(step_name, dispatch_id)
         atomic_write(
             session_dir / "step_timing.json",
             json.dumps(

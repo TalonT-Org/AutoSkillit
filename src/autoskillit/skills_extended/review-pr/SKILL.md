@@ -693,6 +693,32 @@ Log: `"Wrote diff-scoped context handoff: N entries → {path}"`. If the write f
 (e.g., temp dir unavailable), log a warning and continue — the handoff file is
 best-effort and its absence is handled gracefully by resolve-review.
 
+**Write Raw Findings JSON (after diff-context handoff):**
+
+After writing the diff-context handoff file, also write the raw findings list for
+downstream enrichment. This is a separate file from the handoff — it captures only
+the finding dicts as produced by the subagents, without code_region extraction.
+
+Write to `{{AUTOSKILLIT_TEMP}}/review-pr/raw_findings_{pr_number}.json`:
+
+```json
+{
+  "pr_number": 1234,
+  "findings": [
+    {
+      "file": "src/autoskillit/execution/headless.py",
+      "line": 42,
+      "severity": "critical",
+      "dimension": "arch",
+      "message": "..."
+    }
+  ]
+}
+```
+
+Include all findings from `FILTERED_FINDINGS` + `UNPOSTABLE_FINDINGS` where severity
+is `"critical"` or `"warning"`. Log: `"Wrote raw findings: N entries → {path}"`.
+
 Output the verdict as the final line:
 
 > **IMPORTANT:** Emit the structured output tokens as **literal plain text with no

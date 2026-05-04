@@ -375,3 +375,70 @@ class TestSelectReviewAgents:
         )
         agents = select_review_agents(metrics)
         assert "deletion_regression" not in agents
+
+
+class TestExtractCodeRegion:
+    """Tests for extract_code_region() — deterministic code region extraction."""
+
+    ANNOTATED_DIFF = (
+        "+++ b/src/app.py\n"
+        "@@ -38,10 +38,12 @@ def main():\n"
+        "[L38] existing_line_38\n"
+        "[L39] existing_line_39\n"
+        "[L40]+new_import\n"
+        "[L41]+another_import\n"
+        "[L42] existing_42\n"
+        "[L43] existing_43\n"
+        "[L44]+added_44\n"
+        "[L45] existing_45\n"
+        "+++ b/tests/test_app.py\n"
+        "@@ -1,3 +1,5 @@\n"
+        "[L1] import pytest\n"
+        "[L2]+from app import main\n"
+        "[L3]+from app import helper\n"
+        "[L4] \n"
+    )
+
+    def test_basic_extraction(self):
+        from autoskillit.execution.diff_annotator import extract_code_region
+
+        region = extract_code_region(self.ANNOTATED_DIFF, "src/app.py", 42)
+        assert "[L42]" in region
+        assert "[L40]" in region
+        assert "[L38]" in region
+
+    def test_file_not_in_diff(self):
+        from autoskillit.execution.diff_annotator import extract_code_region
+
+        region = extract_code_region(self.ANNOTATED_DIFF, "src/missing.py", 10)
+        assert region == ""
+
+    def test_line_outside_window(self):
+        from autoskillit.execution.diff_annotator import extract_code_region
+
+        region = extract_code_region(self.ANNOTATED_DIFF, "src/app.py", 500)
+        assert region == ""
+
+    def test_multiple_files(self):
+        from autoskillit.execution.diff_annotator import extract_code_region
+
+        app_region = extract_code_region(self.ANNOTATED_DIFF, "src/app.py", 42)
+        test_region = extract_code_region(self.ANNOTATED_DIFF, "tests/test_app.py", 2)
+        assert "[L42]" in app_region
+        assert "tests/test_app.py" not in app_region
+        assert "[L2]" in test_region
+        assert "src/app.py" not in test_region
+
+    def test_custom_context_lines(self):
+        from autoskillit.execution.diff_annotator import extract_code_region
+
+        region = extract_code_region(self.ANNOTATED_DIFF, "src/app.py", 42, context_lines=2)
+        assert "[L42]" in region
+        assert "[L40]" in region
+        assert "[L44]" in region
+        assert "[L38]" not in region
+
+    def test_empty_annotated_diff(self):
+        from autoskillit.execution.diff_annotator import extract_code_region
+
+        assert extract_code_region("", "src/app.py", 42) == ""

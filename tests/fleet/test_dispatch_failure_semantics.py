@@ -206,10 +206,10 @@ class TestTimeoutPath:
 
 class TestNoSentinelPath:
     @pytest.mark.anyio
-    async def test_no_sentinel_writes_state_with_reason_l2_no_result_block(
+    async def test_no_sentinel_writes_state_with_reason_l3_no_result_block(
         self, tool_ctx, monkeypatch
     ):
-        """no_sentinel outcome → DispatchRecord.reason = 'l2_no_result_block'."""
+        """no_sentinel outcome → DispatchRecord.reason = 'l3_no_result_block'."""
         _setup_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
             "autoskillit.fleet._api.parse_l3_result_block",
@@ -247,10 +247,10 @@ class TestNoSentinelPath:
 
 class TestCompletedDirtyPath:
     @pytest.mark.anyio
-    async def test_completed_dirty_writes_state_with_reason_l2_parse_failed(
+    async def test_completed_dirty_writes_state_with_reason_l3_parse_failed(
         self, tool_ctx, monkeypatch
     ):
-        """completed_dirty outcome → DispatchRecord.reason = 'l2_parse_failed'."""
+        """completed_dirty outcome → DispatchRecord.reason = 'l3_parse_failed'."""
         _setup_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
             "autoskillit.fleet._api.parse_l3_result_block",

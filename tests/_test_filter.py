@@ -176,7 +176,6 @@ MODULE_CASCADE_EXECUTION: dict[str, frozenset[str]] = {
     "clone_guard": frozenset({"execution"}),
     # --- Medium: execution + specific file-level consumers ---
     "ci": frozenset({"execution"}),
-    "merge_queue": frozenset({"execution"}),
     "diff_annotator": frozenset({"execution", "test_smoke_utils.py"}),
     "pr_analysis": frozenset({"execution", "test_smoke_utils.py"}),
     "testing": frozenset(
@@ -254,6 +253,10 @@ MODULE_CASCADE_EXECUTION: dict[str, frozenset[str]] = {
         }
     ),
     # headless and process are NOT listed — they fall through to cascade_map["execution"]
+}
+
+SUBPKG_CASCADE_EXECUTION: dict[str, frozenset[str]] = {
+    "merge_queue": frozenset({"execution"}),
 }
 
 MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
@@ -1019,6 +1022,24 @@ def _file_to_package(filepath: str) -> str | None:
     return None
 
 
+def _file_to_execution_subpkg(filepath: str) -> str | None:
+    """Return the execution subpackage name if *filepath* is inside one, else None.
+
+    e.g. 'src/autoskillit/execution/merge_queue/_classifier.py' -> 'merge_queue'
+         'src/autoskillit/execution/headless.py' -> None
+         'src/autoskillit/execution/__init__.py' -> None
+    """
+    parts = Path(filepath).parts
+    try:
+        idx = parts.index("autoskillit")
+    except ValueError:
+        return None
+    # idx + 3 < len(parts) ensures parts[idx + 2] is a subpackage dir (not a bare module) and guards parts[idx + 1].
+    if idx + 3 < len(parts) and parts[idx + 1] == "execution":
+        return parts[idx + 2]
+    return None
+
+
 def build_test_scope(
     changed_files: set[str] | None,
     mode: FilterMode,
@@ -1087,13 +1108,17 @@ def build_test_scope(
                 else:
                     test_dirs.update(cascade_map["core"])  # fail-open: unknown stem
             elif pkg == "execution" and mode == FilterMode.CONSERVATIVE:
-                stem = Path(f).stem
-                if stem in MODULE_CASCADE_EXECUTION:
-                    test_dirs.update(MODULE_CASCADE_EXECUTION[stem])
+                subpkg = _file_to_execution_subpkg(f)
+                if subpkg and subpkg in SUBPKG_CASCADE_EXECUTION:
+                    test_dirs.update(SUBPKG_CASCADE_EXECUTION[subpkg])
                 else:
-                    test_dirs.update(
-                        cascade_map["execution"]
-                    )  # fail-open: headless, process, unknown
+                    stem = Path(f).stem
+                    if stem in MODULE_CASCADE_EXECUTION:
+                        test_dirs.update(MODULE_CASCADE_EXECUTION[stem])
+                    else:
+                        test_dirs.update(
+                            cascade_map["execution"]
+                        )  # fail-open: headless, process, unknown
             elif pkg == "recipe" and mode == FilterMode.CONSERVATIVE:
                 stem = Path(f).stem
                 if stem in MODULE_CASCADE_RECIPE:
@@ -1144,25 +1169,38 @@ def build_test_scope(
                         else:
                             test_dirs.update(cascade_map["core"])  # fail-open: unknown stem
                     elif pkg == "execution" and mode == FilterMode.CONSERVATIVE:
-                        stem = Path(f).stem
-                        if stem == "__init__":
-                            exec_cause_stems = {
-                                Path(c).stem
-                                for c in changed_src_py
-                                if _file_to_package(c) == "execution"
-                                and Path(c).stem != "__init__"
-                            }
-                            if exec_cause_stems and all(
-                                s in MODULE_CASCADE_EXECUTION for s in exec_cause_stems
-                            ):
-                                for s in exec_cause_stems:
-                                    test_dirs.update(MODULE_CASCADE_EXECUTION[s])
+                        subpkg = _file_to_execution_subpkg(f)
+                        if subpkg and subpkg in SUBPKG_CASCADE_EXECUTION:
+                            test_dirs.update(SUBPKG_CASCADE_EXECUTION[subpkg])
+                        else:
+                            stem = Path(f).stem
+                            if stem == "__init__":
+                                exec_cause_files = [
+                                    c
+                                    for c in changed_src_py
+                                    if _file_to_package(c) == "execution"
+                                    and Path(c).stem != "__init__"
+                                ]
+                                # empty list → fail-open: only execution/__init__ changed, no cause to narrow on
+                                all_narrow = bool(exec_cause_files)
+                                narrow_dirs: set[str] = set()
+                                for c in exec_cause_files:
+                                    c_subpkg = _file_to_execution_subpkg(c)
+                                    if c_subpkg and c_subpkg in SUBPKG_CASCADE_EXECUTION:
+                                        narrow_dirs.update(SUBPKG_CASCADE_EXECUTION[c_subpkg])
+                                    elif Path(c).stem in MODULE_CASCADE_EXECUTION:
+                                        narrow_dirs.update(MODULE_CASCADE_EXECUTION[Path(c).stem])
+                                    else:
+                                        all_narrow = False
+                                        break
+                                if all_narrow:
+                                    test_dirs.update(narrow_dirs)
+                                else:
+                                    test_dirs.update(cascade_map["execution"])  # fail-open
+                            elif stem in MODULE_CASCADE_EXECUTION:
+                                test_dirs.update(MODULE_CASCADE_EXECUTION[stem])
                             else:
                                 test_dirs.update(cascade_map["execution"])  # fail-open
-                        elif stem in MODULE_CASCADE_EXECUTION:
-                            test_dirs.update(MODULE_CASCADE_EXECUTION[stem])
-                        else:
-                            test_dirs.update(cascade_map["execution"])  # fail-open
                     elif pkg == "recipe" and mode == FilterMode.CONSERVATIVE:
                         stem = Path(f).stem
                         if stem == "__init__":

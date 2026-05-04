@@ -347,8 +347,29 @@ steps:
       experiment_results: "${{ result.results_path }}"
     retries: 2
     on_success: generate_report
-    on_failure: adjust_experiment
+    on_failure: troubleshoot_run_failure
     on_exhausted: ensure_results
+
+  troubleshoot_run_failure:
+    tool: run_skill
+    stale_threshold: 2400
+    idle_output_timeout: 0
+    with:
+      skill_command: "/autoskillit:troubleshoot-experiment ${{ context.worktree_path }} run_experiment"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: troubleshoot_run
+    capture:
+      run_failure_type: "${{ result.failure_type }}"
+      run_is_fixable: "${{ result.is_fixable }}"
+    on_success: route_run_failure
+    on_failure: escalate_stop
+
+  route_run_failure:
+    action: route
+    on_result:
+      - when: "${{ context.run_is_fixable }} == true"
+        route: adjust_experiment
+      - route: escalate_stop
 
   adjust_experiment:
     tool: run_skill

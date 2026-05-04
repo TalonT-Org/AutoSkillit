@@ -188,7 +188,7 @@ def _resolve_provider_profile(
 
     # Tier 3: step YAML provider field
     if step_name:
-        logger.debug("provider_profile_resolved", tier="step", profile=step_name)
+        logger.debug("provider_profile_resolved", tier="step_provider_field", profile=step_name)
         if step_name == "anthropic":
             return ("anthropic", {})
         return (step_name, config_providers.profiles.get(step_name, {}))

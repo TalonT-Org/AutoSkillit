@@ -89,12 +89,14 @@ def test_non_anthropic_profile_returns_correct_env_dict():
     assert result == ("bedrock", {"AWS_ACCESS_KEY_ID": "test"})
 
 
-def test_empty_recipe_name_skips_overrides():
+def test_no_recipe_name_skips_step_override():
+    # Without recipe context, Tier 1 is bypassed; Tier 3 uses step_name as the
+    # provider name. If the override had applied we'd get ("vertex", {"K": "V"}).
     from autoskillit.server._guards import _resolve_provider_profile
 
     cfg = _make_config(
-        step_overrides={"my_step": "vertex"},
-        profiles={"vertex": {"K": "V"}},
+        step_overrides={"bedrock": "vertex"},
+        profiles={"vertex": {"K": "V"}, "bedrock": {"X": "Y"}},
     )
-    result = _resolve_provider_profile("my_step", "", cfg)
-    assert result == ("my_step", {})
+    result = _resolve_provider_profile("bedrock", "", cfg)
+    assert result == ("bedrock", {"X": "Y"})

@@ -11,6 +11,7 @@ from uuid import uuid4
 
 if TYPE_CHECKING:
     from autoskillit.config.settings import QuotaGuardConfig
+    from autoskillit.recipe import OpenKitchenResult
 
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
@@ -90,11 +91,6 @@ def _quota_guard_hook_payload(cfg: QuotaGuardConfig) -> QuotaGuardHookPayload:
         "buffer_seconds": cfg.buffer_seconds,
         "disabled": not cfg.enabled,
     }
-
-
-def _build_sous_chef_for_delivery(sc_text: str) -> str:
-    """Return stripped sous-chef SKILL.md text for delivery via the named-recipe path."""
-    return sc_text.strip()
 
 
 def _write_hook_config() -> None:
@@ -379,7 +375,7 @@ async def open_kitchen(
                         }
                     )
             try:
-                result = tool_ctx.recipes.load_and_validate(
+                result: OpenKitchenResult = tool_ctx.recipes.load_and_validate(  # type: ignore[assignment]
                     name,
                     Path.cwd(),
                     suppressed=suppressed,
@@ -394,7 +390,7 @@ async def open_kitchen(
             tool_ctx.recipe_name = name
             tool_ctx.recipe_content_hash = result.get("content_hash", "")
             tool_ctx.recipe_composite_hash = result.get("composite_hash", "")
-            tool_ctx.recipe_version = result.get("recipe_version", "")
+            tool_ctx.recipe_version = result.get("recipe_version", "")  # type: ignore[assignment]
 
             composite = result.get("composite_hash", "")
             from autoskillit.server._state import _check_rerun  # noqa: PLC0415
@@ -410,7 +406,7 @@ async def open_kitchen(
                 return _kitchen_failure_envelope(exc, stage="recipe_find")
 
             try:
-                result = await _apply_triage_gate(result, name, recipe_info=recipe_info)
+                result = await _apply_triage_gate(result, name, recipe_info=recipe_info)  # type: ignore[assignment, arg-type]
             except Exception as exc:
                 logger.warning("open_kitchen_failure", stage="apply_triage_gate", exc_info=True)
                 return _kitchen_failure_envelope(exc, stage="apply_triage_gate")
@@ -423,19 +419,6 @@ async def open_kitchen(
                 result.pop("content", None)
                 result.pop("orchestration_rules", None)
                 result.pop("stop_step_semantics", None)
-            else:
-                _sc_path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
-                try:
-                    if _sc_path.exists():
-                        _sc_content = _build_sous_chef_for_delivery(_sc_path.read_text())
-                        if _sc_content:
-                            result["sous_chef_discipline"] = _sc_content
-                except (OSError, UnicodeDecodeError):
-                    logger.warning(
-                        "open_kitchen_failure",
-                        stage="read_sous_chef_discipline",
-                        exc_info=True,
-                    )
 
             if "ingredients_table" not in result or not result["ingredients_table"]:
                 result["ingredients_table"] = None

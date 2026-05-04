@@ -357,7 +357,7 @@ steps:
     with:
       skill_command: "/autoskillit:troubleshoot-experiment ${{ context.worktree_path }} run_experiment"
       cwd: "${{ inputs.source_dir }}"
-      step_name: troubleshoot_run
+      step_name: troubleshoot_run_failure
     capture:
       run_is_fixable: "${{ result.is_fixable }}"
     on_success: route_run_failure

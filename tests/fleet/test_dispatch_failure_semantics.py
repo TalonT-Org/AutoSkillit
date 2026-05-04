@@ -265,6 +265,95 @@ class TestCompletedDirtyPath:
         assert record["reason"] == "fleet_l2_parse_failed"
 
 
+class TestDispatchStatusEnvelopeField:
+    @pytest.mark.anyio
+    async def test_envelope_includes_dispatch_status_on_success(self, tool_ctx, monkeypatch):
+        """Envelope from _run_dispatch includes dispatch_status matching state-file status."""
+        _setup_dispatch(tool_ctx, monkeypatch)
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.parse_l2_result_block",
+            lambda **_: _make_completed_clean(success=True),
+        )
+
+        result = await _run(tool_ctx)
+        assert "dispatch_status" in result
+        assert result["dispatch_status"] == "success"
+
+    @pytest.mark.anyio
+    async def test_envelope_includes_dispatch_status_on_failure(self, tool_ctx, monkeypatch):
+        """Envelope includes dispatch_status='failure' when outcome is completed_dirty."""
+        _setup_dispatch(tool_ctx, monkeypatch)
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.parse_l2_result_block",
+            lambda **_: _make_completed_dirty(),
+        )
+
+        result = await _run(tool_ctx)
+        assert "dispatch_status" in result
+        assert result["dispatch_status"] == "failure"
+
+    @pytest.mark.anyio
+    async def test_envelope_includes_dispatch_status_on_no_sentinel(self, tool_ctx, monkeypatch):
+        """Envelope includes dispatch_status='failure' for no_sentinel without session signal."""
+        _setup_dispatch(tool_ctx, monkeypatch)
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.parse_l2_result_block",
+            lambda **_: _make_no_sentinel(),
+        )
+
+        result = await _run(tool_ctx)
+        assert "dispatch_status" in result
+        assert result["dispatch_status"] == "failure"
+
+    @pytest.mark.anyio
+    async def test_envelope_includes_dispatch_status_on_no_sentinel_resumable(
+        self, tool_ctx, monkeypatch
+    ):
+        """no_sentinel + session_id + lifespan_started + sidecar → dispatch_status='resumable'."""
+        import dataclasses
+        from uuid import UUID
+
+        from tests.fakes import _DEFAULT_SKILL_RESULT, InMemoryHeadlessExecutor
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+
+        fixed_dispatch_id = "aaaabbbb-cccc-dddd-eeee-ffffffffffff"
+        monkeypatch.setattr("autoskillit.fleet._api.uuid4", lambda: UUID(fixed_dispatch_id))
+
+        from autoskillit.fleet.sidecar import sidecar_path
+
+        sidecar_file = sidecar_path(fixed_dispatch_id, tool_ctx.project_dir)
+        sidecar_file.parent.mkdir(parents=True, exist_ok=True)
+        sidecar_file.touch()
+
+        resumable_result = dataclasses.replace(
+            _DEFAULT_SKILL_RESULT,
+            session_id="sess-resumable-abc",
+            lifespan_started=True,
+        )
+
+        class _SpawningExecutor(InMemoryHeadlessExecutor):
+            """Calls on_spawn with a fake PID to drive PENDING → RUNNING before returning."""
+
+            async def dispatch_food_truck(self, orchestrator_prompt, cwd, *, on_spawn=None, **kw):
+                if on_spawn is not None:
+                    on_spawn(12345, 1000)
+                return await super().dispatch_food_truck(
+                    orchestrator_prompt, cwd, on_spawn=on_spawn, **kw
+                )
+
+        tool_ctx.executor = _SpawningExecutor(default_result=resumable_result)
+
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.parse_l2_result_block",
+            lambda **_: _make_no_sentinel(),
+        )
+
+        result = await _run(tool_ctx)
+        assert "dispatch_status" in result
+        assert result["dispatch_status"] == "resumable"
+
+
 class TestCompletedCleanPath:
     @pytest.mark.anyio
     async def test_completed_clean_success_writes_empty_reason(self, tool_ctx, monkeypatch):

@@ -560,6 +560,7 @@ async def dispatch_food_truck(
     dispatch_name: str | None = None,
     timeout_sec: int | None = None,
     capture: dict[str, str] | None = None,
+    resume_session_id: str | None = None,
     ctx: Context = CurrentContext(),
 ) -> str:
     """Dispatch a single food truck L2 session for one recipe.
@@ -641,6 +642,7 @@ async def dispatch_food_truck(
             quota_refresher=_refresh_quota_cache,
             cache_invalidator=invalidate_cache,
             capture=capture,
+            resume_session_id=resume_session_id,
         )
 
         campaign_state_path_str = os.environ.get("AUTOSKILLIT_CAMPAIGN_STATE_PATH")
@@ -655,11 +657,7 @@ async def dispatch_food_truck(
                         append_dispatch_record,
                     )
 
-                    status = (
-                        DispatchStatus.SUCCESS
-                        if envelope.get("success")
-                        else DispatchStatus.FAILURE
-                    )
+                    status = DispatchStatus(envelope["dispatch_status"])
                     append_dispatch_record(
                         campaign_state_path,
                         DispatchRecord(

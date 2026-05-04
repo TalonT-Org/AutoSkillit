@@ -89,6 +89,7 @@ class DispatchFoodTruckCall:
     orchestrator_prompt: str
     cwd: str
     completion_marker: str = ""
+    resume_session_id: str | None = None
     model: str = ""
     step_name: str = ""
     kitchen_id: str = ""
@@ -102,6 +103,7 @@ class DispatchFoodTruckCall:
     env_extras: Mapping[str, str] | None = None
     requires_packs: Sequence[str] = ()
     on_spawn: Callable[[int, int], None] | None = None
+    allowed_write_prefix: str = ""
 
 
 _DEFAULT_SKILL_RESULT = SkillResult(
@@ -195,6 +197,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         cwd: str,
         *,
         completion_marker: str,
+        resume_session_id: str | None = None,
         model: str = "",
         step_name: str = "",
         kitchen_id: str = "",
@@ -208,12 +211,14 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         env_extras: Mapping[str, str] | None = None,
         requires_packs: Sequence[str] = (),
         on_spawn: Callable[[int, int], None] | None = None,
+        allowed_write_prefix: str = "",
     ) -> SkillResult:
         self.dispatch_calls.append(
             DispatchFoodTruckCall(
                 orchestrator_prompt=orchestrator_prompt,
                 cwd=cwd,
                 completion_marker=completion_marker,
+                resume_session_id=resume_session_id,
                 model=model,
                 step_name=step_name,
                 kitchen_id=kitchen_id,
@@ -227,6 +232,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 env_extras=env_extras,
                 requires_packs=requires_packs,
                 on_spawn=on_spawn,
+                allowed_write_prefix=allowed_write_prefix,
             )
         )
         if self._queue:

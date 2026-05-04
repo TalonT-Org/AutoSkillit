@@ -135,6 +135,7 @@ class TestDispatchFoodTruckCampaignState:
         success_envelope = json.dumps(
             {
                 "success": True,
+                "dispatch_status": "success",
                 "dispatch_id": "d1",
                 "l2_session_id": "s1",
                 "reason": "",
@@ -169,6 +170,7 @@ class TestDispatchFoodTruckCampaignState:
         failure_envelope = json.dumps(
             {
                 "success": False,
+                "dispatch_status": "failure",
                 "dispatch_id": "d1",
                 "l2_session_id": "s1",
                 "reason": "l2_crashed",

@@ -184,6 +184,51 @@ class TestDispatchFoodTruck:
         assert "--plugin-dir" in cmd
         assert str(cache) in cmd
 
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_passes_resume_session_id_to_cmd_builder(
+        self, minimal_ctx, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """resume_session_id is forwarded from dispatch_food_truck to build_food_truck_cmd."""
+        from autoskillit.core.types import SubprocessResult, TerminationReason
+        from autoskillit.execution.headless import DefaultHeadlessExecutor
+        from tests.fakes import MockSubprocessRunner
+
+        captured_kwargs: list[dict] = []
+
+        import autoskillit.execution.headless as _headless_mod
+
+        original_build = _headless_mod.build_food_truck_cmd
+
+        def _spy(**kwargs):
+            captured_kwargs.append(kwargs)
+            return original_build(**kwargs)
+
+        monkeypatch.setattr(_headless_mod, "build_food_truck_cmd", _spy)
+
+        runner = MockSubprocessRunner()
+        runner.set_default(
+            SubprocessResult(
+                returncode=0,
+                stdout=_make_success_stdout(),
+                stderr="",
+                termination=TerminationReason.NATURAL_EXIT,
+                pid=55555,
+            )
+        )
+        minimal_ctx.runner = runner
+        minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
+
+        executor = DefaultHeadlessExecutor(minimal_ctx)
+        await executor.dispatch_food_truck(
+            "You are an L2 orchestrator",
+            str(tmp_path),
+            completion_marker="%%FT_DONE%%",
+            resume_session_id="abc-123",
+        )
+
+        assert captured_kwargs, "build_food_truck_cmd was never called"
+        assert captured_kwargs[0]["resume_session_id"] == "abc-123"
+
 
 class TestDispatchFoodTruckPackInjection:
     """Tests that dispatch_food_truck correctly injects AUTOSKILLIT_L2_TOOL_TAGS."""

@@ -15,7 +15,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core import get_logger, write_versioned_json
+from autoskillit.core import FleetErrorCode, get_logger, write_versioned_json
 
 logger = get_logger(__name__)
 
@@ -85,6 +85,7 @@ class ResumeDecision:
     next_dispatch_name: str
     completed_dispatches_block: str
     is_resumable: bool = False
+    l2_session_id: str = ""
 
 
 _ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
@@ -153,8 +154,19 @@ def write_initial_state(
     write_versioned_json(state_path, payload, schema_version=_SCHEMA_VERSION)
 
 
+_INFRASTRUCTURE_FAILURE_REASONS: frozenset[str] = frozenset(
+    {
+        FleetErrorCode.FLEET_L2_NO_RESULT_BLOCK,
+    }
+)
+
+
 def has_failed_dispatch(state_path: Path) -> bool:
-    """Check whether any dispatch in *state_path* has FAILURE status.
+    """Check whether any dispatch has a FAILURE status attributable to logic (not infrastructure).
+
+    Infrastructure failures (e.g. fleet_l2_no_result_block) represent transient L2
+    disconnections and do not halt the campaign. Logic failures (e.g. completed_clean
+    with success=false) represent genuine task failures and do halt the campaign.
 
     Returns False when the file is missing or corrupted (fail-open).
     """
@@ -163,7 +175,10 @@ def has_failed_dispatch(state_path: Path) -> bool:
     state = read_state(state_path)
     if state is None:
         return False
-    return any(d.status == DispatchStatus.FAILURE for d in state.dispatches)
+    return any(
+        d.status == DispatchStatus.FAILURE and d.reason not in _INFRASTRUCTURE_FAILURE_REASONS
+        for d in state.dispatches
+    )
 
 
 def read_state(state_path: Path) -> CampaignState | None:
@@ -594,12 +609,14 @@ def resume_campaign_from_state(
             completed_lines: list[str] = []
             next_name = ""
             is_resumable = False
+            resumable_l2_session_id = ""
             for d in state.dispatches:
                 if d.status in _VISIBLE_IN_BLOCK_STATUSES:
                     completed_lines.append(f"- {d.name}: {d.status}")
                 elif d.status == DispatchStatus.RESUMABLE and not next_name:
                     next_name = d.name
                     is_resumable = True
+                    resumable_l2_session_id = d.l2_session_id
                 elif (
                     d.status
                     not in {
@@ -620,4 +637,5 @@ def resume_campaign_from_state(
                 next_dispatch_name=next_name,
                 completed_dispatches_block=completed_block,
                 is_resumable=is_resumable,
+                l2_session_id=resumable_l2_session_id,
             )

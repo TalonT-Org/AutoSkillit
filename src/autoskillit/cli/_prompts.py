@@ -107,6 +107,7 @@ def _build_fleet_campaign_prompt(
     campaign_id: str,
     max_quota_wait_sec: int = 3600,
     resumable_dispatch_name: str = "",
+    resume_session_id: str = "",
     ingredients_table: str | None = None,
 ) -> str:
     """Build the system prompt for an L3 campaign dispatcher headless session.
@@ -180,6 +181,13 @@ dispatch name NOT listed above.
 
     resumable_section = ""
     if resumable_dispatch_name:
+        _resume_session_line = (
+            f'and pass resume_session_id="{resume_session_id}" to dispatch_food_truck'
+            " so the L2 session resumes from its prior context"
+            if resume_session_id
+            else ""
+        )
+        _resume_session_clause = f" {_resume_session_line}" if _resume_session_line else ""
         resumable_section = f"""\
 
 ## RESUMABLE DISPATCH: {resumable_dispatch_name}
@@ -187,7 +195,7 @@ dispatch name NOT listed above.
 This dispatch was interrupted mid-run with partial sidecar progress.
 Re-dispatch it using compute_remaining_issues(dispatch_id, original_urls, project_dir)
 to retrieve only the remaining issue URLs, then call dispatch_food_truck with
-issue_urls=<remaining> and allow_reentry=true as ingredient overrides.
+issue_urls=<remaining> and allow_reentry=true as ingredient overrides{_resume_session_clause}.
 Do NOT re-dispatch from the full original issue list.
 """
 

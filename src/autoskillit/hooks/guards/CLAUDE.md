@@ -28,4 +28,4 @@ PreToolUse guard scripts — standalone Python processes enforcing tool-call pol
 
 ## Architecture Notes
 
-Each guard is a standalone Python script executed as a subprocess (not imported as a module). Protocol: read PreToolUse JSON from stdin, write decision JSON to stdout, exit 0. Most are stdlib-only for fast startup. Guards fail-open for malformed input (except `skill_command_guard.py` which fails-closed).
+Each guard is a standalone Python script executed as a subprocess (not imported as a module). Protocol: read PreToolUse JSON from stdin, write decision JSON to stdout, exit 0. Most are stdlib-only for fast startup. Guards fail-open for malformed input. `skill_command_guard.py` has split error handling: malformed JSON fails-open (approve), unexpected runtime errors fail-closed (deny).

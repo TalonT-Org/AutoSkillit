@@ -615,3 +615,32 @@ def test_parse_step_handles_all_recipe_step_fields() -> None:
         f"  Missing from handled: {schema_fields - _PARSE_STEP_HANDLED_FIELDS}\n"
         f"  Extra in handled:     {_PARSE_STEP_HANDLED_FIELDS - schema_fields}"
     )
+
+
+def test_step_provider_field_parses_correctly() -> None:
+    step = _parse_step({"tool": "run_skill", "provider": "minimax"})
+    assert step.provider == "minimax"
+
+
+def test_step_provider_field_default_is_none() -> None:
+    step = _parse_step({"tool": "run_skill"})
+    assert step.provider is None
+
+
+def test_load_recipe_step_with_provider_field(tmp_path: Path) -> None:
+    yaml_content = textwrap.dedent("""\
+        name: provider-test
+        kitchen_rules: [rule1]
+        steps:
+          run_step:
+            tool: run_skill
+            provider: minimax
+            on_success: done
+          done:
+            action: stop
+            message: Done.
+    """)
+    recipe_file = tmp_path / "provider-test.yaml"
+    recipe_file.write_text(yaml_content)
+    recipe = load_recipe(recipe_file)
+    assert recipe.steps["run_step"].provider == "minimax"

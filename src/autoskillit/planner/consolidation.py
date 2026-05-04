@@ -304,6 +304,15 @@ def consolidate_wps(
         ),
     )
 
+    wp_dir = planner_path / "work_packages"
+    if wp_dir.exists():
+        for wp in output_wps:
+            atomic_write(wp_dir / f"{wp['id']}_result.json", json.dumps(wp))
+        for absorbed_id in non_primary_sources:
+            result_file = wp_dir / f"{absorbed_id}_result.json"
+            if result_file.exists():
+                result_file.unlink()
+
     return {
         "consolidated_wps_path": str(consolidated_path),
         "total_count": str(len(output_wps)),

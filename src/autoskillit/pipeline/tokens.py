@@ -55,6 +55,8 @@ class TokenEntry:
     elapsed_seconds: float = 0.0
     loc_insertions: int = 0
     loc_deletions: int = 0
+    peak_context: int = 0
+    turn_count: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -109,6 +111,12 @@ class DefaultTokenLog:
         e.invocation_count += 1
         e.loc_insertions += loc_insertions
         e.loc_deletions += loc_deletions
+        _peak = token_usage.get("peak_context", 0)
+        if isinstance(_peak, int) and _peak > e.peak_context:
+            e.peak_context = _peak
+        _turns = token_usage.get("turn_count", 0)
+        if isinstance(_turns, int):
+            e.turn_count += _turns
         if elapsed_seconds is not None:
             e.elapsed_seconds += elapsed_seconds
         elif start_ts and end_ts:
@@ -149,6 +157,9 @@ class DefaultTokenLog:
             agg.invocation_count += e.invocation_count
             agg.loc_insertions += e.loc_insertions
             agg.loc_deletions += e.loc_deletions
+            if e.peak_context > agg.peak_context:
+                agg.peak_context = e.peak_context
+            agg.turn_count += e.turn_count
         return [e.to_dict() for e in aggregated.values()]
 
     def compute_total(self, *, order_id: str = "") -> dict[str, Any]:
@@ -165,6 +176,8 @@ class DefaultTokenLog:
             "total_elapsed_seconds": 0.0,
             "loc_insertions": 0,
             "loc_deletions": 0,
+            "peak_context": 0,
+            "turn_count": 0,
         }
         for (oid, _step), entry in self._entries.items():
             if order_id and oid != order_id:
@@ -176,6 +189,9 @@ class DefaultTokenLog:
             total["total_elapsed_seconds"] += entry.elapsed_seconds
             total["loc_insertions"] += entry.loc_insertions
             total["loc_deletions"] += entry.loc_deletions
+            if entry.peak_context > total["peak_context"]:
+                total["peak_context"] = entry.peak_context
+            total["turn_count"] += entry.turn_count
         return total
 
     def clear(self) -> None:
@@ -242,6 +258,12 @@ class DefaultTokenLog:
             e.elapsed_seconds += float(_raw_timing) if _raw_timing is not None else 0.0
             e.loc_insertions += data.get("loc_insertions", 0)
             e.loc_deletions += data.get("loc_deletions", 0)
+            _raw_peak = data.get("peak_context", 0)
+            if isinstance(_raw_peak, int) and _raw_peak > e.peak_context:
+                e.peak_context = _raw_peak
+            _raw_turns = data.get("turn_count", 0)
+            if isinstance(_raw_turns, int):
+                e.turn_count += _raw_turns
             # Each token_usage.json file represents a single run_skill invocation
             # (one file = one invocation). Incrementing here reconstructs the
             # invocation count that was accumulated live via record().

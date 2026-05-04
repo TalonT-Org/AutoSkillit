@@ -24,10 +24,14 @@ def _fmt_get_token_summary(data: dict, _pipeline: bool) -> str:
         inp = _fmt_tokens(step.get("input_tokens", 0))
         out = _fmt_tokens(step.get("output_tokens", 0))
         cache_rd = _fmt_tokens(step.get("cache_read_input_tokens", 0))
+        peak_ctx = _fmt_tokens(step.get("peak_context", 0))
         cache_wr = _fmt_tokens(step.get("cache_creation_input_tokens", 0))
+        turns = step.get("turn_count", 0)
         wc = step.get("wall_clock_seconds", step.get("elapsed_seconds", 0.0))
         lines.append(
-            f"{name} x{count} [uc:{inp} out:{out} cr:{cache_rd} cw:{cache_wr} t:{wc:.1f}s]"
+            f"{name} x{count}"
+            f" [uc:{inp} out:{out} cr:{cache_rd} pk:{peak_ctx} cw:{cache_wr}"
+            f" turns:{turns} t:{wc:.1f}s]"
         )
     total = data.get("total", {})
     if total:
@@ -35,6 +39,7 @@ def _fmt_get_token_summary(data: dict, _pipeline: bool) -> str:
         lines.append(f"total_uncached: {_fmt_tokens(total.get('input_tokens', 0))}")
         lines.append(f"total_out: {_fmt_tokens(total.get('output_tokens', 0))}")
         lines.append(f"total_cache_read: {_fmt_tokens(total.get('cache_read_input_tokens', 0))}")
+        lines.append(f"total_peak_context: {_fmt_tokens(total.get('peak_context', 0))}")
         lines.append(
             f"total_cache_write: {_fmt_tokens(total.get('cache_creation_input_tokens', 0))}"
         )

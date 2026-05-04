@@ -229,6 +229,8 @@ def _load_sessions(
                 "invocation_count": 0,
                 "loc_insertions": 0,
                 "loc_deletions": 0,
+                "peak_context": 0,
+                "turn_count": 0,
             }
         entry = aggregated[key]
         entry["input_tokens"] += data.get("input_tokens", 0)
@@ -240,6 +242,12 @@ def _load_sessions(
         entry["invocation_count"] += 1
         entry["loc_insertions"] = entry.get("loc_insertions", 0) + data.get("loc_insertions", 0)
         entry["loc_deletions"] = entry.get("loc_deletions", 0) + data.get("loc_deletions", 0)
+        _raw_peak = data.get("peak_context", 0)
+        if isinstance(_raw_peak, int) and _raw_peak > entry["peak_context"]:
+            entry["peak_context"] = _raw_peak
+        _raw_turns = data.get("turn_count", 0)
+        if isinstance(_raw_turns, int):
+            entry["turn_count"] = entry.get("turn_count", 0) + _raw_turns
 
     return aggregated
 
@@ -249,13 +257,14 @@ def _format_table(aggregated: dict[str, dict[str, Any]]) -> str:
     lines = [
         "## Token Usage Summary",
         "",
-        "| Step | uncached | output | cache_read | cache_write | count | time |",
-        "|------|----------|--------|------------|-------------|-------|------|",
+        "| Step | uncached | output | cache_read | peak_ctx | turns | cache_write | time |",
+        "|------|----------|--------|------------|----------|-------|-------------|------|",
     ]
 
     total_input = 0
     total_output = 0
     total_cache_rd = 0
+    total_peak = 0
     total_cache_wr = 0
     total_time = 0.0
 
@@ -264,25 +273,29 @@ def _format_table(aggregated: dict[str, dict[str, Any]]) -> str:
         inp = entry["input_tokens"]
         out = entry["output_tokens"]
         cache_rd = entry["cache_read_input_tokens"]
+        peak_ctx = entry.get("peak_context", 0)
+        turns = entry.get("turn_count", 0)
         cache_wr = entry["cache_creation_input_tokens"]
-        count = entry["invocation_count"]
         elapsed = entry["elapsed_seconds"]
 
         lines.append(
             f"| {name} | {_humanize(inp)} | {_humanize(out)} | {_humanize(cache_rd)}"
-            f" | {_humanize(cache_wr)} | {count} | {_fmt_duration(elapsed)} |"
+            f" | {_humanize(peak_ctx)} | {turns} | {_humanize(cache_wr)}"
+            f" | {_fmt_duration(elapsed)} |"
         )
 
         total_input += inp
         total_output += out
         total_cache_rd += cache_rd
+        if peak_ctx > total_peak:
+            total_peak = peak_ctx
         total_cache_wr += cache_wr
         total_time += elapsed
 
     lines.append(
         f"| **Total** | {_humanize(total_input)} | {_humanize(total_output)}"
-        f" | {_humanize(total_cache_rd)} | {_humanize(total_cache_wr)}"
-        f" | | {_fmt_duration(total_time)} |"
+        f" | {_humanize(total_cache_rd)} | {_humanize(total_peak)}"
+        f" | | {_humanize(total_cache_wr)} | {_fmt_duration(total_time)} |"
     )
 
     return "\n".join(lines)
@@ -305,27 +318,28 @@ def _format_efficiency_table(aggregated: dict[str, dict[str, Any]]) -> str:
     lines = [
         "## Token Efficiency",
         "",
-        "| Step | LoC Changed | cache_read/LoC | cache_write/LoC | output/LoC |",
-        "|------|-------------|----------------|-----------------|------------|",
+        "| Step | LoC Changed | peak_ctx/LoC | cache_write/LoC | output/LoC |",
+        "|------|-------------|--------------|-----------------|------------|",
     ]
-    total_loc = total_cr = total_cw = total_out = 0
+    total_loc = total_peak = total_cw = total_out = 0
     for entry in aggregated.values():
         loc = entry.get("loc_insertions", 0) + entry.get("loc_deletions", 0)
-        cr = entry.get("cache_read_input_tokens", 0)
+        peak = entry.get("peak_context", 0)
         cw = entry.get("cache_creation_input_tokens", 0)
         out = entry.get("output_tokens", 0)
         lines.append(
             f"| {entry['step_name']} | {loc}"
-            f" | {_ratio(cr, loc)} | {_ratio(cw, loc)} | {_ratio(out, loc)} |"
+            f" | {_ratio(peak, loc)} | {_ratio(cw, loc)} | {_ratio(out, loc)} |"
         )
         total_loc += loc
-        total_cr += cr
+        if peak > total_peak:
+            total_peak = peak
         total_cw += cw
         total_out += out
 
     lines.append(
         f"| **Total** | **{total_loc}**"
-        f" | {_ratio(total_cr, total_loc)} | {_ratio(total_cw, total_loc)}"
+        f" | {_ratio(total_peak, total_loc)} | {_ratio(total_cw, total_loc)}"
         f" | {_ratio(total_out, total_loc)} |"
     )
     return "\n".join(lines)

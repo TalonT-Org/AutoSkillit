@@ -75,5 +75,7 @@ def _write_sessions(log_root: Path, entries: list[dict]) -> None:
             "timing_seconds": entry.get("timing_seconds", 10.0),
             "loc_insertions": entry.get("loc_insertions", 0),
             "loc_deletions": entry.get("loc_deletions", 0),
+            "peak_context": entry.get("peak_context", 0),
+            "turn_count": entry.get("turn_count", 0),
         }
         (session_dir / "token_usage.json").write_text(json.dumps(token_data))

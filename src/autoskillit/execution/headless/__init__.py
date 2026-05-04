@@ -1,4 +1,4 @@
-"""Headless Claude Code session orchestration.
+"""Headless Claude Code session orchestration. IL-1 module (execution/).
 
 Public API:
     run_headless_core(skill_command, cwd, ctx, *, ...) -> SkillResult

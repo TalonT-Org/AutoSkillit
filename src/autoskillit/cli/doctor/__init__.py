@@ -18,8 +18,8 @@ from ._doctor_config import (
 from ._doctor_env import (
     _check_ambient_campaign_id,
     _check_ambient_session_type_fleet,
-    _check_ambient_session_type_leaf,
     _check_ambient_session_type_orchestrator,
+    _check_ambient_session_type_skill,
 )
 from ._doctor_features import (
     _check_feature_dependencies,
@@ -142,8 +142,8 @@ def run_doctor(*, output_json: bool = False) -> None:
 
     # -- Fleet doctor checks (ambient env + infrastructure health) --
 
-    # Check 18: Ambient SESSION_TYPE=leaf leak detection
-    results.append(_check_ambient_session_type_leaf())
+    # Check 18: Ambient SESSION_TYPE=skill leak detection
+    results.append(_check_ambient_session_type_skill())
 
     # Check 19: Ambient SESSION_TYPE=orchestrator leak detection
     results.append(_check_ambient_session_type_orchestrator())

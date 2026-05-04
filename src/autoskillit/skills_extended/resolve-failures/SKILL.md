@@ -43,6 +43,8 @@ Fix test failures in a worktree implemented by `/autoskillit:implement-worktree-
 - Report iteration count and what was fixed
 - Leave worktree intact on failure for manual inspection
 - Treat CI as the source of truth: "passes locally" is not a resolution
+- **Read before editing**: Before issuing an `Edit` call on any file, ensure you have issued a `Read` on that file earlier in this session. Claude Code rejects `Edit` on unread files — the retry wastes a full API turn at current context size. If you are uncertain whether a file was read, issue a targeted `Read` (offset + limit to the region you plan to edit) rather than risk an error.
+- **CWD awareness**: Before running `python3` or other interpreters in the worktree, verify CWD is the worktree root. Use absolute paths or explicit `cd`. Wrong-CWD errors waste a full API turn at current context size.
 
 **Flaky tests must always be resolved.** A test that failed previously and now passes
 is flaky by definition. Investigate timing dependencies, race conditions, insufficient

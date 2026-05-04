@@ -80,6 +80,7 @@ _PRINT_EXEMPT = frozenset(
         "_sessions.py",
         "_workspace.py",
         "branch_protection_guard.py",
+        "lint_after_edit_hook.py",
         "open_kitchen_guard.py",
         "pretty_output_hook.py",
         "quota_guard.py",

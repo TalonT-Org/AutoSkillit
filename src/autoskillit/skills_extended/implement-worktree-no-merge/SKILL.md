@@ -48,6 +48,7 @@ The worktree is left intact for the orchestrator to test and merge separately.
 - Implement one phase at a time
 - Commit per phase with descriptive messages
 - Leave the worktree intact when done
+- **Read before editing**: Before issuing an `Edit` call on any file, ensure you have issued a `Read` on that file earlier in this session. Claude Code rejects `Edit` on unread files — the retry wastes a full API turn at current context size. If you are uncertain whether a file was read, issue a targeted `Read` (offset + limit to the region you plan to edit) rather than risk an error.
 
 ## Context Limit Behavior
 

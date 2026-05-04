@@ -319,6 +319,7 @@ generic_automation_mcp/
 │   ├── __init__.py
 │   ├── hooks.json           #   Plugin hook registration
 │   ├── _hook_settings.py    #   Shared stdlib-only settings resolver for quota guard hooks
+│   ├── lint_after_edit_hook.py #  PostToolUse: runs ruff format+check on .py files after Edit/Write
 │   ├── quota_post_hook.py   #   Appends quota warning to run_skill output
 │   ├── review_gate_post_hook.py #  PostToolUse: writes/clears review_gate_state.json
 │   ├── token_summary_hook.py #  Appends Token Usage Summary to PR body

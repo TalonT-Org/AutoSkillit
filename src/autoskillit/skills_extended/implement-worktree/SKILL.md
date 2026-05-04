@@ -42,6 +42,7 @@ Implement a provided plan in an isolated git worktree branched from the current 
 - Implement one phase at a time
 - Run the project's test suite after implementation
 - Rebase onto base branch before completion (ready for squash-and-merge)
+- **Read before editing**: Before issuing an `Edit` call on any file, ensure you have issued a `Read` on that file earlier in this session. Claude Code rejects `Edit` on unread files — the retry wastes a full API turn at current context size. If you are uncertain whether a file was read, issue a targeted `Read` (offset + limit to the region you plan to edit) rather than risk an error.
 
 ## Context Limit Behavior
 

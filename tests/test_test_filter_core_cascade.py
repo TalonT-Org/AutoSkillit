@@ -82,6 +82,13 @@ class TestModuleCascadeCore:
             "_type_resume",
             "_type_helpers",
             "_type_protocols_workspace",
+            "_install_detect",
+            "_linux_proc",
+            "_type_plugin_source",
+            "kitchen_state",
+            "readiness",
+            "session_registry",
+            "tool_sequence_analysis",
         }
         assert set(MODULE_CASCADE_CORE.keys()) == expected_stems
 
@@ -165,8 +172,8 @@ class TestBuildTestScopeCoreCascade:
         for pkg in ["core", "config", "execution", "server", "cli"]:
             assert pkg in dir_names
 
-    def test_kitchen_state_fails_open_to_full_cascade(self, tmp_path: Path) -> None:
-        """kitchen_state.py (now in runtime/) → fail-open to full core cascade."""
+    def test_kitchen_state_narrow_cascade(self, tmp_path: Path) -> None:
+        """kitchen_state.py → narrow cascade of {"core"} only."""
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
             changed_files={"src/autoskillit/core/runtime/kitchen_state.py"},
@@ -175,9 +182,9 @@ class TestBuildTestScopeCoreCascade:
         )
         assert result is not None
         dir_names = {p.name for p in result}
-        # Fail-open: kitchen_state stem not in MODULE_CASCADE_CORE → full core cascade
-        for pkg in ["core", "config", "execution", "server", "cli"]:
-            assert pkg in dir_names, f"fail-open should include {pkg}"
+        assert "core" in dir_names
+        for excluded in ["config", "execution", "pipeline", "fleet", "migration", "workspace"]:
+            assert excluded not in dir_names, f"narrow cascade should not include {excluded}"
 
     def test_unknown_core_module_fails_open_to_full_cascade(self, tmp_path: Path) -> None:
         """An unknown core module stem → full cascade (fail-open, not None)."""
@@ -240,8 +247,8 @@ class TestBuildTestScopeCoreCascade:
         ]:
             assert pkg in dir_names
 
-    def test_readiness_cascade_fails_open_to_full_cascade(self, tmp_path: Path) -> None:
-        """readiness.py in core/runtime/ subpackage → falls through to full core cascade."""
+    def test_readiness_narrow_cascade(self, tmp_path: Path) -> None:
+        """readiness.py → narrow cascade of {"core", "server"} only."""
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
             changed_files={"src/autoskillit/core/runtime/readiness.py"},
@@ -250,18 +257,18 @@ class TestBuildTestScopeCoreCascade:
         )
         assert result is not None
         dir_names = {p.name for p in result}
-        for pkg in [
-            "core",
+        for pkg in ["core", "server"]:
+            assert pkg in dir_names, f"narrow cascade should include {pkg}"
+        for excluded in [
             "cli",
             "config",
             "execution",
             "fleet",
             "migration",
             "recipe",
-            "server",
             "workspace",
         ]:
-            assert pkg in dir_names
+            assert excluded not in dir_names, f"narrow cascade should not include {excluded}"
 
     def test_type_resume_narrow_routing(self, tmp_path: Path) -> None:
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)

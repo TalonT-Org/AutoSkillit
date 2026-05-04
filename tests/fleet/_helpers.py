@@ -44,7 +44,13 @@ def _make_recipe_info(name: str = "test-recipe", path_prefix: str = "/fake/"):
     )
 
 
-def _setup_dispatch(tool_ctx, monkeypatch, recipe_name: str = "test-recipe"):
+def _setup_dispatch(
+    tool_ctx,
+    monkeypatch,
+    recipe_name: str = "test-recipe",
+    *,
+    requires_packs: list[str] | None = None,
+):
     """Wire tool_ctx for dispatch tests."""
     from autoskillit.fleet import FleetSemaphore
     from autoskillit.recipe.schema import Recipe, RecipeKind
@@ -56,7 +62,13 @@ def _setup_dispatch(tool_ctx, monkeypatch, recipe_name: str = "test-recipe"):
     repo.add_recipe(recipe_name, recipe_info)
     repo.add_full_recipe(
         recipe_info.path,
-        Recipe(name=recipe_name, description="test", kind=RecipeKind.STANDARD, ingredients={}),
+        Recipe(
+            name=recipe_name,
+            description="test",
+            kind=RecipeKind.STANDARD,
+            ingredients={},
+            requires_packs=requires_packs if requires_packs is not None else [],
+        ),
     )
     tool_ctx.recipes = repo
     tool_ctx.executor = InMemoryHeadlessExecutor()

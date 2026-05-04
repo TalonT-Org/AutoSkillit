@@ -32,10 +32,13 @@ from autoskillit.execution.db import (
     _execute_readonly_query as execute_readonly_query,
 )
 from autoskillit.execution.diff_annotator import (
+    DiffMetrics,
     FilterResult,
     annotate_diff,
+    compute_diff_metrics,
     filter_findings,
     parse_hunk_ranges,
+    select_review_agents,
 )
 from autoskillit.execution.github import (
     DefaultGitHubFetcher,
@@ -167,10 +170,13 @@ __all__ = [
     "resolve_remote_name",
     "resolve_remote_repo",
     # diff_annotator
+    "DiffMetrics",
     "FilterResult",
     "annotate_diff",
+    "compute_diff_metrics",
     "filter_findings",
     "parse_hunk_ranges",
+    "select_review_agents",
     # db
     "execute_readonly_query",
     "DefaultDatabaseReader",

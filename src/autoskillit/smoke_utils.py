@@ -58,7 +58,13 @@ def compute_domain_partitions(
     return {"domain_partitions_path": str(out_path)}
 
 
-def annotate_pr_diff(pr_number: str, cwd: str, output_dir: str) -> dict[str, str]:
+def annotate_pr_diff(
+    pr_number: str,
+    cwd: str,
+    output_dir: str,
+    loc_threshold: str = "",
+    file_threshold: str = "",
+) -> dict[str, str]:
     """Fetch and annotate a PR diff server-side for review-pr.
 
     Called by run_python from the annotate_pr_diff step in merge-prs.yaml.
@@ -68,7 +74,12 @@ def annotate_pr_diff(pr_number: str, cwd: str, output_dir: str) -> dict[str, str
     import subprocess  # noqa: PLC0415
 
     from autoskillit.core import atomic_write  # noqa: PLC0415
-    from autoskillit.execution import annotate_diff, parse_hunk_ranges  # noqa: PLC0415
+    from autoskillit.execution import (
+        annotate_diff,
+        compute_diff_metrics,
+        parse_hunk_ranges,
+        select_review_agents,
+    )  # noqa: PLC0415
 
     result = subprocess.run(
         ["gh", "pr", "diff", pr_number],
@@ -85,9 +96,27 @@ def annotate_pr_diff(pr_number: str, cwd: str, output_dir: str) -> dict[str, str
     ranges_path = out / f"ranges_{pr_number}.json"
     atomic_write(annotated_path, annotate_diff(diff))
     atomic_write(ranges_path, json.dumps(parse_hunk_ranges(diff)))
+    metrics = compute_diff_metrics(diff)
+    loc_thresh = int(loc_threshold) if loc_threshold else 200
+    file_thresh = int(file_threshold) if file_threshold else 5
+    dispatch = select_review_agents(
+        metrics,
+        loc_threshold=loc_thresh,
+        file_threshold=file_thresh,
+    )
+    metrics_data = {
+        "added_lines": metrics.added_lines,
+        "removed_lines": metrics.removed_lines,
+        "changed_files": metrics.changed_files,
+        "file_paths": metrics.file_paths,
+        "dispatch_agents": dispatch,
+    }
+    metrics_path = out / f"metrics_{pr_number}.json"
+    atomic_write(metrics_path, json.dumps(metrics_data))
     return {
         "annotated_diff_path": str(annotated_path),
         "hunk_ranges_path": str(ranges_path),
+        "diff_metrics_path": str(metrics_path),
     }
 
 

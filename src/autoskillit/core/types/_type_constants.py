@@ -418,6 +418,19 @@ FEATURE_REGISTRY: dict[str, FeatureDef] = {
         default_enabled=False,
         since_version="0.9.119",
     ),
+    "providers": FeatureDef(
+        lifecycle=FeatureLifecycle.EXPERIMENTAL,
+        description=(
+            "Provider routing — route recipe steps to a non-Anthropic LLM"
+            " provider (e.g. MiniMax M2.7-highspeed)"
+        ),
+        tool_tags=frozenset(),
+        skill_categories=frozenset(),
+        import_package=None,
+        tier=1,
+        default_enabled=False,
+        since_version="0.9.351",
+    ),
 }
 
 RETIRED_FEATURES: frozenset[str] = frozenset()

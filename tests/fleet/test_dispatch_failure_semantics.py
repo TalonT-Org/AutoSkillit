@@ -305,6 +305,43 @@ class TestDispatchStatusEnvelopeField:
         assert "dispatch_status" in result
         assert result["dispatch_status"] == "failure"
 
+    @pytest.mark.anyio
+    async def test_envelope_includes_dispatch_status_on_no_sentinel_resumable(
+        self, tool_ctx, monkeypatch
+    ):
+        """no_sentinel + session_id + lifespan_started + sidecar → dispatch_status='resumable'."""
+        import dataclasses
+        from uuid import UUID
+
+        from tests.fakes import _DEFAULT_SKILL_RESULT, InMemoryHeadlessExecutor
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+
+        fixed_dispatch_id = "aaaabbbb-cccc-dddd-eeee-ffffffffffff"
+        monkeypatch.setattr("autoskillit.fleet._api.uuid4", lambda: UUID(fixed_dispatch_id))
+
+        from autoskillit.fleet.sidecar import sidecar_path
+
+        sidecar_file = sidecar_path(fixed_dispatch_id, tool_ctx.project_dir)
+        sidecar_file.parent.mkdir(parents=True, exist_ok=True)
+        sidecar_file.touch()
+
+        resumable_result = dataclasses.replace(
+            _DEFAULT_SKILL_RESULT,
+            session_id="sess-resumable-abc",
+            lifespan_started=True,
+        )
+        tool_ctx.executor = InMemoryHeadlessExecutor(default_result=resumable_result)
+
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.parse_l2_result_block",
+            lambda **_: _make_no_sentinel(),
+        )
+
+        result = await _run(tool_ctx)
+        assert "dispatch_status" in result
+        assert result["dispatch_status"] == "resumable"
+
 
 class TestCompletedCleanPath:
     @pytest.mark.anyio

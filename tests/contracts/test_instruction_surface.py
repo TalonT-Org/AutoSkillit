@@ -319,14 +319,15 @@ class TestSourceIsolationContract:
         clone_recipes = []
         for wf_info in bundled:
             raw = wf_info.path.read_text()
-            if "clone_repo" not in raw:
+            if "clone_repo" not in raw and "bootstrap_clone" not in raw:
                 continue
             clone_recipes.append(wf_info.name)
             wf = load_recipe(wf_info.path)
             assert wf.kitchen_rules, f"{wf_info.name} has no kitchen_rules"
             all_rules = " ".join(wf.kitchen_rules)
             assert self._SENTINEL in all_rules, (
-                f"{wf_info.name} uses clone_repo but kitchen_rules lack '{self._SENTINEL}'"
+                f"{wf_info.name} uses clone_repo/bootstrap_clone but "
+                f"kitchen_rules lack '{self._SENTINEL}'"
             )
             assert "checkout" in all_rules.lower(), (
                 f"{wf_info.name} SOURCE ISOLATION rule must explicitly mention 'checkout'"
@@ -356,10 +357,15 @@ class TestSourceIsolationContract:
         )
 
     def test_git_mutating_recipes_have_clone_step(self):
-        """Recipes using MCP git-mutation tools must use clone_repo."""
+        """Recipes using MCP git-mutation tools must use clone_repo or bootstrap_clone."""
         from autoskillit.recipe.io import list_recipes, load_recipe
 
-        GIT_MUTATION_TOOLS = {"create_unique_branch", "push_to_remote"}
+        CLONE_TOOLS = {"clone_repo", "bootstrap_clone"}
+        GIT_MUTATION_TOOLS = {
+            "create_unique_branch",
+            "push_to_remote",
+            "create_and_publish_branch",
+        }
         workflows = list_recipes(Path("/nonexistent"))
         bundled = [w for w in workflows.items if w.source.value == "builtin"]
         for wf_info in bundled:
@@ -368,13 +374,14 @@ class TestSourceIsolationContract:
             if not uses_mutation_tool:
                 continue
             has_clone = any(
-                step.tool == "clone_repo" or (step.python and "clone_repo" in step.python)
+                step.tool in CLONE_TOOLS
+                or (step.python and any(t in step.python for t in CLONE_TOOLS))
                 for step in wf.steps.values()
             )
             assert has_clone, (
                 f"{wf_info.name} uses MCP git-mutation tools "
                 f"({GIT_MUTATION_TOOLS & {s.tool for s in wf.steps.values()}}) "
-                f"but never calls clone_repo — workspace isolation is missing."
+                f"but never calls clone_repo/bootstrap_clone — workspace isolation is missing."
             )
 
 

@@ -106,15 +106,14 @@ steps:
     capture:
       work_dir: "${{ result.work_dir }}"
       remote_url: "${{ result.remote_url }}"
-      base_sha: "${{ result.base_sha }}"
       merge_target: "${{ result.merge_target }}"
     on_success: claim_and_resolve
     on_failure: escalate_stop
     note: >
-      Clones source_dir and captures base_sha + merge_target in one turn.
-      Returns work_dir, remote_url, base_sha (SHA of base_branch before any merge),
-      and merge_target (set to base_branch as fallback; overridden by create_and_publish
-      when open_pr=true). On failure, escalate_stop immediately (no clone to remove).
+      Clones source_dir and captures merge_target in one turn.
+      Returns work_dir, remote_url, and merge_target (set to base_branch as fallback;
+      overridden by create_and_publish when open_pr=true). On failure, escalate_stop
+      immediately (no clone to remove).
 
   claim_and_resolve:
     tool: claim_and_resolve_issue

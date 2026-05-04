@@ -138,15 +138,14 @@ def test_check_review_loop_with_args_has_previous_verdict(recipe) -> None:
 
 
 def test_capture_base_sha_captures_both_base_sha_and_merge_target(recipe) -> None:
-    """capture_base_sha must capture both base_sha and merge_target in a single step."""
-    step = recipe.steps["capture_base_sha"]
+    """bootstrap_clone must capture both base_sha and merge_target."""
+    step = recipe.steps["clone"]
     capture = step.capture or {}
     assert "base_sha" in capture, (
-        "capture_base_sha must capture base_sha — the SHA of base_branch before any merge"
+        "clone (bootstrap_clone) must capture base_sha — the SHA of base_branch before any merge"
     )
     assert "merge_target" in capture, (
-        "capture_base_sha must capture merge_target — the fallback target branch name "
-        "(replaces the removed set_merge_target step)"
+        "clone (bootstrap_clone) must capture merge_target — the fallback target branch name"
     )
 
 

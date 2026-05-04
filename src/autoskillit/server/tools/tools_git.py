@@ -18,6 +18,19 @@ from autoskillit.server._guards import _require_enabled
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._subprocess import _run_subprocess
 
+_BRANCH_DATE_FORMAT = "%Y%m%d"
+
+
+def _compute_branch_name(issue_slug: str, run_name: str, issue_number: str) -> str:
+    """Compute branch name from slug + issue number or today's date."""
+    from datetime import date
+
+    prefix = issue_slug or run_name
+    if issue_number:
+        return f"{prefix}/{issue_number}"
+    return f"{prefix}/{date.today().strftime(_BRANCH_DATE_FORMAT)}"
+
+
 logger = get_logger(__name__)
 
 
@@ -516,7 +529,6 @@ async def create_and_publish_branch(
             extra={"run_name": run_name, "issue_number": issue_number},
         )
 
-        from autoskillit.recipe._cmd_rpc import compute_branch
         from autoskillit.server import _get_ctx
 
         tool_ctx = _get_ctx()
@@ -527,13 +539,8 @@ async def create_and_publish_branch(
         _total_start = time.monotonic()
 
         _compute_start = time.monotonic()
-        computed = compute_branch(
-            issue_slug=issue_slug,
-            run_name=run_name,
-            issue_number=issue_number,
-        )
+        base_name = _compute_branch_name(issue_slug, run_name, issue_number)
         compute_ms = int((time.monotonic() - _compute_start) * 1000)
-        base_name = computed["branch_name"]
 
         _branch_start = time.monotonic()
         branch_result = await _resolve_and_create_branch(base_name, "origin", work_dir)

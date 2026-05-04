@@ -1,6 +1,6 @@
 """MCP server for orchestrating automated skill-driven workflows.
 
-Kitchen tools (45 kitchen-tagged: 44 gated + 1 headless-tagged) are hidden at startup
+Kitchen tools (48 kitchen-tagged: 47 gated + 1 headless-tagged) are hidden at startup
 via FastMCP v3 mcp.disable(tags={'kitchen'}) applied once after all tool modules are
 imported. Each new session sees only the 4 free-range tools (open_kitchen, close_kitchen,
 disable_quota_guard, and reload_session).
@@ -87,6 +87,9 @@ from autoskillit.server.tools import (  # noqa: E402, F401
 )
 from autoskillit.server.tools import (  # noqa: E402, F401
     tools_github as _tools_github,
+)
+from autoskillit.server.tools import (  # noqa: E402, F401
+    tools_issue_composite as _tools_issue_composite,
 )
 from autoskillit.server.tools import (  # noqa: E402, F401
     tools_issue_lifecycle as _tools_issue_lifecycle,

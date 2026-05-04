@@ -10,7 +10,7 @@ import pytest
 
 from autoskillit.server.tools.tools_clone import bootstrap_clone
 from autoskillit.server.tools.tools_git import create_and_publish_branch
-from autoskillit.server.tools.tools_issue_lifecycle import claim_and_resolve_issue
+from autoskillit.server.tools.tools_issue_composite import claim_and_resolve_issue
 from tests.conftest import _make_result
 from tests.server.conftest import assert_step_timed
 

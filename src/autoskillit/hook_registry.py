@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, NamedTuple
 
-from autoskillit.core import pkg_root
+from autoskillit.core import DIRECT_INSTALL_CACHE_SUBDIR, pkg_root
 
 
 @dataclass(frozen=True)
@@ -144,7 +144,6 @@ RETIRED_SCRIPT_BASENAMES: frozenset[str] = frozenset(
         "session_start_reminder.py",
         "headless_orchestration_guard.py",
         "franchise_dispatch_guard.py",
-        # Moved from hooks/ to hooks/guards/ in commit 26c80595
         "ask_user_question_guard.py",
         "branch_protection_guard.py",
         "fleet_dispatch_guard.py",
@@ -163,7 +162,6 @@ RETIRED_SCRIPT_BASENAMES: frozenset[str] = frozenset(
         "skill_command_guard.py",
         "unsafe_install_guard.py",
         "write_guard.py",
-        # Moved from hooks/ to hooks/formatters/ in commit 26c80595
         "pretty_output_hook.py",
         # Append any future retired basenames here, atomically with the rename commit.
     }
@@ -381,7 +379,7 @@ def validate_plugin_cache_hooks(cache_dir: Path | None = None) -> list[str]:
     every autoskillit hook script path exists on disk.
     """
     _cache = cache_dir or (
-        Path.home() / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
+        Path.home() / ".claude" / "plugins" / "cache" / DIRECT_INSTALL_CACHE_SUBDIR / "autoskillit"
     )
     broken: list[str] = []
     if not _cache.is_dir():

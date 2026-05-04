@@ -76,6 +76,7 @@ def _extract_block(text: str, start_delim: str, end_delim: str) -> list[str]:
 
 def _build_hook_diagnostic_warning() -> str | None:
     """Run hook health and drift checks. Return a warning string if issues are found."""
+    from autoskillit.core import DIRECT_INSTALL_CACHE_SUBDIR
     from autoskillit.hook_registry import (
         _claude_settings_path,
         _count_hook_registry_drift,
@@ -101,7 +102,10 @@ def _build_hook_diagnostic_warning() -> str | None:
                 f"{drift.missing} hook(s) from HOOK_REGISTRY are not deployed in settings.json."
             )
 
-    cache_broken = validate_plugin_cache_hooks()
+    _cache_dir = (
+        Path.home() / ".claude" / "plugins" / "cache" / DIRECT_INSTALL_CACHE_SUBDIR / "autoskillit"
+    )
+    cache_broken = validate_plugin_cache_hooks(cache_dir=_cache_dir)
     if cache_broken:
         issues.append(
             f"Plugin cache has {len(cache_broken)} stale hook path(s): {', '.join(cache_broken)}"

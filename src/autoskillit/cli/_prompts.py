@@ -107,7 +107,7 @@ def _build_fleet_campaign_prompt(
     campaign_id: str,
     max_quota_wait_sec: int = 3600,
     resumable_dispatch_name: str = "",
-    resumable_session_id: str = "",
+    resume_session_id: str = "",
     ingredients_table: str | None = None,
 ) -> str:
     """Build the system prompt for an L3 campaign dispatcher headless session.
@@ -182,9 +182,9 @@ dispatch name NOT listed above.
     resumable_section = ""
     if resumable_dispatch_name:
         _resume_session_line = (
-            f'and pass resume_session_id="{resumable_session_id}" to dispatch_food_truck'
+            f'and pass resume_session_id="{resume_session_id}" to dispatch_food_truck'
             " so the L2 session resumes from its prior context"
-            if resumable_session_id
+            if resume_session_id
             else ""
         )
         _resume_session_clause = f" {_resume_session_line}" if _resume_session_line else ""

@@ -62,6 +62,7 @@ tokens after the skill name for the first path-like token (starts with `/`,
 - Leave the worktree intact when done
 - Write `tests/test_{script_name}.py` alongside each experiment script created in Step 4
 - Run `pytest --collect-only` after creating tests to verify discovery before committing
+- **Read before editing**: Before issuing an `Edit` call on any file, ensure you have issued a `Read` on that file earlier in this session. Claude Code rejects `Edit` on unread files — the retry wastes a full API turn at current context size. If you are uncertain whether a file was read, issue a targeted `Read` (offset + limit to the region you plan to edit) rather than risk an error.
 
 ## Context Limit Behavior
 

@@ -123,6 +123,12 @@ HOOK_REGISTRY: list[HookDef] = [
         scripts=["review_gate_post_hook.py"],
     ),
     HookDef(
+        event_type="PostToolUse",
+        matcher=r"Write|Edit",
+        scripts=["lint_after_edit_hook.py"],
+        session_scope="headless_only",
+    ),
+    HookDef(
         matcher=r"mcp__.*autoskillit.*__(wait_for_ci|enqueue_pr)",
         scripts=["guards/review_loop_gate.py"],
     ),

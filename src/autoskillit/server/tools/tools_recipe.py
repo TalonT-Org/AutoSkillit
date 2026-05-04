@@ -65,7 +65,9 @@ async def list_recipes() -> str:
     meta={"anthropic/maxResultSizeChars": 100_000},
 )
 @track_response_size("load_recipe")
-async def load_recipe(name: str, overrides: dict[str, str] | None = None) -> str:
+async def load_recipe(
+    name: str, overrides: dict[str, str] | None = None, ingredients_only: bool = False
+) -> str:
     """Load a recipe by name and return its raw YAML content.
 
     The YAML follows the recipe schema (ingredients, steps with tool/action,
@@ -206,7 +208,12 @@ async def load_recipe(name: str, overrides: dict[str, str] | None = None) -> str
             temp_dir_relpath=temp_dir_display_str(tool_ctx.config.workspace.temp_dir),
         )
         recipe_info = tool_ctx.recipes.find(name, Path.cwd())
-        return json.dumps(await _apply_triage_gate(result, name, recipe_info=recipe_info))
+        result = await _apply_triage_gate(result, name, recipe_info=recipe_info)
+        if ingredients_only:
+            result.pop("content", None)
+            result.pop("orchestration_rules", None)
+            result.pop("stop_step_semantics", None)
+        return json.dumps(result)
     except Exception as exc:
         logger.error("load_recipe unhandled exception", exc_info=True)
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})

@@ -590,3 +590,123 @@ async def test_open_kitchen_generates_uuid_without_campaign_env(tmp_path, monkey
 
     kitchen_id = mock_ctx.kitchen_id
     assert len(kitchen_id) == 36 and kitchen_id.count("-") == 4
+
+
+# ---------------------------------------------------------------------------
+# Group K — ingredients_only parameter
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_ingredients_only_strips_content(tmp_path, monkeypatch):
+    """open_kitchen(name=X, ingredients_only=True) must omit content from result."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+    mock_ctx.recipes = MagicMock()
+    mock_ctx.recipes.load_and_validate.return_value = {
+        "content": "name: test\nsteps:\n  s1:\n    tool: run_skill\n",
+        "ingredients_table": (
+            "| Name | Description | Default |\n| task | What to do | (required) |"
+        ),
+        "suggestions": [],
+        "valid": True,
+        "orchestration_rules": "MANDATORY: execute every step",
+        "stop_step_semantics": "stop semantics text",
+        "content_hash": "abc123",
+        "composite_hash": "def456",
+        "recipe_version": "1.0",
+    }
+    mock_ctx.recipes.find.return_value = MagicMock()
+    mock_ctx.config.migration.suppressed = []
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    with patch(
+                        "autoskillit.server.tools.tools_kitchen._apply_triage_gate",
+                        new=AsyncMock(side_effect=lambda r, *a, **kw: r),
+                    ):
+                        from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+                        result_json = await open_kitchen(
+                            name="test", ingredients_only=True, ctx=mock_ctx
+                        )
+
+    result = json.loads(result_json)
+    assert result["success"] is True
+    assert result["ingredients_table"] is not None
+    assert "content" not in result
+    assert "orchestration_rules" not in result
+    assert "sous_chef_discipline" not in result
+    assert "stop_step_semantics" not in result
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_ingredients_only_preserves_metadata(tmp_path, monkeypatch):
+    """ingredients_only=True must preserve success, kitchen, version, valid, suggestions."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+    mock_ctx.recipes = MagicMock()
+    mock_ctx.recipes.load_and_validate.return_value = {
+        "content": "name: test\nsteps:\n  s1:\n    tool: run_skill\n",
+        "ingredients_table": "| Name | Description | Default |",
+        "suggestions": [],
+        "valid": True,
+        "content_hash": "abc123",
+        "composite_hash": "def456",
+        "recipe_version": "1.0",
+    }
+    mock_ctx.recipes.find.return_value = MagicMock()
+    mock_ctx.config.migration.suppressed = []
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    with patch(
+                        "autoskillit.server.tools.tools_kitchen._apply_triage_gate",
+                        new=AsyncMock(side_effect=lambda r, *a, **kw: r),
+                    ):
+                        from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+                        result_json = await open_kitchen(
+                            name="test", ingredients_only=True, ctx=mock_ctx
+                        )
+
+    result = json.loads(result_json)
+    assert result["success"] is True
+    assert result["kitchen"] == "open"
+    assert "version" in result
+    assert result["valid"] is True
+    assert result["suggestions"] == []
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_ingredients_only_no_name_ignored(tmp_path, monkeypatch):
+    """ingredients_only=True with name=None should behave like regular no-name open."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+                    result_json = await open_kitchen(ingredients_only=True, ctx=mock_ctx)
+
+    result = json.loads(result_json)
+    assert result["success"] is True
+    assert "content" in result
+    assert result["kitchen"] == "open"
+    assert "version" in result

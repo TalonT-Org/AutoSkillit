@@ -268,3 +268,12 @@ def test_build_fleet_dispatch_prompt_no_sleep_toolsearch_preamble() -> None:
 
     prompt = _build_fleet_dispatch_prompt(DIRECT_PREFIX)
     assert "sleep 2" not in prompt
+
+
+def test_build_fleet_dispatch_prompt_uses_ingredients_only() -> None:
+    """_build_fleet_dispatch_prompt recipe discovery must mention ingredients_only."""
+    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.cli._prompts import _build_fleet_dispatch_prompt
+
+    prompt = _build_fleet_dispatch_prompt(DIRECT_PREFIX)
+    assert "ingredients_only" in prompt

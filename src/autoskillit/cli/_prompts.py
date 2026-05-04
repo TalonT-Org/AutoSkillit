@@ -642,6 +642,19 @@ def _build_open_kitchen_prompt(mcp_prefix: str) -> str:
         "headless sessions with full tool access. Do NOT use native tools to "
         "investigate failures — route to on_failure and let the downstream skill "
         "handle diagnosis.\n\n"
+        "DISPATCH ROUTING:\n"
+        "If the user wants to dispatch a recipe through fleet (e.g., "
+        "'run this issue through implementation', 'dispatch implementation'):\n"
+        f"1. Call {mcp_prefix}open_kitchen(name='<recipe>', ingredients_only=True) "
+        "— opens the gate and returns ONLY the ingredient schema.\n"
+        "2. Display the ingredients table and collect required values from the user.\n"
+        f"3. Call {mcp_prefix}dispatch_food_truck(recipe='<recipe>', task='<task>', "
+        "ingredients={...}) with the collected values.\n"
+        "Do NOT call open_kitchen without ingredients_only=True when dispatching "
+        "— the full recipe content is unnecessary for dispatch and wastes context.\n"
+        "If the user wants to run a recipe interactively (pipeline execution), "
+        f"call {mcp_prefix}open_kitchen(name='<recipe>') without ingredients_only "
+        "to receive the full recipe content and orchestration rules.\n\n"
         "OPTIONAL STEP SEMANTICS:\n"
         "- optional: true means the step is SKIPPED when its skip_when_false ingredient\n"
         "  is false. When skip_when_false evaluates to true (or is absent), the step is\n"
@@ -698,7 +711,8 @@ TOOL SURFACE — these 10 tools are available in this session:
 ## RECIPE DISCOVERY FLOW
 
 1. Call {mcp_prefix}list_recipes to see available recipes.
-2. Call {mcp_prefix}load_recipe with a recipe name to inspect its ingredients schema.
+2. Call {mcp_prefix}load_recipe(name='<recipe>', ingredients_only=True) to inspect its \
+ingredients schema without loading the full recipe YAML.
 3. Call {mcp_prefix}fetch_github_issue (or {mcp_prefix}get_issue_title) to retrieve \
 issue context when the task involves a GitHub issue.
 4. Populate all required ingredient fields before dispatching.

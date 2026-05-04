@@ -729,3 +729,20 @@ def test_fmt_open_kitchen_ingredients_not_duplicated_when_table_present():
     recipe_section = result.split("--- INGREDIENTS TABLE")[0]
     assert "  task:" not in recipe_section
     assert "review_approach:" not in recipe_section
+
+
+def test_fmt_open_kitchen_ingredients_only_no_recipe_block():
+    """Formatter must not render RECIPE block when content is absent (ingredients_only)."""
+    from autoskillit.hooks.formatters.pretty_output_hook import _fmt_open_kitchen
+
+    data = {
+        "success": True,
+        "kitchen": "open",
+        "version": "0.9.372",
+        "valid": True,
+        "ingredients_table": "| Name | Description | Default |",
+        "suggestions": [],
+    }
+    output = _fmt_open_kitchen(data, pipeline=False)
+    assert "--- RECIPE ---" not in output
+    assert "INGREDIENTS TABLE" in output

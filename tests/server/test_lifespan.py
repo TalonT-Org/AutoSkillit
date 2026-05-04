@@ -147,6 +147,31 @@ def test_startup_broken_hook_detection(tmp_path: Path, monkeypatch) -> None:
     assert broken  # must return non-empty list of broken hook paths
 
 
+def test_startup_hook_health_checks_plugin_cache(tmp_path: Path, monkeypatch) -> None:
+    """run_startup_hook_health_check must include broken plugin cache paths in the result."""
+    from autoskillit.server._lifespan import run_startup_hook_health_check
+
+    stale_commands = [
+        "python3 /stale/cache/path/hooks/quota_guard.py",
+        "python3 /stale/cache/path/hooks/write_guard.py",
+    ]
+
+    monkeypatch.setattr(
+        "autoskillit.hook_registry.iter_all_scope_paths",
+        lambda project_root=None: iter([]),
+    )
+    monkeypatch.setattr(
+        "autoskillit.hook_registry.validate_plugin_cache_hooks",
+        lambda cache_dir=None: stale_commands,
+    )
+
+    broken = run_startup_hook_health_check()
+
+    assert set(stale_commands).issubset(set(broken)), (
+        "run_startup_hook_health_check must include broken plugin cache paths in result"
+    )
+
+
 def test_serve_startup_regenerates_on_hash_mismatch(tmp_path: Path, monkeypatch) -> None:
     """run_startup_drift_check() regenerates hooks.json when hash is mismatched."""
     import json as _json

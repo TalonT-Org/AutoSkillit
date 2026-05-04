@@ -60,18 +60,20 @@ def test_claude_md_def_spec_location_qualified() -> None:
 
 
 def test_claude_md_mentions_write_guard() -> None:
-    # write_guard lives in the collapsed hooks/guards/ subpackage — accept either main or sub-CLAUDE.md
+    # write_guard is documented in hooks/guards/CLAUDE.md — accept either location
     main_content = CLAUDE_MD.read_text()
     guards_claude = CLAUDE_MD.parent / "src" / "autoskillit" / "hooks" / "guards" / "CLAUDE.md"
-    assert "write_guard" in main_content or "write_guard" in guards_claude.read_text()
+    assert "write_guard" in main_content or (
+        guards_claude.exists() and "write_guard" in guards_claude.read_text()
+    )
 
 
 def test_claude_md_mentions_dispatch_food_truck() -> None:
-    # dispatch_food_truck lives in the collapsed server/tools/ subpackage — accept either main or sub-CLAUDE.md
+    # dispatch_food_truck is documented in server/tools/CLAUDE.md — accept either location
     main_content = CLAUDE_MD.read_text()
     tools_claude = CLAUDE_MD.parent / "src" / "autoskillit" / "server" / "tools" / "CLAUDE.md"
-    assert (
-        "dispatch_food_truck" in main_content or "dispatch_food_truck" in tools_claude.read_text()
+    assert "dispatch_food_truck" in main_content or (
+        tools_claude.exists() and "dispatch_food_truck" in tools_claude.read_text()
     )
 
 

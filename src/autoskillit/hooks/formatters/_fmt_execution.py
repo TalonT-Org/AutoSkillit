@@ -222,11 +222,7 @@ _FMT_RUN_SKILL_SUPPRESSED: frozenset[str] = frozenset(
 )
 
 _FMT_RUN_CMD_RENDERED: frozenset[str] = frozenset({"success", "exit_code", "stdout", "stderr"})
-_FMT_RUN_CMD_SUPPRESSED: frozenset[str] = frozenset(
-    {
-        "error",  # only emitted from exception guard paths, not accessed by the formatter
-    }
-)
+_FMT_RUN_CMD_SUPPRESSED: frozenset[str] = frozenset({"error"})
 
 _FMT_TEST_CHECK_RENDERED: frozenset[str] = frozenset(
     {

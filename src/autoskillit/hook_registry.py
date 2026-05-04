@@ -100,7 +100,7 @@ HOOK_REGISTRY: list[HookDef] = [
     ),
     HookDef(
         matcher=r"mcp__.*autoskillit.*__(run_skill|run_cmd|run_python).*",
-        scripts=["guards/leaf_orchestration_guard.py"],
+        scripts=["guards/skill_orchestration_guard.py"],
         session_scope="headless_only",
     ),
     HookDef(

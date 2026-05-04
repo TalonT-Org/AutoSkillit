@@ -115,14 +115,14 @@ def main() -> None:
             sys.exit(0)
 
         if session_type not in ("orchestrator",):
-            # leaf, unset, or invalid — deny (fail-closed)
+            # skill session, unset, or invalid — deny (fail-closed)
             payload = json.dumps(
                 {
                     "hookSpecificOutput": {
                         "hookEventName": "PreToolUse",
                         "permissionDecision": "deny",
                         "permissionDecisionReason": (
-                            "open_kitchen cannot be called from leaf sessions. "
+                            "open_kitchen cannot be called from skill sessions. "
                             "Open the kitchen in your orchestrator session using "
                             "/autoskillit:open-kitchen."
                         ),

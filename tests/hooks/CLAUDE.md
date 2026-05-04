@@ -23,3 +23,7 @@ Hook script behavior, registration, and bridge tests.
 | `test_session_start_reminder.py` | Tests for the SessionStart hook — session_start_hook.py |
 | `test_token_summary_appender.py` | Tests for the token_summary_appender PostToolUse hook |
 | `test_write_guard.py` | Tests for write_guard.py PreToolUse hook |
+
+## Architecture Notes
+
+`test_token_summary_appender.py` covers the hook registration and end-to-end behavior. The related split test files (`test_token_summary_core.py`, `test_token_summary_filters.py`) and shared helpers (`_token_summary_helpers.py`) live in `tests/infra/` — see `tests/infra/CLAUDE.md`.

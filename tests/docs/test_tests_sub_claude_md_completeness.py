@@ -80,6 +80,7 @@ def test_tests_sub_claude_md_no_main_claude_md_duplication():
     for rel_path in EXPECTED_SUB_CLAUDE_MDS:
         claude_md = TESTS_ROOT / rel_path
         if not claude_md.is_file():
+            failures.append(f"{rel_path}: file does not exist")
             continue
         content = claude_md.read_text()
         match = numbered_section_re.search(content)
@@ -93,6 +94,8 @@ def test_tests_sub_claude_md_no_main_claude_md_duplication():
 def test_top_level_tests_claude_md_references_all_subdirs():
     """The top-level tests/CLAUDE.md references each subdirectory's CLAUDE.md."""
     top_claude_md = TESTS_ROOT / "CLAUDE.md"
+    if not top_claude_md.is_file():
+        pytest.fail("tests/CLAUDE.md does not exist")
     content = top_claude_md.read_text()
     failures = []
     for rel_path in EXPECTED_SUB_CLAUDE_MDS:
@@ -106,6 +109,8 @@ def test_top_level_tests_claude_md_references_all_subdirs():
 def test_top_level_tests_claude_md_no_per_file_subdir_listings():
     """The top-level tests/CLAUDE.md must not contain per-file listings for subdirectories."""
     top_claude_md = TESTS_ROOT / "CLAUDE.md"
+    if not top_claude_md.is_file():
+        pytest.fail("tests/CLAUDE.md does not exist")
     content = top_claude_md.read_text()
     # Per-file listings look like: │   ├── test_*.py lines inside subdir blocks.
     # After decomposition, subdirectory blocks should be single lines only.

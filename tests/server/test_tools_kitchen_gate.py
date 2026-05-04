@@ -602,6 +602,7 @@ async def test_open_kitchen_ingredients_only_strips_content(tmp_path, monkeypatc
     """open_kitchen(name=X, ingredients_only=True) must omit content from result."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
     mock_ctx.recipes = MagicMock()
     mock_ctx.recipes.load_and_validate.return_value = {
         "content": "name: test\nsteps:\n  s1:\n    tool: run_skill\n",
@@ -631,7 +632,9 @@ async def test_open_kitchen_ingredients_only_strips_content(tmp_path, monkeypatc
                     ):
                         from autoskillit.server.tools.tools_kitchen import open_kitchen
 
-                        result_json = await open_kitchen(name="test", ingredients_only=True)
+                        result_json = await open_kitchen(
+                            name="test", ingredients_only=True, ctx=mock_ctx
+                        )
 
     result = json.loads(result_json)
     assert result["success"] is True
@@ -647,6 +650,7 @@ async def test_open_kitchen_ingredients_only_preserves_metadata(tmp_path, monkey
     """ingredients_only=True must preserve success, kitchen, version, valid, suggestions."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
     mock_ctx.recipes = MagicMock()
     mock_ctx.recipes.load_and_validate.return_value = {
         "content": "name: test\nsteps:\n  s1:\n    tool: run_skill\n",
@@ -672,7 +676,9 @@ async def test_open_kitchen_ingredients_only_preserves_metadata(tmp_path, monkey
                     ):
                         from autoskillit.server.tools.tools_kitchen import open_kitchen
 
-                        result_json = await open_kitchen(name="test", ingredients_only=True)
+                        result_json = await open_kitchen(
+                            name="test", ingredients_only=True, ctx=mock_ctx
+                        )
 
     result = json.loads(result_json)
     assert result["success"] is True
@@ -687,6 +693,7 @@ async def test_open_kitchen_ingredients_only_no_name_ignored(tmp_path, monkeypat
     """ingredients_only=True with name=None should behave like regular no-name open."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
@@ -696,7 +703,7 @@ async def test_open_kitchen_ingredients_only_no_name_ignored(tmp_path, monkeypat
                 with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
                     from autoskillit.server.tools.tools_kitchen import open_kitchen
 
-                    result_json = await open_kitchen(ingredients_only=True)
+                    result_json = await open_kitchen(ingredients_only=True, ctx=mock_ctx)
 
     result = json.loads(result_json)
     assert result["success"] is True

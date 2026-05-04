@@ -1025,6 +1025,13 @@ def test_efficiency_table_appended_when_loc_present(tmp_path: Path) -> None:
     body_arg = edit_calls[0][edit_calls[0].index("--raw-field") + 1]
     body_content = body_arg[len("body=") :]
     assert "## Token Efficiency" in body_content
+    assert "cache_read/LoC" in body_content
+    assert "peak_ctx/LoC" in body_content
+    assert "cache_write/LoC" in body_content
+    assert "output/LoC" in body_content
+    eff_section = body_content[body_content.index("## Token Efficiency") :]
+    eff_header = eff_section.split("\n")[2]
+    assert eff_header.count("|") == 7  # 6 columns + outer pipes
 
 
 # T-HOOK-EFF-2

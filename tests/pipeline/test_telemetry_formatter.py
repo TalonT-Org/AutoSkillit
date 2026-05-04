@@ -376,6 +376,7 @@ def test_efficiency_table_columns() -> None:
     steps = [
         {
             "step_name": "implement",
+            "peak_context": 500,
             "cache_read_input_tokens": 1000,
             "cache_creation_input_tokens": 200,
             "output_tokens": 50,
@@ -386,6 +387,7 @@ def test_efficiency_table_columns() -> None:
     total = {
         "loc_insertions": 80,
         "loc_deletions": 20,
+        "peak_context": 500,
         "cache_read_input_tokens": 1000,
         "cache_creation_input_tokens": 200,
         "output_tokens": 50,
@@ -394,8 +396,10 @@ def test_efficiency_table_columns() -> None:
     assert "## Token Efficiency" in result
     assert "LoC Changed" in result
     assert "peak_ctx/LoC" in result
+    assert "cache_read/LoC" in result
     assert "cache_write/LoC" in result
     assert "output/LoC" in result
+    assert result.split("\n")[2].count("|") == 7  # 6 columns + outer pipes
 
 
 # T-EFF-3
@@ -516,6 +520,9 @@ def test_efficiency_table_terminal_no_markdown() -> None:
     assert "|" not in result  # no markdown pipes
     assert "LOC" in result  # column header present
     assert "PK/LOC" in result
+    assert "RD/LOC" in result
+    assert "WR/LOC" in result
+    assert "OUT/LOC" in result
 
 
 # T-EFF-7

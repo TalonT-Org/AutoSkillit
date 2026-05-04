@@ -465,14 +465,11 @@ class DefaultMergeQueueWatcher:
         if not auto_merge_available:
             await self._enqueue_direct(pr_node_id)
             return
-        # Disable then re-enable auto-merge.
-        resp = await self._ensure_client().post(
-            _GRAPHQL_ENDPOINT,
-            json={
-                "query": _MUTATION_DISABLE_AUTO_MERGE,
-                "variables": {"prId": pr_node_id},
-            },
-        )
+        disable_payload = {
+            "query": _MUTATION_DISABLE_AUTO_MERGE,
+            "variables": {"prId": pr_node_id},
+        }
+        resp = await self._ensure_client().post(_GRAPHQL_ENDPOINT, json=disable_payload)
         resp.raise_for_status()
         body = resp.json()
         if "errors" in body:
@@ -482,15 +479,10 @@ class DefaultMergeQueueWatcher:
 
     async def _confirm_disable(self, pr_node_id: str) -> None:
         """Poll until auto-merge disable is confirmed or timeout (best-effort)."""
+        payload = {"query": _QUERY_AUTO_MERGE_STATUS, "variables": {"nodeId": pr_node_id}}
         for _ in range(6):
             await asyncio.sleep(5)
-            resp = await self._ensure_client().post(
-                _GRAPHQL_ENDPOINT,
-                json={
-                    "query": _QUERY_AUTO_MERGE_STATUS,
-                    "variables": {"nodeId": pr_node_id},
-                },
-            )
+            resp = await self._ensure_client().post(_GRAPHQL_ENDPOINT, json=payload)
             if resp.status_code != 200:
                 logger.warning(
                     "confirm_disable_poll_error",
@@ -502,7 +494,6 @@ class DefaultMergeQueueWatcher:
                 data = resp.json().get("data", {})
             except (ValueError, httpx.DecodingError):
                 continue
-            node = data.get("node", {}) or {}
-            if not node.get("autoMergeRequest"):
+            if not (data.get("node") or {}).get("autoMergeRequest"):
                 return
         logger.warning("confirm_disable_timeout", pr_node_id=pr_node_id)

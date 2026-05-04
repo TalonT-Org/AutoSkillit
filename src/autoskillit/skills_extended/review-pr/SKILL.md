@@ -19,12 +19,13 @@ by the recipe pipeline after `open_pr_step` opens the PR.
 
 ## Arguments
 
-`/autoskillit:review-pr <feature-branch> <base-branch> [annotated_diff_path=<path>] [hunk_ranges_path=<path>]`
+`/autoskillit:review-pr <feature-branch> <base-branch> [annotated_diff_path=<path>] [hunk_ranges_path=<path>] [diff_metrics_path=<path>]`
 
 - **feature-branch** — The feature branch containing the changes to review
 - **base-branch** — The base branch the PR targets (e.g., "main")
 - **annotated_diff_path** (optional) — absolute path to a pre-computed annotated diff file (produced by `annotate_pr_diff` run_python step). When provided and present, read from file instead of running python3.
 - **hunk_ranges_path** (optional) — absolute path to a pre-computed hunk ranges JSON file (produced by `annotate_pr_diff` run_python step). When provided and present, read from file instead of running python3.
+- **diff_metrics_path** (optional) — absolute path to a pre-computed diff metrics JSON file (produced by `annotate_pr_diff` run_python step). Contains `dispatch_agents` list that determines which audit dimensions to spawn. When absent, all 6 standard agents are dispatched.
 
 ## When to Use
 
@@ -242,9 +243,40 @@ deletion_context = {
 If `MERGE_BASE` is empty or any git command fails, set `deletion_context = null`.
 The parallel deletion regression audit is skipped when `deletion_context` is null.
 
+### Step 2.9: Diff-Size Adaptive Agent Selection
+
+Read the pre-computed diff metrics when available:
+
+```bash
+DISPATCH_AGENTS=""
+if [ -n "${diff_metrics_path:-}" ] && [ -f "$diff_metrics_path" ]; then
+    DISPATCH_AGENTS=$(cat "$diff_metrics_path" | python3 -c "import sys,json; print(','.join(json.load(sys.stdin).get('dispatch_agents',[])))" 2>/dev/null || echo "")
+fi
+```
+
+`DISPATCH_AGENTS` is a comma-separated list of audit dimension names to spawn in Step 3
+(e.g., `"tests,cohesion"` for a small diff, or `"arch,tests,defense,bugs,cohesion,slop"`
+for a medium/large diff).
+
+When `DISPATCH_AGENTS` is empty (metrics file absent or unparseable), dispatch all 6
+standard agents — this is the graceful-degradation fallback that preserves current behavior.
+
+**Agent selection tiers:**
+- **Small diff** (<200 added LoC and <5 changed files): `tests`, `cohesion`, and optionally `arch` if structural files changed (e.g., `__init__.py`, `pyproject.toml`).
+- **Medium/large diff** (>= 200 added LoC or >= 5 changed files): All 6 standard agents (`arch`, `tests`, `defense`, `bugs`, `cohesion`, `slop`).
+
+Note: `deletion_regression` (dimension 7) is NOT part of the dispatch plan — it remains
+unconditionally gated on `deletion_context` being non-null (unchanged from current behavior).
+
 ### Step 3: Run Parallel Audit Subagents
 
-Spawn parallel subagents (Task tool, model: sonnet) for each audit dimension.
+Spawn parallel subagents (Task tool, model: sonnet) for each audit dimension listed in
+`DISPATCH_AGENTS`. If `DISPATCH_AGENTS` is non-empty, spawn ONLY the dimensions it lists.
+If `DISPATCH_AGENTS` is empty, spawn all 6 standard dimensions (1-6).
+
+Parse `DISPATCH_AGENTS` (comma-separated string) into a list. For each dimension name in
+the list, spawn the corresponding subagent using the prompt template below.
+
 Each subagent receives only the PR diff content (not the full codebase) and returns
 findings in JSON format:
 

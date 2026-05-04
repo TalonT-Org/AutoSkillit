@@ -1131,6 +1131,78 @@ class TestWriteConfigLayer:
         assert data["github"]["default_repo"] == "owner/repo"
 
 
+class TestProvidersConfig:
+    """ProvidersConfig dataclass and from_dynaconf wiring."""
+
+    def test_providers_config_exists_on_automation_config(self, tmp_path):
+        cfg = load_config(tmp_path / "settings.toml")
+        assert hasattr(cfg, "providers")
+
+    def test_default_provider_defaults_to_none(self, tmp_path):
+        cfg = load_config(tmp_path / "settings.toml")
+        assert cfg.providers.default_provider is None
+
+    def test_profiles_defaults_to_empty_dict(self, tmp_path):
+        cfg = load_config(tmp_path / "settings.toml")
+        assert cfg.providers.profiles == {}
+
+    def test_step_overrides_defaults_to_empty_dict(self, tmp_path):
+        cfg = load_config(tmp_path / "settings.toml")
+        assert cfg.providers.step_overrides == {}
+
+    def test_provider_retry_limit_defaults_to_two(self, tmp_path):
+        cfg = load_config(tmp_path / "settings.toml")
+        assert cfg.providers.provider_retry_limit == 2
+
+    def test_yaml_loads_providers_section(self, tmp_path):
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        config_data = {
+            "providers": {
+                "default_provider": "anthropic",
+                "profiles": {"fast": {"model": "haiku"}, "slow": {"model": "opus"}},
+                "step_overrides": {"impl": "fast"},
+                "provider_retry_limit": 5,
+            }
+        }
+        (config_dir / "config.yaml").write_text(yaml.dump(config_data))
+        cfg = load_config(tmp_path)
+        assert cfg.providers.default_provider == "anthropic"
+        assert cfg.providers.profiles == {"fast": {"model": "haiku"}, "slow": {"model": "opus"}}
+        assert cfg.providers.step_overrides == {"impl": "fast"}
+        assert cfg.providers.provider_retry_limit == 5
+
+    def test_partial_providers_config_preserves_defaults(self, tmp_path):
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        config_data = {"providers": {"default_provider": "bedrock"}}
+        (config_dir / "config.yaml").write_text(yaml.dump(config_data))
+        cfg = load_config(tmp_path)
+        assert cfg.providers.default_provider == "bedrock"
+        assert cfg.providers.profiles == {}
+        assert cfg.providers.step_overrides == {}
+        assert cfg.providers.provider_retry_limit == 2
+
+    def test_default_provider_none_coercion_from_empty_string(self, tmp_path):
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        config_data = {"providers": {"default_provider": ""}}
+        (config_dir / "config.yaml").write_text(yaml.dump(config_data))
+        cfg = load_config(tmp_path)
+        assert cfg.providers.default_provider is None
+
+    def test_profiles_inner_dicts_are_independent_copies(self, tmp_path):
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        config_data = {"providers": {"profiles": {"p1": {"model": "haiku"}}}}
+        (config_dir / "config.yaml").write_text(yaml.dump(config_data))
+        cfg = load_config(tmp_path)
+        inner = cfg.providers.profiles["p1"]
+        inner["injected"] = "mutated"
+        cfg2 = load_config(tmp_path)
+        assert "injected" not in cfg2.providers.profiles["p1"]
+
+
 class TestWorkspaceConfig:
     """WorkspaceConfig section is present in AutomationConfig with correct defaults."""
 

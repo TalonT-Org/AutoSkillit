@@ -176,7 +176,11 @@ RETIRED_SCRIPT_BASENAMES: frozenset[str] = frozenset(
 # Basenames of scripts added directly to a subdirectory without ever having a flat path.
 # Add the basename here when introducing a new subdir script that was never previously flat,
 # so test_moved_scripts_must_be_in_retired does not false-positive on it.
-NEW_SUBDIR_BASENAMES: frozenset[str] = frozenset()
+NEW_SUBDIR_BASENAMES: frozenset[str] = frozenset(
+    {
+        "skill_orchestration_guard.py",
+    }
+)
 
 
 def _canonical_registry_payload(

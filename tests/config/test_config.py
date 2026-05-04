@@ -8,7 +8,6 @@ import yaml
 from autoskillit.config import (
     AutomationConfig,
     ConfigSchemaError,
-    ProvidersConfig,
     RunSkillConfig,
     load_config,
 )
@@ -890,75 +889,3 @@ class TestWorkspaceConfig:
 
         cfg = load_config(tmp_path)
         assert cfg.workspace.runs_root is None
-
-
-class TestProvidersConfig:
-    def test_providers_config_importable_from_settings(self):
-        from autoskillit.config.settings import ProvidersConfig as PC
-
-        assert PC is ProvidersConfig
-
-    def test_providers_config_in_settings_all(self):
-        import autoskillit.config.settings as m
-
-        assert "ProvidersConfig" in m.__all__
-
-    def test_automation_config_has_providers_field(self):
-        field_names = [f.name for f in dc_fields(AutomationConfig)]
-        assert "providers" in field_names
-        cfg = AutomationConfig()
-        assert isinstance(cfg.providers, ProvidersConfig)
-
-    def test_providers_field_ordering(self):
-        field_names = [f.name for f in dc_fields(AutomationConfig)]
-        fleet_idx = field_names.index("fleet")
-        providers_idx = field_names.index("providers")
-        features_idx = field_names.index("features")
-        assert fleet_idx < providers_idx < features_idx
-
-    def test_providers_config_importable_from_package(self):
-        from autoskillit.config import ProvidersConfig as PC
-
-        assert PC is ProvidersConfig
-
-    def test_from_dynaconf_providers_defaults(self, tmp_path):
-        cfg = load_config(tmp_path)
-        assert cfg.providers.default_provider is None
-        assert cfg.providers.profiles == {}
-        assert cfg.providers.step_overrides == {}
-        assert cfg.providers.provider_retry_limit == 2
-
-    def test_providers_config_defaults(self):
-        cfg = ProvidersConfig()
-        assert cfg.default_provider is None
-        assert cfg.profiles == {}
-        assert cfg.step_overrides == {}
-        assert cfg.provider_retry_limit == 2
-
-    def test_providers_config_is_mutable(self):
-        cfg = ProvidersConfig()
-        cfg.default_provider = "openai"
-        assert cfg.default_provider == "openai"
-
-    def test_providers_config_field_types(self):
-        from dataclasses import fields as _dc_fields
-
-        field_map = {f.name: f for f in _dc_fields(ProvidersConfig)}
-        assert set(field_map.keys()) == {
-            "default_provider",
-            "profiles",
-            "step_overrides",
-            "provider_retry_limit",
-        }
-
-    def test_providers_config_retry_limit_zero_raises(self):
-        with pytest.raises(ValueError, match="provider_retry_limit must be >= 1"):
-            ProvidersConfig(provider_retry_limit=0)
-
-    def test_providers_config_retry_limit_negative_raises(self):
-        with pytest.raises(ValueError, match="provider_retry_limit must be >= 1"):
-            ProvidersConfig(provider_retry_limit=-1)
-
-    def test_providers_config_profiles_non_string_value_raises(self):
-        with pytest.raises(ValueError, match=r"profiles\[.+\]\[.+\] must be a string"):
-            ProvidersConfig(profiles={"my_profile": {"model": 42}})  # type: ignore[arg-type]

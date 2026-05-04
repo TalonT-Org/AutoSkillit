@@ -14,6 +14,9 @@ from pathlib import Path
 # The key written to installed_plugins.json by `autoskillit install`
 _AUTOSKILLIT_PLUGIN_KEY = "autoskillit@autoskillit-local"
 
+# Cache subdirectory name used by all plugin cache path constructions
+DIRECT_INSTALL_CACHE_SUBDIR = "autoskillit-local"
+
 # Single source of truth for both known prefix forms
 DIRECT_PREFIX = "mcp__autoskillit__"
 MARKETPLACE_PREFIX = "mcp__plugin_autoskillit_autoskillit__"

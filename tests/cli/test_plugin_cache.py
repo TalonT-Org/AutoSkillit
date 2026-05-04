@@ -511,3 +511,48 @@ def test_any_kitchen_open_no_project_path_returns_global(
     register_active_kitchen("test-kitchen-008", os.getpid(), "/project_A")
 
     assert any_kitchen_open() is True
+
+
+# ---------------------------------------------------------------------------
+# Category G — Plugin cache integrity validation
+# ---------------------------------------------------------------------------
+
+
+def test_stale_cache_after_reorg_detected(tmp_path: Path) -> None:
+    """validate_plugin_cache_hooks must detect flat-path commands after directory reorganization.
+
+    Reproduces issue #1740: hooks.json frozen with pre-reorg flat paths while scripts
+    have moved to subdirectories.
+    """
+    from autoskillit.hook_registry import validate_plugin_cache_hooks
+
+    fake_cache = tmp_path / "cache"
+    version_dir = fake_cache / "0.9.347"
+    version_dir.mkdir(parents=True)
+
+    stale_hooks_json = {
+        "hooks": {
+            "PreToolUse": [
+                {
+                    "matcher": ".*",
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": f"python3 {tmp_path}/pkg/hooks/quota_guard.py",
+                        },
+                        {
+                            "type": "command",
+                            "command": f"python3 {tmp_path}/pkg/hooks/pretty_output_hook.py",
+                        },
+                    ],
+                }
+            ]
+        }
+    }
+    (version_dir / "hooks.json").write_text(json.dumps(stale_hooks_json))
+
+    broken = validate_plugin_cache_hooks(cache_dir=fake_cache)
+
+    assert len(broken) == 2
+    assert any("quota_guard.py" in cmd for cmd in broken)
+    assert any("pretty_output_hook.py" in cmd for cmd in broken)

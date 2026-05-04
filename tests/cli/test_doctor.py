@@ -413,7 +413,7 @@ class TestGroupFDoctor:
     """P8-2, P3-2: CLI refactoring — doctor delegation tests from TestGroupFRefactoring."""
 
     def test_doctor_delegates_to_doctor_module(self, monkeypatch, capsys):
-        """doctor_cmd() must delegate to run_doctor(), not contain logic itself."""
+        """cli.doctor_cmd() must delegate to cli.doctor.run_doctor(), not contain the logic."""
         import autoskillit.cli.doctor as _doctor_mod
 
         called_with: dict = {}
@@ -1255,3 +1255,148 @@ def test_check_source_version_drift_warning_on_drift(
     assert result.severity == Severity.WARNING
     assert installed_sha[:8] in result.message
     assert ref_sha[:8] in result.message
+
+
+# T-CACHE-INTEGRITY-1: doctor detects plugin cache hooks.json with broken paths
+def test_doctor_plugin_cache_integrity(tmp_path: Path) -> None:
+    """_check_plugin_cache_integrity must return ERROR when cached hooks.json has broken paths."""
+    import json as _json
+
+    from autoskillit.cli.doctor._doctor_mcp import _check_plugin_cache_integrity
+    from autoskillit.core import Severity
+
+    fake_cache = tmp_path / "cache"
+    version_dir = fake_cache / "0.9.347"
+    version_dir.mkdir(parents=True)
+    stale_hooks = {
+        "hooks": {
+            "PreToolUse": [
+                {
+                    "matcher": ".*",
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": f"python3 {tmp_path}/hooks/quota_guard.py",
+                        }
+                    ],
+                }
+            ]
+        }
+    }
+    (version_dir / "hooks.json").write_text(_json.dumps(stale_hooks))
+
+    result = _check_plugin_cache_integrity(cache_dir=fake_cache)
+
+    assert result.severity == Severity.ERROR, (
+        "_check_plugin_cache_integrity must return ERROR when cached hooks.json has broken paths"
+    )
+    assert "quota_guard.py" in result.message
+
+
+# T-CACHE-INTEGRITY-2: doctor returns OK when cached hooks.json paths all exist
+def test_doctor_plugin_cache_integrity_ok_when_valid(tmp_path: Path) -> None:
+    """_check_plugin_cache_integrity must return OK when all cached hook paths are valid."""
+    import json as _json
+
+    from autoskillit.cli.doctor._doctor_mcp import _check_plugin_cache_integrity
+    from autoskillit.core import Severity
+
+    fake_cache = tmp_path / "cache"
+    version_dir = fake_cache / "0.9.347"
+    version_dir.mkdir(parents=True)
+    valid_script = tmp_path / "hooks" / "guards" / "quota_guard.py"
+    valid_script.parent.mkdir(parents=True)
+    valid_script.write_text("# valid")
+    valid_hooks = {
+        "hooks": {
+            "PreToolUse": [
+                {
+                    "matcher": ".*",
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": f"python3 {valid_script}",
+                        }
+                    ],
+                }
+            ]
+        }
+    }
+    (version_dir / "hooks.json").write_text(_json.dumps(valid_hooks))
+
+    result = _check_plugin_cache_integrity(cache_dir=fake_cache)
+
+    assert result.severity == Severity.OK
+
+
+# T-CACHE-VERSION-1: _check_cache_version_mismatch returns ERROR when kitchen open + mismatch
+def test_doctor_cache_version_mismatch_with_kitchen_open(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_check_cache_version_mismatch must return ERROR when kitchen is open and versions differ."""
+    from autoskillit.cli.doctor._doctor_mcp import _check_cache_version_mismatch
+    from autoskillit.core import Severity
+
+    monkeypatch.setattr("autoskillit.core.any_kitchen_open", lambda **kw: True)
+    monkeypatch.setattr(
+        "autoskillit.version.version_info",
+        lambda **kw: {
+            "match": False,
+            "plugin_json_version": "0.9.347",
+            "package_version": "0.9.351",
+        },
+    )
+
+    result = _check_cache_version_mismatch()
+
+    assert result.severity == Severity.ERROR, (
+        "_check_cache_version_mismatch must return ERROR when kitchen open and version mismatch"
+    )
+    assert "0.9.347" in result.message
+    assert "0.9.351" in result.message
+
+
+# T-CACHE-VERSION-2: _check_cache_version_mismatch returns WARNING when kitchen closed + mismatch
+def test_doctor_cache_version_mismatch_without_kitchen(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_check_cache_version_mismatch must return WARNING (not ERROR) when kitchen is closed."""
+    from autoskillit.cli.doctor._doctor_mcp import _check_cache_version_mismatch
+    from autoskillit.core import Severity
+
+    monkeypatch.setattr("autoskillit.core.any_kitchen_open", lambda **kw: False)
+    monkeypatch.setattr(
+        "autoskillit.version.version_info",
+        lambda **kw: {
+            "match": False,
+            "plugin_json_version": "0.9.347",
+            "package_version": "0.9.351",
+        },
+    )
+
+    result = _check_cache_version_mismatch()
+
+    assert result.severity == Severity.WARNING
+
+
+# T-CACHE-VERSION-3: _check_cache_version_mismatch returns OK when versions match
+def test_doctor_cache_version_mismatch_ok_when_matching(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_check_cache_version_mismatch must return OK when versions match."""
+    from autoskillit.cli.doctor._doctor_mcp import _check_cache_version_mismatch
+    from autoskillit.core import Severity
+
+    monkeypatch.setattr("autoskillit.core.any_kitchen_open", lambda **kw: False)
+    monkeypatch.setattr(
+        "autoskillit.version.version_info",
+        lambda **kw: {
+            "match": True,
+            "plugin_json_version": "0.9.351",
+            "package_version": "0.9.351",
+        },
+    )
+
+    result = _check_cache_version_mismatch()
+
+    assert result.severity == Severity.OK

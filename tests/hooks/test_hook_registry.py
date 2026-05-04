@@ -258,3 +258,39 @@ def test_deny_path_pretooluse_hooks_export_deny_trigger() -> None:
         f"These PreToolUse hooks have no *_DENY_TRIGGER constant: {missing}. "
         "Add a DENY_TRIGGER constant or add the hook to _ADVISORY_HOOKS if it is non-blocking."
     )
+
+
+# HR-RETIRED-1: scripts moved to subdirectories must have flat basenames in RETIRED
+def test_moved_scripts_must_be_in_retired() -> None:
+    """Any script moved from flat hooks/ to a subdirectory must have its flat basename in RETIRED.
+
+    Auto-enforces the CLAUDE.md rule: renaming a hook script must update RETIRED_SCRIPT_BASENAMES
+    in the same commit.  Future directory reorganizations will fail this test automatically.
+    """
+    from autoskillit.hook_registry import (
+        HOOK_REGISTRY,
+        NEW_SUBDIR_BASENAMES,
+        RETIRED_SCRIPT_BASENAMES,
+    )
+
+    flat_scripts = {s for h in HOOK_REGISTRY for s in h.scripts if "/" not in s}
+    subdir_scripts = {s for h in HOOK_REGISTRY for s in h.scripts if "/" in s}
+
+    missing: list[str] = []
+    for subdir_script in subdir_scripts:
+        bare = subdir_script.rsplit("/", 1)[-1]
+        if (
+            bare not in flat_scripts
+            and bare not in RETIRED_SCRIPT_BASENAMES
+            and bare not in NEW_SUBDIR_BASENAMES
+        ):
+            missing.append(
+                f"{subdir_script!r} → {bare!r} not in RETIRED_SCRIPT_BASENAMES"
+                " or NEW_SUBDIR_BASENAMES"
+            )
+
+    assert not missing, (
+        "Subdir scripts must have their basename in RETIRED_SCRIPT_BASENAMES (moved)\n"
+        "or in NEW_SUBDIR_BASENAMES (newly added to a subdir):\n"
+        + "\n".join(f"  {m}" for m in missing)
+    )

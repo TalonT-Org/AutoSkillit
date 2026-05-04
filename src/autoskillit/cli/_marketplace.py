@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.metadata
 import json
 import os
 import re
@@ -16,11 +17,25 @@ from autoskillit.cli._hooks import (
     sync_hooks_to_settings,
 )
 from autoskillit.cli._init_helpers import _user_claude_json_path, evict_direct_mcp_entry
-from autoskillit.core import atomic_write, is_git_worktree, pkg_root
+from autoskillit.core import (
+    DIRECT_INSTALL_CACHE_SUBDIR,
+    atomic_write,
+    get_logger,
+    is_git_worktree,
+    pkg_root,
+)
 from autoskillit.hooks import generate_hooks_json
+
+logger = get_logger(__name__)
 
 _VALID_SCOPES = {"user", "project", "local"}
 _MARKETPLACE_NAME = "autoskillit-local"
+
+
+def _plugin_cache_dir() -> Path:
+    return (
+        Path.home() / ".claude" / "plugins" / "cache" / DIRECT_INSTALL_CACHE_SUBDIR / "autoskillit"
+    )
 
 
 def _clear_plugin_cache() -> None:
@@ -32,12 +47,12 @@ def _clear_plugin_cache() -> None:
     the cache beforehand ensures a single ``autoskillit install`` is always
     sufficient.
     """
-    cache_dir = Path.home() / ".claude" / "plugins" / "cache" / _MARKETPLACE_NAME / "autoskillit"
-    if cache_dir.is_dir():
+    _d = _plugin_cache_dir()
+    if _d.is_dir():
         from autoskillit import __version__ as _new_version
         from autoskillit.core import _retire_old_versions
 
-        _retire_old_versions(cache_dir, _new_version)
+        _retire_old_versions(_d, _new_version)
     else:
         from autoskillit.core import sweep_retiring_cache
 
@@ -162,13 +177,35 @@ def install(*, scope: str = "user") -> bool:
 
     _ensure_workspace_ready()
 
+    _cache = _plugin_cache_dir()
+
     from autoskillit.core import _InstallLock
 
     with _InstallLock():
         from autoskillit.core import any_kitchen_open
 
         if any_kitchen_open(project_path=str(Path.cwd())):
-            print("Kitchen open for this project — skipping plugin cache clear.")
+            from autoskillit.version import version_info
+
+            try:
+                vi = version_info(plugin_dir=str(_cache))
+            except (OSError, json.JSONDecodeError, importlib.metadata.PackageNotFoundError):
+                logger.warning("version_info_failed", plugin_dir=str(_cache), exc_info=True)
+                vi = {
+                    "match": False,
+                    "plugin_json_version": "unknown",
+                    "package_version": "unknown",
+                }
+            if not vi["match"]:
+                print(
+                    f"WARNING: Kitchen open — skipping plugin cache clear. "
+                    f"Cached version {vi['plugin_json_version']!r} ≠ "
+                    f"installed {vi['package_version']!r}. "
+                    f"Tool calls may fail with ENOENT until kitchens are closed "
+                    f"and `autoskillit install` is re-run."
+                )
+            else:
+                print("Kitchen open for this project — skipping plugin cache clear.")
         else:
             _clear_plugin_cache()
 
@@ -202,6 +239,15 @@ def install(*, scope: str = "user") -> bool:
             sys.exit(1)
 
     print(f"Plugin installed: {plugin_ref} (scope: {scope})")
+    from autoskillit.hook_registry import validate_plugin_cache_hooks
+
+    post_install_broken = validate_plugin_cache_hooks(cache_dir=_cache)
+    if post_install_broken:
+        logger.warning(
+            "broken_hook_paths_after_install",
+            count=len(post_install_broken),
+            paths=list(post_install_broken),
+        )
     if evict_direct_mcp_entry(_user_claude_json_path()):
         print("Removed stale direct MCP entry from ~/.claude.json")
     # Cross-scope sweep: evict orphaned autoskillit hooks from ALL scopes before

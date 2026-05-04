@@ -8,8 +8,8 @@ disable_quota_guard, and reload_session).
 Startup tag visibility is determined by AUTOSKILLIT_SESSION_TYPE (3-branch dispatch):
   FLEET — fleet-tagged tools pre-revealed
   ORCHESTRATOR + HEADLESS=1 — all kitchen-tagged tools pre-revealed
-  LEAF + HEADLESS=1 — headless-tagged tools (test_check) pre-revealed
-  ORCHESTRATOR/LEAF (interactive) — no pre-reveal; open_kitchen unlocks
+  SKILL + HEADLESS=1 — headless-tagged tools (test_check) pre-revealed
+  ORCHESTRATOR/SKILL (interactive) — no pre-reveal; open_kitchen unlocks
 
 Calling the open_kitchen tool reveals all kitchen-tagged tools for that session
 via ctx.enable_components(tags={'kitchen'}).

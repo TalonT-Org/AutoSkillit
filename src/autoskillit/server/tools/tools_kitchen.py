@@ -389,7 +389,7 @@ async def open_kitchen(
             tool_ctx.recipe_name = name
             tool_ctx.recipe_content_hash = result.get("content_hash", "")
             tool_ctx.recipe_composite_hash = result.get("composite_hash", "")
-            tool_ctx.recipe_version = result.get("recipe_version", "")  # type: ignore[assignment]
+            tool_ctx.recipe_version = result.get("recipe_version") or ""
 
             composite = result.get("composite_hash", "")
             from autoskillit.server._state import _check_rerun  # noqa: PLC0415
@@ -405,7 +405,7 @@ async def open_kitchen(
                 return _kitchen_failure_envelope(exc, stage="recipe_find")
 
             try:
-                result = await _apply_triage_gate(result, name, recipe_info=recipe_info)  # type: ignore[assignment, arg-type]
+                result = await _apply_triage_gate(result, name, recipe_info=recipe_info)
             except Exception as exc:
                 logger.warning("open_kitchen_failure", stage="apply_triage_gate", exc_info=True)
                 return _kitchen_failure_envelope(exc, stage="apply_triage_gate")

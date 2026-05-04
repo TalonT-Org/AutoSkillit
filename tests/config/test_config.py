@@ -927,3 +927,15 @@ class TestProvidersConfig:
         assert cfg.providers.profiles == {}
         assert cfg.providers.step_overrides == {}
         assert cfg.providers.provider_retry_limit == 2
+
+    def test_providers_config_retry_limit_zero_raises(self):
+        with pytest.raises(ValueError, match="provider_retry_limit must be >= 1"):
+            ProvidersConfig(provider_retry_limit=0)
+
+    def test_providers_config_retry_limit_negative_raises(self):
+        with pytest.raises(ValueError, match="provider_retry_limit must be >= 1"):
+            ProvidersConfig(provider_retry_limit=-1)
+
+    def test_providers_config_profiles_non_string_value_raises(self):
+        with pytest.raises(ValueError, match=r"profiles\[.+\]\[.+\] must be a string"):
+            ProvidersConfig(profiles={"my_profile": {"model": 42}})  # type: ignore[arg-type]

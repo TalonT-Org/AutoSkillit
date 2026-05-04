@@ -168,7 +168,22 @@ def install(*, scope: str = "user") -> bool:
         from autoskillit.core import any_kitchen_open
 
         if any_kitchen_open(project_path=str(Path.cwd())):
-            print("Kitchen open for this project — skipping plugin cache clear.")
+            from autoskillit.version import version_info
+
+            _cache_plugin_dir = (
+                Path.home() / ".claude" / "plugins" / "cache" / _MARKETPLACE_NAME / "autoskillit"
+            )
+            vi = version_info(plugin_dir=str(_cache_plugin_dir))
+            if not vi["match"]:
+                print(
+                    f"WARNING: Kitchen open — skipping plugin cache clear. "
+                    f"Cached version {vi['plugin_json_version']!r} ≠ "
+                    f"installed {vi['package_version']!r}. "
+                    f"Tool calls may fail with ENOENT until kitchens are closed "
+                    f"and `autoskillit install` is re-run."
+                )
+            else:
+                print("Kitchen open for this project — skipping plugin cache clear.")
         else:
             _clear_plugin_cache()
 
@@ -202,6 +217,14 @@ def install(*, scope: str = "user") -> bool:
             sys.exit(1)
 
     print(f"Plugin installed: {plugin_ref} (scope: {scope})")
+    from autoskillit.hook_registry import validate_plugin_cache_hooks
+
+    post_install_broken = validate_plugin_cache_hooks()
+    if post_install_broken:
+        print(f"WARNING: Plugin cache contains {len(post_install_broken)} broken hook path(s):")
+        for _cmd in post_install_broken:
+            print(f"  {_cmd}")
+        print("This may cause tool call denials. Re-run `autoskillit install`.")
     if evict_direct_mcp_entry(_user_claude_json_path()):
         print("Removed stale direct MCP entry from ~/.claude.json")
     # Cross-scope sweep: evict orphaned autoskillit hooks from ALL scopes before

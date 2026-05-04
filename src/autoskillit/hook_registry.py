@@ -144,6 +144,27 @@ RETIRED_SCRIPT_BASENAMES: frozenset[str] = frozenset(
         "session_start_reminder.py",
         "headless_orchestration_guard.py",
         "franchise_dispatch_guard.py",
+        # Moved from hooks/ to hooks/guards/ in commit 26c80595
+        "ask_user_question_guard.py",
+        "branch_protection_guard.py",
+        "fleet_dispatch_guard.py",
+        "generated_file_write_guard.py",
+        "grep_pattern_lint_guard.py",
+        "leaf_orchestration_guard.py",
+        "mcp_health_guard.py",
+        "open_kitchen_guard.py",
+        "planner_gh_discovery_guard.py",
+        "pr_create_guard.py",
+        "quota_guard.py",
+        "recipe_write_advisor.py",
+        "remove_clone_guard.py",
+        "review_loop_gate.py",
+        "skill_cmd_guard.py",
+        "skill_command_guard.py",
+        "unsafe_install_guard.py",
+        "write_guard.py",
+        # Moved from hooks/ to hooks/formatters/ in commit 26c80595
+        "pretty_output_hook.py",
         # Append any future retired basenames here, atomically with the rename commit.
     }
 )
@@ -350,4 +371,21 @@ def find_broken_hook_scripts(settings_path: Path) -> list[str]:
                 if len(parts) >= 2:
                     if not Path(parts[-1]).is_file():
                         broken.append(cmd)
+    return broken
+
+
+def validate_plugin_cache_hooks(cache_dir: Path | None = None) -> list[str]:
+    """Return list of broken hook commands from the plugin cache hooks.json.
+
+    Reads each hooks.json found under cache_dir/*/hooks.json and checks that
+    every autoskillit hook script path exists on disk.
+    """
+    _cache = cache_dir or (
+        Path.home() / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
+    )
+    broken: list[str] = []
+    if not _cache.is_dir():
+        return broken
+    for hooks_json_path in _cache.glob("*/hooks.json"):
+        broken.extend(find_broken_hook_scripts(hooks_json_path))
     return broken

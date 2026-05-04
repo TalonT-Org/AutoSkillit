@@ -194,3 +194,57 @@ def _check_installed_plugins_entry(plugins_json_path: Path | None = None) -> Doc
         "installed_plugins_entry",
         "autoskillit entry missing from installed_plugins.json. Run `autoskillit install` to fix.",
     )
+
+
+def _check_plugin_cache_integrity(cache_dir: Path | None = None) -> DoctorResult:
+    """Validate that plugin cache hooks.json paths resolve to real files."""
+    from autoskillit.hook_registry import validate_plugin_cache_hooks
+
+    broken = validate_plugin_cache_hooks(cache_dir=cache_dir)
+    if broken:
+        broken_str = ", ".join(broken)
+        return DoctorResult(
+            Severity.ERROR,
+            "plugin_cache_integrity",
+            f"Plugin cache hooks.json has {len(broken)} broken path(s): {broken_str}. "
+            f"Run `autoskillit install` to rebuild the cache.",
+        )
+    return DoctorResult(
+        Severity.OK,
+        "plugin_cache_integrity",
+        "Plugin cache hook paths are valid",
+    )
+
+
+def _check_cache_version_mismatch(cache_dir: Path | None = None) -> DoctorResult:
+    """Check plugin cache version against installed package. ERROR when kitchen-open AND mismatched."""
+    from autoskillit.core import any_kitchen_open
+    from autoskillit.version import version_info
+
+    _cache_plugin_dir = cache_dir or (
+        Path.home() / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
+    )
+    vi = version_info(plugin_dir=str(_cache_plugin_dir))
+    if vi["match"]:
+        return DoctorResult(
+            Severity.OK,
+            "version_consistency",
+            f"Version {vi['package_version']} — plugin cache is current",
+        )
+    mismatch_msg = (
+        f"Plugin cache version {vi['plugin_json_version']!r} does not match "
+        f"installed package {vi['package_version']!r}. "
+        f"Run 'autoskillit install' to sync."
+    )
+    if any_kitchen_open():
+        return DoctorResult(
+            Severity.ERROR,
+            "version_consistency",
+            mismatch_msg + " Kitchen is open — tool calls may fail with ENOENT until kitchens are "
+            "closed and `autoskillit install` is re-run.",
+        )
+    return DoctorResult(
+        Severity.WARNING,
+        "version_consistency",
+        mismatch_msg,
+    )

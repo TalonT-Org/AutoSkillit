@@ -80,27 +80,33 @@ def _build_hook_diagnostic_warning() -> str | None:
         _claude_settings_path,
         _count_hook_registry_drift,
         find_broken_hook_scripts,
+        validate_plugin_cache_hooks,
     )
 
-    settings_path = _claude_settings_path("user")
-    if not settings_path.exists():
-        return None
-
-    broken = find_broken_hook_scripts(settings_path)
-    drift = _count_hook_registry_drift(settings_path)
-
     issues: list[str] = []
-    if broken:
-        issues.append(f"Hook scripts not found: {', '.join(broken)}")
-    if drift.orphaned > 0:
+
+    settings_path = _claude_settings_path("user")
+    if settings_path.exists():
+        broken = find_broken_hook_scripts(settings_path)
+        drift = _count_hook_registry_drift(settings_path)
+        if broken:
+            issues.append(f"Hook scripts not found: {', '.join(broken)}")
+        if drift.orphaned > 0:
+            issues.append(
+                f"{drift.orphaned} orphaned hook entry(ies) in settings.json are not in "
+                f"HOOK_REGISTRY — every matching tool call will be denied with ENOENT."
+            )
+        if drift.missing > 0:
+            issues.append(
+                f"{drift.missing} hook(s) from HOOK_REGISTRY are not deployed in settings.json."
+            )
+
+    cache_broken = validate_plugin_cache_hooks()
+    if cache_broken:
         issues.append(
-            f"{drift.orphaned} orphaned hook entry(ies) in settings.json are not in "
-            f"HOOK_REGISTRY — every matching tool call will be denied with ENOENT."
+            f"Plugin cache has {len(cache_broken)} stale hook path(s): {', '.join(cache_broken)}"
         )
-    if drift.missing > 0:
-        issues.append(
-            f"{drift.missing} hook(s) from HOOK_REGISTRY are not deployed in settings.json."
-        )
+
     if not issues:
         return None
 

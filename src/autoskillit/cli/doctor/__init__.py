@@ -7,7 +7,7 @@ from pathlib import Path
 
 from autoskillit.cli._hooks import _claude_settings_path
 from autoskillit.config import load_config
-from autoskillit.core import Severity, get_logger, is_feature_enabled
+from autoskillit.core import get_logger, is_feature_enabled
 
 from ._doctor_config import (
     _check_config_layers_for_secrets,
@@ -47,10 +47,12 @@ from ._doctor_install import (
     _check_update_dismissal_state,
 )
 from ._doctor_mcp import (
+    _check_cache_version_mismatch,
     _check_dual_mcp_registration,
     _check_installed_plugins_entry,
     _check_mcp_server_registered,
     _check_plugin_cache_exists,
+    _check_plugin_cache_integrity,
     _check_stale_mcp_servers,
 )
 from ._doctor_runtime import (
@@ -84,6 +86,9 @@ def run_doctor(*, output_json: bool = False) -> None:
     # Check 2d: installed_plugins.json has autoskillit entry
     results.append(_check_installed_plugins_entry())
 
+    # Check 2e: Plugin cache hooks.json paths resolve to real files
+    results.append(_check_plugin_cache_integrity())
+
     # Check 3: autoskillit command on PATH
     results.append(_check_autoskillit_on_path())
 
@@ -94,30 +99,7 @@ def run_doctor(*, output_json: bool = False) -> None:
     results.append(_check_config_layers_for_secrets())
 
     # Check 5: Version consistency — cached plugin.json must match installed package
-    from autoskillit.version import version_info as _version_info
-
-    _cache_plugin_dir = (
-        Path.home() / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
-    )
-    vi = _version_info(plugin_dir=str(_cache_plugin_dir))
-    if vi["match"]:
-        results.append(
-            DoctorResult(
-                Severity.OK,
-                "version_consistency",
-                f"Version {vi['package_version']} — plugin cache is current",
-            )
-        )
-    else:
-        results.append(
-            DoctorResult(
-                Severity.WARNING,
-                "version_consistency",
-                f"Plugin cache version {vi['plugin_json_version']!r} does not match "
-                f"installed package {vi['package_version']!r}. "
-                f"Run 'autoskillit install' to sync.",
-            )
-        )
+    results.append(_check_cache_version_mismatch())
 
     # Check 6: Hook executability — validates deployed scripts for all event types (all scopes)
     results.extend(_check_hook_health_all_scopes(Path.cwd()))

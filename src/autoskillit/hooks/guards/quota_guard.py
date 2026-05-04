@@ -111,6 +111,19 @@ def main(*, cache_path_override: str | None = None) -> None:
     log_dir = _resolve_quota_log_dir()
     ts = datetime.now(UTC).isoformat()
 
+    profile = os.environ.get("AUTOSKILLIT_PROVIDER_PROFILE", "").strip()
+    if profile and profile.casefold() != "anthropic":
+        _write_quota_log_event(
+            {
+                "ts": ts,
+                "event": "provider_bypass",
+                "profile": profile,
+                "cache_path": cache_path_str,
+            },
+            log_dir,
+        )
+        sys.exit(0)
+
     cache = _read_quota_cache(cache_path_str, cache_max_age)
     if cache is None:
         _write_quota_log_event(

@@ -413,7 +413,7 @@ class TestGroupFDoctor:
     """P8-2, P3-2: CLI refactoring — doctor delegation tests from TestGroupFRefactoring."""
 
     def test_doctor_delegates_to_doctor_module(self, monkeypatch, capsys):
-        """cli.doctor_cmd() must delegate to cli.doctor.run_doctor(), not contain the logic itself."""
+        """doctor_cmd() must delegate to run_doctor(), not contain logic itself."""
         import autoskillit.cli.doctor as _doctor_mod
 
         called_with: dict = {}

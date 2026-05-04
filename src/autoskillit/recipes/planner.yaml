@@ -184,7 +184,7 @@ steps:
     with:
       skill_command: "/autoskillit:planner-elaborate-assignments {context_path} ${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"
-      output_dir: "${{ context.planner_dir }}"
+      output_dir: "${{ context.planner_dir }}/assignments"
       dispatch_items: "${{ context.assignment_context_paths }}"
     capture_list:
       phase_assignments_result_dir: "${{ result.phase_assignments_result_dir }}"
@@ -215,7 +215,7 @@ steps:
     with:
       skill_command: "/autoskillit:planner-refine-assignments {context_path} ${{ context.refined_plan_path }} ${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"
-      output_dir: "${{ context.planner_dir }}"
+      output_dir: "${{ context.planner_dir }}/refine_contexts"
       dispatch_items: "${{ context.refine_context_paths }}"
     capture_list:
       phase_refined_path: "${{ result.phase_refined_path }}"
@@ -256,7 +256,7 @@ steps:
     with:
       skill_command: "/autoskillit:planner-elaborate-wps {context_path} ${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"
-      output_dir: "${{ context.planner_dir }}"
+      output_dir: "${{ context.planner_dir }}/work_packages"
       dispatch_items: "${{ context.wp_context_paths }}"
     capture_list:
       phase_wps_result_dir: "${{ result.phase_wps_result_dir }}"

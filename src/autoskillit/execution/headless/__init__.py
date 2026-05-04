@@ -159,6 +159,13 @@ def _resolve_skill_temp_dir(cwd: str, skill_command: str) -> Path | None:
     return Path(cwd) / ".autoskillit" / "temp" / name
 
 
+def _recursive_snapshot(directory: Path) -> set[str]:
+    """Recursively enumerate all files under directory as relative paths."""
+    return {
+        str(Path(dp).relative_to(directory) / f) for dp, _, fns in os.walk(directory) for f in fns
+    }
+
+
 @dataclasses.dataclass(frozen=True)
 class PostSessionMetrics:
     loc_insertions: int
@@ -264,7 +271,7 @@ async def _execute_claude_headless(
     for _wd in _watch_dirs:
         if _wd.is_dir():
             try:
-                _temp_snapshots_pre[_wd] = {e.name for e in os.scandir(_wd)}
+                _temp_snapshots_pre[_wd] = _recursive_snapshot(_wd)
             except OSError:
                 logger.warning("watch_dir_pre_scan_failed", watch_dir=str(_wd), exc_info=True)
                 _temp_snapshots_pre[_wd] = set()
@@ -378,7 +385,7 @@ async def _execute_claude_headless(
     for _wd in _watch_dirs:
         if _wd.is_dir():
             try:
-                _post = {e.name for e in os.scandir(_wd)}
+                _post = _recursive_snapshot(_wd)
             except OSError:
                 logger.warning("watch_dir_post_scan_failed", watch_dir=str(_wd), exc_info=True)
                 _post = set()

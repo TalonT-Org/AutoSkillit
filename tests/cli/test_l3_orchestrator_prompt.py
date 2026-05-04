@@ -218,6 +218,28 @@ class TestResumeStateInjection:
         assert "DO NOT RE-DISPATCH" in prompt
 
 
+class TestResumableSessionIdInjection:
+    def test_resumable_section_includes_resume_session_id_instruction(self) -> None:
+        prompt = _build(
+            resumable_dispatch_name="impl-1",
+            resumable_session_id="sess-abc-456",
+        )
+        assert "RESUMABLE DISPATCH: impl-1" in prompt
+        assert 'resume_session_id="sess-abc-456"' in prompt
+
+    def test_resumable_section_without_session_id_omits_instruction(self) -> None:
+        prompt = _build(
+            resumable_dispatch_name="impl-1",
+            resumable_session_id="",
+        )
+        assert "RESUMABLE DISPATCH: impl-1" in prompt
+        assert "resume_session_id" not in prompt
+
+    def test_no_resumable_section_when_dispatch_name_empty(self) -> None:
+        prompt = _build(resumable_dispatch_name="", resumable_session_id="sess-abc")
+        assert "RESUMABLE DISPATCH" not in prompt
+
+
 # --- K-9: TestInterruptCleanupSection ---
 
 

@@ -925,3 +925,50 @@ async def test_third_concurrent_dispatch_refused_with_max2(
     assert results[2] is not None
     assert results[2]["error"] == "fleet_parallel_refused"
     assert results[2]["success"] is False
+
+
+# ---------------------------------------------------------------------------
+# Test: resume_session_id threads through to the subprocess cmd
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_end_to_end_resumable_dispatch_uses_resume_flag(
+    fleet_runtime: FleetRuntime, monkeypatch: Any
+) -> None:
+    """resume_session_id reaches build_food_truck_cmd and produces --resume <id> in the cmd."""
+    import autoskillit.execution.headless as _headless_mod
+    from autoskillit.fleet._api import execute_dispatch
+
+    rt = fleet_runtime
+    rt.add_recipe("recipe-a")
+
+    captured_cmds: list[list[str]] = []
+    original_build = _headless_mod.build_food_truck_cmd
+
+    def _spy_build(**kwargs):
+        spec = original_build(**kwargs)
+        captured_cmds.append(list(spec.cmd))
+        return spec
+
+    monkeypatch.setattr(_headless_mod, "build_food_truck_cmd", _spy_build)
+    rt.configure_shim("success")
+
+    await execute_dispatch(
+        tool_ctx=rt.tool_ctx,
+        recipe="recipe-a",
+        task="test-task",
+        ingredients=None,
+        dispatch_name=None,
+        timeout_sec=None,
+        prompt_builder=_simple_prompt_builder,
+        quota_checker=_no_sleep_quota_checker,
+        quota_refresher=_noop_quota_refresher,
+        resume_session_id="test-session-id",
+    )
+
+    assert captured_cmds, "build_food_truck_cmd was never called"
+    cmd = captured_cmds[0]
+    assert "--resume" in cmd
+    idx = cmd.index("--resume")
+    assert cmd[idx + 1] == "test-session-id"

@@ -490,6 +490,27 @@ class TestResumableSelectedBeforePending:
         assert decision.next_dispatch_name == "impl-1"
         assert decision.is_resumable is True
 
+    def test_resume_decision_carries_l2_session_id(self, tmp_path: Path) -> None:
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "c1", "myCampaign", "manifest.yaml", _make_dispatches("impl-1"))
+        mark_dispatch_running(sp, "impl-1", dispatch_id="d2222", l2_pid=888)
+        append_dispatch_record(
+            sp,
+            DispatchRecord(
+                name="impl-1",
+                status=DispatchStatus.RESUMABLE,
+                dispatch_id="d2222",
+                l2_session_id="sess-xyz-test",
+                sidecar_path=str(sp.parent / "d2222_issues.jsonl"),
+            ),
+        )
+
+        decision = resume_campaign_from_state(sp, continue_on_failure=False)
+
+        assert decision is not None
+        assert decision.is_resumable is True
+        assert decision.l2_session_id == "sess-xyz-test"
+
 
 class TestResumableStateTransitionsValid:
     def test_resumable_valid_transitions(self, tmp_path: Path) -> None:

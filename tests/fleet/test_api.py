@@ -88,3 +88,38 @@ class TestExecuteDispatchCancelledErrorLockRelease:
 
         assert active_count_at_cancel == [1], "lock must be held when _run_dispatch is called"
         assert fleet_lock.active_count == 0
+
+    @pytest.mark.anyio
+    async def test_execute_dispatch_passes_resume_session_id_to_run_dispatch(
+        self, tool_ctx, monkeypatch
+    ) -> None:
+        from tests.fleet._helpers import _setup_dispatch
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+
+        captured_kwargs: list[dict] = []
+
+        async def _capture(**kwargs):
+            captured_kwargs.append(kwargs)
+            raise asyncio.CancelledError
+
+        monkeypatch.setattr("autoskillit.fleet._api._run_dispatch", _capture)
+
+        with pytest.raises(asyncio.CancelledError):
+            from autoskillit.fleet import execute_dispatch
+
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="do something",
+                ingredients=None,
+                dispatch_name="test-dispatch",
+                timeout_sec=None,
+                prompt_builder=lambda *a, **kw: "prompt",
+                quota_checker=lambda *a, **kw: None,
+                quota_refresher=lambda *a, **kw: None,
+                resume_session_id="abc-123",
+            )
+
+        assert captured_kwargs, "_run_dispatch was never called"
+        assert captured_kwargs[0].get("resume_session_id") == "abc-123"

@@ -143,6 +143,7 @@ async def execute_dispatch(
     quota_refresher: Callable[..., Any],
     cache_invalidator: Callable[[str], None] | None = None,
     capture: dict[str, str] | None = None,
+    resume_session_id: str | None = None,
 ) -> str:
     """Execute a single food truck dispatch.
 
@@ -183,6 +184,7 @@ async def execute_dispatch(
             quota_refresher=quota_refresher,
             cache_invalidator=cache_invalidator,
             capture=capture,
+            resume_session_id=resume_session_id,
         )
     except asyncio.CancelledError:
         raise
@@ -237,6 +239,7 @@ async def _run_dispatch(
     quota_refresher: Callable[..., Any],
     cache_invalidator: Callable[[str], None] | None = None,
     capture: dict[str, str] | None = None,
+    resume_session_id: str | None = None,
 ) -> str:
     """Inner dispatch body — called after lock acquisition."""
     from autoskillit.fleet.state import (
@@ -364,6 +367,7 @@ async def _run_dispatch(
         orchestrator_prompt=prompt,
         cwd=str(tool_ctx.project_dir),
         completion_marker=completion_marker,
+        resume_session_id=resume_session_id,
         kitchen_id=tool_ctx.kitchen_id,
         order_id=dispatch_id,
         campaign_id=campaign_id,

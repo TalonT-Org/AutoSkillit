@@ -85,6 +85,7 @@ class ResumeDecision:
     next_dispatch_name: str
     completed_dispatches_block: str
     is_resumable: bool = False
+    l2_session_id: str = ""
 
 
 _ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
@@ -608,12 +609,14 @@ def resume_campaign_from_state(
             completed_lines: list[str] = []
             next_name = ""
             is_resumable = False
+            resumable_l2_session_id = ""
             for d in state.dispatches:
                 if d.status in _VISIBLE_IN_BLOCK_STATUSES:
                     completed_lines.append(f"- {d.name}: {d.status}")
                 elif d.status == DispatchStatus.RESUMABLE and not next_name:
                     next_name = d.name
                     is_resumable = True
+                    resumable_l2_session_id = d.l2_session_id
                 elif (
                     d.status
                     not in {
@@ -634,4 +637,5 @@ def resume_campaign_from_state(
                 next_dispatch_name=next_name,
                 completed_dispatches_block=completed_block,
                 is_resumable=is_resumable,
+                l2_session_id=resumable_l2_session_id,
             )

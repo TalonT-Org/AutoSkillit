@@ -723,6 +723,63 @@ class TestDispatchFoodTruckExecution:
 
 
 @pytest.mark.anyio
+async def test_dispatch_food_truck_tool_passes_resume_session_id_to_executor(
+    tool_ctx, monkeypatch
+):
+    """dispatch_food_truck MCP tool forwards resume_session_id all the way to the executor."""
+    from autoskillit.server.tools.tools_execution import dispatch_food_truck
+
+    tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+    repo = InMemoryRecipeRepository()
+    recipe_info = _make_recipe_info("test-recipe")
+    repo.add_recipe("test-recipe", recipe_info)
+    repo.add_full_recipe(recipe_info.path, _make_standard_recipe("test-recipe"))
+    tool_ctx.recipes = repo
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx.executor = executor
+
+    await dispatch_food_truck(
+        recipe="test-recipe",
+        task="do-work",
+        resume_session_id="sess-resume-123",
+    )
+
+    assert executor.dispatch_calls, "dispatch_food_truck executor was never called"
+    assert executor.dispatch_calls[0].resume_session_id == "sess-resume-123"
+
+
+@pytest.mark.anyio
+async def test_dispatch_food_truck_executor_records_resume_session_id(tool_ctx, monkeypatch):
+    """resume_session_id propagates through execute_dispatch to the executor's dispatch_calls."""
+    from autoskillit.fleet._api import execute_dispatch
+
+    tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+    repo = InMemoryRecipeRepository()
+    recipe_info = _make_recipe_info("test-recipe")
+    repo.add_recipe("test-recipe", recipe_info)
+    repo.add_full_recipe(recipe_info.path, _make_standard_recipe("test-recipe"))
+    tool_ctx.recipes = repo
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx.executor = executor
+
+    await execute_dispatch(
+        tool_ctx=tool_ctx,
+        recipe="test-recipe",
+        task="t",
+        ingredients=None,
+        dispatch_name=None,
+        timeout_sec=None,
+        prompt_builder=_simple_prompt_builder,
+        quota_checker=_no_sleep_quota_checker,
+        quota_refresher=_noop_quota_refresher,
+        resume_session_id="sess-abc",
+    )
+
+    assert executor.dispatch_calls, "dispatch_food_truck was never called"
+    assert executor.dispatch_calls[0].resume_session_id == "sess-abc"
+
+
+@pytest.mark.anyio
 async def test_dispatch_food_truck_marketplace_install_succeeds(tool_ctx_marketplace, monkeypatch):
     """dispatch_food_truck does not raise when plugin_source is MarketplaceInstall.
 

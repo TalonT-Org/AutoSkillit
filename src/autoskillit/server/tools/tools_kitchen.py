@@ -284,6 +284,7 @@ def _build_tool_category_listing(
 async def open_kitchen(
     name: str | None = None,
     overrides: dict[str, str] | None = None,
+    ingredients_only: bool = False,
     ctx: Context = CurrentContext(),
 ) -> str:
     """Open the AutoSkillit kitchen for service.
@@ -295,6 +296,11 @@ async def open_kitchen(
         name: Optional recipe name to load immediately after opening.
         overrides: Optional dict of ingredient name → value to override recipe defaults.
             Use to activate hidden features (e.g., ``{"sprint_mode": "true"}``).
+        ingredients_only: When True and name is provided, return only the ingredient
+            schema (ingredients_table, validity, suggestions) without the full recipe
+            content, orchestration rules, or sous-chef discipline. Use for dispatch
+            workflows where the caller needs ingredient discovery but not pipeline
+            execution context.
 
     Never raises.
     """
@@ -413,6 +419,24 @@ async def open_kitchen(
             result["kitchen"] = "open"
             result["version"] = __version__
 
+            if ingredients_only:
+                result.pop("content", None)
+                result.pop("orchestration_rules", None)
+                result.pop("stop_step_semantics", None)
+            else:
+                _sc_path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
+                try:
+                    if _sc_path.exists():
+                        _sc_content = _build_sous_chef_for_delivery(_sc_path.read_text())
+                        if _sc_content:
+                            result["sous_chef_discipline"] = _sc_content
+                except (OSError, UnicodeDecodeError):
+                    logger.warning(
+                        "open_kitchen_failure",
+                        stage="read_sous_chef_discipline",
+                        exc_info=True,
+                    )
+
             if "ingredients_table" not in result or not result["ingredients_table"]:
                 result["ingredients_table"] = None
 
@@ -423,21 +447,6 @@ async def open_kitchen(
                 return _kitchen_failure_envelope(exc, stage="hook_diagnostic")
             if warning:
                 result["hook_warning"] = warning.strip()
-
-            # Inject sous-chef discipline into the response so headless L2 sessions
-            # receive mandatory step-execution rules. Headless sessions receive no
-            # system prompt injection; this named-recipe path is their sole delivery
-            # channel. Graceful degradation: missing SKILL.md is non-fatal.
-            _sc_path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
-            try:
-                if _sc_path.exists():
-                    _sc_content = _build_sous_chef_for_delivery(_sc_path.read_text())
-                    if _sc_content:
-                        result["sous_chef_discipline"] = _sc_content
-            except (OSError, UnicodeDecodeError):
-                logger.warning(
-                    "open_kitchen_failure", stage="read_sous_chef_discipline", exc_info=True
-                )
 
             return json.dumps(result)
 

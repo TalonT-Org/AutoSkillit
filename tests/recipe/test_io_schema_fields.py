@@ -253,3 +253,35 @@ class TestContentHash:
         )
         result = list_recipes(tmp_path)
         assert result.items[0].content_hash.startswith("sha256:")
+
+
+# ---------------------------------------------------------------------------
+# provider field tests (PROV-S1–PROV-S3)
+# ---------------------------------------------------------------------------
+
+
+# PROV-S1
+def test_recipe_step_provider_field_accepts_value() -> None:
+    """RecipeStep accepts provider field and stores it."""
+    step = RecipeStep(
+        tool="run_skill",
+        with_args={"skill_command": "/autoskillit:make-plan inputs.task"},
+        on_success="done",
+        provider="anthropic",
+    )
+    assert step.provider == "anthropic"
+
+
+# PROV-S2
+def test_recipe_step_provider_defaults_to_none() -> None:
+    """RecipeStep.provider defaults to None when not provided."""
+    step = RecipeStep(tool="run_skill", with_args={}, on_success="done")
+    assert step.provider is None
+
+
+# PROV-S3
+def test_recipe_step_provider_in_handled_fields() -> None:
+    """provider key is registered in _PARSE_STEP_HANDLED_FIELDS."""
+    from autoskillit.recipe.io import _PARSE_STEP_HANDLED_FIELDS
+
+    assert "provider" in _PARSE_STEP_HANDLED_FIELDS

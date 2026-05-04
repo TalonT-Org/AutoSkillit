@@ -60,27 +60,31 @@ class TestReviewPrRecipeIntegration:
         assert step.capture["review_verdict"] == "${{ result.verdict }}"
 
     def test_review_pr_changes_requested_routes_to_resolve_review(self, recipe: object) -> None:
-        """T_RP4c: on_result routes changes_requested verdict to resolve_review."""
+        """T_RP4c: changes_requested routes through enrich_diff_context."""
         step = recipe.steps["review_pr"]  # type: ignore[attr-defined]
         assert step.on_result is not None
         changes_conditions = [
             c for c in step.on_result.conditions if c.when and "changes_requested" in c.when
         ]
-        assert any(c.route == "resolve_review" for c in changes_conditions)
+        assert any(c.route == "enrich_diff_context" for c in changes_conditions)
+        enrich_step = recipe.steps["enrich_diff_context"]  # type: ignore[attr-defined]
+        assert enrich_step.on_success == "resolve_review"
 
     def test_review_pr_routes_to_check_repo_ci_event_on_failure(self, recipe: object) -> None:
         """T_RP5: review_pr.on_failure routes to check_repo_ci_event (no review to resolve)."""
         assert recipe.steps["review_pr"].on_failure == "check_repo_ci_event"  # type: ignore[attr-defined]
 
     def test_resolve_review_only_reachable_via_verdict(self, recipe: object) -> None:
-        """T_RP5b: resolve_review only reachable via on_result verdicts, not on_failure."""
+        """T_RP5b: resolve_review reachable via enrich_diff_context, not on_failure."""
         step = recipe.steps["review_pr"]  # type: ignore[attr-defined]
         assert step.on_failure != "resolve_review"
         assert step.on_context_limit != "resolve_review"
         verdict_routes = [
-            c.route for c in step.on_result.conditions if c.route == "resolve_review"
+            c.route for c in step.on_result.conditions if c.route == "enrich_diff_context"
         ]
-        assert len(verdict_routes) >= 1, "resolve_review must still be reachable via on_result"
+        assert len(verdict_routes) >= 1, "enrich_diff_context must be reachable via on_result"
+        enrich_step = recipe.steps["enrich_diff_context"]  # type: ignore[attr-defined]
+        assert enrich_step.on_success == "resolve_review"
 
     def test_review_pr_failure_and_context_limit_converge(self, recipe: object) -> None:
         """T_RP5c: on_failure and on_context_limit both route to check_repo_ci_event."""

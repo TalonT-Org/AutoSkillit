@@ -110,7 +110,9 @@ def test_coverage_registry_entries_are_valid():
     from tests.infra.conftest import _FORMATTER_COVERAGE_REGISTRY
 
     for name, entry in _FORMATTER_COVERAGE_REGISTRY.items():
-        all_fields = set(entry.typed_dict.__annotations__)
+        import typing
+
+        all_fields = set(typing.get_type_hints(entry.typed_dict))
         covered = entry.rendered | entry.suppressed
         overlap = entry.rendered & entry.suppressed
         uncovered = all_fields - covered

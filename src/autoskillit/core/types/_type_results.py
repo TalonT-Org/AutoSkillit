@@ -348,16 +348,21 @@ class CloneGateUnpublished(TypedDict):
 CloneResult = CloneSuccessResult | CloneGateUncommitted | CloneGateUnpublished
 
 
-class RunSkillResult(TypedDict, total=False):
-    """Typed return contract for run_skill — mirrors SkillResult.to_json() output keys."""
+class _RunSkillResultBase(TypedDict):
+    """Required fields always present in every run_skill response."""
 
     success: bool
+    exit_code: int
+
+
+class RunSkillResult(_RunSkillResultBase, total=False):
+    """Typed return contract for run_skill — mirrors SkillResult.to_json() output keys."""
+
     result: str
     session_id: str
     subtype: str
     cli_subtype: str
     is_error: bool
-    exit_code: int
     kill_reason: str
     needs_retry: bool
     retry_reason: str
@@ -372,20 +377,30 @@ class RunSkillResult(TypedDict, total=False):
     order_id: str
 
 
-class RunCmdResult(TypedDict, total=False):
-    """Typed return contract for run_cmd."""
+class _RunCmdResultBase(TypedDict):
+    """Required fields always present in every run_cmd response."""
 
     success: bool
     exit_code: int
+
+
+class RunCmdResult(_RunCmdResultBase, total=False):
+    """Typed return contract for run_cmd."""
+
     stdout: str
     stderr: str
     error: str
 
 
-class TestCheckResult(TypedDict, total=False):
-    """Typed return contract for test_check."""
+class _TestCheckResultBase(TypedDict):
+    """Required field always present in every test_check response."""
 
     passed: bool
+
+
+class TestCheckResult(_TestCheckResultBase, total=False):
+    """Typed return contract for test_check."""
+
     stdout: str
     stderr: str
     duration_seconds: float

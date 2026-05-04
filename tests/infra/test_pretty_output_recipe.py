@@ -615,13 +615,15 @@ def test_fmt_recipe_list_item_field_coverage():
 
 def test_fmt_open_kitchen_field_coverage():
     """Every OpenKitchenResult field must be in RENDERED or SUPPRESSED."""
+    import typing
+
     from autoskillit.hooks.formatters.pretty_output_hook import (
         _FMT_OPEN_KITCHEN_RENDERED,
         _FMT_OPEN_KITCHEN_SUPPRESSED,
     )
     from autoskillit.recipe._recipe_ingredients import OpenKitchenResult
 
-    all_fields = set(OpenKitchenResult.__annotations__)
+    all_fields = set(typing.get_type_hints(OpenKitchenResult))
     covered = _FMT_OPEN_KITCHEN_RENDERED | _FMT_OPEN_KITCHEN_SUPPRESSED
     uncovered = all_fields - covered
     assert uncovered == set(), (

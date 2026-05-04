@@ -9,12 +9,32 @@ from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 _MERGE_QUEUE_WAIT_TOOLS = frozenset({"wait_for_merge_queue"})
 _PUSH_TOOLS = frozenset({"push_to_remote"})
-_FLOW_BOUNDARY_TOOLS = frozenset({
-    "wait_for_merge_queue",
-    "wait_for_ci",
-    "wait_for_direct_merge",
-    "wait_for_immediate_merge",
-})
+_FLOW_BOUNDARY_TOOLS = frozenset(
+    {
+        "wait_for_merge_queue",
+        "wait_for_ci",
+        "wait_for_direct_merge",
+        "wait_for_immediate_merge",
+    }
+)
+
+
+def _build_raw_routing_graph(ctx: ValidationContext) -> dict[str, set[str]]:
+    """Build a routing adjacency list without skip_when_false bypass edges.
+
+    ``ctx.step_graph`` includes bypass edges that jump past skippable steps,
+    creating paths around flow-boundary steps.  For ejection-flow reachability
+    we need the direct routing graph only.
+    """
+    step_names = set(ctx.recipe.steps.keys())
+    graph: dict[str, set[str]] = {name: set() for name in step_names}
+    for name, step in ctx.recipe.steps.items():
+        for edge in _extract_routing_edges(step):
+            if edge.edge_type == "exhausted" and step.action is not None:
+                continue
+            if edge.target in step_names:
+                graph[name].add(edge.target)
+    return graph
 
 
 def _collect_ejection_exit_steps(ctx: ValidationContext) -> set[str]:
@@ -92,7 +112,8 @@ def _check_push_after_queue_has_queued_branch_route(
     if not ejection_exits:
         return []
 
-    reachable = _bfs_forward(ctx.step_graph, ejection_exits, ctx)
+    raw_graph = _build_raw_routing_graph(ctx)
+    reachable = _bfs_forward(raw_graph, ejection_exits, ctx)
 
     findings: list[RuleFinding] = []
     for step_name in reachable:

@@ -281,6 +281,14 @@ class WorkspaceConfig:
     temp_dir: str | None = None  # null = canonical default (see resolve_temp_dir)
 
 
+@dataclass
+class ProvidersConfig:
+    default_provider: str | None = None
+    profiles: dict[str, dict[str, str]] = field(default_factory=dict)
+    step_overrides: dict[str, str] = field(default_factory=dict)
+    provider_retry_limit: int = 2
+
+
 def _field_defaults(cls: type) -> dict[str, Any]:
     """Extract default values from dataclass fields into a dict keyed by field name."""
     defaults: dict[str, Any] = {}
@@ -317,6 +325,7 @@ class AutomationConfig:
     subsets: SubsetsConfig = field(default_factory=SubsetsConfig)
     packs: PacksConfig = field(default_factory=PacksConfig)
     workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
+    providers: ProvidersConfig = field(default_factory=ProvidersConfig)
 
     @classmethod
     def from_dynaconf(cls, d: Dynaconf) -> AutomationConfig:
@@ -356,6 +365,7 @@ class AutomationConfig:
         _sub = sec("subsets")
         pk = sec("packs")
         ws_raw = sec("workspace")
+        pv = sec("providers")
 
         _tc = _field_defaults(TestCheckConfig)
         _cf = _field_defaults(ClassifyFixConfig)
@@ -378,6 +388,7 @@ class AutomationConfig:
         _ci = _field_defaults(CIConfig)
         _sk = _field_defaults(SkillsConfig)
         _wsc = _field_defaults(WorkspaceConfig)
+        _pv = _field_defaults(ProvidersConfig)
 
         return cls(
             test_check=TestCheckConfig(
@@ -519,6 +530,14 @@ class AutomationConfig:
                 worktree_root=val(ws_raw, "worktree_root", _wsc["worktree_root"]) or None,
                 runs_root=val(ws_raw, "runs_root", _wsc["runs_root"]) or None,
                 temp_dir=val(ws_raw, "temp_dir", _wsc["temp_dir"]) or None,
+            ),
+            providers=ProvidersConfig(
+                default_provider=val(pv, "default_provider", _pv["default_provider"]) or None,
+                profiles=dict(val(pv, "profiles", _pv["profiles"])),
+                step_overrides=dict(val(pv, "step_overrides", _pv["step_overrides"])),
+                provider_retry_limit=int(
+                    val(pv, "provider_retry_limit", _pv["provider_retry_limit"])
+                ),
             ),
         )
 

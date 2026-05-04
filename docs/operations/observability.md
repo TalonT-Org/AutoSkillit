@@ -21,10 +21,16 @@ and are written out at the end via `write_telemetry_files`.
 ## TelemetryFormatter
 
 `pipeline/telemetry_fmt.py:TelemetryFormatter` is the single source of truth
-for the human-readable token and timing tables. Both
-`get_token_summary` and the `token_summary_appender.py` PostToolUse hook
-delegate to it so the format never drifts between the CLI and the PR body
-appender.
+for the human-readable token and timing tables. The MCP tool
+`get_token_summary` delegates to it directly. The `token_summary_hook.py`
+PostToolUse hook maintains stdlib-only parallel implementations of
+`_format_efficiency_table` and `_format_table` (cannot import from
+`autoskillit.*` — enforced by `tests/arch/test_ast_rules.py`). Output
+equivalence between the canonical formatter and the hook is enforced by
+`test_efficiency_table_equivalence` and `test_token_table_equivalence` in
+`tests/infra/test_token_summary_core.py`. The canonical formatter derives
+markdown headers from `_EFFICIENCY_COLUMNS` / `_TOKEN_COLUMNS` via
+label-mapping dicts rather than hardcoding header strings.
 
 ## Mid-run accessors
 

@@ -487,3 +487,97 @@ def test_token_summary_hook_unexpected_error_exits_zero(monkeypatch: object) -> 
         _, exit_code = _run_hook(event={"tool_name": "any", "tool_response": "{}"})
 
     assert exit_code == 0
+
+
+def test_efficiency_table_equivalence() -> None:
+    """Canonical format_efficiency_table and hook _format_efficiency_table produce identical output."""
+    from autoskillit.hooks.token_summary_hook import _format_efficiency_table
+    from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
+
+    steps_data = [
+        {
+            "step_name": "investigate",
+            "peak_context": 500,
+            "cache_read_input_tokens": 8000,
+            "cache_creation_input_tokens": 2000,
+            "output_tokens": 1000,
+            "loc_insertions": 30,
+            "loc_deletions": 10,
+        },
+        {
+            "step_name": "implement",
+            "peak_context": 12000,
+            "cache_read_input_tokens": 50000,
+            "cache_creation_input_tokens": 15000,
+            "output_tokens": 8000,
+            "loc_insertions": 200,
+            "loc_deletions": 50,
+        },
+    ]
+
+    canonical_total = {
+        "loc_insertions": sum(s["loc_insertions"] for s in steps_data),
+        "loc_deletions": sum(s["loc_deletions"] for s in steps_data),
+        "peak_context": max(s["peak_context"] for s in steps_data),
+        "cache_read_input_tokens": sum(s["cache_read_input_tokens"] for s in steps_data),
+        "cache_creation_input_tokens": sum(s["cache_creation_input_tokens"] for s in steps_data),
+        "output_tokens": sum(s["output_tokens"] for s in steps_data),
+    }
+    aggregated = {s["step_name"]: dict(s) for s in steps_data}
+
+    canonical_output = TelemetryFormatter.format_efficiency_table(
+        list(steps_data), canonical_total
+    )
+    hook_output = _format_efficiency_table(aggregated)
+
+    assert canonical_output == hook_output, (
+        f"Canonical and hook efficiency tables differ:\n"
+        f"CANONICAL:\n{canonical_output}\n\nHOOK:\n{hook_output}"
+    )
+
+
+def test_token_table_equivalence() -> None:
+    """Canonical format_token_table and hook _format_table produce identical output."""
+    from autoskillit.hooks.token_summary_hook import _format_table
+    from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
+
+    steps_data = [
+        {
+            "step_name": "investigate",
+            "input_tokens": 7000,
+            "output_tokens": 5939,
+            "cache_creation_input_tokens": 8495,
+            "cache_read_input_tokens": 252179,
+            "peak_context": 45000,
+            "turn_count": 8,
+            "elapsed_seconds": 45.0,
+        },
+        {
+            "step_name": "implement",
+            "input_tokens": 2031000,
+            "output_tokens": 122306,
+            "cache_creation_input_tokens": 280601,
+            "cache_read_input_tokens": 19071323,
+            "peak_context": 890000,
+            "turn_count": 42,
+            "elapsed_seconds": 492.0,
+        },
+    ]
+
+    canonical_total = {
+        "input_tokens": sum(s["input_tokens"] for s in steps_data),
+        "output_tokens": sum(s["output_tokens"] for s in steps_data),
+        "cache_creation_input_tokens": sum(s["cache_creation_input_tokens"] for s in steps_data),
+        "cache_read_input_tokens": sum(s["cache_read_input_tokens"] for s in steps_data),
+        "peak_context": max(s["peak_context"] for s in steps_data),
+        "total_elapsed_seconds": sum(s["elapsed_seconds"] for s in steps_data),
+    }
+    aggregated = {s["step_name"]: dict(s) for s in steps_data}
+
+    canonical_output = TelemetryFormatter.format_token_table(list(steps_data), canonical_total)
+    hook_output = _format_table(aggregated)
+
+    assert canonical_output == hook_output, (
+        f"Canonical and hook token tables differ:\n"
+        f"CANONICAL:\n{canonical_output}\n\nHOOK:\n{hook_output}"
+    )

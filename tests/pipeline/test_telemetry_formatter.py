@@ -516,3 +516,93 @@ def test_efficiency_table_terminal_no_markdown() -> None:
     assert "|" not in result  # no markdown pipes
     assert "LOC" in result  # column header present
     assert "PK/LOC" in result
+
+
+# T-EFF-7
+def test_efficiency_table_has_all_ratio_columns() -> None:
+    """Markdown efficiency table must contain all four ratio columns and have 6-column header."""
+    steps = [
+        {
+            "step_name": "implement",
+            "peak_context": 500,
+            "cache_read_input_tokens": 1000,
+            "cache_creation_input_tokens": 200,
+            "output_tokens": 50,
+            "loc_insertions": 80,
+            "loc_deletions": 20,
+        }
+    ]
+    total = {
+        "loc_insertions": 80,
+        "loc_deletions": 20,
+        "peak_context": 500,
+        "cache_read_input_tokens": 1000,
+        "cache_creation_input_tokens": 200,
+        "output_tokens": 50,
+    }
+    result = TelemetryFormatter.format_efficiency_table(steps, total)
+    assert "cache_read/LoC" in result
+    assert "peak_ctx/LoC" in result
+    assert "cache_write/LoC" in result
+    assert "output/LoC" in result
+    header_line = result.split("\n")[2]
+    assert header_line.count("|") == 7  # 6 columns + outer pipes
+
+
+# T-EFF-8
+def test_efficiency_table_terminal_has_all_columns() -> None:
+    """Terminal efficiency table must show RD/LOC alongside PK/LOC, WR/LOC, OUT/LOC."""
+    steps = [
+        {
+            "step_name": "implement",
+            "peak_context": 1000,
+            "cache_read_input_tokens": 500,
+            "cache_creation_input_tokens": 200,
+            "output_tokens": 50,
+            "loc_insertions": 80,
+            "loc_deletions": 20,
+        }
+    ]
+    total = {
+        "loc_insertions": 80,
+        "loc_deletions": 20,
+        "peak_context": 1000,
+        "cache_read_input_tokens": 500,
+        "cache_creation_input_tokens": 200,
+        "output_tokens": 50,
+    }
+    result = TelemetryFormatter.format_efficiency_table_terminal(steps, total)
+    assert "PK/LOC" in result
+    assert "RD/LOC" in result
+    assert "WR/LOC" in result
+    assert "OUT/LOC" in result
+
+
+# T-EFF-9
+def test_efficiency_markdown_terminal_column_parity() -> None:
+    """Markdown and terminal efficiency tables must have the same number of data columns."""
+    from autoskillit.pipeline.telemetry_fmt import _EFFICIENCY_COLUMNS
+
+    steps = [
+        {
+            "step_name": "implement",
+            "peak_context": 1000,
+            "cache_read_input_tokens": 500,
+            "cache_creation_input_tokens": 200,
+            "output_tokens": 50,
+            "loc_insertions": 80,
+            "loc_deletions": 20,
+        }
+    ]
+    total = {
+        "loc_insertions": 80,
+        "loc_deletions": 20,
+        "peak_context": 1000,
+        "cache_read_input_tokens": 500,
+        "cache_creation_input_tokens": 200,
+        "output_tokens": 50,
+    }
+    result = TelemetryFormatter.format_efficiency_table(steps, total)
+    md_header = result.split("\n")[2]
+    md_cols = [c.strip() for c in md_header.strip("|").split("|")]
+    assert len(md_cols) == len(_EFFICIENCY_COLUMNS)

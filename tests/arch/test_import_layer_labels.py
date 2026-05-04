@@ -63,7 +63,7 @@ _IMPORT_LAYER_PATTERNS = re.compile(
 # test_load_bearing_skip_paths_still_match verifies these files still contain matches.
 _LOAD_BEARING_SKIP_PATHS: frozenset[str] = frozenset(
     {
-        "hooks/guards/leaf_orchestration_guard.py",  # (L2)+(L3) in docstring: guard invariants
+        "hooks/guards/leaf_orchestration_guard.py",  # (L3)+(L3) in docstring: guard invariants
         "fleet/summary.py",  # "L3 fleet sessions" in module docstring
         "cli/_prompts.py",  # "L1/L3 orchestration sessions" in docstring
     }
@@ -76,7 +76,7 @@ _LOAD_BEARING_SKIP_PATHS: frozenset[str] = frozenset(
 # _LOAD_BEARING_SKIP_PATHS.
 _PRECAUTIONARY_SKIP_PATHS: frozenset[str] = frozenset(
     {
-        # fleet/ files use orchestration vocabulary ("L2 food truck", "L2 dispatch", etc.)
+        # fleet/ files use orchestration vocabulary ("L3 food truck", "L3 dispatch", etc.)
         # that escapes the current regex but could match after a future regex expansion.
         "fleet/_api.py",
         "fleet/_prompts.py",

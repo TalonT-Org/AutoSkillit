@@ -1,4 +1,4 @@
-"""Food truck prompt builder for L2 dispatch sessions.
+"""Food truck prompt builder for L3 dispatch sessions.
 
 Moved from autoskillit.cli._prompts — this module
 depends only on autoskillit.core and stdlib, making it importable from both
@@ -10,17 +10,17 @@ from __future__ import annotations
 import json
 import re
 
-from autoskillit.core import SOUS_CHEF_L2_SECTIONS, get_logger, pkg_root
+from autoskillit.core import SOUS_CHEF_L3_SECTIONS, get_logger, pkg_root
 from autoskillit.hooks import QUOTA_GUARD_DENY_TRIGGER, QUOTA_POST_WARNING_TRIGGER
 
 logger = get_logger(__name__)
 
 
-def _build_l2_sous_chef_block() -> str:
-    """Extract the L2-relevant subset of sous-chef SKILL.md.
+def _build_l3_sous_chef_block() -> str:
+    """Extract the L3-relevant subset of sous-chef SKILL.md.
 
     Uses regex to split on ``## `` section headers and retains only sections
-    whose title starts with one of the SOUS_CHEF_L2_SECTIONS prefixes.
+    whose title starts with one of the SOUS_CHEF_L3_SECTIONS prefixes.
     Returns empty string if SKILL.md is absent (graceful degradation).
     """
     path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
@@ -36,7 +36,7 @@ def _build_l2_sous_chef_block() -> str:
 
     retained: list[str] = []
     for section in sections:
-        for title in SOUS_CHEF_L2_SECTIONS:
+        for title in SOUS_CHEF_L3_SECTIONS:
             if section.startswith(f"## {title}"):
                 retained.append(section.rstrip())
                 break
@@ -51,11 +51,11 @@ def _build_food_truck_prompt(
     mcp_prefix: str,
     dispatch_id: str,
     campaign_id: str,
-    l2_timeout_sec: int,
+    l3_timeout_sec: int,
 ) -> str:
-    """Build the system prompt for an L2 food truck headless session.
+    """Build the system prompt for an L3 food truck headless session.
 
-    The prompt is self-contained — the L2 session needs no runtime reference
+    The prompt is self-contained — the L3 session needs no runtime reference
     material beyond what is embedded here. It assembles 8 sections:
     filtered sous-chef discipline, headless directives, routing/predicates,
     budget guidance, quota awareness, campaign task, ingredient values,
@@ -65,13 +65,13 @@ def _build_food_truck_prompt(
     ingredients_json = json.dumps(ingredients)
     ingredients_pretty_json = json.dumps(ingredients, indent=2)
 
-    sous_chef_block = _build_l2_sous_chef_block()
+    sous_chef_block = _build_l3_sous_chef_block()
 
     return f"""\
-You are an L2 food truck orchestrator. Execute the recipe '{recipe}' autonomously.
-Timeout: {l2_timeout_sec}s. Campaign: {campaign_id}. Dispatch: {dispatch_id}.
+You are an L3 food truck orchestrator. Execute the recipe '{recipe}' autonomously.
+Timeout: {l3_timeout_sec}s. Campaign: {campaign_id}. Dispatch: {dispatch_id}.
 
---- SECTION 1: SOUS-CHEF DISCIPLINE (L2 SUBSET) ---
+--- SECTION 1: SOUS-CHEF DISCIPLINE (L3 SUBSET) ---
 
 {sous_chef_block}
 
@@ -230,7 +230,7 @@ Recipe: {recipe}
 Task: {task}
 Campaign ID: {campaign_id}
 Dispatch ID: {dispatch_id}
-Timeout: {l2_timeout_sec} seconds
+Timeout: {l3_timeout_sec} seconds
 
 Execute the recipe pipeline for the task above. Follow all routing
 rules and failure predicates. Emit the sentinel block upon completion.
@@ -250,10 +250,10 @@ When the pipeline completes (success or failure), emit this EXACT sentinel block
 as your final output. No other text after the sentinel.
 
 ```
----l2-result::{dispatch_id}---
+---l3-result::{dispatch_id}---
 {{"success": <true|false>, "reason": "<completion_reason>", "summary": "<one_line_summary>"}}
----end-l2-result::{dispatch_id}---
-%%L2_DONE::{dispatch_id_short}%%
+---end-l3-result::{dispatch_id}---
+%%L3_DONE::{dispatch_id_short}%%
 ```
 
 Fields:
@@ -262,7 +262,7 @@ Fields:
   "open_kitchen_failed", "missing_on_failure"
 - summary: One-line description of what happened
 
-The sentinel markers ---l2-result::{dispatch_id}--- and ---end-l2-result::{dispatch_id}---
-are parsed by the fleet dispatcher. The %%L2_DONE::{dispatch_id_short}%% marker
+The sentinel markers ---l3-result::{dispatch_id}--- and ---end-l3-result::{dispatch_id}---
+are parsed by the fleet dispatcher. The %%L3_DONE::{dispatch_id_short}%% marker
 signals session completion to the process monitor.
 """

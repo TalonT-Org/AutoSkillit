@@ -442,11 +442,11 @@ class TestBuildLeafHeadlessCmd:
     ) -> None:
         monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", "/tmp/state")
         monkeypatch.setenv("AUTOSKILLIT_PROJECT_DIR", "/tmp/proj")
-        monkeypatch.setenv("AUTOSKILLIT_L2_TOOL_TAGS", "kitchen")
+        monkeypatch.setenv("AUTOSKILLIT_L3_TOOL_TAGS", "kitchen")
         spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
         assert "AUTOSKILLIT_CAMPAIGN_STATE_PATH" not in spec.env
         assert "AUTOSKILLIT_PROJECT_DIR" not in spec.env
-        assert "AUTOSKILLIT_L2_TOOL_TAGS" not in spec.env
+        assert "AUTOSKILLIT_L3_TOOL_TAGS" not in spec.env
 
     def test_provider_extras_injected_into_env(self) -> None:
         spec = build_leaf_headless_cmd(
@@ -501,10 +501,10 @@ class TestBuildLeafHeadlessCmd:
 
 class TestBuildFoodTruckCmd:
     BASE = dict(
-        orchestrator_prompt="You are an L2 food truck orchestrator...",
+        orchestrator_prompt="You are an L3 food truck orchestrator...",
         plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
         cwd="/repo",
-        completion_marker="%%L2_DONE::abc12345%%",
+        completion_marker="%%L3_DONE::abc12345%%",
         model=None,
         env_extras=None,
         output_format=OutputFormat.STREAM_JSON,
@@ -540,7 +540,7 @@ class TestBuildFoodTruckCmd:
         prompt_idx = spec.cmd.index(ClaudeFlags.PRINT) + 1
         prompt = spec.cmd[prompt_idx]
         assert not prompt.startswith("Use ")
-        assert "You are an L2 food truck orchestrator" in prompt
+        assert "You are an L3 food truck orchestrator" in prompt
 
     def test_tools_flag_restricts_to_ask_user_question(self):
         spec = build_food_truck_cmd(**self.BASE)
@@ -589,7 +589,7 @@ class TestBuildFoodTruckCmd:
     def test_completion_marker_in_prompt(self):
         spec = build_food_truck_cmd(**self.BASE)
         prompt_idx = spec.cmd.index(ClaudeFlags.PRINT) + 1
-        assert "%%L2_DONE::abc12345%%" in spec.cmd[prompt_idx]
+        assert "%%L3_DONE::abc12345%%" in spec.cmd[prompt_idx]
 
     def test_cwd_anchor_in_prompt(self):
         spec = build_food_truck_cmd(**self.BASE)
@@ -618,11 +618,11 @@ class TestBuildFoodTruckCmd:
 
     def test_private_vars_scrubbed_from_host_env(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", "/tmp/state")
-        monkeypatch.setenv("AUTOSKILLIT_L2_TOOL_TAGS", "kitchen")
+        monkeypatch.setenv("AUTOSKILLIT_L3_TOOL_TAGS", "kitchen")
         monkeypatch.setenv("AUTOSKILLIT_PROJECT_DIR", "/tmp/proj")
         spec = build_food_truck_cmd(**self.BASE)
         assert "AUTOSKILLIT_CAMPAIGN_STATE_PATH" not in spec.env
-        assert "AUTOSKILLIT_L2_TOOL_TAGS" not in spec.env
+        assert "AUTOSKILLIT_L3_TOOL_TAGS" not in spec.env
         assert "AUTOSKILLIT_PROJECT_DIR" not in spec.env
 
     def test_model_injected_when_provided(self):
@@ -643,26 +643,26 @@ class TestBuildFoodTruckCmd:
 
 
 class TestBuildFoodTruckCmdPackTags:
-    def test_env_extras_with_l2_tool_tags_passes_through(self):
-        """env_extras containing AUTOSKILLIT_L2_TOOL_TAGS reaches subprocess env."""
+    def test_env_extras_with_l3_tool_tags_passes_through(self):
+        """env_extras containing AUTOSKILLIT_L3_TOOL_TAGS reaches subprocess env."""
         spec = build_food_truck_cmd(
             orchestrator_prompt="...",
             plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
             cwd="/repo",
             completion_marker="%%DONE%%",
-            env_extras={"AUTOSKILLIT_L2_TOOL_TAGS": "github,ci,clone,telemetry"},
+            env_extras={"AUTOSKILLIT_L3_TOOL_TAGS": "github,ci,clone,telemetry"},
         )
-        assert spec.env["AUTOSKILLIT_L2_TOOL_TAGS"] == "github,ci,clone,telemetry"
+        assert spec.env["AUTOSKILLIT_L3_TOOL_TAGS"] == "github,ci,clone,telemetry"
 
 
 class TestBuildFoodTruckCmdFeatureParity:
     """Tests for features ported from build_leaf_headless_cmd (issue #1656)."""
 
     BASE = dict(
-        orchestrator_prompt="You are an L2 food truck orchestrator...",
+        orchestrator_prompt="You are an L3 food truck orchestrator...",
         plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
         cwd="/repo",
-        completion_marker="%%L2_DONE::abc12345%%",
+        completion_marker="%%L3_DONE::abc12345%%",
         model=None,
         env_extras=None,
         output_format=OutputFormat.STREAM_JSON,
@@ -729,10 +729,10 @@ class TestBuildFoodTruckCmdFeatureParity:
 
 class TestBuildFoodTruckCmdResume:
     BASE = dict(
-        orchestrator_prompt="You are an L2 food truck orchestrator...",
+        orchestrator_prompt="You are an L3 food truck orchestrator...",
         plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
         cwd="/repo",
-        completion_marker="%%L2_DONE::abc12345%%",
+        completion_marker="%%L3_DONE::abc12345%%",
     )
 
     def test_resume_session_id_adds_resume_flag(self):
@@ -774,7 +774,7 @@ def test_headless_exclusive_vars_contains_max_mcp_output_tokens() -> None:
         ),
         lambda: build_headless_resume_cmd(resume_session_id="abc", prompt="Emit"),
         lambda: build_food_truck_cmd(
-            orchestrator_prompt="You are an L2 orchestrator",
+            orchestrator_prompt="You are an L3 orchestrator",
             plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
             cwd="/tmp",
             completion_marker="%%DONE%%",
@@ -815,7 +815,7 @@ def test_interactive_cmd_env_has_mcp_connection_nonblocking() -> None:
         ),
         lambda: build_headless_resume_cmd(resume_session_id="abc", prompt="Emit"),
         lambda: build_food_truck_cmd(
-            orchestrator_prompt="You are an L2 orchestrator",
+            orchestrator_prompt="You are an L3 orchestrator",
             plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
             cwd="/tmp",
             completion_marker="%%DONE%%",

@@ -11,15 +11,15 @@ pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature
 
 class TestIsDispatchSessionAlive:
     def test_unstarted_dispatch_not_alive(self) -> None:
-        record = DispatchRecord(name="test")  # l2_pid defaults to 0
+        record = DispatchRecord(name="test")  # l3_pid defaults to 0
         assert not is_dispatch_session_alive(record)
 
     def test_different_boot_id_not_alive(self) -> None:
         record = DispatchRecord(
             name="test",
-            l2_pid=os.getpid(),
-            l2_boot_id="different-boot-id-xyz",
-            l2_starttime_ticks=999,
+            l3_pid=os.getpid(),
+            l3_boot_id="different-boot-id-xyz",
+            l3_starttime_ticks=999,
         )
         assert not is_dispatch_session_alive(record)
 
@@ -28,7 +28,7 @@ class TestIsDispatchSessionAlive:
         if boot_id is None:
             pytest.skip("Not on Linux")
         record = DispatchRecord(
-            name="test", l2_pid=999999999, l2_boot_id=boot_id, l2_starttime_ticks=999
+            name="test", l3_pid=999999999, l3_boot_id=boot_id, l3_starttime_ticks=999
         )
         assert not is_dispatch_session_alive(record)
 
@@ -39,7 +39,7 @@ class TestIsDispatchSessionAlive:
         if ticks is None or boot_id is None:
             pytest.skip("Not on Linux")
         record = DispatchRecord(
-            name="test", l2_pid=pid, l2_boot_id=boot_id, l2_starttime_ticks=ticks
+            name="test", l3_pid=pid, l3_boot_id=boot_id, l3_starttime_ticks=ticks
         )
         assert is_dispatch_session_alive(record)
 
@@ -48,11 +48,11 @@ class TestIsDispatchSessionAlive:
         boot_id = read_boot_id()
         if boot_id is None:
             pytest.skip("Not on Linux")
-        record = DispatchRecord(name="test", l2_pid=pid, l2_boot_id=boot_id, l2_starttime_ticks=-1)
+        record = DispatchRecord(name="test", l3_pid=pid, l3_boot_id=boot_id, l3_starttime_ticks=-1)
         assert not is_dispatch_session_alive(record)
 
     def test_missing_boot_id_on_record_not_alive(self) -> None:
         record = DispatchRecord(
-            name="test", l2_pid=os.getpid(), l2_boot_id="", l2_starttime_ticks=999
+            name="test", l3_pid=os.getpid(), l3_boot_id="", l3_starttime_ticks=999
         )
         assert not is_dispatch_session_alive(record)

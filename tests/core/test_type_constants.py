@@ -78,7 +78,7 @@ def test_private_env_vars_includes_franchise_tier_vars() -> None:
         "AUTOSKILLIT_KITCHEN_SESSION_ID",
         "AUTOSKILLIT_CAMPAIGN_STATE_PATH",
         "AUTOSKILLIT_PROJECT_DIR",
-        "AUTOSKILLIT_L2_TOOL_TAGS",
+        "AUTOSKILLIT_L3_TOOL_TAGS",
     }
     assert expected <= AUTOSKILLIT_PRIVATE_ENV_VARS
 

@@ -5,7 +5,7 @@ Leaf sessions (AUTOSKILLIT_SESSION_TYPE=leaf or unset in headless mode) must
 never call run_skill, run_cmd, or run_python. This is defense-in-depth over
 the in-handler gate check in each tool.
 
-L2+ invariant: orchestrator (L2) and fleet (L3) sessions may call orchestration tools.
+L3+ invariant: orchestrator (L3) and fleet (L3) sessions may call orchestration tools.
 Leaf workers use native Claude Code tools only.
 """
 

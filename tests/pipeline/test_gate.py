@@ -256,6 +256,6 @@ def test_headless_message_uses_l_numbers():
     from autoskillit.pipeline.gate import _DEFAULT_HEADLESS_MESSAGE
 
     assert "L1" in _DEFAULT_HEADLESS_MESSAGE
-    assert "L2" in _DEFAULT_HEADLESS_MESSAGE
+    assert "L3" in _DEFAULT_HEADLESS_MESSAGE
     assert "Tier 1" not in _DEFAULT_HEADLESS_MESSAGE
     assert "Tier 2" not in _DEFAULT_HEADLESS_MESSAGE

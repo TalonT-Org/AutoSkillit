@@ -293,8 +293,8 @@ def fleet_status(
                     ephemeral_root=resolve_ephemeral_root(),
                 )
                 for d in state.dispatches:
-                    if d.l2_session_id:
-                        skill_mgr.cleanup_session(d.l2_session_id)
+                    if d.l3_session_id:
+                        skill_mgr.cleanup_session(d.l3_session_id)
                 skill_mgr.cleanup_session(campaign_id)
             except Exception:
                 logger.warning(

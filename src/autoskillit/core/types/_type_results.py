@@ -196,7 +196,7 @@ class SkillResult:
     """
     last_stop_reason: str = ""
     lifespan_started: bool = False
-    """True when the L2 session invoked at least one MCP tool (heuristic for server lifespan)."""
+    """True when the L3 session invoked at least one MCP tool (heuristic for server lifespan)."""
 
     def to_json(self) -> str:
         data: dict[str, Any] = {

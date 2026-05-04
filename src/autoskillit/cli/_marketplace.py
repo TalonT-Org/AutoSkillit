@@ -16,8 +16,10 @@ from autoskillit.cli._hooks import (
     sync_hooks_to_settings,
 )
 from autoskillit.cli._init_helpers import _user_claude_json_path, evict_direct_mcp_entry
-from autoskillit.core import atomic_write, is_git_worktree, pkg_root
+from autoskillit.core import atomic_write, get_logger, is_git_worktree, pkg_root
 from autoskillit.hooks import generate_hooks_json
+
+logger = get_logger(__name__)
 
 _VALID_SCOPES = {"user", "project", "local"}
 _MARKETPLACE_NAME = "autoskillit-local"
@@ -176,6 +178,9 @@ def install(*, scope: str = "user") -> bool:
             try:
                 vi = version_info(plugin_dir=str(_cache_plugin_dir))
             except Exception:
+                logger.warning(
+                    "version_info_failed", plugin_dir=str(_cache_plugin_dir), exc_info=True
+                )
                 vi = {
                     "match": False,
                     "plugin_json_version": "unknown",

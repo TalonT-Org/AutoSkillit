@@ -227,6 +227,7 @@ def _check_cache_version_mismatch(cache_dir: Path | None = None) -> DoctorResult
     try:
         vi = version_info(plugin_dir=str(_cache_plugin_dir))
     except Exception as exc:
+        logger.warning("version_info_failed", plugin_dir=str(_cache_plugin_dir), exc_info=True)
         return DoctorResult(
             Severity.ERROR,
             "version_consistency",

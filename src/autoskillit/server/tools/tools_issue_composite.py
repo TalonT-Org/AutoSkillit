@@ -17,11 +17,7 @@ logger = get_logger(__name__)
 
 
 def _extract_label_names(raw_labels: list[Any]) -> list[str]:
-    return [
-        lbl["name"] if isinstance(lbl, dict) else str(lbl)
-        for lbl in raw_labels
-        if lbl
-    ]
+    return [lbl["name"] if isinstance(lbl, dict) else str(lbl) for lbl in raw_labels if lbl]
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})

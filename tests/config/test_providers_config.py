@@ -10,9 +10,10 @@ pytestmark = [pytest.mark.layer("config"), pytest.mark.small]
 
 class TestProvidersConfig:
     def test_providers_config_importable_from_settings(self) -> None:
-        from autoskillit.config.settings import ProvidersConfig
+        from autoskillit.config import ProvidersConfig
+        from autoskillit.config.settings import ProvidersConfig as PC
 
-        assert ProvidersConfig is not None
+        assert PC is ProvidersConfig
 
     def test_providers_config_in_settings_all(self) -> None:
         import autoskillit.config.settings as m
@@ -41,9 +42,10 @@ class TestProvidersConfig:
         assert fleet_idx < providers_idx < features_idx
 
     def test_providers_config_importable_from_package(self) -> None:
-        from autoskillit.config import ProvidersConfig
+        from autoskillit.config import ProvidersConfig as PC
+        from autoskillit.config.settings import ProvidersConfig
 
-        assert ProvidersConfig is not None
+        assert PC is ProvidersConfig
 
     def test_from_dynaconf_providers_defaults(self, tmp_path) -> None:
         from autoskillit.config import load_config

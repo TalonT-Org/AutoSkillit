@@ -331,6 +331,13 @@ def test_providers_in_feature_registry():
     assert "providers" in FEATURE_REGISTRY
 
 
+def test_providers_feature_default_disabled():
+    from autoskillit.core.types._type_constants import FEATURE_REGISTRY
+
+    assert "providers" in FEATURE_REGISTRY
+    assert FEATURE_REGISTRY["providers"].default_enabled is False
+
+
 # ── T1: DISABLED lifecycle ──────────────────────────────────────────────────
 
 

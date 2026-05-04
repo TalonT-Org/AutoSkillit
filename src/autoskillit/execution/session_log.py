@@ -115,6 +115,8 @@ def flush_session_log(
     elapsed_seconds: float | None = None,
     termination_reason: str = "",
     kill_reason: str = "",
+    provider_used: str = "",
+    provider_fallback: bool = False,
     snapshot_interval_seconds: float = 0.0,
     step_name: str = "",
     cli_subtype: str = "",
@@ -333,6 +335,8 @@ def flush_session_log(
         "peak_fd_ratio": round(peak_fd_ratio, 3),
         "termination_reason": termination_reason,
         "kill_reason": kill_reason,
+        "provider_used": provider_used,
+        "provider_fallback": provider_fallback,
         "write_path_warnings": effective_write_path_warnings,
         "write_call_count": write_call_count,
         "clone_contamination_reverted": clone_contamination_reverted,
@@ -393,6 +397,7 @@ def flush_session_log(
             "loc_deletions": loc_deletions,
             "peak_context": token_usage.get("peak_context", 0),
             "turn_count": token_usage.get("turn_count", 0),
+            "provider_used": provider_used,
         }
         atomic_write(session_dir / "token_usage.json", json.dumps(tu_data))
 
@@ -445,6 +450,8 @@ def flush_session_log(
         "recipe_version": recipe_version,
         "duration_seconds": duration_seconds,
         "github_api_requests": github_api_requests,
+        "provider_used": provider_used,
+        "provider_fallback": provider_fallback,
     }
     index_path = log_root / "sessions.jsonl"
     with index_path.open("a") as f:

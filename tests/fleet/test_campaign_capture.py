@@ -187,7 +187,7 @@ def _make_success_result(payload: dict):
     body = json.dumps(payload)
     sentinel_id_placeholder = "PLACEHOLDER"
     stdout = (
-        f"%%L2_DONE::{sentinel_id_placeholder}%%\n---l2-result---\n{body}\n---end-l2-result---"
+        f"%%L3_DONE::{sentinel_id_placeholder}%%\n---l2-result---\n{body}\n---end-l2-result---"
     )
     return SkillResult(
         success=True,
@@ -218,13 +218,13 @@ async def test_dispatch_captures_extracted_and_written_to_state(tool_ctx, monkey
 
     payload = {"success": True, "reason": "", "out": "hello"}
 
-    # The actual dispatch ID isn't known ahead of time; we patch parse_l2_result_block
+    # The actual dispatch ID isn't known ahead of time; we patch parse_l3_result_block
     # to return a clean result with the payload.
-    from autoskillit.fleet.result_parser import L2ParseResult
+    from autoskillit.fleet.result_parser import L3ParseResult
 
     monkeypatch.setattr(
-        "autoskillit.fleet._api.parse_l2_result_block",
-        lambda **kwargs: L2ParseResult(
+        "autoskillit.fleet._api.parse_l3_result_block",
+        lambda **kwargs: L3ParseResult(
             outcome="completed_clean",
             payload=payload,
             raw_body=None,
@@ -260,7 +260,7 @@ async def test_dispatch_ingredients_interpolated_from_captured_values(tool_ctx, 
     """Prior captured_values in state file are resolved into ingredients before dispatch."""
 
     from autoskillit.fleet._api import execute_dispatch
-    from autoskillit.fleet.result_parser import L2ParseResult
+    from autoskillit.fleet.result_parser import L3ParseResult
     from autoskillit.fleet.state import DispatchRecord, write_captured_values, write_initial_state
 
     # Pre-create a state file for the same campaign_id with captured_values
@@ -292,8 +292,8 @@ async def test_dispatch_ingredients_interpolated_from_captured_values(tool_ctx, 
         return "prompt"
 
     monkeypatch.setattr(
-        "autoskillit.fleet._api.parse_l2_result_block",
-        lambda **kwargs: L2ParseResult(
+        "autoskillit.fleet._api.parse_l3_result_block",
+        lambda **kwargs: L3ParseResult(
             outcome="completed_clean",
             payload={"success": True, "reason": ""},
             raw_body=None,

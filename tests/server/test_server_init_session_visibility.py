@@ -174,12 +174,12 @@ class TestSessionTypeVisibility:
 
     @pytest.mark.anyio
     async def test_food_truck_with_tool_tags_sees_kitchen_core_plus_declared(self, monkeypatch):
-        """ORCHESTRATOR+HEADLESS with L2_TOOL_TAGS sees kitchen-core + github only."""
+        """ORCHESTRATOR+HEADLESS with L3_TOOL_TAGS sees kitchen-core + github only."""
         from autoskillit.server import _apply_session_type_visibility, mcp
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-        monkeypatch.setenv("AUTOSKILLIT_L2_TOOL_TAGS", "github")
+        monkeypatch.setenv("AUTOSKILLIT_L3_TOOL_TAGS", "github")
         _apply_session_type_visibility()
 
         tools = list(await mcp.list_tools())
@@ -194,12 +194,12 @@ class TestSessionTypeVisibility:
 
     @pytest.mark.anyio
     async def test_food_truck_with_multiple_packs(self, monkeypatch):
-        """ORCHESTRATOR+HEADLESS with L2_TOOL_TAGS=github,ci sees both packs."""
+        """ORCHESTRATOR+HEADLESS with L3_TOOL_TAGS=github,ci sees both packs."""
         from autoskillit.server import _apply_session_type_visibility, mcp
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-        monkeypatch.setenv("AUTOSKILLIT_L2_TOOL_TAGS", "github,ci")
+        monkeypatch.setenv("AUTOSKILLIT_L3_TOOL_TAGS", "github,ci")
         _apply_session_type_visibility()
 
         tools = list(await mcp.list_tools())
@@ -211,13 +211,13 @@ class TestSessionTypeVisibility:
 
     @pytest.mark.anyio
     async def test_food_truck_without_tool_tags_sees_full_kitchen(self, monkeypatch):
-        """ORCHESTRATOR+HEADLESS without L2_TOOL_TAGS falls back to full kitchen."""
+        """ORCHESTRATOR+HEADLESS without L3_TOOL_TAGS falls back to full kitchen."""
         from autoskillit.core import GATED_TOOLS
         from autoskillit.server import _apply_session_type_visibility, mcp
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-        monkeypatch.delenv("AUTOSKILLIT_L2_TOOL_TAGS", raising=False)
+        monkeypatch.delenv("AUTOSKILLIT_L3_TOOL_TAGS", raising=False)
         _apply_session_type_visibility()
 
         tools = list(await mcp.list_tools())
@@ -228,13 +228,13 @@ class TestSessionTypeVisibility:
 
     @pytest.mark.anyio
     async def test_cook_interactive_unaffected_by_tool_tags(self, monkeypatch):
-        """Interactive ORCHESTRATOR (cook) ignores L2_TOOL_TAGS."""
+        """Interactive ORCHESTRATOR (cook) ignores L3_TOOL_TAGS."""
         from autoskillit.core import GATED_TOOLS
         from autoskillit.server import _apply_session_type_visibility, mcp
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
         monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
-        monkeypatch.setenv("AUTOSKILLIT_L2_TOOL_TAGS", "github")
+        monkeypatch.setenv("AUTOSKILLIT_L3_TOOL_TAGS", "github")
         _apply_session_type_visibility()
 
         tools = list(await mcp.list_tools())

@@ -137,7 +137,7 @@ class TestDispatchFoodTruckCampaignState:
                 "success": True,
                 "dispatch_status": "success",
                 "dispatch_id": "d1",
-                "l2_session_id": "s1",
+                "l3_session_id": "s1",
                 "reason": "",
                 "token_usage": {},
             }
@@ -172,7 +172,7 @@ class TestDispatchFoodTruckCampaignState:
                 "success": False,
                 "dispatch_status": "failure",
                 "dispatch_id": "d1",
-                "l2_session_id": "s1",
+                "l3_session_id": "s1",
                 "reason": "l2_crashed",
                 "token_usage": {},
             }
@@ -206,7 +206,7 @@ class TestDispatchFoodTruckCampaignState:
                 {
                     "success": True,
                     "dispatch_id": "d1",
-                    "l2_session_id": "s1",
+                    "l3_session_id": "s1",
                     "reason": "",
                     "token_usage": {},
                 }
@@ -239,7 +239,7 @@ class TestDispatchFoodTruckCampaignState:
                 {
                     "success": True,
                     "dispatch_id": "d1",
-                    "l2_session_id": "s1",
+                    "l3_session_id": "s1",
                     "reason": "",
                     "token_usage": {},
                 }

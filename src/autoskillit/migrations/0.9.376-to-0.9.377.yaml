@@ -1,0 +1,43 @@
+from_version: "0.9.376"
+to_version: "0.9.377"
+description: >
+  Rename L2 identifiers to L3 in fleet dispatch code. Campaign state
+  field names change; read_state accepts both old and new names.
+changes:
+  - id: fleet-dispatch-record-field-rename
+    description: >
+      DispatchRecord fields renamed from l2_* to l3_*.
+      read_state falls back to old names for existing state files.
+    instruction: |
+      No manual action required — read_state auto-migrates on read.
+      After the first write-back, state files use new field names.
+      Old field names: l2_session_id, l2_session_log_dir, l2_pid,
+      l2_starttime_ticks, l2_boot_id.
+      New field names: l3_session_id, l3_session_log_dir, l3_pid,
+      l3_starttime_ticks, l3_boot_id.
+
+  - id: fleet-error-code-value-rename
+    description: >
+      FleetErrorCode string values renamed from fleet_l2_* to fleet_l3_*.
+    instruction: |
+      Old values: fleet_l2_timeout, fleet_l2_no_result_block,
+      fleet_l2_parse_failed, fleet_l2_startup_or_crash.
+      New values: fleet_l3_timeout, fleet_l3_no_result_block,
+      fleet_l3_parse_failed, fleet_l3_startup_or_crash.
+      Persisted error_records[*].code in campaign summaries will
+      retain old values until rewritten.
+
+  - id: fleet-env-var-rename
+    description: >
+      Environment variable AUTOSKILLIT_L2_TOOL_TAGS renamed to
+      AUTOSKILLIT_L3_TOOL_TAGS.
+    instruction: |
+      Internal-only env var. No user action required.
+
+  - id: fleet-sentinel-protocol-rename
+    description: >
+      Result block sentinel markers renamed from l2-result to l3-result.
+      Completion marker renamed from L2_DONE to L3_DONE.
+    instruction: |
+      In-flight campaigns using old sentinel format will not parse
+      correctly after upgrade. Complete all campaigns before upgrading.

@@ -58,7 +58,7 @@ __all__ = [
     "SKILL_FILE_ADVISORY_MAP",
     "SKILL_ACTIVATE_DEPS_REQUIRED",
     "SOUS_CHEF_MANDATORY_SECTIONS",
-    "SOUS_CHEF_L2_SECTIONS",
+    "SOUS_CHEF_L3_SECTIONS",
     "KNOWN_CI_EVENTS",
 ]
 
@@ -99,7 +99,7 @@ AUTOSKILLIT_PRIVATE_ENV_VARS: frozenset[str] = frozenset(
         "AUTOSKILLIT_KITCHEN_SESSION_ID",
         "AUTOSKILLIT_CAMPAIGN_STATE_PATH",
         "AUTOSKILLIT_PROJECT_DIR",
-        "AUTOSKILLIT_L2_TOOL_TAGS",
+        "AUTOSKILLIT_L3_TOOL_TAGS",
         "AUTOSKILLIT_LAUNCH_ID",
         "AUTOSKILLIT_SKILL_NAME",
         # Provider-routing vars — must not leak into user-code subprocesses
@@ -523,14 +523,14 @@ SOUS_CHEF_MANDATORY_SECTIONS: tuple[str, ...] = (
     "NARRATION SUPPRESSION",
 )
 
-# Strict subset of SOUS_CHEF_MANDATORY_SECTIONS delivered to L2 food truck sessions.
-SOUS_CHEF_L2_SECTIONS: tuple[str, ...] = (
+# Strict subset of SOUS_CHEF_MANDATORY_SECTIONS delivered to L3 food truck sessions.
+SOUS_CHEF_L3_SECTIONS: tuple[str, ...] = (
     "CONTEXT LIMIT ROUTING",
     "STEP NAME IMMUTABILITY",
     "MERGE PHASE",
     "QUOTA WAIT PROTOCOL",
 )
-assert set(SOUS_CHEF_L2_SECTIONS).issubset(set(SOUS_CHEF_MANDATORY_SECTIONS))
+assert set(SOUS_CHEF_L3_SECTIONS).issubset(set(SOUS_CHEF_MANDATORY_SECTIONS))
 
 KNOWN_CI_EVENTS: frozenset[str] = frozenset(
     {

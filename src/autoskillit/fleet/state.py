@@ -21,7 +21,7 @@ logger = get_logger(__name__)
 
 _resume_lock = threading.Lock()
 
-_SCHEMA_VERSION = 3
+_SCHEMA_VERSION = 4
 
 FLEET_HALTED_SENTINEL = "fleet_halted_on_failure"
 
@@ -50,11 +50,11 @@ class DispatchRecord:
     name: str
     status: DispatchStatus = DispatchStatus.PENDING
     dispatch_id: str = ""
-    l2_session_id: str = ""
-    l2_session_log_dir: str = ""
-    l2_pid: int = 0
-    l2_starttime_ticks: int = 0
-    l2_boot_id: str = ""
+    l3_session_id: str = ""
+    l3_session_log_dir: str = ""
+    l3_pid: int = 0
+    l3_starttime_ticks: int = 0
+    l3_boot_id: str = ""
     reason: str = ""
     token_usage: dict[str, Any] = field(default_factory=dict)
     started_at: float = 0.0
@@ -85,7 +85,7 @@ class ResumeDecision:
     next_dispatch_name: str
     completed_dispatches_block: str
     is_resumable: bool = False
-    l2_session_id: str = ""
+    l3_session_id: str = ""
 
 
 _ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
@@ -156,7 +156,7 @@ def write_initial_state(
 
 _INFRASTRUCTURE_FAILURE_REASONS: frozenset[str] = frozenset(
     {
-        FleetErrorCode.FLEET_L2_NO_RESULT_BLOCK,
+        FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK,
     }
 )
 
@@ -164,7 +164,7 @@ _INFRASTRUCTURE_FAILURE_REASONS: frozenset[str] = frozenset(
 def has_failed_dispatch(state_path: Path) -> bool:
     """Check whether any dispatch has a FAILURE status attributable to logic (not infrastructure).
 
-    Infrastructure failures (e.g. fleet_l2_no_result_block) represent transient L2
+    Infrastructure failures (e.g. fleet_l3_no_result_block) represent transient L3
     disconnections and do not halt the campaign. Logic failures (e.g. completed_clean
     with success=false) represent genuine task failures and do halt the campaign.
 
@@ -197,11 +197,11 @@ def read_state(state_path: Path) -> CampaignState | None:
                 name=d["name"],
                 status=DispatchStatus(d.get("status", DispatchStatus.PENDING)),
                 dispatch_id=d.get("dispatch_id", ""),
-                l2_session_id=d.get("l2_session_id", ""),
-                l2_session_log_dir=d.get("l2_session_log_dir", ""),
-                l2_pid=d.get("l2_pid", 0),
-                l2_starttime_ticks=d.get("l2_starttime_ticks", 0),
-                l2_boot_id=d.get("l2_boot_id", ""),
+                l3_session_id=d.get("l3_session_id") or d.get("l2_session_id", ""),
+                l3_session_log_dir=d.get("l3_session_log_dir") or d.get("l2_session_log_dir", ""),
+                l3_pid=d.get("l3_pid") or d.get("l2_pid", 0),
+                l3_starttime_ticks=d.get("l3_starttime_ticks") or d.get("l2_starttime_ticks", 0),
+                l3_boot_id=d.get("l3_boot_id") or d.get("l2_boot_id", ""),
                 reason=d.get("reason", ""),
                 token_usage=d.get("token_usage", {}),
                 started_at=d.get("started_at", 0.0),
@@ -242,12 +242,12 @@ def mark_dispatch_running(
     dispatch_name: str,
     *,
     dispatch_id: str,
-    l2_pid: int,
+    l3_pid: int,
     starttime_ticks: int = 0,
     boot_id: str = "",
     sidecar_path: str | None = None,
 ) -> None:
-    """Atomically mark a dispatch as running with its dispatch_id and l2_pid."""
+    """Atomically mark a dispatch as running with its dispatch_id and l3_pid."""
     state = read_state(state_path)
     if state is None:
         raise FileNotFoundError(f"State file not found or corrupted: {state_path}")
@@ -256,9 +256,9 @@ def mark_dispatch_running(
             _validate_transition(d.status, DispatchStatus.RUNNING, d.name)
             d.status = DispatchStatus.RUNNING
             d.dispatch_id = dispatch_id
-            d.l2_pid = l2_pid
-            d.l2_starttime_ticks = starttime_ticks
-            d.l2_boot_id = boot_id
+            d.l3_pid = l3_pid
+            d.l3_starttime_ticks = starttime_ticks
+            d.l3_boot_id = boot_id
             d.started_at = time.time()
             d.sidecar_path = sidecar_path
             break
@@ -609,14 +609,14 @@ def resume_campaign_from_state(
             completed_lines: list[str] = []
             next_name = ""
             is_resumable = False
-            resumable_l2_session_id = ""
+            resumable_l3_session_id = ""
             for d in state.dispatches:
                 if d.status in _VISIBLE_IN_BLOCK_STATUSES:
                     completed_lines.append(f"- {d.name}: {d.status}")
                 elif d.status == DispatchStatus.RESUMABLE and not next_name:
                     next_name = d.name
                     is_resumable = True
-                    resumable_l2_session_id = d.l2_session_id
+                    resumable_l3_session_id = d.l3_session_id
                 elif (
                     d.status
                     not in {
@@ -637,5 +637,5 @@ def resume_campaign_from_state(
                 next_dispatch_name=next_name,
                 completed_dispatches_block=completed_block,
                 is_resumable=is_resumable,
-                l2_session_id=resumable_l2_session_id,
+                l3_session_id=resumable_l3_session_id,
             )

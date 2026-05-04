@@ -19,7 +19,7 @@ class TestFleetConfig:
         assert isinstance(cfg.fleet, FleetConfig)
         assert cfg.fleet.default_timeout_sec == 3600
 
-    def test_fleet_l2_timeout_matches_defaults_yaml(self) -> None:
+    def test_fleet_l3_timeout_matches_defaults_yaml(self) -> None:
         """FleetConfig Python default matches defaults.yaml value."""
         from autoskillit.config.settings import FleetConfig
         from autoskillit.core.io import load_yaml

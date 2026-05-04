@@ -27,7 +27,7 @@ ingredients:
     description: "Target branch for promotion PR"
     default: "main"
   max_issues_per_l2:
-    description: "Max issues per L2 food truck"
+    description: "Max issues per L3 food truck"
     default: "6"
     hidden: true
   model_context_window:

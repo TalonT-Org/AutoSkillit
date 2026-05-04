@@ -1,4 +1,4 @@
-"""L2 result block parser with Channel B JSONL fallback."""
+"""L3 result block parser with Channel B JSONL fallback."""
 
 from __future__ import annotations
 
@@ -16,8 +16,8 @@ _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 
 @dataclass(frozen=True, slots=True)
-class L2ParseResult:
-    """Tri-state outcome of parsing an L2 result block."""
+class L3ParseResult:
+    """Tri-state outcome of parsing an L3 result block."""
 
     outcome: Literal["completed_clean", "completed_dirty", "no_sentinel"]
     payload: dict | None
@@ -91,13 +91,13 @@ def _parse_body(
     close_pos: int,
     open_sentinel: str,
     source: Literal["stdout", "assistant_messages_jsonl"],
-) -> L2ParseResult:
+) -> L3ParseResult:
     """Extract body between sentinels and attempt JSON decode."""
     after_open = open_pos + len(open_sentinel)
     body = text[after_open:close_pos].strip()
 
     if not body:
-        return L2ParseResult(
+        return L3ParseResult(
             outcome="completed_dirty",
             payload=None,
             raw_body="",
@@ -108,7 +108,7 @@ def _parse_body(
     try:
         parsed = json.loads(body)
     except json.JSONDecodeError as exc:
-        return L2ParseResult(
+        return L3ParseResult(
             outcome="completed_dirty",
             payload=None,
             raw_body=body,
@@ -117,7 +117,7 @@ def _parse_body(
         )
 
     if not isinstance(parsed, dict):
-        return L2ParseResult(
+        return L3ParseResult(
             outcome="completed_dirty",
             payload=None,
             raw_body=body,
@@ -125,7 +125,7 @@ def _parse_body(
             source=source,
         )
 
-    return L2ParseResult(
+    return L3ParseResult(
         outcome="completed_clean",
         payload=parsed,
         raw_body=None,
@@ -134,19 +134,19 @@ def _parse_body(
     )
 
 
-def parse_l2_result_block(
+def parse_l3_result_block(
     stdout: str,
     expected_dispatch_id: str,
     assistant_messages_path: Path | None = None,
-) -> L2ParseResult:
-    """Parse an L2 result block from food truck dispatch output.
+) -> L3ParseResult:
+    """Parse an L3 result block from food truck dispatch output.
 
     Strips ANSI codes, scans stdout for the last occurrence of the sentinel
     block keyed to expected_dispatch_id, and returns a tri-state outcome.
     Falls back to reading the Channel B JSONL file when stdout is truncated.
     """
-    open_sentinel = f"---l2-result::{expected_dispatch_id}---"
-    close_sentinel = f"---end-l2-result::{expected_dispatch_id}---"
+    open_sentinel = f"---l3-result::{expected_dispatch_id}---"
+    close_sentinel = f"---end-l3-result::{expected_dispatch_id}---"
 
     cleaned = _ANSI_RE.sub("", stdout)
 
@@ -156,7 +156,7 @@ def parse_l2_result_block(
         return _parse_body(cleaned, open_pos, close_pos, open_sentinel, "stdout")
 
     if assistant_messages_path is None:
-        return L2ParseResult(
+        return L3ParseResult(
             outcome="no_sentinel",
             payload=None,
             raw_body=None,
@@ -172,7 +172,7 @@ def parse_l2_result_block(
             jsonl_text, open_pos, close_pos, open_sentinel, "assistant_messages_jsonl"
         )
 
-    return L2ParseResult(
+    return L3ParseResult(
         outcome="no_sentinel",
         payload=None,
         raw_body=None,

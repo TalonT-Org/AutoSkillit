@@ -29,9 +29,9 @@ def _make_running_state(
     tmp_path: Path,
     *,
     dispatch_name: str = "sg-dispatch",
-    l2_pid: int = 0,
-    l2_starttime_ticks: int = TICKS,
-    l2_boot_id: str = BOOT_ID,
+    l3_pid: int = 0,
+    l3_starttime_ticks: int = TICKS,
+    l3_boot_id: str = BOOT_ID,
 ) -> tuple[Path, str]:
     sp = tmp_path / "state.json"
     campaign_id = "camp-sg-001"
@@ -47,9 +47,9 @@ def _make_running_state(
         {
             "status": "running",
             "dispatch_id": "did-sg",
-            "l2_pid": l2_pid,
-            "l2_starttime_ticks": l2_starttime_ticks,
-            "l2_boot_id": l2_boot_id,
+            "l3_pid": l3_pid,
+            "l3_starttime_ticks": l3_starttime_ticks,
+            "l3_boot_id": l3_boot_id,
             "started_at": 1000.0,
         }
     )
@@ -88,7 +88,7 @@ async def _run_signal_guard(
 class TestSignalGuard:
     async def test_signal_guard_kills_running_dispatch(self, tmp_path: Path) -> None:
         state_path, campaign_id = _make_running_state(
-            tmp_path, l2_pid=12345, l2_starttime_ticks=TICKS
+            tmp_path, l3_pid=12345, l3_starttime_ticks=TICKS
         )
         kill_calls: list[int] = []
 
@@ -115,7 +115,7 @@ class TestSignalGuard:
     async def test_signal_guard_reason_contains_signal_name(self, tmp_path: Path) -> None:
         state_path, campaign_id = _make_running_state(
             tmp_path,
-            l2_pid=0,  # zero pid → skips kill, goes straight to mark
+            l3_pid=0,  # zero pid → skips kill, goes straight to mark
         )
 
         await _run_signal_guard(state_path, campaign_id, _signal.SIGINT)
@@ -125,8 +125,8 @@ class TestSignalGuard:
         assert state.dispatches[0].reason == "signal_SIGINT"
 
     async def test_signal_guard_skips_zero_pid(self, tmp_path: Path) -> None:
-        """Dispatch with l2_pid=0 → state marked INTERRUPTED without kill attempt."""
-        state_path, campaign_id = _make_running_state(tmp_path, l2_pid=0)
+        """Dispatch with l3_pid=0 → state marked INTERRUPTED without kill attempt."""
+        state_path, campaign_id = _make_running_state(tmp_path, l3_pid=0)
         kill_calls: list[int] = []
 
         async def fake_kill(pid: int, timeout: float = 2.0) -> None:
@@ -146,7 +146,7 @@ class TestSignalGuard:
     async def test_signal_guard_verifies_pid_identity(self, tmp_path: Path) -> None:
         """Dispatch with pid alive but different starttime_ticks → kill NOT called."""
         state_path, campaign_id = _make_running_state(
-            tmp_path, l2_pid=12345, l2_starttime_ticks=TICKS
+            tmp_path, l3_pid=12345, l3_starttime_ticks=TICKS
         )
         kill_calls: list[int] = []
 
@@ -173,7 +173,7 @@ class TestSignalGuard:
     async def test_signal_guard_stderr_resume_hint(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        state_path, campaign_id = _make_running_state(tmp_path, l2_pid=0)
+        state_path, campaign_id = _make_running_state(tmp_path, l3_pid=0)
 
         await _run_signal_guard(state_path, campaign_id, _signal.SIGTERM)
 
@@ -182,7 +182,7 @@ class TestSignalGuard:
 
     async def test_signal_guard_cleanup_on_interrupt_true(self, tmp_path: Path) -> None:
         """cleanup_on_interrupt=True → DefaultWorkspaceManager.delete_contents is invoked."""
-        state_path, campaign_id = _make_running_state(tmp_path, l2_pid=0)
+        state_path, campaign_id = _make_running_state(tmp_path, l3_pid=0)
         cleanup_calls: list[Path] = []
 
         class FakeWorkspaceManager:
@@ -202,7 +202,7 @@ class TestSignalGuard:
 
     async def test_signal_guard_cleanup_on_interrupt_default_false(self, tmp_path: Path) -> None:
         """cleanup_on_interrupt=False (default) → workspace cleanup NOT invoked."""
-        state_path, campaign_id = _make_running_state(tmp_path, l2_pid=0)
+        state_path, campaign_id = _make_running_state(tmp_path, l3_pid=0)
         cleanup_calls: list[Path] = []
 
         class FakeWorkspaceManager:
@@ -225,7 +225,7 @@ class TestSignalGuard:
         that the guard context manager exited cleanly (scope was cancelled) AND the
         dispatch state was updated (shielded cleanup ran).
         """
-        state_path, campaign_id = _make_running_state(tmp_path, l2_pid=0)
+        state_path, campaign_id = _make_running_state(tmp_path, l3_pid=0)
 
         events: list[str] = []
 
@@ -248,7 +248,7 @@ class TestSignalGuard:
     async def test_signal_guard_resume_hint_includes_campaign_name(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        state_path, campaign_id = _make_running_state(tmp_path, l2_pid=0)
+        state_path, campaign_id = _make_running_state(tmp_path, l3_pid=0)
         await _run_signal_guard(
             state_path, campaign_id, _signal.SIGTERM, campaign_name="my-campaign"
         )
@@ -259,7 +259,7 @@ class TestSignalGuard:
     async def test_signal_guard_resume_hint_generic_when_no_campaign_name(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        state_path, campaign_id = _make_running_state(tmp_path, l2_pid=0)
+        state_path, campaign_id = _make_running_state(tmp_path, l3_pid=0)
         await _run_signal_guard(state_path, campaign_id, _signal.SIGTERM)
         captured = capsys.readouterr()
         assert "fleet campaign <name>" in captured.err

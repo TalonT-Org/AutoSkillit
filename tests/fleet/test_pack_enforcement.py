@@ -55,7 +55,7 @@ def _simulate_food_truck(monkeypatch: pytest.MonkeyPatch, packs: str) -> None:
     """Set env vars to simulate a food truck session, then apply visibility."""
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-    monkeypatch.setenv("AUTOSKILLIT_L2_TOOL_TAGS", packs)
+    monkeypatch.setenv("AUTOSKILLIT_L3_TOOL_TAGS", packs)
     from autoskillit.server import _apply_session_type_visibility
 
     _apply_session_type_visibility()
@@ -223,7 +223,7 @@ class TestSyntheticPackScenarios:
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-        monkeypatch.setenv("AUTOSKILLIT_L2_TOOL_TAGS", "")
+        monkeypatch.setenv("AUTOSKILLIT_L3_TOOL_TAGS", "")
         _apply_session_type_visibility()
 
         async with Client(mcp) as client:
@@ -232,7 +232,7 @@ class TestSyntheticPackScenarios:
 
         for name in GATED_TOOLS:
             assert name in visible, (
-                f"{name} should be visible under full kitchen fallback (empty L2_TOOL_TAGS)"
+                f"{name} should be visible under full kitchen fallback (empty L3_TOOL_TAGS)"
             )
 
     @pytest.mark.anyio
@@ -259,7 +259,7 @@ class TestSyntheticPackScenarios:
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-        monkeypatch.setenv("AUTOSKILLIT_L2_TOOL_TAGS", "github,ci,telemetry")
+        monkeypatch.setenv("AUTOSKILLIT_L3_TOOL_TAGS", "github,ci,telemetry")
 
         mock_mcp = MagicMock()
         with patch("autoskillit.server.mcp", mock_mcp):

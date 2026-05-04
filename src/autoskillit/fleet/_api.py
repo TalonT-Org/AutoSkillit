@@ -18,7 +18,7 @@ from autoskillit.core import (
     fleet_error,
     get_logger,
 )
-from autoskillit.fleet.result_parser import L2ParseResult, parse_l2_result_block
+from autoskillit.fleet.result_parser import L3ParseResult, parse_l3_result_block
 from autoskillit.fleet.state import DispatchStatus
 
 if TYPE_CHECKING:
@@ -34,7 +34,7 @@ def _extract_captures(
     capture_spec: dict[str, str],
     payload: dict[str, object],
 ) -> dict[str, str]:
-    """Extract captured values from an L2 result payload.
+    """Extract captured values from an L3 result payload.
 
     For each entry in `capture_spec` whose value matches ``${{ result.field }}``,
     reads `payload[field]` and converts it to str. Missing payload keys are skipped.
@@ -85,7 +85,7 @@ def _write_pid(
     starttime_ticks: int,
     sidecar_path: str | None = None,
 ) -> None:
-    """on_spawn callback: atomically mark dispatch as running with l2_pid and identity fields."""
+    """on_spawn callback: atomically mark dispatch as running with l3_pid and identity fields."""
     from autoskillit.core import read_boot_id
     from autoskillit.fleet import mark_dispatch_running
 
@@ -94,7 +94,7 @@ def _write_pid(
             state_path,
             dispatch_name,
             dispatch_id=dispatch_id,
-            l2_pid=pid,
+            l3_pid=pid,
             starttime_ticks=starttime_ticks,
             boot_id=read_boot_id() or "",
             sidecar_path=sidecar_path,
@@ -191,7 +191,7 @@ async def execute_dispatch(
     except Exception as exc:
         logger.error("execute_dispatch failed", exc_info=True)
         return fleet_error(
-            FleetErrorCode.FLEET_L2_STARTUP_OR_CRASH,
+            FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
             f"{type(exc).__name__}: {exc}",
         )
     finally:
@@ -199,20 +199,20 @@ async def execute_dispatch(
 
 
 def classify_dispatch_outcome(
-    parsed: L2ParseResult,
+    parsed: L3ParseResult,
     skill_result: SkillResult,
     *,
     sidecar_exists: bool,
 ) -> tuple[DispatchStatus, str]:
-    """Map L2 subprocess signals to a (DispatchStatus, reason) pair.
+    """Map L3 subprocess signals to a (DispatchStatus, reason) pair.
 
     Pure function — no filesystem access, no side effects.
     Rules applied in order:
       1. completed_clean + success flag → SUCCESS
       2. completed_clean + no success → FAILURE
-      3. completed_dirty → FAILURE (fleet_l2_parse_failed)
+      3. completed_dirty → FAILURE (fleet_l3_parse_failed)
       4. no_sentinel + session_id + lifespan_started + sidecar → RESUMABLE
-      5. no_sentinel (any other case) → FAILURE (fleet_l2_no_result_block)
+      5. no_sentinel (any other case) → FAILURE (fleet_l3_no_result_block)
     """
     if parsed.outcome == "completed_clean" and parsed.payload and parsed.payload.get("success"):
         return DispatchStatus.SUCCESS, ""
@@ -220,10 +220,10 @@ def classify_dispatch_outcome(
         reason = parsed.payload.get("reason", "") if parsed.payload else ""
         return DispatchStatus.FAILURE, reason
     if parsed.outcome == "completed_dirty":
-        return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L2_PARSE_FAILED
+        return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L3_PARSE_FAILED
     if skill_result.session_id and skill_result.lifespan_started and sidecar_exists:
-        return DispatchStatus.RESUMABLE, FleetErrorCode.FLEET_L2_NO_RESULT_BLOCK
-    return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L2_NO_RESULT_BLOCK
+        return DispatchStatus.RESUMABLE, FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
+    return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
 
 
 async def _run_dispatch(
@@ -323,7 +323,7 @@ async def _run_dispatch(
         await asyncio.sleep(quota_result.get("sleep_seconds", 0))
 
     dispatch_id = str(uuid4())
-    completion_marker = f"%%L2_DONE::{dispatch_id[:8]}%%"
+    completion_marker = f"%%L3_DONE::{dispatch_id[:8]}%%"
     from autoskillit.fleet.sidecar import sidecar_path as compute_sidecar_path  # noqa: PLC0415
 
     dispatch_sidecar_path = str(compute_sidecar_path(dispatch_id, tool_ctx.project_dir))
@@ -336,7 +336,7 @@ async def _run_dispatch(
         ingredients=effective_ingredients,
         dispatch_id=dispatch_id,
         campaign_id=campaign_id,
-        l2_timeout_sec=timeout_sec or 1800,
+        l3_timeout_sec=timeout_sec or 1800,
     )
 
     state_path = tool_ctx.temp_dir / "dispatches" / f"{dispatch_id}.json"
@@ -356,10 +356,10 @@ async def _run_dispatch(
         )
 
     started_at = time.time()
-    _l2_pid: list[int] = []
+    _l3_pid: list[int] = []
 
     def _on_spawn(pid: int, ticks: int) -> None:
-        _l2_pid.append(pid)
+        _l3_pid.append(pid)
         _write_pid(state_path, effective_name, dispatch_id, pid, ticks, dispatch_sidecar_path)
 
     skill_result = await tool_ctx.executor.dispatch_food_truck(
@@ -391,9 +391,9 @@ async def _run_dispatch(
                 name=effective_name,
                 status=DispatchStatus.FAILURE,
                 dispatch_id=dispatch_id,
-                l2_session_id=skill_result.session_id,
-                l2_pid=_l2_pid[0] if _l2_pid else 0,
-                reason=FleetErrorCode.FLEET_L2_TIMEOUT,
+                l3_session_id=skill_result.session_id,
+                l3_pid=_l3_pid[0] if _l3_pid else 0,
+                reason=FleetErrorCode.FLEET_L3_TIMEOUT,
                 token_usage=skill_result.token_usage or {},
                 started_at=started_at,
                 ended_at=ended_at,
@@ -401,18 +401,18 @@ async def _run_dispatch(
         )
         _post_dispatch_cleanup(tool_ctx, skill_result, cache_invalidator, quota_refresher)
         return fleet_error(
-            FleetErrorCode.FLEET_L2_TIMEOUT,
-            f"L2 dispatch '{effective_name}' timed out",
+            FleetErrorCode.FLEET_L3_TIMEOUT,
+            f"L3 dispatch '{effective_name}' timed out",
             details={
                 "dispatch_id": dispatch_id,
-                "l2_session_id": skill_result.session_id,
+                "l3_session_id": skill_result.session_id,
                 "lifespan_started": skill_result.lifespan_started,
                 "token_usage": skill_result.token_usage,
             },
         )
 
     jsonl_path = claude_code_log_path(str(tool_ctx.project_dir), skill_result.session_id or "")
-    parsed = parse_l2_result_block(
+    parsed = parse_l3_result_block(
         stdout=skill_result.result or "",
         expected_dispatch_id=dispatch_id,
         assistant_messages_path=jsonl_path,
@@ -428,8 +428,8 @@ async def _run_dispatch(
             name=effective_name,
             status=final_status,
             dispatch_id=dispatch_id,
-            l2_session_id=skill_result.session_id,
-            l2_pid=_l2_pid[0] if _l2_pid else 0,
+            l3_session_id=skill_result.session_id,
+            l3_pid=_l3_pid[0] if _l3_pid else 0,
             reason=reason,
             token_usage=skill_result.token_usage or {},
             started_at=started_at,
@@ -453,11 +453,11 @@ async def _run_dispatch(
                 "success": envelope_success,
                 "dispatch_status": final_status.value,
                 "dispatch_id": dispatch_id,
-                "l2_session_id": skill_result.session_id,
-                "l2_payload": parsed.payload,
+                "l3_session_id": skill_result.session_id,
+                "l3_payload": parsed.payload,
                 "reason": reason,
                 "token_usage": skill_result.token_usage,
-                "l2_parse_source": parsed.source,
+                "l3_parse_source": parsed.source,
                 "lifespan_started": skill_result.lifespan_started,
             }
         )
@@ -467,13 +467,13 @@ async def _run_dispatch(
                 "success": False,
                 "dispatch_status": final_status.value,
                 "dispatch_id": dispatch_id,
-                "l2_session_id": skill_result.session_id,
-                "l2_payload": None,
-                "reason": FleetErrorCode.FLEET_L2_PARSE_FAILED,
-                "l2_raw_body": parsed.raw_body,
-                "l2_parse_error": parsed.parse_error,
+                "l3_session_id": skill_result.session_id,
+                "l3_payload": None,
+                "reason": FleetErrorCode.FLEET_L3_PARSE_FAILED,
+                "l3_raw_body": parsed.raw_body,
+                "l3_parse_error": parsed.parse_error,
                 "token_usage": skill_result.token_usage,
-                "l2_parse_source": parsed.source,
+                "l3_parse_source": parsed.source,
                 "lifespan_started": skill_result.lifespan_started,
             }
         )
@@ -483,10 +483,10 @@ async def _run_dispatch(
                 "success": False,
                 "dispatch_status": final_status.value,
                 "dispatch_id": dispatch_id,
-                "l2_session_id": skill_result.session_id,
-                "l2_payload": None,
-                "reason": FleetErrorCode.FLEET_L2_NO_RESULT_BLOCK,
-                "l2_parse_source": parsed.source,
+                "l3_session_id": skill_result.session_id,
+                "l3_payload": None,
+                "reason": FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK,
+                "l3_parse_source": parsed.source,
                 "token_usage": skill_result.token_usage,
                 "lifespan_started": skill_result.lifespan_started,
             }

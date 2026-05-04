@@ -197,7 +197,7 @@ def patch_pr_token_summary(
     owner, repo, pr_number = m.group(1), m.group(2), m.group(3)
 
     # Auto-discover order_id from environment when not explicitly provided.
-    # AUTOSKILLIT_DISPATCH_ID is set by the fleet dispatcher on all L2 sessions
+    # AUTOSKILLIT_DISPATCH_ID is set by the fleet dispatcher on all L3 sessions
     # and inherited by L3 sub-sessions, providing correct multi-clone scoping
     # without requiring recipe authors to pass order_id explicitly.
     effective_order_id = order_id or os.environ.get("AUTOSKILLIT_DISPATCH_ID", "")

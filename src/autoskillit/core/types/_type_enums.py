@@ -343,7 +343,7 @@ class SessionType(StrEnum):
         L3 (FLEET) -> L2 (ORCHESTRATOR) -> L1 (headless worker) -> L0 (subagent)
 
     FLEET        -- L3: top-level campaign dispatcher.
-                    Launches L2 food trucks via dispatch_food_truck.
+                    Launches L3 food trucks via dispatch_food_truck.
     ORCHESTRATOR -- L2: recipe runner (interactive via order, or headless food truck).
                     Launches L1 headless workers via run_skill.
     LEAF         -- L1 headless worker (or L0 subagent -- both are terminal from
@@ -379,10 +379,10 @@ class FleetErrorCode(StrEnum):
     FLEET_MANIFEST_MISSING = "fleet_manifest_missing"
     FLEET_MANIFEST_CORRUPTED = "fleet_manifest_corrupted"
     FLEET_LOCK_NOT_INITIALIZED = "fleet_lock_not_initialized"
-    FLEET_L2_TIMEOUT = "fleet_l2_timeout"
-    FLEET_L2_NO_RESULT_BLOCK = "fleet_l2_no_result_block"
-    FLEET_L2_PARSE_FAILED = "fleet_l2_parse_failed"
-    FLEET_L2_STARTUP_OR_CRASH = "fleet_l2_startup_or_crash"
+    FLEET_L3_TIMEOUT = "fleet_l3_timeout"
+    FLEET_L3_NO_RESULT_BLOCK = "fleet_l3_no_result_block"
+    FLEET_L3_PARSE_FAILED = "fleet_l3_parse_failed"
+    FLEET_L3_STARTUP_OR_CRASH = "fleet_l3_startup_or_crash"
     FLEET_BUDGET_EXCEEDED = "fleet_budget_exceeded"
     FLEET_QUOTA_EXHAUSTED = "fleet_quota_exhausted"
     FLEET_CLEANUP_FAILED = "fleet_cleanup_failed"

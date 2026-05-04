@@ -208,7 +208,7 @@ def test_watch_exits_on_terminal_campaign(monkeypatch: pytest.MonkeyPatch, tmp_p
 
 
 def test_cleanup_per_dispatch_session(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """--cleanup calls cleanup_session for each dispatch l2_session_id."""
+    """--cleanup calls cleanup_session for each dispatch l3_session_id."""
     _setup_campaign_with_sessions(
         tmp_path,
         "cid01",

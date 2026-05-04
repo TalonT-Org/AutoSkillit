@@ -362,7 +362,7 @@ async def run_skill(
 
         # Auto-enrich order_id from the fleet dispatcher's env variable when the
         # caller did not pass an explicit value. AUTOSKILLIT_DISPATCH_ID is injected
-        # by fleet/_api.py into every L2 session environment and inherited by all L3
+        # by fleet/_api.py into every L3 session environment and inherited by all
         # sub-sessions, ensuring token log entries carry the correct order_id without
         # requiring recipe authors to thread it through every run_skill call.
         effective_order_id = order_id or os.environ.get("AUTOSKILLIT_DISPATCH_ID", "")
@@ -563,18 +563,18 @@ async def dispatch_food_truck(
     resume_session_id: str | None = None,
     ctx: Context = CurrentContext(),
 ) -> str:
-    """Dispatch a single food truck L2 session for one recipe.
+    """Dispatch a single food truck L3 session for one recipe.
 
     Spawns a headless subprocess that executes the given recipe with the
     provided task and ingredient overrides. Returns a JSON envelope with
-    dispatch_id, l2_session_id, l2_payload, and token_usage.
+    dispatch_id, l3_session_id, l3_payload, and token_usage.
 
     Args:
         recipe: Recipe name to dispatch (must be kind=standard).
-        task: Task description for the L2 session.
+        task: Task description for the L3 session.
         ingredients: Optional ingredient overrides (all values must be strings).
         dispatch_name: Optional display name for the dispatch record.
-        timeout_sec: Optional L2 session timeout override in seconds.
+        timeout_sec: Optional L3 session timeout override in seconds.
         capture: Optional dict mapping capture keys to "${{ result.field }}" templates.
             Extracted values are persisted in the campaign context for downstream
             dispatches to reference via "${{ campaign.key }}" in their ingredients.
@@ -664,7 +664,7 @@ async def dispatch_food_truck(
                             name=dispatch_name,
                             status=status,
                             dispatch_id=envelope.get("dispatch_id", ""),
-                            l2_session_id=envelope.get("l2_session_id", ""),
+                            l3_session_id=envelope.get("l3_session_id", ""),
                             reason=envelope.get("reason", ""),
                             token_usage=envelope.get("token_usage") or {},
                         ),
@@ -678,7 +678,7 @@ async def dispatch_food_truck(
         from autoskillit.core import FleetErrorCode, fleet_error
 
         return fleet_error(
-            FleetErrorCode.FLEET_L2_STARTUP_OR_CRASH,
+            FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
             f"{type(exc).__name__}: {exc}",
         )
 
@@ -695,7 +695,7 @@ async def record_gate_dispatch(
 ) -> str:
     """Record the outcome of a gate dispatch to the campaign state file.
 
-    Gate dispatches are handled by AskUserQuestion (no L2 session). This tool
+    Gate dispatches are handled by AskUserQuestion (no L3 session). This tool
     persists the user's approval/rejection so that campaign resume can skip
     completed gates.
 
@@ -743,6 +743,6 @@ async def record_gate_dispatch(
         from autoskillit.core import FleetErrorCode, fleet_error
 
         return fleet_error(
-            FleetErrorCode.FLEET_L2_STARTUP_OR_CRASH,
+            FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
             f"{type(exc).__name__}: {exc}",
         )

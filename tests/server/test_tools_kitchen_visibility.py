@@ -351,7 +351,7 @@ async def test_open_kitchen_no_redisable_when_empty(tmp_path, monkeypatch):
 async def test_sous_chef_discipline_injected_on_named_open_kitchen_path(tmp_path, monkeypatch):
     """Named path (Path A) must deliver sous-chef discipline to all session types.
 
-    Headless L2 sessions receive no system prompt injection, so the only delivery
+    Headless L3 sessions receive no system prompt injection, so the only delivery
     channel is the open_kitchen response. This test verifies the discipline section
     is present in the result dict under the 'sous_chef_discipline' key.
     """

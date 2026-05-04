@@ -215,12 +215,12 @@ def test_build_fleet_dispatch_prompt_lists_all_10_tools() -> None:
 
 
 def test_build_fleet_dispatch_prompt_includes_sous_chef_sections() -> None:
-    """Dispatch prompt must include the 4 L2 sous-chef sections."""
+    """Dispatch prompt must include the 4 L3 sous-chef sections."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
     from autoskillit.cli._prompts import _build_fleet_dispatch_prompt
-    from autoskillit.fleet import _build_l2_sous_chef_block
+    from autoskillit.fleet import _build_l3_sous_chef_block
 
-    sous_chef_block = _build_l2_sous_chef_block()
+    sous_chef_block = _build_l3_sous_chef_block()
     assert sous_chef_block
     prompt = _build_fleet_dispatch_prompt(DIRECT_PREFIX)
     assert "SOUS-CHEF DISCIPLINE" in prompt

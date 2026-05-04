@@ -359,7 +359,6 @@ steps:
       cwd: "${{ inputs.source_dir }}"
       step_name: troubleshoot_run
     capture:
-      run_failure_type: "${{ result.failure_type }}"
       run_is_fixable: "${{ result.is_fixable }}"
     on_success: route_run_failure
     on_failure: escalate_stop

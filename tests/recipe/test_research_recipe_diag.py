@@ -131,10 +131,9 @@ def test_research_recipe_has_troubleshoot_run_steps(recipe):
 
 
 def test_troubleshoot_run_captures_required_tokens(recipe):
-    """troubleshoot_run_failure must capture run_failure_type and run_is_fixable."""
+    """troubleshoot_run_failure must capture run_is_fixable for downstream routing."""
     step = recipe.steps["troubleshoot_run_failure"]
     capture = step.capture or {}
-    assert "run_failure_type" in capture
     assert "run_is_fixable" in capture
 
 

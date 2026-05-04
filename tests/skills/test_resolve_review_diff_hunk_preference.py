@@ -16,15 +16,16 @@ SKILL_PATH = (
     / "resolve-review"
     / "SKILL.md"
 )
-assert SKILL_PATH.exists(), f"SKILL.md not found at {SKILL_PATH}"
-SKILL_TEXT = SKILL_PATH.read_text()
 
 
 def _step35_section() -> str:
-    start = SKILL_TEXT.find("### Step 3.5")
+    assert SKILL_PATH.exists(), f"SKILL.md not found at {SKILL_PATH}"
+    text = SKILL_PATH.read_text()
+    start = text.find("### Step 3.5")
     assert start != -1, "### Step 3.5 not found in SKILL.md"
-    end = SKILL_TEXT.find("### Step 4", start)
-    return SKILL_TEXT[start:end]
+    end = text.find("### Step 4", start)
+    assert end != -1, "### Step 4 not found after Step 3.5 in SKILL.md"
+    return text[start:end]
 
 
 def test_diff_hunk_documented_as_preferred_context_in_step35() -> None:

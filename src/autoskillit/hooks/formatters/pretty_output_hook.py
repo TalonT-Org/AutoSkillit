@@ -39,7 +39,15 @@ _HOOKS_DIR = str(Path(__file__).resolve().parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
-from _fmt_execution import (  # type: ignore[import-not-found]  # noqa: E402
+from _fmt_execution import (  # type: ignore[import-not-found]  # noqa: E402, F401
+    _FMT_MERGE_WORKTREE_RENDERED,
+    _FMT_MERGE_WORKTREE_SUPPRESSED,
+    _FMT_RUN_CMD_RENDERED,
+    _FMT_RUN_CMD_SUPPRESSED,
+    _FMT_RUN_SKILL_RENDERED,
+    _FMT_RUN_SKILL_SUPPRESSED,
+    _FMT_TEST_CHECK_RENDERED,
+    _FMT_TEST_CHECK_SUPPRESSED,
     _fmt_merge_worktree,
     _fmt_run_cmd,
     _fmt_run_skill,
@@ -72,7 +80,15 @@ from _fmt_recipe import (  # type: ignore[import-not-found]  # noqa: E402, F401
     _fmt_recipe_body,
     _strip_yaml_ingredients_block,
 )
-from _fmt_status import (  # type: ignore[import-not-found]  # noqa: E402
+from _fmt_status import (  # type: ignore[import-not-found]  # noqa: E402, F401
+    _FMT_CLONE_REPO_RENDERED,
+    _FMT_CLONE_REPO_SUPPRESSED,
+    _FMT_KITCHEN_STATUS_RENDERED,
+    _FMT_KITCHEN_STATUS_SUPPRESSED,
+    _FMT_TIMING_SUMMARY_RENDERED,
+    _FMT_TIMING_SUMMARY_SUPPRESSED,
+    _FMT_TOKEN_SUMMARY_RENDERED,
+    _FMT_TOKEN_SUMMARY_SUPPRESSED,
     _fmt_clone_repo,
     _fmt_get_timing_summary,
     _fmt_get_token_summary,

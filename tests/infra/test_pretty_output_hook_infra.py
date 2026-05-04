@@ -92,6 +92,39 @@ def test_formatter_coverage_contract():
     )
 
 
+def test_all_formatters_have_coverage_contracts():
+    """Every dedicated formatter must have a registered field coverage contract."""
+    from autoskillit.hooks.formatters.pretty_output_hook import _FORMATTERS
+    from tests.infra.conftest import _FORMATTER_COVERAGE_REGISTRY
+
+    uncovered = set(_FORMATTERS.keys()) - set(_FORMATTER_COVERAGE_REGISTRY.keys())
+    assert uncovered == set(), (
+        f"Formatters without coverage contracts: {sorted(uncovered)}. "
+        "Define a TypedDict for the tool result, add RENDERED/SUPPRESSED frozensets, "
+        "and register in _FORMATTER_COVERAGE_REGISTRY."
+    )
+
+
+def test_coverage_registry_entries_are_valid():
+    """Every registry entry's frozensets must exactly cover its TypedDict annotations."""
+    from tests.infra.conftest import _FORMATTER_COVERAGE_REGISTRY
+
+    for name, entry in _FORMATTER_COVERAGE_REGISTRY.items():
+        all_fields = set(entry.typed_dict.__annotations__)
+        covered = entry.rendered | entry.suppressed
+        overlap = entry.rendered & entry.suppressed
+        uncovered = all_fields - covered
+        extra = covered - all_fields
+
+        assert overlap == set(), (
+            f"{name}: fields in both RENDERED and SUPPRESSED: {sorted(overlap)}"
+        )
+        assert uncovered == set(), (
+            f"{name}: TypedDict fields without coverage: {sorted(uncovered)}"
+        )
+        assert extra == set(), f"{name}: frozenset entries not in TypedDict: {sorted(extra)}"
+
+
 # ---------------------------------------------------------------------------
 # T-3: _wrap_plain_str_for_claude_code helper shape
 # ---------------------------------------------------------------------------

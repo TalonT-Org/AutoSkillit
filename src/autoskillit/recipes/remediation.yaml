@@ -1119,7 +1119,6 @@ steps:
       - when: "${{ context.push_error_type }} == queued_branch"
         route: wait_dequeue_retry
       - route: release_issue_failure
-    skip_when_false: "inputs.open_pr"
 
   wait_dequeue_retry:
     tool: wait_for_merge_queue
@@ -1145,7 +1144,6 @@ steps:
         route: register_clone_unconfirmed
       - route: register_clone_unconfirmed
     on_failure: register_clone_unconfirmed
-    skip_when_false: "inputs.open_pr"
     optional_context_refs:
       - push_error_type
 

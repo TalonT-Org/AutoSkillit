@@ -9,17 +9,23 @@ from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 _MERGE_QUEUE_WAIT_TOOLS = frozenset({"wait_for_merge_queue"})
 _PUSH_TOOLS = frozenset({"push_to_remote"})
+_FLOW_BOUNDARY_TOOLS = frozenset({
+    "wait_for_merge_queue",
+    "wait_for_ci",
+    "wait_for_direct_merge",
+    "wait_for_immediate_merge",
+})
 
 
 def _collect_ejection_exit_steps(ctx: ValidationContext) -> set[str]:
     """Collect step names that are pure-ejection-route exits from merge-queue-wait steps.
 
     Only matches conditions for the ``ejected`` state, not ``ejected_ci_failure``
-    or ``dropped_*`` variants. Those routes lead to CI diagnosis or terminal paths
-    that do not need ``queued_branch`` error handling.
+    or ``dropped_*`` variants. Excludes routes whose target is itself a
+    ``wait_for_merge_queue`` step (re-enrollment, not ejection recovery).
     """
     exits: set[str] = set()
-    for step_name, step in ctx.recipe.steps.items():
+    for _name, step in ctx.recipe.steps.items():
         if step.tool not in _MERGE_QUEUE_WAIT_TOOLS:
             continue
         if step.on_result and step.on_result.conditions:
@@ -28,12 +34,15 @@ def _collect_ejection_exit_steps(ctx: ValidationContext) -> set[str]:
                     continue
                 when_lower = cond.when.lower()
                 if "ejected" in when_lower and "ejected_ci_failure" not in when_lower:
+                    target = ctx.recipe.steps.get(cond.route)
+                    if target and target.tool in _MERGE_QUEUE_WAIT_TOOLS:
+                        continue
                     exits.add(cond.route)
     return exits
 
 
 def _bfs_forward(graph: dict[str, set[str]], starts: set[str], ctx: ValidationContext) -> set[str]:
-    """BFS from start nodes, stopping at merge-queue wait step boundaries."""
+    """BFS from start nodes, stopping at flow-boundary step tools."""
     reachable: set[str] = set()
     frontier = starts & set(graph)
     while frontier:
@@ -42,7 +51,7 @@ def _bfs_forward(graph: dict[str, set[str]], starts: set[str], ctx: ValidationCo
         for name in frontier:
             for succ in graph.get(name, set()) - reachable:
                 step = ctx.recipe.steps.get(succ)
-                if step and step.tool in _MERGE_QUEUE_WAIT_TOOLS and succ not in starts:
+                if step and step.tool in _FLOW_BOUNDARY_TOOLS and succ not in starts:
                     continue
                 next_frontier.add(succ)
         frontier = next_frontier

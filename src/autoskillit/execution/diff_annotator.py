@@ -83,11 +83,7 @@ def select_review_agents(
 ) -> list[str]:
     if metrics.added_lines < loc_threshold and metrics.changed_files < file_threshold:
         agents: list[str] = list(_SMALL_DIFF_CORE_AGENTS)
-        if any(
-            fp.endswith(s) or fp.endswith(s.lstrip("/"))
-            for fp in metrics.file_paths
-            for s in _STRUCTURAL_SUFFIXES
-        ):
+        if any(("/" + fp).endswith(s) for fp in metrics.file_paths for s in _STRUCTURAL_SUFFIXES):
             agents.insert(0, "arch")
         return agents
     return list(_ALL_STANDARD_AGENTS)

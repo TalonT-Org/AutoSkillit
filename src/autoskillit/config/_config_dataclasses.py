@@ -301,3 +301,27 @@ class FleetConfig:
             raise ValueError(
                 f"max_concurrent_dispatches must be >= 1, got {self.max_concurrent_dispatches}"
             )
+
+
+@dataclass
+class ProvidersConfig:
+    """Configuration for alternative LLM provider routing.
+
+    API keys must live in .secrets.yaml or environment variables and must
+    never be committed to version-controlled config files.
+    """
+
+    default_provider: str | None = None
+    profiles: dict[str, dict[str, str]] = field(default_factory=dict)
+    step_overrides: dict[str, str] = field(default_factory=dict)
+    provider_retry_limit: int = 2
+
+    def __post_init__(self) -> None:
+        if self.provider_retry_limit < 1:
+            raise ValueError(f"provider_retry_limit must be >= 1, got {self.provider_retry_limit}")
+        for name, profile in self.profiles.items():
+            for k, v in profile.items():
+                if not isinstance(v, str):
+                    raise ValueError(
+                        f"profiles[{name!r}][{k!r}] must be a string, got {type(v).__name__!r}"
+                    )

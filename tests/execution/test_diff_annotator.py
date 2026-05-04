@@ -5,9 +5,12 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.execution.diff_annotator import (
+    DiffMetrics,
     annotate_diff,
+    compute_diff_metrics,
     filter_findings,
     parse_hunk_ranges,
+    select_review_agents,
 )
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -244,3 +247,131 @@ class TestEndToEnd:
         assert len(result.unpostable) == 1
         assert result.unpostable[0]["message"] == "stream offset"
         assert result.all_unpostable is False
+
+
+# --- compute_diff_metrics ---
+
+
+class TestComputeDiffMetrics:
+    def test_counts_added_lines(self):
+        diff = (
+            "diff --git a/f.py b/f.py\n"
+            "--- a/f.py\n"
+            "+++ b/f.py\n"
+            "@@ -1,2 +1,4 @@\n"
+            " existing\n"
+            "+new_line_1\n"
+            "+new_line_2\n"
+            " more\n"
+        )
+        metrics = compute_diff_metrics(diff)
+        assert metrics.added_lines == 2
+
+    def test_counts_removed_lines(self):
+        diff = (
+            "diff --git a/f.py b/f.py\n"
+            "--- a/f.py\n"
+            "+++ b/f.py\n"
+            "@@ -1,3 +1,1 @@\n"
+            "-old_1\n"
+            "-old_2\n"
+            " kept\n"
+        )
+        metrics = compute_diff_metrics(diff)
+        assert metrics.removed_lines == 2
+
+    def test_counts_changed_files(self):
+        diff = (
+            "diff --git a/a.py b/a.py\n--- a/a.py\n+++ b/a.py\n"
+            "@@ -1,1 +1,2 @@\n+x\n"
+            "diff --git a/b.py b/b.py\n--- a/b.py\n+++ b/b.py\n"
+            "@@ -1,1 +1,2 @@\n+y\n"
+            "diff --git a/c.py b/c.py\n--- a/c.py\n+++ b/c.py\n"
+            "@@ -1,1 +1,2 @@\n+z\n"
+        )
+        metrics = compute_diff_metrics(diff)
+        assert metrics.changed_files == 3
+        assert set(metrics.file_paths) == {"a.py", "b.py", "c.py"}
+
+    def test_extracts_file_paths(self):
+        diff = (
+            "diff --git a/src/app.py b/src/app.py\n"
+            "--- a/src/app.py\n"
+            "+++ b/src/app.py\n"
+            "@@ -1,1 +1,2 @@\n"
+            "+x\n"
+        )
+        metrics = compute_diff_metrics(diff)
+        assert metrics.file_paths == ["src/app.py"]
+
+    def test_empty_diff(self):
+        metrics = compute_diff_metrics("")
+        assert metrics.added_lines == 0
+        assert metrics.removed_lines == 0
+        assert metrics.changed_files == 0
+        assert metrics.file_paths == []
+
+    def test_ignores_diff_headers(self):
+        diff = "diff --git a/f.py b/f.py\n--- a/f.py\n+++ b/f.py\n@@ -1,1 +1,1 @@\n context\n"
+        metrics = compute_diff_metrics(diff)
+        assert metrics.added_lines == 0
+        assert metrics.removed_lines == 0
+
+
+# --- select_review_agents ---
+
+
+class TestSelectReviewAgents:
+    def test_small_diff_returns_core_agents(self):
+        metrics = DiffMetrics(
+            added_lines=50,
+            removed_lines=10,
+            changed_files=2,
+            file_paths=["src/foo.py", "tests/test_foo.py"],
+        )
+        agents = select_review_agents(metrics)
+        assert agents == ["tests", "cohesion"]
+
+    def test_small_diff_with_structural_adds_arch(self):
+        metrics = DiffMetrics(
+            added_lines=30,
+            removed_lines=5,
+            changed_files=2,
+            file_paths=["src/pkg/__init__.py", "src/pkg/mod.py"],
+        )
+        agents = select_review_agents(metrics)
+        assert "arch" in agents
+        assert "tests" in agents
+        assert "cohesion" in agents
+        assert len(agents) == 3
+
+    def test_medium_diff_returns_all_agents(self):
+        metrics = DiffMetrics(
+            added_lines=200, removed_lines=50, changed_files=3, file_paths=["a.py", "b.py", "c.py"]
+        )
+        agents = select_review_agents(metrics)
+        assert set(agents) == {"arch", "tests", "defense", "bugs", "cohesion", "slop"}
+
+    def test_many_files_returns_all_agents(self):
+        fps = [f"f{i}.py" for i in range(5)]
+        metrics = DiffMetrics(added_lines=50, removed_lines=0, changed_files=5, file_paths=fps)
+        agents = select_review_agents(metrics)
+        assert set(agents) == {"arch", "tests", "defense", "bugs", "cohesion", "slop"}
+
+    def test_custom_thresholds(self):
+        metrics = DiffMetrics(
+            added_lines=150, removed_lines=0, changed_files=3, file_paths=["a.py", "b.py", "c.py"]
+        )
+        assert len(select_review_agents(metrics)) < 6
+        agents = select_review_agents(metrics, loc_threshold=100)
+        assert set(agents) == {"arch", "tests", "defense", "bugs", "cohesion", "slop"}
+
+    def test_deletion_regression_never_included(self):
+        metrics = DiffMetrics(
+            added_lines=500,
+            removed_lines=200,
+            changed_files=10,
+            file_paths=[f"f{i}.py" for i in range(10)],
+        )
+        agents = select_review_agents(metrics)
+        assert "deletion_regression" not in agents

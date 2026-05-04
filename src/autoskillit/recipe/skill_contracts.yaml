@@ -2096,10 +2096,18 @@ callable_contracts:
     - name: output_dir
       type: directory_path
       required: true
+    - name: loc_threshold
+      type: str
+      required: false
+    - name: file_threshold
+      type: str
+      required: false
     outputs:
     - name: annotated_diff_path
       type: file_path
     - name: hunk_ranges_path
+      type: file_path
+    - name: diff_metrics_path
       type: file_path
   autoskillit.smoke_utils.compute_domain_partitions:
     inputs:

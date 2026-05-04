@@ -151,10 +151,11 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/cli/update/_update_checks.py", 79),
     # _update_checks_fetch.py — fetch cache (extracted from _update_checks.py)
     ("src/autoskillit/cli/update/_update_checks_fetch.py", 58),
-    # smoke_utils.py — domain partitions dict, hunk ranges list, merge queue list
+    # smoke_utils.py — partitions dict, ranges list, diff metrics dict, queue list
     ("src/autoskillit/smoke_utils.py", 57),
-    ("src/autoskillit/smoke_utils.py", 87),
-    ("src/autoskillit/smoke_utils.py", 299),
+    ("src/autoskillit/smoke_utils.py", 98),
+    ("src/autoskillit/smoke_utils.py", 115),
+    ("src/autoskillit/smoke_utils.py", 328),
     # planner/consolidation.py — write-back of merged WP dicts to per-file results
     ("src/autoskillit/planner/consolidation.py", 310),
     # planner/manifests.py — finalize_wp_manifest: wp_index.json rebuild (list payload)
@@ -221,8 +222,8 @@ class TestSchemaVersionConvention:
         """List-payload sites are included since the AST scanner can't distinguish return types."""
         # These sites write list payloads through function calls but are caught by the scanner
         list_sites = [
-            ("src/autoskillit/smoke_utils.py", 87),
-            ("src/autoskillit/smoke_utils.py", 299),
+            ("src/autoskillit/smoke_utils.py", 98),
+            ("src/autoskillit/smoke_utils.py", 328),
         ]
         for site in list_sites:
             assert site in _LEGACY_JSON_WRITES, (

@@ -23,6 +23,72 @@ class FilterResult:
     all_unpostable: bool = False
 
 
+@dataclass
+class DiffMetrics:
+    """Size metrics computed from a unified diff."""
+
+    added_lines: int
+    removed_lines: int
+    changed_files: int
+    file_paths: list[str] = field(default_factory=list)
+
+
+_STRUCTURAL_SUFFIXES = (
+    "/__init__.py",
+    "/setup.py",
+    "/setup.cfg",
+    "/pyproject.toml",
+    "/Makefile",
+    "/Taskfile.yml",
+    "/Dockerfile",
+    "/docker-compose.yml",
+    "/docker-compose.yaml",
+)
+
+_ALL_STANDARD_AGENTS = ("arch", "tests", "defense", "bugs", "cohesion", "slop")
+_SMALL_DIFF_CORE_AGENTS = ("tests", "cohesion")
+
+
+def compute_diff_metrics(diff_text: str) -> DiffMetrics:
+    added = 0
+    removed = 0
+    file_paths: list[str] = []
+
+    for line in diff_text.splitlines():
+        if line.startswith("+++ b/"):
+            file_paths.append(line[6:])
+            continue
+        if line.startswith("+++"):
+            continue
+        if line.startswith("---"):
+            continue
+        if line.startswith("+"):
+            added += 1
+        elif line.startswith("-"):
+            removed += 1
+
+    return DiffMetrics(
+        added_lines=added,
+        removed_lines=removed,
+        changed_files=len(file_paths),
+        file_paths=file_paths,
+    )
+
+
+def select_review_agents(
+    metrics: DiffMetrics,
+    *,
+    loc_threshold: int = 200,
+    file_threshold: int = 5,
+) -> list[str]:
+    if metrics.added_lines < loc_threshold and metrics.changed_files < file_threshold:
+        agents: list[str] = list(_SMALL_DIFF_CORE_AGENTS)
+        if any(("/" + fp).endswith(s) for fp in metrics.file_paths for s in _STRUCTURAL_SUFFIXES):
+            agents.insert(0, "arch")
+        return agents
+    return list(_ALL_STANDARD_AGENTS)
+
+
 def parse_hunk_ranges(diff_text: str) -> dict[str, list[tuple[int, int]]]:
     """Extract per-file valid line ranges from unified diff @@ headers.
 

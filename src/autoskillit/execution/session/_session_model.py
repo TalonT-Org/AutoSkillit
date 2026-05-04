@@ -197,6 +197,8 @@ def extract_token_usage(stdout: str) -> dict[str, Any] | None:
 
     model_buckets: dict[str, dict[str, int]] = {}
     result_usage: dict[str, int] | None = None
+    peak_context = 0
+    turn_count = 0
 
     for line in stdout.strip().splitlines():
         line = line.strip()
@@ -221,6 +223,10 @@ def extract_token_usage(stdout: str) -> dict[str, Any] | None:
             bucket = model_buckets.setdefault(model, {f: 0 for f in _TOKEN_FIELDS})
             for f in _TOKEN_FIELDS:
                 bucket[f] += usage.get(f, 0)
+            cr = usage.get("cache_read_input_tokens", 0)
+            if cr > peak_context:
+                peak_context = cr
+            turn_count += 1
         elif record_type == "result":
             usage = obj.get("usage")
             if isinstance(usage, dict):
@@ -240,6 +246,8 @@ def extract_token_usage(stdout: str) -> dict[str, Any] | None:
     return {
         **totals,
         "model_breakdown": dict(model_buckets) if model_buckets else {},
+        "peak_context": peak_context,
+        "turn_count": turn_count,
     }
 
 

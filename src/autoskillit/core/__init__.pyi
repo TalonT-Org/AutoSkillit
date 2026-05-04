@@ -4,8 +4,6 @@ from ._install_detect import _is_release_tag as _is_release_tag
 from ._install_detect import _is_stable_track as _is_stable_track
 from ._install_detect import is_dev_install as is_dev_install
 from ._install_detect import parse_direct_url as parse_direct_url
-from .runtime._linux_proc import read_boot_id as read_boot_id
-from .runtime._linux_proc import read_starttime_ticks as read_starttime_ticks
 from ._plugin_cache import _InstallLock as _InstallLock
 from ._plugin_cache import _retire_old_versions as _retire_old_versions
 from ._plugin_cache import any_kitchen_open as any_kitchen_open
@@ -44,11 +42,6 @@ from .io import load_yaml as load_yaml
 from .io import resolve_temp_dir as resolve_temp_dir
 from .io import temp_dir_display_str as temp_dir_display_str
 from .io import write_versioned_json as write_versioned_json
-from .runtime.kitchen_state import KitchenMarker as KitchenMarker
-from .runtime.kitchen_state import get_state_dir as get_state_dir
-from .runtime.kitchen_state import is_marker_fresh as is_marker_fresh
-from .runtime.kitchen_state import read_marker as read_marker
-from .runtime.kitchen_state import sweep_stale_markers as sweep_stale_markers
 from .logging import configure_logging as configure_logging
 from .logging import get_logger as get_logger
 from .paths import GENERATED_FILES as GENERATED_FILES
@@ -58,6 +51,13 @@ from .paths import find_latest_session_id as find_latest_session_id
 from .paths import is_git_main_checkout as is_git_main_checkout
 from .paths import is_git_worktree as is_git_worktree
 from .paths import pkg_root as pkg_root
+from .runtime._linux_proc import read_boot_id as read_boot_id
+from .runtime._linux_proc import read_starttime_ticks as read_starttime_ticks
+from .runtime.kitchen_state import KitchenMarker as KitchenMarker
+from .runtime.kitchen_state import get_state_dir as get_state_dir
+from .runtime.kitchen_state import is_marker_fresh as is_marker_fresh
+from .runtime.kitchen_state import read_marker as read_marker
+from .runtime.kitchen_state import sweep_stale_markers as sweep_stale_markers
 from .runtime.readiness import cleanup_readiness_sentinel as cleanup_readiness_sentinel
 from .runtime.readiness import readiness_sentinel_path as readiness_sentinel_path
 from .runtime.readiness import write_readiness_sentinel as write_readiness_sentinel

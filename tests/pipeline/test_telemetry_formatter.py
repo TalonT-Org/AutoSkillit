@@ -63,6 +63,8 @@ class TestFormatTokenTable:
         assert "|---" in result
         assert "| uncached |" in result
         assert "| cache_read |" in result
+        assert "| peak_ctx |" in result
+        assert "| turns |" in result
         assert "| cache_write |" in result
         assert "- input_tokens:" not in result
         assert "# Token Summary" not in result
@@ -112,6 +114,8 @@ class TestFormatTokenTable:
                 "output_tokens": 500,
                 "cache_creation_input_tokens": 100,
                 "cache_read_input_tokens": 200,
+                "peak_context": 200,
+                "turn_count": 5,
                 "invocation_count": 1,
                 "wall_clock_seconds": 45.7,
             },
@@ -121,6 +125,7 @@ class TestFormatTokenTable:
             "output_tokens": 500,
             "cache_creation_input_tokens": 100,
             "cache_read_input_tokens": 200,
+            "peak_context": 200,
             "total_elapsed_seconds": 45.7,
         }
         result = TelemetryFormatter.format_token_table(steps, total)
@@ -128,10 +133,10 @@ class TestFormatTokenTable:
             [
                 "## Token Usage Summary",
                 "",
-                "| Step | uncached | output | cache_read | cache_write | count | time |",
-                "|------|----------|--------|------------|-------------|-------|------|",
-                "| plan | 1.0k | 500 | 200 | 100 | 1 | 46s |",
-                "| **Total** | 1.0k | 500 | 200 | 100 | | 46s |",
+                "| Step | uncached | output | cache_read | peak_ctx | turns | cache_write | time |",  # noqa: E501
+                "|------|----------|--------|------------|----------|-------|-------------|------|",
+                "| plan | 1.0k | 500 | 200 | 200 | 5 | 100 | 46s |",
+                "| **Total** | 1.0k | 500 | 200 | 200 | | 100 | 46s |",
             ]
         )
         assert result == expected
@@ -232,21 +237,27 @@ def test_format_timing_table_terminal_output_has_leading_indent() -> None:
 
 
 def test_terminal_table_has_four_token_columns() -> None:
-    """Terminal table must show UNCACHED, CACHE_RD, CACHE_WR column headers."""
+    """Terminal table must show UNCACHED, CACHE_RD, PEAK_CTX, TURNS, CACHE_WR headers."""
     result = TelemetryFormatter.format_token_table_terminal(_STEPS, _TOTAL)
     assert "UNCACHED" in result
     assert "CACHE_RD" in result
+    assert "PEAK_CTX" in result
+    assert "TURNS" in result
     assert "CACHE_WR" in result
+    assert "COUNT" not in result
 
 
 def test_compact_kv_four_token_prefixes() -> None:
-    """Compact KV format must use uc:, cr:, cw: prefixes and split totals."""
+    """Compact KV format must use uc:, cr:, pk:, cw:, turns: prefixes and split totals."""
     result = TelemetryFormatter.format_compact_kv(_STEPS, _TOTAL)
     assert "uc:" in result
     assert "cr:" in result
+    assert "pk:" in result
     assert "cw:" in result
+    assert "turns:" in result
     assert "total_uncached:" in result
     assert "total_cache_read:" in result
+    assert "total_peak_context:" in result
     assert "total_cache_write:" in result
     assert "in:" not in result
     assert " cached:" not in result
@@ -382,7 +393,7 @@ def test_efficiency_table_columns() -> None:
     result = TelemetryFormatter.format_efficiency_table(steps, total)
     assert "## Token Efficiency" in result
     assert "LoC Changed" in result
-    assert "cache_read/LoC" in result
+    assert "peak_ctx/LoC" in result
     assert "cache_write/LoC" in result
     assert "output/LoC" in result
 
@@ -393,7 +404,7 @@ def test_efficiency_table_ratios() -> None:
     steps = [
         {
             "step_name": "implement",
-            "cache_read_input_tokens": 1000,
+            "peak_context": 1000,
             "cache_creation_input_tokens": 200,
             "output_tokens": 50,
             "loc_insertions": 80,
@@ -403,12 +414,12 @@ def test_efficiency_table_ratios() -> None:
     total = {
         "loc_insertions": 80,
         "loc_deletions": 20,
-        "cache_read_input_tokens": 1000,
+        "peak_context": 1000,
         "cache_creation_input_tokens": 200,
         "output_tokens": 50,
     }
     result = TelemetryFormatter.format_efficiency_table(steps, total)
-    # loc_changed = 100; cache_read/LoC = 10.0; cache_write/LoC = 2.0; output/LoC = 0.5
+    # loc_changed = 100; peak_ctx/LoC = 10.0; cache_write/LoC = 2.0; output/LoC = 0.5
     assert "10.0" in result
     assert "2.0" in result
     assert "0.5" in result
@@ -421,7 +432,7 @@ def test_efficiency_table_zero_loc_step_shows_dash() -> None:
     steps = [
         {
             "step_name": "no-change",
-            "cache_read_input_tokens": 500,
+            "peak_context": 500,
             "cache_creation_input_tokens": 100,
             "output_tokens": 20,
             "loc_insertions": 0,
@@ -429,7 +440,7 @@ def test_efficiency_table_zero_loc_step_shows_dash() -> None:
         },
         {
             "step_name": "implement",
-            "cache_read_input_tokens": 1000,
+            "peak_context": 1000,
             "cache_creation_input_tokens": 200,
             "output_tokens": 50,
             "loc_insertions": 50,
@@ -439,7 +450,7 @@ def test_efficiency_table_zero_loc_step_shows_dash() -> None:
     total = {
         "loc_insertions": 50,
         "loc_deletions": 10,
-        "cache_read_input_tokens": 1500,
+        "peak_context": 1000,
         "cache_creation_input_tokens": 300,
         "output_tokens": 70,
     }
@@ -453,7 +464,7 @@ def test_efficiency_table_total_row_uses_aggregate_totals() -> None:
     steps = [
         {
             "step_name": "plan",
-            "cache_read_input_tokens": 200,
+            "peak_context": 200,
             "cache_creation_input_tokens": 0,
             "output_tokens": 10,
             "loc_insertions": 10,
@@ -461,7 +472,7 @@ def test_efficiency_table_total_row_uses_aggregate_totals() -> None:
         },
         {
             "step_name": "implement",
-            "cache_read_input_tokens": 800,
+            "peak_context": 800,
             "cache_creation_input_tokens": 100,
             "output_tokens": 40,
             "loc_insertions": 90,
@@ -471,12 +482,12 @@ def test_efficiency_table_total_row_uses_aggregate_totals() -> None:
     total = {
         "loc_insertions": 100,
         "loc_deletions": 10,
-        "cache_read_input_tokens": 1000,
+        "peak_context": 1000,
         "cache_creation_input_tokens": 100,
         "output_tokens": 50,
     }
     result = TelemetryFormatter.format_efficiency_table(steps, total)
-    # Total loc_changed=110; cache_read/LoC=1000/110≈9.1
+    # Total loc_changed=110; peak_ctx/LoC=1000/110≈9.1
     assert "9.1" in result
     assert "**Total**" in result
 
@@ -487,7 +498,7 @@ def test_efficiency_table_terminal_no_markdown() -> None:
     steps = [
         {
             "step_name": "implement",
-            "cache_read_input_tokens": 1000,
+            "peak_context": 1000,
             "cache_creation_input_tokens": 200,
             "output_tokens": 50,
             "loc_insertions": 80,
@@ -497,10 +508,11 @@ def test_efficiency_table_terminal_no_markdown() -> None:
     total = {
         "loc_insertions": 80,
         "loc_deletions": 20,
-        "cache_read_input_tokens": 1000,
+        "peak_context": 1000,
         "cache_creation_input_tokens": 200,
         "output_tokens": 50,
     }
     result = TelemetryFormatter.format_efficiency_table_terminal(steps, total)
     assert "|" not in result  # no markdown pipes
     assert "LOC" in result  # column header present
+    assert "PK/LOC" in result

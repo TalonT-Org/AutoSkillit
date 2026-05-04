@@ -540,6 +540,30 @@ def test_token_usage_json_schema(tmp_path):
     assert tu["cache_creation_input_tokens"] == 2
     assert tu["cache_read_input_tokens"] == 1
     assert tu["timing_seconds"] == 15.0
+    assert tu["peak_context"] == 0
+    assert tu["turn_count"] == 0
+
+
+def test_token_usage_json_includes_peak_context_and_turn_count(tmp_path):
+    """flush_session_log writes peak_context and turn_count to token_usage.json."""
+    _flush(
+        tmp_path,
+        step_name="implement",
+        token_usage={
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "cache_creation_input_tokens": 10,
+            "cache_read_input_tokens": 200,
+            "peak_context": 75000,
+            "turn_count": 14,
+        },
+        timing_seconds=30.0,
+        proc_snapshots=None,
+        success=True,
+    )
+    tu = json.loads((tmp_path / "sessions" / "test-session-001" / "token_usage.json").read_text())
+    assert tu["peak_context"] == 75000
+    assert tu["turn_count"] == 14
 
 
 def test_step_timing_json_schema(tmp_path):

@@ -61,12 +61,13 @@ def test_format_get_token_summary_compact():
     out, _ = _run_hook(event=event)
     text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
     assert "token_summary" in text
-    assert "investigate x1 [uc:45.2k out:12.8k cr:1.2M cw:0 t:0.0s]" in text
-    assert "make_plan x2 [uc:30.0k out:8.0k cr:0 cw:500.0k t:0.0s]" in text
-    assert "implement x1 [uc:60.0k out:15.0k cr:2.0M cw:0 t:0.0s]" in text
+    assert "investigate x1 [uc:45.2k out:12.8k cr:1.2M pk:0 cw:0 turns:0 t:0.0s]" in text
+    assert "make_plan x2 [uc:30.0k out:8.0k cr:0 pk:0 cw:500.0k turns:0 t:0.0s]" in text
+    assert "implement x1 [uc:60.0k out:15.0k cr:2.0M pk:0 cw:0 turns:0 t:0.0s]" in text
     assert "total_uncached:" in text
     assert "total_out:" in text
     assert "total_cache_read:" in text
+    assert "total_peak_context:" in text
     assert "total_cache_write:" in text
 
 

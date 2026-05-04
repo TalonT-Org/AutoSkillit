@@ -391,6 +391,8 @@ def flush_session_log(
             "order_id": order_id,
             "loc_insertions": loc_insertions,
             "loc_deletions": loc_deletions,
+            "peak_context": token_usage.get("peak_context", 0),
+            "turn_count": token_usage.get("turn_count", 0),
         }
         atomic_write(session_dir / "token_usage.json", json.dumps(tu_data))
 

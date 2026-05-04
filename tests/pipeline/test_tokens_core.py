@@ -37,6 +37,8 @@ class TestTokenEntry:
             "elapsed_seconds",
             "loc_insertions",
             "loc_deletions",
+            "peak_context",
+            "turn_count",
         }
 
     def test_default_counts_are_zero(self):
@@ -65,6 +67,8 @@ class TestTokenEntry:
             "elapsed_seconds",
             "loc_insertions",
             "loc_deletions",
+            "peak_context",
+            "turn_count",
         }
         assert d["step_name"] == "implement"
         assert d["input_tokens"] == 42
@@ -152,6 +156,8 @@ class TestDefaultTokenLog:
             "total_elapsed_seconds": 0.0,
             "loc_insertions": 0,
             "loc_deletions": 0,
+            "peak_context": 0,
+            "turn_count": 0,
         }
 
     def test_token_entry_has_elapsed_seconds_field(self):
@@ -574,3 +580,93 @@ def test_token_log_load_from_log_dir_missing_loc_defaults_to_zero(tmp_path):
     report = log.get_report()
     assert report[0]["loc_insertions"] == 0
     assert report[0]["loc_deletions"] == 0
+
+
+# ---------------------------------------------------------------------------
+# T-PEAK: peak_context and turn_count
+# ---------------------------------------------------------------------------
+
+
+def test_token_entry_has_peak_context_and_turn_count_fields():
+    e = TokenEntry(step_name="plan")
+    assert e.peak_context == 0
+    assert e.turn_count == 0
+
+
+def test_record_peak_context_uses_max():
+    log = DefaultTokenLog()
+    log.record("impl", {"cache_read_input_tokens": 100, "peak_context": 50000, "turn_count": 10})
+    log.record("impl", {"cache_read_input_tokens": 200, "peak_context": 80000, "turn_count": 15})
+    report = log.get_report()
+    assert report[0]["peak_context"] == 80000
+
+
+def test_record_turn_count_sums():
+    log = DefaultTokenLog()
+    log.record("impl", {"cache_read_input_tokens": 100, "peak_context": 50000, "turn_count": 10})
+    log.record("impl", {"cache_read_input_tokens": 200, "peak_context": 80000, "turn_count": 15})
+    report = log.get_report()
+    assert report[0]["turn_count"] == 25
+
+
+def test_compute_total_peak_context_is_max_across_steps():
+    log = DefaultTokenLog()
+    log.record("plan", {"cache_read_input_tokens": 100, "peak_context": 40000, "turn_count": 5})
+    log.record("impl", {"cache_read_input_tokens": 200, "peak_context": 70000, "turn_count": 18})
+    total = log.compute_total()
+    assert total["peak_context"] == 70000
+    assert total["turn_count"] == 23
+
+
+def test_load_from_log_dir_reads_peak_context_and_turn_count(tmp_path):
+    sessions_dir = tmp_path / "sessions" / "sess-001"
+    sessions_dir.mkdir(parents=True)
+    (tmp_path / "sessions.jsonl").write_text(
+        json.dumps({"dir_name": "sess-001", "timestamp": "2026-03-07T00:00:00+00:00"}) + "\n"
+    )
+    (sessions_dir / "token_usage.json").write_text(
+        json.dumps(
+            {
+                "step_name": "impl",
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 200,
+                "timing_seconds": 5.0,
+                "order_id": "",
+                "peak_context": 60000,
+                "turn_count": 12,
+            }
+        )
+    )
+    log = DefaultTokenLog()
+    log.load_from_log_dir(tmp_path)
+    report = log.get_report()
+    assert report[0]["peak_context"] == 60000
+    assert report[0]["turn_count"] == 12
+
+
+def test_load_from_log_dir_missing_peak_context_defaults_to_zero(tmp_path):
+    sessions_dir = tmp_path / "sessions" / "sess-old"
+    sessions_dir.mkdir(parents=True)
+    (tmp_path / "sessions.jsonl").write_text(
+        json.dumps({"dir_name": "sess-old", "timestamp": "2026-03-07T00:00:00+00:00"}) + "\n"
+    )
+    (sessions_dir / "token_usage.json").write_text(
+        json.dumps(
+            {
+                "step_name": "plan",
+                "input_tokens": 500,
+                "output_tokens": 50,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "timing_seconds": 3.0,
+                "order_id": "",
+            }
+        )
+    )
+    log = DefaultTokenLog()
+    log.load_from_log_dir(tmp_path)
+    report = log.get_report()
+    assert report[0]["peak_context"] == 0
+    assert report[0]["turn_count"] == 0

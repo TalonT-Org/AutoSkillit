@@ -286,6 +286,8 @@ def build_leaf_headless_cmd(
     scenario_step_name: str = "",
     temp_dir_relpath: str | None = None,
     allowed_write_prefix: str = "",
+    provider_extras: Mapping[str, str] | None = None,
+    profile_name: str = "",
 ) -> ClaudeHeadlessCmd:
     """Build the complete headless command spec for a leaf session.
 
@@ -320,6 +322,17 @@ def build_leaf_headless_cmd(
         When > 0, carried as ``CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=<ms>`` in ``.env``.
     scenario_step_name
         When non-empty, carried as ``SCENARIO_STEP_NAME=<name>`` in ``.env`` for recording.
+    temp_dir_relpath
+        Relative path to the temp directory injected into the CWD anchor directive.
+        Falls back to the canonical default when None.
+    allowed_write_prefix
+        When non-empty, carried as ``AUTOSKILLIT_ALLOWED_WRITE_PREFIX`` in ``.env``.
+    provider_extras
+        Provider-profile env vars merged into the session environment after
+        session-identity keys are set.  ``AUTOSKILLIT_SESSION_TYPE`` and
+        ``AUTOSKILLIT_HEADLESS`` keys are silently ignored.
+    profile_name
+        When non-empty, carried as ``AUTOSKILLIT_PROVIDER_PROFILE`` in ``.env``.
     """
     prompt = _inject_narration_suppression(
         _inject_cwd_anchor(
@@ -347,6 +360,12 @@ def build_leaf_headless_cmd(
     if allowed_write_prefix:
         extras["AUTOSKILLIT_ALLOWED_WRITE_PREFIX"] = allowed_write_prefix
     extras["AUTOSKILLIT_SKILL_NAME"] = extract_skill_name(skill_command) or ""
+    if provider_extras:
+        for k, v in provider_extras.items():
+            if k not in ("AUTOSKILLIT_SESSION_TYPE", "AUTOSKILLIT_HEADLESS"):
+                extras[k] = v
+    if profile_name:
+        extras["AUTOSKILLIT_PROVIDER_PROFILE"] = profile_name
 
     filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
     spec = build_headless_cmd(prompt, model=model, env_extras=extras, base=filtered_base)

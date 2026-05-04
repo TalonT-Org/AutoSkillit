@@ -448,6 +448,56 @@ class TestBuildLeafHeadlessCmd:
         assert "AUTOSKILLIT_PROJECT_DIR" not in spec.env
         assert "AUTOSKILLIT_L2_TOOL_TAGS" not in spec.env
 
+    def test_provider_extras_injected_into_env(self) -> None:
+        spec = build_leaf_headless_cmd(
+            "/investigate foo",
+            **self.BASE,
+            provider_extras={
+                "ANTHROPIC_BASE_URL": "https://custom.example.com",
+                "ANTHROPIC_API_KEY": "sk-test",
+            },
+        )
+        assert spec.env["ANTHROPIC_BASE_URL"] == "https://custom.example.com"
+        assert spec.env["ANTHROPIC_API_KEY"] == "sk-test"
+
+    def test_provider_extras_cannot_override_session_type(self) -> None:
+        spec = build_leaf_headless_cmd(
+            "/investigate foo",
+            **self.BASE,
+            provider_extras={"AUTOSKILLIT_SESSION_TYPE": "franchise"},
+        )
+        assert spec.env["AUTOSKILLIT_SESSION_TYPE"] == "leaf"
+
+    def test_provider_extras_cannot_override_headless(self) -> None:
+        spec = build_leaf_headless_cmd(
+            "/investigate foo",
+            **self.BASE,
+            provider_extras={"AUTOSKILLIT_HEADLESS": "0"},
+        )
+        assert spec.env["AUTOSKILLIT_HEADLESS"] == "1"
+
+    def test_host_anthropic_base_url_stripped_when_in_exclusive_vars(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Depends on P2-A1 (#1751) having added ANTHROPIC_BASE_URL to
+        # _HEADLESS_EXCLUSIVE_VARS.
+        monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://host.example.com")
+        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
+        assert "ANTHROPIC_BASE_URL" not in spec.env
+
+    def test_provider_extras_none_changes_nothing(self) -> None:
+        baseline = build_leaf_headless_cmd("/investigate foo", **self.BASE)
+        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE, provider_extras=None)
+        assert spec.env == baseline.env
+
+    def test_profile_name_injects_provider_profile_env_var(self) -> None:
+        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE, profile_name="minimax")
+        assert spec.env["AUTOSKILLIT_PROVIDER_PROFILE"] == "minimax"
+
+    def test_empty_profile_name_omits_provider_profile(self) -> None:
+        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE, profile_name="")
+        assert "AUTOSKILLIT_PROVIDER_PROFILE" not in spec.env
+
 
 class TestBuildFoodTruckCmd:
     BASE = dict(

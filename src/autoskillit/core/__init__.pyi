@@ -15,6 +15,7 @@ from ._plugin_cache import register_active_kitchen as register_active_kitchen
 from ._plugin_cache import sweep_retiring_cache as sweep_retiring_cache
 from ._plugin_cache import unregister_active_kitchen as unregister_active_kitchen
 from ._plugin_ids import _AUTOSKILLIT_PLUGIN_KEY as _AUTOSKILLIT_PLUGIN_KEY
+from ._plugin_ids import DIRECT_INSTALL_CACHE_SUBDIR as DIRECT_INSTALL_CACHE_SUBDIR
 from ._plugin_ids import DIRECT_PREFIX as DIRECT_PREFIX
 from ._plugin_ids import MARKETPLACE_PREFIX as MARKETPLACE_PREFIX
 from ._plugin_ids import _get_autoskillit_install_path as _get_autoskillit_install_path

@@ -7,7 +7,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from autoskillit.core import Severity, build_claude_env, get_logger
+from autoskillit.core import DIRECT_INSTALL_CACHE_SUBDIR, Severity, build_claude_env, get_logger
 
 from ._doctor_types import DoctorResult
 
@@ -157,7 +157,7 @@ def _check_plugin_cache_exists(cache_dir: Path | None = None) -> DoctorResult:
         )
 
     _cache_dir = cache_dir or (
-        Path.home() / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
+        Path.home() / ".claude" / "plugins" / "cache" / DIRECT_INSTALL_CACHE_SUBDIR / "autoskillit"
     )
     if _cache_dir.is_dir():
         return DoctorResult(
@@ -193,4 +193,67 @@ def _check_installed_plugins_entry(plugins_json_path: Path | None = None) -> Doc
         Severity.WARNING,
         "installed_plugins_entry",
         "autoskillit entry missing from installed_plugins.json. Run `autoskillit install` to fix.",
+    )
+
+
+def _check_plugin_cache_integrity(cache_dir: Path | None = None) -> DoctorResult:
+    """Validate that plugin cache hooks.json paths resolve to real files."""
+    from autoskillit.hook_registry import validate_plugin_cache_hooks
+
+    broken = validate_plugin_cache_hooks(cache_dir=cache_dir)
+    if broken:
+        broken_str = ", ".join(broken)
+        return DoctorResult(
+            Severity.ERROR,
+            "plugin_cache_integrity",
+            f"Plugin cache hooks.json has {len(broken)} broken path(s): {broken_str}. "
+            f"Run `autoskillit install` to rebuild the cache.",
+        )
+    return DoctorResult(
+        Severity.OK,
+        "plugin_cache_integrity",
+        "Plugin cache hook paths are valid",
+    )
+
+
+def _check_cache_version_mismatch(cache_dir: Path | None = None) -> DoctorResult:
+    """Check plugin cache version. ERROR if kitchen is open and versions mismatch."""
+    from autoskillit.core import any_kitchen_open
+    from autoskillit.version import version_info
+
+    _cache_plugin_dir = cache_dir or (
+        Path.home() / ".claude" / "plugins" / "cache" / DIRECT_INSTALL_CACHE_SUBDIR / "autoskillit"
+    )
+    try:
+        vi = version_info(plugin_dir=str(_cache_plugin_dir))
+    except Exception as exc:
+        logger.warning("version_info_failed", plugin_dir=str(_cache_plugin_dir), exc_info=True)
+        return DoctorResult(
+            Severity.ERROR,
+            "version_consistency",
+            f"Could not read plugin cache version info: {exc}. "
+            "Run `autoskillit install` to rebuild.",
+        )
+    if vi["match"]:
+        return DoctorResult(
+            Severity.OK,
+            "version_consistency",
+            f"Version {vi['package_version']} — plugin cache is current",
+        )
+    mismatch_msg = (
+        f"Plugin cache version {vi['plugin_json_version']!r} does not match "
+        f"installed package {vi['package_version']!r}. "
+        f"Run 'autoskillit install' to sync."
+    )
+    if any_kitchen_open(project_path=str(Path.cwd())):
+        return DoctorResult(
+            Severity.ERROR,
+            "version_consistency",
+            mismatch_msg + " Kitchen is open — tool calls may fail with ENOENT until kitchens are "
+            "closed and `autoskillit install` is re-run.",
+        )
+    return DoctorResult(
+        Severity.WARNING,
+        "version_consistency",
+        mismatch_msg,
     )

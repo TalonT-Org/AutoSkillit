@@ -71,7 +71,11 @@ def run_startup_hook_health_check() -> list[str]:
     Returns list of broken hook commands. Any failure is logged and swallowed.
     """
     try:
-        from autoskillit.hook_registry import find_broken_hook_scripts, iter_all_scope_paths
+        from autoskillit.hook_registry import (
+            find_broken_hook_scripts,
+            iter_all_scope_paths,
+            validate_plugin_cache_hooks,
+        )
 
         broken: list[str] = []
         for scope_label, settings_path in iter_all_scope_paths(None):
@@ -83,6 +87,14 @@ def run_startup_hook_health_check() -> list[str]:
                     scope=scope_label,
                     broken=scope_broken,
                 )
+        cache_broken = validate_plugin_cache_hooks()
+        if cache_broken:
+            broken.extend(cache_broken)
+            logger.warning(
+                "stale_plugin_cache_hooks_detected",
+                broken=cache_broken,
+                remediation="Run `autoskillit install` from an external terminal",
+            )
         return broken
     except Exception:
         logger.exception("startup_hook_health_check_failed")

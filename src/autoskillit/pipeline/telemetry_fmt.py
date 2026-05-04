@@ -233,21 +233,21 @@ class TelemetryFormatter:
         ]
         for step in steps:
             loc = step.get("loc_insertions", 0) + step.get("loc_deletions", 0)
-            cr = step.get("peak_context", 0)
+            peak_ctx = step.get("peak_context", 0)
             cw = step.get("cache_creation_input_tokens", 0)
             out = step.get("output_tokens", 0)
             lines.append(
                 f"| {step.get('step_name', '?')} | {loc}"
-                f" | {_ratio(cr, loc)} | {_ratio(cw, loc)} | {_ratio(out, loc)} |"
+                f" | {_ratio(peak_ctx, loc)} | {_ratio(cw, loc)} | {_ratio(out, loc)} |"
             )
 
         total_loc = total.get("loc_insertions", 0) + total.get("loc_deletions", 0)
-        total_cr = total.get("peak_context", 0)
+        total_peak = total.get("peak_context", 0)
         total_cw = total.get("cache_creation_input_tokens", 0)
         total_out = total.get("output_tokens", 0)
         lines.append(
             f"| **Total** | **{total_loc}**"
-            f" | {_ratio(total_cr, total_loc)} | {_ratio(total_cw, total_loc)}"
+            f" | {_ratio(total_peak, total_loc)} | {_ratio(total_cw, total_loc)}"
             f" | {_ratio(total_out, total_loc)} |"
         )
         return "\n".join(lines)
@@ -261,14 +261,14 @@ class TelemetryFormatter:
         rows: list[tuple[str, str, str, str, str]] = []
         for step in steps:
             loc = step.get("loc_insertions", 0) + step.get("loc_deletions", 0)
-            cr = step.get("peak_context", 0)
+            peak_ctx = step.get("peak_context", 0)
             cw = step.get("cache_creation_input_tokens", 0)
             out = step.get("output_tokens", 0)
             rows.append(
                 (
                     step.get("step_name", "?"),
                     str(loc),
-                    _ratio(cr, loc),
+                    _ratio(peak_ctx, loc),
                     _ratio(cw, loc),
                     _ratio(out, loc),
                 )

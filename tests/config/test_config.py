@@ -896,7 +896,7 @@ class TestProvidersConfig:
     def test_providers_config_importable_from_settings(self):
         from autoskillit.config.settings import ProvidersConfig as PC
 
-        assert PC is not None
+        assert PC is ProvidersConfig
 
     def test_providers_config_in_settings_all(self):
         import autoskillit.config.settings as m
@@ -919,13 +919,10 @@ class TestProvidersConfig:
     def test_providers_config_importable_from_package(self):
         from autoskillit.config import ProvidersConfig as PC
 
-        assert PC is not None
+        assert PC is ProvidersConfig
 
-    def test_from_dynaconf_providers_defaults(self):
-        from autoskillit.config._config_loader import _make_dynaconf
-
-        d = _make_dynaconf()
-        cfg = AutomationConfig.from_dynaconf(d)
+    def test_from_dynaconf_providers_defaults(self, tmp_path):
+        cfg = load_config(tmp_path)
         assert cfg.providers.default_provider is None
         assert cfg.providers.profiles == {}
         assert cfg.providers.step_overrides == {}

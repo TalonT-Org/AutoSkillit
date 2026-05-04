@@ -533,7 +533,7 @@ class AutomationConfig:
             ),
             providers=ProvidersConfig(
                 default_provider=val(pv, "default_provider", _pv["default_provider"]) or None,
-                profiles=dict(val(pv, "profiles", _pv["profiles"])),
+                profiles={k: dict(v) for k, v in val(pv, "profiles", _pv["profiles"]).items()},
                 step_overrides=dict(val(pv, "step_overrides", _pv["step_overrides"])),
                 provider_retry_limit=int(
                     val(pv, "provider_retry_limit", _pv["provider_retry_limit"])

@@ -1090,9 +1090,37 @@ steps:
       remote_url: "${{ context.remote_url }}"
       branch: "${{ context.merge_target }}"
       force: "true"
+    capture:
+      push_error_type: "${{ result.error_type }}"
     on_success: ci_watch_post_queue_fix
+    on_failure: classify_push_failure
+    skip_when_false: "inputs.open_pr"
+
+  classify_push_failure:
+    action: route
+    on_result:
+      - when: "${{ context.push_error_type }} == queued_branch"
+        route: wait_dequeue_retry
+      - route: release_issue_failure
+    skip_when_false: "inputs.open_pr"
+
+  wait_dequeue_retry:
+    tool: wait_for_merge_queue
+    with:
+      pr_number: "${{ context.pr_number }}"
+      target_branch: "${{ inputs.base_branch }}"
+      cwd: "${{ context.work_dir }}"
+      timeout_seconds: "60"
+    on_result:
+      - when: "${{ result.pr_state }} == 'ejected'"
+        route: re_push_queue_fix
+      - when: "${{ result.pr_state }} == 'timeout'"
+        route: release_issue_failure
+      - route: release_issue_failure
     on_failure: release_issue_failure
     skip_when_false: "inputs.open_pr"
+    optional_context_refs:
+      - push_error_type
 
   ci_watch_post_queue_fix:
     tool: wait_for_ci

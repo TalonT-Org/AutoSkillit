@@ -37,6 +37,7 @@ from autoskillit.execution.merge_queue._merge_queue_group_ci import (
     _MUTATION_ENABLE_AUTO_MERGE,
     _MUTATION_ENQUEUE_PR,
     _QUERY,  # noqa: F401 — re-export: tests assert merge_queue._QUERY exists
+    _QUERY_AUTO_MERGE_STATUS,
     _query_merge_group_ci,  # noqa: F401 — re-export: tests patch merge_queue._query_merge_group_ci
 )
 from autoskillit.execution.merge_queue._merge_queue_repo_state import (
@@ -133,6 +134,8 @@ class DefaultMergeQueueWatcher:
         ever_enrolled: bool = False
         was_in_queue: bool = False
         merge_group_ci_cache: str | None = None
+        pending_ejection: PRState | None = None
+        pending_reason: str = ""
 
         def _make_result(
             success: bool, pr_state: PRState, reason: str, ejection_cause: str = ""
@@ -166,7 +169,8 @@ class DefaultMergeQueueWatcher:
                 not_in_queue_cycles = 0
                 inconclusive_count = 0
                 if state["queue_state"] == "UNMERGEABLE":
-                    return _make_result(False, PRState.EJECTED, "PR is UNMERGEABLE in merge queue")
+                    pending_ejection = PRState.EJECTED
+                    pending_reason = "PR is UNMERGEABLE in merge queue"
                 await asyncio.sleep(poll_interval)
                 continue
 
@@ -227,6 +231,9 @@ class DefaultMergeQueueWatcher:
             if not_in_queue_cycles < not_in_queue_confirmation_cycles:
                 await asyncio.sleep(poll_interval)
                 continue
+
+            if pending_ejection is not None:
+                return _make_result(False, pending_ejection, pending_reason)
 
             if classification.terminal == PRState.STALLED:
                 enabled_at = state["auto_merge_enabled_at"]
@@ -467,5 +474,24 @@ class DefaultMergeQueueWatcher:
         body = resp.json()
         if "errors" in body:
             raise RuntimeError(f"GraphQL mutation error: {body['errors']}")
-        await asyncio.sleep(2)
+        await self._confirm_disable(pr_node_id)
         await self._enable_auto_merge_direct(pr_node_id)
+
+    async def _confirm_disable(self, pr_node_id: str) -> None:
+        """Poll until auto-merge disable is confirmed or timeout (best-effort)."""
+        for _ in range(6):
+            await asyncio.sleep(5)
+            resp = await self._ensure_client().post(
+                _GRAPHQL_ENDPOINT,
+                json={
+                    "query": _QUERY_AUTO_MERGE_STATUS,
+                    "variables": {"nodeId": pr_node_id},
+                },
+            )
+            if resp.status_code != 200:
+                continue
+            data = resp.json().get("data", {})
+            node = data.get("node", {}) or {}
+            if not node.get("autoMergeRequest"):
+                return
+        logger.warning("confirm_disable_timeout", pr_node_id=pr_node_id)

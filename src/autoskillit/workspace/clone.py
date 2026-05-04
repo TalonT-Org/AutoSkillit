@@ -379,6 +379,10 @@ def push_to_remote(
                 "no upstream configured" in stderr_text or "has no upstream branch" in stderr_text
             ):
                 failure["error_type"] = "force_with_lease_no_upstream"
+        if "error_type" not in failure and (
+            "GH006" in stderr_text or "merge queue" in stderr_text.lower()
+        ):
+            failure["error_type"] = "queued_branch"
         return failure
 
     logger.info(

@@ -81,6 +81,16 @@ mutation EnqueuePullRequest($prId: ID!) {
 }
 """
 
+_QUERY_AUTO_MERGE_STATUS = """
+query AutoMergeStatus($nodeId: ID!) {
+  node(id: $nodeId) {
+    ... on PullRequest {
+      autoMergeRequest { enabledAt }
+    }
+  }
+}
+"""
+
 
 async def _query_merge_group_ci(
     repo: str,

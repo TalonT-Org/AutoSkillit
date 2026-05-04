@@ -658,3 +658,76 @@ class TestMergeQueueReliability:
             await watcher.wait(pr_number=7, target_branch="main", repo="owner/repo")
 
         mock_query.assert_not_called()
+
+
+class TestToggleAutoMergeConfirmation:
+    """Tests for _toggle_auto_merge confirmation polling instead of hardcoded sleep."""
+
+    @pytest.mark.anyio
+    async def test_toggle_polls_for_disable_confirmation(self):
+        """_toggle_auto_merge polls until auto-merge is confirmed disabled."""
+        watcher = _make_watcher()
+        watcher._client = AsyncMock()
+
+        disable_resp = AsyncMock()
+        disable_resp.status_code = 200
+        disable_resp.raise_for_status = lambda: None
+        disable_resp.json.return_value = {"data": {"disablePullRequestAutoMerge": {}}}
+
+        poll_resp_still_active = AsyncMock()
+        poll_resp_still_active.status_code = 200
+        poll_resp_still_active.json.return_value = {
+            "data": {"node": {"autoMergeRequest": {"enabledAt": "2026-01-01T00:00:00Z"}}}
+        }
+
+        poll_resp_disabled = AsyncMock()
+        poll_resp_disabled.status_code = 200
+        poll_resp_disabled.json.return_value = {"data": {"node": {"autoMergeRequest": None}}}
+
+        enable_resp = AsyncMock()
+        enable_resp.status_code = 200
+        enable_resp.raise_for_status = lambda: None
+        enable_resp.json.return_value = {"data": {"enablePullRequestAutoMerge": {}}}
+
+        watcher._client.post = AsyncMock(
+            side_effect=[disable_resp, poll_resp_still_active, poll_resp_disabled, enable_resp]
+        )
+        watcher._ensure_client = lambda: watcher._client
+
+        with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
+            await watcher._toggle_auto_merge("PR_node123")
+
+        assert watcher._client.post.call_count == 4
+
+    @pytest.mark.anyio
+    async def test_toggle_does_not_use_hardcoded_sleep_2(self):
+        """_toggle_auto_merge no longer uses asyncio.sleep(2)."""
+        watcher = _make_watcher()
+        watcher._client = AsyncMock()
+
+        disable_resp = AsyncMock()
+        disable_resp.status_code = 200
+        disable_resp.raise_for_status = lambda: None
+        disable_resp.json.return_value = {"data": {"disablePullRequestAutoMerge": {}}}
+
+        poll_resp = AsyncMock()
+        poll_resp.status_code = 200
+        poll_resp.json.return_value = {"data": {"node": {"autoMergeRequest": None}}}
+
+        enable_resp = AsyncMock()
+        enable_resp.status_code = 200
+        enable_resp.raise_for_status = lambda: None
+        enable_resp.json.return_value = {"data": {"enablePullRequestAutoMerge": {}}}
+
+        watcher._client.post = AsyncMock(side_effect=[disable_resp, poll_resp, enable_resp])
+        watcher._ensure_client = lambda: watcher._client
+
+        sleep_durations: list[float] = []
+
+        async def _capture_sleep(seconds: float) -> None:
+            sleep_durations.append(seconds)
+
+        with patch("autoskillit.execution.merge_queue.asyncio.sleep", side_effect=_capture_sleep):
+            await watcher._toggle_auto_merge("PR_node123")
+
+        assert 2 not in sleep_durations

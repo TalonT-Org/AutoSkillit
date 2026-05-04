@@ -480,7 +480,7 @@ async def test_continue_on_failure_when_flagged(fleet_runtime: FleetRuntime) -> 
 
 @pytest.mark.anyio
 async def test_malformed_l3_result_surfaces_warning(fleet_runtime: FleetRuntime) -> None:
-    """Malformed sentinel body produces l2_parse_failed failure with diagnostic fields."""
+    """Malformed sentinel body produces l3_parse_failed failure with diagnostic fields."""
     from autoskillit.fleet.state import DispatchStatus
 
     rt = fleet_runtime

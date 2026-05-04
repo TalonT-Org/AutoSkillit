@@ -75,7 +75,11 @@ def test_review_pr_skill_reads_hunk_ranges_from_file() -> None:
 def test_review_pr_contract_has_diff_metrics_path() -> None:
     """annotate_pr_diff callable contract must declare diff_metrics_path output."""
     raw = yaml.safe_load(_CONTRACTS_YAML.read_text())
-    outputs = raw.get("callable_contracts", {}).get("autoskillit.smoke_utils.annotate_pr_diff", {}).get("outputs", [])
+    outputs = (
+        raw.get("callable_contracts", {})
+        .get("autoskillit.smoke_utils.annotate_pr_diff", {})
+        .get("outputs", [])
+    )
     names = [o["name"] for o in outputs]
     assert "diff_metrics_path" in names, (
         "annotate_pr_diff contract must have a diff_metrics_path output entry"

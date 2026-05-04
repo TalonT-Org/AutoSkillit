@@ -6,7 +6,11 @@ from pathlib import Path
 
 SKILL_PATH = (
     Path(__file__).parent.parent.parent
-    / "src" / "autoskillit" / "skills_extended" / "review-pr" / "SKILL.md"
+    / "src"
+    / "autoskillit"
+    / "skills_extended"
+    / "review-pr"
+    / "SKILL.md"
 )
 
 

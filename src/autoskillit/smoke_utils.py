@@ -74,7 +74,12 @@ def annotate_pr_diff(
     import subprocess  # noqa: PLC0415
 
     from autoskillit.core import atomic_write  # noqa: PLC0415
-    from autoskillit.execution import annotate_diff, compute_diff_metrics, parse_hunk_ranges, select_review_agents  # noqa: PLC0415
+    from autoskillit.execution import (
+        annotate_diff,
+        compute_diff_metrics,
+        parse_hunk_ranges,
+        select_review_agents,
+    )  # noqa: PLC0415
 
     result = subprocess.run(
         ["gh", "pr", "diff", pr_number],
@@ -95,7 +100,9 @@ def annotate_pr_diff(
     loc_thresh = int(loc_threshold) if loc_threshold else 200
     file_thresh = int(file_threshold) if file_threshold else 5
     dispatch = select_review_agents(
-        metrics, loc_threshold=loc_thresh, file_threshold=file_thresh,
+        metrics,
+        loc_threshold=loc_thresh,
+        file_threshold=file_thresh,
     )
     metrics_data = {
         "added_lines": metrics.added_lines,

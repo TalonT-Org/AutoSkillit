@@ -165,292 +165,47 @@ to directory-level cascade — no error is raised. Refresh cadence:
 
 ```
 tests/
-├── CLAUDE.md                            # xdist compatibility guidelines
+├── CLAUDE.md                            # Universal test guidelines (this file)
 ├── __init__.py
 ├── _helpers.py
+├── _subprocess_ready.py
+├── _test_filter.py                      # Test filter manifest: glob-to-test-directory mapping
 ├── conftest.py                          # Shared fixtures: minimal_ctx, tool_ctx, _make_result, _make_timeout_result
 ├── fakes.py                             # Protocol-based test fakes: InMemory*, MockSubprocessRunner
 ├── test_conftest.py                     # Tests for conftest fixtures
+├── test_fakes_conformance.py
 ├── test_llm_triage.py
+├── test_no_orchestration_tier_language.py
 ├── test_smoke_utils.py
+├── test_test_filter.py
+├── test_test_filter_cascade.py
+├── test_test_filter_content_aware.py
+├── test_test_filter_core_cascade.py
+├── test_test_filter_execution_cascade.py
+├── test_test_filter_plugin.py
+├── test_test_filter_scope_extras.py
+├── test_test_filter_step7.py
+├── test_test_filter_tiered_always_run.py
 ├── test_version.py                      # Version health tests
-├── arch/                                # AST enforcement + sub-package layer contracts
-│   ├── __init__.py
-│   ├── _helpers.py                      # Shared AST visitor infrastructure
-│   ├── _rules.py                        # Reusable AST rule definitions
-│   ├── test_anyio_migration.py          # Anyio migration guards
-│   ├── test_ast_rules.py
-│   ├── test_cli_decomposition.py
-│   ├── test_gfm_rendering_guard.py
-│   ├── test_never_raises_contracts.py
-│   ├── test_import_paths.py
-│   ├── test_layer_enforcement.py
-│   ├── test_python_no_hardcoded_temp.py    # Architectural invariant: no literal .autoskillit/temp outside whitelist
-│   ├── test_registry.py
-│   └── test_subpackage_isolation.py
-├── cli/                                 # CLI command tests
-│   ├── __init__.py
-│   ├── test_ansi.py
-│   ├── test_cook_interactive.py
-│   ├── test_cli_hooks.py
-│   ├── test_cli_marketplace.py
-│   ├── test_cli_prompts.py
-│   ├── test_cli_serve_logging.py
-│   ├── test_cook.py
-│   ├── test_doctor.py
-│   ├── test_init.py
-│   ├── test_install.py
-│   ├── test_input_tty_contracts.py
-│   ├── test_interactive_subprocess_contracts.py
-│   ├── test_mcp_names.py
-│   ├── test_onboarding.py
-│   ├── test_subprocess_env_contracts.py
-│   ├── test_terminal.py
-│   └── test_workspace.py
-├── config/                              # Config loading tests
-│   ├── __init__.py
-│   ├── test_config.py
-│   ├── test_helpers.py                  # resolve_ingredient_defaults (moved from server/ in groupG)
-│   ├── test_settings_staged_label.py
-│   └── test_settings_allowed_labels.py
-├── contracts/                           # Protocol satisfaction + package gateway contracts
-│   ├── __init__.py
-│   ├── test_claim_issue_contracts.py
-│   ├── test_claude_code_interface_contracts.py
-│   ├── test_collapse_issues_contracts.py
-│   ├── test_github_ops.py
-│   ├── test_instruction_surface.py
-│   ├── test_issue_content_fidelity.py
-│   ├── test_issue_splitter_contracts.py
-│   ├── test_l1_packages.py
-│   ├── test_package_gateways.py
-│   ├── test_pr_traceability_contracts.py
-│   ├── test_prepare_issue_contracts.py
-│   ├── test_process_issues_contracts.py
-│   ├── test_protocol_satisfaction.py
-│   ├── test_skill_contracts.py
-│   ├── test_target_skill_invocability.py
-│   ├── test_triage_contracts.py
-│   ├── test_api_surface_alignment.py
-│   ├── test_sous_chef_routing.py
-│   ├── test_sous_chef_scheduling.py
-│   ├── test_tools_recipe_contracts.py
-│   ├── test_review_pr_diff_annotation.py
-│   └── test_version_consistency.py
-├── core/                                # Core layer tests
-│   ├── __init__.py
-│   ├── test_add_dir_validation.py
-│   ├── test_branch_guard.py             # (moved from pipeline/ in groupG)
-│   ├── test_core.py
-│   ├── test_github_url.py
-│   ├── test_io.py
-│   ├── test_logging.py
-│   ├── test_paths.py
-│   ├── test_types.py
-│   ├── test_core_terminal_table.py
-│   ├── test_type_constants.py
-│   └── test_types_structure.py
-├── docs/                                # Documentation integrity tests
-│   ├── __init__.py
-│   ├── test_banned_phrases.py           # Prohibited phrases not present in documentation
-│   ├── test_doc_counts.py               # Counts of tools, skills, hooks, recipes (regression guard)
-│   ├── test_doc_index.py                # Doc file index integrity
-│   ├── test_doc_links.py                # Internal and external link validity
-│   ├── test_filename_naming.py          # Documentation filename conventions
-│   └── test_glossary_spelling.py        # Glossary term spelling consistency
-├── execution/                           # Subprocess integration + session tests
-│   ├── __init__.py
-│   ├── test_anomaly_detection.py
-│   ├── test_ci.py
-│   ├── test_ci_params.py
-│   ├── test_commands.py
-│   ├── test_db.py
-│   ├── test_diff_annotator.py
-│   ├── test_flag_contracts.py
-│   ├── test_github.py
-│   ├── test_headless.py
-│   ├── test_headless_add_dirs.py
-│   ├── test_headless_debug_logging.py
-│   ├── test_headless_env_injection.py
-│   ├── test_linux_tracing.py
-│   ├── test_merge_queue.py
-│   ├── test_normalize_subtype.py
-│   ├── test_output_format_contract.py
-│   ├── test_pr_analysis.py
-│   ├── test_process_race.py
-│   ├── test_process_channel_b.py
-│   ├── test_process_debug_logging.py
-│   ├── test_process_jsonl.py
-│   ├── test_process_kill.py
-│   ├── test_process_monitor.py
-│   ├── test_process_pty.py
-│   ├── test_process_run.py
-│   ├── test_process_submodules.py
-│   ├── test_quota.py
-│   ├── test_remote_resolver.py
-│   ├── test_session.py
-│   ├── test_session_adjudication.py
-│   ├── test_session_debug_logging.py
-│   ├── test_session_log.py
-│   ├── test_session_log_integration.py
-│   ├── test_testing.py
-│   └── test_zero_write_detection.py
-├── infra/                               # CI/CD and security configuration tests
-│   ├── __init__.py
-│   ├── test_anyio_infra.py
-│   ├── test_branch_protection_guard.py
-│   ├── test_ci_dev_config.py
-│   ├── test_claude_md_critical_rules.py
-│   ├── test_coverage_audit.py
-│   ├── test_docstring_labels.py
-│   ├── test_generated_files.py
-│   ├── test_guard_coverage.py
-│   ├── test_leaf_orchestration_guard.py
-│   ├── test_hook_executability.py
-│   ├── test_hook_registration_coverage.py
-│   ├── test_open_kitchen_guard.py       # (moved from root test_phase2_hooks.py in groupG)
-│   ├── test_pretty_output.py
-│   ├── test_pretty_output_integration.py
-│   ├── test_pyproject_bounds.py
-│   ├── test_pyproject_metadata.py       # (moved from root in groupG; path constant updated)
-│   ├── test_quota_check.py
-│   ├── test_release_sanity.py           # (moved from root in groupG; path constant updated)
-│   ├── test_release_workflows.py
-│   ├── test_remove_clone_guard.py
-│   ├── test_security_config.py
-│   ├── test_skill_cmd_check.py
-│   ├── test_skill_command_guard.py
-│   ├── test_taskfile.py
-│   ├── test_hook_sync.py
-│   ├── test_session_start_reminder.py
-│   ├── test_token_summary_appender.py
-│   └── test_unsafe_install_guard.py
-├── migration/                           # Migration engine and store tests
-│   ├── __init__.py
-│   ├── test_engine.py
-│   ├── test_loader.py
-│   ├── test_store.py
-│   └── test_api.py
-├── pipeline/                            # Audit log, gate, fidelity, and PR-gate tests
-│   ├── __init__.py
-│   ├── test_audit.py
-│   ├── test_context.py
-│   ├── test_background_supervisor.py
-│   ├── test_gate.py
-│   ├── test_mcp_response.py
-│   ├── test_pr_gates.py
-│   ├── test_telemetry_formatter.py
-│   ├── test_timings.py
-│   └── test_tokens.py
-├── recipe/                              # Recipe I/O, validation, schema tests
-│   ├── __init__.py
-│   ├── conftest.py
-│   ├── test_anti_pattern_guards.py
-│   ├── test_api.py
-│   ├── test_bundled_recipe_hidden_policy.py
-│   ├── test_bundled_recipes.py
-│   ├── test_contracts.py
-│   ├── test_diagrams.py
-│   ├── test_hidden_ingredients.py
-│   ├── test_implementation.py
-│   ├── test_io.py
-│   ├── test_issue_url_pipeline.py
-│   ├── test_loader.py
-│   ├── test_merge_prs.py
-│   ├── test_merge_prs_queue.py
-│   ├── test_merge_sub_recipe_hidden.py
-│   ├── test_remediation_recipe.py
-│   ├── test_rule_decomposition.py
-│   ├── test_rules_bypass.py
-│   ├── test_rules_ci.py
-│   ├── test_rules_clone.py
-│   ├── test_rules_contracts.py
-│   ├── test_rules_dataflow.py
-│   ├── test_rules_inputs.py
-│   ├── test_rules_pipeline_internal.py
-│   ├── test_rules_project_local_override.py
-│   ├── test_rules_recipe.py
-│   ├── test_rules_skill_content.py
-│   ├── test_rules_skills.py
-│   ├── test_rules_structure.py
-│   ├── test_rules_subset_disabled.py
-│   ├── test_rules_tools.py
-│   ├── test_rules_verdict.py
-│   ├── test_rules_worktree.py
-│   ├── test_schema.py
-│   ├── test_skill_emit_consistency.py
-│   ├── test_staleness_cache.py
-│   ├── test_sub_recipe_loading.py
-│   ├── test_sub_recipe_schema.py
-│   ├── test_sub_recipe_validation.py
-│   └── test_validator.py
-├── server/                              # Server unit tests (tool handlers)
-│   ├── __init__.py
-│   ├── test_factory.py
-│   ├── test_editable_guard.py
-│   ├── test_perform_merge_editable_guard.py
-│   ├── test_tools_label_validation.py
-│   ├── test_git.py
-│   ├── test_headless_session.py         # (moved from root test_phase2_cook_session.py in groupG)
-│   ├── test_mcp_overrides.py            # (moved from recipe/ in groupG)
-│   ├── test_server_init_gate.py
-│   ├── test_server_init_session_visibility.py
-│   ├── test_service_wrappers.py
-│   ├── test_set_commit_status.py
-│   ├── test_smoke_pipeline.py
-│   ├── test_state.py
-│   ├── test_tool_exception_boundary.py
-│   ├── test_tools_ci.py
-│   ├── test_tools_clone.py
-│   ├── test_tools_execution_command.py
-│   ├── test_tools_execution_input_gates.py
-│   ├── test_tools_execution_results.py
-│   ├── test_tools_execution_routing.py
-│   ├── test_tools_git.py
-│   ├── test_tools_integrations.py
-│   ├── test_tools_integrations_release.py
-│   ├── test_tools_kitchen_envelope.py
-│   ├── test_tools_kitchen_gate.py
-│   ├── test_tools_kitchen_visibility.py
-│   ├── test_tools_recipe.py
-│   ├── test_tools_run_cmd.py
-│   ├── test_tools_run_skill_retry.py
-│   ├── test_tools_session_diagnostics.py
-│   ├── test_tools_status_kitchen.py
-│   ├── test_tools_status_mcp_response.py
-│   ├── test_tools_status_quota_and_db.py
-│   ├── test_tools_status_summaries.py
-│   ├── test_tools_workspace.py
-│   └── test_track_response_size.py
-├── skills/                              # Skill contract and compliance tests
-│   ├── __init__.py
-│   ├── test_analyze_prs_contracts.py
-│   ├── test_conflict_resolution_guards.py
-│   ├── test_deletion_regression_guards.py
-│   ├── test_dry_walkthrough_contracts.py
-│   ├── test_merge_pr_ci_gate.py
-│   ├── test_open_integration_pr_domain_analysis.py
-│   ├── test_phase2_skills.py
-│   ├── test_resolve_review_intent_validation.py
-│   ├── test_resolve_review_thread_resolution.py
-│   ├── test_review_pr_inline_comment_guards.py
-│   ├── test_review_pr_verdict_guards.py
-│   ├── test_skill_compliance.py
-│   ├── test_skill_genericization.py
-│   ├── test_skill_output_compliance.py
-│   ├── test_skill_placeholder_contracts.py
-│   ├── test_skill_preambles.py
-│   └── test_validate_audit_contracts.py
-└── workspace/                           # Workspace and clone tests
-    ├── __init__.py
-    ├── conftest.py
-    ├── test_cleanup.py
-    ├── test_clone.py
-    ├── test_clone_ci_contract.py
-    ├── test_project_local_overrides.py
-    ├── test_session_skills.py           # (moved from root test_phase2_session_skills.py in groupG)
-    ├── test_clone_registry.py
-    └── test_skills.py
+├── arch/                                # AST enforcement + sub-package layer contracts (see arch/CLAUDE.md)
+├── assets/                              # Vendored asset integrity tests (see assets/CLAUDE.md)
+├── cli/                                 # CLI command tests (see cli/CLAUDE.md)
+├── config/                              # Config loading tests (see config/CLAUDE.md)
+├── contracts/                           # Protocol satisfaction + package gateway contracts (see contracts/CLAUDE.md)
+├── core/                                # Core layer tests (see core/CLAUDE.md)
+├── docs/                                # Documentation integrity tests (see docs/CLAUDE.md)
+├── execution/                           # Subprocess integration + session tests (see execution/CLAUDE.md)
+├── fleet/                               # Fleet campaign + dispatch tests (see fleet/CLAUDE.md)
+├── hooks/                               # Hook script tests (see hooks/CLAUDE.md)
+├── infra/                               # CI/CD and security configuration tests (see infra/CLAUDE.md)
+├── migration/                           # Migration engine and store tests (see migration/CLAUDE.md)
+├── pipeline/                            # Audit log, gate, fidelity, and PR-gate tests (see pipeline/CLAUDE.md)
+├── planner/                             # Planner manifest, validation, and compilation tests (see planner/CLAUDE.md)
+├── recipe/                              # Recipe I/O, validation, schema tests (see recipe/CLAUDE.md)
+├── server/                              # Server unit tests — tool handlers (see server/CLAUDE.md)
+├── skills/                              # Skill contract and compliance tests (see skills/CLAUDE.md)
+├── skills_extended/                     # Extended skill tests (see skills_extended/CLAUDE.md)
+└── workspace/                           # Workspace and clone tests (see workspace/CLAUDE.md)
 
 temp/                        # Temporary/working files (gitignored)
 ```

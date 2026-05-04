@@ -29,13 +29,13 @@ def test_fleet_dispatch_rejects_inside_claude_session(monkeypatch: pytest.Monkey
 
 
 # ---------------------------------------------------------------------------
-# T2. fleet dispatch — SESSION_TYPE=leaf guard
+# T2. fleet dispatch — SESSION_TYPE=skill guard
 # ---------------------------------------------------------------------------
 
 
-def test_fleet_dispatch_rejects_leaf_session_type(monkeypatch: pytest.MonkeyPatch) -> None:
-    """fleet dispatch exits 1 when ambient SESSION_TYPE is leaf."""
-    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaf")
+def test_fleet_dispatch_rejects_skill_session_type(monkeypatch: pytest.MonkeyPatch) -> None:
+    """fleet dispatch exits 1 when ambient SESSION_TYPE is skill."""
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
     monkeypatch.delenv("CLAUDECODE", raising=False)
     with pytest.raises(SystemExit, match="1"):
         _fleet_dispatch()

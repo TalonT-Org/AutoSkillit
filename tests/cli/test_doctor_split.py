@@ -107,7 +107,7 @@ def test_doctor_submodule_runtime_importable():
 
 
 def test_doctor_submodule_env_importable():
-    from autoskillit.cli.doctor._doctor_env import _check_ambient_session_type_leaf  # noqa: F401
+    from autoskillit.cli.doctor._doctor_env import _check_ambient_session_type_skill  # noqa: F401
 
 
 def test_doctor_submodule_features_importable():

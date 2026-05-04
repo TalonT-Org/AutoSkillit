@@ -1,4 +1,4 @@
-"""Tests for leaf_orchestration_guard.py PreToolUse hook."""
+"""Tests for skill_orchestration_guard.py PreToolUse hook."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ def _run_guard(
     raw_stdin: if provided, passed directly to stdin instead of json.dumps(tool_input).
     Use this to test malformed-input paths without duplicating setup boilerplate.
     """
-    from autoskillit.hooks.guards.leaf_orchestration_guard import main
+    from autoskillit.hooks.guards.skill_orchestration_guard import main
 
     stdin_content = raw_stdin if raw_stdin is not None else json.dumps(tool_input)
     env_updates: dict[str, str] = {}
@@ -46,19 +46,28 @@ def _run_guard(
         return buf.getvalue()
 
 
-def _run_guard_headless(tool_input: dict, session_type: str = "leaf") -> dict:
+def _run_guard_headless(tool_input: dict, session_type: str = "skill") -> dict:
     """Run guard in headless mode and parse output JSON."""
     out = _run_guard(tool_input, headless=True, session_type=session_type)
     return json.loads(out) if out.strip() else {}
 
 
 @pytest.mark.parametrize("tool_name", _ORCHESTRATION_TOOLS)
-def test_guard_denies_leaf_tier(tool_name):
+def test_guard_denies_skill_tier(tool_name):
+    response = _run_guard_headless(
+        {"tool_name": f"mcp__autoskillit__{tool_name}"}, session_type="skill"
+    )
+    assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "skill" in response["hookSpecificOutput"]["permissionDecisionReason"].lower()
+
+
+@pytest.mark.parametrize("tool_name", _ORCHESTRATION_TOOLS)
+def test_guard_denies_deprecated_leaf_tier(tool_name):
+    """Backward compat: SESSION_TYPE=leaf (old value) is also denied."""
     response = _run_guard_headless(
         {"tool_name": f"mcp__autoskillit__{tool_name}"}, session_type="leaf"
     )
     assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "leaf" in response["hookSpecificOutput"]["permissionDecisionReason"].lower()
 
 
 def test_guard_permits_orchestrator_tier():
@@ -80,8 +89,8 @@ def test_guard_permits_fleet_tier():
 
 
 def test_guard_denies_when_session_type_unset():
-    """Fail-closed: headless with no SESSION_TYPE is treated as leaf → deny."""
-    from autoskillit.hooks.guards.leaf_orchestration_guard import main
+    """Fail-closed: headless with no SESSION_TYPE is treated as skill session → deny."""
+    from autoskillit.hooks.guards.skill_orchestration_guard import main
 
     stdin_content = json.dumps({"tool_name": "mcp__autoskillit__run_skill"})
     env_without_session_type = {
@@ -126,7 +135,7 @@ def test_guard_fails_open_on_malformed_input():
 
 
 @pytest.mark.parametrize("tool_name", _ORCHESTRATION_TOOLS)
-def test_leaf_orchestration_guard_permits_fleet_session(tool_name):
+def test_skill_orchestration_guard_permits_fleet_session(tool_name):
     response = _run_guard_headless(
         {"tool_name": f"mcp__autoskillit__{tool_name}"}, session_type="fleet"
     )

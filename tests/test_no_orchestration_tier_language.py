@@ -14,7 +14,7 @@ _ORCHESTRATION_FILES = [
     "src/autoskillit/core/types/_type_enums.py",
     "src/autoskillit/pipeline/gate.py",
     "src/autoskillit/server/_guards.py",
-    "src/autoskillit/hooks/guards/leaf_orchestration_guard.py",
+    "src/autoskillit/hooks/guards/skill_orchestration_guard.py",
 ]
 
 _FORBIDDEN = [

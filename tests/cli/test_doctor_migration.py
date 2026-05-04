@@ -431,38 +431,38 @@ def test_check_installed_plugins_entry_flat_structure_is_warning(tmp_path: Path)
 class TestGroupMFranchiseDoctorChecks:
     """Group M: Fleet doctor checks (ambient env detection + infra health + campaign ops)."""
 
-    # M1: SESSION_TYPE unset → OK (unset is normal; check only fires on explicit 'leaf')
-    def test_check_ambient_session_type_leaf_ok_when_unset(
+    # M1: SESSION_TYPE unset → OK (unset is normal; check only fires on explicit 'skill')
+    def test_check_ambient_session_type_skill_ok_when_unset(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from autoskillit.cli.doctor import _check_ambient_session_type_leaf
+        from autoskillit.cli.doctor import _check_ambient_session_type_skill
         from autoskillit.core import Severity
 
         monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
-        result = _check_ambient_session_type_leaf()
+        result = _check_ambient_session_type_skill()
         assert result.severity == Severity.OK
-        assert result.check == "ambient_session_type_leaf"
+        assert result.check == "ambient_session_type_skill"
 
-    # M2: SESSION_TYPE=leaf → WARN
-    def test_check_ambient_session_type_leaf_warns_when_leaf(
+    # M2: SESSION_TYPE=skill → WARN
+    def test_check_ambient_session_type_skill_warns_when_skill(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from autoskillit.cli.doctor import _check_ambient_session_type_leaf
+        from autoskillit.cli.doctor import _check_ambient_session_type_skill
         from autoskillit.core import Severity
 
-        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaf")
-        result = _check_ambient_session_type_leaf()
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
+        result = _check_ambient_session_type_skill()
         assert result.severity == Severity.WARNING
 
     # M3: SESSION_TYPE=orchestrator → OK (not this check's concern)
-    def test_check_ambient_session_type_leaf_ok_when_orchestrator(
+    def test_check_ambient_session_type_skill_ok_when_orchestrator(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from autoskillit.cli.doctor import _check_ambient_session_type_leaf
+        from autoskillit.cli.doctor import _check_ambient_session_type_skill
         from autoskillit.core import Severity
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
-        result = _check_ambient_session_type_leaf()
+        result = _check_ambient_session_type_skill()
         assert result.severity == Severity.OK
 
     # M4: SESSION_TYPE=orchestrator → WARN from orchestrator check
@@ -728,7 +728,7 @@ class TestGroupMFranchiseDoctorChecks:
         data = json.loads(capsys.readouterr().out)
         check_names = {r["check"] for r in data["results"]}
         fleet_checks = {
-            "ambient_session_type_leaf",
+            "ambient_session_type_skill",
             "ambient_session_type_orchestrator",
             "ambient_session_type_fleet",
             "ambient_campaign_id",
@@ -826,7 +826,7 @@ class TestGroupNFeatureGateDoctorChecks:
         data = json.loads(capsys.readouterr().out)
         check_names = {r["check"] for r in data["results"]}
         ambient_checks = {
-            "ambient_session_type_leaf",
+            "ambient_session_type_skill",
             "ambient_session_type_orchestrator",
             "ambient_session_type_fleet",
             "ambient_campaign_id",

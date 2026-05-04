@@ -378,7 +378,7 @@ class TestNotifyHelper:
 
 class TestHeadlessGateEnforcement:
     """T_HGE: run_skill, run_cmd, run_python each return headless_error
-    when the session is running with AUTOSKILLIT_HEADLESS=1 and SESSION_TYPE=leaf.
+    when the session is running with AUTOSKILLIT_HEADLESS=1 and SESSION_TYPE=skill.
 
     The gate is open (tool_ctx default), so _require_enabled() passes.
     _require_orchestrator_or_higher() fires first and returns subtype='headless_error'.
@@ -387,18 +387,18 @@ class TestHeadlessGateEnforcement:
     @pytest.fixture(autouse=True)
     def _set_headless_env(self, monkeypatch):
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaf")
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
 
     @pytest.mark.anyio
     async def test_run_skill_blocked_in_headless_session(self, tool_ctx):
-        """run_skill returns headless_error when AUTOSKILLIT_HEADLESS=1 and SESSION_TYPE=leaf."""
+        """run_skill returns headless_error when AUTOSKILLIT_HEADLESS=1 and SESSION_TYPE=skill."""
         result = json.loads(await run_skill("/autoskillit:investigate some-error", "/tmp"))
         assert result["subtype"] == "headless_error"
 
 
 @pytest.mark.feature("fleet")
 class TestTierAwareGateEnforcement:
-    """T_TAGE: tier-aware guard permits orchestrator, denies leaf and fleet as appropriate."""
+    """T_TAGE: tier-aware guard permits orchestrator, denies skill and fleet as appropriate."""
 
     @pytest.mark.anyio
     async def test_run_skill_permitted_for_orchestrator_tier(self, tool_ctx, monkeypatch):
@@ -416,10 +416,10 @@ class TestTierAwareGateEnforcement:
         assert result.get("cli_subtype") == "success"
 
     @pytest.mark.anyio
-    async def test_run_skill_denied_for_leaf_tier(self, tool_ctx, monkeypatch):
-        """run_skill returns headless_error for leaf-tier headless sessions."""
+    async def test_run_skill_denied_for_skill_tier(self, tool_ctx, monkeypatch):
+        """run_skill returns headless_error for skill-tier headless sessions."""
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaf")
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
         result = json.loads(await run_skill("/autoskillit:investigate some-error", "/tmp"))
         assert result["subtype"] == "headless_error"
 

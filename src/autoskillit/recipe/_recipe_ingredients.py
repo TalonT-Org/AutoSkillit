@@ -120,6 +120,34 @@ class LoadRecipeResult(TypedDict, total=False):
     recipe_version: str | None
 
 
+class OpenKitchenResult(TypedDict, total=False):
+    """Typed schema for the open_kitchen named-recipe handler → formatter boundary.
+
+    Extends LoadRecipeResult with three post-return keys injected by the handler.
+    """
+
+    # Inherited from LoadRecipeResult (14 keys)
+    content: str
+    diagram: str | None
+    suggestions: list[dict[str, Any]]
+    valid: bool
+    kitchen_rules: list[str]
+    requires_packs: list[str]
+    error: str
+    greeting: str
+    ingredients_table: str | None
+    orchestration_rules: str
+    stop_step_semantics: str
+    content_hash: str
+    composite_hash: str
+    recipe_version: str | None
+    # Post-return keys injected by open_kitchen handler (4 keys)
+    success: bool
+    kitchen: str
+    version: str
+    hook_warning: str
+
+
 class RecipeListItem(TypedDict):
     """Typed schema for a single recipe entry in the list_recipes response."""
 

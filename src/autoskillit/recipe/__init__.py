@@ -16,6 +16,7 @@ from autoskillit.recipe._api import (  # noqa: E402
 from autoskillit.recipe._recipe_ingredients import (  # noqa: E402
     ListRecipesResult,
     LoadRecipeResult,
+    OpenKitchenResult,
     RecipeListItem,
     build_ingredient_rows,
     format_ingredients_table,
@@ -117,6 +118,7 @@ __all__ = [
     "group_rank",
     "ListRecipesResult",
     "LoadRecipeResult",
+    "OpenKitchenResult",
     "RecipeListItem",
     "build_ingredient_rows",
     "Recipe",

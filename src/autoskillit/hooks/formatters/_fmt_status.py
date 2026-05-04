@@ -137,3 +137,51 @@ def _fmt_clone_repo(data: dict, _pipeline: bool) -> str:
             continue
         lines.append(f"{key}: {val}")
     return "\n".join(lines)
+
+
+_FMT_TOKEN_SUMMARY_RENDERED: frozenset[str] = frozenset({"steps", "total", "mcp_responses"})
+_FMT_TOKEN_SUMMARY_SUPPRESSED: frozenset[str] = frozenset(
+    {
+        "success",  # only emitted from exception guard paths, not accessed by the formatter
+        "error",  # only emitted from exception guard paths, not accessed by the formatter
+    }
+)
+
+_FMT_TIMING_SUMMARY_RENDERED: frozenset[str] = frozenset({"steps", "total"})
+_FMT_TIMING_SUMMARY_SUPPRESSED: frozenset[str] = frozenset(
+    {
+        "success",  # only emitted from exception guard paths, not accessed by the formatter
+        "error",  # only emitted from exception guard paths, not accessed by the formatter
+    }
+)
+
+_FMT_KITCHEN_STATUS_RENDERED: frozenset[str] = frozenset(
+    {
+        "error",
+        "tools_enabled",
+        "package_version",
+        "plugin_json_version",
+        "versions_match",
+        "token_usage_verbosity",
+        "quota_guard_enabled",
+        "github_token_configured",
+        "github_default_repo",
+        "warning",
+    }
+)
+_FMT_KITCHEN_STATUS_SUPPRESSED: frozenset[str] = frozenset(
+    {
+        "success",  # only emitted from exception guard paths, not accessed by the formatter
+    }
+)
+
+_FMT_CLONE_REPO_RENDERED: frozenset[str] = frozenset(
+    {
+        "clone_path",
+        "source_dir",
+        "remote_url",
+        "clone_source_type",
+        "clone_source_reason",
+    }
+)
+_FMT_CLONE_REPO_SUPPRESSED: frozenset[str] = frozenset()

@@ -26,6 +26,7 @@ from autoskillit.recipe._recipe_composition import (
 from autoskillit.recipe._recipe_ingredients import (
     ListRecipesResult,  # noqa: F401
     LoadRecipeResult,
+    OpenKitchenResult,  # noqa: F401
     RecipeListItem,
     build_ingredient_rows,  # noqa: F401
     format_ingredients_table,

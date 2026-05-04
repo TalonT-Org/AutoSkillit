@@ -181,9 +181,13 @@ def _build_pkg_module_reverse_graph(
             parts = node.module.split(".")
             if parts[0] != "autoskillit":
                 continue
-            # Direct: from autoskillit.{pkg_name}.{stem} import ...
+            # Direct: from autoskillit.{pkg_name}.{stem}[.substem...] import ...
             if len(parts) >= 3 and parts[1] == pkg_name:
                 graph[parts[2]].add(consumer_pkg)
+                # Also track leaf stems for nested submodule imports
+                # (e.g., core.runtime.kitchen_state → records both "runtime" and "kitchen_state")
+                for i in range(3, len(parts)):
+                    graph[parts[i]].add(consumer_pkg)
             # Via re-export: from autoskillit.{pkg_name} import {name}
             elif len(parts) == 2 and parts[1] == pkg_name:
                 for alias in node.names:
@@ -261,10 +265,15 @@ class TestModuleCascadeCoreGuard:
 
     def test_module_cascade_core_has_no_phantom_stems(self) -> None:
         graph = _build_module_reverse_graph()
-        phantoms = [stem for stem in MODULE_CASCADE_CORE if not graph.get(stem)]
+        no_consumers = [stem for stem in MODULE_CASCADE_CORE if not graph.get(stem)]
+        # Stems consumed only via multi-level re-export chains (e.g., core → runtime →
+        # kitchen_state) have zero direct AST consumers. Verify they are real files.
+        phantoms = [
+            stem for stem in no_consumers if not list((_SRC_ROOT / "core").rglob(f"{stem}.py"))
+        ]
         assert not phantoms, (
-            "MODULE_CASCADE_CORE contains stems with zero AST consumers — "
-            "the source file may have been renamed or deleted:\n"
+            "MODULE_CASCADE_CORE contains stems with zero AST consumers and no matching "
+            "source file under core/ — the module may have been renamed or deleted:\n"
             f"  {sorted(phantoms)}\n"
             "Remove the stale entry or rename it to match the current module."
         )

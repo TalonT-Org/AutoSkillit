@@ -221,7 +221,6 @@ def classify_dispatch_outcome(
         return DispatchStatus.FAILURE, reason
     if parsed.outcome == "completed_dirty":
         return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L2_PARSE_FAILED
-    # no_sentinel
     if skill_result.session_id and skill_result.lifespan_started and sidecar_exists:
         return DispatchStatus.RESUMABLE, FleetErrorCode.FLEET_L2_NO_RESULT_BLOCK
     return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L2_NO_RESULT_BLOCK

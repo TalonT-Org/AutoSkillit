@@ -187,6 +187,96 @@ class TestBashFilePathEnrichment:
         assert "/tmp/output/" in paths
 
 
+class TestRecursiveSnapshot:
+    """Recursive snapshot detects writes in pre-existing subdirectories."""
+
+    def test_detects_write_in_preexisting_subdir(self, tmp_path: Path) -> None:
+        from autoskillit.execution.headless import _recursive_snapshot
+
+        watch_dir = tmp_path / "planner_run"
+        sub_dir = watch_dir / "refine_contexts"
+        sub_dir.mkdir(parents=True)
+        (sub_dir / "context_P1.json").write_text("{}")
+
+        pre = _recursive_snapshot(watch_dir)
+
+        (sub_dir / "P1_result.json").write_text('{"assignments": []}')
+
+        post = _recursive_snapshot(watch_dir)
+
+        assert post - pre == {"refine_contexts/P1_result.json"}
+
+    def test_detects_write_in_nested_subdir(self, tmp_path: Path) -> None:
+        from autoskillit.execution.headless import _recursive_snapshot
+
+        watch_dir = tmp_path / "planner_run"
+        nested = watch_dir / "work_packages" / "wp_sentinels"
+        nested.mkdir(parents=True)
+
+        pre = _recursive_snapshot(watch_dir)
+
+        (nested / "P1_result.json").write_text("{}")
+
+        post = _recursive_snapshot(watch_dir)
+
+        assert post - pre == {"work_packages/wp_sentinels/P1_result.json"}
+
+    @pytest.mark.anyio
+    async def test_run_headless_core_detects_subdir_write(
+        self, tmp_path: Path, minimal_ctx
+    ) -> None:
+        from autoskillit.execution.headless import run_headless_core
+        from tests.execution.conftest import _success_session_json
+
+        watch_dir = tmp_path / "output"
+        sub_dir = watch_dir / "results"
+        sub_dir.mkdir(parents=True)
+        (sub_dir / "existing.json").write_text("{}")
+
+        async def mock_runner(cmd, **kwargs):
+            (sub_dir / "new_output.json").write_text('{"data": true}')
+            return _make_result(returncode=0, stdout=_success_session_json("done"))
+
+        minimal_ctx.runner = mock_runner
+        proj = tmp_path / "proj"
+        proj.mkdir()
+
+        result = await run_headless_core(
+            "/autoskillit:test-skill",
+            str(proj),
+            minimal_ctx,
+            write_watch_dirs=[watch_dir],
+        )
+        assert result.fs_writes_detected is True
+
+    @pytest.mark.anyio
+    async def test_run_headless_core_empty_subdir_no_false_positive(
+        self, tmp_path: Path, minimal_ctx
+    ) -> None:
+        from autoskillit.execution.headless import run_headless_core
+        from tests.execution.conftest import _success_session_json
+
+        watch_dir = tmp_path / "output"
+        sub_dir = watch_dir / "results"
+        sub_dir.mkdir(parents=True)
+        (sub_dir / "existing.json").write_text("{}")
+
+        async def mock_runner(cmd, **kwargs):
+            return _make_result(returncode=0, stdout=_success_session_json("done"))
+
+        minimal_ctx.runner = mock_runner
+        proj = tmp_path / "proj"
+        proj.mkdir()
+
+        result = await run_headless_core(
+            "/autoskillit:test-skill",
+            str(proj),
+            minimal_ctx,
+            write_watch_dirs=[watch_dir],
+        )
+        assert result.fs_writes_detected is False
+
+
 class TestPlannerSkillEndToEnd:
     """Planner skill that writes via Bash to run dir detected via write_watch_dirs."""
 

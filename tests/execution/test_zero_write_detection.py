@@ -8,7 +8,6 @@ skill classified as write-expected via WriteBehaviorSpec.
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 import pytest
@@ -688,20 +687,24 @@ class TestTempDirSnapshot:
 
     def test_snapshot_detects_new_file(self, tmp_path: Path) -> None:
         """A file created between pre and post snapshot is detected."""
+        from autoskillit.execution.headless import _recursive_snapshot
+
         temp_dir = tmp_path / ".autoskillit" / "temp" / "prepare-pr"
         temp_dir.mkdir(parents=True)
-        pre = {e.name for e in os.scandir(temp_dir)}
+        pre = _recursive_snapshot(temp_dir)
         (temp_dir / "pr_prep_20260425.md").write_text("content")
-        post = {e.name for e in os.scandir(temp_dir)}
+        post = _recursive_snapshot(temp_dir)
         assert len(post - pre) > 0
 
     def test_snapshot_empty_when_no_new_files(self, tmp_path: Path) -> None:
         """No new files between snapshots yields empty diff."""
+        from autoskillit.execution.headless import _recursive_snapshot
+
         temp_dir = tmp_path / ".autoskillit" / "temp" / "prepare-pr"
         temp_dir.mkdir(parents=True)
         (temp_dir / "existing.md").write_text("content")
-        pre = {e.name for e in os.scandir(temp_dir)}
-        post = {e.name for e in os.scandir(temp_dir)}
+        pre = _recursive_snapshot(temp_dir)
+        post = _recursive_snapshot(temp_dir)
         assert post - pre == set()
 
 

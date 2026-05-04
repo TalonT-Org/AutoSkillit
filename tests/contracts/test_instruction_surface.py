@@ -621,7 +621,8 @@ def test_claude_md_documents_all_source_modules() -> None:
     """Every .py file in src/autoskillit/ must appear by name in CLAUDE.md.
 
     For __init__.py files, the containing package directory name must appear.
-    For all other files, the filename must appear somewhere in CLAUDE.md.
+    For all other files, the filename must appear in CLAUDE.md or the package's
+    own sub-CLAUDE.md (for collapsed subdirectory listings).
     """
     claude_path = Path(__file__).parent.parent.parent / "CLAUDE.md"
     content = claude_path.read_text()
@@ -639,7 +640,10 @@ def test_claude_md_documents_all_source_modules() -> None:
                 missing.append(str(rel))
         else:
             if py_file.name not in content:
-                missing.append(str(rel))
+                # Accept documentation in a sub-CLAUDE.md alongside the file
+                pkg_claude = py_file.parent / "CLAUDE.md"
+                if not (pkg_claude.exists() and py_file.name in pkg_claude.read_text()):
+                    missing.append(str(rel))
 
     assert not missing, (
         f"Modules not documented in CLAUDE.md: {', '.join(missing)}. "

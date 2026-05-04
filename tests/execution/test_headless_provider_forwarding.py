@@ -28,12 +28,14 @@ async def test_run_headless_core_forwards_provider_extras_to_build_cmd(
     from autoskillit.execution.headless import run_headless_core
 
     captured: dict = {}
+    execute_kwargs: dict = {}
 
     def fake_build(skill_command, **kwargs):
         captured.update(kwargs)
         return object()
 
     async def fake_execute(spec, cwd, ctx, **kwargs):
+        execute_kwargs.update(kwargs)
         return _STUB_RESULT
 
     monkeypatch.setattr("autoskillit.execution.headless.build_leaf_headless_cmd", fake_build)
@@ -49,6 +51,8 @@ async def test_run_headless_core_forwards_provider_extras_to_build_cmd(
 
     assert captured["provider_extras"] == {"AWS_REGION": "us-east-1"}
     assert captured["profile_name"] == "bedrock"
+    assert "provider_extras" not in execute_kwargs
+    assert "profile_name" not in execute_kwargs
 
 
 @pytest.mark.anyio

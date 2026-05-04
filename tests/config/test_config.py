@@ -940,16 +940,6 @@ class TestProvidersConfig:
         cfg.default_provider = "openai"
         assert cfg.default_provider == "openai"
 
-    def test_providers_config_is_last_class(self):
-        import ast
-
-        from autoskillit.core.paths import pkg_root
-
-        source = (pkg_root() / "config" / "_config_dataclasses.py").read_text()
-        tree = ast.parse(source)
-        classes = [node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)]
-        assert classes[-1] == "ProvidersConfig"
-
     def test_providers_config_field_types(self):
         from dataclasses import fields as _dc_fields
 

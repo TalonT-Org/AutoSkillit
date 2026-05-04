@@ -492,8 +492,16 @@ class DefaultMergeQueueWatcher:
                 },
             )
             if resp.status_code != 200:
+                logger.warning(
+                    "confirm_disable_poll_error",
+                    pr_node_id=pr_node_id,
+                    status_code=resp.status_code,
+                )
                 continue
-            data = resp.json().get("data", {})
+            try:
+                data = resp.json().get("data", {})
+            except (ValueError, httpx.DecodingError):
+                continue
             node = data.get("node", {}) or {}
             if not node.get("autoMergeRequest"):
                 return

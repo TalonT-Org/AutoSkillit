@@ -32,6 +32,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_l1_packages.py` | Package export surface tests for the L1 sub-packages |
 | `test_make_campaign_skill_contracts.py` | Contract tests: structural invariants for the make-campaign SKILL.md |
 | `test_mermaid_palette_contracts.py` | Contract: any SKILL.md that generates mermaid diagrams must embed the canonical 9-class palette |
+| `test_no_pagination_file_read.py` | Contract tests for no-pagination file read instruction in high-turn SKILL.md files |
 | `test_package_gateways.py` | Tests for Package Gateway API (groupC) — REQ-GWAY-001 through REQ-GWAY-008 |
 | `test_plan_experiment_contracts.py` | Contract tests for plan-experiment SKILL.md — data provenance lifecycle |
 | `test_pr_traceability_contracts.py` | Cross-skill contract tests for requirement traceability across PR lifecycle skills |

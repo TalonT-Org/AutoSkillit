@@ -331,7 +331,18 @@ class TestDispatchStatusEnvelopeField:
             session_id="sess-resumable-abc",
             lifespan_started=True,
         )
-        tool_ctx.executor = InMemoryHeadlessExecutor(default_result=resumable_result)
+
+        class _SpawningExecutor(InMemoryHeadlessExecutor):
+            """Calls on_spawn with a fake PID to drive PENDING → RUNNING before returning."""
+
+            async def dispatch_food_truck(self, orchestrator_prompt, cwd, *, on_spawn=None, **kw):
+                if on_spawn is not None:
+                    on_spawn(12345, 1000)
+                return await super().dispatch_food_truck(
+                    orchestrator_prompt, cwd, on_spawn=on_spawn, **kw
+                )
+
+        tool_ctx.executor = _SpawningExecutor(default_result=resumable_result)
 
         monkeypatch.setattr(
             "autoskillit.fleet._api.parse_l2_result_block",

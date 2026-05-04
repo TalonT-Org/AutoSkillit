@@ -822,7 +822,7 @@ skills:
       required: false
     - name: experiment_plan_path
       type: file_path
-      required: false
+      required: true
     - name: project_context
       type: string
       required: false
@@ -841,7 +841,7 @@ skills:
       required: false
     - name: experiment_plan_path
       type: file_path
-      required: false
+      required: true
     - name: project_context
       type: string
       required: false
@@ -860,7 +860,7 @@ skills:
       required: false
     - name: experiment_plan_path
       type: file_path
-      required: false
+      required: true
     - name: project_context
       type: string
       required: false
@@ -879,7 +879,7 @@ skills:
       required: false
     - name: experiment_plan_path
       type: file_path
-      required: false
+      required: true
     - name: project_context
       type: string
       required: false
@@ -898,7 +898,7 @@ skills:
       required: false
     - name: experiment_plan_path
       type: file_path
-      required: false
+      required: true
     - name: project_context
       type: string
       required: false
@@ -917,7 +917,7 @@ skills:
       required: false
     - name: experiment_plan_path
       type: file_path
-      required: false
+      required: true
     - name: project_context
       type: string
       required: false
@@ -936,7 +936,7 @@ skills:
       required: false
     - name: experiment_plan_path
       type: file_path
-      required: false
+      required: true
     - name: project_context
       type: string
       required: false
@@ -955,7 +955,7 @@ skills:
       required: false
     - name: experiment_plan_path
       type: file_path
-      required: false
+      required: true
     - name: project_context
       type: string
       required: false
@@ -974,7 +974,7 @@ skills:
       required: false
     - name: experiment_plan_path
       type: file_path
-      required: false
+      required: true
     - name: project_context
       type: string
       required: false
@@ -993,7 +993,7 @@ skills:
       required: false
     - name: experiment_plan_path
       type: file_path
-      required: false
+      required: true
     - name: project_context
       type: string
       required: false
@@ -1012,7 +1012,7 @@ skills:
       required: false
     - name: experiment_plan_path
       type: file_path
-      required: false
+      required: true
     - name: project_context
       type: string
       required: false
@@ -1031,7 +1031,7 @@ skills:
       required: false
     - name: experiment_plan_path
       type: file_path
-      required: false
+      required: true
     - name: project_context
       type: string
       required: false
@@ -1050,7 +1050,7 @@ skills:
       required: false
     - name: experiment_plan_path
       type: file_path
-      required: false
+      required: true
     - name: project_context
       type: string
       required: false
@@ -1069,7 +1069,7 @@ skills:
       required: false
     - name: experiment_plan_path
       type: file_path
-      required: false
+      required: true
     - name: project_context
       type: string
       required: false
@@ -1088,7 +1088,7 @@ skills:
       required: false
     - name: experiment_plan_path
       type: file_path
-      required: false
+      required: true
     - name: project_context
       type: string
       required: false
@@ -1107,7 +1107,7 @@ skills:
       required: false
     - name: experiment_plan_path
       type: file_path
-      required: false
+      required: true
     - name: project_context
       type: string
       required: false
@@ -1126,7 +1126,7 @@ skills:
       required: false
     - name: experiment_plan_path
       type: file_path
-      required: false
+      required: true
     - name: project_context
       type: string
       required: false
@@ -1145,7 +1145,7 @@ skills:
       required: false
     - name: experiment_plan_path
       type: file_path
-      required: false
+      required: true
     - name: project_context
       type: string
       required: false

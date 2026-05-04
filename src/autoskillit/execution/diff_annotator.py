@@ -188,3 +188,42 @@ def filter_findings(
         unpostable=unpostable,
         all_unpostable=len(findings) > 0 and len(filtered) == 0,
     )
+
+
+_LINE_MARKER = re.compile(r"^\[L(\d+)\]")
+
+
+def extract_code_region(
+    annotated_diff: str,
+    file_path: str,
+    line: int,
+    context_lines: int = 50,
+) -> str:
+    if not annotated_diff:
+        return ""
+
+    lines = annotated_diff.splitlines()
+    in_file = False
+    collected: list[str] = []
+    lo = line - context_lines
+    hi = line + context_lines
+
+    for raw_line in lines:
+        header_match = _FILE_HEADER.match(raw_line)
+        if header_match:
+            if in_file:
+                break
+            if header_match.group(1) == file_path:
+                in_file = True
+            continue
+
+        if not in_file:
+            continue
+
+        marker_match = _LINE_MARKER.match(raw_line)
+        if marker_match:
+            marker_line = int(marker_match.group(1))
+            if lo <= marker_line <= hi:
+                collected.append(raw_line)
+
+    return "\n".join(collected)

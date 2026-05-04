@@ -103,6 +103,7 @@ class DispatchFoodTruckCall:
     env_extras: Mapping[str, str] | None = None
     requires_packs: Sequence[str] = ()
     on_spawn: Callable[[int, int], None] | None = None
+    allowed_write_prefix: str = ""
 
 
 _DEFAULT_SKILL_RESULT = SkillResult(
@@ -231,6 +232,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 env_extras=env_extras,
                 requires_packs=requires_packs,
                 on_spawn=on_spawn,
+                allowed_write_prefix=allowed_write_prefix,
             )
         )
         if self._queue:

@@ -327,3 +327,55 @@ def fetch_merge_queue_data(base_branch: str, cwd: str, output_dir: str) -> dict[
     out_path = Path(output_dir) / "merge_queue_data.json"
     atomic_write(out_path, json.dumps(entries))
     return {"merge_queue_data_path": str(out_path)}
+
+
+def enrich_diff_context(
+    pr_number: str,
+    work_dir: str,
+    context_lines: str = "50",
+) -> dict[str, str]:
+    """Fill empty code_region fields in the review-pr diff_context handoff.
+
+    Called by run_python from the enrich_diff_context step in implementation.yaml.
+    Reads the existing diff_context_{pr_number}.json and the annotated diff,
+    then uses extract_code_region() to populate any empty code_region entries.
+    Overwrites the handoff file in place.
+    """
+    from autoskillit.core import atomic_write  # noqa: PLC0415
+    from autoskillit.execution import extract_code_region  # noqa: PLC0415
+
+    ctx_lines = int(context_lines) if context_lines else 50
+    temp_dir = Path(work_dir) / ".autoskillit" / "temp"
+    handoff_path = temp_dir / "review-pr" / f"diff_context_{pr_number}.json"
+
+    if not handoff_path.exists():
+        return {"enriched": "false", "reason": "handoff_not_found"}
+
+    handoff = json.loads(handoff_path.read_text())
+    entries = handoff.get("context_entries", [])
+
+    annotated_path = temp_dir / "review-pr" / f"annotated_diff_{pr_number}.txt"
+    if not annotated_path.exists():
+        return {"enriched": "false", "reason": "annotated_diff_not_found"}
+
+    annotated_diff = annotated_path.read_text()
+    enriched_count = 0
+
+    for entry in entries:
+        if not entry.get("code_region"):
+            region = extract_code_region(
+                annotated_diff,
+                entry["path"],
+                entry["line"],
+                context_lines=ctx_lines,
+            )
+            entry["code_region"] = region
+            if region:
+                enriched_count += 1
+
+    atomic_write(handoff_path, json.dumps(handoff, indent=2))
+    return {
+        "enriched": "true",
+        "enriched_count": str(enriched_count),
+        "total_entries": str(len(entries)),
+    }

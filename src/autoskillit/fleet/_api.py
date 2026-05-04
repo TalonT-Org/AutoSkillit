@@ -18,7 +18,8 @@ from autoskillit.core import (
     fleet_error,
     get_logger,
 )
-from autoskillit.fleet.result_parser import parse_l2_result_block
+from autoskillit.fleet.result_parser import L2ParseResult, parse_l2_result_block
+from autoskillit.fleet.state import DispatchStatus
 
 if TYPE_CHECKING:
     from autoskillit.pipeline.context import ToolContext
@@ -193,6 +194,35 @@ async def execute_dispatch(
         )
     finally:
         lock.release()
+
+
+def classify_dispatch_outcome(
+    parsed: L2ParseResult,
+    skill_result: SkillResult,
+    *,
+    sidecar_exists: bool,
+) -> tuple[DispatchStatus, str]:
+    """Map L2 subprocess signals to a (DispatchStatus, reason) pair.
+
+    Pure function — no filesystem access, no side effects.
+    Rules applied in order:
+      1. completed_clean + success flag → SUCCESS
+      2. completed_clean + no success → FAILURE
+      3. completed_dirty → FAILURE (fleet_l2_parse_failed)
+      4. no_sentinel + session_id + lifespan_started + sidecar → RESUMABLE
+      5. no_sentinel (any other case) → FAILURE (fleet_l2_no_result_block)
+    """
+    if parsed.outcome == "completed_clean" and parsed.payload and parsed.payload.get("success"):
+        return DispatchStatus.SUCCESS, ""
+    if parsed.outcome == "completed_clean":
+        reason = parsed.payload.get("reason", "") if parsed.payload else ""
+        return DispatchStatus.FAILURE, reason
+    if parsed.outcome == "completed_dirty":
+        return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L2_PARSE_FAILED
+    # no_sentinel
+    if skill_result.session_id and skill_result.lifespan_started and sidecar_exists:
+        return DispatchStatus.RESUMABLE, FleetErrorCode.FLEET_L2_NO_RESULT_BLOCK
+    return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L2_NO_RESULT_BLOCK
 
 
 async def _run_dispatch(
@@ -384,19 +414,9 @@ async def _run_dispatch(
         assistant_messages_path=jsonl_path,
     )
 
-    # Classify outcome → (final_status, reason)
-    if parsed.outcome == "completed_clean" and parsed.payload and parsed.payload.get("success"):
-        final_status = DispatchStatus.SUCCESS
-        reason = ""
-    elif parsed.outcome == "completed_clean":
-        final_status = DispatchStatus.FAILURE
-        reason = parsed.payload.get("reason", "") if parsed.payload else ""
-    elif parsed.outcome == "completed_dirty":
-        final_status = DispatchStatus.FAILURE
-        reason = FleetErrorCode.FLEET_L2_PARSE_FAILED
-    else:  # no_sentinel
-        final_status = DispatchStatus.FAILURE
-        reason = FleetErrorCode.FLEET_L2_NO_RESULT_BLOCK
+    final_status, reason = classify_dispatch_outcome(
+        parsed, skill_result, sidecar_exists=Path(dispatch_sidecar_path).exists()
+    )
 
     append_dispatch_record(
         state_path,
@@ -427,6 +447,7 @@ async def _run_dispatch(
         return json.dumps(
             {
                 "success": envelope_success,
+                "dispatch_status": final_status.value,
                 "dispatch_id": dispatch_id,
                 "l2_session_id": skill_result.session_id,
                 "l2_payload": parsed.payload,
@@ -440,6 +461,7 @@ async def _run_dispatch(
         return json.dumps(
             {
                 "success": False,
+                "dispatch_status": final_status.value,
                 "dispatch_id": dispatch_id,
                 "l2_session_id": skill_result.session_id,
                 "l2_payload": None,
@@ -455,6 +477,7 @@ async def _run_dispatch(
         return json.dumps(
             {
                 "success": False,
+                "dispatch_status": final_status.value,
                 "dispatch_id": dispatch_id,
                 "l2_session_id": skill_result.session_id,
                 "l2_payload": None,

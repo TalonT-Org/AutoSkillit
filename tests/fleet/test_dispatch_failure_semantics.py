@@ -265,6 +265,47 @@ class TestCompletedDirtyPath:
         assert record["reason"] == "fleet_l2_parse_failed"
 
 
+class TestDispatchStatusEnvelopeField:
+    @pytest.mark.anyio
+    async def test_envelope_includes_dispatch_status_on_success(self, tool_ctx, monkeypatch):
+        """Envelope from _run_dispatch includes dispatch_status matching state-file status."""
+        _setup_dispatch(tool_ctx, monkeypatch)
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.parse_l2_result_block",
+            lambda **_: _make_completed_clean(success=True),
+        )
+
+        result = await _run(tool_ctx)
+        assert "dispatch_status" in result
+        assert result["dispatch_status"] == "success"
+
+    @pytest.mark.anyio
+    async def test_envelope_includes_dispatch_status_on_failure(self, tool_ctx, monkeypatch):
+        """Envelope includes dispatch_status='failure' when outcome is completed_dirty."""
+        _setup_dispatch(tool_ctx, monkeypatch)
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.parse_l2_result_block",
+            lambda **_: _make_completed_dirty(),
+        )
+
+        result = await _run(tool_ctx)
+        assert "dispatch_status" in result
+        assert result["dispatch_status"] == "failure"
+
+    @pytest.mark.anyio
+    async def test_envelope_includes_dispatch_status_on_no_sentinel(self, tool_ctx, monkeypatch):
+        """Envelope includes dispatch_status='failure' for no_sentinel without session signal."""
+        _setup_dispatch(tool_ctx, monkeypatch)
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.parse_l2_result_block",
+            lambda **_: _make_no_sentinel(),
+        )
+
+        result = await _run(tool_ctx)
+        assert "dispatch_status" in result
+        assert result["dispatch_status"] == "failure"
+
+
 class TestCompletedCleanPath:
     @pytest.mark.anyio
     async def test_completed_clean_success_writes_empty_reason(self, tool_ctx, monkeypatch):

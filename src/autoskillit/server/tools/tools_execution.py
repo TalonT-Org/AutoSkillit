@@ -655,11 +655,7 @@ async def dispatch_food_truck(
                         append_dispatch_record,
                     )
 
-                    status = (
-                        DispatchStatus.SUCCESS
-                        if envelope.get("success")
-                        else DispatchStatus.FAILURE
-                    )
+                    status = DispatchStatus(envelope["dispatch_status"])
                     append_dispatch_record(
                         campaign_state_path,
                         DispatchRecord(

@@ -153,8 +153,19 @@ def write_initial_state(
     write_versioned_json(state_path, payload, schema_version=_SCHEMA_VERSION)
 
 
+_INFRASTRUCTURE_FAILURE_REASONS: frozenset[str] = frozenset(
+    {
+        "fleet_l2_no_result_block",
+    }
+)
+
+
 def has_failed_dispatch(state_path: Path) -> bool:
-    """Check whether any dispatch in *state_path* has FAILURE status.
+    """Check whether any dispatch has a FAILURE status attributable to logic (not infrastructure).
+
+    Infrastructure failures (e.g. fleet_l2_no_result_block) represent transient L2
+    disconnections and do not halt the campaign. Logic failures (e.g. completed_clean
+    with success=false) represent genuine task failures and do halt the campaign.
 
     Returns False when the file is missing or corrupted (fail-open).
     """
@@ -163,7 +174,10 @@ def has_failed_dispatch(state_path: Path) -> bool:
     state = read_state(state_path)
     if state is None:
         return False
-    return any(d.status == DispatchStatus.FAILURE for d in state.dispatches)
+    return any(
+        d.status == DispatchStatus.FAILURE and d.reason not in _INFRASTRUCTURE_FAILURE_REASONS
+        for d in state.dispatches
+    )
 
 
 def read_state(state_path: Path) -> CampaignState | None:

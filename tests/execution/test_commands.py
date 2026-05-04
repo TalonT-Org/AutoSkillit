@@ -859,3 +859,23 @@ class TestBuildLeafAllowedWritePrefix:
         monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "old")
         spec = build_leaf_headless_cmd("/investigate foo", **self.BASE, allowed_write_prefix="new")
         assert spec.env["AUTOSKILLIT_ALLOWED_WRITE_PREFIX"] == "new"
+
+
+def test_provider_profile_in_headless_exclusive_vars() -> None:
+    """AUTOSKILLIT_PROVIDER_PROFILE must be headless-exclusive."""
+    assert "AUTOSKILLIT_PROVIDER_PROFILE" in _HEADLESS_EXCLUSIVE_VARS
+
+
+def test_anthropic_base_url_in_headless_exclusive_vars() -> None:
+    """ANTHROPIC_BASE_URL must be headless-exclusive."""
+    assert "ANTHROPIC_BASE_URL" in _HEADLESS_EXCLUSIVE_VARS
+
+
+def test_anthropic_api_key_in_headless_exclusive_vars() -> None:
+    """ANTHROPIC_API_KEY must be headless-exclusive."""
+    assert "ANTHROPIC_API_KEY" in _HEADLESS_EXCLUSIVE_VARS
+
+
+def test_anthropic_auth_token_in_headless_exclusive_vars() -> None:
+    """ANTHROPIC_AUTH_TOKEN must be headless-exclusive."""
+    assert "ANTHROPIC_AUTH_TOKEN" in _HEADLESS_EXCLUSIVE_VARS

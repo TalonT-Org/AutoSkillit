@@ -102,6 +102,8 @@ AUTOSKILLIT_PRIVATE_ENV_VARS: frozenset[str] = frozenset(
         "AUTOSKILLIT_L2_TOOL_TAGS",
         "AUTOSKILLIT_LAUNCH_ID",
         "AUTOSKILLIT_SKILL_NAME",
+        # Provider-routing vars — must not leak into user-code subprocesses
+        "AUTOSKILLIT_PROVIDER_PROFILE",
     }
 )
 

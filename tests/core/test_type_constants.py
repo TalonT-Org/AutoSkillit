@@ -266,3 +266,10 @@ def test_skill_tools_matches_expected() -> None:
     from autoskillit.core import SKILL_TOOLS
 
     assert SKILL_TOOLS == frozenset({"run_skill"})
+
+
+def test_provider_profile_in_private_env_vars() -> None:
+    """AUTOSKILLIT_PROVIDER_PROFILE must be in AUTOSKILLIT_PRIVATE_ENV_VARS."""
+    from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS
+
+    assert "AUTOSKILLIT_PROVIDER_PROFILE" in AUTOSKILLIT_PRIVATE_ENV_VARS

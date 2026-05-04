@@ -17,7 +17,7 @@ from _fmt_primitives import (  # type: ignore[import-not-found]
 )
 
 if TYPE_CHECKING:
-    from autoskillit.recipe import ListRecipesResult, LoadRecipeResult
+    from autoskillit.recipe import ListRecipesResult, LoadRecipeResult, OpenKitchenResult
 
 
 # Field coverage contract for _fmt_load_recipe ↔ LoadRecipeResult
@@ -154,8 +154,36 @@ _FMT_RECIPE_LIST_ITEM_RENDERED: frozenset[str] = frozenset(
 )
 _FMT_RECIPE_LIST_ITEM_SUPPRESSED: frozenset[str] = frozenset()
 
+# Field coverage contract for _fmt_open_kitchen ↔ OpenKitchenResult
+_FMT_OPEN_KITCHEN_RENDERED: frozenset[str] = frozenset(
+    {
+        "valid",
+        "suggestions",
+        "error",
+        "content",
+        "ingredients_table",
+        "orchestration_rules",
+        "version",
+    }
+)
+_FMT_OPEN_KITCHEN_SUPPRESSED: frozenset[str] = frozenset(
+    {
+        "success",  # metadata — model infers success from formatted output
+        "kitchen",  # metadata — model knows kitchen state from context
+        "greeting",  # delivered via CLI preview, not MCP response
+        "diagram",  # rendered in terminal preview, not needed by agent
+        "kitchen_rules",  # already embedded in YAML content
+        "requires_packs",  # internal gating field
+        "content_hash",  # internal identity metadata
+        "composite_hash",  # internal identity metadata
+        "recipe_version",  # internal identity metadata
+        "stop_step_semantics",  # delivered via open_kitchen Channel B
+        "hook_warning",  # edge-case diagnostic; not rendered in standard path
+    }
+)
 
-def _fmt_open_kitchen(data: dict[str, Any], pipeline: bool) -> str:
+
+def _fmt_open_kitchen(data: OpenKitchenResult, pipeline: bool) -> str:
     """Format open_kitchen combined kitchen+recipe result."""
     version = data.get("version", "")
 

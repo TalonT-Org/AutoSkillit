@@ -193,6 +193,53 @@ def _fmt_test_check(data: dict, _pipeline: bool) -> str:
     return "\n".join(lines)
 
 
+_FMT_RUN_SKILL_RENDERED: frozenset[str] = frozenset(
+    {
+        "success",
+        "subtype",
+        "session_id",
+        "exit_code",
+        "kill_reason",
+        "needs_retry",
+        "retry_reason",
+        "worktree_path",
+        "result",
+        "stderr",
+        "token_usage",
+    }
+)
+_FMT_RUN_SKILL_SUPPRESSED: frozenset[str] = frozenset(
+    {
+        "cli_subtype",
+        "is_error",
+        "write_path_warnings",
+        "write_call_count",
+        "fs_writes_detected",
+        "last_stop_reason",
+        "lifespan_started",
+        "order_id",
+    }
+)
+
+_FMT_RUN_CMD_RENDERED: frozenset[str] = frozenset({"success", "exit_code", "stdout", "stderr"})
+_FMT_RUN_CMD_SUPPRESSED: frozenset[str] = frozenset({"error"})
+
+_FMT_TEST_CHECK_RENDERED: frozenset[str] = frozenset(
+    {
+        "passed",
+        "duration_seconds",
+        "filter_mode",
+        "full_run_reason",
+        "tests_selected",
+        "tests_deselected",
+        "stdout",
+        "stderr",
+        "error",
+    }
+)
+_FMT_TEST_CHECK_SUPPRESSED: frozenset[str] = frozenset()
+
+
 def _fmt_merge_worktree(data: dict, _pipeline: bool) -> str:
     """Format merge_worktree result as Markdown-KV."""
     succeeded = data.get("merge_succeeded")
@@ -224,3 +271,29 @@ def _fmt_merge_worktree(data: dict, _pipeline: bool) -> str:
     if stderr:
         lines.extend(["", "### stderr", stderr])
     return "\n".join(lines)
+
+
+_FMT_MERGE_WORKTREE_RENDERED: frozenset[str] = frozenset(
+    {
+        "merge_succeeded",
+        "merged_branch",
+        "into_branch",
+        "worktree_removed",
+        "branch_deleted",
+        "cleanup_succeeded",
+        "error",
+        "failed_step",
+        "state",
+        "worktree_path",
+        "stderr",
+        "base_branch",
+        "dirty_files",
+        "merge_commits",
+        "test_stdout",
+        "test_stderr",
+        "abort_failed",
+        "abort_stderr",
+        "poisoned_installs",
+    }
+)
+_FMT_MERGE_WORKTREE_SUPPRESSED: frozenset[str] = frozenset()

@@ -28,6 +28,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_headless_env_scrub.py` | Launch-site env-scrub contract test for run_headless_core |
 | `test_headless_ordering.py` | AST-based structural test for post-session operation ordering in headless.py |
 | `test_headless_path_validation.py` | Tests for headless.py: _build_skill_result, path validation, synthesis, and contract gates |
+| `test_headless_provider_forwarding.py` | Tests verifying provider_extras and profile_name forwarding through the headless call chain |
 | `test_headless_synthesis.py` | Tests for headless.py synthesis helpers: output path extraction, validation, contamination |
 | `test_idle_output_env.py` | Group G (execution part): AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT env variable injection tests |
 | `test_linux_tracing.py` | Tests for Linux-only process tracing via psutil and /proc filesystem |

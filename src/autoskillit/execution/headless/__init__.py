@@ -555,6 +555,8 @@ async def run_headless_core(
     allowed_write_prefix: str = "",
     readonly_skill: bool = False,
     write_watch_dirs: Sequence[Path] = (),
+    provider_extras: Mapping[str, str] | None = None,
+    profile_name: str = "",
 ) -> SkillResult:
     """Shared headless runner used by run_skill.
 
@@ -585,6 +587,8 @@ async def run_headless_core(
             scenario_step_name=step_name,
             temp_dir_relpath=temp_dir_display_str(ctx.config.workspace.temp_dir),
             allowed_write_prefix=allowed_write_prefix,
+            provider_extras=provider_extras,
+            profile_name=profile_name,
         )
 
         effective_timeout = timeout if timeout is not None else cfg.timeout
@@ -655,6 +659,8 @@ class DefaultHeadlessExecutor:
         allowed_write_prefix: str = "",
         readonly_skill: bool = False,
         write_watch_dirs: Sequence[Path] = (),
+        provider_extras: Mapping[str, str] | None = None,
+        profile_name: str = "",
     ) -> SkillResult:
         cfg = self._ctx.config.run_skill
         effective_timeout = timeout if timeout is not None else cfg.timeout
@@ -681,6 +687,8 @@ class DefaultHeadlessExecutor:
             allowed_write_prefix=allowed_write_prefix,
             readonly_skill=readonly_skill,
             write_watch_dirs=write_watch_dirs,
+            provider_extras=provider_extras,
+            profile_name=profile_name,
         )
 
     async def dispatch_food_truck(

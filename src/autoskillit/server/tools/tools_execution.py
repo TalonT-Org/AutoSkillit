@@ -375,6 +375,24 @@ async def run_skill(
         if tool_ctx.executor is None:
             return json.dumps({"success": False, "error": "Executor not configured"})
 
+        provider_extras: dict[str, str] | None = None
+        profile_name_out: str = ""
+
+        from autoskillit.core import is_feature_enabled
+
+        _cfg = _get_config()
+        if is_feature_enabled(
+            "providers", _cfg.features, experimental_enabled=_cfg.experimental_enabled
+        ):
+            from autoskillit.server._guards import _resolve_provider_profile
+
+            _profile, _env_dict = _resolve_provider_profile(
+                step_name or "", tool_ctx.recipe_name or "", _cfg.providers
+            )
+            if _profile != "anthropic":
+                provider_extras = _env_dict
+                profile_name_out = _profile
+
         # Look up artifact validation patterns from skill contract
         expected_output_patterns: list[str] = []
         if tool_ctx.output_pattern_resolver:
@@ -501,6 +519,8 @@ async def run_skill(
                 allowed_write_prefix=allowed_write_prefix,
                 readonly_skill=is_read_only,
                 write_watch_dirs=write_watch_dirs,
+                provider_extras=provider_extras,
+                profile_name=profile_name_out,
             )
             if skill_result.success:
                 tool_ctx.audit.record_success(skill_command)

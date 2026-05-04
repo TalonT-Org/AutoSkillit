@@ -49,6 +49,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_tools_dispatch.py` | Tests for dispatch_food_truck tool handler and execute_dispatch domain function |
 | `test_tools_execution_command.py` | Tests for run_skill command building, timeouts, env, model, and per-invocation markers |
 | `test_tools_execution_input_gates.py` | Tests for run_skill input validation gates and CWD checking |
+| `test_tools_execution_provider.py` | Tests for provider_extras/profile_name forwarding through run_skill() |
 | `test_tools_execution_response.py` | Contract tests: MCP tool response fields use correct enum types |
 | `test_tools_execution_results.py` | Tests for run_skill result shapes, failure paths, timing, flush telemetry, and gate checks |
 | `test_tools_execution_routing.py` | Tests for run_skill routing, executor delegation, and session skill management |

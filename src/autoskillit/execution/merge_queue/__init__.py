@@ -171,6 +171,9 @@ class DefaultMergeQueueWatcher:
                 if state["queue_state"] == "UNMERGEABLE":
                     pending_ejection = PRState.EJECTED
                     pending_reason = "PR is UNMERGEABLE in merge queue"
+                else:
+                    pending_ejection = None
+                    pending_reason = ""
                 await asyncio.sleep(poll_interval)
                 continue
 

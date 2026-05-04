@@ -635,7 +635,12 @@ def test_enrich_diff_context_preserves_existing_code_regions(tmp_path: Path) -> 
     _setup_handoff(
         tmp_path,
         [
-            {"path": "src/app.py", "line": 42, "severity": "critical", "code_region": "pre-existing"},
+            {
+                "path": "src/app.py",
+                "line": 42,
+                "severity": "critical",
+                "code_region": "pre-existing",
+            },
             {"path": "src/app.py", "line": 40, "severity": "warning", "code_region": ""},
         ],
     )

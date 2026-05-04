@@ -79,6 +79,7 @@ async def test_run_headless_core_defaults_provider_extras_none(
 async def test_default_executor_run_forwards_provider_extras(
     minimal_ctx, tmp_path, monkeypatch
 ) -> None:
+    import autoskillit.execution.headless as _headless_mod
     from autoskillit.execution.headless import DefaultHeadlessExecutor
 
     captured: dict = {}
@@ -87,7 +88,7 @@ async def test_default_executor_run_forwards_provider_extras(
         captured.update(kwargs)
         return _STUB_RESULT
 
-    monkeypatch.setattr("autoskillit.execution.headless.run_headless_core", fake_core)
+    monkeypatch.setattr(_headless_mod, "run_headless_core", fake_core)
 
     executor = DefaultHeadlessExecutor(minimal_ctx)
     await executor.run(
@@ -105,6 +106,7 @@ async def test_default_executor_run_forwards_provider_extras(
 async def test_default_executor_run_defaults_provider_extras(
     minimal_ctx, tmp_path, monkeypatch
 ) -> None:
+    import autoskillit.execution.headless as _headless_mod
     from autoskillit.execution.headless import DefaultHeadlessExecutor
 
     captured: dict = {}
@@ -113,7 +115,7 @@ async def test_default_executor_run_defaults_provider_extras(
         captured.update(kwargs)
         return _STUB_RESULT
 
-    monkeypatch.setattr("autoskillit.execution.headless.run_headless_core", fake_core)
+    monkeypatch.setattr(_headless_mod, "run_headless_core", fake_core)
 
     executor = DefaultHeadlessExecutor(minimal_ctx)
     await executor.run("/autoskillit:probe", str(tmp_path))

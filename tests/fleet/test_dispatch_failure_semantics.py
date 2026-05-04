@@ -6,6 +6,7 @@ import json
 
 import pytest
 
+from autoskillit.fleet.result_parser import L3ParseResult
 from tests.fakes import InMemoryHeadlessExecutor
 from tests.fleet._helpers import _setup_dispatch
 
@@ -58,9 +59,8 @@ def _read_dispatch_record(tool_ctx) -> dict:
 
 
 def _make_no_sentinel():
-    from autoskillit.fleet.result_parser import L2ParseResult
 
-    return L2ParseResult(
+    return L3ParseResult(
         outcome="no_sentinel",
         payload=None,
         raw_body=None,
@@ -70,9 +70,8 @@ def _make_no_sentinel():
 
 
 def _make_completed_dirty():
-    from autoskillit.fleet.result_parser import L2ParseResult
 
-    return L2ParseResult(
+    return L3ParseResult(
         outcome="completed_dirty",
         payload=None,
         raw_body="garbled",
@@ -82,12 +81,11 @@ def _make_completed_dirty():
 
 
 def _make_completed_clean(success: bool, reason: str = ""):
-    from autoskillit.fleet.result_parser import L2ParseResult
 
     payload: dict = {"success": success}
     if reason:
         payload["reason"] = reason
-    return L2ParseResult(
+    return L3ParseResult(
         outcome="completed_clean",
         payload=payload,
         raw_body=None,
@@ -99,7 +97,7 @@ def _make_completed_clean(success: bool, reason: str = ""):
 class TestTimeoutPath:
     @pytest.mark.anyio
     async def test_timeout_returns_fleet_error_envelope(self, tool_ctx, monkeypatch):
-        """skill_result.subtype == 'timeout' → fleet_error envelope with error='l2_timeout'."""
+        """skill_result.subtype == 'timeout' → fleet_error envelope with error='l3_timeout'."""
         import dataclasses
 
         from tests.fakes import _DEFAULT_SKILL_RESULT
@@ -111,11 +109,11 @@ class TestTimeoutPath:
 
         result = await _run(tool_ctx)
         assert result["success"] is False
-        assert result["error"] == "fleet_l2_timeout"
+        assert result["error"] == "fleet_l3_timeout"
 
     @pytest.mark.anyio
-    async def test_timeout_writes_state_with_reason_l2_timeout(self, tool_ctx, monkeypatch):
-        """Timeout path writes DispatchRecord with status=failure and reason=l2_timeout."""
+    async def test_timeout_writes_state_with_reason_l3_timeout(self, tool_ctx, monkeypatch):
+        """Timeout path writes DispatchRecord with status=failure and reason=l3_timeout."""
         import dataclasses
 
         from tests.fakes import _DEFAULT_SKILL_RESULT
@@ -129,11 +127,11 @@ class TestTimeoutPath:
 
         record = _read_dispatch_record(tool_ctx)
         assert record["status"] == "failure"
-        assert record["reason"] == "fleet_l2_timeout"
+        assert record["reason"] == "fleet_l3_timeout"
 
     @pytest.mark.anyio
-    async def test_timeout_skips_parse_l2_result_block(self, tool_ctx, monkeypatch):
-        """Timeout path must not call parse_l2_result_block."""
+    async def test_timeout_skips_parse_l3_result_block(self, tool_ctx, monkeypatch):
+        """Timeout path must not call parse_l3_result_block."""
         import dataclasses
 
         from tests.fakes import _DEFAULT_SKILL_RESULT
@@ -144,20 +142,20 @@ class TestTimeoutPath:
         )
 
         def _should_not_be_called(**_kwargs):
-            raise AssertionError("parse_l2_result_block called on timeout path")
+            raise AssertionError("parse_l3_result_block called on timeout path")
 
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l2_result_block",
+            "autoskillit.fleet._api.parse_l3_result_block",
             _should_not_be_called,
         )
 
-        # Should succeed (return l2_timeout error envelope) without raising
+        # Should succeed (return l3_timeout error envelope) without raising
         result = await _run(tool_ctx)
-        assert result["error"] == "fleet_l2_timeout"
+        assert result["error"] == "fleet_l3_timeout"
 
     @pytest.mark.anyio
     async def test_timeout_envelope_includes_dispatch_metadata(self, tool_ctx, monkeypatch):
-        """Timeout envelope details includes dispatch_id, l2_session_id, and token_usage."""
+        """Timeout envelope details includes dispatch_id, l3_session_id, and token_usage."""
         import dataclasses
 
         from tests.fakes import _DEFAULT_SKILL_RESULT
@@ -175,7 +173,7 @@ class TestTimeoutPath:
         result = await _run(tool_ctx)
         details = result.get("details", {})
         assert "dispatch_id" in details
-        assert details["l2_session_id"] == "sess-timeout-123"
+        assert details["l3_session_id"] == "sess-timeout-123"
         assert details["token_usage"] == {"input_tokens": 50}
 
     @pytest.mark.anyio
@@ -200,28 +198,28 @@ class TestTimeoutPath:
             parse_called.append(True)
             return _make_no_sentinel()
 
-        monkeypatch.setattr("autoskillit.fleet._api.parse_l2_result_block", _recording_parse)
+        monkeypatch.setattr("autoskillit.fleet._api.parse_l3_result_block", _recording_parse)
 
         await _run(tool_ctx)
-        assert parse_called, "parse_l2_result_block was not called for idle_stall"
+        assert parse_called, "parse_l3_result_block was not called for idle_stall"
 
 
 class TestNoSentinelPath:
     @pytest.mark.anyio
-    async def test_no_sentinel_writes_state_with_reason_l2_no_result_block(
+    async def test_no_sentinel_writes_state_with_reason_l3_no_result_block(
         self, tool_ctx, monkeypatch
     ):
-        """no_sentinel outcome → DispatchRecord.reason = 'l2_no_result_block'."""
+        """no_sentinel outcome → DispatchRecord.reason = 'l3_no_result_block'."""
         _setup_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l2_result_block",
+            "autoskillit.fleet._api.parse_l3_result_block",
             lambda **_: _make_no_sentinel(),
         )
 
         await _run(tool_ctx)
 
         record = _read_dispatch_record(tool_ctx)
-        assert record["reason"] == "fleet_l2_no_result_block"
+        assert record["reason"] == "fleet_l3_no_result_block"
 
     @pytest.mark.anyio
     async def test_no_sentinel_clean_exit_is_not_success(self, tool_ctx, monkeypatch):
@@ -239,7 +237,7 @@ class TestNoSentinelPath:
             )
         )
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l2_result_block",
+            "autoskillit.fleet._api.parse_l3_result_block",
             lambda **_: _make_no_sentinel(),
         )
 
@@ -249,20 +247,20 @@ class TestNoSentinelPath:
 
 class TestCompletedDirtyPath:
     @pytest.mark.anyio
-    async def test_completed_dirty_writes_state_with_reason_l2_parse_failed(
+    async def test_completed_dirty_writes_state_with_reason_l3_parse_failed(
         self, tool_ctx, monkeypatch
     ):
-        """completed_dirty outcome → DispatchRecord.reason = 'l2_parse_failed'."""
+        """completed_dirty outcome → DispatchRecord.reason = 'l3_parse_failed'."""
         _setup_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l2_result_block",
+            "autoskillit.fleet._api.parse_l3_result_block",
             lambda **_: _make_completed_dirty(),
         )
 
         await _run(tool_ctx)
 
         record = _read_dispatch_record(tool_ctx)
-        assert record["reason"] == "fleet_l2_parse_failed"
+        assert record["reason"] == "fleet_l3_parse_failed"
 
 
 class TestDispatchStatusEnvelopeField:
@@ -271,7 +269,7 @@ class TestDispatchStatusEnvelopeField:
         """Envelope from _run_dispatch includes dispatch_status matching state-file status."""
         _setup_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l2_result_block",
+            "autoskillit.fleet._api.parse_l3_result_block",
             lambda **_: _make_completed_clean(success=True),
         )
 
@@ -284,7 +282,7 @@ class TestDispatchStatusEnvelopeField:
         """Envelope includes dispatch_status='failure' when outcome is completed_dirty."""
         _setup_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l2_result_block",
+            "autoskillit.fleet._api.parse_l3_result_block",
             lambda **_: _make_completed_dirty(),
         )
 
@@ -297,7 +295,7 @@ class TestDispatchStatusEnvelopeField:
         """Envelope includes dispatch_status='failure' for no_sentinel without session signal."""
         _setup_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l2_result_block",
+            "autoskillit.fleet._api.parse_l3_result_block",
             lambda **_: _make_no_sentinel(),
         )
 
@@ -345,7 +343,7 @@ class TestDispatchStatusEnvelopeField:
         tool_ctx.executor = _SpawningExecutor(default_result=resumable_result)
 
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l2_result_block",
+            "autoskillit.fleet._api.parse_l3_result_block",
             lambda **_: _make_no_sentinel(),
         )
 
@@ -360,7 +358,7 @@ class TestCompletedCleanPath:
         """completed_clean with success=True → DispatchRecord.reason = ''."""
         _setup_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l2_result_block",
+            "autoskillit.fleet._api.parse_l3_result_block",
             lambda **_: _make_completed_clean(success=True),
         )
 
@@ -374,7 +372,7 @@ class TestCompletedCleanPath:
         """completed_clean success=False: payload.reason → DispatchRecord.reason."""
         _setup_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l2_result_block",
+            "autoskillit.fleet._api.parse_l3_result_block",
             lambda **_: _make_completed_clean(success=False, reason="my-failure-reason"),
         )
 

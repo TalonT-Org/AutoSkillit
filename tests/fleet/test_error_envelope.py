@@ -34,10 +34,10 @@ class TestFleetErrorCodeEnum:
             "fleet_manifest_missing",
             "fleet_manifest_corrupted",
             "fleet_lock_not_initialized",
-            "fleet_l2_timeout",
-            "fleet_l2_no_result_block",
-            "fleet_l2_parse_failed",
-            "fleet_l2_startup_or_crash",
+            "fleet_l3_timeout",
+            "fleet_l3_no_result_block",
+            "fleet_l3_parse_failed",
+            "fleet_l3_startup_or_crash",
             "fleet_budget_exceeded",
             "fleet_quota_exhausted",
             "fleet_cleanup_failed",
@@ -82,6 +82,10 @@ class TestFleetErrorCodeEnum:
             "l2_no_result_block",
             "l2_parse_failed",
             "l2_startup_or_crash",
+            "l3_timeout",
+            "l3_no_result_block",
+            "l3_parse_failed",
+            "l3_startup_or_crash",
             "dispatch_budget_exceeded",
             "quota_exhausted",
             "cleanup_failed",
@@ -102,17 +106,17 @@ class TestFleetErrorHelper:
     def test_fleet_error_returns_valid_json_envelope(self):
         from autoskillit.core import FleetErrorCode, fleet_error
 
-        result = fleet_error(FleetErrorCode.FLEET_L2_TIMEOUT, "timed out")
+        result = fleet_error(FleetErrorCode.FLEET_L3_TIMEOUT, "timed out")
         data = json.loads(result)
         assert set(data.keys()) >= {"success", "error", "user_visible_message", "details"}
         assert data["success"] is False
-        assert data["error"] == "fleet_l2_timeout"
+        assert data["error"] == "fleet_l3_timeout"
         assert data["user_visible_message"] == "timed out"
 
     def test_fleet_error_details_default_none(self):
         from autoskillit.core import FleetErrorCode, fleet_error
 
-        result = json.loads(fleet_error(FleetErrorCode.FLEET_L2_TIMEOUT, "msg"))
+        result = json.loads(fleet_error(FleetErrorCode.FLEET_L3_TIMEOUT, "msg"))
         assert result["details"] is None
 
     def test_fleet_error_details_json_serializable(self):
@@ -120,7 +124,7 @@ class TestFleetErrorHelper:
 
         result = json.loads(
             fleet_error(
-                FleetErrorCode.FLEET_L2_TIMEOUT,
+                FleetErrorCode.FLEET_L3_TIMEOUT,
                 "msg",
                 details={"key": [1, 2]},
             )
@@ -129,7 +133,7 @@ class TestFleetErrorHelper:
 
         with pytest.raises(TypeError):
             fleet_error(
-                FleetErrorCode.FLEET_L2_TIMEOUT,
+                FleetErrorCode.FLEET_L3_TIMEOUT,
                 "msg",
                 details={"fn": lambda: 0},  # type: ignore[arg-type]
             )

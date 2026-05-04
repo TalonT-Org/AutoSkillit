@@ -278,7 +278,7 @@ class TestDispatchFoodTruckValidation:
 
         Previously all dispatch tests stored Recipe objects in the fake, masking the
         AttributeError. This test uses RecipeInfo (the actual production return type).
-        Before fix: recipe_obj.kind raises AttributeError → L2_STARTUP_OR_CRASH.
+        Before fix: recipe_obj.kind raises AttributeError → L3_STARTUP_OR_CRASH.
         After fix: load_recipe upgrades RecipeInfo → Recipe before kind check.
         """
         from autoskillit.fleet._api import execute_dispatch
@@ -314,8 +314,8 @@ class TestDispatchFoodTruckValidation:
             )
         )
 
-        assert result.get("error") != "fleet_l2_startup_or_crash", (
-            "Expected structured validation error, not FLEET_L2_STARTUP_OR_CRASH. "
+        assert result.get("error") != "fleet_l3_startup_or_crash", (
+            "Expected structured validation error, not FLEET_L3_STARTUP_OR_CRASH. "
             "RecipeInfo.kind AttributeError is not fixed."
         )
 
@@ -324,7 +324,7 @@ class TestDispatchFoodTruckValidation:
         """find() returns RecipeInfo; ingredients validation must not crash on
         recipe_obj.ingredients when non-empty ingredients are passed.
 
-        Before fix: recipe_obj.ingredients raises AttributeError → L2_STARTUP_OR_CRASH.
+        Before fix: recipe_obj.ingredients raises AttributeError → L3_STARTUP_OR_CRASH.
         After fix: load_recipe upgrades RecipeInfo → Recipe; unknown ingredient detected.
         """
         from autoskillit.fleet._api import execute_dispatch
@@ -462,11 +462,11 @@ class TestDispatchFoodTruckExecution:
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_success_envelope(self, tool_ctx, monkeypatch):
-        """Returns envelope with success, dispatch_id, l2_payload, token_usage, l2_parse_source."""
+        """Returns envelope with success, dispatch_id, l3_payload, token_usage, l3_parse_source."""
         import dataclasses
 
         from autoskillit.fleet._api import execute_dispatch
-        from autoskillit.fleet.result_parser import L2ParseResult
+        from autoskillit.fleet.result_parser import L3ParseResult
         from tests.fakes import _DEFAULT_SKILL_RESULT
 
         self._setup_standard_dispatch(tool_ctx, monkeypatch)
@@ -481,7 +481,7 @@ class TestDispatchFoodTruckExecution:
         )
 
         canned_payload = {"success": True, "data": "dispatch done"}
-        canned_result = L2ParseResult(
+        canned_result = L3ParseResult(
             outcome="completed_clean",
             payload=canned_payload,
             raw_body=None,
@@ -489,7 +489,7 @@ class TestDispatchFoodTruckExecution:
             source="stdout",
         )
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l2_result_block",
+            "autoskillit.fleet._api.parse_l3_result_block",
             lambda **_kwargs: canned_result,
         )
 
@@ -507,14 +507,14 @@ class TestDispatchFoodTruckExecution:
         result = json.loads(raw)
         assert result["success"] is True
         assert "dispatch_id" in result
-        assert result["l2_session_id"] == "sess-abc"
-        assert result["l2_payload"] == canned_payload
+        assert result["l3_session_id"] == "sess-abc"
+        assert result["l3_payload"] == canned_payload
         assert result["token_usage"] == {"input_tokens": 100}
-        assert result["l2_parse_source"] == "stdout"
+        assert result["l3_parse_source"] == "stdout"
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_on_spawn_writes_pid(self, tool_ctx, monkeypatch):
-        """on_spawn callback writes l2_pid into state.json via mark_dispatch_running."""
+        """on_spawn callback writes l3_pid into state.json via mark_dispatch_running."""
         from autoskillit.fleet._api import _write_pid
         from autoskillit.fleet.state import DispatchRecord, write_initial_state
 
@@ -532,7 +532,7 @@ class TestDispatchFoodTruckExecution:
 
         state_data = json.loads(state_path.read_text())
         dispatch_record = state_data["dispatches"][0]
-        assert dispatch_record["l2_pid"] == 54321
+        assert dispatch_record["l3_pid"] == 54321
         assert dispatch_record["status"] == "running"
         assert dispatch_record["dispatch_id"] == "dispatch-id-abc"
 
@@ -571,7 +571,7 @@ class TestDispatchFoodTruckExecution:
         state_path = tool_ctx.temp_dir / "dispatches" / f"{dispatch_id}.json"
         state = read_state(state_path)
         assert state is not None
-        assert any(d.l2_pid == 99999 for d in state.dispatches)
+        assert any(d.l3_pid == 99999 for d in state.dispatches)
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_invalidates_quota_cache(self, tool_ctx, monkeypatch):
@@ -605,7 +605,7 @@ class TestDispatchFoodTruckExecution:
     async def test_dispatch_food_truck_cleans_session_skills(
         self, tool_ctx, monkeypatch, tmp_path
     ):
-        """Completed L2 session skill dir is cleaned up."""
+        """Completed L3 session skill dir is cleaned up."""
         from autoskillit.fleet._api import execute_dispatch
 
         self._setup_standard_dispatch(tool_ctx, monkeypatch)
@@ -679,7 +679,7 @@ class TestDispatchFoodTruckExecution:
         import json
 
         from autoskillit.fleet._api import execute_dispatch
-        from autoskillit.fleet.result_parser import L2ParseResult
+        from autoskillit.fleet.result_parser import L3ParseResult
         from tests.fakes import _DEFAULT_SKILL_RESULT
 
         self._setup_standard_dispatch(tool_ctx, monkeypatch)
@@ -691,8 +691,8 @@ class TestDispatchFoodTruckExecution:
             )
         )
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l2_result_block",
-            lambda **_kwargs: L2ParseResult(
+            "autoskillit.fleet._api.parse_l3_result_block",
+            lambda **_kwargs: L3ParseResult(
                 outcome="completed_clean",
                 payload={"success": True},
                 raw_body=None,
@@ -755,11 +755,11 @@ async def test_dispatch_food_truck_marketplace_install_succeeds(tool_ctx_marketp
     This test was impossible before the fix — it would raise ValueError.
     """
     from autoskillit.fleet._api import execute_dispatch
-    from autoskillit.fleet.result_parser import L2ParseResult
+    from autoskillit.fleet.result_parser import L3ParseResult
 
     monkeypatch.setattr(
-        "autoskillit.fleet._api.parse_l2_result_block",
-        lambda **_kwargs: L2ParseResult(
+        "autoskillit.fleet._api.parse_l3_result_block",
+        lambda **_kwargs: L3ParseResult(
             outcome="completed_clean",
             payload={"success": True},
             raw_body=None,
@@ -915,12 +915,12 @@ class TestDispatchFoodTruckHaltEnforcement:
                 "success": False,
                 "dispatch_status": "resumable",
                 "dispatch_id": "test-dispatch-id",
-                "l2_session_id": "sess-abc",
-                "reason": "fleet_l2_no_result_block",
+                "l3_session_id": "sess-abc",
+                "reason": "fleet_l3_no_result_block",
                 "token_usage": None,
-                "l2_parse_source": "stdout",
+                "l3_parse_source": "stdout",
                 "lifespan_started": True,
-                "l2_payload": None,
+                "l3_payload": None,
             }
         )
         monkeypatch.setattr(
@@ -948,11 +948,11 @@ class TestDispatchFoodTruckHaltEnforcement:
     async def test_no_result_block_failure_does_not_halt_campaign(
         self, tool_ctx, monkeypatch, tmp_path
     ):
-        """dispatch_food_truck proceeds when prior FAILURE has fleet_l2_no_result_block reason."""
+        """dispatch_food_truck proceeds when prior FAILURE has fleet_l3_no_result_block reason."""
         state_path = tmp_path / "state.json"
         _write_campaign_state(
             state_path,
-            [{"name": "d1", "status": "failure", "reason": "fleet_l2_no_result_block"}],
+            [{"name": "d1", "status": "failure", "reason": "fleet_l3_no_result_block"}],
         )
         monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(state_path))
         monkeypatch.setenv("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false")

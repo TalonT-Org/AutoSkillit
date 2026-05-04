@@ -1,4 +1,4 @@
-"""Group E tests: L2 food truck prompt builder — sous-chef subset, inversions,
+"""Group E tests: L3 food truck prompt builder — sous-chef subset, inversions,
 budget guidance, quota awareness, sentinel format."""
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ _MCP_PREFIX = "mcp__autoskillit__"
 _DISPATCH_ID = "abc12345deadbeef"
 _DISPATCH_ID_SHORT = "abc12345"
 _CAMPAIGN_ID = "camp-001"
-_L2_TIMEOUT = 3600
+_L3_TIMEOUT = 3600
 
 
 def _get_prompt() -> str:
@@ -33,20 +33,20 @@ def _get_prompt() -> str:
         mcp_prefix=_MCP_PREFIX,
         dispatch_id=_DISPATCH_ID,
         campaign_id=_CAMPAIGN_ID,
-        l2_timeout_sec=_L2_TIMEOUT,
+        l3_timeout_sec=_L3_TIMEOUT,
     )
 
 
 def _get_sous_chef_block() -> str:
-    from autoskillit.fleet._prompts import _build_l2_sous_chef_block
+    from autoskillit.fleet._prompts import _build_l3_sous_chef_block
 
-    return _build_l2_sous_chef_block()
+    return _build_l3_sous_chef_block()
 
 
 # --- Group E-1: Sous-Chef Subset Filter ---
 
 
-class TestL2SousChefBlock:
+class TestL3SousChefBlock:
     def test_retains_exactly_four_sections(self) -> None:
         block = _get_sous_chef_block()
         for title in (
@@ -87,7 +87,7 @@ class TestL2SousChefBlock:
         from autoskillit.fleet import _prompts as _fleet_prompts
 
         monkeypatch.setattr(_fleet_prompts, "pkg_root", lambda: tmp_path)
-        result = _fleet_prompts._build_l2_sous_chef_block()
+        result = _fleet_prompts._build_l3_sous_chef_block()
         assert result == ""
 
     def test_excludes_unretained_sections(self) -> None:
@@ -99,23 +99,23 @@ class TestL2SousChefBlock:
         ):
             assert f"## {title}" not in block, f"Unretained section present: {title}"
 
-    def test_l2_sections_constant_matches_build_output(self) -> None:
+    def test_l3_sections_constant_matches_build_output(self) -> None:
         from autoskillit.core.types._type_constants import (
-            SOUS_CHEF_L2_SECTIONS,
+            SOUS_CHEF_L3_SECTIONS,
             SOUS_CHEF_MANDATORY_SECTIONS,
         )
 
-        assert set(SOUS_CHEF_L2_SECTIONS).issubset(set(SOUS_CHEF_MANDATORY_SECTIONS))
+        assert set(SOUS_CHEF_L3_SECTIONS).issubset(set(SOUS_CHEF_MANDATORY_SECTIONS))
         block = _get_sous_chef_block()
-        for header in SOUS_CHEF_L2_SECTIONS:
+        for header in SOUS_CHEF_L3_SECTIONS:
             assert f"## {header}" in block, (
-                f"_build_l2_sous_chef_block() missing L2 section: {header!r}. "
-                "Update SOUS_CHEF_L2_SECTIONS or the allowlist in fleet/_prompts.py."
+                f"_build_l3_sous_chef_block() missing L3 section: {header!r}. "
+                "Update SOUS_CHEF_L3_SECTIONS or the allowlist in fleet/_prompts.py."
             )
-        extra = set(SOUS_CHEF_MANDATORY_SECTIONS) - set(SOUS_CHEF_L2_SECTIONS)
+        extra = set(SOUS_CHEF_MANDATORY_SECTIONS) - set(SOUS_CHEF_L3_SECTIONS)
         for header in extra:
             assert f"## {header}" not in block, (
-                f"_build_l2_sous_chef_block() unexpectedly includes non-L2 section: {header!r}"
+                f"_build_l3_sous_chef_block() unexpectedly includes non-L3 section: {header!r}"
             )
 
 
@@ -130,7 +130,7 @@ class TestFoodTruckPromptPlaceholders:
         assert _DISPATCH_ID in prompt
         assert _DISPATCH_ID_SHORT in prompt
         assert _CAMPAIGN_ID in prompt
-        assert str(_L2_TIMEOUT) in prompt
+        assert str(_L3_TIMEOUT) in prompt
         assert _MCP_PREFIX in prompt
         assert json.dumps(_INGREDIENTS) in prompt
         assert '"branch": "main"' in prompt
@@ -216,12 +216,12 @@ class TestFoodTruckPromptSections:
 class TestSentinelFormat:
     def test_sentinel_format_dispatch_id(self) -> None:
         prompt = _get_prompt()
-        assert f"---l2-result::{_DISPATCH_ID}---" in prompt
-        assert f"---end-l2-result::{_DISPATCH_ID}---" in prompt
+        assert f"---l3-result::{_DISPATCH_ID}---" in prompt
+        assert f"---end-l3-result::{_DISPATCH_ID}---" in prompt
 
     def test_sentinel_done_marker(self) -> None:
         prompt = _get_prompt()
-        assert f"%%L2_DONE::{_DISPATCH_ID_SHORT}%%" in prompt
+        assert f"%%L3_DONE::{_DISPATCH_ID_SHORT}%%" in prompt
 
     def test_sentinel_json_body_contract(self) -> None:
         prompt = _get_prompt()

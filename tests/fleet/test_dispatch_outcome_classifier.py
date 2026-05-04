@@ -9,7 +9,7 @@ import pytest
 from autoskillit.core import FleetErrorCode, SkillResult
 from autoskillit.fleet import DispatchStatus
 from autoskillit.fleet._api import classify_dispatch_outcome
-from autoskillit.fleet.result_parser import L2ParseResult
+from autoskillit.fleet.result_parser import L3ParseResult
 from tests.fakes import _DEFAULT_SKILL_RESULT
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
@@ -17,8 +17,8 @@ pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature
 
 def _no_sentinel(
     session_id: str = "", lifespan_started: bool = False
-) -> tuple[L2ParseResult, SkillResult]:
-    parsed = L2ParseResult(
+) -> tuple[L3ParseResult, SkillResult]:
+    parsed = L3ParseResult(
         outcome="no_sentinel",
         payload=None,
         raw_body=None,
@@ -38,30 +38,30 @@ class TestClassifyDispatchOutcomeNoSentinel:
         parsed, skill_result = _no_sentinel(session_id="sess-abc", lifespan_started=True)
         status, reason = classify_dispatch_outcome(parsed, skill_result, sidecar_exists=True)
         assert status == DispatchStatus.RESUMABLE
-        assert reason == FleetErrorCode.FLEET_L2_NO_RESULT_BLOCK
+        assert reason == FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
 
     def test_no_sentinel_without_session_is_failure(self):
         parsed, skill_result = _no_sentinel(session_id="", lifespan_started=True)
         status, reason = classify_dispatch_outcome(parsed, skill_result, sidecar_exists=True)
         assert status == DispatchStatus.FAILURE
-        assert reason == FleetErrorCode.FLEET_L2_NO_RESULT_BLOCK
+        assert reason == FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
 
     def test_no_sentinel_lifespan_not_started_is_failure(self):
         parsed, skill_result = _no_sentinel(session_id="sess-abc", lifespan_started=False)
         status, reason = classify_dispatch_outcome(parsed, skill_result, sidecar_exists=True)
         assert status == DispatchStatus.FAILURE
-        assert reason == FleetErrorCode.FLEET_L2_NO_RESULT_BLOCK
+        assert reason == FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
 
     def test_no_sentinel_without_sidecar_is_failure(self):
         parsed, skill_result = _no_sentinel(session_id="sess-abc", lifespan_started=True)
         status, reason = classify_dispatch_outcome(parsed, skill_result, sidecar_exists=False)
         assert status == DispatchStatus.FAILURE
-        assert reason == FleetErrorCode.FLEET_L2_NO_RESULT_BLOCK
+        assert reason == FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
 
 
 class TestClassifyDispatchOutcomeCompletedClean:
     def test_completed_clean_success(self):
-        parsed = L2ParseResult(
+        parsed = L3ParseResult(
             outcome="completed_clean",
             payload={"success": True},
             raw_body=None,
@@ -74,7 +74,7 @@ class TestClassifyDispatchOutcomeCompletedClean:
         assert reason == ""
 
     def test_completed_clean_failure(self):
-        parsed = L2ParseResult(
+        parsed = L3ParseResult(
             outcome="completed_clean",
             payload={"success": False, "reason": "my-error"},
             raw_body=None,
@@ -89,7 +89,7 @@ class TestClassifyDispatchOutcomeCompletedClean:
 
 class TestClassifyDispatchOutcomeCompletedDirty:
     def test_completed_dirty_is_failure(self):
-        parsed = L2ParseResult(
+        parsed = L3ParseResult(
             outcome="completed_dirty",
             payload=None,
             raw_body="garbled",
@@ -99,4 +99,4 @@ class TestClassifyDispatchOutcomeCompletedDirty:
         skill_result = dataclasses.replace(_DEFAULT_SKILL_RESULT)
         status, reason = classify_dispatch_outcome(parsed, skill_result, sidecar_exists=False)
         assert status == DispatchStatus.FAILURE
-        assert reason == FleetErrorCode.FLEET_L2_PARSE_FAILED
+        assert reason == FleetErrorCode.FLEET_L3_PARSE_FAILED

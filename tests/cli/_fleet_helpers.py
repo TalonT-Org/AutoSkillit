@@ -99,7 +99,7 @@ def _setup_campaign_with_tokens(
             name="dispatch-1",
             status=DispatchStatus.SUCCESS,
             token_usage=token_usage,
-            l2_session_log_dir="/tmp/test-session-log",
+            l3_session_log_dir="/tmp/test-session-log",
             started_at=now - 60.0,
             ended_at=now,
         )
@@ -130,13 +130,13 @@ def _setup_campaign_with_sessions(
     *,
     dispatches: list[DispatchDescriptor],
 ) -> None:
-    """Create a state.json with dispatches that have l2_session_id set."""
+    """Create a state.json with dispatches that have l3_session_id set."""
     from autoskillit.fleet import DispatchRecord, DispatchStatus, write_initial_state
 
     state_dir = tmp_path / ".autoskillit" / "temp" / "fleet" / campaign_id
     state_dir.mkdir(parents=True)
     records = [
-        DispatchRecord(name=d.name, status=DispatchStatus(d.status), l2_session_id=d.session_id)
+        DispatchRecord(name=d.name, status=DispatchStatus(d.status), l3_session_id=d.session_id)
         for d in dispatches
     ]
     write_initial_state(

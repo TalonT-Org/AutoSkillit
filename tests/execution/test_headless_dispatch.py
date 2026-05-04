@@ -15,7 +15,7 @@ def _make_success_stdout(marker: str = "%%FT_DONE%%") -> str:
         {
             "type": "result",
             "subtype": "success",
-            "result": f"L2 done {marker}",
+            "result": f"L3 done {marker}",
             "session_id": "ft-session",
             "is_error": False,
         }
@@ -46,7 +46,7 @@ class TestDispatchFoodTruck:
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
         await executor.dispatch_food_truck(
-            "You are an L2 orchestrator",
+            "You are an L3 orchestrator",
             str(tmp_path),
             completion_marker="%%FT_DONE%%",
         )
@@ -81,7 +81,7 @@ class TestDispatchFoodTruck:
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
         result = await executor.dispatch_food_truck(
-            "You are an L2 orchestrator",
+            "You are an L3 orchestrator",
             str(tmp_path),
             completion_marker="%%FT_DONE%%",
         )
@@ -112,7 +112,7 @@ class TestDispatchFoodTruck:
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
         await executor.dispatch_food_truck(
-            "You are an L2 orchestrator",
+            "You are an L3 orchestrator",
             str(tmp_path),
             completion_marker="%%FT_DONE%%",
             on_spawn=lambda pid, ticks: spawned_pids.append(pid),
@@ -141,7 +141,7 @@ class TestDispatchFoodTruck:
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
         result = await executor.dispatch_food_truck(
-            "You are an L2 orchestrator",
+            "You are an L3 orchestrator",
             str(tmp_path),
             completion_marker="%%FT_DONE%%",
             on_spawn=None,
@@ -176,7 +176,7 @@ class TestDispatchFoodTruck:
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
         await executor.dispatch_food_truck(
-            "You are an L2 orchestrator",
+            "You are an L3 orchestrator",
             str(tmp_path),
             completion_marker="%%FT_DONE%%",
         )
@@ -220,7 +220,7 @@ class TestDispatchFoodTruck:
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
         await executor.dispatch_food_truck(
-            "You are an L2 orchestrator",
+            "You are an L3 orchestrator",
             str(tmp_path),
             completion_marker="%%FT_DONE%%",
             resume_session_id="abc-123",
@@ -231,10 +231,10 @@ class TestDispatchFoodTruck:
 
 
 class TestDispatchFoodTruckPackInjection:
-    """Tests that dispatch_food_truck correctly injects AUTOSKILLIT_L2_TOOL_TAGS."""
+    """Tests that dispatch_food_truck correctly injects AUTOSKILLIT_L3_TOOL_TAGS."""
 
     @pytest.mark.anyio
-    async def test_requires_packs_injected_as_l2_tool_tags(self, minimal_ctx, tmp_path: Path):
+    async def test_requires_packs_injected_as_l3_tool_tags(self, minimal_ctx, tmp_path: Path):
         """dispatch_food_truck with requires_packs injects sorted comma-joined env var."""
         from autoskillit.core.types import SubprocessResult, TerminationReason
         from autoskillit.execution.headless import DefaultHeadlessExecutor
@@ -255,7 +255,7 @@ class TestDispatchFoodTruckPackInjection:
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
         await executor.dispatch_food_truck(
-            "You are an L2 orchestrator",
+            "You are an L3 orchestrator",
             str(tmp_path),
             completion_marker="%%FT_DONE%%",
             requires_packs=["ci", "github", "clone"],
@@ -265,11 +265,11 @@ class TestDispatchFoodTruckPackInjection:
         _cmd, _cwd, _timeout, kwargs = runner.call_args_list[0]
         env = kwargs.get("env")
         assert env is not None
-        assert env["AUTOSKILLIT_L2_TOOL_TAGS"] == "ci,clone,github"
+        assert env["AUTOSKILLIT_L3_TOOL_TAGS"] == "ci,clone,github"
 
     @pytest.mark.anyio
-    async def test_requires_packs_empty_omits_l2_tool_tags(self, minimal_ctx, tmp_path: Path):
-        """dispatch_food_truck with empty requires_packs does not inject L2_TOOL_TAGS."""
+    async def test_requires_packs_empty_omits_l3_tool_tags(self, minimal_ctx, tmp_path: Path):
+        """dispatch_food_truck with empty requires_packs does not inject L3_TOOL_TAGS."""
         from autoskillit.core.types import SubprocessResult, TerminationReason
         from autoskillit.execution.headless import DefaultHeadlessExecutor
         from tests.fakes import MockSubprocessRunner
@@ -289,7 +289,7 @@ class TestDispatchFoodTruckPackInjection:
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
         await executor.dispatch_food_truck(
-            "You are an L2 orchestrator",
+            "You are an L3 orchestrator",
             str(tmp_path),
             completion_marker="%%FT_DONE%%",
             requires_packs=[],
@@ -299,14 +299,14 @@ class TestDispatchFoodTruckPackInjection:
         _cmd, _cwd, _timeout, kwargs = runner.call_args_list[0]
         env = kwargs.get("env")
         assert env is not None
-        assert "AUTOSKILLIT_L2_TOOL_TAGS" not in env
+        assert "AUTOSKILLIT_L3_TOOL_TAGS" not in env
 
 
 class TestDispatchFoodTruckGuards:
     """Guard-path tests for dispatch_food_truck: conflict detection and skip_clone_guard."""
 
     @pytest.mark.anyio
-    async def test_dispatch_food_truck_l2_tool_tags_conflict_raises(
+    async def test_dispatch_food_truck_l3_tool_tags_conflict_raises(
         self, minimal_ctx, tmp_path: Path
     ) -> None:
         from autoskillit.core.types._type_plugin_source import DirectInstall
@@ -315,13 +315,13 @@ class TestDispatchFoodTruckGuards:
         minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
         executor = DefaultHeadlessExecutor(minimal_ctx)
 
-        with pytest.raises(ValueError, match="AUTOSKILLIT_L2_TOOL_TAGS"):
+        with pytest.raises(ValueError, match="AUTOSKILLIT_L3_TOOL_TAGS"):
             await executor.dispatch_food_truck(
                 "some prompt",
                 str(tmp_path),
                 completion_marker="DONE",
                 requires_packs=["ci"],
-                env_extras={"AUTOSKILLIT_L2_TOOL_TAGS": "ci"},
+                env_extras={"AUTOSKILLIT_L3_TOOL_TAGS": "ci"},
             )
 
     @pytest.mark.anyio

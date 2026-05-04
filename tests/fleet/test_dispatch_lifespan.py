@@ -48,9 +48,9 @@ async def _run(tool_ctx, recipe: str = "test-recipe") -> dict:
 
 
 def _make_completed_clean(success: bool):
-    from autoskillit.fleet.result_parser import L2ParseResult
+    from autoskillit.fleet.result_parser import L3ParseResult
 
-    return L2ParseResult(
+    return L3ParseResult(
         outcome="completed_clean",
         payload={"success": success},
         raw_body=None,
@@ -60,9 +60,9 @@ def _make_completed_clean(success: bool):
 
 
 def _make_no_sentinel():
-    from autoskillit.fleet.result_parser import L2ParseResult
+    from autoskillit.fleet.result_parser import L3ParseResult
 
-    return L2ParseResult(
+    return L3ParseResult(
         outcome="no_sentinel",
         payload=None,
         raw_body=None,
@@ -72,9 +72,9 @@ def _make_no_sentinel():
 
 
 def _make_completed_dirty():
-    from autoskillit.fleet.result_parser import L2ParseResult
+    from autoskillit.fleet.result_parser import L3ParseResult
 
-    return L2ParseResult(
+    return L3ParseResult(
         outcome="completed_dirty",
         payload=None,
         raw_body="bad",
@@ -120,7 +120,7 @@ class TestLifespanStartedInEnvelopes:
             )
         )
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l2_result_block",
+            "autoskillit.fleet._api.parse_l3_result_block",
             lambda **_: _make_completed_clean(success=True),
         )
 
@@ -136,7 +136,7 @@ class TestLifespanStartedInEnvelopes:
         """no_sentinel envelope includes 'lifespan_started' field."""
         _setup_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l2_result_block",
+            "autoskillit.fleet._api.parse_l3_result_block",
             lambda **_: _make_no_sentinel(),
         )
 
@@ -152,7 +152,7 @@ class TestLifespanStartedInEnvelopes:
         """completed_dirty envelope includes 'lifespan_started' field."""
         _setup_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l2_result_block",
+            "autoskillit.fleet._api.parse_l3_result_block",
             lambda **_: _make_completed_dirty(),
         )
 

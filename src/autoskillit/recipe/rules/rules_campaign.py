@@ -652,7 +652,7 @@ def _check_gate_dispatch_no_capture(ctx: ValidationContext) -> list[RuleFinding]
                     step_name="(top-level)",
                     message=(
                         f"Dispatch {d.name!r} has gate={d.gate!r} but also specifies "
-                        f"capture={d.capture!r}. Gate dispatches produce no L2 session "
+                        f"capture={d.capture!r}. Gate dispatches produce no L3 session "
                         "output and must not specify capture."
                     ),
                 )

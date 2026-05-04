@@ -8,9 +8,9 @@ from ._api import _write_pid as _write_pid
 from ._api import classify_dispatch_outcome, execute_dispatch
 from ._liveness import is_dispatch_session_alive
 from ._prompts import _build_food_truck_prompt as _build_food_truck_prompt
-from ._prompts import _build_l2_sous_chef_block as _build_l2_sous_chef_block
+from ._prompts import _build_l3_sous_chef_block as _build_l3_sous_chef_block
 from ._semaphore import FleetSemaphore
-from .result_parser import L2ParseResult, parse_l2_result_block
+from .result_parser import L3ParseResult, parse_l3_result_block
 from .sidecar import (
     IssueSidecarEntry,
     append_sidecar_entry,
@@ -60,9 +60,9 @@ __all__ = [
     "classify_dispatch_outcome",
     "execute_dispatch",
     "_build_food_truck_prompt",
-    "_build_l2_sous_chef_block",
-    "L2ParseResult",
-    "parse_l2_result_block",
+    "_build_l3_sous_chef_block",
+    "L3ParseResult",
+    "parse_l3_result_block",
     "CampaignParseResult",
     "CampaignSummary",
     "CampaignSummaryStatus",

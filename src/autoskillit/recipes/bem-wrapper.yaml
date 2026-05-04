@@ -2,7 +2,7 @@ name: bem-wrapper
 description: >-
   Re-fetch open audit issues, run build-execution-map, emit execution map path
   and compact dispatch plan. Used by the promote-to-main campaign to compute
-  issue distribution before dispatching implementation L2s.
+  issue distribution before dispatching implementation L3s.
 kind: standard
 autoskillit_version: "0.9.380"
 recipe_version: "1.0.0"
@@ -13,7 +13,7 @@ kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Agent,
     WebFetch, WebSearch, NotebookEdit) from the orchestrator. All work is delegated
     through run_cmd and run_skill."
-  - "This recipe is a food truck dispatched by a campaign. Emit the L2 sentinel JSON
+  - "This recipe is a food truck dispatched by a campaign. Emit the L3 sentinel JSON
     block exactly as instructed in the done step message — no extra tool calls after
     reaching done."
 
@@ -86,7 +86,7 @@ steps:
     message: >-
       Execution map computed. The context variable execution_map holds either a
       file path or "none" (if all issues were closed during review gate). Emit
-      your L2 sentinel JSON block now. The sentinel must include: success=true,
+      your L3 sentinel JSON block now. The sentinel must include: success=true,
       execution_map=<the captured value>, and dispatch_plan=<compact array>.
       To build dispatch_plan: if execution_map is a file path, parse the JSON
       and for each group emit {"group": <N>, "parallel": <bool>, "issues":

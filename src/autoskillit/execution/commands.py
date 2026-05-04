@@ -399,9 +399,9 @@ def build_food_truck_cmd(
     temp_dir_relpath: str | None = None,
     allowed_write_prefix: str = "",
 ) -> ClaudeHeadlessCmd:
-    """Build the complete headless command spec for an L2 food truck session.
+    """Build the complete headless command spec for an L3 food truck session.
 
-    A food truck session is an L2 orchestrator: it runs a full recipe
+    A food truck session is an L3 orchestrator: it runs a full recipe
     autonomously, always carries ``AUTOSKILLIT_SESSION_TYPE=orchestrator``,
     and restricts Claude native tools to ``--tools AskUserQuestion``.
 
@@ -409,7 +409,7 @@ def build_food_truck_cmd(
     - Does NOT call ``_ensure_skill_prefix`` (prompt is a complete orchestrator prompt)
     - Sets ``SESSION_TYPE=orchestrator`` (not ``leaf``)
     - Accepts caller-provided ``env_extras`` for campaign-specific variables
-      (CAMPAIGN_ID, CAMPAIGN_STATE_PATH, PROJECT_DIR, L2_TOOL_TAGS, etc.)
+      (CAMPAIGN_ID, CAMPAIGN_STATE_PATH, PROJECT_DIR, L3_TOOL_TAGS, etc.)
     - Always emits ``--plugin-dir``: DirectInstall uses plugin_dir, MarketplaceInstall
       uses cache_path (food truck sessions are fresh subprocesses that need explicit
       plugin loading, unlike leaf sessions where the parent already has it).

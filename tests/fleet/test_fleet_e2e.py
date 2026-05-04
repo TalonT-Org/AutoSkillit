@@ -50,9 +50,9 @@ sleep_sec = float(os.environ.get("CLAUDE_SHIM_SLEEP_SEC", "10"))
 
 def _sentinel(payload: str) -> str:
     return (
-        f"---l2-result::{dispatch_id}---\\n"
+        f"---l3-result::{dispatch_id}---\\n"
         f"{payload}\\n"
-        f"---end-l2-result::{dispatch_id}---"
+        f"---end-l3-result::{dispatch_id}---"
     )
 
 
@@ -296,9 +296,9 @@ def _force_running_state(
     for d in data["dispatches"]:
         if d["name"] == name:
             d["status"] = "running"
-            d["l2_pid"] = pid
-            d["l2_starttime_ticks"] = ticks
-            d["l2_boot_id"] = boot_id
+            d["l3_pid"] = pid
+            d["l3_starttime_ticks"] = ticks
+            d["l3_boot_id"] = boot_id
             d["started_at"] = time.time()
             break
     state_path.write_text(json.dumps(data), encoding="utf-8")
@@ -418,7 +418,7 @@ async def test_two_dispatch_happy_path(fleet_runtime: FleetRuntime) -> None:
         from autoskillit.fleet.state import DispatchStatus
 
         assert d.status == DispatchStatus.SUCCESS
-        assert d.l2_pid > 0
+        assert d.l3_pid > 0
         assert d.ended_at > d.started_at
 
 
@@ -459,7 +459,7 @@ async def test_continue_on_failure_when_flagged(fleet_runtime: FleetRuntime) -> 
 
     result_a = await rt.dispatch("recipe-a", shim_mode="no_sentinel")
     assert result_a["success"] is False
-    assert result_a["reason"] == "fleet_l2_no_result_block"
+    assert result_a["reason"] == "fleet_l3_no_result_block"
 
     state_path = rt.dispatch_state_path(result_a["dispatch_id"])
     decision = resume_campaign_from_state(state_path, continue_on_failure=True)
@@ -479,8 +479,8 @@ async def test_continue_on_failure_when_flagged(fleet_runtime: FleetRuntime) -> 
 
 
 @pytest.mark.anyio
-async def test_malformed_l2_result_surfaces_warning(fleet_runtime: FleetRuntime) -> None:
-    """Malformed sentinel body produces l2_parse_failed failure with diagnostic fields."""
+async def test_malformed_l3_result_surfaces_warning(fleet_runtime: FleetRuntime) -> None:
+    """Malformed sentinel body produces l3_parse_failed failure with diagnostic fields."""
     from autoskillit.fleet.state import DispatchStatus
 
     rt = fleet_runtime
@@ -488,14 +488,14 @@ async def test_malformed_l2_result_surfaces_warning(fleet_runtime: FleetRuntime)
 
     result = await rt.dispatch("recipe-a", shim_mode="malformed_sentinel")
     assert result["success"] is False
-    assert result["reason"] == "fleet_l2_parse_failed"
-    assert "l2_raw_body" in result
-    assert "l2_parse_error" in result
+    assert result["reason"] == "fleet_l3_parse_failed"
+    assert "l3_raw_body" in result
+    assert "l3_parse_error" in result
 
     state = rt.read_dispatch_state(result["dispatch_id"])
     assert state is not None
     assert state.dispatches[0].status == DispatchStatus.FAILURE
-    assert state.dispatches[0].reason == "fleet_l2_parse_failed"
+    assert state.dispatches[0].reason == "fleet_l3_parse_failed"
 
 
 @pytest.mark.anyio
@@ -510,12 +510,12 @@ async def test_l3_halts_on_missing_result_block_when_continue_on_failure_false(
 
     result = await rt.dispatch("recipe-a", shim_mode="no_sentinel")
     assert result["success"] is False
-    assert result["reason"] == "fleet_l2_no_result_block"
+    assert result["reason"] == "fleet_l3_no_result_block"
 
     state = rt.read_dispatch_state(result["dispatch_id"])
     assert state is not None
     assert state.dispatches[0].status == DispatchStatus.FAILURE
-    assert state.dispatches[0].reason == "fleet_l2_no_result_block"
+    assert state.dispatches[0].reason == "fleet_l3_no_result_block"
 
     state_path = rt.dispatch_state_path(result["dispatch_id"])
     decision = resume_campaign_from_state(state_path, continue_on_failure=False)
@@ -658,10 +658,10 @@ async def test_quota_exhausted_mid_campaign_sleeps_and_retries_once(
 
 
 @pytest.mark.anyio
-async def test_l2_killed_mid_dispatch_records_failure(
+async def test_l3_killed_mid_dispatch_records_failure(
     fleet_runtime: FleetRuntime,
 ) -> None:
-    """L2 process killed mid-dispatch produces l2_no_result_block failure (not crash)."""
+    """L3 process killed mid-dispatch produces l3_no_result_block failure (not crash)."""
     from autoskillit.fleet.state import DispatchStatus
 
     rt = fleet_runtime
@@ -690,12 +690,12 @@ async def test_l2_killed_mid_dispatch_records_failure(
 
     assert dispatch_result is not None
     assert dispatch_result["success"] is False
-    assert dispatch_result["reason"] == "fleet_l2_no_result_block"
+    assert dispatch_result["reason"] == "fleet_l3_no_result_block"
 
     state = rt.read_dispatch_state(dispatch_result["dispatch_id"])
     assert state is not None
     assert state.dispatches[0].status == DispatchStatus.FAILURE
-    assert state.dispatches[0].reason == "fleet_l2_no_result_block"
+    assert state.dispatches[0].reason == "fleet_l3_no_result_block"
 
     killed_pid = rt.runner.last_pid
     assert killed_pid > 0
@@ -711,7 +711,7 @@ def _is_zombie(pid: int) -> bool:
 
 
 @pytest.mark.anyio
-async def test_orphan_l2_reaping(fleet_runtime: FleetRuntime, tmp_path: Path) -> None:
+async def test_orphan_l3_reaping(fleet_runtime: FleetRuntime, tmp_path: Path) -> None:
     """_reap_stale_dispatches kills a real orphan process and marks it interrupted."""
     from autoskillit.cli.fleet import _reap_stale_dispatches
     from autoskillit.core.runtime._linux_proc import read_boot_id, read_starttime_ticks
@@ -754,8 +754,8 @@ async def test_orphan_l2_reaping(fleet_runtime: FleetRuntime, tmp_path: Path) ->
 
 
 @pytest.mark.anyio
-async def test_l2_timeout_enforced(fleet_runtime: FleetRuntime) -> None:
-    """timeout_sec=1 kills a sleeping L2 process and returns l2_timeout fleet_error."""
+async def test_l3_timeout_enforced(fleet_runtime: FleetRuntime) -> None:
+    """timeout_sec=1 kills a sleeping L3 process and returns l3_timeout fleet_error."""
     from autoskillit.fleet.state import DispatchStatus
 
     rt = fleet_runtime
@@ -769,15 +769,15 @@ async def test_l2_timeout_enforced(fleet_runtime: FleetRuntime) -> None:
     )
 
     assert result["success"] is False
-    assert result["error"] == "fleet_l2_timeout"
+    assert result["error"] == "fleet_l3_timeout"
     assert "details" in result
     assert "dispatch_id" in result["details"]
-    assert "l2_session_id" in result["details"]
+    assert "l3_session_id" in result["details"]
 
     state = rt.read_dispatch_state(result["details"]["dispatch_id"])
     assert state is not None
     assert state.dispatches[0].status == DispatchStatus.FAILURE
-    assert state.dispatches[0].reason == "fleet_l2_timeout"
+    assert state.dispatches[0].reason == "fleet_l3_timeout"
 
     killed_pid = rt.runner.last_pid
     assert killed_pid > 0
@@ -879,7 +879,7 @@ async def test_manifest_mid_campaign_deletion(fleet_runtime: FleetRuntime, tmp_p
 async def test_two_concurrent_dispatches_allowed_with_max2(
     fleet_runtime_factory,
 ) -> None:
-    """FleetSemaphore(max=2) allows both L2 dispatches to complete successfully."""
+    """FleetSemaphore(max=2) allows both L3 dispatches to complete successfully."""
     rt = fleet_runtime_factory(max_concurrent_dispatches=2)
     rt.add_recipe("slow-recipe")
     results: list[dict | None] = [None, None]

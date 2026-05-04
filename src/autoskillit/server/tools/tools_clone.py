@@ -1,5 +1,5 @@
 """MCP tool handlers: clone_repo, remove_clone, push_to_remote,
-register_clone_status, batch_cleanup_clones."""
+register_clone_status, batch_cleanup_clones, bootstrap_clone."""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import clone_registry
 from autoskillit.server._notify import _notify, track_response_size
+from autoskillit.server._subprocess import _run_subprocess
 
 logger = get_logger(__name__)
 
@@ -449,3 +450,129 @@ async def batch_cleanup_clones(
     except Exception as exc:
         logger.warning("batch_cleanup_clones failed", exc_info=True)
         return json.dumps({"deleted": [], "preserved": [], "error": str(exc)})
+
+
+@mcp.tool(tags={"autoskillit", "kitchen", "clone"}, annotations={"readOnlyHint": True})
+@track_response_size("bootstrap_clone")
+async def bootstrap_clone(
+    source_dir: str,
+    run_name: str,
+    base_branch: str,
+    branch: str = "",
+    strategy: str = "",
+    remote_url: str = "",
+    step_name: str = "",
+    ctx: Context = CurrentContext(),
+) -> str:
+    """Clone a source repository and capture the base SHA in one orchestrator turn.
+
+    Combines clone_repo + git rev-parse into a single call, reducing bootstrap
+    corridor turns from 2 to 1.
+
+    Returns {"work_dir": str, "remote_url": str, "base_sha": str,
+    "merge_target": str, "timings": {"clone_ms": int, "rev_parse_ms": int}}
+    on success. Returns {"error": str} on clone failure or rev-parse failure.
+
+    Args:
+        source_dir: Path to the source repository. Empty string auto-detects via git.
+        run_name: Name prefix for the clone directory (e.g. "impl", "audit-fix").
+        base_branch: Branch to capture the SHA for (e.g. "main", "develop").
+        branch: Branch to check out in the clone. Empty = auto-detect from HEAD.
+        strategy: On uncommitted changes: "" = return warning, "proceed" = clone
+                  remote committed state, "clone_local" = copytree.
+        remote_url: Override remote URL for clone's origin.
+        step_name: Optional YAML step key for wall-clock timing accumulation.
+
+    Never raises.
+    """
+    if (gate := _require_enabled()) is not None:
+        return gate
+    try:
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(
+            tool="bootstrap_clone", source_dir=source_dir, base_branch=base_branch
+        )
+        logger.info(
+            "bootstrap_clone", source_dir=source_dir, run_name=run_name, base_branch=base_branch
+        )
+        await _notify(
+            ctx,
+            "info",
+            f"bootstrap_clone: {source_dir!r} run_name={run_name!r} base_branch={base_branch!r}",
+            "autoskillit.bootstrap_clone",
+            extra={
+                "source_dir": source_dir,
+                "run_name": run_name,
+                "base_branch": base_branch,
+                "branch": branch,
+            },
+        )
+
+        from autoskillit.server import _get_ctx
+
+        tool_ctx = _get_ctx()
+        if tool_ctx.clone_mgr is None:
+            return json.dumps({"error": "Clone manager not configured"})
+
+        _total_start = time.monotonic()
+
+        _clone_start = time.monotonic()
+        try:
+            clone_result = await asyncio.to_thread(
+                tool_ctx.clone_mgr.clone_repo, source_dir, run_name, branch, strategy, remote_url
+            )
+        except (ValueError, RuntimeError) as exc:
+            await _notify(
+                ctx,
+                "error",
+                "bootstrap_clone: clone failed",
+                "autoskillit.bootstrap_clone",
+                extra={"reason": str(exc)},
+            )
+            return json.dumps({"error": str(exc)})
+        finally:
+            clone_ms = int((time.monotonic() - _clone_start) * 1000)
+
+        clone_path: str = str(clone_result.get("clone_path", ""))
+        resolved_remote_url: str = str(clone_result.get("remote_url", remote_url))
+
+        _revparse_start = time.monotonic()
+        try:
+            rc, stdout, stderr = await _run_subprocess(
+                ["git", "rev-parse", base_branch],
+                cwd=clone_path,
+                timeout=30,
+            )
+        finally:
+            rev_parse_ms = int((time.monotonic() - _revparse_start) * 1000)
+
+        if rc != 0:
+            await _notify(
+                ctx,
+                "error",
+                "bootstrap_clone: rev-parse failed",
+                "autoskillit.bootstrap_clone",
+                extra={"stderr": stderr},
+            )
+            return json.dumps({"error": f"rev-parse failed: {stderr.strip()}"})
+
+        base_sha = stdout.strip()
+
+        if step_name:
+            tool_ctx.timing_log.record(step_name, time.monotonic() - _total_start)
+
+        return json.dumps(
+            {
+                "work_dir": clone_path,
+                "remote_url": resolved_remote_url,
+                "base_sha": base_sha,
+                "merge_target": base_branch,
+                "timings": {
+                    "clone_ms": clone_ms,
+                    "rev_parse_ms": rev_parse_ms,
+                },
+            }
+        )
+    except Exception as exc:
+        logger.error("bootstrap_clone unhandled exception", exc_info=True)
+        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})

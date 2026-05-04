@@ -85,11 +85,11 @@ def test_implementation_groups_ci_failure_routes_to_diagnose_ci():
 
 
 def test_implementation_create_branch_uses_create_unique_branch_tool():
-    """AP3: create_branch step must use create_unique_branch MCP tool, not run_cmd."""
+    """AP3: create_and_publish step must use create_and_publish_branch MCP tool, not run_cmd."""
     recipe = load_recipe(builtin_recipes_dir() / "implementation.yaml")
-    step = recipe.steps["create_branch"]
-    assert step.tool == "create_unique_branch", (
-        "create_branch must use create_unique_branch tool (not run_cmd bash script)"
+    step = recipe.steps["create_and_publish"]
+    assert step.tool == "create_and_publish_branch", (
+        "create_and_publish must use create_and_publish_branch tool (not run_cmd bash script)"
     )
 
 

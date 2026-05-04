@@ -1,10 +1,12 @@
-"""MCP tool handlers: merge_worktree, classify_fix."""
+"""MCP tool handlers: merge_worktree, classify_fix, create_and_publish_branch."""
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import time
+from typing import Any
 
 import structlog
 from fastmcp import Context
@@ -15,6 +17,19 @@ from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._subprocess import _run_subprocess
+
+_BRANCH_DATE_FORMAT = "%Y%m%d"
+
+
+def _compute_branch_name(issue_slug: str, run_name: str, issue_number: str) -> str:
+    """Compute branch name from slug + issue number or today's date."""
+    from datetime import date
+
+    prefix = issue_slug or run_name
+    if issue_number:
+        return f"{prefix}/{issue_number}"
+    return f"{prefix}/{date.today().strftime(_BRANCH_DATE_FORMAT)}"
+
 
 logger = get_logger(__name__)
 
@@ -321,70 +336,10 @@ async def create_unique_branch(
             )
         else:
             base_name = f"{slug}-{issue_number}" if issue_number is not None else slug
-        branch_name = base_name
-        was_unique = True
 
         try:
-            rc, stdout, _ = await _run_subprocess(
-                ["git", "ls-remote", remote, f"refs/heads/{branch_name}"],
-                cwd=cwd,
-                timeout=30,
-            )
-
-            if rc == 0 and stdout.strip():
-                was_unique = False
-                suffix = 2
-                _MAX_SUFFIX = 100
-                while suffix <= _MAX_SUFFIX:
-                    candidate = f"{base_name}-{suffix}"
-                    rc2, stdout2, _ = await _run_subprocess(
-                        ["git", "ls-remote", remote, f"refs/heads/{candidate}"],
-                        cwd=cwd,
-                        timeout=30,
-                    )
-                    if rc2 != 0:
-                        branch_name = candidate
-                        break
-                    if not stdout2.strip():
-                        branch_name = candidate
-                        break
-                    suffix += 1
-                else:
-                    return json.dumps(
-                        {
-                            "success": False,
-                            "error": (
-                                f"All branch name candidates up to "
-                                f"{base_name}-{_MAX_SUFFIX} are taken."
-                            ),
-                        }
-                    )
-
-            rc_head, head_out, _ = await _run_subprocess(
-                ["git", "branch", "--show-current"],
-                cwd=cwd,
-                timeout=10,
-            )
-            base_ref = head_out.strip() if rc_head == 0 and head_out.strip() else "DETACHED_HEAD"
-
-            rc_checkout, _, _stderr_checkout = await _run_subprocess(
-                ["git", "checkout", "-b", branch_name],
-                cwd=cwd,
-                timeout=30,
-            )
-            if rc_checkout != 0:
-                return json.dumps(
-                    {
-                        "success": False,
-                        "error": (
-                            f"git checkout -b {branch_name!r} failed: {_stderr_checkout.strip()}"
-                        ),
-                    }
-                )
-
-            return json.dumps(
-                {"branch_name": branch_name, "was_unique": was_unique, "base_ref": base_ref}
-            )
+            result = await _resolve_and_create_branch(base_name, remote, cwd)
+            return json.dumps(result)
         finally:
             if step_name:
                 tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
@@ -456,3 +411,196 @@ async def check_pr_mergeable(
     except Exception as exc:
         logger.error("check_pr_mergeable unhandled exception", exc_info=True)
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+
+
+async def _resolve_and_create_branch(
+    base_name: str,
+    remote: str,
+    cwd: str,
+) -> dict[str, Any]:
+    """Core branch creation: ls-remote collision check + git checkout -b.
+
+    Returns {"branch_name": str, "was_unique": bool, "base_ref": str} on success,
+    or {"success": False, "error": str} on failure.
+    """
+    branch_name = base_name
+    was_unique = True
+
+    rc, stdout, _ = await _run_subprocess(
+        ["git", "ls-remote", remote, f"refs/heads/{branch_name}"],
+        cwd=cwd,
+        timeout=30,
+    )
+
+    if rc == 0 and stdout.strip():
+        was_unique = False
+        suffix = 2
+        _MAX_SUFFIX = 100
+        while suffix <= _MAX_SUFFIX:
+            candidate = f"{base_name}-{suffix}"
+            rc2, stdout2, _ = await _run_subprocess(
+                ["git", "ls-remote", remote, f"refs/heads/{candidate}"],
+                cwd=cwd,
+                timeout=30,
+            )
+            if rc2 != 0:
+                branch_name = candidate
+                break
+            if not stdout2.strip():
+                branch_name = candidate
+                break
+            suffix += 1
+        else:
+            return {
+                "success": False,
+                "error": f"All branch name candidates up to {base_name}-{_MAX_SUFFIX} are taken.",
+            }
+
+    rc_head, head_out, _ = await _run_subprocess(
+        ["git", "branch", "--show-current"],
+        cwd=cwd,
+        timeout=10,
+    )
+    base_ref = head_out.strip() if rc_head == 0 and head_out.strip() else "DETACHED_HEAD"
+
+    rc_checkout, _, _stderr_checkout = await _run_subprocess(
+        ["git", "checkout", "-b", branch_name],
+        cwd=cwd,
+        timeout=30,
+    )
+    if rc_checkout != 0:
+        return {
+            "success": False,
+            "error": f"git checkout -b {branch_name!r} failed: {_stderr_checkout.strip()}",
+        }
+
+    return {"branch_name": branch_name, "was_unique": was_unique, "base_ref": base_ref}
+
+
+@mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
+@track_response_size("create_and_publish_branch")
+async def create_and_publish_branch(
+    issue_slug: str,
+    run_name: str,
+    issue_number: str,
+    work_dir: str,
+    remote_url: str,
+    step_name: str = "",
+    ctx: Context = CurrentContext(),
+) -> str:
+    """Compute branch name, create it, and push to remote in one orchestrator turn.
+
+    Combines compute_branch + create_unique_branch + push_to_remote into a single call.
+
+    Returns {"merge_target": str, "was_unique": bool, "timings": {...}} on success.
+    Returns {"error": str, "error_type": str, "merge_target": str} on push failure —
+    merge_target is included so the orchestrator can reference it in release paths.
+
+    Args:
+        issue_slug: Descriptive slug from the issue title (e.g. "fix-bug").
+        run_name: Run name prefix (e.g. "impl"). Used as prefix when issue_slug is empty.
+        issue_number: GitHub issue number as a string. Empty string → date-based branch.
+        work_dir: Absolute path to the clone directory.
+        remote_url: Pre-resolved upstream remote URL for push isolation.
+        step_name: Optional YAML step key for wall-clock timing accumulation.
+
+    Never raises.
+    """
+    if (gate := _require_enabled()) is not None:
+        return gate
+    try:
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(
+            tool="create_and_publish_branch",
+            work_dir=work_dir,
+            issue_number=issue_number,
+        )
+        logger.info(
+            "create_and_publish_branch",
+            issue_slug=issue_slug,
+            run_name=run_name,
+            issue_number=issue_number,
+        )
+        await _notify(
+            ctx,
+            "info",
+            f"create_and_publish_branch: {issue_slug or run_name}/{issue_number or 'date'}",
+            "autoskillit.create_and_publish_branch",
+            extra={"run_name": run_name, "issue_number": issue_number},
+        )
+
+        from autoskillit.server import _get_ctx
+
+        tool_ctx = _get_ctx()
+        clone_mgr = tool_ctx.clone_mgr
+        if clone_mgr is None:
+            return json.dumps({"error": "Clone manager not configured"})
+
+        _total_start = time.monotonic()
+
+        _compute_start = time.monotonic()
+        base_name = _compute_branch_name(issue_slug, run_name, issue_number)
+        compute_ms = int((time.monotonic() - _compute_start) * 1000)
+
+        _branch_start = time.monotonic()
+        branch_result = await _resolve_and_create_branch(base_name, "origin", work_dir)
+        branch_create_ms = int((time.monotonic() - _branch_start) * 1000)
+
+        if "error" in branch_result:
+            return json.dumps(
+                {
+                    "error": branch_result["error"],
+                    "merge_target": base_name,
+                    "timings": {
+                        "compute_ms": compute_ms,
+                        "branch_create_ms": branch_create_ms,
+                        "push_ms": 0,
+                    },
+                }
+            )
+
+        branch_name: str = branch_result["branch_name"]
+        was_unique: bool = branch_result["was_unique"]
+
+        _push_start = time.monotonic()
+        push_result = await asyncio.to_thread(
+            lambda: clone_mgr.push_to_remote(
+                work_dir,
+                "",
+                branch_name,
+                remote_url=remote_url,
+                protected_branches=tool_ctx.config.safety.protected_branches,
+                force=False,
+            )
+        )
+        push_ms = int((time.monotonic() - _push_start) * 1000)
+
+        timings = {
+            "compute_ms": compute_ms,
+            "branch_create_ms": branch_create_ms,
+            "push_ms": push_ms,
+        }
+
+        if step_name:
+            tool_ctx.timing_log.record(step_name, time.monotonic() - _total_start)
+
+        if not push_result.get("success"):
+            return json.dumps(
+                {
+                    "error": push_result.get("stderr", "push failed"),
+                    "error_type": push_result.get("error_type", ""),
+                    "merge_target": branch_name,
+                    "timings": timings,
+                }
+            )
+
+        return json.dumps(
+            {
+                "merge_target": branch_name,
+                "was_unique": was_unique,
+                "timings": timings,
+            }
+        )
+    except Exception as exc:
+        logger.error("create_and_publish_branch unhandled exception", exc_info=True)
+        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})

@@ -215,6 +215,9 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "batch_cleanup_clones",
         "dispatch_food_truck",
         "record_gate_dispatch",
+        "bootstrap_clone",
+        "claim_and_resolve_issue",
+        "create_and_publish_branch",
     }
 )
 
@@ -322,6 +325,8 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     "push_to_remote": frozenset({"github"}),
     "create_unique_branch": frozenset({"github"}),
     "set_commit_status": frozenset({"github"}),
+    "claim_and_resolve_issue": frozenset({"github"}),
+    "create_and_publish_branch": frozenset({"github"}),
     # ci
     "wait_for_ci": frozenset({"ci"}),
     "wait_for_merge_queue": frozenset({"ci"}),
@@ -334,6 +339,7 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     "remove_clone": frozenset({"clone"}),
     "register_clone_status": frozenset({"clone"}),
     "batch_cleanup_clones": frozenset({"clone", "fleet"}),
+    "bootstrap_clone": frozenset({"clone"}),
     # kitchen-core — telemetry
     "get_token_summary": frozenset({"kitchen-core", "telemetry", "fleet"}),
     "get_timing_summary": frozenset({"kitchen-core", "telemetry", "fleet"}),

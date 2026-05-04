@@ -391,7 +391,7 @@ class TestImplementationPipelineStructure:
         )
 
     def test_ip_base_sha_capture_uses_work_dir(self, recipe) -> None:
-        """A4: The base_sha capture command must reference context.work_dir."""
+        """A4: base_sha must be captured by the bootstrap_clone step."""
         sha_step = next(
             (
                 step
@@ -401,9 +401,9 @@ class TestImplementationPipelineStructure:
             None,
         )
         assert sha_step is not None, "No step captures base_sha"
-        with_args_str = str(sha_step.with_args)
-        assert "context.work_dir" in with_args_str, (
-            "base_sha capture must run inside context.work_dir (the clone directory)"
+        assert sha_step.tool == "bootstrap_clone", (
+            "base_sha must be captured by bootstrap_clone (which runs git rev-parse inside the "
+            "clone directory internally)"
         )
 
     def test_ip_base_sha_used_by_audit_impl(self, recipe) -> None:
@@ -438,27 +438,26 @@ class TestImplementationPipelineStructure:
         assert audit_step.skip_when_false == "inputs.audit"
 
     def test_ip_create_branch_has_skip_when_false(self, recipe) -> None:
-        """create_branch must declare skip_when_false: inputs.open_pr."""
-        create_branch = recipe.steps["create_branch"]
-        assert create_branch.skip_when_false == "inputs.open_pr"
+        """create_and_publish must declare skip_when_false: inputs.open_pr."""
+        create_and_publish = recipe.steps["create_and_publish"]
+        assert create_and_publish.skip_when_false == "inputs.open_pr"
 
     def test_create_branch_uses_callable(self, recipe) -> None:
-        """compute_branch must use run_python with _cmd_rpc.compute_branch callable."""
-        step = recipe.steps["compute_branch"]
-        assert step.tool == "run_python"
-        assert step.with_args["callable"] == "autoskillit.recipe._cmd_rpc.compute_branch"
+        """create_and_publish must use create_and_publish_branch MCP tool."""
+        step = recipe.steps["create_and_publish"]
+        assert step.tool == "create_and_publish_branch"
 
     def test_create_branch_checks_remote_for_collisions(self, recipe) -> None:
-        """create_branch must use create_unique_branch tool (which always checks ls-remote)."""
-        assert recipe.steps["create_branch"].tool == "create_unique_branch"
+        """create_and_publish uses create_and_publish_branch (which checks ls-remote)."""
+        assert recipe.steps["create_and_publish"].tool == "create_and_publish_branch"
 
     def test_create_branch_references_issue_number(self, recipe) -> None:
-        """compute_branch with_args must include issue_number for branch naming."""
-        assert "issue_number" in recipe.steps["compute_branch"].with_args
+        """create_and_publish with_args must include issue_number for branch naming."""
+        assert "issue_number" in recipe.steps["create_and_publish"].with_args
 
     def test_create_branch_uses_run_name_as_prefix(self, recipe) -> None:
-        """compute_branch with_args must include run_name for branch naming."""
-        assert "run_name" in recipe.steps["compute_branch"].with_args
+        """create_and_publish with_args must include run_name for branch naming."""
+        assert "run_name" in recipe.steps["create_and_publish"].with_args
 
     def test_ip_main_push_step_not_reachable_after_compose_pr(self, recipe) -> None:
         """The main `push` step must not be reachable after compose_pr —
@@ -605,8 +604,8 @@ class TestImplementationGroupsStructure:
         assert "all_plan_paths" in note
 
     def test_ig_push_merge_target_routes_to_group(self, recipe) -> None:
-        """push_merge_target must route to group, not plan, in the groups recipe."""
-        step = recipe.steps.get("push_merge_target")
+        """create_and_publish must route to group, not plan, in the groups recipe."""
+        step = recipe.steps.get("create_and_publish")
         assert step is not None
         assert step.on_success == "group"
 
@@ -690,22 +689,21 @@ class TestImplementationGroupsStructure:
         assert "inputs.base_branch" in with_args["target_branch"]
 
     def test_create_branch_uses_callable(self, recipe) -> None:
-        """compute_branch must use run_python with _cmd_rpc.compute_branch callable."""
-        step = recipe.steps["compute_branch"]
-        assert step.tool == "run_python"
-        assert step.with_args["callable"] == "autoskillit.recipe._cmd_rpc.compute_branch"
+        """create_and_publish must use create_and_publish_branch MCP tool."""
+        step = recipe.steps["create_and_publish"]
+        assert step.tool == "create_and_publish_branch"
 
     def test_create_branch_checks_remote_for_collisions(self, recipe) -> None:
-        """create_branch must use create_unique_branch tool (which always checks ls-remote)."""
-        assert recipe.steps["create_branch"].tool == "create_unique_branch"
+        """create_and_publish uses create_and_publish_branch (which checks ls-remote)."""
+        assert recipe.steps["create_and_publish"].tool == "create_and_publish_branch"
 
     def test_create_branch_references_issue_number(self, recipe) -> None:
-        """compute_branch with_args must include issue_number for branch naming."""
-        assert "issue_number" in recipe.steps["compute_branch"].with_args
+        """create_and_publish with_args must include issue_number for branch naming."""
+        assert "issue_number" in recipe.steps["create_and_publish"].with_args
 
     def test_create_branch_uses_run_name_as_prefix(self, recipe) -> None:
-        """compute_branch with_args must include run_name for branch naming."""
-        assert "run_name" in recipe.steps["compute_branch"].with_args
+        """create_and_publish with_args must include run_name for branch naming."""
+        assert "run_name" in recipe.steps["create_and_publish"].with_args
 
 
 # ---------------------------------------------------------------------------
@@ -792,22 +790,21 @@ class TestInvestigateFirstStructure:
         )
 
     def test_create_branch_uses_callable(self, recipe) -> None:
-        """compute_branch must use run_python with _cmd_rpc.compute_branch callable."""
-        step = recipe.steps["compute_branch"]
-        assert step.tool == "run_python"
-        assert step.with_args["callable"] == "autoskillit.recipe._cmd_rpc.compute_branch"
+        """create_and_publish must use create_and_publish_branch MCP tool."""
+        step = recipe.steps["create_and_publish"]
+        assert step.tool == "create_and_publish_branch"
 
     def test_create_branch_checks_remote_for_collisions(self, recipe) -> None:
-        """create_branch must use create_unique_branch tool (which always checks ls-remote)."""
-        assert recipe.steps["create_branch"].tool == "create_unique_branch"
+        """create_and_publish uses create_and_publish_branch (which checks ls-remote)."""
+        assert recipe.steps["create_and_publish"].tool == "create_and_publish_branch"
 
     def test_create_branch_references_issue_number(self, recipe) -> None:
-        """compute_branch with_args must include issue_number for branch naming."""
-        assert "issue_number" in recipe.steps["compute_branch"].with_args
+        """create_and_publish with_args must include issue_number for branch naming."""
+        assert "issue_number" in recipe.steps["create_and_publish"].with_args
 
     def test_create_branch_uses_run_name_as_prefix(self, recipe) -> None:
-        """compute_branch with_args must include run_name for branch naming."""
-        assert "run_name" in recipe.steps["compute_branch"].with_args
+        """create_and_publish with_args must include run_name for branch naming."""
+        assert "run_name" in recipe.steps["create_and_publish"].with_args
 
     def test_if_push_after_audit_warning_fires(self, recipe) -> None:
         """push-before-audit semantic rule fires as WARNING (audit has skip_when_false)."""

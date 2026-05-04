@@ -1,6 +1,6 @@
 # MCP Tool Access Control
 
-AutoSkillit provides 49 MCP tools organized into three access levels that control which
+AutoSkillit provides 52 MCP tools organized into three access levels that control which
 session types can see each tool.
 
 ## Three Access Levels
@@ -65,7 +65,7 @@ Server startup sequence:
    → reveals test_check only (the sole headless-tagged tool)
 
 4. When open_kitchen is called:
-   ctx.enable_components(tags={"kitchen"})   → reveals all 45 kitchen tools
+   ctx.enable_components(tags={"kitchen"})   → reveals all 48 kitchen tools
    ctx.disable_components(tags={subset})     → re-hides each disabled subset
    (session-level enable overwrites server-level disable, so re-disabling is required)
 ```
@@ -86,7 +86,7 @@ missing kitchen visibility.
 
 ## Complete MCP Tool Access Control Map
 
-All 49 tools with their access level, tags, source file, and functional category.
+All 52 tools with their access level, tags, source file, and functional category.
 
 **Tag abbreviations**: AS = `autoskillit`, K = `kitchen`, HL = `headless`,
 GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`, FL = `fleet`
@@ -129,6 +129,7 @@ GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`, FL = `fleet`
 | `merge_worktree` | AS, K | `server/tools_git.py` |
 | `classify_fix` | AS, K | `server/tools_git.py` |
 | `create_unique_branch` | AS, K, GH | `server/tools_git.py` |
+| `create_and_publish_branch` | AS, K, GH | `server/tools_git.py` |
 | `check_pr_mergeable` | AS, K, GH | `server/tools_git.py` |
 | `reset_test_dir` | AS, K | `server/tools_workspace.py` |
 | `reset_workspace` | AS, K | `server/tools_workspace.py` |
@@ -144,6 +145,7 @@ GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`, FL = `fleet`
 | `push_to_remote` | AS, K, GH | `server/tools_clone.py` |
 | `register_clone_status` | AS, K, CL | `server/tools_clone.py` |
 | `batch_cleanup_clones` | AS, K, CL, FL | `server/tools_clone.py` |
+| `bootstrap_clone` | AS, K, CL | `server/tools_clone.py` |
 
 ---
 
@@ -172,6 +174,7 @@ GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`, FL = `fleet`
 | `enrich_issues` | AS, K, GH | `server/tools_issue_lifecycle.py` |
 | `claim_issue` | AS, K, GH | `server/tools_issue_lifecycle.py` |
 | `release_issue` | AS, K, GH | `server/tools_issue_lifecycle.py` |
+| `claim_and_resolve_issue` | AS, K, GH | `server/tools_issue_composite.py` |
 | `get_pr_reviews` | AS, K, GH | `server/tools_pr_ops.py` |
 | `bulk_close_issues` | AS, K, GH | `server/tools_pr_ops.py` |
 

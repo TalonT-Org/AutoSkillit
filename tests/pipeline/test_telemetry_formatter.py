@@ -133,10 +133,10 @@ class TestFormatTokenTable:
             [
                 "## Token Usage Summary",
                 "",
-                "| Step | uncached | output | cache_read | peak_ctx | turns | cache_write | time |",  # noqa: E501
-                "|------|----------|--------|------------|----------|-------|-------------|------|",
-                "| plan | 1.0k | 500 | 200 | 200 | 5 | 100 | 46s |",
-                "| **Total** | 1.0k | 500 | 200 | 200 | | 100 | 46s |",
+                "| Step | count | uncached | output | cache_read | peak_ctx | turns | cache_write | time |",  # noqa: E501
+                "|------|-------|----------|--------|------------|----------|-------|-------------|------|",  # noqa: E501
+                "| plan | 1 | 1.0k | 500 | 200 | 200 | 5 | 100 | 46s |",
+                "| **Total** | | 1.0k | 500 | 200 | 200 | | 100 | 46s |",
             ]
         )
         assert result == expected
@@ -236,15 +236,15 @@ def test_format_timing_table_terminal_output_has_leading_indent() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_terminal_table_has_four_token_columns() -> None:
-    """Terminal table must show UNCACHED, CACHE_RD, PEAK_CTX, TURNS, CACHE_WR headers."""
+def test_terminal_table_has_token_columns() -> None:
+    """Terminal table must show COUNT, UNCACHED, CACHE_RD, PEAK_CTX, TURNS, CACHE_WR headers."""
     result = TelemetryFormatter.format_token_table_terminal(_STEPS, _TOTAL)
+    assert "COUNT" in result
     assert "UNCACHED" in result
     assert "CACHE_RD" in result
     assert "PEAK_CTX" in result
     assert "TURNS" in result
     assert "CACHE_WR" in result
-    assert "COUNT" not in result
 
 
 def test_compact_kv_four_token_prefixes() -> None:
@@ -395,11 +395,10 @@ def test_efficiency_table_columns() -> None:
     result = TelemetryFormatter.format_efficiency_table(steps, total)
     assert "## Token Efficiency" in result
     assert "LoC Changed" in result
-    assert "peak_ctx/LoC" in result
     assert "cache_read/LoC" in result
     assert "cache_write/LoC" in result
     assert "output/LoC" in result
-    assert result.split("\n")[2].count("|") == 7  # 6 columns + outer pipes
+    assert result.split("\n")[2].count("|") == 6  # 5 columns + outer pipes
 
 
 # T-EFF-3
@@ -423,8 +422,7 @@ def test_efficiency_table_ratios() -> None:
         "output_tokens": 50,
     }
     result = TelemetryFormatter.format_efficiency_table(steps, total)
-    # loc_changed = 100; peak_ctx/LoC = 10.0; cache_write/LoC = 2.0; output/LoC = 0.5
-    assert "10.0" in result
+    # loc_changed = 100; cache_write/LoC = 2.0; output/LoC = 0.5
     assert "2.0" in result
     assert "0.5" in result
     assert "100" in result  # LoC Changed column
@@ -491,8 +489,8 @@ def test_efficiency_table_total_row_uses_aggregate_totals() -> None:
         "output_tokens": 50,
     }
     result = TelemetryFormatter.format_efficiency_table(steps, total)
-    # Total loc_changed=110; peak_ctx/LoC=1000/110≈9.1
-    assert "9.1" in result
+    # Total loc_changed=110; cache_write/LoC=100/110≈0.9 (aggregate, not per-step average 0.5)
+    assert "0.9" in result
     assert "**Total**" in result
 
 
@@ -519,7 +517,6 @@ def test_efficiency_table_terminal_no_markdown() -> None:
     result = TelemetryFormatter.format_efficiency_table_terminal(steps, total)
     assert "|" not in result  # no markdown pipes
     assert "LOC" in result  # column header present
-    assert "PK/LOC" in result
     assert "RD/LOC" in result
     assert "WR/LOC" in result
     assert "OUT/LOC" in result
@@ -549,11 +546,10 @@ def test_efficiency_table_has_all_ratio_columns() -> None:
     }
     result = TelemetryFormatter.format_efficiency_table(steps, total)
     assert "cache_read/LoC" in result
-    assert "peak_ctx/LoC" in result
     assert "cache_write/LoC" in result
     assert "output/LoC" in result
     header_line = result.split("\n")[2]
-    assert header_line.count("|") == 7  # 6 columns + outer pipes
+    assert header_line.count("|") == 6  # 5 columns + outer pipes
 
 
 # T-EFF-8
@@ -579,7 +575,6 @@ def test_efficiency_table_terminal_has_all_columns() -> None:
         "output_tokens": 50,
     }
     result = TelemetryFormatter.format_efficiency_table_terminal(steps, total)
-    assert "PK/LOC" in result
     assert "RD/LOC" in result
     assert "WR/LOC" in result
     assert "OUT/LOC" in result
@@ -613,3 +608,136 @@ def test_efficiency_markdown_terminal_column_parity() -> None:
     md_header = result.split("\n")[2]
     md_cols = [c.strip() for c in md_header.strip("|").split("|")]
     assert len(md_cols) == len(_EFFICIENCY_COLUMNS)
+
+
+# ---------------------------------------------------------------------------
+# Field coverage contract tests
+# ---------------------------------------------------------------------------
+
+
+def test_token_column_field_coverage() -> None:
+    """Every TokenEntry field must be explicitly assigned to DISPLAY or EXCLUDED."""
+    import dataclasses
+
+    from autoskillit.pipeline.telemetry_fmt import _TOKEN_DISPLAY_FIELDS, _TOKEN_EXCLUDED_FIELDS
+    from autoskillit.pipeline.tokens import TokenEntry
+
+    all_fields = frozenset(f.name for f in dataclasses.fields(TokenEntry))
+    covered = _TOKEN_DISPLAY_FIELDS | _TOKEN_EXCLUDED_FIELDS
+    assert covered == all_fields, (
+        f"Uncovered fields: {all_fields - covered}; Stale exclusions: {covered - all_fields}"
+    )
+
+
+def test_token_display_fields_have_columns() -> None:
+    """Every field in _TOKEN_DISPLAY_FIELDS must have a corresponding _TOKEN_COLUMNS entry."""
+    from autoskillit.pipeline.telemetry_fmt import (
+        _TOKEN_COLUMNS,
+        _TOKEN_DISPLAY_FIELDS,
+        _TOKEN_FIELD_TO_COLUMN,
+    )
+
+    column_labels = frozenset(c.label for c in _TOKEN_COLUMNS)
+    for field in _TOKEN_DISPLAY_FIELDS:
+        target_col = _TOKEN_FIELD_TO_COLUMN[field]
+        assert target_col in column_labels, (
+            f"Field '{field}' maps to column '{target_col}' which is not in _TOKEN_COLUMNS"
+        )
+
+
+def test_token_table_renders_invocation_count() -> None:
+    """Token table must include invocation_count as a visible column."""
+    steps = [
+        {
+            "step_name": "fix",
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "cache_read_input_tokens": 200,
+            "cache_creation_input_tokens": 10,
+            "peak_context": 500,
+            "turn_count": 40,
+            "invocation_count": 3,
+            "wall_clock_seconds": 120.0,
+        }
+    ]
+    total = {
+        "input_tokens": 100,
+        "output_tokens": 50,
+        "cache_read_input_tokens": 200,
+        "cache_creation_input_tokens": 10,
+        "peak_context": 500,
+        "total_elapsed_seconds": 120.0,
+    }
+    result = TelemetryFormatter.format_token_table(steps, total)
+    assert "| 3 |" in result or "| 3 " in result, "invocation_count=3 not rendered"
+
+
+def test_token_markdown_terminal_column_parity() -> None:
+    """Markdown and terminal token tables must have the same number of data columns."""
+    from autoskillit.pipeline.telemetry_fmt import _TOKEN_COLUMNS
+
+    steps = [
+        {
+            "step_name": "plan",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "cache_read_input_tokens": 200,
+            "cache_creation_input_tokens": 100,
+            "peak_context": 200,
+            "turn_count": 5,
+            "invocation_count": 1,
+            "wall_clock_seconds": 45.7,
+        }
+    ]
+    total = {
+        "input_tokens": 1000,
+        "output_tokens": 500,
+        "cache_read_input_tokens": 200,
+        "cache_creation_input_tokens": 100,
+        "peak_context": 200,
+        "total_elapsed_seconds": 45.7,
+    }
+    result = TelemetryFormatter.format_token_table(steps, total)
+    md_header = result.split("\n")[2]
+    md_cols = [c.strip() for c in md_header.strip("|").split("|")]
+    assert len(md_cols) == len(_TOKEN_COLUMNS)
+
+
+def test_timing_markdown_terminal_column_parity() -> None:
+    """Timing table markdown header must be derived from _TIMING_COLUMNS."""
+    from autoskillit.pipeline.telemetry_fmt import _TIMING_COLUMNS
+
+    steps = [{"step_name": "plan", "total_seconds": 45.0, "invocation_count": 2}]
+    total = {"total_seconds": 45.0}
+    result = TelemetryFormatter.format_timing_table(steps, total)
+    md_header = result.split("\n")[2]
+    md_cols = [c.strip() for c in md_header.strip("|").split("|")]
+    assert len(md_cols) == len(_TIMING_COLUMNS)
+
+
+def test_efficiency_table_no_peak_ctx_ratio() -> None:
+    """Efficiency table must not contain peak_ctx/LoC — it's a meaningless ratio."""
+    steps = [
+        {
+            "step_name": "fix",
+            "input_tokens": 100,
+            "output_tokens": 500,
+            "cache_read_input_tokens": 2000,
+            "cache_creation_input_tokens": 100,
+            "peak_context": 5000,
+            "loc_insertions": 10,
+            "loc_deletions": 5,
+        }
+    ]
+    total = {
+        "input_tokens": 100,
+        "output_tokens": 500,
+        "cache_read_input_tokens": 2000,
+        "cache_creation_input_tokens": 100,
+        "peak_context": 5000,
+        "loc_insertions": 10,
+        "loc_deletions": 5,
+    }
+    result = TelemetryFormatter.format_efficiency_table(steps, total)
+    assert "peak_ctx/LoC" not in result
+    assert "PK/LOC" not in TelemetryFormatter.format_efficiency_table_terminal(steps, total)

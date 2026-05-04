@@ -550,6 +550,7 @@ def test_token_table_equivalence() -> None:
             "cache_read_input_tokens": 252179,
             "peak_context": 45000,
             "turn_count": 8,
+            "invocation_count": 1,
             "elapsed_seconds": 45.0,
         },
         {
@@ -560,6 +561,7 @@ def test_token_table_equivalence() -> None:
             "cache_read_input_tokens": 19071323,
             "peak_context": 890000,
             "turn_count": 42,
+            "invocation_count": 3,
             "elapsed_seconds": 492.0,
         },
     ]

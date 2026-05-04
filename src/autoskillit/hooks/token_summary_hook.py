@@ -257,8 +257,8 @@ def _format_table(aggregated: dict[str, dict[str, Any]]) -> str:
     lines = [
         "## Token Usage Summary",
         "",
-        "| Step | uncached | output | cache_read | peak_ctx | turns | cache_write | time |",
-        "|------|----------|--------|------------|----------|-------|-------------|------|",
+        "| Step | count | uncached | output | cache_read | peak_ctx | turns | cache_write | time |",  # noqa: E501
+        "|------|-------|----------|--------|------------|----------|-------|-------------|------|",
     ]
 
     total_input = 0
@@ -270,6 +270,7 @@ def _format_table(aggregated: dict[str, dict[str, Any]]) -> str:
 
     for entry in aggregated.values():
         name = entry["step_name"]
+        count = entry.get("invocation_count", 1)
         inp = entry["input_tokens"]
         out = entry["output_tokens"]
         cache_rd = entry["cache_read_input_tokens"]
@@ -279,7 +280,7 @@ def _format_table(aggregated: dict[str, dict[str, Any]]) -> str:
         elapsed = entry["elapsed_seconds"]
 
         lines.append(
-            f"| {name} | {_humanize(inp)} | {_humanize(out)} | {_humanize(cache_rd)}"
+            f"| {name} | {count} | {_humanize(inp)} | {_humanize(out)} | {_humanize(cache_rd)}"
             f" | {_humanize(peak_ctx)} | {turns} | {_humanize(cache_wr)}"
             f" | {_fmt_duration(elapsed)} |"
         )
@@ -293,7 +294,7 @@ def _format_table(aggregated: dict[str, dict[str, Any]]) -> str:
         total_time += elapsed
 
     lines.append(
-        f"| **Total** | {_humanize(total_input)} | {_humanize(total_output)}"
+        f"| **Total** | | {_humanize(total_input)} | {_humanize(total_output)}"
         f" | {_humanize(total_cache_rd)} | {_humanize(total_peak)}"
         f" | | {_humanize(total_cache_wr)} | {_fmt_duration(total_time)} |"
     )
@@ -318,31 +319,28 @@ def _format_efficiency_table(aggregated: dict[str, dict[str, Any]]) -> str:
     lines = [
         "## Token Efficiency",
         "",
-        "| Step | LoC Changed | peak_ctx/LoC | cache_read/LoC | cache_write/LoC | output/LoC |",
-        "|------|-------------|--------------|----------------|-----------------|------------|",
+        "| Step | LoC Changed | cache_read/LoC | cache_write/LoC | output/LoC |",
+        "|------|-------------|----------------|-----------------|------------|",
     ]
-    total_loc = total_peak = total_cr = total_cw = total_out = 0
+    total_loc = total_cr = total_cw = total_out = 0
     for entry in aggregated.values():
         loc = entry.get("loc_insertions", 0) + entry.get("loc_deletions", 0)
-        peak = entry.get("peak_context", 0)
         cr = entry.get("cache_read_input_tokens", 0)
         cw = entry.get("cache_creation_input_tokens", 0)
         out = entry.get("output_tokens", 0)
         lines.append(
             f"| {entry['step_name']} | {loc}"
-            f" | {_ratio(peak, loc)} | {_ratio(cr, loc)}"
+            f" | {_ratio(cr, loc)}"
             f" | {_ratio(cw, loc)} | {_ratio(out, loc)} |"
         )
         total_loc += loc
-        if peak > total_peak:
-            total_peak = peak
         total_cr += cr
         total_cw += cw
         total_out += out
 
     lines.append(
         f"| **Total** | **{total_loc}**"
-        f" | {_ratio(total_peak, total_loc)} | {_ratio(total_cr, total_loc)}"
+        f" | {_ratio(total_cr, total_loc)}"
         f" | {_ratio(total_cw, total_loc)} | {_ratio(total_out, total_loc)} |"
     )
     return "\n".join(lines)

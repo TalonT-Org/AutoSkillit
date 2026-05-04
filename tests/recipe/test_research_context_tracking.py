@@ -33,7 +33,9 @@ def test_create_worktree_captures_research_dir(recipe):
 
 
 def test_create_worktree_script_emits_research_dir():
-    script = (SCRIPTS_DIR / "create_worktree.sh").read_text()
+    script_path = SCRIPTS_DIR / "create_worktree.sh"
+    assert script_path.exists(), f"create_worktree.sh not found at {script_path}"
+    script = script_path.read_text()
     assert 'echo "research_dir=' in script, (
         "create_worktree.sh must emit research_dir= to stdout for capture"
     )
@@ -51,10 +53,11 @@ def test_finalize_bundle_no_find_heuristic(recipe):
     step = recipe.steps["finalize_bundle"]
     cmd = step.with_args.get("cmd", "")
     assert not _has_find_heuristic(cmd), (
-        "finalize_bundle cmd uses find|sort|tail heuristic — "
-        "must use context.research_dir instead"
+        "finalize_bundle cmd uses find|sort|tail heuristic — must use context.research_dir instead"
     )
-    script = (SCRIPTS_DIR / "finalize_bundle.sh").read_text()
+    script_path = SCRIPTS_DIR / "finalize_bundle.sh"
+    assert script_path.exists(), f"finalize_bundle.sh not found at {script_path}"
+    script = script_path.read_text()
     assert not _has_find_heuristic(script), (
         "finalize_bundle.sh uses find|sort|tail heuristic — "
         "must use positional arg from context.research_dir instead"
@@ -67,17 +70,19 @@ def test_create_artifact_branch_scopes_via_research_dir(recipe):
     assert "context.research_dir" in cmd, (
         "create_artifact_branch must pass context.research_dir to script"
     )
-    script = (SCRIPTS_DIR / "create_artifact_branch.sh").read_text()
-    assert "basename" in script, (
-        "create_artifact_branch.sh must use basename to scope checkout"
-    )
+    script_path = SCRIPTS_DIR / "create_artifact_branch.sh"
+    assert script_path.exists(), f"create_artifact_branch.sh not found at {script_path}"
+    script = script_path.read_text()
+    assert "basename" in script, "create_artifact_branch.sh must use basename to scope checkout"
 
 
 def test_finalize_bundle_has_post_compression_guard():
-    script = (SCRIPTS_DIR / "finalize_bundle.sh").read_text()
-    assert "artifacts.tar.gz" in script and "exit 1" in script, (
-        "finalize_bundle.sh must fail loudly if artifacts.tar.gz is absent"
-    )
+    script_path = SCRIPTS_DIR / "finalize_bundle.sh"
+    assert script_path.exists(), f"finalize_bundle.sh not found at {script_path}"
+    script = script_path.read_text()
+    assert re.search(
+        r"artifacts\.tar\.gz[^\n]*\|\|[^\n]*exit\s+1|artifacts\.tar\.gz.*\\\n.*exit\s+1", script
+    ), "finalize_bundle.sh must conditionally exit 1 when artifacts.tar.gz is absent"
 
 
 def test_research_recipe_passes_semantic_rules(recipe):

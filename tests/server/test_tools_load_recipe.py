@@ -860,4 +860,6 @@ class TestLoadRecipeIngredientsOnly:
         )
         result = json.loads(await load_recipe(name="test", ingredients_only=True))
         assert "content" not in result
+        assert "orchestration_rules" not in result
+        assert "stop_step_semantics" not in result
         assert "suggestions" in result

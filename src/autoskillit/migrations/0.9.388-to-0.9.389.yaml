@@ -1,0 +1,34 @@
+from_version: "0.9.388"
+to_version: "0.9.389"
+description: >
+  Rename L1 session terminology from "leaf" to "skill". SessionType.LEAF
+  is replaced by SessionType.SKILL; the wire value changes from "leaf" to
+  "skill". The old "leaf" value is recognized with a DeprecationWarning for
+  one release cycle.
+changes:
+  - id: session-type-leaf-to-skill
+    description: >
+      SessionType.LEAF renamed to SessionType.SKILL; wire value "leaf"
+      deprecated in favor of "skill".
+    instruction: |
+      AUTOSKILLIT_SESSION_TYPE=leaf is still accepted but emits a
+      DeprecationWarning and maps to SessionType.SKILL. Update any
+      scripts or config that sets SESSION_TYPE=leaf to use SESSION_TYPE=skill.
+      The old value will be removed in a future release.
+
+  - id: build-leaf-headless-cmd-renamed
+    description: >
+      build_leaf_headless_cmd() renamed to build_skill_session_cmd() in
+      autoskillit.execution.commands.
+    instruction: |
+      Update any direct callers of build_leaf_headless_cmd() to use
+      build_skill_session_cmd(). Function signature is unchanged.
+
+  - id: leaf-orchestration-guard-renamed
+    description: >
+      hooks/guards/leaf_orchestration_guard.py retired;
+      hooks/guards/skill_orchestration_guard.py is the active guard.
+    instruction: |
+      No manual action required. hook_registry.py references the new path.
+      leaf_orchestration_guard.py is listed in RETIRED_SCRIPT_BASENAMES and
+      will be removed from existing installs automatically on next init.

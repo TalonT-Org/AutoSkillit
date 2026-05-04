@@ -1,5 +1,6 @@
 """Structural tests for per-subfolder CLAUDE.md documentation files."""
 
+import re
 from pathlib import Path
 
 import pytest
@@ -44,8 +45,8 @@ def test_sub_claude_md_covers_all_py_files():
         py_files = sorted(f.name for f in directory.glob("*.py"))
         for py_file in py_files:
             if py_file == "__init__.py":
-                if "__init__.py" not in content and "Facade" not in content:
-                    failures.append(f"{rel_path}: missing __init__.py or Facade mention")
+                if "`__init__.py`" not in content:
+                    failures.append(f"{rel_path}: missing `__init__.py` in file table")
             else:
                 if py_file not in content:
                     failures.append(f"{rel_path}: missing {py_file}")
@@ -74,14 +75,14 @@ def test_channel_b_defined_in_process_claude_md():
 
 
 def test_sub_claude_md_no_main_claude_md_duplication():
-    forbidden_headers = ["## 3.", "## 4.", "## 5."]
+    numbered_section_re = re.compile(r"^## \*{0,2}\d+\.", re.MULTILINE)
     failures = []
     for rel_path in EXPECTED_SUB_CLAUDE_MDS:
         claude_md = SRC_ROOT / rel_path
         if not claude_md.is_file():
             continue
         content = claude_md.read_text()
-        for header in forbidden_headers:
-            if header in content:
-                failures.append(f"{rel_path}: contains '{header}' (main CLAUDE.md section)")
+        match = numbered_section_re.search(content)
+        if match:
+            failures.append(f"{rel_path}: contains '{match.group()}' (main CLAUDE.md section)")
     assert not failures, "Sub-CLAUDE.md files duplicate main sections:\n" + "\n".join(failures)

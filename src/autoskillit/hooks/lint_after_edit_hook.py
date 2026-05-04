@@ -17,6 +17,14 @@ LINT_ERROR_TRIGGER = "--- RUFF LINT ---"
 _TIMEOUT_S = 15
 
 
+def _resolve_ruff() -> str:
+    """Resolve ruff binary co-located with the running Python interpreter."""
+    candidate = Path(sys.executable).parent / "ruff"
+    if candidate.is_file():
+        return str(candidate)
+    return "ruff"
+
+
 def _file_sha256(path: str) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
@@ -50,9 +58,11 @@ def main() -> None:
     except OSError:
         sys.exit(0)
 
+    ruff_cmd = _resolve_ruff()
+
     try:
         subprocess.run(
-            ["ruff", "format", file_path],
+            [ruff_cmd, "format", file_path],
             capture_output=True,
             text=True,
             timeout=_TIMEOUT_S,
@@ -64,7 +74,7 @@ def main() -> None:
 
     try:
         subprocess.run(
-            ["ruff", "check", "--fix", file_path],
+            [ruff_cmd, "check", "--fix", file_path],
             capture_output=True,
             text=True,
             timeout=_TIMEOUT_S,
@@ -75,7 +85,7 @@ def main() -> None:
     remaining_errors = ""
     try:
         result = subprocess.run(
-            ["ruff", "check", file_path],
+            [ruff_cmd, "check", file_path],
             capture_output=True,
             text=True,
             timeout=_TIMEOUT_S,

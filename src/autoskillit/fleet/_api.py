@@ -378,6 +378,7 @@ async def _run_dispatch(
             "AUTOSKILLIT_CAMPAIGN_ID": campaign_id,
             "AUTOSKILLIT_DISPATCH_ID": dispatch_id,
         },
+        requires_packs=list(full_recipe.requires_packs) or ["kitchen-core"],
         on_spawn=_on_spawn,
     )
     ended_at = time.time()

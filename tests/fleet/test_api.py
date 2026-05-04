@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,7 @@ from autoskillit.fleet import (
     _write_pid,
     write_initial_state,
 )
+from tests.fleet._helpers import _setup_dispatch
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -129,3 +131,57 @@ class TestExecuteDispatchCancelledErrorLockRelease:
 
         assert captured_kwargs, "_run_dispatch was never called"
         assert captured_kwargs[0].get("resume_session_id") == "abc-123"
+
+
+# ---------------------------------------------------------------------------
+# requires_packs forwarding helpers
+# ---------------------------------------------------------------------------
+
+
+async def _no_sleep_quota_checker(config, **kwargs) -> dict:
+    return {
+        "should_sleep": False,
+        "sleep_seconds": 0,
+        "utilization": None,
+        "resets_at": None,
+        "window_name": None,
+    }
+
+
+async def _noop_quota_refresher(config, **kwargs) -> None:
+    pass
+
+
+async def _run(tool_ctx, recipe="test-recipe", ingredients=None):
+    from autoskillit.fleet._api import execute_dispatch
+
+    raw = await execute_dispatch(
+        tool_ctx=tool_ctx,
+        recipe=recipe,
+        task="t",
+        ingredients=ingredients,
+        dispatch_name=None,
+        timeout_sec=None,
+        prompt_builder=lambda **kwargs: f"prompt-for-{kwargs.get('recipe', 'unknown')}",
+        quota_checker=_no_sleep_quota_checker,
+        quota_refresher=_noop_quota_refresher,
+    )
+    return json.loads(raw)
+
+
+class TestRequiresPacksForwarding:
+    @pytest.mark.anyio
+    async def test_run_dispatch_forwards_requires_packs_to_executor(self, tool_ctx, monkeypatch):
+        _setup_dispatch(tool_ctx, monkeypatch, requires_packs=["github", "ci"])
+        await _run(tool_ctx)
+        call = tool_ctx.executor.dispatch_calls[0]
+        assert list(call.requires_packs) == ["github", "ci"]
+
+    @pytest.mark.anyio
+    async def test_run_dispatch_defaults_kitchen_core_when_requires_packs_empty(
+        self, tool_ctx, monkeypatch
+    ):
+        _setup_dispatch(tool_ctx, monkeypatch)
+        await _run(tool_ctx)
+        call = tool_ctx.executor.dispatch_calls[0]
+        assert list(call.requires_packs) == ["kitchen-core"]

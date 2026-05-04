@@ -265,7 +265,7 @@ standard agents — this is the graceful-degradation fallback that preserves cur
 - **Small diff** (<200 added LoC and <5 changed files): `tests`, `cohesion`, and optionally `arch` if structural files changed (e.g., `__init__.py`, `pyproject.toml`).
 - **Medium/large diff** (>= 200 added LoC or >= 5 changed files): All 6 standard agents (`arch`, `tests`, `defense`, `bugs`, `cohesion`, `slop`).
 
-Note: `deletion_regression` (dimension 7) is NOT part of the dispatch plan — it remains
+Note: Dimension 7 (the deletion regression audit) is NOT part of the dispatch plan — it remains
 unconditionally gated on `deletion_context` being non-null (unchanged from current behavior).
 
 ### Step 3: Run Parallel Audit Subagents

@@ -152,7 +152,11 @@ def test_install_warns_on_version_mismatch_with_kitchen_open(
         },
     )
 
-    monkeypatch.setattr("autoskillit.cli._marketplace._clear_plugin_cache", lambda: None)
+    clear_called: list[bool] = []
+    monkeypatch.setattr(
+        "autoskillit.cli._marketplace._clear_plugin_cache",
+        lambda: clear_called.append(True),
+    )
     monkeypatch.setattr("autoskillit.cli._marketplace.generate_hooks_json", lambda: {})
     monkeypatch.setattr("autoskillit.cli._marketplace.atomic_write", lambda *a, **kw: None)
     monkeypatch.setattr("autoskillit.cli._marketplace.pkg_root", lambda: tmp_path)
@@ -160,6 +164,7 @@ def test_install_warns_on_version_mismatch_with_kitchen_open(
         "autoskillit.cli._marketplace.subprocess.run",
         lambda *a, **kw: subprocess.CompletedProcess([], 0, stdout="", stderr=""),
     )
+    monkeypatch.setattr("autoskillit.hook_registry.validate_plugin_cache_hooks", lambda **kw: [])
     monkeypatch.setattr("autoskillit.cli._marketplace.evict_direct_mcp_entry", lambda *a: False)
     monkeypatch.setattr(
         "autoskillit.cli._marketplace.sweep_all_scopes_for_orphans", lambda *a: None
@@ -181,3 +186,4 @@ def test_install_warns_on_version_mismatch_with_kitchen_open(
     assert "WARNING" in out, "install must emit WARNING when kitchen open and version mismatch"
     assert "0.9.347" in out, "install must include cached version in WARNING"
     assert "0.9.351" in out, "install must include installed version in WARNING"
+    assert not clear_called, "_clear_plugin_cache must not be called when kitchen is open"

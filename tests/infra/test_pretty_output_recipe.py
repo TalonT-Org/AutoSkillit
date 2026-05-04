@@ -613,6 +613,27 @@ def test_fmt_recipe_list_item_field_coverage():
     )
 
 
+def test_fmt_open_kitchen_field_coverage():
+    """Every OpenKitchenResult field must be in RENDERED or SUPPRESSED."""
+    from autoskillit.hooks.formatters.pretty_output_hook import (
+        _FMT_OPEN_KITCHEN_RENDERED,
+        _FMT_OPEN_KITCHEN_SUPPRESSED,
+    )
+    from autoskillit.recipe._recipe_ingredients import OpenKitchenResult
+
+    all_fields = set(OpenKitchenResult.__annotations__)
+    covered = _FMT_OPEN_KITCHEN_RENDERED | _FMT_OPEN_KITCHEN_SUPPRESSED
+    uncovered = all_fields - covered
+    assert uncovered == set(), (
+        f"OpenKitchenResult fields have no coverage decision: {sorted(uncovered)}. "
+        "Add each to _FMT_OPEN_KITCHEN_RENDERED or _FMT_OPEN_KITCHEN_SUPPRESSED."
+    )
+    extra = covered - all_fields
+    assert extra == set(), (
+        f"Coverage registry references non-existent fields: {sorted(extra)}. Remove stale entries."
+    )
+
+
 def test_fmt_list_recipes_renders_summary():
     """Recipe summary appears on the line below each recipe name."""
     formatted = _format_response(

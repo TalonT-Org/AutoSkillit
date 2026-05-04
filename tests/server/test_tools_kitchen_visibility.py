@@ -348,13 +348,8 @@ async def test_open_kitchen_no_redisable_when_empty(tmp_path, monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_sous_chef_discipline_injected_on_named_open_kitchen_path(tmp_path, monkeypatch):
-    """Named path (Path A) must deliver sous-chef discipline to all session types.
-
-    Headless L3 sessions receive no system prompt injection, so the only delivery
-    channel is the open_kitchen response. This test verifies the discipline section
-    is present in the result dict under the 'sous_chef_discipline' key.
-    """
+async def test_sous_chef_discipline_not_in_open_kitchen_result(tmp_path, monkeypatch):
+    """open_kitchen does not inject sous_chef_discipline — delivery is via system prompt."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     mock_ctx.enable_components = AsyncMock()
@@ -380,13 +375,47 @@ async def test_sous_chef_discipline_injected_on_named_open_kitchen_path(tmp_path
 
     result = json.loads(result_str)
     assert result["success"] is True
-    discipline = result["sous_chef_discipline"]
-    present = [s for s in SOUS_CHEF_MANDATORY_SECTIONS if s in discipline]
-    for header in SOUS_CHEF_MANDATORY_SECTIONS:
-        assert header in discipline, (
-            f"sous_chef_discipline missing section: {header!r}. "
-            f"Only {len(present)} of {len(SOUS_CHEF_MANDATORY_SECTIONS)} sections present."
-        )
+    assert "sous_chef_discipline" not in result, (
+        "sous_chef_discipline must not be injected by open_kitchen; "
+        "food truck delivery is handled by _build_l3_sous_chef_block() in fleet/_prompts.py"
+    )
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_result_keys_match_typed_dict(tmp_path, monkeypatch):
+    """All keys in open_kitchen result are declared in OpenKitchenResult."""
+    from autoskillit.recipe._recipe_ingredients import OpenKitchenResult
+
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+    mock_ctx.recipes = MagicMock()
+    mock_ctx.recipes.load_and_validate.return_value = {
+        "content": "name: implementation\nsteps:\n  do:\n    tool: run_cmd\n",
+        "valid": True,
+        "suggestions": [],
+        "diagram": None,
+    }
+    mock_ctx.recipes.find.return_value = None
+    mock_ctx.config.migration.suppressed = []
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+                    result_str = await open_kitchen(name="implementation", ctx=mock_ctx)
+
+    result = json.loads(result_str)
+    declared = set(OpenKitchenResult.__annotations__)
+    undeclared = set(result.keys()) - declared
+    assert undeclared == set(), (
+        f"open_kitchen returned keys not declared in OpenKitchenResult: {sorted(undeclared)}. "
+        "Add each to OpenKitchenResult in recipe/_recipe_ingredients.py."
+    )
 
 
 @pytest.mark.anyio

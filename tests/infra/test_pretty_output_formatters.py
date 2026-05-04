@@ -571,3 +571,230 @@ def test_fmt_test_check_shows_question_mark_only_when_stats_truly_unavailable():
     out = _fmt_test_check(data, False)
     assert "?" in out
     assert "full run" not in out
+
+
+# --- Provider line rendering ---
+
+
+def test_fmt_run_skill_interactive_no_provider_field_no_provider_line() -> None:
+    """Legacy payloads without provider_used produce no provider: line."""
+    from autoskillit.hooks.formatters._fmt_execution import _fmt_run_skill
+
+    data = {
+        "success": True,
+        "result": "Done.",
+        "session_id": "abc",
+        "subtype": "end_turn",
+        "is_error": False,
+        "exit_code": 0,
+        "needs_retry": False,
+        "retry_reason": "none",
+        "stderr": "",
+    }
+    text = _fmt_run_skill(data, pipeline=False)
+    assert "provider:" not in text
+
+
+def test_fmt_run_skill_interactive_anthropic_provider_suppressed() -> None:
+    """provider_used='anthropic' must not render a provider line."""
+    from autoskillit.hooks.formatters._fmt_execution import _fmt_run_skill
+
+    data = {
+        "success": True,
+        "result": "Done.",
+        "session_id": "abc",
+        "subtype": "end_turn",
+        "is_error": False,
+        "exit_code": 0,
+        "needs_retry": False,
+        "retry_reason": "none",
+        "stderr": "",
+        "provider_used": "anthropic",
+        "provider_fallback": False,
+    }
+    text = _fmt_run_skill(data, pipeline=False)
+    assert "provider:" not in text
+
+
+def test_fmt_run_skill_interactive_non_anthropic_provider_rendered() -> None:
+    """Non-anthropic provider_used renders 'provider: <value>' line."""
+    from autoskillit.hooks.formatters._fmt_execution import _fmt_run_skill
+
+    data = {
+        "success": True,
+        "result": "Done.",
+        "session_id": "abc",
+        "subtype": "end_turn",
+        "is_error": False,
+        "exit_code": 0,
+        "needs_retry": False,
+        "retry_reason": "none",
+        "stderr": "",
+        "worktree_path": "/tmp/wt",
+        "provider_used": "bedrock",
+        "provider_fallback": False,
+    }
+    text = _fmt_run_skill(data, pipeline=False)
+    lines = text.splitlines()
+    wt_idx = next(i for i, line in enumerate(lines) if "worktree_path:" in line)
+    provider_idx = next(i for i, line in enumerate(lines) if "provider:" in line)
+    assert provider_idx == wt_idx + 1
+    assert "provider: bedrock" in text
+    assert "[FALLBACK]" not in text
+
+
+def test_fmt_run_skill_interactive_provider_fallback_annotation() -> None:
+    """provider_fallback=True appends [FALLBACK] to the provider line."""
+    from autoskillit.hooks.formatters._fmt_execution import _fmt_run_skill
+
+    data = {
+        "success": True,
+        "result": "Done.",
+        "session_id": "abc",
+        "subtype": "end_turn",
+        "is_error": False,
+        "exit_code": 0,
+        "needs_retry": False,
+        "retry_reason": "none",
+        "stderr": "",
+        "provider_used": "vertex",
+        "provider_fallback": True,
+    }
+    text = _fmt_run_skill(data, pipeline=False)
+    assert "provider: vertex [FALLBACK]" in text
+
+
+def test_fmt_run_skill_interactive_provider_before_token_usage() -> None:
+    """Provider line appears before the blank line that opens token_usage."""
+    from autoskillit.hooks.formatters._fmt_execution import _fmt_run_skill
+
+    data = {
+        "success": True,
+        "result": "Done.",
+        "session_id": "abc",
+        "subtype": "end_turn",
+        "is_error": False,
+        "exit_code": 0,
+        "needs_retry": False,
+        "retry_reason": "none",
+        "stderr": "",
+        "provider_used": "bedrock",
+        "provider_fallback": False,
+        "token_usage": {"input_tokens": 1000, "output_tokens": 500},
+    }
+    text = _fmt_run_skill(data, pipeline=False)
+    lines = text.splitlines()
+    provider_idx = next(i for i, line in enumerate(lines) if "provider:" in line)
+    tokens_idx = next(i for i, line in enumerate(lines) if "tokens_uncached:" in line)
+    assert provider_idx < tokens_idx
+
+
+def test_fmt_run_skill_pipeline_non_anthropic_provider_rendered() -> None:
+    """Pipeline mode renders provider line for non-anthropic providers."""
+    from autoskillit.hooks.formatters._fmt_execution import _fmt_run_skill
+
+    data = {
+        "success": True,
+        "result": "Done.",
+        "session_id": "abc",
+        "subtype": "end_turn",
+        "is_error": False,
+        "exit_code": 0,
+        "needs_retry": False,
+        "retry_reason": "none",
+        "stderr": "",
+        "worktree_path": "/tmp/wt",
+        "provider_used": "bedrock",
+        "provider_fallback": False,
+    }
+    text = _fmt_run_skill(data, pipeline=True)
+    assert "provider: bedrock" in text
+    assert "[FALLBACK]" not in text
+
+
+def test_fmt_run_skill_pipeline_provider_fallback_annotation() -> None:
+    """Pipeline mode appends [FALLBACK] when provider_fallback is True."""
+    from autoskillit.hooks.formatters._fmt_execution import _fmt_run_skill
+
+    data = {
+        "success": True,
+        "result": "Done.",
+        "session_id": "abc",
+        "subtype": "end_turn",
+        "is_error": False,
+        "exit_code": 0,
+        "needs_retry": False,
+        "retry_reason": "none",
+        "stderr": "",
+        "provider_used": "bedrock",
+        "provider_fallback": True,
+    }
+    text = _fmt_run_skill(data, pipeline=True)
+    assert "provider: bedrock [FALLBACK]" in text
+
+
+def test_fmt_run_skill_pipeline_anthropic_suppressed() -> None:
+    """Pipeline mode suppresses provider line for anthropic."""
+    from autoskillit.hooks.formatters._fmt_execution import _fmt_run_skill
+
+    data = {
+        "success": True,
+        "result": "Done.",
+        "session_id": "abc",
+        "subtype": "end_turn",
+        "is_error": False,
+        "exit_code": 0,
+        "needs_retry": False,
+        "retry_reason": "none",
+        "stderr": "",
+        "provider_used": "anthropic",
+        "provider_fallback": False,
+    }
+    text = _fmt_run_skill(data, pipeline=True)
+    assert "provider:" not in text
+
+
+def test_fmt_run_skill_pipeline_provider_position() -> None:
+    """Pipeline provider line appears after worktree_path and before result."""
+    from autoskillit.hooks.formatters._fmt_execution import _fmt_run_skill
+
+    data = {
+        "success": True,
+        "result": "Implementation done.",
+        "session_id": "abc",
+        "subtype": "end_turn",
+        "is_error": False,
+        "exit_code": 0,
+        "needs_retry": False,
+        "retry_reason": "none",
+        "stderr": "",
+        "worktree_path": "/tmp/wt",
+        "provider_used": "bedrock",
+        "provider_fallback": False,
+    }
+    text = _fmt_run_skill(data, pipeline=True)
+    lines = text.splitlines()
+    wt_idx = next(i for i, line in enumerate(lines) if "worktree_path:" in line)
+    provider_idx = next(i for i, line in enumerate(lines) if "provider:" in line)
+    result_idx = next(i for i, line in enumerate(lines) if line.startswith("result:"))
+    assert wt_idx < provider_idx < result_idx
+
+
+def test_make_run_skill_event_default_includes_provider_fields() -> None:
+    """_make_run_skill_event with no args includes provider_used='' and provider_fallback=False."""
+    from tests.infra._pretty_output_helpers import _make_run_skill_event
+
+    event = _make_run_skill_event()
+    payload = json.loads(event["tool_response"])
+    assert payload["provider_used"] == ""
+    assert payload["provider_fallback"] is False
+
+
+def test_make_run_skill_event_custom_provider_values() -> None:
+    """_make_run_skill_event passes through custom provider values."""
+    from tests.infra._pretty_output_helpers import _make_run_skill_event
+
+    event = _make_run_skill_event(provider_used="anthropic", provider_fallback=True)
+    payload = json.loads(event["tool_response"])
+    assert payload["provider_used"] == "anthropic"
+    assert payload["provider_fallback"] is True

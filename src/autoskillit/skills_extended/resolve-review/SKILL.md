@@ -238,13 +238,20 @@ their `path` field:
 - `src/autoskillit/server/tools_ci.py` → group `server`
 
 **Inline classification shortcut:** If there are 3 or fewer findings AND they all
-fall in a single domain group, classify them inline — read each unique file once
-(±30 lines around all flagged lines), run `git log` once per unique path, then
-emit a verdict for each finding — without spawning a Task sub-agent. The
-classification criteria and output format are identical to the sub-agent path.
+fall in a single domain group, classify them inline — use each finding's
+`diff_hunk` as the primary code context, run `git log` once per unique path, then
+emit a verdict for each finding — without spawning a Task sub-agent. Only read
+source files if a comment explicitly references code outside the hunk or the
+`diff_hunk` is missing. The classification criteria and output format are
+identical to the sub-agent path.
 
 This produces 3–6 groups on a typical PR. Launch one parallel sub-agent per group using
 the Task tool (`model: "sonnet"`).
+
+**Context resolution hierarchy** (applied per finding):
+1. **`diff_context_map` code_region** — richest context (±50 annotated diff lines); used when review-pr ran in the same pipeline and wrote the handoff file.
+2. **`diff_hunk` from the review comment** — the unified-diff snippet surrounding the commented line; always available from the GitHub API. Sufficient for most classification tasks (naming, patterns, style).
+3. **Source file read** — last resort (±30 lines); used only when the comment references code outside the hunk or the hunk is truncated/missing.
 
 **Sub-agent prompt template** — each sub-agent receives:
 - The list of comments in its domain group (with `path`, `line`, `body`, `diff_hunk`)
@@ -252,9 +259,16 @@ the Task tool (`model: "sonnet"`).
   `(path, line)` is available in `diff_context_map`, include it directly in the prompt
   under "Pre-built code region (from review-pr, ±50 diff lines):" and instruct the
   sub-agent to use it — do **not** instruct it to read the file for context. If
-  `diff_context_map` has no entry for this finding, instruct the sub-agent: "For each unique file in the group, read the file
-  once, spanning all flagged lines with ±30 lines margin. Classify each
-  finding from the already-read content — do not re-read the file per finding."
+  `diff_context_map` has no entry for this finding, use the comment's `diff_hunk`
+  as the primary code context — include it directly in the prompt under
+  "Code context (diff_hunk from review comment):" and instruct the sub-agent to
+  classify the finding using this hunk. Only instruct the sub-agent to read the
+  source file if: (a) the review comment body explicitly references code outside
+  the hunk (e.g., "see the function above", "this conflicts with the import at
+  line N", "look at the caller in X.py"), or (b) the `diff_hunk` is truncated
+  or missing (empty string). When a file read IS needed, read each unique file
+  once, spanning all flagged lines with ±30 lines margin — do not re-read per
+  finding.
 - Instructions to run `git log --follow -p --max-count=5 -- {path}` once per unique path (not once per finding) to trace original intent
 - Instructions to classify each comment as `ACCEPT`, `REJECT`, or `DISCUSS` with:
   - `verdict`: the classification (`ACCEPT` / `REJECT` / `DISCUSS`)
@@ -283,8 +297,18 @@ Use the above region for context. Do NOT read the file — the region is already
 Run `git log --follow -p --max-count=5 -- {path}` for history context as usual.
 ```
 
-When `diff_context_map` has no entry: fall back to current behavior — instruct the
-sub-agent to read `±30 lines` from the file.
+When `diff_context_map` has no entry but `diff_hunk` is present (non-empty):
+```
+Code context (diff_hunk from review comment):
+{comment.diff_hunk}
+
+Use the above hunk for classification context. Only read the source file if:
+(a) the comment body references code outside this hunk, or (b) you need
+additional context not visible in the hunk. Run `git log` for history as usual.
+```
+
+When `diff_context_map` has no entry AND `diff_hunk` is empty or missing:
+fall back to reading the file at `±30 lines` from the flagged line.
 
 **Fallback:** If a sub-agent fails or times out, classify all comments in that group as
 `DISCUSS` (safe fallback — no code is changed, human reviews). Log the failure including

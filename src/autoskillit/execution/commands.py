@@ -151,15 +151,20 @@ _SESSION_BASELINE_ENV: Mapping[str, str] = MappingProxyType(
 # parameters (exit_after_stop_delay_ms, scenario_step_name, allowed_write_prefix, etc.).
 # Note: CLAUDE_CODE_EXIT_AFTER_STOP_DELAY, SCENARIO_STEP_NAME, and
 # MAX_MCP_OUTPUT_TOKENS also overlap with IDE_ENV_DENYLIST in
-# core/_claude_env.py. AUTOSKILLIT_SESSION_TYPE and AUTOSKILLIT_CAMPAIGN_ID
-# overlap with AUTOSKILLIT_PRIVATE_ENV_VARS (scrubbed by build_claude_env).
+# core/_claude_env.py. AUTOSKILLIT_SESSION_TYPE, AUTOSKILLIT_CAMPAIGN_ID, and
+# AUTOSKILLIT_PROVIDER_PROFILE overlap with AUTOSKILLIT_PRIVATE_ENV_VARS
+# (scrubbed by build_claude_env).
 # All lists must be kept in sync when adding new exclusive variables.
 _HEADLESS_EXCLUSIVE_VARS: frozenset[str] = frozenset(
     {
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_AUTH_TOKEN",
+        "ANTHROPIC_BASE_URL",
         "AUTOSKILLIT_ALLOWED_WRITE_PREFIX",
         "AUTOSKILLIT_CAMPAIGN_ID",
         "AUTOSKILLIT_KITCHEN_SESSION_ID",
         "AUTOSKILLIT_LAUNCH_ID",
+        "AUTOSKILLIT_PROVIDER_PROFILE",
         "AUTOSKILLIT_SESSION_TYPE",
         "AUTOSKILLIT_SKILL_NAME",
         "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY",

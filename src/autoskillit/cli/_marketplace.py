@@ -30,6 +30,9 @@ logger = get_logger(__name__)
 
 _VALID_SCOPES = {"user", "project", "local"}
 _MARKETPLACE_NAME = "autoskillit-local"
+_PLUGIN_CACHE_DIR = (
+    Path.home() / ".claude" / "plugins" / "cache" / DIRECT_INSTALL_CACHE_SUBDIR / "autoskillit"
+)
 
 
 def _clear_plugin_cache() -> None:
@@ -41,14 +44,11 @@ def _clear_plugin_cache() -> None:
     the cache beforehand ensures a single ``autoskillit install`` is always
     sufficient.
     """
-    cache_dir = (
-        Path.home() / ".claude" / "plugins" / "cache" / DIRECT_INSTALL_CACHE_SUBDIR / "autoskillit"
-    )
-    if cache_dir.is_dir():
+    if _PLUGIN_CACHE_DIR.is_dir():
         from autoskillit import __version__ as _new_version
         from autoskillit.core import _retire_old_versions
 
-        _retire_old_versions(cache_dir, _new_version)
+        _retire_old_versions(_PLUGIN_CACHE_DIR, _new_version)
     else:
         from autoskillit.core import sweep_retiring_cache
 
@@ -173,10 +173,6 @@ def install(*, scope: str = "user") -> bool:
 
     _ensure_workspace_ready()
 
-    _plugin_cache_dir = (
-        Path.home() / ".claude" / "plugins" / "cache" / DIRECT_INSTALL_CACHE_SUBDIR / "autoskillit"
-    )
-
     from autoskillit.core import _InstallLock
 
     with _InstallLock():
@@ -186,10 +182,10 @@ def install(*, scope: str = "user") -> bool:
             from autoskillit.version import version_info
 
             try:
-                vi = version_info(plugin_dir=str(_plugin_cache_dir))
+                vi = version_info(plugin_dir=str(_PLUGIN_CACHE_DIR))
             except (OSError, json.JSONDecodeError, importlib.metadata.PackageNotFoundError):
                 logger.warning(
-                    "version_info_failed", plugin_dir=str(_plugin_cache_dir), exc_info=True
+                    "version_info_failed", plugin_dir=str(_PLUGIN_CACHE_DIR), exc_info=True
                 )
                 vi = {
                     "match": False,
@@ -241,7 +237,7 @@ def install(*, scope: str = "user") -> bool:
     print(f"Plugin installed: {plugin_ref} (scope: {scope})")
     from autoskillit.hook_registry import validate_plugin_cache_hooks
 
-    post_install_broken = validate_plugin_cache_hooks(cache_dir=_plugin_cache_dir)
+    post_install_broken = validate_plugin_cache_hooks(cache_dir=_PLUGIN_CACHE_DIR)
     if post_install_broken:
         logger.warning(
             "broken_hook_paths_after_install",

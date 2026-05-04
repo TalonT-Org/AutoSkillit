@@ -80,6 +80,8 @@ class ExecutorCall:
     allowed_write_prefix: str = ""
     readonly_skill: bool = False
     write_watch_dirs: tuple[Any, ...] = ()
+    provider_extras: Mapping[str, str] | None = None
+    profile_name: str = ""
 
 
 @dataclasses.dataclass
@@ -185,6 +187,8 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 allowed_write_prefix=allowed_write_prefix,
                 readonly_skill=readonly_skill,
                 write_watch_dirs=tuple(write_watch_dirs),
+                provider_extras=provider_extras,
+                profile_name=profile_name,
             )
         )
         if self._queue:

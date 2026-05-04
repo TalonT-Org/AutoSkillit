@@ -300,3 +300,65 @@ class TestOutputDirParameter:
 
         assert len(executor.calls) == 1
         assert Path(output_dir) in executor.calls[0].write_watch_dirs
+
+
+@pytest.mark.anyio
+async def test_run_skill_injects_provider_extras_when_feature_enabled(
+    tool_ctx, monkeypatch, tmp_path
+) -> None:
+    """run_skill records provider_extras and profile_name when feature is enabled."""
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+    monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: True)
+    monkeypatch.setattr(
+        "autoskillit.server._guards._resolve_provider_profile",
+        lambda *a: ("vertex", {"ANTHROPIC_API_KEY": "test-key-xyz"}),
+    )
+
+    await run_skill("/autoskillit:probe", str(tmp_path))
+
+    assert executor.calls[0].provider_extras == {"ANTHROPIC_API_KEY": "test-key-xyz"}
+    assert executor.calls[0].profile_name == "vertex"
+
+
+@pytest.mark.anyio
+async def test_run_skill_provider_extras_none_when_feature_disabled(
+    tool_ctx, monkeypatch, tmp_path
+) -> None:
+    """run_skill records None provider_extras and empty profile_name when feature is disabled."""
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+    monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: False)
+
+    await run_skill("/autoskillit:probe", str(tmp_path))
+
+    assert executor.calls[0].provider_extras is None
+    assert executor.calls[0].profile_name == ""
+
+
+@pytest.mark.anyio
+async def test_run_skill_provider_extras_none_when_default_profile(
+    tool_ctx, monkeypatch, tmp_path
+) -> None:
+    """run_skill records None provider_extras when profile resolves to default anthropic."""
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+    monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: True)
+    monkeypatch.setattr(
+        "autoskillit.server._guards._resolve_provider_profile",
+        lambda *a: ("anthropic", {}),
+    )
+
+    await run_skill("/autoskillit:probe", str(tmp_path))
+
+    assert executor.calls[0].provider_extras is None
+    assert executor.calls[0].profile_name == ""

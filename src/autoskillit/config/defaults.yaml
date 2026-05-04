@@ -277,4 +277,10 @@ fleet:
   default_timeout_sec: 3600
   max_concurrent_dispatches: 1
 
+providers:
+  default_provider: null
+  profiles: {}
+  step_overrides: {}
+  provider_retry_limit: 2
+
 features: {}

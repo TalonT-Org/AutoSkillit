@@ -550,7 +550,7 @@ def test_token_usage_json_schema(tmp_path):
         success=False,
     )
     tu = json.loads((tmp_path / "sessions" / "test-session-001" / "token_usage.json").read_text())
-    assert tu["step_name"] == "plan"
+    assert tu["session_label"] == "plan"
     assert tu["input_tokens"] == 10
     assert tu["output_tokens"] == 5
     assert tu["cache_creation_input_tokens"] == 2

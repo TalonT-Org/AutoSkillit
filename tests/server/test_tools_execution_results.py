@@ -155,11 +155,14 @@ class TestRunSkillStepName:
         assert report[0]["input_tokens"] == 200
 
     @pytest.mark.anyio
-    async def test_no_step_name_does_not_record(self, tool_ctx):
+    async def test_no_step_name_records_with_ad_hoc_label(self, tool_ctx):
         tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot (not a git repo)
         tool_ctx.runner.push(_make_result(returncode=0, stdout=self._make_ndjson()))
         await run_skill(skill_command="/autoskillit:investigate topic", cwd="/tmp", step_name="")
-        assert tool_ctx.token_log.get_report() == []
+        report = tool_ctx.token_log.get_report()
+        assert len(report) == 1
+        assert report[0]["step_name"] == "(ad-hoc)"
+        assert report[0]["input_tokens"] == 200
 
     @pytest.mark.anyio
     async def test_null_token_usage_does_not_record(self, tool_ctx):

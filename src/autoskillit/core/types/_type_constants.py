@@ -429,6 +429,7 @@ FEATURE_REGISTRY: dict[str, FeatureDef] = {
         import_package=None,
         tier=1,
         default_enabled=False,
+        since_version="0.9.351",
     ),
 }
 

@@ -437,6 +437,16 @@ class TestRecipeParser:
         step = _parse_step({"tool": "run_skill"})
         assert step.model is None
 
+    # PROV1
+    def test_parse_step_extracts_provider(self) -> None:
+        step = _parse_step({"tool": "run_skill", "provider": "anthropic"})
+        assert step.provider == "anthropic"
+
+    # PROV2
+    def test_parse_step_provider_absent(self) -> None:
+        step = _parse_step({"tool": "run_skill"})
+        assert step.provider is None
+
     def test_parse_step_reads_stale_threshold(self) -> None:
         data = {"tool": "run_skill", "stale_threshold": 2400, "on_success": "done"}
         step = _parse_step(data)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import Any, Final
 
 import pytest
 import yaml
@@ -158,6 +159,54 @@ def test_all_exp_lens_skills_have_contracts(skills):
     ]
     missing = [name for name in exp_lens if name not in skills]
     assert not missing, f"exp-lens skills missing contracts: {sorted(missing)}"
+
+
+_EXP_LENS_SKILLS: Final[list[str]] = [
+    "exp-lens-estimand-clarity",
+    "exp-lens-causal-assumptions",
+    "exp-lens-comparator-construction",
+    "exp-lens-pipeline-integrity",
+    "exp-lens-variance-stability",
+    "exp-lens-fair-comparison",
+    "exp-lens-reproducibility-artifacts",
+    "exp-lens-measurement-validity",
+    "exp-lens-sensitivity-robustness",
+    "exp-lens-benchmark-representativeness",
+    "exp-lens-unit-interference",
+    "exp-lens-error-budget",
+    "exp-lens-severity-testing",
+    "exp-lens-randomization-blocking",
+    "exp-lens-validity-threats",
+    "exp-lens-iterative-learning",
+    "exp-lens-exploratory-confirmatory",
+    "exp-lens-governance-risk",
+]
+
+
+@pytest.mark.parametrize("skill_name", _EXP_LENS_SKILLS)
+def test_exp_lens_experiment_plan_path_is_required(
+    skills: dict[str, Any], skill_name: str
+) -> None:
+    """experiment_plan_path must be required: true on all exp-lens contracts."""
+    contract = skills[skill_name]
+    inp = next(
+        (i for i in contract["inputs"] if i["name"] == "experiment_plan_path"),
+        None,
+    )
+    assert inp is not None, f"{skill_name}: missing experiment_plan_path input"
+    assert inp["required"] is True, f"{skill_name}: experiment_plan_path must be required: true"
+
+
+@pytest.mark.parametrize("skill_name", _EXP_LENS_SKILLS)
+def test_exp_lens_context_path_remains_optional(skills: dict[str, Any], skill_name: str) -> None:
+    """context_path must remain required: false on all exp-lens contracts."""
+    contract = skills[skill_name]
+    inp = next(
+        (i for i in contract["inputs"] if i["name"] == "context_path"),
+        None,
+    )
+    assert inp is not None, f"{skill_name}: missing context_path input"
+    assert inp["required"] is False, f"{skill_name}: context_path must remain required: false"
 
 
 def test_skill_contracts_yaml_includes_prepare_research_pr(skills):

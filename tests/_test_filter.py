@@ -1047,7 +1047,8 @@ def _file_to_execution_subpkg(filepath: str) -> str | None:
         idx = parts.index("autoskillit")
     except ValueError:
         return None
-    # idx + 3 < len(parts) ensures parts[idx + 2] is a subpackage dir (not a bare module) and guards parts[idx + 1].
+    # idx + 3 < len(parts) ensures parts[idx + 2] is a subpackage dir (not a bare module)
+    # and guards parts[idx + 1].
     if idx + 3 < len(parts) and parts[idx + 1] == "execution":
         return parts[idx + 2]
     return None
@@ -1196,7 +1197,8 @@ def build_test_scope(
                                     if _file_to_package(c) == "execution"
                                     and Path(c).stem != "__init__"
                                 ]
-                                # empty list → fail-open: only execution/__init__ changed, no cause to narrow on
+                                # empty list → fail-open: only execution/__init__ changed,
+                                # no cause to narrow on
                                 all_narrow = bool(exec_cause_files)
                                 narrow_dirs: set[str] = set()
                                 for c in exec_cause_files:

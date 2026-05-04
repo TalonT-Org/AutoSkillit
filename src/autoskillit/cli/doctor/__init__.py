@@ -7,7 +7,7 @@ from pathlib import Path
 
 from autoskillit.cli._hooks import _claude_settings_path
 from autoskillit.config import load_config
-from autoskillit.core import get_logger, is_feature_enabled
+from autoskillit.core import Severity, get_logger, is_feature_enabled
 
 from ._doctor_config import (
     _check_config_layers_for_secrets,
@@ -63,7 +63,7 @@ from ._doctor_types import _NON_PROBLEM, DoctorResult
 
 logger = get_logger(__name__)
 
-__all__ = ["DoctorResult", "run_doctor"]
+__all__ = ["DoctorResult", "Severity", "run_doctor"]
 
 
 def run_doctor(*, output_json: bool = False) -> None:

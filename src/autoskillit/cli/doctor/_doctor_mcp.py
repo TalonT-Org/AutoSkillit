@@ -217,7 +217,7 @@ def _check_plugin_cache_integrity(cache_dir: Path | None = None) -> DoctorResult
 
 
 def _check_cache_version_mismatch(cache_dir: Path | None = None) -> DoctorResult:
-    """Check plugin cache version against installed package. ERROR when kitchen-open AND mismatched."""
+    """Check plugin cache version. ERROR if kitchen is open and versions mismatch."""
     from autoskillit.core import any_kitchen_open
     from autoskillit.version import version_info
 
@@ -236,7 +236,7 @@ def _check_cache_version_mismatch(cache_dir: Path | None = None) -> DoctorResult
         f"installed package {vi['package_version']!r}. "
         f"Run 'autoskillit install' to sync."
     )
-    if any_kitchen_open():
+    if any_kitchen_open(project_path=str(Path.cwd())):
         return DoctorResult(
             Severity.ERROR,
             "version_consistency",

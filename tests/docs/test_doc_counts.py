@@ -236,18 +236,18 @@ def test_quota_thresholds_defaults() -> None:
 
 def test_doctor_check_count_is_31() -> None:
     # _count_doctor_checks() counts every "# Check N:" and "# Check Nb:" marker
-    # in run_doctor() — 17 numbered base markers + 5 lettered sub-check markers
-    # (2b, 2c, 2d, 4b, 7b) + 4 ambient env checks (18–21)
+    # in run_doctor() — 17 numbered base markers + 6 lettered sub-check markers
+    # (2b, 2c, 2d, 2e, 4b, 7b) + 4 ambient env checks (18–21)
     # + 2 new unconditional feature checks (22–23)
-    # + 5 gated franchise checks (24–28) = 33 total.
+    # + 5 gated franchise checks (24–28) = 34 total.
     # test_installation_states_17_doctor_checks checks the *user-visible* count
     # from docs/installation.md ("15 numbered + 2 lettered sub-checks 4b and 7b
     # = 17").  The gap of 5 is intentional: Check 2, Check 4, and Check 7 each
     # appear as separate implementation markers but the docs present them as single
     # numbered entries that subsume their sub-variants.
     # Update both tests whenever a new doctor check is added.
-    assert _count_doctor_checks() == 33, (
-        f"Expected 33 doctor checks; found {_count_doctor_checks()}"
+    assert _count_doctor_checks() == 34, (
+        f"Expected 34 doctor checks; found {_count_doctor_checks()}"
     )
 
 

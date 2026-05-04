@@ -128,6 +128,16 @@ class TestReviewPrRecipeIntegration:
             "It must not silently fall through the catch-all."
         )
 
+    def test_annotate_step_captures_diff_metrics_path(self, recipe: object) -> None:
+        step = recipe.steps["annotate_pr_diff"]  # type: ignore[attr-defined]
+        assert "diff_metrics_path" in step.capture
+        assert step.capture["diff_metrics_path"] == "${{ result.diff_metrics_path }}"
+
+    def test_review_pr_command_includes_diff_metrics_path(self, recipe: object) -> None:
+        step = recipe.steps["review_pr"]  # type: ignore[attr-defined]
+        cmd = step.with_args.get("skill_command", "")
+        assert "diff_metrics_path=" in cmd
+
     def test_resolve_review_step_uses_correct_skill(self, recipe: object) -> None:
         """resolve_review step must invoke /autoskillit:resolve-review in all recipes."""
         resolve_step = recipe.steps["resolve_review"]  # type: ignore[attr-defined]
@@ -144,3 +154,16 @@ def test_implementation_groups_has_ci_watch() -> None:
     assert "ci_watch" in recipe.steps
     assert "resolve_ci" in recipe.steps
     assert "re_push" in recipe.steps
+
+
+def test_merge_prs_review_pr_integration_includes_diff_metrics_path() -> None:
+    recipe = load_recipe(builtin_recipes_dir() / "merge-prs.yaml")
+    step = recipe.steps["review_pr_integration"]
+    cmd = step.with_args.get("skill_command", "")
+    assert "diff_metrics_path=" in cmd
+
+
+def test_merge_prs_annotate_step_captures_diff_metrics_path() -> None:
+    recipe = load_recipe(builtin_recipes_dir() / "merge-prs.yaml")
+    step = recipe.steps["annotate_pr_diff"]
+    assert "diff_metrics_path" in step.capture

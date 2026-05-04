@@ -4,9 +4,15 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from autoskillit.core import SessionType, extract_path_arg, session_type
+from autoskillit.core import SessionType, extract_path_arg, get_logger, session_type
 from autoskillit.pipeline import gate_error_result, headless_error_result
+
+if TYPE_CHECKING:
+    from autoskillit.config._config_dataclasses import ProvidersConfig
+
+logger = get_logger(__name__)
 
 
 def _get_ctx():  # type: ignore[return]
@@ -146,3 +152,50 @@ def _check_dry_walkthrough(skill_command: str, cwd: str) -> str | None:
         )
 
     return None
+
+
+def _resolve_provider_profile(
+    step_name: str,
+    recipe_name: str,
+    config_providers: ProvidersConfig,
+) -> tuple[str, dict[str, str]]:
+
+    # Tier 1: per-step config override (requires recipe context)
+    if recipe_name and step_name:
+        step_override = config_providers.step_overrides.get(step_name)
+        if step_override:
+            logger.debug(
+                "provider_profile_resolved",
+                tier="step_override",
+                profile=step_override,
+            )
+            if step_override == "anthropic":
+                return ("anthropic", {})
+            return (step_override, config_providers.profiles.get(step_override, {}))
+
+    # Tier 2: wildcard override (requires recipe context)
+    if recipe_name:
+        wildcard = config_providers.step_overrides.get("*")
+        if wildcard:
+            logger.debug(
+                "provider_profile_resolved",
+                tier="recipe_wildcard",
+                profile=wildcard,
+            )
+            if wildcard == "anthropic":
+                return ("anthropic", {})
+            return (wildcard, config_providers.profiles.get(wildcard, {}))
+
+    # Tier 3: step YAML provider field
+    if step_name:
+        logger.debug("provider_profile_resolved", tier="step_provider_field", profile=step_name)
+        if step_name == "anthropic":
+            return ("anthropic", {})
+        return (step_name, config_providers.profiles.get(step_name, {}))
+
+    # Tier 4: default
+    name = config_providers.default_provider or "anthropic"
+    logger.debug("provider_profile_resolved", tier="default", profile=name)
+    if name == "anthropic":
+        return ("anthropic", {})
+    return (name, config_providers.profiles.get(name, {}))

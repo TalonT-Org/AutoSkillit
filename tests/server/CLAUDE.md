@@ -28,6 +28,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_quota_refresh_loop.py` | Tests for _quota_refresh_loop in server/_misc.py |
 | `test_release_issue_fail_label.py` | Tests for release_issue fail_label path and fail label cleanup |
 | `test_reload_session.py` | Tests for the reload_session MCP tool and supporting helpers |
+| `test_resolve_provider_profile.py` | Tests for _resolve_provider_profile four-tier provider resolution in _guards.py |
 | `test_run_skill_add_dirs.py` | Contract tests: run_skill passes correct add_dirs to executor (T-OVR-014) |
 | `test_server_init_gate.py` | Tests for server init: gate access, visibility, subset management, wire format compliance |
 | `test_server_init_session_visibility.py` | Tests for server init: session type visibility, fleet gate boot, feature gate visibility |

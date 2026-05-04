@@ -490,7 +490,7 @@ def test_token_summary_hook_unexpected_error_exits_zero(monkeypatch: object) -> 
 
 
 def test_efficiency_table_equivalence() -> None:
-    """Canonical format_efficiency_table and hook _format_efficiency_table produce identical output."""
+    """format_efficiency_table and hook _format_efficiency_table produce identical output."""
     from autoskillit.hooks.token_summary_hook import _format_efficiency_table
     from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
 

@@ -164,27 +164,35 @@ def fleet_error(
 def session_type() -> SessionType:
     """Resolve current session type from AUTOSKILLIT_SESSION_TYPE env var.
 
-    Fail-closed: returns LEAF on unset or invalid values.
+    Fail-closed: returns SKILL on unset or invalid values.
     Transitional bridge: HEADLESS=1 without SESSION_TYPE emits DeprecationWarning.
     """
     raw = os.environ.get(SESSION_TYPE_ENV_VAR, "")
     if raw:
         raw_lower = raw.lower()
+        if raw_lower == "leaf":
+            warnings.warn(
+                "AUTOSKILLIT_SESSION_TYPE='leaf' is deprecated. "
+                "Use 'skill' instead. Mapped to SessionType.SKILL.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            return SessionType.SKILL
         try:
             return SessionType(raw_lower)
         except ValueError:
             warnings.warn(
-                f"Invalid {SESSION_TYPE_ENV_VAR}={raw!r}, defaulting to LEAF. "
+                f"Invalid {SESSION_TYPE_ENV_VAR}={raw!r}, defaulting to SKILL. "
                 f"Valid values: {', '.join(m.value for m in SessionType)}",
                 DeprecationWarning,
                 stacklevel=2,
             )
-            return SessionType.LEAF
+            return SessionType.SKILL
     if os.environ.get(HEADLESS_ENV_VAR) == "1":
         warnings.warn(
             f"{HEADLESS_ENV_VAR}=1 without {SESSION_TYPE_ENV_VAR} set. "
-            "Defaulting to LEAF. Set AUTOSKILLIT_SESSION_TYPE explicitly.",
+            "Defaulting to SKILL. Set AUTOSKILLIT_SESSION_TYPE explicitly.",
             DeprecationWarning,
             stacklevel=2,
         )
-    return SessionType.LEAF
+    return SessionType.SKILL

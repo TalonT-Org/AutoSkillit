@@ -1028,6 +1028,62 @@ class TestPushToRemoteMocked:
         assert result["success"] is False
         assert "error_type" not in result
 
+    def test_gh006_returns_queued_branch_error_type(self) -> None:
+        """GH006 stderr produces error_type=queued_branch."""
+        mock_url = MagicMock()
+        mock_url.returncode = 0
+        mock_url.stdout = "git@github.com:org/repo.git\n"
+        mock_url.stderr = ""
+
+        mock_push = MagicMock()
+        mock_push.returncode = 1
+        mock_push.stderr = (
+            "remote: error: GH006: Protected branch update failed for refs/heads/main.\n"
+            "remote: error: Changes must be made through a merge queue."
+        )
+
+        with patch("subprocess.run", side_effect=[mock_url, mock_push]):
+            result = push_to_remote("/clone", "/source", "main", protected_branches=[], force=True)
+
+        assert result["success"] is False
+        assert result.get("error_type") == "queued_branch"
+
+    def test_merge_queue_stderr_returns_queued_branch_error_type(self) -> None:
+        """'protected by merge queue' stderr variant also produces queued_branch."""
+        mock_url = MagicMock()
+        mock_url.returncode = 0
+        mock_url.stdout = "git@github.com:org/repo.git\n"
+        mock_url.stderr = ""
+
+        mock_push = MagicMock()
+        mock_push.returncode = 1
+        mock_push.stderr = "remote: error: branch is protected by merge queue"
+
+        with patch("subprocess.run", side_effect=[mock_url, mock_push]):
+            result = push_to_remote("/clone", "/source", "main", protected_branches=[], force=True)
+
+        assert result["success"] is False
+        assert result.get("error_type") == "queued_branch"
+
+    def test_gh006_non_force_also_returns_queued_branch(self) -> None:
+        """GH006 fires for non-force pushes too (queue protects all push modes)."""
+        mock_url = MagicMock()
+        mock_url.returncode = 0
+        mock_url.stdout = "git@github.com:org/repo.git\n"
+        mock_url.stderr = ""
+
+        mock_push = MagicMock()
+        mock_push.returncode = 1
+        mock_push.stderr = "remote: error: GH006: Protected branch update failed."
+
+        with patch("subprocess.run", side_effect=[mock_url, mock_push]):
+            result = push_to_remote(
+                "/clone", "/source", "main", protected_branches=[], force=False
+            )
+
+        assert result["success"] is False
+        assert result.get("error_type") == "queued_branch"
+
 
 class TestPushToRemoteNonBare:
     """push_to_remote fails with error_type when remote is a local non-bare repo."""

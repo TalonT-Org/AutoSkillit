@@ -37,6 +37,7 @@ from autoskillit.execution.merge_queue._merge_queue_group_ci import (
     _MUTATION_ENABLE_AUTO_MERGE,
     _MUTATION_ENQUEUE_PR,
     _QUERY,  # noqa: F401 — re-export: tests assert merge_queue._QUERY exists
+    _QUERY_AUTO_MERGE_STATUS,
     _query_merge_group_ci,  # noqa: F401 — re-export: tests patch merge_queue._query_merge_group_ci
 )
 from autoskillit.execution.merge_queue._merge_queue_repo_state import (
@@ -133,6 +134,8 @@ class DefaultMergeQueueWatcher:
         ever_enrolled: bool = False
         was_in_queue: bool = False
         merge_group_ci_cache: str | None = None
+        pending_ejection: PRState | None = None
+        pending_reason: str = ""
 
         def _make_result(
             success: bool, pr_state: PRState, reason: str, ejection_cause: str = ""
@@ -166,7 +169,11 @@ class DefaultMergeQueueWatcher:
                 not_in_queue_cycles = 0
                 inconclusive_count = 0
                 if state["queue_state"] == "UNMERGEABLE":
-                    return _make_result(False, PRState.EJECTED, "PR is UNMERGEABLE in merge queue")
+                    pending_ejection = PRState.EJECTED
+                    pending_reason = "PR is UNMERGEABLE in merge queue"
+                else:
+                    pending_ejection = None
+                    pending_reason = ""
                 await asyncio.sleep(poll_interval)
                 continue
 
@@ -216,6 +223,13 @@ class DefaultMergeQueueWatcher:
             if classification.terminal == PRState.MERGED:
                 return _make_result(True, PRState.MERGED, classification.reason)
 
+            if not_in_queue_cycles < not_in_queue_confirmation_cycles:
+                await asyncio.sleep(poll_interval)
+                continue
+
+            if pending_ejection is not None:
+                return _make_result(False, pending_ejection, pending_reason)
+
             if state["state"] == "CLOSED":
                 ejection_cause = (
                     "ci_failure" if classification.terminal == PRState.EJECTED_CI_FAILURE else ""
@@ -223,10 +237,6 @@ class DefaultMergeQueueWatcher:
                 return _make_result(
                     False, classification.terminal, classification.reason, ejection_cause
                 )
-
-            if not_in_queue_cycles < not_in_queue_confirmation_cycles:
-                await asyncio.sleep(poll_interval)
-                continue
 
             if classification.terminal == PRState.STALLED:
                 enabled_at = state["auto_merge_enabled_at"]
@@ -455,17 +465,35 @@ class DefaultMergeQueueWatcher:
         if not auto_merge_available:
             await self._enqueue_direct(pr_node_id)
             return
-        # Disable then re-enable auto-merge.
-        resp = await self._ensure_client().post(
-            _GRAPHQL_ENDPOINT,
-            json={
-                "query": _MUTATION_DISABLE_AUTO_MERGE,
-                "variables": {"prId": pr_node_id},
-            },
-        )
+        disable_payload = {
+            "query": _MUTATION_DISABLE_AUTO_MERGE,
+            "variables": {"prId": pr_node_id},
+        }
+        resp = await self._ensure_client().post(_GRAPHQL_ENDPOINT, json=disable_payload)
         resp.raise_for_status()
         body = resp.json()
         if "errors" in body:
             raise RuntimeError(f"GraphQL mutation error: {body['errors']}")
-        await asyncio.sleep(2)
+        await self._confirm_disable(pr_node_id)
         await self._enable_auto_merge_direct(pr_node_id)
+
+    async def _confirm_disable(self, pr_node_id: str) -> None:
+        """Poll until auto-merge disable is confirmed or timeout (best-effort)."""
+        payload = {"query": _QUERY_AUTO_MERGE_STATUS, "variables": {"nodeId": pr_node_id}}
+        for _ in range(6):
+            await asyncio.sleep(5)
+            resp = await self._ensure_client().post(_GRAPHQL_ENDPOINT, json=payload)
+            if resp.status_code != 200:
+                logger.warning(
+                    "confirm_disable_poll_error",
+                    pr_node_id=pr_node_id,
+                    status_code=resp.status_code,
+                )
+                continue
+            try:
+                data = resp.json().get("data", {})
+            except (ValueError, httpx.DecodingError):
+                continue
+            if not (data.get("node") or {}).get("autoMergeRequest"):
+                return
+        logger.warning("confirm_disable_timeout", pr_node_id=pr_node_id)

@@ -93,6 +93,12 @@ class TestExecuteDispatchCancelledErrorLockRelease:
     async def test_execute_dispatch_passes_resume_session_id_to_run_dispatch(
         self, tool_ctx, monkeypatch
     ) -> None:
+        """Verify resume_session_id is forwarded to _run_dispatch.
+
+        Raises CancelledError from the _run_dispatch mock intentionally: this
+        short-circuits execute_dispatch after kwarg capture, avoiding the need
+        to wire a full dispatch chain while still asserting kwarg forwarding.
+        """
         from tests.fleet._helpers import _setup_dispatch
 
         _setup_dispatch(tool_ctx, monkeypatch)

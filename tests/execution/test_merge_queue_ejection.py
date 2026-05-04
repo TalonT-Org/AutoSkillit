@@ -20,17 +20,72 @@ class TestRelatedCoverage:
     """Coverage for related untested paths found during investigation."""
 
     @pytest.mark.anyio
-    async def test_returns_ejected_when_unmergeable_in_queue(self):
-        """in_queue=True, queue_state=UNMERGEABLE → ejected immediately."""
+    async def test_unmergeable_waits_for_dequeue_before_returning_ejected(self):
+        """UNMERGEABLE must wait for in_queue=False before returning EJECTED."""
+        watcher = _make_watcher()
+        watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
+            side_effect=[
+                _queue_state(in_queue=True, queue_state="UNMERGEABLE"),
+                _queue_state(in_queue=True, queue_state="UNMERGEABLE"),
+                _queue_state(in_queue=False, state="CLOSED"),
+                _queue_state(in_queue=False, state="CLOSED"),
+            ]
+        )
+        with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
+            result = await watcher.wait(
+                pr_number=1,
+                target_branch="main",
+                repo="owner/repo",
+                poll_interval=1,
+                not_in_queue_confirmation_cycles=2,
+            )
+
+        assert result["success"] is False
+        assert result["pr_state"] == "ejected"
+        assert watcher._fetch_pr_and_queue_state.call_count == 4  # type: ignore[union-attr]
+
+    @pytest.mark.anyio
+    async def test_unmergeable_dequeue_wait_respects_timeout(self):
+        """UNMERGEABLE with perpetual in_queue=True times out instead of returning ejected."""
         watcher = _make_watcher()
         watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
             return_value=_queue_state(in_queue=True, queue_state="UNMERGEABLE")
         )
         with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
-            result = await watcher.wait(pr_number=1, target_branch="main", repo="owner/repo")
+            result = await watcher.wait(
+                pr_number=1,
+                target_branch="main",
+                repo="owner/repo",
+                poll_interval=1,
+                timeout_seconds=0,
+            )
+
+        assert result["success"] is False
+        assert result["pr_state"] == "timeout"
+
+    @pytest.mark.anyio
+    async def test_unmergeable_respects_confirmation_cycles(self):
+        """UNMERGEABLE with confirmation_cycles=2 requires 2 cycles after in_queue=False."""
+        watcher = _make_watcher()
+        watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
+            side_effect=[
+                _queue_state(in_queue=True, queue_state="UNMERGEABLE"),
+                _queue_state(in_queue=False, state="CLOSED"),
+                _queue_state(in_queue=False, state="CLOSED"),
+            ]
+        )
+        with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
+            result = await watcher.wait(
+                pr_number=1,
+                target_branch="main",
+                repo="owner/repo",
+                poll_interval=1,
+                not_in_queue_confirmation_cycles=2,
+            )
 
         assert result["success"] is False
         assert result["pr_state"] == "ejected"
+        assert watcher._fetch_pr_and_queue_state.call_count == 3  # type: ignore[union-attr]
 
     @pytest.mark.anyio
     async def test_is_stall_candidate_when_has_hooks(self):

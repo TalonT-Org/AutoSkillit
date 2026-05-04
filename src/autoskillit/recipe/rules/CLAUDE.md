@@ -1,6 +1,6 @@
 # rules/
 
-Semantic validation rule modules for recipe analysis (25 rule files).
+Semantic validation rule modules for recipe analysis (26 rule files).
 
 ## Files
 
@@ -23,6 +23,7 @@ Semantic validation rule modules for recipe analysis (25 rule files).
 | `rules_inputs.py` | Input/ingredient validation; version compatibility checks |
 | `rules_isolation.py` | Workspace isolation rules (prevents operating on source repo) |
 | `rules_merge.py` | `merge_worktree` routing completeness |
+| `rules_merge_queue.py` | Merge queue push routing: `queued_branch` error route enforcement |
 | `rules_packs.py` | Pack validation (names must exist in `PACK_REGISTRY`) |
 | `rules_reachability.py` | Symbolic BFS reachability; capture-inversion detection |
 | `rules_recipe.py` | Sub-recipe reference validity and `with_args` hygiene |
@@ -35,4 +36,4 @@ Semantic validation rule modules for recipe analysis (25 rule files).
 
 ## Architecture Notes
 
-Side-effect registration: callers import the package to trigger `@semantic_rule` decorator registration of all 25 rule modules. Each rule receives a `ValidationContext` argument. No cross-imports between rule modules.
+Side-effect registration: callers import the package to trigger `@semantic_rule` decorator registration of all 26 rule modules. Each rule receives a `ValidationContext` argument. No cross-imports between rule modules.

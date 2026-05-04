@@ -11,7 +11,6 @@ from uuid import uuid4
 
 if TYPE_CHECKING:
     from autoskillit.config.settings import QuotaGuardConfig
-    from autoskillit.recipe import OpenKitchenResult
 
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
@@ -375,7 +374,7 @@ async def open_kitchen(
                         }
                     )
             try:
-                result: OpenKitchenResult = tool_ctx.recipes.load_and_validate(  # type: ignore[assignment]
+                result = tool_ctx.recipes.load_and_validate(
                     name,
                     Path.cwd(),
                     suppressed=suppressed,

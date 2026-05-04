@@ -498,6 +498,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_service_wrappers.py",
             "server/test_tools_list_recipes.py",
             "server/test_tools_bootstrap.py",
+            "server/test_tools_kitchen_visibility.py",
             # CLI file-level entries (4 of 38 import autoskillit.recipe):
             "cli/test_cli_prompts.py",
             "cli/test_l3_orchestrator_prompt.py",

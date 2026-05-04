@@ -110,9 +110,7 @@ class TestScopingGates:
             "implement-experiment",
         ],
     )
-    def test_activates_for_implement_skills(
-        self, tmp_path, monkeypatch, skill
-    ):
+    def test_activates_for_implement_skills(self, tmp_path, monkeypatch, skill):
         f = tmp_path / "clean.py"
         f.write_text("x = 1\n")
         _out, code = _run_hook(
@@ -131,9 +129,7 @@ class TestScopingGates:
             "resolve-research-review",
         ],
     )
-    def test_activates_for_resolve_skills(
-        self, tmp_path, monkeypatch, skill
-    ):
+    def test_activates_for_resolve_skills(self, tmp_path, monkeypatch, skill):
         f = tmp_path / "clean.py"
         f.write_text("x = 1\n")
         _out, code = _run_hook(

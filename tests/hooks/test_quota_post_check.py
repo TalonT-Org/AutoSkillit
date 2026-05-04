@@ -451,3 +451,46 @@ def test_write_quota_log_event_prints_to_stderr_on_write_failure(
 
     captured = capsys.readouterr()
     assert "quota_post_hook" in captured.err
+
+
+def test_post_provider_bypass_skips_warning(tmp_path, monkeypatch):
+    """Non-anthropic AUTOSKILLIT_PROVIDER_PROFILE bypasses post-check warning."""
+    monkeypatch.setenv("AUTOSKILLIT_PROVIDER_PROFILE", "minimax")
+    cache = tmp_path / "quota_cache.json"
+    _write_cache(cache, utilization=99.0, should_block=True)
+    event = _build_event()
+    out, exit_code = _run_hook(event=event, cache_path=cache)
+    assert out.strip() == ""
+    assert exit_code == 0
+
+
+def test_post_provider_bypass_logs_event(tmp_path, monkeypatch):
+    """Provider bypass writes a 'post_provider_bypass' event to quota_events.jsonl."""
+    monkeypatch.setenv("AUTOSKILLIT_PROVIDER_PROFILE", "minimax")
+    log_dir = tmp_path / "logs"
+    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(log_dir))
+    cache = tmp_path / "quota_cache.json"
+    _write_cache(cache, utilization=99.0, should_block=True)
+    event = _build_event()
+    _run_hook(event=event, cache_path=cache)
+    events = [
+        json.loads(line) for line in (log_dir / "quota_events.jsonl").read_text().splitlines()
+    ]
+    assert len(events) == 1
+    ev = events[0]
+    assert ev["event"] == "post_provider_bypass"
+    assert ev["profile"] == "minimax"
+    assert "ts" in ev
+    assert "tool_name" in ev
+    assert "cache_path" in ev
+
+
+def test_post_anthropic_profile_does_not_bypass(tmp_path, monkeypatch):
+    """AUTOSKILLIT_PROVIDER_PROFILE=anthropic still enforces post-check warning."""
+    monkeypatch.setenv("AUTOSKILLIT_PROVIDER_PROFILE", "anthropic")
+    cache = tmp_path / "quota_cache.json"
+    _write_cache(cache, utilization=99.0, should_block=True)
+    event = _build_event()
+    out, _ = _run_hook(event=event, cache_path=cache)
+    data = json.loads(out)
+    assert "QUOTA WARNING" in data["hookSpecificOutput"]["updatedMCPToolOutput"]

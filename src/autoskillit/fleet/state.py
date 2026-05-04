@@ -15,7 +15,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core import get_logger, write_versioned_json
+from autoskillit.core import FleetErrorCode, get_logger, write_versioned_json
 
 logger = get_logger(__name__)
 
@@ -156,7 +156,7 @@ def write_initial_state(
 
 _INFRASTRUCTURE_FAILURE_REASONS: frozenset[str] = frozenset(
     {
-        "fleet_l2_no_result_block",
+        FleetErrorCode.FLEET_L2_NO_RESULT_BLOCK,
     }
 )
 

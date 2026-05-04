@@ -112,9 +112,11 @@ class DefaultTokenLog:
         e.loc_insertions += loc_insertions
         e.loc_deletions += loc_deletions
         _peak = token_usage.get("peak_context", 0)
-        if _peak > e.peak_context:
+        if isinstance(_peak, int) and _peak > e.peak_context:
             e.peak_context = _peak
-        e.turn_count += token_usage.get("turn_count", 0)
+        _turns = token_usage.get("turn_count", 0)
+        if isinstance(_turns, int):
+            e.turn_count += _turns
         if elapsed_seconds is not None:
             e.elapsed_seconds += elapsed_seconds
         elif start_ts and end_ts:
@@ -259,7 +261,9 @@ class DefaultTokenLog:
             _raw_peak = data.get("peak_context", 0)
             if isinstance(_raw_peak, int) and _raw_peak > e.peak_context:
                 e.peak_context = _raw_peak
-            e.turn_count += data.get("turn_count", 0)
+            _raw_turns = data.get("turn_count", 0)
+            if isinstance(_raw_turns, int):
+                e.turn_count += _raw_turns
             # Each token_usage.json file represents a single run_skill invocation
             # (one file = one invocation). Incrementing here reconstructs the
             # invocation count that was accumulated live via record().

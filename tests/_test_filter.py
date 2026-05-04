@@ -172,6 +172,13 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_resume": frozenset({"core", "cli", "execution"}),
     "_type_helpers": frozenset({"core", "execution", "fleet", "pipeline", "recipe", "server"}),
     "_type_protocols_workspace": frozenset({"core", "pipeline", "recipe", "workspace"}),
+    "_install_detect": frozenset({"core"}),
+    "_linux_proc": frozenset({"core", "execution", "fleet", "cli"}),
+    "_type_plugin_source": frozenset({"core", "execution", "pipeline", "server", "cli"}),
+    "kitchen_state": frozenset({"core"}),
+    "readiness": frozenset({"core", "server"}),
+    "session_registry": frozenset({"core"}),
+    "tool_sequence_analysis": frozenset({"core", "server", "cli"}),
 }
 
 # Narrow per-module cascade for execution/. Modules not listed here fall through
@@ -1112,7 +1119,7 @@ def build_test_scope(
                 elif stem in MODULE_CASCADE_CORE:
                     test_dirs.update(MODULE_CASCADE_CORE[stem])
                 else:
-                    test_dirs.update(cascade_map["core"])  # fail-open: unknown stem
+                    test_dirs.update(cascade_map["core"])  # fail-open: future unclassified stems
             elif pkg == "execution" and mode == FilterMode.CONSERVATIVE:
                 subpkg = _file_to_execution_subpkg(f)
                 if subpkg and subpkg in SUBPKG_CASCADE_EXECUTION:
@@ -1173,7 +1180,9 @@ def build_test_scope(
                         elif stem in MODULE_CASCADE_CORE:
                             test_dirs.update(MODULE_CASCADE_CORE[stem])
                         else:
-                            test_dirs.update(cascade_map["core"])  # fail-open: unknown stem
+                            test_dirs.update(
+                                cascade_map["core"]
+                            )  # fail-open: future unclassified stems
                     elif pkg == "execution" and mode == FilterMode.CONSERVATIVE:
                         subpkg = _file_to_execution_subpkg(f)
                         if subpkg and subpkg in SUBPKG_CASCADE_EXECUTION:

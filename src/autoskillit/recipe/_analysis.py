@@ -71,6 +71,7 @@ class ValidationContext:
     project_dir: Path | None = None
     disabled_subsets: frozenset[str] = field(default_factory=frozenset)
     disabled_features: frozenset[str] = field(default_factory=frozenset)
+    provider_profiles: frozenset[str] = field(default_factory=frozenset)
     skill_category_map: dict[str, frozenset[str]] | None = None
     overridden_skills: frozenset[str] | None = None
     blocks: tuple[RecipeBlock, ...] = field(default_factory=tuple)
@@ -121,6 +122,7 @@ def make_validation_context(
     project_dir: Path | None = None,
     disabled_subsets: frozenset[str] = frozenset(),
     disabled_features: frozenset[str] = frozenset(),
+    provider_profiles: frozenset[str] = frozenset(),
 ) -> ValidationContext:
     """Build a ``ValidationContext`` from a recipe.
 
@@ -145,6 +147,7 @@ def make_validation_context(
         project_dir=project_dir,
         disabled_subsets=disabled_subsets,
         disabled_features=disabled_features,
+        provider_profiles=provider_profiles,
         blocks=extract_blocks(recipe, step_graph, predecessors=predecessors),
         predecessors=predecessors,
     )

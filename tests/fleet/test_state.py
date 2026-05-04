@@ -17,6 +17,7 @@ from autoskillit.fleet import (
     DispatchStatus,
     append_dispatch_record,
     crash_recover_dispatch,
+    has_failed_dispatch,
     mark_dispatch_resumable,
     mark_dispatch_running,
     read_all_campaign_captures,
@@ -489,6 +490,27 @@ class TestResumableSelectedBeforePending:
         assert decision.next_dispatch_name == "impl-1"
         assert decision.is_resumable is True
 
+    def test_resume_decision_carries_l2_session_id(self, tmp_path: Path) -> None:
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "c1", "myCampaign", "manifest.yaml", _make_dispatches("impl-1"))
+        mark_dispatch_running(sp, "impl-1", dispatch_id="d2222", l2_pid=888)
+        append_dispatch_record(
+            sp,
+            DispatchRecord(
+                name="impl-1",
+                status=DispatchStatus.RESUMABLE,
+                dispatch_id="d2222",
+                l2_session_id="sess-xyz-test",
+                sidecar_path=str(sp.parent / "d2222_issues.jsonl"),
+            ),
+        )
+
+        decision = resume_campaign_from_state(sp, continue_on_failure=False)
+
+        assert decision is not None
+        assert decision.is_resumable is True
+        assert decision.l2_session_id == "sess-xyz-test"
+
 
 class TestResumableStateTransitionsValid:
     def test_resumable_valid_transitions(self, tmp_path: Path) -> None:
@@ -689,3 +711,49 @@ class TestCrashRecoverDispatchSidecarVanished:
         result = crash_recover_dispatch(sp, record)
         assert result == DispatchStatus.INTERRUPTED
         assert read_state(sp).dispatches[0].status == DispatchStatus.INTERRUPTED
+
+
+class TestHasFailedDispatchReasonAware:
+    def test_no_result_block_failure_does_not_halt_campaign(self, tmp_path: Path) -> None:
+        """has_failed_dispatch returns False when only FAILURE is fleet_l2_no_result_block."""
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("d1"))
+        append_dispatch_record(
+            sp,
+            DispatchRecord(
+                name="d1",
+                status=DispatchStatus.FAILURE,
+                reason="fleet_l2_no_result_block",
+            ),
+        )
+        assert has_failed_dispatch(sp) is False
+
+    def test_logic_failure_halts_campaign(self, tmp_path: Path) -> None:
+        """has_failed_dispatch returns True for a completed_clean-based FAILURE."""
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("d1"))
+        append_dispatch_record(
+            sp,
+            DispatchRecord(
+                name="d1",
+                status=DispatchStatus.FAILURE,
+                reason="task-failed",
+            ),
+        )
+        assert has_failed_dispatch(sp) is True
+
+    def test_mixed_infrastructure_and_logic_failure_halts(self, tmp_path: Path) -> None:
+        """has_failed_dispatch returns True if ANY non-infrastructure FAILURE exists."""
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("d1", "d2"))
+        append_dispatch_record(
+            sp,
+            DispatchRecord(
+                name="d1", status=DispatchStatus.FAILURE, reason="fleet_l2_no_result_block"
+            ),
+        )
+        append_dispatch_record(
+            sp,
+            DispatchRecord(name="d2", status=DispatchStatus.FAILURE, reason="task-failed"),
+        )
+        assert has_failed_dispatch(sp) is True

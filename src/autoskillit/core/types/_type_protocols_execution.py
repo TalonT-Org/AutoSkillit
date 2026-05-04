@@ -61,6 +61,7 @@ class HeadlessExecutor(Protocol):
         cwd: str,
         *,
         completion_marker: str,
+        resume_session_id: str | None = None,
         model: str = "",
         step_name: str = "",
         kitchen_id: str = "",

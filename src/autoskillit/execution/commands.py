@@ -366,6 +366,7 @@ def build_food_truck_cmd(
     plugin_source: PluginSource,
     cwd: str,
     completion_marker: str,
+    resume_session_id: str | None = None,
     model: str | None = None,
     env_extras: Mapping[str, str] | None = None,
     output_format: OutputFormat = OutputFormat.STREAM_JSON,
@@ -466,5 +467,7 @@ def build_food_truck_cmd(
             cmd += [ClaudeFlags.PLUGIN_DIR, str(cp)]
     _apply_output_format(cmd, output_format)
     cmd += [ClaudeFlags.TOOLS, "AskUserQuestion"]
+    if resume_session_id:
+        cmd += [ClaudeFlags.RESUME, resume_session_id]
 
     return ClaudeHeadlessCmd(cmd=cmd, env=spec.env)

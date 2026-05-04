@@ -677,6 +677,29 @@ class TestBuildFoodTruckCmdFeatureParity:
         assert "SCENARIO_STEP_NAME" not in spec.env
 
 
+class TestBuildFoodTruckCmdResume:
+    BASE = dict(
+        orchestrator_prompt="You are an L2 food truck orchestrator...",
+        plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
+        cwd="/repo",
+        completion_marker="%%L2_DONE::abc12345%%",
+    )
+
+    def test_resume_session_id_adds_resume_flag(self):
+        spec = build_food_truck_cmd(**self.BASE, resume_session_id="abc-123")
+        assert "--resume" in spec.cmd
+        idx = spec.cmd.index("--resume")
+        assert spec.cmd[idx + 1] == "abc-123"
+
+    def test_no_resume_session_id_omits_resume_flag(self):
+        spec = build_food_truck_cmd(**self.BASE)
+        assert "--resume" not in spec.cmd
+
+    def test_none_resume_session_id_omits_resume_flag(self):
+        spec = build_food_truck_cmd(**self.BASE, resume_session_id=None)
+        assert "--resume" not in spec.cmd
+
+
 def test_headless_exclusive_vars_contains_max_mcp_output_tokens() -> None:
     """MAX_MCP_OUTPUT_TOKENS must be in _HEADLESS_EXCLUSIVE_VARS."""
     from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS

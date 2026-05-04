@@ -93,6 +93,19 @@ def read_telemetry_clear_marker(log_root: Path) -> datetime | None:
         return None
 
 
+def _resolve_session_label(step_name: str, dispatch_id: str) -> str:
+    """Derive a non-empty session label for telemetry file identification.
+
+    Recipe steps use step_name. Fleet dispatches use dispatch_id.
+    Ad-hoc sessions get a fallback label.
+    """
+    if step_name:
+        return step_name
+    if dispatch_id:
+        return f"dispatch:{dispatch_id}"
+    return "(ad-hoc)"
+
+
 def flush_session_log(
     *,
     log_dir: str,
@@ -383,10 +396,11 @@ def flush_session_log(
     if exception_text:
         atomic_write(session_dir / "crash_exception.txt", exception_text)
 
-    # Write per-session telemetry files when step_name is provided
-    if step_name and token_usage is not None:
+    # Write per-session telemetry files; gate on data presence, not session identity
+    if token_usage is not None:
+        label = _resolve_session_label(step_name, dispatch_id)
         tu_data = {
-            "step_name": step_name,
+            "session_label": label,
             "input_tokens": token_usage.get("input_tokens", 0),
             "output_tokens": token_usage.get("output_tokens", 0),
             "cache_creation_input_tokens": token_usage.get("cache_creation_input_tokens", 0),
@@ -401,12 +415,13 @@ def flush_session_log(
         }
         atomic_write(session_dir / "token_usage.json", json.dumps(tu_data))
 
-    if step_name and timing_seconds is not None:
+    if timing_seconds is not None:
+        label = _resolve_session_label(step_name, dispatch_id)
         atomic_write(
             session_dir / "step_timing.json",
             json.dumps(
                 {
-                    "step_name": step_name,
+                    "step_name": label,
                     "total_seconds": max(0.0, timing_seconds),
                     "order_id": order_id,
                 }
@@ -439,6 +454,12 @@ def flush_session_log(
         "step_name": step_name,
         "input_tokens": token_usage.get("input_tokens", 0) if token_usage else 0,
         "output_tokens": token_usage.get("output_tokens", 0) if token_usage else 0,
+        "cache_creation_input_tokens": token_usage.get("cache_creation_input_tokens", 0)
+        if token_usage
+        else 0,
+        "cache_read_input_tokens": token_usage.get("cache_read_input_tokens", 0)
+        if token_usage
+        else 0,
         "write_call_count": write_call_count,
         "tracked_comm": _effective_tracked_comm,
         "tracked_comm_drift": _tracked_comm_drift,

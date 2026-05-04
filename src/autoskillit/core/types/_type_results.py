@@ -39,6 +39,8 @@ __all__ = [
     "TokenSummaryResult",
     "TimingSummaryResult",
     "KitchenStatusResult",
+    "TokenUsageFileEntry",
+    "SessionIndexEntry",
 ]
 
 
@@ -475,3 +477,58 @@ class KitchenStatusResult(TypedDict, total=False):
     warning: str
     success: bool
     error: str
+
+
+class TokenUsageFileEntry(TypedDict):
+    """Schema contract for token_usage.json written by flush_session_log."""
+
+    session_label: str
+    input_tokens: int
+    output_tokens: int
+    cache_creation_input_tokens: int
+    cache_read_input_tokens: int
+    peak_context: int
+    turn_count: int
+    timing_seconds: float
+    order_id: str
+    loc_insertions: int
+    loc_deletions: int
+
+
+class SessionIndexEntry(TypedDict):
+    """Schema contract for sessions.jsonl entries written by flush_session_log."""
+
+    session_id: str
+    dir_name: str
+    timestamp: str
+    cwd: str
+    kitchen_id: str
+    order_id: str
+    campaign_id: str
+    dispatch_id: str
+    claude_code_log: str
+    skill_command: str
+    success: bool
+    subtype: str
+    cli_subtype: str
+    exit_code: int
+    snapshot_count: int
+    anomaly_count: int
+    peak_rss_kb: int
+    peak_oom_score: int
+    step_name: str
+    input_tokens: int
+    output_tokens: int
+    cache_creation_input_tokens: int
+    cache_read_input_tokens: int
+    write_call_count: int
+    tracked_comm: str | None
+    tracked_comm_drift: bool
+    autoskillit_version: str
+    claude_code_version: str
+    recipe_name: str
+    recipe_content_hash: str
+    recipe_composite_hash: str
+    recipe_version: str
+    duration_seconds: float
+    github_api_requests: int

@@ -415,17 +415,26 @@ def test_flush_writes_token_usage_json_when_step_provided(tmp_path):
     assert (session_dir / "token_usage.json").is_file()
 
 
-def test_flush_omits_token_usage_json_when_no_step_name(tmp_path):
-    """token_usage.json is NOT written when step_name is empty, even if token_usage provided."""
+def test_flush_writes_token_usage_json_when_step_name_empty(tmp_path):
+    """token_usage.json IS written when step_name is empty, as long as token_usage is present."""
     _flush(
         tmp_path,
         step_name="",
-        token_usage={"input_tokens": 100},
+        token_usage={
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "cache_creation_input_tokens": 20,
+            "cache_read_input_tokens": 80,
+        },
         proc_snapshots=None,
         success=False,
     )
     session_dir = tmp_path / "sessions" / "test-session-001"
-    assert not (session_dir / "token_usage.json").exists()
+    assert (session_dir / "token_usage.json").exists()
+    data = json.loads((session_dir / "token_usage.json").read_text())
+    assert data["session_label"] == "(ad-hoc)"
+    assert data["cache_creation_input_tokens"] == 20
+    assert data["cache_read_input_tokens"] == 80
 
 
 def test_flush_writes_step_timing_json(tmp_path):
@@ -493,11 +502,16 @@ def test_flush_omits_audit_log_when_no_record(tmp_path):
 
 
 def test_flush_index_includes_step_name_and_token_fields(tmp_path):
-    """sessions.jsonl entry has step_name, input_tokens, output_tokens fields."""
+    """sessions.jsonl entry has step_name, input_tokens, output_tokens, and cache fields."""
     _flush(
         tmp_path,
         step_name="implement",
-        token_usage={"input_tokens": 100, "output_tokens": 50},
+        token_usage={
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "cache_creation_input_tokens": 20,
+            "cache_read_input_tokens": 80,
+        },
         proc_snapshots=None,
         success=False,
     )
@@ -506,6 +520,8 @@ def test_flush_index_includes_step_name_and_token_fields(tmp_path):
     assert entry["step_name"] == "implement"
     assert entry["input_tokens"] == 100
     assert entry["output_tokens"] == 50
+    assert entry["cache_creation_input_tokens"] == 20
+    assert entry["cache_read_input_tokens"] == 80
 
 
 def test_flush_index_token_fields_zero_when_no_step(tmp_path):
@@ -684,3 +700,76 @@ def test_flush_helper_builds_and_passes_session_telemetry():
     assert telemetry.github_api_usage is None
     assert telemetry.loc_insertions == 0
     assert telemetry.loc_deletions == 0
+
+
+# ---------------------------------------------------------------------------
+# L2 orchestrator session telemetry tests
+# ---------------------------------------------------------------------------
+
+
+def test_flush_writes_token_usage_with_dispatch_label(tmp_path):
+    """token_usage.json uses dispatch:{id} label when step_name is empty and dispatch_id set."""
+    _flush(
+        tmp_path,
+        step_name="",
+        dispatch_id="abc-123",
+        token_usage={
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "cache_creation_input_tokens": 20,
+            "cache_read_input_tokens": 80,
+        },
+        proc_snapshots=None,
+        success=False,
+    )
+    session_dir = tmp_path / "sessions" / "test-session-001"
+    assert (session_dir / "token_usage.json").exists()
+    data = json.loads((session_dir / "token_usage.json").read_text())
+    assert data["session_label"] == "dispatch:abc-123"
+    assert data["cache_creation_input_tokens"] == 20
+    assert data["cache_read_input_tokens"] == 80
+
+
+def test_sessions_jsonl_includes_cache_fields(tmp_path):
+    """sessions.jsonl entries include cache_creation_input_tokens and cache_read_input_tokens."""
+    _flush(
+        tmp_path,
+        step_name="implement",
+        token_usage={
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "cache_creation_input_tokens": 20,
+            "cache_read_input_tokens": 80,
+        },
+        proc_snapshots=None,
+        success=False,
+    )
+    lines = (tmp_path / "sessions.jsonl").read_text().strip().split("\n")
+    entry = json.loads(lines[-1])
+    assert entry["cache_creation_input_tokens"] == 20
+    assert entry["cache_read_input_tokens"] == 80
+
+
+def test_token_usage_file_entry_type_matches_written_fields(tmp_path):
+    """token_usage.json keys match exactly the fields defined in TokenUsageFileEntry TypedDict."""
+    from autoskillit.core.types import TokenUsageFileEntry
+
+    _flush(
+        tmp_path,
+        step_name="implement",
+        token_usage={
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "cache_creation_input_tokens": 20,
+            "cache_read_input_tokens": 80,
+            "peak_context": 1000,
+            "turn_count": 5,
+        },
+        timing_seconds=42.0,
+        proc_snapshots=None,
+        success=False,
+    )
+    session_dir = tmp_path / "sessions" / "test-session-001"
+    data = json.loads((session_dir / "token_usage.json").read_text())
+    expected_keys = set(TokenUsageFileEntry.__annotations__.keys())
+    assert set(data.keys()) == expected_keys

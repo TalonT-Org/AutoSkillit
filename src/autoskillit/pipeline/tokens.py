@@ -238,7 +238,7 @@ class DefaultTokenLog:
             except (json.JSONDecodeError, OSError):
                 continue
 
-            raw_step = data.get("step_name", "")
+            raw_step = data.get("session_label") or data.get("step_name", "")
             if not raw_step:
                 continue
 

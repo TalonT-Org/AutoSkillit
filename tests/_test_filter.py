@@ -1034,6 +1034,7 @@ def _file_to_execution_subpkg(filepath: str) -> str | None:
         idx = parts.index("autoskillit")
     except ValueError:
         return None
+    # idx + 3 < len(parts) ensures parts[idx + 2] is a subpackage dir (not a bare module) and guards parts[idx + 1].
     if idx + 3 < len(parts) and parts[idx + 1] == "execution":
         return parts[idx + 2]
     return None

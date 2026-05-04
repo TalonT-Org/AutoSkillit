@@ -234,7 +234,7 @@ class TestDispatchFoodTruckPackInjection:
     """Tests that dispatch_food_truck correctly injects AUTOSKILLIT_L3_TOOL_TAGS."""
 
     @pytest.mark.anyio
-    async def test_requires_packs_injected_as_l2_tool_tags(self, minimal_ctx, tmp_path: Path):
+    async def test_requires_packs_injected_as_l3_tool_tags(self, minimal_ctx, tmp_path: Path):
         """dispatch_food_truck with requires_packs injects sorted comma-joined env var."""
         from autoskillit.core.types import SubprocessResult, TerminationReason
         from autoskillit.execution.headless import DefaultHeadlessExecutor
@@ -268,7 +268,7 @@ class TestDispatchFoodTruckPackInjection:
         assert env["AUTOSKILLIT_L3_TOOL_TAGS"] == "ci,clone,github"
 
     @pytest.mark.anyio
-    async def test_requires_packs_empty_omits_l2_tool_tags(self, minimal_ctx, tmp_path: Path):
+    async def test_requires_packs_empty_omits_l3_tool_tags(self, minimal_ctx, tmp_path: Path):
         """dispatch_food_truck with empty requires_packs does not inject L3_TOOL_TAGS."""
         from autoskillit.core.types import SubprocessResult, TerminationReason
         from autoskillit.execution.headless import DefaultHeadlessExecutor
@@ -306,7 +306,7 @@ class TestDispatchFoodTruckGuards:
     """Guard-path tests for dispatch_food_truck: conflict detection and skip_clone_guard."""
 
     @pytest.mark.anyio
-    async def test_dispatch_food_truck_l2_tool_tags_conflict_raises(
+    async def test_dispatch_food_truck_l3_tool_tags_conflict_raises(
         self, minimal_ctx, tmp_path: Path
     ) -> None:
         from autoskillit.core.types._type_plugin_source import DirectInstall

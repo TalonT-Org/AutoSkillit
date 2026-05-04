@@ -104,6 +104,14 @@ __all__ = [
 ]
 
 
+def _parse_int_field(val: Any, config_key: str) -> int:
+    """Convert a config value to int, raising a descriptive ConfigSchemaError on failure."""
+    try:
+        return int(val)
+    except (TypeError, ValueError) as exc:
+        raise ConfigSchemaError(f"{config_key} must be an integer, got {val!r}") from exc
+
+
 def _field_defaults(cls: type) -> dict[str, Any]:
     """Extract default values from dataclass fields into a dict keyed by field name."""
     defaults: dict[str, Any] = {}
@@ -249,7 +257,7 @@ class AutomationConfig:
         pk = sec("packs")
         ws_raw = sec("workspace")
         fr = sec("fleet")
-        pv = sec("providers")
+        pvd = sec("providers")
         feat = sec("features")
 
         _tc = _field_defaults(TestCheckConfig)
@@ -274,7 +282,7 @@ class AutomationConfig:
         _sk = _field_defaults(SkillsConfig)
         _wsc = _field_defaults(WorkspaceConfig)
         _fr = _field_defaults(FleetConfig)
-        _pv = _field_defaults(ProvidersConfig)
+        _pvd = _field_defaults(ProvidersConfig)
 
         _features_dict, _exp_enabled = AutomationConfig._build_features_dict(
             dict(feat) if isinstance(feat, dict) else {}
@@ -436,11 +444,12 @@ class AutomationConfig:
                 ),
             ),
             providers=ProvidersConfig(
-                default_provider=val(pv, "default_provider", _pv["default_provider"]),
-                profiles=val(pv, "profiles", _pv["profiles"]),
-                step_overrides=val(pv, "step_overrides", _pv["step_overrides"]),
-                provider_retry_limit=int(
-                    val(pv, "provider_retry_limit", _pv["provider_retry_limit"])
+                default_provider=val(pvd, "default_provider", _pvd["default_provider"]),
+                profiles=val(pvd, "profiles", _pvd["profiles"]),
+                step_overrides=val(pvd, "step_overrides", _pvd["step_overrides"]),
+                provider_retry_limit=_parse_int_field(
+                    val(pvd, "provider_retry_limit", _pvd["provider_retry_limit"]),
+                    "providers.provider_retry_limit",
                 ),
             ),
             features=_features_dict,

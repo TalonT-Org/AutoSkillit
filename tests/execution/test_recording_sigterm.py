@@ -29,8 +29,11 @@ def test_sigterm_writes_scenario_json(tmp_path):
     output_dir = tmp_path / "scenario"
     output_dir.mkdir()
 
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
     env = {
         **os.environ,
+        "HOME": str(fake_home),
         "RECORD_SCENARIO": "1",
         "RECORD_SCENARIO_DIR": str(output_dir),
         "RECORD_SCENARIO_RECIPE": "test-recipe",

@@ -13,6 +13,7 @@ Configuration loading, defaults, and schema tests.
 | `test_fleet_config.py` | Tests for FleetConfig loading and validation |
 | `test_helpers.py` | Tests for autoskillit.config resolve_ingredient_defaults |
 | `test_packs_config.py` | Tests for PacksConfig loading and validation |
+| `test_providers_config.py` | Tests for ProvidersConfig loading and validation |
 | `test_settings_allowed_labels.py` | Tests for GitHubConfig.allowed_labels field and check_label_allowed validation |
 | `test_settings_staged_label.py` | Tests for GitHubConfig.staged_label field and config layer resolution |
 | `test_skills_config.py` | Tests for SkillsConfig loading and validation |

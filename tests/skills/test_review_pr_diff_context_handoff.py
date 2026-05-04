@@ -76,3 +76,9 @@ def test_diff_context_schema_version_field():
     """JSON schema must include schema_version for future-proofing."""
     section = _step8_section()
     assert "schema_version" in section
+
+
+def test_step8_writes_raw_findings_json():
+    """Step 8 must declare writing raw_findings_{pr_number}.json."""
+    section = _step8_section()
+    assert "raw_findings_{pr_number}.json" in section

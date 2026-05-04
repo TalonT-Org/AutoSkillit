@@ -11,6 +11,7 @@ from autoskillit.smoke_utils import (
     check_bug_report_non_empty,
     check_loop_iteration,
     check_review_loop,
+    enrich_diff_context,
     patch_pr_token_summary,
 )
 
@@ -582,3 +583,75 @@ def test_pts_reads_order_id_from_dispatch_env(
     result = patch_pr_token_summary(PR_URL, cwd="", log_dir=str(tmp_path))
     assert result["success"] == "true"
     assert result["sessions_loaded"] == "2"
+
+
+# ---------------------------------------------------------------------------
+# T_EDC1–T_EDC3: enrich_diff_context tests
+# ---------------------------------------------------------------------------
+
+_ANNOTATED_DIFF_CONTENT = (
+    "+++ b/src/app.py\n"
+    "@@ -38,10 +38,12 @@ def main():\n"
+    "[L38] existing_line_38\n"
+    "[L39] existing_line_39\n"
+    "[L40]+new_import\n"
+    "[L41]+another_import\n"
+    "[L42] existing_42\n"
+    "[L43] existing_43\n"
+    "[L44]+added_44\n"
+    "[L45] existing_45\n"
+)
+
+
+def _setup_handoff(tmp_path: Path, entries: list[dict]) -> None:
+    review_dir = tmp_path / ".autoskillit" / "temp" / "review-pr"
+    review_dir.mkdir(parents=True)
+    handoff = {"schema_version": 1, "context_entries": entries}
+    (review_dir / "diff_context_123.json").write_text(json.dumps(handoff))
+    (review_dir / "annotated_diff_123.txt").write_text(_ANNOTATED_DIFF_CONTENT)
+
+
+# T_EDC1
+def test_enrich_diff_context_fills_empty_code_regions(tmp_path: Path) -> None:
+    """enrich_diff_context populates empty code_region from annotated diff."""
+    _setup_handoff(
+        tmp_path,
+        [
+            {"path": "src/app.py", "line": 42, "severity": "critical", "code_region": ""},
+        ],
+    )
+    result = enrich_diff_context(pr_number="123", work_dir=str(tmp_path))
+    assert result["enriched"] == "true"
+    assert result["enriched_count"] == "1"
+
+    handoff_path = tmp_path / ".autoskillit" / "temp" / "review-pr" / "diff_context_123.json"
+    handoff = json.loads(handoff_path.read_text())
+    assert "[L42]" in handoff["context_entries"][0]["code_region"]
+
+
+# T_EDC2
+def test_enrich_diff_context_preserves_existing_code_regions(tmp_path: Path) -> None:
+    """enrich_diff_context does not overwrite non-empty code_region values."""
+    _setup_handoff(
+        tmp_path,
+        [
+            {"path": "src/app.py", "line": 42, "severity": "critical", "code_region": "pre-existing"},
+            {"path": "src/app.py", "line": 40, "severity": "warning", "code_region": ""},
+        ],
+    )
+    result = enrich_diff_context(pr_number="123", work_dir=str(tmp_path))
+    assert result["enriched"] == "true"
+    assert result["enriched_count"] == "1"
+
+    handoff_path = tmp_path / ".autoskillit" / "temp" / "review-pr" / "diff_context_123.json"
+    handoff = json.loads(handoff_path.read_text())
+    assert handoff["context_entries"][0]["code_region"] == "pre-existing"
+    assert "[L40]" in handoff["context_entries"][1]["code_region"]
+
+
+# T_EDC3
+def test_enrich_diff_context_missing_handoff_file(tmp_path: Path) -> None:
+    """enrich_diff_context returns gracefully when handoff file does not exist."""
+    result = enrich_diff_context(pr_number="999", work_dir=str(tmp_path))
+    assert result["enriched"] == "false"
+    assert result["reason"] == "handoff_not_found"

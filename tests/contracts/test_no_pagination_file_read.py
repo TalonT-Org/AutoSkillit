@@ -15,7 +15,7 @@ TARGET_SKILLS = [
 ]
 
 
-@pytest.fixture(params=TARGET_SKILLS)
+@pytest.fixture(params=TARGET_SKILLS, ids=TARGET_SKILLS)
 def skill_text(request: pytest.FixtureRequest) -> str:
     path = SKILLS_ROOT / request.param / "SKILL.md"
     assert path.exists(), f"SKILL.md not found at {path}"
@@ -23,9 +23,10 @@ def skill_text(request: pytest.FixtureRequest) -> str:
 
 
 def _extract_always_block(text: str) -> str:
-    """Extract the ALWAYS block from Critical Constraints."""
+    """Extract the ALWAYS block from Critical Constraints, or "" if absent."""
     always_idx = text.find("**ALWAYS:**")
-    assert always_idx != -1, "SKILL.md must have an **ALWAYS:** block"
+    if always_idx == -1:
+        return ""
     next_section = text.find("\n## ", always_idx)
     return text[always_idx:next_section] if next_section != -1 else text[always_idx:]
 

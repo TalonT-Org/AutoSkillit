@@ -12,27 +12,39 @@ _PUSH_TOOLS = frozenset({"push_to_remote"})
 
 
 def _collect_ejection_exit_steps(ctx: ValidationContext) -> set[str]:
-    """Collect step names that are ejection-route exits from merge-queue-wait steps."""
+    """Collect step names that are pure-ejection-route exits from merge-queue-wait steps.
+
+    Only matches conditions for the ``ejected`` state, not ``ejected_ci_failure``
+    or ``dropped_*`` variants. Those routes lead to CI diagnosis or terminal paths
+    that do not need ``queued_branch`` error handling.
+    """
     exits: set[str] = set()
     for step_name, step in ctx.recipe.steps.items():
         if step.tool not in _MERGE_QUEUE_WAIT_TOOLS:
             continue
         if step.on_result and step.on_result.conditions:
             for cond in step.on_result.conditions:
-                if cond.when and "ejected" in cond.when.lower():
+                if not cond.when:
+                    continue
+                when_lower = cond.when.lower()
+                if "ejected" in when_lower and "ejected_ci_failure" not in when_lower:
                     exits.add(cond.route)
     return exits
 
 
-def _bfs_forward(graph: dict[str, set[str]], starts: set[str]) -> set[str]:
-    """BFS from start nodes through forward step graph."""
+def _bfs_forward(graph: dict[str, set[str]], starts: set[str], ctx: ValidationContext) -> set[str]:
+    """BFS from start nodes, stopping at merge-queue wait step boundaries."""
     reachable: set[str] = set()
     frontier = starts & set(graph)
     while frontier:
         reachable |= frontier
         next_frontier: set[str] = set()
         for name in frontier:
-            next_frontier |= graph.get(name, set()) - reachable
+            for succ in graph.get(name, set()) - reachable:
+                step = ctx.recipe.steps.get(succ)
+                if step and step.tool in _MERGE_QUEUE_WAIT_TOOLS and succ not in starts:
+                    continue
+                next_frontier.add(succ)
         frontier = next_frontier
     return reachable
 
@@ -71,7 +83,7 @@ def _check_push_after_queue_has_queued_branch_route(
     if not ejection_exits:
         return []
 
-    reachable = _bfs_forward(ctx.step_graph, ejection_exits)
+    reachable = _bfs_forward(ctx.step_graph, ejection_exits, ctx)
 
     findings: list[RuleFinding] = []
     for step_name in reachable:

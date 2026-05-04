@@ -375,6 +375,8 @@ steps:
       force: "true"
     capture:
       push_error_type: "${{ result.error_type }}"
+    retries: 2
+    on_exhausted: register_clone_failure
     on_success: ci_watch_post_queue_fix
     on_failure: classify_push_failure
 

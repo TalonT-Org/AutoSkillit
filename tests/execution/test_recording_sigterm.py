@@ -31,10 +31,12 @@ def test_sigterm_writes_scenario_json(tmp_path):
 
     env = {
         **os.environ,
+        "HOME": str(tmp_path / "home"),
         "RECORD_SCENARIO": "1",
         "RECORD_SCENARIO_DIR": str(output_dir),
         "RECORD_SCENARIO_RECIPE": "test-recipe",
     }
+    (tmp_path / "home").mkdir()
     # Use sys.executable -m to ensure we run the worktree-installed version,
     # not a system-wide `autoskillit` binary that may lack the lifespan fix.
     proc = subprocess.Popen(

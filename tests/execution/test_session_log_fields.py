@@ -601,3 +601,83 @@ def test_flush_index_includes_duration_seconds(tmp_path):
     index = (tmp_path / "sessions.jsonl").read_text().strip()
     entry = json.loads(index)
     assert entry["duration_seconds"] == pytest.approx(42.5)
+
+
+def test_flush_session_log_provider_used_in_summary(tmp_path):
+    _flush(tmp_path, session_id="prov-sum", provider_used="minimax", proc_snapshots=None)
+    summary = json.loads((tmp_path / "sessions" / "prov-sum" / "summary.json").read_text())
+    assert summary["provider_used"] == "minimax"
+
+
+def test_flush_session_log_provider_fallback_in_summary(tmp_path):
+    _flush(tmp_path, session_id="fb-sum", provider_fallback=True, proc_snapshots=None)
+    summary = json.loads((tmp_path / "sessions" / "fb-sum" / "summary.json").read_text())
+    assert summary["provider_fallback"] is True
+
+
+def test_flush_session_log_provider_used_defaults_empty_in_summary(tmp_path):
+    _flush(tmp_path, session_id="prov-def", proc_snapshots=None)
+    summary = json.loads((tmp_path / "sessions" / "prov-def" / "summary.json").read_text())
+    assert summary["provider_used"] == ""
+
+
+def test_flush_session_log_provider_fallback_defaults_false_in_summary(tmp_path):
+    _flush(tmp_path, session_id="fb-def", proc_snapshots=None)
+    summary = json.loads((tmp_path / "sessions" / "fb-def" / "summary.json").read_text())
+    assert summary["provider_fallback"] is False
+
+
+def test_flush_session_log_provider_used_in_index(tmp_path):
+    _flush(tmp_path, session_id="prov-idx", provider_used="openai", proc_snapshots=None)
+    entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip().split("\n")[-1])
+    assert entry["provider_used"] == "openai"
+
+
+def test_flush_session_log_provider_fallback_in_index(tmp_path):
+    _flush(tmp_path, session_id="fb-idx", provider_fallback=True, proc_snapshots=None)
+    entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip().split("\n")[-1])
+    assert entry["provider_fallback"] is True
+
+
+def test_flush_session_log_kill_reason_absent_from_index(tmp_path):
+    _flush(tmp_path, session_id="kr-idx", kill_reason="timeout", proc_snapshots=None)
+    entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip().split("\n")[-1])
+    assert "kill_reason" not in entry
+
+
+def test_flush_session_log_provider_used_in_token_usage(tmp_path):
+    _flush(
+        tmp_path,
+        session_id="prov-tu",
+        step_name="implement",
+        provider_used="minimax",
+        token_usage={"input_tokens": 100, "output_tokens": 50},
+        proc_snapshots=None,
+    )
+    tu = json.loads((tmp_path / "sessions" / "prov-tu" / "token_usage.json").read_text())
+    assert tu["provider_used"] == "minimax"
+
+
+def test_flush_session_log_provider_fallback_absent_from_token_usage(tmp_path):
+    _flush(
+        tmp_path,
+        session_id="fb-tu",
+        step_name="implement",
+        provider_fallback=True,
+        token_usage={"input_tokens": 100, "output_tokens": 50},
+        proc_snapshots=None,
+    )
+    tu = json.loads((tmp_path / "sessions" / "fb-tu" / "token_usage.json").read_text())
+    assert "provider_fallback" not in tu
+
+
+def test_flush_session_log_provider_used_defaults_empty_in_token_usage(tmp_path):
+    _flush(
+        tmp_path,
+        session_id="prov-tu-def",
+        step_name="implement",
+        token_usage={"input_tokens": 100, "output_tokens": 50},
+        proc_snapshots=None,
+    )
+    tu = json.loads((tmp_path / "sessions" / "prov-tu-def" / "token_usage.json").read_text())
+    assert tu["provider_used"] == ""

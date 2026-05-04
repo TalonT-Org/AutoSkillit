@@ -1334,12 +1334,14 @@ def test_doctor_cache_version_mismatch_with_kitchen_open(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """_check_cache_version_mismatch must return ERROR when kitchen is open and versions differ."""
+    import autoskillit.version as _ver
     from autoskillit.cli.doctor._doctor_mcp import _check_cache_version_mismatch
     from autoskillit.core import Severity
 
     monkeypatch.setattr("autoskillit.core.any_kitchen_open", lambda **kw: True)
     monkeypatch.setattr(
-        "autoskillit.version.version_info",
+        _ver,
+        "version_info",
         lambda **kw: {
             "match": False,
             "plugin_json_version": "0.9.347",
@@ -1361,12 +1363,14 @@ def test_doctor_cache_version_mismatch_without_kitchen(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """_check_cache_version_mismatch must return WARNING (not ERROR) when kitchen is closed."""
+    import autoskillit.version as _ver
     from autoskillit.cli.doctor._doctor_mcp import _check_cache_version_mismatch
     from autoskillit.core import Severity
 
     monkeypatch.setattr("autoskillit.core.any_kitchen_open", lambda **kw: False)
     monkeypatch.setattr(
-        "autoskillit.version.version_info",
+        _ver,
+        "version_info",
         lambda **kw: {
             "match": False,
             "plugin_json_version": "0.9.347",
@@ -1384,12 +1388,14 @@ def test_doctor_cache_version_mismatch_ok_when_matching(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """_check_cache_version_mismatch must return OK when versions match."""
+    import autoskillit.version as _ver
     from autoskillit.cli.doctor._doctor_mcp import _check_cache_version_mismatch
     from autoskillit.core import Severity
 
     monkeypatch.setattr("autoskillit.core.any_kitchen_open", lambda **kw: False)
     monkeypatch.setattr(
-        "autoskillit.version.version_info",
+        _ver,
+        "version_info",
         lambda **kw: {
             "match": True,
             "plugin_json_version": "0.9.351",

@@ -928,6 +928,29 @@ class TestProvidersConfig:
         assert cfg.providers.step_overrides == {}
         assert cfg.providers.provider_retry_limit == 2
 
+    def test_providers_config_defaults(self):
+        cfg = ProvidersConfig()
+        assert cfg.default_provider is None
+        assert cfg.profiles == {}
+        assert cfg.step_overrides == {}
+        assert cfg.provider_retry_limit == 2
+
+    def test_providers_config_is_mutable(self):
+        cfg = ProvidersConfig()
+        cfg.default_provider = "openai"
+        assert cfg.default_provider == "openai"
+
+    def test_providers_config_field_types(self):
+        from dataclasses import fields as _dc_fields
+
+        field_map = {f.name: f for f in _dc_fields(ProvidersConfig)}
+        assert set(field_map.keys()) == {
+            "default_provider",
+            "profiles",
+            "step_overrides",
+            "provider_retry_limit",
+        }
+
     def test_providers_config_retry_limit_zero_raises(self):
         with pytest.raises(ValueError, match="provider_retry_limit must be >= 1"):
             ProvidersConfig(provider_retry_limit=0)

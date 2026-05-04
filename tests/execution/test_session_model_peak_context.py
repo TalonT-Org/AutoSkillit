@@ -52,22 +52,26 @@ def _build_ndjson(lines: list[str]) -> str:
 
 
 def test_extract_peak_context_from_multi_turn_stdout():
-    stdout = _build_ndjson([
-        _assistant(cache_read=10000),
-        _assistant(cache_read=50000),
-        _assistant(cache_read=30000),
-    ])
+    stdout = _build_ndjson(
+        [
+            _assistant(cache_read=10000),
+            _assistant(cache_read=50000),
+            _assistant(cache_read=30000),
+        ]
+    )
     result = extract_token_usage(stdout)
     assert result is not None
     assert result["peak_context"] == 50000
 
 
 def test_extract_turn_count_from_multi_turn_stdout():
-    stdout = _build_ndjson([
-        _assistant(cache_read=10000),
-        _assistant(cache_read=20000),
-        _assistant(cache_read=30000),
-    ])
+    stdout = _build_ndjson(
+        [
+            _assistant(cache_read=10000),
+            _assistant(cache_read=20000),
+            _assistant(cache_read=30000),
+        ]
+    )
     result = extract_token_usage(stdout)
     assert result is not None
     assert result["turn_count"] == 3
@@ -82,11 +86,13 @@ def test_extract_peak_context_single_turn():
 
 
 def test_extract_peak_context_with_result_record():
-    stdout = _build_ndjson([
-        _assistant(cache_read=60000),
-        _assistant(cache_read=80000),
-        _result(cache_read=140000),
-    ])
+    stdout = _build_ndjson(
+        [
+            _assistant(cache_read=60000),
+            _assistant(cache_read=80000),
+            _result(cache_read=140000),
+        ]
+    )
     result = extract_token_usage(stdout)
     assert result is not None
     assert result["peak_context"] == 80000
@@ -102,10 +108,12 @@ def test_extract_peak_context_no_assistant_records():
 
 
 def test_extract_peak_context_zero_cache_read():
-    stdout = _build_ndjson([
-        _assistant(cache_read=0),
-        _assistant(cache_read=0),
-    ])
+    stdout = _build_ndjson(
+        [
+            _assistant(cache_read=0),
+            _assistant(cache_read=0),
+        ]
+    )
     result = extract_token_usage(stdout)
     assert result is not None
     assert result["peak_context"] == 0

@@ -1,9 +1,5 @@
 """Headless Claude Code session orchestration.
 
-IL-1 module (execution/). Owns the full lifecycle of a headless claude CLI session:
-command preparation, subprocess invocation via the injected runner, and
-SkillResult construction.
-
 Public API:
     run_headless_core(skill_command, cwd, ctx, *, ...) -> SkillResult
 """
@@ -135,14 +131,6 @@ def _resolve_model(step_model: str, config: AutomationConfig) -> str | None:
 
 
 def _derive_step_name_from_skill_command(skill_command: str) -> str:
-    """Extract a recording step name from a skill command string.
-
-    Examples:
-        "/autoskillit:smoke-task arg1" -> "smoke-task"
-        "/investigate foo"             -> "investigate"
-        "/autoskillit:make-plan"       -> "make-plan"
-        ""                             -> ""
-    """
     stripped = skill_command.strip()
     if not stripped:
         return ""
@@ -153,7 +141,6 @@ def _derive_step_name_from_skill_command(skill_command: str) -> str:
 
 
 def _resolve_skill_temp_dir(cwd: str, skill_command: str) -> Path | None:
-    """Resolve the skill-specific temp directory for fs write detection."""
     name = extract_skill_name(skill_command)
     if not name:
         return None
@@ -217,13 +204,6 @@ async def _execute_claude_headless(
     provider_name: str = "",
     provider_fallback_env: dict[str, str] | None = None,
 ) -> SkillResult:
-    """Shared subprocess execution for headless Claude sessions.
-
-    Accepts an already-built ClaudeHeadlessCmd and handles runner invocation,
-    exception handling, _build_skill_result, and session log flushing.
-    Used by both run_headless_core (skill session path) and
-    DefaultHeadlessExecutor.dispatch_food_truck (food truck path).
-    """
     campaign_id = campaign_id or os.environ.get(CAMPAIGN_ID_ENV_VAR, "")
     dispatch_id = dispatch_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
 
@@ -418,9 +398,6 @@ async def _execute_claude_headless(
             fs_writes_detected=_fs_writes_detected,
         )
 
-        # CONTRACT NUDGE: lightweight resume recovery before full retry.
-        # Fires only when _build_skill_result returns CONTRACT_RECOVERY with a
-        # valid session_id (budget-exhausted cases have retry_reason=BUDGET_EXHAUSTED).
         if (
             skill_result.retry_reason == RetryReason.CONTRACT_RECOVERY
             and skill_result.needs_retry
@@ -465,8 +442,6 @@ async def _execute_claude_headless(
 
     _metrics = _compute_post_session_metrics(cwd, _pre_session_sha, skill_result)
 
-    # Use monotonic elapsed_seconds — authoritative wall-clock timing set by time.monotonic()
-    # brackets in run_managed_async. Never re-derive from ISO strings (backward-clock risk).
     timing_seconds: float = result.elapsed_seconds
 
     # Extract the audit record (if any) added by this session
@@ -598,11 +573,7 @@ async def run_headless_core(
     provider_name: str = "",
     provider_fallback_env: dict[str, str] | None = None,
 ) -> SkillResult:
-    """Shared headless runner used by run_skill.
-
-    Does NOT check open_kitchen gate — callers in server.py are responsible.
-    Accepts explicit ToolContext so this module has no server.py dependency.
-    """
+    """Does NOT check open_kitchen gate — callers in server.py are responsible."""
     cfg = ctx.config.run_skill
     effective_marker = completion_marker or cfg.completion_marker
     original_skill_command = skill_command

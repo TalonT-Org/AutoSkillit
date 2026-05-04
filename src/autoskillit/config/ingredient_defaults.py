@@ -14,7 +14,13 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Testing & Workspace", ("test_check", "reset_test_dir", "classify_fix", "reset_workspace")),
     (
         "Git Operations",
-        ("merge_worktree", "create_unique_branch", "check_pr_mergeable", "set_commit_status"),
+        (
+            "merge_worktree",
+            "create_unique_branch",
+            "create_and_publish_branch",
+            "check_pr_mergeable",
+            "set_commit_status",
+        ),
     ),
     ("Recipes", ("migrate_recipe", "list_recipes", "load_recipe", "validate_recipe")),
     (
@@ -25,6 +31,7 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "push_to_remote",
             "register_clone_status",
             "batch_cleanup_clones",
+            "bootstrap_clone",
         ),
     ),
     (
@@ -39,6 +46,7 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "release_issue",
             "get_pr_reviews",
             "bulk_close_issues",
+            "claim_and_resolve_issue",
         ),
     ),
     (

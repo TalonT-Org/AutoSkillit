@@ -1,6 +1,6 @@
 name: remediation
 description: Investigate deeply, plan architectural fix, implement and open a PR.
-summary: "clone > investigate > rectify > dry-walkthrough > implement > test > merge (per plan part) > (audit-impl?) > (open_pr?) > push > cleanup"
+summary: "bootstrap_clone > (claim_and_resolve?) > (create_and_publish?) > investigate > rectify > dry-walkthrough > implement > test > merge (per plan part) > (audit-impl?) > (open_pr?) > push > cleanup"
 autoskillit_version: "0.9.379"
 recipe_version: "1.0.0"
 requires_packs: [github, ci, clone, telemetry]
@@ -27,7 +27,7 @@ kitchen_rules:
     run_arch_lenses before compose_pr, adding architecture lens diagrams
     to the PR. By default arch_lenses is off and prepare_pr routes
     directly to compose_pr."
-  - "SOURCE ISOLATION: After clone_repo returns, the source_dir is strictly
+  - "SOURCE ISOLATION: After bootstrap_clone returns, the source_dir is strictly
     off-limits. Never run any command in source_dir — no git checkout, git
     fetch, git reset, git pull, run_cmd, run_skill, or any other operation.
     All work — skill invocations, git operations, file reads — happens
@@ -97,122 +97,67 @@ ingredients:
 
 steps:
   clone:
-    tool: clone_repo
+    tool: bootstrap_clone
     with:
       source_dir: "${{ inputs.source_dir }}"
       run_name: "${{ inputs.run_name }}"
-      branch: "${{ inputs.base_branch }}"
+      base_branch: "${{ inputs.base_branch }}"
+      step_name: "bootstrap_clone"
     capture:
-      work_dir: "${{ result.clone_path }}"
+      work_dir: "${{ result.work_dir }}"
       remote_url: "${{ result.remote_url }}"
-    on_success: set_merge_target
+      merge_target: "${{ result.merge_target }}"
+    on_success: claim_and_resolve
     on_failure: escalate_stop
     note: >
-      Clones source_dir into ../autoskillit-runs/<run_name>-<timestamp>/.
-      Captures work_dir context used by all subsequent steps as cwd.
-      On failure, escalate_stop is reached immediately (no clone to remove).
+      Clones source_dir and captures merge_target in one turn.
+      Returns work_dir, remote_url, and merge_target (set to base_branch as fallback;
+      overridden by create_and_publish when open_pr=true). On failure, escalate_stop
+      immediately (no clone to remove).
 
-  set_merge_target:
-    tool: run_cmd
-    with:
-      cmd: "printf '%s' '${{ inputs.base_branch }}'"
-      cwd: "${{ context.work_dir }}"
-      step_name: "set_merge_target"
-    capture:
-      merge_target: "${{ result.stdout }}"
-    on_success: get_issue_title
-    on_failure: escalate_stop
-    note: >
-      Unconditionally sets merge_target to inputs.base_branch as a fallback.
-      In the standard flow (open_pr=true), the subsequent create_branch step
-      overrides merge_target with the feature branch name. When open_pr=false,
-      create_branch is skipped and this fallback stands. This eliminates the
-      undefined-context-variable gap that existed when create_branch was optional.
-
-  get_issue_title:
-    tool: get_issue_title
-    with:
-      issue_url: "${{ inputs.issue_url }}"
-    capture:
-      issue_number: "${{ result.number }}"
-      issue_title: "${{ result.title }}"
-      issue_slug: "${{ result.slug }}"
-    on_success: claim_issue
-    on_failure: escalate_stop
-    optional: true
-    skip_when_false: "inputs.issue_url"
-    note: >
-      Runs when inputs.issue_url is non-empty. Skipped otherwise.
-      Fetches only the issue title and slug (no body, no comments).
-      issue_number is used for feature branch naming and threaded to
-      prepare_pr for "Closes #N" in the PR body.
-      issue_slug provides a descriptive branch prefix (e.g. fix-merge-conflict-triage).
-
-  claim_issue:
-    description: Claim the issue with in-progress label to block parallel work
-    tool: claim_issue
+  claim_and_resolve:
+    tool: claim_and_resolve_issue
     optional: true
     skip_when_false: inputs.issue_url
     with:
-      issue_url: ${{ inputs.issue_url }}
-      allow_reentry: ${{ inputs.upfront_claimed }}
+      issue_url: "${{ inputs.issue_url }}"
+      allow_reentry: "${{ inputs.upfront_claimed }}"
     capture:
+      issue_number: "${{ result.issue_number }}"
+      issue_title: "${{ result.issue_title }}"
+      issue_slug: "${{ result.issue_slug }}"
       claimed: "${{ result.claimed }}"
     on_result:
       - when: "${{ result.claimed }} == true"
-        route: compute_branch
+        route: create_and_publish
       - route: escalate_stop
     on_failure: escalate_stop
+    note: >
+      Fetches issue title/slug and claims the issue in one turn.
+      Returns issue_number, issue_title, issue_slug, and claimed boolean.
+      When claimed=false (another session owns it), routes to escalate_stop.
+      issue_slug and issue_number are passed to create_and_publish for branch naming.
 
-  compute_branch:
-    tool: run_python
+  create_and_publish:
+    tool: create_and_publish_branch
+    optional: true
+    skip_when_false: inputs.open_pr
     with:
-      callable: "autoskillit.recipe._cmd_rpc.compute_branch"
       issue_slug: "${{ context.issue_slug }}"
       run_name: "${{ inputs.run_name }}"
       issue_number: "${{ context.issue_number }}"
-    capture:
-      proposed_branch: "${{ result.branch_name }}"
-    on_success: create_branch
-    on_failure: release_issue_failure
-    optional: true
-    skip_when_false: "inputs.open_pr"
-    note: >
-      Computes the proposed branch name from slug/issue or slug/date — no git operations.
-      Result is passed to create_branch for atomic collision check and checkout.
-
-  create_branch:
-    tool: create_unique_branch
-    with:
-      base_branch_name: "${{ context.proposed_branch }}"
-      cwd: "${{ context.work_dir }}"
-    capture:
-      merge_target: "${{ result.branch_name }}"
-    on_success: push_merge_target
-    on_failure: release_issue_failure
-    optional: true
-    skip_when_false: "inputs.open_pr"
-    note: >
-      Atomic branch creation: ls-remote collision check → checkout -b. Uses the
-      create_unique_branch MCP tool so the orchestrator cannot insert extra git fetch
-      or checkout calls between the collision check and branch creation.
-
-  push_merge_target:
-    tool: push_to_remote
-    with:
-      clone_path: "${{ context.work_dir }}"
+      work_dir: "${{ context.work_dir }}"
       remote_url: "${{ context.remote_url }}"
-      branch: "${{ context.merge_target }}"
+      step_name: "create_and_publish_branch"
+    capture:
+      merge_target: "${{ result.merge_target }}"
     on_success: investigate
     on_failure: release_issue_failure
-    optional: true
-    skip_when_false: "inputs.open_pr"
     note: >
-      Runs by default (open_pr=true). Skipped when open_pr=false.
-      Publishes the feature branch to origin before any merge_worktree call.
+      Computes branch name, creates it (with collision suffix if needed), and pushes
+      to origin in one turn. Overrides merge_target with the feature branch name.
       merge_worktree requires refs/remotes/origin/{branch} to exist after fetch.
-      Without this step, merge_worktree fails with WORKTREE_INTACT_BASE_NOT_PUBLISHED.
-      Uses the pre-resolved remote_url from the clone step to preserve clone isolation.
+      When open_pr=false, this step is skipped and merge_target remains as base_branch.
 
   investigate:
     tool: run_skill

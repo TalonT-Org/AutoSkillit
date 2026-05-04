@@ -411,12 +411,18 @@ def _check_merge_base_unpublished(ctx: ValidationContext) -> list[RuleFinding]:
         if context_var is None:
             continue  # literal branch name — always published, no check needed
 
-        # Collect push_to_remote steps that push this exact context variable.
+        # Collect steps that publish this exact context variable.
+        # push_to_remote steps are barriers when their branch arg is context.X.
+        # create_and_publish_branch steps are barriers when they capture X (they
+        # always push the created branch before capturing it as merge_target).
         push_steps = {
             name
             for name, s in recipe.steps.items()
-            if s.tool == "push_to_remote"
-            and _extract_context_var((s.with_args or {}).get("branch", "")) == context_var
+            if (
+                s.tool == "push_to_remote"
+                and _extract_context_var((s.with_args or {}).get("branch", "")) == context_var
+            )
+            or (s.tool == "create_and_publish_branch" and context_var in (s.capture or {}))
         }
 
         # BFS from entry treating push_steps as barriers.

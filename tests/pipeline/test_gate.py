@@ -54,6 +54,9 @@ def test_gated_tools_contains_expected_names():
         "dispatch_food_truck",
         "record_gate_dispatch",
         "analyze_tool_sequences",
+        "bootstrap_clone",
+        "claim_and_resolve_issue",
+        "create_and_publish_branch",
     }
     assert GATED_TOOLS == expected
 

@@ -197,6 +197,9 @@ _UNFORMATTED_TOOLS: frozenset[str] = frozenset(
         "reload_session",  # simple status dict, generic renders correctly
         "analyze_tool_sequences",  # DFG analysis result, generic renders correctly
         "record_gate_dispatch",  # simple success/error result
+        "bootstrap_clone",  # composite clone result dict
+        "claim_and_resolve_issue",  # composite claim result dict
+        "create_and_publish_branch",  # composite branch result dict
     }
 )
 

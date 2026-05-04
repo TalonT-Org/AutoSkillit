@@ -122,6 +122,12 @@ _LARGE_CHANGESET_THRESHOLD: int = 30
 # core/ module-level cascade classification
 # ---------------------------------------------------------------------------
 
+# Modules in this set trigger a full 17-directory cascade. A core/ module belongs
+# here if:
+# (a) it is imported at the top level of tests/conftest.py or tests/fakes.py, OR
+# (b) its types have concrete implementations in tests/fakes.py (protocol satisfaction),
+# because conftest.py imports fakes, making any signature break cascade to all dirs.
+# If neither condition holds, use MODULE_CASCADE_CORE with an explicit narrower cascade.
 _CORE_UNIVERSAL_MODULES: frozenset[str] = frozenset(
     {
         "io",
@@ -131,14 +137,11 @@ _CORE_UNIVERSAL_MODULES: frozenset[str] = frozenset(
         "_type_protocols_logging",
         "_type_protocols_execution",
         "_type_protocols_github",
-        "_type_protocols_workspace",
         "_type_protocols_recipe",
         "_type_protocols_infra",
         "_type_enums",
         "_type_subprocess",
         "_type_results",
-        "_type_resume",
-        "_type_helpers",
     }
 )
 
@@ -166,6 +169,9 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_claude_env": frozenset({"core", "execution", "_llm_triage", "cli"}),
     "_version_snapshot": frozenset({"core", "execution"}),
     "claude_conventions": frozenset({"core", "server", "workspace"}),
+    "_type_resume": frozenset({"core", "cli", "execution"}),
+    "_type_helpers": frozenset({"core", "execution", "fleet", "pipeline", "recipe", "server"}),
+    "_type_protocols_workspace": frozenset({"core", "pipeline", "recipe", "workspace"}),
 }
 
 # Narrow per-module cascade for execution/. Modules not listed here fall through

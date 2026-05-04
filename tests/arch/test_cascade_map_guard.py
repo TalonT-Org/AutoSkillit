@@ -58,12 +58,59 @@ def _build_reexport_map(pkg_name: str) -> dict[str, str]:
     return reexport_map
 
 
+def _build_types_submodule_symbol_map() -> dict[str, str]:
+    """Build a secondary symbol→stem map for core/types/ submodules in MODULE_CASCADE_CORE.
+
+    core/types/__init__.py uses star imports, so _build_reexport_map cannot follow the
+    second level of indirection. Instead, parse each _type_* submodule's __all__ list
+    directly to map exported symbol names to their submodule stem.
+
+    Returns {symbol_name: submodule_stem} for all stems in MODULE_CASCADE_CORE that
+    start with "_type_" and have a corresponding core/types/{stem}.py file.
+    """
+    secondary: dict[str, str] = {}
+    types_dir = _SRC_ROOT / "core" / "types"
+    for stem in MODULE_CASCADE_CORE:
+        if not stem.startswith("_type_"):
+            continue
+        submodule_path = types_dir / f"{stem}.py"
+        if not submodule_path.exists():
+            continue
+        try:
+            tree = ast.parse(submodule_path.read_text(encoding="utf-8"))
+        except SyntaxError as exc:
+            warnings.warn(
+                f"SyntaxError parsing {submodule_path}: {exc} — skipping submodule",
+                stacklevel=2,
+            )
+            continue
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Assign)
+                and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id == "__all__"
+                and isinstance(node.value, (ast.List, ast.Tuple))
+            ):
+                for elt in node.value.elts:
+                    if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                        secondary[elt.value] = stem
+    return secondary
+
+
 def _build_core_reexport_map() -> dict[str, str]:
     reexport_map = _build_reexport_map("core")
     if not reexport_map:
         pytest.skip(
             "core/__init__.py and .pyi contain no relative imports — guard would pass vacuously"
         )
+    # Resolve two-level indirection: core/__init__ → types → _type_* submodule.
+    # Symbols that map to "types" are re-resolved to their deeper _type_* stem when
+    # that stem is a key in MODULE_CASCADE_CORE.
+    secondary = _build_types_submodule_symbol_map()
+    for symbol, stem in list(reexport_map.items()):
+        if stem == "types" and symbol in secondary:
+            reexport_map[symbol] = secondary[symbol]
     return reexport_map
 
 

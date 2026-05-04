@@ -27,14 +27,11 @@ class TestCoreUniversalModules:
             "_type_protocols_logging",
             "_type_protocols_execution",
             "_type_protocols_github",
-            "_type_protocols_workspace",
             "_type_protocols_recipe",
             "_type_protocols_infra",
             "_type_enums",
             "_type_subprocess",
             "_type_results",
-            "_type_resume",
-            "_type_helpers",
         }
         assert required <= _CORE_UNIVERSAL_MODULES
 
@@ -82,8 +79,24 @@ class TestModuleCascadeCore:
             "_claude_env",
             "_version_snapshot",
             "claude_conventions",
+            "_type_resume",
+            "_type_helpers",
+            "_type_protocols_workspace",
         }
         assert set(MODULE_CASCADE_CORE.keys()) == expected_stems
+
+    def test_type_resume_cascade(self) -> None:
+        assert MODULE_CASCADE_CORE["_type_resume"] == frozenset({"core", "cli", "execution"})
+
+    def test_type_helpers_cascade(self) -> None:
+        assert MODULE_CASCADE_CORE["_type_helpers"] == frozenset(
+            {"core", "execution", "fleet", "pipeline", "recipe", "server"}
+        )
+
+    def test_type_protocols_workspace_cascade(self) -> None:
+        assert MODULE_CASCADE_CORE["_type_protocols_workspace"] == frozenset(
+            {"core", "pipeline", "recipe", "workspace"}
+        )
 
 
 class TestBuildTestScopeCoreCascade:
@@ -249,6 +262,60 @@ class TestBuildTestScopeCoreCascade:
             "workspace",
         ]:
             assert pkg in dir_names
+
+    def test_type_resume_narrow_routing(self, tmp_path: Path) -> None:
+        tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
+        result = build_test_scope(
+            changed_files={"src/autoskillit/core/types/_type_resume.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        dir_names = {p.name for p in result}
+        for pkg in ["core", "cli", "execution"]:
+            assert pkg in dir_names, f"_type_resume cascade should include {pkg}"
+        for excluded in [
+            "server",
+            "recipe",
+            "pipeline",
+            "fleet",
+            "workspace",
+            "migration",
+            "hooks",
+        ]:
+            assert excluded not in dir_names, f"_type_resume cascade should not include {excluded}"
+
+    def test_type_helpers_narrow_routing(self, tmp_path: Path) -> None:
+        tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
+        result = build_test_scope(
+            changed_files={"src/autoskillit/core/types/_type_helpers.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        dir_names = {p.name for p in result}
+        for pkg in ["core", "execution", "fleet", "pipeline", "recipe", "server"]:
+            assert pkg in dir_names, f"_type_helpers cascade should include {pkg}"
+        for excluded in ["cli", "hooks", "workspace", "migration"]:
+            assert excluded not in dir_names, (
+                f"_type_helpers cascade should not include {excluded}"
+            )
+
+    def test_type_protocols_workspace_narrow_routing(self, tmp_path: Path) -> None:
+        tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
+        result = build_test_scope(
+            changed_files={"src/autoskillit/core/types/_type_protocols_workspace.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        dir_names = {p.name for p in result}
+        for pkg in ["core", "pipeline", "recipe", "workspace"]:
+            assert pkg in dir_names, f"_type_protocols_workspace cascade should include {pkg}"
+        for excluded in ["cli", "server", "execution", "fleet", "migration", "hooks"]:
+            assert excluded not in dir_names, (
+                f"_type_protocols_workspace cascade should not include {excluded}"
+            )
 
 
 class TestClosureCoreNarrowCascade:

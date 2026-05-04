@@ -161,26 +161,11 @@ def test_all_exp_lens_skills_have_contracts(skills):
     assert not missing, f"exp-lens skills missing contracts: {sorted(missing)}"
 
 
-_EXP_LENS_SKILLS: Final[list[str]] = [
-    "exp-lens-estimand-clarity",
-    "exp-lens-causal-assumptions",
-    "exp-lens-comparator-construction",
-    "exp-lens-pipeline-integrity",
-    "exp-lens-variance-stability",
-    "exp-lens-fair-comparison",
-    "exp-lens-reproducibility-artifacts",
-    "exp-lens-measurement-validity",
-    "exp-lens-sensitivity-robustness",
-    "exp-lens-benchmark-representativeness",
-    "exp-lens-unit-interference",
-    "exp-lens-error-budget",
-    "exp-lens-severity-testing",
-    "exp-lens-randomization-blocking",
-    "exp-lens-validity-threats",
-    "exp-lens-iterative-learning",
-    "exp-lens-exploratory-confirmatory",
-    "exp-lens-governance-risk",
-]
+_EXP_LENS_SKILLS: Final[list[str]] = sorted(
+    name
+    for name in yaml.safe_load(_CONTRACTS_YAML.read_text()).get("skills", {})
+    if name.startswith("exp-lens-")
+)
 
 
 @pytest.mark.parametrize("skill_name", _EXP_LENS_SKILLS)

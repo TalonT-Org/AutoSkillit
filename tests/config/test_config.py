@@ -5,7 +5,13 @@ from dataclasses import fields as dc_fields
 import pytest
 import yaml
 
-from autoskillit.config import AutomationConfig, ConfigSchemaError, RunSkillConfig, load_config
+from autoskillit.config import (
+    AutomationConfig,
+    ConfigSchemaError,
+    ProvidersConfig,
+    RunSkillConfig,
+    load_config,
+)
 
 pytestmark = [pytest.mark.layer("config"), pytest.mark.small]
 
@@ -884,3 +890,43 @@ class TestWorkspaceConfig:
 
         cfg = load_config(tmp_path)
         assert cfg.workspace.runs_root is None
+
+
+class TestProvidersConfig:
+    def test_providers_config_importable_from_settings(self):
+        from autoskillit.config.settings import ProvidersConfig as PC
+
+        assert PC is not None
+
+    def test_providers_config_in_settings_all(self):
+        import autoskillit.config.settings as m
+
+        assert "ProvidersConfig" in m.__all__
+
+    def test_automation_config_has_providers_field(self):
+        field_names = [f.name for f in dc_fields(AutomationConfig)]
+        assert "providers" in field_names
+        cfg = AutomationConfig()
+        assert isinstance(cfg.providers, ProvidersConfig)
+
+    def test_providers_field_ordering(self):
+        field_names = [f.name for f in dc_fields(AutomationConfig)]
+        fleet_idx = field_names.index("fleet")
+        providers_idx = field_names.index("providers")
+        features_idx = field_names.index("features")
+        assert fleet_idx < providers_idx < features_idx
+
+    def test_providers_config_importable_from_package(self):
+        from autoskillit.config import ProvidersConfig as PC
+
+        assert PC is not None
+
+    def test_from_dynaconf_providers_defaults(self):
+        from autoskillit.config._config_loader import _make_dynaconf
+
+        d = _make_dynaconf()
+        cfg = AutomationConfig.from_dynaconf(d)
+        assert cfg.providers.default_provider is None
+        assert cfg.providers.profiles == {}
+        assert cfg.providers.step_overrides == {}
+        assert cfg.providers.provider_retry_limit == 2

@@ -32,6 +32,7 @@ from autoskillit.config._config_dataclasses import (
     MigrationConfig,
     ModelConfig,
     PacksConfig,
+    ProvidersConfig,
     QuotaGuardConfig,
     ReadDbConfig,
     ReportBugConfig,
@@ -84,6 +85,7 @@ __all__ = [
     "MigrationConfig",
     "ModelConfig",
     "PacksConfig",
+    "ProvidersConfig",
     "QuotaGuardConfig",
     "ReadDbConfig",
     "ReportBugConfig",
@@ -139,6 +141,7 @@ class AutomationConfig:
     packs: PacksConfig = field(default_factory=PacksConfig)
     workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
     fleet: FleetConfig = field(default_factory=FleetConfig)
+    providers: ProvidersConfig = field(default_factory=ProvidersConfig)
     features: dict[str, bool] = field(default_factory=dict)
     experimental_enabled: bool = False
 
@@ -246,6 +249,7 @@ class AutomationConfig:
         pk = sec("packs")
         ws_raw = sec("workspace")
         fr = sec("fleet")
+        pv = sec("providers")
         feat = sec("features")
 
         _tc = _field_defaults(TestCheckConfig)
@@ -270,6 +274,7 @@ class AutomationConfig:
         _sk = _field_defaults(SkillsConfig)
         _wsc = _field_defaults(WorkspaceConfig)
         _fr = _field_defaults(FleetConfig)
+        _pv = _field_defaults(ProvidersConfig)
 
         _features_dict, _exp_enabled = AutomationConfig._build_features_dict(
             dict(feat) if isinstance(feat, dict) else {}
@@ -428,6 +433,14 @@ class AutomationConfig:
                 ),
                 max_concurrent_dispatches=int(
                     val(fr, "max_concurrent_dispatches", _fr["max_concurrent_dispatches"])
+                ),
+            ),
+            providers=ProvidersConfig(
+                default_provider=val(pv, "default_provider", _pv["default_provider"]),
+                profiles=val(pv, "profiles", _pv["profiles"]),
+                step_overrides=val(pv, "step_overrides", _pv["step_overrides"]),
+                provider_retry_limit=int(
+                    val(pv, "provider_retry_limit", _pv["provider_retry_limit"])
                 ),
             ),
             features=_features_dict,

@@ -745,6 +745,7 @@ def test_sessions_jsonl_includes_cache_fields(tmp_path):
         success=False,
     )
     lines = (tmp_path / "sessions.jsonl").read_text().strip().split("\n")
+    assert len(lines) == 1
     entry = json.loads(lines[-1])
     assert entry["cache_creation_input_tokens"] == 20
     assert entry["cache_read_input_tokens"] == 80

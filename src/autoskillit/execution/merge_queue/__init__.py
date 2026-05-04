@@ -220,6 +220,13 @@ class DefaultMergeQueueWatcher:
             if classification.terminal == PRState.MERGED:
                 return _make_result(True, PRState.MERGED, classification.reason)
 
+            if not_in_queue_cycles < not_in_queue_confirmation_cycles:
+                await asyncio.sleep(poll_interval)
+                continue
+
+            if pending_ejection is not None:
+                return _make_result(False, pending_ejection, pending_reason)
+
             if state["state"] == "CLOSED":
                 ejection_cause = (
                     "ci_failure" if classification.terminal == PRState.EJECTED_CI_FAILURE else ""
@@ -227,13 +234,6 @@ class DefaultMergeQueueWatcher:
                 return _make_result(
                     False, classification.terminal, classification.reason, ejection_cause
                 )
-
-            if not_in_queue_cycles < not_in_queue_confirmation_cycles:
-                await asyncio.sleep(poll_interval)
-                continue
-
-            if pending_ejection is not None:
-                return _make_result(False, pending_ejection, pending_reason)
 
             if classification.terminal == PRState.STALLED:
                 enabled_at = state["auto_merge_enabled_at"]

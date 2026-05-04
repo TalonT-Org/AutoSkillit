@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
@@ -669,22 +669,22 @@ class TestToggleAutoMergeConfirmation:
         watcher = _make_watcher()
         watcher._client = AsyncMock()
 
-        disable_resp = AsyncMock()
+        disable_resp = MagicMock()
         disable_resp.status_code = 200
         disable_resp.raise_for_status = lambda: None
         disable_resp.json.return_value = {"data": {"disablePullRequestAutoMerge": {}}}
 
-        poll_resp_still_active = AsyncMock()
+        poll_resp_still_active = MagicMock()
         poll_resp_still_active.status_code = 200
         poll_resp_still_active.json.return_value = {
             "data": {"node": {"autoMergeRequest": {"enabledAt": "2026-01-01T00:00:00Z"}}}
         }
 
-        poll_resp_disabled = AsyncMock()
+        poll_resp_disabled = MagicMock()
         poll_resp_disabled.status_code = 200
         poll_resp_disabled.json.return_value = {"data": {"node": {"autoMergeRequest": None}}}
 
-        enable_resp = AsyncMock()
+        enable_resp = MagicMock()
         enable_resp.status_code = 200
         enable_resp.raise_for_status = lambda: None
         enable_resp.json.return_value = {"data": {"enablePullRequestAutoMerge": {}}}
@@ -705,16 +705,16 @@ class TestToggleAutoMergeConfirmation:
         watcher = _make_watcher()
         watcher._client = AsyncMock()
 
-        disable_resp = AsyncMock()
+        disable_resp = MagicMock()
         disable_resp.status_code = 200
         disable_resp.raise_for_status = lambda: None
         disable_resp.json.return_value = {"data": {"disablePullRequestAutoMerge": {}}}
 
-        poll_resp = AsyncMock()
+        poll_resp = MagicMock()
         poll_resp.status_code = 200
         poll_resp.json.return_value = {"data": {"node": {"autoMergeRequest": None}}}
 
-        enable_resp = AsyncMock()
+        enable_resp = MagicMock()
         enable_resp.status_code = 200
         enable_resp.raise_for_status = lambda: None
         enable_resp.json.return_value = {"data": {"enablePullRequestAutoMerge": {}}}

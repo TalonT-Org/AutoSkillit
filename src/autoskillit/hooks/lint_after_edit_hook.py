@@ -57,7 +57,9 @@ def main() -> None:
             text=True,
             timeout=_TIMEOUT_S,
         )
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+    except subprocess.TimeoutExpired:
+        pass
+    except (FileNotFoundError, OSError):
         sys.exit(0)
 
     try:

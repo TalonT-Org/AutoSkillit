@@ -537,6 +537,7 @@ class TestSkillResult:
             "kill_reason",
             "last_stop_reason",
             "lifespan_started",
+            "provider_fallback",
             "needs_retry",
             "retry_reason",
             "order_id",

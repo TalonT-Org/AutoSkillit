@@ -413,3 +413,94 @@ class TestSkillResultCrashedFactory:
         assert "session_id" in data
         assert "subtype" in data
         assert data["subtype"] == "crashed"
+
+
+# ---------------------------------------------------------------------------
+# P3-A1-WP1 — provider_used and provider_fallback fields
+# ---------------------------------------------------------------------------
+
+
+def test_skill_result_provider_fields_have_correct_defaults():
+    """provider_used and provider_fallback have correct defaults via dataclasses.fields()."""
+    fields_map = {f.name: f for f in dataclasses.fields(SkillResult)}
+    assert fields_map["provider_used"].default == ""
+    assert fields_map["provider_fallback"].default is False
+
+
+def test_skill_result_construction_without_provider_fields():
+    """SkillResult can be constructed without passing provider fields (backward compat)."""
+    sr = SkillResult(
+        success=True,
+        result="ok",
+        session_id="s1",
+        subtype="success",
+        is_error=False,
+        exit_code=0,
+        needs_retry=False,
+        retry_reason=RetryReason.NONE,
+        stderr="",
+    )
+    assert sr.provider_used == ""
+    assert sr.provider_fallback is False
+
+
+def test_skill_result_to_json_includes_provider_fallback_unconditionally():
+    """provider_fallback appears in JSON even when False (unconditional serialization)."""
+    sr = SkillResult(
+        success=True,
+        result="ok",
+        session_id="s1",
+        subtype="success",
+        is_error=False,
+        exit_code=0,
+        needs_retry=False,
+        retry_reason=RetryReason.NONE,
+        stderr="",
+    )
+    data = json.loads(sr.to_json())
+    assert "provider_fallback" in data
+    assert data["provider_fallback"] is False
+
+
+def test_skill_result_to_json_omits_provider_used_when_empty():
+    """provider_used key is absent from JSON when the field is '' (empty string)."""
+    sr = SkillResult(
+        success=True,
+        result="ok",
+        session_id="s1",
+        subtype="success",
+        is_error=False,
+        exit_code=0,
+        needs_retry=False,
+        retry_reason=RetryReason.NONE,
+        stderr="",
+    )
+    data = json.loads(sr.to_json())
+    assert "provider_used" not in data
+
+
+def test_skill_result_to_json_includes_provider_used_when_set():
+    """provider_used appears in JSON when non-empty string."""
+    sr = SkillResult(
+        success=True,
+        result="ok",
+        session_id="s1",
+        subtype="success",
+        is_error=False,
+        exit_code=0,
+        needs_retry=False,
+        retry_reason=RetryReason.NONE,
+        stderr="",
+        provider_used="anthropic-vertex",
+        provider_fallback=True,
+    )
+    data = json.loads(sr.to_json())
+    assert data["provider_used"] == "anthropic-vertex"
+    assert data["provider_fallback"] is True
+
+
+def test_skill_result_crashed_works_without_provider_fields():
+    """crashed() classmethod still works — inherits provider field defaults."""
+    result = SkillResult.crashed(exception=RuntimeError("boom"))
+    assert result.provider_used == ""
+    assert result.provider_fallback is False

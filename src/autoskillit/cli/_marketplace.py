@@ -173,7 +173,14 @@ def install(*, scope: str = "user") -> bool:
             _cache_plugin_dir = (
                 Path.home() / ".claude" / "plugins" / "cache" / _MARKETPLACE_NAME / "autoskillit"
             )
-            vi = version_info(plugin_dir=str(_cache_plugin_dir))
+            try:
+                vi = version_info(plugin_dir=str(_cache_plugin_dir))
+            except Exception:
+                vi = {
+                    "match": False,
+                    "plugin_json_version": "unknown",
+                    "package_version": "unknown",
+                }
             if not vi["match"]:
                 print(
                     f"WARNING: Kitchen open — skipping plugin cache clear. "
@@ -219,7 +226,10 @@ def install(*, scope: str = "user") -> bool:
     print(f"Plugin installed: {plugin_ref} (scope: {scope})")
     from autoskillit.hook_registry import validate_plugin_cache_hooks
 
-    post_install_broken = validate_plugin_cache_hooks()
+    _post_install_cache_dir = (
+        Path.home() / ".claude" / "plugins" / "cache" / _MARKETPLACE_NAME / "autoskillit"
+    )
+    post_install_broken = validate_plugin_cache_hooks(cache_dir=_post_install_cache_dir)
     if post_install_broken:
         print(f"WARNING: Plugin cache contains {len(post_install_broken)} broken hook path(s):")
         for _cmd in post_install_broken:

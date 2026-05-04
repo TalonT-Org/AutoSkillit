@@ -7,7 +7,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from autoskillit.core import Severity, build_claude_env, get_logger
+from autoskillit.core import DIRECT_INSTALL_CACHE_SUBDIR, Severity, build_claude_env, get_logger
 
 from ._doctor_types import DoctorResult
 
@@ -157,7 +157,7 @@ def _check_plugin_cache_exists(cache_dir: Path | None = None) -> DoctorResult:
         )
 
     _cache_dir = cache_dir or (
-        Path.home() / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
+        Path.home() / ".claude" / "plugins" / "cache" / DIRECT_INSTALL_CACHE_SUBDIR / "autoskillit"
     )
     if _cache_dir.is_dir():
         return DoctorResult(
@@ -222,9 +222,17 @@ def _check_cache_version_mismatch(cache_dir: Path | None = None) -> DoctorResult
     from autoskillit.version import version_info
 
     _cache_plugin_dir = cache_dir or (
-        Path.home() / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
+        Path.home() / ".claude" / "plugins" / "cache" / DIRECT_INSTALL_CACHE_SUBDIR / "autoskillit"
     )
-    vi = version_info(plugin_dir=str(_cache_plugin_dir))
+    try:
+        vi = version_info(plugin_dir=str(_cache_plugin_dir))
+    except Exception as exc:
+        return DoctorResult(
+            Severity.ERROR,
+            "version_consistency",
+            f"Could not read plugin cache version info: {exc}. "
+            "Run `autoskillit install` to rebuild.",
+        )
     if vi["match"]:
         return DoctorResult(
             Severity.OK,

@@ -1181,6 +1181,7 @@ def build_test_scope(
                                     if _file_to_package(c) == "execution"
                                     and Path(c).stem != "__init__"
                                 ]
+                                # empty list → fail-open: only execution/__init__ changed, no cause to narrow on
                                 all_narrow = bool(exec_cause_files)
                                 narrow_dirs: set[str] = set()
                                 for c in exec_cause_files:

@@ -31,9 +31,39 @@ _EFFICIENCY_COLUMNS = (
     TerminalColumn("STEP", max_width=40, align="<"),
     TerminalColumn("LOC_CHG", max_width=8, align=">"),
     TerminalColumn("PK/LOC", max_width=8, align=">"),
+    TerminalColumn("RD/LOC", max_width=8, align=">"),
     TerminalColumn("WR/LOC", max_width=8, align=">"),
     TerminalColumn("OUT/LOC", max_width=8, align=">"),
 )
+
+
+_EFFICIENCY_MD_LABELS: dict[str, str] = {
+    "STEP": "Step",
+    "LOC_CHG": "LoC Changed",
+    "PK/LOC": "peak_ctx/LoC",
+    "RD/LOC": "cache_read/LoC",
+    "WR/LOC": "cache_write/LoC",
+    "OUT/LOC": "output/LoC",
+}
+
+_eff_md_headers = [_EFFICIENCY_MD_LABELS[c.label] for c in _EFFICIENCY_COLUMNS]
+_EFFICIENCY_MD_HEADER = "| " + " | ".join(_eff_md_headers) + " |"
+_EFFICIENCY_MD_SEP = "|" + "|".join("-" * (len(h) + 2) for h in _eff_md_headers) + "|"
+
+_TOKEN_MD_LABELS: dict[str, str] = {
+    "STEP": "Step",
+    "UNCACHED": "uncached",
+    "OUTPUT": "output",
+    "CACHE_RD": "cache_read",
+    "PEAK_CTX": "peak_ctx",
+    "TURNS": "turns",
+    "CACHE_WR": "cache_write",
+    "TIME": "time",
+}
+
+_tok_md_headers = [_TOKEN_MD_LABELS[c.label] for c in _TOKEN_COLUMNS]
+_TOKEN_MD_HEADER = "| " + " | ".join(_tok_md_headers) + " |"
+_TOKEN_MD_SEP = "|" + "|".join("-" * (len(h) + 2) for h in _tok_md_headers) + "|"
 
 
 def _ratio(tokens: int, loc: int) -> str:
@@ -78,8 +108,8 @@ class TelemetryFormatter:
         lines = [
             "## Token Usage Summary",
             "",
-            "| Step | uncached | output | cache_read | peak_ctx | turns | cache_write | time |",
-            "|------|----------|--------|------------|----------|-------|-------------|------|",
+            _TOKEN_MD_HEADER,
+            _TOKEN_MD_SEP,
         ]
         for step in steps:
             name = step.get("step_name", "?")
@@ -228,27 +258,30 @@ class TelemetryFormatter:
         lines = [
             "## Token Efficiency",
             "",
-            "| Step | LoC Changed | peak_ctx/LoC | cache_write/LoC | output/LoC |",
-            "|------|-------------|--------------|-----------------|------------|",
+            _EFFICIENCY_MD_HEADER,
+            _EFFICIENCY_MD_SEP,
         ]
         for step in steps:
             loc = step.get("loc_insertions", 0) + step.get("loc_deletions", 0)
             peak_ctx = step.get("peak_context", 0)
+            cr = step.get("cache_read_input_tokens", 0)
             cw = step.get("cache_creation_input_tokens", 0)
             out = step.get("output_tokens", 0)
             lines.append(
                 f"| {step.get('step_name', '?')} | {loc}"
-                f" | {_ratio(peak_ctx, loc)} | {_ratio(cw, loc)} | {_ratio(out, loc)} |"
+                f" | {_ratio(peak_ctx, loc)} | {_ratio(cr, loc)}"
+                f" | {_ratio(cw, loc)} | {_ratio(out, loc)} |"
             )
 
         total_loc = total.get("loc_insertions", 0) + total.get("loc_deletions", 0)
         total_peak = total.get("peak_context", 0)
+        total_cr = total.get("cache_read_input_tokens", 0)
         total_cw = total.get("cache_creation_input_tokens", 0)
         total_out = total.get("output_tokens", 0)
         lines.append(
             f"| **Total** | **{total_loc}**"
-            f" | {_ratio(total_peak, total_loc)} | {_ratio(total_cw, total_loc)}"
-            f" | {_ratio(total_out, total_loc)} |"
+            f" | {_ratio(total_peak, total_loc)} | {_ratio(total_cr, total_loc)}"
+            f" | {_ratio(total_cw, total_loc)} | {_ratio(total_out, total_loc)} |"
         )
         return "\n".join(lines)
 
@@ -258,10 +291,11 @@ class TelemetryFormatter:
         if not any(s.get("loc_insertions", 0) + s.get("loc_deletions", 0) > 0 for s in steps):
             return ""
 
-        rows: list[tuple[str, str, str, str, str]] = []
+        rows: list[tuple[str, str, str, str, str, str]] = []
         for step in steps:
             loc = step.get("loc_insertions", 0) + step.get("loc_deletions", 0)
             peak_ctx = step.get("peak_context", 0)
+            cr = step.get("cache_read_input_tokens", 0)
             cw = step.get("cache_creation_input_tokens", 0)
             out = step.get("output_tokens", 0)
             rows.append(
@@ -269,6 +303,7 @@ class TelemetryFormatter:
                     step.get("step_name", "?"),
                     str(loc),
                     _ratio(peak_ctx, loc),
+                    _ratio(cr, loc),
                     _ratio(cw, loc),
                     _ratio(out, loc),
                 )
@@ -279,6 +314,7 @@ class TelemetryFormatter:
             "Total",
             str(total_loc),
             _ratio(total.get("peak_context", 0), total_loc),
+            _ratio(total.get("cache_read_input_tokens", 0), total_loc),
             _ratio(total.get("cache_creation_input_tokens", 0), total_loc),
             _ratio(total.get("output_tokens", 0), total_loc),
         )

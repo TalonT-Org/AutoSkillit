@@ -126,8 +126,10 @@ async def resolve_trace_target(
             try:
                 name = child.name()
                 cmdline = child.cmdline()
+                if not cmdline:
+                    continue
                 basename_matches = name == expected_basename or (
-                    cmdline and Path(cmdline[0]).name == expected_basename
+                    Path(cmdline[0]).name == expected_basename
                 )
                 if not basename_matches:
                     continue

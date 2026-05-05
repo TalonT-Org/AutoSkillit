@@ -397,10 +397,8 @@ def _build_skill_result(
 
     normalized_subtype = session.normalize_subtype(outcome, completion_marker)
 
-    # For adjudicated_failure with write evidence, record as retriable in the audit so
-    # the consecutive chain is intact for the budget guard inside the CONTRACT_RECOVERY gate.
-    # CONTRACT_RECOVERY failures are genuinely retriable (the gate promotes them), so
-    # recording needs_retry=True is architecturally correct.
+    # For adjudicated_failure + write evidence: record as retriable so the consecutive
+    # chain is intact for the CONTRACT_RECOVERY budget guard (genuinely retriable).
     _audit_needs_retry = needs_retry
     _audit_retry_reason = retry_reason
     if (

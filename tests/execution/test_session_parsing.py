@@ -661,6 +661,173 @@ class TestAccumulatorPreservesState:
 # ---------------------------------------------------------------------------
 
 
+class TestThinkingBlockParsing:
+    """parse_session_result handles thinking content blocks correctly."""
+
+    def test_thinking_only_turn_sets_flag(self):
+        ndjson = "\n".join(
+            [
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {
+                            "content": [
+                                {
+                                    "type": "thinking",
+                                    "thinking": "Let me re-run pre-commit...",
+                                }
+                            ],
+                            "stop_reason": "end_turn",
+                        },
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "result",
+                        "subtype": "success",
+                        "is_error": False,
+                        "result": "",
+                        "session_id": "s1",
+                    }
+                ),
+            ]
+        )
+        session = parse_session_result(ndjson)
+        assert session.has_thinking_only_turn is True
+        assert session.assistant_messages == []
+
+    def test_thinking_text_is_not_stored_as_assistant_message(self):
+        ndjson = "\n".join(
+            [
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {
+                            "content": [{"type": "thinking", "thinking": "Reasoning here..."}],
+                        },
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "result",
+                        "subtype": "success",
+                        "is_error": False,
+                        "result": "",
+                        "session_id": "s1",
+                    }
+                ),
+            ]
+        )
+        session = parse_session_result(ndjson)
+        assert session.assistant_messages == []
+
+    def test_redacted_thinking_also_sets_flag(self):
+        ndjson = "\n".join(
+            [
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {
+                            "content": [{"type": "redacted_thinking", "data": "REDACTED"}],
+                        },
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "result",
+                        "subtype": "success",
+                        "is_error": False,
+                        "result": "",
+                        "session_id": "s1",
+                    }
+                ),
+            ]
+        )
+        session = parse_session_result(ndjson)
+        assert session.has_thinking_only_turn is True
+
+    def test_thinking_plus_text_turn_is_not_thinking_only(self):
+        ndjson = "\n".join(
+            [
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {
+                            "content": [
+                                {"type": "thinking", "thinking": "First I'll check..."},
+                                {"type": "text", "text": "I found the issue."},
+                            ],
+                        },
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "result",
+                        "subtype": "success",
+                        "is_error": False,
+                        "result": "done",
+                        "session_id": "s1",
+                    }
+                ),
+            ]
+        )
+        session = parse_session_result(ndjson)
+        assert session.has_thinking_only_turn is False
+        assert session.assistant_messages == ["I found the issue."]
+
+    def test_thinking_with_tool_use_is_not_thinking_only(self):
+        ndjson = "\n".join(
+            [
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {
+                            "content": [
+                                {"type": "thinking", "thinking": "I should read the file."},
+                                {"type": "tool_use", "name": "Read", "id": "tu_1"},
+                            ],
+                        },
+                    }
+                ),
+            ]
+        )
+        session = parse_session_result(ndjson)
+        assert session.has_thinking_only_turn is False
+        assert len(session.tool_uses) == 1
+
+    def test_no_thinking_blocks_leaves_flag_false(self):
+        ndjson = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "done",
+                "session_id": "s1",
+            }
+        )
+        session = parse_session_result(ndjson)
+        assert session.has_thinking_only_turn is False
+
+    @pytest.mark.parametrize(
+        "block_type",
+        ["text", "tool_use", "thinking", "redacted_thinking", "image", "tool_result", "unknown"],
+    )
+    def test_all_content_block_types_handled_without_error(self, block_type: str):
+        block: dict = {"type": block_type}
+        if block_type == "text":
+            block["text"] = "hello"
+        elif block_type == "tool_use":
+            block["name"] = "Read"
+            block["id"] = "tu_x"
+        elif block_type == "thinking":
+            block["thinking"] = "reasoning"
+        elif block_type == "redacted_thinking":
+            block["data"] = "REDACTED"
+        ndjson = json.dumps({"type": "assistant", "message": {"content": [block]}})
+        session = parse_session_result(ndjson)
+        assert session is not None
+
+
 class TestFullChainZeroWriteGate:
     """Full chain: NDJSON → parse_session_result → write_call_count."""
 

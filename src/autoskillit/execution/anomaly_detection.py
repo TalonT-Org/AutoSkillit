@@ -22,6 +22,7 @@ class AnomalyKind(StrEnum):
     HIGH_CPU_SUSTAINED = "high_cpu_sustained"
     IDENTITY_DRIFT = "identity_drift"
     EMPTY_RESULT_WITH_TOKENS = "empty_result_with_tokens"
+    THINKING_ONLY_FINAL_TURN = "thinking_only_final_turn"
 
 
 class AnomalySeverity(StrEnum):
@@ -318,15 +319,30 @@ def detect_identity_drift(
 def detect_outcome_anomalies(
     token_usage: dict[str, object],
     subtype: str,
+    has_thinking_only_turn: bool = False,
 ) -> list[dict[str, object]]:
     """Detect outcome-level anomalies that require correlating session result with token usage.
 
-    Currently detects:
+    Detects:
+    - THINKING_ONLY_FINAL_TURN: final turn contained only thinking blocks (no text/tool output)
     - EMPTY_RESULT_WITH_TOKENS: session produced output_tokens > 0 but subtype is 'empty_result'
     """
     anomalies: list[dict[str, object]] = []
     output_tokens = token_usage.get("output_tokens", 0)
-    if isinstance(output_tokens, int) and output_tokens > 0 and subtype == "empty_result":
+    if has_thinking_only_turn and subtype == "empty_result":
+        anomalies.append(
+            {
+                "ts": datetime.now(UTC).isoformat(),
+                "seq": OUTCOME_ANOMALY_SEQ_SENTINEL,
+                "event": "anomaly",
+                "kind": str(AnomalyKind.THINKING_ONLY_FINAL_TURN),
+                "severity": str(AnomalySeverity.WARNING),
+                "pid": OUTCOME_ANOMALY_PID_SENTINEL,
+                "detail": {"output_tokens": output_tokens, "subtype": subtype},
+                "snapshot": {},
+            }
+        )
+    elif isinstance(output_tokens, int) and output_tokens > 0 and subtype == "empty_result":
         anomalies.append(
             {
                 "ts": datetime.now(UTC).isoformat(),

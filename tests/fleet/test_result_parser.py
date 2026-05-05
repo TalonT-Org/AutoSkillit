@@ -288,3 +288,43 @@ def test_channel_b_jsonl_no_assistant_records(tmp_path) -> None:
     )
 
     assert result.outcome == "no_sentinel"
+
+
+def test_extract_text_from_jsonl_ignores_thinking_blocks(tmp_path: Path) -> None:
+    """Thinking blocks do not contribute to sentinel search text."""
+    from autoskillit.fleet.result_parser import _extract_text_from_jsonl
+
+    path = tmp_path / "session.jsonl"
+    records = [
+        {
+            "type": "assistant",
+            "message": {"content": [{"type": "thinking", "thinking": "Internal reasoning only."}]},
+        },
+    ]
+    path.write_text("\n".join(json.dumps(r) for r in records), encoding="utf-8")
+
+    text = _extract_text_from_jsonl(path)
+    assert text == ""
+
+
+def test_extract_text_from_jsonl_extracts_text_blocks_only(tmp_path: Path) -> None:
+    """Only text blocks are returned; thinking blocks are excluded."""
+    from autoskillit.fleet.result_parser import _extract_text_from_jsonl
+
+    path = tmp_path / "session.jsonl"
+    records = [
+        {
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {"type": "thinking", "thinking": "Private reasoning."},
+                    {"type": "text", "text": "Final result here."},
+                ]
+            },
+        },
+    ]
+    path.write_text("\n".join(json.dumps(r) for r in records), encoding="utf-8")
+
+    text = _extract_text_from_jsonl(path)
+    assert text == "Final result here."
+    assert "Private reasoning" not in text

@@ -50,7 +50,7 @@ def test_passthrough_unchanged_when_no_manifests(tmp_path: Path) -> None:
         "P1-A1-WP2",
         "P1-A1-WP3",
     }
-    index = json.loads((tmp_path / "wp_index.json").read_text())
+    index = json.loads((tmp_path / "work_packages" / "wp_index.json").read_text())
     assert {e["id"] for e in index} == {"P1-A1-WP1", "P1-A1-WP2", "P1-A1-WP3"}
     # consolidate_wps returns str values (compatible with run_python result passing)
     assert result["total_count"] == "3"
@@ -297,7 +297,7 @@ def test_wp_index_rebuilt_with_merged_ids(tmp_path: Path) -> None:
 
     consolidate_wps(refined_wps_path=str(refined_path), planner_dir=str(tmp_path))
 
-    index = json.loads((tmp_path / "wp_index.json").read_text())
+    index = json.loads((tmp_path / "work_packages" / "wp_index.json").read_text())
     assert len(index) == 2
     merged_entry = next(e for e in index if e["id"] == "P1-A1-WP1")
     assert merged_entry["id"] == "P1-A1-WP1"
@@ -796,3 +796,14 @@ def test_consolidate_then_compile_emits_correct_issue_count(tmp_path: Path) -> N
     merged_issue = (issues_dir / "P1-A1-WP1_issue.md").read_text()
     assert "src/mod_P1-A1-WP1.py" in merged_issue
     assert "src/mod_P1-A1-WP2.py" in merged_issue
+
+
+def test_consolidate_wps_wp_index_in_work_packages(tmp_path: Path) -> None:
+    """Rebuilt wp_index.json must land in work_packages/, not planner root."""
+    wps = [make_wp_result("P1-A1-WP1")]
+    refined_path = _make_refined_wps(tmp_path, wps)
+
+    consolidate_wps(refined_wps_path=str(refined_path), planner_dir=str(tmp_path))
+
+    assert (tmp_path / "work_packages" / "wp_index.json").exists()
+    assert not (tmp_path / "wp_index.json").exists()

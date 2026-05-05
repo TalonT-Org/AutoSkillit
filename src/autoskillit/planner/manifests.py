@@ -199,7 +199,7 @@ def build_phase_wp_manifest(
     }
     manifest_path = out_dir / "phase_wp_manifest.json"
     write_versioned_json(manifest_path, manifest, schema_version=1)
-    atomic_write(out_dir / "wp_index.json", "[]")
+    atomic_write(wp_dir / "wp_index.json", "[]")
     return {"manifest_path": str(manifest_path), "total_count": str(len(items))}
 
 
@@ -210,7 +210,6 @@ def finalize_wp_manifest(work_packages_dir: str, output_dir: str) -> dict[str, s
     wp_dir = Path(work_packages_dir)
     if not wp_dir.is_dir():
         raise FileNotFoundError(f"work_packages_dir does not exist: {wp_dir}")
-    out_dir = Path(output_dir)
 
     result_files = sorted(
         (f for f in wp_dir.glob("*_result.json") if WP_RESULT_FILE_RE.match(f.name)),
@@ -249,9 +248,9 @@ def finalize_wp_manifest(work_packages_dir: str, output_dir: str) -> dict[str, s
         "created_at": datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "items": items,
     }
-    manifest_path = out_dir / "wp_manifest.json"
+    manifest_path = wp_dir / "wp_manifest.json"
     write_versioned_json(manifest_path, manifest, schema_version=1)
-    atomic_write(out_dir / "wp_index.json", json.dumps(index_entries, indent=2))
+    atomic_write(wp_dir / "wp_index.json", json.dumps(index_entries, indent=2))
     return {"manifest_path": str(manifest_path), "total_count": str(len(items))}
 
 
@@ -401,7 +400,7 @@ def expand_wps(refined_assignments_path: str, output_dir: str, **kwargs: object)
             "task": task,
             "metadata": metadata,
             "prior_results": [],
-            "wp_index_path": str(out_dir / "wp_index.json"),
+            "wp_index_path": str(wp_dir / "wp_index.json"),
         }
         ctx_path = wp_dir / f"context_{phase_id}.json"
         write_versioned_json(ctx_path, context, schema_version=1)
@@ -418,7 +417,7 @@ def expand_wps(refined_assignments_path: str, output_dir: str, **kwargs: object)
     }
     manifest_path = out_dir / "phase_wp_manifest.json"
     write_versioned_json(manifest_path, manifest, schema_version=1)
-    atomic_write(out_dir / "wp_index.json", "[]")
+    atomic_write(wp_dir / "wp_index.json", "[]")
     return {
         "manifest_path": str(manifest_path),
         "context_paths": ",".join(context_paths),

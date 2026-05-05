@@ -759,3 +759,7 @@ async def test_report_bug_config_model_as_profile(tool_ctx, tmp_path, monkeypatc
     assert map_calls == ["minimax"]
     call_kwargs = mock_executor.run.call_args.kwargs
     assert call_kwargs.get("model") == "MiniMax-M2.7"
+    assert call_kwargs.get("provider_extras") == {
+        "ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"
+    }
+    assert call_kwargs.get("profile_name") == "minimax"

@@ -47,10 +47,10 @@ tool result. The routing rules per tool:
 - `clone_repo` / `remove_clone` — read `clone_id` and stash for later
   cleanup via `register_clone_status` and `batch_cleanup_clones`.
 
-## The 12 `retry_reason` values
+## The 13 `retry_reason` values
 
 `RetryReason` is a `StrEnum` in `src/autoskillit/core/_type_enums.py` with
-12 distinct values. Each value triggers a different recovery route:
+13 distinct values. Each value triggers a different recovery route:
 
 | Value | When the orchestrator sets it | Recovery |
 |-------|-------------------------------|----------|
@@ -60,7 +60,8 @@ tool result. The routing rules per tool:
 | `budget_exhausted` | Token-budget cap reached for the step | Re-plan or escalate; do not auto-retry |
 | `early_stop` | Worker emitted a structured `early_stop` token | Skip remaining sub-steps and route to a fallback |
 | `zero_writes` | Worker exited cleanly but produced no file writes | Re-spawn once, then escalate |
-| `empty_output` | Natural exit with rc=0 and no stdout, no partial progress | Treat as a transient failure; one retry then escalate |
+| `empty_output` | Natural exit with rc=0, no stdout, and no write evidence | Treat as a transient failure; one retry then escalate |
+| `completed_no_flush` | Natural exit with rc=0 and no stdout, but write evidence confirms work was performed | Route to on_context_limit (same as drain_race/resume); partial progress exists on disk |
 | `drain_race` | Channel-confirmed completion but stdout was not flushed before kill | Replay the captured channel record; do not re-spawn |
 | `path_contamination` | Worker wrote outside its CWD boundary | Hard-fail; do not retry — this is an isolation breach |
 | `contract_recovery` | Marker present and write evidence on disk, but the structured contract token was missing | Treat as success and synthesise the contract from disk |

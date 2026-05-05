@@ -268,9 +268,9 @@ def test_bundled_recipe_count_is_9() -> None:
     assert recipes == expected, f"Recipes drifted: {recipes}"
 
 
-def test_retry_reason_value_count_is_12() -> None:
+def test_retry_reason_value_count_is_13() -> None:
     values = _retry_reason_values()
-    assert len(values) == 12, f"RetryReason has {len(values)} values: {values}"
+    assert len(values) == 13, f"RetryReason has {len(values)} values: {values}"
 
 
 def test_semantic_rule_family_count_is_25() -> None:
@@ -341,8 +341,8 @@ def test_recipes_overview_states_6_recipes() -> None:
     _assert_doc_states_number(DOCS_DIR / "recipes" / "overview.md", "bundled recipes", 6)
 
 
-def test_orchestration_states_12_retry_reasons() -> None:
-    _assert_doc_states_number(DOCS_DIR / "execution" / "orchestration.md", "retry reasons", 12)
+def test_orchestration_states_13_retry_reasons() -> None:
+    _assert_doc_states_number(DOCS_DIR / "execution" / "orchestration.md", "retry reasons", 13)
 
 
 def test_authoring_states_24_rule_families() -> None:

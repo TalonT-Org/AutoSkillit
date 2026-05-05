@@ -293,12 +293,16 @@ async def run_skill(
     - "resume": context/turn limit hit — partial progress on disk, route to on_context_limit.
     - "drain_race": channel confirmed completion but stdout not fully flushed — route to
       on_context_limit (same as resume).
-    - "empty_output": session exited cleanly but produced no output — no partial progress,
-      route to on_failure.
+    - "completed_no_flush": session exited with empty stdout but write evidence confirms work was
+      performed — route to on_context_limit (same as drain_race/resume).
+    - "empty_output": session exited cleanly with no output AND no write evidence — no partial
+      progress, route to on_failure.
     - "path_contamination": session wrote files outside its working directory — route to
       on_failure.
     - "early_stop": model stopped before completion marker — route to on_failure.
     - "zero_writes": skill made no writes despite write expectation — route to on_failure.
+    - "thinking_stall": model produced thinking blocks only, no text/tool output — route to
+      on_context_limit if lifespan_started, else on_failure.
 
     This is the correct MCP tool to delegate work to a headless session during
     pipeline execution. NEVER use native tools (Read, Grep, Glob, Edit, Write,

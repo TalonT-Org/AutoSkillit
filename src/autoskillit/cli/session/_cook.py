@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import sys
 import uuid
 from collections.abc import Mapping
 from pathlib import Path
 
 from autoskillit.cli.ui._terminal import terminal_guard
+from autoskillit.core.feature_flags import is_feature_enabled
 
 
 def _print_recipes_list() -> None:
@@ -59,7 +61,9 @@ def _run_cook_session(
     return None
 
 
-def cook(*, resume: bool = False, session_id: str | None = None) -> None:
+def cook(
+    *, resume: bool = False, session_id: str | None = None, profile: str | None = None
+) -> None:
     """Launch Claude with all bundled AutoSkillit skills as slash commands."""
     from autoskillit.workspace import (
         DefaultSessionSkillManager,
@@ -85,6 +89,27 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
     from autoskillit.config import iter_display_categories, load_config  # noqa: PLC0415
 
     config = load_config()
+
+    if profile is not None:
+        if not is_feature_enabled(
+            "providers", config.features, experimental_enabled=config.experimental_enabled
+        ):
+            print(
+                "Error: --profile requires the 'providers' feature to be enabled.\n"
+                "Enable it in .autoskillit/config.yaml:\n"
+                "  features:\n"
+                "    providers: true",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
+        if profile not in config.providers.profiles:
+            known = ", ".join(sorted(config.providers.profiles)) or "(none defined)"
+            print(
+                f"Error: Unknown provider profile {profile!r}. Known profiles: {known}\n"
+                "Define profiles in .autoskillit/config.yaml under providers.profiles.",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
 
     print(f"{_B}{_C}AUTOSKILLIT {__version__}{_R} {_D}Kitchen open. All tools active.{_R}")
     skip = {"Telemetry & Diagnostics", "Kitchen"}
@@ -175,6 +200,9 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
         SESSION_TYPE_ENV_VAR: SESSION_TYPE_COOK,
         LAUNCH_ID_ENV_VAR: session_id_local,
     }
+    if profile is not None:
+        _cook_env_extras["AUTOSKILLIT_PROVIDER_PROFILE"] = profile
+        _cook_env_extras.update(config.providers.profiles[profile])
 
     current_resume_spec = resume_spec
     _current_first_run = _first_run

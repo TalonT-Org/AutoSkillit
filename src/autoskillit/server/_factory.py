@@ -198,6 +198,13 @@ def make_context(
         All service fields are populated. When runner=None is passed explicitly,
         tester is left as None.
     """
+    # When cook CLI passes --profile, it stamps AUTOSKILLIT_PROVIDER_PROFILE into the
+    # Claude Code subprocess env. The MCP server (plugin subprocess) inherits this and
+    # uses it as default_provider, taking precedence over config without modifying disk.
+    env_profile = os.environ.get("AUTOSKILLIT_PROVIDER_PROFILE")
+    if env_profile:
+        config.providers.default_provider = env_profile
+
     if runner is _UNSET:
         from autoskillit.execution import DefaultSubprocessRunner
 

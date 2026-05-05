@@ -18,6 +18,23 @@ def _sous_chef_text() -> str:
     return skill_md.read_text()
 
 
+def _extract_routing_section(skill_md: str) -> str:
+    """Extract the full CONTEXT LIMIT ROUTING section."""
+    lines = skill_md.splitlines()
+    in_section = False
+    extracted: list[str] = []
+    for line in lines:
+        if "CONTEXT LIMIT ROUTING" in line:
+            in_section = True
+            extracted.append(line)
+            continue
+        if in_section and line.startswith("---"):
+            break
+        if in_section:
+            extracted.append(line)
+    return "\n".join(extracted)
+
+
 def _extract_routing_rule(skill_md: str, retry_reason: str) -> str:
     """Extract the bullet(s) in CONTEXT LIMIT ROUTING that mention a given retry_reason."""
     lines = skill_md.splitlines()
@@ -243,4 +260,90 @@ def test_sous_chef_no_resume_session_id_in_context_limit_routing() -> None:
     assert "resume_session_id" not in skill_md, (
         "sous-chef SKILL.md must not instruct passing resume_session_id; "
         "context-exhausted sessions must start fresh"
+    )
+
+
+class TestWorktreeStaleCarveout:
+    """SKILL.md routing contract for the worktree-stale carve-out."""
+
+    def test_worktree_stale_carveout_exists(self) -> None:
+        """SKILL.md must contain a worktree-stale carve-out for retry_reason=stale."""
+        skill_md = _sous_chef_text()
+        routing_section = _extract_routing_section(skill_md)
+        assert "worktree" in routing_section.lower() and "stale" in routing_section.lower(), (
+            "CONTEXT LIMIT ROUTING must contain a worktree-stale carve-out"
+        )
+        assert "implement-worktree-no-merge" in routing_section, (
+            "Worktree-stale carve-out must explicitly name implement-worktree-no-merge"
+        )
+
+    def test_worktree_stale_carveout_does_not_route_to_on_context_limit(self) -> None:
+        """Worktree-stale carve-out must NOT route to on_context_limit."""
+        skill_md = _sous_chef_text()
+        routing_section = _extract_routing_section(skill_md)
+        lines = routing_section.splitlines()
+        carveout_lines: list[str] = []
+        in_carveout = False
+        for line in lines:
+            if "worktree" in line.lower() and "stale" in line.lower() and "carve" in line.lower():
+                in_carveout = True
+                carveout_lines.append(line)
+                continue
+            if in_carveout:
+                if line.startswith("**") or line.startswith("---"):
+                    break
+                carveout_lines.append(line)
+        carveout_text = "\n".join(carveout_lines)
+        assert carveout_text, "Expected to find a worktree-stale carve-out subsection"
+        assert "on_context_limit" not in carveout_text, (
+            "Worktree-stale carve-out must not route to on_context_limit — "
+            "stale is not a context limit"
+        )
+
+    def test_worktree_stale_carveout_bypasses_retries_budget(self) -> None:
+        """Worktree-stale carve-out must bypass the retries budget."""
+        skill_md = _sous_chef_text()
+        lower = skill_md.lower()
+        assert any(
+            phrase in lower
+            for phrase in [
+                "without consuming the retries budget",
+                "without decrementing the retries counter",
+                "does not consume the retries budget",
+                "does not decrement the retries",
+                "bypass the retries",
+                "independent of the retries counter",
+                "regardless of the retries counter",
+            ]
+        ), "Worktree-stale carve-out must explicitly state it bypasses the retries budget"
+
+    def test_worktree_stale_carveout_is_one_shot(self) -> None:
+        """Worktree-stale carve-out must be limited to a single retry."""
+        skill_md = _sous_chef_text()
+        lower = skill_md.lower()
+        assert any(
+            phrase in lower
+            for phrase in [
+                "one-shot",
+                "once",
+                "single retry",
+                "maximum once",
+                "at most once",
+                "if the retry also goes stale",
+            ]
+        ), "Worktree-stale carve-out must be one-shot (limited to a single stale retry)"
+
+
+def test_prompts_worktree_stale_carveout() -> None:
+    """_prompts.py orchestrator prompt must contain the worktree-stale carve-out."""
+    prompts_path = (
+        Path(__file__).resolve().parent.parent.parent
+        / "src"
+        / "autoskillit"
+        / "cli"
+        / "_prompts.py"
+    )
+    prompts_text = prompts_path.read_text().lower()
+    assert "worktree" in prompts_text and "stale" in prompts_text, (
+        "_prompts.py must contain a worktree-stale carve-out matching SKILL.md"
     )

@@ -424,13 +424,17 @@ def recipes_render(name: str | None = None) -> None:
 
 
 @app.command(name="cook", alias="c")
-def _cook_cmd(session_id: str | None = None, *, resume: bool = False) -> None:
+def _cook_cmd(
+    session_id: str | None = None, *, resume: bool = False, profile: str | None = None
+) -> None:
     """Launch an interactive Claude session with all skills and kitchen tools.
 
     Use --resume to restore a previous session. Pass a session ID to target a
     specific one, or omit for Claude Code's interactive picker.
     """
-    cook_interactive(resume=resume or (session_id is not None), session_id=session_id)
+    cook_interactive(
+        resume=resume or (session_id is not None), session_id=session_id, profile=profile
+    )
 
 
 def main() -> None:

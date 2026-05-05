@@ -9,6 +9,7 @@ construction scattered across callers.
 
 from __future__ import annotations
 
+import dataclasses
 import os
 import subprocess
 from collections.abc import Callable
@@ -198,6 +199,16 @@ def make_context(
         All service fields are populated. When runner=None is passed explicitly,
         tester is left as None.
     """
+    env_profile = os.environ.get("AUTOSKILLIT_PROVIDER_PROFILE")
+    if env_profile and env_profile in config.providers.profiles:
+        config = dataclasses.replace(
+            config, providers=dataclasses.replace(config.providers, default_provider=env_profile)
+        )
+    elif env_profile:
+        logger.warning(
+            "AUTOSKILLIT_PROVIDER_PROFILE %r not in known profiles — ignored", env_profile
+        )
+
     if runner is _UNSET:
         from autoskillit.execution import DefaultSubprocessRunner
 

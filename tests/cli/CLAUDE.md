@@ -21,6 +21,7 @@ CLI command, subcommand, and interactive workflow tests.
 | `test_cook_features.py` | Tests: cook CLI features — subset gate, recipes CLI, fleet display categories |
 | `test_cook_ide_isolation.py` | End-to-end regression canary: _launch_cook_session under simulated IDE state |
 | `test_cook_interactive.py` | Tests for the cook CLI command (interactive skill session) |
+| `test_cook_profile.py` | Tests for --profile flag in cook command — env injection and validation |
 | `test_cook_order_command.py` | Tests: cook CLI order command — script validation, command building, env injection |
 | `test_cook_order_picker.py` | Tests: cook CLI order command — recipe picker, resume flows, session parsing |
 | `test_cook_order_prompt.py` | Tests: cook CLI order command — system prompt content, MCP prefix selection, ownership |

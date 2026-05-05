@@ -34,6 +34,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_layer_enforcement.py` | MCP tool registry + import layer contracts + cross-package rules |
 | `test_layer_markers.py` | Enforce pytestmark layer markers on all in-scope test files |
 | `test_never_raises_contracts.py` | Structural enforcement of 'Never raises' docstring contracts in server/ |
+| `test_no_inline_jsonl_request_id_dedup.py` | AST guard: no inline requestId dedup in session_log.py or tool_sequence_analysis.py |
 | `test_protocol_names.py` | T5-T6: Protocol naming and DefaultSkillResolver export smoke tests |
 | `test_python_no_hardcoded_temp.py` | Architectural invariant: no literal `.autoskillit/temp` outside the whitelist |
 | `test_recipe_rule_registration.py` | REQ-RECIPE-001: every recipe/rules_*.py file must be imported by recipe/__init__.py |

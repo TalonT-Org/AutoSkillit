@@ -4,13 +4,23 @@ import json
 import pathlib
 import statistics
 import sys
-from collections import Counter
+from collections import Counter, OrderedDict
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
 from itertools import islice
+from typing import NamedTuple
+
+from .logging import get_logger
 
 _TOOL_USE_CAP = 8
 _MAX_NGRAM_LEN = 5
+logger = get_logger(__name__)
+
+
+class AssistantTurn(NamedTuple):
+    request_id: str
+    timestamp: str
+    tool_names: tuple[str, ...]
 
 
 @dataclass
@@ -44,14 +54,23 @@ class AnalysisResult:
     session_count: int
 
 
-def parse_raw_cc_jsonl(jsonl_path: pathlib.Path, *, cap: int = _TOOL_USE_CAP) -> list[list[str]]:
-    """Parse a Claude Code session JSONL into per-turn tool call lists."""
-    result: list[list[str]] = []
-    seen: set[str] = set()
-    try:
-        text = jsonl_path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return result
+def iter_merged_assistant_turns(text: str, *, cap: int = _TOOL_USE_CAP) -> Iterator[AssistantTurn]:
+    """Yield one AssistantTurn per logical assistant turn, merging across records.
+
+    When multiple JSONL records share the same requestId (e.g., extended thinking
+    emits a thinking-only record followed by a tool-bearing record), tool calls
+    are accumulated across all records for that requestId. The cap is applied
+    after accumulation.
+
+    Records without a requestId are yielded individually (no dedup possible).
+    Turns are yielded in the order their requestId (or no-rid record) was first
+    encountered — preserving file-order interleaving for correct DFG bigram analysis.
+    """
+    pending: OrderedDict[str, tuple[str, list[str]]] = OrderedDict()
+    insertion_order: list[tuple[str, str]] = []
+    no_rid_turns: dict[str, AssistantTurn] = {}
+    no_rid_counter = 0
+
     for raw_line in text.splitlines():
         raw_line = raw_line.strip()
         if not raw_line:
@@ -62,11 +81,9 @@ def parse_raw_cc_jsonl(jsonl_path: pathlib.Path, *, cap: int = _TOOL_USE_CAP) ->
             continue
         if not isinstance(rec, dict) or rec.get("type") != "assistant":
             continue
+
         rid = rec.get("requestId", "")
-        if rid and rid in seen:
-            continue
-        if rid:
-            seen.add(rid)
+        ts = rec.get("timestamp", "")
         message = rec.get("message")
         content = message.get("content", []) if isinstance(message, dict) else []
         tools = [
@@ -77,8 +94,38 @@ def parse_raw_cc_jsonl(jsonl_path: pathlib.Path, *, cap: int = _TOOL_USE_CAP) ->
             and isinstance(blk.get("name"), str)
             and blk["name"]
         ]
-        result.append(tools[:cap])
-    return result
+
+        if rid:
+            if rid in pending:
+                existing_ts, existing_tools = pending[rid]
+                pending[rid] = (existing_ts or ts, existing_tools + tools)
+            else:
+                pending[rid] = (ts, tools)
+                insertion_order.append(("rid", rid))
+        else:
+            key = str(no_rid_counter)
+            no_rid_counter += 1
+            no_rid_turns[key] = AssistantTurn("", ts, tuple(tools[:cap]))
+            insertion_order.append(("no_rid", key))
+
+    for kind, key in insertion_order:
+        if kind == "rid":
+            ts, tools = pending[key]
+            yield AssistantTurn(key, ts, tuple(tools[:cap]))
+        else:
+            yield no_rid_turns[key]
+
+
+def parse_raw_cc_jsonl(
+    jsonl_path: pathlib.Path, *, cap: int = _TOOL_USE_CAP
+) -> list[tuple[str, ...]]:
+    """Parse a Claude Code session JSONL into per-turn tool call lists."""
+    try:
+        text = jsonl_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        logger.debug("parse_raw_cc_jsonl: cannot read %s", jsonl_path, exc_info=True)
+        return []
+    return [turn.tool_names for turn in iter_merged_assistant_turns(text, cap=cap)]
 
 
 def parse_sessions_from_summary_dir(log_root: pathlib.Path) -> Iterator[TurnSequence]:

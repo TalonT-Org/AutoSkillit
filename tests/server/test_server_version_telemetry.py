@@ -149,7 +149,11 @@ class TestInitializeClearMarker:
     def test_initialize_uses_clear_marker_as_since_bound(self, tool_ctx, tmp_path, monkeypatch):
         from datetime import UTC, datetime, timedelta
 
-        from autoskillit.core.types._type_results import SessionTelemetry
+        from autoskillit.core.types._type_results import (
+            ProviderOutcome,
+            RecipeIdentity,
+            SessionTelemetry,
+        )
         from autoskillit.execution.session_log import (
             flush_session_log,
         )
@@ -186,6 +190,8 @@ class TestInitializeClearMarker:
                 loc_insertions=0,
                 loc_deletions=0,
             ),
+            provider_outcome=ProviderOutcome.none_used(),
+            recipe_identity=RecipeIdentity.empty(),
         )
 
         # Write a clear marker 3 hours ago (after the session completed)

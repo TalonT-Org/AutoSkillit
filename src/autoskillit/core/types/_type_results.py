@@ -25,6 +25,8 @@ __all__ = [
     "WriteBehaviorSpec",
     "FailureRecord",
     "SessionTelemetry",
+    "ProviderOutcome",
+    "RecipeIdentity",
     "SkillResult",
     "CleanupResult",
     "CIRunScope",
@@ -177,6 +179,42 @@ class SessionTelemetry:
         )
 
 
+@dataclass(frozen=True)
+class ProviderOutcome:
+    """Typed bundle of provider execution outcome fields.
+
+    All fields are required — constructing without any field is a TypeError,
+    making omissions visible at construction time rather than silently defaulting.
+    """
+
+    provider_used: str
+    fallback_activated: bool
+
+    @classmethod
+    def none_used(cls) -> ProviderOutcome:
+        """Sentinel for paths where no provider selection occurred."""
+        return cls(provider_used="", fallback_activated=False)
+
+
+@dataclass(frozen=True)
+class RecipeIdentity:
+    """Typed bundle of recipe identification fields for session logging.
+
+    All fields required — prevents silent empty-string drift when new recipe
+    fields are added to flush_session_log but not wired from callers.
+    """
+
+    name: str
+    content_hash: str
+    composite_hash: str
+    version: str
+
+    @classmethod
+    def empty(cls) -> RecipeIdentity:
+        """Sentinel for sessions not driven by a recipe."""
+        return cls(name="", content_hash="", composite_hash="", version="")
+
+
 @dataclass
 class SkillResult:
     """Typed result returned by _build_skill_result and run_headless_core."""
@@ -233,11 +271,10 @@ class SkillResult:
             "last_stop_reason": self.last_stop_reason,
             "lifespan_started": self.lifespan_started,
             "provider_fallback": self.provider_fallback,
+            "provider_used": self.provider_used,
         }
         if self.worktree_path is not None:
             data["worktree_path"] = self.worktree_path
-        if self.provider_used:
-            data["provider_used"] = self.provider_used
         data["infra_exit_category"] = self.infra_exit_category
         data["order_id"] = self.order_id
         return json.dumps(data, default=lambda o: o.value if isinstance(o, Enum) else str(o))
@@ -537,3 +574,5 @@ class SessionIndexEntry(TypedDict):
     recipe_version: str
     duration_seconds: float
     github_api_requests: int
+    provider_used: str
+    provider_fallback: bool

@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from autoskillit.core import SessionTelemetry
+    from autoskillit.core.types._type_results import ProviderOutcome, RecipeIdentity
 
 import psutil
 
@@ -133,8 +134,8 @@ def flush_session_log(
     elapsed_seconds: float | None = None,
     termination_reason: str = "",
     kill_reason: str = "",
-    provider_used: str = "",
-    provider_fallback: bool = False,
+    provider_outcome: ProviderOutcome,
+    recipe_identity: RecipeIdentity,
     snapshot_interval_seconds: float = 0.0,
     step_name: str = "",
     cli_subtype: str = "",
@@ -149,10 +150,6 @@ def flush_session_log(
     has_thinking_only_turn: bool = False,
     versions: dict[str, Any] | None = None,
     model_identifier: str = "",
-    recipe_name: str = "",
-    recipe_content_hash: str = "",
-    recipe_composite_hash: str = "",
-    recipe_version: str = "",
     max_sessions: int | None = None,
     telemetry: SessionTelemetry,
 ) -> None:
@@ -334,8 +331,8 @@ def flush_session_log(
         "peak_fd_ratio": round(peak_fd_ratio, 3),
         "termination_reason": termination_reason,
         "kill_reason": kill_reason,
-        "provider_used": provider_used,
-        "provider_fallback": provider_fallback,
+        "provider_used": provider_outcome.provider_used,
+        "provider_fallback": provider_outcome.fallback_activated,
         "write_path_warnings": effective_write_path_warnings,
         "write_call_count": write_call_count,
         "clone_contamination_reverted": clone_contamination_reverted,
@@ -358,13 +355,13 @@ def flush_session_log(
             **versions,
             "model_identifier": effective_model_id,
         }
-    if recipe_name or recipe_content_hash:
+    if recipe_identity.name or recipe_identity.content_hash:
         summary["recipe_provenance"] = {
             "schema_version": 1,
-            "recipe_name": recipe_name,
-            "recipe_version": recipe_version,
-            "content_hash": recipe_content_hash,
-            "composite_hash": recipe_composite_hash,
+            "recipe_name": recipe_identity.name,
+            "recipe_version": recipe_identity.version,
+            "content_hash": recipe_identity.content_hash,
+            "composite_hash": recipe_identity.composite_hash,
         }
     summary_path = session_dir / "summary.json"
     atomic_write(summary_path, json.dumps(summary, sort_keys=True, indent=2) + "\n")
@@ -397,7 +394,7 @@ def flush_session_log(
             "loc_deletions": loc_deletions,
             "peak_context": token_usage.get("peak_context", 0),
             "turn_count": token_usage.get("turn_count", 0),
-            "provider_used": provider_used,
+            "provider_used": provider_outcome.provider_used,
         }
         atomic_write(session_dir / "token_usage.json", json.dumps(tu_data))
 
@@ -450,14 +447,14 @@ def flush_session_log(
         "tracked_comm_drift": _tracked_comm_drift,
         "autoskillit_version": versions.get("autoskillit_version", "") if versions else "",
         "claude_code_version": versions.get("claude_code_version", "") if versions else "",
-        "recipe_name": recipe_name,
-        "recipe_content_hash": recipe_content_hash,
-        "recipe_composite_hash": recipe_composite_hash,
-        "recipe_version": recipe_version,
+        "recipe_name": recipe_identity.name,
+        "recipe_content_hash": recipe_identity.content_hash,
+        "recipe_composite_hash": recipe_identity.composite_hash,
+        "recipe_version": recipe_identity.version,
         "duration_seconds": duration_seconds,
         "github_api_requests": github_api_requests,
-        "provider_used": provider_used,
-        "provider_fallback": provider_fallback,
+        "provider_used": provider_outcome.provider_used,
+        "provider_fallback": provider_outcome.fallback_activated,
     }
     index_path = log_root / "sessions.jsonl"
     with index_path.open("a") as f:
@@ -627,7 +624,7 @@ def recover_crashed_sessions(tmpfs_path: str = "/dev/shm", log_dir: str = "") ->
             continue
 
         try:
-            from autoskillit.core import SessionTelemetry
+            from autoskillit.core import ProviderOutcome, RecipeIdentity, SessionTelemetry
 
             flush_session_log(
                 log_dir=log_dir,
@@ -641,6 +638,8 @@ def recover_crashed_sessions(tmpfs_path: str = "/dev/shm", log_dir: str = "") ->
                 start_ts=mtime_ts,
                 proc_snapshots=snapshots if snapshots else None,
                 termination_reason="CRASHED",
+                provider_outcome=ProviderOutcome.none_used(),
+                recipe_identity=RecipeIdentity.empty(),
                 telemetry=SessionTelemetry.empty(),
             )
         except Exception:

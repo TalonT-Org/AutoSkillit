@@ -474,10 +474,11 @@ class TestSkillResultProviderFields:
         assert data["provider_used"] == "anthropic-vertex"
         assert data["provider_fallback"] is True
 
-    def test_to_json_omits_provider_used_when_empty(self):
+    def test_to_json_includes_provider_used_as_empty_string_when_unset(self):
         sr = SkillResult(**self._BASE_KWARGS)
         data = json.loads(sr.to_json())
-        assert "provider_used" not in data
+        assert "provider_used" in data
+        assert data["provider_used"] == ""
 
     def test_to_json_includes_provider_fallback_when_true(self):
         sr = SkillResult(**self._BASE_KWARGS, provider_fallback=True)

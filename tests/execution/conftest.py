@@ -169,7 +169,11 @@ def _snap(
 
 
 def _flush(tmp_path: Path, **overrides) -> None:
-    from autoskillit.core.types._type_results import SessionTelemetry
+    from autoskillit.core.types._type_results import (
+        ProviderOutcome,
+        RecipeIdentity,
+        SessionTelemetry,
+    )
     from autoskillit.execution.session_log import flush_session_log
 
     defaults: dict = {
@@ -206,7 +210,30 @@ def _flush(tmp_path: Path, **overrides) -> None:
         loc_insertions=defaults.pop("loc_insertions"),
         loc_deletions=defaults.pop("loc_deletions"),
     )
-    flush_session_log(**defaults, telemetry=telemetry)
+
+    # Extract provider/recipe kwargs and build typed containers
+    _provider_used = defaults.pop("provider_used", "")
+    _provider_fallback = defaults.pop("provider_fallback", False)
+    _recipe_name = defaults.pop("recipe_name", "")
+    _recipe_content_hash = defaults.pop("recipe_content_hash", "")
+    _recipe_composite_hash = defaults.pop("recipe_composite_hash", "")
+    _recipe_version = defaults.pop("recipe_version", "")
+    provider_outcome = ProviderOutcome(
+        provider_used=_provider_used,
+        fallback_activated=_provider_fallback,
+    )
+    recipe_identity = RecipeIdentity(
+        name=_recipe_name,
+        content_hash=_recipe_content_hash,
+        composite_hash=_recipe_composite_hash,
+        version=_recipe_version,
+    )
+    flush_session_log(
+        **defaults,
+        telemetry=telemetry,
+        provider_outcome=provider_outcome,
+        recipe_identity=recipe_identity,
+    )
 
 
 @pytest.fixture

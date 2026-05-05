@@ -389,12 +389,14 @@ class TestCloneRepoRemoteUrlOverride:
                 cwd=str(clone_path),
                 capture_output=True,
                 text=True,
+                check=True,
             ).stdout.strip()
             actual_upstream = subprocess.run(
                 ["git", "remote", "get-url", "upstream"],
                 cwd=str(clone_path),
                 capture_output=True,
                 text=True,
+                check=True,
             ).stdout.strip()
             # origin is now a local file URL unique to this clone
             assert actual_origin.startswith("file://")
@@ -421,12 +423,14 @@ class TestCloneRepoRemoteUrlOverride:
                 cwd=str(clone_path),
                 capture_output=True,
                 text=True,
+                check=True,
             ).stdout.strip()
             actual_upstream = subprocess.run(
                 ["git", "remote", "get-url", "upstream"],
                 cwd=str(clone_path),
                 capture_output=True,
                 text=True,
+                check=True,
             ).stdout.strip()
             # origin is now a local file URL unique to this clone
             assert actual_origin.startswith("file://")
@@ -480,7 +484,7 @@ class TestCloneRepoDetectAndExpand:
             with patch("autoskillit.workspace.clone.detect_uncommitted_changes", return_value=[]):
                 mock_clone = MagicMock()
                 mock_clone.returncode = 0
-                with patch("subprocess.run", return_value=mock_clone):
+                with patch("autoskillit.workspace.clone.subprocess.run", return_value=mock_clone):
                     clone_repo(str(tmp_path), "test-run", branch="")
         mock_detect.assert_called_once_with(str(tmp_path))
 
@@ -489,7 +493,9 @@ class TestCloneRepoDetectAndExpand:
         with patch("autoskillit.workspace.clone.detect_uncommitted_changes", return_value=[]):
             mock_clone = MagicMock()
             mock_clone.returncode = 0
-            with patch("subprocess.run", return_value=mock_clone) as mock_run:
+            with patch(
+                "autoskillit.workspace.clone.subprocess.run", return_value=mock_clone
+            ) as mock_run:
                 clone_repo(str(tmp_path), "test-run", branch="dev")
         git_clone_calls = [
             call for call in mock_run.call_args_list if call.args and "clone" in call.args[0]
@@ -506,7 +512,7 @@ class TestCloneRepoDetectAndExpand:
                 "autoskillit.workspace.clone.detect_uncommitted_changes",
                 return_value=[" M file.py"],
             ):
-                with patch("subprocess.run") as mock_run:
+                with patch("autoskillit.workspace.clone.subprocess.run") as mock_run:
                     result = clone_repo(str(tmp_path), "test-run")
         assert result["uncommitted_changes"] == "true"
         mock_run.assert_not_called()
@@ -553,6 +559,7 @@ class TestCloneDecontamination:
                 cwd=str(clone_path),
                 capture_output=True,
                 text=True,
+                check=True,
             )
             assert ls_result.stdout.strip() == "", "Generated file should be untracked in clone"
         finally:

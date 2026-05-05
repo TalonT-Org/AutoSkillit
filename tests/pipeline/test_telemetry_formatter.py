@@ -667,9 +667,11 @@ def test_token_table_renders_invocation_count() -> None:
         "cache_creation_input_tokens": 10,
         "peak_context": 500,
         "total_elapsed_seconds": 120.0,
+        "invocation_count": 3,
+        "turn_count": 40,
     }
     result = TelemetryFormatter.format_token_table(steps, total)
-    assert "| 3 |" in result or "| 3 " in result, "invocation_count=3 not rendered"
+    assert "| 3 |" in result, "invocation_count=3 not rendered"
 
 
 def test_token_markdown_terminal_column_parity() -> None:

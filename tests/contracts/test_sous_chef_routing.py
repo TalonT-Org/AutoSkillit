@@ -231,3 +231,16 @@ def test_merge_phase_preserves_merge_prs_for_non_queue_repos() -> None:
     assert "queue_available" in lower and "false" in lower, (
         "MERGE PHASE must distinguish queue_available=false as the condition for merge-prs"
     )
+
+
+def test_sous_chef_no_resume_session_id_in_context_limit_routing() -> None:
+    """sous-chef SKILL.md must not instruct passing resume_session_id for
+    on_context_limit routing.
+
+    Context-exhausted sessions must start fresh to get a full context window.
+    """
+    skill_md = _sous_chef_text()
+    assert "resume_session_id" not in skill_md, (
+        "sous-chef SKILL.md must not instruct passing resume_session_id; "
+        "context-exhausted sessions must start fresh"
+    )

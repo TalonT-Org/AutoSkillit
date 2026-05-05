@@ -324,10 +324,8 @@ def test_recipe_repository_validate_from_path_records_call_default_relpath():
 @pytest.mark.anyio
 async def test_in_memory_executor_accepts_resume_session_id():
     """InMemoryHeadlessExecutor.run() must accept resume_session_id kwarg."""
-    import asyncio
-
     executor = InMemoryHeadlessExecutor()
     # Must not raise TypeError
-    await asyncio.shield(executor.run("/implement foo", "/tmp", resume_session_id="sess-123"))
+    await executor.run("/implement foo", "/tmp", resume_session_id="sess-123")
     assert len(executor.calls) == 1
     assert executor.calls[0].resume_session_id == "sess-123"

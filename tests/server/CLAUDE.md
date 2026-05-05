@@ -44,8 +44,9 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_tool_exception_boundary.py` | Tests for the exception boundary in track_response_size |
 | `test_tools_ci.py` | Tests for wait_for_ci, get_ci_status, and wait_for_merge_queue MCP tool handlers |
 | `test_tools_ci_enqueue.py` | Tests for enqueue_pr MCP tool handler |
+| `test_tools_ci_merge_state.py` | Tests for check_repo_merge_state MCP tool handler |
 | `test_tools_ci_split.py` | CI split structural guard |
-| `test_tools_ci_watch.py` | Tests for wait_for_ci event validation and null coercion |
+| `test_tools_ci_watch.py` | Tests for wait_for_ci event validation, null coercion, and auto_trigger recovery |
 | `test_tools_clone.py` | Tests for autoskillit server clone tools |
 | `test_tools_dispatch.py` | Tests for dispatch_food_truck tool handler and execute_dispatch domain function |
 | `test_tools_execution_command.py` | Tests for run_skill command building, timeouts, env, model, and per-invocation markers |

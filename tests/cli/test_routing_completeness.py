@@ -55,7 +55,7 @@ def test_completed_no_flush_routes_to_on_context_limit() -> None:
     assert "on_context_limit" in surrounding, (
         "completed_no_flush rule must reference on_context_limit"
     )
-    assert "NEVER route" in prompt_text[idx : idx + 600] or "on_context_limit" in surrounding
+    assert "NEVER route" in prompt_text[idx : idx + 600]
 
 
 def test_empty_output_routing_does_not_include_on_context_limit() -> None:

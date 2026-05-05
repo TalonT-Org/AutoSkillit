@@ -13,38 +13,13 @@ import pytest
 
 from autoskillit.core.types import (
     RetryReason,
-    SubprocessResult,
-    TerminationReason,
 )
 from autoskillit.execution.headless import _build_skill_result
 from autoskillit.pipeline.audit import DefaultAuditLog, FailureRecord
+from tests.execution.conftest import EMPTY_OUTPUT_RESULT_LINE, WRITE_TOOL_LINE, _sr
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
-_WRITE_TOOL_LINE = json.dumps(
-    {
-        "type": "assistant",
-        "message": {
-            "content": [
-                {
-                    "type": "tool_use",
-                    "name": "Write",
-                    "id": "w1",
-                    "input": {"file_path": "/worktree/src/foo.py"},
-                }
-            ]
-        },
-    }
-)
-_EMPTY_OUTPUT_RESULT_LINE = json.dumps(
-    {
-        "type": "result",
-        "subtype": "empty_output",
-        "is_error": True,
-        "result": "",
-        "session_id": "",
-    }
-)
 _SUCCESS_EMPTY_RESULT_LINE = json.dumps(
     {
         "type": "result",
@@ -56,23 +31,10 @@ _SUCCESS_EMPTY_RESULT_LINE = json.dumps(
 )
 
 
-def _make_sr(stdout: str) -> SubprocessResult:
-    return SubprocessResult(
-        returncode=0,
-        stdout=stdout,
-        stderr="",
-        termination=TerminationReason.NATURAL_EXIT,
-        pid=12345,
-    )
-
-
 class TestEmptyOutputWriteReconciliation:
-    """EMPTY_OUTPUT + write evidence must be reclassified to COMPLETED_NO_FLUSH."""
-
     def test_empty_output_with_write_tool_use_becomes_completed_no_flush(self) -> None:
-        """Write tool_use in stdout triggers reclassification from EMPTY_OUTPUT."""
-        stdout = "\n".join([_WRITE_TOOL_LINE, _EMPTY_OUTPUT_RESULT_LINE])
-        sr = _build_skill_result(_make_sr(stdout))
+        stdout = "\n".join([WRITE_TOOL_LINE, EMPTY_OUTPUT_RESULT_LINE])
+        sr = _build_skill_result(_sr(stdout=stdout))
 
         assert sr.needs_retry is True
         assert sr.retry_reason == RetryReason.COMPLETED_NO_FLUSH
@@ -81,8 +43,8 @@ class TestEmptyOutputWriteReconciliation:
 
     def test_empty_output_with_fs_writes_only_becomes_completed_no_flush(self) -> None:
         """fs_writes_detected alone (no tool_uses) triggers reclassification."""
-        stdout = _EMPTY_OUTPUT_RESULT_LINE
-        sr = _build_skill_result(_make_sr(stdout), fs_writes_detected=True)
+        stdout = EMPTY_OUTPUT_RESULT_LINE
+        sr = _build_skill_result(_sr(stdout=stdout), fs_writes_detected=True)
 
         assert sr.needs_retry is True
         assert sr.retry_reason == RetryReason.COMPLETED_NO_FLUSH
@@ -90,8 +52,8 @@ class TestEmptyOutputWriteReconciliation:
 
     def test_success_empty_result_with_write_evidence_becomes_completed_no_flush(self) -> None:
         """success subtype with empty result + write evidence → COMPLETED_NO_FLUSH."""
-        stdout = "\n".join([_WRITE_TOOL_LINE, _SUCCESS_EMPTY_RESULT_LINE])
-        sr = _build_skill_result(_make_sr(stdout))
+        stdout = "\n".join([WRITE_TOOL_LINE, _SUCCESS_EMPTY_RESULT_LINE])
+        sr = _build_skill_result(_sr(stdout=stdout))
 
         assert sr.needs_retry is True
         assert sr.retry_reason == RetryReason.COMPLETED_NO_FLUSH
@@ -99,18 +61,18 @@ class TestEmptyOutputWriteReconciliation:
 
     def test_empty_output_without_write_evidence_stays_empty_output(self) -> None:
         """EMPTY_OUTPUT with no writes preserves original reason — correct behavior unchanged."""
-        stdout = _EMPTY_OUTPUT_RESULT_LINE
-        sr = _build_skill_result(_make_sr(stdout), fs_writes_detected=False)
+        stdout = EMPTY_OUTPUT_RESULT_LINE
+        sr = _build_skill_result(_sr(stdout=stdout), fs_writes_detected=False)
 
         assert sr.needs_retry is True
         assert sr.retry_reason == RetryReason.EMPTY_OUTPUT
 
     def test_budget_guard_caps_completed_no_flush(self) -> None:
         """Budget exhaustion overrides COMPLETED_NO_FLUSH → BUDGET_EXHAUSTED."""
-        stdout = "\n".join([_WRITE_TOOL_LINE, _EMPTY_OUTPUT_RESULT_LINE])
+        stdout = "\n".join([WRITE_TOOL_LINE, EMPTY_OUTPUT_RESULT_LINE])
         skill_command = "/autoskillit:implement-worktree-no-merge"
         audit = DefaultAuditLog()
-        for _ in range(4):  # 4 > max_consecutive_retries=3
+        for _ in range(3):  # 3 pre-existing + 1 from _capture_failure = 4 > max=3
             audit.record_failure(
                 FailureRecord(  # type: ignore[arg-type]
                     timestamp=datetime.now(UTC).isoformat(),
@@ -124,7 +86,7 @@ class TestEmptyOutputWriteReconciliation:
             )
 
         sr = _build_skill_result(
-            _make_sr(stdout),
+            _sr(stdout=stdout),
             skill_command=skill_command,
             audit=audit,
         )

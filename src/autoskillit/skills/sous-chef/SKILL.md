@@ -64,7 +64,7 @@ When `run_skill` returns `needs_retry=true` for **any step**:
 - **If `retry_reason: drain_race` AND the step has no `on_context_limit`** → fall through to `on_failure`.
 - **If `retry_reason: completed_no_flush` AND the step defines `on_context_limit`** → follow `on_context_limit`.
   The session exited with empty stdout but write evidence confirms files were written to the worktree.
-  Partial progress is confirmed — treat identically to `drain_race` for routing purposes.
+  Partial progress is confirmed — treat identically to `resume` for routing purposes.
 - **If `retry_reason: completed_no_flush` AND the step has no `on_context_limit`** → fall through to `on_failure`.
 - **If `retry_reason: empty_output`** → fall through to `on_failure`. The session produced no
   output AND no write evidence (no Write/Edit calls, no filesystem writes). Do NOT route to `on_context_limit` even if defined.

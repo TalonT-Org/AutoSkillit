@@ -411,6 +411,8 @@ def _build_skill_result(
     ):
         _audit_needs_retry = True
         _audit_retry_reason = RetryReason.CONTRACT_RECOVERY
+    if retry_reason == RetryReason.EMPTY_OUTPUT and _has_write_evidence:
+        _audit_retry_reason = RetryReason.COMPLETED_NO_FLUSH
 
     if not success or needs_retry:
         _capture_failure(
@@ -534,10 +536,10 @@ def _build_skill_result(
                 retry_reason=RetryReason.ZERO_WRITES,
             )
 
-    # EMPTY_OUTPUT + write evidence → COMPLETED_NO_FLUSH: preserve worktree, not discard.
     if sr.needs_retry and sr.retry_reason == RetryReason.EMPTY_OUTPUT and _has_write_evidence:
         sr = dataclasses.replace(
             sr,
+            subtype="completed_no_flush",
             retry_reason=RetryReason.COMPLETED_NO_FLUSH,
         )
         sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)

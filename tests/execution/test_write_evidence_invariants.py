@@ -7,8 +7,6 @@ corresponding gate causes this test to fail immediately.
 
 from __future__ import annotations
 
-import json
-
 import pytest
 
 from autoskillit.core.types import (
@@ -17,6 +15,7 @@ from autoskillit.core.types import (
     TerminationReason,
 )
 from autoskillit.execution.headless import _build_skill_result
+from tests.execution.conftest import EMPTY_OUTPUT_RESULT_LINE, WRITE_TOOL_LINE
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -27,36 +26,10 @@ NO_WORK_REASONS = {RetryReason.EMPTY_OUTPUT}
 # Reasons that correctly reflect write-aware reclassification.
 WRITE_AWARE_REASONS = {RetryReason.COMPLETED_NO_FLUSH}
 
-_WRITE_TOOL_LINE = json.dumps(
-    {
-        "type": "assistant",
-        "message": {
-            "content": [
-                {
-                    "type": "tool_use",
-                    "name": "Write",
-                    "id": "w1",
-                    "input": {"file_path": "/worktree/src/foo.py"},
-                }
-            ]
-        },
-    }
-)
-_EMPTY_OUTPUT_RESULT_LINE = json.dumps(
-    {
-        "type": "result",
-        "subtype": "empty_output",
-        "is_error": True,
-        "result": "",
-        "session_id": "",
-    }
-)
-
 
 @pytest.mark.parametrize("reason", sorted(NO_WORK_REASONS, key=lambda r: r.value))
 def test_no_work_reasons_are_overridden_by_write_evidence(reason: RetryReason) -> None:
-    """Any 'no work done' retry reason must be reclassified when write evidence exists."""
-    stdout = "\n".join([_WRITE_TOOL_LINE, _EMPTY_OUTPUT_RESULT_LINE])
+    stdout = "\n".join([WRITE_TOOL_LINE, EMPTY_OUTPUT_RESULT_LINE])
     result = SubprocessResult(
         returncode=0,
         stdout=stdout,

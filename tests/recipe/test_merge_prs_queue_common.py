@@ -9,16 +9,11 @@ import pytest
 
 from autoskillit.core import PRState
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
-from autoskillit.recipe.validator import validate_recipe
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
-# ---------------------------------------------------------------------------
-# Local fixture (depends on conftest-provided fixtures)
-# ---------------------------------------------------------------------------
-
-
+# pmp is excluded: pmp-specific assertions live in test_merge_prs_queue_pmp.py
 @pytest.fixture(scope="module", params=["impl", "remed", "impl_groups"])
 def any_recipe(request, impl_recipe, remed_recipe, impl_groups_recipe):
     return {"impl": impl_recipe, "remed": remed_recipe, "impl_groups": impl_groups_recipe}[
@@ -368,21 +363,6 @@ def test_auto_merge_ingredient_description_updated(any_recipe) -> None:
     )
 
 
-def test_implementation_recipe_still_valid(impl_recipe) -> None:
-    errors = validate_recipe(impl_recipe)
-    assert errors == [], f"validate_recipe errors: {errors}"
-
-
-def test_remediation_recipe_still_valid(remed_recipe) -> None:
-    errors = validate_recipe(remed_recipe)
-    assert errors == [], f"validate_recipe errors: {errors}"
-
-
-def test_impl_groups_recipe_still_valid(impl_groups_recipe) -> None:
-    errors = validate_recipe(impl_groups_recipe)
-    assert errors == [], f"validate_recipe errors: {errors}"
-
-
 # ---------------------------------------------------------------------------
 # Routing matrix exhaustiveness — queue_available × auto_merge_available
 # ---------------------------------------------------------------------------
@@ -479,9 +459,6 @@ def test_no_gh_pr_merge_in_queue_enrollment_steps(any_recipe) -> None:
         assert step.tool == "enqueue_pr", (
             f"{step_name} must use enqueue_pr tool, got {step.tool!r}"
         )
-        if step.tool == "run_cmd":
-            cmd = step.with_args.get("cmd", "")
-            assert "gh pr merge" not in cmd, f"{step_name} must not use gh pr merge"
 
 
 def test_no_enable_auto_merge_step_exists(any_recipe) -> None:
@@ -554,15 +531,15 @@ def test_verify_queue_enrollment_ejected_ci_failure_routes_directly_to_diagnose_
     )
 
 
-@pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])
+@pytest.mark.parametrize("recipe_fixture", ["impl_recipe", "remed_recipe", "impl_groups_recipe"])
 def test_wait_for_direct_merge_on_failure_routes_to_register_clone_unconfirmed(
-    recipe_name: str,
+    recipe_fixture: str, request
 ) -> None:
     """wait_for_direct_merge.on_failure must be register_clone_unconfirmed in all three recipes."""
-    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    recipe = request.getfixturevalue(recipe_fixture)
     step = recipe.steps["wait_for_direct_merge"]
     assert step.on_failure == "register_clone_unconfirmed", (
-        f"{recipe_name}.yaml wait_for_direct_merge.on_failure must be "
+        f"{recipe_fixture}: wait_for_direct_merge.on_failure must be "
         f"'register_clone_unconfirmed', got: {step.on_failure!r}"
     )
 

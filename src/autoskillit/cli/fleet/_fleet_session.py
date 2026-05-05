@@ -35,6 +35,8 @@ def _launch_fleet_session(
     *,
     fleet_mode: Literal["dispatch", "campaign"],
     ingredients_table: str | None = None,
+    initial_message: str | None = None,
+    recipe_table: str | None = None,
 ) -> None:
     """Build the L3 orchestrator prompt and launch an interactive fleet session."""
     from autoskillit.cli import detect_autoskillit_mcp_prefix  # noqa: PLC0415
@@ -48,7 +50,7 @@ def _launch_fleet_session(
         # Ad-hoc mode: no campaign, no state, bare kitchen open
         from autoskillit.cli._prompts import _build_fleet_dispatch_prompt
 
-        prompt = _build_fleet_dispatch_prompt(mcp_prefix)
+        prompt = _build_fleet_dispatch_prompt(mcp_prefix, recipe_table=recipe_table)
         extra_env: dict[str, str] = {
             "AUTOSKILLIT_SESSION_TYPE": "fleet",
             "AUTOSKILLIT_FLEET_MODE": fleet_mode,
@@ -56,9 +58,11 @@ def _launch_fleet_session(
         }
         seen_reload_ids: set[str] = set()
         current_resume_spec: ResumeSpec = NoResume()
+        current_initial_message = initial_message
         while True:
             reload_id = _run_interactive_session(
                 prompt,
+                initial_message=current_initial_message,
                 extra_env=extra_env,
                 resume_spec=current_resume_spec,
                 project_dir=project_dir,
@@ -67,6 +71,7 @@ def _launch_fleet_session(
                 break
             _check_reload_guard(reload_id, seen_reload_ids)
             current_resume_spec = NamedResume(session_id=reload_id)
+            current_initial_message = None  # greeting only on first launch
     else:
         # Campaign-driven mode: full orchestrator prompt with manifest and state
         if campaign_id is None:

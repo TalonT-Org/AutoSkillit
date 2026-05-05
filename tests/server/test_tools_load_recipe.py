@@ -342,7 +342,7 @@ class TestMigrationSuppression:
         from autoskillit.server.tools.tools_recipe import validate_recipe
 
         script = tmp_path / "test-script.yaml"
-        script.write_text(_MINIMAL_SCRIPT_YAML)
+        script.write_text(_MINIMAL_SCRIPT_YAML + 'autoskillit_version: "0.0.1"\n')
 
         # Even with script suppressed in config, validate_recipe does not filter
         tool_ctx.config = AutomationConfig(migration=MigrationConfig(suppressed=["test-script"]))

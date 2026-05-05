@@ -215,6 +215,7 @@ async def _execute_claude_headless(
     write_watch_dirs: Sequence[Path] = (),
     provider_name: str = "",
     provider_fallback_env: dict[str, str] | None = None,
+    provider_fallback_name: str = "",
 ) -> SkillResult:
     """Shared subprocess execution for headless Claude sessions.
 
@@ -284,7 +285,7 @@ async def _execute_claude_headless(
 
     _pre_session_sha = _capture_git_head_sha(cwd)
     _result: SubprocessResult | None = None
-    result: SubprocessResult  # assigned before every break; exception paths return/raise
+    result: SubprocessResult
     skill_result: SkillResult
     while True:
         try:
@@ -308,8 +309,6 @@ async def _execute_claude_headless(
             _exc_text = traceback.format_exc()
             _log_dir = ctx.config.linux_tracing.log_dir
             try:
-                # Deferred: autoskillit.execution.__init__ imports headless.py (L39-42);
-                # a top-level import of autoskillit.execution would be circular.
                 from autoskillit.execution import flush_session_log
 
                 flush_session_log(
@@ -456,6 +455,8 @@ async def _execute_claude_headless(
         ):
             if not fallback_activated:
                 spec = dataclasses.replace(spec, env={**spec.env, **provider_fallback_env})
+                if provider_fallback_name:
+                    current_provider_name = provider_fallback_name
             fallback_activated = True
             remaining_attempts -= 1
             continue
@@ -593,6 +594,7 @@ async def run_headless_core(
     profile_name: str = "",
     provider_name: str = "",
     provider_fallback_env: dict[str, str] | None = None,
+    provider_fallback_name: str = "",
 ) -> SkillResult:
     """Shared headless runner used by run_skill.
 
@@ -665,6 +667,7 @@ async def run_headless_core(
             write_watch_dirs=write_watch_dirs,
             provider_name=provider_name,
             provider_fallback_env=provider_fallback_env,
+            provider_fallback_name=provider_fallback_name,
         )
 
 
@@ -701,6 +704,7 @@ class DefaultHeadlessExecutor:
         profile_name: str = "",
         provider_name: str = "",
         provider_fallback_env: dict[str, str] | None = None,
+        provider_fallback_name: str = "",
     ) -> SkillResult:
         cfg = self._ctx.config.run_skill
         effective_timeout = timeout if timeout is not None else cfg.timeout
@@ -731,6 +735,7 @@ class DefaultHeadlessExecutor:
             profile_name=profile_name,
             provider_name=provider_name,
             provider_fallback_env=provider_fallback_env,
+            provider_fallback_name=provider_fallback_name,
         )
 
     async def dispatch_food_truck(
@@ -756,6 +761,7 @@ class DefaultHeadlessExecutor:
         allowed_write_prefix: str = "",
         provider_name: str = "",
         provider_fallback_env: dict[str, str] | None = None,
+        provider_fallback_name: str = "",
     ) -> SkillResult:
         cfg = self._ctx.config
         resolved_model = _resolve_model(model, cfg)
@@ -813,4 +819,5 @@ class DefaultHeadlessExecutor:
             skip_clone_guard=True,
             provider_name=provider_name,
             provider_fallback_env=provider_fallback_env,
+            provider_fallback_name=provider_fallback_name,
         )

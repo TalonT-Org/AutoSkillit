@@ -279,19 +279,7 @@ def _build_skill_result(
     write_call_count = sum(1 for t in session.tool_uses if t.get("name") in {"Write", "Edit"})
     _has_write_evidence = write_call_count >= 1 or fs_writes_detected
 
-    # ── Channel B drain-race recovery ──────────────────────────────────────
-    # When Channel B confirmed completion but stdout never received the
-    # type=result record (UNPARSEABLE / EMPTY_OUTPUT), the session completed
-    # but Claude Code deferred type=result until all background agents finished.
-    # If we killed the process tree after Channel B fired, the deferred record
-    # was never flushed to stdout.
-    #
-    # assistant_messages are accumulated from stdout NDJSON records of type
-    # "assistant" — these are written BEFORE the deferred type=result. If the
-    # completion marker is standalone in assistant_messages with substantive
-    # content, reconstruct the result and promote the session so downstream
-    # recovery paths and the Channel B bypass in _compute_success operate on
-    # valid state.
+    # Channel B drain-race: recover from assistant_messages if type=result was not flushed.
     match result.channel_confirmation:
         case ChannelConfirmation.CHANNEL_B if (
             session.subtype in _CHANNEL_B_RECOVERABLE_SUBTYPES and completion_marker

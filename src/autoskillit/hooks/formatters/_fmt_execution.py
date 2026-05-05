@@ -15,7 +15,6 @@ from _fmt_primitives import (  # type: ignore[import-not-found]
 
 def _format_exit_code_line(data: dict) -> str:
     """Return the formatted exit_code line, annotated with kill_reason when present.
-
     Legacy payloads without kill_reason render as bare exit_code values so that
     JSON-line replay of old session logs still parses correctly.
     """

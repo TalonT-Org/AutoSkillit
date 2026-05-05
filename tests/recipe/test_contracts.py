@@ -663,6 +663,7 @@ ALWAYS_WRITE_SKILLS = {
     "review-design",
     "run-experiment",
     "scope",
+    "setup-environment",
     "stage-data",
     "troubleshoot-experiment",
     "write-recipe",

@@ -41,6 +41,7 @@ _PSEUDOCODE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         # bash blocks that reference it.
         ("implement-experiment", "slug"),
         ("generate-report", "slug"),
+        ("setup-environment", "slug"),
         ("promote-to-main", "branch"),
         ("promote-to-main", "merge_base_sha"),
         ("promote-to-main", "number"),

@@ -2,7 +2,7 @@
 
 ## Overview
 
-AutoSkillit's 130 bundled skills are organized into three tiers that control when and where
+AutoSkillit's 131 bundled skills are organized into three tiers that control when and where
 they appear as slash commands. The tier system is orthogonal to subset categories — you can
 disable a subset across all tiers simultaneously, or reclassify individual skills between
 tiers. See [Subset Categories](subsets.md) for subset configuration.
@@ -22,7 +22,7 @@ tiers. See [Subset Categories](subsets.md) for subset configuration.
 ### Tier 2 — Cook (Interactive Skills)
 
 - **Location**: `src/autoskillit/skills_extended/` (NOT plugin-scanned)
-- **Default members** (100 total):
+- **Default members** (101 total):
   `investigate`, `make-plan`, `implement-worktree`, `rectify`,
   `dry-walkthrough`, `make-groups`, `review-approach`, `mermaid`, `make-arch-diag`,
   `make-experiment-diag`, `build-execution-map`, `plan-visualization`,
@@ -36,7 +36,7 @@ tiers. See [Subset Categories](subsets.md) for subset configuration.
   `issue-splitter`, `enrich-issues`, `prepare-issue`, `process-issues`, `make-campaign`,
   `scope`, `plan-experiment`, `implement-experiment`, `run-experiment`,
   `generate-report`, `troubleshoot-experiment`,
-  `review-design`, `stage-data`, `bundle-local-report`, `reload-session`
+  `review-design`, `stage-data`, `setup-environment`, `bundle-local-report`, `reload-session`
 - **Visible in**: cook and headless sessions
 - **Mechanism**: copied to an ephemeral session directory (cook) or exposed via
   `--add-dir` (headless sessions launched by `run_skill`)

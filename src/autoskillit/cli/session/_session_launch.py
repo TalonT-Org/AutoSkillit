@@ -137,7 +137,7 @@ def _launch_cook_session(
             break
         if isinstance(session_signal, _InfraExitSignal):
             infra_resume_count += 1
-            if infra_resume_count > _max_infra_resumes:
+            if infra_resume_count >= _max_infra_resumes:
                 raise SystemExit(
                     f"Too many infrastructure resumes ({_max_infra_resumes} max). "
                     f"Last exit: {session_signal.category}"

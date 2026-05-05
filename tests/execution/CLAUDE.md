@@ -30,6 +30,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_headless_path_validation.py` | Tests for headless.py: _build_skill_result, path validation, synthesis, and contract gates |
 | `test_headless_provider_fallback.py` | Tests for the provider fallback loop in _execute_claude_headless — STALE and BUDGET_EXHAUSTED trigger provider switch |
 | `test_headless_provider_forwarding.py` | Tests verifying provider_extras and profile_name forwarding through the headless call chain |
+| `test_headless_result_write_reconciliation.py` | Integration tests for EMPTY_OUTPUT + write-evidence reconciliation gate in _build_skill_result |
 | `test_headless_synthesis.py` | Tests for headless.py synthesis helpers: output path extraction, validation, contamination |
 | `test_idle_output_env.py` | Group G (execution part): AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT env variable injection tests |
 | `test_linux_tracing.py` | Tests for Linux-only process tracing via psutil and /proc filesystem |
@@ -80,6 +81,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_testing.py` | L1 unit tests for execution/testing.py — pytest output parsing |
 | `test_trace_target_resolver.py` | Tests for resolve_trace_target — descendant-walk and basename-match contract |
 | `test_write_evidence.py` | Write evidence: multi-directory fs snapshot and write_watch_dirs plumbing |
+| `test_write_evidence_invariants.py` | Write-evidence invariants: 'no work done' retry reasons must be overridden by write evidence |
 | `test_zero_write_detection.py` | Contract: sessions expected to write must actually write (behavioral write-count gate) |
 
 ## Architecture Notes

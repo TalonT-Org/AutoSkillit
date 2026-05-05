@@ -14,7 +14,13 @@ from autoskillit.core.types._type_results import SessionTelemetry
 from autoskillit.execution.session_log import (
     flush_session_log,
 )
-from tests.execution.conftest import _flush, _snap
+from tests.execution.conftest import (
+    _flush,
+    _make_cc_jsonl_record,
+    _make_thinking_block,
+    _make_tool_block,
+    _snap,
+)
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -681,3 +687,85 @@ def test_flush_session_log_provider_used_defaults_empty_in_token_usage(tmp_path)
     )
     tu = json.loads((tmp_path / "sessions" / "prov-tu-def" / "token_usage.json").read_text())
     assert tu["provider_used"] == ""
+
+
+# ---------------------------------------------------------------------------
+# Extended-thinking merge tests (1d, 1e — currently failing)
+# ---------------------------------------------------------------------------
+
+
+def test_turn_tool_calls_merged_across_thinking_and_tool_records(tmp_path, monkeypatch):
+    cb_log = tmp_path / "s.jsonl"
+    cb_log.write_text(
+        _make_cc_jsonl_record(
+            request_id="req-001",
+            timestamp="2026-05-04T00:00:00Z",
+            content=[_make_thinking_block()],
+        )
+        + "\n"
+        + _make_cc_jsonl_record(
+            request_id="req-001",
+            content=[_make_tool_block("Bash")],
+        )
+        + "\n"
+    )
+    import autoskillit.execution.session_log as sl_mod
+
+    monkeypatch.setattr(sl_mod, "claude_code_log_path", lambda cwd, sid: cb_log)
+    flush_session_log(
+        log_dir=str(tmp_path),
+        cwd="/tmp",
+        session_id="s",
+        pid=1,
+        skill_command="test",
+        success=True,
+        subtype="completed",
+        exit_code=0,
+        start_ts="2026-05-04T00:00:00Z",
+        proc_snapshots=None,
+        telemetry=SessionTelemetry.empty(),
+    )
+    summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
+    assert summary["turn_tool_calls"] == [["Bash"]]
+    assert summary["request_ids"] == ["req-001"]
+
+
+def test_parallel_lists_aligned_when_timestamp_missing(tmp_path, monkeypatch):
+    cb_log = tmp_path / "s.jsonl"
+    cb_log.write_text(
+        _make_cc_jsonl_record(
+            request_id="req-001",
+            timestamp="2026-05-04T00:00:00Z",
+            content=[_make_tool_block("Read")],
+        )
+        + "\n"
+        + _make_cc_jsonl_record(
+            request_id="req-002",
+            content=[_make_tool_block("Edit")],
+        )
+        + "\n"
+    )
+    import autoskillit.execution.session_log as sl_mod
+
+    monkeypatch.setattr(sl_mod, "claude_code_log_path", lambda cwd, sid: cb_log)
+    flush_session_log(
+        log_dir=str(tmp_path),
+        cwd="/tmp",
+        session_id="s",
+        pid=1,
+        skill_command="test",
+        success=True,
+        subtype="completed",
+        exit_code=0,
+        start_ts="2026-05-04T00:00:00Z",
+        proc_snapshots=None,
+        telemetry=SessionTelemetry.empty(),
+    )
+    summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
+    assert (
+        len(summary["request_ids"])
+        == len(summary["turn_timestamps"])
+        == len(summary["turn_tool_calls"])
+        == 2
+    )
+    assert summary["turn_timestamps"][1] == ""

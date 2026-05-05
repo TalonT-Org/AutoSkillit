@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 import psutil
 
 from autoskillit.core import atomic_write, claude_code_log_path, get_logger
+from autoskillit.core.tool_sequence_analysis import iter_merged_assistant_turns
 from autoskillit.execution.anomaly_detection import (
     detect_anomalies,
     detect_identity_drift,
@@ -191,36 +192,14 @@ def flush_session_log(
     _cb_turn_timestamps: list[str] = []
     _cb_turn_tool_calls: list[list[str]] = []
     if cc_log and cc_log.exists():
-        seen_request_ids: set[str] = set()
         try:
-            for raw_line in cc_log.read_text(encoding="utf-8", errors="replace").splitlines():
-                raw_line = raw_line.strip()
-                if not raw_line:
+            _text = cc_log.read_text(encoding="utf-8", errors="replace")
+            for _turn in iter_merged_assistant_turns(_text):
+                if not _turn.request_id:
                     continue
-                try:
-                    rec = json.loads(raw_line)
-                except json.JSONDecodeError:
-                    continue
-                if not isinstance(rec, dict) or rec.get("type") != "assistant":
-                    continue
-                rid = rec.get("requestId", "")
-                ts = rec.get("timestamp", "")
-                if rid and rid not in seen_request_ids:
-                    seen_request_ids.add(rid)
-                    _cb_request_ids.append(str(rid))
-                    if ts:
-                        _cb_turn_timestamps.append(str(ts))
-                    _message = rec.get("message")
-                    _content = _message.get("content", []) if isinstance(_message, dict) else []
-                    _tools = [
-                        str(blk["name"])
-                        for blk in _content
-                        if isinstance(blk, dict)
-                        and blk.get("type") == "tool_use"
-                        and isinstance(blk.get("name"), str)
-                        and blk["name"]
-                    ]
-                    _cb_turn_tool_calls.append(_tools[:8])
+                _cb_request_ids.append(_turn.request_id)
+                _cb_turn_timestamps.append(_turn.timestamp)
+                _cb_turn_tool_calls.append(_turn.tool_names)
         except OSError:
             logger.debug("channel_b_log_read_error", path=cc_log_str, exc_info=True)
 

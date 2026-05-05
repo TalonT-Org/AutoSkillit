@@ -8,10 +8,12 @@ import pytest
 
 from autoskillit.core.tool_sequence_analysis import (
     DFG,
+    AssistantTurn,
     TurnSequence,
     build_dfg,
     build_dfg_by_recipe,
     compute_gap_stats,
+    iter_merged_assistant_turns,
     parse_raw_cc_jsonl,
     parse_sessions_from_summary_dir,
     render_adjacency_table,
@@ -324,3 +326,146 @@ class TestParseSessionsFromSummaryDir:
         (session_dir / "summary.json").write_text("NOT_JSON")
         sessions = list(parse_sessions_from_summary_dir(tmp_path))
         assert sessions == []
+
+
+# ---------------------------------------------------------------------------
+# TestParseRawCCJsonlExtendedThinking  (tests 1a–1c — currently failing)
+# ---------------------------------------------------------------------------
+
+
+class TestParseRawCCJsonlExtendedThinking:
+    def _write(self, tmp_path: pathlib.Path, *records: dict) -> pathlib.Path:
+        log = tmp_path / "session.jsonl"
+        log.write_text("\n".join(json.dumps(r) for r in records) + "\n")
+        return log
+
+    def test_merges_tool_calls_across_thinking_and_tool_records(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        # thinking-only record first, tool-bearing record second — same requestId
+        r1 = {
+            "type": "assistant",
+            "requestId": "req-X",
+            "message": {"content": [{"type": "thinking", "thinking": "reasoning..."}]},
+        }
+        r2 = {
+            "type": "assistant",
+            "requestId": "req-X",
+            "message": {
+                "content": [
+                    {"type": "thinking", "thinking": "more..."},
+                    {"type": "tool_use", "name": "Bash"},
+                ]
+            },
+        }
+        result = parse_raw_cc_jsonl(self._write(tmp_path, r1, r2))
+        assert result == [["Bash"]]
+
+    def test_accumulates_tools_from_multiple_records_same_request_id(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        r1 = {
+            "type": "assistant",
+            "requestId": "req-X",
+            "message": {"content": [{"type": "tool_use", "name": "Read"}]},
+        }
+        r2 = {
+            "type": "assistant",
+            "requestId": "req-X",
+            "message": {"content": [{"type": "tool_use", "name": "Edit"}]},
+        }
+        result = parse_raw_cc_jsonl(self._write(tmp_path, r1, r2))
+        assert result == [["Read", "Edit"]]
+
+    def test_cap_applied_after_accumulation_across_records(self, tmp_path: pathlib.Path) -> None:
+        tools5 = [{"type": "tool_use", "name": f"T{i}"} for i in range(5)]
+        tools5b = [{"type": "tool_use", "name": f"U{i}"} for i in range(5)]
+        r1 = {"type": "assistant", "requestId": "req-X", "message": {"content": tools5}}
+        r2 = {"type": "assistant", "requestId": "req-X", "message": {"content": tools5b}}
+        result = parse_raw_cc_jsonl(self._write(tmp_path, r1, r2))
+        assert len(result[0]) == 8
+
+
+# ---------------------------------------------------------------------------
+# TestIterMergedAssistantTurns  (test 1f — currently failing)
+# ---------------------------------------------------------------------------
+
+
+class TestIterMergedAssistantTurns:
+    def _make_record(
+        self,
+        *,
+        rid: str = "",
+        ts: str = "",
+        tools: list[str] | None = None,
+        thinking: bool = False,
+    ) -> str:
+        content: list[dict] = []
+        if thinking:
+            content.append({"type": "thinking", "thinking": "..."})
+        for name in tools or []:
+            content.append({"type": "tool_use", "name": name})
+        rec: dict = {"type": "assistant", "message": {"content": content}}
+        if rid:
+            rec["requestId"] = rid
+        if ts:
+            rec["timestamp"] = ts
+        return json.dumps(rec)
+
+    def _parse(self, *lines: str) -> list[AssistantTurn]:
+        text = "\n".join(lines) + "\n"
+        return list(iter_merged_assistant_turns(text))
+
+    def test_single_record_yields_one_turn(self) -> None:
+        line = self._make_record(rid="r1", ts="ts1", tools=["Bash"])
+        turns = self._parse(line)
+        assert len(turns) == 1
+        assert turns[0].request_id == "r1"
+        assert turns[0].timestamp == "ts1"
+        assert turns[0].tool_names == ["Bash"]
+
+    def test_multiple_distinct_request_ids_yield_separate_turns(self) -> None:
+        l1 = self._make_record(rid="r1", tools=["A"])
+        l2 = self._make_record(rid="r2", tools=["B"])
+        turns = self._parse(l1, l2)
+        assert len(turns) == 2
+        assert turns[0].tool_names == ["A"]
+        assert turns[1].tool_names == ["B"]
+
+    def test_no_request_id_records_not_deduplicated(self) -> None:
+        l1 = self._make_record(tools=["A"])
+        l2 = self._make_record(tools=["B"])
+        turns = self._parse(l1, l2)
+        assert len(turns) == 2
+
+    def test_records_without_request_id_included(self) -> None:
+        line = self._make_record(tools=["Bash"])
+        turns = self._parse(line)
+        assert len(turns) == 1
+        assert turns[0].request_id == ""
+        assert turns[0].tool_names == ["Bash"]
+
+    def test_preserves_insertion_order(self) -> None:
+        l1 = self._make_record(rid="r1", tools=["A"])
+        l2 = self._make_record(rid="r2", tools=["B"])
+        l3 = self._make_record(rid="r3", tools=["C"])
+        turns = self._parse(l1, l2, l3)
+        assert [t.request_id for t in turns] == ["r1", "r2", "r3"]
+
+    def test_no_rid_turns_interleaved_in_file_order(self) -> None:
+        l_a = self._make_record(rid="r-A", tools=["A"])
+        l_no = self._make_record(tools=["NoRid"])
+        l_b = self._make_record(rid="r-B", tools=["B"])
+        turns = self._parse(l_a, l_no, l_b)
+        assert len(turns) == 3
+        assert turns[0].request_id == "r-A"
+        assert turns[1].request_id == ""
+        assert turns[2].request_id == "r-B"
+
+    def test_timestamp_from_first_record_preferred(self) -> None:
+        l1 = self._make_record(rid="r1", ts="first-ts", tools=[])
+        l2 = self._make_record(rid="r1", ts="second-ts", tools=["Bash"])
+        turns = self._parse(l1, l2)
+        assert len(turns) == 1
+        assert turns[0].timestamp == "first-ts"
+        assert turns[0].tool_names == ["Bash"]

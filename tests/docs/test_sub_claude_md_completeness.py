@@ -25,10 +25,28 @@ EXPECTED_SUB_CLAUDE_MDS = [
     "cli/update/CLAUDE.md",
     "hooks/guards/CLAUDE.md",
     "hooks/formatters/CLAUDE.md",
+    "CLAUDE.md",  # src/autoskillit/ package root
+    "core/CLAUDE.md",
+    "config/CLAUDE.md",
+    "pipeline/CLAUDE.md",
+    "execution/CLAUDE.md",
+    "workspace/CLAUDE.md",
+    "planner/CLAUDE.md",
+    "recipe/CLAUDE.md",
+    "migration/CLAUDE.md",
+    "fleet/CLAUDE.md",
+    "cli/CLAUDE.md",
+    "hooks/CLAUDE.md",
 ]
 
 
-def test_all_15_sub_claude_md_files_exist():
+def test_all_27_sub_claude_md_files_exist():
+    assert len(EXPECTED_SUB_CLAUDE_MDS) == 27, (
+        f"Expected 27 entries, got {len(EXPECTED_SUB_CLAUDE_MDS)}"
+    )
+    assert len(EXPECTED_SUB_CLAUDE_MDS) == len(set(EXPECTED_SUB_CLAUDE_MDS)), (
+        "Duplicate entries in EXPECTED_SUB_CLAUDE_MDS"
+    )
     missing = [p for p in EXPECTED_SUB_CLAUDE_MDS if not (SRC_ROOT / p).is_file()]
     assert not missing, f"Missing sub-CLAUDE.md files: {missing}"
 

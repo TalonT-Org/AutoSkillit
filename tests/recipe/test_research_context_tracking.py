@@ -41,6 +41,28 @@ def test_create_worktree_script_emits_research_dir():
     )
 
 
+def test_create_worktree_script_has_git_init_guard():
+    """create_worktree.sh must auto-init a git repo when .git is absent."""
+    script_path = SCRIPTS_DIR / "create_worktree.sh"
+    script = script_path.read_text()
+    assert '[ ! -d "$SOURCE_DIR/.git" ]' in script or "! -d" in script, (
+        "create_worktree.sh must check for .git directory absence"
+    )
+    assert "git init" in script, "create_worktree.sh must run git init when .git is missing"
+    assert "--allow-empty" in script, (
+        "create_worktree.sh must create an empty seed commit for git worktree add"
+    )
+
+
+def test_create_worktree_git_init_guard_precedes_worktree_add():
+    """The git-init guard must appear BEFORE git worktree add."""
+    script_path = SCRIPTS_DIR / "create_worktree.sh"
+    lines = script_path.read_text().splitlines()
+    init_line = next(i for i, ln in enumerate(lines) if "git init" in ln)
+    worktree_line = next(i for i, ln in enumerate(lines) if "worktree add" in ln)
+    assert init_line < worktree_line, "git init guard must be PREPENDED before git worktree add"
+
+
 def test_finalize_bundle_uses_context_research_dir(recipe):
     step = recipe.steps["finalize_bundle"]
     cmd = step.with_args.get("cmd", "")

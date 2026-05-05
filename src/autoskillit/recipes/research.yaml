@@ -217,7 +217,8 @@ steps:
     note: >
       Creates the shared worktree and commits the experiment plan and scope report
       to research/ as permanent artifacts. All phases and experiment implementation
-      share this worktree.
+      share this worktree. Auto-initializes a git repo with an empty seed commit
+      when the source directory has no .git directory.
 
   stage_data:
     tool: run_skill

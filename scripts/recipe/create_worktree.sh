@@ -12,6 +12,11 @@ VISUALIZATION_PLAN="${6:-}"
 REPORT_PLAN="${7:-}"
 TEMP_NAME="${8:-.autoskillit/temp}"
 
+if [ ! -d "$SOURCE_DIR/.git" ]; then
+  git init -q "$SOURCE_DIR"
+  git -C "$SOURCE_DIR" commit --allow-empty -m "autoskillit: init for research recipe" -q
+fi
+
 BRANCH="research-$(date +%Y%m%d-%H%M%S)"
 WORKTREE_PATH="../worktrees/${BRANCH}"
 git -C "$SOURCE_DIR" worktree add -b "${BRANCH}" "${WORKTREE_PATH}"

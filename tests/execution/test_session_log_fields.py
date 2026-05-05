@@ -609,6 +609,11 @@ def test_flush_index_includes_duration_seconds(tmp_path):
     assert entry["duration_seconds"] == pytest.approx(42.5)
 
 
+# ---------------------------------------------------------------------------
+# Provider field tests
+# ---------------------------------------------------------------------------
+
+
 def test_flush_session_log_provider_used_in_summary(tmp_path):
     _flush(tmp_path, session_id="prov-sum", provider_used="minimax", proc_snapshots=None)
     summary = json.loads((tmp_path / "sessions" / "prov-sum" / "summary.json").read_text())
@@ -767,3 +772,15 @@ def test_parallel_lists_aligned_when_timestamp_missing(tmp_path, monkeypatch):
     assert summary["turn_timestamps"][0] == "2026-05-04T00:00:00Z"
     assert summary["turn_timestamps"][1] == ""
     assert summary["turn_tool_calls"] == [["Read"], ["Edit"]]
+
+
+def test_flush_session_log_provider_used_defaults_to_empty_string(tmp_path):
+    _flush(tmp_path, session_id="prov-def-001", proc_snapshots=None)
+    entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip().split("\n")[-1])
+    assert entry["provider_used"] == ""
+
+
+def test_flush_session_log_provider_fallback_defaults_to_false(tmp_path):
+    _flush(tmp_path, session_id="prov-def-002", proc_snapshots=None)
+    entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip().split("\n")[-1])
+    assert entry["provider_fallback"] is False

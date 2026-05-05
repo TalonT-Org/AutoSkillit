@@ -1,6 +1,6 @@
 ---
 name: dry-walkthrough
-description: Validate an implementation plan by tracing through each change without implementing. Use when user says dry walkthrough, drywalkthrough, validate plan, or check plan. Identifies gaps, fixes the plan directly, and reports changes to terminal.
+description: Plan validation executor. ALWAYS invoke this skill when instructed to validate or dry-walkthrough a plan. Do not read the plan or trace changes directly — use this skill first to load the validation workflow.
 hooks:
   PreToolUse:
     - matcher: "*"

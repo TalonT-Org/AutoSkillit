@@ -22,6 +22,7 @@ Hook script behavior, registration, and bridge tests.
 | `test_review_gate_post_hook.py` | Tests for the review_gate_post_hook PostToolUse hook |
 | `test_review_loop_gate.py` | Tests for the review_loop_gate PreToolUse hook |
 | `test_session_start_reminder.py` | Tests for the SessionStart hook — session_start_hook.py |
+| `test_skill_load_post_hook.py` | Tests for skill_load_post_hook.py PostToolUse hook |
 | `test_token_summary_appender.py` | Tests for the token_summary_appender PostToolUse hook |
 | `test_write_guard.py` | Tests for write_guard.py PreToolUse hook |
 

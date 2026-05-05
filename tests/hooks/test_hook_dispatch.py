@@ -195,6 +195,7 @@ class TestGenerateHooksJsonFormat:
                         "token_summary_hook",
                         "quota_post_hook",
                         "review_gate_post_hook",
+                        "skill_load_post_hook",
                     ), f"Unexpected logical name format: {logical_name}"
 
 

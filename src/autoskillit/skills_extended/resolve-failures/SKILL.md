@@ -1,6 +1,6 @@
 ---
 name: resolve-failures
-description: Fix test failures in a worktree without merging. Leaves worktree green and unmerged for the orchestrator's merge gate. Use when tests fail after implementation. Takes worktree path, plan path, and base branch as positional arguments.
+description: Failure resolution executor. ALWAYS invoke this skill when instructed to fix test failures in a worktree. Do not read test output or edit code directly — use this skill first to load the failure resolution workflow.
 hooks:
   PreToolUse:
     - matcher: "*"

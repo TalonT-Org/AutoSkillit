@@ -325,6 +325,7 @@ generic_automation_mcp/
 │   ├── lint_after_edit_hook.py #  PostToolUse: runs ruff format+check on .py files after Edit/Write
 │   ├── quota_post_hook.py   #   Appends quota warning to run_skill output
 │   ├── review_gate_post_hook.py #  PostToolUse: writes/clears review_gate_state.json
+│   ├── skill_load_post_hook.py  #  PostToolUse: writes skill-loaded flag for non-Anthropic providers
 │   ├── token_summary_hook.py #  Appends Token Usage Summary to PR body
 │   └── session_start_hook.py #  Injects open-kitchen reminder on resume
 │

@@ -47,6 +47,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_run_experiment_contracts.py` | Contract tests for run-experiment SKILL.md — data provenance lifecycle |
 | `test_scope_contracts.py` | Contract tests for the scope skill's SKILL.md template |
 | `test_skill_contracts.py` | Contract tests: every delimiter-emitting skill must be registered in skill_contracts.yaml |
+| `test_skill_directive_descriptions.py` | Contract: headless recipe skills must use directive language in SKILL.md descriptions |
 | `test_skill_transition_boundaries.py` | Contract tests for anti-confirmation instructions at SKILL.md transition boundaries |
 | `test_skill_yaml_validation.py` | Contract: YAML workflow examples embedded in SKILL.md files must be valid recipes |
 | `test_sous_chef_quota_protocol.py` | Contract test: sous-chef SKILL.md must contain QUOTA WAIT PROTOCOL section |

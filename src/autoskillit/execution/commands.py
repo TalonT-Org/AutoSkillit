@@ -219,7 +219,7 @@ def build_headless_resume_cmd(
     return ClaudeHeadlessCmd(cmd=cmd, env=build_claude_env(extras=merged))
 
 
-def _ensure_skill_prefix(skill_command: str) -> str:
+def _ensure_skill_prefix(skill_command: str, *, provider_profile: str = "") -> str:
     """Prompt-formatting helper: wrap slash-commands for headless session loading.
 
     Transforms `/foo args` into `Use the /foo skill args` so non-Claude models
@@ -236,6 +236,15 @@ def _ensure_skill_prefix(skill_command: str) -> str:
         formatted = f"Use the {slash_cmd} skill"
         if rest:
             formatted += f" {rest}"
+        if provider_profile:
+            skill_name = extract_skill_name(stripped) or slash_cmd.lstrip("/")
+            formatted = (
+                f"FIRST ACTION: Your first action should be to load the skill instructions "
+                f'by calling the Skill tool with skill="{skill_name}". '
+                f"If the Skill tool is unavailable or returns an error, read the skill "
+                f"instructions from the skill's SKILL.md file instead.\n\n"
+                f"{formatted}"
+            )
         return formatted
     return skill_command
 
@@ -265,7 +274,7 @@ def _inject_cwd_anchor(skill_command: str, cwd: str, temp_dir_relpath: str | Non
     return skill_command + directive
 
 
-def _inject_narration_suppression(skill_command: str) -> str:
+def _inject_narration_suppression(skill_command: str, *, has_skill_prefix: bool = False) -> str:
     """Append an efficiency directive to suppress inter-tool narration.
 
     Targets prose status text and phase announcements emitted between tool
@@ -273,8 +282,9 @@ def _inject_narration_suppression(skill_command: str) -> str:
     long-running sessions. Does NOT suppress the final response, which is
     where structured output tokens (worktree_path, plan_path, etc.) live.
     """
+    opener = "After loading the skill instructions, d" if has_skill_prefix else "D"
     directive = (
-        "\n\nEFFICIENCY DIRECTIVE: Do NOT output prose status text, phase "
+        f"\n\nEFFICIENCY DIRECTIVE: {opener}o NOT output prose status text, phase "
         "announcements, or progress summaries between tool calls. Every "
         "non-final assistant turn MUST invoke at least one tool. The only "
         "permitted text-only turn is the final response required by the "
@@ -376,14 +386,17 @@ def build_skill_session_cmd(
             )
         )
     else:
+        _has_prefix = bool(profile_name) and skill_command.strip().startswith("/")
         prompt = _inject_narration_suppression(
             _inject_cwd_anchor(
                 _inject_completion_directive(
-                    _ensure_skill_prefix(skill_command), completion_marker
+                    _ensure_skill_prefix(skill_command, provider_profile=profile_name or ""),
+                    completion_marker,
                 ),
                 cwd,
                 temp_dir_relpath=temp_dir_relpath,
-            )
+            ),
+            has_skill_prefix=_has_prefix,
         )
     extras: dict[str, str] = {
         "AUTOSKILLIT_HEADLESS": "1",

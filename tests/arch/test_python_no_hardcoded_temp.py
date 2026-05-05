@@ -58,6 +58,8 @@ _TEMP_PATH_WHITELIST: dict[str, str] = {
     # hook config path so callers know where the file is written.
     "server/tools/tools_kitchen.py": "docstring example",
     "recipe/_cmd_rpc.py": "ensure_results default temp_subdir matches canonical default",
+    "hooks/skill_load_post_hook.py": "stdlib-only hook; cannot use resolve_temp_dir()",
+    "hooks/guards/skill_load_guard.py": "stdlib-only guard; cannot use resolve_temp_dir()",
 }
 
 _LITERAL = ".autoskillit/temp"

@@ -215,3 +215,51 @@ def test_review_loop_gate_matcher_covers_wait_for_ci_and_enqueue_pr() -> None:
     matcher = gate_entries[0].matcher
     assert re.search(r"wait_for_ci", matcher), f"Matcher must cover wait_for_ci; got: {matcher!r}"
     assert re.search(r"enqueue_pr", matcher), f"Matcher must cover enqueue_pr; got: {matcher!r}"
+
+
+def test_skill_load_post_hook_registered_in_hook_registry() -> None:
+    """T3-1: skill_load_post_hook.py must be registered as a PostToolUse hook."""
+    post_scripts = {
+        s for hd in HOOK_REGISTRY if hd.event_type == "PostToolUse" for s in hd.scripts
+    }
+    assert "skill_load_post_hook.py" in post_scripts, (
+        "skill_load_post_hook.py must be registered as a PostToolUse hook in HOOK_REGISTRY"
+    )
+
+
+def test_skill_load_guard_registered_in_hook_registry() -> None:
+    """T3-2: guards/skill_load_guard.py must be registered as a PreToolUse hook."""
+    pre_scripts = {s for hd in HOOK_REGISTRY if hd.event_type == "PreToolUse" for s in hd.scripts}
+    assert "guards/skill_load_guard.py" in pre_scripts, (
+        "guards/skill_load_guard.py must be registered as a PreToolUse hook in HOOK_REGISTRY"
+    )
+
+
+def test_skill_load_guard_matcher_covers_native_tools() -> None:
+    """T3-3: guards/skill_load_guard.py matcher must cover all native tools."""
+    import re
+
+    guard_entries = [
+        hd
+        for hd in HOOK_REGISTRY
+        if hd.event_type == "PreToolUse" and "guards/skill_load_guard.py" in hd.scripts
+    ]
+    assert guard_entries, "No PreToolUse entry found for guards/skill_load_guard.py"
+    matcher = guard_entries[0].matcher
+    for tool in ("Read", "Write", "Edit", "Bash", "Grep", "Glob"):
+        assert re.search(tool, matcher), f"Matcher must cover {tool}; got: {matcher!r}"
+
+
+def test_skill_load_post_hook_matcher_is_skill() -> None:
+    """T3-4: skill_load_post_hook.py matcher must match Skill."""
+    import re
+
+    entries = [
+        hd
+        for hd in HOOK_REGISTRY
+        if hd.event_type == "PostToolUse" and "skill_load_post_hook.py" in hd.scripts
+    ]
+    assert entries, "No PostToolUse entry found for skill_load_post_hook.py"
+    assert re.search("Skill", entries[0].matcher), (
+        f"Matcher must match Skill; got: {entries[0].matcher!r}"
+    )

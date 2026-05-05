@@ -111,6 +111,8 @@ _BROAD_EXCEPT_EXEMPT = frozenset(
         "skill_cmd_guard.py",
         "skill_command_guard.py",
         "token_summary_hook.py",
+        "skill_load_post_hook.py",
+        "skill_load_guard.py",
     }
 )
 

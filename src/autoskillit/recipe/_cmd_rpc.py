@@ -531,8 +531,13 @@ def _resolve_repo_identity(cwd: str) -> tuple[str, str, str]:
         msg = f"gh repo view failed: {result.stderr}"
         raise RuntimeError(msg)
     parts = result.stdout.strip().split()
+    if len(parts) < 2:
+        msg = f"Unexpected gh repo view output: {result.stdout!r}"
+        raise RuntimeError(msg)
     owner, repo_name = parts[0], parts[1]
-    query = f'{{ repository(owner: "{owner}", name: "{repo_name}") {{ id }} }}'
+    safe_owner = json.dumps(owner)[1:-1]
+    safe_repo = json.dumps(repo_name)[1:-1]
+    query = f'{{ repository(owner: "{safe_owner}", name: "{safe_repo}") {{ id }} }}'
     result = subprocess.run(
         ["gh", "api", "graphql", "-f", f"query={query}"],
         cwd=cwd,
@@ -542,7 +547,13 @@ def _resolve_repo_identity(cwd: str) -> tuple[str, str, str]:
     if result.returncode != 0:
         msg = f"gh graphql repo ID query failed: {result.stderr}"
         raise RuntimeError(msg)
-    data = json.loads(result.stdout)
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        msg = f"gh graphql repo ID: non-JSON output: {result.stdout!r}"
+        raise RuntimeError(msg) from exc
+    if "errors" in data:
+        raise RuntimeError(f"gh graphql repo ID errors: {data['errors']}")
     node_id = data["data"]["repository"]["id"]
     return owner, repo_name, node_id
 
@@ -560,8 +571,10 @@ def _ensure_and_resolve_labels(cwd: str, owner: str, repo_name: str) -> list[str
             capture_output=True,
         )
         time.sleep(1)
+    safe_owner = json.dumps(owner)[1:-1]
+    safe_repo = json.dumps(repo_name)[1:-1]
     query = (
-        f'{{ repository(owner: "{owner}", name: "{repo_name}") {{'
+        f'{{ repository(owner: "{safe_owner}", name: "{safe_repo}") {{'
         f' impl: label(name: "recipe:implementation") {{ id }}'
         f' enh: label(name: "enhancement") {{ id }} }} }}'
     )
@@ -574,8 +587,18 @@ def _ensure_and_resolve_labels(cwd: str, owner: str, repo_name: str) -> list[str
     if result.returncode != 0:
         msg = f"gh graphql label query failed: {result.stderr}"
         raise RuntimeError(msg)
-    data = json.loads(result.stdout)
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        msg = f"gh graphql label query: non-JSON output: {result.stdout!r}"
+        raise RuntimeError(msg) from exc
+    if "errors" in data:
+        raise RuntimeError(f"gh graphql label query errors: {data['errors']}")
     repo = data["data"]["repository"]
+    if repo["impl"] is None or repo["enh"] is None:
+        raise RuntimeError(
+            f"Label resolution returned null: impl={repo['impl']!r} enh={repo['enh']!r}"
+        )
     return [repo["impl"]["id"], repo["enh"]["id"]]
 
 
@@ -584,6 +607,8 @@ def batch_create_issues(
     chunk_size: str = "20",
 ) -> dict[str, str]:
     """Batch-create GitHub issues from validated ticket body files via GraphQL."""
+    if not workspace or not Path(workspace).is_dir():
+        raise ValueError(f"workspace must be an existing directory, got: {workspace!r}")
     temp_dir = Path(workspace) / ".autoskillit" / "temp" / "validate-audit"
     ticket_bodies = sorted(temp_dir.glob("ticket_body_*.md"))
     if not ticket_bodies:
@@ -606,11 +631,16 @@ def batch_create_issues(
     label_ids = _ensure_and_resolve_labels(workspace, owner, repo_name)
 
     all_urls: list[str] = []
-    chunk_sz = int(chunk_size) if chunk_size else 20
+    try:
+        chunk_sz = int(chunk_size) if chunk_size else 20
+    except ValueError as exc:
+        raise ValueError(f"chunk_size must be a positive integer, got: {chunk_size!r}") from exc
+    if chunk_sz <= 0:
+        raise ValueError(f"chunk_size must be positive, got: {chunk_sz}")
     for offset in range(0, len(parsed), chunk_sz):
         chunk = parsed[offset : offset + chunk_sz]
         mutation_parts = []
-        variables: dict[str, object] = {"repoId": repo_id, "labelIds": label_ids}
+        variables: dict[str, object] = {}
         for idx, (title, body, _) in enumerate(chunk):
             alias = f"issue{idx}"
             mutation_parts.append(
@@ -640,10 +670,22 @@ def batch_create_issues(
         if result.returncode != 0:
             msg = f"gh graphql createIssue failed: {result.stderr}"
             raise RuntimeError(msg)
-        data = json.loads(result.stdout)
+        try:
+            data = json.loads(result.stdout)
+        except json.JSONDecodeError as exc:
+            msg = f"gh graphql createIssue: non-JSON output: {result.stdout!r}"
+            raise RuntimeError(msg) from exc
+        if "errors" in data:
+            raise RuntimeError(f"gh graphql createIssue errors: {data['errors']}")
+        resp_data = data.get("data") or {}
         for idx in range(len(chunk)):
             alias = f"issue{idx}"
-            issue_data = data["data"][alias]["issue"]
+            alias_result = resp_data.get(alias)
+            if alias_result is None:
+                raise RuntimeError(f"createIssue response missing alias {alias!r}: {data}")
+            issue_data = alias_result.get("issue")
+            if issue_data is None:
+                raise RuntimeError(f"createIssue alias {alias!r} returned null issue: {data}")
             all_urls.append(issue_data["url"])
         if offset + chunk_sz < len(parsed):
             time.sleep(1)

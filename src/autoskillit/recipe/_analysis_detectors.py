@@ -176,7 +176,7 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
                 if not isinstance(arg_val, str):
                     continue
                 consumed.update(_CONTEXT_REF_RE.findall(arg_val))
-            # Also scan the step's own message field (used by stop/confirm actions).
+            # message fields are not recipe args; scanner must handle them separately.
             if reachable_step.message and isinstance(reachable_step.message, str):
                 consumed.update(_CONTEXT_REF_RE.findall(reachable_step.message))
             if reachable_step.on_result and reachable_step.on_result.conditions:

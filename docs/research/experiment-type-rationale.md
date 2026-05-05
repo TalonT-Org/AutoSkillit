@@ -12,11 +12,11 @@ further. Weights of `M` (medium) are the implicit baseline for most dimensions; 
 departure to `H` (high), `L` (low), or `S` (silent) is explained below.
 
 **Citation removal note.** An earlier draft of this material contained synthetic
-deep-research citation markers of the form `【N†LX-LY】`. All such markers have been
-removed. Every verifiable claim now cites a source from the Reference List at the end
-of this document; claims that cannot be traced to a specific published passage use
-appropriately hedged language ("may require", "is often recommended", "typically
-involves").
+deep-research citation markers (left-double-angle-bracket + line-reference fragments).
+All such markers have been removed. Every verifiable claim now cites a source from the
+Reference List at the end of this document; claims that cannot be traced to a specific
+published passage use appropriately hedged language ("may require", "is often
+recommended", "typically involves").
 
 ---
 

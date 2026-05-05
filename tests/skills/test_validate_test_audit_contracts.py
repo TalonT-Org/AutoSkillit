@@ -13,7 +13,7 @@ from autoskillit.workspace.skills import DefaultSkillResolver
 def _skill_text() -> str:
     info = DefaultSkillResolver().resolve("validate-test-audit")
     assert info is not None, "validate-test-audit skill not found"
-    return info.path.read_text()
+    return info.path.read_text(encoding="utf-8")
 
 
 class TestValidateTestAuditSkillExists:
@@ -102,13 +102,15 @@ class TestValidateTestAuditSemanticRules:
     # T-VTA-015
     def test_semantic_rule_import_path_as_contract(self) -> None:
         text = _skill_text().lower()
-        assert "import" in text and "contract" in text
+        assert "import" in text, "expected 'import' in skill text"
+        assert "contract" in text, "expected 'contract' in skill text"
         assert "existence guard" in text
 
     # T-VTA-016
     def test_semantic_rule_precondition_as_assertion(self) -> None:
         text = _skill_text().lower()
-        assert "precondition" in text and "assertion" in text
+        assert "precondition" in text, "expected 'precondition' in skill text"
+        assert "assertion" in text, "expected 'assertion' in skill text"
 
     # T-VTA-017
     def test_semantic_rule_provenance_verification(self) -> None:
@@ -119,13 +121,14 @@ class TestValidateTestAuditSemanticRules:
     # T-VTA-018
     def test_semantic_rule_split_era_lifecycle(self) -> None:
         text = _skill_text().lower()
-        assert "split" in text
+        assert "split-era" in text, "expected 'split-era' in skill text"
         assert "lifecycle" in text or "structural contract" in text
 
     # T-VTA-019
     def test_semantic_rule_deletion_vs_improvement(self) -> None:
         text = _skill_text().lower()
-        assert "deletion" in text and "improvement" in text
+        assert "deletion" in text, "expected 'deletion' in skill text"
+        assert "improvement" in text, "expected 'improvement' in skill text"
         assert "improving" in text or "improve" in text
 
 

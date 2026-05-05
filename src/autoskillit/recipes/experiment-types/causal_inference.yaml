@@ -1,6 +1,7 @@
 name: causal_inference
 classification_triggers:
-  - "Causal language (\"causes\", \"effect of\"), confounders in threats"
+  - "Explicit randomization, manipulation, or intervention assignment: 'randomly assigned', 'intervention applied', 'treatment group', 'control group', 'manipulated X', 'assigned to condition'"
+  - "Causal claim ('test whether X causes Y') AND explicit confounder adjustment or treatment assignment described"
 dimension_weights:
   causal_structure: H
   variance_protocol: L

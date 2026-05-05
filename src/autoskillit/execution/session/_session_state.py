@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import fcntl
 import json
-import os  # noqa: F401 — used at runtime in SessionStateLock
+import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from autoskillit.core import atomic_write, get_logger
 
@@ -30,7 +31,7 @@ class SessionState:
     checkpoint_path: str | None = None
     infra_exit_category: str | None = None
 
-    def to_dict(self) -> dict:  # type: ignore[type-arg]
+    def to_dict(self) -> dict[str, object]:
         d: dict[str, object] = {
             "session_id": self.session_id,
             "pid": self.pid,
@@ -44,7 +45,7 @@ class SessionState:
         return d
 
     @classmethod
-    def from_dict(cls, data: dict) -> SessionState | None:  # type: ignore[type-arg]
+    def from_dict(cls, data: dict[str, Any]) -> SessionState | None:
         try:
             return cls(
                 session_id=str(data["session_id"]),

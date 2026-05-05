@@ -8,6 +8,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -17,7 +18,7 @@ class SessionCheckpoint:
     progress_pct: float = 0.0
     ts: str = ""
 
-    def to_dict(self) -> dict:  # type: ignore[type-arg]
+    def to_dict(self) -> dict[str, Any]:
         return {
             "completed_items": list(self.completed_items),
             "step_name": self.step_name,
@@ -26,7 +27,7 @@ class SessionCheckpoint:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> SessionCheckpoint:  # type: ignore[type-arg]
+    def from_dict(cls, data: dict[str, Any]) -> SessionCheckpoint:
         return cls(
             completed_items=list(data.get("completed_items", [])),
             step_name=str(data.get("step_name", "")),

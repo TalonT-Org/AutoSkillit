@@ -32,3 +32,30 @@ def _skill_fail() -> SkillResult:
         retry_reason=RetryReason.NONE,
         stderr="something went wrong",
     )
+
+
+_MINIMAL_SCRIPT_YAML = """\
+name: test-script
+description: Test
+summary: test
+ingredients:
+  task:
+    description: What to do
+    required: true
+steps:
+  do-thing:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:investigate ${{ inputs.task }}"
+      cwd: "."
+    on_success: done
+    on_failure: escalate
+  done:
+    action: stop
+    message: "Done."
+  escalate:
+    action: stop
+    message: "Failed."
+kitchen_rules:
+  - "Follow routing rules"
+"""

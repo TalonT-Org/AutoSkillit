@@ -19,9 +19,7 @@ from autoskillit.cli.fleet._fleet_display import (
     _cross_check_tokens,
     _render_status_display,
     _watch_loop,
-)
-from autoskillit.cli.fleet._fleet_display import (
-    render_fleet_error as render_fleet_error,
+    render_fleet_error,
 )
 from autoskillit.cli.fleet._fleet_lifecycle import (
     _pick_resume_campaign,
@@ -57,6 +55,7 @@ if TYPE_CHECKING:
 
 
 fleet_app = App(name="fleet", help="Campaign fleet management.")
+__all__ = ["fleet_app", "render_fleet_error"]
 
 
 def _remove_clone_fn(path: str, _flag: str) -> dict[str, str]:

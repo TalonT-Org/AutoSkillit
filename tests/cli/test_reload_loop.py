@@ -198,7 +198,7 @@ def test_fleet_reload_relaunches_without_resume(
     captured_resume_specs: list = []
 
     def fake_run_interactive_session(
-        prompt, *, extra_env=None, resume_spec=None, project_dir=None
+        prompt, *, extra_env=None, resume_spec=None, project_dir=None, initial_message=None
     ):
         call_count[0] += 1
         captured_resume_specs.append(resume_spec)

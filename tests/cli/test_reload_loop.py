@@ -213,7 +213,7 @@ def test_fleet_reload_relaunches_without_resume(
     monkeypatch.setattr("autoskillit.cli.detect_autoskillit_mcp_prefix", lambda: "autoskillit")
     monkeypatch.setattr(
         "autoskillit.cli._prompts._build_fleet_dispatch_prompt",
-        lambda mcp_prefix: "test-prompt",
+        lambda mcp_prefix, recipe_table=None: "test-prompt",
     )
     monkeypatch.chdir(tmp_path)
 

@@ -20,9 +20,16 @@ from autoskillit.cli.fleet._fleet_display import (
     _render_status_display,
     _watch_loop,
 )
+from autoskillit.cli.fleet._fleet_display import (
+    render_fleet_error as render_fleet_error,
+)
 from autoskillit.cli.fleet._fleet_lifecycle import (
     _pick_resume_campaign,
     _reap_stale_dispatches,
+)
+from autoskillit.cli.fleet._fleet_preview import (
+    _build_dispatch_recipe_table,
+    _print_dispatch_preview,
 )
 from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
 from autoskillit.core import TerminalColumn, get_logger, is_feature_enabled
@@ -60,71 +67,6 @@ def _remove_clone_fn(path: str, _flag: str) -> dict[str, str]:
     except Exception as exc:
         logger.warning("Failed to remove clone %s: %s", path, exc, exc_info=True)
         return {"removed": "false", "reason": str(exc)}
-
-
-def _build_dispatch_recipe_table() -> str:
-    """Build a compact NAME — DESCRIPTION table of standard recipes for greeting injection."""
-    from autoskillit.recipe import list_recipes
-    from autoskillit.recipe.schema import RecipeKind
-
-    recipes = list_recipes(Path.cwd(), exclude_kinds=frozenset({RecipeKind.CAMPAIGN})).items
-    if not recipes:
-        return "(no recipes found)"
-    name_w = max(len(r.name) for r in recipes)
-    lines = [f"{r.name:<{name_w}}  {r.description}" for r in recipes]
-    return "\n".join(lines)
-
-
-def _print_dispatch_preview(cfg: object) -> None:
-    """Print the pre-launch summary for fleet dispatch (mirrors cook's pre-launch display)."""
-    from autoskillit.cli.ui._ansi import permissions_warning, supports_color
-    from autoskillit.recipe import list_recipes
-    from autoskillit.recipe.schema import RecipeKind
-
-    color = supports_color()
-    _B = "\x1b[1m" if color else ""
-    _C = "\x1b[96m" if color else ""
-    _D = "\x1b[2m" if color else ""
-    _G = "\x1b[32m" if color else ""
-    _Y = "\x1b[33m" if color else ""
-    _R = "\x1b[0m" if color else ""
-
-    from autoskillit import __version__
-
-    print(
-        f"{_B}{_C}AUTOSKILLIT {__version__}{_R}"
-        f" {_D}Fleet dispatcher. Ad-hoc food truck coordination.{_R}"
-    )
-
-    recipes = list_recipes(Path.cwd(), exclude_kinds=frozenset({RecipeKind.CAMPAIGN})).items
-    if recipes:
-        name_w = max(len(r.name) for r in recipes)
-        src_w = max(len(r.source) for r in recipes)
-        print(f"\n{_B}Available food trucks:{_R}")
-        print(f"  {'NAME':<{name_w}}  {'SOURCE':<{src_w}}  DESCRIPTION")
-        print(f"  {'-' * name_w}  {'-' * src_w}  {'-' * 11}")
-        for r in recipes:
-            print(f"  {_G}{r.name:<{name_w}}{_R}  {_D}{r.source:<{src_w}}{_R}  {r.description}")
-    else:
-        print(f"\n{_D}No recipes found.{_R}")
-
-    _DISPATCH_TOOL_CATEGORIES: list[tuple[str, tuple[str, ...]]] = [
-        ("Dispatch", ("dispatch_food_truck",)),
-        ("Cleanup", ("batch_cleanup_clones",)),
-        (
-            "Telemetry",
-            ("get_pipeline_report", "get_token_summary", "get_timing_summary", "get_quota_events"),
-        ),
-        ("Recipes", ("list_recipes", "load_recipe")),
-        ("GitHub", ("fetch_github_issue", "get_issue_title")),
-    ]
-    print()
-    for name, tools in _DISPATCH_TOOL_CATEGORIES:
-        tool_list = f"{_D}, {_R}".join(f"{_G}{t}{_R}" for t in tools)
-        print(f"  {_Y}{name:>20}{_R}  {tool_list}")
-    print()
-
-    print(permissions_warning())
 
 
 @fleet_app.command(name="dispatch")
@@ -457,23 +399,3 @@ def fleet_status(
             return
 
         print(_render_terminal_table(columns, rows_list))
-
-
-def render_fleet_error(envelope_json: str) -> int:
-    """Render a fleet error envelope to stderr.
-
-    Returns exit code: 3 for fleet envelope errors, 0 for non-error envelopes.
-    """
-    try:
-        data = json.loads(envelope_json)
-    except (json.JSONDecodeError, TypeError):
-        return 0
-    if data.get("success") is not False:
-        return 0
-    msg = data.get("user_visible_message") or "unknown error"
-    code = data.get("error", "")
-    sys.stderr.write(f"fleet error [{code}]: {msg}\n")
-    details = data.get("details")
-    if details:
-        sys.stderr.write(f"  details: {json.dumps(details)}\n")
-    return 3

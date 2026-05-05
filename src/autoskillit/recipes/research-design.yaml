@@ -1,0 +1,172 @@
+name: research-design
+autoskillit_version: "0.9.430"
+recipe_version: "1.0.0"
+categories: [research-family]
+requires_packs: [research]
+description: >
+  Design-phase sub-recipe extracted from research.yaml. Scopes a research
+  question, plans an experiment, optionally reviews the design (bounded by
+  retries: 2), plans visualizations, then terminates with a cross-dispatch
+  handoff sentinel containing the design artifacts. Dispatched as a food truck
+  by campaign recipes that separate design from execution.
+summary: scope > plan > [review?] > visualize > design_complete
+
+ingredients:
+  task:
+    description: Research question or topic to investigate
+    required: true
+  source_dir:
+    description: Path to the project root
+    required: true
+  base_branch:
+    description: Branch to target for the research PR
+    default: "main"
+  review_design:
+    description: >
+      When 'true' (the default), run the review-design skill after plan_experiment
+      to validate the experiment plan before execution. Emits a verdict: GO proceeds,
+      REVISE loops back to plan_experiment with revision guidance (bounded by
+      retries: 2), STOP triggers resolve_design_review for triage — addressable
+      findings loop back, structural findings halt the pipeline. When 'false', skip
+      directly to plan_visualization.
+    default: "true"
+  issue_url:
+    description: >
+      Optional URL to an existing GitHub issue describing the research goal.
+      Provided as context to scope and plan_experiment.
+    required: false
+
+kitchen_rules:
+  - >
+    NEVER use native Claude Code tools from the orchestrator: Read, Grep, Glob,
+    Edit, Write, Bash, Agent, WebFetch, WebSearch, NotebookEdit are ALL forbidden.
+    All work is delegated through run_skill, run_cmd, run_python.
+  - >
+    This recipe is a food truck dispatched by a campaign. Emit the L3 sentinel
+    JSON block exactly as instructed in the design_complete step message — no
+    extra tool calls after reaching design_complete.
+
+steps:
+  scope:
+    tool: run_skill
+    model: ""
+    with:
+      skill_command: "/autoskillit:scope ${{ inputs.task }}"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: scope
+    capture:
+      scope_report: "${{ result.scope_report }}"
+    on_success: plan_experiment
+    on_failure: escalate_stop
+
+  plan_experiment:
+    tool: run_skill
+    model: ""
+    with:
+      skill_command: "/autoskillit:plan-experiment ${{ context.scope_report }} ${{ context.revision_guidance }}"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: plan_experiment
+    optional_context_refs: [revision_guidance]
+    capture:
+      experiment_plan: "${{ result.experiment_plan }}"
+    on_success: review_design
+    on_failure: escalate_stop
+
+  review_design:
+    tool: run_skill
+    model: ""
+    with:
+      skill_command: "/autoskillit:review-design ${{ context.experiment_plan }}"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: review_design
+    capture:
+      verdict: "${{ result.verdict }}"
+      experiment_type: "${{ result.experiment_type }}"
+      evaluation_dashboard: "${{ result.evaluation_dashboard }}"
+      revision_guidance: "${{ result.revision_guidance }}"
+    skip_when_false: inputs.review_design
+    retries: 2
+    on_exhausted: plan_visualization
+    on_context_limit: plan_visualization
+    on_failure: plan_visualization
+    on_result:
+      - when: "${{ result.verdict }} == GO"
+        route: plan_visualization
+      - when: "${{ result.verdict }} == REVISE"
+        route: revise_design
+      - when: "${{ result.verdict }} == STOP"
+        route: resolve_design_review
+      - route: plan_visualization
+
+  plan_visualization:
+    tool: run_skill
+    model: ""
+    with:
+      skill_command: "/autoskillit:plan-visualization ${{ inputs.source_dir }} ${{ context.experiment_plan }} ${{ context.scope_report }}"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: plan_visualization
+    capture:
+      visualization_plan_path: "${{ result.visualization_plan_path }}"
+      report_plan_path: "${{ result.report_plan_path }}"
+    on_success: design_complete
+    on_failure: escalate_stop
+    note: >
+      Selects 2–4 vis-lens skills via three-tier logic, runs them in parallel, and
+      synthesizes outputs into visualization-plan.md and report-plan.md.
+      Runs before worktree creation so outputs can be committed into the research dir.
+
+  revise_design:
+    action: route
+    on_result:
+      - route: plan_experiment
+
+  resolve_design_review:
+    tool: run_skill
+    model: ""
+    with:
+      skill_command: "/autoskillit:resolve-design-review ${{ context.evaluation_dashboard }} ${{ context.experiment_plan }} ${{ context.revision_guidance }}"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: resolve_design_review
+    optional_context_refs: [evaluation_dashboard, experiment_plan, revision_guidance]
+    capture:
+      revision_guidance: "${{ result.revision_guidance }}"
+    retries: 1
+    on_failure: design_rejected
+    on_context_limit: design_rejected
+    on_result:
+      - when: "${{ result.resolution }} == revised"
+        route: revise_design
+      - when: "${{ result.resolution }} == failed"
+        route: design_rejected
+      - route: design_rejected
+    note: >
+      Triages STOP-verdict findings from review_design. ADDRESSABLE/DISCUSS findings
+      generate revision_guidance and loop back. Only all-STRUCTURAL findings halt at
+      design_rejected.
+
+  design_rejected:
+    action: stop
+    message: >
+      Research pipeline halted: experiment design rejected (verdict=STOP, resolution=failed).
+      All stop-trigger findings are structural — revision cannot address the identified flaws.
+      Check {{AUTOSKILLIT_TEMP}}/resolve-design-review/ for the triage report and
+      {{AUTOSKILLIT_TEMP}}/review-design/ for the evaluation dashboard.
+
+  design_complete:
+    action: stop
+    message: >-
+      Design phase complete. Emit the L3 result sentinel JSON block now.
+      The sentinel must include the following fields from captured context:
+      success=true, scope_report=<context.scope_report>,
+      experiment_plan=<context.experiment_plan>,
+      visualization_plan_path=<context.visualization_plan_path>,
+      report_plan_path=<context.report_plan_path>,
+      experiment_type=<context.experiment_type>.
+      Example sentinel:
+      {"success": true, "scope_report": "<path>", "experiment_plan": "<path>",
+      "visualization_plan_path": "<path>", "report_plan_path": "<path>",
+      "experiment_type": "benchmark"}
+
+  escalate_stop:
+    action: stop
+    message: "Research pipeline failed — human intervention needed. Check the latest step output for details."

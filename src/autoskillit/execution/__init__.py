@@ -155,9 +155,13 @@ __all__ = [
     # session
     "ClaudeSessionResult",
     "ContentState",
+    "SessionState",
     "SkillResult",
+    "clear_session_state",
     "extract_token_usage",
     "parse_session_result",
+    "persist_session_state",
+    "read_session_state",
     # headless
     "run_headless_core",
     "DefaultHeadlessExecutor",

@@ -257,6 +257,8 @@ steps:
       skill_command: "/autoskillit:setup-environment ${{ context.worktree_path }} ${{ context.experiment_plan }}"
       cwd: "${{ context.worktree_path }}"
       step_name: setup_environment
+    capture:
+      verdict: "${{ result.verdict }}"
     on_result:
       field: verdict
       routes:

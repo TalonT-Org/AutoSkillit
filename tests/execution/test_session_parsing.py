@@ -538,6 +538,7 @@ class TestSkillResult:
             "last_stop_reason",
             "lifespan_started",
             "provider_fallback",
+            "provider_used",
             "needs_retry",
             "retry_reason",
             "order_id",

@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 import pytest
 
-from autoskillit.core.types._type_results import SessionTelemetry
+from autoskillit.core.types._type_results import ProviderOutcome, RecipeIdentity, SessionTelemetry
 from autoskillit.core.types._type_subprocess import SubprocessResult, TerminationReason
 from tests.fakes import MockSubprocessRunner
 
@@ -139,6 +139,8 @@ async def test_flush_session_log_writes_github_api_usage(tmp_path):
             loc_insertions=0,
             loc_deletions=0,
         ),
+        provider_outcome=ProviderOutcome.none_used(),
+        recipe_identity=RecipeIdentity.empty(),
     )
 
     usage_file = tmp_path / "sessions" / "test-session" / "github_api_usage.json"

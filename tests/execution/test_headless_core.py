@@ -882,6 +882,7 @@ class TestBuildSkillResultCrossValidation:
         "kill_reason",
         "last_stop_reason",
         "lifespan_started",
+        "provider_used",
         "provider_fallback",
         "needs_retry",
         "retry_reason",
@@ -893,6 +894,14 @@ class TestBuildSkillResultCrossValidation:
         "fs_writes_detected",
         "infra_exit_category",
     }
+
+    def test_expected_skill_keys_includes_provider_used(self):
+        import dataclasses
+
+        from autoskillit.core.types import SkillResult
+
+        skill_result_field_names = {f.name for f in dataclasses.fields(SkillResult)}
+        assert "provider_used" in skill_result_field_names
 
     def test_empty_stdout_exit_zero_is_failure(self):
         """Exit 0 with empty stdout is NOT success — output was lost."""

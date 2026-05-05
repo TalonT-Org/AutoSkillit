@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 import anyio
 import pytest
 
-from autoskillit.core.types._type_results import SessionTelemetry
+from autoskillit.core.types._type_results import ProviderOutcome, RecipeIdentity, SessionTelemetry
 from tests.execution.conftest import _ALLOCATE_60MB_SCRIPT
 
 pytestmark = [
@@ -60,6 +60,8 @@ async def test_full_tracing_pipeline_writes_distinct_timestamps(tmp_path):
         snapshot_interval_seconds=0.05,
         proc_snapshots=snap_dicts,
         telemetry=SessionTelemetry.empty(),
+        provider_outcome=ProviderOutcome.none_used(),
+        recipe_identity=RecipeIdentity.empty(),
     )
 
     session_dir = tmp_path / "sessions" / "integration-test-001"
@@ -115,6 +117,8 @@ def _flush_with_snaps(tmp_path, session_id: str, snaps: list[dict]) -> None:
         start_ts="2026-01-01T00:00:00+00:00",
         proc_snapshots=snaps,
         telemetry=SessionTelemetry.empty(),
+        provider_outcome=ProviderOutcome.none_used(),
+        recipe_identity=RecipeIdentity.empty(),
     )
 
 
@@ -194,6 +198,8 @@ async def test_peak_rss_kb_above_sanity_floor(tmp_path):
         start_ts=result.start_ts or "2026-01-01T00:00:00+00:00",
         proc_snapshots=result.proc_snapshots,
         telemetry=SessionTelemetry.empty(),
+        provider_outcome=ProviderOutcome.none_used(),
+        recipe_identity=RecipeIdentity.empty(),
     )
 
     summary_path = tmp_path / "logs" / "sessions" / "sanity-floor-001" / "summary.json"

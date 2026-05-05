@@ -361,11 +361,15 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
     requires_recipe_packs = data.get("requires_recipe_packs") or []
     allowed_recipes = data.get("allowed_recipes") or []
     continue_on_failure = bool(data.get("continue_on_failure", False))
-    requires_features_raw = data.get("requires_features") or []
+    _rf_val = data.get("requires_features")
+    requires_features_raw = _rf_val if _rf_val is not None else []
     if not isinstance(requires_features_raw, list):
         raise ValueError(
             f"'requires_features' must be a list, got {type(requires_features_raw).__name__!r}"
         )
+    if not all(isinstance(f, str) for f in requires_features_raw):
+        bad = [f for f in requires_features_raw if not isinstance(f, str)]
+        raise ValueError(f"'requires_features' entries must be strings, got: {bad!r}")
 
     return Recipe(
         name=name,

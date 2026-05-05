@@ -372,6 +372,12 @@ parallel run of the same step reports under the same canonical step name.
 
 ---
 
+## MODEL PROPAGATION — MANDATORY
+
+**MODEL PROPAGATION** — When the user specifies a model (e.g. "use opus"), apply it to the `model` parameter of ALL `run_skill` calls for steps that declare a `model:` field — including follow-on steps (retry_worktree, fix, resolve_review, resolve_ci, conflict resolution).
+
+---
+
 ## MERGE PHASE — MANDATORY
 
 This rule applies whenever the orchestrator must merge **one or more open PRs**, whether

@@ -190,6 +190,7 @@ steps:
 
   analyze_prs:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:analyze-prs ${{ inputs.base_branch }} merge_queue_data_path=${{ context.merge_queue_data_path }}"
       cwd: "${{ context.work_dir }}"
@@ -346,6 +347,7 @@ steps:
 
   resolve_ejected_conflicts:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:resolve-merge-conflicts '${{ context.ejected_pr_branch }}' '${{ inputs.base_branch }}'"
       cwd: "${{ context.work_dir }}"
@@ -531,6 +533,7 @@ steps:
 
   resolve_proactive_rebase_conflicts:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:resolve-merge-conflicts '${{ context.next_pr_branch }}' '${{ inputs.base_branch }}'"
       cwd: "${{ context.work_dir }}"
@@ -569,6 +572,7 @@ steps:
 
   diagnose_queue_ci:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:diagnose-ci '${{ context.current_pr_number }}' - - - ${{ context.ci_event }}"
       cwd: "${{ context.work_dir }}"
@@ -645,6 +649,7 @@ steps:
 
   merge_pr:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:merge-pr {pr_number} {complexity}"
       cwd: "${{ context.work_dir }}"
@@ -676,6 +681,7 @@ steps:
 
   plan:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:make-plan ${{ context.task }}"
       cwd: "${{ context.work_dir }}"
@@ -698,6 +704,7 @@ steps:
 
   verify:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:dry-walkthrough ${{ context.pr_plan_path }}"
       cwd: "${{ context.work_dir }}"
@@ -714,6 +721,7 @@ steps:
 
   implement:
     tool: run_skill
+    model: ""
     stale_threshold: 2400
     with:
       skill_command: "/autoskillit:implement-worktree-no-merge ${{ context.pr_plan_path }}"
@@ -730,6 +738,7 @@ steps:
 
   retry_worktree:
     tool: run_skill
+    model: ""
     stale_threshold: 2400
     with:
       skill_command: "/autoskillit:retry-worktree ${{ context.pr_plan_path }} ${{ context.worktree_path }}"
@@ -830,6 +839,7 @@ steps:
 
   fix:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:resolve-failures ${{ context.worktree_path }} ${{ context.pr_plan_path }} ${{ context.batch_branch }}"
       cwd: "${{ context.worktree_path }}"
@@ -906,6 +916,7 @@ steps:
 
   audit_impl:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:audit-impl \"${{ context.all_plan_paths }}\" ${{ context.batch_branch }} ${{ inputs.base_branch }} \"${{ context.all_conflict_report_paths }}\""
       cwd: "${{ context.work_dir }}"
@@ -961,6 +972,7 @@ steps:
 
   open_integration_pr:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:open-integration-pr ${{ context.batch_branch }} ${{ inputs.base_branch }} ${{ context.pr_order_file }} ${{ context.verdict }} \"${{ context.all_conflict_report_paths }}\" domain_partitions_path=${{ context.domain_partitions_path }}"
       cwd: "${{ context.work_dir }}"
@@ -1007,6 +1019,7 @@ steps:
 
   resolve_integration_conflicts:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:resolve-merge-conflicts ${{ context.batch_branch }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
@@ -1084,6 +1097,7 @@ steps:
 
   review_pr_integration:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:review-pr ${{ context.batch_branch }} ${{ inputs.base_branch }} annotated_diff_path=${{ context.annotated_diff_path }} hunk_ranges_path=${{ context.hunk_ranges_path }} diff_metrics_path=${{ context.diff_metrics_path }}"
       cwd: "${{ context.work_dir }}"
@@ -1111,6 +1125,7 @@ steps:
 
   resolve_review_integration:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:resolve-review ${{ context.batch_branch }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
@@ -1173,6 +1188,7 @@ steps:
 
   diagnose_ci:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:diagnose-ci ${{ context.batch_branch }} - - - ${{ context.ci_event }}"
       cwd: "${{ context.work_dir }}"

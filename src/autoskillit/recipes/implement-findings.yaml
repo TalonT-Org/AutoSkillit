@@ -107,6 +107,7 @@ steps:
 
   run_bem_internally:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:build-execution-map ${{ context.remaining_urls_json }} ${{ inputs.base_branch }}"
       cwd: "${{ inputs.source_dir }}"

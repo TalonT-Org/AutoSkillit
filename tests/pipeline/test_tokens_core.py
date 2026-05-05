@@ -672,11 +672,6 @@ def test_load_from_log_dir_missing_peak_context_defaults_to_zero(tmp_path):
     assert report[0]["turn_count"] == 0
 
 
-# ---------------------------------------------------------------------------
-# L2 orchestrator session label tests
-# ---------------------------------------------------------------------------
-
-
 def test_token_log_record_accepts_resolved_label():
     """record() stores and returns entries keyed by non-recipe labels (e.g. dispatch:id)."""
     log = DefaultTokenLog()

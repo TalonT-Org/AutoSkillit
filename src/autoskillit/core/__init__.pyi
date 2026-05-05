@@ -158,6 +158,7 @@ from .types import GateState as GateState
 from .types import GitHubApiLog as GitHubApiLog
 from .types import GitHubFetcher as GitHubFetcher
 from .types import HeadlessExecutor as HeadlessExecutor
+from .types import InfraExitCategory as InfraExitCategory
 from .types import KillReason as KillReason
 from .types import LoadReport as LoadReport
 from .types import LoadResult as LoadResult

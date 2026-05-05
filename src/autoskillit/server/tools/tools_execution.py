@@ -284,6 +284,7 @@ async def run_skill(
     stale_threshold: int | None = None,
     idle_output_timeout: int | None = None,
     output_dir: str = "",
+    resume_session_id: str = "",
     ctx: Context = CurrentContext(),
 ) -> str:
     """Run a Claude Code headless session with a skill command.
@@ -330,6 +331,10 @@ async def run_skill(
         idle_output_timeout: Override the idle stdout kill threshold in seconds.
             0 = disabled for this step. None = use global config
             (RunSkillConfig.idle_output_timeout, default 600s).
+        resume_session_id: Session ID from a previous run_skill call that was interrupted.
+            When set, the session is resumed via --resume instead of starting fresh.
+            The skill_command becomes a continuation instruction (non-slash text is allowed).
+            Pass the session_id from the previous run_skill result JSON.
 
     Never raises.
     """
@@ -337,7 +342,7 @@ async def run_skill(
         return headless
     if (gate := _require_enabled()) is not None:
         return gate
-    if (cmd_error := _validate_skill_command(skill_command)) is not None:
+    if not resume_session_id and (cmd_error := _validate_skill_command(skill_command)) is not None:
         return cmd_error
     if cwd and not _is_absolute_path(cwd):
         return json.dumps(
@@ -526,6 +531,7 @@ async def run_skill(
                 write_watch_dirs=write_watch_dirs,
                 provider_extras=provider_extras,
                 profile_name=profile_name_out,
+                resume_session_id=resume_session_id,
             )
             if skill_result.success:
                 tool_ctx.audit.record_success(skill_command)

@@ -233,7 +233,7 @@ class TestResumableSessionIdInjection:
             resume_session_id="",
         )
         assert "RESUMABLE DISPATCH: impl-1" in prompt
-        assert "resume_session_id" not in prompt
+        assert 'resume_session_id="' not in prompt
 
     def test_no_resumable_section_when_dispatch_name_empty(self) -> None:
         prompt = _build(resumable_dispatch_name="", resume_session_id="sess-abc")

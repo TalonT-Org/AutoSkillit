@@ -82,6 +82,7 @@ class ExecutorCall:
     write_watch_dirs: tuple[Any, ...] = ()
     provider_extras: Mapping[str, str] | None = None
     profile_name: str = ""
+    resume_session_id: str = ""
 
 
 @dataclasses.dataclass
@@ -164,6 +165,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         write_watch_dirs: Sequence[Any] = (),
         provider_extras: Mapping[str, str] | None = None,
         profile_name: str = "",
+        resume_session_id: str = "",
     ) -> SkillResult:
         self.calls.append(
             ExecutorCall(
@@ -189,6 +191,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 write_watch_dirs=tuple(write_watch_dirs),
                 provider_extras=provider_extras,
                 profile_name=profile_name,
+                resume_session_id=resume_session_id,
             )
         )
         if self._queue:

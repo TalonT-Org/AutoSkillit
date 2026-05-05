@@ -597,6 +597,7 @@ async def run_headless_core(
     provider_name: str = "",
     provider_fallback_env: dict[str, str] | None = None,
     provider_fallback_name: str = "",
+    resume_session_id: str = "",
 ) -> SkillResult:
     """Shared headless runner used by run_skill.
 
@@ -629,6 +630,7 @@ async def run_headless_core(
             allowed_write_prefix=allowed_write_prefix,
             provider_extras=provider_extras,
             profile_name=profile_name,
+            resume_session_id=resume_session_id,
         )
 
         effective_timeout = timeout if timeout is not None else cfg.timeout
@@ -707,6 +709,7 @@ class DefaultHeadlessExecutor:
         provider_name: str = "",
         provider_fallback_env: dict[str, str] | None = None,
         provider_fallback_name: str = "",
+        resume_session_id: str = "",
     ) -> SkillResult:
         cfg = self._ctx.config.run_skill
         effective_timeout = timeout if timeout is not None else cfg.timeout
@@ -738,6 +741,7 @@ class DefaultHeadlessExecutor:
             provider_name=provider_name,
             provider_fallback_env=provider_fallback_env,
             provider_fallback_name=provider_fallback_name,
+            resume_session_id=resume_session_id,
         )
 
     async def dispatch_food_truck(

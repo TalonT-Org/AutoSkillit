@@ -16,6 +16,9 @@ from autoskillit.core import (
     get_logger,
     truncate_text,
 )
+from autoskillit.execution.session._exit_classification import (
+    classify_infra_exit,  # noqa: F401 — re-export for callers
+)
 from autoskillit.execution.session._retry_fsm import (
     _KILL_ANOMALY_SUBTYPES,  # noqa: F401 — re-export for callers
     _compute_retry,  # noqa: F401 — re-export for callers
@@ -41,4 +44,4 @@ from autoskillit.execution.session._session_outcome import (
 logger = get_logger(__name__)
 _truncate = truncate_text
 # Re-export SkillResult so existing callers can import from this module.
-__all__ = ["CliSubtype", "SkillResult"]
+__all__ = ["CliSubtype", "SkillResult", "classify_infra_exit"]

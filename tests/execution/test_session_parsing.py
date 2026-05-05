@@ -546,6 +546,7 @@ class TestSkillResult:
             "write_path_warnings",
             "write_call_count",
             "fs_writes_detected",
+            "infra_exit_category",
         }
         assert set(parsed.keys()) == expected
 
@@ -851,3 +852,46 @@ class TestFullChainZeroWriteGate:
         session = parse_session_result(ndjson)
         write_call_count = sum(1 for t in session.tool_uses if t.get("name") in {"Write", "Edit"})
         assert write_call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# T6: SkillResult.to_json() includes infra_exit_category
+# ---------------------------------------------------------------------------
+
+
+def test_skill_result_to_json_includes_infra_exit_category():
+    """infra_exit_category is serialized when non-empty."""
+    from autoskillit.core.types import InfraExitCategory
+
+    sr = SkillResult(
+        success=False,
+        result="",
+        session_id="s1",
+        subtype="context_exhaustion",
+        is_error=True,
+        exit_code=1,
+        needs_retry=True,
+        retry_reason=RetryReason.RESUME,
+        stderr="",
+        infra_exit_category=InfraExitCategory.CONTEXT_EXHAUSTED,
+    )
+    data = json.loads(sr.to_json())
+    assert data["infra_exit_category"] == "context_exhausted"
+
+
+def test_skill_result_to_json_infra_exit_category_always_present():
+    """infra_exit_category is always present in JSON; defaults to empty string."""
+    sr = SkillResult(
+        success=True,
+        result="done",
+        session_id="s1",
+        subtype="success",
+        is_error=False,
+        exit_code=0,
+        needs_retry=False,
+        retry_reason=RetryReason.NONE,
+        stderr="",
+    )
+    data = json.loads(sr.to_json())
+    assert "infra_exit_category" in data
+    assert data["infra_exit_category"] == ""

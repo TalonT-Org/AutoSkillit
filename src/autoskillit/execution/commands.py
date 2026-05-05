@@ -288,6 +288,7 @@ def build_skill_session_cmd(
     allowed_write_prefix: str = "",
     provider_extras: Mapping[str, str] | None = None,
     profile_name: str = "",
+    resume_session_id: str = "",
 ) -> ClaudeHeadlessCmd:
     """Build the complete headless command spec for a skill session.
 
@@ -334,13 +335,29 @@ def build_skill_session_cmd(
     profile_name
         When non-empty, carried as ``AUTOSKILLIT_PROVIDER_PROFILE`` in ``.env``.
     """
-    prompt = _inject_narration_suppression(
-        _inject_cwd_anchor(
-            _inject_completion_directive(_ensure_skill_prefix(skill_command), completion_marker),
-            cwd,
-            temp_dir_relpath=temp_dir_relpath,
+    if resume_session_id:
+        _resume_instruction = (
+            "Your previous session was interrupted before completion. "
+            "Continue your work from where you left off. "
+            "Do NOT restart from scratch — pick up exactly where you stopped."
         )
-    )
+        prompt = _inject_narration_suppression(
+            _inject_cwd_anchor(
+                _inject_completion_directive(_resume_instruction, completion_marker),
+                cwd,
+                temp_dir_relpath=temp_dir_relpath,
+            )
+        )
+    else:
+        prompt = _inject_narration_suppression(
+            _inject_cwd_anchor(
+                _inject_completion_directive(
+                    _ensure_skill_prefix(skill_command), completion_marker
+                ),
+                cwd,
+                temp_dir_relpath=temp_dir_relpath,
+            )
+        )
     extras: dict[str, str] = {
         "AUTOSKILLIT_HEADLESS": "1",
         "AUTOSKILLIT_SESSION_TYPE": SESSION_TYPE_SKILL,
@@ -380,6 +397,8 @@ def build_skill_session_cmd(
     _apply_output_format(cmd, output_format)
     for validated_dir in add_dirs:
         cmd.extend([ClaudeFlags.ADD_DIR, validated_dir.path])
+    if resume_session_id:
+        cmd += [ClaudeFlags.RESUME, resume_session_id]
 
     return ClaudeHeadlessCmd(cmd=cmd, env=spec.env)
 

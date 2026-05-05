@@ -229,6 +229,7 @@ _FMT_RUN_SKILL_SUPPRESSED: frozenset[str] = frozenset(
         "last_stop_reason",
         "lifespan_started",
         "order_id",
+        "infra_exit_category",
     }
 )
 

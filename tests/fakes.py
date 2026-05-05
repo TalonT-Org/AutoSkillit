@@ -20,6 +20,7 @@ from autoskillit.core.types import (
     HeadlessExecutor,
     MergeQueueWatcher,
     RecipeRepository,
+    SessionCheckpoint,  # noqa: F401, TC001
     SkillResult,
     SubprocessResult,
     SubprocessRunner,
@@ -83,6 +84,7 @@ class ExecutorCall:
     provider_extras: Mapping[str, str] | None = None
     profile_name: str = ""
     resume_session_id: str = ""
+    resume_checkpoint: SessionCheckpoint | None = None
 
 
 @dataclasses.dataclass
@@ -166,6 +168,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         provider_extras: Mapping[str, str] | None = None,
         profile_name: str = "",
         resume_session_id: str = "",
+        resume_checkpoint: SessionCheckpoint | None = None,
     ) -> SkillResult:
         self.calls.append(
             ExecutorCall(
@@ -192,6 +195,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 provider_extras=provider_extras,
                 profile_name=profile_name,
                 resume_session_id=resume_session_id,
+                resume_checkpoint=resume_checkpoint,
             )
         )
         if self._queue:

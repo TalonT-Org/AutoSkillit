@@ -13,7 +13,7 @@ description: >
   phase separates research artifacts from experimental code: opens a clean
   artifact-only PR, tags the experiment branch, and closes the original PR.
   No auto-merge.
-summary: scope > plan > [review?] > worktree > decompose > phases > experiment > report > open-pr > [review? > resolve > [re-run?] > push] > archive
+summary: scope > plan > [review?] > worktree > env-setup > decompose > phases > experiment > report > open-pr > [review? > resolve > [re-run?] > push] > archive
 
 ingredients:
   task:
@@ -238,17 +238,46 @@ steps:
     on_result:
       field: verdict
       routes:
-        PASS: decompose_phases
-        WARN: decompose_phases
+        PASS: setup_environment
+        WARN: setup_environment
         FAIL: escalate_stop
     on_failure: escalate_stop
     note: >
       Pre-flight resource gate. Reads the experiment plan's data_manifest, checks
       available disk space and network connectivity for external/gitignored data
       entries, and creates the required directory structure in the worktree. PASS
-      and WARN proceed to decompose_phases. FAIL escalates immediately with a
+      and WARN proceed to setup_environment. FAIL escalates immediately with a
       detailed resource feasibility report rather than wasting compute on doomed
       downloads.
+
+  setup_environment:
+    tool: run_skill
+    model: ""
+    with:
+      skill_command: "/autoskillit:setup-environment ${{ context.worktree_path }} ${{ context.experiment_plan }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: setup_environment
+    capture:
+      env_mode: "${{ result.env_mode }}"
+      env_report: "${{ result.env_report }}"
+    on_result:
+      field: verdict
+      routes:
+        PASS: decompose_phases
+        WARN: decompose_phases
+        FAIL: escalate_stop
+    on_failure: escalate_stop
+    stale_threshold: 600
+    retries: 1
+    on_exhausted: escalate_stop
+    note: >
+      Pre-flight environment gate. Reads the experiment plan to determine the
+      required environment type (standard, Docker, or micromamba-host). Probes
+      Docker availability, builds the image if possible, falls back to host
+      micromamba if Docker is unavailable and deps are pure conda-forge Python.
+      Emits env_mode consumed by implement_phase and downstream steps. PASS
+      (none or docker) and WARN (micromamba-host) proceed to decompose_phases.
+      FAIL (unavailable) escalates immediately.
 
   decompose_phases:
     tool: run_skill

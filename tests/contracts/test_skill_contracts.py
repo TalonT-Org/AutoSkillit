@@ -363,3 +363,25 @@ def test_review_gate_clear_pattern_in_review_pr_contracts(skills):
         assert "%%REVIEW_GATE::" not in ex, (
             f"approved_with_comments example must NOT include %%REVIEW_GATE:: tag; found: {ex!r}"
         )
+
+
+def test_skill_contracts_yaml_includes_setup_environment(skills: dict[str, Any]) -> None:
+    """setup-environment must be registered with env_mode and verdict patterns."""
+    _assert_skill_has_patterns(
+        skills, "setup-environment", r"env_mode\s*=\s*(none|docker|micromamba-host|unavailable)"
+    )
+    contract = skills["setup-environment"]
+    patterns = contract["expected_output_patterns"]
+    assert any("verdict" in p for p in patterns), "missing verdict pattern"
+    assert any("env_report" in p for p in patterns), "missing env_report pattern"
+
+
+def test_setup_environment_env_mode_examples_cover_all_modes(
+    skills: dict[str, Any],
+) -> None:
+    """Pattern examples must cover all four env_mode values."""
+    contract = skills["setup-environment"]
+    examples = contract.get("pattern_examples", [])
+    example_text = "\n".join(examples)
+    for mode in ("none", "docker", "micromamba-host", "unavailable"):
+        assert f"env_mode = {mode}" in example_text, f"missing example for env_mode={mode}"

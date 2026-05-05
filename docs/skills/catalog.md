@@ -1,7 +1,7 @@
 # Skill catalog
 
-The complete list of bundled skills (130 total: 3 in `src/autoskillit/skills/`,
-127 in `src/autoskillit/skills_extended/`). Filesystem walk this directory if
+The complete list of bundled skills (131 total: 3 in `src/autoskillit/skills/`,
+128 in `src/autoskillit/skills_extended/`). Filesystem walk this directory if
 you need an exhaustive listing; this catalog groups by purpose.
 
 ## Tier 1 — free range (3)
@@ -37,7 +37,7 @@ Located under `src/autoskillit/skills_extended/`. Grouped by purpose:
 `generate-report`, `troubleshoot-experiment`
 
 ### Research and review
-`review-design`, `stage-data`, `bundle-local-report`, `reload-session`
+`review-design`, `stage-data`, `setup-environment`, `bundle-local-report`, `reload-session`
 
 ## Tier 3 — pipeline / automation
 
@@ -139,8 +139,8 @@ symptom, and the audit suite is updated so the same class of bug cannot
 recur. Commit messages prefix with `Rectify:` for traceability; the count of
 `Rectify:` commits is reported in `docs/developer/contributing.md`.
 
-## Total: 129
+## Total: 131
 
-3 (Tier 1) + 126 (`skills_extended/`) = 129 bundled skills. The total is
+3 (Tier 1) + 128 (`skills_extended/`) = 131 bundled skills. The total is
 verified by `tests/docs/test_doc_counts.py` against a filesystem walk so any
 addition or removal is caught immediately.

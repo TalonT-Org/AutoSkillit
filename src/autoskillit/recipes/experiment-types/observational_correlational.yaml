@@ -1,0 +1,31 @@
+name: observational_correlational
+schema_version: "1.0"
+priority: 10
+is_fallback: false
+classification_triggers:
+  - "No manipulation or intervention; variables measured as they naturally occur: 'observational study', 'correlational', 'cross-sectional', 'longitudinal survey', 'archival data', 'naturalistic'"
+  - "Association or prediction claim without causal assignment: 'associated with', 'predicts', 'correlated with', 'relationship between' without randomization or intervention described"
+dimension_weights:
+  causal_structure: M
+  variance_protocol: L
+  statistical_corrections: M
+  ecological_validity: H
+  measurement_alignment: H
+  resource_proportionality: L
+  data_acquisition: H
+  agent_implementability: L
+applicable_lenses:
+  primary: exp-lens-validity-threats
+  secondary: exp-lens-measurement-validity
+red_team_focus:
+  specific: unmeasured confounder invalidating association claim
+  severity_cap: warning
+l1_severity:
+  estimand_clarity: warning
+  hypothesis_falsifiability: warning
+dimension_weight_rationale:
+  causal_structure: "Confounders must be enumerated in a DAG; covariate adjustment strategy determines whether associations are interpretable"
+  statistical_corrections: "Multiple predictor tests and post-hoc subgroup splits require correction; p-hacking risk is elevated in large-N surveys"
+  ecological_validity: "Naturalistic observation maximizes ecological validity; the key question is sample representativeness"
+  measurement_alignment: "Self-report scales and archival proxies introduce construct validity threats requiring convergent evidence"
+  data_acquisition: "Sampling frame, response rate, and missing-not-at-random mechanisms determine population validity"

@@ -48,6 +48,7 @@ def test_retry_reason_values():
         RetryReason.EARLY_STOP,
         RetryReason.ZERO_WRITES,
         RetryReason.EMPTY_OUTPUT,
+        RetryReason.COMPLETED_NO_FLUSH,
         RetryReason.DRAIN_RACE,
         RetryReason.PATH_CONTAMINATION,
         RetryReason.CONTRACT_RECOVERY,

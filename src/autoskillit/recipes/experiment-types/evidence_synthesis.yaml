@@ -1,0 +1,32 @@
+name: evidence_synthesis
+schema_version: "1.0"
+priority: 2
+is_fallback: false
+classification_triggers:
+  - "Aggregates results from multiple existing studies: 'meta-analysis', 'systematic review', 'literature synthesis', 'pooled estimate', 'effect size aggregation', 'PRISMA'"
+  - "No new data collection; studies are the unit of analysis: 'included studies', 'search strategy', 'inclusion criteria', 'forest plot'"
+dimension_weights:
+  causal_structure: L
+  variance_protocol: M
+  statistical_corrections: H
+  ecological_validity: H
+  measurement_alignment: H
+  resource_proportionality: L
+  data_acquisition: H
+  agent_implementability: M
+applicable_lenses:
+  primary: exp-lens-measurement-validity
+  secondary: exp-lens-sensitivity-robustness
+red_team_focus:
+  specific: publication bias and outcome reporting bias
+  severity_cap: critical
+l1_severity:
+  estimand_clarity: critical
+  hypothesis_falsifiability: warning
+dimension_weight_rationale:
+  variance_protocol: "Heterogeneity across included studies must be characterized; random-effects vs fixed-effects model choice is load-bearing"
+  statistical_corrections: "Multiple comparisons across subgroup and sensitivity analyses require explicit correction"
+  ecological_validity: "Generalizability across study populations is a primary deliverable of systematic reviews"
+  measurement_alignment: "Outcome harmonization across heterogeneous measurement instruments is the defining data challenge"
+  data_acquisition: "Search strategy completeness and PRISMA compliance determine which evidence enters the pool"
+  agent_implementability: "Protocol steps are well-defined but access to literature databases may require external tools"

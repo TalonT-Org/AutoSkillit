@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from autoskillit.core import get_logger, load_yaml, pkg_root
@@ -22,16 +22,47 @@ class ExperimentTypeSpec:
     applicable_lenses: dict[str, str | None]
     red_team_focus: dict[str, str]
     l1_severity: dict[str, str]
+    schema_version: str = ""
+    priority: int = 999
+    is_fallback: bool = False
+    dimension_weight_rationale: dict[str, str] = field(default_factory=dict)
+
+
+def _parse_int_field(data: dict, field: str, default: int, source_path: Path) -> int:
+    val = data.get(field, default)
+    try:
+        return int(val)
+    except (ValueError, TypeError) as e:
+        name = data.get("name", "?")
+        raise TypeError(
+            f"Experiment type '{name}' field '{field}' must be an integer: {source_path}"
+        ) from e
+
+
+def _parse_bool_field(data: dict, field: str, default: bool, source_path: Path) -> bool:
+    val = data.get(field, default)
+    if not isinstance(val, bool):
+        name = data.get("name", "?")
+        raise TypeError(
+            f"Experiment type '{name}' field '{field}' must be a boolean: {source_path}"
+        )
+    return val
 
 
 def _parse_experiment_type(data: dict, source_path: Path) -> ExperimentTypeSpec:
     if "name" not in data:
         raise ValueError(f"Experiment type YAML missing 'name' field: {source_path}")
-    for field in ("dimension_weights", "applicable_lenses", "red_team_focus", "l1_severity"):
-        val = data.get(field)
+    for f in (
+        "dimension_weights",
+        "applicable_lenses",
+        "red_team_focus",
+        "l1_severity",
+        "dimension_weight_rationale",
+    ):
+        val = data.get(f)
         if val is not None and not isinstance(val, dict):
             raise TypeError(
-                f"Experiment type '{data['name']}' field '{field}' must be a dict, "
+                f"Experiment type '{data['name']}' field '{f}' must be a dict, "
                 f"got {type(val).__name__}: {source_path}"
             )
     return ExperimentTypeSpec(
@@ -41,6 +72,10 @@ def _parse_experiment_type(data: dict, source_path: Path) -> ExperimentTypeSpec:
         applicable_lenses=dict(data.get("applicable_lenses", {})),
         red_team_focus=dict(data.get("red_team_focus", {})),
         l1_severity=dict(data.get("l1_severity", {})),
+        schema_version=str(data.get("schema_version", "")),
+        priority=_parse_int_field(data, "priority", 999, source_path),
+        is_fallback=_parse_bool_field(data, "is_fallback", False, source_path),
+        dimension_weight_rationale=dict(data.get("dimension_weight_rationale", {})),
     )
 
 

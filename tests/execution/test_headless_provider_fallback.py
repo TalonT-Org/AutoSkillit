@@ -14,6 +14,8 @@ from autoskillit.core.types import RetryReason, SkillResult
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
+_PROVIDER_RETRY_LIMIT = 2
+
 _STALE_RESULT = SkillResult(
     success=False,
     result="",
@@ -61,7 +63,7 @@ def _make_queued_build_result(*results: SkillResult):
 
 
 class TestProviderFallbackLoop:
-    def _patch_common(self, monkeypatch, tmp_path, build_result_fn):
+    def _patch_common(self, monkeypatch, tmp_path, build_result_fn, ctx=None):
         import autoskillit.execution.session_log as _sl_mod
         from autoskillit.execution.headless import PostSessionMetrics
         from tests.execution.conftest import _sr
@@ -72,6 +74,11 @@ class TestProviderFallbackLoop:
         async def fake_runner(cmd, **kwargs):  # noqa: ARG001
             call_count[0] += 1
             return _sub_result
+
+        if ctx is not None:
+            monkeypatch.setattr(
+                ctx.config.providers, "provider_retry_limit", _PROVIDER_RETRY_LIMIT
+            )
 
         monkeypatch.setattr(
             "autoskillit.execution.headless._build_skill_result",
@@ -106,6 +113,7 @@ class TestProviderFallbackLoop:
             monkeypatch,
             tmp_path,
             _make_queued_build_result(_STALE_RESULT, _SUCCESS_RESULT),
+            ctx=minimal_ctx,
         )
         minimal_ctx.runner = fake_runner
 
@@ -133,6 +141,7 @@ class TestProviderFallbackLoop:
             monkeypatch,
             tmp_path,
             _make_queued_build_result(_BUDGET_EXHAUSTED_RESULT, _SUCCESS_RESULT),
+            ctx=minimal_ctx,
         )
         minimal_ctx.runner = fake_runner
 
@@ -184,6 +193,7 @@ class TestProviderFallbackLoop:
             monkeypatch,
             tmp_path,
             _make_queued_build_result(_STALE_RESULT),
+            ctx=minimal_ctx,
         )
         minimal_ctx.runner = fake_runner
 
@@ -194,6 +204,8 @@ class TestProviderFallbackLoop:
             timeout=30.0,
             stale_threshold=5.0,
             provider_name="",
+            provider_fallback_env={"ANTHROPIC_API_KEY": "sk-test"},
+            provider_fallback_name="anthropic",
         )
 
         assert call_count[0] == 1

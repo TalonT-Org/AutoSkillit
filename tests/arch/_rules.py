@@ -90,6 +90,7 @@ _PRINT_EXEMPT = frozenset(
         "review_loop_gate.py",
         "skill_cmd_guard.py",
         "skill_command_guard.py",
+        "_dispatch.py",
     }
 )
 

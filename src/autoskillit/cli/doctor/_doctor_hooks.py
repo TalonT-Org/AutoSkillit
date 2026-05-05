@@ -20,14 +20,20 @@ def _check_hook_registration(settings_path: Path) -> DoctorResult:
     from autoskillit.cli._hooks import _load_settings_data
 
     data = _load_settings_data(settings_path)
-    registered = " ".join(
+    commands = [
         hook.get("command", "")
         for event_entries in data.get("hooks", {}).values()
         if isinstance(event_entries, list)
         for entry in event_entries
         for hook in entry.get("hooks", [])
-    )
-    missing = [script for script in canonical_script_basenames() if script not in registered]
+    ]
+    registered_logical = {cmd.split()[-1] for cmd in commands if "_dispatch.py" in cmd}
+    missing = [
+        script
+        for script in canonical_script_basenames()
+        if not any(script in cmd for cmd in commands)
+        and script.removesuffix(".py") not in registered_logical
+    ]
     if missing:
         return DoctorResult(
             severity=Severity.WARNING,

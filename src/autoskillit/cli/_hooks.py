@@ -7,6 +7,7 @@ from pathlib import Path
 
 from autoskillit.core import atomic_write, is_git_worktree, pkg_root
 from autoskillit.hook_registry import (
+    _build_hook_command,
     _build_hook_entry,
     _claude_settings_path,  # noqa: F401 — re-exported; cli/__init__ + _stale_check + _init_helpers import from here
     _load_settings_data,
@@ -72,15 +73,7 @@ def sync_hooks_to_settings(settings_path: Path) -> None:
     for hook_def in HOOK_REGISTRY:
         key = (hook_def.event_type, hook_def.matcher)
         hooks_list = [
-            {
-                "type": "command",
-                "command": f"python3 {hooks_dir / script}",
-                **(
-                    {"timeout": hook_def.timeout_seconds}
-                    if hook_def.timeout_seconds is not None
-                    else {}
-                ),
-            }
+            _build_hook_command(hooks_dir, script, hook_def.timeout_seconds)
             for script in hook_def.scripts
         ]
         if key not in groups:

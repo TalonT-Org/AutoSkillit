@@ -238,7 +238,10 @@ class TestCLIInit:
         )
         for hdef in HOOK_REGISTRY:
             for script in hdef.scripts:
-                assert script in registered, f"Expected hook script {script!r} to be registered"
+                logical_name = script.removesuffix(".py")
+                assert logical_name in registered, (
+                    f"Expected hook script {script!r} to be registered"
+                )
 
     # CI-SCOPE-3
     def test_init_idempotent_no_duplicates(

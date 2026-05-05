@@ -30,6 +30,7 @@ __all__ = [
     "FeatureLifecycle",
     "DispatchGateType",
     "ClaudeContentBlockType",
+    "InfraExitCategory",
 ]
 
 
@@ -51,6 +52,20 @@ class RetryReason(StrEnum):
     )
     CLONE_CONTAMINATION = "clone_contamination"
     THINKING_STALL = "thinking_stall"  # final turn: thinking blocks only, no text or tool output
+
+
+class InfraExitCategory(StrEnum):
+    """Infrastructure-level exit classification for headless sessions.
+
+    Distinguishes infrastructure failures (context exhaustion, API errors,
+    process kills) from logical agent failures (completed with error).
+    Used for telemetry and resume routing — not a retry discriminant itself.
+    """
+
+    COMPLETED = "completed"
+    CONTEXT_EXHAUSTED = "context_exhausted"
+    API_ERROR = "api_error"
+    PROCESS_KILLED = "process_killed"
 
 
 class MergeFailedStep(StrEnum):

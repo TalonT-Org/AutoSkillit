@@ -6,7 +6,7 @@ and _linux_proc so callers can use ``from autoskillit.core.runtime import X``.
 
 from __future__ import annotations
 
-from ._linux_proc import read_boot_id, read_starttime_ticks
+from ._linux_proc import is_session_alive, read_boot_id, read_starttime_ticks
 from .kitchen_state import (
     KitchenMarker,
     get_state_dir,
@@ -29,6 +29,7 @@ from .session_registry import (
 )
 
 __all__ = [
+    "is_session_alive",
     "KitchenMarker",
     "bridge_claude_session_id",
     "cleanup_readiness_sentinel",

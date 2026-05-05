@@ -51,6 +51,7 @@ from .paths import find_latest_session_id as find_latest_session_id
 from .paths import is_git_main_checkout as is_git_main_checkout
 from .paths import is_git_worktree as is_git_worktree
 from .paths import pkg_root as pkg_root
+from .runtime._linux_proc import is_session_alive as is_session_alive
 from .runtime._linux_proc import read_boot_id as read_boot_id
 from .runtime._linux_proc import read_starttime_ticks as read_starttime_ticks
 from .runtime.kitchen_state import KitchenMarker as KitchenMarker
@@ -84,6 +85,8 @@ from .tool_sequence_analysis import (
 from .tool_sequence_analysis import render_adjacency_table as render_adjacency_table
 from .tool_sequence_analysis import render_dot as render_dot
 from .tool_sequence_analysis import render_mermaid as render_mermaid
+from .types import SessionCheckpoint as SessionCheckpoint
+from .types import compute_remaining as compute_remaining
 from .types import ALL_VISIBILITY_TAGS as ALL_VISIBILITY_TAGS
 from .types import AUTOSKILLIT_INSTALLED_VERSION as AUTOSKILLIT_INSTALLED_VERSION
 from .types import AUTOSKILLIT_PRIVATE_ENV_VARS as AUTOSKILLIT_PRIVATE_ENV_VARS
@@ -158,6 +161,7 @@ from .types import GateState as GateState
 from .types import GitHubApiLog as GitHubApiLog
 from .types import GitHubFetcher as GitHubFetcher
 from .types import HeadlessExecutor as HeadlessExecutor
+from .types import InfraExitCategory as InfraExitCategory
 from .types import KillReason as KillReason
 from .types import LoadReport as LoadReport
 from .types import LoadResult as LoadResult

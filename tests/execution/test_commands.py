@@ -929,3 +929,58 @@ def test_anthropic_api_key_in_headless_exclusive_vars() -> None:
 def test_anthropic_auth_token_in_headless_exclusive_vars() -> None:
     """ANTHROPIC_AUTH_TOKEN must be headless-exclusive."""
     assert "ANTHROPIC_AUTH_TOKEN" in _HEADLESS_EXCLUSIVE_VARS
+
+
+# ---------------------------------------------------------------------------
+# T3: build_skill_session_cmd resume_session_id support
+# ---------------------------------------------------------------------------
+
+
+class TestBuildSkillSessionCmdResume:
+    BASE = dict(
+        cwd="/repo",
+        completion_marker="%%ORDER_UP::abc%%",
+        model=None,
+        plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
+        output_format=OutputFormat.STREAM_JSON,
+        add_dirs=[],
+    )
+
+    def test_resume_flag_present_when_session_id_set(self):
+        """--resume <id> is in the command when resume_session_id is set."""
+        spec = build_skill_session_cmd(
+            "/implement fix the bug", **self.BASE, resume_session_id="sess-12345"
+        )
+        assert "--resume" in spec.cmd
+        idx = spec.cmd.index("--resume")
+        assert spec.cmd[idx + 1] == "sess-12345"
+
+    def test_no_resume_flag_when_empty(self):
+        """--resume is absent when resume_session_id is empty."""
+        spec = build_skill_session_cmd("/implement fix the bug", **self.BASE)
+        assert "--resume" not in spec.cmd
+
+    def test_resume_prompt_wraps_with_continuation_context(self):
+        """When resuming, the prompt includes continuation instructions."""
+        spec = build_skill_session_cmd(
+            "/implement fix the bug", **self.BASE, resume_session_id="sess-12345"
+        )
+        prompt = spec.cmd[spec.cmd.index("-p") + 1]
+        assert "resume" in prompt.lower() or "continue" in prompt.lower()
+        assert "%%ORDER_UP::abc%%" in prompt
+
+    def test_resume_flag_appended_after_add_dirs(self):
+        """--resume flag is appended after all --add-dir entries."""
+        from autoskillit.core import ValidatedAddDir
+
+        spec = build_skill_session_cmd(
+            "/implement fix the bug",
+            **{**self.BASE, "add_dirs": [ValidatedAddDir(path="/extra")]},
+            resume_session_id="sess-99",
+        )
+        # --resume must appear after --add-dir in argv
+        assert "--resume" in spec.cmd
+        assert "--add-dir" in spec.cmd
+        resume_idx = spec.cmd.index("--resume")
+        add_dir_idx = spec.cmd.index("--add-dir")
+        assert resume_idx > add_dir_idx

@@ -13,6 +13,7 @@ from uuid import uuid4
 
 from autoskillit.core import (
     FleetErrorCode,
+    SessionCheckpoint,  # noqa: F401, TC001
     SkillResult,
     claude_code_log_path,
     fleet_error,
@@ -144,6 +145,7 @@ async def execute_dispatch(
     cache_invalidator: Callable[[str], None] | None = None,
     capture: dict[str, str] | None = None,
     resume_session_id: str | None = None,
+    resume_checkpoint: SessionCheckpoint | None = None,
 ) -> str:
     """Execute a single food truck dispatch.
 
@@ -185,6 +187,7 @@ async def execute_dispatch(
             cache_invalidator=cache_invalidator,
             capture=capture,
             resume_session_id=resume_session_id,
+            resume_checkpoint=resume_checkpoint,
         )
     except asyncio.CancelledError:
         raise
@@ -202,7 +205,8 @@ def classify_dispatch_outcome(
     parsed: L3ParseResult,
     skill_result: SkillResult,
     *,
-    sidecar_exists: bool,
+    sidecar_exists: bool = False,
+    checkpoint: SessionCheckpoint | None = None,
 ) -> tuple[DispatchStatus, str]:
     """Map L3 subprocess signals to a (DispatchStatus, reason) pair.
 
@@ -211,7 +215,7 @@ def classify_dispatch_outcome(
       1. completed_clean + success flag → SUCCESS
       2. completed_clean + no success → FAILURE
       3. completed_dirty → FAILURE (fleet_l3_parse_failed)
-      4. no_sentinel + session_id + lifespan_started + sidecar → RESUMABLE
+      4. no_sentinel + session_id + lifespan_started + (checkpoint or sidecar) → RESUMABLE
       5. no_sentinel (any other case) → FAILURE (fleet_l3_no_result_block)
     """
     if parsed.outcome == "completed_clean" and parsed.payload and parsed.payload.get("success"):
@@ -221,7 +225,8 @@ def classify_dispatch_outcome(
         return DispatchStatus.FAILURE, reason
     if parsed.outcome == "completed_dirty":
         return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L3_PARSE_FAILED
-    if skill_result.session_id and skill_result.lifespan_started and sidecar_exists:
+    has_progress = checkpoint is not None or sidecar_exists
+    if skill_result.session_id and skill_result.lifespan_started and has_progress:
         return DispatchStatus.RESUMABLE, FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
     return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
 
@@ -239,6 +244,7 @@ async def _run_dispatch(
     cache_invalidator: Callable[[str], None] | None = None,
     capture: dict[str, str] | None = None,
     resume_session_id: str | None = None,
+    resume_checkpoint: SessionCheckpoint | None = None,
 ) -> str:
     """Inner dispatch body — called after lock acquisition."""
     from autoskillit.fleet.state import (
@@ -367,6 +373,7 @@ async def _run_dispatch(
         cwd=str(tool_ctx.project_dir),
         completion_marker=completion_marker,
         resume_session_id=resume_session_id,
+        resume_checkpoint=resume_checkpoint,
         kitchen_id=tool_ctx.kitchen_id,
         order_id=dispatch_id,
         campaign_id=campaign_id,
@@ -418,8 +425,21 @@ async def _run_dispatch(
         assistant_messages_path=jsonl_path,
     )
 
+    sidecar_file = Path(dispatch_sidecar_path)
+    dispatch_checkpoint: SessionCheckpoint | None = None
+    if sidecar_file.exists():
+        from autoskillit.fleet._checkpoint_bridge import checkpoint_from_sidecar  # noqa: PLC0415
+        from autoskillit.fleet.sidecar import read_sidecar_from_path  # noqa: PLC0415
+
+        sidecar_entries = read_sidecar_from_path(sidecar_file)
+        if sidecar_entries:
+            dispatch_checkpoint = checkpoint_from_sidecar(sidecar_entries)
+
     final_status, reason = classify_dispatch_outcome(
-        parsed, skill_result, sidecar_exists=Path(dispatch_sidecar_path).exists()
+        parsed,
+        skill_result,
+        sidecar_exists=sidecar_file.exists(),
+        checkpoint=dispatch_checkpoint,
     )
 
     append_dispatch_record(
@@ -489,5 +509,8 @@ async def _run_dispatch(
                 "l3_parse_source": parsed.source,
                 "token_usage": skill_result.token_usage,
                 "lifespan_started": skill_result.lifespan_started,
+                "resume_checkpoint": dispatch_checkpoint.to_dict()
+                if dispatch_checkpoint
+                else None,
             }
         )

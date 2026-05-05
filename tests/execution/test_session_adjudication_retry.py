@@ -518,3 +518,59 @@ class TestContentStateEnum:
         session = make_session(subtype="success", is_error=is_error, result=result)
         state = _evaluate_content_state(session, completion_marker, patterns)
         assert state.value == expected_state
+
+
+# ---------------------------------------------------------------------------
+# T2: API errors route to RetryReason.RESUME (not EMPTY_OUTPUT)
+# ---------------------------------------------------------------------------
+
+
+class TestApiErrorRetryRouting:
+    """API errors (529/overload/disconnect) must route to RESUME, not EMPTY_OUTPUT."""
+
+    def _make_result(
+        self,
+        stderr: str = "",
+        returncode: int = 1,
+    ):
+        from autoskillit.core.types import ChannelConfirmation, SubprocessResult, TerminationReason
+
+        return SubprocessResult(
+            returncode=returncode,
+            stdout="",
+            stderr=stderr,
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
+
+    def test_api_error_overrides_empty_output_to_resume(self):
+        """When _build_skill_result detects API error in stderr, override
+        EMPTY_OUTPUT → RESUME for on_context_limit routing."""
+        from autoskillit.core.types import RetryReason
+        from autoskillit.execution.headless._headless_result import _build_skill_result
+
+        result = self._make_result(stderr="Error: API is overloaded", returncode=1)
+        sr = _build_skill_result(result)
+        assert sr.needs_retry is True
+        assert sr.retry_reason == RetryReason.RESUME
+
+    def test_api_error_503_overrides_to_resume(self):
+        """503 Service Unavailable in stderr → RESUME."""
+        from autoskillit.core.types import RetryReason
+        from autoskillit.execution.headless._headless_result import _build_skill_result
+
+        result = self._make_result(stderr="503 Service Unavailable", returncode=1)
+        sr = _build_skill_result(result)
+        assert sr.needs_retry is True
+        assert sr.retry_reason == RetryReason.RESUME
+
+    def test_api_error_econnreset_overrides_to_resume(self):
+        """ECONNRESET in stderr → RESUME."""
+        from autoskillit.core.types import RetryReason
+        from autoskillit.execution.headless._headless_result import _build_skill_result
+
+        result = self._make_result(stderr="read ECONNRESET", returncode=1)
+        sr = _build_skill_result(result)
+        assert sr.needs_retry is True
+        assert sr.retry_reason == RetryReason.RESUME

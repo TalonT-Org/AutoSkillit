@@ -272,6 +272,7 @@ generic_automation_mcp/
 │   ├── _semaphore.py        #   FleetSemaphore — configurable asyncio.BoundedSemaphore implementing FleetLock
 │   ├── _sidecar_rpc.py      #   run_python-callable entry points: write_sidecar_entry, get_remaining_issues
 │   ├── _findings_rpc.py     #   run_python-callable entry points: parse_and_resume, load_execution_map
+│   ├── _checkpoint_bridge.py #  checkpoint_from_sidecar — converts IssueSidecarEntry list to SessionCheckpoint
 │   ├── state.py             #   Campaign state persistence — DispatchRecord, DispatchStatus, atomic writes, resume algorithm
 │   └── summary.py           #   Campaign summary schema v1: frozen dataclasses, sentinel parser, validator
 │

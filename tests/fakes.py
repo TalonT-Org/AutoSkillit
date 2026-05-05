@@ -20,6 +20,7 @@ from autoskillit.core.types import (
     HeadlessExecutor,
     MergeQueueWatcher,
     RecipeRepository,
+    SessionCheckpoint,  # noqa: F401, TC001
     SkillResult,
     SubprocessResult,
     SubprocessRunner,
@@ -82,6 +83,8 @@ class ExecutorCall:
     write_watch_dirs: tuple[Any, ...] = ()
     provider_extras: Mapping[str, str] | None = None
     profile_name: str = ""
+    resume_session_id: str = ""
+    resume_checkpoint: SessionCheckpoint | None = None
 
 
 @dataclasses.dataclass
@@ -92,6 +95,7 @@ class DispatchFoodTruckCall:
     cwd: str
     completion_marker: str = ""
     resume_session_id: str | None = None
+    resume_checkpoint: SessionCheckpoint | None = None
     model: str = ""
     step_name: str = ""
     kitchen_id: str = ""
@@ -164,6 +168,8 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         write_watch_dirs: Sequence[Any] = (),
         provider_extras: Mapping[str, str] | None = None,
         profile_name: str = "",
+        resume_session_id: str = "",
+        resume_checkpoint: SessionCheckpoint | None = None,
     ) -> SkillResult:
         self.calls.append(
             ExecutorCall(
@@ -189,6 +195,8 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 write_watch_dirs=tuple(write_watch_dirs),
                 provider_extras=provider_extras,
                 profile_name=profile_name,
+                resume_session_id=resume_session_id,
+                resume_checkpoint=resume_checkpoint,
             )
         )
         if self._queue:
@@ -204,6 +212,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         *,
         completion_marker: str,
         resume_session_id: str | None = None,
+        resume_checkpoint: SessionCheckpoint | None = None,
         model: str = "",
         step_name: str = "",
         kitchen_id: str = "",
@@ -225,6 +234,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 cwd=cwd,
                 completion_marker=completion_marker,
                 resume_session_id=resume_session_id,
+                resume_checkpoint=resume_checkpoint,
                 model=model,
                 step_name=step_name,
                 kitchen_id=kitchen_id,

@@ -11,6 +11,7 @@ Fleet campaign dispatch, state persistence, and sidecar tests.
 | `conftest.py` | Shared fixtures for tests/fleet/ |
 | `test_api.py` | Tests for fleet._api module (Group J) |
 | `test_campaign_capture.py` | Tests for campaign capture extraction and ingredient interpolation (Group J) |
+| `test_checkpoint_bridge.py` | Tests for checkpoint_from_sidecar converting IssueSidecarEntry to SessionCheckpoint |
 | `test_dispatch_failure_semantics.py` | Group F: Timeout + No-Result-Block failure semantics for fleet dispatch |
 | `test_dispatch_lifespan.py` | Group G (fleet part): lifespan_started surface + envelope propagation |
 | `test_dispatch_outcome_classifier.py` | Tests for classify_dispatch_outcome() pure classification function |

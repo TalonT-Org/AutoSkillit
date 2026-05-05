@@ -210,6 +210,8 @@ class SkillResult:
     """Provider identifier stamped by _build_skill_result (e.g. 'anthropic', 'vertex')."""
     provider_fallback: bool = False
     """True when this result was produced by a fallback provider (not the primary)."""
+    infra_exit_category: str = ""
+    """Infrastructure exit classification (InfraExitCategory value)."""
 
     def to_json(self) -> str:
         data: dict[str, Any] = {
@@ -236,6 +238,7 @@ class SkillResult:
             data["worktree_path"] = self.worktree_path
         if self.provider_used:
             data["provider_used"] = self.provider_used
+        data["infra_exit_category"] = self.infra_exit_category
         data["order_id"] = self.order_id
         return json.dumps(data, default=lambda o: o.value if isinstance(o, Enum) else str(o))
 
@@ -384,6 +387,7 @@ class RunSkillResult(_RunSkillResultBase, total=False):
     lifespan_started: bool
     worktree_path: str
     order_id: str
+    infra_exit_category: str
 
 
 class _RunCmdResultBase(TypedDict):

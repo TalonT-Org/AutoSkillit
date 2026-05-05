@@ -41,6 +41,7 @@ from autoskillit.workspace import clone_registry as clone_registry
 
 if TYPE_CHECKING:
     from autoskillit.config import QuotaGuardConfig
+    from autoskillit.core import SkillResult
 
 logger = get_logger(__name__)
 
@@ -183,3 +184,43 @@ async def _quota_refresh_loop(config: QuotaGuardConfig) -> None:
             await _refresh_quota_cache(config)
         except Exception as exc:
             logger.warning("quota_refresh_loop_error", exc_info=True, error=str(exc))
+
+
+def persist_run_skill_state(skill_result: SkillResult, project_dir: Path) -> None:
+    import os  # noqa: PLC0415
+
+    from autoskillit.core import ensure_project_temp  # noqa: PLC0415
+    from autoskillit.execution import (  # noqa: PLC0415
+        SessionState,
+        persist_session_state,
+    )
+
+    if not skill_result.session_id:
+        return
+    try:
+        state = SessionState(
+            session_id=skill_result.session_id,
+            pid=os.getpid(),
+            boot_id="",
+            starttime_ticks=0,
+            infra_exit_category=skill_result.infra_exit_category
+            if skill_result.infra_exit_category
+            else None,
+        )
+        state_dir = ensure_project_temp(project_dir) / "session_state"
+        persist_session_state(state, state_dir)
+    except Exception:
+        logger.debug("run_skill: could not persist session state", exc_info=True)
+
+
+def clear_run_skill_state(project_dir: Path) -> None:
+    from autoskillit.core import ensure_project_temp  # noqa: PLC0415
+    from autoskillit.execution import (  # noqa: PLC0415
+        clear_session_state,
+    )
+
+    try:
+        state_dir = ensure_project_temp(project_dir) / "session_state"
+        clear_session_state(state_dir)
+    except Exception:
+        logger.debug("run_skill: could not clear session state", exc_info=True)

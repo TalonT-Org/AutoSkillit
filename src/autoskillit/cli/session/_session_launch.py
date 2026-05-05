@@ -5,6 +5,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -14,6 +15,12 @@ if TYPE_CHECKING:
     from autoskillit.core import ResumeSpec
 
 
+@dataclass(frozen=True)
+class _InfraExitSignal:
+    session_id: str
+    category: str
+
+
 def _run_interactive_session(
     system_prompt: str,
     *,
@@ -21,8 +28,14 @@ def _run_interactive_session(
     extra_env: dict[str, str] | None = None,
     resume_spec: ResumeSpec | None = None,
     project_dir: Path | None = None,
-) -> str | None:
-    """Launch an interactive Claude Code session; return session_id if reload sentinel found."""
+) -> str | _InfraExitSignal | None:
+    """Launch an interactive Claude Code session.
+
+    Returns:
+        str — session_id when a reload sentinel is found
+        _InfraExitSignal — when an infrastructure exit is detected
+        None — clean exit
+    """
     if shutil.which("claude") is None:
         print("ERROR: 'claude' not found. Install: https://docs.anthropic.com/en/docs/claude-code")
         sys.exit(1)
@@ -32,12 +45,13 @@ def _run_interactive_session(
         MARKETPLACE_PREFIX,
         BareResume,
         ClaudeFlags,
+        InfraExitCategory,
         NamedResume,
         NoResume,
         detect_autoskillit_mcp_prefix,
         pkg_root,
     )
-    from autoskillit.execution import build_interactive_cmd
+    from autoskillit.execution import build_interactive_cmd, read_session_state
 
     _project_dir = project_dir if project_dir is not None else Path.cwd()
     spec = build_interactive_cmd(
@@ -64,6 +78,19 @@ def _run_interactive_session(
     if reload_session_id is not None:
         return reload_session_id
     if result.returncode != 0:
+        from autoskillit.core import ensure_project_temp
+
+        state_dir = ensure_project_temp(_project_dir) / "session_state"
+        state = read_session_state(state_dir)
+        if (
+            state is not None
+            and state.infra_exit_category
+            and state.infra_exit_category != InfraExitCategory.COMPLETED
+            and state.session_id
+        ):
+            return _InfraExitSignal(
+                session_id=state.session_id, category=state.infra_exit_category
+            )
         sys.exit(result.returncode)
     return None
 
@@ -91,25 +118,37 @@ def _launch_cook_session(
     resume_spec: ResumeSpec = NoResume(),
     project_dir: Path | None = None,
 ) -> None:
-    """Launch an interactive Claude Code cook session with reload loop support."""
+    """Launch an interactive Claude Code cook session with reload and infra-resume support."""
     _max_reloads = 10
-    current_resume_spec = resume_spec
+    _max_infra_resumes = 3
+    current_resume_spec: ResumeSpec = resume_spec
     _current_initial_message = initial_message
     seen_reload_ids: set[str] = set()
+    infra_resume_count = 0
     while True:
-        reload_id = _run_interactive_session(
+        session_signal = _run_interactive_session(
             system_prompt,
             initial_message=_current_initial_message,
             extra_env=extra_env,
             resume_spec=current_resume_spec,
             project_dir=project_dir,
         )
-        if reload_id is None:
+        if session_signal is None:
             break
+        if isinstance(session_signal, _InfraExitSignal):
+            infra_resume_count += 1
+            if infra_resume_count >= _max_infra_resumes:
+                raise SystemExit(
+                    f"Too many infrastructure resumes ({_max_infra_resumes} max). "
+                    f"Last exit: {session_signal.category}"
+                )
+            current_resume_spec = NamedResume(session_id=session_signal.session_id)
+            _current_initial_message = None
+            continue
         if len(seen_reload_ids) >= _max_reloads:
             raise SystemExit(f"Too many reloads ({_max_reloads} max). Check for infinite loop.")
-        if reload_id in seen_reload_ids:
-            raise SystemExit(f"Repeated reload_id {reload_id!r} — aborting.")
-        seen_reload_ids.add(reload_id)
-        current_resume_spec = NamedResume(session_id=reload_id)
+        if session_signal in seen_reload_ids:
+            raise SystemExit(f"Repeated reload_id {session_signal!r} — aborting.")
+        seen_reload_ids.add(session_signal)
+        current_resume_spec = NamedResume(session_id=session_signal)
         _current_initial_message = None

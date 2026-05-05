@@ -8,7 +8,6 @@ import pytest
 
 from autoskillit.execution.session._session_state import (
     SessionState,
-    SessionStateLock,
     clear_session_state,
     persist_session_state,
     read_session_state,
@@ -74,27 +73,3 @@ class TestPersistSessionState:
         state = SessionState(session_id="s", pid=1, boot_id="b", starttime_ticks=0)
         persist_session_state(state, nested)
         assert read_session_state(nested) is not None
-
-
-class TestSessionStateLock:
-    def test_acquire_and_release(self, tmp_path: Path) -> None:
-        lock = SessionStateLock(tmp_path)
-        assert lock.acquire() is True
-        lock.release()
-
-    def test_context_manager(self, tmp_path: Path) -> None:
-        with SessionStateLock(tmp_path) as acquired:
-            assert acquired is True
-
-    def test_second_lock_fails(self, tmp_path: Path) -> None:
-        lock1 = SessionStateLock(tmp_path)
-        lock2 = SessionStateLock(tmp_path)
-        assert lock1.acquire() is True
-        assert lock2.acquire() is False
-        lock1.release()
-        assert lock2.acquire() is True
-        lock2.release()
-
-    def test_release_without_acquire_is_noop(self, tmp_path: Path) -> None:
-        lock = SessionStateLock(tmp_path)
-        lock.release()

@@ -1,4 +1,4 @@
-"""Remote resolution tests — _probe_single_remote, _probe_clone_source_url, clone URL resolution."""
+"""Remote resolution tests — _probe_single_remote, _probe_clone_source_url, URL resolution."""
 
 from __future__ import annotations
 

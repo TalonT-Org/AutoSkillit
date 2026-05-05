@@ -28,6 +28,27 @@ class ExperimentTypeSpec:
     dimension_weight_rationale: dict[str, str] = field(default_factory=dict)
 
 
+def _parse_int_field(data: dict, field: str, default: int, source_path: Path) -> int:
+    val = data.get(field, default)
+    try:
+        return int(val)
+    except (ValueError, TypeError) as e:
+        name = data.get("name", "?")
+        raise TypeError(
+            f"Experiment type '{name}' field '{field}' must be an integer: {source_path}"
+        ) from e
+
+
+def _parse_bool_field(data: dict, field: str, default: bool, source_path: Path) -> bool:
+    val = data.get(field, default)
+    if not isinstance(val, bool):
+        name = data.get("name", "?")
+        raise TypeError(
+            f"Experiment type '{name}' field '{field}' must be a boolean: {source_path}"
+        )
+    return val
+
+
 def _parse_experiment_type(data: dict, source_path: Path) -> ExperimentTypeSpec:
     if "name" not in data:
         raise ValueError(f"Experiment type YAML missing 'name' field: {source_path}")
@@ -52,8 +73,8 @@ def _parse_experiment_type(data: dict, source_path: Path) -> ExperimentTypeSpec:
         red_team_focus=dict(data.get("red_team_focus", {})),
         l1_severity=dict(data.get("l1_severity", {})),
         schema_version=str(data.get("schema_version", "")),
-        priority=int(data.get("priority", 999)),
-        is_fallback=bool(data.get("is_fallback", False)),
+        priority=_parse_int_field(data, "priority", 999, source_path),
+        is_fallback=_parse_bool_field(data, "is_fallback", False, source_path),
         dimension_weight_rationale=dict(data.get("dimension_weight_rationale", {})),
     )
 

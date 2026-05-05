@@ -199,3 +199,48 @@ def _resolve_provider_profile(
     if name == "anthropic":
         return ("anthropic", {})
     return (name, config_providers.profiles.get(name, {}))
+
+
+def _resolve_model_as_profile(
+    model_value: str,
+    config_providers: ProvidersConfig,
+) -> tuple[str, str, dict[str, str] | None]:
+    """Check if a model value names a configured provider profile.
+
+    When a model parameter matches a key in ``providers.profiles``, the profile's
+    ``ANTHROPIC_MODEL`` entry becomes the effective model for ``--model``, and the
+    remaining profile entries become environment variable overrides for the subprocess.
+
+    Returns:
+        (effective_model, profile_name, provider_extras):
+        - Profile match with ANTHROPIC_MODEL:
+          (profile's model, profile_key, env_dict without ANTHROPIC_MODEL)
+        - Profile match without ANTHROPIC_MODEL:
+          ("", "", None) — caller should fall through to config default
+        - No match:
+          (model_value, "", None) — treat as literal model name
+    """
+    if not model_value:
+        return (model_value, "", None)
+
+    profile = config_providers.profiles.get(model_value)
+    if profile is None:
+        return (model_value, "", None)
+
+    actual_model = profile.get("ANTHROPIC_MODEL")
+    if not actual_model:
+        logger.warning(
+            "provider_profile_no_model",
+            profile=model_value,
+            hint="Add ANTHROPIC_MODEL to the profile or use a literal model name",
+        )
+        return ("", "", None)
+
+    logger.debug(
+        "model_as_profile_resolved",
+        input_model=model_value,
+        resolved_model=actual_model,
+        profile=model_value,
+    )
+    env_dict = {k: v for k, v in profile.items() if k != "ANTHROPIC_MODEL"}
+    return (actual_model, model_value, env_dict)

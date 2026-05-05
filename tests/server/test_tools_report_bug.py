@@ -672,3 +672,94 @@ async def test_report_bug_blocking_github_client_raises_does_not_propagate(tool_
     assert result["github"].get("skipped") is True
     assert "unexpected error" in result["github"].get("reason", "")
     assert "network failure" in result["github"].get("reason", "")
+
+
+# ---------------------------------------------------------------------------
+# model-as-profile resolution in report_bug
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_report_bug_model_as_profile_resolves_provider(tool_ctx, tmp_path, monkeypatch):
+    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx.config.report_bug.github_filing = False
+
+    monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: True)
+    monkeypatch.setattr(
+        "autoskillit.server._guards._resolve_model_as_profile",
+        lambda *a: (
+            "MiniMax-M2.7",
+            "minimax",
+            {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"},
+        ),
+    )
+
+    mock_executor = AsyncMock()
+    mock_executor.run.return_value = _skill_ok("report text")
+    tool_ctx.executor = mock_executor
+
+    result = json.loads(
+        await report_bug("error ctx", str(tmp_path), model="minimax", severity="blocking")
+    )
+
+    assert result["success"] is True
+    call_kwargs = mock_executor.run.call_args.kwargs
+    assert call_kwargs.get("model") == "MiniMax-M2.7"
+    assert call_kwargs.get("provider_extras") == {
+        "ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"
+    }
+    assert call_kwargs.get("profile_name") == "minimax"
+
+
+@pytest.mark.anyio
+async def test_report_bug_model_as_profile_disabled_when_feature_off(
+    tool_ctx, tmp_path, monkeypatch
+):
+    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx.config.report_bug.github_filing = False
+
+    monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: False)
+
+    mock_executor = AsyncMock()
+    mock_executor.run.return_value = _skill_ok("report text")
+    tool_ctx.executor = mock_executor
+
+    result = json.loads(
+        await report_bug("error ctx", str(tmp_path), model="minimax", severity="blocking")
+    )
+
+    assert result["success"] is True
+    call_kwargs = mock_executor.run.call_args.kwargs
+    assert call_kwargs.get("model") == "minimax"
+    assert call_kwargs.get("provider_extras") is None
+
+
+@pytest.mark.anyio
+async def test_report_bug_config_model_as_profile(tool_ctx, tmp_path, monkeypatch):
+    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx.config.report_bug.github_filing = False
+    tool_ctx.config.report_bug.model = "minimax"
+
+    map_calls: list[str] = []
+
+    def fake_resolve(model_value, *a, **kw):
+        map_calls.append(model_value)
+        return ("MiniMax-M2.7", "minimax", {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"})
+
+    monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: True)
+    monkeypatch.setattr("autoskillit.server._guards._resolve_model_as_profile", fake_resolve)
+
+    mock_executor = AsyncMock()
+    mock_executor.run.return_value = _skill_ok("report text")
+    tool_ctx.executor = mock_executor
+
+    result = json.loads(await report_bug("error ctx", str(tmp_path), severity="blocking"))
+
+    assert result["success"] is True
+    assert map_calls == ["minimax"]
+    call_kwargs = mock_executor.run.call_args.kwargs
+    assert call_kwargs.get("model") == "MiniMax-M2.7"
+    assert call_kwargs.get("provider_extras") == {
+        "ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"
+    }
+    assert call_kwargs.get("profile_name") == "minimax"

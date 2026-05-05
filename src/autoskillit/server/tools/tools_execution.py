@@ -398,6 +398,7 @@ async def run_skill(
 
         provider_extras: dict[str, str] | None = None
         profile_name_out: str = ""
+        effective_model = model
 
         from autoskillit.core import is_feature_enabled
 
@@ -405,7 +406,10 @@ async def run_skill(
         if is_feature_enabled(
             "providers", _cfg.features, experimental_enabled=_cfg.experimental_enabled
         ):
-            from autoskillit.server._guards import _resolve_provider_profile
+            from autoskillit.server._guards import (
+                _resolve_model_as_profile,
+                _resolve_provider_profile,
+            )
 
             _profile, _env_dict = _resolve_provider_profile(
                 step_name or "", tool_ctx.recipe_name or "", _cfg.providers
@@ -413,6 +417,13 @@ async def run_skill(
             if _profile != "anthropic":
                 provider_extras = _env_dict
                 profile_name_out = _profile
+            else:
+                effective_model, prof_name, prof_extras = _resolve_model_as_profile(
+                    model, _cfg.providers
+                )
+                if prof_extras is not None:
+                    provider_extras = prof_extras
+                    profile_name_out = prof_name
 
         # Look up artifact validation patterns from skill contract
         expected_output_patterns: list[str] = []
@@ -522,7 +533,7 @@ async def run_skill(
             skill_result = await tool_ctx.executor.run(
                 resolved_command,
                 cwd,
-                model=model,
+                model=effective_model,
                 add_dirs=skill_add_dirs,
                 step_name=step_name,
                 kitchen_id=tool_ctx.kitchen_id,

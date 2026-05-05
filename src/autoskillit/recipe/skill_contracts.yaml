@@ -2564,6 +2564,19 @@ callable_contracts:
     outputs:
     - name: local_bundle_path
       type: str
+  autoskillit.recipe._cmd_rpc.batch_create_issues:
+    inputs:
+    - name: workspace
+      type: str
+      required: true
+    - name: chunk_size
+      type: str
+      required: false
+    outputs:
+    - name: issue_urls
+      type: str
+    - name: issue_count
+      type: str
 
 tool_output_contracts:
   wait_for_ci:

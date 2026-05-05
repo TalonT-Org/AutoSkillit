@@ -4,7 +4,7 @@ description: >-
   audit-review-decisions in parallel, validate each report individually, and create a
   GitHub issue from each validated report.
 summary: "branch → audit×6 ∥ → validate×6 ∥ → issue×6 ∥ → done"
-recipe_version: "1.1.0"
+recipe_version: "1.2.0"
 requires_packs: [audit, github]
 
 ingredients:
@@ -23,7 +23,7 @@ kitchen_rules:
   - >-
     NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Agent,
     WebFetch, WebSearch, NotebookEdit) from the orchestrator. All work is delegated
-    through run_skill.
+    through MCP tools (run_skill, run_cmd, run_python).
   - >-
     Each audit chain (tests, cohesion, arch, feature-gates, docs, review-decisions) is
     independent. A failure in one chain MUST NOT block or affect the other five chains.
@@ -33,10 +33,6 @@ kitchen_rules:
     concurrent run_skill calls. When any call completes, immediately dispatch
     the next item from the queue. Do not wait for all slots to finish before
     refilling — fill each freed slot individually.
-  - >-
-    prepare-issue calls MUST be sequential — never call prepare-issue in
-    parallel with itself. It hits the GitHub API and parallel calls create
-    request storms. Other tool types may overlap with prepare-issue.
   - >-
     Report paths are discovered from session output — look for file paths
     in {{AUTOSKILLIT_TEMP}}/ directories. Pass discovered paths as positional
@@ -151,39 +147,24 @@ steps:
     on_exhausted: escalate_stop
 
   create_issues:
-    tool: run_skill
-    model: ""
-    description: "Create GitHub issues from validated reports"
+    tool: run_python
+    description: "Batch-create GitHub issues via GraphQL from validated ticket body files"
     with:
-      skill_command: "/autoskillit:prepare-issue"
-      cwd: "${{ inputs.workspace }}"
-      step_name: "create_issues"
+      callable: "autoskillit.recipe._cmd_rpc.batch_create_issues"
+      workspace: "${{ inputs.workspace }}"
+      timeout: 120
     note: >
-      SEQUENTIAL ISSUE CREATION — validate-audit splits each validated report
-      into per-ticket body files (ticket_body_{source}_{N}_{ts}.md) according to the
-      grouping manifest.
+      BATCHED ISSUE CREATION via GraphQL — The callable discovers all
+      ticket_body_{source}_{N}_{ts}.md files in the validate-audit temp directory,
+      parses titles and bodies, includes validation summaries, resolves repository
+      and label IDs, and executes a single batched createIssue mutation with aliases.
+      Chunks at 20 issues per request if needed.
 
-      For each audit type that succeeded in validation:
-        1. Discover the grouping manifest (grouping_manifest_{source}_{ts}.md) in the
-           validate-audit session output.
-        2. Read the manifest to get the list of ticket body file paths.
-        3. Process prepare-issue calls one at a time:
-           - run_skill(skill_command="/autoskillit:prepare-issue {ticket_body_path}", cwd="${{ inputs.workspace }}", step_name="issue_{source}_{N}")
-           - Wait for completion.
-           - Proceed to the next ticket body.
-
-      Never call prepare-issue in parallel with itself — it hits the GitHub API
-      and parallel calls create request storms.
-
-      After all issues are created, append the validation summary to each issue body
-      (sequentially): fetch the current body, verify it is non-empty, append a separator
-      and the validation summary content, write the combined text to a temp file, then run:
-        gh issue edit {issue_number} --body-file {combined_temp_file}
-
-      Collect all issue URLs. If any ticket body issue creation fails, note it but continue.
-      Route to escalate_stop ONLY if ALL ticket bodies across ALL audit types fail.
-    capture_list:
-      issue_urls: "${{ result.issue_url }}"
+      No headless sessions are spawned. Rate-limit cost: 5 pts per chunk
+      (vs 90 pts for 18 sequential REST calls).
+    capture:
+      issue_urls: "${{ result.issue_urls }}"
+      issue_count: "${{ result.issue_count }}"
     on_success: done
     on_failure: escalate_stop
     retries: 1
@@ -193,11 +174,10 @@ steps:
     action: stop
     message: >-
       Full audit complete. GitHub issues created from validated audit reports.
-      Emit the L3 result sentinel with issue_urls included as a comma-separated
-      string of the created issue URLs. context.issue_urls contains the list of
-      created issue URLs — join them with commas in the sentinel JSON:
+      Emit the L3 result sentinel. context.issue_urls is a comma-separated
+      string of the created issue URLs — include it directly in the sentinel JSON:
       {"success": true, "reason": "completed", "summary": "Full audit complete.
-      GitHub issues created.", "issue_urls": "https://github.com/org/repo/issues/1,https://github.com/org/repo/issues/2"}
+      GitHub issues created.", "issue_urls": "${{ context.issue_urls }}"}
       Artifacts are in {{AUTOSKILLIT_TEMP}}/.
 
   escalate_stop:

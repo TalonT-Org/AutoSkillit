@@ -148,6 +148,11 @@ def _is_observability_capture(cap_key: str, step_name: str, step: RecipeStep) ->
     if cap_key == "local_bundle_path" and step_name == "export_local_bundle":
         return True
 
+    # batch_create_issues issue_count: captured output used for telemetry/logging,
+    # not threaded to downstream recipe steps (the done message uses issue_urls only).
+    if cap_key == "issue_count" and step_name == "create_issues" and step.tool == "run_python":
+        return True
+
     return False
 
 
@@ -171,6 +176,9 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
                 if not isinstance(arg_val, str):
                     continue
                 consumed.update(_CONTEXT_REF_RE.findall(arg_val))
+            # message fields are not recipe args; scanner must handle them separately.
+            if reachable_step.message and isinstance(reachable_step.message, str):
+                consumed.update(_CONTEXT_REF_RE.findall(reachable_step.message))
             if reachable_step.on_result and reachable_step.on_result.conditions:
                 for cond in reachable_step.on_result.conditions:
                     if cond.when and isinstance(cond.when, str):

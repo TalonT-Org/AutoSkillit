@@ -80,7 +80,7 @@ def test_full_audit_kitchen_rules() -> None:
     from autoskillit.recipe.io import load_recipe
 
     recipe = load_recipe(RECIPE_PATH)
-    assert len(recipe.kitchen_rules) == 5
+    assert len(recipe.kitchen_rules) == 4
 
 
 def test_full_audit_done_step_has_message() -> None:
@@ -132,7 +132,6 @@ def test_full_audit_semantic_rules_no_errors() -> None:
             "audit-docs",
             "audit-review-decisions",
             "validate-audit",
-            "prepare-issue",
         }
     )
     ctx = make_validation_context(recipe, available_skills=known_skills)
@@ -222,12 +221,23 @@ def test_full_audit_validate_audits_no_wave_barrier() -> None:
     assert "as each" in note or "as soon as" in note or "slot" in note
 
 
-def test_full_audit_create_issues_sequential_prepare_issue() -> None:
+def test_full_audit_create_issues_uses_batched_graphql() -> None:
     import yaml
 
     data = yaml.safe_load(RECIPE_PATH.read_text())
-    note = data["steps"]["create_issues"]["note"].lower()
-    assert "sequential" in note or "one at a time" in note
+    step = data["steps"]["create_issues"]
+    assert step["tool"] == "run_python"
+    assert "batch_create_issues" in step["with"]["callable"]
+    note = step["note"].lower()
+    assert "batched" in note or "graphql" in note
+
+
+def test_full_audit_create_issues_captures_issue_urls() -> None:
+    import yaml
+
+    data = yaml.safe_load(RECIPE_PATH.read_text())
+    capture = data["steps"]["create_issues"]["capture"]
+    assert "issue_urls" in capture
 
 
 def test_full_audit_recipe_version_bumped() -> None:

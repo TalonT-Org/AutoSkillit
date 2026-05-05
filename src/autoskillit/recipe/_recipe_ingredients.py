@@ -110,6 +110,7 @@ class LoadRecipeResult(TypedDict, total=False):
     valid: bool
     kitchen_rules: list[str]
     requires_packs: list[str]
+    requires_features: list[str]
     error: str
     greeting: str
     ingredients_table: str
@@ -126,13 +127,14 @@ class OpenKitchenResult(TypedDict, total=False):
     Extends LoadRecipeResult with three post-return keys injected by the handler.
     """
 
-    # Inherited from LoadRecipeResult (14 keys)
+    # Inherited from LoadRecipeResult (15 keys)
     content: str
     diagram: str | None
     suggestions: list[dict[str, Any]]
     valid: bool
     kitchen_rules: list[str]
     requires_packs: list[str]
+    requires_features: list[str]
     error: str
     greeting: str
     ingredients_table: str | None

@@ -511,6 +511,8 @@ def load_and_validate(
         result["kitchen_rules"] = _serving_recipe.kitchen_rules
     if _serving_recipe is not None and _serving_recipe.requires_packs:
         result["requires_packs"] = _serving_recipe.requires_packs
+    if _serving_recipe is not None and _serving_recipe.requires_features:
+        result["requires_features"] = _serving_recipe.requires_features
     if ing_table:
         result["ingredients_table"] = ing_table
     # Compute once; reused by both fields to avoid a second traversal of recipe.steps.

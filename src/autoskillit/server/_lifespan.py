@@ -161,6 +161,7 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
 
     ctx.kitchen_id = str(uuid4())
     ctx.active_recipe_packs = frozenset()
+    ctx.active_recipe_features = frozenset()
     if ctx.gate is None:
         logger.warning("fleet_auto_gate_boot_no_gate")
         return

@@ -125,6 +125,7 @@ async def _open_kitchen_handler() -> str | None:
     ctx.gate.enable()
     ctx.kitchen_id = os.environ.get("AUTOSKILLIT_CAMPAIGN_ID") or str(uuid4())
     ctx.active_recipe_packs = frozenset()
+    ctx.active_recipe_features = frozenset()
     logger.info("open_kitchen", gate_state="open", kitchen_id=ctx.kitchen_id)
 
     try:
@@ -210,6 +211,7 @@ def _close_kitchen_handler() -> None:
     except Exception:
         logger.warning("close_kitchen_registry_failed", exc_info=True)
     ctx.active_recipe_packs = None
+    ctx.active_recipe_features = None
     ctx.recipe_name = ""
     ctx.recipe_content_hash = ""
     ctx.recipe_composite_hash = ""
@@ -386,6 +388,7 @@ async def open_kitchen(
                 return _kitchen_failure_envelope(exc, stage="load_and_validate")
 
             tool_ctx.active_recipe_packs = frozenset(result.get("requires_packs", []))
+            tool_ctx.active_recipe_features = frozenset(result.get("requires_features", []))
             tool_ctx.recipe_name = name
             tool_ctx.recipe_content_hash = result.get("content_hash", "")
             tool_ctx.recipe_composite_hash = result.get("composite_hash", "")

@@ -670,3 +670,41 @@ def test_load_from_log_dir_missing_peak_context_defaults_to_zero(tmp_path):
     report = log.get_report()
     assert report[0]["peak_context"] == 0
     assert report[0]["turn_count"] == 0
+
+
+def test_token_log_record_accepts_resolved_label():
+    """record() stores and returns entries keyed by non-recipe labels (e.g. dispatch:id)."""
+    log = DefaultTokenLog()
+    log.record(
+        "dispatch:abc-123",
+        {"input_tokens": 100, "output_tokens": 50, "cache_read_input_tokens": 80},
+    )
+    report = log.get_report()
+    assert len(report) == 1
+    assert report[0]["step_name"] == "dispatch:abc-123"
+    assert report[0]["input_tokens"] == 100
+    assert report[0]["cache_read_input_tokens"] == 80
+
+
+def test_load_from_log_dir_restores_orchestrator_sessions(tmp_path):
+    """load_from_log_dir reads token_usage.json written with session_label key (L2 sessions)."""
+    _write_session(
+        tmp_path,
+        "dispatch-s001",
+        {
+            "session_label": "(ad-hoc)",
+            "input_tokens": 200,
+            "output_tokens": 100,
+            "cache_creation_input_tokens": 30,
+            "cache_read_input_tokens": 70,
+            "timing_seconds": 5.0,
+        },
+    )
+    log = DefaultTokenLog()
+    n = log.load_from_log_dir(tmp_path)
+    assert n == 1
+    report = log.get_report()
+    assert len(report) == 1
+    assert report[0]["input_tokens"] == 200
+    assert report[0]["cache_creation_input_tokens"] == 30
+    assert report[0]["cache_read_input_tokens"] == 70

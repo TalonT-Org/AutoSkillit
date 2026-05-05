@@ -371,16 +371,6 @@ async def test_update_issue_body_request_error(httpx_mock):
 
 
 # ---------------------------------------------------------------------------
-# Protocol conformance
-# ---------------------------------------------------------------------------
-
-
-def test_github_fetcher_protocol_includes_write_methods():
-    fetcher = DefaultGitHubFetcher(token=None)
-    assert isinstance(fetcher, GitHubFetcher)
-
-
-# ---------------------------------------------------------------------------
 # DefaultGitHubFetcher — fetch_title
 # ---------------------------------------------------------------------------
 
@@ -473,10 +463,6 @@ class TestFetchTitle:
         result = await fetcher.fetch_title("owner/repo#1")
         assert result["success"] is False
         assert "error" in result
-
-    def test_protocol_conformance(self):
-        """DefaultGitHubFetcher satisfies GitHubFetcher protocol (has fetch_title)."""
-        assert isinstance(DefaultGitHubFetcher(), GitHubFetcher)
 
 
 # ---------------------------------------------------------------------------

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from functools import partial
+
 import pytest
 
 from autoskillit.execution.anomaly_detection import (
@@ -10,41 +12,11 @@ from autoskillit.execution.anomaly_detection import (
     AnomalySeverity,
     detect_anomalies,
 )
+from tests.execution.conftest import _snap as _snap_full
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
-
-def _snap(
-    *,
-    state: str = "sleeping",
-    vm_rss_kb: int = 100000,
-    oom_score: int = 50,
-    fd_count: int = 10,
-    fd_soft_limit: int = 1024,
-    sig_pnd: str = "0000000000000000",
-    sig_blk: str = "0000000000000000",
-    sig_cgt: str = "0000000000000000",
-    threads: int = 4,
-    wchan: str = "",
-    ctx_switches_voluntary: int = 500,
-    ctx_switches_involuntary: int = 20,
-    cpu_percent: float = 0.0,
-) -> dict[str, object]:
-    return {
-        "state": state,
-        "vm_rss_kb": vm_rss_kb,
-        "oom_score": oom_score,
-        "fd_count": fd_count,
-        "fd_soft_limit": fd_soft_limit,
-        "sig_pnd": sig_pnd,
-        "sig_blk": sig_blk,
-        "sig_cgt": sig_cgt,
-        "threads": threads,
-        "wchan": wchan,
-        "ctx_switches_voluntary": ctx_switches_voluntary,
-        "ctx_switches_involuntary": ctx_switches_involuntary,
-        "cpu_percent": cpu_percent,
-    }
+_snap = partial(_snap_full, captured_at=None)
 
 
 def test_detect_oom_spike():

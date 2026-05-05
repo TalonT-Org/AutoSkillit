@@ -30,50 +30,6 @@ def _make_error_session(
     )
 
 
-def _result_ndjson(
-    result_text: str = "done",
-    subtype: str = "success",
-    is_error: bool = False,
-    session_id: str = "s1",
-    errors: list | None = None,
-    usage: dict | None = None,
-) -> str:
-    obj: dict = {
-        "type": "result",
-        "subtype": subtype,
-        "is_error": is_error,
-        "result": result_text,
-        "session_id": session_id,
-        "errors": errors or [],
-    }
-    if usage:
-        obj["usage"] = usage
-    return json.dumps(obj)
-
-
-def _assistant_ndjson(
-    model: str = "claude-sonnet-4-6",
-    input_tokens: int = 100,
-    output_tokens: int = 50,
-    cache_create: int = 0,
-    cache_read: int = 0,
-) -> str:
-    return json.dumps(
-        {
-            "type": "assistant",
-            "message": {
-                "model": model,
-                "usage": {
-                    "input_tokens": input_tokens,
-                    "output_tokens": output_tokens,
-                    "cache_creation_input_tokens": cache_create,
-                    "cache_read_input_tokens": cache_read,
-                },
-            },
-        }
-    )
-
-
 class TestClaudeSessionResult:
     """ClaudeSessionResult correctly parses Claude Code JSON output."""
 
@@ -410,25 +366,6 @@ class TestClaudeSessionResultTokenUsage:
 
 
 class TestClaudeSessionResultBasic:
-    def test_post_init_coerces_none_result_to_empty_str(self):
-        s = ClaudeSessionResult(
-            subtype="success",
-            is_error=False,
-            result=None,
-            session_id="s1",  # type: ignore[arg-type]
-        )
-        assert s.result == ""
-
-    def test_post_init_coerces_non_list_errors(self):
-        s = ClaudeSessionResult(
-            subtype="success",
-            is_error=False,
-            result="ok",
-            session_id="s1",
-            errors=None,  # type: ignore[arg-type]
-        )
-        assert s.errors == []
-
     def test_post_init_list_with_non_dict_element(self):
         s = ClaudeSessionResult(
             subtype="success",

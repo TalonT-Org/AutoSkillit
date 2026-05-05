@@ -19,6 +19,7 @@ from autoskillit.execution.session import (
     parse_session_result,
 )
 from tests._helpers import _flush_structlog_proxy_caches as _flush_logger_proxy_caches
+from tests.execution.conftest import _assistant_ndjson, _result_ndjson
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -38,50 +39,6 @@ def _make_session_result(
         termination=termination_reason,
         pid=12345,
         channel_confirmation=channel_confirmation,
-    )
-
-
-def _result_ndjson(
-    result_text: str = "done",
-    subtype: str = "success",
-    is_error: bool = False,
-    session_id: str = "s1",
-    errors: list | None = None,
-    usage: dict | None = None,
-) -> str:
-    obj: dict = {
-        "type": "result",
-        "subtype": subtype,
-        "is_error": is_error,
-        "result": result_text,
-        "session_id": session_id,
-        "errors": errors or [],
-    }
-    if usage:
-        obj["usage"] = usage
-    return json.dumps(obj)
-
-
-def _assistant_ndjson(
-    model: str = "claude-sonnet-4-6",
-    input_tokens: int = 100,
-    output_tokens: int = 50,
-    cache_create: int = 0,
-    cache_read: int = 0,
-) -> str:
-    return json.dumps(
-        {
-            "type": "assistant",
-            "message": {
-                "model": model,
-                "usage": {
-                    "input_tokens": input_tokens,
-                    "output_tokens": output_tokens,
-                    "cache_creation_input_tokens": cache_create,
-                    "cache_read_input_tokens": cache_read,
-                },
-            },
-        }
     )
 
 

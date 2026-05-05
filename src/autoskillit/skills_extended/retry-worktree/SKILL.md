@@ -1,6 +1,6 @@
 ---
 name: retry-worktree
-description: Continue implementing a plan in an existing git worktree after context exhaustion. Use when a previous implement-worktree session hit context limits. Takes plan path and worktree path as arguments.
+description: Worktree retry executor. ALWAYS invoke this skill when instructed to continue or retry an implementation in an existing worktree. Do not resume editing files directly — use this skill first to load the retry workflow.
 hooks:
   PreToolUse:
     - matcher: "*"

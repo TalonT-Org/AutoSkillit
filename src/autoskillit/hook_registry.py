@@ -129,6 +129,16 @@ HOOK_REGISTRY: list[HookDef] = [
         session_scope="headless_only",
     ),
     HookDef(
+        event_type="PostToolUse",
+        matcher="Skill",
+        scripts=["skill_load_post_hook.py"],
+    ),
+    HookDef(
+        matcher=r"Read|Write|Edit|Bash|Grep|Glob",
+        scripts=["guards/skill_load_guard.py"],
+        session_scope="headless_only",
+    ),
+    HookDef(
         matcher=r"mcp__.*autoskillit.*__(wait_for_ci|enqueue_pr)",
         scripts=["guards/review_loop_gate.py"],
     ),
@@ -179,6 +189,7 @@ RETIRED_SCRIPT_BASENAMES: frozenset[str] = frozenset(
 NEW_SUBDIR_BASENAMES: frozenset[str] = frozenset(
     {
         "skill_orchestration_guard.py",
+        "skill_load_guard.py",
     }
 )
 

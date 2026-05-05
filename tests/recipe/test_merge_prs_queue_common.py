@@ -54,6 +54,10 @@ def _discover_queue_recipe_fixtures() -> list[str]:
 # Intentional: fail-fast at collection time if a bundled recipe YAML is malformed.
 QUEUE_RECIPES = _discover_queue_recipe_fixtures()
 
+# Recipes that use register_clone_unconfirmed as the queue error escalation step.
+# Imported by test_merge_prs_queue_release_timeout.py to avoid duplicate definition.
+RELEASE_TIMEOUT_RECIPES = ["impl_recipe", "remed_recipe", "impl_groups_recipe"]
+
 
 # ---------------------------------------------------------------------------
 # any_recipe parametrized — auto_merge ingredient
@@ -69,18 +73,29 @@ def test_auto_merge_ingredient(any_recipe) -> None:
 
 def test_route_queue_mode_auto_merge_condition_first(any_recipe) -> None:
     step = any_recipe.steps["route_queue_mode"]
+    assert step.on_result is not None, "route_queue_mode must have on_result routing"
     conds = step.on_result.conditions
-    auto_merge_idx = next(i for i, c in enumerate(conds) if c.when and "auto_merge" in c.when)
+    auto_merge_idx = next(
+        (i for i, c in enumerate(conds) if c.when and "auto_merge" in c.when), None
+    )
+    assert auto_merge_idx is not None, "Expected a condition with 'auto_merge' in route_queue_mode"
     queue_available_idx = next(
-        i for i, c in enumerate(conds) if c.when and "queue_available" in c.when
+        (i for i, c in enumerate(conds) if c.when and "queue_available" in c.when), None
+    )
+    assert queue_available_idx is not None, (
+        "Expected a condition with 'queue_available' in route_queue_mode"
     )
     assert auto_merge_idx < queue_available_idx
 
 
 def test_auto_merge_false_routes_to_register_clone_success(any_recipe) -> None:
     step = any_recipe.steps["route_queue_mode"]
+    assert step.on_result is not None, "route_queue_mode must have on_result routing"
     auto_merge_cond = next(
-        c for c in step.on_result.conditions if c.when and "auto_merge" in c.when
+        (c for c in step.on_result.conditions if c.when and "auto_merge" in c.when), None
+    )
+    assert auto_merge_cond is not None, (
+        "Expected a condition with 'auto_merge' in route_queue_mode"
     )
     assert auto_merge_cond.when == "${{ inputs.auto_merge }} != 'true'"
     assert auto_merge_cond.route == "patch_token_summary"
@@ -227,6 +242,7 @@ def test_check_repo_merge_state_is_in_pre_queue_gate_block(any_recipe) -> None:
 def test_route_queue_mode_has_auto_merge_available_condition(any_recipe) -> None:
     """route_queue_mode must have an explicit condition for auto_merge_available == true."""
     step = any_recipe.steps["route_queue_mode"]
+    assert step.on_result is not None, "route_queue_mode must have on_result routing"
     conds = step.on_result.conditions
     assert any(c.when and "auto_merge_available" in c.when for c in conds)
 
@@ -256,6 +272,7 @@ def test_immediate_merge_step_exists(any_recipe) -> None:
 def test_immediate_merge_uses_squash_without_auto(any_recipe) -> None:
     """immediate_merge must use --squash without --auto."""
     step = any_recipe.steps["immediate_merge"]
+    assert step.with_args is not None, "immediate_merge must have with_args"
     cmd = step.with_args.get("cmd", "")
     assert "--squash" in cmd
     assert "--auto" not in cmd
@@ -384,11 +401,16 @@ def test_route_queue_mode_queue_routes_to_enqueue_to_queue(any_recipe) -> None:
 def test_route_queue_mode_no_queue_with_auto_routes_to_direct_merge(any_recipe) -> None:
     """no-queue+auto cell must route to direct_merge."""
     step = any_recipe.steps["route_queue_mode"]
+    assert step.on_result is not None, "route_queue_mode must have on_result routing"
     cond = next(
-        c
-        for c in step.on_result.conditions
-        if c.when and "auto_merge_available" in c.when and "queue_available" not in c.when
+        (
+            c
+            for c in step.on_result.conditions
+            if c.when and "auto_merge_available" in c.when and "queue_available" not in c.when
+        ),
+        None,
     )
+    assert cond is not None, "Expected a no-queue+auto condition in route_queue_mode"
     assert cond.route == "direct_merge"
 
 
@@ -397,13 +419,16 @@ def test_route_queue_mode_no_queue_no_auto_falls_through_to_immediate_merge(
 ) -> None:
     """Default (when is None) condition must route to immediate_merge."""
     step = any_recipe.steps["route_queue_mode"]
-    cond = next(c for c in step.on_result.conditions if c.when is None)
+    assert step.on_result is not None, "route_queue_mode must have on_result routing"
+    cond = next((c for c in step.on_result.conditions if c.when is None), None)
+    assert cond is not None, "Expected a default (when=None) condition in route_queue_mode"
     assert cond.route == "immediate_merge"
 
 
 def test_enqueue_to_queue_route_count(any_recipe) -> None:
     """Exactly one condition must route to enqueue_to_queue."""
     step = any_recipe.steps["route_queue_mode"]
+    assert step.on_result is not None, "route_queue_mode must have on_result routing"
     count = sum(1 for c in step.on_result.conditions if c.route == "enqueue_to_queue")
     assert count == 1, f"Expected exactly 1 enqueue_to_queue route, got {count}"
 
@@ -531,7 +556,7 @@ def test_verify_queue_enrollment_ejected_ci_failure_routes_directly_to_diagnose_
     )
 
 
-@pytest.mark.parametrize("recipe_fixture", ["impl_recipe", "remed_recipe", "impl_groups_recipe"])
+@pytest.mark.parametrize("recipe_fixture", RELEASE_TIMEOUT_RECIPES)
 def test_wait_for_direct_merge_on_failure_routes_to_register_clone_unconfirmed(
     recipe_fixture: str, request
 ) -> None:

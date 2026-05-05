@@ -95,8 +95,23 @@ Disk space verdict thresholds:
 **b. NETWORK PROBE AGENT:** Infer the API base URL from the `acquisition`
 field. Known endpoints to probe:
 - GEO / NCBI: `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/einfo.fcgi`
+  Rate limit: 3 req/s without API key, 10 req/s with NCBI API key. Single probe is well within limits.
 - ENCODE: `https://www.encodeproject.org/`
+  Rate limit: no published hard limit; courtesy throttle expected at high volume.
 - UniProt: `https://rest.uniprot.org/uniprotkb/search?query=reviewed:true&size=1`
+  Rate limit: undocumented; `size=1` keeps payload ~1KB.
+- Allen Brain Atlas: `https://api.brain-map.org/api/v2/data/Gene/query.json?num_rows=1`
+  Rate limit: no published limit; public API. `num_rows=1` keeps response ~200B.
+- CellxGene: `https://api.cellxgene.cziscience.com/dp/v1/collections`
+  Rate limit: CDN-backed, no published limit. HEAD avoids 53KB collection list.
+- Expression Atlas: `https://www.ebi.ac.uk/gxa/json/experiments`
+  Rate limit: no published hard limit (EBI courtesy policy). CRITICAL: response is ~2.6MB — always use HEAD (`curl -sI`), never GET.
+- Human Protein Atlas: `https://www.proteinatlas.org/api/search_download.php?search=CD8A&columns=g&compress=no&format=json`
+  Rate limit: no published limit; public API. `columns=g` is required (API returns 400 without it). Response ~20B.
+- STRING: `https://string-db.org/api/json/version`
+  Rate limit: ~10 req/s for programmatic access. Version endpoint returns 84B — ideal probe.
+- JASPAR: `https://jaspar.elixir.no/api/v1/matrix/?page_size=1`
+  Rate limit: no published limit (academic resource). Note: domain migrated from genereg.net to elixir.no. `page_size=1` keeps response ~330B.
 - For unrecognized sources: attempt a HEAD request to any URL found in
   the `acquisition` field.
 

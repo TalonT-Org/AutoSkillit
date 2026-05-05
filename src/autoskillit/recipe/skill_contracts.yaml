@@ -1584,7 +1584,7 @@ skills:
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
-  vis-lens-domain-norms:
+  vis-lens-methodology-norms:
     inputs:
     - name: context_path
       type: file_path

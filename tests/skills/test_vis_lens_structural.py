@@ -13,7 +13,7 @@ VIS_LENS_SLUGS = [
     "chart-select",
     "uncertainty",
     "antipattern",
-    "domain-norms",
+    "methodology-norms",
     "always-on",
     "multi-compare",
     "temporal",

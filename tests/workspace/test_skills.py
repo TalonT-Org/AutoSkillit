@@ -139,7 +139,7 @@ BUNDLED_SKILLS = [
     "vis-lens-caption-annot",
     "vis-lens-chart-select",
     "vis-lens-color-access",
-    "vis-lens-domain-norms",
+    "vis-lens-methodology-norms",
     "vis-lens-figure-table",
     "vis-lens-multi-compare",
     "vis-lens-reproducibility",

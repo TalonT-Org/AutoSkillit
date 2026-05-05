@@ -39,7 +39,9 @@ def canonical_step_name(step_name: str) -> str:
     indistinguishable from an orchestrator-appended suffix and will be
     collapsed to the base name.
     """
-    return re.sub(r"-\d+$", "", step_name) if step_name else step_name
+    if not step_name or ":" in step_name or step_name.startswith("("):
+        return step_name
+    return re.sub(r"-\d+$", "", step_name)
 
 
 @dataclass
@@ -238,7 +240,7 @@ class DefaultTokenLog:
             except (json.JSONDecodeError, OSError):
                 continue
 
-            raw_step = data.get("step_name", "")
+            raw_step = data.get("session_label") or data.get("step_name", "")
             if not raw_step:
                 continue
 

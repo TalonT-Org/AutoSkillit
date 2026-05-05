@@ -447,7 +447,12 @@ async def _execute_claude_headless(
     new_audit_records = ctx.audit.get_report_as_dicts()[audit_count_before:]
     audit_record = new_audit_records[0] if new_audit_records else None
 
-    if result.proc_snapshots is not None or not skill_result.success or bool(step_name):
+    if (
+        result.proc_snapshots is not None
+        or not skill_result.success
+        or bool(step_name)
+        or skill_result.token_usage is not None
+    ):
         from autoskillit.execution.session_log import flush_session_log
 
         try:
@@ -512,20 +517,22 @@ async def _execute_claude_headless(
         session_id=skill_result.session_id,
     )
 
-    if step_name:
-        try:
-            ctx.token_log.record(
-                step_name,
-                skill_result.token_usage,
-                start_ts=result.start_ts,
-                end_ts=result.end_ts,
-                elapsed_seconds=result.elapsed_seconds,
-                order_id=order_id,
-                loc_insertions=_metrics.loc_insertions,
-                loc_deletions=_metrics.loc_deletions,
-            )
-        except Exception:
-            logger.debug("token_log_record_failed", exc_info=True)
+    from autoskillit.execution.session_log import _resolve_session_label
+
+    _token_label = _resolve_session_label(step_name, dispatch_id)
+    try:
+        ctx.token_log.record(
+            _token_label,
+            skill_result.token_usage,
+            start_ts=result.start_ts,
+            end_ts=result.end_ts,
+            elapsed_seconds=result.elapsed_seconds,
+            order_id=order_id,
+            loc_insertions=_metrics.loc_insertions,
+            loc_deletions=_metrics.loc_deletions,
+        )
+    except Exception:
+        logger.debug("token_log_record_failed", exc_info=True)
     return skill_result
 
 

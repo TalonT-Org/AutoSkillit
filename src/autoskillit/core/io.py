@@ -115,7 +115,7 @@ def write_versioned_json(path: Path, payload: dict[str, Any], schema_version: in
     if not isinstance(payload, dict):
         raise TypeError("write_versioned_json requires a dict payload")
     enriched = {**payload, "schema_version": schema_version}
-    atomic_write(path, json.dumps(enriched))
+    atomic_write(path, json.dumps(enriched, indent=2))
 
 
 _AUTOSKILLIT_GITIGNORE_ENTRIES = [

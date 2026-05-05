@@ -300,14 +300,15 @@ def consolidate_wps(
             [
                 {"id": wp["id"], "name": wp["name"], "summary": wp.get("summary", "")}
                 for wp in sorted(output_wps, key=lambda w: _natural_sort_key(w["id"]))
-            ]
+            ],
+            indent=2,
         ),
     )
 
     wp_dir = planner_path / "work_packages"
     if wp_dir.exists():
         for wp in output_wps:
-            atomic_write(wp_dir / f"{wp['id']}_result.json", json.dumps(wp))
+            atomic_write(wp_dir / f"{wp['id']}_result.json", json.dumps(wp, indent=2))
         for absorbed_id in non_primary_sources:
             result_file = wp_dir / f"{absorbed_id}_result.json"
             if result_file.exists():

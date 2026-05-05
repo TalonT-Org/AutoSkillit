@@ -31,6 +31,8 @@ class TestProviderOutcomeConstruction:
         assert outcome.fallback_activated is False
 
     def test_frozen_rejects_mutation(self):
+        import dataclasses
+
         outcome = ProviderOutcome(provider_used="minimax", fallback_activated=False)
-        with pytest.raises(TypeError):
+        with pytest.raises(dataclasses.FrozenInstanceError):
             outcome.provider_used = "other"  # type: ignore[misc]

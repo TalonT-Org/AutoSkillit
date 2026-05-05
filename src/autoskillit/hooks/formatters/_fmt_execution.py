@@ -35,6 +35,13 @@ def _format_exit_code_line(data: dict) -> str:
     return f"exit_code: {exit_code}"
 
 
+def _maybe_provider_line(data: dict, lines: list[str]) -> None:
+    provider_used = data.get("provider_used", "")
+    if provider_used and provider_used != "anthropic":
+        suffix = " [FALLBACK]" if data.get("provider_fallback", False) else ""
+        lines.append(f"provider: {provider_used}{suffix}")
+
+
 def _fmt_run_skill(data: dict, pipeline: bool) -> str:
     """Format run_skill result as Markdown-KV."""
     success = data.get("success", False)
@@ -56,6 +63,7 @@ def _fmt_run_skill(data: dict, pipeline: bool) -> str:
         worktree = data.get("worktree_path", "")
         if worktree:
             lines.append(f"worktree_path: {worktree}")
+        _maybe_provider_line(data, lines)
         result = data.get("result", "")
         if result:
             lines.append(f"\nresult:\n{result}")
@@ -79,6 +87,7 @@ def _fmt_run_skill(data: dict, pipeline: bool) -> str:
     worktree = data.get("worktree_path", "")
     if worktree:
         lines.append(f"worktree_path: {worktree}")
+    _maybe_provider_line(data, lines)
     token_usage = data.get("token_usage")
     if isinstance(token_usage, dict):
         lines.append("")

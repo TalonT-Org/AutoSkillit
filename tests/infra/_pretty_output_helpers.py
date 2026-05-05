@@ -77,6 +77,8 @@ def _make_run_skill_event(
     stderr: str = "",
     token_usage: dict | None = None,
     worktree_path: str = "",
+    provider_used: str = "",
+    provider_fallback: bool = False,
 ) -> dict:
     return {
         "tool_name": "mcp__plugin_autoskillit_autoskillit__run_skill",
@@ -93,6 +95,8 @@ def _make_run_skill_event(
                 "stderr": stderr,
                 "token_usage": token_usage,
                 "worktree_path": worktree_path,
+                "provider_used": provider_used,
+                "provider_fallback": provider_fallback,
             }
         ),
     }

@@ -519,9 +519,11 @@ def test_expand_assignments_without_task_file_path_uses_empty(tmp_path: Path) ->
     plan_path.write_text(json.dumps(refined))
     result = expand_assignments(refined_plan_path=str(plan_path), output_dir=str(tmp_path))
     context_paths = [p for p in result["context_paths"].split(",") if p.strip()]
+    assert context_paths, "Must produce at least one context path"
     for cp in context_paths:
         context = json.loads(Path(cp).read_text())
         assert context.get("task_file_path", "") == ""
+        assert "task" not in context, "Context file must not include inline task text"
 
 
 def test_expand_wps_includes_task_file_path_in_context(tmp_path: Path) -> None:

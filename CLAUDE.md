@@ -132,209 +132,26 @@ generic_automation_mcp/
 └── pyproject.toml
 ```
 
-`src/autoskillit/`:
+`src/autoskillit/` packages — each has its own CLAUDE.md with file-level detail:
 
-```
-├── __init__.py
-├── __main__.py
-├── _llm_triage.py           # Contract staleness triage (Haiku subprocess)
-├── smoke_utils.py           # Callables for smoke-test pipeline run_python steps
-├── hook_registry.py         # HookDef, HOOK_REGISTRY, generate_hooks_json
-├── _test_filter.py          # Test filter manifest: glob-to-test-directory mapping
-├── version.py               # Version health utilities (IL-0)
-├── .claude-plugin/          # plugin.json
-├── .mcp.json
-│
-├── core/                    # IL-0 foundation (zero autoskillit imports)
-│   ├── types/               # Type re-export hub + protocol/enum/result modules (see types/CLAUDE.md)
-│   ├── runtime/             # Process-state modules (see runtime/CLAUDE.md)
-│   ├── __init__.py          #   Re-exports public surface
-│   ├── io.py                #   atomic_write, ensure_project_temp, YAML helpers
-│   ├── logging.py
-│   ├── paths.py             #   pkg_root(), is_git_worktree()
-│   ├── _claude_env.py       #   IDE-scrubbing canonical env builder for claude subprocesses
-│   ├── _terminal_table.py   #   IL-0 color-agnostic terminal table primitive
-│   ├── _version_snapshot.py #   Process-scoped version snapshot for session telemetry (lru_cache'd)
-│   ├── branch_guard.py
-│   ├── claude_conventions.py #  Skill discovery directory layout constants
-│   ├── github_url.py        #   parse_github_repo
-│   ├── _plugin_cache.py     #   Plugin cache lifecycle: retiring cache, install locking, kitchen registry
-│   ├── _plugin_ids.py       #   DIRECT_PREFIX, MARKETPLACE_PREFIX, detect_autoskillit_mcp_prefix (stdlib-only)
-│   ├── _install_detect.py   #   is_dev_install() — editable-install detection for config resolution (IL-0)
-│   ├── feature_flags.py     #   is_feature_enabled() — IL-0 feature gate resolution primitive
-│   └── tool_sequence_analysis.py #  Cross-session tool call sequence DFG analysis (stdlib-only, IL-0)
-│
-├── config/                  # IL-1
-│   ├── __init__.py
-│   ├── defaults.yaml
-│   ├── ingredient_defaults.py
-│   ├── settings.py          #   AutomationConfig + schema validate/write API
-│   ├── _config_dataclasses.py #  24 leaf dataclasses + ConfigSchemaError
-│   └── _config_loader.py    #   _make_dynaconf + load_config layer helpers
-│
-├── pipeline/                # IL-1 pipeline state
-│   ├── __init__.py
-│   ├── audit.py             #   FailureRecord, DefaultAuditLog
-│   ├── background.py        #   DefaultBackgroundSupervisor
-│   ├── context.py           #   ToolContext DI container
-│   ├── gate.py              #   DefaultGateState, gate_error_result
-│   ├── github_api_log.py    #   DefaultGitHubApiLog — session-scoped GitHub API request accumulator
-│   ├── mcp_response.py      #   Per-tool response size tracking
-│   ├── telemetry_fmt.py     #   Canonical token/timing display
-│   ├── timings.py
-│   ├── tokens.py
-│   └── pr_gates.py          #   is_ci_passing, is_review_passing, partition_prs
-│
-├── execution/               # IL-1
-│   ├── headless/            # Headless session orchestration (see headless/CLAUDE.md)
-│   ├── process/             # Process lifecycle management (see process/CLAUDE.md)
-│   ├── merge_queue/         # GitHub merge queue watcher (see merge_queue/CLAUDE.md)
-│   ├── session/             # Session result processing (see session/CLAUDE.md)
-│   ├── __init__.py
-│   ├── commands.py          #   Claude{Interactive,Headless}Cmd builders
-│   ├── db.py                #   Read-only SQLite with defence-in-depth
-│   ├── diff_annotator.py    #   Diff annotation + findings filter for review-pr
-│   ├── linux_tracing.py     #   /proc + psutil process tracing (Linux)
-│   ├── anomaly_detection.py #   Post-hoc anomaly detection over snapshots
-│   ├── session_log.py       #   XDG-aware session diagnostics log writer
-│   ├── recording.py         #   Record/replay subprocess runners via api-simulator
-│   ├── _recording_skills.py #   Skill dir snapshot/restore for record/replay sessions
-│   ├── quota.py             #   QuotaStatus, cache, check_and_sleep_if_needed
-│   ├── ci.py                #   GitHub Actions CI watcher (httpx, never raises)
-│   ├── github.py            #   GitHub issue fetcher
-│   ├── remote_resolver.py   #   upstream > origin, clone-aware
-│   ├── testing.py           #   Pytest output parsing + pass/fail adjudication
-│   ├── clone_guard.py       #   Clone contamination guard — detect and revert direct changes to clone CWD
-│   └── pr_analysis.py       #   extract_linked_issues, DOMAIN_PATHS, partition_files_by_domain
-│
-├── workspace/               # IL-1
-│   ├── __init__.py
-│   ├── cleanup.py           #   CleanupResult, preserve list
-│   ├── clone.py             #   clone_repo + push_to_remote + DefaultCloneManager
-│   ├── _clone_detect.py     #   detect_* helpers + RUNS_DIR + classify_remote_url
-│   ├── _clone_remote.py     #   CloneSourceResolution + probe/isolate remotes
-│   ├── session_skills.py    #   Per-session ephemeral skill dirs; subset filtering
-│   ├── clone_registry.py    #   Shared file-based coordination for deferred cleanup
-│   ├── skills.py            #   SkillResolver — bundled skill listing
-│   └── worktree.py
-│
-├── planner/                 # IL-1
-│   ├── __init__.py          #   Progressive resolution planner — re-exports expand_assignments, expand_wps, finalize_wp_manifest, validate_plan, compile_plan
-│   ├── manifests.py         #   expand_assignments, expand_wps, finalize_wp_manifest, build_phase_assignment_manifest, build_phase_wp_manifest — manifest callables
-│   ├── merge.py             #   merge_tier_dir, merge_files, build_plan_snapshot, extract_item, replace_item — JSON interchange merge tooling
-│   ├── validation.py        #   validate_plan — DAG cycle check, structural completeness, sizing bounds, duplicate-deliverable detection
-│   ├── schema.py            #   planner data contracts — PhaseResult, AssignmentResult, WPResult, PlanDocument TypedDicts
-│   ├── compiler.py          #   compile_plan — topological sort, issue body generation, milestone definitions, plan artifacts
-│   └── consolidation.py     #   consolidate_wps — post-elaboration WP consolidation: reads manifests, merges trivial WPs, rewrites dep IDs
-│
-├── recipe/                  # IL-2
-│   ├── rules/               # Semantic validation rules (see rules/CLAUDE.md)
-│   ├── __init__.py
-│   ├── contracts.py         #   Contract card generation + staleness triage
-│   ├── io.py                #   load_recipe, list_recipes, iter_steps_with_context
-│   ├── order.py             #   BUNDLED_RECIPE_ORDER — stable display order registry for Group 0 recipes
-│   ├── loader.py            #   Path-based recipe metadata utilities
-│   ├── _api.py              #   Orchestration API
-│   ├── _cmd_rpc.py          #   run_python callables for externalized recipe cmd scripts
-│   ├── _recipe_ingredients.py #  format_ingredients_table + LoadRecipeResult TypedDicts
-│   ├── _recipe_composition.py #  _build_active_recipe + sub-recipe merging
-│   ├── diagrams.py          #   Flow diagram generation + staleness detection
-│   ├── experiment_type_registry.py #  ExperimentTypeSpec, load_all_experiment_types
-│   ├── registry.py          #   RuleFinding, RuleSpec, semantic_rule decorator
-│   ├── repository.py
-│   ├── _analysis.py         #   ValidationContext + make_validation_context
-│   ├── _analysis_graph.py   #   RouteEdge + build_recipe_graph + step graph primitives
-│   ├── _analysis_bfs.py     #   bfs_reachable + symbolic BFS fact propagation
-│   ├── _analysis_blocks.py  #   extract_blocks — group steps by block annotation
-│   ├── _analysis_detectors.py #  dead outputs + ref invalidations + implicit handoffs
-│   ├── _git_helpers.py      #   Shared git-remote regex (_GIT_REMOTE_COMMAND_RE, _LITERAL_ORIGIN_RE) for lint rules
-│   ├── _skill_helpers.py        #   Shared helpers for skill-related semantic rules
-│   ├── _skill_placeholder_parser.py
-│   ├── identity.py          #   Recipe identity hashing — content and composite fingerprints
-│   ├── schema.py            #   Recipe, RecipeStep, DataFlowWarning
-│   ├── staleness_cache.py
-│   └── validator.py         #   validate_recipe, analyze_dataflow
-│
-├── migration/               # IL-2
-│   ├── __init__.py
-│   ├── engine.py            #   MigrationEngine, adapter ABC hierarchy
-│   ├── _api.py              #   check_and_migrate
-│   ├── loader.py            #   Migration note discovery + version chaining
-│   └── store.py             #   FailureStore (JSON, atomic writes)
-│
-├── fleet/                   # IL-2
-│   ├── __init__.py          #   Re-exports: CampaignSummary, parse_campaign_summary, etc.
-│   ├── _api.py              #   Fleet campaign execution engine — dispatches L2 sessions, resolves campaign/result variable references
-│   ├── _prompts.py          #   Prompt builder for L2 fleet dispatch sessions — assembles sous-chef instruction block from SKILL.md sections
-│   ├── result_parser.py     #   L2 result block parser with Channel B JSONL fallback
-│   ├── sidecar.py           #   Per-issue JSONL sidecar — IssueSidecarEntry, append/read/compute_remaining helpers
-│   ├── _liveness.py         #   is_dispatch_session_alive() — boot_id + starttime_ticks liveness gate
-│   ├── _semaphore.py        #   FleetSemaphore — configurable asyncio.BoundedSemaphore implementing FleetLock
-│   ├── _sidecar_rpc.py      #   run_python-callable entry points: write_sidecar_entry, get_remaining_issues
-│   ├── _findings_rpc.py     #   run_python-callable entry points: parse_and_resume, load_execution_map
-│   ├── _checkpoint_bridge.py #  checkpoint_from_sidecar — converts IssueSidecarEntry list to SessionCheckpoint
-│   ├── state.py             #   Campaign state persistence — DispatchRecord, DispatchStatus, atomic writes, resume algorithm
-│   └── summary.py           #   Campaign summary schema v1: frozen dataclasses, sentinel parser, validator
-│
-├── server/                  # IL-3 FastMCP server
-│   ├── tools/               # MCP @mcp.tool handlers (see tools/CLAUDE.md)
-│   ├── __init__.py          #   FastMCP app, kitchen gating, headless tool reveal
-│   ├── git.py               #   Merge workflow for merge_worktree
-│   ├── _editable_guard.py   #   Pre-deletion editable install guard (stdlib-only)
-│   ├── _guards.py           #   Tier/gate guard functions: _require_enabled, _require_orchestrator_*, _require_fleet, _check_dry_walkthrough, _validate_skill_command
-│   ├── _lifespan.py         #   FastMCP lifespan: recorder teardown on shutdown
-│   ├── _session_type.py     #   Session-type tag visibility dispatcher (3-branch startup logic)
-│   ├── _wire_compat.py      #   Claude Code wire-format sanitization middleware
-│   ├── _notify.py           #   _notify, track_response_size, _get_ctx_or_none
-│   ├── _misc.py             #   Quota/hook/triage utilities + re-exports for tools_*.py layer compliance
-│   ├── _subprocess.py       #   Subprocess execution helpers for MCP tools
-│   ├── _factory.py          #   Composition Root: make_context()
-│   └── _state.py            #   Lazy init, plugin dir resolution
-│
-├── cli/                     # IL-3 CLI
-│   ├── doctor/              # Health check subcommand (see doctor/CLAUDE.md)
-│   ├── fleet/               # Fleet subcommand group (see fleet/CLAUDE.md)
-│   ├── session/             # Session management (see session/CLAUDE.md)
-│   ├── ui/                  # Terminal UI primitives (see ui/CLAUDE.md)
-│   ├── update/              # Update/upgrade machinery (see update/CLAUDE.md)
-│   ├── __init__.py
-│   ├── _restart.py          #   perform_restart() -> NoReturn: sets SKIP_UPDATE_CHECK, calls os.execv
-│   ├── _hooks.py            #   PreToolUse hook registration helpers
-│   ├── _init_helpers.py
-│   ├── _installed_plugins.py #  InstalledPluginsFile — canonical accessor for installed_plugins.json
-│   ├── _install_info.py     #   InstallInfo, InstallType, detect_install(), comparison_branch(), dismissal_window(), upgrade_command()
-│   ├── _marketplace.py      #   Plugin install/upgrade
-│   ├── _mcp_names.py        #   MCP prefix detection
-│   ├── _onboarding.py       #   First-run detection + guided menu
-│   ├── _prompts.py          #   Orchestrator prompt builder
-│   ├── _preview.py          #   Shared pre-launch preview: flow diagram + ingredient table display
-│   ├── _serve_guard.py      #   Async signal-guarded MCP server bootstrap (extracted from app.py)
-│   ├── _features.py         #   features subcommand group: list/status commands for feature gate inspection
-│   ├── _workspace.py        #   Workspace clean helpers
-│   ├── _sessions.py         #   sessions analyze CLI subcommand for cross-session DFG visualization
-│   ├── _terminal_table.py   #   Re-export shim from core/_terminal_table
-│   └── app.py               #   CLI entry: serve, init, config, skills, recipes, doctor, update, etc.
-│
-├── hooks/                   # Claude Code PreToolUse/PostToolUse/SessionStart scripts
-│   ├── guards/              # PreToolUse guard scripts (see guards/CLAUDE.md)
-│   ├── formatters/          # PostToolUse output formatters (see formatters/CLAUDE.md)
-│   ├── __init__.py
-│   ├── hooks.json           #   Plugin hook registration
-│   ├── _dispatch.py         #   Stable hook dispatcher — resolves logical hook names to scripts (stdlib-only, NEVER RENAME)
-│   ├── _hook_settings.py    #   Shared stdlib-only settings resolver for quota guard hooks
-│   ├── lint_after_edit_hook.py #  PostToolUse: runs ruff format+check on .py files after Edit/Write
-│   ├── quota_post_hook.py   #   Appends quota warning to run_skill output
-│   ├── review_gate_post_hook.py #  PostToolUse: writes/clears review_gate_state.json
-│   ├── skill_load_post_hook.py  #  PostToolUse: writes skill-loaded flag for non-Anthropic providers
-│   ├── token_summary_hook.py #  Appends Token Usage Summary to PR body
-│   └── session_start_hook.py #  Injects open-kitchen reminder on resume
-│
-├── migrations/              # Versioned migration YAML notes
-├── recipes/                 # Bundled recipe YAML + contracts/, diagrams/, sub-recipes/
-├── skills/                  # Tier 1: open-kitchen, close-kitchen, sous-chef
-└── skills_extended/         # Tier 2 (interactive) + Tier 3 (pipeline/automation) skills
-                             # incl. arch-lens-* (13), exp-lens-* (18), and vis-lens-* (12) diagram families
-```
+| Package | IL | Purpose |
+|---|---|---|
+| `./` | — | Package root: `__init__`, `__main__`, `hook_registry`, `version`, `_test_filter` |
+| `core/` | IL-0 | Foundation — types/, runtime/, paths, IO, feature flags (zero autoskillit imports) |
+| `config/` | IL-1 | `AutomationConfig` + Dynaconf loader + 24 leaf dataclasses |
+| `pipeline/` | IL-1 | Pipeline state — `ToolContext` DI, gate, audit log, telemetry |
+| `execution/` | IL-1 | Headless sessions (headless/, process/, merge_queue/, session/), CI/GitHub |
+| `workspace/` | IL-1 | Clone management, worktrees, skill resolution |
+| `planner/` | IL-1 | Progressive resolution planner — phases, assignments, WPs, validation |
+| `recipe/` | IL-2 | Recipe schema, validation, semantic rules/ |
+| `migration/` | IL-2 | Versioned migration engine + failure store |
+| `fleet/` | IL-2 | Campaign dispatch, semaphore, sidecar, liveness, state persistence |
+| `server/` | IL-3 | FastMCP server — tools/, kitchen gating, session-type dispatch |
+| `cli/` | IL-3 | CLI — doctor/, update/, fleet/ subcommands, ui/, session/ management |
+| `hooks/` | — | Claude Code hook scripts — guards/, formatters/ |
+| `recipes/` | — | Bundled recipe YAML + contracts, diagrams, sub-recipes |
+| `skills/` | — | Tier 1 skills: open-kitchen, close-kitchen, sous-chef |
+| `skills_extended/` | — | Tier 2 (interactive) + Tier 3 (pipeline) skills, incl. arch-lens-* (13), exp-lens-* (18), vis-lens-* (12) |
 
 **Session diagnostics logs** live at `~/.local/share/autoskillit/logs/` (Linux) or `~/Library/Application Support/autoskillit/logs/` (macOS). Override with `linux_tracing.log_dir`. Session directories are named by Claude Code session UUID when available (parsed from stdout, or discovered from JSONL filename via Channel B (the JSONL stream written by the Claude Code subprocess)). Fallback: `no_session_{timestamp}`. Query the index: `jq 'select(.success == false)' ~/.local/share/autoskillit/logs/sessions.jsonl`.
 

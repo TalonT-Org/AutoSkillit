@@ -33,11 +33,17 @@ EXPECTED_SUB_CLAUDE_MDS = [
     "pipeline/CLAUDE.md",
     "execution/CLAUDE.md",
     "workspace/CLAUDE.md",
-    # Part B entries (planner, recipe, migration, fleet, cli, hooks) added when Part B lands
+    # 6 new entries (Part B)
+    "planner/CLAUDE.md",
+    "recipe/CLAUDE.md",
+    "migration/CLAUDE.md",
+    "fleet/CLAUDE.md",
+    "cli/CLAUDE.md",
+    "hooks/CLAUDE.md",
 ]
 
 
-def test_all_21_sub_claude_md_files_exist():
+def test_all_27_sub_claude_md_files_exist():
     missing = [p for p in EXPECTED_SUB_CLAUDE_MDS if not (SRC_ROOT / p).is_file()]
     assert not missing, f"Missing sub-CLAUDE.md files: {missing}"
 

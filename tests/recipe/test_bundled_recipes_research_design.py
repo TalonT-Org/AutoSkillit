@@ -24,7 +24,7 @@ class TestResearchDesignRecipeStructure:
         assert recipe.name == "research-design"
 
     def test_autoskillit_version(self, recipe) -> None:
-        assert recipe.version == "0.9.434"
+        assert recipe.version == "0.9.435"
 
     def test_recipe_version(self, recipe) -> None:
         assert recipe.recipe_version == "1.0.0"

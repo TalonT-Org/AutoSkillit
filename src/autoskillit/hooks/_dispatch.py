@@ -41,18 +41,25 @@ def main() -> None:
 
     if not target.is_file():
         print(
-            f"[autoskillit dispatch] retired mapping target missing: {target} — degrading gracefully",
+            f"[autoskillit dispatch] retired target missing: {target} — degrading gracefully",
             file=sys.stderr,
         )
         sys.exit(0)
 
     stdin_data = sys.stdin.buffer.read()
 
-    result = subprocess.run(
-        [sys.executable, str(target)],
-        input=stdin_data,
-        capture_output=False,
-    )
+    try:
+        result = subprocess.run(
+            [sys.executable, str(target)],
+            input=stdin_data,
+            capture_output=False,
+        )
+    except OSError as exc:
+        print(
+            f"[autoskillit dispatch] exec failed for {target}: {exc} — degrading gracefully",
+            file=sys.stderr,
+        )
+        sys.exit(0)
     sys.exit(result.returncode)
 
 

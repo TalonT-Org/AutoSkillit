@@ -10,7 +10,6 @@ pytestmark = pytest.mark.small
 SRC_ROOT = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
 
 EXPECTED_SUB_CLAUDE_MDS = [
-    # existing 15 (unchanged order)
     "core/types/CLAUDE.md",
     "core/runtime/CLAUDE.md",
     "execution/headless/CLAUDE.md",
@@ -26,14 +25,12 @@ EXPECTED_SUB_CLAUDE_MDS = [
     "cli/update/CLAUDE.md",
     "hooks/guards/CLAUDE.md",
     "hooks/formatters/CLAUDE.md",
-    # 6 new entries (Part A)
     "CLAUDE.md",  # src/autoskillit/ package root
     "core/CLAUDE.md",
     "config/CLAUDE.md",
     "pipeline/CLAUDE.md",
     "execution/CLAUDE.md",
     "workspace/CLAUDE.md",
-    # 6 new entries (Part B)
     "planner/CLAUDE.md",
     "recipe/CLAUDE.md",
     "migration/CLAUDE.md",

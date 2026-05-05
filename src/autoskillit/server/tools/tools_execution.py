@@ -273,6 +273,44 @@ async def run_python(
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
+def _persist_run_skill_state(skill_result: SkillResult, project_dir: Path) -> None:
+    if not skill_result.session_id:
+        return
+    try:
+        from autoskillit.core import ensure_project_temp  # noqa: PLC0415
+        from autoskillit.execution.session._session_state import (  # noqa: PLC0415
+            SessionState,
+            persist_session_state,
+        )
+
+        state = SessionState(
+            session_id=skill_result.session_id,
+            pid=os.getpid(),
+            boot_id="",
+            starttime_ticks=0,
+            infra_exit_category=skill_result.infra_exit_category
+            if skill_result.infra_exit_category
+            else None,
+        )
+        state_dir = ensure_project_temp(project_dir) / "session_state"
+        persist_session_state(state, state_dir)
+    except Exception:
+        logger.debug("run_skill: could not persist session state", exc_info=True)
+
+
+def _clear_run_skill_state(project_dir: Path) -> None:
+    try:
+        from autoskillit.core import ensure_project_temp  # noqa: PLC0415
+        from autoskillit.execution.session._session_state import (  # noqa: PLC0415
+            clear_session_state,
+        )
+
+        state_dir = ensure_project_temp(project_dir) / "session_state"
+        clear_session_state(state_dir)
+    except Exception:
+        logger.debug("run_skill: could not clear session state", exc_info=True)
+
+
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
 @track_response_size("run_skill")
 async def run_skill(
@@ -535,6 +573,7 @@ async def run_skill(
             )
             if skill_result.success:
                 tool_ctx.audit.record_success(skill_command)
+                _clear_run_skill_state(tool_ctx.project_dir)
             else:
                 await _notify(
                     ctx,
@@ -543,6 +582,7 @@ async def run_skill(
                     "autoskillit.run_skill",
                     extra={"exit_code": skill_result.exit_code, "subtype": skill_result.subtype},
                 )
+                _persist_run_skill_state(skill_result, tool_ctx.project_dir)
             if effective_order_id:
                 skill_result.order_id = effective_order_id
             from autoskillit.server._misc import (  # noqa: PLC0415

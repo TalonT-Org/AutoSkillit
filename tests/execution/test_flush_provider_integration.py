@@ -232,7 +232,7 @@ class TestProviderFieldsReachFlush:
 
         minimal_ctx.runner = cancelling_runner  # type: ignore[assignment]
 
-        with pytest.raises(BaseException):
+        with pytest.raises(anyio.get_cancelled_exc_class()):
             await _execute_claude_headless(
                 ClaudeHeadlessCmd(cmd=["echo", "test"], env={}),
                 str(tmp_path),

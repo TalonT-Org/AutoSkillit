@@ -431,7 +431,7 @@ def test_check_installed_plugins_entry_flat_structure_is_warning(tmp_path: Path)
 class TestGroupMFranchiseDoctorChecks:
     """Group M: Fleet doctor checks (ambient env detection + infra health + campaign ops)."""
 
-    # M1: SESSION_TYPE unset → OK (unset is normal; check only fires on explicit 'skill')
+    # M1: SESSION_TYPE unset → OK (unset is normal; check fires on 'skill' and deprecated 'leaf')
     def test_check_ambient_session_type_skill_ok_when_unset(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -453,6 +453,20 @@ class TestGroupMFranchiseDoctorChecks:
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
         result = _check_ambient_session_type_skill()
         assert result.severity == Severity.WARNING
+        assert result.check == "ambient_session_type_skill"
+
+    # M2b: SESSION_TYPE=leaf (deprecated) → WARN with DeprecationWarning
+    def test_check_ambient_session_type_skill_warns_when_leaf_deprecated(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.cli.doctor import _check_ambient_session_type_skill
+        from autoskillit.core import Severity
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaf")
+        with pytest.warns(DeprecationWarning, match="deprecated"):
+            result = _check_ambient_session_type_skill()
+        assert result.severity == Severity.WARNING
+        assert result.check == "ambient_session_type_skill"
 
     # M3: SESSION_TYPE=orchestrator → OK (not this check's concern)
     def test_check_ambient_session_type_skill_ok_when_orchestrator(

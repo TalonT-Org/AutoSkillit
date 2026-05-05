@@ -12,6 +12,7 @@ from autoskillit.core import TerminalColumn, _render_terminal_table
 
 _TOKEN_COLUMNS = (
     TerminalColumn("STEP", max_width=40, align="<"),
+    TerminalColumn("COUNT", max_width=5, align=">"),
     TerminalColumn("UNCACHED", max_width=10, align=">"),
     TerminalColumn("OUTPUT", max_width=10, align=">"),
     TerminalColumn("CACHE_RD", max_width=10, align=">"),
@@ -30,7 +31,6 @@ _TIMING_COLUMNS = (
 _EFFICIENCY_COLUMNS = (
     TerminalColumn("STEP", max_width=40, align="<"),
     TerminalColumn("LOC_CHG", max_width=8, align=">"),
-    TerminalColumn("PK/LOC", max_width=8, align=">"),
     TerminalColumn("RD/LOC", max_width=8, align=">"),
     TerminalColumn("WR/LOC", max_width=8, align=">"),
     TerminalColumn("OUT/LOC", max_width=8, align=">"),
@@ -40,7 +40,6 @@ _EFFICIENCY_COLUMNS = (
 _EFFICIENCY_MD_LABELS: dict[str, str] = {
     "STEP": "Step",
     "LOC_CHG": "LoC Changed",
-    "PK/LOC": "peak_ctx/LoC",
     "RD/LOC": "cache_read/LoC",
     "WR/LOC": "cache_write/LoC",
     "OUT/LOC": "output/LoC",
@@ -52,6 +51,7 @@ _EFFICIENCY_MD_SEP = "|" + "|".join("-" * (len(h) + 2) for h in _eff_md_headers)
 
 _TOKEN_MD_LABELS: dict[str, str] = {
     "STEP": "Step",
+    "COUNT": "count",
     "UNCACHED": "uncached",
     "OUTPUT": "output",
     "CACHE_RD": "cache_read",
@@ -64,6 +64,48 @@ _TOKEN_MD_LABELS: dict[str, str] = {
 _tok_md_headers = [_TOKEN_MD_LABELS[c.label] for c in _TOKEN_COLUMNS]
 _TOKEN_MD_HEADER = "| " + " | ".join(_tok_md_headers) + " |"
 _TOKEN_MD_SEP = "|" + "|".join("-" * (len(h) + 2) for h in _tok_md_headers) + "|"
+
+_TOKEN_DISPLAY_FIELDS: frozenset[str] = frozenset(
+    {
+        "step_name",
+        "input_tokens",
+        "output_tokens",
+        "cache_creation_input_tokens",
+        "cache_read_input_tokens",
+        "invocation_count",
+        "peak_context",
+        "turn_count",
+    }
+)
+
+_TOKEN_EXCLUDED_FIELDS: frozenset[str] = frozenset(
+    {
+        "elapsed_seconds",
+        "loc_insertions",
+        "loc_deletions",
+    }
+)
+
+_TOKEN_FIELD_TO_COLUMN: dict[str, str] = {
+    "step_name": "STEP",
+    "input_tokens": "UNCACHED",
+    "output_tokens": "OUTPUT",
+    "cache_read_input_tokens": "CACHE_RD",
+    "peak_context": "PEAK_CTX",
+    "turn_count": "TURNS",
+    "cache_creation_input_tokens": "CACHE_WR",
+    "invocation_count": "COUNT",
+}
+
+_TIMING_MD_LABELS: dict[str, str] = {
+    "STEP": "Step",
+    "DURATION": "Duration",
+    "INVOCATIONS": "Invocations",
+}
+
+_timing_md_headers = [_TIMING_MD_LABELS[c.label] for c in _TIMING_COLUMNS]
+_TIMING_MD_HEADER = "| " + " | ".join(_timing_md_headers) + " |"
+_TIMING_MD_SEP = "|" + "|".join("-" * (len(h) + 2) for h in _timing_md_headers) + "|"
 
 
 def _ratio(tokens: int, loc: int) -> str:
@@ -113,6 +155,7 @@ class TelemetryFormatter:
         ]
         for step in steps:
             name = step.get("step_name", "?")
+            count = step.get("invocation_count", 1)
             inp = h(step.get("input_tokens", 0))
             out = h(step.get("output_tokens", 0))
             cache_rd = h(step.get("cache_read_input_tokens", 0))
@@ -121,7 +164,7 @@ class TelemetryFormatter:
             cache_wr = h(step.get("cache_creation_input_tokens", 0))
             wc = step.get("wall_clock_seconds", step.get("elapsed_seconds", 0.0))
             lines.append(
-                f"| {name} | {inp} | {out} | {cache_rd} | {peak_ctx}"
+                f"| {name} | {count} | {inp} | {out} | {cache_rd} | {peak_ctx}"
                 f" | {turns} | {cache_wr} | {fmt_dur(wc)} |"
             )
 
@@ -132,7 +175,7 @@ class TelemetryFormatter:
         total_cache_wr = h(total.get("cache_creation_input_tokens", 0))
         total_time = total.get("total_elapsed_seconds", 0.0)
         lines.append(
-            f"| **Total** | {total_in} | {total_out} | {total_cache_rd}"
+            f"| **Total** | | {total_in} | {total_out} | {total_cache_rd}"
             f" | {total_peak} | | {total_cache_wr} | {fmt_dur(total_time)} |"
         )
         return "\n".join(lines)
@@ -145,8 +188,8 @@ class TelemetryFormatter:
         lines = [
             "## Step Timing Summary",
             "",
-            "| Step | Duration | Invocations |",
-            "|------|----------|-------------|",
+            _TIMING_MD_HEADER,
+            _TIMING_MD_SEP,
         ]
         for step in steps:
             name = step.get("step_name", "?")
@@ -164,11 +207,12 @@ class TelemetryFormatter:
         h = TelemetryFormatter._humanize
         fmt_dur = TelemetryFormatter._fmt_duration
 
-        rows: list[tuple[str, str, str, str, str, str, str, str]] = []
+        rows: list[tuple[str, str, str, str, str, str, str, str, str]] = []
         for step in steps:
             rows.append(
                 (
                     step.get("step_name", "?"),
+                    str(step.get("invocation_count", 1)),
                     h(step.get("input_tokens", 0)),
                     h(step.get("output_tokens", 0)),
                     h(step.get("cache_read_input_tokens", 0)),
@@ -181,6 +225,7 @@ class TelemetryFormatter:
 
         total_row = (
             "Total",
+            "",
             h(total.get("input_tokens", 0)),
             h(total.get("output_tokens", 0)),
             h(total.get("cache_read_input_tokens", 0)),
@@ -263,24 +308,22 @@ class TelemetryFormatter:
         ]
         for step in steps:
             loc = step.get("loc_insertions", 0) + step.get("loc_deletions", 0)
-            peak_ctx = step.get("peak_context", 0)
             cr = step.get("cache_read_input_tokens", 0)
             cw = step.get("cache_creation_input_tokens", 0)
             out = step.get("output_tokens", 0)
             lines.append(
                 f"| {step.get('step_name', '?')} | {loc}"
-                f" | {_ratio(peak_ctx, loc)} | {_ratio(cr, loc)}"
+                f" | {_ratio(cr, loc)}"
                 f" | {_ratio(cw, loc)} | {_ratio(out, loc)} |"
             )
 
         total_loc = total.get("loc_insertions", 0) + total.get("loc_deletions", 0)
-        total_peak = total.get("peak_context", 0)
         total_cr = total.get("cache_read_input_tokens", 0)
         total_cw = total.get("cache_creation_input_tokens", 0)
         total_out = total.get("output_tokens", 0)
         lines.append(
             f"| **Total** | **{total_loc}**"
-            f" | {_ratio(total_peak, total_loc)} | {_ratio(total_cr, total_loc)}"
+            f" | {_ratio(total_cr, total_loc)}"
             f" | {_ratio(total_cw, total_loc)} | {_ratio(total_out, total_loc)} |"
         )
         return "\n".join(lines)
@@ -291,10 +334,9 @@ class TelemetryFormatter:
         if not any(s.get("loc_insertions", 0) + s.get("loc_deletions", 0) > 0 for s in steps):
             return ""
 
-        rows: list[tuple[str, str, str, str, str, str]] = []
+        rows: list[tuple[str, str, str, str, str]] = []
         for step in steps:
             loc = step.get("loc_insertions", 0) + step.get("loc_deletions", 0)
-            peak_ctx = step.get("peak_context", 0)
             cr = step.get("cache_read_input_tokens", 0)
             cw = step.get("cache_creation_input_tokens", 0)
             out = step.get("output_tokens", 0)
@@ -302,7 +344,6 @@ class TelemetryFormatter:
                 (
                     step.get("step_name", "?"),
                     str(loc),
-                    _ratio(peak_ctx, loc),
                     _ratio(cr, loc),
                     _ratio(cw, loc),
                     _ratio(out, loc),
@@ -313,7 +354,6 @@ class TelemetryFormatter:
         total_row = (
             "Total",
             str(total_loc),
-            _ratio(total.get("peak_context", 0), total_loc),
             _ratio(total.get("cache_read_input_tokens", 0), total_loc),
             _ratio(total.get("cache_creation_input_tokens", 0), total_loc),
             _ratio(total.get("output_tokens", 0), total_loc),

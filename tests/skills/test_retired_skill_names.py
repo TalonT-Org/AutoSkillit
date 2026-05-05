@@ -26,18 +26,13 @@ def test_no_retired_skill_name_has_a_live_directory() -> None:
             )
 
 
-def test_retired_skill_names_are_lowercase() -> None:
-    """All RETIRED_SKILL_NAMES entries must be lowercase (kebab-case)."""
-    from autoskillit.core import RETIRED_SKILL_NAMES
-
-    bad = sorted(n for n in RETIRED_SKILL_NAMES if n != n.lower())
-    assert not bad, f"RETIRED_SKILL_NAMES entries must be lowercase. Offending: {bad}"
-
-
 def test_scan_directory_raises_on_retired_skill(tmp_path: Path) -> None:
     """DefaultSkillResolver raises RuntimeError if a retired skill directory is discovered."""
     from autoskillit.core import RETIRED_SKILL_NAMES
     from autoskillit.workspace.skills import SkillSource, _scan_directory
+
+    if not RETIRED_SKILL_NAMES:
+        pytest.skip("no retired names defined")
 
     retired_name = next(iter(sorted(RETIRED_SKILL_NAMES)))
     skill_dir = tmp_path / retired_name

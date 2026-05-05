@@ -8,9 +8,9 @@ used in module docstrings and `pyproject.toml` import-linter contracts.
 
 ### L0 — Leaf Subagent
 
-A terminal node in the execution graph. L0 agents are always headless, spawned
-by an L1 session via Claude Code's Agent or Task tool. They cannot launch
-sub-agents or headless sessions of their own.
+A terminal node (actual leaf) in the execution graph. L0 agents are always
+headless, spawned by an L1 session via Claude Code's Agent or Task tool. They
+cannot launch sub-agents or headless sessions of their own.
 
 Key properties:
 
@@ -29,9 +29,9 @@ Key properties:
 
 - Interactive variant: `autoskillit cook`
 - Headless variant: `run_skill` worker
-- SessionType: `LEAF` (both interactive and headless)
+- SessionType: `SKILL` (both interactive and headless)
 - Can spawn L0 subagents via Agent/Task tool
-- Cannot call `run_skill` (enforced by `leaf_orchestration_guard.py` and
+- Cannot call `run_skill` (enforced by `skill_orchestration_guard.py` and
   `skill_cmd_guard.py`)
 
 ```
@@ -91,14 +91,14 @@ L3 (interactive fleet)
 | Orchestration Level | SessionType enum | CLI command | Headless variant |
 |---|---|---|---|
 | L0 (leaf) | n/a — Claude Agent | n/a | Always headless |
-| L1 (session) | `LEAF` | `autoskillit cook` | `run_skill` worker |
+| L1 (session) | `SKILL` | `autoskillit cook` | `run_skill` worker |
 | L2 (orchestrator) | `ORCHESTRATOR` | `autoskillit order` | Food truck |
 | L3 (fleet) | `FLEET` | `autoskillit fleet` | None — no L4 exists |
 
 ## Key Rules
 
 - **L1 workers cannot call `run_skill`.** The boundary is enforced three ways:
-  FastMCP visibility tags, the `leaf_orchestration_guard.py` PreToolUse hook,
+  FastMCP visibility tags, the `skill_orchestration_guard.py` PreToolUse hook,
   and the `_require_orchestrator_or_higher()` runtime guard in
   `tools_execution.py`. All three must independently agree.
 - **L0 agents cannot launch anything.** They are terminal nodes — they cannot

@@ -145,6 +145,6 @@ def test_build_claude_env_scrubs_autoskillit_private_vars(var: str) -> None:
 def test_build_claude_env_extras_override_scrubbed_private_vars() -> None:
     result = build_claude_env(
         base={"AUTOSKILLIT_SESSION_TYPE": "franchise", "HOME": "/tmp"},
-        extras={"AUTOSKILLIT_SESSION_TYPE": "leaf"},
+        extras={"AUTOSKILLIT_SESSION_TYPE": "skill"},
     )
-    assert result["AUTOSKILLIT_SESSION_TYPE"] == "leaf"
+    assert result["AUTOSKILLIT_SESSION_TYPE"] == "skill"

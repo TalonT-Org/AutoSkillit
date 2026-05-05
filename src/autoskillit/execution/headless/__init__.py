@@ -44,7 +44,7 @@ from autoskillit.execution.clone_guard import (
 )
 from autoskillit.execution.commands import (
     build_food_truck_cmd,
-    build_leaf_headless_cmd,
+    build_skill_session_cmd,
 )
 from autoskillit.execution.headless._headless_git import (
     _capture_git_head_sha,
@@ -218,7 +218,7 @@ async def _execute_claude_headless(
 
     Accepts an already-built ClaudeHeadlessCmd and handles runner invocation,
     exception handling, _build_skill_result, and session log flushing.
-    Used by both run_headless_core (leaf path) and
+    Used by both run_headless_core (skill session path) and
     DefaultHeadlessExecutor.dispatch_food_truck (food truck path).
     """
     campaign_id = campaign_id or os.environ.get(CAMPAIGN_ID_ENV_VAR, "")
@@ -582,7 +582,7 @@ async def run_headless_core(
         step_name=step_name or None,
     ):
         resolved_model = _resolve_model(model, ctx.config)
-        spec = build_leaf_headless_cmd(
+        spec = build_skill_session_cmd(
             skill_command,
             cwd=cwd,
             completion_marker=effective_marker,

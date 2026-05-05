@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import warnings
 
 from autoskillit.core import SESSION_TYPE_ENV_VAR, Severity, get_logger
 
@@ -11,21 +12,35 @@ from ._doctor_types import DoctorResult
 logger = get_logger(__name__)
 
 
-def _check_ambient_session_type_leaf() -> DoctorResult:
-    """Detect ambient SESSION_TYPE=leaf — common env leakage from fleet subprocesses."""
+def _check_ambient_session_type_skill() -> DoctorResult:
+    """Detect ambient SESSION_TYPE=skill — common env leakage from fleet subprocesses."""
     raw = os.environ.get(SESSION_TYPE_ENV_VAR, "")
-    if raw.lower() == "leaf":
+    raw_lower = raw.lower()
+    if raw_lower == "leaf":
+        warnings.warn(
+            "AUTOSKILLIT_SESSION_TYPE='leaf' is deprecated. Use 'skill' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return DoctorResult(
             Severity.WARNING,
-            "ambient_session_type_leaf",
-            "Ambient SESSION_TYPE=leaf detected. "
-            "Did you intend to set SESSION_TYPE=leaf? Fleet sessions should set "
-            "SESSION_TYPE=leaf only in launched subprocesses.",
+            "ambient_session_type_skill",
+            "Ambient SESSION_TYPE=leaf detected (deprecated). "
+            "Update to SESSION_TYPE=skill. Fleet sessions should set "
+            "SESSION_TYPE=skill only in launched subprocesses.",
+        )
+    if raw_lower == "skill":
+        return DoctorResult(
+            Severity.WARNING,
+            "ambient_session_type_skill",
+            "Ambient SESSION_TYPE=skill detected. "
+            "Did you intend to set SESSION_TYPE=skill? Fleet sessions should set "
+            "SESSION_TYPE=skill only in launched subprocesses.",
         )
     return DoctorResult(
         Severity.OK,
-        "ambient_session_type_leaf",
-        f"SESSION_TYPE={raw!r} (not leaf)",
+        "ambient_session_type_skill",
+        f"SESSION_TYPE={raw!r} (not skill)",
     )
 
 

@@ -346,10 +346,9 @@ class SessionType(StrEnum):
                     Launches L3 food trucks via dispatch_food_truck.
     ORCHESTRATOR -- L2: recipe runner (interactive via order, or headless food truck).
                     Launches L1 headless workers via run_skill.
-    LEAF         -- L1 headless worker (or L0 subagent -- both are terminal from
-                    AutoSkillit's perspective since neither can call run_skill).
-                    L0 subagents never set AUTOSKILLIT_SESSION_TYPE so they share
-                    this terminal slot rather than having a distinct enum value.
+    SKILL        -- L1 skill session (headless worker launched by an orchestrator via
+                    run_skill). L0 subagents are the actual leaf nodes — they never
+                    set AUTOSKILLIT_SESSION_TYPE and cannot call run_skill.
 
     Note: interactive L1 sessions (autoskillit cook, bare Claude Code) have no
     SessionType value -- they bypass tier checks because AUTOSKILLIT_HEADLESS is unset.
@@ -357,7 +356,7 @@ class SessionType(StrEnum):
 
     FLEET = "fleet"
     ORCHESTRATOR = "orchestrator"
-    LEAF = "leaf"
+    SKILL = "skill"
 
 
 @unique

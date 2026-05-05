@@ -36,7 +36,7 @@ is the sole writer for this phase's assignments — no concurrent write races.
 - Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
-- Spawn all L0 subagents in parallel using the native Agent/Task tool (NOT run_skill — leaf guard blocks it)
+- Spawn all L0 subagents in parallel using the native Agent/Task tool (NOT run_skill — skill session guard blocks it)
 - Write the phase sentinel file before emitting the output token
 - Emit: `phase_assignments_result_dir = <absolute path to assignments/ directory>`
 - Write a stub result for any L0 that fails or returns invalid JSON
@@ -86,7 +86,7 @@ Each L0 receives a self-contained prompt that:
 6. Instructs the L0 to return results as JSON between triple-backtick json fences
 
 Each L0 MUST:
-- Use Grep/Glob/Read for codebase analysis (no sub-subagent spawning — they are leaf sessions)
+- Use Grep/Glob/Read for codebase analysis (no sub-subagent spawning — they are actual leaf nodes)
 - Scan for dependencies by comparing scope against other phase assignments (short-form provided in prompt)
 - Read prior result files (if paths provided) to detect cross-phase overlaps
 - Decompose into 1–5 work packages with: `id_suffix` (WP1, WP2, ...), `name`, `scope`, `estimated_files`

@@ -38,9 +38,9 @@ def test_A3_require_orchestrator_or_higher_permits_headless_fleet(monkeypatch) -
     assert _require_orchestrator_or_higher("run_cmd") is None
 
 
-def test_A4_require_orchestrator_or_higher_denies_headless_leaf(monkeypatch) -> None:
+def test_A4_require_orchestrator_or_higher_denies_headless_skill(monkeypatch) -> None:
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaf")
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
     from autoskillit.server._guards import _require_orchestrator_or_higher
 
     result = _require_orchestrator_or_higher("run_cmd")
@@ -112,9 +112,9 @@ def test_A9_require_orchestrator_exact_denies_headless_fleet(monkeypatch) -> Non
     assert "fleet" in msg
 
 
-def test_A10_require_orchestrator_exact_denies_headless_leaf(monkeypatch) -> None:
+def test_A10_require_orchestrator_exact_denies_headless_skill(monkeypatch) -> None:
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaf")
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
     from autoskillit.server._guards import _require_orchestrator_exact
 
     result = _require_orchestrator_exact("open_kitchen")

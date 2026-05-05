@@ -26,7 +26,7 @@ from autoskillit.core.types import (
 from autoskillit.execution.commands import (
     build_food_truck_cmd,
     build_headless_resume_cmd,
-    build_leaf_headless_cmd,
+    build_skill_session_cmd,
 )
 from autoskillit.execution.headless import _build_skill_result
 from autoskillit.execution.session import (
@@ -224,7 +224,7 @@ class TestOutputFormatCliRequirements:
     def test_command_assembly_satisfies_format_requirements(self):
         """Actual builders must produce commands containing all required flags."""
         fmt = OutputFormat.STREAM_JSON
-        spec = build_leaf_headless_cmd(
+        spec = build_skill_session_cmd(
             "/investigate foo",
             cwd="/tmp",
             completion_marker="%%DONE%%",
@@ -233,15 +233,15 @@ class TestOutputFormatCliRequirements:
             output_format=fmt,
         )
         for flag in fmt.required_cli_flags:
-            assert flag in spec.cmd, f"Missing required flag {flag} in leaf builder"
+            assert flag in spec.cmd, f"Missing required flag {flag} in skill builder"
 
 
 class TestAllBuildersEnforceOutputFormatFlags:
     """Every cmd builder that accepts OutputFormat must self-apply required_cli_flags."""
 
     @pytest.mark.parametrize("fmt", list(OutputFormat))
-    def test_leaf_builder_satisfies_format_requirements(self, fmt: OutputFormat):
-        spec = build_leaf_headless_cmd(
+    def test_skill_builder_satisfies_format_requirements(self, fmt: OutputFormat):
+        spec = build_skill_session_cmd(
             "/investigate foo",
             cwd="/tmp",
             completion_marker="%%DONE%%",

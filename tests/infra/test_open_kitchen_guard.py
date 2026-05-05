@@ -25,10 +25,10 @@ def _run_guard(env_extra: dict, tool_input: dict) -> dict:
     return json.loads(result.stdout) if result.stdout.strip() else {}
 
 
-def test_open_kitchen_guard_denies_leaf_tier() -> None:
-    response = _run_guard({"AUTOSKILLIT_HEADLESS": "1", "AUTOSKILLIT_SESSION_TYPE": "leaf"}, {})
+def test_open_kitchen_guard_denies_skill_tier() -> None:
+    response = _run_guard({"AUTOSKILLIT_HEADLESS": "1", "AUTOSKILLIT_SESSION_TYPE": "skill"}, {})
     assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "leaf" in response["hookSpecificOutput"]["permissionDecisionReason"].lower()
+    assert "skill" in response["hookSpecificOutput"]["permissionDecisionReason"].lower()
 
 
 def test_open_kitchen_guard_denies_fleet_tier() -> None:
@@ -125,7 +125,7 @@ def test_open_kitchen_guard_no_marker_on_deny(tmp_path: Path, monkeypatch) -> No
     env = {
         **os.environ,
         "AUTOSKILLIT_HEADLESS": "1",
-        "AUTOSKILLIT_SESSION_TYPE": "leaf",
+        "AUTOSKILLIT_SESSION_TYPE": "skill",
         "AUTOSKILLIT_STATE_DIR": str(tmp_path),
     }
     result = subprocess.run(
@@ -169,7 +169,7 @@ def test_open_kitchen_guard_denies_fleet_headless() -> None:
 
 
 def test_open_kitchen_guard_fleet_denial_has_specific_message() -> None:
-    """Fleet denial message must mention fleet or franchise, not the generic leaf message."""
+    """Fleet denial message must mention fleet or franchise, not the generic skill message."""
     response = _run_guard({"AUTOSKILLIT_HEADLESS": "1", "AUTOSKILLIT_SESSION_TYPE": "fleet"}, {})
     reason = response["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "fleet" in reason or "franchise" in reason

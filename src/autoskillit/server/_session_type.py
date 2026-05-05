@@ -64,7 +64,7 @@ def _apply_session_type_visibility() -> None:
                 mcp.enable(tags={pack})
         else:
             mcp.enable(tags={"kitchen"})
-    elif _session is SessionType.LEAF and _headless:
+    elif _session is SessionType.SKILL and _headless:
         mcp.enable(tags={"headless"})
-    # ORCHESTRATOR+interactive and LEAF+interactive: no pre-reveal.
-    # Cook unlocks via open_kitchen (orchestrator) or stays minimal (leaf).
+    # ORCHESTRATOR+interactive and SKILL+interactive: no pre-reveal.
+    # Cook unlocks via open_kitchen (orchestrator) or stays minimal (skill session).

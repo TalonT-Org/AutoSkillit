@@ -538,6 +538,12 @@ CONTEXT LIMIT ROUTING — run_skill only (check BEFORE on_failure):
     If lifespan_started is false, fall through to on_failure — no progress was made.
 - When run_skill returns "needs_retry: true" AND "retry_reason: early_stop" or "zero_writes":
   - These are not context limit conditions. Fall through to on_failure.
+- WORKTREE-STALE CARVE-OUT: When the step invokes a worktree-creating skill
+  (implement-worktree-no-merge, implement-worktree, implement-experiment) and returns
+  retry_reason=stale (or retry_reason=resume with subtype=stale), re-execute the step
+  without consuming the retries budget. This is a one-shot retry — if the retry also
+  goes stale, fall through to on_failure. Before re-executing, if worktree_path was
+  captured from the stale result, remove it (git worktree remove --force <path>).
 
 HOOK DENIAL COMPLIANCE — ALL HOOKS:
 - When a PreToolUse hook DENIES a tool call (permissionDecision: "deny"), the denial

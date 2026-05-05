@@ -138,6 +138,8 @@ def _build_skill_result(
     cwd: str = "",
     write_behavior: WriteBehaviorSpec | None = None,
     fs_writes_detected: bool = False,
+    *,
+    provider_used: str = "",
 ) -> SkillResult:
     """Route SubprocessResult fields into the standard run_skill response."""
     branch = (
@@ -192,6 +194,7 @@ def _build_skill_result(
                     stderr=result.stderr if result.stderr else "",
                     token_usage=stale_session.token_usage,
                     last_stop_reason=stale_session.last_stop_reason,
+                    provider_used=provider_used,
                 )
         # No valid result in stdout — fall through to original stale response
         _capture_failure(
@@ -217,6 +220,7 @@ def _build_skill_result(
             retry_reason=RetryReason.STALE,
             stderr="",
             token_usage=None,
+            provider_used=provider_used,
         )
         return _apply_budget_guard(stale_sr, skill_command, audit, max_consecutive_retries)
 
@@ -247,6 +251,7 @@ def _build_skill_result(
             retry_reason=RetryReason.STALE,
             stderr="",
             token_usage=None,
+            provider_used=provider_used,
         )
         return _apply_budget_guard(idle_sr, skill_command, audit, max_consecutive_retries)
 
@@ -465,6 +470,7 @@ def _build_skill_result(
             fs_writes_detected=fs_writes_detected,
             last_stop_reason=session.last_stop_reason,
             lifespan_started=session.lifespan_started,
+            provider_used=provider_used,
         )
     else:
         sr = SkillResult(
@@ -486,6 +492,7 @@ def _build_skill_result(
             kill_reason=result.kill_reason,
             last_stop_reason=session.last_stop_reason,
             lifespan_started=session.lifespan_started,
+            provider_used=provider_used,
         )
     sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
 

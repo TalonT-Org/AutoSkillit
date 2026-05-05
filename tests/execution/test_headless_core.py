@@ -831,22 +831,28 @@ class TestEnsureSkillPrefix:
     """Unit tests for _ensure_skill_prefix helper."""
 
     def test_adds_use_to_slash_command(self):
-        assert _ensure_skill_prefix("/investigate error") == "Use /investigate error"
+        assert _ensure_skill_prefix("/investigate error") == "Use the /investigate skill error"
 
     def test_adds_use_to_namespaced_skill(self):
         assert (
             _ensure_skill_prefix("/autoskillit:investigate error")
-            == "Use /autoskillit:investigate error"
+            == "Use the /autoskillit:investigate skill error"
         )
 
     def test_no_double_prefix(self):
-        assert _ensure_skill_prefix("Use /investigate error") == "Use /investigate error"
+        assert (
+            _ensure_skill_prefix("Use the /investigate skill error")
+            == "Use the /investigate skill error"
+        )
 
     def test_ignores_plain_prompts(self):
         assert _ensure_skill_prefix("Fix the bug in main.py") == "Fix the bug in main.py"
 
     def test_handles_leading_whitespace(self):
-        assert _ensure_skill_prefix("  /investigate error") == "Use /investigate error"
+        assert _ensure_skill_prefix("  /investigate error") == "Use the /investigate skill error"
+
+    def test_bare_slash_command_no_args(self):
+        assert _ensure_skill_prefix("/investigate") == "Use the /investigate skill"
 
 
 class TestStalenessReturnsNeedsRetry:

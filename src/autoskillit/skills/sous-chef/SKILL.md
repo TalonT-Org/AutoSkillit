@@ -89,7 +89,6 @@ useful — the worktree orphan concern that motivates `retries: 0` does not appl
 This is a one-shot retry: if the retry also goes stale, fall through to `on_failure`.
 Before re-executing, if the stale result captured `worktree_path`, remove the empty
 worktree (`git worktree remove --force <path>`) to prevent orphaned worktrees.
-Do NOT route to `on_context_limit` — stale is not a context limit.
 
 **For `implement-worktree-no-merge` specifically:**
 - `on_context_limit` routes to `retry_worktree` in standard recipes.

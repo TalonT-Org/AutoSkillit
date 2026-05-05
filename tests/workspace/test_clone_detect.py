@@ -1,4 +1,4 @@
-"""Tests for detect_* helpers and classify_remote_url from autoskillit.workspace._clone_detect (re-exported via autoskillit.workspace.clone)."""
+"""Tests for detect_* helpers and classify_remote_url from autoskillit.workspace._clone_detect."""
 
 from __future__ import annotations
 

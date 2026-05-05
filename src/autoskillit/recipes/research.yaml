@@ -257,9 +257,6 @@ steps:
       skill_command: "/autoskillit:setup-environment ${{ context.worktree_path }} ${{ context.experiment_plan }}"
       cwd: "${{ context.worktree_path }}"
       step_name: setup_environment
-    capture:
-      env_mode: "${{ result.env_mode }}"
-      env_report: "${{ result.env_report }}"
     on_result:
       field: verdict
       routes:
@@ -275,8 +272,7 @@ steps:
       required environment type (standard, Docker, or micromamba-host). Probes
       Docker availability, builds the image if possible, falls back to host
       micromamba if Docker is unavailable and deps are pure conda-forge Python.
-      Emits env_mode consumed by implement_phase and downstream steps. PASS
-      (none or docker) and WARN (micromamba-host) proceed to decompose_phases.
+      PASS (none or docker) and WARN (micromamba-host) proceed to decompose_phases.
       FAIL (unavailable) escalates immediately.
 
   decompose_phases:

@@ -104,7 +104,7 @@ Read the `task` field from the combined WPs document. Each L0 subagent reviewing
 WPs must verify that every WP's deliverables and scope serve the stated task. Flag WPs
 whose deliverables address concerns not mentioned in the task as scope creep.
 
-Group WPs by `phase_id` (extracted from `id` prefix, e.g., `P1-A1-WP1` → `P1`).
+Group WPs by `phase_id` (always populated; read directly from the field).
 For each phase, build a context packet containing:
 - The full serialized `combined_wps.json` content (all WPs visible for cross-phase awareness)
 - The `PhaseElaborated` entry for the phase from `$2`

@@ -628,3 +628,15 @@ def test_deduplication_orphan_cascade(tmp_path: Path) -> None:
     sizing_findings = [f for f in validation["findings"] if f["check"] == "sizing_bounds"]
     assert len(sizing_findings) == 1
     assert "P1-A1-WP2" in sizing_findings[0]["message"]
+
+
+def test_validate_plan_reads_finalized_manifest(tmp_path: Path) -> None:
+    """validate_plan must find wp_manifest.json written by finalize_wp_manifest."""
+    from autoskillit.planner import finalize_wp_manifest
+
+    _make_minimal_output_dir(tmp_path)
+    wp_dir = tmp_path / "work_packages"
+    finalize_wp_manifest(str(wp_dir), str(tmp_path))
+
+    result = validate_plan(str(tmp_path))
+    assert result["verdict"] == "pass"

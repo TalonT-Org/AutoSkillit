@@ -213,7 +213,7 @@ def consolidate_wps(
 
     Reads manifests from ``{planner_dir}/work_packages/consolidation/``.
     Writes ``{planner_dir}/consolidated_wps.json`` and rebuilds
-    ``{planner_dir}/wp_index.json``. Returns a result dict with string values.
+    ``{planner_dir}/work_packages/wp_index.json``. Returns a result dict with string values.
     """
     try:
         wps_doc: dict[str, Any] = json.loads(Path(refined_wps_path).read_text())
@@ -293,7 +293,7 @@ def consolidate_wps(
     )
 
     # Rebuild wp_index.json as a sorted list (ListComp arg keeps AST scan from flagging as dict)
-    wp_index_path = planner_path / "wp_index.json"
+    wp_index_path = planner_path / "work_packages" / "wp_index.json"
     atomic_write(
         wp_index_path,
         json.dumps(

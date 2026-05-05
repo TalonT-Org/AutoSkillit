@@ -144,7 +144,7 @@ For each failed L0, write `$2/work_packages/{wp_id}_result.json` with:
 }
 ```
 
-After writing all WP files, update `$2/wp_index.json` by appending compact entries
+After writing all WP files, update `$2/work_packages/wp_index.json` by appending compact entries
 for all **successful** results only (skip stubs). Read the current index, append, and write back
 atomically. L1 is the sole writer for this phase's WPs — no concurrent writes.
 

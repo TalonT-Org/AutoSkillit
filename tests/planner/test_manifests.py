@@ -238,7 +238,7 @@ def test_build_phase_wp_manifest_initializes_wp_index(tmp_path):
 
     build_phase_wp_manifest(str(assignments_dir), str(output_dir))
 
-    wp_index = output_dir / "wp_index.json"
+    wp_index = output_dir / "work_packages" / "wp_index.json"
     assert wp_index.exists()
     assert json.loads(wp_index.read_text()) == []
 
@@ -388,7 +388,7 @@ def test_finalize_wp_manifest_regenerates_wp_index(tmp_path):
 
     finalize_wp_manifest(str(wp_dir), str(output_dir))
 
-    index = json.loads((output_dir / "wp_index.json").read_text())
+    index = json.loads((wp_dir / "wp_index.json").read_text())
     assert len(index) == 3
     ids = [e["id"] for e in index]
     assert ids == ["P1-A1-WP1", "P1-A2-WP1", "P2-A1-WP1"]
@@ -626,3 +626,67 @@ def test_expand_wps_result_dir_points_to_wp_sentinels(tmp_path):
     manifest = json.loads(Path(result["manifest_path"]).read_text())
     assert manifest["result_dir"].endswith("wp_sentinels")
     assert (tmp_path / "work_packages" / "wp_sentinels").is_dir()
+
+
+def test_finalize_wp_manifest_writes_to_work_packages_dir(tmp_path):
+    """wp_manifest.json must be written inside work_packages_dir, not output_dir."""
+    from autoskillit.planner import finalize_wp_manifest
+
+    wp_dir = tmp_path / "work_packages"
+    wp_dir.mkdir()
+    (wp_dir / "P1-A1-WP1_result.json").write_text(json.dumps(make_wp_result("P1-A1-WP1")))
+
+    result = finalize_wp_manifest(str(wp_dir), str(tmp_path))
+
+    assert (wp_dir / "wp_manifest.json").exists()
+    assert not (tmp_path / "wp_manifest.json").exists()
+    assert "work_packages" in result["manifest_path"]
+
+
+def test_finalize_wp_manifest_writes_wp_index_to_work_packages_dir(tmp_path):
+    """wp_index.json must be written inside work_packages_dir, not output_dir."""
+    from autoskillit.planner import finalize_wp_manifest
+
+    wp_dir = tmp_path / "work_packages"
+    wp_dir.mkdir()
+    (wp_dir / "P1-A1-WP1_result.json").write_text(json.dumps(make_wp_result("P1-A1-WP1")))
+
+    finalize_wp_manifest(str(wp_dir), str(tmp_path))
+
+    assert (wp_dir / "wp_index.json").exists()
+    assert not (tmp_path / "wp_index.json").exists()
+
+
+def test_expand_wps_wp_index_path_in_work_packages(tmp_path):
+    """wp_index.json and context wp_index_path must point to work_packages/."""
+    from autoskillit.planner import expand_wps
+
+    refined = {
+        "task": "test",
+        "assignments": [
+            {
+                "id": "P1-A1",
+                "name": "Assignment 1",
+                "phase_id": "P1",
+                "phase_name": "Phase 1",
+                "goal": "test",
+                "technical_approach": "test",
+                "proposed_work_packages": [
+                    {"id_suffix": "WP1", "name": "WP1", "scope": "s", "estimated_files": ["f.py"]}
+                ],
+            }
+        ],
+    }
+    ra_path = tmp_path / "refined_assignments.json"
+    ra_path.write_text(json.dumps(refined))
+
+    expand_wps(str(ra_path), str(tmp_path))
+
+    wp_dir = tmp_path / "work_packages"
+    assert (wp_dir / "wp_index.json").exists()
+    assert not (tmp_path / "wp_index.json").exists()
+
+    ctx_files = list(wp_dir.glob("context_*.json"))
+    assert len(ctx_files) >= 1
+    ctx = json.loads(ctx_files[0].read_text())
+    assert "work_packages" in ctx["wp_index_path"]

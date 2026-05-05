@@ -1,4 +1,4 @@
-"""Tests for guards/skill_load_guard.py PreToolUse hook — denies native tools until Skill called."""
+"""Tests for guards/skill_load_guard.py PreToolUse hook."""
 
 from __future__ import annotations
 

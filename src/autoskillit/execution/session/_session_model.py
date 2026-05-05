@@ -10,6 +10,7 @@ from typing import Any, assert_never
 
 from autoskillit.core import (
     CONTEXT_EXHAUSTION_MARKER,
+    ClaudeContentBlockType,
     CliSubtype,
     RetryReason,
     SessionOutcome,
@@ -61,13 +62,22 @@ class ClaudeSessionResult:
     tool_uses: list[dict[str, Any]] = field(default_factory=list)
     jsonl_context_exhausted: bool = False
     stop_reasons: list[str] = field(default_factory=list)
+    has_thinking_only_turn: bool = False
+    seen_block_types: frozenset[str] = field(default_factory=frozenset)
 
     def __post_init__(self) -> None:
         if not isinstance(self.result, str):
             if isinstance(self.result, list):
-                self.result = "\n".join(
-                    b.get("text", "") if isinstance(b, dict) else str(b) for b in self.result
-                )
+                parts: list[str] = []
+                for b in self.result:
+                    if not isinstance(b, dict):
+                        parts.append(str(b))
+                        continue
+                    block_type = ClaudeContentBlockType.from_api(b.get("type", ""))
+                    if block_type == ClaudeContentBlockType.TEXT:
+                        parts.append(b.get("text", ""))
+                    # Non-text blocks (thinking, tool_use, etc.) contribute no text
+                self.result = "\n".join(parts)
             elif not isinstance(self.result, str):
                 self.result = "" if self.result is None else str(self.result)
         if not isinstance(self.errors, list):
@@ -265,6 +275,8 @@ class _ParseAccumulator:
     assistant_messages: list[str] = field(default_factory=list)
     jsonl_context_exhausted: bool = False
     stop_reasons: list[str] = field(default_factory=list)
+    seen_block_types: set[str] = field(default_factory=set)
+    has_thinking_only_turn: bool = False
 
 
 def parse_session_result(stdout: str) -> ClaudeSessionResult:
@@ -302,33 +314,59 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
                 if isinstance(msg, dict):
                     content = msg.get("content", "")
                     if isinstance(content, list):
+                        text_parts: list[str] = []
+                        turn_has_thinking = False
+                        turn_has_tool_use = False
                         for block in content:
-                            if isinstance(block, dict) and block.get("type") == "tool_use":
-                                name = block.get("name", "")
-                                entry: dict[str, str | list[str]] = {
-                                    "name": name,
-                                    "id": block.get("id", ""),
-                                }
-                                if name in {"Write", "Edit"} and isinstance(
-                                    block.get("input"), dict
+                            if not isinstance(block, dict):
+                                continue
+                            block_type = ClaudeContentBlockType.from_api(block.get("type", ""))
+                            match block_type:
+                                case ClaudeContentBlockType.TEXT:
+                                    text_parts.append(block.get("text", ""))
+                                case ClaudeContentBlockType.TOOL_USE:
+                                    turn_has_tool_use = True
+                                    name = block.get("name", "")
+                                    entry: dict[str, str | list[str]] = {
+                                        "name": name,
+                                        "id": block.get("id", ""),
+                                    }
+                                    if name in {"Write", "Edit"} and isinstance(
+                                        block.get("input"), dict
+                                    ):
+                                        fp = block["input"].get("file_path", "")
+                                        if fp:
+                                            entry["file_path"] = fp
+                                    elif name == "Bash" and isinstance(block.get("input"), dict):
+                                        command = block["input"].get("command", "")
+                                        if isinstance(command, str):
+                                            paths = [
+                                                m.group(1)
+                                                for m in _ABS_PATH_RE.finditer(command)
+                                                if len(m.group(1)) >= 5
+                                            ]
+                                            if paths:
+                                                entry["bash_paths"] = paths
+                                    acc.tool_uses.append(entry)
+                                case (
+                                    ClaudeContentBlockType.THINKING
+                                    | ClaudeContentBlockType.REDACTED_THINKING
                                 ):
-                                    fp = block["input"].get("file_path", "")
-                                    if fp:
-                                        entry["file_path"] = fp
-                                elif name == "Bash" and isinstance(block.get("input"), dict):
-                                    command = block["input"].get("command", "")
-                                    if isinstance(command, str):
-                                        paths = [
-                                            m.group(1)
-                                            for m in _ABS_PATH_RE.finditer(command)
-                                            if len(m.group(1)) >= 5
-                                        ]
-                                        if paths:
-                                            entry["bash_paths"] = paths
-                                acc.tool_uses.append(entry)
-                        text = "\n".join(
-                            block.get("text", "") for block in content if isinstance(block, dict)
-                        ).strip()
+                                    turn_has_thinking = True
+                                case (
+                                    ClaudeContentBlockType.TOOL_RESULT
+                                    | ClaudeContentBlockType.IMAGE
+                                ):
+                                    pass  # Not expected in assistant content; skip gracefully
+                                case ClaudeContentBlockType.UNKNOWN:
+                                    raw_type = block.get("type", "")
+                                    logger.debug("unknown_content_block_type", block_type=raw_type)
+                                    acc.seen_block_types.add(raw_type)
+                                case _ as unreachable:
+                                    assert_never(unreachable)
+                        text = "\n".join(text_parts).strip()
+                        if turn_has_thinking and not text_parts and not turn_has_tool_use:
+                            acc.has_thinking_only_turn = True
                     else:
                         text = str(content).strip()
                     if text:
@@ -390,4 +428,8 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
         tool_uses=acc.tool_uses,
         jsonl_context_exhausted=acc.jsonl_context_exhausted,
         stop_reasons=acc.stop_reasons,
+        has_thinking_only_turn=acc.has_thinking_only_turn,
+        seen_block_types=frozenset(
+            acc.seen_block_types
+        ),  # accumulator uses set; result is immutable
     )

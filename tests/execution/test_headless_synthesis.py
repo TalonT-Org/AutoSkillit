@@ -131,7 +131,7 @@ class TestBuildSkillResultPathContamination:
         return json.dumps(
             {
                 "type": "assistant",
-                "message": {"content": [{"text": text}]},
+                "message": {"content": [{"type": "text", "text": text}]},
             }
         )
 

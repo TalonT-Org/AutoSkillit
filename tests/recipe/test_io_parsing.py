@@ -482,9 +482,9 @@ class TestRecipeParser:
                     step.with_args.get("skill_command")
                     and "resolve-failures" in step.with_args["skill_command"]
                 ):
-                    assert step.model is None, (
+                    assert not step.model, (
                         f"{f.name} step '{step_name}' should not have explicit model "
-                        "(sonnet is the config default)"
+                        "(sonnet is the config default); got {step.model!r}"
                     )
 
 

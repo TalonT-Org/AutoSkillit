@@ -273,7 +273,6 @@ def _build_skill_result(
         returncode = result.returncode if result.returncode is not None else -1
         session = parse_session_result(result.stdout)
 
-    # Moved earlier: needed by synthesis recovery step before _compute_outcome.
     write_call_count = sum(1 for t in session.tool_uses if t.get("name") in {"Write", "Edit"})
     _has_write_evidence = write_call_count >= 1 or fs_writes_detected
 
@@ -398,10 +397,8 @@ def _build_skill_result(
 
     normalized_subtype = session.normalize_subtype(outcome, completion_marker)
 
-    # For adjudicated_failure with write evidence, record as retriable in the audit so
-    # the consecutive chain is intact for the budget guard inside the CONTRACT_RECOVERY gate.
-    # CONTRACT_RECOVERY failures are genuinely retriable (the gate promotes them), so
-    # recording needs_retry=True is architecturally correct.
+    # For adjudicated_failure + write evidence: record as retriable so the consecutive
+    # chain is intact for the CONTRACT_RECOVERY budget guard (genuinely retriable).
     _audit_needs_retry = needs_retry
     _audit_retry_reason = retry_reason
     if (
@@ -412,6 +409,8 @@ def _build_skill_result(
     ):
         _audit_needs_retry = True
         _audit_retry_reason = RetryReason.CONTRACT_RECOVERY
+    if retry_reason == RetryReason.EMPTY_OUTPUT and _has_write_evidence:
+        _audit_retry_reason = RetryReason.COMPLETED_NO_FLUSH
 
     if not success or needs_retry:
         _capture_failure(
@@ -497,12 +496,10 @@ def _build_skill_result(
     sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
 
     # CONTRACT_RECOVERY gate: when the session was classified as adjudicated_failure but
-    # write evidence exists (write_call_count >= 1), the model wrote the artifact but
-    # omitted the structured output token — an emission omission, not a structural contract
-    # failure. Promote to RETRIABLE(CONTRACT_RECOVERY) so the pipeline can recover.
-    # The first _apply_budget_guard call skips CONTRACT_VIOLATION cases because
-    # needs_retry is False at that point. Re-apply budget_guard after promoting so that
-    # budget exhaustion can still cap CONTRACT_RECOVERY retries (diagram: CRG → BG).
+    # write evidence exists, the model wrote the artifact but omitted the structured output
+    # token — promote to RETRIABLE(CONTRACT_RECOVERY). Re-apply budget_guard after
+    # promoting so budget exhaustion can still cap CONTRACT_RECOVERY retries.
+    # The first _apply_budget_guard skips this case because needs_retry is False then.
     if (
         not sr.success
         and not sr.needs_retry
@@ -536,6 +533,14 @@ def _build_skill_result(
                 needs_retry=True,
                 retry_reason=RetryReason.ZERO_WRITES,
             )
+
+    if sr.needs_retry and sr.retry_reason == RetryReason.EMPTY_OUTPUT and _has_write_evidence:
+        sr = dataclasses.replace(
+            sr,
+            subtype="completed_no_flush",
+            retry_reason=RetryReason.COMPLETED_NO_FLUSH,
+        )
+        sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
 
     logger.debug(
         "build_skill_result_exit",

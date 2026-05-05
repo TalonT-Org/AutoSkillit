@@ -50,6 +50,32 @@ def _sr(
     )
 
 
+WRITE_TOOL_LINE = json.dumps(
+    {
+        "type": "assistant",
+        "message": {
+            "content": [
+                {
+                    "type": "tool_use",
+                    "name": "Write",
+                    "id": "w1",
+                    "input": {"file_path": "/worktree/src/foo.py"},
+                }
+            ]
+        },
+    }
+)
+EMPTY_OUTPUT_RESULT_LINE = json.dumps(
+    {
+        "type": "result",
+        "subtype": "empty_output",
+        "is_error": True,
+        "result": "",
+        "session_id": "",
+    }
+)
+
+
 def _make_tool_use_line(name: str, input_dict: dict) -> str:
     return json.dumps(
         {

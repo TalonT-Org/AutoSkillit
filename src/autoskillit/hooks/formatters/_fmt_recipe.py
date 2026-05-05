@@ -37,6 +37,7 @@ _FMT_LOAD_RECIPE_SUPPRESSED: frozenset[str] = frozenset(
         "diagram",  # user sees it in terminal preview; agent doesn't need it
         "kitchen_rules",  # already in the YAML content
         "requires_packs",  # internal field; used for skill gating, not display
+        "requires_features",  # internal feature gate enablement field
         "content_hash",  # internal identity metadata
         "composite_hash",  # internal identity metadata
         "recipe_version",  # internal identity metadata
@@ -174,6 +175,7 @@ _FMT_OPEN_KITCHEN_SUPPRESSED: frozenset[str] = frozenset(
         "diagram",  # rendered in terminal preview, not needed by agent
         "kitchen_rules",  # already embedded in YAML content
         "requires_packs",  # internal gating field
+        "requires_features",  # internal feature gate enablement field
         "content_hash",  # internal identity metadata
         "composite_hash",  # internal identity metadata
         "recipe_version",  # internal identity metadata

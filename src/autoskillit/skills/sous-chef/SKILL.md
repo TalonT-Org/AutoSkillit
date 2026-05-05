@@ -374,7 +374,7 @@ parallel run of the same step reports under the same canonical step name.
 
 ## MODEL PROPAGATION — MANDATORY
 
-**MODEL PROPAGATION** — When the user specifies a model (e.g. "use opus"), apply it to the `model` parameter of ALL `run_skill` calls for steps that declare a `model:` field — including follow-on steps (retry_worktree, fix, resolve_review, resolve_ci, conflict resolution).
+**MODEL PROPAGATION** — When the user specifies a model (e.g. "use opus"), apply it to the `model` parameter of ALL `run_skill` calls for steps that declare a `model:` field — including follow-on steps (retry_worktree, fix, resolve_review, resolve_ci, conflict resolution). All `run_skill` steps in orchestrated recipes must declare a `model:` field; steps that omit it are ineligible for propagation and silently bypass user model selection.
 
 ---
 

@@ -29,6 +29,7 @@ from autoskillit.execution.process import (
     run_managed_async,
 )
 from autoskillit.execution.session import ClaudeSessionResult
+from tests.execution.conftest import _result_ndjson
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -493,25 +494,6 @@ class TestAdjudicationCoverageMatrix:
 # ---------------------------------------------------------------------------
 
 
-def _result_ndjson(
-    result: str = "done",
-    subtype: str = "success",
-    is_error: bool = False,
-    session_id: str = "s1",
-) -> str:
-    """Build a minimal NDJSON string with a single type=result record."""
-    return json.dumps(
-        {
-            "type": "result",
-            "subtype": subtype,
-            "is_error": is_error,
-            "result": result,
-            "session_id": session_id,
-            "errors": [],
-        }
-    )
-
-
 class TestResolveTerminationMatrix:
     """Pure-function unit tests for resolve_termination.
 
@@ -835,7 +817,7 @@ class TestAdjudicationGuards:
         """CHANNEL_A + empty result: dead-end guard escalates to retriable."""
         result = SubprocessResult(
             returncode=0,
-            stdout=_result_ndjson(subtype="success", result=""),
+            stdout=_result_ndjson(subtype="success", result_text=""),
             stderr="",
             termination=TerminationReason.NATURAL_EXIT,
             pid=12345,
@@ -858,7 +840,7 @@ class TestAdjudicationGuards:
         """CHANNEL_B + error_max_turns: contradiction guard resolves to retriable."""
         result = SubprocessResult(
             returncode=0,
-            stdout=_result_ndjson(subtype="error_max_turns", result="partial", is_error=True),
+            stdout=_result_ndjson(subtype="error_max_turns", result_text="partial", is_error=True),
             stderr="",
             termination=TerminationReason.NATURAL_EXIT,
             pid=12345,
@@ -882,7 +864,7 @@ class TestAdjudicationGuards:
         """COMPLETED + CHANNEL_B + error_max_turns: contradiction guard resolves to retriable."""
         result = SubprocessResult(
             returncode=-15,
-            stdout=_result_ndjson(subtype="error_max_turns", result="partial", is_error=True),
+            stdout=_result_ndjson(subtype="error_max_turns", result_text="partial", is_error=True),
             stderr="",
             termination=TerminationReason.COMPLETED,
             pid=12345,

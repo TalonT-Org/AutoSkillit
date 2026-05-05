@@ -307,3 +307,49 @@ def test_headless_executor_protocol_includes_provider_params() -> None:
     sig = inspect.signature(HeadlessExecutor.run)
     assert sig.parameters["provider_name"].default == ""
     assert sig.parameters["provider_fallback_env"].default is None
+
+
+def test_build_skill_result_accepts_provider_used_kwarg() -> None:
+    import inspect
+
+    from autoskillit.execution.headless._headless_result import _build_skill_result
+
+    sig = inspect.signature(_build_skill_result)
+    param = sig.parameters["provider_used"]
+    assert param.default == ""
+    assert param.kind == inspect.Parameter.KEYWORD_ONLY
+
+
+def test_build_skill_result_stamps_provider_used_on_result() -> None:
+    from autoskillit.execution.headless._headless_result import _build_skill_result
+    from tests.execution.conftest import _sr
+
+    sub_result = _sr(stdout="result: done\n", returncode=0)
+    sr = _build_skill_result(sub_result, provider_used="vertex")
+    assert sr.provider_used == "vertex"
+
+
+def test_build_skill_result_defaults_provider_used_empty() -> None:
+    from autoskillit.execution.headless._headless_result import _build_skill_result
+    from tests.execution.conftest import _sr
+
+    sub_result = _sr(stdout="result: done\n", returncode=0)
+    sr = _build_skill_result(sub_result)
+    assert sr.provider_used == ""
+
+
+def test_build_skill_result_provider_used_survives_budget_guard() -> None:
+    from autoskillit.execution.headless._headless_result import _build_skill_result
+    from autoskillit.pipeline.audit import DefaultAuditLog
+    from tests.execution.conftest import _sr
+
+    audit = DefaultAuditLog()
+    sub_result = _sr(stdout="", returncode=1)
+    sr = _build_skill_result(
+        sub_result,
+        skill_command="/test:cmd",
+        audit=audit,
+        max_consecutive_retries=3,
+        provider_used="bedrock",
+    )
+    assert sr.provider_used == "bedrock"

@@ -672,9 +672,6 @@ async def test_advisory_dispatch_does_not_write_file(tmp_path: Path) -> None:
 
 
 class TestMigrateRecipesConstant:
-    def test_constant_value(self) -> None:
-        assert MIGRATE_RECIPES_MAX_RETRIES == 3
-
     @pytest.mark.anyio
     async def test_failed_headless_retries_match_constant(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

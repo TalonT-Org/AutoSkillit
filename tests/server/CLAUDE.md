@@ -68,6 +68,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_tools_load_recipe.py` | Tests for autoskillit server load_recipe and migrate_recipe tools |
 | `test_tools_pr_ops.py` | Tests for server/tools_pr_ops.py |
 | `test_tools_recipe.py` | Tests for autoskillit server validate_recipe tool and recipe docstring contracts |
+| `test_tools_report_bug.py` | Tests for report_bug MCP tool handler and supporting helpers (_parse_fingerprint, _extract_block, _parse_prepare_result, _parse_enrich_result) |
 | `test_tools_run_cmd.py` | Tests for run_cmd and run_python MCP tool handlers |
 | `test_tools_run_cmd_unit.py` | Unit tests for run_cmd: observability, timing, and headless gate enforcement |
 | `test_tools_run_python.py` | Unit tests for run_python: observability and headless gate enforcement |

@@ -452,6 +452,7 @@ async def _execute_claude_headless(
             skill_result.retry_reason in {RetryReason.STALE, RetryReason.BUDGET_EXHAUSTED}
             and provider_fallback_env is not None
             and remaining_attempts > 0
+            and provider_name
             and is_feature_enabled("providers", ctx.config.features)
         ):
             if not fallback_activated:

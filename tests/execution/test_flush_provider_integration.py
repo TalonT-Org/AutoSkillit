@@ -1,4 +1,4 @@
-"""Integration seam tests: provider fields forwarded from _execute_claude_headless to flush_session_log."""
+"""Integration seam tests: provider fields forwarded from _execute_claude_headless to flush."""
 
 from __future__ import annotations
 

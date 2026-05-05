@@ -19,8 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from autoskillit.core import SessionTelemetry
-    from autoskillit.core.types._type_results import ProviderOutcome, RecipeIdentity
+    from autoskillit.core import ProviderOutcome, RecipeIdentity, SessionTelemetry
 
 import psutil
 

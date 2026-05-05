@@ -10,14 +10,17 @@ from dataclasses import dataclass, field
 from itertools import islice
 from typing import NamedTuple
 
+from .logging import get_logger
+
 _TOOL_USE_CAP = 8
 _MAX_NGRAM_LEN = 5
+_log = get_logger(__name__)
 
 
 class AssistantTurn(NamedTuple):
     request_id: str
     timestamp: str
-    tool_names: list[str]
+    tool_names: tuple[str, ...]
 
 
 @dataclass
@@ -102,22 +105,25 @@ def iter_merged_assistant_turns(text: str, *, cap: int = _TOOL_USE_CAP) -> Itera
         else:
             key = str(no_rid_counter)
             no_rid_counter += 1
-            no_rid_turns[key] = AssistantTurn("", ts, tools[:cap])
+            no_rid_turns[key] = AssistantTurn("", ts, tuple(tools[:cap]))
             insertion_order.append(("no_rid", key))
 
     for kind, key in insertion_order:
         if kind == "rid":
             ts, tools = pending[key]
-            yield AssistantTurn(key, ts, tools[:cap])
+            yield AssistantTurn(key, ts, tuple(tools[:cap]))
         else:
             yield no_rid_turns[key]
 
 
-def parse_raw_cc_jsonl(jsonl_path: pathlib.Path, *, cap: int = _TOOL_USE_CAP) -> list[list[str]]:
+def parse_raw_cc_jsonl(
+    jsonl_path: pathlib.Path, *, cap: int = _TOOL_USE_CAP
+) -> list[tuple[str, ...]]:
     """Parse a Claude Code session JSONL into per-turn tool call lists."""
     try:
         text = jsonl_path.read_text(encoding="utf-8", errors="replace")
     except OSError:
+        _log.debug("parse_raw_cc_jsonl: cannot read %s", jsonl_path, exc_info=True)
         return []
     return [turn.tool_names for turn in iter_merged_assistant_turns(text, cap=cap)]
 

@@ -194,7 +194,7 @@ def flush_session_log(
 
     _cb_request_ids: list[str] = []
     _cb_turn_timestamps: list[str] = []
-    _cb_turn_tool_calls: list[list[str]] = []
+    _cb_turn_tool_calls: list[tuple[str, ...]] = []
     if cc_log and cc_log.exists():
         try:
             _text = cc_log.read_text(encoding="utf-8", errors="replace")

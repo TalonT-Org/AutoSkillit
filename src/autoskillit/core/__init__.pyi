@@ -51,6 +51,7 @@ from .paths import find_latest_session_id as find_latest_session_id
 from .paths import is_git_main_checkout as is_git_main_checkout
 from .paths import is_git_worktree as is_git_worktree
 from .paths import pkg_root as pkg_root
+from .runtime._linux_proc import is_session_alive as is_session_alive
 from .runtime._linux_proc import read_boot_id as read_boot_id
 from .runtime._linux_proc import read_starttime_ticks as read_starttime_ticks
 from .runtime.kitchen_state import KitchenMarker as KitchenMarker

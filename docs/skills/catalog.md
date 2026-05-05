@@ -23,7 +23,7 @@ Located under `src/autoskillit/skills_extended/`. Grouped by purpose:
 
 ### Audit suite
 `audit-arch`, `audit-cohesion`, `audit-tests`, `audit-defense-standards`,
-`audit-bugs`, `audit-friction`, `validate-audit`,
+`audit-bugs`, `audit-friction`, `validate-audit`, `validate-test-audit`,
 `audit-claims`, `audit-docs`, `audit-feature-gates`, `audit-review-decisions`
 
 ### Requirements and planning

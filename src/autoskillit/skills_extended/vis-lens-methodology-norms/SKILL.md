@@ -2,7 +2,7 @@
 name: vis-lens-methodology-norms
 categories: [vis-lens]
 activate_deps: [mermaid]
-description: "Create Domain Norms visualization planning spec showing ML sub-area mandatory figures, community conventions, and coverage gaps. Domain-Normative lens answering \"Which domain-specific figures are expected by reviewers?\""
+description: "Create Methodology Norms visualization planning spec showing ML sub-area mandatory figures, community conventions, and coverage gaps. Methodology-Normative lens answering \"Which domain-specific figures are expected by reviewers?\""
 hooks:
   PreToolUse:
     - matcher: "*"

@@ -6,10 +6,8 @@
 
 ## Version Propagation
 
-`scripts/sync_versions.py` reads the canonical version from `pyproject.toml` via `tomllib`, then:
-
-- Atomically updates `src/autoskillit/.claude-plugin/plugin.json` `"version"` field
-- Regex-replaces `autoskillit_version:` lines in `src/autoskillit/recipes/**/*.yaml`
+`scripts/sync_versions.py` reads the canonical version from `pyproject.toml` via `tomllib`, then
+atomically updates `src/autoskillit/.claude-plugin/plugin.json` `"version"` field.
 
 Pre-commit enforcement: `sync_versions.py --check` (exits 1 if any artifact is out of sync, without modifying files).
 
@@ -20,7 +18,7 @@ Pre-commit enforcement: `sync_versions.py --check` (exits 1 if any artifact is o
 - **Trigger:** any PR merged into `develop`
 - **Action:** `MAJOR.MINOR.(PATCH+1)` on `develop`
 - **Calls `sync_versions.py`:** yes
-- **Staged files:** `pyproject.toml`, `src/autoskillit/.claude-plugin/plugin.json`, `src/autoskillit/recipes/`, `uv.lock`
+- **Staged files:** `pyproject.toml`, `src/autoskillit/.claude-plugin/plugin.json`, `uv.lock`
 - **Concurrency:** serialized (`cancel-in-progress: false`)
 
 ### `version-bump.yml`
@@ -36,8 +34,8 @@ Pre-commit enforcement: `sync_versions.py --check` (exits 1 if any artifact is o
 
 - **Trigger:** PR merged into `stable`
 - **Action:** `MAJOR.(MINOR+1).0` on `stable`, annotated git tag `vX.Y.Z`, GitHub Release
-- **Calls `sync_versions.py`:** yes — `plugin.json` and recipe YAMLs are synced (see fix below)
-- **Staged files:** `pyproject.toml`, `src/autoskillit/.claude-plugin/plugin.json`, `src/autoskillit/recipes/`, `uv.lock`
+- **Calls `sync_versions.py`:** yes — `plugin.json` is synced
+- **Staged files:** `pyproject.toml`, `src/autoskillit/.claude-plugin/plugin.json`, `uv.lock`
 
 ## Runtime Health
 
@@ -45,13 +43,8 @@ Pre-commit enforcement: `sync_versions.py --check` (exits 1 if any artifact is o
 
 - `importlib.metadata.version("autoskillit")` → `package_version`
 - `plugin.json` → `plugin_json_version`
-- `recipes/*.yaml` `autoskillit_version:` lines → `stale_recipes`
 
-Returns `match` (`package_version == plugin_json_version`) and `recipe_versions_match` (True if no stale recipes found).
-
-## Known Gap: `release.yml` Did Not Sync Recipes
-
-`patch-bump-develop.yml` and `version-bump.yml` both call `sync_versions.py`, keeping `plugin.json` and recipe YAMLs in sync. Previously, `release.yml` updated `plugin.json` inline but skipped `sync_versions.py`, so recipe YAML `autoskillit_version` fields were not updated on `stable`. This gap has been closed: `release.yml` now calls `python3 scripts/sync_versions.py` and stages `src/autoskillit/recipes/` in the commit step, consistent with the other two workflows.
+Returns `match` (`package_version == plugin_json_version`).
 
 ## Invariant for PRs
 

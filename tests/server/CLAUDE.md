@@ -47,7 +47,8 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_tools_ci_split.py` | CI split structural guard |
 | `test_tools_ci_watch.py` | Tests for wait_for_ci event validation and null coercion |
 | `test_tools_clone.py` | Tests for autoskillit server clone tools |
-| `test_tools_dispatch.py` | Tests for dispatch_food_truck tool handler and execute_dispatch domain function |
+| `test_tools_dispatch.py` | Tests for dispatch_food_truck tool handler: gates, validation, execution, and execute_dispatch domain function |
+| `test_tools_dispatch_halt.py` | Tests for dispatch_food_truck campaign halt enforcement gate |
 | `test_tools_execution_command.py` | Tests for run_skill command building, timeouts, env, model, and per-invocation markers |
 | `test_tools_execution_input_gates.py` | Tests for run_skill input validation gates and CWD checking |
 | `test_tools_execution_provider.py` | Tests for provider_extras/profile_name forwarding through run_skill() |

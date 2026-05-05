@@ -81,6 +81,16 @@ When `run_skill` returns `needs_retry=true` for **any step**:
   to `on_failure`. Do NOT route to `on_context_limit` — stale is a transient failure,
   not a context limit. No partial progress is assumed.
 
+**Worktree-stale carve-out:** When a step that invokes a worktree-creating skill
+(`implement-worktree-no-merge`, `implement-worktree`, `implement-experiment`) returns
+`retry_reason: stale` (or `retry_reason: resume` with `subtype: stale`), re-execute the
+step **without consuming the retries budget**. Stale means the session produced nothing
+useful — the worktree orphan concern that motivates `retries: 0` does not apply.
+This is a one-shot retry: if the retry also goes stale, fall through to `on_failure`.
+Before re-executing, if the stale result captured `worktree_path`, remove the empty
+worktree (`git worktree remove --force <path>`) to prevent orphaned worktrees.
+Do NOT route to `on_context_limit` — stale is not a context limit.
+
 **For `implement-worktree-no-merge` specifically:**
 - `on_context_limit` routes to `retry_worktree` in standard recipes.
 - Use `/autoskillit:retry-worktree` — pass the existing `worktree_path` from the
@@ -98,6 +108,7 @@ Summary: `needs_retry=true` + `retry_reason=resume` + `subtype=stale` → re-exe
          `needs_retry=true` + `retry_reason=drain_race` + step has `on_context_limit` → follow `on_context_limit`.
          `needs_retry=true` + `retry_reason=drain_race` + no `on_context_limit` → `on_failure`.
          `needs_retry=true` + `retry_reason=stale` → decrement retries counter → `on_failure` when exhausted (no partial progress, not a context limit).
+         `needs_retry=true` + `retry_reason=stale` + worktree-creating step → one-shot re-execute (bypasses retries budget; on_failure if repeated stale).
          `needs_retry=true` + any other `retry_reason` → `on_failure` (no partial progress).
 
 ---

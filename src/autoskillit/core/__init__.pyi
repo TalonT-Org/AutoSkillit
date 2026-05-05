@@ -85,6 +85,8 @@ from .tool_sequence_analysis import (
 from .tool_sequence_analysis import render_adjacency_table as render_adjacency_table
 from .tool_sequence_analysis import render_dot as render_dot
 from .tool_sequence_analysis import render_mermaid as render_mermaid
+from .types import SessionCheckpoint as SessionCheckpoint
+from .types import compute_remaining as compute_remaining
 from .types import ALL_VISIBILITY_TAGS as ALL_VISIBILITY_TAGS
 from .types import AUTOSKILLIT_INSTALLED_VERSION as AUTOSKILLIT_INSTALLED_VERSION
 from .types import AUTOSKILLIT_PRIVATE_ENV_VARS as AUTOSKILLIT_PRIVATE_ENV_VARS

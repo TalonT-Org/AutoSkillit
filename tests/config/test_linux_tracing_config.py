@@ -1,8 +1,11 @@
 """Tests for LinuxTracingConfig loading and validation."""
 
+import dataclasses
+
 import pytest
 
 from autoskillit.config import AutomationConfig, load_config
+from autoskillit.config.settings import LinuxTracingConfig
 
 pytestmark = [pytest.mark.layer("config"), pytest.mark.small]
 
@@ -38,22 +41,13 @@ class TestLinuxTracingConfig:
 
     def test_linux_tracing_config_fields(self):
         """LT_C4: LinuxTracingConfig has exactly the expected fields."""
-        from dataclasses import fields as dc_fields
-
-        from autoskillit.config.settings import LinuxTracingConfig
-
-        names = {f.name for f in dc_fields(LinuxTracingConfig)}
+        names = {f.name for f in dataclasses.fields(LinuxTracingConfig)}
         assert names == {"enabled", "proc_interval", "log_dir", "tmpfs_path", "max_sessions"}
 
     def test_linux_tracing_max_sessions_default(self):
         """LT_C5: LinuxTracingConfig includes max_sessions with default 2000."""
-        import dataclasses
-
-        from autoskillit.config.settings import LinuxTracingConfig
-
         cfg = LinuxTracingConfig(tmpfs_path="/tmp/test")
         assert cfg.max_sessions == 2000
-        assert "max_sessions" in {f.name for f in dataclasses.fields(LinuxTracingConfig)}
 
     def test_linux_tracing_max_sessions_yaml_roundtrip(self, tmp_path):
         """LT_C6: max_sessions survives YAML round-trip."""

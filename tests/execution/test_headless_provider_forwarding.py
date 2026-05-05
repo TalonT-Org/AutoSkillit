@@ -174,7 +174,7 @@ async def test_run_headless_core_forwards_provider_name_and_fallback_env(
         execute_kwargs.update(kwargs)
         return _STUB_RESULT
 
-    monkeypatch.setattr("autoskillit.execution.headless.build_leaf_headless_cmd", fake_build)
+    monkeypatch.setattr("autoskillit.execution.headless.build_skill_session_cmd", fake_build)
     monkeypatch.setattr("autoskillit.execution.headless._execute_claude_headless", fake_execute)
 
     await run_headless_core(

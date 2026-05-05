@@ -67,3 +67,48 @@ def test_stage_data_documents_fail_verdict(skill_text: str) -> None:
 def test_stage_data_categories_include_research(skill_text: str) -> None:
     assert "categories" in skill_text
     assert "research" in skill_text
+
+
+def test_stage_data_probes_allen_brain_atlas(skill_text: str) -> None:
+    assert "brain-map.org" in skill_text
+
+
+def test_stage_data_probes_cellxgene(skill_text: str) -> None:
+    assert "cellxgene" in skill_text.lower()
+
+
+def test_stage_data_probes_expression_atlas(skill_text: str) -> None:
+    assert "gxa" in skill_text
+
+
+def test_stage_data_probes_human_protein_atlas(skill_text: str) -> None:
+    assert "proteinatlas.org" in skill_text
+
+
+def test_stage_data_probes_string_db(skill_text: str) -> None:
+    assert "string-db.org" in skill_text
+
+
+def test_stage_data_probes_jaspar(skill_text: str) -> None:
+    assert "jaspar" in skill_text.lower()
+
+
+def test_stage_data_documents_rate_limit_behavior(skill_text: str) -> None:
+    lower = skill_text.lower()
+    assert "rate" in lower and "limit" in lower
+
+
+def test_stage_data_probe_count_minimum(skill_text: str) -> None:
+    known_sources = [
+        "GEO / NCBI",
+        "ENCODE",
+        "UniProt",
+        "Allen Brain Atlas",
+        "CellxGene",
+        "Expression Atlas",
+        "Human Protein Atlas",
+        "STRING",
+        "JASPAR",
+    ]
+    count = sum(1 for src in known_sources if src.lower() in skill_text.lower())
+    assert count >= 9

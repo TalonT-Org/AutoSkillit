@@ -206,6 +206,44 @@ def test_dashboard_yaml_summary_block(skill_text):
     )
 
 
+def test_evaluation_dashboard_includes_rationale_section(skill_text: str) -> None:
+    """evaluation_dashboard must include a Dimension Rationale subsection."""
+    step7_text = skill_text_between("### Step 7", "### Step 8", skill_text)
+    assert "Dimension Rationale" in step7_text, (
+        "Step 7 evaluation_dashboard must include a 'Dimension Rationale' subsection "
+        "that surfaces dimension_weight_rationale entries from ExperimentTypeSpec"
+    )
+
+
+def test_rationale_table_structure_in_dashboard(skill_text: str) -> None:
+    """Dimension Rationale subsection must specify Dimension, Weight, and Rationale columns."""
+    step7_text = skill_text_between("### Step 7", "### Step 8", skill_text)
+    for column in ("Dimension", "Weight", "Rationale"):
+        assert column in step7_text, f"Dimension Rationale table must include a '{column}' column"
+
+
+def test_rationale_subsection_references_experiment_type_spec(skill_text: str) -> None:
+    """Dimension Rationale subsection must reference dimension_weight_rationale field."""
+    step7_text = skill_text_between("### Step 7", "### Step 8", skill_text)
+    assert "dimension_weight_rationale" in step7_text, (
+        "Step 7 must reference the dimension_weight_rationale field from ExperimentTypeSpec "
+        "so the LLM knows where to source the rationale data"
+    )
+
+
+def test_rationale_handles_missing_rationale_gracefully(skill_text: str) -> None:
+    """Dimension Rationale subsection must document behavior for types with no rationale."""
+    step7_text = skill_text_between("### Step 7", "### Step 8", skill_text)
+    rationale_idx = step7_text.find("Dimension Rationale")
+    assert rationale_idx != -1, "Dimension Rationale subsection not found"
+    rationale_section = step7_text[rationale_idx:]
+    text_lower = rationale_section.lower()
+    assert "omit" in text_lower or "skip" in text_lower or "no rationale" in text_lower, (
+        "Dimension Rationale subsection must document behavior when "
+        "dimension_weight_rationale is empty (legacy types)"
+    )
+
+
 # ── Output token format ──────────────────────────────────────────────────────
 
 

@@ -186,7 +186,7 @@ def test_user_override_replaces_bundled_type(tmp_path: Path) -> None:
     assert "variance_protocol" not in bench.dimension_weights
     # Other bundled types remain intact
     assert "causal_inference" in types
-    assert len(types) == 12
+    assert len(types) == len(EXPECTED_TYPES)
 
 
 def test_user_new_type_is_added(tmp_path: Path) -> None:

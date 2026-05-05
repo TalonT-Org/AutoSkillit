@@ -27,6 +27,7 @@ from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
     KillReason,
     RetryReason,
+    SessionCheckpoint,
     SkillResult,
     ValidatedAddDir,
     WriteBehaviorSpec,
@@ -598,6 +599,7 @@ async def run_headless_core(
     provider_fallback_env: dict[str, str] | None = None,
     provider_fallback_name: str = "",
     resume_session_id: str = "",
+    resume_checkpoint: SessionCheckpoint | None = None,
 ) -> SkillResult:
     """Shared headless runner used by run_skill.
 
@@ -631,6 +633,7 @@ async def run_headless_core(
             provider_extras=provider_extras,
             profile_name=profile_name,
             resume_session_id=resume_session_id,
+            resume_checkpoint=resume_checkpoint,
         )
 
         effective_timeout = timeout if timeout is not None else cfg.timeout
@@ -710,6 +713,7 @@ class DefaultHeadlessExecutor:
         provider_fallback_env: dict[str, str] | None = None,
         provider_fallback_name: str = "",
         resume_session_id: str = "",
+        resume_checkpoint: SessionCheckpoint | None = None,
     ) -> SkillResult:
         cfg = self._ctx.config.run_skill
         effective_timeout = timeout if timeout is not None else cfg.timeout
@@ -742,6 +746,7 @@ class DefaultHeadlessExecutor:
             provider_fallback_env=provider_fallback_env,
             provider_fallback_name=provider_fallback_name,
             resume_session_id=resume_session_id,
+            resume_checkpoint=resume_checkpoint,
         )
 
     async def dispatch_food_truck(

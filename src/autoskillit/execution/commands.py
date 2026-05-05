@@ -273,6 +273,20 @@ def _inject_narration_suppression(skill_command: str) -> str:
     return skill_command + directive
 
 
+def _build_resume_context(checkpoint: SessionCheckpoint) -> str:
+    lines = [
+        "RESUME CONTEXT: The following items were completed in the previous session "
+        "and MUST be skipped. Do NOT redo any of them — continue from where the "
+        "previous session left off.",
+        "",
+    ]
+    for item in checkpoint.completed_items:
+        lines.append(f"  - COMPLETED: {item}")
+    if checkpoint.step_name:
+        lines.append(f"\nLast active step: {checkpoint.step_name}")
+    return "\n".join(lines)
+
+
 def build_skill_session_cmd(
     skill_command: str,
     *,
@@ -289,6 +303,7 @@ def build_skill_session_cmd(
     provider_extras: Mapping[str, str] | None = None,
     profile_name: str = "",
     resume_session_id: str = "",
+    resume_checkpoint: SessionCheckpoint | None = None,
 ) -> ClaudeHeadlessCmd:
     """Build the complete headless command spec for a skill session.
 
@@ -341,6 +356,8 @@ def build_skill_session_cmd(
             "Continue your work from where you left off. "
             "Do NOT restart from scratch — pick up exactly where you stopped."
         )
+        if resume_checkpoint and resume_checkpoint.completed_items:
+            _resume_instruction += "\n\n" + _build_resume_context(resume_checkpoint)
         prompt = _inject_narration_suppression(
             _inject_cwd_anchor(
                 _inject_completion_directive(_resume_instruction, completion_marker),

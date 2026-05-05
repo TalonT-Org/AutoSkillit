@@ -59,6 +59,7 @@ class HeadlessExecutor(Protocol):
         provider_fallback_env: dict[str, str] | None = None,
         provider_fallback_name: str = "",
         resume_session_id: str = "",
+        resume_checkpoint: SessionCheckpoint | None = None,
     ) -> SkillResult: ...
 
     async def dispatch_food_truck(

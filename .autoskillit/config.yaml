@@ -42,6 +42,4 @@ providers:
       ANTHROPIC_TIMEOUT: "3000000"
   step_overrides:
     implement: minimax
-    make-plan: minimax
-    dry-walkthrough: minimax
 

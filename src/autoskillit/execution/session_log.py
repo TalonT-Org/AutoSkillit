@@ -642,7 +642,9 @@ def recover_crashed_sessions(tmpfs_path: str = "/dev/shm", log_dir: str = "") ->
                 telemetry=SessionTelemetry.empty(),
             )
         except Exception:
-            logger.debug("recover_crashed_sessions: failed to finalize %s", trace_file)
+            logger.debug(
+                "recover_crashed_sessions: failed to finalize %s", trace_file, exc_info=True
+            )
             continue
 
         trace_file.unlink(missing_ok=True)

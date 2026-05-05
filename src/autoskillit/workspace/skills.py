@@ -142,8 +142,7 @@ def _scan_directory(source: SkillSource, directory: Path) -> list[SkillInfo]:
             continue
         if entry.name in RETIRED_SKILL_NAMES:
             raise RuntimeError(
-                f"Retired skill name '{entry.name}' found at {entry}. "
-                "Remove this directory or remove it from RETIRED_SKILL_NAMES."
+                f"Retired skill name '{entry.name}' found at {entry}. Remove this directory."
             )
         if entry.name in _INTERNAL_SKILLS:
             continue

@@ -1,4 +1,4 @@
-"""Tests for detect_* helpers and classify_remote_url from _clone_detect."""
+"""Tests for detect_* helpers and classify_remote_url from autoskillit.workspace._clone_detect (re-exported via autoskillit.workspace.clone)."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ class TestDetectSourceDir:
         mock_result = MagicMock()
         mock_result.returncode = 0
         mock_result.stdout = "/repo/root\n"
-        with patch("subprocess.run", return_value=mock_result):
+        with patch("autoskillit.workspace._clone_detect.subprocess.run", return_value=mock_result):
             assert detect_source_dir("/any/cwd") == "/repo/root"
 
     def test_ds2_falls_back_on_nonzero_returncode(self) -> None:
@@ -32,7 +32,7 @@ class TestDetectSourceDir:
         mock_result = MagicMock()
         mock_result.returncode = 128
         mock_result.stdout = ""
-        with patch("subprocess.run", return_value=mock_result):
+        with patch("autoskillit.workspace._clone_detect.subprocess.run", return_value=mock_result):
             assert detect_source_dir("/any/cwd") == "/any/cwd"
 
 
@@ -42,7 +42,7 @@ class TestDetectBranch:
         mock_result = MagicMock()
         mock_result.returncode = 0
         mock_result.stdout = "main\n"
-        with patch("subprocess.run", return_value=mock_result):
+        with patch("autoskillit.workspace._clone_detect.subprocess.run", return_value=mock_result):
             assert detect_branch("/any") == "main"
 
     def test_cb12_returns_empty_string_on_nonzero_returncode(self) -> None:
@@ -50,7 +50,7 @@ class TestDetectBranch:
         mock_result = MagicMock()
         mock_result.returncode = 128
         mock_result.stdout = ""
-        with patch("subprocess.run", return_value=mock_result):
+        with patch("autoskillit.workspace._clone_detect.subprocess.run", return_value=mock_result):
             assert detect_branch("/any") == ""
 
     def test_cb13_returns_head_literal_for_detached_state(self) -> None:
@@ -58,7 +58,7 @@ class TestDetectBranch:
         mock_result = MagicMock()
         mock_result.returncode = 0
         mock_result.stdout = "HEAD\n"
-        with patch("subprocess.run", return_value=mock_result):
+        with patch("autoskillit.workspace._clone_detect.subprocess.run", return_value=mock_result):
             assert detect_branch("/any") == "HEAD"
 
 
@@ -68,7 +68,7 @@ class TestDetectUncommittedChanges:
         mock_result = MagicMock()
         mock_result.returncode = 0
         mock_result.stdout = ""
-        with patch("subprocess.run", return_value=mock_result):
+        with patch("autoskillit.workspace._clone_detect.subprocess.run", return_value=mock_result):
             assert detect_uncommitted_changes("/any") == []
 
     def test_cb15_returns_changed_file_lines_when_dirty(self) -> None:
@@ -76,14 +76,14 @@ class TestDetectUncommittedChanges:
         mock_result = MagicMock()
         mock_result.returncode = 0
         mock_result.stdout = " M file.py\n?? new.txt\n"
-        with patch("subprocess.run", return_value=mock_result):
+        with patch("autoskillit.workspace._clone_detect.subprocess.run", return_value=mock_result):
             assert detect_uncommitted_changes("/any") == [" M file.py", "?? new.txt"]
 
     def test_cb16_returns_empty_list_on_git_failure(self) -> None:
         """T_CB16: returns [] when git exits non-zero."""
         mock_result = MagicMock()
         mock_result.returncode = 128
-        with patch("subprocess.run", return_value=mock_result):
+        with patch("autoskillit.workspace._clone_detect.subprocess.run", return_value=mock_result):
             assert detect_uncommitted_changes("/any") == []
 
 

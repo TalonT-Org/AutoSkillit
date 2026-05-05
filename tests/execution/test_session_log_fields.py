@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from autoskillit.core.types._type_results import SessionTelemetry
+from autoskillit.core.types._type_results import ProviderOutcome, RecipeIdentity, SessionTelemetry
 from autoskillit.execution.session_log import (
     flush_session_log,
 )
@@ -87,6 +87,8 @@ def test_flush_session_log_writes_kitchen_id(tmp_path):
         start_ts="2026-03-27T08:00:00",
         proc_snapshots=None,
         telemetry=SessionTelemetry.empty(),
+        provider_outcome=ProviderOutcome.none_used(),
+        recipe_identity=RecipeIdentity.empty(),
     )
 
     index = (tmp_path / "sessions.jsonl").read_text()
@@ -110,6 +112,8 @@ def test_flush_session_log_writes_order_id_to_index(tmp_path):
         start_ts="2026-03-27T08:00:00",
         proc_snapshots=None,
         telemetry=SessionTelemetry.empty(),
+        provider_outcome=ProviderOutcome.none_used(),
+        recipe_identity=RecipeIdentity.empty(),
     )
 
     entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
@@ -131,6 +135,8 @@ def test_flush_session_log_order_id_defaults_to_empty(tmp_path):
         start_ts="2026-03-27T08:00:00",
         proc_snapshots=None,
         telemetry=SessionTelemetry.empty(),
+        provider_outcome=ProviderOutcome.none_used(),
+        recipe_identity=RecipeIdentity.empty(),
     )
 
     entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
@@ -154,6 +160,8 @@ def test_flush_writes_crash_exception_file(tmp_path):
         termination_reason="CRASHED",
         exception_text="RuntimeError: boom\n  at headless.py:1023",
         telemetry=SessionTelemetry.empty(),
+        provider_outcome=ProviderOutcome.none_used(),
+        recipe_identity=RecipeIdentity.empty(),
     )
     session_dir = tmp_path / "sessions" / "test-session"
     crash_file = session_dir / "crash_exception.txt"
@@ -181,6 +189,8 @@ def test_flush_session_log_writes_raw_stdout_on_failure(tmp_path):
         proc_snapshots=None,
         raw_stdout=raw,
         telemetry=SessionTelemetry.empty(),
+        provider_outcome=ProviderOutcome.none_used(),
+        recipe_identity=RecipeIdentity.empty(),
     )
     raw_file = tmp_path / "sessions" / "test-session" / "raw_stdout.jsonl"
     assert raw_file.exists()
@@ -201,6 +211,8 @@ def test_flush_session_log_no_raw_stdout_on_success(tmp_path):
         proc_snapshots=None,
         raw_stdout='{"type": "result"}',
         telemetry=SessionTelemetry.empty(),
+        provider_outcome=ProviderOutcome.none_used(),
+        recipe_identity=RecipeIdentity.empty(),
     )
     raw_file = tmp_path / "sessions" / "ok-session" / "raw_stdout.jsonl"
     assert not raw_file.exists()
@@ -235,6 +247,8 @@ def test_flush_session_log_summary_contains_per_turn_fields(tmp_path, monkeypatc
         proc_snapshots=None,
         last_stop_reason="end_turn",
         telemetry=SessionTelemetry.empty(),
+        provider_outcome=ProviderOutcome.none_used(),
+        recipe_identity=RecipeIdentity.empty(),
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
     assert summary["last_stop_reason"] == "end_turn"
@@ -278,6 +292,8 @@ def test_flush_session_log_summary_contains_turn_tool_calls(tmp_path, monkeypatc
         start_ts="2026-04-15T07:00:00Z",
         proc_snapshots=None,
         telemetry=SessionTelemetry.empty(),
+        provider_outcome=ProviderOutcome.none_used(),
+        recipe_identity=RecipeIdentity.empty(),
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
     assert summary["turn_tool_calls"] == [["ToolA", "ToolB"]]
@@ -311,6 +327,8 @@ def test_turn_tool_calls_capped_at_8_per_turn(tmp_path, monkeypatch):
         start_ts="2026-04-15T07:00:00Z",
         proc_snapshots=None,
         telemetry=SessionTelemetry.empty(),
+        provider_outcome=ProviderOutcome.none_used(),
+        recipe_identity=RecipeIdentity.empty(),
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
     assert len(summary["turn_tool_calls"][0]) == 8
@@ -344,6 +362,8 @@ def test_turn_tool_calls_empty_for_text_only_turn(tmp_path, monkeypatch):
         start_ts="2026-04-15T07:00:00Z",
         proc_snapshots=None,
         telemetry=SessionTelemetry.empty(),
+        provider_outcome=ProviderOutcome.none_used(),
+        recipe_identity=RecipeIdentity.empty(),
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
     assert summary["turn_tool_calls"] == [[]]
@@ -377,6 +397,8 @@ def test_turn_tool_calls_parallel_to_request_ids(tmp_path, monkeypatch):
         start_ts="2026-04-15T07:00:00Z",
         proc_snapshots=None,
         telemetry=SessionTelemetry.empty(),
+        provider_outcome=ProviderOutcome.none_used(),
+        recipe_identity=RecipeIdentity.empty(),
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
     assert len(summary["turn_tool_calls"]) == len(summary["request_ids"]) == 3
@@ -575,10 +597,10 @@ def test_summary_includes_recipe_provenance(tmp_path):
     summary = json.loads((session_dir / "summary.json").read_text())
     assert "recipe_provenance" in summary
     assert summary["recipe_provenance"]["schema_version"] == 1
-    assert summary["recipe_provenance"]["recipe_name"] == "impl"
+    assert summary["recipe_provenance"]["name"] == "impl"
     assert summary["recipe_provenance"]["content_hash"] == "sha256:abc"
     assert summary["recipe_provenance"]["composite_hash"] == "sha256:def"
-    assert summary["recipe_provenance"]["recipe_version"] == "1.0.0"
+    assert summary["recipe_provenance"]["version"] == "1.0.0"
 
 
 def test_session_log_empty_recipe_identity(tmp_path):
@@ -724,6 +746,8 @@ def test_turn_tool_calls_merged_across_thinking_and_tool_records(tmp_path, monke
         start_ts="2026-05-04T00:00:00Z",
         proc_snapshots=None,
         telemetry=SessionTelemetry.empty(),
+        provider_outcome=ProviderOutcome.none_used(),
+        recipe_identity=RecipeIdentity.empty(),
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
     assert summary["turn_tool_calls"] == [["Bash"]]
@@ -760,6 +784,8 @@ def test_parallel_lists_aligned_when_timestamp_missing(tmp_path, monkeypatch):
         start_ts="2026-05-04T00:00:00Z",
         proc_snapshots=None,
         telemetry=SessionTelemetry.empty(),
+        provider_outcome=ProviderOutcome.none_used(),
+        recipe_identity=RecipeIdentity.empty(),
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
     assert (

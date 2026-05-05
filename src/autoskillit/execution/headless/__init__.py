@@ -26,6 +26,8 @@ from autoskillit.core import (
     CAMPAIGN_ID_ENV_VAR,
     DISPATCH_ID_ENV_VAR,
     KillReason,
+    ProviderOutcome,
+    RecipeIdentity,
     RetryReason,
     SessionCheckpoint,  # noqa: F401, TC001
     SkillResult,
@@ -332,10 +334,16 @@ async def _execute_claude_headless(
                     termination_reason="CRASHED",
                     exception_text=_exc_text,
                     versions=_versions,
-                    recipe_name=recipe_name,
-                    recipe_content_hash=recipe_content_hash,
-                    recipe_composite_hash=recipe_composite_hash,
-                    recipe_version=recipe_version,
+                    provider_outcome=ProviderOutcome(
+                        provider_used=current_provider_name,
+                        fallback_activated=fallback_activated,
+                    ),
+                    recipe_identity=RecipeIdentity(
+                        name=recipe_name,
+                        content_hash=recipe_content_hash,
+                        composite_hash=recipe_composite_hash,
+                        version=recipe_version,
+                    ),
                     max_sessions=ctx.config.linux_tracing.max_sessions,
                     telemetry=_build_error_path_telemetry(ctx.github_api_log),
                 )
@@ -379,10 +387,16 @@ async def _execute_claude_headless(
                         termination_reason="CANCELLED",
                         exception_text=_exc_text,
                         versions=_versions,
-                        recipe_name=recipe_name,
-                        recipe_content_hash=recipe_content_hash,
-                        recipe_composite_hash=recipe_composite_hash,
-                        recipe_version=recipe_version,
+                        provider_outcome=ProviderOutcome(
+                            provider_used=current_provider_name,
+                            fallback_activated=fallback_activated,
+                        ),
+                        recipe_identity=RecipeIdentity(
+                            name=recipe_name,
+                            content_hash=recipe_content_hash,
+                            composite_hash=recipe_composite_hash,
+                            version=recipe_version,
+                        ),
                         max_sessions=ctx.config.linux_tracing.max_sessions,
                         telemetry=_build_error_path_telemetry(ctx.github_api_log),
                     )
@@ -418,7 +432,7 @@ async def _execute_claude_headless(
             cwd=cwd,
             write_behavior=write_behavior,
             fs_writes_detected=_fs_writes_detected,
-            provider_used=provider_name,
+            provider_used=current_provider_name,
         )
 
         if (
@@ -526,10 +540,16 @@ async def _execute_claude_headless(
                 else "",
                 last_stop_reason=skill_result.last_stop_reason,
                 versions=_versions,
-                recipe_name=recipe_name,
-                recipe_content_hash=recipe_content_hash,
-                recipe_composite_hash=recipe_composite_hash,
-                recipe_version=recipe_version,
+                provider_outcome=ProviderOutcome(
+                    provider_used=current_provider_name,
+                    fallback_activated=fallback_activated,
+                ),
+                recipe_identity=RecipeIdentity(
+                    name=recipe_name,
+                    content_hash=recipe_content_hash,
+                    composite_hash=recipe_composite_hash,
+                    version=recipe_version,
+                ),
                 max_sessions=ctx.config.linux_tracing.max_sessions,
             )
         except Exception:

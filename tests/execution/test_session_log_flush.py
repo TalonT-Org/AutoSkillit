@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core.types._type_results import SessionTelemetry
+from autoskillit.core.types._type_results import ProviderOutcome, RecipeIdentity, SessionTelemetry
 from autoskillit.execution.session_log import (
     flush_session_log,
     read_telemetry_clear_marker,
@@ -334,6 +334,8 @@ def test_flush_session_log_backward_clock_produces_non_negative_duration(tmp_pat
         termination_reason="completed",
         snapshot_interval_seconds=5.0,
         telemetry=SessionTelemetry.empty(),
+        provider_outcome=ProviderOutcome.none_used(),
+        recipe_identity=RecipeIdentity.empty(),
     )
     session_dir = tmp_path / "sessions" / "backward-clock-test"
     summary = json.loads((session_dir / "summary.json").read_text())
@@ -362,6 +364,8 @@ def test_flush_session_log_uses_elapsed_seconds_over_iso_subtraction(tmp_path):
         termination_reason="completed",
         snapshot_interval_seconds=5.0,
         telemetry=SessionTelemetry.empty(),
+        provider_outcome=ProviderOutcome.none_used(),
+        recipe_identity=RecipeIdentity.empty(),
     )
     session_dir = tmp_path / "sessions" / "elapsed-seconds-test"
     summary = json.loads((session_dir / "summary.json").read_text())
@@ -393,6 +397,8 @@ def test_flush_session_log_zero_elapsed_seconds_is_valid(tmp_path):
         termination_reason="completed",
         snapshot_interval_seconds=5.0,
         telemetry=SessionTelemetry.empty(),
+        provider_outcome=ProviderOutcome.none_used(),
+        recipe_identity=RecipeIdentity.empty(),
     )
     session_dir = tmp_path / "sessions" / "zero-elapsed-test"
     summary = json.loads((session_dir / "summary.json").read_text())

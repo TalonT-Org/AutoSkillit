@@ -18,6 +18,8 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_diff_annotator.py` | Behavioral tests for execution/diff_annotator.py |
 | `test_exit_classification.py` | Unit tests for classify_infra_exit and InfraExitCategory enum |
 | `test_flag_contracts.py` | Contract tests for Claude CLI flags |
+| `test_flush_completeness_guard.py` | Structural guard: every required-container field must appear in flush output |
+| `test_flush_provider_integration.py` | Integration seam tests: provider fields forwarded from _execute_claude_headless to flush_session_log |
 | `test_github.py` | L1 unit tests for execution/github.py |
 | `test_github_api_tracking_http.py` | GitHub API tracking HTTP tests |
 | `test_github_headers.py` | Tests for the shared github_headers helper and its adoption by all three classes |
@@ -55,6 +57,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_process_run.py` | Integration tests for normal subprocess run, stdin, timeout, temp I/O, and logging |
 | `test_process_session_log_monitor.py` | Unit tests for _session_log_monitor and related session log monitoring behavior |
 | `test_process_submodules.py` | Tests verifying process.py decomposition into focused sub-modules (P8-2) |
+| `test_provider_outcome_container.py` | Tests for ProviderOutcome typed container construction — required fields and TypeError on omission |
 | `test_push_trigger_applies.py` | Unit tests for _push_trigger_applies_to_branch and _has_merge_group_trigger |
 | `test_quota_binding.py` | Tests for execution/quota.py — multi-window selection, per-window thresholds, cache refresh |
 | `test_quota_http.py` | End-to-end HTTP tests for quota guard using api-simulator mock_http_server |

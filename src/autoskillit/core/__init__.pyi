@@ -188,6 +188,8 @@ from .types import ResumeSpec as ResumeSpec
 from .types import RetryReason as RetryReason
 from .types import SessionOutcome as SessionOutcome
 from .types import SessionSkillManager as SessionSkillManager
+from .types import ProviderOutcome as ProviderOutcome
+from .types import RecipeIdentity as RecipeIdentity
 from .types import SessionTelemetry as SessionTelemetry
 from .types import SessionType as SessionType
 from .types import Severity as Severity

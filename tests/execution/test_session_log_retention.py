@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core.types._type_results import SessionTelemetry
+from autoskillit.core.types._type_results import ProviderOutcome, RecipeIdentity, SessionTelemetry
 from autoskillit.execution.linux_tracing import read_boot_id, read_starttime_ticks
 from autoskillit.execution.session_log import (
     flush_session_log,
@@ -481,6 +481,8 @@ def test_retention_protects_active_campaign_sessions(tmp_path, monkeypatch):
         start_ts="2026-04-20T10:00:00+00:00",
         proc_snapshots=None,
         telemetry=SessionTelemetry.empty(),
+        provider_outcome=ProviderOutcome.none_used(),
+        recipe_identity=RecipeIdentity.empty(),
     )
 
     # Protected sessions survive — campaign meta.json writes update their mtime so they
@@ -549,6 +551,8 @@ def test_retention_deletes_released_campaign_sessions(tmp_path, monkeypatch):
         start_ts="2026-04-20T10:00:00+00:00",
         proc_snapshots=None,
         telemetry=SessionTelemetry.empty(),
+        provider_outcome=ProviderOutcome.none_used(),
+        recipe_identity=RecipeIdentity.empty(),
     )
 
     # Released campaign sessions are NOT protected — oldest 2 should be deleted
@@ -604,6 +608,8 @@ def test_retention_preserves_index_for_protected(tmp_path, monkeypatch):
         start_ts="2026-04-20T10:00:00+00:00",
         proc_snapshots=None,
         telemetry=SessionTelemetry.empty(),
+        provider_outcome=ProviderOutcome.none_used(),
+        recipe_identity=RecipeIdentity.empty(),
     )
 
     index_lines = [ln for ln in index_path.read_text().strip().split("\n") if ln.strip()]
@@ -649,6 +655,8 @@ def test_retention_handles_missing_meta_json(tmp_path, monkeypatch):
         start_ts="2026-04-20T10:00:00+00:00",
         proc_snapshots=None,
         telemetry=SessionTelemetry.empty(),
+        provider_outcome=ProviderOutcome.none_used(),
+        recipe_identity=RecipeIdentity.empty(),
     )
 
     # Oldest dirs with no meta.json are deleted normally
@@ -696,6 +704,8 @@ def test_retention_handles_missing_franchise_state_dir(tmp_path, monkeypatch):
         start_ts="2026-04-20T10:00:00+00:00",
         proc_snapshots=None,
         telemetry=SessionTelemetry.empty(),
+        provider_outcome=ProviderOutcome.none_used(),
+        recipe_identity=RecipeIdentity.empty(),
     )
 
     # Normal retention applies — oldest dirs deleted
@@ -742,6 +752,8 @@ def test_retention_handles_corrupt_meta_json(tmp_path, monkeypatch):
         start_ts="2026-04-20T10:00:00+00:00",
         proc_snapshots=None,
         telemetry=SessionTelemetry.empty(),
+        provider_outcome=ProviderOutcome.none_used(),
+        recipe_identity=RecipeIdentity.empty(),
     )
 
     # Corrupt meta.json → not protected → deleted normally
@@ -805,6 +817,8 @@ def test_retention_no_protection_when_callback_is_none(tmp_path: Path, monkeypat
         start_ts="2026-04-20T10:00:00+00:00",
         proc_snapshots=None,
         telemetry=SessionTelemetry.empty(),
+        provider_outcome=ProviderOutcome.none_used(),
+        recipe_identity=RecipeIdentity.empty(),
     )
 
     # No protection applied — oldest sessions deleted even though campaign is active
@@ -842,6 +856,8 @@ def test_flush_session_log_passes_callback_to_enforce_retention(
         start_ts="2026-04-20T10:00:00+00:00",
         proc_snapshots=None,
         telemetry=SessionTelemetry.empty(),
+        provider_outcome=ProviderOutcome.none_used(),
+        recipe_identity=RecipeIdentity.empty(),
     )
 
     assert (tmp_path / "sessions.jsonl").exists()

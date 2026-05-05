@@ -56,17 +56,17 @@ def test_stage_data_captures_resource_report(recipe) -> None:
 
 
 def test_stage_data_pass_routes_to_decompose_phases(recipe) -> None:
-    """stage_data PASS verdict must route to decompose_phases."""
+    """stage_data PASS verdict must route to setup_environment."""
     step = recipe.steps["stage_data"]
     assert step.on_result is not None
-    assert step.on_result.routes["PASS"] == "decompose_phases"
+    assert step.on_result.routes["PASS"] == "setup_environment"
 
 
 def test_stage_data_warn_routes_to_decompose_phases(recipe) -> None:
-    """stage_data WARN verdict must route to decompose_phases."""
+    """stage_data WARN verdict must route to setup_environment."""
     step = recipe.steps["stage_data"]
     assert step.on_result is not None
-    assert step.on_result.routes["WARN"] == "decompose_phases"
+    assert step.on_result.routes["WARN"] == "setup_environment"
 
 
 def test_stage_data_fail_does_not_route_to_decompose_phases(recipe) -> None:

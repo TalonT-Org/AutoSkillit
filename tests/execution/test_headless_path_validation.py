@@ -372,6 +372,8 @@ class TestOutputPathTokensDerivedFromContracts:
             "validated_report_path",
             # promote-to-main skill output (promote-to-main-wrapper recipe)
             "pr_body_path",
+            # setup-environment skill output (research recipe pre-flight gate)
+            "env_report",
         }
     )
 

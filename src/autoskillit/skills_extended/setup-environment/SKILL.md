@@ -124,7 +124,7 @@ viable.
   `dpkg -l <package> 2>/dev/null` returning exit 0, or `which <package>`
   returning a hit in `/usr/bin`, `/usr/sbin`, `/bin`, `/sbin`)
 
-If channels or deps are not viable, skip to Step 7 with
+If channels or deps are not viable, proceed to Step 7 with
 `env_mode = unavailable`, `verdict = FAIL`.
 
 ### Step 6 — Create Host Micromamba Environment

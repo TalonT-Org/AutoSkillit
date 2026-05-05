@@ -269,6 +269,8 @@ def test_output_path_tokens_synchronized() -> None:
             "alignment_findings_path",
             # planner-assess-review-approach output
             "review_approach_assessment_path",
+            # setup-environment skill output (research recipe pre-flight gate)
+            "env_report",
         }
     )
 

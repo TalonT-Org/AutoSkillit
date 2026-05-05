@@ -1,7 +1,7 @@
 name: remediation
 description: Investigate deeply, plan architectural fix, implement and open a PR.
 summary: "bootstrap_clone > (claim_and_resolve?) > (create_and_publish?) > investigate > rectify > dry-walkthrough > implement > test > merge (per plan part) > (audit-impl?) > (open_pr?) > push > cleanup"
-autoskillit_version: "0.9.434"
+autoskillit_version: "0.9.435"
 recipe_version: "1.0.0"
 requires_packs: [github, ci, clone, telemetry]
 

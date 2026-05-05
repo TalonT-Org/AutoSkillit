@@ -53,6 +53,7 @@ def test_profile_valid_injects_provider_env_var(_mock_mgr):
     cfg.experimental_enabled = True
     cfg.providers.profiles = {"minimax": {"ANTHROPIC_BASE_URL": "https://minimax.example"}}
     captured = _run_cook("minimax", cfg, _mock_mgr)
+    assert len(captured) >= 1, "build_interactive_cmd was not called"
     env = captured[0]
     assert env.get("AUTOSKILLIT_PROVIDER_PROFILE") == "minimax"
 
@@ -65,6 +66,7 @@ def test_profile_valid_injects_profile_env_vars(_mock_mgr):
         "minimax": {"ANTHROPIC_BASE_URL": "https://mm.io", "ANTHROPIC_API_KEY": "sk-mm"}
     }
     captured = _run_cook("minimax", cfg, _mock_mgr)
+    assert len(captured) >= 1, "build_interactive_cmd was not called"
     env = captured[0]
     assert env.get("ANTHROPIC_BASE_URL") == "https://mm.io"
     assert env.get("ANTHROPIC_API_KEY") == "sk-mm"
@@ -76,6 +78,7 @@ def test_profile_none_does_not_inject_provider_env(_mock_mgr):
     cfg.experimental_enabled = True
     cfg.providers.profiles = {}
     captured = _run_cook(None, cfg, _mock_mgr)
+    assert len(captured) >= 1, "build_interactive_cmd was not called"
     env = captured[0]
     assert "AUTOSKILLIT_PROVIDER_PROFILE" not in env
 

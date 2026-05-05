@@ -144,28 +144,83 @@ def isolated_tracing_config(tmp_path: pathlib.Path):
 
 def _snap(
     *,
-    captured_at: str = "2026-03-03T12:00:00+00:00",
+    captured_at: str | None = "2026-03-03T12:00:00+00:00",
+    state: str = "sleeping",
     vm_rss_kb: int = 100000,
     oom_score: int = 50,
     fd_count: int = 10,
     fd_soft_limit: int = 1024,
-    state: str = "sleeping",
+    sig_pnd: str = "0000000000000000",
+    sig_blk: str = "0000000000000000",
+    sig_cgt: str = "0000000000000000",
+    threads: int = 4,
+    wchan: str = "",
+    ctx_switches_voluntary: int = 500,
+    ctx_switches_involuntary: int = 20,
+    cpu_percent: float = 0.0,
 ) -> dict[str, object]:
-    return {
-        "captured_at": captured_at,
+    d: dict[str, object] = {
         "state": state,
         "vm_rss_kb": vm_rss_kb,
         "oom_score": oom_score,
         "fd_count": fd_count,
         "fd_soft_limit": fd_soft_limit,
-        "sig_pnd": "0000000000000000",
-        "sig_blk": "0000000000000000",
-        "sig_cgt": "0000000000000000",
-        "threads": 4,
-        "wchan": "",
-        "ctx_switches_voluntary": 500,
-        "ctx_switches_involuntary": 20,
+        "sig_pnd": sig_pnd,
+        "sig_blk": sig_blk,
+        "sig_cgt": sig_cgt,
+        "threads": threads,
+        "wchan": wchan,
+        "ctx_switches_voluntary": ctx_switches_voluntary,
+        "ctx_switches_involuntary": ctx_switches_involuntary,
+        "cpu_percent": cpu_percent,
     }
+    if captured_at is not None:
+        d["captured_at"] = captured_at
+    return d
+
+
+def _result_ndjson(
+    result_text: str = "done",
+    subtype: str = "success",
+    is_error: bool = False,
+    session_id: str = "s1",
+    errors: list | None = None,
+    usage: dict | None = None,
+) -> str:
+    obj: dict = {
+        "type": "result",
+        "subtype": subtype,
+        "is_error": is_error,
+        "result": result_text,
+        "session_id": session_id,
+        "errors": errors or [],
+    }
+    if usage:
+        obj["usage"] = usage
+    return json.dumps(obj)
+
+
+def _assistant_ndjson(
+    model: str = "claude-sonnet-4-6",
+    input_tokens: int = 100,
+    output_tokens: int = 50,
+    cache_create: int = 0,
+    cache_read: int = 0,
+) -> str:
+    return json.dumps(
+        {
+            "type": "assistant",
+            "message": {
+                "model": model,
+                "usage": {
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "cache_creation_input_tokens": cache_create,
+                    "cache_read_input_tokens": cache_read,
+                },
+            },
+        }
+    )
 
 
 def _flush(tmp_path: Path, **overrides) -> None:

@@ -790,10 +790,15 @@ def test_no_file_based_path_resolution_outside_paths_module() -> None:
     """
     violations = []
     src_root = Path(__file__).parent.parent.parent / "src" / "autoskillit"
-    allowed_file = src_root / "core" / "paths.py"
+    allowed_files = {
+        src_root / "core" / "paths.py",
+        # _dispatch.py is stdlib-only (runs as subprocess by Claude Code host)
+        # and cannot import core.paths.pkg_root()
+        src_root / "hooks" / "_dispatch.py",
+    }
 
     for py_file in src_root.rglob("*.py"):
-        if py_file == allowed_file:
+        if py_file in allowed_files:
             continue
         tree = ast.parse(py_file.read_text())
         for node in ast.walk(tree):

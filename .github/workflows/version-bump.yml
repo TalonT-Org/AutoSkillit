@@ -73,7 +73,7 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add pyproject.toml src/autoskillit/.claude-plugin/plugin.json src/autoskillit/recipes/ uv.lock
+          git add pyproject.toml src/autoskillit/.claude-plugin/plugin.json uv.lock
           if git diff --cached --quiet; then
             echo "Nothing to commit"
           else
@@ -132,7 +132,7 @@ jobs:
       - name: Commit and push develop version bump
         run: |
           set -euo pipefail
-          git add pyproject.toml src/autoskillit/.claude-plugin/plugin.json src/autoskillit/recipes/ uv.lock
+          git add pyproject.toml src/autoskillit/.claude-plugin/plugin.json uv.lock
           if git diff --cached --quiet; then
             echo "Nothing to commit"
           else

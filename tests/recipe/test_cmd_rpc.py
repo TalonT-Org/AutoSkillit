@@ -180,29 +180,20 @@ def _make_side_effect(repo_id="R_123", label_ids=None, issue_data=None):
     if label_ids is None:
         label_ids = ["L_1", "L_2"]
     if issue_data is None:
-        issue_data = [
-            {"number": 1, "url": "https://github.com/org/repo/issues/1"},
-            {"number": 2, "url": "https://github.com/org/repo/issues/2"},
-            {"number": 3, "url": "https://github.com/org/repo/issues/3"},
-        ]
+        issue_data = [{"number": 1, "url": "https://github.com/org/repo/issues/1"}]
     alias_data = {}
     for idx, issue in enumerate(issue_data):
         alias_data[f"issue{idx}"] = {"issue": issue}
     return [
-        # gh repo view
         subprocess.CompletedProcess(args=[], returncode=0, stdout="org repo\n", stderr=""),
-        # gh api graphql (repo ID)
         subprocess.CompletedProcess(
             args=[],
             returncode=0,
             stdout=json.dumps({"data": {"repository": {"id": repo_id}}}),
             stderr="",
         ),
-        # gh label create recipe:implementation
         subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
-        # gh label create enhancement
         subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
-        # gh api graphql (label IDs)
         subprocess.CompletedProcess(
             args=[],
             returncode=0,
@@ -218,7 +209,6 @@ def _make_side_effect(repo_id="R_123", label_ids=None, issue_data=None):
             ),
             stderr="",
         ),
-        # gh api graphql (createIssue mutation)
         subprocess.CompletedProcess(
             args=[],
             returncode=0,
@@ -239,7 +229,13 @@ def test_batch_create_issues_discovers_ticket_bodies(tmp_path):
         patch("autoskillit.recipe._cmd_rpc.subprocess.run") as mock_run,
         patch("autoskillit.recipe._cmd_rpc.time.sleep"),
     ):
-        mock_run.side_effect = _make_side_effect()
+        mock_run.side_effect = _make_side_effect(
+            issue_data=[
+                {"number": 1, "url": "https://github.com/org/repo/issues/1"},
+                {"number": 2, "url": "https://github.com/org/repo/issues/2"},
+                {"number": 3, "url": "https://github.com/org/repo/issues/3"},
+            ]
+        )
         result = batch_create_issues(workspace=str(tmp_path))
     assert result["issue_count"] == "3"
 
@@ -270,6 +266,7 @@ def test_batch_create_issues_strips_body_content(tmp_path):
         if "--input" in args:
             mutation_call = json.loads(call[1].get("input", "{}"))
             break
+    assert mutation_call, "no createIssue mutation call found in mock_run calls"
     body = mutation_call["variables"]["i0"]["body"]
     assert ".autoskillit/" not in body
     assert "| CONTESTED |" not in body
@@ -291,12 +288,15 @@ def test_batch_create_issues_extracts_h1_title(tmp_path):
     ):
         mock_run.side_effect = _make_side_effect()
         batch_create_issues(workspace=str(tmp_path))
+    found = False
     for call in mock_run.call_args_list:
         kwargs = call[1]
         if kwargs.get("input"):
             mutation_call = json.loads(kwargs["input"])
             assert mutation_call["variables"]["i0"]["title"] == "Audit: Missing test coverage"
+            found = True
             break
+    assert found, "no createIssue mutation call found in mock_run calls"
 
 
 def test_batch_create_issues_constructs_graphql_mutation(tmp_path):
@@ -308,8 +308,14 @@ def test_batch_create_issues_constructs_graphql_mutation(tmp_path):
         patch("autoskillit.recipe._cmd_rpc.subprocess.run") as mock_run,
         patch("autoskillit.recipe._cmd_rpc.time.sleep"),
     ):
-        mock_run.side_effect = _make_side_effect()
+        mock_run.side_effect = _make_side_effect(
+            issue_data=[
+                {"number": 1, "url": "https://github.com/org/repo/issues/1"},
+                {"number": 2, "url": "https://github.com/org/repo/issues/2"},
+            ]
+        )
         batch_create_issues(workspace=str(tmp_path))
+    found = False
     for call in mock_run.call_args_list:
         kwargs = call[1]
         if kwargs.get("input"):
@@ -322,7 +328,9 @@ def test_batch_create_issues_constructs_graphql_mutation(tmp_path):
             assert variables["i1"]["repositoryId"] == "R_123"
             assert variables["i0"]["labelIds"] == ["L_1", "L_2"]
             assert variables["i1"]["labelIds"] == ["L_1", "L_2"]
+            found = True
             break
+    assert found, "no createIssue mutation call found in mock_run calls"
 
 
 def test_batch_create_issues_chunks_large_batches(tmp_path):
@@ -343,12 +351,10 @@ def test_batch_create_issues_chunks_large_batches(tmp_path):
             def side_effect(_args, **_kwargs):
                 c = call_count[0]
                 call_count[0] += 1
-                # repo view
                 if c == 0:
                     return subprocess.CompletedProcess(
                         args=[], returncode=0, stdout="org repo\n", stderr=""
                     )
-                # repo ID query
                 if c == 1:
                     return subprocess.CompletedProcess(
                         args=[],
@@ -356,10 +362,8 @@ def test_batch_create_issues_chunks_large_batches(tmp_path):
                         stdout=json.dumps({"data": {"repository": {"id": "R_123"}}}),
                         stderr="",
                     )
-                # label create
                 if c in (2, 3):
                     return subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
-                # label IDs query
                 if c == 4:
                     return subprocess.CompletedProcess(
                         args=[],
@@ -369,7 +373,6 @@ def test_batch_create_issues_chunks_large_batches(tmp_path):
                         ),
                         stderr="",
                     )
-                # createIssue chunks
                 if c == 5:
                     data5 = {
                         f"issue{i}": {
@@ -414,13 +417,14 @@ def test_batch_create_issues_chunks_large_batches(tmp_path):
             return side_effect
 
         mock_run.side_effect = side_effect_factory()
-        batch_create_issues(workspace=str(tmp_path), chunk_size="10")
+        result = batch_create_issues(workspace=str(tmp_path), chunk_size="10")
     mutation_calls = sum(
         1
         for call in mock_run.call_args_list
         if call[1].get("input") and "createIssue" in call[1]["input"]
     )
     assert mutation_calls == 3
+    assert result["issue_count"] == "25"
 
 
 def test_batch_create_issues_appends_validation_summary(tmp_path):
@@ -438,6 +442,7 @@ def test_batch_create_issues_appends_validation_summary(tmp_path):
     ):
         mock_run.side_effect = _make_side_effect()
         batch_create_issues(workspace=str(tmp_path))
+    found = False
     for call in mock_run.call_args_list:
         kwargs = call[1]
         if kwargs.get("input"):
@@ -445,7 +450,9 @@ def test_batch_create_issues_appends_validation_summary(tmp_path):
             body = mutation_call["variables"]["i0"]["body"]
             assert "## Validation Summary" in body
             assert "All clear." in body
+            found = True
             break
+    assert found, "no createIssue mutation call found in mock_run calls"
 
 
 def test_batch_create_issues_handles_no_tickets(tmp_path):

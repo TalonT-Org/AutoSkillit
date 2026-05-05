@@ -4,13 +4,40 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import yaml
 
-from autoskillit.recipe.io import _parse_step
+from autoskillit.recipe.io import _parse_step, builtin_recipes_dir, load_recipe
 from autoskillit.recipe.schema import Recipe, RecipeStep
 
 # Known violations fixed in Parts B and C — excluded from general semantic-error assertions.
 NO_AUTOSKILLIT_IMPORT = "no-autoskillit-import-in-skill-python-block"
+
+
+# ---------------------------------------------------------------------------
+# Shared recipe fixtures (used across multiple test_merge_prs_queue_*.py files)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def pmp_recipe():
+    return load_recipe(builtin_recipes_dir() / "merge-prs.yaml")
+
+
+@pytest.fixture(scope="module")
+def impl_recipe():
+    return load_recipe(builtin_recipes_dir() / "implementation.yaml")
+
+
+@pytest.fixture(scope="module")
+def remed_recipe():
+    return load_recipe(builtin_recipes_dir() / "remediation.yaml")
+
+
+@pytest.fixture(scope="module")
+def impl_groups_recipe():
+    return load_recipe(builtin_recipes_dir() / "implementation-groups.yaml")
+
 
 # ---------------------------------------------------------------------------
 # Shared helper: recipe workflow factory

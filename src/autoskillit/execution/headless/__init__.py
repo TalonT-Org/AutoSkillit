@@ -27,7 +27,7 @@ from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
     KillReason,
     RetryReason,
-    SessionCheckpoint,
+    SessionCheckpoint,  # noqa: F401, TC001
     SkillResult,
     ValidatedAddDir,
     WriteBehaviorSpec,

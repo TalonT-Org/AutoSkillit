@@ -13,6 +13,7 @@ from uuid import uuid4
 
 from autoskillit.core import (
     FleetErrorCode,
+    SessionCheckpoint,  # noqa: F401, TC001
     SkillResult,
     claude_code_log_path,
     fleet_error,

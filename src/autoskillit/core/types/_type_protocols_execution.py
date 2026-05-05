@@ -6,6 +6,7 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
+from ._type_checkpoint import SessionCheckpoint  # noqa: F401, TC001
 from ._type_results import SkillResult, TestResult, ValidatedAddDir, WriteBehaviorSpec
 
 __all__ = [

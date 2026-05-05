@@ -40,7 +40,9 @@ def _launch_fleet_session(
 ) -> None:
     """Build the L3 orchestrator prompt and launch an interactive fleet session."""
     from autoskillit.cli import detect_autoskillit_mcp_prefix  # noqa: PLC0415
-    from autoskillit.cli.session._session_launch import _run_interactive_session
+    from autoskillit.cli.session._session_launch import (
+        _run_interactive_session,
+    )
 
     mcp_prefix = detect_autoskillit_mcp_prefix()
 
@@ -60,17 +62,20 @@ def _launch_fleet_session(
         current_resume_spec: ResumeSpec = NoResume()
         current_initial_message = initial_message
         while True:
-            reload_id = _run_interactive_session(
+            session_signal = _run_interactive_session(
                 prompt,
                 initial_message=current_initial_message,
                 extra_env=extra_env,
                 resume_spec=current_resume_spec,
                 project_dir=project_dir,
             )
-            if reload_id is None:
+            if session_signal is None:
                 break
-            _check_reload_guard(reload_id, seen_reload_ids)
-            current_resume_spec = NamedResume(session_id=reload_id)
+            if not isinstance(session_signal, str):
+                current_resume_spec = NamedResume(session_id=session_signal.session_id)
+                continue
+            _check_reload_guard(session_signal, seen_reload_ids)
+            current_resume_spec = NamedResume(session_id=session_signal)
             current_initial_message = None  # greeting only on first launch
     else:
         # Campaign-driven mode: full orchestrator prompt with manifest and state
@@ -123,15 +128,18 @@ def _launch_fleet_session(
         current_resume_spec = NoResume()
 
         while True:
-            reload_id = _run_interactive_session(
+            session_signal = _run_interactive_session(
                 prompt,
                 extra_env=extra_env,
                 resume_spec=current_resume_spec,
                 project_dir=project_dir,
             )
-            if reload_id is None:
+            if session_signal is None:
                 break
-            _check_reload_guard(reload_id, seen_reload_ids)
+            if not isinstance(session_signal, str):
+                current_resume_spec = NamedResume(session_id=session_signal.session_id)
+                continue
+            _check_reload_guard(session_signal, seen_reload_ids)
 
             fresh_metadata = resume_campaign_from_state(
                 state_path, campaign_recipe.continue_on_failure
@@ -158,4 +166,4 @@ def _launch_fleet_session(
                 resume_session_id=resume_session_id,
                 ingredients_table=ingredients_table,
             )
-            current_resume_spec = NamedResume(session_id=reload_id)
+            current_resume_spec = NamedResume(session_id=session_signal)

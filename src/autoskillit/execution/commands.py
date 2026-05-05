@@ -22,6 +22,7 @@ from autoskillit.core import (
     OutputFormat,
     PluginSource,
     ResumeSpec,
+    SessionCheckpoint,  # noqa: F401, TC001
     ValidatedAddDir,
     build_claude_env,
     extract_skill_name,

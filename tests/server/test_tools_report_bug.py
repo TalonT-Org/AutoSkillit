@@ -232,17 +232,17 @@ def test_parse_enrich_result_invalid_json():
 
 
 @pytest.mark.anyio
-async def test_report_bug_gate_closed(tool_ctx):
+async def test_report_bug_gate_closed(tool_ctx, tmp_path):
     tool_ctx.gate.disable()
-    result = json.loads(await report_bug("some error", "/tmp"))
+    result = json.loads(await report_bug("some error", str(tmp_path)))
     assert result["success"] is False
     assert "not enabled" in result["result"].lower() or "gate" in result["result"].lower()
 
 
 @pytest.mark.anyio
-async def test_report_bug_no_executor(tool_ctx):
+async def test_report_bug_no_executor(tool_ctx, tmp_path):
     tool_ctx.executor = None
-    result = json.loads(await report_bug("error ctx", "/tmp"))
+    result = json.loads(await report_bug("error ctx", str(tmp_path)))
     assert result["success"] is False
     assert "executor" in result["error"].lower()
 

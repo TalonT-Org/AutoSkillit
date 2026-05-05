@@ -60,10 +60,12 @@ def test_hook_registry_matches_generated_hooks_json() -> None:
             matcher = entry.get("matcher", "")
             for hook in entry["hooks"]:
                 cmd = hook["command"]
-                # Extract hooks-dir-relative path (e.g. "guards/quota_guard.py")
-                # Command format: "python3 /path/to/autoskillit/hooks/guards/quota_guard.py"
-                parts = cmd.split("/hooks/", 1)
-                script_name = parts[1] if len(parts) == 2 else cmd.split("/")[-1]
+                parts = cmd.split()
+                if "_dispatch.py" in cmd and len(parts) >= 3:
+                    script_name = parts[-1] + ".py"
+                else:
+                    path_parts = cmd.split("/hooks/", 1)
+                    script_name = path_parts[1] if len(path_parts) == 2 else cmd.split("/")[-1]
                 generated_pairs.add((matcher, script_name))
 
     registry_pairs: set[tuple[str, str]] = set()
@@ -101,6 +103,8 @@ def test_hook_registry_scripts_exist_on_disk() -> None:
         for script in hook_def.scripts:
             script_path = hooks_dir / script
             assert script_path.is_file(), f"Registry script not found on disk: {script_path}"
+    dispatch_path = hooks_dir / "_dispatch.py"
+    assert dispatch_path.is_file(), f"Stable dispatcher not found on disk: {dispatch_path}"
 
 
 # REQ-HOOK-001

@@ -294,3 +294,59 @@ def test_moved_scripts_must_be_in_retired() -> None:
         "or in NEW_SUBDIR_BASENAMES (newly added to a subdir):\n"
         + "\n".join(f"  {m}" for m in missing)
     )
+
+
+def test_find_broken_hook_scripts_dispatcher_format_valid(tmp_path: Path) -> None:
+    """Dispatcher-format commands are not flagged when _dispatch.py exists."""
+    dispatch = tmp_path / "_dispatch.py"
+    dispatch.write_text("# dispatcher stub")
+    settings = tmp_path / "settings.json"
+    settings.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "matcher": ".*",
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": f"python3 {dispatch} guards/quota_guard",
+                                }
+                            ],
+                        }
+                    ]
+                }
+            }
+        )
+    )
+    broken = find_broken_hook_scripts(settings)
+    assert broken == []
+
+
+def test_find_broken_hook_scripts_dispatcher_missing(tmp_path: Path) -> None:
+    """Dispatcher-format commands are flagged when _dispatch.py itself is missing."""
+    missing_dispatch = tmp_path / "nonexistent" / "_dispatch.py"
+    settings = tmp_path / "settings.json"
+    settings.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "matcher": ".*",
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": f"python3 {missing_dispatch} guards/quota_guard",
+                                }
+                            ],
+                        }
+                    ]
+                }
+            }
+        )
+    )
+    broken = find_broken_hook_scripts(settings)
+    assert len(broken) == 1
+    assert "_dispatch.py" in broken[0]

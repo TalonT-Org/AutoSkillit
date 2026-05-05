@@ -318,6 +318,7 @@ generic_automation_mcp/
 │   ├── formatters/          # PostToolUse output formatters (see formatters/CLAUDE.md)
 │   ├── __init__.py
 │   ├── hooks.json           #   Plugin hook registration
+│   ├── _dispatch.py         #   Stable hook dispatcher — resolves logical hook names to scripts (stdlib-only, NEVER RENAME)
 │   ├── _hook_settings.py    #   Shared stdlib-only settings resolver for quota guard hooks
 │   ├── lint_after_edit_hook.py #  PostToolUse: runs ruff format+check on .py files after Edit/Write
 │   ├── quota_post_hook.py   #   Appends quota warning to run_skill output

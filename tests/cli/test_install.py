@@ -462,12 +462,12 @@ class TestGroupFInstall:
         pretooluse_commands = [
             hook["command"] for entry in data["hooks"]["PreToolUse"] for hook in entry["hooks"]
         ]
-        assert any(cmd.endswith("quota_guard.py") for cmd in pretooluse_commands)
+        assert any("quota_guard" in cmd for cmd in pretooluse_commands)
         assert "PostToolUse" in data["hooks"]
         posttooluse_commands = [
             hook["command"] for entry in data["hooks"]["PostToolUse"] for hook in entry["hooks"]
         ]
-        assert any(cmd.endswith("pretty_output_hook.py") for cmd in posttooluse_commands)
+        assert any("pretty_output_hook" in cmd for cmd in posttooluse_commands)
 
     def test_install_writes_pretooluse_hooks(self, tmp_path, monkeypatch):
         """install must register the quota PreToolUse hook in .claude/settings.json."""

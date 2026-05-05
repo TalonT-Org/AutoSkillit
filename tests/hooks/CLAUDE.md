@@ -8,6 +8,7 @@ Hook script behavior, registration, and bridge tests.
 |------|---------|
 | `__init__.py` | empty |
 | `test_fmt_status.py` | Tests for autoskillit.hooks.formatters._fmt_status |
+| `test_hook_dispatch.py` | Tests for the stable hook dispatcher (_dispatch.py) — resolution, retired mapping, graceful degrade |
 | `test_hook_config_bridge.py` | Regression tests for the quota_guard.py → .hook_config.json bridge |
 | `test_hook_executability.py` | Tests for hook command executability — validates invocation path via subprocess |
 | `test_hook_registration_coverage.py` | Structural test: every hook script is registered in HOOK_REGISTRY |

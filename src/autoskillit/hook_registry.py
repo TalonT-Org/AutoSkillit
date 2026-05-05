@@ -201,7 +201,7 @@ def _canonical_registry_payload(
         key=lambda row: (row["event_type"], row["matcher"], tuple(row["scripts"])),  # type: ignore[arg-type]
     )
     return json.dumps(
-        {"registry": registry_rows, "retired": sorted(retired)},
+        {"format_version": 2, "registry": registry_rows, "retired": sorted(retired)},
         sort_keys=True,
         separators=(",", ":"),
     )
@@ -238,8 +238,20 @@ def _build_hook_entry(hook_def: HookDef, hook_commands: list[dict]) -> dict:
     return {"matcher": hook_def.matcher, "hooks": hook_commands}
 
 
+def _build_hook_command(hooks_dir: Path, script: str, timeout_seconds: int | None) -> dict:
+    """Build a single hook command dict using the stable dispatcher format."""
+    logical_name = script.removesuffix(".py")
+    cmd: dict = {
+        "type": "command",
+        "command": f"python3 {hooks_dir / '_dispatch.py'} {logical_name}",
+    }
+    if timeout_seconds is not None:
+        cmd["timeout"] = timeout_seconds
+    return cmd
+
+
 def generate_hooks_json() -> dict:
-    """Generate the hooks.json structure from HOOK_REGISTRY using absolute paths.
+    """Generate the hooks.json structure from HOOK_REGISTRY using the stable dispatcher.
 
     Multiple HookDef entries with the same (event_type, matcher) are consolidated
     into a single settings.json entry so Claude Code sees no duplicate matchers.
@@ -249,15 +261,7 @@ def generate_hooks_json() -> dict:
     for hook_def in HOOK_REGISTRY:
         key = (hook_def.event_type, hook_def.matcher)
         hook_commands = [
-            {
-                "type": "command",
-                "command": f"python3 {HOOKS_DIR / script}",
-                **(
-                    {"timeout": hook_def.timeout_seconds}
-                    if hook_def.timeout_seconds is not None
-                    else {}
-                ),
-            }
+            _build_hook_command(HOOKS_DIR, script, hook_def.timeout_seconds)
             for script in hook_def.scripts
         ]
         if key not in groups:
@@ -321,6 +325,8 @@ def _is_own_hook(command: str) -> bool:
     """Check if a hook command belongs to autoskillit (any format)."""
     if "autoskillit" in command:
         return True
+    if "_dispatch.py" in command:
+        return True
     known = canonical_script_basenames() | RETIRED_SCRIPT_BASENAMES
     bare = {Path(s).name for s in known}
     return any(command.endswith(script) or f"/{script}" in command for script in known | bare)
@@ -341,11 +347,16 @@ def _extract_script_basenames(hooks_dict: dict) -> set[str]:
                 cmd = hook.get("command", "")
                 if not cmd or not _is_own_hook(cmd):
                     continue
-                script_path = Path(cmd.split()[-1])
-                bare = script_path.name
-                canonical = canonical_script_basenames()
-                matched = next((c for c in canonical if Path(c).name == bare), bare)
-                result.add(matched)
+                parts = cmd.split()
+                if "_dispatch.py" in cmd and len(parts) >= 3:
+                    logical_name = parts[-1]
+                    result.add(logical_name + ".py")
+                else:
+                    script_path = Path(parts[-1])
+                    bare = script_path.name
+                    canonical = canonical_script_basenames()
+                    matched = next((c for c in canonical if Path(c).name == bare), bare)
+                    result.add(matched)
     return result
 
 
@@ -378,10 +389,13 @@ def find_broken_hook_scripts(settings_path: Path) -> list[str]:
         for entry in data.get("hooks", {}).get(event_type, []):
             for hook in entry.get("hooks", []):
                 cmd = hook.get("command", "")
-                if not _is_own_hook(cmd):  # skip non-autoskillit hooks
+                if not _is_own_hook(cmd):
                     continue
                 parts = cmd.split()
-                if len(parts) >= 2:
+                if len(parts) >= 3 and parts[-2].endswith("_dispatch.py"):
+                    if not Path(parts[-2]).is_file():
+                        broken.append(cmd)
+                elif len(parts) >= 2:
                     if not Path(parts[-1]).is_file():
                         broken.append(cmd)
     return broken

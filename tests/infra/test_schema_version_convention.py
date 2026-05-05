@@ -136,7 +136,7 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # tools_github.py — bug report dict
     ("src/autoskillit/server/tools/tools_github.py", 279),
     # _hooks.py — settings.json dict (co-owned with Claude CLI)
-    ("src/autoskillit/cli/_hooks.py", 23),
+    ("src/autoskillit/cli/_hooks.py", 24),
     # _init_helpers.py — ~/.claude.json (co-owned)
     ("src/autoskillit/cli/_init_helpers.py", 376),
     # _init_helpers.py — evict_direct_mcp_entry write-back to ~/.claude.json (co-owned)

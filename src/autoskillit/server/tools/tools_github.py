@@ -231,6 +231,25 @@ async def report_bug(
             report_path = report_dir / f"{timestamp}_report.md"
 
             effective_model = model or cfg.model or ""
+            report_provider_extras: dict[str, str] | None = None
+            report_profile_name: str = ""
+
+            from autoskillit.core import is_feature_enabled
+
+            if is_feature_enabled(
+                "providers",
+                config.features,
+                experimental_enabled=config.experimental_enabled,
+            ):
+                from autoskillit.server._guards import _resolve_model_as_profile
+
+                effective_model, _prof_name, _prof_extras = _resolve_model_as_profile(
+                    effective_model, config.providers
+                )
+                if _prof_extras is not None:
+                    report_provider_extras = _prof_extras
+                    report_profile_name = _prof_name
+
             skill_command = (
                 f"/report-bug\n\n"
                 f"Error context:\n{error_context}\n\n"
@@ -263,6 +282,8 @@ async def report_bug(
                     log_dir=log_dir,
                     expected_output_patterns=expected_output_patterns,
                     write_behavior=write_spec,
+                    provider_extras=report_provider_extras,
+                    profile_name=report_profile_name,
                 )
                 if not result["success"]:
                     await _notify(
@@ -300,6 +321,8 @@ async def report_bug(
                     expected_output_patterns=expected_output_patterns,
                     write_behavior=write_spec,
                     status_path=status_path,
+                    provider_extras=report_provider_extras,
+                    profile_name=report_profile_name,
                 ),
                 label=step_name or "report_bug",
             )
@@ -581,6 +604,8 @@ async def _run_report_session(
     expected_output_patterns: list[str] | None = None,
     write_behavior: Any = None,
     status_path: Path | None = None,
+    provider_extras: dict[str, str] | None = None,
+    profile_name: str = "",
 ) -> dict[str, Any]:
     """Run the headless session, write the report, and handle GitHub filing.
 
@@ -597,6 +622,8 @@ async def _run_report_session(
             timeout=float(cfg.timeout),
             expected_output_patterns=expected_output_patterns or [],
             write_behavior=write_behavior,
+            provider_extras=provider_extras,
+            profile_name=profile_name,
         )
 
         report_text = skill_result.result or skill_result.stderr or "No report generated."

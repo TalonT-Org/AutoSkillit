@@ -18,6 +18,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_config_field_coverage.py` | REQ-CONFIG-001: every sub-config dataclass field must be referenced in from_dynaconf |
 | `test_core_public_api_surface.py` | Validates that every symbol in autoskillit.core.__all__ is importable via the public gateway |
 | `test_docstring_skill_prefix.py` | Contract: source files must not use /autoskillit: prefix for skills_extended skills |
+| `test_environment_setup_design_contracts.py` | Contract tests verifying the environment-setup skill design doc completeness |
 | `test_enrich_issues_contracts.py` | Contract tests for the enrich-issues skill SKILL.md |
 | `test_execution_map_contracts.py` | Contract tests for the build-execution-map skill SKILL.md |
 | `test_exogenous_string_coupling.py` | Exogenous string coupling tests: orchestrator prompt triggers coupled to emitting module |

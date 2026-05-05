@@ -146,6 +146,7 @@ def flush_session_log(
     orphaned_tool_result: bool = False,
     raw_stdout: str = "",
     last_stop_reason: str = "",
+    has_thinking_only_turn: bool = False,
     versions: dict[str, Any] | None = None,
     model_identifier: str = "",
     recipe_name: str = "",
@@ -273,7 +274,9 @@ def flush_session_log(
 
     # Outcome anomaly detection (correlates session result with token usage)
     if token_usage:
-        outcome_anomalies = detect_outcome_anomalies(token_usage, subtype)
+        outcome_anomalies = detect_outcome_anomalies(
+            token_usage, subtype, has_thinking_only_turn=has_thinking_only_turn
+        )
         anomalies.extend(outcome_anomalies)
 
     # Write anomalies.jsonl (only if anomalies exist)

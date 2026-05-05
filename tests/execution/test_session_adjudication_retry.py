@@ -55,6 +55,42 @@ class TestComputeRetry:
         assert needs is True
         assert reason == RetryReason.RESUME
 
+    def test_thinking_stall_is_distinct_from_empty_output(self):
+        """Thinking-only final turn produces THINKING_STALL, not EMPTY_OUTPUT.
+
+        When the model's final turn contained only thinking blocks (has_thinking_only_turn=True)
+        and the session has no text result and no tool calls, the retry reason must be
+        THINKING_STALL rather than EMPTY_OUTPUT to allow callers to distinguish between
+        "model produced nothing" and "model was actively reasoning."
+        """
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="",
+            session_id="s1",
+            has_thinking_only_turn=True,
+        )
+        needs, reason = _compute_retry(
+            session, returncode=0, termination=TerminationReason.NATURAL_EXIT
+        )
+        assert needs is True
+        assert reason == RetryReason.THINKING_STALL
+
+    def test_empty_output_without_thinking_flag_stays_empty_output(self):
+        """EMPTY_OUTPUT retry reason requires has_thinking_only_turn=False."""
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="",
+            session_id="s1",
+            has_thinking_only_turn=False,
+        )
+        needs, reason = _compute_retry(
+            session, returncode=0, termination=TerminationReason.NATURAL_EXIT
+        )
+        assert needs is True
+        assert reason == RetryReason.EMPTY_OUTPUT
+
     def test_empty_output_exit_zero_is_retriable(self):
         """Infrastructure failure: session never ran, CLI exited cleanly.
 

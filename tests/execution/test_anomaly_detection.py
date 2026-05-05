@@ -381,3 +381,50 @@ def test_detect_outcome_anomalies_record_structure():
     assert "severity" in a
     assert "detail" in a
     assert a["detail"]["output_tokens"] == 100
+
+
+def test_thinking_only_final_turn_kind_exists():
+    assert AnomalyKind.THINKING_ONLY_FINAL_TURN == "thinking_only_final_turn"
+
+
+def test_detect_outcome_anomalies_thinking_only_fires():
+    """THINKING_ONLY_FINAL_TURN anomaly fires when has_thinking_only_turn is True."""
+    from autoskillit.execution.anomaly_detection import detect_outcome_anomalies
+
+    anomalies = detect_outcome_anomalies(
+        {"output_tokens": 500}, "empty_result", has_thinking_only_turn=True
+    )
+    kinds = [a["kind"] for a in anomalies]
+    assert "thinking_only_final_turn" in kinds
+
+
+def test_detect_outcome_anomalies_thinking_only_not_empty_result_with_tokens():
+    """When has_thinking_only_turn=True, EMPTY_RESULT_WITH_TOKENS is suppressed."""
+    from autoskillit.execution.anomaly_detection import detect_outcome_anomalies
+
+    anomalies = detect_outcome_anomalies(
+        {"output_tokens": 500}, "empty_result", has_thinking_only_turn=True
+    )
+    kinds = [a["kind"] for a in anomalies]
+    assert "empty_result_with_tokens" not in kinds
+
+
+def test_detect_outcome_anomalies_thinking_only_no_fire_wrong_subtype():
+    """THINKING_ONLY_FINAL_TURN does not fire when subtype is not 'empty_result'."""
+    from autoskillit.execution.anomaly_detection import detect_outcome_anomalies
+
+    anomalies = detect_outcome_anomalies(
+        {"output_tokens": 100}, "success", has_thinking_only_turn=True
+    )
+    assert anomalies == []
+
+
+def test_detect_outcome_anomalies_thinking_only_false_falls_back_to_empty_result():
+    """When has_thinking_only_turn=False, EMPTY_RESULT_WITH_TOKENS still fires."""
+    from autoskillit.execution.anomaly_detection import detect_outcome_anomalies
+
+    anomalies = detect_outcome_anomalies(
+        {"output_tokens": 200}, "empty_result", has_thinking_only_turn=False
+    )
+    kinds = [a["kind"] for a in anomalies]
+    assert "empty_result_with_tokens" in kinds

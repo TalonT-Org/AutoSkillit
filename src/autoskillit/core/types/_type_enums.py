@@ -29,6 +29,7 @@ __all__ = [
     "FleetErrorCode",
     "FeatureLifecycle",
     "DispatchGateType",
+    "ClaudeContentBlockType",
 ]
 
 
@@ -46,6 +47,7 @@ class RetryReason(StrEnum):
         "contract_recovery"  # marker present + write evidence — omission not structural
     )
     CLONE_CONTAMINATION = "clone_contamination"
+    THINKING_STALL = "thinking_stall"  # final turn: thinking blocks only, no text or tool output
 
 
 class MergeFailedStep(StrEnum):
@@ -410,3 +412,36 @@ class DispatchGateType(StrEnum):
     """Valid gate types for campaign dispatch entries."""
 
     CONFIRM = "confirm"
+
+
+class ClaudeContentBlockType(StrEnum):
+    """Sealed enum for Claude API content block types.
+
+    Every block type that can appear in an assistant message content array
+    MUST be a member of this enum. The from_api() constructor maps unknown
+    block types to UNKNOWN instead of raising ValueError, because the Claude
+    API may introduce new block types in future versions.
+
+    Exhaustive match dispatch over this enum (with assert_never on the
+    fallthrough arm) provides compile-time enforcement that all block types
+    are handled — adding a new member forces the developer to handle it.
+    """
+
+    TEXT = "text"
+    TOOL_USE = "tool_use"
+    TOOL_RESULT = "tool_result"
+    THINKING = "thinking"
+    REDACTED_THINKING = "redacted_thinking"
+    IMAGE = "image"
+    UNKNOWN = "unknown"
+
+    @classmethod
+    def from_api(cls, raw: str) -> ClaudeContentBlockType:
+        """Convert a raw API block type string to a ClaudeContentBlockType member.
+
+        Unknown strings map to UNKNOWN instead of raising ValueError.
+        """
+        try:
+            return cls(raw)
+        except ValueError:
+            return cls.UNKNOWN

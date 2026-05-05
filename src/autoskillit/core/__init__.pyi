@@ -136,6 +136,7 @@ from .types import ChannelBStatus as ChannelBStatus
 from .types import ChannelConfirmation as ChannelConfirmation
 from .types import CIRunScope as CIRunScope
 from .types import CIWatcher as CIWatcher
+from .types import ClaudeContentBlockType as ClaudeContentBlockType
 from .types import ClaudeFlags as ClaudeFlags
 from .types import CleanupResult as CleanupResult
 from .types import CliSubtype as CliSubtype

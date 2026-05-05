@@ -385,3 +385,52 @@ class TestJsonlLastRecordType:
     def test_ignores_records_without_type_field(self):
         content = '{"other": "field"}\n{"type": "result"}\n'
         assert _jsonl_last_record_type(content) == "result"
+
+
+class TestJsonlContainsMarkerThinkingBlocks:
+    """_jsonl_contains_marker must not match markers inside thinking blocks."""
+
+    def test_marker_in_thinking_block_not_detected(self):
+        import json
+
+        marker = "%%COMPLETE%%"
+        content = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [
+                        {"type": "thinking", "thinking": f"I will emit {marker} when done."}
+                    ]
+                },
+            }
+        )
+        assert not _jsonl_contains_marker(content, marker, frozenset({"assistant"}))
+
+    def test_marker_in_text_block_is_detected(self):
+        import json
+
+        marker = "%%COMPLETE%%"
+        content = json.dumps(
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "text", "text": marker}]},
+            }
+        )
+        assert _jsonl_contains_marker(content, marker, frozenset({"assistant"}))
+
+    def test_marker_in_text_block_despite_thinking_block_present(self):
+        import json
+
+        marker = "%%COMPLETE%%"
+        content = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [
+                        {"type": "thinking", "thinking": "Internal reasoning."},
+                        {"type": "text", "text": marker},
+                    ]
+                },
+            }
+        )
+        assert _jsonl_contains_marker(content, marker, frozenset({"assistant"}))

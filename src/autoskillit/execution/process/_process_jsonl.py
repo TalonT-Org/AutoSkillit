@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from autoskillit.core import get_logger
+from autoskillit.core import ClaudeContentBlockType, get_logger
 
 logger = get_logger(__name__)
 
@@ -29,6 +29,8 @@ def _jsonl_contains_marker(
 
     This prevents false-fires when the model quotes the marker directive
     in discussion (e.g. ``"I will emit %%AUTOSKILLIT_COMPLETE%% when done"``).
+    Thinking blocks are excluded — a marker inside a thinking block is internal
+    reasoning, not a structural completion signal.
     """
     import json as _json
 
@@ -54,7 +56,13 @@ def _jsonl_contains_marker(
             raw = " ".join(v for v in obj.values() if isinstance(v, str))
 
         if isinstance(raw, list):
-            text = "\n".join(b.get("text", "") if isinstance(b, dict) else str(b) for b in raw)
+            text = "\n".join(
+                b.get("text", "")
+                for b in raw
+                if isinstance(b, dict)
+                and ClaudeContentBlockType.from_api(b.get("type", ""))
+                == ClaudeContentBlockType.TEXT
+            )
         elif not isinstance(raw, str):
             text = "" if raw is None else str(raw)
         else:

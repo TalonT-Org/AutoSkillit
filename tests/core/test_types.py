@@ -20,6 +20,25 @@ from autoskillit.core.types import (
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
+@pytest.mark.parametrize(
+    ("raw", "expected_value"),
+    [
+        ("text", "text"),
+        ("tool_use", "tool_use"),
+        ("thinking", "thinking"),
+        ("redacted_thinking", "redacted_thinking"),
+        ("future_new_type", "unknown"),
+        ("image", "image"),
+        ("tool_result", "tool_result"),
+    ],
+)
+def test_claude_content_block_type_from_api(raw: str, expected_value: str) -> None:
+    from autoskillit.core.types import ClaudeContentBlockType
+
+    block_type = ClaudeContentBlockType.from_api(raw)
+    assert block_type.value == expected_value
+
+
 def test_retry_reason_values():
     """RetryReason enum has exactly the expected members."""
     assert set(RetryReason) == {
@@ -34,6 +53,7 @@ def test_retry_reason_values():
         RetryReason.CONTRACT_RECOVERY,
         RetryReason.STALE,
         RetryReason.CLONE_CONTAMINATION,
+        RetryReason.THINKING_STALL,
     }
     assert RetryReason.NONE.value == "none"
 

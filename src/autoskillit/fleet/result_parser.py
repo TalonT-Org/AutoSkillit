@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from autoskillit.core import get_logger
+from autoskillit.core import ClaudeContentBlockType, get_logger
 
 logger = get_logger(__name__)
 
@@ -56,7 +56,11 @@ def _extract_text_from_jsonl(path: Path) -> str:
         content = msg.get("content", "")
         if isinstance(content, list):
             text = "\n".join(
-                block.get("text", "") for block in content if isinstance(block, dict)
+                block.get("text", "")
+                for block in content
+                if isinstance(block, dict)
+                and ClaudeContentBlockType.from_api(block.get("type", ""))
+                == ClaudeContentBlockType.TEXT
             ).strip()
         else:
             text = str(content).strip()

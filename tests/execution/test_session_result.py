@@ -332,6 +332,24 @@ class TestClaudeSessionResultTypeEnforcement:
         assert session.result == "Task completed."
         assert isinstance(session.result, str)
 
+    def test_thinking_block_in_list_result_yields_empty_string(self):
+        blocks = [{"type": "thinking", "thinking": "reasoning here..."}]
+        session = ClaudeSessionResult(
+            subtype="success", is_error=False, result=blocks, session_id="s1"
+        )
+        assert session.result == ""
+        assert isinstance(session.result, str)
+
+    def test_mixed_text_and_thinking_blocks_only_extracts_text(self):
+        blocks = [
+            {"type": "thinking", "thinking": "internal reasoning"},
+            {"type": "text", "text": "Final answer."},
+        ]
+        session = ClaudeSessionResult(
+            subtype="success", is_error=False, result=blocks, session_id="s1"
+        )
+        assert session.result == "Final answer."
+
 
 class TestParseSessionResultNullFields:
     """parse_session_result handles null JSON values correctly."""

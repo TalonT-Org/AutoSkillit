@@ -518,6 +518,11 @@ CONTEXT LIMIT ROUTING — run_skill only (check BEFORE on_failure):
   - The session wrote files outside its working directory. This is a CWD boundary violation,
     not a context limit. No partial worktree progress should be resumed.
   - Fall through to on_failure regardless of whether on_context_limit is defined.
+- When run_skill returns "needs_retry: true" AND "retry_reason: thinking_stall":
+  - The model consumed tokens (thinking blocks were present) but produced no text or tool output.
+    If lifespan_started is true (model made tool calls before the thinking-only final turn),
+    follow on_context_limit if defined — partial progress likely exists on disk.
+    If lifespan_started is false, fall through to on_failure — no progress was made.
 - When run_skill returns "needs_retry: true" AND "retry_reason: early_stop" or "zero_writes":
   - These are not context limit conditions. Fall through to on_failure.
 

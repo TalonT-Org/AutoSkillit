@@ -96,12 +96,15 @@ def _load_types_from_dir(directory: Path) -> dict[str, ExperimentTypeSpec]:
 
 def load_all_experiment_types(
     project_dir: Path | None = None,
-) -> dict[str, ExperimentTypeSpec]:
+) -> list[ExperimentTypeSpec]:
     """Load experiment types: bundled types merged with user-defined overrides.
 
     User-defined types with the same name as a bundled type replace the bundled
     type entirely — no field merging. User-defined types with a new name are added
     alongside bundled types.
+
+    The returned list is sorted by ``(priority, name)`` with ``is_fallback=True``
+    entries always appended last.
 
     Args:
         project_dir: Project root containing optional user-defined overrides at
@@ -109,13 +112,39 @@ def load_all_experiment_types(
             are returned.
 
     Returns:
-        Mapping of experiment type name to ``ExperimentTypeSpec``.
+        Sorted list of ``ExperimentTypeSpec``, fallback entries last.
     """
     types = _load_types_from_dir(BUNDLED_EXPERIMENT_TYPES_DIR)
 
     if project_dir is not None:
         user_dir = Path(project_dir) / ".autoskillit" / "experiment-types"
         user_types = _load_types_from_dir(user_dir)
+        for spec in user_types.values():
+            if spec.schema_version and spec.schema_version != "1.0":
+                logger.warning(
+                    "User experiment type '%s' has schema_version '%s' (expected '1.0'); "
+                    "loading continues but behavior may differ",
+                    spec.name,
+                    spec.schema_version,
+                )
         types.update(user_types)
 
-    return types
+    non_fallback = [s for s in types.values() if not s.is_fallback]
+    fallback = [s for s in types.values() if s.is_fallback]
+    non_fallback.sort(key=lambda s: (s.priority, s.name))
+    fallback.sort(key=lambda s: (s.priority, s.name))
+    return non_fallback + fallback
+
+
+def get_experiment_type_by_name(
+    name: str,
+    project_dir: Path | None = None,
+) -> ExperimentTypeSpec | None:
+    """Look up a single experiment type by name.
+
+    Returns the matching spec or None if not found.
+    """
+    for spec in load_all_experiment_types(project_dir):
+        if spec.name == name:
+            return spec
+    return None

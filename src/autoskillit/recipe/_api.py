@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import threading
 import time
 from collections.abc import Sequence
@@ -102,6 +103,19 @@ def _get_pkg_version() -> str:
     from autoskillit import __version__
 
     return __version__
+
+
+def _compute_registry_hash(experiment_types_dir: Path) -> str:
+    """Compute md5 hash of sorted (path, mtime_ns) pairs for experiment-type YAMLs."""
+    if not experiment_types_dir.exists():
+        return ""
+    entries: list[tuple[str, int]] = []
+    for p in sorted(experiment_types_dir.glob("*.yaml")):
+        try:
+            entries.append((p.name, p.stat().st_mtime_ns))
+        except OSError:
+            continue
+    return hashlib.md5(str(entries).encode()).hexdigest()
 
 
 @_dc
@@ -312,11 +326,20 @@ def load_and_validate(
     pkg_version = _get_pkg_version()
     project_recipes_dir = _pdir / ".autoskillit" / "recipes"
     _builtin_dir = builtin_recipes_dir()
+    from autoskillit.recipe.experiment_type_registry import (  # noqa: PLC0415
+        BUNDLED_EXPERIMENT_TYPES_DIR,
+    )
+
+    _exp_types_hash = _compute_registry_hash(BUNDLED_EXPERIMENT_TYPES_DIR)
+    _user_exp_types_dir = _pdir / ".autoskillit" / "experiment-types"
+    _user_exp_hash = _compute_registry_hash(_user_exp_types_dir)
     cache_key = (
         name,
         str(_pdir),
         tuple(sorted(suppressed)) if suppressed else (),
         tuple(sorted(ingredient_overrides.items())) if ingredient_overrides else (),
+        _exp_types_hash,
+        _user_exp_hash,
     )
 
     with _LOAD_CACHE_LOCK:

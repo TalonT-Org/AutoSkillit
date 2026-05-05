@@ -55,7 +55,7 @@ _EMPTY_OUTPUT_RESULT_LINE = json.dumps(
 
 @pytest.mark.parametrize("reason", sorted(NO_WORK_REASONS, key=lambda r: r.value))
 def test_no_work_reasons_are_overridden_by_write_evidence(reason: RetryReason) -> None:
-    """Any retry reason asserting 'no work done' must be reclassified when write evidence exists."""
+    """Any 'no work done' retry reason must be reclassified when write evidence exists."""
     stdout = "\n".join([_WRITE_TOOL_LINE, _EMPTY_OUTPUT_RESULT_LINE])
     result = SubprocessResult(
         returncode=0,

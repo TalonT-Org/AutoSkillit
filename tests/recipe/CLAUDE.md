@@ -13,6 +13,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_api.py` | Tests for recipe/_api.py orchestration API |
 | `test_api_split.py` | Structural guard for recipe API split |
 | `test_bem_wrapper_structure.py` | Tests for BEM wrapper recipe structure |
+| `test_bundled_model_field.py` | Tests that all run_skill steps declare a model: field across bundled recipes |
 | `test_bundled_recipe_hidden_policy.py` | Tests for hidden policy in bundled recipes |
 | `test_bundled_recipes_general.py` | General structural tests for all bundled recipes |
 | `test_bundled_recipes_no_inversions.py` | Guard: no inversion step order violations in bundled recipes |

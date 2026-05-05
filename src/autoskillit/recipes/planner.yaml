@@ -73,6 +73,7 @@ steps:
 
   analyze:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:planner-analyze ${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"
@@ -82,6 +83,7 @@ steps:
 
   extract_domain:
     tool: run_skill
+    model: ""
     with:
       skill_command: >
         /autoskillit:planner-extract-domain
@@ -94,6 +96,7 @@ steps:
 
   generate_phases:
     tool: run_skill
+    model: ""
     with:
       skill_command: >
         /autoskillit:planner-generate-phases
@@ -126,6 +129,7 @@ steps:
 
   elaborate_phases:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:planner-elaborate-phase ${{ context.plan_snapshot_path }} {phase_id} ${{ context.planner_dir }}/phases"
       cwd: "${{ inputs.source_dir }}"
@@ -158,6 +162,7 @@ steps:
 
   refine_phases:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:planner-refine-phases ${{ context.combined_phases_path }} ${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"
@@ -183,6 +188,7 @@ steps:
 
   elaborate_assignments:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:planner-elaborate-assignments {context_path} ${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"
@@ -214,6 +220,7 @@ steps:
 
   refine_assignments:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:planner-refine-assignments {context_path} ${{ context.refined_plan_path }} ${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"
@@ -256,6 +263,7 @@ steps:
 
   elaborate_wps:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:planner-elaborate-wps {context_path} ${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"
@@ -297,6 +305,7 @@ steps:
 
   refine_wps:
     tool: run_skill
+    model: ""
     with:
       skill_command: >
         /autoskillit:planner-refine-wps
@@ -313,6 +322,7 @@ steps:
 
   consolidate_wps_analyze:
     tool: run_skill
+    model: ""
     with:
       skill_command: >
         /autoskillit:planner-consolidate-wps
@@ -340,6 +350,7 @@ steps:
 
   validate_task_alignment:
     tool: run_skill
+    model: ""
     with:
       skill_command: >
         /autoskillit:planner-validate-task-alignment
@@ -357,6 +368,7 @@ steps:
 
   reconcile_deps:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:planner-reconcile-deps ${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"
@@ -367,6 +379,7 @@ steps:
 
   assess_review_approach_step:
     tool: run_skill
+    model: ""
     optional: true
     skip_when_false: "inputs.planner_assess_review_approach"
     with:
@@ -404,6 +417,7 @@ steps:
 
   refine:
     tool: run_skill
+    model: ""
     with:
       skill_command: >
         /autoskillit:planner-refine

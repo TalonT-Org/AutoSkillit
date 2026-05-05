@@ -1,0 +1,29 @@
+name: qualitative_interpretive
+schema_version: "1.0"
+priority: 11
+is_fallback: false
+classification_triggers:
+  - "Non-numerical data or interpretive epistemology: 'qualitative', 'thematic analysis', 'grounded theory', 'phenomenology', 'discourse analysis', 'ethnography', 'interpretive', 'narrative inquiry'"
+  - "Meaning, experience, or process as the research target rather than a quantitative estimand: 'lived experience', 'meaning-making', 'thick description', 'saturation', 'purposive sampling', 'inductive'"
+dimension_weights:
+  causal_structure: S
+  variance_protocol: S
+  statistical_corrections: S
+  ecological_validity: H
+  measurement_alignment: H
+  resource_proportionality: L
+  data_acquisition: H
+  agent_implementability: L
+applicable_lenses:
+  primary: exp-lens-estimand-clarity
+  secondary: exp-lens-validity-threats
+red_team_focus:
+  specific: researcher positionality and reflexivity undocumented
+  severity_cap: warning
+l1_severity:
+  estimand_clarity: warning
+  hypothesis_falsifiability: info
+dimension_weight_rationale:
+  ecological_validity: "Naturalistic inquiry is a defining epistemological commitment; decontextualized data is structurally invalid"
+  measurement_alignment: "Credibility of coding schemes, member-checking, and audit trail serve as measurement validity analogues"
+  data_acquisition: "Purposive sampling strategy and data saturation criteria determine whether interpretive claims are warranted"

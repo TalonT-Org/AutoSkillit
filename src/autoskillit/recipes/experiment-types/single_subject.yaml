@@ -1,0 +1,31 @@
+name: single_subject
+schema_version: "1.0"
+priority: 9
+is_fallback: false
+classification_triggers:
+  - "Study of one or very few individuals with intensive repeated measurement: 'N-of-1', 'single-subject', 'single case', 'case study', 'ABA design', 'ABAB', 'multiple baseline', 'idiographic'"
+  - "Within-person replication logic rather than between-group inference: 'withdrawal design', 'reversal design', 'phase', 'baseline phase', 'treatment phase'"
+dimension_weights:
+  causal_structure: M
+  variance_protocol: H
+  statistical_corrections: S
+  ecological_validity: H
+  measurement_alignment: H
+  resource_proportionality: L
+  data_acquisition: H
+  agent_implementability: L
+applicable_lenses:
+  primary: exp-lens-variance-stability
+  secondary: exp-lens-validity-threats
+red_team_focus:
+  specific: baseline instability confounding phase-change interpretation
+  severity_cap: warning
+l1_severity:
+  estimand_clarity: warning
+  hypothesis_falsifiability: warning
+dimension_weight_rationale:
+  causal_structure: "Within-person causal inference via phase designs is valid but external generalization requires theoretical argument"
+  variance_protocol: "Autocorrelation, trend, and level in time-series must be modeled; baseline stability is a structural prerequisite"
+  ecological_validity: "Single subjects are studied in naturalistic settings; ecological validity is a strength but context limits generalization"
+  measurement_alignment: "Repeated measurement across many occasions requires demonstrated test-retest reliability and sensitivity to change"
+  data_acquisition: "Continuous measurement schedule, missing observations, and phase-boundary decisions are structural design elements"

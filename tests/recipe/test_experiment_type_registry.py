@@ -20,6 +20,13 @@ EXPECTED_TYPES = {
     "causal_inference",
     "robustness_audit",
     "exploratory",
+    "evidence_synthesis",
+    "factorial_design",
+    "simulation_modeling",
+    "instrument_validation",
+    "single_subject",
+    "observational_correlational",
+    "qualitative_interpretive",
 }
 
 VALID_WEIGHT_VALUES = {"H", "M", "L", "S"}
@@ -37,7 +44,7 @@ EXPECTED_DIMENSIONS = {
 
 
 def test_all_bundled_types_present() -> None:
-    """All 5 bundled types load without error."""
+    """All 12 bundled types load without error."""
     types = load_all_experiment_types()
     assert set(types.keys()) == EXPECTED_TYPES
 
@@ -179,7 +186,7 @@ def test_user_override_replaces_bundled_type(tmp_path: Path) -> None:
     assert "variance_protocol" not in bench.dimension_weights
     # Other bundled types remain intact
     assert "causal_inference" in types
-    assert len(types) == 5
+    assert len(types) == 12
 
 
 def test_user_new_type_is_added(tmp_path: Path) -> None:
@@ -212,7 +219,7 @@ def test_user_new_type_is_added(tmp_path: Path) -> None:
     )
     types = load_all_experiment_types(project_dir=tmp_path)
     assert "network_analysis" in types
-    assert len(types) == 6  # 5 bundled + 1 user
+    assert len(types) == 13  # 12 bundled + 1 user
 
 
 def test_missing_user_override_dir_is_silent(tmp_path: Path) -> None:
@@ -265,3 +272,130 @@ def test_no_citation_markers_in_yaml_files() -> None:
         content = yaml_path.read_text()
         assert chr(0x3010) not in content, f"{yaml_path.name} contains synthetic citation marker"
         assert "†L" not in content, f"{yaml_path.name} contains synthetic citation marker"
+
+
+def test_all_types_have_schema_version() -> None:
+    """Every bundled type has schema_version == '1.0'."""
+    types = load_all_experiment_types()
+    for name, spec in types.items():
+        assert spec.schema_version == "1.0", f"{name}: schema_version = {spec.schema_version!r}"
+
+
+def test_priority_values_are_unique_except_fallback() -> None:
+    """No duplicate priority values among non-fallback types; exploratory has priority 999."""
+    types = load_all_experiment_types()
+    non_fallback_priorities = [spec.priority for spec in types.values() if not spec.is_fallback]
+    assert len(non_fallback_priorities) == len(set(non_fallback_priorities)), (
+        "Duplicate priority values among non-fallback types"
+    )
+    assert types["exploratory"].priority == 999
+
+
+def test_only_exploratory_is_fallback() -> None:
+    """exploratory is the sole fallback type; all others have is_fallback=False."""
+    types = load_all_experiment_types()
+    assert types["exploratory"].is_fallback is True
+    for name, spec in types.items():
+        if name != "exploratory":
+            assert spec.is_fallback is False, f"{name}: is_fallback should be False"
+
+
+def test_priority_assignments_match_contract() -> None:
+    """Each type's priority matches the contract from the implementation plan."""
+    EXPECTED_PRIORITIES = {
+        "causal_inference": 1,
+        "evidence_synthesis": 2,
+        "benchmark": 3,
+        "factorial_design": 4,
+        "configuration_study": 5,
+        "simulation_modeling": 6,
+        "instrument_validation": 7,
+        "robustness_audit": 8,
+        "single_subject": 9,
+        "observational_correlational": 10,
+        "qualitative_interpretive": 11,
+        "exploratory": 999,
+    }
+    types = load_all_experiment_types()
+    for name, expected_priority in EXPECTED_PRIORITIES.items():
+        assert types[name].priority == expected_priority, (
+            f"{name}: expected priority {expected_priority}, got {types[name].priority}"
+        )
+
+
+def test_new_types_dimension_weight_rationale_coverage() -> None:
+    """For each new type, every H or M dimension weight has a rationale entry."""
+    new_types = {
+        "evidence_synthesis",
+        "factorial_design",
+        "simulation_modeling",
+        "instrument_validation",
+        "single_subject",
+        "observational_correlational",
+        "qualitative_interpretive",
+    }
+    types = load_all_experiment_types()
+    for name in new_types:
+        spec = types[name]
+        for dim, weight in spec.dimension_weights.items():
+            if weight in ("H", "M"):
+                assert dim in spec.dimension_weight_rationale, (
+                    f"{name}: dimension '{dim}' has weight '{weight}' but no rationale entry"
+                )
+                assert spec.dimension_weight_rationale[dim], (
+                    f"{name}: dimension '{dim}' rationale is empty"
+                )
+
+
+def test_new_types_red_team_severity_caps() -> None:
+    """evidence_synthesis has severity_cap=critical; all other new types have warning."""
+    types = load_all_experiment_types()
+    assert types["evidence_synthesis"].red_team_focus["severity_cap"] == "critical"
+    for name in (
+        "factorial_design",
+        "simulation_modeling",
+        "instrument_validation",
+        "single_subject",
+        "observational_correlational",
+        "qualitative_interpretive",
+    ):
+        assert types[name].red_team_focus["severity_cap"] == "warning", (
+            f"{name}: expected severity_cap=warning"
+        )
+
+
+def test_new_types_dimension_weights_spot_check() -> None:
+    """Spot-check key distinguishing weights for each new type."""
+    types = load_all_experiment_types()
+    assert types["evidence_synthesis"].dimension_weights["measurement_alignment"] == "H"
+    assert types["evidence_synthesis"].dimension_weights["causal_structure"] == "L"
+
+    assert types["factorial_design"].dimension_weights["causal_structure"] == "H"
+    assert types["factorial_design"].dimension_weights["ecological_validity"] == "L"
+
+    assert types["qualitative_interpretive"].dimension_weights["causal_structure"] == "S"
+    assert types["qualitative_interpretive"].dimension_weights["statistical_corrections"] == "S"
+
+    assert types["single_subject"].dimension_weights["statistical_corrections"] == "S"
+    assert types["single_subject"].dimension_weights["variance_protocol"] == "H"
+
+    assert types["simulation_modeling"].dimension_weights["data_acquisition"] == "L"
+    assert types["simulation_modeling"].dimension_weights["agent_implementability"] == "H"
+
+    assert types["instrument_validation"].dimension_weights["causal_structure"] == "S"
+    assert types["instrument_validation"].dimension_weights["measurement_alignment"] == "H"
+
+    assert types["observational_correlational"].dimension_weights["ecological_validity"] == "H"
+    assert types["observational_correlational"].dimension_weights["variance_protocol"] == "L"
+
+
+def test_qualitative_interpretive_falsifiability_is_info() -> None:
+    """qualitative_interpretive has hypothesis_falsifiability=info (unique among all types)."""
+    types = load_all_experiment_types()
+    assert types["qualitative_interpretive"].l1_severity["hypothesis_falsifiability"] == "info"
+
+
+def test_evidence_synthesis_estimand_clarity_is_critical() -> None:
+    """evidence_synthesis has estimand_clarity=critical."""
+    types = load_all_experiment_types()
+    assert types["evidence_synthesis"].l1_severity["estimand_clarity"] == "critical"

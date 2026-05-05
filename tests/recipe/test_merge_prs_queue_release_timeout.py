@@ -8,14 +8,11 @@ import pytest
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
-# Family-specific list: impl/remed/impl_groups use register_clone_unconfirmed as
-# their queue error escalation step.
 RELEASE_TIMEOUT_RECIPES = ["impl_recipe", "remed_recipe", "impl_groups_recipe"]
 
 
 # ---------------------------------------------------------------------------
-# Gap 1 + Gap 6: ci_watch_post_queue_fix step + ejected_ci_failure routing
-# (applies to register_clone_unconfirmed family only)
+# ci_watch_post_queue_fix step + ejected_ci_failure routing
 # ---------------------------------------------------------------------------
 
 
@@ -42,9 +39,6 @@ def test_re_push_queue_fix_routes_to_ci_watch_post_queue_fix(recipe_fixture, req
 def test_ci_watch_post_queue_fix_routes_reenter_on_success(recipe_fixture, request):
     """ci_watch_post_queue_fix on_result success must route to reenter_merge_queue."""
     recipe = request.getfixturevalue(recipe_fixture)
-    assert "ci_watch_post_queue_fix" in recipe.steps, (
-        f"ci_watch_post_queue_fix must be a step in {recipe_fixture}"
-    )
     step = recipe.steps["ci_watch_post_queue_fix"]
     assert step.on_result is not None, (
         f"ci_watch_post_queue_fix must use on_result routing in {recipe_fixture}"
@@ -62,9 +56,6 @@ def test_ci_watch_post_queue_fix_routes_reenter_on_success(recipe_fixture, reque
 def test_ci_watch_post_queue_fix_routes_detect_ci_conflict_on_failure(recipe_fixture, request):
     """ci_watch_post_queue_fix.on_failure must route to detect_ci_conflict."""
     recipe = request.getfixturevalue(recipe_fixture)
-    assert "ci_watch_post_queue_fix" in recipe.steps, (
-        f"ci_watch_post_queue_fix must be a step in {recipe_fixture}"
-    )
     step = recipe.steps["ci_watch_post_queue_fix"]
     assert step.on_failure == "detect_ci_conflict", (
         f"ci_watch_post_queue_fix.on_failure must be 'detect_ci_conflict' in {recipe_fixture}"
@@ -75,9 +66,6 @@ def test_ci_watch_post_queue_fix_routes_detect_ci_conflict_on_failure(recipe_fix
 def test_ci_watch_post_queue_fix_uses_wait_for_ci_tool(recipe_fixture, request):
     """ci_watch_post_queue_fix must use the wait_for_ci tool."""
     recipe = request.getfixturevalue(recipe_fixture)
-    assert "ci_watch_post_queue_fix" in recipe.steps, (
-        f"ci_watch_post_queue_fix must be a step in {recipe_fixture}"
-    )
     step = recipe.steps["ci_watch_post_queue_fix"]
     assert step.tool == "wait_for_ci"
 
@@ -86,9 +74,6 @@ def test_ci_watch_post_queue_fix_uses_wait_for_ci_tool(recipe_fixture, request):
 def test_ci_watch_post_queue_fix_has_skip_when_false(recipe_fixture, request):
     """ci_watch_post_queue_fix must have skip_when_false: inputs.open_pr."""
     recipe = request.getfixturevalue(recipe_fixture)
-    assert "ci_watch_post_queue_fix" in recipe.steps, (
-        f"ci_watch_post_queue_fix must be a step in {recipe_fixture}"
-    )
     step = recipe.steps["ci_watch_post_queue_fix"]
     assert step.skip_when_false == "inputs.open_pr"
 

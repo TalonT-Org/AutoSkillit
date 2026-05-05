@@ -7,13 +7,16 @@ Configuration loading, defaults, and schema tests.
 | File | Purpose |
 |------|---------|
 | `__init__.py` | empty |
+| `test_branching_config.py` | Tests for BranchingConfig and ReleaseReadinessConfig loading and validation |
 | `test_config.py` | Tests for configuration loading and resolution |
 | `test_config_split.py` | Structural guard for config split |
 | `test_defaults.py` | Settings coherence guard: natural_exit_grace_seconds and exit_after_stop_delay_ms coherence |
 | `test_fleet_config.py` | Tests for FleetConfig loading and validation |
 | `test_helpers.py` | Tests for autoskillit.config resolve_ingredient_defaults |
+| `test_linux_tracing_config.py` | Tests for LinuxTracingConfig loading and validation |
 | `test_packs_config.py` | Tests for PacksConfig loading and validation |
 | `test_providers_config.py` | Tests for ProvidersConfig loading and validation |
+| `test_quota_guard_config.py` | Tests for QuotaGuardConfig loading and validation |
 | `test_settings_allowed_labels.py` | Tests for GitHubConfig.allowed_labels field and check_label_allowed validation |
 | `test_settings_staged_label.py` | Tests for GitHubConfig.staged_label field and config layer resolution |
 | `test_skills_config.py` | Tests for SkillsConfig loading and validation |

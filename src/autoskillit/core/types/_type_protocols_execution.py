@@ -55,6 +55,9 @@ class HeadlessExecutor(Protocol):
         write_watch_dirs: Sequence[Path] = (),
         provider_extras: Mapping[str, str] | None = None,
         profile_name: str = "",
+        provider_name: str = "",
+        provider_fallback_env: dict[str, str] | None = None,
+        provider_fallback_name: str = "",
     ) -> SkillResult: ...
 
     async def dispatch_food_truck(
@@ -78,6 +81,9 @@ class HeadlessExecutor(Protocol):
         requires_packs: Sequence[str] = (),
         on_spawn: Callable[[int, int], None] | None = None,
         allowed_write_prefix: str = "",
+        provider_name: str = "",
+        provider_fallback_env: dict[str, str] | None = None,
+        provider_fallback_name: str = "",
     ) -> SkillResult: ...
 
 

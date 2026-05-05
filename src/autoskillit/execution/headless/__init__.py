@@ -34,6 +34,7 @@ from autoskillit.core import (
     collect_version_snapshot,
     extract_skill_name,
     get_logger,
+    is_feature_enabled,
     is_git_worktree,
     temp_dir_display_str,
 )
@@ -152,7 +153,6 @@ def _derive_step_name_from_skill_command(skill_command: str) -> str:
 
 
 def _resolve_skill_temp_dir(cwd: str, skill_command: str) -> Path | None:
-    """Resolve the skill-specific temp directory for fs write detection."""
     name = extract_skill_name(skill_command)
     if not name:
         return None
@@ -213,12 +213,15 @@ async def _execute_claude_headless(
     skip_clone_guard: bool = False,
     readonly_skill: bool = False,
     write_watch_dirs: Sequence[Path] = (),
+    provider_name: str = "",
+    provider_fallback_env: dict[str, str] | None = None,
+    provider_fallback_name: str = "",
 ) -> SkillResult:
     """Shared subprocess execution for headless Claude sessions.
 
     Accepts an already-built ClaudeHeadlessCmd and handles runner invocation,
     exception handling, _build_skill_result, and session log flushing.
-    Used by both run_headless_core (skill session path) and
+    Used by both run_headless_core (leaf path) and
     DefaultHeadlessExecutor.dispatch_food_truck (food truck path).
     """
     campaign_id = campaign_id or os.environ.get(CAMPAIGN_ID_ENV_VAR, "")
@@ -242,6 +245,10 @@ async def _execute_claude_headless(
         else:
             _raw_idle = float(cfg.idle_output_timeout)
     effective_idle: float | None = _raw_idle if _raw_idle > 0.0 else None
+
+    current_provider_name: str = provider_name
+    fallback_activated: bool = False
+    remaining_attempts = ctx.config.providers.provider_retry_limit if provider_fallback_env else 0
 
     runner = ctx.runner
     if runner is None:
@@ -278,73 +285,32 @@ async def _execute_claude_headless(
 
     _pre_session_sha = _capture_git_head_sha(cwd)
     _result: SubprocessResult | None = None
-    try:
-        _result = await runner(
-            spec.cmd,
-            cwd=Path(cwd),
-            timeout=timeout,
-            env=spec.env,
-            pty_mode=True,
-            session_log_dir=_session_log_dir(cwd),
-            completion_marker=completion_marker,
-            stale_threshold=stale_threshold,
-            completion_drain_timeout=cfg.completion_drain_timeout,
-            linux_tracing_config=linux_tracing_cfg,
-            idle_output_timeout=effective_idle,
-            max_suppression_seconds=cfg.max_suppression_seconds,
-            on_pid_resolved=on_spawn,
-        )
-    except Exception as exc:
-        logger.error("headless_runner_crashed", exc_info=True)
-        _exc_text = traceback.format_exc()
-        _log_dir = ctx.config.linux_tracing.log_dir
+    result: SubprocessResult
+    skill_result: SkillResult
+    while True:
         try:
-            # Deferred: autoskillit.execution.__init__ imports headless.py (L39-42);
-            # a top-level import of autoskillit.execution would be circular.
-            from autoskillit.execution import flush_session_log
-
-            flush_session_log(
-                log_dir=_log_dir,
-                cwd=str(cwd),
-                kitchen_id=kitchen_id,
-                order_id=order_id,
-                campaign_id=campaign_id,
-                dispatch_id=dispatch_id,
-                project_dir=project_dir,
-                build_protected_campaign_ids=ctx.build_protected_campaign_ids,
-                session_id="",
-                pid=0,
-                skill_command=skill_command,
-                success=False,
-                subtype="crashed",
-                exit_code=-1,
-                start_ts=_start_ts,
-                proc_snapshots=None,
-                termination_reason="CRASHED",
-                exception_text=_exc_text,
-                versions=_versions,
-                recipe_name=recipe_name,
-                recipe_content_hash=recipe_content_hash,
-                recipe_composite_hash=recipe_composite_hash,
-                recipe_version=recipe_version,
-                max_sessions=ctx.config.linux_tracing.max_sessions,
-                telemetry=_build_error_path_telemetry(ctx.github_api_log),
+            _result = await runner(
+                spec.cmd,
+                cwd=Path(cwd),
+                timeout=timeout,
+                env=spec.env,
+                pty_mode=True,
+                session_log_dir=_session_log_dir(cwd),
+                completion_marker=completion_marker,
+                stale_threshold=stale_threshold,
+                completion_drain_timeout=cfg.completion_drain_timeout,
+                linux_tracing_config=linux_tracing_cfg,
+                idle_output_timeout=effective_idle,
+                max_suppression_seconds=cfg.max_suppression_seconds,
+                on_pid_resolved=on_spawn,
             )
-        except Exception:
-            logger.debug("flush_session_log during crash failed", exc_info=True)
-        return SkillResult.crashed(
-            exception=exc,
-            skill_command=skill_command,
-            order_id=order_id,
-        )
-    except BaseException:
-        logger.warning("headless_runner_cancelled", exc_info=True)
-        _exc_text = traceback.format_exc()
-        _log_dir = ctx.config.linux_tracing.log_dir
-        try:
-            from autoskillit.execution import flush_session_log
+        except Exception as exc:
+            logger.error("headless_runner_crashed", exc_info=True)
+            _exc_text = traceback.format_exc()
+            _log_dir = ctx.config.linux_tracing.log_dir
+            try:
+                from autoskillit.execution import flush_session_log
 
-            with anyio.CancelScope(shield=True):
                 flush_session_log(
                     log_dir=_log_dir,
                     cwd=str(cwd),
@@ -358,11 +324,11 @@ async def _execute_claude_headless(
                     pid=0,
                     skill_command=skill_command,
                     success=False,
-                    subtype="cancelled",
+                    subtype="crashed",
                     exit_code=-1,
                     start_ts=_start_ts,
                     proc_snapshots=None,
-                    termination_reason="CANCELLED",
+                    termination_reason="CRASHED",
                     exception_text=_exc_text,
                     versions=_versions,
                     recipe_name=recipe_name,
@@ -372,75 +338,132 @@ async def _execute_claude_headless(
                     max_sessions=ctx.config.linux_tracing.max_sessions,
                     telemetry=_build_error_path_telemetry(ctx.github_api_log),
                 )
-        except Exception:
-            logger.debug("flush_session_log during cancel failed", exc_info=True)
-        raise
-    _elapsed = time.monotonic() - _start_mono
-    _end_ts = (datetime.fromisoformat(_start_ts) + timedelta(seconds=_elapsed)).isoformat()
-    result = dataclasses.replace(  # type: ignore[arg-type]
-        _result, start_ts=_start_ts, end_ts=_end_ts, elapsed_seconds=_elapsed
-    )
-
-    _fs_writes_detected = False
-    for _wd in _watch_dirs:
-        if _wd.is_dir():
+            except Exception:
+                logger.debug("flush_session_log during crash failed", exc_info=True)
+            _crashed = SkillResult.crashed(
+                exception=exc,
+                skill_command=skill_command,
+                order_id=order_id,
+            )
+            return dataclasses.replace(
+                _crashed,
+                provider_used=current_provider_name,
+                provider_fallback=fallback_activated,
+            )
+        except BaseException:
+            logger.warning("headless_runner_cancelled", exc_info=True)
+            _exc_text = traceback.format_exc()
+            _log_dir = ctx.config.linux_tracing.log_dir
             try:
-                _post = _recursive_snapshot(_wd)
-            except OSError:
-                logger.warning("watch_dir_post_scan_failed", watch_dir=str(_wd), exc_info=True)
-                _post = set()
-            _pre = _temp_snapshots_pre.get(_wd, set())
-            if _post - _pre:
-                _fs_writes_detected = True
-                break
+                from autoskillit.execution import flush_session_log
 
-    audit_count_before = len(ctx.audit.get_report())
-    skill_result = _build_skill_result(
-        result,
-        completion_marker=completion_marker,
-        skill_command=skill_command,
-        audit=ctx.audit,
-        expected_output_patterns=expected_output_patterns,
-        cwd=cwd,
-        write_behavior=write_behavior,
-        fs_writes_detected=_fs_writes_detected,
-    )
+                with anyio.CancelScope(shield=True):
+                    flush_session_log(
+                        log_dir=_log_dir,
+                        cwd=str(cwd),
+                        kitchen_id=kitchen_id,
+                        order_id=order_id,
+                        campaign_id=campaign_id,
+                        dispatch_id=dispatch_id,
+                        project_dir=project_dir,
+                        build_protected_campaign_ids=ctx.build_protected_campaign_ids,
+                        session_id="",
+                        pid=0,
+                        skill_command=skill_command,
+                        success=False,
+                        subtype="cancelled",
+                        exit_code=-1,
+                        start_ts=_start_ts,
+                        proc_snapshots=None,
+                        termination_reason="CANCELLED",
+                        exception_text=_exc_text,
+                        versions=_versions,
+                        recipe_name=recipe_name,
+                        recipe_content_hash=recipe_content_hash,
+                        recipe_composite_hash=recipe_composite_hash,
+                        recipe_version=recipe_version,
+                        max_sessions=ctx.config.linux_tracing.max_sessions,
+                        telemetry=_build_error_path_telemetry(ctx.github_api_log),
+                    )
+            except Exception:
+                logger.debug("flush_session_log during cancel failed", exc_info=True)
+            raise
+        _elapsed = time.monotonic() - _start_mono
+        _end_ts = (datetime.fromisoformat(_start_ts) + timedelta(seconds=_elapsed)).isoformat()
+        result = dataclasses.replace(  # type: ignore[arg-type]
+            _result, start_ts=_start_ts, end_ts=_end_ts, elapsed_seconds=_elapsed
+        )
 
-    # CONTRACT NUDGE: lightweight resume recovery before full retry.
-    # Fires only when _build_skill_result returns CONTRACT_RECOVERY with a
-    # valid session_id (budget-exhausted cases have retry_reason=BUDGET_EXHAUSTED).
-    if (
-        skill_result.retry_reason == RetryReason.CONTRACT_RECOVERY
-        and skill_result.needs_retry
-        and skill_result.session_id
-    ):
-        nudge_success = await _attempt_contract_nudge(
-            skill_result,
+        _fs_writes_detected = False
+        for _wd in _watch_dirs:
+            if _wd.is_dir():
+                try:
+                    _post = _recursive_snapshot(_wd)
+                except OSError:
+                    logger.warning("watch_dir_post_scan_failed", watch_dir=str(_wd), exc_info=True)
+                    _post = set()
+                _pre = _temp_snapshots_pre.get(_wd, set())
+                if _post - _pre:
+                    _fs_writes_detected = True
+                    break
+
+        audit_count_before = len(ctx.audit.get_report())
+        skill_result = _build_skill_result(
             result,
-            expected_output_patterns,
-            completion_marker,
-            cwd,
-            runner,
-        )
-        if nudge_success is not None:
-            skill_result = nudge_success
-
-    _clone_reverted = False
-    if _clone_snapshot is not None:
-        skill_result, _clone_reverted = await check_and_revert_clone_contamination(
-            _clone_snapshot,
-            skill_result,
-            cwd,
-            runner,
-            ctx.audit,
+            completion_marker=completion_marker,
             skill_command=skill_command,
-            readonly_skill=_readonly_skill,
+            audit=ctx.audit,
+            expected_output_patterns=expected_output_patterns,
+            cwd=cwd,
+            write_behavior=write_behavior,
+            fs_writes_detected=_fs_writes_detected,
         )
+
+        if (
+            skill_result.retry_reason == RetryReason.CONTRACT_RECOVERY
+            and skill_result.needs_retry
+            and skill_result.session_id
+        ):
+            nudge_success = await _attempt_contract_nudge(
+                skill_result,
+                result,
+                expected_output_patterns,
+                completion_marker,
+                cwd,
+                runner,
+            )
+            if nudge_success is not None:
+                skill_result = nudge_success
+
+        _clone_reverted = False
+        if _clone_snapshot is not None:
+            skill_result, _clone_reverted = await check_and_revert_clone_contamination(
+                _clone_snapshot,
+                skill_result,
+                cwd,
+                runner,
+                ctx.audit,
+                skill_command=skill_command,
+                readonly_skill=_readonly_skill,
+            )
+
+        if (
+            skill_result.retry_reason in {RetryReason.STALE, RetryReason.BUDGET_EXHAUSTED}
+            and provider_fallback_env is not None
+            and remaining_attempts > 0
+            and is_feature_enabled("providers", ctx.config.features)
+        ):
+            if not fallback_activated:
+                spec = dataclasses.replace(spec, env={**spec.env, **provider_fallback_env})
+                if provider_fallback_name:
+                    current_provider_name = provider_fallback_name
+            fallback_activated = True
+            remaining_attempts -= 1
+            continue
+        break
 
     _metrics = _compute_post_session_metrics(cwd, _pre_session_sha, skill_result)
 
-    # Use monotonic elapsed_seconds — authoritative wall-clock timing set by time.monotonic()
-    # brackets in run_managed_async. Never re-derive from ISO strings (backward-clock risk).
     timing_seconds: float = result.elapsed_seconds
 
     # Extract the audit record (if any) added by this session
@@ -533,6 +556,11 @@ async def _execute_claude_headless(
         )
     except Exception:
         logger.debug("token_log_record_failed", exc_info=True)
+    skill_result = dataclasses.replace(
+        skill_result,
+        provider_used=current_provider_name,
+        provider_fallback=fallback_activated,
+    )
     return skill_result
 
 
@@ -564,6 +592,9 @@ async def run_headless_core(
     write_watch_dirs: Sequence[Path] = (),
     provider_extras: Mapping[str, str] | None = None,
     profile_name: str = "",
+    provider_name: str = "",
+    provider_fallback_env: dict[str, str] | None = None,
+    provider_fallback_name: str = "",
 ) -> SkillResult:
     """Shared headless runner used by run_skill.
 
@@ -634,6 +665,9 @@ async def run_headless_core(
             recipe_version=recipe_version,
             readonly_skill=readonly_skill,
             write_watch_dirs=write_watch_dirs,
+            provider_name=provider_name,
+            provider_fallback_env=provider_fallback_env,
+            provider_fallback_name=provider_fallback_name,
         )
 
 
@@ -668,6 +702,9 @@ class DefaultHeadlessExecutor:
         write_watch_dirs: Sequence[Path] = (),
         provider_extras: Mapping[str, str] | None = None,
         profile_name: str = "",
+        provider_name: str = "",
+        provider_fallback_env: dict[str, str] | None = None,
+        provider_fallback_name: str = "",
     ) -> SkillResult:
         cfg = self._ctx.config.run_skill
         effective_timeout = timeout if timeout is not None else cfg.timeout
@@ -696,6 +733,9 @@ class DefaultHeadlessExecutor:
             write_watch_dirs=write_watch_dirs,
             provider_extras=provider_extras,
             profile_name=profile_name,
+            provider_name=provider_name,
+            provider_fallback_env=provider_fallback_env,
+            provider_fallback_name=provider_fallback_name,
         )
 
     async def dispatch_food_truck(
@@ -719,6 +759,9 @@ class DefaultHeadlessExecutor:
         requires_packs: Sequence[str] = (),
         on_spawn: Callable[[int, int], None] | None = None,
         allowed_write_prefix: str = "",
+        provider_name: str = "",
+        provider_fallback_env: dict[str, str] | None = None,
+        provider_fallback_name: str = "",
     ) -> SkillResult:
         cfg = self._ctx.config
         resolved_model = _resolve_model(model, cfg)
@@ -774,4 +817,7 @@ class DefaultHeadlessExecutor:
             completion_marker=completion_marker,
             on_spawn=on_spawn,
             skip_clone_guard=True,
+            provider_name=provider_name,
+            provider_fallback_env=provider_fallback_env,
+            provider_fallback_name=provider_fallback_name,
         )

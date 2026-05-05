@@ -493,6 +493,7 @@ class TokenUsageFileEntry(TypedDict):
     order_id: str
     loc_insertions: int
     loc_deletions: int
+    provider_used: str
 
 
 class SessionIndexEntry(TypedDict):

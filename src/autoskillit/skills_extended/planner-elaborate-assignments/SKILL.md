@@ -59,9 +59,11 @@ Read `$2/phases/{id}_result.json` (the elaborated phase result). Extract:
 - `technical_approach` — overall technical approach for the phase
 - `assignments` — array of assignment objects with `name`, `goal`, `metadata`
 
-Read the `task` field from the context file at $1. Every assignment elaboration — its `goal`,
-`scope`, `deliverables`, and `work_packages_preview` — must serve the stated task. Do not
-elaborate into work not requested by the task.
+Read the `task_file_path` field from the context file at $1, then read the task description
+from disk at that path. Every assignment elaboration — its `goal`, `scope`, `deliverables`,
+and `work_packages_preview` — must serve the stated task. Do not read the full task text
+into the L1 context or embed it in the L0 prompt — pass the path reference only and
+instruct L0s to read the file from disk for scope creep verification.
 
 ### Step 3: Build per-L0 context packets
 

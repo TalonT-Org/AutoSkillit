@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
+
+from autoskillit.core.io import write_versioned_json
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
@@ -128,7 +132,6 @@ def test_atomic_write_private_alias_removed():
 
 
 def test_write_versioned_json_enriches_payload_with_schema_version(tmp_path):
-    import json
 
     from autoskillit.core.io import write_versioned_json
 
@@ -140,7 +143,6 @@ def test_write_versioned_json_enriches_payload_with_schema_version(tmp_path):
 def test_write_versioned_json_preserves_existing_keys_atomically(tmp_path, monkeypatch):
     """Asserts the helper routes through ``atomic_write`` (no partial-file
     fallout on a simulated mid-write crash)."""
-    import json
 
     from autoskillit.core import io as io_mod
     from autoskillit.core.io import write_versioned_json
@@ -167,9 +169,16 @@ def test_write_versioned_json_preserves_existing_keys_atomically(tmp_path, monke
 def test_write_versioned_json_rejects_non_dict_payload(tmp_path):
     import pytest
 
-    from autoskillit.core.io import write_versioned_json
-
     target = tmp_path / "bad.json"
     with pytest.raises(TypeError, match="dict payload"):
         write_versioned_json(target, [1, 2, 3], schema_version=1)  # type: ignore[arg-type]
     assert not target.exists()
+
+
+def test_write_versioned_json_produces_indented_output(tmp_path):
+    target = tmp_path / "f.json"
+    write_versioned_json(target, {"a": 1, "b": [2, 3]}, schema_version=1)
+    raw = target.read_text(encoding="utf-8")
+    lines = raw.strip().splitlines()
+    assert len(lines) > 1, "Output must be multi-line (indented)"
+    assert json.loads(raw) == {"a": 1, "b": [2, 3], "schema_version": 1}

@@ -175,6 +175,7 @@ steps:
       callable: "autoskillit.planner.expand_assignments"
       refined_plan_path: "${{ context.refined_plan_path }}"
       output_dir: "${{ context.planner_dir }}"
+      task_file_path: "${{ context.task_file_path }}"
     capture:
       assignment_context_paths: "${{ result.context_paths }}"
     on_success: elaborate_assignments
@@ -247,6 +248,7 @@ steps:
       callable: "autoskillit.planner.expand_wps"
       refined_assignments_path: "${{ context.refined_assignments_path }}"
       output_dir: "${{ context.planner_dir }}"
+      task_file_path: "${{ context.task_file_path }}"
     capture:
       wp_context_paths: "${{ result.context_paths }}"
     on_success: elaborate_wps

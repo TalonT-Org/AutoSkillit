@@ -66,9 +66,11 @@ Read all `$2/assignments/P{N}-A*_result.json` matching this phase to get assignm
 - `technical_approach` — assignment technical approach
 - `proposed_work_packages` — the WP decomposition from the assignment pass
 
-Read the `task` field from the context file at $1. Every WP elaboration — its `deliverables`,
-`acceptance_criteria`, and `estimated_files` — must serve the stated task. Do not create WPs
-for work not requested by the task.
+Read the `task_file_path` field from the context file at $1, then read the task description
+from disk at that path. Every WP elaboration — its `deliverables`, `acceptance_criteria`,
+and `estimated_files` — must serve the stated task. Do not read the full task text into the
+L1 context or embed it in the L0 prompt — pass the path reference only and instruct L0s
+to read the file from disk for scope creep verification.
 
 ### Step 3: Build per-L0 context packets
 

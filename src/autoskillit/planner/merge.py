@@ -90,7 +90,7 @@ def merge_files(
                 key: existing_items,
             }
             enriched = {**document, "schema_version": 1}
-            payload = json.dumps(enriched).encode()
+            payload = json.dumps(enriched, indent=2).encode()
             fh.seek(0)
             fh.truncate()
             fh.write(payload)
@@ -201,7 +201,7 @@ def replace_item(
                     if item.get("id") == item_id:
                         tier[idx] = replacement
                         enriched = {**data, "schema_version": 1}
-                        payload = json.dumps(enriched).encode()
+                        payload = json.dumps(enriched, indent=2).encode()
                         fh.seek(0)
                         fh.truncate()
                         fh.write(payload)

@@ -462,7 +462,9 @@ class TestCookInteractive:
 
         captured: dict = {}
 
-        def fake_cook(*, resume: bool = False, session_id: str | None = None) -> None:
+        def fake_cook(
+            *, resume: bool = False, session_id: str | None = None, profile: str | None = None
+        ) -> None:
             captured["resume"] = resume
             captured["session_id"] = session_id
 
@@ -487,7 +489,9 @@ class TestCookInteractive:
 
         captured: dict = {}
 
-        def fake_cook(*, resume: bool = False, session_id: str | None = None) -> None:
+        def fake_cook(
+            *, resume: bool = False, session_id: str | None = None, profile: str | None = None
+        ) -> None:
             captured["resume"] = resume
             captured["session_id"] = session_id
 
@@ -511,7 +515,9 @@ class TestCookInteractive:
 
         captured: dict = {}
 
-        def fake_cook(*, resume: bool = False, session_id: str | None = None) -> None:
+        def fake_cook(
+            *, resume: bool = False, session_id: str | None = None, profile: str | None = None
+        ) -> None:
             captured["resume"] = resume
             captured["session_id"] = session_id
 

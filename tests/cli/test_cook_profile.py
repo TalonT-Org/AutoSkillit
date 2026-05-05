@@ -41,6 +41,7 @@ def _run_cook(profile, cfg, mock_mgr):
             "autoskillit.cli.session._cook.is_feature_enabled",
             side_effect=lambda key, *a, **kw: key == "providers",
         ),
+        patch("autoskillit.cli.ui._timed_input.timed_prompt", return_value=""),
     ):
         cook_module.cook(profile=profile)
     return captured

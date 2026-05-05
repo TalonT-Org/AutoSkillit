@@ -10,7 +10,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from autoskillit.cli.ui._terminal import terminal_guard
-from autoskillit.core.feature_flags import is_feature_enabled
+from autoskillit.core import is_feature_enabled
 
 
 def _print_recipes_list() -> None:

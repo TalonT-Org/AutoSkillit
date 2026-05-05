@@ -70,6 +70,7 @@ class HeadlessExecutor(Protocol):
         *,
         completion_marker: str,
         resume_session_id: str | None = None,
+        resume_checkpoint: SessionCheckpoint | None = None,
         model: str = "",
         step_name: str = "",
         kitchen_id: str = "",

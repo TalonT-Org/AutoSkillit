@@ -606,6 +606,7 @@ async def dispatch_food_truck(
     timeout_sec: int | None = None,
     capture: dict[str, str] | None = None,
     resume_session_id: str | None = None,
+    resume_checkpoint: dict[str, object] | None = None,
     ctx: Context = CurrentContext(),
 ) -> str:
     """Dispatch a single food truck L3 session for one recipe.
@@ -623,6 +624,9 @@ async def dispatch_food_truck(
         capture: Optional dict mapping capture keys to "${{ result.field }}" templates.
             Extracted values are persisted in the campaign context for downstream
             dispatches to reference via "${{ campaign.key }}" in their ingredients.
+        resume_checkpoint: Checkpoint dict from a prior RESUMABLE dispatch envelope.
+            Pass the "resume_checkpoint" field from the prior result to inject completed
+            items context into the resume prompt.
 
     Never raises.
     """
@@ -666,6 +670,7 @@ async def dispatch_food_truck(
                     "No further dispatches permitted.",
                 )
 
+        from autoskillit.core import SessionCheckpoint  # noqa: PLC0415
         from autoskillit.fleet import execute_dispatch
         from autoskillit.server import _get_ctx
         from autoskillit.server._misc import (  # noqa: PLC0415
@@ -674,6 +679,9 @@ async def dispatch_food_truck(
             invalidate_cache,
         )
 
+        parsed_checkpoint = (
+            SessionCheckpoint.from_dict(resume_checkpoint) if resume_checkpoint else None
+        )
         tool_ctx = _get_ctx()
         result = await execute_dispatch(
             tool_ctx=tool_ctx,
@@ -688,6 +696,7 @@ async def dispatch_food_truck(
             cache_invalidator=invalidate_cache,
             capture=capture,
             resume_session_id=resume_session_id,
+            resume_checkpoint=parsed_checkpoint,
         )
 
         campaign_state_path_str = os.environ.get("AUTOSKILLIT_CAMPAIGN_STATE_PATH")

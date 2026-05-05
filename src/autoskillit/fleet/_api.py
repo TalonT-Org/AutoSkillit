@@ -145,6 +145,7 @@ async def execute_dispatch(
     cache_invalidator: Callable[[str], None] | None = None,
     capture: dict[str, str] | None = None,
     resume_session_id: str | None = None,
+    resume_checkpoint: SessionCheckpoint | None = None,
 ) -> str:
     """Execute a single food truck dispatch.
 
@@ -186,6 +187,7 @@ async def execute_dispatch(
             cache_invalidator=cache_invalidator,
             capture=capture,
             resume_session_id=resume_session_id,
+            resume_checkpoint=resume_checkpoint,
         )
     except asyncio.CancelledError:
         raise
@@ -242,6 +244,7 @@ async def _run_dispatch(
     cache_invalidator: Callable[[str], None] | None = None,
     capture: dict[str, str] | None = None,
     resume_session_id: str | None = None,
+    resume_checkpoint: SessionCheckpoint | None = None,
 ) -> str:
     """Inner dispatch body — called after lock acquisition."""
     from autoskillit.fleet.state import (
@@ -370,6 +373,7 @@ async def _run_dispatch(
         cwd=str(tool_ctx.project_dir),
         completion_marker=completion_marker,
         resume_session_id=resume_session_id,
+        resume_checkpoint=resume_checkpoint,
         kitchen_id=tool_ctx.kitchen_id,
         order_id=dispatch_id,
         campaign_id=campaign_id,
@@ -505,5 +509,8 @@ async def _run_dispatch(
                 "l3_parse_source": parsed.source,
                 "token_usage": skill_result.token_usage,
                 "lifespan_started": skill_result.lifespan_started,
+                "resume_checkpoint": dispatch_checkpoint.to_dict()
+                if dispatch_checkpoint
+                else None,
             }
         )

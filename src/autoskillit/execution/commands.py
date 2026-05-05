@@ -428,6 +428,7 @@ def build_food_truck_cmd(
     cwd: str,
     completion_marker: str,
     resume_session_id: str | None = None,
+    resume_checkpoint: SessionCheckpoint | None = None,
     model: str | None = None,
     env_extras: Mapping[str, str] | None = None,
     output_format: OutputFormat = OutputFormat.STREAM_JSON,
@@ -483,15 +484,30 @@ def build_food_truck_cmd(
     allowed_write_prefix
         If non-empty, sets ``AUTOSKILLIT_ALLOWED_WRITE_PREFIX`` in the subprocess env.
     """
-    # Prompt transformations: completion directive + cwd anchor + narration suppression.
-    # No _ensure_skill_prefix — orchestrator_prompt is a complete system prompt.
-    prompt = _inject_narration_suppression(
-        _inject_cwd_anchor(
-            _inject_completion_directive(orchestrator_prompt, completion_marker),
-            cwd,
-            temp_dir_relpath=temp_dir_relpath,
+    if resume_session_id:
+        _resume_instruction = (
+            "Your previous session was interrupted before completion. "
+            "Continue your work from where you left off. "
+            "Do NOT restart from scratch — pick up exactly where you stopped."
         )
-    )
+        if resume_checkpoint and resume_checkpoint.completed_items:
+            _resume_instruction += "\n\n" + _build_resume_context(resume_checkpoint)
+        prompt = _inject_narration_suppression(
+            _inject_cwd_anchor(
+                _inject_completion_directive(_resume_instruction, completion_marker),
+                cwd,
+                temp_dir_relpath=temp_dir_relpath,
+            )
+        )
+    else:
+        # No _ensure_skill_prefix — orchestrator_prompt is a complete system prompt.
+        prompt = _inject_narration_suppression(
+            _inject_cwd_anchor(
+                _inject_completion_directive(orchestrator_prompt, completion_marker),
+                cwd,
+                temp_dir_relpath=temp_dir_relpath,
+            )
+        )
 
     # Baseline env: headless + orchestrator session type + MCP settings.
     extras: dict[str, str] = {

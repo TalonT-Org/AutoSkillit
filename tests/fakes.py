@@ -95,6 +95,7 @@ class DispatchFoodTruckCall:
     cwd: str
     completion_marker: str = ""
     resume_session_id: str | None = None
+    resume_checkpoint: SessionCheckpoint | None = None
     model: str = ""
     step_name: str = ""
     kitchen_id: str = ""
@@ -211,6 +212,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         *,
         completion_marker: str,
         resume_session_id: str | None = None,
+        resume_checkpoint: SessionCheckpoint | None = None,
         model: str = "",
         step_name: str = "",
         kitchen_id: str = "",
@@ -232,6 +234,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 cwd=cwd,
                 completion_marker=completion_marker,
                 resume_session_id=resume_session_id,
+                resume_checkpoint=resume_checkpoint,
                 model=model,
                 step_name=step_name,
                 kitchen_id=kitchen_id,

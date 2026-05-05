@@ -360,3 +360,59 @@ def test_validation_context_provider_profiles_default() -> None:
     )
     ctx = make_validation_context(recipe)
     assert ctx.provider_profiles == frozenset()
+
+
+def test_feature_gate_rule_fires_on_undeclared_requires_features() -> None:
+    """Recipe using planner skill_command without requires_features: [planner] gets ERROR."""
+    from autoskillit.core import SKILL_TOOLS, Severity
+    from autoskillit.recipe._analysis import make_validation_context
+    from autoskillit.recipe.registry import run_semantic_rules
+    from autoskillit.recipe.schema import Recipe, RecipeStep
+
+    skill_tool = next(iter(SKILL_TOOLS))
+    recipe = Recipe(
+        name="r",
+        description="d",
+        version="0.2.0",
+        kitchen_rules="k",
+        requires_features=[],
+        steps={
+            "s": RecipeStep(
+                tool=skill_tool,
+                with_args={"skill_command": "/autoskillit:planner-analyze"},
+            )
+        },
+    )
+    ctx = make_validation_context(recipe, disabled_features=frozenset())
+    findings = [f for f in run_semantic_rules(ctx) if f.rule == "undeclared-feature-requirement"]
+    assert findings, (
+        "expected undeclared-feature-requirement finding for planner skill "
+        "without requires_features"
+    )
+    assert all(f.severity == Severity.ERROR for f in findings)
+
+
+def test_feature_gate_rule_passes_when_requires_features_declared() -> None:
+    """No undeclared-feature-requirement finding when requires_features includes the feature."""
+    from autoskillit.core import SKILL_TOOLS
+    from autoskillit.recipe._analysis import make_validation_context
+    from autoskillit.recipe.registry import run_semantic_rules
+    from autoskillit.recipe.schema import Recipe, RecipeStep
+
+    skill_tool = next(iter(SKILL_TOOLS))
+    recipe = Recipe(
+        name="r",
+        description="d",
+        version="0.2.0",
+        kitchen_rules="k",
+        requires_features=["planner"],
+        steps={
+            "s": RecipeStep(
+                tool=skill_tool,
+                with_args={"skill_command": "/autoskillit:planner-analyze"},
+            )
+        },
+    )
+    ctx = make_validation_context(recipe, disabled_features=frozenset())
+    findings = [f for f in run_semantic_rules(ctx) if f.rule == "undeclared-feature-requirement"]
+    assert not findings, f"unexpected findings: {findings}"

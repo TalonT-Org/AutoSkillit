@@ -117,6 +117,48 @@ def check_feature_gated_tools(ctx: ValidationContext) -> list[RuleFinding]:
 
 
 @semantic_rule(
+    name="undeclared-feature-requirement",
+    description="Recipes dispatching feature-gated skills must declare requires_features",
+    severity=Severity.ERROR,
+)
+def check_requires_features_declared(ctx: ValidationContext) -> list[RuleFinding]:
+    """Flag recipes that dispatch skills in feature-gated categories without
+    declaring the corresponding requires_features entry."""
+    category_map = (
+        ctx.skill_category_map if ctx.skill_category_map is not None else _get_skill_category_map()
+    )
+    declared_features: frozenset[str] = frozenset(ctx.recipe.requires_features)
+
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool not in SKILL_TOOLS:
+            continue
+        skill_cmd = (step.with_args or {}).get("skill_command") or ""
+        skill_name = resolve_skill_name(skill_cmd)
+        if skill_name is None:
+            continue
+        categories = category_map.get(skill_name, frozenset())
+        for feat_name, fdef in FEATURE_REGISTRY.items():
+            if not (categories & fdef.skill_categories):
+                continue
+            if feat_name not in declared_features:
+                findings.append(
+                    RuleFinding(
+                        rule="undeclared-feature-requirement",
+                        severity=Severity.ERROR,
+                        step_name=step_name,
+                        message=(
+                            f"step '{step_name}': skill_command '{skill_cmd}' references "
+                            f"skill '{skill_name}' which belongs to feature '{feat_name}'. "
+                            f"Add 'requires_features: [{feat_name}]' to this recipe so "
+                            f"init_session can enable the '{feat_name}' feature gate."
+                        ),
+                    )
+                )
+    return findings
+
+
+@semantic_rule(
     name="provider-requires-profile",
     description="Steps that reference a provider must name a configured provider profile",
     severity=Severity.ERROR,

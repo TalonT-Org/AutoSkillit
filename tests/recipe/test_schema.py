@@ -522,3 +522,27 @@ def test_recipe_accepts_empty_categories() -> None:
 
     r = Recipe(name="x", description="d", categories=[])
     assert r.categories == []
+
+
+def test_recipe_requires_features_field() -> None:
+    """Recipe dataclass accepts requires_features list."""
+    from autoskillit.recipe.schema import Recipe
+
+    r = Recipe(name="x", description="d", requires_features=["planner"])
+    assert r.requires_features == ["planner"]
+
+
+def test_recipe_requires_features_defaults_to_empty() -> None:
+    """Recipe.requires_features defaults to empty list."""
+    from autoskillit.recipe.schema import Recipe
+
+    r = Recipe(name="x", description="d")
+    assert r.requires_features == []
+
+
+def test_recipe_requires_features_rejects_unknown_feature() -> None:
+    """Recipe raises ValueError for unknown feature names in requires_features."""
+    from autoskillit.recipe.schema import Recipe
+
+    with pytest.raises(ValueError, match="Unknown features"):
+        Recipe(name="x", description="d", requires_features=["nonexistent_feature_xyz"])

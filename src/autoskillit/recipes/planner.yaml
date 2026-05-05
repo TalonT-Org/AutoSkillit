@@ -11,6 +11,7 @@ description: |
 summary: "init > analyze > [domain?] > gen-phases > parallel-phases > parallel-assignments > sequential-wps > reconcile > validate/refine > compile"
 
 requires_packs: [kitchen-core]
+requires_features: [planner]
 categories: [orchestration-family]
 
 kitchen_rules:

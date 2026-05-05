@@ -66,6 +66,7 @@ class SessionSkillManager(Protocol):
         config: Any | None = None,
         project_dir: Path | None = None,
         recipe_packs: frozenset[str] | None = None,
+        recipe_features: frozenset[str] | None = None,
         allow_only: frozenset[str] | None = None,
     ) -> ValidatedAddDir: ...
 

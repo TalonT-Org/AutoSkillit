@@ -86,6 +86,8 @@ class ToolContext:
                           to the current kitchen session lifetime.
     active_recipe_packs:  frozenset[str] | None — pack names declared by the loaded recipe
                           (frozenset() when kitchen open but no recipe loaded; None when closed)
+    active_recipe_features: frozenset[str] | None — feature names declared by the loaded recipe
+                          (frozenset() when kitchen open but no recipe loaded; None when closed)
     temp_dir:             Resolved temp directory for this project. Sentinel-guarded: raises
                           TypeError if not supplied explicitly. Use make_context() or pass
                           temp_dir=<path>.
@@ -131,6 +133,7 @@ class ToolContext:
     recipe_version: str = field(default="")
     kitchen_id: str = field(default="")
     active_recipe_packs: frozenset[str] | None = field(default_factory=lambda: None)
+    active_recipe_features: frozenset[str] | None = field(default_factory=lambda: None)
     quota_refresh_task: QuotaRefreshTask | None = field(default=None)
     token_factory: TokenFactory | None = field(default=None)
     fleet_lock: FleetLock | None = field(default=None)

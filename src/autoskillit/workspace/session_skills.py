@@ -395,6 +395,7 @@ class DefaultSessionSkillManager:
         config: AutomationConfig | None = None,
         project_dir: Path | None = None,
         recipe_packs: frozenset[str] | None = None,
+        recipe_features: frozenset[str] | None = None,
         allow_only: frozenset[str] | None = None,
     ) -> ValidatedAddDir:
         """Create ephemeral skill dir for session_id.
@@ -449,6 +450,15 @@ class DefaultSessionSkillManager:
             else (config.features if config is not None else {})
         )
 
+        # Merge recipe-level feature requirements: features declared by the active recipe
+        # are injected into session_features when not already set by the user config.
+        # This allows recipes to enable feature-gated skill categories without requiring
+        # the user to configure each feature explicitly.
+        if recipe_features and not cook_session:
+            for feat_name in recipe_features:
+                if feat_name in FEATURE_REGISTRY and feat_name not in session_features:
+                    session_features = {**session_features, feat_name: True}
+
         disabled_feature_tags: frozenset[str] = frozenset()
         if config is not None and not cook_session:
             enabled_tool_tags: set[str] = set()
@@ -456,7 +466,7 @@ class DefaultSessionSkillManager:
             for feature_name, feature_def in FEATURE_REGISTRY.items():
                 if is_feature_enabled(
                     feature_name,
-                    config.features,
+                    session_features,
                     experimental_enabled=config.experimental_enabled,
                 ):
                     enabled_tool_tags |= feature_def.tool_tags

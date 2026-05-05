@@ -106,6 +106,26 @@ def test_feature_depends_on_references_valid_features():
     assert not violations, "\n".join(violations)
 
 
+def test_every_feature_with_skill_categories_has_recipe_enablement_path():
+    """Every FEATURE_REGISTRY entry with non-empty skill_categories must have
+    init_session accept recipe_features so it is testable via recipe-level enablement."""
+    import inspect
+
+    from autoskillit.core.types._type_constants import FEATURE_REGISTRY
+    from autoskillit.workspace.session_skills import DefaultSessionSkillManager
+
+    features_with_cats = [name for name, defn in FEATURE_REGISTRY.items() if defn.skill_categories]
+    assert features_with_cats, (
+        "Test setup: FEATURE_REGISTRY must have at least one feature with skill_categories"
+    )
+
+    sig = inspect.signature(DefaultSessionSkillManager.init_session)
+    assert "recipe_features" in sig.parameters, (
+        "DefaultSessionSkillManager.init_session must accept recipe_features parameter "
+        "so recipes can enable feature-gated skill categories"
+    )
+
+
 def test_feature_skill_categories_match_real_skills():
     """Every FeatureDef.skill_categories entry must map to a frontmatter category tag."""
     import yaml

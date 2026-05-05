@@ -29,10 +29,12 @@ def main() -> None:
         sys.exit(0)
 
     # Headless: resolve session type, fail-closed to skill session
-    session_type = os.environ.get("AUTOSKILLIT_SESSION_TYPE", "").lower()
+    raw_session_type = os.environ.get("AUTOSKILLIT_SESSION_TYPE", "")
+    session_type = raw_session_type.lower()
     if session_type in ("orchestrator", "fleet"):
         sys.exit(0)  # permitted tiers — not a skill session
-    # skill, unset, or invalid → deny below
+    # skill, leaf (deprecated), unset → deny below; unrecognized non-empty values also denied
+    _unrecognized_tier = bool(session_type) and session_type not in ("skill", "leaf")
 
     tool_name: str = data.get("tool_name", "")
     # MCP tool names are prefixed: mcp__<server>__<tool>
@@ -40,16 +42,22 @@ def main() -> None:
     # name coincidentally contains an orchestration tool name.
     tool = tool_name.split("__")[-1]
     if tool in _ORCHESTRATION_TOOLS:
+        denial_reason = (
+            f"{tool} cannot be called from skill sessions. "
+            "Only orchestrator or fleet sessions may call orchestration tools. "
+            "Skill sessions use native Claude Code tools only."
+        )
+        if _unrecognized_tier:
+            denial_reason += (
+                f" (AUTOSKILLIT_SESSION_TYPE={raw_session_type!r} is not a recognized tier;"
+                " expected: orchestrator, fleet, or skill)"
+            )
         payload = json.dumps(
             {
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
                     "permissionDecision": "deny",
-                    "permissionDecisionReason": (
-                        f"{tool} cannot be called from skill sessions. "
-                        "Only orchestrator or fleet sessions may call orchestration tools. "
-                        "Skill sessions use native Claude Code tools only."
-                    ),
+                    "permissionDecisionReason": denial_reason,
                 }
             }
         )

@@ -141,3 +141,14 @@ def test_skill_orchestration_guard_permits_fleet_session(tool_name):
         {"tool_name": f"mcp__autoskillit__{tool_name}"}, session_type="fleet"
     )
     assert response == {}, f"Expected fleet to be permitted for {tool_name}"
+
+
+def test_guard_denies_unrecognized_tier_with_diagnostic_note():
+    """Unrecognized non-empty session type is denied with a diagnostic note naming the value."""
+    response = _run_guard_headless(
+        {"tool_name": "mcp__autoskillit__run_skill"}, session_type="orchestratr"
+    )
+    assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
+    reason = response["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "orchestratr" in reason
+    assert "not a recognized tier" in reason

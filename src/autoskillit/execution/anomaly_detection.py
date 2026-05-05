@@ -338,7 +338,10 @@ def detect_outcome_anomalies(
                 "kind": str(AnomalyKind.THINKING_ONLY_FINAL_TURN),
                 "severity": str(AnomalySeverity.WARNING),
                 "pid": OUTCOME_ANOMALY_PID_SENTINEL,
-                "detail": {"output_tokens": output_tokens, "subtype": subtype},
+                "detail": {
+                    "output_tokens": output_tokens if isinstance(output_tokens, int) else 0,
+                    "subtype": subtype,
+                },
                 "snapshot": {},
             }
         )

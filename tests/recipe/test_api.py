@@ -726,3 +726,22 @@ def test_path_mtime_ns_exists_and_old_helpers_removed() -> None:
     assert not hasattr(api, "_dir_mtime_ns"), "_dir_mtime_ns must be removed"
     assert callable(api._path_mtime_ns), "_path_mtime_ns must be callable"
     assert isinstance(api._path_mtime_ns(Path(".")), int), "_path_mtime_ns must return int"
+
+
+def test_compute_registry_hash_changes_on_mtime(tmp_path: Path) -> None:
+    """Registry hash changes when a YAML file's mtime changes."""
+    import time
+
+    from autoskillit.recipe._api import _compute_registry_hash
+
+    d = tmp_path / "types"
+    d.mkdir()
+    f = d / "test.yaml"
+    f.write_text("name: test\n")
+    h1 = _compute_registry_hash(d)
+
+    time.sleep(0.01)
+    f.write_text("name: test\n")  # same content, new mtime
+    h2 = _compute_registry_hash(d)
+
+    assert h1 != h2

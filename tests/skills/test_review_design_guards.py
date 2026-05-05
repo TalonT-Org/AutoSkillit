@@ -22,7 +22,7 @@ def test_data_acquisition_dimension_exists() -> None:
 def test_data_acquisition_not_l_weight() -> None:
     """data_acquisition must be M-weight minimum to influence verdict in at least one type."""
     types = load_all_experiment_types()
-    for name, spec in types.items():
+    for spec in types:
         weight = spec.dimension_weights.get("data_acquisition")
         if weight in ("M", "H"):
             return
@@ -37,6 +37,7 @@ def test_agent_implementability_dimension_exists() -> None:
 def test_agent_implementability_weight_row() -> None:
     """agent_implementability must have H/H/M/M/L weights for the 5 bundled types."""
     types = load_all_experiment_types()
+    by_name = {s.name: s for s in types}
     expected = {
         "benchmark": "H",
         "configuration_study": "H",
@@ -45,7 +46,7 @@ def test_agent_implementability_weight_row() -> None:
         "exploratory": "L",
     }
     for type_name, exp_weight in expected.items():
-        spec = types.get(type_name)
+        spec = by_name.get(type_name)
         assert spec is not None, f"Bundled type {type_name!r} not found"
         actual = spec.dimension_weights.get("agent_implementability")
         assert actual == exp_weight, (

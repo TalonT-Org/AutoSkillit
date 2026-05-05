@@ -165,6 +165,18 @@ class TestRunSkillStepName:
         assert report[0]["input_tokens"] == 200
 
     @pytest.mark.anyio
+    async def test_dispatch_id_env_records_with_dispatch_label(self, tool_ctx, monkeypatch):
+        """step_name='' with AUTOSKILLIT_DISPATCH_ID set records under dispatch:{id} label."""
+        monkeypatch.setenv("AUTOSKILLIT_DISPATCH_ID", "abc-123")
+        tool_ctx.runner.push(_make_result(returncode=1))  # clone guard snapshot (not a git repo)
+        tool_ctx.runner.push(_make_result(returncode=0, stdout=self._make_ndjson()))
+        await run_skill(skill_command="/autoskillit:investigate topic", cwd="/tmp", step_name="")
+        report = tool_ctx.token_log.get_report()
+        assert len(report) == 1
+        assert report[0]["step_name"] == "dispatch:abc-123"
+        assert report[0]["input_tokens"] == 200
+
+    @pytest.mark.anyio
     async def test_null_token_usage_does_not_record(self, tool_ctx):
         # Return NDJSON with no usage field → token_usage will be null
         no_usage_ndjson = json.dumps(

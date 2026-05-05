@@ -42,6 +42,7 @@ Skill SKILL.md content compliance, placeholder contracts, and verdict guard test
 | `test_resolve_review_severity_and_reject_resolution.py` | Resolve review severity and reject resolution tests |
 | `test_resolve_review_thread_resolution.py` | Resolve review thread resolution tests |
 | `test_resolve_review_token_optimizations.py` | Structural guards for resolve-review SKILL.md token-optimization edits |
+| `test_retired_skill_names.py` | Convention guard: RETIRED_SKILL_NAMES entries must not have live directories, must be lowercase, and runtime raises on retired skill |
 | `test_review_design_contracts.py` | Contract tests for review-design SKILL.md behavioral encoding |
 | `test_review_design_guards.py` | Guard tests for review-design SKILL.md — data_acquisition dimension |
 | `test_review_flag_marker.py` | Tests for the REVIEW-FLAG HTML comment marker used in resolve-review replies |

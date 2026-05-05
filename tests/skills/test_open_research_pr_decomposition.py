@@ -48,14 +48,6 @@ def test_compose_research_pr_skill_exists():
     assert path.exists()
 
 
-def test_open_research_pr_skill_retired():
-    """open-research-pr must be removed — it has been retired."""
-    path = _SKILLS_ROOT / "open-research-pr" / "SKILL.md"
-    assert not path.exists(), (
-        "open-research-pr/SKILL.md still exists — remove it once new skills are in place"
-    )
-
-
 @pytest.mark.parametrize(
     "slug",
     [

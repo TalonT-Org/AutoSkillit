@@ -30,3 +30,4 @@ multi-level orchestrator. The bundled recipes implement issue → plan → workt
 - [examples/](examples/README.md) — end-to-end pipeline runs
 - [decisions/](decisions/README.md) — architecture decision records
 - [design/](design/README.md) — design specifications for planned features and skills
+- [research/experiment-type-rationale.md](research/experiment-type-rationale.md) — dimension-weight rationale for experiment types

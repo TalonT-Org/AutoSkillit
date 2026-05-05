@@ -16,5 +16,7 @@ Documentation integrity, link validity, and naming convention tests.
 | `test_glossary_spelling.py` | Reject banned variants of glossary terms across every doc |
 | `test_no_franchise_in_docs.py` | Guard against franchise references in docs |
 | `test_orchestration_levels.py` | Orchestration levels doc validation |
+| `test_no_synthetic_citation_markers.py` | Guard against synthetic deep-research citation markers in tracked files |
+| `test_rationale_document_completeness.py` | Validate experiment-type rationale document completeness |
 | `test_sub_claude_md_completeness.py` | Structural tests for per-subfolder CLAUDE.md files under src/autoskillit/ |
 | `test_tests_sub_claude_md_completeness.py` | Structural tests for per-subfolder CLAUDE.md files under tests/ |

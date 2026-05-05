@@ -255,3 +255,13 @@ def test_causal_inference_trigger_covers_rct_language() -> None:
     assert "randomly assigned" in triggers_text
     assert "treatment group" in triggers_text
     assert "control group" in triggers_text
+
+
+def test_no_citation_markers_in_yaml_files() -> None:
+    """Experiment-type YAML files must not contain synthetic citation markers."""
+    from autoskillit.recipe.experiment_type_registry import BUNDLED_EXPERIMENT_TYPES_DIR
+
+    for yaml_path in sorted(BUNDLED_EXPERIMENT_TYPES_DIR.glob("*.yaml")):
+        content = yaml_path.read_text()
+        assert chr(0x3010) not in content, f"{yaml_path.name} contains synthetic citation marker"
+        assert "†L" not in content, f"{yaml_path.name} contains synthetic citation marker"

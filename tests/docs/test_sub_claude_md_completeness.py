@@ -44,6 +44,12 @@ EXPECTED_SUB_CLAUDE_MDS = [
 
 
 def test_all_27_sub_claude_md_files_exist():
+    assert len(EXPECTED_SUB_CLAUDE_MDS) == 27, (
+        f"Expected 27 entries, got {len(EXPECTED_SUB_CLAUDE_MDS)}"
+    )
+    assert len(EXPECTED_SUB_CLAUDE_MDS) == len(set(EXPECTED_SUB_CLAUDE_MDS)), (
+        "Duplicate entries in EXPECTED_SUB_CLAUDE_MDS"
+    )
     missing = [p for p in EXPECTED_SUB_CLAUDE_MDS if not (SRC_ROOT / p).is_file()]
     assert not missing, f"Missing sub-CLAUDE.md files: {missing}"
 

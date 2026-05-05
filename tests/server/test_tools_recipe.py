@@ -260,7 +260,7 @@ class TestMigrationSuggestions:
     async def test_validate_always_includes_outdated_version(self, tmp_path):
         """MSUG2: validate_recipe always includes outdated-script-version in semantic results."""
         script = tmp_path / "test-script.yaml"
-        script.write_text(_MINIMAL_SCRIPT_YAML)
+        script.write_text(_MINIMAL_SCRIPT_YAML + 'autoskillit_version: "0.0.1"\n')
 
         result = json.loads(await validate_recipe(script_path=str(script)))
         assert "findings" in result

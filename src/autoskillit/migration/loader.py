@@ -62,15 +62,20 @@ def applicable_migrations(
     """Return migration notes applicable to a script at the given version.
 
     Chains migrations from *script_version* up to *installed_version*.
+    Returns empty when script_version is None (bundled recipes have no version
+    and are not subject to migration).
 
     Algorithm:
-    1. current = Version(script_version) or Version("0.0.0") if None
-    2. Sort migrations by to_version ascending
-    3. For each migration: if from_version <= current < to_version, include it
+    1. If script_version is None, return [] (not migratable)
+    2. current = Version(script_version)
+    3. Sort migrations by to_version ascending
+    4. For each migration: if from_version <= current < to_version, include it
        and advance current = to_version
-    4. Stop when current >= installed_version or no more migrations
+    5. Stop when current >= installed_version or no more migrations
     """
-    current = Version(script_version) if script_version else Version("0.0.0")
+    if script_version is None:
+        return []
+    current = Version(script_version)
     target = Version(installed_version)
 
     if current >= target:

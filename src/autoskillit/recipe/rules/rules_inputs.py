@@ -38,18 +38,7 @@ def _check_outdated_version(ctx: ValidationContext) -> list[RuleFinding]:
     wf = ctx.recipe
     script_ver = wf.version
     if script_ver is None:
-        return [
-            RuleFinding(
-                rule="outdated-recipe-version",
-                severity=Severity.WARNING,
-                step_name="(top-level)",
-                message=(
-                    f"Recipe has no autoskillit_version field. "
-                    f"Current installed version is {AUTOSKILLIT_INSTALLED_VERSION}. "
-                    f"Run 'autoskillit migrate' to update."
-                ),
-            )
-        ]
+        return []
 
     if Version(script_ver) < Version(AUTOSKILLIT_INSTALLED_VERSION):
         return [

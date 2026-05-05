@@ -260,10 +260,10 @@ class TestApplicableMigrations:
         assert result == []
 
     # ML9
-    def test_none_version_matches_from_zero(
+    def test_none_version_not_migratable(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Scripts with no version (None) match from_version="0.0.0"."""
+        """Recipes with no version (None) are not subject to migration."""
         self._setup_migrations(
             tmp_path,
             monkeypatch,
@@ -276,8 +276,7 @@ class TestApplicableMigrations:
             ],
         )
         result = applicable_migrations(None, "0.1.0")
-        assert len(result) == 1
-        assert result[0].from_version == "0.0.0"
+        assert result == []
 
     # ML10
     def test_script_mid_range_matches_enclosing_migration(

@@ -42,7 +42,7 @@ class TestMigrateRecipe:
         recipes_dir = tmp_path / ".autoskillit" / "recipes"
         recipes_dir.mkdir(parents=True)
         recipe_path = recipes_dir / "test-script.yaml"
-        recipe_path.write_text(_MINIMAL_SCRIPT_YAML)
+        recipe_path.write_text(_MINIMAL_SCRIPT_YAML + 'autoskillit_version: "0.0.0"\n')
 
         installed_ver = autoskillit.__version__
         fake_mig_dir = tmp_path / "migrations"

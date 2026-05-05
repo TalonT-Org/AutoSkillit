@@ -3,7 +3,6 @@ description: >-
   Full promotion lifecycle: audit integration branch, human review gate,
   implement audit findings with BEM-guided distribution, promote to main.
 kind: campaign
-autoskillit_version: "0.9.437"
 recipe_version: "1.0.0"
 categories:
   - orchestration-family

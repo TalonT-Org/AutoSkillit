@@ -196,6 +196,7 @@ AUDIT_SKILL_NAMES = [
     "audit-cohesion",
     "audit-defense-standards",
     "validate-audit",
+    "validate-test-audit",
     "audit-docs",
     "audit-review-decisions",
 ]

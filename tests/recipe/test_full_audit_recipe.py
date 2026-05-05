@@ -132,6 +132,7 @@ def test_full_audit_semantic_rules_no_errors() -> None:
             "audit-docs",
             "audit-review-decisions",
             "validate-audit",
+            "validate-test-audit",
         }
     )
     ctx = make_validation_context(recipe, available_skills=known_skills)
@@ -172,6 +173,15 @@ def test_full_audit_validate_audits_note_mentions_review_decisions() -> None:
     data = yaml.safe_load(RECIPE_PATH.read_text())
     note = data["steps"]["validate_audits"]["note"]
     assert "review_decisions" in note
+
+
+def test_full_audit_validate_audits_routes_tests_to_specialized_skill() -> None:
+    """validate_audits step must route test audits to validate-test-audit."""
+    import yaml
+
+    data = yaml.safe_load(RECIPE_PATH.read_text())
+    note = data["steps"]["validate_audits"]["note"]
+    assert "validate-test-audit" in note
 
 
 def test_full_audit_has_max_parallel_ingredient() -> None:

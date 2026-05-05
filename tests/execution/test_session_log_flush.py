@@ -433,6 +433,7 @@ def test_flush_writes_token_usage_json_when_step_name_empty(tmp_path):
     assert (session_dir / "token_usage.json").exists()
     data = json.loads((session_dir / "token_usage.json").read_text())
     assert data["session_label"] == "(ad-hoc)"
+    assert "step_name" not in data
     assert data["cache_creation_input_tokens"] == 20
     assert data["cache_read_input_tokens"] == 80
 
@@ -516,6 +517,7 @@ def test_flush_index_includes_step_name_and_token_fields(tmp_path):
         success=False,
     )
     lines = (tmp_path / "sessions.jsonl").read_text().strip().split("\n")
+    assert len(lines) == 1
     entry = json.loads(lines[-1])
     assert entry["step_name"] == "implement"
     assert entry["input_tokens"] == 100
@@ -702,11 +704,6 @@ def test_flush_helper_builds_and_passes_session_telemetry():
     assert telemetry.loc_deletions == 0
 
 
-# ---------------------------------------------------------------------------
-# L2 orchestrator session telemetry tests
-# ---------------------------------------------------------------------------
-
-
 def test_flush_writes_token_usage_with_dispatch_label(tmp_path):
     """token_usage.json uses dispatch:{id} label when step_name is empty and dispatch_id set."""
     _flush(
@@ -728,27 +725,6 @@ def test_flush_writes_token_usage_with_dispatch_label(tmp_path):
     assert data["session_label"] == "dispatch:abc-123"
     assert data["cache_creation_input_tokens"] == 20
     assert data["cache_read_input_tokens"] == 80
-
-
-def test_sessions_jsonl_includes_cache_fields(tmp_path):
-    """sessions.jsonl entries include cache_creation_input_tokens and cache_read_input_tokens."""
-    _flush(
-        tmp_path,
-        step_name="implement",
-        token_usage={
-            "input_tokens": 100,
-            "output_tokens": 50,
-            "cache_creation_input_tokens": 20,
-            "cache_read_input_tokens": 80,
-        },
-        proc_snapshots=None,
-        success=False,
-    )
-    lines = (tmp_path / "sessions.jsonl").read_text().strip().split("\n")
-    assert len(lines) == 1
-    entry = json.loads(lines[-1])
-    assert entry["cache_creation_input_tokens"] == 20
-    assert entry["cache_read_input_tokens"] == 80
 
 
 def test_token_usage_file_entry_type_matches_written_fields(tmp_path):

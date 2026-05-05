@@ -58,8 +58,10 @@ def test_empty_model_passthrough():
     from autoskillit.server._guards import _resolve_model_as_profile
 
     cfg = _make_config()
-    result = _resolve_model_as_profile("", cfg)
+    with structlog.testing.capture_logs() as logs:
+        result = _resolve_model_as_profile("", cfg)
     assert result == ("", "", None)
+    assert not any(log.get("event") == "provider_profile_no_model" for log in logs)
 
 
 def test_anthropic_model_key_excluded_from_extras():

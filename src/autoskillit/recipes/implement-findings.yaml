@@ -5,7 +5,7 @@ description: >-
   lifecycle. Issues within the same BEM group run in parallel via wavefront
   scheduling; groups run sequentially.
 kind: standard
-autoskillit_version: "0.9.392"
+autoskillit_version: "0.9.393"
 recipe_version: "1.0.0"
 requires_packs:
   - github

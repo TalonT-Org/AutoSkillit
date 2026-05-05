@@ -27,12 +27,12 @@ def _check_hook_registration(settings_path: Path) -> DoctorResult:
         for entry in event_entries
         for hook in entry.get("hooks", [])
     ]
-    registered = " ".join(commands)
     registered_logical = {cmd.split()[-1] for cmd in commands if "_dispatch.py" in cmd}
     missing = [
         script
         for script in canonical_script_basenames()
-        if script not in registered and script.removesuffix(".py") not in registered_logical
+        if not any(script in cmd for cmd in commands)
+        and script.removesuffix(".py") not in registered_logical
     ]
     if missing:
         return DoctorResult(

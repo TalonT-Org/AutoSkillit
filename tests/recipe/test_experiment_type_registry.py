@@ -263,5 +263,5 @@ def test_no_citation_markers_in_yaml_files() -> None:
 
     for yaml_path in sorted(BUNDLED_EXPERIMENT_TYPES_DIR.glob("*.yaml")):
         content = yaml_path.read_text()
-        assert "【" not in content, f"{yaml_path.name} contains synthetic 【 marker"
-        assert "†L" not in content, f"{yaml_path.name} contains synthetic †L marker"
+        assert chr(0x3010) not in content, f"{yaml_path.name} contains synthetic citation marker"
+        assert "†L" not in content, f"{yaml_path.name} contains synthetic citation marker"

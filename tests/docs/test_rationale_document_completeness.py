@@ -22,6 +22,8 @@ EXPECTED_TYPE_SECTIONS = [
     "qualitative_interpretive",
 ]
 
+_LENTICULAR = chr(0x3010)  # U+3010 LEFT BLACK LENTICULAR BRACKET; chr() avoids literal in source
+
 
 @pytest.fixture()
 def rationale_text() -> str:
@@ -50,4 +52,6 @@ def test_rationale_has_reference_list(rationale_text: str) -> None:
 
 def test_rationale_has_no_synthetic_markers(rationale_text: str) -> None:
     """The rationale document itself contains no synthetic citation markers."""
-    assert "【" not in rationale_text, "Rationale document contains synthetic 【 marker"
+    assert _LENTICULAR not in rationale_text, (
+        "Rationale document contains synthetic citation marker"
+    )

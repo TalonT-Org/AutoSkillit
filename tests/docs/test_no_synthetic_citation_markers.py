@@ -8,9 +8,10 @@ import pytest
 
 pytestmark = [pytest.mark.layer("docs"), pytest.mark.small]
 
-# Pattern matches 【N†LX-LY】 style markers from deep-research tool output
+# Pattern matches deep-research tool citation markers.
+# chr() is used intentionally so the guard does not trigger itself.
 SYNTHETIC_MARKER_PATTERNS = [
-    r"【",  # Left double-angle bracket (unique to deep-research markers)
+    chr(0x3010),  # U+3010 LEFT BLACK LENTICULAR BRACKET (unique to deep-research markers)
     r"†L\d",  # Dagger + L + digit (line reference fragment)
 ]
 

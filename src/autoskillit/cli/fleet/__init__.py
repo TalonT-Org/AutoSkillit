@@ -19,10 +19,15 @@ from autoskillit.cli.fleet._fleet_display import (
     _cross_check_tokens,
     _render_status_display,
     _watch_loop,
+    render_fleet_error,
 )
 from autoskillit.cli.fleet._fleet_lifecycle import (
     _pick_resume_campaign,
     _reap_stale_dispatches,
+)
+from autoskillit.cli.fleet._fleet_preview import (
+    _FLEET_DISPATCH_GREETINGS,
+    _print_dispatch_preview,
 )
 from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
 from autoskillit.core import TerminalColumn, get_logger, is_feature_enabled
@@ -50,6 +55,7 @@ if TYPE_CHECKING:
 
 
 fleet_app = App(name="fleet", help="Campaign fleet management.")
+__all__ = ["fleet_app", "render_fleet_error"]
 
 
 def _remove_clone_fn(path: str, _flag: str) -> dict[str, str]:
@@ -78,7 +84,29 @@ def fleet_dispatch() -> None:
     cfg = load_config(Path.cwd())
     _require_fleet(cfg)
 
-    _launch_fleet_session(None, None, None, None, fleet_mode="dispatch")
+    recipe_table = _print_dispatch_preview()
+
+    from autoskillit.cli.ui._timed_input import timed_prompt
+
+    confirm = timed_prompt(
+        "\nLaunch session? [Enter/n]", default="", timeout=120, label="autoskillit fleet dispatch"
+    )
+    if confirm.lower() in ("n", "no"):
+        return
+
+    import random
+
+    greeting = random.choice(_FLEET_DISPATCH_GREETINGS).format(recipe_table=recipe_table)
+
+    _launch_fleet_session(
+        None,
+        None,
+        None,
+        None,
+        fleet_mode="dispatch",
+        initial_message=greeting,
+        recipe_table=recipe_table,
+    )
 
 
 @fleet_app.command(name="campaign")
@@ -367,23 +395,3 @@ def fleet_status(
             return
 
         print(_render_terminal_table(columns, rows_list))
-
-
-def render_fleet_error(envelope_json: str) -> int:
-    """Render a fleet error envelope to stderr.
-
-    Returns exit code: 3 for fleet envelope errors, 0 for non-error envelopes.
-    """
-    try:
-        data = json.loads(envelope_json)
-    except (json.JSONDecodeError, TypeError):
-        return 0
-    if data.get("success") is not False:
-        return 0
-    msg = data.get("user_visible_message") or "unknown error"
-    code = data.get("error", "")
-    sys.stderr.write(f"fleet error [{code}]: {msg}\n")
-    details = data.get("details")
-    if details:
-        sys.stderr.write(f"  details: {json.dumps(details)}\n")
-    return 3

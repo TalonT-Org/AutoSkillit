@@ -198,7 +198,7 @@ def test_fleet_reload_relaunches_without_resume(
     captured_resume_specs: list = []
 
     def fake_run_interactive_session(
-        prompt, *, extra_env=None, resume_spec=None, project_dir=None
+        prompt, *, extra_env=None, resume_spec=None, project_dir=None, initial_message=None
     ):
         call_count[0] += 1
         captured_resume_specs.append(resume_spec)
@@ -213,7 +213,7 @@ def test_fleet_reload_relaunches_without_resume(
     monkeypatch.setattr("autoskillit.cli.detect_autoskillit_mcp_prefix", lambda: "autoskillit")
     monkeypatch.setattr(
         "autoskillit.cli._prompts._build_fleet_dispatch_prompt",
-        lambda mcp_prefix: "test-prompt",
+        lambda mcp_prefix, recipe_table=None: "test-prompt",
     )
     monkeypatch.chdir(tmp_path)
 

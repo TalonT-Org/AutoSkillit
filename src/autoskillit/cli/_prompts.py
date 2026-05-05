@@ -687,7 +687,7 @@ def _build_open_kitchen_prompt(mcp_prefix: str) -> str:
     return text
 
 
-def _build_fleet_dispatch_prompt(mcp_prefix: str) -> str:
+def _build_fleet_dispatch_prompt(mcp_prefix: str, recipe_table: str | None = None) -> str:
     """Build the --append-system-prompt content for an ad-hoc fleet dispatcher session."""
     from autoskillit.fleet import _build_l3_sous_chef_block  # noqa: PLC0415
 
@@ -697,6 +697,15 @@ def _build_fleet_dispatch_prompt(mcp_prefix: str) -> str:
         if sous_chef_block
         else ""
     )
+    _food_truck_section = ""
+    if recipe_table:
+        _food_truck_section = (
+            "\n## AVAILABLE FOOD TRUCKS — STANDARD RECIPES AVAILABLE FOR DISPATCH\n\n"
+            f"{recipe_table}\n\n"
+            "The recipes above are pre-loaded from the CLI. You may skip the "
+            "list_recipes call and proceed directly to load_recipe for ingredient "
+            "inspection when dispatching any of the above.\n"
+        )
     return f"""\
 You are a fleet dispatcher. You coordinate recipe execution across targets \
 by dispatching food trucks.
@@ -712,7 +721,7 @@ TOOL SURFACE — these 10 tools are available in this session:
 - {mcp_prefix}load_recipe             — load a recipe and inspect its ingredients
 - {mcp_prefix}fetch_github_issue      — retrieve issue context when dispatching issue work
 - {mcp_prefix}get_issue_title         — get the title of a GitHub issue
-{sous_chef_section}
+{_food_truck_section}{sous_chef_section}
 ## RECIPE DISCOVERY FLOW
 
 1. Call {mcp_prefix}list_recipes to see available recipes.

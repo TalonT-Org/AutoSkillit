@@ -19,6 +19,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_bundled_recipes_no_inversions.py` | Guard: no inversion step order violations in bundled recipes |
 | `test_bundled_recipes_pipeline_structure.py` | Pipeline structure tests for bundled recipes |
 | `test_bundled_recipes_research.py` | Tests for research bundled recipe structure |
+| `test_bundled_recipes_research_design.py` | Tests for research-design bundled recipe structure |
 | `test_bundled_recipes_review_pr.py` | Tests for review-pr bundled recipe structure |
 | `test_callable_contracts.py` | Contract tests for run_python callable inputs and outputs |
 | `test_campaign_loader.py` | Tests for campaign recipe loading |

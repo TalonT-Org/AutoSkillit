@@ -417,6 +417,7 @@ async def _execute_claude_headless(
             cwd=cwd,
             write_behavior=write_behavior,
             fs_writes_detected=_fs_writes_detected,
+            provider_used=provider_name,
         )
 
         if (

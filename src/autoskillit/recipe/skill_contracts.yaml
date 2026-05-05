@@ -1289,6 +1289,33 @@ skills:
     - "verdict = PASS\nresource_report = /tmp/stage-data/resource_feasibility_2026-04-13_120000.md\n%%ORDER_UP%%"
     write_behavior: always
 
+  setup-environment:
+    inputs:
+    - name: worktree_path
+      type: directory_path
+      required: true
+    - name: experiment_plan
+      type: file_path
+      required: true
+    outputs:
+    - name: env_mode
+      type: string
+      allowed_values: [none, docker, micromamba-host, unavailable]
+    - name: env_report
+      type: file_path
+    - name: verdict
+      type: string
+    expected_output_patterns:
+    - "env_mode\\s*=\\s*(none|docker|micromamba-host|unavailable)"
+    - "env_report\\s*=\\s*/.+"
+    - "verdict\\s*=\\s*(PASS|WARN|FAIL)"
+    pattern_examples:
+    - "env_mode = none\nenv_report = /tmp/setup-environment/env_setup_report.md\nverdict = PASS\n%%ORDER_UP%%"
+    - "env_mode = docker\nenv_report = /tmp/setup-environment/env_setup_report.md\nverdict = PASS\n%%ORDER_UP%%"
+    - "env_mode = micromamba-host\nenv_report = /tmp/setup-environment/env_setup_report.md\nverdict = WARN\n%%ORDER_UP%%"
+    - "env_mode = unavailable\nenv_report = /tmp/setup-environment/env_setup_report.md\nverdict = FAIL\n%%ORDER_UP%%"
+    write_behavior: always
+
   implement-experiment:
     inputs:
     - name: plan_path

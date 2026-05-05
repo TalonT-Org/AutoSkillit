@@ -253,7 +253,7 @@ implement-experiment, implement-worktree, implement-worktree-no-merge, investiga
 make-campaign, make-experiment-diag, make-groups, make-plan, make-req, merge-pr, mermaid, migrate-recipes, open-integration-pr,
 open-kitchen, pipeline-summary, plan-experiment, plan-visualization, planner-analyze, planner-assess-review-approach, planner-consolidate-wps, planner-elaborate-assignments, planner-elaborate-phase, planner-elaborate-wps, planner-extract-domain, planner-generate-phases, planner-reconcile-deps, planner-refine, planner-refine-assignments, planner-refine-phases, planner-refine-wps, planner-validate-task-alignment, prepare-issue, prepare-pr, prepare-research-pr, process-issues, promote-to-main, rectify, reload-session, report-bug,
 resolve-claims-review, resolve-design-review, resolve-failures, resolve-merge-conflicts, resolve-research-review, resolve-review, retry-worktree, review-approach, review-design, review-pr, review-research-pr, run-experiment,
-scope, setup-project, smoke-task, stage-data, triage-issues, troubleshoot-experiment,
+scope, setup-environment, setup-project, smoke-task, stage-data, triage-issues, troubleshoot-experiment,
 validate-audit, verify-diag,
 vis-lens-always-on, vis-lens-antipattern, vis-lens-caption-annot, vis-lens-chart-select,
 vis-lens-color-access, vis-lens-methodology-norms, vis-lens-figure-table, vis-lens-multi-compare,

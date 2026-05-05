@@ -25,6 +25,7 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
         ("fleet", "FLEET", False, False),
         ("FLEET", "FLEET", False, False),
         ("fleet", "FLEET", False, True),
+        ("leaf", "SKILL", True, False),
     ],
     ids=[
         "orchestrator",
@@ -35,6 +36,7 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
         "fleet",
         "fleet-case-insensitive",
         "fleet-no-warning",
+        "leaf-deprecated-suppressed",
     ],
 )
 def test_session_type_resolver(

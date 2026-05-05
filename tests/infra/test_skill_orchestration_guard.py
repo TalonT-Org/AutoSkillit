@@ -68,6 +68,7 @@ def test_guard_denies_deprecated_leaf_tier(tool_name):
         {"tool_name": f"mcp__autoskillit__{tool_name}"}, session_type="leaf"
     )
     assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "skill" in response["hookSpecificOutput"]["permissionDecisionReason"].lower()
 
 
 def test_guard_permits_orchestrator_tier():

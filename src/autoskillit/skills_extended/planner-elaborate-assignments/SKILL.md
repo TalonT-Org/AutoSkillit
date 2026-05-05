@@ -86,7 +86,7 @@ Each L0 receives a self-contained prompt that:
 6. Instructs the L0 to return results as JSON between triple-backtick json fences
 
 Each L0 MUST:
-- Use Grep/Glob/Read for codebase analysis (no sub-subagent spawning — they are skill sessions)
+- Use Grep/Glob/Read for codebase analysis (no sub-subagent spawning — they are actual leaf nodes)
 - Scan for dependencies by comparing scope against other phase assignments (short-form provided in prompt)
 - Read prior result files (if paths provided) to detect cross-phase overlaps
 - Decompose into 1–5 work packages with: `id_suffix` (WP1, WP2, ...), `name`, `scope`, `estimated_files`

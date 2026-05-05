@@ -94,7 +94,7 @@ Each L0 receives a self-contained prompt that:
 6. Instructs the L0 to return results as JSON between triple-backtick json fences
 
 Each L0 MUST:
-- Use Grep/Glob/Read for codebase analysis (no sub-subagent spawning — they are skill sessions)
+- Use Grep/Glob/Read for codebase analysis (no sub-subagent spawning — they are actual leaf nodes)
 - Elaborate the WP with all mandatory fields
 - Return structured JSON between ` ```json ` and ` ``` ` delimiters
 

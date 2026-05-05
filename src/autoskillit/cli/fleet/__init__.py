@@ -70,7 +70,7 @@ def fleet_dispatch() -> None:
         print("Run this command in a regular terminal.")
         sys.exit(1)
     if os.environ.get("AUTOSKILLIT_SESSION_TYPE") in ("skill", "leaf"):
-        print("ERROR: 'fleet dispatch' cannot run inside a skill session.")
+        print("ERROR: 'fleet dispatch' cannot run inside a skill or leaf (deprecated) session.")
         sys.exit(1)
 
     from autoskillit.config import load_config
@@ -93,7 +93,7 @@ def fleet_campaign(
         print("Run this command in a regular terminal.")
         sys.exit(1)
     if os.environ.get("AUTOSKILLIT_SESSION_TYPE") in ("skill", "leaf"):
-        print("ERROR: 'fleet campaign' cannot run inside a skill session.")
+        print("ERROR: 'fleet campaign' cannot run inside a skill or leaf (deprecated) session.")
         sys.exit(1)
 
     from autoskillit.config import load_config

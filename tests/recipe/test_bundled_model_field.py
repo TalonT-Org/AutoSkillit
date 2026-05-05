@@ -4,9 +4,10 @@ import pytest
 
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 
-pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
 _ALL_BUNDLED_RECIPES = [f.name for f in sorted(builtin_recipes_dir().glob("*.yaml"))]
+assert _ALL_BUNDLED_RECIPES, "no bundled recipes found"
 
 
 class TestAllRunSkillStepsHaveModel:

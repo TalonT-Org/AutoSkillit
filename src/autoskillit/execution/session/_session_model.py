@@ -365,7 +365,7 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
                                 case _ as unreachable:
                                     assert_never(unreachable)
                         text = "\n".join(text_parts).strip()
-                        if turn_has_thinking and not text and not turn_has_tool_use:
+                        if turn_has_thinking and not text_parts and not turn_has_tool_use:
                             acc.has_thinking_only_turn = True
                     else:
                         text = str(content).strip()
@@ -429,5 +429,7 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
         jsonl_context_exhausted=acc.jsonl_context_exhausted,
         stop_reasons=acc.stop_reasons,
         has_thinking_only_turn=acc.has_thinking_only_turn,
-        seen_block_types=frozenset(acc.seen_block_types),
+        seen_block_types=frozenset(
+            acc.seen_block_types
+        ),  # accumulator uses set; result is immutable
     )

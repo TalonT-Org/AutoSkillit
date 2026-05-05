@@ -409,25 +409,6 @@ _OPEN_KITCHEN_GREETINGS: list[str] = [
     "Order up! The kitchen is ready. What can I get you?",
 ]
 
-_FLEET_DISPATCH_GREETINGS: list[str] = [
-    (
-        "Fleet dispatcher online. Your available food trucks:\n\n"
-        "{recipe_table}\n\n"
-        "Ready for dispatch orders."
-    ),
-    (
-        "Welcome to fleet dispatch — ad-hoc food truck coordination.\n\n"
-        "Available food trucks:\n\n"
-        "{recipe_table}\n\n"
-        "What targets are we dispatching to?"
-    ),
-    (
-        "Dispatcher standing by. Food truck roster:\n\n"
-        "{recipe_table}\n\n"
-        "Issue your dispatch orders when ready."
-    ),
-]
-
 
 def _build_orchestrator_prompt(
     recipe_name: str,

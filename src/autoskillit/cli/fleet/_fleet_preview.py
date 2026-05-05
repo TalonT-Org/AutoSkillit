@@ -4,21 +4,42 @@ from __future__ import annotations
 
 from pathlib import Path
 
+_DISPATCH_TOOL_CATEGORIES: list[tuple[str, tuple[str, ...]]] = [
+    ("Dispatch", ("dispatch_food_truck",)),
+    ("Cleanup", ("batch_cleanup_clones",)),
+    (
+        "Telemetry",
+        ("get_pipeline_report", "get_token_summary", "get_timing_summary", "get_quota_events"),
+    ),
+    ("Recipes", ("list_recipes", "load_recipe")),
+    ("GitHub", ("fetch_github_issue", "get_issue_title")),
+]
 
-def _build_dispatch_recipe_table() -> str:
-    """Build a compact NAME — DESCRIPTION table of standard recipes for greeting injection."""
-    from autoskillit.recipe import RecipeKind, list_recipes
+_FLEET_DISPATCH_GREETINGS: list[str] = [
+    (
+        "Fleet dispatcher online. Your available food trucks:\n\n"
+        "{recipe_table}\n\n"
+        "Ready for dispatch orders."
+    ),
+    (
+        "Welcome to fleet dispatch — ad-hoc food truck coordination.\n\n"
+        "Available food trucks:\n\n"
+        "{recipe_table}\n\n"
+        "What targets are we dispatching to?"
+    ),
+    (
+        "Dispatcher standing by. Food truck roster:\n\n"
+        "{recipe_table}\n\n"
+        "Issue your dispatch orders when ready."
+    ),
+]
 
-    recipes = list_recipes(Path.cwd(), exclude_kinds=frozenset({RecipeKind.CAMPAIGN})).items
-    if not recipes:
-        return "(no recipes found)"
-    name_w = max(len(r.name) for r in recipes)
-    lines = [f"{r.name:<{name_w}}  {r.description}" for r in recipes]
-    return "\n".join(lines)
 
+def _print_dispatch_preview() -> str:
+    """Print the pre-launch summary for fleet dispatch (mirrors cook's pre-launch display).
 
-def _print_dispatch_preview(cfg: object) -> None:
-    """Print the pre-launch summary for fleet dispatch (mirrors cook's pre-launch display)."""
+    Returns the recipe table string (name + description) for greeting injection.
+    """
     from autoskillit.cli.ui._ansi import permissions_warning, supports_color
     from autoskillit.recipe import RecipeKind, list_recipes
 
@@ -39,26 +60,20 @@ def _print_dispatch_preview(cfg: object) -> None:
 
     recipes = list_recipes(Path.cwd(), exclude_kinds=frozenset({RecipeKind.CAMPAIGN})).items
     if recipes:
-        name_w = max(len(r.name) for r in recipes)
-        src_w = max(len(r.source) for r in recipes)
+        name_w = max(len(r.name or "") for r in recipes)
+        src_w = max(len(r.source or "") for r in recipes)
         print(f"\n{_B}Available food trucks:{_R}")
         print(f"  {'NAME':<{name_w}}  {'SOURCE':<{src_w}}  DESCRIPTION")
         print(f"  {'-' * name_w}  {'-' * src_w}  {'-' * 11}")
         for r in recipes:
-            print(f"  {_G}{r.name:<{name_w}}{_R}  {_D}{r.source:<{src_w}}{_R}  {r.description}")
+            name = r.name or ""
+            src = r.source or ""
+            print(f"  {_G}{name:<{name_w}}{_R}  {_D}{src:<{src_w}}{_R}  {r.description}")
+        greeting_table = "\n".join(f"{(r.name or ''):<{name_w}}  {r.description}" for r in recipes)
     else:
         print(f"\n{_D}No recipes found.{_R}")
+        greeting_table = "(no recipes found)"
 
-    _DISPATCH_TOOL_CATEGORIES: list[tuple[str, tuple[str, ...]]] = [
-        ("Dispatch", ("dispatch_food_truck",)),
-        ("Cleanup", ("batch_cleanup_clones",)),
-        (
-            "Telemetry",
-            ("get_pipeline_report", "get_token_summary", "get_timing_summary", "get_quota_events"),
-        ),
-        ("Recipes", ("list_recipes", "load_recipe")),
-        ("GitHub", ("fetch_github_issue", "get_issue_title")),
-    ]
     print()
     for name, tools in _DISPATCH_TOOL_CATEGORIES:
         tool_list = f"{_D}, {_R}".join(f"{_G}{t}{_R}" for t in tools)
@@ -66,3 +81,4 @@ def _print_dispatch_preview(cfg: object) -> None:
     print()
 
     print(permissions_warning())
+    return greeting_table

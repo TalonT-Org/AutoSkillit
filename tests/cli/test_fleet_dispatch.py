@@ -478,7 +478,7 @@ def test_fleet_dispatch_greeting_contains_recipe_descriptions(
 
 def test_fleet_dispatch_greetings_have_recipe_table_placeholder() -> None:
     """All _FLEET_DISPATCH_GREETINGS entries must contain {recipe_table}."""
-    from autoskillit.cli._prompts import _FLEET_DISPATCH_GREETINGS
+    from autoskillit.cli.fleet._fleet_preview import _FLEET_DISPATCH_GREETINGS
 
     assert len(_FLEET_DISPATCH_GREETINGS) >= 3
     for greeting in _FLEET_DISPATCH_GREETINGS:
@@ -571,6 +571,9 @@ def test_launch_fleet_session_clears_initial_message_on_reload(
         None,
         fleet_mode="dispatch",
         initial_message="Hello!",
+    )
+    assert len(captured_messages) >= 2, (
+        f"expected reload to fire but got only {len(captured_messages)} call(s)"
     )
     assert captured_messages[0] == "Hello!"
     assert captured_messages[1] is None

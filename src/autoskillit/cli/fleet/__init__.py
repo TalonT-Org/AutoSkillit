@@ -26,7 +26,7 @@ from autoskillit.cli.fleet._fleet_lifecycle import (
     _reap_stale_dispatches,
 )
 from autoskillit.cli.fleet._fleet_preview import (
-    _build_dispatch_recipe_table,
+    _FLEET_DISPATCH_GREETINGS,
     _print_dispatch_preview,
 )
 from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
@@ -84,7 +84,7 @@ def fleet_dispatch() -> None:
     cfg = load_config(Path.cwd())
     _require_fleet(cfg)
 
-    _print_dispatch_preview(cfg)
+    recipe_table = _print_dispatch_preview()
 
     from autoskillit.cli.ui._timed_input import timed_prompt
 
@@ -96,9 +96,6 @@ def fleet_dispatch() -> None:
 
     import random
 
-    from autoskillit.cli._prompts import _FLEET_DISPATCH_GREETINGS
-
-    recipe_table = _build_dispatch_recipe_table()
     greeting = random.choice(_FLEET_DISPATCH_GREETINGS).format(recipe_table=recipe_table)
 
     _launch_fleet_session(

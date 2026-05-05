@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 import time
 from datetime import UTC, datetime
@@ -275,7 +276,6 @@ def render_fleet_error(envelope_json: str) -> int:
 
     Returns exit code: 3 for fleet envelope errors, 0 for non-error envelopes.
     """
-    import json
 
     try:
         data = json.loads(envelope_json)

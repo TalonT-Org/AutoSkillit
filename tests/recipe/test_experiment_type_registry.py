@@ -226,3 +226,32 @@ def test_returns_dict_of_experiment_type_spec() -> None:
     types = load_all_experiment_types()
     for _name, spec in types.items():
         assert isinstance(spec, ExperimentTypeSpec)
+
+
+def test_causal_inference_classification_triggers_require_manipulation() -> None:
+    """causal_inference triggers require explicit manipulation/randomization.
+
+    Not just causal language alone.
+    """
+    types = load_all_experiment_types()
+    causal = types["causal_inference"]
+    assert causal.classification_triggers == [
+        (
+            "Explicit randomization, manipulation, or intervention assignment: "
+            "'randomly assigned', 'intervention applied', 'treatment group', "
+            "'control group', 'manipulated X', 'assigned to condition'"
+        ),
+        (
+            "Causal claim ('test whether X causes Y') AND explicit confounder "
+            "adjustment or treatment assignment described"
+        ),
+    ]
+
+
+def test_causal_inference_trigger_covers_rct_language() -> None:
+    """causal_inference triggers cover RCT keywords: randomized assignment, treatment/control."""
+    types = load_all_experiment_types()
+    triggers_text = " ".join(types["causal_inference"].classification_triggers)
+    assert "randomly assigned" in triggers_text
+    assert "treatment group" in triggers_text
+    assert "control group" in triggers_text

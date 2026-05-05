@@ -477,9 +477,11 @@ def test_replace_item_does_not_use_atomic_write(
 # --- expand functions propagate task context ---
 
 
-def test_expand_assignments_includes_task_in_context(tmp_path: Path) -> None:
+def test_expand_assignments_includes_task_file_path_in_context(tmp_path: Path) -> None:
     from autoskillit.planner.manifests import expand_assignments
 
+    task_file = tmp_path / "task_input.md"
+    task_file.write_text("Split research.yaml into 4 sub-recipes")
     refined = {
         "task": "Split research.yaml into 4 sub-recipes",
         "phases": [
@@ -492,18 +494,41 @@ def test_expand_assignments_includes_task_in_context(tmp_path: Path) -> None:
     }
     plan_path = tmp_path / "refined_plan.json"
     plan_path.write_text(json.dumps(refined))
-    result = expand_assignments(refined_plan_path=str(plan_path), output_dir=str(tmp_path))
+    result = expand_assignments(
+        refined_plan_path=str(plan_path),
+        output_dir=str(tmp_path),
+        task_file_path=str(task_file),
+    )
     context_paths = [p for p in result["context_paths"].split(",") if p.strip()]
     assert context_paths, "Must produce at least one context path"
     for cp in context_paths:
         context = json.loads(Path(cp).read_text())
-        assert "task" in context, "Context file must include task field"
-        assert context["task"] == "Split research.yaml into 4 sub-recipes"
+        assert "task_file_path" in context, "Context file must include task_file_path field"
+        assert context["task_file_path"] == str(task_file)
+        assert "task" not in context, "Context file must not include inline task text"
 
 
-def test_expand_wps_includes_task_in_context(tmp_path: Path) -> None:
+def test_expand_assignments_without_task_file_path_uses_empty(tmp_path: Path) -> None:
+    from autoskillit.planner.manifests import expand_assignments
+
+    refined = {
+        "task": "Some task",
+        "phases": [{"id": "P1", "name": "Phase", "assignments_preview": [{"name": "A"}]}],
+    }
+    plan_path = tmp_path / "refined_plan.json"
+    plan_path.write_text(json.dumps(refined))
+    result = expand_assignments(refined_plan_path=str(plan_path), output_dir=str(tmp_path))
+    context_paths = [p for p in result["context_paths"].split(",") if p.strip()]
+    for cp in context_paths:
+        context = json.loads(Path(cp).read_text())
+        assert context.get("task_file_path", "") == ""
+
+
+def test_expand_wps_includes_task_file_path_in_context(tmp_path: Path) -> None:
     from autoskillit.planner.manifests import expand_wps
 
+    task_file = tmp_path / "task_input.md"
+    task_file.write_text("Add telemetry to fleet dispatch")
     refined = {
         "schema_version": 2,
         "task": "Add telemetry to fleet dispatch",
@@ -531,10 +556,15 @@ def test_expand_wps_includes_task_in_context(tmp_path: Path) -> None:
     }
     plan_path = tmp_path / "refined_assignments.json"
     plan_path.write_text(json.dumps(refined))
-    result = expand_wps(refined_assignments_path=str(plan_path), output_dir=str(tmp_path))
+    result = expand_wps(
+        refined_assignments_path=str(plan_path),
+        output_dir=str(tmp_path),
+        task_file_path=str(task_file),
+    )
     context_paths = [p for p in result["context_paths"].split(",") if p.strip()]
     assert context_paths, "Must produce at least one context path"
     for cp in context_paths:
         context = json.loads(Path(cp).read_text())
-        assert "task" in context, "Context file must include task field"
-        assert context["task"] == "Add telemetry to fleet dispatch"
+        assert "task_file_path" in context, "Context file must include task_file_path field"
+        assert context["task_file_path"] == str(task_file)
+        assert "task" not in context, "Context file must not include inline task text"

@@ -914,3 +914,13 @@ def test_merge_tier_results_skips_non_assignment_files(tmp_path):
     ids = [a["id"] for a in merged["assignments"]]
     assert "P1-A1" in ids
     assert "P1" not in ids
+
+
+def test_merge_files_produces_indented_output(tmp_path: Path) -> None:
+    out = tmp_path / "combined.json"
+    item = tmp_path / "item.json"
+    item.write_text(json.dumps({"id": "P1", "name": "Phase 1"}))
+    merge_files(file_paths=[str(item)], output_path=str(out), key="phases")
+    raw = out.read_text(encoding="utf-8")
+    lines = raw.strip().splitlines()
+    assert len(lines) > 1, "merge_files output must be multi-line (indented)"

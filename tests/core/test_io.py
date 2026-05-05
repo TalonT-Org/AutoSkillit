@@ -173,3 +173,16 @@ def test_write_versioned_json_rejects_non_dict_payload(tmp_path):
     with pytest.raises(TypeError, match="dict payload"):
         write_versioned_json(target, [1, 2, 3], schema_version=1)  # type: ignore[arg-type]
     assert not target.exists()
+
+
+def test_write_versioned_json_produces_indented_output(tmp_path):
+    import json
+
+    from autoskillit.core.io import write_versioned_json
+
+    target = tmp_path / "f.json"
+    write_versioned_json(target, {"a": 1, "b": [2, 3]}, schema_version=1)
+    raw = target.read_text(encoding="utf-8")
+    lines = raw.strip().splitlines()
+    assert len(lines) > 1, "Output must be multi-line (indented)"
+    assert json.loads(raw) == {"a": 1, "b": [2, 3], "schema_version": 1}

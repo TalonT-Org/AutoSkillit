@@ -510,9 +510,16 @@ CONTEXT LIMIT ROUTING — run_skill only (check BEFORE on_failure):
     channel signal. Route identically to "resume": follow on_context_limit if defined,
     fall through to on_failure otherwise.
   - NEVER route retry_reason=drain_race to on_failure when on_context_limit exists.
+- When run_skill returns "needs_retry: true" AND "retry_reason: completed_no_flush":
+  - The session exited with empty stdout but write evidence confirms work was performed
+    (files were written to the worktree). Partial progress exists on disk.
+    Route identically to "resume": follow on_context_limit if defined,
+    fall through to on_failure otherwise.
+  - NEVER route retry_reason=completed_no_flush to on_failure when on_context_limit exists.
 - When run_skill returns "needs_retry: true" AND "retry_reason: empty_output":
-  - The session exited cleanly but produced no output (transient API issue or infrastructure
-    failure). No partial progress exists on disk. Do NOT route to on_context_limit.
+  - The session exited cleanly but produced no output AND no write evidence was detected
+    (no Write/Edit tool calls, no filesystem writes). No partial progress exists on disk.
+    Do NOT route to on_context_limit.
   - Fall through to on_failure regardless of whether on_context_limit is defined.
 - When run_skill returns "needs_retry: true" AND "retry_reason: path_contamination":
   - The session wrote files outside its working directory. This is a CWD boundary violation,

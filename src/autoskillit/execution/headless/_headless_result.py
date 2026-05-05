@@ -537,6 +537,16 @@ def _build_skill_result(
                 retry_reason=RetryReason.ZERO_WRITES,
             )
 
+    # Write-evidence reconciliation: EMPTY_OUTPUT contradicts observable write evidence.
+    # When the FSM assigns EMPTY_OUTPUT but tool_uses or fs_writes confirm work was done,
+    # reclassify to COMPLETED_NO_FLUSH so routing preserves the worktree instead of discarding it.
+    if sr.needs_retry and sr.retry_reason == RetryReason.EMPTY_OUTPUT and _has_write_evidence:
+        sr = dataclasses.replace(
+            sr,
+            retry_reason=RetryReason.COMPLETED_NO_FLUSH,
+        )
+        sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
+
     logger.debug(
         "build_skill_result_exit",
         success=sr.success,

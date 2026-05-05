@@ -40,7 +40,8 @@ class RetryReason(StrEnum):
     BUDGET_EXHAUSTED = "budget_exhausted"
     EARLY_STOP = "early_stop"
     ZERO_WRITES = "zero_writes"
-    EMPTY_OUTPUT = "empty_output"  # NATURAL_EXIT + rc=0 + no output, no partial progress
+    EMPTY_OUTPUT = "empty_output"  # NATURAL_EXIT + rc=0 + no output, no write evidence
+    COMPLETED_NO_FLUSH = "completed_no_flush"  # EMPTY_OUTPUT + writes, stdout not flushed
     DRAIN_RACE = "drain_race"  # channel-confirmed completion, stdout not fully flushed before kill
     PATH_CONTAMINATION = "path_contamination"  # CWD boundary violation, not a context limit
     CONTRACT_RECOVERY = (

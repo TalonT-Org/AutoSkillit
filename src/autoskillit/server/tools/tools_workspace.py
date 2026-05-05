@@ -42,6 +42,8 @@ async def test_check(
     Args:
         worktree_path: Path to the git worktree to run tests in.
         step_name: Optional YAML step key for wall-clock timing accumulation.
+            Has no effect on test filtering — filter behavior is controlled by
+            config.test_check.filter_mode.
 
     Never raises.
     """

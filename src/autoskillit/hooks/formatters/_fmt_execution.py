@@ -188,6 +188,8 @@ def _fmt_test_check(data: dict, _pipeline: bool) -> str:
             selected = data.get("tests_selected", "?")
             deselected = data.get("tests_deselected", "?")
             lines.append(f"filter: {filter_mode} ({selected} selected, {deselected} deselected)")
+    else:
+        lines.append("filter: off")
 
     stdout = data.get("stdout", "")
     if stdout:

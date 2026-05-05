@@ -573,6 +573,33 @@ def test_fmt_test_check_shows_question_mark_only_when_stats_truly_unavailable():
     assert "full run" not in out
 
 
+def test_fmt_test_check_emits_filter_off_when_no_filter_mode():
+    """When filter_mode is absent, output contains 'filter: off'."""
+    from autoskillit.hooks.formatters._fmt_execution import _fmt_test_check
+
+    data = {"passed": True, "stdout": "= 10 passed ="}
+    out = _fmt_test_check(data, False)
+    assert "filter: off" in out
+
+
+def test_fmt_test_check_emits_filter_off_when_filter_mode_none():
+    """Explicit None filter_mode also produces 'filter: off'."""
+    from autoskillit.hooks.formatters._fmt_execution import _fmt_test_check
+
+    data = {"passed": True, "stdout": "", "filter_mode": None}
+    out = _fmt_test_check(data, False)
+    assert "filter: off" in out
+
+
+def test_fmt_test_check_emits_filter_off_when_filter_mode_empty_string():
+    """Empty string filter_mode also produces 'filter: off'."""
+    from autoskillit.hooks.formatters._fmt_execution import _fmt_test_check
+
+    data = {"passed": True, "stdout": "", "filter_mode": ""}
+    out = _fmt_test_check(data, False)
+    assert "filter: off" in out
+
+
 # --- Provider line rendering ---
 
 

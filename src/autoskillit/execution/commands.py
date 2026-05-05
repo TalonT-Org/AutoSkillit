@@ -220,14 +220,23 @@ def build_headless_resume_cmd(
 
 
 def _ensure_skill_prefix(skill_command: str) -> str:
-    """Prompt-formatting helper: prepend 'Use ' to slash-commands for headless session loading.
+    """Prompt-formatting helper: wrap slash-commands for headless session loading.
+
+    Transforms `/foo args` into `Use the /foo skill args` so non-Claude models
+    recognize the slash command as a Skill tool invocation rather than a task description.
 
     This is NOT a validator. Non-slash input passes through unchanged by design —
     runtime validation is enforced by the skill_command_guard PreToolUse hook.
     """
     stripped = skill_command.strip()
     if stripped.startswith("/"):
-        return f"Use {stripped}"
+        parts = stripped.split(None, 1)
+        slash_cmd = parts[0]
+        rest = parts[1] if len(parts) > 1 else ""
+        formatted = f"Use the {slash_cmd} skill"
+        if rest:
+            formatted += f" {rest}"
+        return formatted
     return skill_command
 
 

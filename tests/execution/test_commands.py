@@ -348,11 +348,11 @@ class TestBuildSkillSessionCmd:
         assert "--add-dir" not in spec.cmd
 
     def test_skill_prefix_injected(self):
-        """Slash commands must be prefixed with 'Use '."""
+        """Slash commands must be prefixed with 'Use the ... skill'."""
         spec = build_skill_session_cmd("/investigate foo", **self.BASE)
         cmd = spec.cmd
         prompt_idx = cmd.index("-p") + 1 if "-p" in cmd else cmd.index("--print") + 1
-        assert cmd[prompt_idx].startswith("Use /investigate")
+        assert cmd[prompt_idx].startswith("Use the /investigate skill")
 
     def test_completion_marker_appended(self):
         """Completion directive must appear in the prompt."""

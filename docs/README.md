@@ -29,3 +29,4 @@ multi-level orchestrator. The bundled recipes implement issue → plan → workt
 - [developer/](developer/README.md) — contributing, diagnostics, end-turn hazards
 - [examples/](examples/README.md) — end-to-end pipeline runs
 - [decisions/](decisions/README.md) — architecture decision records
+- [design/](design/README.md) — design specifications for planned features and skills

@@ -327,15 +327,8 @@ def test_build_skill_result_stamps_provider_used_on_result() -> None:
     sub_result = _sr(stdout="result: done\n", returncode=0)
     sr = _build_skill_result(sub_result, provider_used="vertex")
     assert sr.provider_used == "vertex"
-
-
-def test_build_skill_result_defaults_provider_used_empty() -> None:
-    from autoskillit.execution.headless._headless_result import _build_skill_result
-    from tests.execution.conftest import _sr
-
-    sub_result = _sr(stdout="result: done\n", returncode=0)
-    sr = _build_skill_result(sub_result)
-    assert sr.provider_used == ""
+    sr_default = _build_skill_result(sub_result)
+    assert sr_default.provider_used == ""
 
 
 def test_build_skill_result_provider_used_survives_budget_guard() -> None:

@@ -215,7 +215,9 @@ class TestPushToRemoteMocked:
         mock_push.returncode = 0
         mock_push.stderr = ""
 
-        with patch("subprocess.run", side_effect=[mock_url, mock_push]) as mock_run:
+        with patch(
+            "autoskillit.workspace.clone.subprocess.run", side_effect=[mock_url, mock_push]
+        ) as mock_run:
             result = push_to_remote(
                 "/clone", "/source", "main", protected_branches=[], force=False
             )
@@ -237,7 +239,9 @@ class TestPushToRemoteMocked:
         mock_fail.stdout = ""
         mock_fail.stderr = "error: No such remote 'origin'"
 
-        with patch("subprocess.run", return_value=mock_fail) as mock_run:
+        with patch(
+            "autoskillit.workspace.clone.subprocess.run", return_value=mock_fail
+        ) as mock_run:
             result = push_to_remote("/clone", "/source", "main", protected_branches=[])
 
         assert result["success"] is False
@@ -255,7 +259,9 @@ class TestPushToRemoteMocked:
         mock_push.returncode = 0
         mock_push.stderr = ""
 
-        with patch("subprocess.run", side_effect=[mock_url, mock_push]) as mock_run:
+        with patch(
+            "autoskillit.workspace.clone.subprocess.run", side_effect=[mock_url, mock_push]
+        ) as mock_run:
             result = push_to_remote("/clone", "/source", "main", protected_branches=[], force=True)
 
         assert result == {"success": True, "stderr": ""}
@@ -279,7 +285,9 @@ class TestPushToRemoteMocked:
         mock_push.returncode = 0
         mock_push.stderr = ""
 
-        with patch("subprocess.run", side_effect=[mock_url, mock_push]) as mock_run:
+        with patch(
+            "autoskillit.workspace.clone.subprocess.run", side_effect=[mock_url, mock_push]
+        ) as mock_run:
             result = push_to_remote(
                 "/clone", "/source", "main", protected_branches=[], force=False
             )
@@ -309,7 +317,9 @@ class TestPushToRemoteMocked:
         mock_push.returncode = 1
         mock_push.stderr = "! [rejected] main -> main (stale info)"
 
-        with patch("subprocess.run", side_effect=[mock_url, mock_push]):
+        with patch(
+            "autoskillit.workspace.clone.subprocess.run", side_effect=[mock_url, mock_push]
+        ):
             result = push_to_remote("/clone", "/source", "main", protected_branches=[], force=True)
 
         assert result["success"] is False
@@ -326,7 +336,9 @@ class TestPushToRemoteMocked:
         mock_push.returncode = 1
         mock_push.stderr = "error: The current branch main has no upstream branch."
 
-        with patch("subprocess.run", side_effect=[mock_url, mock_push]):
+        with patch(
+            "autoskillit.workspace.clone.subprocess.run", side_effect=[mock_url, mock_push]
+        ):
             result = push_to_remote("/clone", "/source", "main", protected_branches=[], force=True)
 
         assert result["success"] is False
@@ -343,7 +355,9 @@ class TestPushToRemoteMocked:
         mock_push.returncode = 1
         mock_push.stderr = "error: failed to push some refs"
 
-        with patch("subprocess.run", side_effect=[mock_url, mock_push]):
+        with patch(
+            "autoskillit.workspace.clone.subprocess.run", side_effect=[mock_url, mock_push]
+        ):
             result = push_to_remote("/clone", "/source", "main", protected_branches=[], force=True)
 
         assert result["success"] is False
@@ -360,7 +374,9 @@ class TestPushToRemoteMocked:
         mock_push.returncode = 1
         mock_push.stderr = "! [rejected] main -> main (stale info)"
 
-        with patch("subprocess.run", side_effect=[mock_url, mock_push]):
+        with patch(
+            "autoskillit.workspace.clone.subprocess.run", side_effect=[mock_url, mock_push]
+        ):
             result = push_to_remote(
                 "/clone", "/source", "main", protected_branches=[], force=False
             )
@@ -382,7 +398,9 @@ class TestPushToRemoteMocked:
             "remote: error: Changes must be made through a merge queue."
         )
 
-        with patch("subprocess.run", side_effect=[mock_url, mock_push]):
+        with patch(
+            "autoskillit.workspace.clone.subprocess.run", side_effect=[mock_url, mock_push]
+        ):
             result = push_to_remote("/clone", "/source", "main", protected_branches=[], force=True)
 
         assert result["success"] is False
@@ -399,7 +417,9 @@ class TestPushToRemoteMocked:
         mock_push.returncode = 1
         mock_push.stderr = "remote: error: branch is protected by merge queue"
 
-        with patch("subprocess.run", side_effect=[mock_url, mock_push]):
+        with patch(
+            "autoskillit.workspace.clone.subprocess.run", side_effect=[mock_url, mock_push]
+        ):
             result = push_to_remote("/clone", "/source", "main", protected_branches=[], force=True)
 
         assert result["success"] is False
@@ -416,7 +436,9 @@ class TestPushToRemoteMocked:
         mock_push.returncode = 1
         mock_push.stderr = "remote: error: GH006: Protected branch update failed."
 
-        with patch("subprocess.run", side_effect=[mock_url, mock_push]):
+        with patch(
+            "autoskillit.workspace.clone.subprocess.run", side_effect=[mock_url, mock_push]
+        ):
             result = push_to_remote(
                 "/clone", "/source", "main", protected_branches=[], force=False
             )

@@ -1,4 +1,8 @@
-"""Headless Claude Code session orchestration. IL-1 module (execution/).
+"""Headless Claude Code session orchestration.
+
+IL-1 module (execution/). Owns the full lifecycle of a headless claude CLI session:
+command preparation, subprocess invocation via the injected runner, and
+SkillResult construction.
 
 Public API:
     run_headless_core(skill_command, cwd, ctx, *, ...) -> SkillResult
@@ -131,6 +135,14 @@ def _resolve_model(step_model: str, config: AutomationConfig) -> str | None:
 
 
 def _derive_step_name_from_skill_command(skill_command: str) -> str:
+    """Extract a recording step name from a skill command string.
+
+    Examples:
+        "/autoskillit:smoke-task arg1" -> "smoke-task"
+        "/investigate foo"             -> "investigate"
+        "/autoskillit:make-plan"       -> "make-plan"
+        ""                             -> ""
+    """
     stripped = skill_command.strip()
     if not stripped:
         return ""
@@ -204,6 +216,13 @@ async def _execute_claude_headless(
     provider_name: str = "",
     provider_fallback_env: dict[str, str] | None = None,
 ) -> SkillResult:
+    """Shared subprocess execution for headless Claude sessions.
+
+    Accepts an already-built ClaudeHeadlessCmd and handles runner invocation,
+    exception handling, _build_skill_result, and session log flushing.
+    Used by both run_headless_core (leaf path) and
+    DefaultHeadlessExecutor.dispatch_food_truck (food truck path).
+    """
     campaign_id = campaign_id or os.environ.get(CAMPAIGN_ID_ENV_VAR, "")
     dispatch_id = dispatch_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
 
@@ -228,9 +247,7 @@ async def _execute_claude_headless(
 
     current_provider_name: str = provider_name
     fallback_activated: bool = False
-    remaining_attempts = (
-        ctx.config.providers.provider_retry_limit if provider_fallback_env is not None else 0
-    )
+    remaining_attempts = ctx.config.providers.provider_retry_limit if provider_fallback_env else 0
 
     runner = ctx.runner
     if runner is None:
@@ -267,6 +284,7 @@ async def _execute_claude_headless(
 
     _pre_session_sha = _capture_git_head_sha(cwd)
     _result: SubprocessResult | None = None
+    result: SubprocessResult  # assigned before every break; exception paths return/raise
     skill_result: SkillResult
     while True:
         try:
@@ -328,7 +346,11 @@ async def _execute_claude_headless(
                 skill_command=skill_command,
                 order_id=order_id,
             )
-            return dataclasses.replace(_crashed, provider_used=current_provider_name)
+            return dataclasses.replace(
+                _crashed,
+                provider_used=current_provider_name,
+                provider_fallback=fallback_activated,
+            )
         except BaseException:
             logger.warning("headless_runner_cancelled", exc_info=True)
             _exc_text = traceback.format_exc()
@@ -428,13 +450,12 @@ async def _execute_claude_headless(
 
         if (
             skill_result.retry_reason in {RetryReason.STALE, RetryReason.BUDGET_EXHAUSTED}
-            and current_provider_name
             and provider_fallback_env is not None
             and remaining_attempts > 0
             and is_feature_enabled("providers", ctx.config.features)
         ):
-            spec = dataclasses.replace(spec, env={**spec.env, **provider_fallback_env})
-            current_provider_name = "anthropic"
+            if not fallback_activated:
+                spec = dataclasses.replace(spec, env={**spec.env, **provider_fallback_env})
             fallback_activated = True
             remaining_attempts -= 1
             continue
@@ -573,7 +594,11 @@ async def run_headless_core(
     provider_name: str = "",
     provider_fallback_env: dict[str, str] | None = None,
 ) -> SkillResult:
-    """Does NOT check open_kitchen gate — callers in server.py are responsible."""
+    """Shared headless runner used by run_skill.
+
+    Does NOT check open_kitchen gate — callers in server.py are responsible.
+    Accepts explicit ToolContext so this module has no server.py dependency.
+    """
     cfg = ctx.config.run_skill
     effective_marker = completion_marker or cfg.completion_marker
     original_skill_command = skill_command
@@ -729,6 +754,8 @@ class DefaultHeadlessExecutor:
         requires_packs: Sequence[str] = (),
         on_spawn: Callable[[int, int], None] | None = None,
         allowed_write_prefix: str = "",
+        provider_name: str = "",
+        provider_fallback_env: dict[str, str] | None = None,
     ) -> SkillResult:
         cfg = self._ctx.config
         resolved_model = _resolve_model(model, cfg)
@@ -784,4 +811,6 @@ class DefaultHeadlessExecutor:
             completion_marker=completion_marker,
             on_spawn=on_spawn,
             skip_clone_guard=True,
+            provider_name=provider_name,
+            provider_fallback_env=provider_fallback_env,
         )

@@ -241,14 +241,22 @@ async def report_bug(
                 config.features,
                 experimental_enabled=config.experimental_enabled,
             ):
-                from autoskillit.server._guards import _resolve_model_as_profile
-
-                effective_model, _prof_name, _prof_extras = _resolve_model_as_profile(
-                    effective_model, config.providers
+                from autoskillit.server._guards import (
+                    _resolve_model_as_profile,
+                    _resolve_provider_profile,
                 )
-                if _prof_extras is not None:
-                    report_provider_extras = _prof_extras
-                    report_profile_name = _prof_name
+
+                _rp_profile, _rp_env = _resolve_provider_profile("", "", config.providers)
+                if _rp_profile != "anthropic":
+                    report_provider_extras = _rp_env
+                    report_profile_name = _rp_profile
+                else:
+                    effective_model, _prof_name, _prof_extras = _resolve_model_as_profile(
+                        effective_model, config.providers
+                    )
+                    if _prof_extras is not None:
+                        report_provider_extras = _prof_extras
+                        report_profile_name = _prof_name
 
             skill_command = (
                 f"/report-bug\n\n"

@@ -109,7 +109,7 @@ figure set:
 | 1 | `vis-lens-always-on` | Composite | Is everything correct by default? | P0 |
 | 2 | `vis-lens-antipattern` | Diagnostic | What visualization antipatterns are present? | P0 |
 | 3 | `vis-lens-chart-select` | Typological | What chart type fits this data shape? | P0 |
-| 4 | `vis-lens-domain-norms` | Normative | Does the figure follow domain conventions? | P0 |
+| 4 | `vis-lens-methodology-norms` | Normative | Does the figure follow methodology-tradition conventions? | P0 |
 | 5 | `vis-lens-uncertainty` | Probabilistic | Is uncertainty properly communicated? | P0 |
 | 6 | `vis-lens-color-access` | Chromatic | Is the color encoding accessible and perceptually uniform? | P1 |
 | 7 | `vis-lens-figure-table` | Decisional | Should this result be a figure or a table? | P1 |

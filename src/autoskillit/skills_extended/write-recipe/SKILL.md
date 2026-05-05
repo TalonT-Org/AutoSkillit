@@ -256,7 +256,7 @@ resolve-claims-review, resolve-design-review, resolve-failures, resolve-merge-co
 scope, setup-project, smoke-task, stage-data, triage-issues, troubleshoot-experiment,
 validate-audit, verify-diag,
 vis-lens-always-on, vis-lens-antipattern, vis-lens-caption-annot, vis-lens-chart-select,
-vis-lens-color-access, vis-lens-domain-norms, vis-lens-figure-table, vis-lens-multi-compare,
+vis-lens-color-access, vis-lens-methodology-norms, vis-lens-figure-table, vis-lens-multi-compare,
 vis-lens-reproducibility, vis-lens-story-arc, vis-lens-temporal, vis-lens-uncertainty,
 generate-report, write-recipe
 

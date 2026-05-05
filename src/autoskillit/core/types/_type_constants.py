@@ -462,6 +462,7 @@ RETIRED_SKILL_NAMES: frozenset[str] = frozenset(
         # DO NOT REMOVE entries — this registry is append-only.
         "open-research-pr",  # Retired; replaced by decomposed skills
         "sprint-planner",  # Retired; no replacement
+        "vis-lens-domain-norms",  # Retired; renamed to vis-lens-methodology-norms
     }
 )
 

@@ -313,7 +313,7 @@ PATH_CAPTURE_SKILLS: dict[str, list[str]] = {
     "vis-lens-caption-annot": ["diagram_path"],
     "vis-lens-chart-select": ["diagram_path"],
     "vis-lens-color-access": ["diagram_path"],
-    "vis-lens-domain-norms": ["diagram_path"],
+    "vis-lens-methodology-norms": ["diagram_path"],
     "vis-lens-figure-table": ["diagram_path"],
     "vis-lens-multi-compare": ["diagram_path"],
     "vis-lens-reproducibility": ["diagram_path"],

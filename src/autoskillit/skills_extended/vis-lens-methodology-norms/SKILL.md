@@ -1,8 +1,8 @@
 ---
-name: vis-lens-domain-norms
+name: vis-lens-methodology-norms
 categories: [vis-lens]
 activate_deps: [mermaid]
-description: "Create Domain Norms visualization planning spec showing ML sub-area mandatory figures, community conventions, and coverage gaps. Domain-Normative lens answering \"Which domain-specific figures are expected by reviewers?\""
+description: "Create Methodology Norms visualization planning spec showing ML sub-area mandatory figures, community conventions, and coverage gaps. Methodology-Normative lens answering \"Which domain-specific figures are expected by reviewers?\""
 hooks:
   PreToolUse:
     - matcher: "*"
@@ -20,7 +20,7 @@ hooks:
 
 ## Arguments
 
-`/autoskillit:vis-lens-domain-norms [context_path] [experiment_plan_path]`
+`/autoskillit:vis-lens-methodology-norms [context_path] [experiment_plan_path]`
 
 - **context_path** (optional positional arg 1) — Absolute path to a lens context file
   containing IV/DV tables, H0/H1 hypotheses, controlled variables, and success criteria.
@@ -36,7 +36,7 @@ hooks:
 - Auditing a figure plan against community norms for the ML sub-area
 - Identifying missing mandatory figures before the camera-ready deadline
 - Onboarding to a new ML sub-area and learning its visualization conventions
-- User invokes `/autoskillit:vis-lens-domain-norms`
+- User invokes `/autoskillit:vis-lens-methodology-norms`
 
 ## ML Sub-Area Mandatory Figures
 
@@ -54,7 +54,7 @@ hooks:
 ## Extensibility
 
 This lens currently covers 8 ML sub-areas. Future domain-specific variants (e.g.,
-`vis-lens-domain-norms-cv`, `vis-lens-domain-norms-rl`) may extend this catalog with
+`vis-lens-methodology-norms-cv`, `vis-lens-methodology-norms-rl`) may extend this catalog with
 venue-specific norms, additional mandatory figure types, or sub-area-specific anti-pattern
 overlays. The base lens should remain general enough to bootstrap any sub-area.
 
@@ -63,7 +63,7 @@ overlays. The base lens should remain general enough to bootstrap any sub-area.
 **NEVER:**
 - Modify any source code files
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for themselves
-- Create files outside `{{AUTOSKILLIT_TEMP}}/vis-lens-domain-norms/`
+- Create files outside `{{AUTOSKILLIT_TEMP}}/vis-lens-methodology-norms/`
 - Declare a figure "present" if it exists only in code but is not yet generated — coverage requires the actual output file or a concrete plan entry
 
 **ALWAYS:**
@@ -72,12 +72,12 @@ overlays. The base lens should remain general enough to bootstrap any sub-area.
 - Sort the gap list absent-first, then partial
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
-- Write output to `{{AUTOSKILLIT_TEMP}}/vis-lens-domain-norms/vis_spec_domain_norms_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+- Write output to `{{AUTOSKILLIT_TEMP}}/vis-lens-methodology-norms/vis_spec_methodology_norms_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
 
   ```
-  diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/vis-lens-domain-norms/vis_spec_domain_norms_{...}.md
+  diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/vis-lens-methodology-norms/vis_spec_methodology_norms_{...}.md
   ```
 
 ---
@@ -209,7 +209,7 @@ priority: "P0"
 placement_tier: "main"
 conflicts: []
 metadata:
-  created_by: "vis-lens-domain-norms"
+  created_by: "vis-lens-methodology-norms"
   reviewed_by: ""
   last_updated: "{YYYY-MM-DD}"
 ```

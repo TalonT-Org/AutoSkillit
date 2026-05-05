@@ -48,7 +48,9 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_make_campaign_output_schema.py` | Tests for make-campaign recipe output schema |
 | `test_merge_prs.py` | Tests for merge-prs recipe structure |
 | `test_merge_prs_queue_any.py` | Tests for merge-prs-queue (any strategy) recipe |
+| `test_merge_prs_queue_common.py` | Shared queue behavior tests across all queue-capable recipes |
 | `test_merge_prs_queue_pmp.py` | Tests for merge-prs-queue (PMP strategy) recipe |
+| `test_merge_prs_queue_release_timeout.py` | Release timeout and ci-watch-post-queue-fix retry logic tests |
 | `test_merge_sub_recipe_hidden.py` | Tests for hidden sub-recipe merging |
 | `test_plan_visualization_step.py` | Tests for plan visualization step in recipes |
 | `test_planner_recipe.py` | Tests for the planner recipe structure |

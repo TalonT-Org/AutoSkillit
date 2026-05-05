@@ -31,6 +31,7 @@ A Claude Code plugin that orchestrates automated skill-driven workflows using he
   * **Version Bumps**: When bumping the package version, update `pyproject.toml` and run `task sync-versions && uv lock`; then search tests for hardcoded version strings (e.g. `AUTOSKILLIT_INSTALLED_VERSION` monkeypatches) and update them.
   * **Run pre-commit before committing**: Always run `pre-commit run --all-files` before committing. Do not skip this step even when code appears clean — hooks auto-fix formatting and abort the commit, requiring re-stage and retry.
   * **Hook Renames**: Renaming a hook script under `src/autoskillit/hooks/` must update `HOOK_REGISTRY` in `hook_registry.py` AND add the old basename to `RETIRED_SCRIPT_BASENAMES` in the same commit. `test_no_retired_name_has_a_live_file` will fail otherwise.
+  * **Skill Renames**: Renaming a skill under `src/autoskillit/skills_extended/` (or `src/autoskillit/skills/`) must update the skill's `SKILL.md` `name:` field AND add the old directory name to `RETIRED_SKILL_NAMES` in `src/autoskillit/core/types/_type_constants.py` in the SAME commit. `test_no_retired_skill_name_has_a_live_directory` will fail otherwise.
   * **Grep tool uses ripgrep (ERE) syntax**: Use `|` for OR-alternation in Grep tool `pattern`
     arguments. `\|` is Bash grep BRE syntax — ripgrep treats it as a literal backslash-pipe
     and returns 0 results. Example: `Grep(pattern="foo|bar")` not `Grep(pattern="foo\|bar")`.

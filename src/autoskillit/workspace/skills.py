@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core import SkillSource, YAMLError, load_yaml, pkg_root
+from autoskillit.core import RETIRED_SKILL_NAMES, SkillSource, YAMLError, load_yaml, pkg_root
 
 
 @dataclass
@@ -136,8 +136,18 @@ def _scan_directory(source: SkillSource, directory: Path) -> list[SkillInfo]:
     """Find all SKILL.md files in immediate subdirectories."""
     if not directory.is_dir():
         return []
-    return [
-        _skill_info_from_frontmatter(d.name, source, d / "SKILL.md")
-        for d in sorted(directory.iterdir())
-        if d.is_dir() and (d / "SKILL.md").is_file() and d.name not in _INTERNAL_SKILLS
-    ]
+    result: list[SkillInfo] = []
+    for entry in sorted(directory.iterdir()):
+        if not entry.is_dir():
+            continue
+        if entry.name in RETIRED_SKILL_NAMES:
+            raise RuntimeError(
+                f"Retired skill name '{entry.name}' found at {entry}. Remove this directory."
+            )
+        if entry.name in _INTERNAL_SKILLS:
+            continue
+        skill_path = entry / "SKILL.md"
+        if not skill_path.is_file():
+            continue
+        result.append(_skill_info_from_frontmatter(entry.name, source, skill_path))
+    return result

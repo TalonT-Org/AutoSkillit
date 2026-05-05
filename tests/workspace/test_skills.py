@@ -487,6 +487,14 @@ class TestSkillResolver:
             f"Skill name collision across skills/ and skills_extended/: {sorted(dupes)}"
         )
 
+    def test_list_all_excludes_retired_skill_names(self) -> None:
+        """list_all() must not surface any skill whose name is in RETIRED_SKILL_NAMES."""
+        from autoskillit.core import RETIRED_SKILL_NAMES
+
+        names = {s.name for s in DefaultSkillResolver().list_all()}
+        surfaced = RETIRED_SKILL_NAMES & names
+        assert not surfaced, f"list_all() returned retired skill name(s): {sorted(surfaced)}"
+
 
 class TestSkillCategories:
     # T6 — read_skill_categories() and SkillInfo.categories
@@ -717,13 +725,6 @@ def test_resolve_claims_review_skill_md_exists() -> None:
     info = resolver.resolve("resolve-claims-review")
     assert info is not None, "resolve-claims-review skill not found"
     assert info.path.exists(), f"SKILL.md missing at {info.path}"
-
-
-def test_sprint_planner_not_in_skill_registry() -> None:
-    """sprint-planner must not appear in the discovered skill list after removal."""
-    resolver = DefaultSkillResolver()
-    skill_names = [s.name for s in resolver.list_all()]
-    assert "sprint-planner" not in skill_names
 
 
 def test_audit_docs_skill_md_exists() -> None:

@@ -55,6 +55,7 @@ __all__ = [
     "FeatureDef",
     "FEATURE_REGISTRY",
     "RETIRED_FEATURES",
+    "RETIRED_SKILL_NAMES",
     "SKILL_FILE_ADVISORY_MAP",
     "SKILL_ACTIVATE_DEPS_REQUIRED",
     "SOUS_CHEF_MANDATORY_SECTIONS",
@@ -452,6 +453,22 @@ if any(k != k.lower() for k in RETIRED_FEATURES):
     raise AssertionError(
         "RETIRED_FEATURES entries must be lowercase. "
         f"Offending: {sorted(k for k in RETIRED_FEATURES if k != k.lower())}"
+    )
+
+RETIRED_SKILL_NAMES: frozenset[str] = frozenset(
+    {
+        # Skill directory names that have been renamed or removed.
+        # Append retired names here atomically with the rename/deletion commit.
+        # DO NOT REMOVE entries — this registry is append-only.
+        "open-research-pr",  # Retired; replaced by decomposed skills
+        "sprint-planner",  # Retired; no replacement
+    }
+)
+
+if any(n != n.lower() for n in RETIRED_SKILL_NAMES):
+    raise AssertionError(
+        "RETIRED_SKILL_NAMES entries must be lowercase. "
+        f"Offending: {sorted(n for n in RETIRED_SKILL_NAMES if n != n.lower())}"
     )
 
 # Guard: FeatureDef.tool_tags must be in TOOL_SUBSET_TAGS — checked at import time.

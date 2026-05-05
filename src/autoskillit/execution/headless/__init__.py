@@ -27,6 +27,7 @@ from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
     KillReason,
     RetryReason,
+    SessionCheckpoint,  # noqa: F401, TC001
     SkillResult,
     ValidatedAddDir,
     WriteBehaviorSpec,
@@ -597,6 +598,8 @@ async def run_headless_core(
     provider_name: str = "",
     provider_fallback_env: dict[str, str] | None = None,
     provider_fallback_name: str = "",
+    resume_session_id: str = "",
+    resume_checkpoint: SessionCheckpoint | None = None,
 ) -> SkillResult:
     """Shared headless runner used by run_skill.
 
@@ -629,6 +632,8 @@ async def run_headless_core(
             allowed_write_prefix=allowed_write_prefix,
             provider_extras=provider_extras,
             profile_name=profile_name,
+            resume_session_id=resume_session_id,
+            resume_checkpoint=resume_checkpoint,
         )
 
         effective_timeout = timeout if timeout is not None else cfg.timeout
@@ -707,6 +712,8 @@ class DefaultHeadlessExecutor:
         provider_name: str = "",
         provider_fallback_env: dict[str, str] | None = None,
         provider_fallback_name: str = "",
+        resume_session_id: str = "",
+        resume_checkpoint: SessionCheckpoint | None = None,
     ) -> SkillResult:
         cfg = self._ctx.config.run_skill
         effective_timeout = timeout if timeout is not None else cfg.timeout
@@ -738,6 +745,8 @@ class DefaultHeadlessExecutor:
             provider_name=provider_name,
             provider_fallback_env=provider_fallback_env,
             provider_fallback_name=provider_fallback_name,
+            resume_session_id=resume_session_id,
+            resume_checkpoint=resume_checkpoint,
         )
 
     async def dispatch_food_truck(
@@ -747,6 +756,7 @@ class DefaultHeadlessExecutor:
         *,
         completion_marker: str,
         resume_session_id: str | None = None,
+        resume_checkpoint: SessionCheckpoint | None = None,
         model: str = "",
         step_name: str = "",
         kitchen_id: str = "",
@@ -788,6 +798,7 @@ class DefaultHeadlessExecutor:
             cwd=cwd,
             completion_marker=completion_marker,
             resume_session_id=resume_session_id,
+            resume_checkpoint=resume_checkpoint,
             model=resolved_model,
             env_extras=merged_extras or None,
             output_format=cfg.run_skill.output_format,

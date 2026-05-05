@@ -6,6 +6,7 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
+from ._type_checkpoint import SessionCheckpoint  # noqa: F401, TC001
 from ._type_results import SkillResult, TestResult, ValidatedAddDir, WriteBehaviorSpec
 
 __all__ = [
@@ -58,6 +59,8 @@ class HeadlessExecutor(Protocol):
         provider_name: str = "",
         provider_fallback_env: dict[str, str] | None = None,
         provider_fallback_name: str = "",
+        resume_session_id: str = "",
+        resume_checkpoint: SessionCheckpoint | None = None,
     ) -> SkillResult: ...
 
     async def dispatch_food_truck(
@@ -67,6 +70,7 @@ class HeadlessExecutor(Protocol):
         *,
         completion_marker: str,
         resume_session_id: str | None = None,
+        resume_checkpoint: SessionCheckpoint | None = None,
         model: str = "",
         step_name: str = "",
         kitchen_id: str = "",

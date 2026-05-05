@@ -235,6 +235,7 @@ MODULE_CASCADE_EXECUTION: dict[str, frozenset[str]] = {
     ),
     "session": frozenset(
         {
+            "cli",
             "execution",
             "server",
             "migration/test_engine.py",

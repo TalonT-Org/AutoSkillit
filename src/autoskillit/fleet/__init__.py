@@ -6,6 +6,7 @@ Gateway exports per REQ-IMP-001 — consumers import from
 
 from ._api import _write_pid as _write_pid
 from ._api import classify_dispatch_outcome, execute_dispatch
+from ._checkpoint_bridge import checkpoint_from_sidecar
 from ._liveness import is_dispatch_session_alive
 from ._prompts import _build_food_truck_prompt as _build_food_truck_prompt
 from ._prompts import _build_l3_sous_chef_block as _build_l3_sous_chef_block
@@ -94,6 +95,7 @@ __all__ = [
     "resume_campaign_from_state",
     "write_captured_values",
     "write_initial_state",
+    "checkpoint_from_sidecar",
     "is_dispatch_session_alive",
     "FleetSemaphore",
     "IssueSidecarEntry",

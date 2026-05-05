@@ -273,6 +273,18 @@ async def run_python(
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
+def _persist_run_skill_state(skill_result: SkillResult, project_dir: Path) -> None:
+    from autoskillit.server._misc import persist_run_skill_state  # noqa: PLC0415
+
+    persist_run_skill_state(skill_result, project_dir)
+
+
+def _clear_run_skill_state(project_dir: Path) -> None:
+    from autoskillit.server._misc import clear_run_skill_state  # noqa: PLC0415
+
+    clear_run_skill_state(project_dir)
+
+
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
 @track_response_size("run_skill")
 async def run_skill(
@@ -284,6 +296,7 @@ async def run_skill(
     stale_threshold: int | None = None,
     idle_output_timeout: int | None = None,
     output_dir: str = "",
+    resume_session_id: str = "",
     ctx: Context = CurrentContext(),
 ) -> str:
     """Run a Claude Code headless session with a skill command.
@@ -330,6 +343,10 @@ async def run_skill(
         idle_output_timeout: Override the idle stdout kill threshold in seconds.
             0 = disabled for this step. None = use global config
             (RunSkillConfig.idle_output_timeout, default 600s).
+        resume_session_id: Session ID from a previous run_skill call that was interrupted.
+            When set, the session is resumed via --resume instead of starting fresh.
+            The skill_command becomes a continuation instruction (non-slash text is allowed).
+            Pass the session_id from the previous run_skill result JSON.
 
     Never raises.
     """
@@ -337,7 +354,7 @@ async def run_skill(
         return headless
     if (gate := _require_enabled()) is not None:
         return gate
-    if (cmd_error := _validate_skill_command(skill_command)) is not None:
+    if not resume_session_id and (cmd_error := _validate_skill_command(skill_command)) is not None:
         return cmd_error
     if cwd and not _is_absolute_path(cwd):
         return json.dumps(
@@ -526,9 +543,11 @@ async def run_skill(
                 write_watch_dirs=write_watch_dirs,
                 provider_extras=provider_extras,
                 profile_name=profile_name_out,
+                resume_session_id=resume_session_id,
             )
             if skill_result.success:
                 tool_ctx.audit.record_success(skill_command)
+                _clear_run_skill_state(tool_ctx.project_dir)
             else:
                 await _notify(
                     ctx,
@@ -537,6 +556,7 @@ async def run_skill(
                     "autoskillit.run_skill",
                     extra={"exit_code": skill_result.exit_code, "subtype": skill_result.subtype},
                 )
+                _persist_run_skill_state(skill_result, tool_ctx.project_dir)
             if effective_order_id:
                 skill_result.order_id = effective_order_id
             from autoskillit.server._misc import (  # noqa: PLC0415
@@ -586,6 +606,7 @@ async def dispatch_food_truck(
     timeout_sec: int | None = None,
     capture: dict[str, str] | None = None,
     resume_session_id: str | None = None,
+    resume_checkpoint: dict[str, object] | None = None,
     ctx: Context = CurrentContext(),
 ) -> str:
     """Dispatch a single food truck L3 session for one recipe.
@@ -603,6 +624,9 @@ async def dispatch_food_truck(
         capture: Optional dict mapping capture keys to "${{ result.field }}" templates.
             Extracted values are persisted in the campaign context for downstream
             dispatches to reference via "${{ campaign.key }}" in their ingredients.
+        resume_checkpoint: Checkpoint dict from a prior RESUMABLE dispatch envelope.
+            Pass the "resume_checkpoint" field from the prior result to inject completed
+            items context into the resume prompt.
 
     Never raises.
     """
@@ -646,6 +670,7 @@ async def dispatch_food_truck(
                     "No further dispatches permitted.",
                 )
 
+        from autoskillit.core import SessionCheckpoint  # noqa: PLC0415
         from autoskillit.fleet import execute_dispatch
         from autoskillit.server import _get_ctx
         from autoskillit.server._misc import (  # noqa: PLC0415
@@ -654,6 +679,9 @@ async def dispatch_food_truck(
             invalidate_cache,
         )
 
+        parsed_checkpoint = (
+            SessionCheckpoint.from_dict(resume_checkpoint) if resume_checkpoint else None
+        )
         tool_ctx = _get_ctx()
         result = await execute_dispatch(
             tool_ctx=tool_ctx,
@@ -668,6 +696,7 @@ async def dispatch_food_truck(
             cache_invalidator=invalidate_cache,
             capture=capture,
             resume_session_id=resume_session_id,
+            resume_checkpoint=parsed_checkpoint,
         )
 
         campaign_state_path_str = os.environ.get("AUTOSKILLIT_CAMPAIGN_STATE_PATH")

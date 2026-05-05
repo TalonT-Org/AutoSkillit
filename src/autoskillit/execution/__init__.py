@@ -99,8 +99,13 @@ from autoskillit.execution.remote_resolver import (
 from autoskillit.execution.session import (
     ClaudeSessionResult,
     ContentState,
+    SessionState,
+    classify_infra_exit,
+    clear_session_state,
     extract_token_usage,
     parse_session_result,
+    persist_session_state,
+    read_session_state,
 )
 from autoskillit.execution.session_log import (
     flush_session_log,
@@ -151,9 +156,14 @@ __all__ = [
     # session
     "ClaudeSessionResult",
     "ContentState",
+    "SessionState",
     "SkillResult",
+    "classify_infra_exit",
+    "clear_session_state",
     "extract_token_usage",
     "parse_session_result",
+    "persist_session_state",
+    "read_session_state",
     # headless
     "run_headless_core",
     "DefaultHeadlessExecutor",

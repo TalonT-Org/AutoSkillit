@@ -36,3 +36,16 @@ def read_starttime_ticks(pid: int) -> int | None:
     except (OSError, ValueError, IndexError):
         pass
     return None
+
+
+def is_session_alive(pid: int, boot_id: str, starttime_ticks: int) -> bool:
+    """True only when boot_id, PID, and starttime_ticks all match — False on non-Linux."""
+    if not pid or not boot_id:
+        return False
+    current_boot_id = read_boot_id()
+    if current_boot_id is None or current_boot_id != boot_id:
+        return False
+    actual_ticks = read_starttime_ticks(pid)
+    if actual_ticks is None:
+        return False
+    return actual_ticks == starttime_ticks

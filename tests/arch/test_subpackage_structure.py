@@ -13,6 +13,7 @@ class TestCoreSubpackages:
 
     def test_core_types_has_all_type_modules(self):
         expected = {
+            "_type_checkpoint",
             "_type_enums",
             "_type_constants",
             "_type_results",
@@ -88,7 +89,9 @@ class TestExecutionSubpackages:
             "_session_model",
             "_session_content",
             "_session_outcome",
+            "_session_state",
             "_retry_fsm",
+            "_exit_classification",
         }
         actual = {
             p.stem for p in (SRC / "execution" / "session").glob("*.py") if p.stem != "__init__"

@@ -16,6 +16,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_commands.py` | Tests for execution/commands.py — ClaudeInteractiveCmd / ClaudeHeadlessCmd builders |
 | `test_db.py` | L1 unit tests for execution/db.py — SQL validation and authorizer |
 | `test_diff_annotator.py` | Behavioral tests for execution/diff_annotator.py |
+| `test_exit_classification.py` | Unit tests for classify_infra_exit and InfraExitCategory enum |
 | `test_flag_contracts.py` | Contract tests for Claude CLI flags |
 | `test_github.py` | L1 unit tests for execution/github.py |
 | `test_github_api_tracking_http.py` | GitHub API tracking HTTP tests |
@@ -61,6 +62,8 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_quota_sleep.py` | Tests for execution/quota.py — check_and_sleep_if_needed, resets_at-None blocking |
 | `test_readiness_helper_contract.py` | AST lint guard: no inline stderr/stdout readline loops used as subprocess readiness polls |
 | `test_recording.py` | Tests for RecordingSubprocessRunner and related helpers |
+| `test_resume_concurrency.py` | Tests for file lock preventing concurrent resume of same session |
+| `test_resume_prompt.py` | Tests for _build_resume_context and build_skill_session_cmd resume integration |
 | `test_recording_sigterm.py` | Integration test: autoskillit serve subprocess receives SIGTERM and writes scenario.json |
 | `test_recording_sigterm_early_term.py` | Edge case: SIGTERM sent to subprocess before readiness sentinel appears |
 | `test_recording_skills.py` | Tests for _recording_skills snapshot/restore helpers |
@@ -69,6 +72,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_session_adjudication_retry.py` | Tests for _compute_retry, _is_kill_anomaly, and related retry adjudication logic |
 | `test_session_adjudication_success.py` | Tests for _compute_success adjudication logic |
 | `test_session_debug_logging.py` | Tests for debug logging instrumentation in session.py |
+| `test_session_state_persistence.py` | Tests for persist_session_state, read_session_state, and clear_session_state |
 | `test_session_log_fields.py` | Tests for flush_session_log field coverage: write warnings, kitchen/order IDs, crash exception, raw stdout, per-turn fields |
 | `test_session_log_flush.py` | Tests for flush_session_log: directory structure, proc-trace, summary/index, resolve_log_dir, temporal fields |
 | `test_session_log_integration.py` | Integration tests: full tracing pipeline (accumulation + flush) end-to-end |

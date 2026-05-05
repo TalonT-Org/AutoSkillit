@@ -11,6 +11,8 @@ from autoskillit.core import (
     ChannelConfirmation,
     CliSubtype,
     FailureRecord,
+    InfraExitCategory,
+    KillReason,
     RetryReason,
     SessionOutcome,
     SessionTelemetry,
@@ -32,6 +34,7 @@ from autoskillit.execution.headless._headless_recovery import (
     _synthesize_from_write_artifacts,
 )
 from autoskillit.execution.headless._headless_scan import _scan_jsonl_write_paths
+from autoskillit.execution.session._exit_classification import classify_infra_exit
 from autoskillit.execution.session._session_content import _check_expected_patterns
 from autoskillit.execution.session._session_model import (
     ClaudeSessionResult,
@@ -276,19 +279,7 @@ def _build_skill_result(
     write_call_count = sum(1 for t in session.tool_uses if t.get("name") in {"Write", "Edit"})
     _has_write_evidence = write_call_count >= 1 or fs_writes_detected
 
-    # ── Channel B drain-race recovery ──────────────────────────────────────
-    # When Channel B confirmed completion but stdout never received the
-    # type=result record (UNPARSEABLE / EMPTY_OUTPUT), the session completed
-    # but Claude Code deferred type=result until all background agents finished.
-    # If we killed the process tree after Channel B fired, the deferred record
-    # was never flushed to stdout.
-    #
-    # assistant_messages are accumulated from stdout NDJSON records of type
-    # "assistant" — these are written BEFORE the deferred type=result. If the
-    # completion marker is standalone in assistant_messages with substantive
-    # content, reconstruct the result and promote the session so downstream
-    # recovery paths and the Channel B bypass in _compute_success operate on
-    # valid state.
+    # Channel B drain-race: recover from assistant_messages if type=result was not flushed.
     match result.channel_confirmation:
         case ChannelConfirmation.CHANNEL_B if (
             session.subtype in _CHANNEL_B_RECOVERABLE_SUBTYPES and completion_marker
@@ -395,6 +386,34 @@ def _build_skill_result(
     success = outcome == SessionOutcome.SUCCEEDED
     needs_retry = outcome == SessionOutcome.RETRIABLE
 
+    infra_category = classify_infra_exit(session, result)
+
+    # API error override: when the session failed due to an API infrastructure error
+    # (overload, 529, ECONNRESET), promote to RESUME so the orchestrator routes to
+    # on_context_limit instead of on_failure (partial progress may exist).
+    if not success and infra_category == InfraExitCategory.API_ERROR:
+        logger.info(
+            "api_error_override",
+            original_retry_reason=retry_reason.value,
+            promoted_to="resume",
+        )
+        retry_reason = RetryReason.RESUME
+        needs_retry = True
+
+    # Process kill override: external kills (SIGKILL/OOM, not autoskillit-initiated)
+    # route to RESUME so the orchestrator can attempt recovery.
+    # TIMED_OUT uses a synthetic returncode=-1 but is a wall-clock timeout (non-recoverable).
+    if (
+        not success
+        and not needs_retry
+        and infra_category == InfraExitCategory.PROCESS_KILLED
+        and result.kill_reason == KillReason.NATURAL_EXIT
+        and result.termination != TerminationReason.TIMED_OUT
+    ):
+        retry_reason = RetryReason.RESUME
+        needs_retry = True
+        outcome = SessionOutcome.RETRIABLE
+
     normalized_subtype = session.normalize_subtype(outcome, completion_marker)
 
     # For adjudicated_failure + write evidence: record as retriable so the consecutive
@@ -470,6 +489,7 @@ def _build_skill_result(
             last_stop_reason=session.last_stop_reason,
             lifespan_started=session.lifespan_started,
             provider_used=provider_used,
+            infra_exit_category=infra_category.value,
         )
     else:
         sr = SkillResult(
@@ -492,6 +512,7 @@ def _build_skill_result(
             last_stop_reason=session.last_stop_reason,
             lifespan_started=session.lifespan_started,
             provider_used=provider_used,
+            infra_exit_category=infra_category.value,
         )
     sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
 

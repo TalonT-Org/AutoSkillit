@@ -484,7 +484,7 @@ class TestRecipeParser:
                 ):
                     assert not step.model, (
                         f"{f.name} step '{step_name}' should not have explicit model "
-                        "(sonnet is the config default); got {step.model!r}"
+                        f"(sonnet is the config default); got {step.model!r}"
                     )
 
 

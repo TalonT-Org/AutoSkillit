@@ -431,9 +431,6 @@ def _cook_cmd(
 
     Use --resume to restore a previous session. Pass a session ID to target a
     specific one, or omit for Claude Code's interactive picker.
-
-    Use --profile to select a provider profile (overrides config default_provider
-    for this session only; requires the 'providers' feature flag to be enabled).
     """
     cook_interactive(
         resume=resume or (session_id is not None), session_id=session_id, profile=profile

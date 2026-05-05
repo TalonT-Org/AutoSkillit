@@ -57,8 +57,8 @@ def main() -> None:
     flag_path = Path.cwd() / ".autoskillit" / "temp" / f"skill_guard_{session_id}.flag"
     try:
         _atomic_write(flag_path, skill_name)
-    except Exception as e:
-        print(f"skill_load_post_hook: failed to write flag: {e}", file=sys.stderr)
+    except Exception:
+        pass
 
     sys.exit(0)
 

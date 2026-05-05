@@ -61,6 +61,31 @@ def _make_tool_use_line(name: str, input_dict: dict) -> str:
     )
 
 
+def _make_cc_jsonl_record(
+    *,
+    request_id: str = "",
+    timestamp: str = "",
+    content: list[dict] | None = None,
+    record_type: str = "assistant",
+) -> str:
+    rec: dict[str, object] = {"type": record_type}
+    if request_id:
+        rec["requestId"] = request_id
+    if timestamp:
+        rec["timestamp"] = timestamp
+    if content is not None:
+        rec["message"] = {"content": content}
+    return json.dumps(rec)
+
+
+def _make_thinking_block(text: str = "reasoning...") -> dict[str, str]:
+    return {"type": "thinking", "thinking": text}
+
+
+def _make_tool_block(name: str) -> dict[str, object]:
+    return {"type": "tool_use", "name": name, "id": "x", "input": {}}
+
+
 # Simulates Claude CLI process that writes a result line then hangs.
 # Used by test_process_channel_b.py and test_process_monitor.py.
 WRITE_RESULT_THEN_HANG_SCRIPT = textwrap.dedent("""\

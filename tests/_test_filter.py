@@ -180,7 +180,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "kitchen_state": frozenset({"core"}),
     "readiness": frozenset({"core", "server"}),
     "session_registry": frozenset({"core"}),
-    "tool_sequence_analysis": frozenset({"core", "server", "cli"}),
+    "tool_sequence_analysis": frozenset({"core", "execution", "server", "cli"}),
 }
 
 # Narrow per-module cascade for execution/. Modules not listed here fall through

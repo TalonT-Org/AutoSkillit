@@ -502,8 +502,8 @@ def _strip_ticket_body(raw: str) -> str:
             continue
         if "| CONTESTED |" in line or "| VALID BUT EXCEPTION WARRANTED |" in line:
             continue
-        if re.search(r"\*\*Contested:\*\s*\d+", line) or re.search(
-            r"\*\*Exception warranted:\*\s*\d+", line
+        if re.search(r"\*\*Contested:\*\*\s+\d+", line) or re.search(
+            r"\*\*Exception warranted:\*\*\s+\d+", line
         ):
             continue
         if "**Exception note:**" in line:
@@ -532,7 +532,7 @@ def _resolve_repo_identity(cwd: str) -> tuple[str, str, str]:
         raise RuntimeError(msg)
     parts = result.stdout.strip().split()
     owner, repo_name = parts[0], parts[1]
-    query = '{ repository(owner: "%s", name: "%s") { id } }' % (owner, repo_name)
+    query = f'{{ repository(owner: "{owner}", name: "{repo_name}") {{ id }} }}'
     result = subprocess.run(
         ["gh", "api", "graphql", "-f", f"query={query}"],
         cwd=cwd,
@@ -561,9 +561,9 @@ def _ensure_and_resolve_labels(cwd: str, owner: str, repo_name: str) -> list[str
         )
         time.sleep(1)
     query = (
-        '{ repository(owner: "%s", name: "%s") { '
-        'impl: label(name: "recipe:implementation") { id } '
-        'enh: label(name: "enhancement") { id } } }' % (owner, repo_name)
+        f'{{ repository(owner: "{owner}", name: "{repo_name}") {{'
+        f' impl: label(name: "recipe:implementation") {{ id }}'
+        f' enh: label(name: "enhancement") {{ id }} }} }}'
     )
     result = subprocess.run(
         ["gh", "api", "graphql", "-f", f"query={query}"],

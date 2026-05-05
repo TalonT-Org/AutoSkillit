@@ -268,15 +268,7 @@ def test_batch_create_issues_strips_body_content(tmp_path):
     for call in mock_run.call_args_list:
         args = call[0][0]
         if "--input" in args:
-            mutation_call = json.loads(
-                call[0][1]["input"] if "input" in call[0][1] else call[1].get("input", "{}")
-            )
-            break
-    # The mutation call uses stdin via --input
-    for call in mock_run.call_args_list:
-        kwargs = call[1]
-        if kwargs.get("input"):
-            mutation_call = json.loads(kwargs["input"])
+            mutation_call = json.loads(call[1].get("input", "{}"))
             break
     body = mutation_call["variables"]["i0"]["body"]
     assert ".autoskillit/" not in body

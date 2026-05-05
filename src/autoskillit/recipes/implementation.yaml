@@ -161,6 +161,7 @@ steps:
 
   plan:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:make-plan ${{ inputs.task }}"
       cwd: "${{ context.work_dir }}"
@@ -191,6 +192,7 @@ steps:
 
   review:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:review-approach ${{ context.plan_path }}"
       cwd: "${{ context.work_dir }}"
@@ -206,6 +208,7 @@ steps:
 
   verify:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:dry-walkthrough ${{ context.plan_path }}"
       cwd: "${{ context.work_dir }}"
@@ -217,6 +220,7 @@ steps:
 
   implement:
     tool: run_skill
+    model: ""
     stale_threshold: 2400
     with:
       skill_command: "/autoskillit:implement-worktree-no-merge ${{ context.plan_path }}"
@@ -232,6 +236,7 @@ steps:
 
   retry_worktree:
     tool: run_skill
+    model: ""
     stale_threshold: 2400
     with:
       skill_command: "/autoskillit:retry-worktree ${{ context.plan_path }} ${{ context.worktree_path }}"
@@ -312,6 +317,7 @@ steps:
 
   fix:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:resolve-failures ${{ context.worktree_path }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.worktree_path }}"
@@ -345,6 +351,7 @@ steps:
 
   audit_impl:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:audit-impl ${{ context.plan_path }} ${{ context.base_sha }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
@@ -379,6 +386,7 @@ steps:
 
   prepare_pr:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:prepare-pr ${{ context.all_plan_paths }} ${{ inputs.run_name }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
@@ -406,6 +414,7 @@ steps:
 
   run_arch_lenses:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:arch-lens-{slug} {context_path}"
       cwd: "${{ context.work_dir }}"
@@ -430,6 +439,7 @@ steps:
 
   compose_pr:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:compose-pr ${{ context.prep_path }} \"${{ context.all_diagram_paths }}\" ${{ context.work_dir }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
@@ -485,6 +495,7 @@ steps:
 
   review_pr:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:review-pr ${{ context.merge_target }} ${{ inputs.base_branch }} annotated_diff_path=${{ context.annotated_diff_path }} hunk_ranges_path=${{ context.hunk_ranges_path }} diff_metrics_path=${{ context.diff_metrics_path }}"
       cwd: "${{ context.work_dir }}"
@@ -532,6 +543,7 @@ steps:
 
   resolve_review:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:resolve-review ${{ context.merge_target }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
@@ -1020,6 +1032,7 @@ steps:
 
   resolve_queue_merge_conflicts:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:resolve-merge-conflicts ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
@@ -1224,6 +1237,7 @@ steps:
 
   resolve_direct_merge_conflicts:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:resolve-merge-conflicts ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
@@ -1327,6 +1341,7 @@ steps:
 
   resolve_immediate_merge_conflicts:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:resolve-merge-conflicts ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
@@ -1374,6 +1389,7 @@ steps:
 
   diagnose_ci:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:diagnose-ci ${{ context.merge_target }} - - - ${{ context.ci_event }}"
       cwd: "${{ context.work_dir }}"
@@ -1394,6 +1410,7 @@ steps:
 
   resolve_ci:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:resolve-failures ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }} ${{ context.ci_conclusion }} ${{ context.ci_failed_jobs }} ${{ context.diagnosis_path }}"
       cwd: "${{ context.work_dir }}"
@@ -1475,6 +1492,7 @@ steps:
 
   ci_conflict_fix:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:resolve-merge-conflicts ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"

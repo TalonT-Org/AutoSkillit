@@ -163,6 +163,8 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/planner/manifests.py", 253),
     # _cmd_rpc.py — emit_fallback_map: BEM fallback execution map (recipe-internal)
     ("src/autoskillit/recipe/_cmd_rpc.py", 445),
+    # _session_state.py — session state persistence (ephemeral process-scoped state)
+    ("src/autoskillit/execution/session/_session_state.py", 64),
 }
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.core.types._type_checkpoint import SessionCheckpoint
+from autoskillit.core.types._type_enums import OutputFormat
 from autoskillit.execution.commands import _build_resume_context
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -43,7 +44,7 @@ class TestBuildSkillSessionCmdResume:
         completion_marker="%%DONE%%",
         model=None,
         plugin_source=None,
-        output_format="text",
+        output_format=OutputFormat.STREAM_JSON,
         resume_session_id="sess-123",
     )
 
@@ -51,7 +52,7 @@ class TestBuildSkillSessionCmdResume:
         from autoskillit.execution.commands import build_skill_session_cmd
 
         spec = build_skill_session_cmd(**self.BASE)
-        prompt = spec.cmd[spec.cmd.index("--prompt") + 1] if "--prompt" in spec.cmd else ""
+        prompt = spec.cmd[spec.cmd.index("-p") + 1] if "-p" in spec.cmd else ""
         assert "interrupted before completion" in prompt
         assert "RESUME CONTEXT" not in prompt
 
@@ -60,7 +61,7 @@ class TestBuildSkillSessionCmdResume:
 
         cp = SessionCheckpoint(completed_items=["done_a", "done_b"], step_name="step_x")
         spec = build_skill_session_cmd(**self.BASE, resume_checkpoint=cp)
-        prompt = spec.cmd[spec.cmd.index("--prompt") + 1] if "--prompt" in spec.cmd else ""
+        prompt = spec.cmd[spec.cmd.index("-p") + 1] if "-p" in spec.cmd else ""
         assert "RESUME CONTEXT" in prompt
         assert "COMPLETED: done_a" in prompt
         assert "COMPLETED: done_b" in prompt
@@ -70,5 +71,5 @@ class TestBuildSkillSessionCmdResume:
 
         cp = SessionCheckpoint(completed_items=[], step_name="")
         spec = build_skill_session_cmd(**self.BASE, resume_checkpoint=cp)
-        prompt = spec.cmd[spec.cmd.index("--prompt") + 1] if "--prompt" in spec.cmd else ""
+        prompt = spec.cmd[spec.cmd.index("-p") + 1] if "-p" in spec.cmd else ""
         assert "RESUME CONTEXT" not in prompt

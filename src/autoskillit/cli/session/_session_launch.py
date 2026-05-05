@@ -51,8 +51,7 @@ def _run_interactive_session(
         detect_autoskillit_mcp_prefix,
         pkg_root,
     )
-    from autoskillit.execution import build_interactive_cmd
-    from autoskillit.execution.session._session_state import read_session_state
+    from autoskillit.execution import build_interactive_cmd, read_session_state
 
     _project_dir = project_dir if project_dir is not None else Path.cwd()
     spec = build_interactive_cmd(

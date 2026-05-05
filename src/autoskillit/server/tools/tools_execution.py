@@ -274,41 +274,15 @@ async def run_python(
 
 
 def _persist_run_skill_state(skill_result: SkillResult, project_dir: Path) -> None:
-    if not skill_result.session_id:
-        return
-    try:
-        from autoskillit.core import ensure_project_temp  # noqa: PLC0415
-        from autoskillit.execution.session._session_state import (  # noqa: PLC0415
-            SessionState,
-            persist_session_state,
-        )
+    from autoskillit.server._misc import persist_run_skill_state  # noqa: PLC0415
 
-        state = SessionState(
-            session_id=skill_result.session_id,
-            pid=os.getpid(),
-            boot_id="",
-            starttime_ticks=0,
-            infra_exit_category=skill_result.infra_exit_category
-            if skill_result.infra_exit_category
-            else None,
-        )
-        state_dir = ensure_project_temp(project_dir) / "session_state"
-        persist_session_state(state, state_dir)
-    except Exception:
-        logger.debug("run_skill: could not persist session state", exc_info=True)
+    persist_run_skill_state(skill_result, project_dir)
 
 
 def _clear_run_skill_state(project_dir: Path) -> None:
-    try:
-        from autoskillit.core import ensure_project_temp  # noqa: PLC0415
-        from autoskillit.execution.session._session_state import (  # noqa: PLC0415
-            clear_session_state,
-        )
+    from autoskillit.server._misc import clear_run_skill_state  # noqa: PLC0415
 
-        state_dir = ensure_project_temp(project_dir) / "session_state"
-        clear_session_state(state_dir)
-    except Exception:
-        logger.debug("run_skill: could not clear session state", exc_info=True)
+    clear_run_skill_state(project_dir)
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})

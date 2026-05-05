@@ -99,8 +99,12 @@ from autoskillit.execution.remote_resolver import (
 from autoskillit.execution.session import (
     ClaudeSessionResult,
     ContentState,
+    SessionState,
+    clear_session_state,
     extract_token_usage,
     parse_session_result,
+    persist_session_state,
+    read_session_state,
 )
 from autoskillit.execution.session_log import (
     flush_session_log,

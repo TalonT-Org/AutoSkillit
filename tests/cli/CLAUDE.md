@@ -48,6 +48,7 @@ CLI command, subcommand, and interactive workflow tests.
 | `test_mcp_names.py` | Tests for cli/_mcp_names.py — MCP prefix detection |
 | `test_menu.py` | Tests: shared selection menu primitive |
 | `test_onboarding.py` | Tests for first-run detection and guided onboarding menu |
+| `test_order_resume.py` | Tests for order CLI infra-exit detection and auto-resume via NamedResume |
 | `test_orchestrator_prompt_contract.py` | Tests for orchestrator prompt contract: failure predicates and dispatch consistency |
 | `test_plugin_cache.py` | Tests for _plugin_cache: retiring cache, install locking, kitchen registry |
 | `test_preview.py` | Tests for the shared pre-launch preview module (_preview.py) |

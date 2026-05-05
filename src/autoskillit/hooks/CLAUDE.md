@@ -15,6 +15,7 @@ Sub-packages: guards/ (see guards/CLAUDE.md), formatters/ (see formatters/CLAUDE
 | `review_gate_post_hook.py` | `PostToolUse`: writes/clears `review_gate_state.json` |
 | `token_summary_hook.py` | Appends Token Usage Summary to PR body |
 | `session_start_hook.py` | Injects open-kitchen reminder on resume |
+| `skill_load_post_hook.py` | `PostToolUse`: writes skill-loaded flag for non-Anthropic provider guard |
 
 ## Architecture Notes
 

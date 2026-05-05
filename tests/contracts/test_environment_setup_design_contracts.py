@@ -10,9 +10,7 @@ from pathlib import Path
 
 import pytest
 
-DESIGN_DOC = (
-    Path(__file__).resolve().parents[2] / "docs" / "design" / "environment-setup-skill-design.md"
-)
+DESIGN_DOC = Path(__file__).resolve().parents[2] / "docs" / "design" / "env-setup-design.md"
 
 
 @pytest.fixture
@@ -25,7 +23,7 @@ class TestDesignDocExists:
     def test_design_doc_file_exists(self) -> None:
         assert DESIGN_DOC.is_file(), (
             f"Expected design doc at {DESIGN_DOC}. "
-            "Create docs/design/environment-setup-skill-design.md per issue #838."
+            "Create docs/design/env-setup-design.md per issue #838."
         )
 
 

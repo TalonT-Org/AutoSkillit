@@ -293,7 +293,7 @@ def consolidate_wps(
     )
 
     # Rebuild wp_index.json as a sorted list (ListComp arg keeps AST scan from flagging as dict)
-    wp_index_path = planner_path / "wp_index.json"
+    wp_index_path = planner_path / "work_packages" / "wp_index.json"
     atomic_write(
         wp_index_path,
         json.dumps(

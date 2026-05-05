@@ -341,3 +341,19 @@ def test_tier_filename_regexes_match_expected_patterns() -> None:
         assert not PHASE_RESULT_FILE_RE.match(name)
         assert not ASSIGN_RESULT_FILE_RE.match(name)
         assert not WP_RESULT_FILE_RE.match(name)
+
+
+def test_refine_wps_skill_md_no_prefix_derivation_instruction() -> None:
+    """planner-refine-wps SKILL.md must not instruct derivation from id prefix."""
+    skill_md = Path("src/autoskillit/skills_extended/planner-refine-wps/SKILL.md")
+    content = skill_md.read_text()
+    assert "extracted from `id` prefix" not in content
+    assert "extracted from id prefix" not in content
+
+
+def test_consolidate_wps_skill_md_no_ambiguous_phase_id() -> None:
+    """planner-consolidate-wps SKILL.md must not offer dual-source phase_id."""
+    skill_md = Path("src/autoskillit/skills_extended/planner-consolidate-wps/SKILL.md")
+    content = skill_md.read_text()
+    assert "or from the `id` prefix" not in content
+    assert "or from the id prefix" not in content

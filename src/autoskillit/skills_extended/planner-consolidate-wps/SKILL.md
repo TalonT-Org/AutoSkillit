@@ -62,8 +62,8 @@ Read `$1` (refined_wps.json). Parse as a PlanDocument. Extract all WP entries fr
 FATAL: failed to parse {path}: {error_detail}
 ```
 
-Group WPs by phase_id (extracted from the `phase_id` field, or from the `id` prefix
-`P{N}-`). Build a map `phase_id → [WPElaborated, ...]`.
+Group WPs by `phase_id` (always populated; read directly from the field).
+Build a map `phase_id → [WPElaborated, ...]`.
 
 ### Step 2: Create output directory
 

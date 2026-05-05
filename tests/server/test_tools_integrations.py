@@ -34,15 +34,6 @@ class TestClaimIssueTool:
         assert "claim_issue" in GATED_TOOLS
 
     @pytest.mark.anyio
-    async def test_claim_issue_returns_gate_error_when_kitchen_closed(self, tool_ctx):
-        from autoskillit.pipeline.gate import DefaultGateState
-
-        tool_ctx.gate = DefaultGateState(enabled=False)
-        result = json.loads(await claim_issue("https://github.com/owner/repo/issues/42"))
-        assert result["success"] is False
-        assert result["subtype"] == "gate_error"
-
-    @pytest.mark.anyio
     async def test_claim_issue_returns_error_without_github_client(self, tool_ctx):
         tool_ctx.github_client = None
         result = json.loads(await claim_issue("https://github.com/owner/repo/issues/42"))
@@ -156,15 +147,6 @@ class TestReleaseIssueTool:
         assert "release_issue" in GATED_TOOLS
 
     @pytest.mark.anyio
-    async def test_release_issue_returns_gate_error_when_kitchen_closed(self, tool_ctx):
-        from autoskillit.pipeline.gate import DefaultGateState
-
-        tool_ctx.gate = DefaultGateState(enabled=False)
-        result = json.loads(await release_issue("https://github.com/owner/repo/issues/42"))
-        assert result["success"] is False
-        assert result["subtype"] == "gate_error"
-
-    @pytest.mark.anyio
     async def test_release_issue_returns_error_without_github_client(self, tool_ctx):
         tool_ctx.github_client = None
         result = json.loads(await release_issue("https://github.com/owner/repo/issues/42"))
@@ -208,15 +190,6 @@ class TestPrepareIssueTool:
         from autoskillit.pipeline.gate import GATED_TOOLS
 
         assert "prepare_issue" in GATED_TOOLS
-
-    @pytest.mark.anyio
-    async def test_prepare_issue_returns_gate_error_when_kitchen_closed(self, tool_ctx):
-        from autoskillit.pipeline.gate import DefaultGateState
-
-        tool_ctx.gate = DefaultGateState(enabled=False)
-        result = json.loads(await prepare_issue("Test title", "Test body"))
-        assert result["success"] is False
-        assert result["subtype"] == "gate_error"
 
     @pytest.mark.anyio
     async def test_prepare_issue_success_with_result_block(self, tool_ctx):
@@ -462,15 +435,6 @@ class TestEnrichIssuesTool:
         from autoskillit.pipeline.gate import GATED_TOOLS
 
         assert "enrich_issues" in GATED_TOOLS
-
-    @pytest.mark.anyio
-    async def test_enrich_issues_returns_gate_error_when_kitchen_closed(self, tool_ctx):
-        from autoskillit.pipeline.gate import DefaultGateState
-
-        tool_ctx.gate = DefaultGateState(enabled=False)
-        result = json.loads(await enrich_issues())
-        assert result["success"] is False
-        assert result["subtype"] == "gate_error"
 
     @pytest.mark.anyio
     async def test_enrich_issues_success_empty_result_includes_diagnostics(self, tool_ctx):

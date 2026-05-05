@@ -40,8 +40,24 @@ from autoskillit.execution.session._session_outcome import (
     _compute_outcome,  # noqa: F401 — re-export for callers
     _compute_success,  # noqa: F401 — re-export for callers
 )
+from autoskillit.execution.session._session_state import (
+    SessionState,  # noqa: F401 — re-export for callers
+    SessionStateLock,  # noqa: F401 — re-export for callers
+    clear_session_state,  # noqa: F401 — re-export for callers
+    persist_session_state,  # noqa: F401 — re-export for callers
+    read_session_state,  # noqa: F401 — re-export for callers
+)
 
 logger = get_logger(__name__)
 _truncate = truncate_text
 # Re-export SkillResult so existing callers can import from this module.
-__all__ = ["CliSubtype", "SkillResult", "classify_infra_exit"]
+__all__ = [
+    "CliSubtype",
+    "SessionState",
+    "SessionStateLock",
+    "SkillResult",
+    "classify_infra_exit",
+    "clear_session_state",
+    "persist_session_state",
+    "read_session_state",
+]

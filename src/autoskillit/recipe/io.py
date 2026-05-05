@@ -361,6 +361,11 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
     requires_recipe_packs = data.get("requires_recipe_packs") or []
     allowed_recipes = data.get("allowed_recipes") or []
     continue_on_failure = bool(data.get("continue_on_failure", False))
+    requires_features_raw = data.get("requires_features") or []
+    if not isinstance(requires_features_raw, list):
+        raise ValueError(
+            f"'requires_features' must be a list, got {type(requires_features_raw).__name__!r}"
+        )
 
     return Recipe(
         name=name,
@@ -379,6 +384,7 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
         requires_recipe_packs=requires_recipe_packs,
         allowed_recipes=allowed_recipes,
         continue_on_failure=continue_on_failure,
+        requires_features=requires_features_raw,
     )
 
 

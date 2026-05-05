@@ -150,3 +150,98 @@ def test_feature_gate_suppresses_when_allow_only_is_none(tmp_path: Path) -> None
         "planner-elaborate-phase must be suppressed by the planner feature gate "
         "when allow_only=None (no orchestrator-requested override)"
     )
+
+
+# ── Tests: recipe_features parameter ─────────────────────────────────────────
+
+
+def test_recipe_features_enables_planner_skills(tmp_path: Path) -> None:
+    """Planner skills are available when recipe declares requires_features: [planner]."""
+    from tests._helpers import make_test_config
+
+    config = make_test_config(features={}, experimental_enabled=False)
+    provider = SkillsDirectoryProvider()
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
+    session_path = mgr.init_session(
+        "recipe-feat-enables",
+        cook_session=False,
+        config=config,
+        recipe_features=frozenset({"planner"}),
+    )
+    skill_names = {p.parent.name for p in session_path.glob(".claude/skills/*/SKILL.md")}
+    assert "planner-elaborate-phase" in skill_names, (
+        "planner-elaborate-phase must be present when recipe_features includes 'planner'"
+    )
+
+
+def test_recipe_features_do_not_override_explicit_user_disable(tmp_path: Path) -> None:
+    """Explicit features.planner=False in config wins over recipe_features."""
+    from tests._helpers import make_test_config
+
+    config = make_test_config(features={"planner": False}, experimental_enabled=False)
+    provider = SkillsDirectoryProvider()
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
+    session_path = mgr.init_session(
+        "recipe-feat-no-override",
+        cook_session=False,
+        config=config,
+        recipe_features=frozenset({"planner"}),
+    )
+    skill_names = {p.parent.name for p in session_path.glob(".claude/skills/*/SKILL.md")}
+    assert "planner-elaborate-phase" not in skill_names, (
+        "recipe_features must not override explicit user config features.planner=False"
+    )
+
+
+def test_recipe_features_enables_multiple_features(tmp_path: Path) -> None:
+    """Recipe declaring requires_features: [planner, fleet] enables both."""
+    from tests._helpers import make_test_config
+
+    config = make_test_config(features={}, experimental_enabled=False)
+    provider = SkillsDirectoryProvider()
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
+    session_path = mgr.init_session(
+        "recipe-feat-multi",
+        cook_session=False,
+        config=config,
+        recipe_features=frozenset({"planner", "fleet"}),
+    )
+    skill_names = {p.parent.name for p in session_path.glob(".claude/skills/*/SKILL.md")}
+    assert "planner-elaborate-phase" in skill_names, (
+        "planner-elaborate-phase must be present when recipe_features includes 'planner'"
+    )
+    assert "make-campaign" in skill_names, (
+        "make-campaign must be present when recipe_features includes 'fleet'"
+    )
+
+
+@pytest.mark.parametrize(
+    "recipe_features,expected",
+    [
+        (None, False),
+        (frozenset(), False),
+        (frozenset({"planner"}), True),
+    ],
+    ids=["none", "empty", "planner"],
+)
+def test_recipe_features_cross_axis(
+    tmp_path: Path, recipe_features: frozenset | None, expected: bool
+) -> None:
+    """recipe_features axis interacts correctly with feature gate."""
+    from tests._helpers import make_test_config
+
+    config = make_test_config(features={}, experimental_enabled=False)
+    provider = SkillsDirectoryProvider()
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
+    session_path = mgr.init_session(
+        f"recipe-feat-cross-{id(recipe_features)}",
+        cook_session=False,
+        config=config,
+        recipe_features=recipe_features,
+    )
+    skill_names = {p.parent.name for p in session_path.glob(".claude/skills/*/SKILL.md")}
+    present = "planner-elaborate-phase" in skill_names
+    assert present == expected, (
+        f"recipe_features={recipe_features!r}: expected planner-elaborate-phase "
+        f"present={expected}, got {present}"
+    )

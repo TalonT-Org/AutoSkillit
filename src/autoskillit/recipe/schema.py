@@ -10,7 +10,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Final
 
-from autoskillit.core import RECIPE_PACK_TAGS, DispatchGateType, RecipeSource
+from autoskillit.core import FEATURE_REGISTRY, RECIPE_PACK_TAGS, DispatchGateType, RecipeSource
 
 AUTOSKILLIT_VERSION_KEY: Final = "autoskillit_version"
 RECIPE_VERSION_KEY: Final = "recipe_version"
@@ -165,6 +165,9 @@ class Recipe:
     continue_on_failure: bool = False
     # Populated by extract_blocks() during load; empty tuple for recipes with no block: anchors.
     blocks: tuple[RecipeBlock, ...] = field(default_factory=tuple)
+    requires_features: list[str] = field(default_factory=list)
+    # Keys from FEATURE_REGISTRY. Recipes declare the features whose skill_categories
+    # they need so init_session can merge them into session_features at dispatch time.
 
     def __post_init__(self) -> None:
         self.name = self.name.strip()
@@ -176,6 +179,9 @@ class Recipe:
             raise ValueError(
                 f"Unknown categories {sorted(unknown_cats)!r}. Valid: {sorted(RECIPE_PACK_TAGS)}"
             )
+        unknown_features = set(self.requires_features) - set(FEATURE_REGISTRY)
+        if unknown_features:
+            raise ValueError(f"Unknown features in requires_features: {sorted(unknown_features)}")
 
 
 @dataclass

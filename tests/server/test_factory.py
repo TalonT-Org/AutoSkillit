@@ -534,3 +534,43 @@ def test_resolve_project_dir_cwd_fallback(monkeypatch):
 
     monkeypatch.setattr("autoskillit.server._factory.subprocess.run", fake_run)
     assert _resolve_project_dir() == Path.cwd()
+
+
+def test_make_context_env_profile_overrides_default_provider(monkeypatch):
+    """AUTOSKILLIT_PROVIDER_PROFILE in env must set config.providers.default_provider."""
+    monkeypatch.setenv("AUTOSKILLIT_PROVIDER_PROFILE", "minimax")
+    config = AutomationConfig()
+    config.providers.default_provider = None
+    config.providers.profiles = {"minimax": {}}
+    ctx = make_context(config, runner=_runner())
+    assert ctx.config.providers.default_provider == "minimax"
+
+
+def test_make_context_env_profile_overrides_existing_default(monkeypatch):
+    """AUTOSKILLIT_PROVIDER_PROFILE overrides even a config-set default_provider."""
+    monkeypatch.setenv("AUTOSKILLIT_PROVIDER_PROFILE", "minimax")
+    config = AutomationConfig()
+    config.providers.default_provider = "openai"
+    config.providers.profiles = {"minimax": {}}
+    ctx = make_context(config, runner=_runner())
+    assert ctx.config.providers.default_provider == "minimax"
+
+
+def test_make_context_unknown_env_profile_is_ignored(monkeypatch):
+    """AUTOSKILLIT_PROVIDER_PROFILE not in profiles is ignored — no mutation."""
+    monkeypatch.setenv("AUTOSKILLIT_PROVIDER_PROFILE", "stale-unknown")
+    config = AutomationConfig()
+    config.providers.default_provider = "anthropic"
+    config.providers.profiles = {}
+    ctx = make_context(config, runner=_runner())
+    assert ctx.config.providers.default_provider == "anthropic"
+
+
+def test_make_context_no_env_profile_preserves_config_default(monkeypatch):
+    """Without AUTOSKILLIT_PROVIDER_PROFILE in env, default_provider is unchanged."""
+    monkeypatch.delenv("AUTOSKILLIT_PROVIDER_PROFILE", raising=False)
+    config = AutomationConfig()
+    config.providers.default_provider = "openai"
+    config.providers.profiles = {}
+    ctx = make_context(config, runner=_runner())
+    assert ctx.config.providers.default_provider == "openai"

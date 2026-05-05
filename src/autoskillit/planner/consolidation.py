@@ -213,7 +213,7 @@ def consolidate_wps(
 
     Reads manifests from ``{planner_dir}/work_packages/consolidation/``.
     Writes ``{planner_dir}/consolidated_wps.json`` and rebuilds
-    ``{planner_dir}/wp_index.json``. Returns a result dict with string values.
+    ``{planner_dir}/work_packages/wp_index.json``. Returns a result dict with string values.
     """
     try:
         wps_doc: dict[str, Any] = json.loads(Path(refined_wps_path).read_text())

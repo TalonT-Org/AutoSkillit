@@ -26,23 +26,18 @@ EXPECTED_SUB_CLAUDE_MDS = [
     "cli/update/CLAUDE.md",
     "hooks/guards/CLAUDE.md",
     "hooks/formatters/CLAUDE.md",
-    # 12 new entries
+    # 6 new entries (Part A)
     "CLAUDE.md",  # src/autoskillit/ package root
     "core/CLAUDE.md",
     "config/CLAUDE.md",
     "pipeline/CLAUDE.md",
     "execution/CLAUDE.md",
     "workspace/CLAUDE.md",
-    "planner/CLAUDE.md",
-    "recipe/CLAUDE.md",
-    "migration/CLAUDE.md",
-    "fleet/CLAUDE.md",
-    "cli/CLAUDE.md",
-    "hooks/CLAUDE.md",
+    # Part B entries (planner, recipe, migration, fleet, cli, hooks) added when Part B lands
 ]
 
 
-def test_all_27_sub_claude_md_files_exist():
+def test_all_21_sub_claude_md_files_exist():
     missing = [p for p in EXPECTED_SUB_CLAUDE_MDS if not (SRC_ROOT / p).is_file()]
     assert not missing, f"Missing sub-CLAUDE.md files: {missing}"
 

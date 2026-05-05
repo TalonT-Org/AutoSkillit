@@ -104,6 +104,7 @@ steps:
   # --- DESIGN PHASE ---
   scope:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:scope ${{ inputs.task }}"
       cwd: "${{ inputs.source_dir }}"
@@ -115,6 +116,7 @@ steps:
 
   plan_experiment:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:plan-experiment ${{ context.scope_report }} ${{ context.revision_guidance }}"
       cwd: "${{ inputs.source_dir }}"
@@ -127,6 +129,7 @@ steps:
 
   review_design:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:review-design ${{ context.experiment_plan }}"
       cwd: "${{ inputs.source_dir }}"
@@ -152,6 +155,7 @@ steps:
 
   plan_visualization:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:plan-visualization ${{ inputs.source_dir }} ${{ context.experiment_plan }} ${{ context.scope_report }}"
       cwd: "${{ inputs.source_dir }}"
@@ -173,6 +177,7 @@ steps:
 
   resolve_design_review:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:resolve-design-review ${{ context.evaluation_dashboard }} ${{ context.experiment_plan }} ${{ context.revision_guidance }}"
       cwd: "${{ inputs.source_dir }}"
@@ -222,6 +227,7 @@ steps:
 
   stage_data:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:stage-data ${{ context.experiment_plan }}"
       cwd: "${{ context.worktree_path }}"
@@ -246,6 +252,7 @@ steps:
 
   decompose_phases:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:make-groups ${{ context.experiment_plan }}"
       cwd: "${{ context.worktree_path }}"
@@ -264,6 +271,7 @@ steps:
 
   plan_phase:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:make-plan ${{ context.group_files }}"
       cwd: "${{ context.worktree_path }}"
@@ -285,6 +293,7 @@ steps:
 
   implement_phase:
     tool: run_skill
+    model: ""
     stale_threshold: 2400
     idle_output_timeout: 0
     with:
@@ -306,6 +315,7 @@ steps:
 
   troubleshoot_implement_failure:
     tool: run_skill
+    model: ""
     stale_threshold: 2400
     idle_output_timeout: 0
     with:
@@ -338,6 +348,7 @@ steps:
   # --- EXPERIMENT + REPORT PHASE ---
   run_experiment:
     tool: run_skill
+    model: ""
     stale_threshold: 2400
     idle_output_timeout: 0
     with:
@@ -353,6 +364,7 @@ steps:
 
   troubleshoot_run_failure:
     tool: run_skill
+    model: ""
     stale_threshold: 2400
     idle_output_timeout: 0
     with:
@@ -373,6 +385,7 @@ steps:
 
   adjust_experiment:
     tool: run_skill
+    model: ""
     stale_threshold: 2400
     idle_output_timeout: 0
     with:
@@ -402,6 +415,7 @@ steps:
 
   generate_report:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }}"
       cwd: "${{ context.worktree_path }}"
@@ -415,6 +429,7 @@ steps:
 
   generate_report_inconclusive:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --inconclusive --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }}"
       cwd: "${{ context.worktree_path }}"
@@ -437,6 +452,7 @@ steps:
 
   fix_tests:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:resolve-failures ${{ context.worktree_path }} ${{ context.experiment_plan }} ${{ inputs.base_branch }}"
       cwd: "${{ inputs.source_dir }}"
@@ -475,6 +491,7 @@ steps:
   # --- PR + REVIEW PHASE ---
   prepare_research_pr:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:prepare-research-pr ${{ context.report_path }} ${{ context.experiment_plan }} ${{ context.worktree_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.worktree_path }}"
@@ -488,6 +505,7 @@ steps:
 
   run_experiment_lenses:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:exp-lens-{slug} {context_path} ${{ context.experiment_plan }}"
       cwd: "${{ context.worktree_path }}"
@@ -535,6 +553,7 @@ steps:
 
   compose_research_pr:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:compose-research-pr ${{ context.prep_path }} \"${{ context.all_diagram_paths }}\" ${{ context.worktree_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.worktree_path }}"
@@ -554,6 +573,7 @@ steps:
 
   review_research_pr:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:review-research-pr ${{ context.worktree_path }} ${{ inputs.base_branch }} ${{ context.pr_url }}"
       cwd: "${{ context.worktree_path }}"
@@ -577,6 +597,7 @@ steps:
 
   audit_claims:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:audit-claims ${{ context.worktree_path }} ${{ inputs.base_branch }} ${{ context.pr_url }}"
       cwd: "${{ context.worktree_path }}"
@@ -609,6 +630,7 @@ steps:
 
   resolve_research_review:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:resolve-research-review ${{ context.worktree_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.worktree_path }}"
@@ -637,6 +659,7 @@ steps:
 
   resolve_claims_review:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:resolve-claims-review ${{ context.worktree_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.worktree_path }}"
@@ -671,6 +694,7 @@ steps:
 
   re_run_experiment:
     tool: run_skill
+    model: ""
     stale_threshold: 2400
     idle_output_timeout: 0
     with:
@@ -691,6 +715,7 @@ steps:
 
   re_generate_report:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }}"
       cwd: "${{ context.worktree_path }}"
@@ -759,6 +784,7 @@ steps:
 
   finalize_bundle_render:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:bundle-local-report ${{ context.research_dir }} ${{ context.report_path_after_finalize }} ${{ context.all_diagram_paths }} ${{ context.visualization_plan_path }}"
       cwd: "${{ context.worktree_path }}"

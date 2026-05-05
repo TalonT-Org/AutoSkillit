@@ -45,6 +45,7 @@ steps:
 
   run_bem:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:build-execution-map ${{ context.issue_numbers }} --base-ref ${{ inputs.base_branch }}"
       step_name: run_bem

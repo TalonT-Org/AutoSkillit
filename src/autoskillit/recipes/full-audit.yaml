@@ -62,6 +62,7 @@ steps:
 
   run_audits:
     tool: run_skill
+    model: ""
     description: "Run six audit skills in parallel"
     with:
       skill_command: "/autoskillit:audit-tests"
@@ -111,6 +112,7 @@ steps:
 
   validate_audits:
     tool: run_skill
+    model: ""
     description: "Validate each audit report in parallel"
     with:
       skill_command: "/autoskillit:validate-audit"
@@ -151,6 +153,7 @@ steps:
 
   create_issues:
     tool: run_skill
+    model: ""
     description: "Create GitHub issues from validated reports"
     with:
       skill_command: "/autoskillit:prepare-issue"

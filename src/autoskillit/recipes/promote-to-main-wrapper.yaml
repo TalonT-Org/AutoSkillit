@@ -31,6 +31,7 @@ ingredients:
 steps:
   promote:
     tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:promote-to-main ${{ inputs.batch_branch }} ${{ inputs.base_branch }}"
       cwd: "${{ inputs.source_dir }}"

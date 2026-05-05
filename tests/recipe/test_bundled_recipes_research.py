@@ -453,6 +453,21 @@ class TestResearchRecipeStructure:
             "retest.on_success must be push_branch after commit_research_artifacts is removed"
         )
 
+    def test_push_branch_cmd_externalizes_guard(self, recipe) -> None:
+        """push_branch cmd must invoke push_branch.sh and forward output_mode.
+
+        Regression guard: ADR-0002 bans inline shell control flow in cmd fields.
+        The local-mode guard lives in scripts/recipe/push_branch.sh. Issue #831.
+        """
+        step = recipe.steps["push_branch"]
+        cmd = step.with_args["cmd"]
+        assert "push_branch.sh" in cmd, (
+            "push_branch cmd must invoke scripts/recipe/push_branch.sh (ADR-0002)"
+        )
+        assert "${{ inputs.output_mode }}" in cmd, (
+            "push_branch cmd must forward inputs.output_mode to the script"
+        )
+
     def test_stage_bundle_routes_to_route_pr_or_local(self, recipe) -> None:
         """stage_bundle must route to route_pr_or_local on success and failure."""
         step = recipe.steps["stage_bundle"]

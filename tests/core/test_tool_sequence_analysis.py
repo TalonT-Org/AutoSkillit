@@ -45,7 +45,7 @@ class TestParseRawCCJsonl:
         log = tmp_path / "session.jsonl"
         log.write_text(json.dumps(record) + "\n")
         result = parse_raw_cc_jsonl(log)
-        assert result == [["ToolA", "ToolB"]]
+        assert result == [("ToolA", "ToolB")]
 
     def test_deduplicates_same_request_id(self, tmp_path: pathlib.Path) -> None:
         record = {
@@ -103,7 +103,7 @@ class TestParseRawCCJsonl:
         log = tmp_path / "session.jsonl"
         log.write_text(json.dumps(record) + "\n")
         result = parse_raw_cc_jsonl(log)
-        assert result == [["ValidTool"]]
+        assert result == [("ValidTool",)]
 
     def test_empty_jsonl_returns_empty_list(self, tmp_path: pathlib.Path) -> None:
         log = tmp_path / "session.jsonl"
@@ -122,14 +122,14 @@ class TestParseRawCCJsonl:
         log = tmp_path / "session.jsonl"
         log.write_text("NOT_JSON\n" + good + "\n")
         result = parse_raw_cc_jsonl(log)
-        assert result == [["GoodTool"]]
+        assert result == [("GoodTool",)]
 
     def test_message_field_absent_returns_empty_turn(self, tmp_path: pathlib.Path) -> None:
         record = {"type": "assistant", "requestId": "r1"}
         log = tmp_path / "session.jsonl"
         log.write_text(json.dumps(record) + "\n")
         result = parse_raw_cc_jsonl(log)
-        assert result == [[]]
+        assert result == [()]
 
 
 # ---------------------------------------------------------------------------

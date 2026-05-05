@@ -14,7 +14,7 @@ from .logging import get_logger
 
 _TOOL_USE_CAP = 8
 _MAX_NGRAM_LEN = 5
-_log = get_logger(__name__)
+logger = get_logger(__name__)
 
 
 class AssistantTurn(NamedTuple):
@@ -123,7 +123,7 @@ def parse_raw_cc_jsonl(
     try:
         text = jsonl_path.read_text(encoding="utf-8", errors="replace")
     except OSError:
-        _log.debug("parse_raw_cc_jsonl: cannot read %s", jsonl_path, exc_info=True)
+        logger.debug("parse_raw_cc_jsonl: cannot read %s", jsonl_path, exc_info=True)
         return []
     return [turn.tool_names for turn in iter_merged_assistant_turns(text, cap=cap)]
 

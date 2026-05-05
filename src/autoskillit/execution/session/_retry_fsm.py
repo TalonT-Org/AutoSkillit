@@ -87,10 +87,10 @@ def _compute_retry(
                 )
                 return False, RetryReason.NONE
             if returncode == 0 and _is_kill_anomaly(session):
-                if session._is_context_exhausted():
-                    reason = RetryReason.RESUME
-                elif session.has_thinking_only_turn:
+                if session.has_thinking_only_turn:
                     reason = RetryReason.THINKING_STALL
+                elif session._is_context_exhausted():
+                    reason = RetryReason.RESUME
                 else:
                     reason = RetryReason.EMPTY_OUTPUT
                 logger.debug(

@@ -14,11 +14,6 @@ from autoskillit.recipe.schema import Recipe, RecipeStep
 NO_AUTOSKILLIT_IMPORT = "no-autoskillit-import-in-skill-python-block"
 
 
-# ---------------------------------------------------------------------------
-# Shared recipe fixtures (used across multiple test_merge_prs_queue_*.py files)
-# ---------------------------------------------------------------------------
-
-
 @pytest.fixture(scope="module")
 def pmp_recipe():
     return load_recipe(builtin_recipes_dir() / "merge-prs.yaml")
@@ -37,11 +32,6 @@ def remed_recipe():
 @pytest.fixture(scope="module")
 def impl_groups_recipe():
     return load_recipe(builtin_recipes_dir() / "implementation-groups.yaml")
-
-
-# ---------------------------------------------------------------------------
-# Shared helper: recipe workflow factory
-# ---------------------------------------------------------------------------
 
 
 def _make_workflow(steps: dict[str, dict]) -> Recipe:

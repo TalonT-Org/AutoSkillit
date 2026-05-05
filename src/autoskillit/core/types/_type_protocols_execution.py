@@ -83,6 +83,7 @@ class HeadlessExecutor(Protocol):
         allowed_write_prefix: str = "",
         provider_name: str = "",
         provider_fallback_env: dict[str, str] | None = None,
+        provider_fallback_name: str = "",
     ) -> SkillResult: ...
 
 

@@ -328,11 +328,6 @@ class TestParseSessionsFromSummaryDir:
         assert sessions == []
 
 
-# ---------------------------------------------------------------------------
-# TestParseRawCCJsonlExtendedThinking  (tests 1a–1c — currently failing)
-# ---------------------------------------------------------------------------
-
-
 class TestParseRawCCJsonlExtendedThinking:
     def _write(self, tmp_path: pathlib.Path, *records: dict) -> pathlib.Path:
         log = tmp_path / "session.jsonl"
@@ -359,7 +354,7 @@ class TestParseRawCCJsonlExtendedThinking:
             },
         }
         result = parse_raw_cc_jsonl(self._write(tmp_path, r1, r2))
-        assert result == [["Bash"]]
+        assert result == [("Bash",)]
 
     def test_accumulates_tools_from_multiple_records_same_request_id(
         self, tmp_path: pathlib.Path
@@ -375,7 +370,7 @@ class TestParseRawCCJsonlExtendedThinking:
             "message": {"content": [{"type": "tool_use", "name": "Edit"}]},
         }
         result = parse_raw_cc_jsonl(self._write(tmp_path, r1, r2))
-        assert result == [["Read", "Edit"]]
+        assert result == [("Read", "Edit")]
 
     def test_cap_applied_after_accumulation_across_records(self, tmp_path: pathlib.Path) -> None:
         tools5 = [{"type": "tool_use", "name": f"T{i}"} for i in range(5)]
@@ -384,11 +379,7 @@ class TestParseRawCCJsonlExtendedThinking:
         r2 = {"type": "assistant", "requestId": "req-X", "message": {"content": tools5b}}
         result = parse_raw_cc_jsonl(self._write(tmp_path, r1, r2))
         assert len(result[0]) == 8
-
-
-# ---------------------------------------------------------------------------
-# TestIterMergedAssistantTurns  (test 1f — currently failing)
-# ---------------------------------------------------------------------------
+        assert result[0] == ("T0", "T1", "T2", "T3", "T4", "U0", "U1", "U2")
 
 
 class TestIterMergedAssistantTurns:
@@ -422,28 +413,30 @@ class TestIterMergedAssistantTurns:
         assert len(turns) == 1
         assert turns[0].request_id == "r1"
         assert turns[0].timestamp == "ts1"
-        assert turns[0].tool_names == ["Bash"]
+        assert turns[0].tool_names == ("Bash",)
 
     def test_multiple_distinct_request_ids_yield_separate_turns(self) -> None:
         l1 = self._make_record(rid="r1", tools=["A"])
         l2 = self._make_record(rid="r2", tools=["B"])
         turns = self._parse(l1, l2)
         assert len(turns) == 2
-        assert turns[0].tool_names == ["A"]
-        assert turns[1].tool_names == ["B"]
+        assert turns[0].tool_names == ("A",)
+        assert turns[1].tool_names == ("B",)
 
     def test_no_request_id_records_not_deduplicated(self) -> None:
         l1 = self._make_record(tools=["A"])
         l2 = self._make_record(tools=["B"])
         turns = self._parse(l1, l2)
         assert len(turns) == 2
+        assert turns[0].tool_names == ("A",)
+        assert turns[1].tool_names == ("B",)
 
     def test_records_without_request_id_included(self) -> None:
         line = self._make_record(tools=["Bash"])
         turns = self._parse(line)
         assert len(turns) == 1
         assert turns[0].request_id == ""
-        assert turns[0].tool_names == ["Bash"]
+        assert turns[0].tool_names == ("Bash",)
 
     def test_preserves_insertion_order(self) -> None:
         l1 = self._make_record(rid="r1", tools=["A"])
@@ -468,4 +461,4 @@ class TestIterMergedAssistantTurns:
         turns = self._parse(l1, l2)
         assert len(turns) == 1
         assert turns[0].timestamp == "first-ts"
-        assert turns[0].tool_names == ["Bash"]
+        assert turns[0].tool_names == ("Bash",)

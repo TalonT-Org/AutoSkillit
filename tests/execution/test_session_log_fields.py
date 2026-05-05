@@ -689,11 +689,6 @@ def test_flush_session_log_provider_used_defaults_empty_in_token_usage(tmp_path)
     assert tu["provider_used"] == ""
 
 
-# ---------------------------------------------------------------------------
-# Extended-thinking merge tests (1d, 1e — currently failing)
-# ---------------------------------------------------------------------------
-
-
 def test_turn_tool_calls_merged_across_thinking_and_tool_records(tmp_path, monkeypatch):
     cb_log = tmp_path / "s.jsonl"
     cb_log.write_text(
@@ -768,4 +763,7 @@ def test_parallel_lists_aligned_when_timestamp_missing(tmp_path, monkeypatch):
         == len(summary["turn_tool_calls"])
         == 2
     )
+    assert summary["request_ids"] == ["req-001", "req-002"]
+    assert summary["turn_timestamps"][0] == "2026-05-04T00:00:00Z"
     assert summary["turn_timestamps"][1] == ""
+    assert summary["turn_tool_calls"] == [["Read"], ["Edit"]]

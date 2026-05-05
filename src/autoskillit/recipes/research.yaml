@@ -259,6 +259,8 @@ steps:
       step_name: setup_environment
     capture:
       verdict: "${{ result.verdict }}"
+      env_mode: "${{ result.env_mode }}"
+      env_report: "${{ result.env_report }}"
     on_result:
       field: verdict
       routes:

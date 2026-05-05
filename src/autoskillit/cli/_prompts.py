@@ -506,11 +506,10 @@ CONTEXT LIMIT ROUTING — run_skill only (check BEFORE on_failure):
   - NEVER route retry_reason=resume with subtype=stale to on_context_limit.
   - NOTE: API infrastructure errors (overload, 529, ECONNRESET) also produce retry_reason=resume
     (infra_exit_category="api_error"). Route them identically to context exhaustion.
-  - When routing to on_context_limit, pass "session_id" from the failed result as
-    "resume_session_id" in the next run_skill call to resume the interrupted session
-    instead of starting fresh. The run_skill tool will use --resume <session_id> under the hood.
   - "infra_exit_category" in the result is informational: "completed" | "context_exhausted" |
     "api_error" | "process_killed". Use it for diagnostics only, not for routing.
+  - When routing to on_context_limit, always start a fresh session (do not attempt to
+    resume the exhausted session — it has no remaining context budget).
 - When run_skill returns "needs_retry: true" AND "retry_reason: drain_race":
   - The infrastructure confirmed session completion (Channel A or B) but stdout was not
     fully flushed before the process was killed. Partial progress was confirmed by the

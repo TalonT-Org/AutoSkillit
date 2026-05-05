@@ -740,3 +740,21 @@ def test_show_cook_preview_no_mermaid_in_output(
     assert "flowchart TD" not in captured.out, "Mermaid syntax leaked to terminal"
     assert "S0[" not in captured.out, "Mermaid node syntax leaked to terminal"
     assert "-->" not in captured.out, "Mermaid arrow syntax leaked to terminal"
+
+
+def test_orchestrator_prompt_no_resume_session_id_in_context_limit_routing():
+    """on_context_limit routing must NOT instruct passing resume_session_id.
+
+    Context-exhausted sessions should never be resumed — the retry must start
+    a fresh session to get a full context window.
+    """
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("implementation", mcp_prefix=DIRECT_PREFIX)
+    ctx_section_start = prompt.find("CONTEXT LIMIT ROUTING")
+    assert ctx_section_start != -1
+    ctx_section = prompt[ctx_section_start : ctx_section_start + 2000]
+    assert "resume_session_id" not in ctx_section, (
+        "on_context_limit routing must not instruct L2 to pass resume_session_id; "
+        "context-exhausted sessions must start fresh"
+    )

@@ -59,9 +59,7 @@ When `run_skill` returns `needs_retry=true` for **any step**:
   (typically `test` or `retry_worktree`) to check whether partial work was sufficient.
   API infrastructure errors (overload, 529, ECONNRESET) also produce `retry_reason=resume`
   with `infra_exit_category="api_error"` — route them identically to context exhaustion.
-  When routing to `on_context_limit`, pass the `session_id` from the failed result as
-  `resume_session_id` in the next `run_skill` call to resume the interrupted session
-  instead of starting fresh. The `infra_exit_category` field is informational only
+  The `infra_exit_category` field is informational only
   (`"completed"`, `"context_exhausted"`, `"api_error"`, `"process_killed"`).
 - **If `retry_reason: resume` AND `subtype≠stale` AND the step has no `on_context_limit`** → fall through to `on_failure`.
 - **If `retry_reason: drain_race` AND the step defines `on_context_limit`** → follow `on_context_limit`.

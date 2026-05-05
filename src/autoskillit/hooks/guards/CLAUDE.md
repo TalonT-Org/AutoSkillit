@@ -12,7 +12,7 @@ PreToolUse guard scripts — standalone Python processes enforcing tool-call pol
 | `fleet_dispatch_guard.py` | Blocks `dispatch_food_truck` from headless sessions (prevents L3->L3 recursion) |
 | `generated_file_write_guard.py` | Blocks Write/Edit to machine-generated files (`hooks.json`, `settings.json`) |
 | `grep_pattern_lint_guard.py` | Blocks Grep with BRE `\|` syntax; surfaces corrected ERE pattern |
-| `leaf_orchestration_guard.py` | Blocks `run_skill`/`run_cmd`/`run_python` from L1 leaf sessions |
+| `skill_orchestration_guard.py` | Blocks `run_skill`/`run_cmd`/`run_python` from L1 skill sessions |
 | `mcp_health_guard.py` | Detects MCP server disconnection (dead PID); non-blocking advisory |
 | `open_kitchen_guard.py` | Blocks `open_kitchen` from headless sessions; writes kitchen marker |
 | `planner_gh_discovery_guard.py` | Blocks GitHub issue/PR listing in planner sessions |

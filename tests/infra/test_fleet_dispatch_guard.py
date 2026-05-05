@@ -57,8 +57,8 @@ def test_guard_permits_interactive_caller():
 
 @pytest.mark.parametrize(
     "session_type",
-    ["orchestrator", "fleet", "leaf", None],
-    ids=["orchestrator", "fleet", "leaf", "unset"],
+    ["orchestrator", "fleet", "skill", None],
+    ids=["orchestrator", "fleet", "skill", "unset"],
 )
 def test_guard_denies_headless_regardless_of_session_type(session_type):
     out = _run_guard(

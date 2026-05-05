@@ -2,8 +2,8 @@
 PreToolUse hook — blocks run_cmd calls that would install an editable package
 into system Python without an explicit --python .venv target.
 
-This guards the interactive orchestrator path (leaf sessions cannot call
-run_cmd at all — they are blocked by leaf_orchestration_guard.py).
+This guards the interactive orchestrator path (skill sessions cannot call
+run_cmd at all — they are blocked by skill_orchestration_guard.py).
 """
 
 import json

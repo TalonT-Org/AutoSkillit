@@ -10,7 +10,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from autoskillit.core.types import DirectInstall, OutputFormat, SubprocessRunner, TerminationReason
-from autoskillit.execution.commands import build_leaf_headless_cmd
+from autoskillit.execution.commands import build_skill_session_cmd
 from autoskillit.execution.recording import (
     RecordingSubprocessRunner,
     ReplayingSubprocessRunner,
@@ -169,7 +169,7 @@ def test_extract_model_missing():
     assert _extract_model(args) == ""
 
 
-# --- T7: SCENARIO_STEP_NAME in cmd from build_leaf_headless_cmd ---
+# --- T7: SCENARIO_STEP_NAME in cmd from build_skill_session_cmd ---
 
 _BASE_CMD_ARGS = dict(
     cwd="/tmp",
@@ -180,8 +180,8 @@ _BASE_CMD_ARGS = dict(
 )
 
 
-def test_build_leaf_headless_cmd_injects_scenario_step_name():
-    spec = build_leaf_headless_cmd(
+def test_build_skill_session_cmd_injects_scenario_step_name():
+    spec = build_skill_session_cmd(
         "/investigate foo",
         scenario_step_name="investigate",
         **_BASE_CMD_ARGS,
@@ -190,11 +190,11 @@ def test_build_leaf_headless_cmd_injects_scenario_step_name():
     assert not any("SCENARIO_STEP_NAME" in tok for tok in spec.cmd)
 
 
-# --- T8: build_leaf_headless_cmd without scenario_step_name ---
+# --- T8: build_skill_session_cmd without scenario_step_name ---
 
 
-def test_build_leaf_headless_cmd_no_scenario_step_name():
-    spec = build_leaf_headless_cmd(
+def test_build_skill_session_cmd_no_scenario_step_name():
+    spec = build_skill_session_cmd(
         "/investigate foo",
         **_BASE_CMD_ARGS,
     )

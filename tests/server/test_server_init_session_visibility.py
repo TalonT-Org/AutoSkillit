@@ -158,19 +158,19 @@ class TestSessionTypeVisibility:
             assert name not in tool_names, f"{name} should be hidden for orchestrator+interactive"
 
     @pytest.mark.anyio
-    async def test_leaf_headless_enables_headless_tag(self, monkeypatch):
+    async def test_skill_headless_enables_headless_tag(self, monkeypatch):
         from autoskillit.core import GATED_TOOLS
         from autoskillit.server import _apply_session_type_visibility, mcp
 
-        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaf")
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
         _apply_session_type_visibility()
 
         tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
-        assert "test_check" in tool_names, "test_check should be visible for leaf+headless"
+        assert "test_check" in tool_names, "test_check should be visible for skill+headless"
         for name in GATED_TOOLS:
-            assert name not in tool_names, f"{name} (kitchen) should be hidden for leaf+headless"
+            assert name not in tool_names, f"{name} (kitchen) should be hidden for skill+headless"
 
     @pytest.mark.anyio
     async def test_food_truck_with_tool_tags_sees_kitchen_core_plus_declared(self, monkeypatch):
@@ -244,20 +244,20 @@ class TestSessionTypeVisibility:
             assert name not in tool_names
 
     @pytest.mark.anyio
-    async def test_leaf_interactive_no_pre_reveal(self, monkeypatch):
+    async def test_skill_interactive_no_pre_reveal(self, monkeypatch):
         from autoskillit.core import GATED_TOOLS, HEADLESS_TOOLS
         from autoskillit.server import _apply_session_type_visibility, mcp
 
-        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaf")
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
         monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
         _apply_session_type_visibility()
 
         tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
         for name in GATED_TOOLS:
-            assert name not in tool_names, f"{name} should be hidden for leaf+interactive"
+            assert name not in tool_names, f"{name} should be hidden for skill+interactive"
         for name in HEADLESS_TOOLS:
-            assert name not in tool_names, f"{name} should be hidden for leaf+interactive"
+            assert name not in tool_names, f"{name} should be hidden for skill+interactive"
 
     @pytest.mark.anyio
     async def test_transitional_bridge_enables_headless(self, monkeypatch):

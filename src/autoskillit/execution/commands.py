@@ -11,8 +11,8 @@ from types import MappingProxyType
 from autoskillit.core import (
     CAMPAIGN_ID_ENV_VAR,
     KITCHEN_SESSION_ID_ENV_VAR,
-    SESSION_TYPE_LEAF,
     SESSION_TYPE_ORCHESTRATOR,
+    SESSION_TYPE_SKILL,
     BareResume,
     ClaudeFlags,
     DirectInstall,
@@ -146,7 +146,7 @@ _SESSION_BASELINE_ENV: Mapping[str, str] = MappingProxyType(
     }
 )
 
-# Variables that build_leaf_headless_cmd controls exclusively. They must not
+# Variables that build_skill_session_cmd controls exclusively. They must not
 # leak from the host process environment — the caller opts in via explicit
 # parameters (exit_after_stop_delay_ms, scenario_step_name, allowed_write_prefix, etc.).
 # Note: CLAUDE_CODE_EXIT_AFTER_STOP_DELAY, SCENARIO_STEP_NAME, and
@@ -273,7 +273,7 @@ def _inject_narration_suppression(skill_command: str) -> str:
     return skill_command + directive
 
 
-def build_leaf_headless_cmd(
+def build_skill_session_cmd(
     skill_command: str,
     *,
     cwd: str,
@@ -289,10 +289,10 @@ def build_leaf_headless_cmd(
     provider_extras: Mapping[str, str] | None = None,
     profile_name: str = "",
 ) -> ClaudeHeadlessCmd:
-    """Build the complete headless command spec for a leaf session.
+    """Build the complete headless command spec for a skill session.
 
-    A leaf session is a direct child of an orchestrator: it runs a skill,
-    always carries ``AUTOSKILLIT_SESSION_TYPE=leaf``, and forwards
+    A skill session is a direct child of an orchestrator: it runs a skill,
+    always carries ``AUTOSKILLIT_SESSION_TYPE=skill``, and forwards
     ``AUTOSKILLIT_CAMPAIGN_ID`` from the parent env when present.
 
     Applies prompt transformations (skill prefix, completion directive, cwd anchor,
@@ -343,7 +343,7 @@ def build_leaf_headless_cmd(
     )
     extras: dict[str, str] = {
         "AUTOSKILLIT_HEADLESS": "1",
-        "AUTOSKILLIT_SESSION_TYPE": SESSION_TYPE_LEAF,
+        "AUTOSKILLIT_SESSION_TYPE": SESSION_TYPE_SKILL,
         "MAX_MCP_OUTPUT_TOKENS": _MAX_MCP_OUTPUT_TOKENS_VALUE,
         "MCP_CONNECTION_NONBLOCKING": "0",
     }
@@ -405,14 +405,14 @@ def build_food_truck_cmd(
     autonomously, always carries ``AUTOSKILLIT_SESSION_TYPE=orchestrator``,
     and restricts Claude native tools to ``--tools AskUserQuestion``.
 
-    Unlike ``build_leaf_headless_cmd``, this builder:
+    Unlike ``build_skill_session_cmd``, this builder:
     - Does NOT call ``_ensure_skill_prefix`` (prompt is a complete orchestrator prompt)
-    - Sets ``SESSION_TYPE=orchestrator`` (not ``leaf``)
+    - Sets ``SESSION_TYPE=orchestrator`` (not ``skill``)
     - Accepts caller-provided ``env_extras`` for campaign-specific variables
       (CAMPAIGN_ID, CAMPAIGN_STATE_PATH, PROJECT_DIR, L3_TOOL_TAGS, etc.)
     - Always emits ``--plugin-dir``: DirectInstall uses plugin_dir, MarketplaceInstall
       uses cache_path (food truck sessions are fresh subprocesses that need explicit
-      plugin loading, unlike leaf sessions where the parent already has it).
+      plugin loading, unlike skill sessions where the parent already has it).
 
     Parameters
     ----------

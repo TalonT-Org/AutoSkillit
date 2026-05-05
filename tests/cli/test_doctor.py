@@ -245,7 +245,7 @@ class TestCLIDoctor:
             "dual_mcp_registration",  # ★ new
             "plugin_cache_exists",
             "installed_plugins_entry",
-            "ambient_session_type_leaf",
+            "ambient_session_type_skill",
             "ambient_session_type_orchestrator",
             "ambient_session_type_fleet",
             "ambient_campaign_id",

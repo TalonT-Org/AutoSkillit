@@ -24,7 +24,7 @@ from autoskillit.execution.commands import (
     build_headless_cmd,
     build_headless_resume_cmd,
     build_interactive_cmd,
-    build_leaf_headless_cmd,
+    build_skill_session_cmd,
 )
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -242,7 +242,7 @@ class TestBuildHeadlessResumeCmd:
         assert result.cmd[idx + 1] == "/tmp/plugin"
 
 
-class TestBuildLeafHeadlessCmd:
+class TestBuildSkillSessionCmd:
     BASE = dict(
         cwd="/repo",
         completion_marker="DONE",
@@ -254,12 +254,12 @@ class TestBuildLeafHeadlessCmd:
     )
 
     def test_returns_claude_headless_cmd(self):
-        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
+        spec = build_skill_session_cmd("/investigate foo", **self.BASE)
         assert isinstance(spec, ClaudeHeadlessCmd)
 
     def test_cmd_starts_with_claude_not_env(self):
         """Argv no longer carries a leading ['env', ...] prefix."""
-        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
+        spec = build_skill_session_cmd("/investigate foo", **self.BASE)
         assert spec.cmd[0] == "claude"
         assert "env" != spec.cmd[0]
         assert not any(tok.startswith("AUTOSKILLIT_HEADLESS=") for tok in spec.cmd)
@@ -268,21 +268,21 @@ class TestBuildLeafHeadlessCmd:
 
     def test_env_has_autoskillit_headless(self):
         """AUTOSKILLIT_HEADLESS=1 now lives on spec.env, not in argv."""
-        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
+        spec = build_skill_session_cmd("/investigate foo", **self.BASE)
         assert spec.env["AUTOSKILLIT_HEADLESS"] == "1"
 
     def test_env_has_exit_delay_when_positive(self):
-        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
+        spec = build_skill_session_cmd("/investigate foo", **self.BASE)
         assert spec.env["CLAUDE_CODE_EXIT_AFTER_STOP_DELAY"] == "2000"
 
     def test_env_omits_exit_delay_when_zero(self):
         params = {**self.BASE, "exit_after_stop_delay_ms": 0}
-        spec = build_leaf_headless_cmd("/investigate foo", **params)
+        spec = build_skill_session_cmd("/investigate foo", **params)
         assert "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY" not in spec.env
 
     def test_env_strips_sse_port(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("CLAUDE_CODE_SSE_PORT", "23270")
-        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
+        spec = build_skill_session_cmd("/investigate foo", **self.BASE)
         assert "CLAUDE_CODE_SSE_PORT" not in spec.env
 
     def test_headless_exclusive_vars_stripped_from_host_env_exit_delay(
@@ -291,7 +291,7 @@ class TestBuildLeafHeadlessCmd:
         """CLAUDE_CODE_EXIT_AFTER_STOP_DELAY in host env must be stripped even when ms=0."""
         monkeypatch.setenv("CLAUDE_CODE_EXIT_AFTER_STOP_DELAY", "99999")
         params = {**self.BASE, "exit_after_stop_delay_ms": 0}
-        spec = build_leaf_headless_cmd("/investigate foo", **params)
+        spec = build_skill_session_cmd("/investigate foo", **params)
         assert "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY" not in spec.env
 
     def test_headless_exclusive_vars_stripped_from_host_env_scenario_step(
@@ -300,37 +300,37 @@ class TestBuildLeafHeadlessCmd:
         """SCENARIO_STEP_NAME in host env must be stripped even when no step name is given."""
         monkeypatch.setenv("SCENARIO_STEP_NAME", "outer-step")
         params = {**self.BASE, "scenario_step_name": ""}
-        spec = build_leaf_headless_cmd("/investigate foo", **params)
+        spec = build_skill_session_cmd("/investigate foo", **params)
         assert "SCENARIO_STEP_NAME" not in spec.env
 
     def test_env_has_auto_connect_off(self):
-        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
+        spec = build_skill_session_cmd("/investigate foo", **self.BASE)
         assert spec.env["CLAUDE_CODE_AUTO_CONNECT_IDE"] == "0"
 
     def test_plugin_source_direct_install_present(self):
-        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
+        spec = build_skill_session_cmd("/investigate foo", **self.BASE)
         assert "--plugin-dir" in spec.cmd
         idx = spec.cmd.index("--plugin-dir")
         assert spec.cmd[idx + 1] == "/plugins"
 
     def test_marketplace_install_omits_plugin_dir(self, tmp_path: Path):
         params = {**self.BASE, "plugin_source": MarketplaceInstall(cache_path=tmp_path)}
-        spec = build_leaf_headless_cmd("/investigate foo", **params)
+        spec = build_skill_session_cmd("/investigate foo", **params)
         assert "--plugin-dir" not in spec.cmd
 
     def test_output_format_present(self):
-        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
+        spec = build_skill_session_cmd("/investigate foo", **self.BASE)
         assert "--output-format" in spec.cmd
         idx = spec.cmd.index("--output-format")
         assert spec.cmd[idx + 1] == "stream-json"
 
     def test_output_format_required_flags_appended(self):
-        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
+        spec = build_skill_session_cmd("/investigate foo", **self.BASE)
         assert "--verbose" in spec.cmd
 
     def test_output_format_required_flags_not_duplicated(self):
         """Required flags must not appear twice even if already present."""
-        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
+        spec = build_skill_session_cmd("/investigate foo", **self.BASE)
         assert spec.cmd.count("--verbose") == 1
 
     def test_add_dirs_injected(self):
@@ -338,62 +338,62 @@ class TestBuildLeafHeadlessCmd:
 
         d = ValidatedAddDir(path="/skills/custom")
         params = {**self.BASE, "add_dirs": [d]}
-        spec = build_leaf_headless_cmd("/investigate foo", **params)
+        spec = build_skill_session_cmd("/investigate foo", **params)
         assert "--add-dir" in spec.cmd
         idx = spec.cmd.index("--add-dir")
         assert spec.cmd[idx + 1] == "/skills/custom"
 
     def test_no_add_dirs_emits_no_flag(self):
-        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
+        spec = build_skill_session_cmd("/investigate foo", **self.BASE)
         assert "--add-dir" not in spec.cmd
 
     def test_skill_prefix_injected(self):
         """Slash commands must be prefixed with 'Use '."""
-        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
+        spec = build_skill_session_cmd("/investigate foo", **self.BASE)
         cmd = spec.cmd
         prompt_idx = cmd.index("-p") + 1 if "-p" in cmd else cmd.index("--print") + 1
         assert cmd[prompt_idx].startswith("Use /investigate")
 
     def test_completion_marker_appended(self):
         """Completion directive must appear in the prompt."""
-        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
+        spec = build_skill_session_cmd("/investigate foo", **self.BASE)
         cmd = spec.cmd
         prompt_idx = cmd.index("-p") + 1 if "-p" in cmd else cmd.index("--print") + 1
         assert "DONE" in cmd[prompt_idx]
 
     def test_cwd_anchor_appended(self):
         """Working-directory anchor must appear in the prompt."""
-        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
+        spec = build_skill_session_cmd("/investigate foo", **self.BASE)
         cmd = spec.cmd
         prompt_idx = cmd.index("-p") + 1 if "-p" in cmd else cmd.index("--print") + 1
         assert "/repo" in cmd[prompt_idx]
 
     def test_model_injected_when_provided(self):
         params = {**self.BASE, "model": "claude-opus-4-6"}
-        spec = build_leaf_headless_cmd("/investigate foo", **params)
+        spec = build_skill_session_cmd("/investigate foo", **params)
         assert "--model" in spec.cmd
         idx = spec.cmd.index("--model")
         assert spec.cmd[idx + 1] == "claude-opus-4-6"
 
     def test_model_omitted_when_none(self):
-        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
+        spec = build_skill_session_cmd("/investigate foo", **self.BASE)
         assert "--model" not in spec.cmd
 
     def test_narration_suppression_directive_in_prompt(self):
         """EFFICIENCY DIRECTIVE must appear in the assembled prompt."""
-        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
+        spec = build_skill_session_cmd("/investigate foo", **self.BASE)
         cmd = spec.cmd
         prompt_idx = cmd.index("-p") + 1 if "-p" in cmd else cmd.index("--print") + 1
         assert "EFFICIENCY DIRECTIVE" in cmd[prompt_idx]
 
     def test_env_has_max_mcp_output_tokens(self):
         """MAX_MCP_OUTPUT_TOKENS=50000 must be present in headless session env."""
-        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
+        spec = build_skill_session_cmd("/investigate foo", **self.BASE)
         assert spec.env["MAX_MCP_OUTPUT_TOKENS"] == _MAX_MCP_OUTPUT_TOKENS_VALUE
 
     def test_max_mcp_output_tokens_not_in_argv(self):
         """MAX_MCP_OUTPUT_TOKENS must live in spec.env, not in argv."""
-        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
+        spec = build_skill_session_cmd("/investigate foo", **self.BASE)
         assert not any(tok.startswith("MAX_MCP_OUTPUT_TOKENS=") for tok in spec.cmd)
 
     def test_headless_exclusive_vars_strips_host_max_mcp_output_tokens(
@@ -401,32 +401,32 @@ class TestBuildLeafHeadlessCmd:
     ) -> None:
         """Host-env MAX_MCP_OUTPUT_TOKENS must be stripped and replaced by the hardcoded value."""
         monkeypatch.setenv("MAX_MCP_OUTPUT_TOKENS", "99999")
-        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
+        spec = build_skill_session_cmd("/investigate foo", **self.BASE)
         assert spec.env["MAX_MCP_OUTPUT_TOKENS"] == _MAX_MCP_OUTPUT_TOKENS_VALUE
 
-    def test_env_has_session_type_leaf(self):
-        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
-        assert spec.env["AUTOSKILLIT_SESSION_TYPE"] == "leaf"
+    def test_env_has_session_type_skill(self):
+        spec = build_skill_session_cmd("/investigate foo", **self.BASE)
+        assert spec.env["AUTOSKILLIT_SESSION_TYPE"] == "skill"
 
     def test_env_overrides_ambient_session_type(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "franchise")
-        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
-        assert spec.env["AUTOSKILLIT_SESSION_TYPE"] == "leaf"
+        spec = build_skill_session_cmd("/investigate foo", **self.BASE)
+        assert spec.env["AUTOSKILLIT_SESSION_TYPE"] == "skill"
 
     def test_env_forwards_campaign_id(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_ID", "camp-42")
-        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
+        spec = build_skill_session_cmd("/investigate foo", **self.BASE)
         assert spec.env["AUTOSKILLIT_CAMPAIGN_ID"] == "camp-42"
 
     def test_env_omits_campaign_id_when_absent(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
-        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
+        spec = build_skill_session_cmd("/investigate foo", **self.BASE)
         assert "AUTOSKILLIT_CAMPAIGN_ID" not in spec.env
 
     def test_env_forwards_kitchen_session_id(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """T32 — AUTOSKILLIT_KITCHEN_SESSION_ID forwarded into spec.env when set."""
         monkeypatch.setenv("AUTOSKILLIT_KITCHEN_SESSION_ID", "kit-77")
-        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
+        spec = build_skill_session_cmd("/investigate foo", **self.BASE)
         assert spec.env["AUTOSKILLIT_KITCHEN_SESSION_ID"] == "kit-77"
 
     def test_env_omits_kitchen_session_id_when_absent(
@@ -434,7 +434,7 @@ class TestBuildLeafHeadlessCmd:
     ) -> None:
         """T33 — AUTOSKILLIT_KITCHEN_SESSION_ID absent from spec.env when not set."""
         monkeypatch.delenv("AUTOSKILLIT_KITCHEN_SESSION_ID", raising=False)
-        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
+        spec = build_skill_session_cmd("/investigate foo", **self.BASE)
         assert "AUTOSKILLIT_KITCHEN_SESSION_ID" not in spec.env
 
     def test_private_vars_scrubbed_except_explicit_forwards(
@@ -443,13 +443,13 @@ class TestBuildLeafHeadlessCmd:
         monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", "/tmp/state")
         monkeypatch.setenv("AUTOSKILLIT_PROJECT_DIR", "/tmp/proj")
         monkeypatch.setenv("AUTOSKILLIT_L3_TOOL_TAGS", "kitchen")
-        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
+        spec = build_skill_session_cmd("/investigate foo", **self.BASE)
         assert "AUTOSKILLIT_CAMPAIGN_STATE_PATH" not in spec.env
         assert "AUTOSKILLIT_PROJECT_DIR" not in spec.env
         assert "AUTOSKILLIT_L3_TOOL_TAGS" not in spec.env
 
     def test_provider_extras_injected_into_env(self) -> None:
-        spec = build_leaf_headless_cmd(
+        spec = build_skill_session_cmd(
             "/investigate foo",
             **self.BASE,
             provider_extras={
@@ -461,15 +461,15 @@ class TestBuildLeafHeadlessCmd:
         assert spec.env["ANTHROPIC_API_KEY"] == "sk-test"
 
     def test_provider_extras_cannot_override_session_type(self) -> None:
-        spec = build_leaf_headless_cmd(
+        spec = build_skill_session_cmd(
             "/investigate foo",
             **self.BASE,
             provider_extras={"AUTOSKILLIT_SESSION_TYPE": "franchise"},
         )
-        assert spec.env["AUTOSKILLIT_SESSION_TYPE"] == "leaf"
+        assert spec.env["AUTOSKILLIT_SESSION_TYPE"] == "skill"
 
     def test_provider_extras_cannot_override_headless(self) -> None:
-        spec = build_leaf_headless_cmd(
+        spec = build_skill_session_cmd(
             "/investigate foo",
             **self.BASE,
             provider_extras={"AUTOSKILLIT_HEADLESS": "0"},
@@ -482,20 +482,20 @@ class TestBuildLeafHeadlessCmd:
         # Depends on P2-A1 (#1751) having added ANTHROPIC_BASE_URL to
         # _HEADLESS_EXCLUSIVE_VARS.
         monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://host.example.com")
-        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
+        spec = build_skill_session_cmd("/investigate foo", **self.BASE)
         assert "ANTHROPIC_BASE_URL" not in spec.env
 
     def test_provider_extras_none_changes_nothing(self) -> None:
-        baseline = build_leaf_headless_cmd("/investigate foo", **self.BASE)
-        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE, provider_extras=None)
+        baseline = build_skill_session_cmd("/investigate foo", **self.BASE)
+        spec = build_skill_session_cmd("/investigate foo", **self.BASE, provider_extras=None)
         assert spec.env == baseline.env
 
     def test_profile_name_injects_provider_profile_env_var(self) -> None:
-        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE, profile_name="minimax")
+        spec = build_skill_session_cmd("/investigate foo", **self.BASE, profile_name="minimax")
         assert spec.env["AUTOSKILLIT_PROVIDER_PROFILE"] == "minimax"
 
     def test_empty_profile_name_omits_provider_profile(self) -> None:
-        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE, profile_name="")
+        spec = build_skill_session_cmd("/investigate foo", **self.BASE, profile_name="")
         assert "AUTOSKILLIT_PROVIDER_PROFILE" not in spec.env
 
 
@@ -607,7 +607,7 @@ class TestBuildFoodTruckCmd:
         assert spec.env["AUTOSKILLIT_CAMPAIGN_ID"] == "camp-1"
 
     def test_env_extras_do_not_override_session_type(self):
-        params = {**self.BASE, "env_extras": {"AUTOSKILLIT_SESSION_TYPE": "leaf"}}
+        params = {**self.BASE, "env_extras": {"AUTOSKILLIT_SESSION_TYPE": "skill"}}
         spec = build_food_truck_cmd(**params)
         assert spec.env["AUTOSKILLIT_SESSION_TYPE"] == "orchestrator"
 
@@ -656,7 +656,7 @@ class TestBuildFoodTruckCmdPackTags:
 
 
 class TestBuildFoodTruckCmdFeatureParity:
-    """Tests for features ported from build_leaf_headless_cmd (issue #1656)."""
+    """Tests for features ported from build_skill_session_cmd (issue #1656)."""
 
     BASE = dict(
         orchestrator_prompt="You are an L3 food truck orchestrator...",
@@ -764,7 +764,7 @@ def test_headless_exclusive_vars_contains_max_mcp_output_tokens() -> None:
     "builder_call",
     [
         lambda: build_interactive_cmd(),
-        lambda: build_leaf_headless_cmd(
+        lambda: build_skill_session_cmd(
             "/investigate foo",
             cwd="/tmp",
             completion_marker="%%DONE%%",
@@ -780,7 +780,7 @@ def test_headless_exclusive_vars_contains_max_mcp_output_tokens() -> None:
             completion_marker="%%DONE%%",
         ),
     ],
-    ids=["interactive", "leaf_headless", "headless_resume", "food_truck"],
+    ids=["interactive", "skill_headless", "headless_resume", "food_truck"],
 )
 def test_all_session_builders_inject_max_mcp_output_tokens(builder_call) -> None:
     """Every session command builder must produce env with MAX_MCP_OUTPUT_TOKENS."""
@@ -805,7 +805,7 @@ def test_interactive_cmd_env_has_mcp_connection_nonblocking() -> None:
     "builder_call",
     [
         lambda: build_interactive_cmd(),
-        lambda: build_leaf_headless_cmd(
+        lambda: build_skill_session_cmd(
             "/investigate foo",
             cwd="/tmp",
             completion_marker="%%DONE%%",
@@ -821,7 +821,7 @@ def test_interactive_cmd_env_has_mcp_connection_nonblocking() -> None:
             completion_marker="%%DONE%%",
         ),
     ],
-    ids=["interactive", "leaf_headless", "headless_resume", "food_truck"],
+    ids=["interactive", "skill_headless", "headless_resume", "food_truck"],
 )
 def test_all_session_builders_inject_mcp_connection_nonblocking(builder_call) -> None:
     """Every session command builder must produce env with MCP_CONNECTION_NONBLOCKING=0."""
@@ -842,8 +842,8 @@ def test_skill_name_in_headless_exclusive_vars() -> None:
     assert "AUTOSKILLIT_SKILL_NAME" in _HEADLESS_EXCLUSIVE_VARS
 
 
-def test_leaf_cmd_includes_skill_name() -> None:
-    spec = build_leaf_headless_cmd(
+def test_skill_cmd_includes_skill_name() -> None:
+    spec = build_skill_session_cmd(
         "/autoskillit:planner-analyze some task",
         cwd="/repo",
         completion_marker="DONE",
@@ -856,8 +856,8 @@ def test_leaf_cmd_includes_skill_name() -> None:
     assert spec.env["AUTOSKILLIT_SKILL_NAME"] == "planner-analyze"
 
 
-def test_leaf_cmd_skill_name_strips_namespace() -> None:
-    spec = build_leaf_headless_cmd(
+def test_skill_cmd_skill_name_strips_namespace() -> None:
+    spec = build_skill_session_cmd(
         "/autoskillit:investigate some issue",
         cwd="/repo",
         completion_marker="DONE",
@@ -870,8 +870,8 @@ def test_leaf_cmd_skill_name_strips_namespace() -> None:
     assert spec.env["AUTOSKILLIT_SKILL_NAME"] == "investigate"
 
 
-def test_leaf_cmd_skill_name_empty_for_non_slash() -> None:
-    spec = build_leaf_headless_cmd(
+def test_skill_cmd_skill_name_empty_for_non_slash() -> None:
+    spec = build_skill_session_cmd(
         "some prompt without slash",
         cwd="/repo",
         completion_marker="DONE",
@@ -884,7 +884,7 @@ def test_leaf_cmd_skill_name_empty_for_non_slash() -> None:
     assert spec.env["AUTOSKILLIT_SKILL_NAME"] == ""
 
 
-class TestBuildLeafAllowedWritePrefix:
+class TestBuildSkillAllowedWritePrefix:
     BASE = dict(
         cwd="/repo",
         completion_marker="DONE",
@@ -896,18 +896,18 @@ class TestBuildLeafAllowedWritePrefix:
     )
 
     def test_allowed_write_prefix_in_env(self):
-        spec = build_leaf_headless_cmd(
+        spec = build_skill_session_cmd(
             "/investigate foo", **self.BASE, allowed_write_prefix="/tmp/foo/"
         )
         assert spec.env["AUTOSKILLIT_ALLOWED_WRITE_PREFIX"] == "/tmp/foo/"
 
     def test_allowed_write_prefix_absent_when_empty(self):
-        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE, allowed_write_prefix="")
+        spec = build_skill_session_cmd("/investigate foo", **self.BASE, allowed_write_prefix="")
         assert "AUTOSKILLIT_ALLOWED_WRITE_PREFIX" not in spec.env
 
     def test_allowed_write_prefix_exclusive(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "old")
-        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE, allowed_write_prefix="new")
+        spec = build_skill_session_cmd("/investigate foo", **self.BASE, allowed_write_prefix="new")
         assert spec.env["AUTOSKILLIT_ALLOWED_WRITE_PREFIX"] == "new"
 
 

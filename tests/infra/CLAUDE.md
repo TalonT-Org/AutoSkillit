@@ -26,7 +26,7 @@ CI/CD configuration, security, guard coverage, and release sanity tests.
 | `test_gitattributes.py` | REQ-R741-A03: .gitattributes must exist and mark vendored JS as binary |
 | `test_grep_pattern_lint_guard.py` | Tests for grep_pattern_lint_guard.py — PreToolUse hook for Grep tool pattern syntax |
 | `test_guard_coverage.py` | Structural test: destructive tools have PreToolUse hook coverage |
-| `test_leaf_orchestration_guard.py` | Tests for leaf_orchestration_guard.py PreToolUse hook |
+| `test_skill_orchestration_guard.py` | Tests for skill_orchestration_guard.py PreToolUse hook |
 | `test_manifest_completeness.py` | Manifest completeness and orphan detection tests for the test-filter manifest |
 | `test_mcp_health_guard.py` | Tests for mcp_health_guard PreToolUse hook |
 | `test_open_kitchen_guard.py` | Phase 2 tests: open_kitchen_guard PreToolUse hook |

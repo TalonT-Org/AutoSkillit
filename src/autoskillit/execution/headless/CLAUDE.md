@@ -15,4 +15,4 @@ Headless Claude session orchestration — command prep, subprocess invocation, r
 
 ## Architecture Notes
 
-The `__init__.py` IS the main module body (not a thin facade). It uses a deferred import for `flush_session_log` to avoid circular imports. `_execute_claude_headless` is the shared path for both `run_skill` (leaf) and `dispatch_food_truck` (fleet) flows.
+The `__init__.py` IS the main module body (not a thin facade). It uses a deferred import for `flush_session_log` to avoid circular imports. `_execute_claude_headless` is the shared path for both `run_skill` (skill session) and `dispatch_food_truck` (fleet) flows.

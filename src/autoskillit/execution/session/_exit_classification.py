@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import re
+from typing import TYPE_CHECKING
 
 from autoskillit.core import InfraExitCategory, get_logger
-from autoskillit.core.types import SubprocessResult
-from autoskillit.execution.session._session_model import ClaudeSessionResult
+
+if TYPE_CHECKING:
+    from autoskillit.core import SubprocessResult
+    from autoskillit.execution.session._session_model import ClaudeSessionResult
 
 logger = get_logger(__name__)
 

@@ -89,6 +89,7 @@ class TestExecutionSubpackages:
             "_session_content",
             "_session_outcome",
             "_retry_fsm",
+            "_exit_classification",
         }
         actual = {
             p.stem for p in (SRC / "execution" / "session").glob("*.py") if p.stem != "__init__"

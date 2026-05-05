@@ -416,7 +416,8 @@ def _build_skill_result(
     # route to RESUME so the orchestrator can attempt recovery.
     # TIMED_OUT uses a synthetic returncode=-1 but is a wall-clock timeout (non-recoverable).
     if (
-        not needs_retry
+        not success
+        and not needs_retry
         and infra_category == InfraExitCategory.PROCESS_KILLED
         and result.kill_reason == KillReason.NATURAL_EXIT
         and result.termination != TerminationReason.TIMED_OUT

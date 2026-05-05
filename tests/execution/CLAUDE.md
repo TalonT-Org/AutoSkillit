@@ -16,6 +16,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_commands.py` | Tests for execution/commands.py — ClaudeInteractiveCmd / ClaudeHeadlessCmd builders |
 | `test_db.py` | L1 unit tests for execution/db.py — SQL validation and authorizer |
 | `test_diff_annotator.py` | Behavioral tests for execution/diff_annotator.py |
+| `test_exit_classification.py` | Unit tests for classify_infra_exit and InfraExitCategory enum |
 | `test_flag_contracts.py` | Contract tests for Claude CLI flags |
 | `test_github.py` | L1 unit tests for execution/github.py |
 | `test_github_api_tracking_http.py` | GitHub API tracking HTTP tests |

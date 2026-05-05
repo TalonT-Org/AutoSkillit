@@ -90,8 +90,8 @@ Cap Tier B at 2 lenses total (overrides count toward this cap).
 **Tier C (0–1 based on target_domain):**
 | target_domain | Lens |
 |---|---|
-| nlp | vis-lens-domain-norms |
-| cv | vis-lens-domain-norms |
+| nlp | vis-lens-methodology-norms |
+| cv | vis-lens-methodology-norms |
 | rl | vis-lens-temporal |
 | (others / general) | — (skip Tier C) |
 
@@ -157,14 +157,14 @@ For each figure-spec block where two lenses disagree on chart type, color encodi
 or layout, apply the conflict resolution hierarchy:
 
 ```
-accessibility > anti-pattern > domain-norms > chart-select
+accessibility > anti-pattern > methodology-norms > chart-select
 ```
 
 Resolution rules:
 - `accessibility` (from `vis-lens-always-on` or `vis-lens-color-access`) wins over all
 - `anti-pattern` findings (from `vis-lens-antipattern` or always-on pass 1) override
-  chart-select and domain-norms recommendations
-- `domain-norms` (from `vis-lens-domain-norms`) overrides `chart-select`
+  chart-select and methodology-norms recommendations
+- `methodology-norms` (from `vis-lens-methodology-norms`) overrides `chart-select`
 - `chart-select` (from `vis-lens-chart-select`) is the lowest priority
 
 Every resolution must be logged as a row in the Conflict Resolution Log table.

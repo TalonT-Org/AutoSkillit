@@ -1,5 +1,5 @@
 name: research-design
-autoskillit_version: "0.9.430"
+autoskillit_version: "0.9.434"
 recipe_version: "1.0.0"
 categories: [research-family]
 requires_packs: [research]

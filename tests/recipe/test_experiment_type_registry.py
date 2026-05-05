@@ -497,9 +497,9 @@ def test_user_types_interleave_by_priority(tmp_path: Path) -> None:
     assert bench_idx < custom_idx < config_idx
 
 
-def test_schema_mismatch_warns(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+def test_schema_mismatch_warns(tmp_path: Path) -> None:
     """A user type with schema_version != '1.0' triggers a WARNING but still loads."""
-    import logging
+    import structlog.testing
 
     user_dir = tmp_path / ".autoskillit" / "experiment-types"
     user_dir.mkdir(parents=True)
@@ -528,10 +528,10 @@ def test_schema_mismatch_warns(tmp_path: Path, caplog: pytest.LogCaptureFixture)
             }
         )
     )
-    with caplog.at_level(logging.WARNING):
+    with structlog.testing.capture_logs() as cap_logs:
         types = load_all_experiment_types(project_dir=tmp_path)
 
-    assert any("schema_version" in r.message and "2.0" in r.message for r in caplog.records), (
+    assert any(entry.get("schema_version") == "2.0" for entry in cap_logs), (
         "Expected WARNING about schema_version mismatch"
     )
     by_name = {s.name: s for s in types}

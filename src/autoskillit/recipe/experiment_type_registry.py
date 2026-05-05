@@ -122,10 +122,10 @@ def load_all_experiment_types(
         for spec in user_types.values():
             if spec.schema_version and spec.schema_version != "1.0":
                 logger.warning(
-                    "User experiment type '%s' has schema_version '%s' (expected '1.0'); "
-                    "loading continues but behavior may differ",
-                    spec.name,
-                    spec.schema_version,
+                    "User experiment type has schema_version mismatch; loading continues",
+                    type_name=spec.name,
+                    schema_version=spec.schema_version,
+                    expected_schema_version="1.0",
                 )
         types.update(user_types)
 

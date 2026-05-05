@@ -460,6 +460,22 @@ One synthesis pass (no subagent — orchestrator synthesizes directly):
 5. **Write `evaluation_dashboard_{slug}_{YYYY-MM-DD_HHMMSS}.md`** — always written.
    Must include:
    - Verdict banner and classification summary
+   - **Dimension Rationale** subsection — renders a per-dimension rationale table sourced
+     from `spec.dimension_weight_rationale` (loaded in Step 0 registry). Table format:
+     ```markdown
+     ## Dimension Rationale (why these weights apply to {experiment_type})
+
+     | Dimension | Weight | Rationale |
+     |---|---|---|
+     | {dim} | {weight} | {rationale from spec.dimension_weight_rationale[dim]} |
+     ```
+     Include ALL non-SILENT dimensions (H, M, L). For each dimension:
+     - If `dimension_weight_rationale[dim]` exists and is non-empty: render the rationale string
+     - If no rationale entry exists (legacy types with empty `dimension_weight_rationale`):
+       render the Weight column only, leave Rationale blank
+     Omit SILENT (S) dimensions from the table (consistent with finding-count suppression).
+     If `dimension_weight_rationale` is entirely empty (no entries for any dimension),
+     omit the Dimension Rationale subsection entirely — do not render an empty table.
    - Dimension scorecard table (dimension → weight → findings count → severity summary)
    - Adversarial findings section (red-team findings, each marked `requires_decision: true`)
    - **Cannot Assess** section with at least 2 items (dimensions where evaluation was

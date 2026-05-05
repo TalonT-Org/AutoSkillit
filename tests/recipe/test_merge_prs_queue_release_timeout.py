@@ -117,7 +117,7 @@ def test_wait_for_queue_ejected_ci_failure_precedes_ejected(recipe_fixture, requ
 
 
 # ---------------------------------------------------------------------------
-# T12: Regression — remediation.yaml timeout arm and correct fallback
+# Regression — remediation.yaml timeout arm and correct fallback
 # ---------------------------------------------------------------------------
 
 

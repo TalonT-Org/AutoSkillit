@@ -472,7 +472,7 @@ def test_no_queue_enqueue_no_auto_step_exists(any_recipe) -> None:
 
 
 # ---------------------------------------------------------------------------
-# T13: Merge step failure routing — silent success degradation guards
+# Merge step failure routing — silent success degradation guards
 # ---------------------------------------------------------------------------
 
 
@@ -545,7 +545,7 @@ def test_wait_for_direct_merge_on_failure_routes_to_register_clone_unconfirmed(
 
 
 # ---------------------------------------------------------------------------
-# T9: Full routing parity — every PRState covered (universal + family-specific)
+# Full routing parity — every PRState covered (universal + family-specific)
 # ---------------------------------------------------------------------------
 
 _REQUIRED_PR_STATE_VALUES = frozenset(

@@ -32,5 +32,5 @@ class TestProviderOutcomeConstruction:
 
     def test_frozen_rejects_mutation(self):
         outcome = ProviderOutcome(provider_used="minimax", fallback_activated=False)
-        with pytest.raises((AttributeError, TypeError)):
+        with pytest.raises(TypeError):
             outcome.provider_used = "other"  # type: ignore[misc]

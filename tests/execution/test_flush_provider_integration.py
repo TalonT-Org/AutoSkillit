@@ -202,7 +202,7 @@ class TestProviderFieldsReachFlush:
 
         assert result.subtype == "crashed"
         crashed_calls = [f for f in flush_calls if f.get("termination_reason") == "CRASHED"]
-        assert len(crashed_calls) >= 1
+        assert len(crashed_calls) == 1
         outcome = crashed_calls[0]["provider_outcome"]
         assert outcome.provider_used == "minimax"
 
@@ -243,6 +243,6 @@ class TestProviderFieldsReachFlush:
             )
 
         cancelled_calls = [f for f in flush_calls if f.get("termination_reason") == "CANCELLED"]
-        assert len(cancelled_calls) >= 1
+        assert len(cancelled_calls) == 1
         outcome = cancelled_calls[0]["provider_outcome"]
         assert outcome.provider_used == "openai"

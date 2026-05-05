@@ -498,6 +498,31 @@ class TestBuildSkillSessionCmd:
         spec = build_skill_session_cmd("/investigate foo", **self.BASE, profile_name="")
         assert "AUTOSKILLIT_PROVIDER_PROFILE" not in spec.env
 
+    def test_no_first_action_without_profile_name(self):
+        spec = build_skill_session_cmd("/investigate foo", **self.BASE)
+        prompt = spec.cmd[spec.cmd.index("-p") + 1]
+        assert "FIRST ACTION" not in prompt
+        assert "After loading" not in prompt
+
+    def test_first_action_with_profile_name(self):
+        spec = build_skill_session_cmd(
+            "/autoskillit:investigate foo", **self.BASE, profile_name="minimax"
+        )
+        prompt = spec.cmd[spec.cmd.index("-p") + 1]
+        assert "FIRST ACTION" in prompt
+        assert "After loading the skill instructions" in prompt
+
+    def test_after_loading_only_with_profile_name(self):
+        spec = build_skill_session_cmd("/investigate foo", **self.BASE, profile_name="")
+        prompt = spec.cmd[spec.cmd.index("-p") + 1]
+        assert "After loading" not in prompt
+
+    def test_no_after_loading_for_plain_prompt_with_profile(self):
+        spec = build_skill_session_cmd("Fix the bug", **self.BASE, profile_name="minimax")
+        prompt = spec.cmd[spec.cmd.index("-p") + 1]
+        assert "FIRST ACTION" not in prompt
+        assert "After loading" not in prompt
+
 
 class TestBuildFoodTruckCmd:
     BASE = dict(
@@ -640,6 +665,17 @@ class TestBuildFoodTruckCmd:
         monkeypatch.setenv("CLAUDE_CODE_SSE_PORT", "23270")
         spec = build_food_truck_cmd(**self.BASE)
         assert "CLAUDE_CODE_SSE_PORT" not in spec.env
+
+    def test_no_first_action_in_food_truck(self):
+        spec = build_food_truck_cmd(
+            orchestrator_prompt="Run the campaign",
+            plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
+            cwd="/repo",
+            completion_marker="DONE",
+        )
+        prompt = spec.cmd[spec.cmd.index("-p") + 1]
+        assert "FIRST ACTION" not in prompt
+        assert "After loading" not in prompt
 
 
 class TestBuildFoodTruckCmdPackTags:

@@ -99,4 +99,4 @@ async def test_check_repo_merge_state_error_includes_http_status(tool_ctx, monke
     )
 
     result = json.loads(await check_repo_merge_state(branch="main"))
-    assert "http_status" in result
+    assert result["http_status"] == 403

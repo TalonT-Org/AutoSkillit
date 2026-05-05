@@ -6,13 +6,6 @@ description: >
   plan, detects the required environment type, builds a Docker image or creates
   a host micromamba environment, and emits an env_mode verdict consumed by
   downstream steps.
-hooks:
-  PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: setup-environment] Setting up experiment environment...'"
-          once: true
 ---
 
 # Environment Setup
@@ -63,6 +56,11 @@ Read the experiment plan at `experiment_plan`. Extract:
 - The `name:` field from the `environment.yml` embedded section (the conda
   environment slug, used as the Docker image tag and micromamba env name)
 
+If `environment.type` is absent or not one of `"standard"` / `"custom"`, or if the
+`name:` field is missing from the `environment.yml` section, set
+`env_mode = unavailable`, `verdict = FAIL`, and proceed directly to Step 7 (write
+report) then Step 8 (emit tokens). Do not proceed to Steps 2–6 with an undefined slug.
+
 ### Step 1 — Short-Circuit for Standard Environments
 
 If `environment.type == "standard"`, no custom environment is needed:
@@ -75,12 +73,15 @@ If `environment.type == "standard"`, no custom environment is needed:
 Run:
 
 ```bash
-docker info --format '{{.OSType}}' 2>/dev/null
+timeout 5 docker info --format '{{.OSType}}' 2>/dev/null
 ```
 
-with a 5-second timeout. If the command exits 0, Docker is available.
+If the command exits 0, Docker is available.
 
 ### Step 3 — Build Docker Image (Docker Available)
+
+Before staging, verify `environment.yml` exists in the worktree root. If the file is
+absent, set `env_mode = unavailable`, `verdict = FAIL`, and proceed directly to Step 7.
 
 Stage the build context under `{{AUTOSKILLIT_TEMP}}/setup-environment/build/`:
 

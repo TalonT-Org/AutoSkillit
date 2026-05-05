@@ -854,6 +854,39 @@ class TestEnsureSkillPrefix:
     def test_bare_slash_command_no_args(self):
         assert _ensure_skill_prefix("/investigate") == "Use the /investigate skill"
 
+    def test_no_first_action_without_provider_profile(self):
+        result = _ensure_skill_prefix("/investigate error")
+        assert "FIRST ACTION" not in result
+
+    def test_no_first_action_with_empty_provider_profile(self):
+        result = _ensure_skill_prefix("/investigate error", provider_profile="")
+        assert "FIRST ACTION" not in result
+
+    def test_first_action_prepended_for_non_anthropic_provider(self):
+        result = _ensure_skill_prefix(
+            "/autoskillit:implement-worktree-no-merge /path", provider_profile="minimax"
+        )
+        assert result.startswith("FIRST ACTION:")
+        assert 'skill="implement-worktree-no-merge"' in result
+
+    def test_first_action_includes_fallback(self):
+        result = _ensure_skill_prefix("/autoskillit:investigate error", provider_profile="minimax")
+        assert "SKILL.md" in result
+
+    def test_first_action_uses_extract_skill_name(self):
+        result = _ensure_skill_prefix("/autoskillit:make-plan task", provider_profile="minimax")
+        assert 'skill="make-plan"' in result
+        assert "autoskillit:" not in result.split('"')[1]
+
+    def test_first_action_preserves_use_the_line(self):
+        result = _ensure_skill_prefix("/investigate error", provider_profile="minimax")
+        assert "Use the /investigate skill error" in result
+
+    def test_plain_prompt_unchanged_with_provider_profile(self):
+        result = _ensure_skill_prefix("Fix the bug", provider_profile="minimax")
+        assert "FIRST ACTION" not in result
+        assert result == "Fix the bug"
+
 
 class TestStalenessReturnsNeedsRetry:
     """Stale SubprocessResult triggers needs_retry response."""
@@ -2545,3 +2578,28 @@ class TestInjectNarrationSuppression:
         result = _inject_narration_suppression("cmd")
         # Must not suppress the final response where structured output tokens live
         assert "final response" in result
+
+    def test_no_after_loading_by_default(self):
+        from autoskillit.execution.commands import _inject_narration_suppression
+
+        result = _inject_narration_suppression("cmd")
+        assert "After loading" not in result
+
+    def test_no_after_loading_when_false(self):
+        from autoskillit.execution.commands import _inject_narration_suppression
+
+        result = _inject_narration_suppression("cmd", has_skill_prefix=False)
+        assert "After loading" not in result
+
+    def test_after_loading_when_has_skill_prefix(self):
+        from autoskillit.execution.commands import _inject_narration_suppression
+
+        result = _inject_narration_suppression("cmd", has_skill_prefix=True)
+        assert "After loading the skill instructions" in result
+
+    def test_still_contains_efficiency_directive_with_prefix(self):
+        from autoskillit.execution.commands import _inject_narration_suppression
+
+        result = _inject_narration_suppression("cmd", has_skill_prefix=True)
+        assert "EFFICIENCY DIRECTIVE" in result
+        assert "between tool calls" in result

@@ -357,8 +357,8 @@ def flush_session_log(
     if recipe_identity.name or recipe_identity.content_hash:
         summary["recipe_provenance"] = {
             "schema_version": 1,
-            "recipe_name": recipe_identity.name,
-            "recipe_version": recipe_identity.version,
+            "name": recipe_identity.name,
+            "version": recipe_identity.version,
             "content_hash": recipe_identity.content_hash,
             "composite_hash": recipe_identity.composite_hash,
         }

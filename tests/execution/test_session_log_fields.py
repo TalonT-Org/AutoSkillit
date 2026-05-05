@@ -597,10 +597,10 @@ def test_summary_includes_recipe_provenance(tmp_path):
     summary = json.loads((session_dir / "summary.json").read_text())
     assert "recipe_provenance" in summary
     assert summary["recipe_provenance"]["schema_version"] == 1
-    assert summary["recipe_provenance"]["recipe_name"] == "impl"
+    assert summary["recipe_provenance"]["name"] == "impl"
     assert summary["recipe_provenance"]["content_hash"] == "sha256:abc"
     assert summary["recipe_provenance"]["composite_hash"] == "sha256:def"
-    assert summary["recipe_provenance"]["recipe_version"] == "1.0.0"
+    assert summary["recipe_provenance"]["version"] == "1.0.0"
 
 
 def test_session_log_empty_recipe_identity(tmp_path):

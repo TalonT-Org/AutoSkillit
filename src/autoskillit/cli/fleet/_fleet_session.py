@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from autoskillit.recipe.schema import Recipe
 
 _MAX_RELOADS = 10
+_MAX_INFRA_RESUMES = 3
 
 
 def _check_reload_guard(reload_id: str, seen_reload_ids: set[str]) -> None:
@@ -61,6 +62,7 @@ def _launch_fleet_session(
         seen_reload_ids: set[str] = set()
         current_resume_spec: ResumeSpec = NoResume()
         current_initial_message = initial_message
+        infra_resume_count = 0
         while True:
             session_signal = _run_interactive_session(
                 prompt,
@@ -72,6 +74,12 @@ def _launch_fleet_session(
             if session_signal is None:
                 break
             if not isinstance(session_signal, str):
+                infra_resume_count += 1
+                if infra_resume_count >= _MAX_INFRA_RESUMES:
+                    raise SystemExit(
+                        f"Too many infrastructure resumes ({_MAX_INFRA_RESUMES} max). "
+                        f"Last exit: {session_signal.category}"
+                    )
                 current_resume_spec = NamedResume(session_id=session_signal.session_id)
                 continue
             _check_reload_guard(session_signal, seen_reload_ids)
@@ -126,6 +134,7 @@ def _launch_fleet_session(
 
         seen_reload_ids = set[str]()
         current_resume_spec = NoResume()
+        infra_resume_count = 0
 
         while True:
             session_signal = _run_interactive_session(
@@ -137,18 +146,25 @@ def _launch_fleet_session(
             if session_signal is None:
                 break
             if not isinstance(session_signal, str):
+                infra_resume_count += 1
+                if infra_resume_count >= _MAX_INFRA_RESUMES:
+                    raise SystemExit(
+                        f"Too many infrastructure resumes ({_MAX_INFRA_RESUMES} max). "
+                        f"Last exit: {session_signal.category}"
+                    )
                 current_resume_spec = NamedResume(session_id=session_signal.session_id)
-                continue
-            _check_reload_guard(session_signal, seen_reload_ids)
+            else:
+                _check_reload_guard(session_signal, seen_reload_ids)
+                current_resume_spec = NamedResume(session_id=session_signal)
 
             fresh_metadata = resume_campaign_from_state(
                 state_path, campaign_recipe.continue_on_failure
             )
             if fresh_metadata is None:
-                logger.error("Campaign state corrupted during reload — exiting")
+                logger.error("Campaign state corrupted during resume — exiting")
                 break
             if fresh_metadata.completed_dispatches_block == FLEET_HALTED_SENTINEL:
-                logger.info("Campaign halted on failure during reload — exiting")
+                logger.info("Campaign halted on failure during resume — exiting")
                 break
 
             completed_dispatches = fresh_metadata.completed_dispatches_block
@@ -166,4 +182,3 @@ def _launch_fleet_session(
                 resume_session_id=resume_session_id,
                 ingredients_table=ingredients_table,
             )
-            current_resume_spec = NamedResume(session_id=session_signal)

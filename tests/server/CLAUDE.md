@@ -64,7 +64,8 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_tools_kitchen_visibility.py` | Tests for tools_kitchen.py: visibility, component management, sous-chef, redisable_subsets |
 | `test_tools_label_validation.py` | Tests for label whitelist validation in server tool handlers |
 | `test_tools_list_recipes.py` | Tests for autoskillit server list_recipes tool |
-| `test_tools_load_recipe.py` | Tests for autoskillit server load_recipe and migrate_recipe tools |
+| `test_tools_load_recipe.py` | Tests for autoskillit server load_recipe tool |
+| `test_tools_migrate_recipe.py` | Tests for autoskillit server migrate_recipe tool |
 | `test_tools_pr_ops.py` | Tests for server/tools_pr_ops.py |
 | `test_tools_recipe.py` | Tests for autoskillit server validate_recipe tool and recipe docstring contracts |
 | `test_tools_run_cmd.py` | Tests for run_cmd and run_python MCP tool handlers |

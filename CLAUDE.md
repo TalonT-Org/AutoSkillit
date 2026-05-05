@@ -132,7 +132,7 @@ generic_automation_mcp/
 └── pyproject.toml
 ```
 
-`src/autoskillit/` packages — each has its own CLAUDE.md with file-level detail:
+`src/autoskillit/` packages — each has its own CLAUDE.md with file-level detail (except `recipes/`, `skills/`, and `skills_extended/` — CLAUDE.md files for these are pending):
 
 | Package | IL | Purpose |
 |---|---|---|

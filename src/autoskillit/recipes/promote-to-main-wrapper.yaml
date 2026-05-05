@@ -3,7 +3,7 @@ description: >-
   Thin wrapper that invokes the promote-to-main skill via run_skill, enabling
   campaign dispatch of integration branch promotions as L3 food trucks.
 kind: standard
-autoskillit_version: "0.9.390"
+autoskillit_version: "0.9.391"
 recipe_version: "1.0.0"
 
 requires_packs:

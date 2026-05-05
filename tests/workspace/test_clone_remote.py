@@ -41,9 +41,18 @@ class TestCloneRemoteUrlResolution:
             assert len(clone_calls) == 1, (
                 f"Expected exactly one git clone call, got {len(clone_calls)}"
             )
-            clone_args = clone_calls[0][0][0]
-            # source is second-to-last positional arg (before clone_path)
-            clone_source = clone_args[-2]
+            cmd = clone_calls[0][0][0]
+            # Extract positional args by skipping flags and their values.
+            positional: list[str] = []
+            i = cmd.index("clone") + 1
+            while i < len(cmd):
+                if cmd[i].startswith("-"):
+                    i += 2  # skip flag and its value
+                else:
+                    positional.append(cmd[i])
+                    i += 1
+            assert len(positional) == 2, f"Expected [source, target] in clone cmd: {cmd}"
+            clone_source = positional[0]
             assert clone_source == str(bare_remote), (
                 f"Expected clone source to be remote URL {bare_remote!r}, "
                 f"got {clone_source!r} (local path was used instead)"
@@ -218,7 +227,7 @@ class TestProbeCloneSourceUrl:
         bare = tmp_path / "bare.git"
         subprocess.run(["git", "init", "--bare", str(bare)], check=True, capture_output=True)
         source = tmp_path / "source"
-        subprocess.run(["git", "clone", str(bare), str(source)], capture_output=True)
+        subprocess.run(["git", "clone", str(bare), str(source)], check=True, capture_output=True)
         subprocess.run(
             ["git", "-C", str(source), "config", "user.email", "t@t.com"],
             check=True,

@@ -69,6 +69,17 @@ signal downstream processing.
 
 ## Workflow
 
+### Step 0 — Validate Environment
+
+Before any path resolution, verify `$AUTOSKILLIT_TEMP` is set:
+
+```bash
+test -n "${AUTOSKILLIT_TEMP}" || { echo "Error: \$AUTOSKILLIT_TEMP is unset. Cannot resolve default paths. Aborting."; exit 1; }
+```
+
+This guard must fire before auto-discovering `audit_report_path` (which resolves a path
+under `$AUTOSKILLIT_TEMP/audit-tests/`) and before any output path construction.
+
 ### Step 1 — Detect Audit Format
 
 Read the audit report file. Confirm it is a test audit by examining the document title:

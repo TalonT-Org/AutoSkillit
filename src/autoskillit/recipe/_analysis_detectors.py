@@ -119,6 +119,10 @@ _OBSERVABILITY_CAPTURES: frozenset[tuple[str, str]] = frozenset(
         ("resource_report", "stage-data"),
         ("alignment_findings_path", "planner-validate-task-alignment"),
         ("review_approach_assessment_path", "planner-assess-review-approach"),
+        # plan-visualization terminal handoff captures: emitted in food-truck sentinel,
+        # not consumed by downstream recipe steps (route → stop action).
+        ("visualization_plan_path", "plan-visualization"),
+        ("report_plan_path", "plan-visualization"),
     }
 )
 

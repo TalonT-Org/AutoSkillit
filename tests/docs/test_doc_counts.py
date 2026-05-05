@@ -264,6 +264,7 @@ def test_bundled_recipe_count_is_9() -> None:
         "promote-to-main-wrapper",
         "remediation",
         "research",
+        "research-design",
     ]
     assert recipes == expected, f"Recipes drifted: {recipes}"
 

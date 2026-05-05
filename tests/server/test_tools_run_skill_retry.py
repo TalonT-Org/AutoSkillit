@@ -38,15 +38,6 @@ class TestRunSkillRetryRemoved:
             "run_skill_retry still exists in tools_execution — it should be removed"
         )
 
-    def test_run_skill_retry_not_in_all(self):
-        """run_skill_retry is not in tools_execution.__all__ (if defined)."""
-        import autoskillit.server.tools.tools_execution as module
-
-        # tools_execution does not define __all__; verify via direct attribute check
-        assert not hasattr(module, "run_skill_retry"), (
-            "run_skill_retry should not be a public attribute of tools_execution"
-        )
-
 
 class TestRunSkillSessionOutcome:
     """run_skill correctly classifies all Claude Code session outcomes."""

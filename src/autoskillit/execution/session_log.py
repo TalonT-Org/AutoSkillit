@@ -23,8 +23,12 @@ if TYPE_CHECKING:
 
 import psutil
 
-from autoskillit.core import atomic_write, claude_code_log_path, get_logger
-from autoskillit.core.tool_sequence_analysis import iter_merged_assistant_turns
+from autoskillit.core import (
+    atomic_write,
+    claude_code_log_path,
+    get_logger,
+    iter_merged_assistant_turns,
+)
 from autoskillit.execution.anomaly_detection import (
     detect_anomalies,
     detect_identity_drift,

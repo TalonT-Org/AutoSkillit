@@ -64,6 +64,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_remediation_depth_ingredient.py` | Tests for remediation depth ingredient configuration |
 | `test_remediation_pr_decomposition.py` | Tests for remediation PR decomposition recipe |
 | `test_remediation_recipe.py` | Tests for the remediation recipe structure |
+| `test_research_campaign.py` | Contract card assertions for the research-campaign recipe |
 | `test_repository.py` | Tests for DefaultRecipeRepository |
 | `test_research_archive_recipe.py` | Tests for research-archive sub-recipe structure |
 | `test_research_bundle_lifecycle.py` | Tests for research bundle lifecycle in recipes |

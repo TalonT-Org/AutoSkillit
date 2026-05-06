@@ -113,6 +113,11 @@ def _launch_fleet_session(
             if resume_metadata is not None and resume_metadata.is_resumable
             else ""
         )
+        resume_kill_reason = (
+            resume_metadata.kill_reason
+            if resume_metadata is not None and resume_metadata.is_resumable
+            else ""
+        )
         prompt = _build_fleet_campaign_prompt(
             campaign_recipe,
             manifest_yaml,
@@ -121,6 +126,7 @@ def _launch_fleet_session(
             campaign_id,
             resumable_dispatch_name=resumable_dispatch_name,
             resume_session_id=resume_session_id,
+            resume_kill_reason=resume_kill_reason,
             ingredients_table=ingredients_table,
         )
         extra_env = {
@@ -172,6 +178,7 @@ def _launch_fleet_session(
                 fresh_metadata.next_dispatch_name if fresh_metadata.is_resumable else ""
             )
             resume_session_id = fresh_metadata.l3_session_id if fresh_metadata.is_resumable else ""
+            resume_kill_reason = fresh_metadata.kill_reason if fresh_metadata.is_resumable else ""
             prompt = _build_fleet_campaign_prompt(
                 campaign_recipe,
                 manifest_yaml,
@@ -180,5 +187,6 @@ def _launch_fleet_session(
                 campaign_id,
                 resumable_dispatch_name=resumable_dispatch_name,
                 resume_session_id=resume_session_id,
+                resume_kill_reason=resume_kill_reason,
                 ingredients_table=ingredients_table,
             )

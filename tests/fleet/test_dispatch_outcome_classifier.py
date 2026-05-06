@@ -100,3 +100,90 @@ class TestClassifyDispatchOutcomeCompletedDirty:
         status, reason = classify_dispatch_outcome(parsed, skill_result, sidecar_exists=False)
         assert status == DispatchStatus.FAILURE
         assert reason == FleetErrorCode.FLEET_L3_PARSE_FAILED
+
+
+class TestReasonAwareResumePolicy:
+    def test_idle_stall_with_progress_is_resumable(self):
+        parsed, skill_result = _no_sentinel(session_id="sess-abc", lifespan_started=True)
+        skill_result = dataclasses.replace(
+            skill_result,
+            retry_reason="idle_stall",
+        )
+        status, reason = classify_dispatch_outcome(parsed, skill_result, sidecar_exists=True)
+        assert status == DispatchStatus.RESUMABLE
+        assert reason == FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
+
+    def test_context_exhausted_with_progress_is_failure(self):
+        parsed, skill_result = _no_sentinel(session_id="sess-abc", lifespan_started=True)
+        skill_result = dataclasses.replace(
+            skill_result,
+            retry_reason="resume",
+            infra_exit_category="context_exhausted",
+        )
+        status, reason = classify_dispatch_outcome(parsed, skill_result, sidecar_exists=True)
+        assert status == DispatchStatus.FAILURE
+        assert reason == FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
+
+    def test_api_error_with_progress_is_resumable(self):
+        parsed, skill_result = _no_sentinel(session_id="sess-abc", lifespan_started=True)
+        skill_result = dataclasses.replace(
+            skill_result,
+            retry_reason="resume",
+            infra_exit_category="api_error",
+        )
+        status, reason = classify_dispatch_outcome(parsed, skill_result, sidecar_exists=True)
+        assert status == DispatchStatus.RESUMABLE
+        assert reason == FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
+
+    def test_process_killed_with_progress_is_resumable(self):
+        parsed, skill_result = _no_sentinel(session_id="sess-abc", lifespan_started=True)
+        skill_result = dataclasses.replace(
+            skill_result,
+            retry_reason="resume",
+            infra_exit_category="process_killed",
+        )
+        status, reason = classify_dispatch_outcome(parsed, skill_result, sidecar_exists=True)
+        assert status == DispatchStatus.RESUMABLE
+        assert reason == FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
+
+    def test_thinking_stall_with_progress_is_failure(self):
+        parsed, skill_result = _no_sentinel(session_id="sess-abc", lifespan_started=True)
+        skill_result = dataclasses.replace(
+            skill_result,
+            retry_reason="thinking_stall",
+        )
+        status, reason = classify_dispatch_outcome(parsed, skill_result, sidecar_exists=True)
+        assert status == DispatchStatus.FAILURE
+        assert reason == FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
+
+    def test_stale_with_progress_is_failure(self):
+        parsed, skill_result = _no_sentinel(session_id="sess-abc", lifespan_started=True)
+        skill_result = dataclasses.replace(
+            skill_result,
+            retry_reason="stale",
+        )
+        status, reason = classify_dispatch_outcome(parsed, skill_result, sidecar_exists=True)
+        assert status == DispatchStatus.FAILURE
+        assert reason == FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
+
+    def test_no_progress_still_failure_regardless_of_reason(self):
+        parsed, skill_result = _no_sentinel(session_id="sess-abc", lifespan_started=True)
+        skill_result = dataclasses.replace(
+            skill_result,
+            retry_reason="idle_stall",
+        )
+        status, reason = classify_dispatch_outcome(
+            parsed, skill_result, sidecar_exists=False, checkpoint=None
+        )
+        assert status == DispatchStatus.FAILURE
+        assert reason == FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
+
+    def test_no_lifespan_still_failure_regardless_of_reason(self):
+        parsed, skill_result = _no_sentinel(session_id="sess-abc", lifespan_started=False)
+        skill_result = dataclasses.replace(
+            skill_result,
+            retry_reason="idle_stall",
+        )
+        status, reason = classify_dispatch_outcome(parsed, skill_result, sidecar_exists=True)
+        assert status == DispatchStatus.FAILURE
+        assert reason == FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK

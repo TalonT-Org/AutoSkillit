@@ -37,6 +37,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_headless_provider_forwarding.py` | Tests verifying provider_extras and profile_name forwarding through the headless call chain |
 | `test_headless_result_write_reconciliation.py` | Integration tests for EMPTY_OUTPUT + write-evidence reconciliation gate in _build_skill_result |
 | `test_headless_synthesis.py` | Tests for headless.py synthesis helpers: output path extraction, validation, contamination |
+| `test_headless_result.py` | Tests for _build_skill_result idle_stall lifespan_started propagation |
 | `test_idle_output_env.py` | Group G (execution part): AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT env variable injection tests |
 | `test_linux_tracing.py` | Tests for Linux-only process tracing via psutil and /proc filesystem |
 | `test_linux_tracing_pty_integration.py` | Integration test: PTY-wrapped command is traced at the workload level, not the wrapper |

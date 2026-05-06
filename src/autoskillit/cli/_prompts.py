@@ -99,6 +99,21 @@ Apply the same failure rules as static dispatches. On any food truck failure:
 """
 
 
+def _resume_reason_guidance(kill_reason: str) -> str:
+    """Return reason-specific resume guidance for the L3 campaign dispatcher."""
+    if kill_reason == "idle_stall":
+        return (
+            "Kill reason: idle timeout (session was waiting for an external event). "
+            "Resume is safe — the session likely has partial progress on disk."
+        )
+    if kill_reason == "resume":
+        return (
+            "Kill reason: transient infrastructure failure (API error or process kill). "
+            "Resume is safe — retry immediately."
+        )
+    return "Kill reason: unknown. Resume with standard recovery."
+
+
 def _build_fleet_campaign_prompt(
     campaign_recipe: Recipe,
     manifest_yaml: str,
@@ -108,6 +123,7 @@ def _build_fleet_campaign_prompt(
     max_quota_wait_sec: int = 3600,
     resumable_dispatch_name: str = "",
     resume_session_id: str = "",
+    resume_kill_reason: str = "",
     ingredients_table: str | None = None,
 ) -> str:
     """Build the system prompt for an L3 campaign dispatcher headless session.
@@ -188,11 +204,13 @@ dispatch name NOT listed above.
             else ""
         )
         _resume_session_clause = f" {_resume_session_line}" if _resume_session_line else ""
+        _reason_guidance = _resume_reason_guidance(resume_kill_reason)
         resumable_section = f"""\
 
 ## RESUMABLE DISPATCH: {resumable_dispatch_name}
 
 This dispatch was interrupted mid-run with partial sidecar progress.
+{_reason_guidance}
 Re-dispatch it using compute_remaining_issues(dispatch_id, original_urls, project_dir)
 to retrieve only the remaining issue URLs, then call dispatch_food_truck with
 issue_urls=<remaining> and allow_reentry=true as ingredient overrides{_resume_session_clause}.
@@ -272,6 +290,22 @@ If a dispatch has no `capture:` field, pass `capture={{}}` or omit the parameter
 The `${{{{ campaign.* }}}}` references in ingredients are resolved before the L2 session
 is started — the L2 food truck agent always receives concrete values.
 {gate_section}{dynamic_dispatch_section}
+## RESUME DISCIPLINE
+
+When a dispatch is killed (no result block received), the infrastructure classifies it:
+
+| Kill Reason | Policy | Rationale |
+|-------------|--------|-----------|
+| idle_stall | RESUME | Session was waiting for an external event — partial progress exists |
+| api_error / process_killed | RESUME | Transient failure — session state is intact |
+| context_exhausted | ABANDON | Session exhausted its context window — resuming hits same limit |
+| thinking_stall | ABANDON | Session stuck in a loop — resuming repeats the stall |
+| stale | ABANDON | Session state is stale — no meaningful progress to continue |
+
+If the infrastructure marks a dispatch RESUMABLE, follow the RESUMABLE DISPATCH section below.
+If the infrastructure marks a dispatch FAILURE, follow the FAILURE RECOVERY rules above.
+Do NOT override the infrastructure's resume/abandon decision.
+
 ## FAILURE RECOVERY
 
 When a dispatch call returns, evaluate the envelope and payload:

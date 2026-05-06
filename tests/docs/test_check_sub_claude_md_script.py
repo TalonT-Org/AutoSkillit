@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = pytest.mark.small
+pytestmark = pytest.mark.medium
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 _SCRIPT = REPO_ROOT / "scripts" / "check_sub_claude_md.py"
@@ -31,7 +31,8 @@ class TestCheckCoverage:
         subdir = tmp_path / "mypackage"
         subdir.mkdir()
         (subdir / "CLAUDE.md").write_text(
-            "| File | Purpose |\n|------|----------|\n| `__init__.py` | init |\n| `foo.py` | foo |\n",
+            "| File | Purpose |\n|------|----------|\n"
+            "| `__init__.py` | init |\n| `foo.py` | foo |\n",
             encoding="utf-8",
         )
         (subdir / "__init__.py").touch()
@@ -77,10 +78,10 @@ class TestCheckCoverage:
         result = script_mod.check_coverage(tmp_path, ["mypackage/CLAUDE.md"])
         assert result == ["mypackage/CLAUDE.md: missing `__init__.py` in file table"]
 
-    def test_check_coverage_skips_nonexistent_claude_md(self, script_mod, tmp_path):
-        """Returns empty list when expected CLAUDE.md path does not exist on disk."""
+    def test_check_coverage_flags_missing_claude_md(self, script_mod, tmp_path):
+        """Returns failure when expected CLAUDE.md path does not exist on disk."""
         result = script_mod.check_coverage(tmp_path, ["nonexistent/CLAUDE.md"])
-        assert result == []
+        assert result == ["nonexistent/CLAUDE.md: CLAUDE.md not found"]
 
     def test_check_coverage_multiple_missing_files(self, script_mod, tmp_path):
         """Returns one failure entry per missing file."""
@@ -103,7 +104,7 @@ class TestCheckCoverage:
 
 class TestExpectedListsSync:
     def test_src_expected_matches_test_file(self, script_mod):
-        """Script's SRC_EXPECTED list matches EXPECTED_SUB_CLAUDE_MDS in test_sub_claude_md_completeness."""
+        """SRC_EXPECTED matches EXPECTED_SUB_CLAUDE_MDS in test_sub_claude_md_completeness."""
         test_module_name = "test_sub_claude_md_completeness"
         test_file = REPO_ROOT / "tests" / "docs" / f"{test_module_name}.py"
         spec = importlib.util.spec_from_file_location(test_module_name, test_file)
@@ -113,7 +114,7 @@ class TestExpectedListsSync:
         assert sorted(script_mod.SRC_EXPECTED) == sorted(test_mod.EXPECTED_SUB_CLAUDE_MDS)
 
     def test_tests_expected_matches_test_file(self, script_mod):
-        """Script's TESTS_EXPECTED list matches EXPECTED_SUB_CLAUDE_MDS in test_tests_sub_claude_md_completeness."""
+        """TESTS_EXPECTED list matches that in test_tests_sub_claude_md_completeness."""
         test_module_name = "test_tests_sub_claude_md_completeness"
         test_file = REPO_ROOT / "tests" / "docs" / f"{test_module_name}.py"
         spec = importlib.util.spec_from_file_location(test_module_name, test_file)

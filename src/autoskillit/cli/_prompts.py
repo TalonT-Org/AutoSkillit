@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, get_logger, pkg_root
+from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, RetryReason, get_logger, pkg_root
 from autoskillit.hooks import QUOTA_GUARD_DENY_TRIGGER, QUOTA_POST_WARNING_TRIGGER
 
 logger = get_logger(__name__)
@@ -101,12 +101,12 @@ Apply the same failure rules as static dispatches. On any food truck failure:
 
 def _resume_reason_guidance(kill_reason: str) -> str:
     """Return reason-specific resume guidance for the L3 campaign dispatcher."""
-    if kill_reason == "idle_stall":
+    if kill_reason == RetryReason.IDLE_STALL:
         return (
             "Kill reason: idle timeout (session was waiting for an external event). "
             "Resume is safe — the session likely has partial progress on disk."
         )
-    if kill_reason == "resume":
+    if kill_reason == RetryReason.RESUME:
         return (
             "Kill reason: transient infrastructure failure (API error or process kill). "
             "Resume is safe — retry immediately."

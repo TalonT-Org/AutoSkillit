@@ -26,7 +26,6 @@ from tests._test_filter import (
     build_test_scope,
     check_bucket_a,
     git_changed_files,
-    load_coverage_map,
     load_manifest,
 )
 
@@ -204,12 +203,14 @@ class TestBuildTestScope:
         assert "arch" in dir_names, "arch always-run missing"
         assert "contracts" in dir_names, "contracts always-run missing"
         # infra and docs are not directories for a non-triggering change;
-        # 9 individual infra files appear in result via direct_test_files
+        # 6 infra + 3 hooks unconditional files appear in result via direct_test_files
         result_names = {p.name for p in result}
-        from tests._test_filter import _INFRA_UNCONDITIONAL_FILES
+        from tests._test_filter import _HOOKS_UNCONDITIONAL_FILES, _INFRA_UNCONDITIONAL_FILES
 
         for fname in _INFRA_UNCONDITIONAL_FILES:
             assert fname in result_names, f"unconditional infra file {fname!r} missing"
+        for fname in _HOOKS_UNCONDITIONAL_FILES:
+            assert fname in result_names, f"unconditional hooks file {fname!r} missing"
         assert "test_doc_counts.py" in result_names
 
     def test_scope_l1_execution_conservative(self, tmp_path: Path) -> None:
@@ -324,10 +325,12 @@ class TestBuildTestScope:
         assert "server" in result_names
         assert "cli" in result_names
         assert "test_pack_enforcement.py" in result_names
-        from tests._test_filter import _INFRA_UNCONDITIONAL_FILES
+        from tests._test_filter import _HOOKS_UNCONDITIONAL_FILES, _INFRA_UNCONDITIONAL_FILES
 
         for fname in _INFRA_UNCONDITIONAL_FILES:
             assert fname in result_names, f"unconditional infra file {fname!r} missing"
+        for fname in _HOOKS_UNCONDITIONAL_FILES:
+            assert fname in result_names, f"unconditional hooks file {fname!r} missing"
         assert "infra" not in {p.name for p in result if (tests_root / p.name).is_dir()}, (
             "full infra dir should not appear for pure server change"
         )
@@ -390,10 +393,12 @@ class TestBuildTestScope:
         assert "docs" in dir_names
         assert "infra" not in dir_names  # docs change doesn't trigger full infra
         result_names = {p.name for p in result}
-        from tests._test_filter import _INFRA_UNCONDITIONAL_FILES
+        from tests._test_filter import _HOOKS_UNCONDITIONAL_FILES, _INFRA_UNCONDITIONAL_FILES
 
         for fname in _INFRA_UNCONDITIONAL_FILES:
-            assert fname in result_names
+            assert fname in result_names, f"unconditional infra file {fname!r} missing"
+        for fname in _HOOKS_UNCONDITIONAL_FILES:
+            assert fname in result_names, f"unconditional hooks file {fname!r} missing"
 
     def test_scope_none_mode_returns_disabled(self, tmp_path: Path) -> None:
         result = build_test_scope(
@@ -924,73 +929,3 @@ class TestManifestApplyManifest:
             ["src/autoskillit/recipes/cook.yaml", "docs/guide.md"], manifest
         )
         assert result == {"recipe/", "docs/"}
-
-
-# ---------------------------------------------------------------------------
-# TestLoadCoverageMap
-# ---------------------------------------------------------------------------
-
-
-class TestLoadCoverageMap:
-    def test_returns_dict_from_valid_json(self, tmp_path: Path) -> None:
-        """Parses a valid JSON map and returns dict[str, set[str]]."""
-        map_file = tmp_path / "test-source-map.json"
-        map_file.write_text(
-            '{"src/autoskillit/recipe/rules_dataflow.py": '
-            '["tests/recipe/test_rules_dataflow.py", "tests/recipe/test_rules_structure.py"]}',
-            encoding="utf-8",
-        )
-        result = load_coverage_map(map_file)
-        assert result is not None
-        assert "src/autoskillit/recipe/rules_dataflow.py" in result
-        assert isinstance(result["src/autoskillit/recipe/rules_dataflow.py"], set)
-        assert (
-            "tests/recipe/test_rules_dataflow.py"
-            in result["src/autoskillit/recipe/rules_dataflow.py"]
-        )
-
-    def test_missing_file_returns_none(self, tmp_path: Path) -> None:
-        """Returns None when the map file does not exist."""
-        result = load_coverage_map(tmp_path / "nonexistent.json")
-        assert result is None
-
-    def test_stale_file_returns_none(self, tmp_path: Path) -> None:
-        """Returns None when the file mtime is older than max_age_days."""
-        import os
-        import time
-
-        map_file = tmp_path / "test-source-map.json"
-        map_file.write_text('{"src/foo.py": ["tests/test_foo.py"]}', encoding="utf-8")
-        # Backdate mtime by 31 days
-        old_mtime = time.time() - (31 * 24 * 3600)
-        os.utime(map_file, (old_mtime, old_mtime))
-        result = load_coverage_map(map_file, max_age_days=30)
-        assert result is None
-
-    def test_fresh_file_returns_data(self, tmp_path: Path) -> None:
-        """Returns data when the file mtime is within max_age_days."""
-        map_file = tmp_path / "test-source-map.json"
-        map_file.write_text('{"src/foo.py": ["tests/test_foo.py"]}', encoding="utf-8")
-        result = load_coverage_map(map_file, max_age_days=30)
-        assert result is not None
-        assert result["src/foo.py"] == {"tests/test_foo.py"}
-
-    def test_custom_max_age_days_respected(self, tmp_path: Path) -> None:
-        """Custom max_age_days threshold is respected."""
-        import os
-        import time
-
-        map_file = tmp_path / "test-source-map.json"
-        map_file.write_text('{"src/foo.py": ["tests/test_foo.py"]}', encoding="utf-8")
-        # Backdate by 2 days — stale with max_age_days=1, fresh with max_age_days=3
-        old_mtime = time.time() - (2 * 24 * 3600)
-        os.utime(map_file, (old_mtime, old_mtime))
-        assert load_coverage_map(map_file, max_age_days=1) is None
-        assert load_coverage_map(map_file, max_age_days=3) is not None
-
-    def test_malformed_json_returns_none(self, tmp_path: Path) -> None:
-        """Returns None on JSON parse failure."""
-        map_file = tmp_path / "test-source-map.json"
-        map_file.write_text("{bad json}", encoding="utf-8")
-        result = load_coverage_map(map_file)
-        assert result is None

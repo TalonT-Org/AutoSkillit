@@ -84,15 +84,22 @@ ALWAYS_RUN_AGGRESSIVE: frozenset[str] = frozenset(
 # These enforce cross-cutting registration, executability, and schema contracts.
 _INFRA_UNCONDITIONAL_FILES: frozenset[str] = frozenset(
     {
-        "test_hook_executability.py",
-        "test_hook_registration_coverage.py",
         "test_manifest_completeness.py",
-        "test_hook_registry.py",
         "test_guard_coverage.py",
         "test_session_scope_enforcement.py",
         "test_filter_activation.py",
         "test_schema_version_convention.py",
         "test_release_sanity.py",
+    }
+)
+
+# Structural hook files that run unconditionally regardless of trigger conditions.
+# These enforce cross-cutting hook registration and executability contracts.
+_HOOKS_UNCONDITIONAL_FILES: frozenset[str] = frozenset(
+    {
+        "test_hook_executability.py",
+        "test_hook_registration_coverage.py",
+        "test_hook_registry.py",
     }
 )
 
@@ -1266,9 +1273,11 @@ def build_test_scope(
         else:
             direct_test_files.add(str(tests_root / "docs" / "test_doc_counts.py"))
 
-        # REQ-TIER-003: 9 structural infra files always; full infra dir only on trigger
+        # REQ-TIER-003: 6 infra + 3 hooks structural files always; full infra dir only on trigger
         for fname in _INFRA_UNCONDITIONAL_FILES:
             direct_test_files.add(str(tests_root / "infra" / fname))
+        for fname in _HOOKS_UNCONDITIONAL_FILES:
+            direct_test_files.add(str(tests_root / "hooks" / fname))
         if any(
             f.startswith(_INFRA_HOOK_TRIGGER_PREFIX)
             or f.startswith(_INFRA_CI_TRIGGER_PREFIX)

@@ -355,6 +355,9 @@ def _format_model_table(aggregated: dict[str, dict[str, Any]]) -> str:
     """Format per-model aggregate breakdown as ## Model Usage Breakdown table.
 
     Returns '' when all entries have no model data (legacy sessions).
+
+    Duplicates TelemetryFormatter.format_model_table by design: hook scripts are
+    stdlib-only and cannot import from autoskillit.*.
     """
     model_data: dict[str, dict[str, Any]] = {}
     for entry in aggregated.values():

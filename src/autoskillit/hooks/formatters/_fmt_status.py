@@ -60,7 +60,7 @@ def _fmt_get_token_summary(data: dict, _pipeline: bool) -> str:
             steps = m.get("step_count", 0)
             inp = _fmt_tokens(m.get("input_tokens", 0))
             out = _fmt_tokens(m.get("output_tokens", 0))
-            lines.append(f"model:{model_name} steps:{steps} [uc:{inp} out:{out}]")
+            lines.append(f"model:{model_name} steps:{steps} [uncached:{inp} out:{out}]")
     return "\n".join(lines)
 
 

@@ -238,8 +238,7 @@ Note the `env_mode` from context (set by `setup-environment`):
 - `unavailable` — no environment could be provisioned; `run-experiment` will emit `blocked_experiment`
 - `none` — standard environment, no special setup needed
 
-Do NOT invoke `docker build`, `docker run`, `micromamba create`, or any
-environment construction command. The environment is already ready.
+Do NOT invoke any container or environment construction commands. The environment is already ready.
 
 **All commands from this point must run from `${WORKTREE_PATH}`.** Use absolute
 paths to avoid CWD drift across Bash tool calls.

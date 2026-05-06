@@ -66,7 +66,7 @@ clear the collection, then re-apply the baseline state — not inverse operation
 
 When context is exhausted mid-execution, edits may be on disk but not committed.
 The recipe routes to `on_context_limit` (typically `test`), bypassing the normal
-commit protocol in Step 3.
+commit protocol during the fix loop.
 
 **Before every test run and before emitting structured output tokens:**
 1. Run `git -C {worktree_path} status --porcelain`
@@ -130,7 +130,7 @@ If `diagnosis_path` was provided and the file exists:
 1. Open `diagnosis_path` and read its content
 2. Find the "Structured Output" section or scan for the line matching `failure_subtype = {value}`
 3. Extract the `failure_subtype` value (e.g., `flaky`, `deterministic`, `timing_race`, etc.)
-4. Store as `{failure_subtype}` for use in Step 2d
+4. Store as `{failure_subtype}` for use in the Verdict Decision Tree
 
 If `diagnosis_path` is absent or the file does not exist:
 - Set `{failure_subtype} = unknown`
@@ -154,14 +154,29 @@ This ensures local test results match CI behavior. Skip if no pre-test generatio
    `test_check` blocks synchronously and returns `passed: true/false` in a single call.
 2. Record the result as `{local_result}`: PASS (`passed: true`) or FAIL (`passed: false`)
 
-### Step 2d: Verdict Decision Tree
+### Step 2c: Verdict Override Rule
+
+**This rule takes precedence over the decision table below.**
+
+If at ANY point during this skill's execution a code change was committed
+(i.e., the fix loop was entered and produced at least one commit) AND the final
+`test_check` result is PASS:
+
+→ `verdict = real_fix` — unconditionally, regardless of `failure_subtype`.
+
+The decision table below applies ONLY when no fix was committed during this
+invocation. Once a fix is applied and tests pass, the verdict is `real_fix`
+and the table is never consulted.
+
+### Step 2d: No-Fix Verdict Decision Tree
+
+**Applies ONLY when no fix was applied (fixes_applied == 0).** If the fix loop was entered
+and a commit was made, skip this table — verdict is already `real_fix` per Step 2c.
 
 Using `{local_result}` from Step 2 and `{failure_subtype}` from Step 2a, determine `{verdict}`:
 
 | Local result | `failure_subtype` | Verdict |
 |---|---|---|
-| FAIL → (fix applied in Step 3) → PASS | any | `real_fix` |
-| FAIL → (no fix possible after 3 iterations) | any | proceed to Step 5 |
 | PASS | `flaky` or `timing_race` | `flake_suspected` |
 | PASS | `deterministic` | `ci_only_failure` |
 | PASS | `fixture` or `import` | `flake_suspected` |
@@ -175,10 +190,10 @@ resolve-failures will now emit `real_fix` or another verdict. `already_green` is
 not emitted by this skill's primary workflow.
 
 If local tests PASS (no fix needed): go to Step 2.5 (Validate CI Resolution) before
-proceeding to Step 4 — the CI-truth gate may redirect to Step 3 for flakiness
+proceeding to Step 4 — the CI-truth gate may redirect to the fix loop for flakiness
 investigation even when local tests pass.
 
-If local tests FAIL: enter Step 3.
+If local tests FAIL: enter the fix loop.
 
 ### Step 2.5: Validate CI Resolution
 
@@ -199,10 +214,13 @@ the failure could not be reproduced locally, which is a flaky-test signal.
       - Do **NOT** proceed to Step 4
       - Log: "CI failure on [test name] — local pass is not a resolution (flaky test
         signal). Entering fix loop to investigate and stabilize."
-      - Proceed to **Step 3 (Fix Loop)** to investigate the non-determinism, timing
+      - Proceed to **the Fix Loop** to investigate the non-determinism, timing
         dependencies, or race conditions that caused the test to pass locally but fail
         in CI. Apply a stabilizing fix (e.g., increase timeouts, remove timing
         dependencies, add retry guards, fix resource cleanup).
+      - When the fix loop applies a stabilizing fix and tests pass, emit `verdict = real_fix`
+        (per Step 2c override). Do NOT fall back to the Step 2d table — the fix
+        resolves the CI failure regardless of the original `failure_subtype`.
    d. If `failure_type` is not "test" (e.g., "lint", "build") and tests pass locally:
       - Proceed to Step 4 — local pass resolves non-test CI failures (lint/build
         failures are deterministic; they don't pass locally while failing remotely).
@@ -231,7 +249,7 @@ the failure could not be reproduced locally, which is a flaky-test signal.
    - The specific error message for each failure (first 10–15 lines)
    Discard the full pytest stdout — do not retain progress dots, install-worktree
    output, or timing lines. These accumulate across iterations and inflate context.
-6. Green → Step 4 (with `verdict = real_fix`); Red and < 3 iterations → repeat; Red and >= 3 → Step 5
+6. Green → `verdict = real_fix` (per Step 2c override — do not re-evaluate Step 2d) → Step 4; Red and < 3 iterations → repeat; Red and >= 3 → Step 5
 
 ### Step 4: Report
 
@@ -255,13 +273,16 @@ fixes_applied = {N}
 
 Where:
 - `{verdict}` is one of: `real_fix`, `flake_suspected`, `ci_only_failure`
-- `{N}` is the number of fix iterations performed (0 for non-real_fix verdicts, ≥1 for `real_fix`)
+- `{N}` is the number of fix iterations performed (0 for `flake_suspected` or `ci_only_failure` verdicts, ≥1 for `real_fix`)
 
 Return control to the orchestrator. The recipe's `on_result:` routing dispatches
 on `verdict`:
 - `real_fix` → `re_push` (fix landed, push to remote)
 - `flake_suspected` → `re_push` (retry via CI, bounded by retries: 2 / on_exhausted: release_issue_failure)
 - `ci_only_failure` → `release_issue_failure` (human escalation)
+
+**Invariant:** `ci_only_failure` is NEVER emitted when `fixes_applied >= 1`. If a fix was
+committed during this invocation and tests pass, the verdict is always `real_fix`.
 
 ### Step 5: Report Failure
 - Total fix iterations attempted

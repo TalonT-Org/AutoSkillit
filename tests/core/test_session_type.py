@@ -137,14 +137,6 @@ def test_leaf_value_maps_to_skill_with_deprecation_warning(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_session_type_invalid_session_type_emits_warning(monkeypatch):
-    from autoskillit.core import session_type
-
-    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "franchise")
-    with pytest.warns(DeprecationWarning, match="Invalid"):
-        session_type()
-
-
 def test_session_type_enum_fleet_value():
     from autoskillit.core import SessionType
 

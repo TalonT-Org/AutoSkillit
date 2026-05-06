@@ -812,7 +812,6 @@ def test_flush_session_log_provider_fallback_defaults_to_false(tmp_path):
     assert entry["provider_fallback"] is False
 
 
-# T8
 def test_token_usage_json_includes_model_identifier(tmp_path):
     """flush_session_log writes model_identifier to token_usage.json."""
     _flush(

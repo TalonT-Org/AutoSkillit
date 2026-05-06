@@ -204,12 +204,14 @@ class TestBuildTestScope:
         assert "arch" in dir_names, "arch always-run missing"
         assert "contracts" in dir_names, "contracts always-run missing"
         # infra and docs are not directories for a non-triggering change;
-        # 9 individual infra files appear in result via direct_test_files
+        # 6 infra + 3 hooks unconditional files appear in result via direct_test_files
         result_names = {p.name for p in result}
-        from tests._test_filter import _INFRA_UNCONDITIONAL_FILES
+        from tests._test_filter import _HOOKS_UNCONDITIONAL_FILES, _INFRA_UNCONDITIONAL_FILES
 
         for fname in _INFRA_UNCONDITIONAL_FILES:
             assert fname in result_names, f"unconditional infra file {fname!r} missing"
+        for fname in _HOOKS_UNCONDITIONAL_FILES:
+            assert fname in result_names, f"unconditional hooks file {fname!r} missing"
         assert "test_doc_counts.py" in result_names
 
     def test_scope_l1_execution_conservative(self, tmp_path: Path) -> None:
@@ -324,10 +326,12 @@ class TestBuildTestScope:
         assert "server" in result_names
         assert "cli" in result_names
         assert "test_pack_enforcement.py" in result_names
-        from tests._test_filter import _INFRA_UNCONDITIONAL_FILES
+        from tests._test_filter import _HOOKS_UNCONDITIONAL_FILES, _INFRA_UNCONDITIONAL_FILES
 
         for fname in _INFRA_UNCONDITIONAL_FILES:
             assert fname in result_names, f"unconditional infra file {fname!r} missing"
+        for fname in _HOOKS_UNCONDITIONAL_FILES:
+            assert fname in result_names, f"unconditional hooks file {fname!r} missing"
         assert "infra" not in {p.name for p in result if (tests_root / p.name).is_dir()}, (
             "full infra dir should not appear for pure server change"
         )
@@ -390,10 +394,12 @@ class TestBuildTestScope:
         assert "docs" in dir_names
         assert "infra" not in dir_names  # docs change doesn't trigger full infra
         result_names = {p.name for p in result}
-        from tests._test_filter import _INFRA_UNCONDITIONAL_FILES
+        from tests._test_filter import _HOOKS_UNCONDITIONAL_FILES, _INFRA_UNCONDITIONAL_FILES
 
         for fname in _INFRA_UNCONDITIONAL_FILES:
-            assert fname in result_names
+            assert fname in result_names, f"unconditional infra file {fname!r} missing"
+        for fname in _HOOKS_UNCONDITIONAL_FILES:
+            assert fname in result_names, f"unconditional hooks file {fname!r} missing"
 
     def test_scope_none_mode_returns_disabled(self, tmp_path: Path) -> None:
         result = build_test_scope(

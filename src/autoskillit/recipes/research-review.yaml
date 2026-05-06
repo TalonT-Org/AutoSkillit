@@ -85,15 +85,6 @@ kitchen_rules:
     value into context.all_diagram_paths using comma separation via capture_list.
     If a lens fails, continue with remaining lenses — partial diagrams are
     acceptable (compose_research_pr handles empty lists).
-  - >
-    LOCAL MODE OUTPUT: In local mode, the finalized bundle (report.html, report.md,
-    artifacts.tar.gz) is exported to {source_dir}/research-bundles/{date-slug}/.
-    This directory is created only when output_mode=local and is not committed to git.
-  - >
-    SENTINEL EMISSION: review_pr_complete emits the L3 result sentinel JSON block
-    with fields: success=true, pr_url, report_path_after_finalize, worktree_path,
-    research_dir. review_local_complete emits success=true and local_bundle_path.
-    Both terminal stops are terminal — no further routing occurs.
 
 steps:
   # --- LENS + STAGING PHASE ---
@@ -377,7 +368,7 @@ steps:
     tool: run_cmd
     optional_context_refs: [worktree_path]
     with:
-      cmd: "cd '${{ context.worktree_path }}' && git push"
+      cmd: "git push"
       cwd: "${{ context.worktree_path }}"
       step_name: re_push_research
     on_success: finalize_bundle
@@ -405,7 +396,7 @@ steps:
   finalize_bundle_render:
     tool: run_skill
     model: ""
-    optional_context_refs: [research_dir, worktree_path, visualization_plan_path]
+    optional_context_refs: [research_dir, worktree_path, all_diagram_paths, visualization_plan_path]
     with:
       skill_command: "/autoskillit:bundle-local-report ${{ context.research_dir }} ${{ context.report_path_after_finalize }} ${{ context.all_diagram_paths }} ${{ context.visualization_plan_path }}"
       cwd: "${{ context.worktree_path }}"

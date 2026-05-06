@@ -406,7 +406,7 @@ skills:
     - name: selected_lenses
       type: string
     - name: lens_context_paths
-      type: string
+      type: file_path_list
     expected_output_patterns:
     - prep_path\s*=\s*/.+
     - selected_lenses\s*=\s*\S+
@@ -427,7 +427,7 @@ skills:
       required: true
       recommended: false
     - name: all_diagram_paths
-      type: string
+      type: file_path_list
       required: true
       recommended: false
     - name: worktree_path
@@ -532,7 +532,7 @@ skills:
       type: integer
     expected_output_patterns:
     - needs_rerun\s*=\s*(true|false)
-    - verdict\s*=\s*(real_fix|already_green|flake_suspected|ci_only_failure)
+    - verdict\s*=\s*(real_fix|already_green)
     - fixes_applied\s*=\s*\d+
     pattern_examples:
     - 'needs_rerun = true
@@ -545,20 +545,6 @@ skills:
     - 'needs_rerun = false
 
       verdict = already_green
-
-      fixes_applied = 0
-
-      %%ORDER_UP%%'
-    - 'needs_rerun = true
-
-      verdict = flake_suspected
-
-      fixes_applied = 0
-
-      %%ORDER_UP%%'
-    - 'needs_rerun = false
-
-      verdict = ci_only_failure
 
       fixes_applied = 0
 
@@ -585,7 +571,7 @@ skills:
       type: integer
     expected_output_patterns:
     - needs_rerun\s*=\s*(true|false)
-    - verdict\s*=\s*(real_fix|already_green|flake_suspected|ci_only_failure)
+    - verdict\s*=\s*(real_fix|already_green)
     - fixes_applied\s*=\s*\d+
     pattern_examples:
     - 'needs_rerun = true
@@ -598,20 +584,6 @@ skills:
     - 'needs_rerun = false
 
       verdict = already_green
-
-      fixes_applied = 0
-
-      %%ORDER_UP%%'
-    - 'needs_rerun = true
-
-      verdict = flake_suspected
-
-      fixes_applied = 0
-
-      %%ORDER_UP%%'
-    - 'needs_rerun = false
-
-      verdict = ci_only_failure
 
       fixes_applied = 0
 

@@ -15,7 +15,13 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core import FleetErrorCode, get_logger, write_versioned_json
+from autoskillit.core import (
+    FleetErrorCode,
+    InfraExitCategory,
+    RetryReason,
+    get_logger,
+    write_versioned_json,
+)
 
 logger = get_logger(__name__)
 
@@ -574,10 +580,10 @@ def read_all_campaign_captures(
 
 _ABANDON_KILL_REASONS: frozenset[str] = frozenset(
     {
-        "stale",
-        "thinking_stall",
-        "path_contamination",
-        "clone_contamination",
+        RetryReason.STALE,
+        RetryReason.THINKING_STALL,
+        RetryReason.PATH_CONTAMINATION,
+        RetryReason.CLONE_CONTAMINATION,
     }
 )
 
@@ -586,7 +592,10 @@ def _is_abandon_kill_reason(kill_reason: str, infra_exit_category: str) -> bool:
     """Check if stored kill metadata indicates resume would be futile."""
     if kill_reason in _ABANDON_KILL_REASONS:
         return True
-    if kill_reason == "resume" and infra_exit_category == "context_exhausted":
+    if (
+        kill_reason == RetryReason.RESUME
+        and infra_exit_category == InfraExitCategory.CONTEXT_EXHAUSTED
+    ):
         return True
     return False
 

@@ -154,6 +154,9 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # smoke_utils.py — partitions, ranges, diff metrics, queue, enriched handoff
     ("src/autoskillit/smoke_utils.py", 57),
     ("src/autoskillit/smoke_utils.py", 126),
+    # Lines 143 and 357 are list-payload write sites (dual membership: also in list_sites
+    # in test_allowlist_includes_list_payloads_as_documented). The AST scanner catches
+    # them because it cannot distinguish list vs dict return types — intentional.
     ("src/autoskillit/smoke_utils.py", 143),
     ("src/autoskillit/smoke_utils.py", 357),
     ("src/autoskillit/smoke_utils.py", 405),

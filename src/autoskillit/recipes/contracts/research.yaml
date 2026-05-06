@@ -482,6 +482,7 @@ skills:
     - 'verdict = needs_human
 
       %%ORDER_UP%%'
+    write_behavior: always
   audit-claims:
     inputs:
     - name: worktree_path
@@ -511,6 +512,7 @@ skills:
     - 'verdict = needs_human
 
       %%ORDER_UP%%'
+    write_behavior: always
   resolve-research-review:
     inputs:
     - name: worktree_path
@@ -530,6 +532,8 @@ skills:
       type: integer
     expected_output_patterns:
     - needs_rerun\s*=\s*(true|false)
+    - verdict\s*=\s*(real_fix|already_green|flake_suspected|ci_only_failure)
+    - fixes_applied\s*=\s*\d+
     pattern_examples:
     - 'needs_rerun = true
 
@@ -581,6 +585,8 @@ skills:
       type: integer
     expected_output_patterns:
     - needs_rerun\s*=\s*(true|false)
+    - verdict\s*=\s*(real_fix|already_green|flake_suspected|ci_only_failure)
+    - fixes_applied\s*=\s*\d+
     pattern_examples:
     - 'needs_rerun = true
 

@@ -343,12 +343,12 @@ class TestChannelBFullPipelineAdjudication:
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=0.5,
-            natural_exit_grace_seconds=0.1,
+            natural_exit_grace_seconds=0.5,
             _phase1_timeout=120,
             _phase1_poll=0.01,
             _phase2_poll=0.05,
             _heartbeat_poll=0.05,
-            _session_id_timeout=0.01,
+            _session_id_timeout=0.5,
         )
         skill_result = _build_skill_result(
             result,

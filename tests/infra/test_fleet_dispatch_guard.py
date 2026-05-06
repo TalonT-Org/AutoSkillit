@@ -68,7 +68,8 @@ def test_guard_denies_headless_regardless_of_session_type(session_type):
     )
     response = json.loads(out)
     assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "headless" in response["hookSpecificOutput"]["permissionDecisionReason"].lower()
+    reason = response["hookSpecificOutput"]["permissionDecisionReason"].lower()
+    assert "headless" in reason or "fleet session" in reason
 
 
 # --- M7: Unrelated tool passes through ---

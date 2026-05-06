@@ -9,8 +9,9 @@ dry-walkthrough, worktree, test, and PR-review skills. See
 
 ### How many MCP tools does it expose?
 
-48. Four are free range (`open_kitchen`, `close_kitchen`, `disable_quota_guard`, `reload_session`) and 43 are
-kitchen-tagged (gated behind `open_kitchen`). One tool, `test_check`,
+52. Four are free range (`open_kitchen`, `close_kitchen`, `disable_quota_guard`, `reload_session`) and 37 are
+kitchen-tagged (gated behind `open_kitchen`). Eleven fleet tools are revealed
+only in fleet sessions via the `fleet`/`fleet-dispatch` tags. One tool, `test_check`,
 carries the `headless` tag and is revealed only inside headless sessions.
 See [execution/tool-access.md](execution/tool-access.md).
 

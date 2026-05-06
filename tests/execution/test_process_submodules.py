@@ -33,7 +33,8 @@ def test_process_pty_exports():
 
 
 def test_process_jsonl_exports():
-    """_jsonl_* helpers are defined in _process_jsonl submodule."""
+    """_jsonl_contains_marker, _jsonl_has_record_type, and _marker_is_standalone
+    are defined in _process_jsonl submodule."""
     from autoskillit.execution.process._process_jsonl import (
         _jsonl_contains_marker,
         _jsonl_has_record_type,
@@ -59,7 +60,8 @@ def test_process_io_exports():
 
 
 def test_process_monitor_exports():
-    """_heartbeat et al. are defined in _process_monitor submodule."""
+    """_heartbeat, _session_log_monitor, and _has_active_api_connection
+    are defined in _process_monitor submodule."""
     from autoskillit.execution.process._process_monitor import (
         _has_active_api_connection,
         _heartbeat,

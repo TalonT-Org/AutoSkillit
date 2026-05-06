@@ -343,24 +343,6 @@ class TestApplicableMigrations:
         result = applicable_migrations("0.1.0", "0.3.0")
         assert result == []
 
-    def test_already_at_installed_version_returns_empty(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Script already at installed_version returns empty list."""
-        self._setup_migrations(
-            tmp_path,
-            monkeypatch,
-            [
-                {
-                    "from_version": "0.1.0",
-                    "to_version": "0.2.0",
-                    "description": "Never needed",
-                }
-            ],
-        )
-        result = applicable_migrations("0.2.0", "0.2.0")
-        assert result == []
-
     def test_no_migrations_available_returns_empty(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

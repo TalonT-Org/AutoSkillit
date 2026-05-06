@@ -18,9 +18,13 @@ def _fmt_get_token_summary(data: dict, _pipeline: bool) -> str:
     """Format get_token_summary compact Markdown-KV output (JSON payload only)."""
     lines = ["## token_summary", ""]
     steps = data.get("steps", [])
+    has_non_anthropic = False
     for step in steps:
         name = step.get("step_name", "?")
         model = step.get("model", "")
+        if model and not model.startswith("claude-"):
+            name = f"{name}*"
+            has_non_anthropic = True
         count = step.get("invocation_count", 1)
         inp = _fmt_tokens(step.get("input_tokens", 0))
         out = _fmt_tokens(step.get("output_tokens", 0))
@@ -52,6 +56,9 @@ def _fmt_get_token_summary(data: dict, _pipeline: bool) -> str:
         lines.append(f"mcp_invocations: {mcp_total.get('total_invocations', 0)}")
         est_tokens = mcp_total.get("total_estimated_response_tokens", 0)
         lines.append(f"mcp_response_tokens: ~{_fmt_tokens(est_tokens)}")
+    if has_non_anthropic:
+        lines.append("")
+        lines.append("* Step used a non-Anthropic provider; caching behavior may differ.")
     model_totals = data.get("model_totals", [])
     if model_totals:
         lines.append("")

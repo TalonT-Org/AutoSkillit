@@ -182,9 +182,13 @@ class TelemetryFormatter:
             _TOKEN_MD_HEADER,
             _TOKEN_MD_SEP,
         ]
+        has_non_anthropic = False
         for step in steps:
             name = step.get("step_name", "?")
             model = step.get("model", "")
+            if model and not model.startswith("claude-"):
+                name = f"{name}*"
+                has_non_anthropic = True
             count = step.get("invocation_count", 1)
             inp = h(step.get("input_tokens", 0))
             out = h(step.get("output_tokens", 0))
@@ -208,6 +212,9 @@ class TelemetryFormatter:
             f"| **Total** | | | {total_in} | {total_out} | {total_cache_rd}"
             f" | {total_peak} | | {total_cache_wr} | {fmt_dur(total_time)} |"
         )
+        if has_non_anthropic:
+            lines.append("")
+            lines.append(r"\* *Step used a non-Anthropic provider; caching behavior may differ.*")
         return "\n".join(lines)
 
     @staticmethod
@@ -238,11 +245,17 @@ class TelemetryFormatter:
         fmt_dur = TelemetryFormatter._fmt_duration
 
         rows: list[tuple[str, str, str, str, str, str, str, str, str, str]] = []
+        has_non_anthropic = False
         for step in steps:
+            step_name = step.get("step_name", "?")
+            model = step.get("model", "")
+            if model and not model.startswith("claude-"):
+                step_name = f"{step_name}*"
+                has_non_anthropic = True
             rows.append(
                 (
-                    step.get("step_name", "?"),
-                    step.get("model", ""),
+                    step_name,
+                    model,
                     str(step.get("invocation_count", 1)),
                     h(step.get("input_tokens", 0)),
                     h(step.get("output_tokens", 0)),
@@ -267,7 +280,10 @@ class TelemetryFormatter:
             fmt_dur(total.get("total_elapsed_seconds", 0.0)),
         )
 
-        return _render_terminal_table(_TOKEN_COLUMNS, rows + [total_row])
+        result = _render_terminal_table(_TOKEN_COLUMNS, rows + [total_row])
+        if has_non_anthropic:
+            result += "\n* Step used a non-Anthropic provider; caching behavior may differ."
+        return result
 
     @staticmethod
     def format_timing_table_terminal(steps: list[dict], total: dict) -> str:
@@ -295,9 +311,13 @@ class TelemetryFormatter:
         h = TelemetryFormatter._humanize
 
         lines = ["## token_summary", ""]
+        has_non_anthropic = False
         for step in steps:
             name = step.get("step_name", "?")
             model = step.get("model", "")
+            if model and not model.startswith("claude-"):
+                name = f"{name}*"
+                has_non_anthropic = True
             count = step.get("invocation_count", 1)
             inp = h(step.get("input_tokens", 0))
             out = h(step.get("output_tokens", 0))
@@ -326,6 +346,9 @@ class TelemetryFormatter:
                 lines.append(f"mcp_invocations: {mcp_total.get('total_invocations', 0)}")
                 est_tokens = mcp_total.get("total_estimated_response_tokens", 0)
                 lines.append(f"mcp_response_tokens: ~{h(est_tokens)}")
+        if has_non_anthropic:
+            lines.append("")
+            lines.append("* Step used a non-Anthropic provider; caching behavior may differ.")
         return "\n".join(lines)
 
     @staticmethod

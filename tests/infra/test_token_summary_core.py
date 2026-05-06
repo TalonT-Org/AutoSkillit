@@ -536,6 +536,57 @@ def test_efficiency_table_equivalence() -> None:
     )
 
 
+def test_token_table_equivalence_non_anthropic() -> None:
+    """Token table equivalence holds when non-Anthropic models are present."""
+    from autoskillit.hooks.token_summary_hook import _format_table
+    from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
+
+    steps_data = [
+        {
+            "step_name": "plan",
+            "model": "claude-sonnet-4-6",
+            "input_tokens": 7000,
+            "output_tokens": 5939,
+            "cache_creation_input_tokens": 8495,
+            "cache_read_input_tokens": 252179,
+            "peak_context": 45000,
+            "turn_count": 8,
+            "invocation_count": 1,
+            "elapsed_seconds": 45.0,
+        },
+        {
+            "step_name": "implement",
+            "model": "MiniMax-M2.7-highspeed",
+            "input_tokens": 2031000,
+            "output_tokens": 122306,
+            "cache_creation_input_tokens": 280601,
+            "cache_read_input_tokens": 19071323,
+            "peak_context": 890000,
+            "turn_count": 42,
+            "invocation_count": 3,
+            "elapsed_seconds": 492.0,
+        },
+    ]
+
+    canonical_total = {
+        "input_tokens": sum(s["input_tokens"] for s in steps_data),
+        "output_tokens": sum(s["output_tokens"] for s in steps_data),
+        "cache_creation_input_tokens": sum(s["cache_creation_input_tokens"] for s in steps_data),
+        "cache_read_input_tokens": sum(s["cache_read_input_tokens"] for s in steps_data),
+        "peak_context": max(s["peak_context"] for s in steps_data),
+        "total_elapsed_seconds": sum(s["elapsed_seconds"] for s in steps_data),
+    }
+    aggregated = {s["step_name"]: dict(s) for s in steps_data}
+
+    canonical_output = TelemetryFormatter.format_token_table(list(steps_data), canonical_total)
+    hook_output = _format_table(aggregated)
+
+    assert canonical_output == hook_output
+    assert "implement*" in canonical_output
+    assert "non-Anthropic provider" in canonical_output
+    assert "plan*" not in canonical_output
+
+
 def test_token_table_equivalence() -> None:
     """Canonical format_token_table and hook _format_table produce identical output."""
     from autoskillit.hooks.token_summary_hook import _format_table

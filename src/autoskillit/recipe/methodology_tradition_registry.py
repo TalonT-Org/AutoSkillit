@@ -66,17 +66,28 @@ def _parse_methodology_tradition(data: dict, source_path: Path) -> MethodologyTr
                 f"got {type(val).__name__}: {source_path}"
             )
 
+    def _coerce_dict_list(field_name: str, items: list) -> list[dict]:
+        for i, item in enumerate(items):
+            if not isinstance(item, dict):
+                raise TypeError(
+                    f"Methodology tradition '{data['name']}' {field_name}[{i}] must be a"
+                    f" dict, got {type(item).__name__}: {source_path}"
+                )
+        return [dict(item) for item in items]
+
     return MethodologyTraditionSpec(
         name=data["name"],
         display_name=str(data.get("display_name", "")),
         canonical_guideline=dict(canonical_guideline) if canonical_guideline else {},
         fields_spanned=list(data.get("fields_spanned", [])),
         detection_keywords=list(data.get("detection_keywords", [])),
-        mandatory_figures=[dict(item) for item in data.get("mandatory_figures", [])],
-        strongly_expected_figures=[
-            dict(item) for item in data.get("strongly_expected_figures", [])
-        ],
-        anti_patterns=[dict(item) for item in data.get("anti_patterns", [])],
+        mandatory_figures=_coerce_dict_list(
+            "mandatory_figures", data.get("mandatory_figures", [])
+        ),
+        strongly_expected_figures=_coerce_dict_list(
+            "strongly_expected_figures", data.get("strongly_expected_figures", [])
+        ),
+        anti_patterns=_coerce_dict_list("anti_patterns", data.get("anti_patterns", [])),
         schema_version=str(data.get("schema_version", "")),
         priority=_parse_int_field(data, "priority", 999, source_path),
         venue_specific_appendices=list(data.get("venue_specific_appendices", [])),
@@ -93,7 +104,12 @@ def _load_traditions_from_dir(directory: Path) -> dict[str, MethodologyTradition
             if isinstance(data, dict):
                 spec = _parse_methodology_tradition(data, path)
                 result[spec.name] = spec
-        except Exception:
+            else:
+                logger.warning(
+                    "Skipping methodology tradition file with non-dict top-level structure: %s",
+                    path,
+                )
+        except (ValueError, TypeError, OSError):
             logger.warning(
                 "Skipping malformed methodology tradition file: %s", path, exc_info=True
             )
@@ -146,10 +162,8 @@ def get_methodology_tradition_by_name(
 
     Returns the matching spec or None if not found.
     """
-    for spec in load_all_methodology_traditions(project_dir):
-        if spec.name == name:
-            return spec
-    return None
+    by_name = {s.name: s for s in load_all_methodology_traditions(project_dir)}
+    return by_name.get(name)
 
 
 def is_out_of_scope_tradition(spec: MethodologyTraditionSpec) -> bool:

@@ -115,6 +115,7 @@ from autoskillit.recipe.rules import rules_worktree as _rules_worktree  # noqa: 
 from autoskillit.recipe.schema import (  # noqa: E402
     AUTOSKILLIT_VERSION_KEY,
     CAMPAIGN_REF_RE,
+    NON_INTERACTIVE_KINDS,
     CampaignDispatch,
     DataFlowReport,
     Recipe,
@@ -218,6 +219,7 @@ __all__ = [
     "check_rerun_detection",
     "find_prior_runs",
     "CampaignDispatch",
+    "NON_INTERACTIVE_KINDS",
     "RecipeKind",
     "find_campaign_by_name",
     "list_campaign_recipes",

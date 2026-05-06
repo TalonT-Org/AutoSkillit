@@ -358,12 +358,12 @@ def validate_registries() -> None:
 
     print(_format_stdout_report(et_results, mt_results))
 
-    for result in et_results + mt_results:
+    for result in et_results:
         if result.errors:
-            registry_type = "experiment-type"
-            if result in mt_results:
-                registry_type = "methodology-tradition"
-            _write_error_report(project_dir, result.filename, registry_type, result)
+            _write_error_report(project_dir, result.filename, "experiment-type", result)
+    for result in mt_results:
+        if result.errors:
+            _write_error_report(project_dir, result.filename, "methodology-tradition", result)
 
     if any(r.status == "error" for r in et_results + mt_results):
         raise SystemExit(1)

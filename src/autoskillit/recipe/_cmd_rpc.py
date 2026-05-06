@@ -605,6 +605,7 @@ def _ensure_and_resolve_labels(cwd: str, owner: str, repo_name: str) -> list[str
 def batch_create_issues(
     workspace: str,
     chunk_size: str = "20",
+    timeout: int = 120,
 ) -> dict[str, str]:
     """Batch-create GitHub issues from validated ticket body files via GraphQL."""
     if not workspace or not Path(workspace).is_dir():

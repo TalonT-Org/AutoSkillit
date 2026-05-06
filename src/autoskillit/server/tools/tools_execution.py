@@ -39,6 +39,8 @@ from autoskillit.server._subprocess import _run_subprocess
 
 logger = get_logger(__name__)
 
+_RUN_PYTHON_SENTINEL_KEYS: frozenset[str] = frozenset({"callable", "timeout"})
+
 
 def _coerce_scalar(val: object, annotation: object) -> object:
     """Coerce val to match the annotated type.
@@ -128,6 +130,31 @@ async def _import_and_call(
         return {"success": False, "error": f"{dotted_path!r} is not callable"}
 
     sig = inspect.signature(func)
+
+    for key in list(args.keys()):
+        if key in _RUN_PYTHON_SENTINEL_KEYS:
+            logger.warning(
+                "run_python stripped sentinel key from args",
+                callable=dotted_path,
+                arg_name=key,
+            )
+            del args[key]
+
+    accepts_var_keyword = any(
+        p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
+    )
+    if not accepts_var_keyword:
+        valid_keys = set(sig.parameters.keys())
+        for key in list(args.keys()):
+            if key not in valid_keys:
+                logger.warning(
+                    "run_python dropped unrecognized arg",
+                    callable=dotted_path,
+                    arg_name=key,
+                    extra_args=[key],
+                )
+                del args[key]
+
     try:
         type_hints = typing.get_type_hints(func)
     except Exception:

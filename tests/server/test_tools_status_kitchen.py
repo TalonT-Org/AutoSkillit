@@ -233,7 +233,7 @@ class TestTelemetryRecoveryData:
         session_dir = log_root / "sessions" / dir_name
         session_dir.mkdir(parents=True, exist_ok=True)
         tu = {
-            "step_name": step_name,
+            "session_label": step_name,
             "input_tokens": input_tokens,
             "output_tokens": 50,
             "cache_creation_input_tokens": 0,

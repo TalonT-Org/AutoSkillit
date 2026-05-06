@@ -4,7 +4,7 @@ categories: [research-family]
 requires_packs: [research]
 description: >
   Execution-phase sub-recipe extracted from research.yaml. Receives a pre-created
-  worktree and experiment plan from a campaign dispatch, then runs the full 18-step
+  worktree and experiment plan from a campaign dispatch, then runs the full 20-step
   implementation pipeline: stage data, decompose into phases, iteratively plan and
   implement each phase, troubleshoot failures, run the experiment, generate a report,
   test, and push. Terminates with sentinel emission of output paths.
@@ -267,7 +267,7 @@ steps:
     with:
       skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --inconclusive --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }}"
       cwd: "${{ context.worktree_path }}"
-      step_name: generate_report
+      step_name: generate_report_inconclusive
     capture:
       report_path: "${{ result.report_path }}"
     on_success: test

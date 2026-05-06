@@ -292,8 +292,9 @@ class TestValidateRegistries:
         yaml_content = VALID_EXPERIMENT_TYPE.replace("name: my-test-type\n", "")
         _write_yaml(tmp_path, "experiment-types", "parse_error.yaml", yaml_content)
 
-        with pytest.raises(SystemExit):
+        with pytest.raises(SystemExit) as exc_info:
             validate_registries()
+        assert exc_info.value.code == 1
 
         error_file = tmp_path / ".autoskillit" / "validation-errors" / "parse_error.yaml.error.md"
         assert error_file.exists()
@@ -363,3 +364,57 @@ class TestValidateRegistries:
         out = capsys.readouterr().out
         assert "✓" in out
         assert "✗" not in out
+
+    # T_VAL_15: Malformed YAML in experiment-type produces YAML parse error and exit 1
+    def test_malformed_yaml_experiment_type(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_yaml(tmp_path, "experiment-types", "bad_yaml.yaml", "name: [unclosed\n")
+
+        with pytest.raises(SystemExit) as exc_info:
+            validate_registries()
+        assert exc_info.value.code == 1
+        out = capsys.readouterr().out
+        assert "✗" in out
+        assert "YAML parse error" in out
+
+    # T_VAL_16: Malformed YAML in methodology-tradition produces YAML parse error and exit 1
+    def test_malformed_yaml_methodology_tradition(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_yaml(tmp_path, "methodology-traditions", "bad_yaml.yaml", "name: [unclosed\n")
+
+        with pytest.raises(SystemExit) as exc_info:
+            validate_registries()
+        assert exc_info.value.code == 1
+        out = capsys.readouterr().out
+        assert "✗" in out
+        assert "YAML parse error" in out
+
+    # T_VAL_17: Invalid secondary applicable_lenses produces ✗ error and exit 1
+    def test_invalid_secondary_lens_error(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        yaml_content = VALID_EXPERIMENT_TYPE.replace(
+            "  secondary: null", "  secondary: exp-lens-nonexistent"
+        )
+        _write_yaml(tmp_path, "experiment-types", "bad_secondary.yaml", yaml_content)
+
+        with pytest.raises(SystemExit) as exc_info:
+            validate_registries()
+        assert exc_info.value.code == 1
+        out = capsys.readouterr().out
+        assert "✗" in out
+        assert "secondary" in out

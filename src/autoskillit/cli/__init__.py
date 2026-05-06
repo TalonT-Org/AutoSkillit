@@ -16,6 +16,7 @@ from autoskillit.cli._prompts import (
     _build_open_kitchen_prompt,
     _build_orchestrator_prompt,
 )
+from autoskillit.cli._validate import validate_registries
 from autoskillit.cli.app import (
     _generate_config_yaml,
     _prompt_test_command,
@@ -90,4 +91,5 @@ __all__ = [
     "workspace_app",
     "workspace_clean",
     "workspace_init",
+    "validate_registries",
 ]

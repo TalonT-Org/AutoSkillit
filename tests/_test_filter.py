@@ -370,6 +370,7 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
         {
             "recipe",
             "skills/test_review_design_guards.py",
+            "cli",
         }
     ),
     "registry": frozenset(
@@ -531,6 +532,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "cli/test_cook_order_picker.py",
             "cli/test_fleet_list.py",
             "cli/test_preview.py",
+            "cli/test_validate_registries.py",
             # Execution file-level entries:
             "execution/test_headless_path_validation.py",
             "execution/test_zero_write_detection.py",

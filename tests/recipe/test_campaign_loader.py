@@ -3,6 +3,7 @@ find_campaign_by_name, load_campaign_recipes_in_packs, and validate_recipe campa
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -336,6 +337,10 @@ def test_research_campaign_header_fields():
 
 
 def test_research_campaign_ingredients_match_research_yaml():
+    # research.yaml is the canonical ingredient source for the research family;
+    # research-campaign.yaml must expose a subset of those keys so the campaign
+    # orchestrator can forward ingredients to each sub-recipe unchanged.
+    # If research.yaml is ever renamed, update this test's path accordingly.
     campaign_path = pkg_root() / "recipes" / "campaigns" / "research-campaign.yaml"
     research_path = pkg_root() / "recipes" / "research.yaml"
     campaign_recipe = load_recipe(campaign_path)
@@ -364,7 +369,6 @@ def test_research_campaign_dispatches_and_steps_empty():
 def test_research_campaign_allowed_recipes_kebab_case():
     path = pkg_root() / "recipes" / "campaigns" / "research-campaign.yaml"
     recipe = load_recipe(path)
-    import re
 
     for name in recipe.allowed_recipes:
         assert re.match(r"^[a-z0-9]+(-[a-z0-9]+)*$", name)

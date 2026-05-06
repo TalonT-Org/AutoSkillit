@@ -364,7 +364,9 @@ class TestGroupFDoctor:
         """Severity and DoctorResult must be importable from autoskillit.cli.doctor."""
         from autoskillit.cli.doctor import DoctorResult, Severity
 
-        DoctorResult(severity=Severity.OK, check="test", message="ok")
+        r = DoctorResult(severity=Severity.OK, check="test", message="ok")
+        assert r.severity == Severity.OK
+        assert r.check == "test"
 
 
 def test_doctor_fix_parameter_does_not_exist():

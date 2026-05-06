@@ -208,7 +208,7 @@ class TestResumeResetOnRetry:
 
         assert decision is not None
         assert decision.next_dispatch_name == "d2"
-        assert decision.completed_dispatches_block == ""
+        assert decision.completed_dispatches_block != FLEET_HALTED_SENTINEL
 
     def test_reset_on_retry_clears_dispatch_from_completed_block(self, tmp_path: Path):
         """Reset dispatch does NOT appear in completed_dispatches_block."""

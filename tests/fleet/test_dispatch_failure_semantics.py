@@ -477,3 +477,71 @@ class TestMissingRequiredIngredient:
 
         result = await _run(tool_ctx, ingredients={})
         assert result.get("error") != "fleet_missing_ingredient"
+
+    @pytest.mark.anyio
+    async def test_task_auto_injected_from_top_level_param(self, tool_ctx, monkeypatch):
+        """Top-level task param auto-injects into effective_ingredients for recipes declaring task."""
+        _setup_dispatch_with_ingredients(
+            tool_ctx, monkeypatch, {"task": {"required": True, "default": None}}
+        )
+
+        result = await _run(tool_ctx, ingredients={})
+        assert result.get("error") != "fleet_missing_ingredient"
+
+    @pytest.mark.anyio
+    async def test_explicit_ingredient_task_overrides_top_level(self, tool_ctx, monkeypatch):
+        """Explicit ingredients['task'] takes precedence over top-level task param."""
+        _setup_dispatch_with_ingredients(
+            tool_ctx, monkeypatch, {"task": {"required": True, "default": None}}
+        )
+
+        captured = {}
+
+        def _capture_prompt_builder(**kwargs):
+            captured.update(kwargs)
+            return "prompt"
+
+        from autoskillit.fleet._api import execute_dispatch
+
+        raw = await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="top-level-value",
+            ingredients={"task": "override-value"},
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=_capture_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+        )
+
+        assert captured["ingredients"]["task"] == "override-value"
+
+    @pytest.mark.anyio
+    async def test_task_not_injected_when_not_declared_ingredient(self, tool_ctx, monkeypatch):
+        """Top-level task is NOT injected when recipe has no 'task' ingredient key."""
+        _setup_dispatch_with_ingredients(
+            tool_ctx, monkeypatch, {"other_key": {"required": False, "default": "x"}}
+        )
+
+        captured = {}
+
+        def _capture_prompt_builder(**kwargs):
+            captured.update(kwargs)
+            return "prompt"
+
+        from autoskillit.fleet._api import execute_dispatch
+
+        raw = await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="some-task",
+            ingredients={},
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=_capture_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+        )
+
+        assert "task" not in captured["ingredients"]

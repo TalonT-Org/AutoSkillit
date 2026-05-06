@@ -1,0 +1,64 @@
+name: research-campaign
+description: >-
+  Four-phase research campaign lifecycle: design the experiment, implement and
+  run it, review the results, then archive artifacts. Dispatches to
+  research-design, research-implement, research-review, and research-archive
+  sub-recipes in sequence.
+kind: campaign
+recipe_version: "1.0.0"
+categories:
+  - research-family
+
+continue_on_failure: false
+
+requires_recipe_packs:
+  - research-family
+
+allowed_recipes:
+  - research-design
+  - research-implement
+  - research-review
+  - research-archive
+
+ingredients:
+  task:
+    description: Research question or topic to investigate
+    required: true
+  source_dir:
+    description: Path to the project root
+    required: true
+  issue_url:
+    description: >-
+      Optional URL to an existing GitHub issue describing the research goal.
+      Provided as context to scope and plan_experiment.
+    required: false
+  base_branch:
+    description: Branch to target for the research PR
+    default: "main"
+  review_design:
+    description: >-
+      When 'true' (the default), run the review-design skill after plan_experiment
+      to validate the experiment plan before execution. When 'false', skip directly
+      to create_worktree.
+    default: "true"
+  review_pr:
+    description: >-
+      When 'true', run the review-research-pr skill after the research PR is opened.
+      Defaults to 'false' — the research PR is for human review.
+    default: "false"
+  audit_claims:
+    description: >-
+      When 'true', run audit-claims after review_research_pr to verify citation
+      integrity and claim backing in the research report.
+    required: false
+    default: "false"
+  output_mode:
+    description: >-
+      Where research outputs land. 'local' (default) produces a self-contained
+      report bundle. 'pr' opens a GitHub PR and runs the full review/archival flow.
+    required: false
+    default: "local"
+
+dispatches: []
+
+steps: {}

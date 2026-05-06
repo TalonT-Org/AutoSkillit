@@ -3,6 +3,7 @@ find_campaign_by_name, load_campaign_recipes_in_packs, and validate_recipe campa
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -296,6 +297,81 @@ def test_promote_to_main_campaign_in_list_campaign_recipes(tmp_path: Path):
     assert result.errors == []
     names = [r.name for r in result.items]
     assert "promote-to-main" in names
+
+
+# ---------------------------------------------------------------------------
+# research-campaign skeleton
+# ---------------------------------------------------------------------------
+
+
+def test_research_campaign_parseable():
+    path = pkg_root() / "recipes" / "campaigns" / "research-campaign.yaml"
+    recipe = load_recipe(path)
+    assert recipe.name == "research-campaign"
+    assert recipe.kind == RecipeKind.CAMPAIGN
+    assert recipe.recipe_version == "1.0.0"
+
+
+def test_research_campaign_skeleton_structural_validation():
+    path = pkg_root() / "recipes" / "campaigns" / "research-campaign.yaml"
+    recipe = load_recipe(path)
+    findings = validate_recipe(recipe)
+    assert findings == ["Campaign recipe must have at least one dispatch."]
+
+
+def test_research_campaign_header_fields():
+    path = pkg_root() / "recipes" / "campaigns" / "research-campaign.yaml"
+    recipe = load_recipe(path)
+    assert recipe.kind == RecipeKind.CAMPAIGN
+    assert recipe.categories == ["research-family"]
+    assert recipe.requires_recipe_packs == ["research-family"]
+    assert recipe.allowed_recipes == [
+        "research-design",
+        "research-implement",
+        "research-review",
+        "research-archive",
+    ]
+    assert recipe.continue_on_failure is False
+    assert recipe.recipe_version == "1.0.0"
+    assert recipe.version is None
+
+
+def test_research_campaign_ingredients_match_research_yaml():
+    # research.yaml is the canonical ingredient source for the research family;
+    # research-campaign.yaml must expose a subset of those keys so the campaign
+    # orchestrator can forward ingredients to each sub-recipe unchanged.
+    # If research.yaml is ever renamed, update this test's path accordingly.
+    campaign_path = pkg_root() / "recipes" / "campaigns" / "research-campaign.yaml"
+    research_path = pkg_root() / "recipes" / "research.yaml"
+    campaign_recipe = load_recipe(campaign_path)
+    research_recipe = load_recipe(research_path)
+    assert set(campaign_recipe.ingredients.keys()).issubset(
+        set(research_recipe.ingredients.keys())
+    )
+    assert campaign_recipe.ingredients["task"].required is True
+    assert campaign_recipe.ingredients["source_dir"].required is True
+    assert campaign_recipe.ingredients["issue_url"].required is False
+    assert campaign_recipe.ingredients["issue_url"].default is None
+    assert campaign_recipe.ingredients["base_branch"].default == "main"
+    assert campaign_recipe.ingredients["review_design"].default == "true"
+    assert campaign_recipe.ingredients["review_pr"].default == "false"
+    assert campaign_recipe.ingredients["audit_claims"].default == "false"
+    assert campaign_recipe.ingredients["output_mode"].default == "local"
+
+
+def test_research_campaign_dispatches_and_steps_empty():
+    path = pkg_root() / "recipes" / "campaigns" / "research-campaign.yaml"
+    recipe = load_recipe(path)
+    assert recipe.dispatches == []
+    assert recipe.steps == {}
+
+
+def test_research_campaign_allowed_recipes_kebab_case():
+    path = pkg_root() / "recipes" / "campaigns" / "research-campaign.yaml"
+    recipe = load_recipe(path)
+
+    for name in recipe.allowed_recipes:
+        assert re.match(r"^[a-z0-9]+(-[a-z0-9]+)*$", name)
 
 
 def test_implement_findings_has_model_context_window_ingredient():

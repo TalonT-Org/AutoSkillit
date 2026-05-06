@@ -64,6 +64,9 @@ def annotate_pr_diff(
     output_dir: str,
     loc_threshold: str = "",
     file_threshold: str = "",
+    base_branch: str = "",
+    local_review_rounds: str = "",
+    current_iteration: str = "",
 ) -> dict[str, str]:
     """Fetch and annotate a PR diff server-side for review-pr.
 
@@ -81,14 +84,39 @@ def annotate_pr_diff(
         select_review_agents,
     )  # noqa: PLC0415
 
-    result = subprocess.run(
-        ["gh", "pr", "diff", pr_number],
-        capture_output=True,
-        text=True,
-        check=True,
-        cwd=cwd,
-        timeout=60,
-    )
+    try:
+        local_rounds = int(local_review_rounds.strip()) if local_review_rounds.strip() else 0
+    except ValueError:
+        local_rounds = 0
+    try:
+        iteration = int(current_iteration.strip()) if current_iteration.strip() else 0
+    except ValueError:
+        iteration = 0
+    review_mode = "local" if local_rounds > 0 and iteration < local_rounds else "github"
+
+    if review_mode == "local" and base_branch.strip():
+        result = subprocess.run(
+            ["git", "diff", f"{base_branch.strip()}...HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=cwd,
+            timeout=60,
+        )
+    else:
+        if review_mode == "local":
+            logger.warning(
+                "local_review_mode_downgrade: base_branch empty, falling back to gh pr diff"
+            )
+            review_mode = "github"
+        result = subprocess.run(
+            ["gh", "pr", "diff", pr_number],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=cwd,
+            timeout=60,
+        )
     diff = result.stdout
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -114,6 +142,7 @@ def annotate_pr_diff(
     metrics_path = out / f"metrics_{pr_number}.json"
     atomic_write(metrics_path, json.dumps(metrics_data))
     return {
+        "review_mode": review_mode,
         "annotated_diff_path": str(annotated_path),
         "hunk_ranges_path": str(ranges_path),
         "diff_metrics_path": str(metrics_path),

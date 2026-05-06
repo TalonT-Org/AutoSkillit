@@ -37,6 +37,7 @@ from autoskillit.config._config_dataclasses import (
     ReadDbConfig,
     ReportBugConfig,
     ResetWorkspaceConfig,
+    ReviewConfig,
     RunSkillConfig,
     SafetyConfig,
     SkillsConfig,
@@ -90,6 +91,7 @@ __all__ = [
     "ReadDbConfig",
     "ReportBugConfig",
     "ResetWorkspaceConfig",
+    "ReviewConfig",
     "RunSkillConfig",
     "SafetyConfig",
     "SkillsConfig",
@@ -144,6 +146,7 @@ class AutomationConfig:
     mcp_response: McpResponseConfig = field(default_factory=McpResponseConfig)
     branching: BranchingConfig = field(default_factory=BranchingConfig)
     ci: CIConfig = field(default_factory=CIConfig)
+    review: ReviewConfig = field(default_factory=ReviewConfig)
     skills: SkillsConfig = field(default_factory=SkillsConfig)
     subsets: SubsetsConfig = field(default_factory=SubsetsConfig)
     packs: PacksConfig = field(default_factory=PacksConfig)
@@ -233,6 +236,14 @@ class AutomationConfig:
         def val(section: dict[str, Any], key: str, default: Any) -> Any:
             return section.get(key, default)
 
+        def _parse_int_config(value: Any, field_name: str) -> int:
+            try:
+                return int(value)
+            except (ValueError, TypeError) as exc:
+                raise ConfigSchemaError(
+                    f"Config field '{field_name}' must be an integer, got {value!r}"
+                ) from exc
+
         tc = sec("test_check")
         cf = sec("classify_fix")
         rw = sec("reset_workspace")
@@ -252,6 +263,7 @@ class AutomationConfig:
         mr = sec("mcp_response")
         br = sec("branching")
         ci = sec("ci")
+        rv = sec("review")
         sk = sec("skills")
         _sub = sec("subsets")
         pk = sec("packs")
@@ -279,6 +291,7 @@ class AutomationConfig:
         _mr = _field_defaults(McpResponseConfig)
         _br = _field_defaults(BranchingConfig)
         _ci = _field_defaults(CIConfig)
+        _rv = _field_defaults(ReviewConfig)
         _sk = _field_defaults(SkillsConfig)
         _wsc = _field_defaults(WorkspaceConfig)
         _fr = _field_defaults(FleetConfig)
@@ -422,6 +435,12 @@ class AutomationConfig:
             ci=CIConfig(
                 workflow=val(ci, "workflow", _ci["workflow"]) or None,
                 event=val(ci, "event", _ci["event"]) or None,
+            ),
+            review=ReviewConfig(
+                local_review_rounds=_parse_int_config(
+                    val(rv, "local_review_rounds", _rv["local_review_rounds"]),
+                    "review.local_review_rounds",
+                ),
             ),
             skills=SkillsConfig(
                 tier1=list(val(sk, "tier1", _sk["tier1"])),

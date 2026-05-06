@@ -153,10 +153,13 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/cli/update/_update_checks_fetch.py", 58),
     # smoke_utils.py — partitions, ranges, diff metrics, queue, enriched handoff
     ("src/autoskillit/smoke_utils.py", 57),
-    ("src/autoskillit/smoke_utils.py", 98),
-    ("src/autoskillit/smoke_utils.py", 115),
-    ("src/autoskillit/smoke_utils.py", 328),
-    ("src/autoskillit/smoke_utils.py", 376),
+    ("src/autoskillit/smoke_utils.py", 126),
+    # Lines 143 and 357 are list-payload write sites (dual membership: also in list_sites
+    # in test_allowlist_includes_list_payloads_as_documented). The AST scanner catches
+    # them because it cannot distinguish list vs dict return types — intentional.
+    ("src/autoskillit/smoke_utils.py", 143),
+    ("src/autoskillit/smoke_utils.py", 357),
+    ("src/autoskillit/smoke_utils.py", 405),
     # planner/consolidation.py — write-back of merged WP dicts to per-file results
     ("src/autoskillit/planner/consolidation.py", 311),
     # planner/manifests.py — finalize_wp_manifest: wp_index.json rebuild (list payload)
@@ -225,8 +228,8 @@ class TestSchemaVersionConvention:
         """List-payload sites are included since the AST scanner can't distinguish return types."""
         # These sites write list payloads through function calls but are caught by the scanner
         list_sites = [
-            ("src/autoskillit/smoke_utils.py", 98),
-            ("src/autoskillit/smoke_utils.py", 328),
+            ("src/autoskillit/smoke_utils.py", 143),
+            ("src/autoskillit/smoke_utils.py", 357),
         ]
         for site in list_sites:
             assert site in _LEGACY_JSON_WRITES, (

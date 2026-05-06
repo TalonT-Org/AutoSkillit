@@ -18,10 +18,13 @@ for actionable findings, commit each fix, and verify tests still pass.
 
 ## Arguments
 
-`/autoskillit:resolve-review <feature_branch> <base_branch>`
+`/autoskillit:resolve-review <feature_branch> <base_branch> [mode=<local|github>]`
 
 - `feature_branch` — The PR's head branch (used to find the open PR)
 - `base_branch` — The PR's base branch (e.g., "main")
+- **mode** (optional, default: `github`) — Controls where findings are read from and how threads are handled:
+  - `mode=github` (or absent/unrecognized): current behavior — fetch findings from GitHub API, post deferred observations from prior local rounds, resolve threads and post inline replies.
+  - `mode=local`: read findings from local JSON (written by `review-pr` in `mode=local`), skip all GitHub API fetching, accumulate DISCUSS/REJECT to persistent local files, skip thread resolution and inline reply API calls, still run `task test-check`.
 
 The `cwd` is provided by the recipe step's `cwd:` field — the clone with the feature
 branch already checked out.
@@ -80,6 +83,21 @@ Parse two positional arguments: `feature_branch` and `base_branch`.
 If either is missing, abort with:
 `"Usage: /autoskillit:resolve-review <feature_branch> <base_branch>"`
 
+Parse the optional `mode` keyword argument:
+
+```bash
+# Extract mode from keyword arguments
+MODE="github"
+for arg in "$@"; do
+    case "$arg" in
+        mode=local)  MODE="local" ;;
+        mode=github) MODE="github" ;;
+    esac
+done
+```
+
+If `mode` is absent or unrecognized, default to `"github"`.
+
 ### Step 1: Find the Open PR
 
 ```bash
@@ -98,7 +116,65 @@ If `gh` is unavailable or not authenticated, or no PR is found:
 - Log "No PR found or gh unavailable — skipping review resolution"
 - Exit 0 (graceful degradation — do not fail the pipeline)
 
+### Step 1.5: Post Accumulated Deferred Observations (github mode only)
+
+**When `mode=github`:**
+
+Before fetching current findings from GitHub, check for any deferred observations
+accumulated from prior local review rounds:
+
+```bash
+DEFERRED_FILE="{{AUTOSKILLIT_TEMP}}/resolve-review/deferred_observations_${PR_NUMBER}.json"
+```
+
+If the file exists and contains entries:
+1. Load the deferred observations array from the file
+2. Post ALL entries as a single batch review via `POST /repos/{owner}/{repo}/pulls/{pr_number}/reviews`:
+   - `event`: `"COMMENT"` (not requesting changes — these are observations for discussion)
+   - `body`: `"Observations accumulated from {N} local review rounds:"`
+   - `commit_id`: current HEAD commit SHA (from `gh pr view {pr_number} --json headRefOid -q .headRefOid`)
+   - `comments[]` array where each entry has:
+     - `path`: from the deferred entry
+     - `line`: from the deferred entry (if `line` is null, omit `line` and use `position: 1` as file-level comment)
+     - `side`: `"RIGHT"`
+     - `body`:
+       ```
+       **Observation from local review round {round}:**
+
+       {body}
+
+       **Evidence:** {evidence}
+
+       <!-- REVIEW-FLAG: severity={severity} dimension={dimension} -->
+       ```
+
+3. Use the batch review endpoint (never post individual comments unless the batch call fails)
+4. **Fallback:** If the batch POST returns HTTP 422 (e.g., stale line numbers), retry by posting each observation individually via `gh api repos/{owner}/{repo}/pulls/{pr_number}/comments --method POST` with 1s delay between calls
+5. After all deferred observations are posted successfully, rename the file to `deferred_observations_${PR_NUMBER}_posted.json` to prevent re-posting on retry
+6. These review threads are left UNRESOLVED (same behavior as DISCUSS in github mode)
+
+If the file does not exist or is empty, skip this step and proceed to Step 2.
+
+**`REVIEW-FLAG` marker format:** `<!-- REVIEW-FLAG: severity={severity} dimension={dimension} -->`
+Matches the regex `<!--\s*REVIEW-FLAG:\s*severity=(\w+)\s+dimension=(\w+)\s*>`.
+
+**When `mode=local`:** Skip this step entirely — there are no prior accumulated observations to post in local mode.
+
 ### Step 2: Fetch Review Comments
+
+**MODE BRANCHING:**
+
+**When `mode=local`:**
+- Skip ALL GitHub API calls for fetching comments (no `gh api repos/.../pulls/{N}/comments`, no `gh api repos/.../pulls/{N}/reviews`, no GraphQL `reviewThreads` query)
+- Instead, read findings from `{{AUTOSKILLIT_TEMP}}/review-pr/local_findings_{pr_number}.json`
+- Transform the local findings format into the same internal structure used by the GitHub-sourced flow: each finding maps to `path`, `line`, `body`, `severity`, `dimension`
+- Load `diff_context_{pr_number}.json` as normal (mode-independent — same handoff file written by review-pr)
+- Set `comment_id_to_thread_id = {}` (no thread IDs in local mode)
+- Set `already_replied_ids = set()` (no prior replies in local mode)
+- Skip writing `inline_comments_{pr_number}.json`, `reviews_{pr_number}.json`, `threads_{pr_number}.json` (GitHub-API-specific files)
+- Proceed to Step 3 with the transformed local findings
+
+**When `mode=github`:** Execute the following GitHub API fetching steps (current behavior unchanged).
 
 Fetch inline comments (anchored to specific file lines):
 ```bash
@@ -335,6 +411,62 @@ Track: `accept_count`, `reject_count`, `discuss_count`.
 
 ---
 
+### Step 3.6: Accumulate DISCUSS Findings (local mode only)
+
+**When `mode=local`:**
+
+After intent validation (Step 3.5), accumulate all DISCUSS-classified findings to a
+persistent local file for later posting when mode switches to `github`.
+
+Read the `iteration` field from `{{AUTOSKILLIT_TEMP}}/review-pr/local_findings_{pr_number}.json`
+to get the round number. If that file is absent, use `iteration = 0`.
+
+```python
+import json, pathlib
+
+deferred_file = pathlib.Path("{{AUTOSKILLIT_TEMP}}/resolve-review/deferred_observations_${PR_NUMBER}.json")
+
+# Load existing entries if file exists
+existing = []
+if deferred_file.exists():
+    existing = json.loads(deferred_file.read_text())
+
+# Build new entries from classification_map (DISCUSS only)
+discuss_entries = []
+for c in classification_map.values():
+    if c.get("verdict") != "DISCUSS":
+        continue
+    entry = {
+        "round": iteration_number,
+        "path": c.get("path"),
+        "line": c.get("line"),
+        "body": c.get("body"),
+        "evidence": c.get("evidence", ""),
+        "severity": c.get("severity", "warning"),
+        "dimension": c.get("dimension", "unknown"),
+        "verdict": "DISCUSS",
+        "category": c.get("category", "design_decision"),
+    }
+    discuss_entries.append(entry)
+
+# Deduplicate: skip if (path, line, body) already in existing
+seen = {(e["path"], e["line"], e["body"]) for e in existing}
+new_entries = [e for e in discuss_entries if (e["path"], e["line"], e["body"]) not in seen]
+
+# Write atomically
+all_entries = existing + new_entries
+deferred_file.write_text(json.dumps(all_entries, indent=2))
+print(f"Accumulated {len(new_entries)} new DISCUSS findings ({len(all_entries)} total)")
+```
+
+The `round` value is the iteration number from `local_findings_{pr_number}.json` (written
+by review-pr with auto-incrementing logic).
+
+**When `mode=github`:** Skip this step. DISCUSS findings are handled by inline replies
+(with `REVIEW-FLAG` markers) in Step 6.5.
+
+---
+
 ### Step 4: Apply Fixes (max 3 iterations)
 
 Initialize `addressed_thread_ids: list[str] = []` before processing findings.
@@ -398,6 +530,10 @@ Record each skip with: `(file, line, reason)`.
 
 ### Step 6: Resolve Addressed Review Threads
 
+**MODE BRANCHING:**
+
+**When `mode=github`:** Execute the following thread resolution steps (current behavior unchanged).
+
 Batch all thread resolutions into a single GraphQL request using aliased mutations.
 This reduces N requests (5 pts each = 5N pts) to 1 request (5 pts total).
 If `addressed_thread_ids` has more than 50 threads, chunk into batches of 50.
@@ -427,7 +563,20 @@ Track:
 This step is best-effort — failure to resolve any thread never affects the exit code.
 The same applies to Step 6.5 (inline replies).
 
+**When `mode=local`:**
+- Skip all GitHub thread resolution API calls (no GraphQL mutation, no thread resolution)
+- Set `resolved_count = 0`, `resolve_failed_count = 0`
+- The `addressed_thread_ids` list is not populated (there are no thread IDs in local mode)
+- Proceed to Step 6.5 (inline replies — also skipped in local mode)
+
 ### Step 6.5: Post Inline Replies
+
+**When `mode=local`:**
+- Skip all inline reply POST calls
+- Set `reply_posted_count = 0`, `reply_failed_count = 0`
+- Proceed to Step 6.6
+
+**When `mode=github`:** Execute the following inline reply steps (current behavior unchanged).
 
 For every finding (those classified via intent validation in Step 3.5 and info findings
 auto-classified as DISCUSS in Step 3), post an inline reply using the GitHub comment reply
@@ -471,7 +620,58 @@ Track:
 
 ### Step 6.6: Persist Reject Patterns
 
-After Step 6.5, save all REJECT-classified comments to a JSON file for future analysis:
+**MODE BRANCHING:**
+
+**When `mode=local`:**
+
+After Step 6.5, save all REJECT-classified comments to a **stable, accumulating** JSON file
+(without timestamp — the same file is reused across local rounds):
+
+```python
+import json, pathlib
+
+reject_file = pathlib.Path("{{AUTOSKILLIT_TEMP}}/resolve-review/reject_patterns_${PR_NUMBER}.json")
+
+# Load existing entries if file exists
+existing = []
+if reject_file.exists():
+    existing = json.loads(reject_file.read_text())
+
+# Build new entries — use synthetic comment_id for local-mode findings
+# Format: "local_{iteration}_{index}" derived from iteration in local_findings + index
+reject_entries = []
+for idx, c in enumerate(classification_map.values()):
+    if c.get("verdict") != "REJECT":
+        continue
+    # Build synthetic comment_id from local finding source
+    comment_id = c.get("comment_id", f"local_unknown_{idx}")
+    entry = {
+        "comment_id": comment_id,
+        "path": c.get("path"),
+        "line": c.get("line"),
+        "body": c.get("body"),
+        "evidence": c.get("evidence", ""),
+        "category": c.get("category", "other"),
+        "pr_number": ${PR_NUMBER},
+        "feature_branch": "${feature_branch}",
+    }
+    reject_entries.append(entry)
+
+# Deduplicate: skip if (path, line, body) already in existing
+seen = {(e["path"], e["line"], e["body"]) for e in existing}
+new_entries = [e for e in reject_entries if (e["path"], e["line"], e["body"]) not in seen]
+
+# Write atomically
+all_entries = existing + new_entries
+reject_file.write_text(json.dumps(all_entries, indent=2))
+print(f"Accumulated {len(new_entries)} new REJECT patterns ({len(all_entries)} total)")
+```
+
+**Note:** In local mode, `comment_id` may not be a GitHub database ID. Use whatever ID
+is in the classification_map entry. If the finding came from `local_findings_{pr_number}.json`
+and has no native ID, use `"local_{iteration}_{index}"` as a synthetic identifier.
+
+**When `mode=github`:** Execute the following current behavior (timestamped, one-shot write).
 
 ```bash
 ts=$(date +%Y%m%d-%H%M%S)
@@ -499,6 +699,9 @@ print(f'Saved {len(reject_entries)} reject patterns')
 ```
 
 ### Step 7: Report
+
+**MODE INDEPENDENCE:** `task test-check` (Step 5) runs identically in both modes.
+Gate token emission is mode-independent.
 
 Print a structured summary to terminal:
 
@@ -565,5 +768,17 @@ fixes_applied = {N}
 Where `{N}` is the count of ACCEPT findings where code changes were committed.
 `verdict = real_fix` means fixes were applied; `verdict = already_green` means
 all review findings were already addressed and no code changes were needed.
+
+**Mode-conditional path outputs:**
+
+When `mode=local`, the following additional tokens are emitted:
+```
+deferred_observations_path = {AUTOSKILLIT_TEMP}/resolve-review/deferred_observations_{pr_number}.json
+reject_patterns_path = {AUTOSKILLIT_TEMP}/resolve-review/reject_patterns_{pr_number}.json
+```
+
+When `mode=github` and prior local rounds accumulated observations, these are posted
+to GitHub and renamed to `deferred_observations_{pr_number}_posted.json` — no path token
+is emitted for the posted state.
 
 Summary written to: `{{AUTOSKILLIT_TEMP}}/resolve-review/report_{pr_number}_{ts}.md` (relative to the current working directory)

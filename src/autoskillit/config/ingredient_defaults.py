@@ -118,8 +118,10 @@ def resolve_ingredient_defaults(project_dir: Path) -> dict[str, str]:
     try:
         cfg = load_config(project_dir)
         resolved["base_branch"] = cfg.branching.default_base_branch
+        resolved["local_review_rounds"] = str(cfg.review.local_review_rounds)
     except Exception:
         logger.warning("resolve_base_branch_failed", exc_info=True)
         resolved["base_branch"] = "main"
+        resolved["local_review_rounds"] = "0"
 
     return resolved

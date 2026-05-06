@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from autoskillit.smoke_utils import (
+    annotate_pr_diff,
     check_bug_report_non_empty,
     check_loop_iteration,
     check_review_loop,
@@ -660,3 +661,134 @@ def test_enrich_diff_context_missing_handoff_file(tmp_path: Path) -> None:
     result = enrich_diff_context(pr_number="999", work_dir=str(tmp_path))
     assert result["enriched"] == "false"
     assert result["reason"] == "handoff_not_found"
+
+
+# ---------------------------------------------------------------------------
+# T3.1–T3.7: annotate_pr_diff review_mode tests
+# ---------------------------------------------------------------------------
+
+_DIFF_OUTPUT = "+++ b/src/app.py\n@@ -1,3 +1,4 @@\n line1\n+added\n"
+
+
+@patch("subprocess.run")
+def test_annotate_pr_diff_returns_review_mode_local(mock_run, tmp_path: Path) -> None:
+    """T3.1: iteration < local_rounds → review_mode=local."""
+    mock_run.return_value = subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, "")
+    result = annotate_pr_diff(
+        pr_number="123",
+        cwd=str(tmp_path),
+        output_dir=str(tmp_path),
+        local_review_rounds="3",
+        current_iteration="0",
+        base_branch="main",
+    )
+    assert result["review_mode"] == "local"
+
+
+@patch("subprocess.run")
+def test_annotate_pr_diff_returns_review_mode_github(mock_run, tmp_path: Path) -> None:
+    """T3.2: iteration >= local_rounds → review_mode=github."""
+    mock_run.return_value = subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, "")
+    result = annotate_pr_diff(
+        pr_number="123",
+        cwd=str(tmp_path),
+        output_dir=str(tmp_path),
+        local_review_rounds="3",
+        current_iteration="3",
+    )
+    assert result["review_mode"] == "github"
+
+
+@patch("subprocess.run")
+def test_annotate_pr_diff_local_mode_uses_git_diff(mock_run, tmp_path: Path) -> None:
+    """T3.3: local mode calls git diff with base...HEAD."""
+    mock_run.return_value = subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, "")
+    annotate_pr_diff(
+        pr_number="123",
+        cwd=str(tmp_path),
+        output_dir=str(tmp_path),
+        local_review_rounds="2",
+        current_iteration="0",
+        base_branch="main",
+    )
+    args = mock_run.call_args[0][0]
+    assert args[:3] == ["git", "diff", "main...HEAD"]
+    mock_run.assert_called_once()
+
+
+@patch("subprocess.run")
+def test_annotate_pr_diff_github_mode_uses_gh_pr_diff(mock_run, tmp_path: Path) -> None:
+    """T3.4: github mode calls gh pr diff."""
+    mock_run.return_value = subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, "")
+    annotate_pr_diff(
+        pr_number="123",
+        cwd=str(tmp_path),
+        output_dir=str(tmp_path),
+        local_review_rounds="2",
+        current_iteration="2",
+        base_branch="",
+    )
+    mock_run.assert_called_once()
+    args = mock_run.call_args[0][0]
+    assert args[:3] == ["gh", "pr", "diff"]
+
+
+@patch("subprocess.run")
+def test_annotate_pr_diff_zero_local_rounds_always_github(mock_run, tmp_path: Path) -> None:
+    """T3.5: local_review_rounds=0 → always github."""
+    mock_run.return_value = subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, "")
+    result = annotate_pr_diff(
+        pr_number="123",
+        cwd=str(tmp_path),
+        output_dir=str(tmp_path),
+        local_review_rounds="0",
+        current_iteration="0",
+    )
+    assert result["review_mode"] == "github"
+
+
+@patch("subprocess.run")
+def test_annotate_pr_diff_missing_iteration_defaults_zero(mock_run, tmp_path: Path) -> None:
+    """T3.6: empty current_iteration defaults to 0 → local mode when local_rounds > 0."""
+    mock_run.return_value = subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, "")
+    result = annotate_pr_diff(
+        pr_number="123",
+        cwd=str(tmp_path),
+        output_dir=str(tmp_path),
+        local_review_rounds="3",
+        current_iteration="",
+        base_branch="main",
+    )
+    assert result["review_mode"] == "local"
+
+
+@patch("subprocess.run")
+def test_annotate_pr_diff_local_mode_empty_base_branch_falls_back_to_github(
+    mock_run, tmp_path: Path
+) -> None:
+    """T3.8: local mode with empty base_branch falls back to gh pr diff and returns github."""
+    mock_run.return_value = subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, "")
+    result = annotate_pr_diff(
+        pr_number="123",
+        cwd=str(tmp_path),
+        output_dir=str(tmp_path),
+        local_review_rounds="3",
+        current_iteration="0",
+        base_branch="",
+    )
+    assert result["review_mode"] == "github"
+    args = mock_run.call_args[0][0]
+    assert args[:3] == ["gh", "pr", "diff"]
+
+
+@patch("subprocess.run")
+def test_annotate_pr_diff_backward_compat_no_new_params(mock_run, tmp_path: Path) -> None:
+    """T3.7: old 3-arg call works and defaults review_mode=github."""
+    mock_run.return_value = subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, "")
+    result = annotate_pr_diff(
+        pr_number="123",
+        cwd=str(tmp_path),
+        output_dir=str(tmp_path),
+    )
+    assert "review_mode" in result
+    assert result["review_mode"] == "github"

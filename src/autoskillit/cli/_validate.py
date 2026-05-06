@@ -8,14 +8,12 @@ from pathlib import Path
 
 from cyclopts import App
 
-from autoskillit.core import YAMLError, load_yaml, pkg_root
-from autoskillit.recipe.experiment_type_registry import (
+from autoskillit.core import YAMLError, atomic_write, load_yaml, pkg_root
+from autoskillit.recipe import (
     BUNDLED_EXPERIMENT_TYPES_DIR,
     ExperimentTypeSpec,
     _load_types_from_dir,
     _parse_experiment_type,
-)
-from autoskillit.recipe.methodology_tradition_registry import (
     _parse_methodology_tradition,
 )
 
@@ -79,6 +77,9 @@ def _validate_experiment_type_file(path: Path, valid_lenses: set[str]) -> Valida
             raw_content=raw_content,
         )
 
+    if isinstance(data, dict) and data.get("classification_triggers") is None:
+        data["classification_triggers"] = []
+
     try:
         spec = _parse_experiment_type(data, path)
     except (ValueError, TypeError) as e:
@@ -139,6 +140,9 @@ def _validate_methodology_tradition_file(path: Path) -> ValidationResult:
             warnings=[],
             raw_content=raw_content,
         )
+
+    if isinstance(data, dict) and data.get("detection_keywords") is None:
+        data["detection_keywords"] = []
 
     try:
         spec = _parse_methodology_tradition(data, path)
@@ -247,7 +251,7 @@ l1_severity:
     if "missing 'name'" in str(result.errors):
         how_to_fix = "Add a `name` field to your YAML file."
     elif "applicable_lenses" in str(result.errors):
-        how_to_fix = "Ensure applicable_lenses reference valid lens slugs from skills_extended/ directories."
+        how_to_fix = "Ensure applicable_lenses slugs exist in skills_extended/ directories."
     elif "classification_triggers" in str(result.errors):
         how_to_fix = "Add at least one classification trigger, or set is_fallback: true."
     elif "priority" in str(result.errors):
@@ -284,7 +288,7 @@ l1_severity:
 {how_to_fix}
 """
 
-    report_path.write_text(content)
+    atomic_write(report_path, content)
     return report_path
 
 
@@ -336,7 +340,8 @@ def validate_registries() -> None:
 
     if not et_dir.exists() and not mt_dir.exists():
         print(
-            "No user registry directories found (.autoskillit/experiment-types/ or .autoskillit/methodology-traditions/)."
+            "No user registry directories found"
+            " (.autoskillit/experiment-types/ or .autoskillit/methodology-traditions/)."
         )
         return
 

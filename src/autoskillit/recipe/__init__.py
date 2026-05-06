@@ -37,7 +37,10 @@ from autoskillit.recipe.diagrams import (  # noqa: E402
     load_recipe_diagram,
 )
 from autoskillit.recipe.experiment_type_registry import (  # noqa: E402
+    BUNDLED_EXPERIMENT_TYPES_DIR,
     ExperimentTypeSpec,
+    _load_types_from_dir,
+    _parse_experiment_type,
     get_experiment_type_by_name,
     load_all_experiment_types,
 )
@@ -61,6 +64,7 @@ from autoskillit.recipe.io import (  # noqa: E402
 from autoskillit.recipe.loader import parse_recipe_metadata  # noqa: E402
 from autoskillit.recipe.methodology_tradition_registry import (  # noqa: E402
     MethodologyTraditionSpec,
+    _parse_methodology_tradition,
     get_methodology_tradition_by_name,
     is_out_of_scope_tradition,
     load_all_methodology_traditions,
@@ -171,10 +175,14 @@ __all__ = [
     "diagram_stale_to_suggestions",
     "builtin_sub_recipes_dir",
     "find_sub_recipe_by_name",
+    "BUNDLED_EXPERIMENT_TYPES_DIR",
     "ExperimentTypeSpec",
+    "_load_types_from_dir",
+    "_parse_experiment_type",
     "get_experiment_type_by_name",
     "load_all_experiment_types",
     "MethodologyTraditionSpec",
+    "_parse_methodology_tradition",
     "get_methodology_tradition_by_name",
     "is_out_of_scope_tradition",
     "load_all_methodology_traditions",

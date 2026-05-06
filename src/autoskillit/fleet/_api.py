@@ -305,9 +305,7 @@ async def _run_dispatch(
             f"Recipe '{recipe}' could not be loaded: {exc}",
         )
 
-    from autoskillit.recipe.schema import RecipeKind  # noqa: PLC0415
-
-    _DISPATCHABLE_KINDS = frozenset({RecipeKind.STANDARD, RecipeKind.FOOD_TRUCK})
+    _DISPATCHABLE_KINDS = frozenset({"standard", "food-truck"})
 
     if full_recipe.kind not in _DISPATCHABLE_KINDS:
         return fleet_error(

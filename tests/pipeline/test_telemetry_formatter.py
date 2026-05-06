@@ -746,7 +746,7 @@ def test_efficiency_table_no_peak_ctx_ratio() -> None:
 
 
 # ---------------------------------------------------------------------------
-# T4: Model column in format_token_table
+# Model column in format_token_table
 # ---------------------------------------------------------------------------
 
 
@@ -820,7 +820,7 @@ def test_format_model_table_all_unknown_returns_empty() -> None:
 
 
 # ---------------------------------------------------------------------------
-# T12: model tag in compact KV
+# model tag in compact KV
 # ---------------------------------------------------------------------------
 
 

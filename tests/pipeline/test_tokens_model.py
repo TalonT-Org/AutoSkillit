@@ -12,7 +12,9 @@ from autoskillit.pipeline.tokens import DefaultTokenLog, TokenEntry
 pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
 
 
-def _make_usage_with_model(model: str, *, input_tokens: int = 100, output_tokens: int = 50) -> dict:
+def _make_usage_with_model(
+    model: str, *, input_tokens: int = 100, output_tokens: int = 50
+) -> dict:
     return {
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,
@@ -22,7 +24,6 @@ def _make_usage_with_model(model: str, *, input_tokens: int = 100, output_tokens
     }
 
 
-# T1
 def test_token_entry_has_model_field() -> None:
     entry = TokenEntry(step_name="plan", model="claude-sonnet-4-6")
     assert entry.model == "claude-sonnet-4-6"
@@ -35,7 +36,6 @@ def test_token_entry_model_defaults_empty() -> None:
     assert entry.model == ""
 
 
-# T2
 def test_record_captures_model_from_breakdown() -> None:
     log = DefaultTokenLog()
     log.record("plan", _make_usage_with_model("claude-sonnet-4-6"))
@@ -58,7 +58,6 @@ def test_record_model_set_on_first_invocation_only() -> None:
     assert report[0]["model"] == "claude-sonnet-4-6"
 
 
-# T3
 def test_compute_model_totals_single_model() -> None:
     log = DefaultTokenLog()
     log.record("plan", _make_usage_with_model("claude-sonnet-4-6", input_tokens=100))
@@ -98,11 +97,8 @@ def test_compute_model_totals_empty_log() -> None:
     assert totals == []
 
 
-# T9
 @pytest.mark.parametrize("use_session_label", [True, False])
-def test_load_from_log_dir_reads_model_identifier(
-    tmp_path: Path, use_session_label: bool
-) -> None:
+def test_load_from_log_dir_reads_model_identifier(tmp_path: Path, use_session_label: bool) -> None:
     sessions_dir = tmp_path / "sessions" / "s1"
     sessions_dir.mkdir(parents=True)
     step_key = "session_label" if use_session_label else "step_name"
@@ -153,7 +149,6 @@ def test_load_from_log_dir_no_model_identifier_defaults_empty(tmp_path: Path) ->
     assert report[0]["model"] == ""
 
 
-# T13
 def test_model_totals_single_model_one_row() -> None:
     log = DefaultTokenLog()
     for step in ["plan", "implement", "verify"]:
@@ -162,7 +157,6 @@ def test_model_totals_single_model_one_row() -> None:
     assert len(totals) == 1
 
 
-# T14
 def test_model_totals_mixed_providers() -> None:
     log = DefaultTokenLog()
     log.record("plan", _make_usage_with_model("claude-sonnet-4-6"))

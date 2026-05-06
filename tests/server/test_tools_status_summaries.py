@@ -138,6 +138,9 @@ class TestGetTokenSummary:
         assert "model_totals" in result
         assert isinstance(result["steps"], list)
         assert isinstance(result["model_totals"], list)
+        assert all("model" in e for e in result["model_totals"]), (
+            "each model_totals entry must have a 'model' key"
+        )
         total_keys = set(result["total"].keys())
         assert {
             "input_tokens",

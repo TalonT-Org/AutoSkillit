@@ -587,7 +587,6 @@ def test_token_table_equivalence() -> None:
     )
 
 
-# T6
 def test_format_table_includes_model_column() -> None:
     """Hook _format_table includes Model column and value."""
     from autoskillit.hooks.token_summary_hook import _format_table
@@ -613,7 +612,6 @@ def test_format_table_includes_model_column() -> None:
     assert "claude-sonnet-4-6" in table
 
 
-# T7
 def test_hook_format_model_table() -> None:
     """Hook _format_model_table produces per-model aggregate table."""
     from autoskillit.hooks.token_summary_hook import _format_model_table
@@ -664,7 +662,6 @@ def test_hook_format_model_table_no_model_returns_empty() -> None:
     assert _format_model_table(aggregated) == ""
 
 
-# T10
 def test_load_sessions_reads_model_identifier(tmp_path: Path) -> None:
     """Hook _load_sessions populates model field from model_identifier in token_usage.json."""
     from autoskillit.hooks.token_summary_hook import _load_sessions
@@ -705,7 +702,6 @@ def test_load_sessions_reads_model_identifier(tmp_path: Path) -> None:
     assert aggregated["plan"]["model"] == "claude-sonnet-4-6"
 
 
-# T11
 def test_model_table_equivalence() -> None:
     """_format_model_table (hook) and format_model_table (canonical) produce equivalent output."""
     from autoskillit.hooks.token_summary_hook import _format_model_table
@@ -758,9 +754,7 @@ def test_model_table_equivalence() -> None:
     ]
     canonical_table = TelemetryFormatter.format_model_table(model_totals)
 
-    assert "## Model Usage Breakdown" in hook_table
-    assert "## Model Usage Breakdown" in canonical_table
-    assert "claude-sonnet-4-6" in hook_table
-    assert "claude-sonnet-4-6" in canonical_table
-    assert "MiniMax-M2.7" in hook_table
-    assert "MiniMax-M2.7" in canonical_table
+    assert hook_table == canonical_table, (
+        f"Hook and canonical model tables diverged:"
+        f"\nHOOK:\n{hook_table}\n\nCANONICAL:\n{canonical_table}"
+    )

@@ -18,7 +18,7 @@ class MethodologyTraditionSpec:
 
     name: str
     display_name: str
-    canonical_guideline: dict[str, object]
+    canonical_guideline: dict[str, str | int | float | bool]
     fields_spanned: list[str]
     detection_keywords: list[str]
     mandatory_figures: list[dict[str, str]]

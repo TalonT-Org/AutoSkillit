@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cache
@@ -24,7 +25,7 @@ class AlternateParentDef:
 
 
 @dataclass(frozen=True)
-class MLSubAreaFoldingEntry:
+class MLSubAreaFoldingDef:
     sub_area: str
     display_name: str
     primary_parent: str
@@ -65,10 +66,12 @@ def _has_keyword_match(text: str, keywords: tuple[str, ...] | list[str]) -> bool
     return any(_keyword_pattern(kw).search(text) for kw in keywords)
 
 
-def load_ml_sub_area_folding() -> list[MLSubAreaFoldingEntry]:
+def load_ml_sub_area_folding() -> list[MLSubAreaFoldingDef]:
     yaml_path = BUNDLED_METHODOLOGY_TRADITIONS_DIR / "_ml_sub_area_folding.yaml"
     data = load_yaml(yaml_path)
-    entries: list[MLSubAreaFoldingEntry] = []
+    if not isinstance(data, dict):
+        raise TypeError(f"Expected dict from {yaml_path}, got {type(data).__name__}")
+    entries: list[MLSubAreaFoldingDef] = []
     for i, item in enumerate(data.get("ml_sub_area_folding", [])):
         if not isinstance(item, dict):
             raise TypeError(
@@ -102,15 +105,21 @@ def load_ml_sub_area_folding() -> list[MLSubAreaFoldingEntry]:
                     f"ml_sub_area_folding[{i}] alternate_parents[{j}] 'trigger_keywords' "
                     f"must be a list: {yaml_path}"
                 )
+            constraint = a.get("constraint")
+            if constraint is not None and constraint not in _CONSTRAINT_EVALUATORS:
+                raise ValueError(
+                    f"ml_sub_area_folding[{i}] alternate_parents[{j}] 'constraint' "
+                    f"'{constraint}' is not a recognised evaluator key: {yaml_path}"
+                )
             alternates.append(
                 AlternateParentDef(
                     parent=a["parent"],
                     trigger_keywords=tuple(a["trigger_keywords"]),
-                    constraint=a.get("constraint"),
+                    constraint=constraint,
                 )
             )
         entries.append(
-            MLSubAreaFoldingEntry(
+            MLSubAreaFoldingDef(
                 sub_area=item["sub_area"],
                 display_name=item["display_name"],
                 primary_parent=item["primary_parent"],
@@ -121,7 +130,7 @@ def load_ml_sub_area_folding() -> list[MLSubAreaFoldingEntry]:
 
 
 def _resolve_conditional_parent(
-    entry: MLSubAreaFoldingEntry,
+    entry: MLSubAreaFoldingDef,
     plan_text: str,
 ) -> tuple[str, bool]:
     """Return (resolved_parent, re_routed)."""
@@ -129,7 +138,14 @@ def _resolve_conditional_parent(
         if _has_keyword_match(plan_text, alt.trigger_keywords):
             if alt.constraint is not None:
                 evaluator = _CONSTRAINT_EVALUATORS.get(alt.constraint)
-                if evaluator is None or not evaluator(plan_text):
+                if evaluator is None:
+                    warnings.warn(
+                        f"_resolve_conditional_parent: unrecognised constraint "
+                        f"'{alt.constraint}' on sub-area '{entry.sub_area}' — skipping alternate",
+                        stacklevel=2,
+                    )
+                    continue
+                if not evaluator(plan_text):
                     continue
             return alt.parent, True
     return entry.primary_parent, False
@@ -145,7 +161,6 @@ def resolve_venue_appendices(
     2. For each detected sub-area, resolve conditional parent
     3. Collect venue appendices from resolved parent tradition
     """
-    import warnings
 
     folding = load_ml_sub_area_folding()
     traditions = {s.name: s for s in load_all_methodology_traditions(project_dir)}

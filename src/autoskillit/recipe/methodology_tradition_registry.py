@@ -124,14 +124,24 @@ def _parse_venue_appendices(data: dict, source_path: Path) -> tuple[VenueAppendi
                 f"Methodology tradition '{data['name']}' venue_specific_appendices[{i}] "
                 f"'sub_area' must be a non-empty string: {source_path}"
             )
-        trigger_keywords = item.get("trigger_keywords")
+        if "trigger_keywords" not in item:
+            raise TypeError(
+                f"Methodology tradition '{data['name']}' venue_specific_appendices[{i}] "
+                f"missing required key 'trigger_keywords': {source_path}"
+            )
+        trigger_keywords = item["trigger_keywords"]
         if not isinstance(trigger_keywords, list):
             raise TypeError(
                 f"Methodology tradition '{data['name']}' venue_specific_appendices[{i}] "
                 f"'trigger_keywords' must be a list, "
                 f"got {type(trigger_keywords).__name__}: {source_path}"
             )
-        expectations = item.get("expectations")
+        if "expectations" not in item:
+            raise TypeError(
+                f"Methodology tradition '{data['name']}' venue_specific_appendices[{i}] "
+                f"missing required key 'expectations': {source_path}"
+            )
+        expectations = item["expectations"]
         if not isinstance(expectations, list):
             raise TypeError(
                 f"Methodology tradition '{data['name']}' venue_specific_appendices[{i}] "

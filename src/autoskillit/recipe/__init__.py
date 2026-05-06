@@ -87,7 +87,7 @@ from autoskillit.recipe.methodology_tradition_router import (  # noqa: E402
 )
 from autoskillit.recipe.methodology_venue_appendix import (  # noqa: E402
     AlternateParentDef,
-    MLSubAreaFoldingEntry,
+    MLSubAreaFoldingDef,
     VenueAppendixMatch,
     load_ml_sub_area_folding,
     resolve_venue_appendices,
@@ -213,7 +213,7 @@ __all__ = [
     "load_all_methodology_traditions",
     "VenueAppendixDef",
     "AlternateParentDef",
-    "MLSubAreaFoldingEntry",
+    "MLSubAreaFoldingDef",
     "VenueAppendixMatch",
     "load_ml_sub_area_folding",
     "resolve_venue_appendices",

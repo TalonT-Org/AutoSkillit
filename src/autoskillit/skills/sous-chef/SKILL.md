@@ -75,7 +75,24 @@ When `run_skill` returns `needs_retry=true` for **any step**:
 - **If `retry_reason: path_contamination`** → fall through to `on_failure`. The session wrote
   files outside its working directory. This is a CWD boundary violation, not a context limit.
   Do NOT route to `on_context_limit` even if defined.
-- **If `retry_reason: early_stop` or `zero_writes`** → fall through to `on_failure`.
+- **If `retry_reason: thinking_stall` AND `lifespan_started` is true AND the step defines
+  `on_context_limit`** → follow `on_context_limit`. The model consumed tokens (thinking
+  blocks) but produced no final output. Prior tool calls suggest partial progress on disk.
+- **If `retry_reason: thinking_stall` AND `lifespan_started` is false** → fall through to `on_failure`.
+  No progress was made.
+- **If `retry_reason: idle_stall` AND `lifespan_started` is true AND the step defines
+  `on_context_limit`** → follow `on_context_limit`. The idle watchdog killed the session,
+  but prior tool calls suggest partial progress on disk.
+- **If `retry_reason: idle_stall` AND `lifespan_started` is false** → fall through to `on_failure`.
+  No progress was made.
+- **If `retry_reason: early_stop` AND `worktree_path` is present in the result AND the step
+  defines `on_context_limit`** → follow `on_context_limit`. The model created a worktree and
+  made progress but stopped before emitting the completion marker. Partial progress exists on disk.
+- **If `retry_reason: early_stop` AND `worktree_path` is absent** → fall through to `on_failure`.
+- **If `retry_reason: zero_writes` AND `worktree_path` is present in the result AND the step
+  defines `on_context_limit`** → follow `on_context_limit`. The model created a worktree but
+  made no Write/Edit tool calls. Partial progress may exist on disk.
+- **If `retry_reason: zero_writes` AND `worktree_path` is absent** → fall through to `on_failure`.
 - **If `retry_reason: stale`** → decrement the `retries` counter for this step.
   Re-execute the same step if retries remain. If retries are exhausted, fall through
   to `on_failure`. Do NOT route to `on_context_limit` — stale is a transient failure,
@@ -106,9 +123,20 @@ Summary: `needs_retry=true` + `retry_reason=resume` + `subtype=stale` → re-exe
          `needs_retry=true` + `retry_reason=resume` + `subtype≠stale` + no `on_context_limit` → `on_failure`.
          `needs_retry=true` + `retry_reason=drain_race` + step has `on_context_limit` → follow `on_context_limit`.
          `needs_retry=true` + `retry_reason=drain_race` + no `on_context_limit` → `on_failure`.
+         `needs_retry=true` + `retry_reason=completed_no_flush` + step has `on_context_limit` → follow `on_context_limit`.
+         `needs_retry=true` + `retry_reason=completed_no_flush` + no `on_context_limit` → `on_failure`.
+         `needs_retry=true` + `retry_reason=empty_output` → `on_failure`.
+         `needs_retry=true` + `retry_reason=path_contamination` → `on_failure`.
+         `needs_retry=true` + `retry_reason=thinking_stall` + `lifespan_started=true` + step has `on_context_limit` → follow `on_context_limit`.
+         `needs_retry=true` + `retry_reason=thinking_stall` + `lifespan_started=false` → `on_failure`.
+         `needs_retry=true` + `retry_reason=idle_stall` + `lifespan_started=true` + step has `on_context_limit` → follow `on_context_limit`.
+         `needs_retry=true` + `retry_reason=idle_stall` + `lifespan_started=false` → `on_failure`.
+         `needs_retry=true` + `retry_reason=early_stop` + `worktree_path` present + step has `on_context_limit` → follow `on_context_limit`.
+         `needs_retry=true` + `retry_reason=early_stop` + `worktree_path` absent → `on_failure`.
+         `needs_retry=true` + `retry_reason=zero_writes` + `worktree_path` present + step has `on_context_limit` → follow `on_context_limit`.
+         `needs_retry=true` + `retry_reason=zero_writes` + `worktree_path` absent → `on_failure`.
          `needs_retry=true` + `retry_reason=stale` → decrement retries counter → `on_failure` when exhausted (no partial progress, not a context limit).
          `needs_retry=true` + `retry_reason=stale` + worktree-creating step → one-shot re-execute (bypasses retries budget; on_failure if repeated stale).
-         `needs_retry=true` + any other `retry_reason` → `on_failure` (no partial progress).
 
 ---
 

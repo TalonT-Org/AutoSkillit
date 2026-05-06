@@ -115,9 +115,10 @@ _ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
             DispatchStatus.INTERRUPTED,
         }
     ),
+    # Retryable settled state: only explicit retry (→ PENDING) is allowed
+    DispatchStatus.FAILURE: frozenset({DispatchStatus.PENDING}),
     # Terminal states: no further transitions permitted
     DispatchStatus.SUCCESS: frozenset(),
-    DispatchStatus.FAILURE: frozenset({DispatchStatus.PENDING}),
     DispatchStatus.INTERRUPTED: frozenset(),
     DispatchStatus.SKIPPED: frozenset(),
     DispatchStatus.REFUSED: frozenset(),

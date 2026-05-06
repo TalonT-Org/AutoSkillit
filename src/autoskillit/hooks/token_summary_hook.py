@@ -213,7 +213,7 @@ def _load_sessions(
         except (json.JSONDecodeError, OSError):
             continue
 
-        raw_step = data.get("step_name", "")
+        raw_step = data.get("session_label", "")
         if not raw_step:
             continue
 

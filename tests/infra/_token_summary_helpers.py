@@ -67,7 +67,7 @@ def _write_sessions(log_root: Path, entries: list[dict]) -> None:
         session_dir = log_root / "sessions" / dir_name
         session_dir.mkdir(parents=True, exist_ok=True)
         token_data: dict = {
-            "step_name": entry.get("step_name", "unknown"),
+            "session_label": entry.get("session_label") or entry.get("step_name", "unknown"),
             "input_tokens": entry.get("input_tokens", 1000),
             "output_tokens": entry.get("output_tokens", 500),
             "cache_creation_input_tokens": entry.get("cache_creation_input_tokens", 100),

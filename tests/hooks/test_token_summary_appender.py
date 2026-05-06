@@ -85,7 +85,7 @@ def _write_sessions(log_root: Path, entries: list[dict]) -> None:
         session_dir = log_root / "sessions" / dir_name
         session_dir.mkdir(parents=True, exist_ok=True)
         token_data = {
-            "step_name": entry.get("step_name", "unknown"),
+            "session_label": entry.get("session_label") or entry.get("step_name", "unknown"),
             "input_tokens": entry.get("input_tokens", 1000),
             "output_tokens": entry.get("output_tokens", 500),
             "cache_creation_input_tokens": entry.get("cache_creation_input_tokens", 100),
@@ -668,7 +668,7 @@ def test_e1_order_id_isolation_multi_issue_session(tmp_path: Path) -> None:
         (d / "token_usage.json").write_text(
             json.dumps(
                 {
-                    "step_name": step,
+                    "session_label": step,
                     "input_tokens": 100,
                     "output_tokens": 50,
                     "cache_creation_input_tokens": 0,
@@ -781,7 +781,7 @@ def test_e3_backward_compat_sessions_without_order_id_field(tmp_path: Path) -> N
     (d / "token_usage.json").write_text(
         json.dumps(
             {
-                "step_name": "plan",
+                "session_label": "plan",
                 "input_tokens": 100,
                 "output_tokens": 50,
                 "cache_creation_input_tokens": 0,

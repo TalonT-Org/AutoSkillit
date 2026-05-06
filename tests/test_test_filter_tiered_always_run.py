@@ -124,6 +124,8 @@ class TestTieredAlwaysRun:
     def test_infra_unconditional_files_resolve_under_infra_dir(self, tmp_path: Path) -> None:
         """Infra unconditional files must resolve to tests/infra/."""
         tests_root = _make_tests_root(tmp_path, ALL_DIRS)
+        # .touch() is load-bearing: build_test_scope resolves unconditional file paths
+        # by scanning the filesystem; files must exist for parent-path assertions to hold.
         for fname in _INFRA_UNCONDITIONAL_FILES:
             (tests_root / "infra" / fname).touch()
         result = build_test_scope(

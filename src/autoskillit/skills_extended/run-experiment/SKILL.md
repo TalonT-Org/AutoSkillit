@@ -140,7 +140,8 @@ Execute the experiment inside the container:
 
 ```bash
 RESEARCH_DIR=$(ls -d "${WORKTREE_PATH}"/research/*/ 2>/dev/null | head -1)
-docker run --rm -v "${RESEARCH_DIR}:/workspace" "research-{slug}" \
+SLUG=$(basename "${RESEARCH_DIR%/}")
+docker run --rm -v "${RESEARCH_DIR}:/workspace" "research-${SLUG}" \
   bash -c "cd /workspace && python scripts/run.py"
 ```
 
@@ -155,8 +156,9 @@ A host micromamba environment `experiment-{slug}` was created by
 
 ```bash
 RESEARCH_DIR=$(ls -d "${WORKTREE_PATH}"/research/*/ 2>/dev/null | head -1)
+SLUG=$(basename "${RESEARCH_DIR%/}")
 cd "${RESEARCH_DIR}"
-micromamba run -n "experiment-{slug}" python scripts/run.py
+micromamba run -n "experiment-${SLUG}" python scripts/run.py
 ```
 
 Adjust the entry-point command to match the actual script from the experiment

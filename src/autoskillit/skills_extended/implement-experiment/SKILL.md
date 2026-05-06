@@ -210,12 +210,6 @@ vars:
     sh: pwd
 
 tasks:
-  build-env:
-    desc: Build Docker image for this experiment
-    cmds:
-      - docker build --build-arg MAMBA_ENV={{.SLUG}} -t {{.IMAGE}} .
-    dir: "{{.RESEARCH_DIR}}"
-
   run-experiment:
     desc: Run experiment inside container (volume-mounts research dir)
     cmds:

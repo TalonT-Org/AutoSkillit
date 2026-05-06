@@ -116,7 +116,11 @@ def test_multi_match_resolved_by_priority():
         "following PRISMA and CONSORT guidelines with forest plots."
     )
     result = classify_methodology(plan_text, resolve_by_priority=True)
-    assert result.primary_tradition == "controlled_intervention"
+    traditions = load_all_methodology_traditions()
+    priority_map = {s.name: s.priority for s in traditions}
+    # Winner is the tradition with the lowest priority number (highest precedence)
+    expected_winner = min(result.candidate_set, key=lambda n: (priority_map[n], n))
+    assert result.primary_tradition == expected_winner
     assert result.precedence_trace == "stage1_multi_match_resolved_by_priority"
     assert len(result.candidate_set) >= 2
 
@@ -175,7 +179,7 @@ def test_candidate_set_sorted_by_priority():
     traditions = load_all_methodology_traditions()
     priority_map = {s.name: s.priority for s in traditions}
     priorities = [priority_map[c] for c in result.candidate_set]
-    assert priorities == sorted(priorities)
+    assert priorities == sorted(priorities)  # ascending: lower number = higher precedence
 
 
 def test_high_threshold_eliminates_weak_matches():

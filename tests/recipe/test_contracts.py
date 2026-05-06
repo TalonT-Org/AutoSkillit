@@ -871,7 +871,10 @@ def test_research_recipe_card_generated_at_is_iso8601() -> None:
     assert isinstance(generated_at, str) and generated_at, (
         "generated_at must be a non-empty string"
     )
-    datetime.datetime.fromisoformat(generated_at)
+    try:
+        datetime.datetime.fromisoformat(generated_at)
+    except ValueError as exc:
+        pytest.fail(f"generated_at is not a valid ISO-8601 datetime: {generated_at!r}: {exc}")
 
 
 def test_research_recipe_card_structure() -> None:

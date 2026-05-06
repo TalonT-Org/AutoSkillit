@@ -102,6 +102,45 @@ When disambiguation is invoked, the result includes:
 - **`applied_union_rules`**: Tuple of union rule strings accumulated from matching rules/overlaps
 - **`precedence_trace`**: String describing which rules and overlaps fired (e.g., `rule_prisma_dominance+overlap_strobe_prisma_moose`)
 
+## Two-Stage Matching (Stage A + Stage B)
+
+This lens uses a two-stage matching process to identify the correct methodology tradition and its venue-specific appendix figures.
+
+### Stage A — Methodology-Tradition Detection
+
+Stage A identifies the primary methodology tradition using keyword scoring across all bundled
+traditions. This is the existing `classify_methodology` + `disambiguate` flow documented in the
+Multi-Match Disambiguation Rules above. The result is a `primary_tradition` that anchors
+the analysis.
+
+### Stage B — Venue Appendix Detection
+
+Stage B runs after Stage A and detects ML sub-area specific figure requirements by
+checking the resolved tradition's `venue_specific_appendices` for keyword matches in the
+plan text. Each tradition YAML may contain venue-specific appendix entries for ML sub-areas
+that attach to it as a primary or alternate parent.
+
+**Conditional branching:** Some ML sub-areas have alternate parent traditions triggered by
+specific keywords. For example, a Foundation Models plan with "calibration" and "held-out"
+keywords routes to `prediction_model_validation` instead of the default `method_comparison_benchmarking`.
+A plan with "psychometric" and "item response theory" keywords routes to
+`measurement_instrument_validation_tradition` — but only when explicit construct measurement
+keywords are also present (constraint evaluation).
+
+**Constraint evaluation:** Some alternate-parent branches require explicit evidence of specific
+constructs. The Foundation Models → COSMIN route is gated by `only_if_explicit_construct_measurement`,
+which checks for keywords like "construct measurement", "item response theory", or
+"latent trait model".
+
+**Result:** `resolve_venue_appendices(plan_text)` returns a list of `VenueAppendixMatch` objects,
+each containing the sub-area slug, the resolved parent tradition, the matching appendix
+definition, and a `re_routed` flag indicating whether the parent was the primary or an
+alternate.
+
+**When `tradition_slug` is provided via context file:** Stage A is skipped (the tradition is
+provided directly), but Stage B still runs against the loaded tradition's `venue_specific_appendices`
+to detect ML sub-area specific figure requirements.
+
 ## Critical Constraints
 
 **NEVER:**

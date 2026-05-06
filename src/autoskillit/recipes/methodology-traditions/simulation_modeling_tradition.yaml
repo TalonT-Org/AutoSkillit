@@ -46,4 +46,37 @@ anti_patterns:
     reason: "Without sensitivity analysis, readers cannot assess which parameters drive outputs"
   - pattern: "Single-run conclusions"
     reason: "ABMs require multiple runs to characterize stochastic variability and emergent patterns"
-venue_specific_appendices: []
+venue_specific_appendices:
+  - sub_area: reinforcement_learning
+    trigger_keywords:
+      - multi-agent
+      - emergent behavior
+      - population dynamics
+      - swarm
+    expectations:
+      - figure: "ODD Protocol for RL Environment"
+        source: "ODD Protocol"
+      - figure: "Parameter Sweep Heatmaps"
+        source: "Saltelli et al. 2008"
+  - sub_area: agentic_systems
+    trigger_keywords:
+      - multi-agent
+      - emergent behavior
+      - agent-based model
+      - swarm intelligence
+    expectations:
+      - figure: "ODD Protocol for Multi-Agent System"
+        source: "ODD Protocol"
+      - figure: "Emergence Visualization"
+        source: "ODD Protocol"
+  - sub_area: time_series
+    trigger_keywords:
+      - dynamical system
+      - differential equation
+      - compartmental model
+      - system dynamics
+    expectations:
+      - figure: "Model Dynamics over Simulated Time"
+        source: "ODD Output section"
+      - figure: "Parameter Sensitivity Analysis"
+        source: "Saltelli et al. 2008"

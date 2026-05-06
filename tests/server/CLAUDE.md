@@ -41,6 +41,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_session_type_tags.py` | Tests for _collect_fleet_tool_tags in server._session_type (Finding 1) |
 | `test_set_commit_status.py` | Tests for the set_commit_status MCP tool handler |
 | `test_smoke_pipeline.py` | Smoke-test pipeline: structural validation and end-to-end execution tests |
+| `test_smoke_recipe_scope_guard.py` | Structural guard: smoke_recipe fixture must not use scope='module' |
 | `test_state.py` | Tests for server/_state.py: server initialization |
 | `test_tool_annotation_completeness.py` | Runtime annotation test shield for MCP tool readOnlyHint semantics (layers 2, 3, 4) |
 | `test_tool_exception_boundary.py` | Tests for the exception boundary in track_response_size |

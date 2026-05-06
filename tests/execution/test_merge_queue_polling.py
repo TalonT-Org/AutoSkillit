@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from tests.execution.conftest import _make_watcher, _queue_state
+from tests.execution._merge_queue_helpers import _make_watcher, _queue_state
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 

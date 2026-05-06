@@ -210,6 +210,7 @@ def patch_pr_token_summary(
     cwd: str = "",
     order_id: str = "",
     log_dir: str = "",
+    timeout: int = 60,
 ) -> dict[str, str]:
     import os  # noqa: PLC0415
     import re  # noqa: PLC0415

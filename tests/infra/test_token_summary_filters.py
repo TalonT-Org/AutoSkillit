@@ -95,7 +95,7 @@ def test_e1_order_id_isolation_multi_issue_session(tmp_path: Path) -> None:
         (d / "token_usage.json").write_text(
             json.dumps(
                 {
-                    "step_name": step,
+                    "session_label": step,
                     "input_tokens": 100,
                     "output_tokens": 50,
                     "cache_creation_input_tokens": 0,
@@ -207,7 +207,7 @@ def test_e3_backward_compat_sessions_without_order_id_field(tmp_path: Path) -> N
     (d / "token_usage.json").write_text(
         json.dumps(
             {
-                "step_name": "plan",
+                "session_label": "plan",
                 "input_tokens": 100,
                 "output_tokens": 50,
                 "cache_creation_input_tokens": 0,

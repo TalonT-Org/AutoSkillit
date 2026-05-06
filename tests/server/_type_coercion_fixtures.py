@@ -28,3 +28,7 @@ def _str_optional_param(value: str = "default") -> dict:
 
 def _str_path_param(path: str) -> Path:
     return Path(path)
+
+
+def _kwargs_callable(name: str, **kwargs: object) -> dict:
+    return {"name": name, "extras": kwargs}

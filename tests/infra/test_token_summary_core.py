@@ -678,7 +678,7 @@ def test_load_sessions_reads_model_identifier(tmp_path: Path) -> None:
     (sessions_dir / "token_usage.json").write_text(
         json.dumps(
             {
-                "step_name": "plan",
+                "session_label": "plan",
                 "input_tokens": 100,
                 "output_tokens": 50,
                 "cache_creation_input_tokens": 0,

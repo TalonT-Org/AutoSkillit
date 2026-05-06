@@ -40,6 +40,27 @@ QUOTA_GUARD_HOOK_PAYLOAD_KEYS: frozenset[str] = frozenset(
     {"cache_path", "cache_max_age", "buffer_seconds", "disabled"}
 )
 
+# The exact keys that appear in token_usage.json files written by flush_session_log.
+# The bridge contract test asserts equality between this set and TokenUsageFileEntry
+# annotations — update both together.
+TOKEN_USAGE_FILE_KEYS: frozenset[str] = frozenset(
+    {
+        "session_label",
+        "input_tokens",
+        "output_tokens",
+        "cache_creation_input_tokens",
+        "cache_read_input_tokens",
+        "peak_context",
+        "turn_count",
+        "timing_seconds",
+        "order_id",
+        "loc_insertions",
+        "loc_deletions",
+        "provider_used",
+        "model_identifier",
+    }
+)
+
 
 @dataclass(frozen=True, slots=True)
 class QuotaHookSettings:

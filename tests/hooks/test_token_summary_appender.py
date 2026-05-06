@@ -6,98 +6,18 @@ reading on-disk session logs after every run_skill response.
 
 from __future__ import annotations
 
-import io
 import json
 import subprocess
 import sys
-from contextlib import ExitStack, redirect_stdout
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from autoskillit.hooks.formatters._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
-
-
-def _run_hook(
-    event: dict | None = None,
-    raw_stdin: str | None = None,
-    log_root: Path | None = None,
-    hook_config_path: Path | None = None,
-) -> tuple[str, int]:
-    """Run token_summary_appender.main() with synthetic stdin.
-
-    Returns (stdout_output, exit_code).
-
-    Args:
-        hook_config_path: Path to a hook config JSON file containing ``kitchen_id``
-            (or legacy ``pipeline_id``).
-            When provided, patches ``_read_kitchen_id`` to return the ``kitchen_id``
-            value from that file. When absent, ``_read_kitchen_id`` reads from the
-            real filesystem (returns '' if no file present in the test CWD).
-    """
-    from autoskillit.hooks.token_summary_hook import main
-
-    stdin_text = raw_stdin if raw_stdin is not None else json.dumps(event or {})
-    exit_code = 0
-    buf = io.StringIO()
-
-    with ExitStack() as stack:
-        stack.enter_context(patch("sys.stdin", io.StringIO(stdin_text)))
-        stack.enter_context(redirect_stdout(buf))
-        if log_root is not None:
-            stack.enter_context(
-                patch(
-                    "autoskillit.hooks.token_summary_hook._log_root",
-                    return_value=log_root,
-                )
-            )
-        if hook_config_path is not None:
-            cfg_data = json.loads(hook_config_path.read_text(encoding="utf-8"))
-            kitchen_id = cfg_data.get("kitchen_id") or cfg_data.get("pipeline_id", "")
-            stack.enter_context(
-                patch(
-                    "autoskillit.hooks.token_summary_hook._read_kitchen_id",
-                    return_value=kitchen_id,
-                )
-            )
-        try:
-            main()
-        except SystemExit as e:
-            exit_code = e.code if e.code is not None else 0
-
-    return buf.getvalue(), exit_code
-
-
-def _make_run_skill_event(result_text: str = "Done.\n%%ORDER_UP%%") -> dict:
-    """Create a double-wrapped PostToolUse event for run_skill."""
-    inner = {"result": result_text, "success": True}
-    outer = {"result": json.dumps(inner)}
-    return {
-        "tool_name": "mcp__autoskillit_server__run_skill",
-        "tool_response": json.dumps(outer),
-    }
-
-
-def _write_sessions(log_root: Path, entries: list[dict]) -> None:
-    """Write sessions.jsonl and token_usage.json files for test setup."""
-    (log_root / "sessions.jsonl").write_text("\n".join(json.dumps(e) for e in entries) + "\n")
-    for entry in entries:
-        dir_name = entry["dir_name"]
-        session_dir = log_root / "sessions" / dir_name
-        session_dir.mkdir(parents=True, exist_ok=True)
-        token_data = {
-            "step_name": entry.get("step_name", "unknown"),
-            "input_tokens": entry.get("input_tokens", 1000),
-            "output_tokens": entry.get("output_tokens", 500),
-            "cache_creation_input_tokens": entry.get("cache_creation_input_tokens", 100),
-            "cache_read_input_tokens": entry.get("cache_read_input_tokens", 200),
-            "timing_seconds": entry.get("timing_seconds", 10.0),
-            "loc_insertions": entry.get("loc_insertions", 0),
-            "loc_deletions": entry.get("loc_deletions", 0),
-            "peak_context": entry.get("peak_context", 0),
-            "turn_count": entry.get("turn_count", 0),
-        }
-        (session_dir / "token_usage.json").write_text(json.dumps(token_data))
-
+from tests.infra._token_summary_helpers import (
+    _make_run_skill_event,
+    _run_hook,
+    _write_sessions,
+)
 
 # ---------------------------------------------------------------------------
 # TSA-1: hook script exists on disk
@@ -668,7 +588,7 @@ def test_e1_order_id_isolation_multi_issue_session(tmp_path: Path) -> None:
         (d / "token_usage.json").write_text(
             json.dumps(
                 {
-                    "step_name": step,
+                    "session_label": step,
                     "input_tokens": 100,
                     "output_tokens": 50,
                     "cache_creation_input_tokens": 0,
@@ -781,7 +701,7 @@ def test_e3_backward_compat_sessions_without_order_id_field(tmp_path: Path) -> N
     (d / "token_usage.json").write_text(
         json.dumps(
             {
-                "step_name": "plan",
+                "session_label": "plan",
                 "input_tokens": 100,
                 "output_tokens": 50,
                 "cache_creation_input_tokens": 0,

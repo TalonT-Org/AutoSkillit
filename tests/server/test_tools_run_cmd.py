@@ -371,3 +371,46 @@ class TestImportAndCallTypeCoercion:
         )
         assert result["success"] is False
         assert "AssertionError" in result["error"]
+
+    @pytest.mark.anyio
+    async def test_sentinel_keys_stripped_from_args(self):
+        """run_python sentinel keys in args dict must be stripped before callable dispatch."""
+        result = json.loads(
+            await run_python(
+                callable="tests.server._type_coercion_fixtures._str_only_param",
+                args={"value": "x", "timeout": 60, "callable": "bogus.path"},
+                timeout=10,
+            )
+        )
+        assert result["success"] is True
+        assert result["result"]["value"] == "x"
+
+    @pytest.mark.anyio
+    async def test_unrecognized_args_dropped_with_warning(self):
+        """_import_and_call should log a warning and drop args not in the callable's signature."""
+        with structlog.testing.capture_logs() as logs:
+            result = json.loads(
+                await run_python(
+                    callable="tests.server._type_coercion_fixtures._str_only_param",
+                    args={"value": "x", "bogus": 42},
+                    timeout=10,
+                )
+            )
+        assert result["success"] is True
+        assert result["result"]["value"] == "x"
+        warning_logs = [log for log in logs if "bogus" in str(log.get("extra_args", []))]
+        assert len(warning_logs) >= 1
+
+    @pytest.mark.anyio
+    async def test_extra_args_forwarded_when_callable_accepts_kwargs(self):
+        """When the callable accepts **kwargs, extra args should be forwarded."""
+        result = json.loads(
+            await run_python(
+                callable="tests.server._type_coercion_fixtures._kwargs_callable",
+                args={"name": "test", "extra": "y"},
+                timeout=10,
+            )
+        )
+        assert result["success"] is True
+        assert result["result"]["name"] == "test"
+        assert result["result"]["extras"]["extra"] == "y"

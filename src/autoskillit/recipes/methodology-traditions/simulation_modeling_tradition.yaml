@@ -1,0 +1,49 @@
+name: simulation_modeling_tradition
+schema_version: "1.0"
+priority: 6
+display_name: "Simulation and Modeling (ABM/Computational)"
+canonical_guideline:
+  name: "ODD Protocol"
+  governing_body: "community"
+  stable_for_decade: true
+  canonical: false
+fields_spanned:
+  - ecology
+  - economics
+  - social_science
+  - computer_science
+  - epidemiology
+detection_keywords:
+  - agent-based model
+  - ABM
+  - ODD protocol
+  - simulation model
+  - computational model
+  - NetLogo
+  - parameter sweep
+  - emergent behavior
+  - individual-based model
+mandatory_figures:
+  - figure: "Model Overview Diagram"
+    shows: "Entities, state variables, processes, and scheduling"
+    citation: "ODD Overview section"
+  - figure: "Sensitivity Analysis Heatmap"
+    shows: "Parameter sensitivity across output metrics"
+    citation: "ODD Submodels section"
+strongly_expected_figures:
+  - figure: "Time-Series Output"
+    shows: "Model dynamics over simulated time"
+    source: "ODD Output section"
+  - figure: "Parameter Sensitivity Tornado Plot"
+    shows: "Ranked influence of each parameter on outputs"
+    source: "Saltelli et al. 2008"
+anti_patterns:
+  - pattern: "No ODD protocol description"
+    reason: "ODD provides the standardized structure for transparent ABM reporting"
+  - pattern: "Unreported parameter ranges"
+    reason: "Readers need to know what parameter values were explored"
+  - pattern: "No sensitivity analysis"
+    reason: "Without sensitivity analysis, readers cannot assess which parameters drive outputs"
+  - pattern: "Single-run conclusions"
+    reason: "ABMs require multiple runs to characterize stochastic variability and emergent patterns"
+venue_specific_appendices: []

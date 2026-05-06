@@ -1,0 +1,49 @@
+name: animal_preclinical
+schema_version: "1.0"
+priority: 10
+display_name: "Animal Preclinical Study"
+canonical_guideline:
+  name: "ARRIVE 2.0"
+  governing_body: "EQUATOR"
+  stable_for_decade: true
+  canonical: true
+fields_spanned:
+  - medicine
+  - biology
+  - pharmacology
+  - neuroscience
+  - toxicology
+detection_keywords:
+  - animal study
+  - ARRIVE
+  - preclinical
+  - in vivo
+  - mouse model
+  - rat model
+  - randomization of animals
+  - blinding of assessors
+  - sample size calculation
+mandatory_figures:
+  - figure: "Experimental Timeline Diagram"
+    shows: "Study schedule with interventions, measurements, and timepoints"
+    citation: "ARRIVE item 9"
+  - figure: "Animal Flow Diagram"
+    shows: "Animals allocated, housed, intervened, and analyzed at each stage"
+    citation: "ARRIVE item 15"
+strongly_expected_figures:
+  - figure: "Body Weight Curves"
+    shows: "Growth curves by intervention group over study duration"
+    source: "ARRIVE item 9"
+  - figure: "Dose-Response Plot"
+    shows: "Response variable vs dose with confidence intervals"
+    source: "ARRIVE item 16"
+anti_patterns:
+  - pattern: "No sample size justification"
+    reason: "ARRIVE requires power analysis or sample size calculation to ensure adequate statistical power"
+  - pattern: "Unreported animal exclusions"
+    reason: "All exclusions must be reported with reasons; the flow diagram requires complete accounting"
+  - pattern: "No blinding of outcome assessors"
+    reason: "Blinding reduces bias in outcome assessment"
+  - pattern: "Housing conditions unreported"
+    reason: "ARRIVE requires reporting of housing and husbandry details"
+venue_specific_appendices: []

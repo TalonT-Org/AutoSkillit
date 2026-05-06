@@ -1,0 +1,50 @@
+name: economic_evaluation
+schema_version: "1.0"
+priority: 9
+display_name: "Economic Evaluation"
+canonical_guideline:
+  name: "CHEERS 2022"
+  governing_body: "ISPOR"
+  stable_for_decade: false
+  canonical: true
+fields_spanned:
+  - medicine
+  - health_economics
+  - pharmacy
+  - public_health
+  - health_policy
+detection_keywords:
+  - cost-effectiveness
+  - CHEERS
+  - ICER
+  - QALY
+  - cost-utility
+  - cost-benefit
+  - economic evaluation
+  - Markov model
+  - willingness to pay
+  - budget impact
+mandatory_figures:
+  - figure: "Cost-Effectiveness Plane"
+    shows: "Incremental costs vs effects for competing strategies"
+    citation: "CHEERS item 20"
+  - figure: "Model Structure Diagram"
+    shows: "Markov states, transitions, and cycle length"
+    citation: "CHEERS item 14"
+strongly_expected_figures:
+  - figure: "Tornado Diagram"
+    shows: "One-way sensitivity analysis across parameters"
+    source: "CHEERS item 21"
+  - figure: "Cost-Effectiveness Acceptability Curve"
+    shows: "Probability of cost-effectiveness at varying willingness-to-pay thresholds"
+    source: "CHEERS item 20"
+anti_patterns:
+  - pattern: "No discounting of future costs"
+    reason: "Future costs and outcomes must be discounted to present value (typically 3-5% annually)"
+  - pattern: "Undisclosed perspective"
+    reason: "The perspective (healthcare system, societal) determines which costs are included"
+  - pattern: "No sensitivity analysis"
+    reason: "Economic models have inherent uncertainty; deterministic and probabilistic sensitivity analysis is required"
+  - pattern: "Missing time horizon"
+    reason: "The time horizon must be justified and long enough to capture all relevant costs and outcomes"
+venue_specific_appendices: []

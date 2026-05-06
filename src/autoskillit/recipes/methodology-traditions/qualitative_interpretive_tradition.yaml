@@ -1,0 +1,45 @@
+name: qualitative_interpretive_tradition
+schema_version: "1.0"
+priority: 11
+display_name: "Qualitative Interpretive Research"
+canonical_guideline:
+  name: "COREQ/SRQR"
+  governing_body: "EQUATOR"
+  stable_for_decade: true
+  canonical: true
+fields_spanned:
+  - medicine
+  - nursing
+  - sociology
+  - education
+  - psychology
+  - public_health
+detection_keywords:
+  - qualitative research
+  - COREQ
+  - SRQR
+  - thematic analysis
+  - grounded theory
+  - phenomenology
+  - ethnography
+  - semi-structured interview
+  - focus group
+  - coding framework
+mandatory_figures: []
+strongly_expected_figures:
+  - figure: "Coding Tree or Thematic Map"
+    shows: "Hierarchy of themes and subthemes with relationships"
+    source: "COREQ item 28"
+  - figure: "Participant Characteristics Table"
+    shows: "Demographics and context of qualitative participants"
+    source: "COREQ item 22"
+anti_patterns:
+  - pattern: "No reflexivity statement"
+    reason: "COREQ and SRQR require researchers to reflect on their role and influence on data collection and analysis"
+  - pattern: "Quantifying qualitative data inappropriately"
+    reason: "Qualitative data is not meant to be reduced to frequencies or percentages"
+  - pattern: "No saturation discussion"
+    reason: "Researchers must discuss whether data saturation was achieved"
+  - pattern: "Member checking unreported"
+    reason: "COREQ encourages reporting of participant validation of findings"
+venue_specific_appendices: []

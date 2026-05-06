@@ -1,0 +1,47 @@
+name: measurement_instrument_validation_tradition
+schema_version: "1.0"
+priority: 7
+display_name: "Measurement Instrument Validation"
+canonical_guideline:
+  name: "COSMIN 2.0"
+  governing_body: "EQUATOR"
+  stable_for_decade: true
+  canonical: true
+fields_spanned:
+  - medicine
+  - psychology
+  - education
+  - nursing
+  - rehabilitation
+detection_keywords:
+  - measurement properties
+  - COSMIN
+  - reliability
+  - validity
+  - responsiveness
+  - internal consistency
+  - Cronbach alpha
+  - test-retest
+  - content validity
+mandatory_figures:
+  - figure: "Structural Validity Diagram"
+    shows: "Factor structure or measurement model path diagram"
+    citation: "COSMIN Box 4"
+  - figure: "Measurement Model Path Diagram"
+    shows: "Latent variables and observed indicators with loadings"
+    citation: "COSMIN Box 4"
+strongly_expected_figures:
+  - figure: "Bland-Altman Plot"
+    shows: "Agreement between two measurement methods"
+    source: "COSMIN reliability"
+  - figure: "Item Characteristic Curves"
+    shows: "Probability of response as function of latent trait"
+    source: "COSMIN validity"
+anti_patterns:
+  - pattern: "Reporting only Cronbach alpha without factor analysis"
+    reason: "Cronbach alpha alone cannot establish structural validity; factor analysis is required"
+  - pattern: "No content validity study"
+    reason: "Content validity is the foundational measurement property and must be established before other properties"
+  - pattern: "Conflating reliability with validity"
+    reason: "Reliability (consistency) is distinct from validity (accuracy); high reliability does not imply validity"
+venue_specific_appendices: []

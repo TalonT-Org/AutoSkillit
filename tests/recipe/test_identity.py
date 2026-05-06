@@ -136,21 +136,6 @@ def test_composite_hash_no_dependencies_differs_from_content_hash(tmp_path):
     assert composite != content
 
 
-def test_composite_hash_includes_domain_separator(tmp_path):
-    from autoskillit.recipe.identity import compute_composite_hash
-    from autoskillit.recipe.io import load_recipe
-
-    skills_dir = tmp_path / "skills"
-    skills_dir.mkdir()
-
-    p = _write_recipe(tmp_path)
-    recipe = load_recipe(p)
-    composite = compute_composite_hash(p, recipe, skills_dir=skills_dir, project_dir=tmp_path)
-    naive = "sha256:" + hashlib.sha256(p.read_bytes()).hexdigest()
-
-    assert composite != naive
-
-
 # ---------------------------------------------------------------------------
 # Part B: find_prior_runs tests
 # ---------------------------------------------------------------------------

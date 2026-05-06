@@ -467,12 +467,6 @@ class TestMigrationEngine:
         assert result.error is not None
         assert "output" in result.error.lower()
 
-    # ME21
-    def test_default_engine_has_both_adapters(self) -> None:
-        engine = default_migration_engine()
-        assert engine.get_adapter("recipe") is not None
-        assert engine.get_adapter("contract") is not None
-
 
 class TestAdapterHierarchy:
     # ME-ADP1

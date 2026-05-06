@@ -755,8 +755,28 @@ def test_annotate_pr_diff_missing_iteration_defaults_zero(mock_run, tmp_path: Pa
         output_dir=str(tmp_path),
         local_review_rounds="3",
         current_iteration="",
+        base_branch="main",
     )
     assert result["review_mode"] == "local"
+
+
+@patch("subprocess.run")
+def test_annotate_pr_diff_local_mode_empty_base_branch_falls_back_to_github(
+    mock_run, tmp_path: Path
+) -> None:
+    """T3.8: local mode with empty base_branch falls back to gh pr diff and returns github."""
+    mock_run.return_value = subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, "")
+    result = annotate_pr_diff(
+        pr_number="123",
+        cwd=str(tmp_path),
+        output_dir=str(tmp_path),
+        local_review_rounds="3",
+        current_iteration="0",
+        base_branch="",
+    )
+    assert result["review_mode"] == "github"
+    args = mock_run.call_args[0][0]
+    assert args[:3] == ["gh", "pr", "diff"]
 
 
 @patch("subprocess.run")

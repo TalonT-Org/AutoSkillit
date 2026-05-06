@@ -174,7 +174,15 @@ class TestResumeResetOnRetry:
         sp = _state_path(tmp_path)
         write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("d1", "d2", "d3"))
         append_dispatch_record(sp, DispatchRecord(name="d1", status=DispatchStatus.SUCCESS))
-        append_dispatch_record(sp, DispatchRecord(name="d2", status=DispatchStatus.FAILURE))
+        append_dispatch_record(
+            sp,
+            DispatchRecord(
+                name="d2",
+                status=DispatchStatus.FAILURE,
+                dispatch_id="d2-uuid",
+                l3_session_id="d2-sess",
+            ),
+        )
 
         decision = resume_campaign_from_state(sp, continue_on_failure=False, reset_on_retry=True)
 
@@ -185,6 +193,11 @@ class TestResumeResetOnRetry:
         assert state is not None
         d2 = next(d for d in state.dispatches if d.name == "d2")
         assert d2.status == DispatchStatus.PENDING
+        assert d2.dispatch_id == ""
+        assert d2.l3_session_id == ""
+        d3 = next(d for d in state.dispatches if d.name == "d3")
+        assert d3.status == DispatchStatus.PENDING
+        assert d3.dispatch_id == ""
 
     def test_reset_on_retry_false_still_halts(self, tmp_path: Path):
         """reset_on_retry=False preserves existing halt behavior."""
@@ -225,4 +238,4 @@ class TestResumeResetOnRetry:
         decision = resume_campaign_from_state(sp, continue_on_failure=False, reset_on_retry=True)
 
         assert decision is not None
-        assert "d2" not in decision.completed_dispatches_block
+        assert decision.completed_dispatches_block == "- d1: success"

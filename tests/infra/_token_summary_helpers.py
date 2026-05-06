@@ -59,6 +59,11 @@ def _make_run_skill_event(result_text: str = "Done.\n%%ORDER_UP%%") -> dict:
     }
 
 
+def _resolve_session_label(entry: dict) -> str:
+    """Resolve session_label from entry, falling back to step_name for old test data."""
+    return entry.get("session_label") or entry.get("step_name", "unknown")
+
+
 def _write_sessions(log_root: Path, entries: list[dict]) -> None:
     """Write sessions.jsonl and token_usage.json files for test setup."""
     (log_root / "sessions.jsonl").write_text("\n".join(json.dumps(e) for e in entries) + "\n")
@@ -67,7 +72,7 @@ def _write_sessions(log_root: Path, entries: list[dict]) -> None:
         session_dir = log_root / "sessions" / dir_name
         session_dir.mkdir(parents=True, exist_ok=True)
         token_data: dict = {
-            "session_label": entry.get("session_label") or entry.get("step_name", "unknown"),
+            "session_label": _resolve_session_label(entry),
             "input_tokens": entry.get("input_tokens", 1000),
             "output_tokens": entry.get("output_tokens", 500),
             "cache_creation_input_tokens": entry.get("cache_creation_input_tokens", 100),

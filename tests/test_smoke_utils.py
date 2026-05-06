@@ -15,6 +15,7 @@ from autoskillit.smoke_utils import (
     enrich_diff_context,
     patch_pr_token_summary,
 )
+from tests.infra._token_summary_helpers import _resolve_session_label
 
 
 # T_SU1
@@ -230,7 +231,7 @@ def _write_test_sessions(log_root: Path, entries: list[dict]) -> None:
         session_dir = log_root / "sessions" / entry["dir_name"]
         session_dir.mkdir(parents=True, exist_ok=True)
         token_data = {
-            "session_label": entry.get("session_label") or entry.get("step_name", "unknown"),
+            "session_label": _resolve_session_label(entry),
             "input_tokens": entry.get("input_tokens", 1000),
             "output_tokens": entry.get("output_tokens", 500),
             "cache_creation_input_tokens": entry.get("cache_creation_input_tokens", 100),

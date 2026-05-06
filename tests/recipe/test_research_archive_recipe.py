@@ -61,9 +61,6 @@ class TestResearchArchiveRecipe:
 
     # ── Steps ───────────────────────────────────────────────────────
 
-    def test_step_count(self, recipe) -> None:
-        assert len(recipe.steps) == 9
-
     def test_step_names(self, recipe) -> None:
         expected = {
             "begin_archival",

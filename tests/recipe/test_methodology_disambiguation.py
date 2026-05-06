@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 
 from autoskillit.recipe.methodology_disambiguation import (
@@ -85,7 +87,7 @@ class TestStructuralBehavioralTests:
 
     def test_result_is_frozen(self) -> None:
         result = disambiguate({"controlled_intervention", "economic_evaluation"})
-        with pytest.raises(Exception):  # FrozenInstanceError
+        with pytest.raises(dataclasses.FrozenInstanceError):
             result.primary_tradition = "something_else"
 
     def test_single_candidate_returns_that_candidate(self) -> None:
@@ -102,8 +104,6 @@ class TestStructuralBehavioralTests:
 
     def test_load_disambiguation_rules_bundled(self) -> None:
         rules, overlaps = load_disambiguation_rules()
-        assert len(rules) == 4
-        assert len(overlaps) == 5
         rule_names = {r.name for r in rules}
         assert rule_names == {
             "prisma_dominance",

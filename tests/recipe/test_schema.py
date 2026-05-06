@@ -367,7 +367,8 @@ def test_recipe_kind_enum_defined() -> None:
     assert issubclass(RecipeKind, StrEnum)
     assert RecipeKind.STANDARD == "standard"
     assert RecipeKind.CAMPAIGN == "campaign"
-    assert len(RecipeKind) == 2
+    assert RecipeKind.FOOD_TRUCK == "food-truck"
+    assert len(RecipeKind) == 3
 
 
 def test_campaign_dispatch_dataclass() -> None:

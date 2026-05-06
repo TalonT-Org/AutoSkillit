@@ -11,7 +11,7 @@ from autoskillit.recipe.methodology_tradition_registry import (
     load_all_methodology_traditions,
 )
 from autoskillit.recipe.methodology_venue_appendix import (
-    MLSubAreaFoldingEntry,
+    MLSubAreaFoldingDef,
     VenueAppendixMatch,
     load_ml_sub_area_folding,
     resolve_venue_appendices,
@@ -75,7 +75,7 @@ class TestFoldingMapStructure:
 
     def test_folding_entries_are_frozen(self) -> None:
         for entry in load_ml_sub_area_folding():
-            assert isinstance(entry, MLSubAreaFoldingEntry)
+            assert isinstance(entry, MLSubAreaFoldingDef)
             with pytest.raises(dataclasses.FrozenInstanceError):
                 entry.sub_area = "mutated"  # type: ignore[misc]
 
@@ -91,7 +91,8 @@ class TestFoldingMapStructure:
 
 class TestVenueAppendixSchema:
     def test_all_traditions_with_appendices_load(self) -> None:
-        list(load_all_methodology_traditions())
+        traditions = list(load_all_methodology_traditions())
+        assert traditions
 
     def test_appendix_entries_have_required_fields(self) -> None:
         traditions = load_all_methodology_traditions()
@@ -131,7 +132,7 @@ class TestVenueAppendixSchema:
             None,
         )
         assert mcb is not None
-        assert len(mcb.venue_specific_appendices) >= 8
+        assert len(mcb.venue_specific_appendices) >= len(load_ml_sub_area_folding())
 
     def test_alternate_parent_traditions_have_appendices(self) -> None:
         folding = load_ml_sub_area_folding()
@@ -342,11 +343,13 @@ class TestVenueBranchingFixtures:
     @pytest.mark.parametrize(
         "sub_area,plan_text,expected_parent,expected_rerouted",
         VENUE_BRANCHING_FIXTURES,
+        ids=[f"{sa}-{ep}" for sa, _, ep, _ in VENUE_BRANCHING_FIXTURES],
     )
     def test_venue_branching(
         self, sub_area: str, plan_text: str, expected_parent: str, expected_rerouted: bool
     ) -> None:
         matches = resolve_venue_appendices(plan_text)
+        assert matches, f"resolve_venue_appendices returned empty list for plan_text={plan_text!r}"
         sub_area_matches = [m for m in matches if m.sub_area == sub_area]
         assert len(sub_area_matches) == 1, (
             f"Expected 1 match for sub_area={sub_area!r}, "
@@ -403,7 +406,10 @@ class TestEdgeCases:
         )
         matches = resolve_venue_appendices(plan_text)
         sub_areas = {m.sub_area for m in matches}
-        assert len(sub_areas) >= 2
+        assert {"supervised_classification", "computer_vision"}.issubset(sub_areas), (
+            f"Expected supervised_classification and computer_vision in detected sub_areas, "
+            f"got {sub_areas}"
+        )
 
     def test_deterministic_resolution(self) -> None:
         plan_text = (

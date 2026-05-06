@@ -859,13 +859,19 @@ def test_wait_for_ci_conclusion_allowed_values() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_load_research_recipe_card() -> None:
-    """load_recipe_card('research', ...) returns non-None after card generation."""
+def test_research_recipe_card_generated_at_is_iso8601() -> None:
+    """research.yaml card's generated_at is a parseable ISO-8601 timestamp."""
+    import datetime
+
     from autoskillit.recipe.io import builtin_recipes_dir
 
     card = load_recipe_card("research", builtin_recipes_dir())
     assert card is not None
-    assert isinstance(card, dict)
+    generated_at = card.get("generated_at", "")
+    assert isinstance(generated_at, str) and generated_at, (
+        "generated_at must be a non-empty string"
+    )
+    datetime.datetime.fromisoformat(generated_at)
 
 
 def test_research_recipe_card_structure() -> None:
@@ -901,8 +907,20 @@ def test_research_recipe_card_contains_research_skills() -> None:
         "make-plan",
         "bundle-local-report",
     }
+    required_fields = {"inputs", "outputs", "expected_output_patterns", "write_behavior"}
     for skill_name in expected_subset:
         assert skill_name in skills, f"Missing skill: {skill_name}"
+        entry = skills[skill_name]
+        for field in required_fields:
+            assert field in entry, f"{skill_name} missing '{field}'"
+        assert isinstance(entry["inputs"], list), f"{skill_name} 'inputs' must be a list"
+        assert isinstance(entry["outputs"], list), f"{skill_name} 'outputs' must be a list"
+        assert isinstance(entry["expected_output_patterns"], list), (
+            f"{skill_name} 'expected_output_patterns' must be a list"
+        )
+        assert entry["write_behavior"] in {"always", "conditional", "never"}, (
+            f"{skill_name} 'write_behavior' has unexpected value: {entry['write_behavior']!r}"
+        )
 
 
 def test_research_recipe_card_dataflow() -> None:
@@ -912,10 +930,14 @@ def test_research_recipe_card_dataflow() -> None:
     card = load_recipe_card("research", builtin_recipes_dir())
     assert card is not None
     dataflow = card["dataflow"]
-    assert len(dataflow) > 0
     step_names = [entry["step"] for entry in dataflow]
     assert "scope" in step_names
     assert "plan_experiment" in step_names
+    for entry in dataflow:
+        assert "step" in entry, f"Dataflow entry missing 'step': {entry}"
+        assert "available" in entry, f"Step '{entry.get('step')}' missing 'available'"
+        assert "required" in entry, f"Step '{entry.get('step')}' missing 'required'"
+        assert "produced" in entry, f"Step '{entry.get('step')}' missing 'produced'"
 
 
 def test_research_contract_card_not_stale() -> None:

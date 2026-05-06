@@ -21,6 +21,9 @@ _HEADLESS_RECIPE_SKILLS = [
     "dry-walkthrough",
     "make-plan",
     "resolve-failures",
+    "compose-pr",
+    "prepare-pr",
+    "diagnose-ci",
 ]
 
 

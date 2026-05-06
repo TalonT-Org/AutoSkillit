@@ -1,10 +1,7 @@
 ---
 name: compose-pr
 categories: [github]
-description: >
-  Reads the PR prep file and validated arch-lens diagrams, composes the PR body,
-  and creates the GitHub PR. Does NOT invoke sub-skills. Part 3 of 3 in the
-  decomposed PR flow.
+description: Composition executor for pull requests. ALWAYS invoke this skill when instructed to compose a PR. Do not read prep files or create PRs directly — use this skill first to load the composition workflow.
 hooks:
   PreToolUse:
     - matcher: "*"

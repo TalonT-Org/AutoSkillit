@@ -42,6 +42,9 @@ providers:
       ANTHROPIC_TIMEOUT: "3000000"
       ENABLE_TOOL_SEARCH: "false"
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
-#  step_overrides:
-#    implement: minimax
+  step_overrides:
+    retry_worktree: minimax
+    compose_pr: minimax
+    diagnose_ci: minimax
+    prepare_pr: minimax
 

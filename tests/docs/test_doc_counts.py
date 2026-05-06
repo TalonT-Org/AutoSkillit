@@ -251,7 +251,7 @@ def test_doctor_check_count_is_31() -> None:
     )
 
 
-def test_bundled_recipe_count_is_12() -> None:
+def test_bundled_recipe_count_is_13() -> None:
     recipes = _bundled_recipes()
     expected = [
         "bem-wrapper",
@@ -266,6 +266,7 @@ def test_bundled_recipe_count_is_12() -> None:
         "research",
         "research-design",
         "research-implement",
+        "research-review",
     ]
     assert recipes == expected, f"Recipes drifted: {recipes}"
 

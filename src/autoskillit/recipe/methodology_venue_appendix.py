@@ -51,14 +51,18 @@ _CONSTRAINT_EVALUATORS: dict[str, Callable[[str], bool]] = {
 }
 
 
-@cache
 def _keyword_pattern(keyword: str) -> re.Pattern[str]:
+    return _keyword_pattern_cached(keyword.lower())
+
+
+@cache
+def _keyword_pattern_cached(keyword: str) -> re.Pattern[str]:
     escaped = re.escape(keyword)
     return re.compile(r"(?<!\w)" + escaped + r"(?!\w)", re.IGNORECASE)
 
 
 def _has_keyword_match(text: str, keywords: tuple[str, ...] | list[str]) -> bool:
-    return any(_keyword_pattern(kw.lower()).search(text) for kw in keywords)
+    return any(_keyword_pattern(kw).search(text) for kw in keywords)
 
 
 def load_ml_sub_area_folding() -> list[MLSubAreaFoldingEntry]:

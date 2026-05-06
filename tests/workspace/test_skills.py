@@ -366,7 +366,7 @@ class TestSkillResolver:
         assert "manifest" in content.lower()
 
     def test_bundled_skills_list_matches_filesystem(self) -> None:
-        """make-script-skill SKILL.md bundled skills list must match filesystem."""
+        """write-recipe SKILL.md bundled skills list must match filesystem."""
         skill_md = DefaultSkillResolver().resolve("write-recipe").path
         content = skill_md.read_text()
 
@@ -396,7 +396,7 @@ class TestSkillResolver:
         actual_skills = sorted(s.name for s in DefaultSkillResolver().list_all())
 
         assert listed_skills == actual_skills, (
-            f"make-script-skill bundled skills list doesn't match filesystem.\n"
+            f"write-recipe bundled skills list doesn't match filesystem.\n"
             f"  Listed:  {listed_skills}\n"
             f"  On disk: {actual_skills}"
         )

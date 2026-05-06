@@ -221,7 +221,7 @@ tasks:
           uv venv --clear .venv
           uv pip install -e '.[dev]' --python .venv/bin/python
         fi
-        echo "Done: $(python --version 2>/dev/null || .venv/bin/python --version)"
+        echo "Done: $(.venv/bin/python --version)"
 
   install-dev:
     desc: Install dev version of autoskillit from the develop branch

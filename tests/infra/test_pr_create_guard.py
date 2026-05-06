@@ -18,6 +18,7 @@ import pytest
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
 
 _TOOL_NAME = "mcp__autoskillit__local__autoskillit__run_cmd"
+_BASH_TOOL_NAME = "Bash"
 _HOOK_CONFIG_RELPATH = ".autoskillit/temp/.hook_config.json"
 
 
@@ -30,6 +31,34 @@ def _run_guard(cmd: str, kitchen_open: bool, tmpdir, raw_stdin: str | None = Non
     else:
         tool_input = {"cmd": cmd, "cwd": str(tmpdir)}
         stdin_payload = {"tool_name": _TOOL_NAME, "tool_input": tool_input}
+        stdin_content = json.dumps(stdin_payload)
+
+    if kitchen_open:
+        hook_cfg = tmpdir / _HOOK_CONFIG_RELPATH
+        hook_cfg.parent.mkdir(parents=True, exist_ok=True)
+        hook_cfg.write_text(json.dumps({"kitchen": "open"}))
+
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        with unittest.mock.patch("sys.stdin", io.StringIO(stdin_content)):
+            with unittest.mock.patch("pathlib.Path.cwd", return_value=tmpdir):
+                try:
+                    main()
+                except SystemExit as exc:
+                    assert exc.code == 0, f"Guard exited non-zero: {exc.code!r}"
+
+    return buf.getvalue()
+
+
+def _run_bash_guard(cmd: str, kitchen_open: bool, tmpdir, raw_stdin: str | None = None) -> str:
+    """Invoke pr_create_guard.main() with Bash tool format and return captured stdout."""
+    from autoskillit.hooks.guards.pr_create_guard import main  # noqa: PLC0415
+
+    if raw_stdin is not None:
+        stdin_content = raw_stdin
+    else:
+        tool_input = {"command": cmd, "cwd": str(tmpdir)}
+        stdin_payload = {"tool_name": _BASH_TOOL_NAME, "tool_input": tool_input}
         stdin_content = json.dumps(stdin_payload)
 
     if kitchen_open:
@@ -88,6 +117,30 @@ class TestPrCreateGuardDenied:
 # ---------------------------------------------------------------------------
 # Allowed cases
 # ---------------------------------------------------------------------------
+
+
+class TestBashToolDenyPath:
+    """Bash tool sends command via 'command' key — guard must handle this format."""
+
+    def test_denies_gh_pr_create_via_bash_tool(self, tmp_path):
+        out = _run_bash_guard(
+            "gh pr create --title foo --body bar", kitchen_open=True, tmpdir=tmp_path
+        )
+        assert _is_denied(out)
+
+    def test_denies_gh_pr_create_with_flags_via_bash_tool(self, tmp_path):
+        out = _run_bash_guard(
+            "gh pr create -t 'fix' -b 'desc'", kitchen_open=True, tmpdir=tmp_path
+        )
+        assert _is_denied(out)
+
+    def test_allows_non_pr_create_via_bash_tool(self, tmp_path):
+        out = _run_bash_guard("gh pr list", kitchen_open=True, tmpdir=tmp_path)
+        assert out.strip() == ""
+
+    def test_allows_when_kitchen_closed_via_bash_tool(self, tmp_path):
+        out = _run_bash_guard("gh pr create --title foo", kitchen_open=False, tmpdir=tmp_path)
+        assert out.strip() == ""
 
 
 class TestPrCreateGuardAllowed:

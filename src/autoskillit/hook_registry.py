@@ -66,7 +66,7 @@ HOOK_REGISTRY: list[HookDef] = [
         scripts=["guards/branch_protection_guard.py"],
     ),
     HookDef(
-        matcher=r"mcp__.*autoskillit.*__run_cmd",
+        matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
         scripts=["guards/unsafe_install_guard.py", "guards/pr_create_guard.py"],
     ),
     HookDef(

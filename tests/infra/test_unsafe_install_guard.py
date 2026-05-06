@@ -31,11 +31,81 @@ def _run_guard(cmd: str, raw_stdin: str | None = None) -> str:
     return buf.getvalue()
 
 
+def _run_bash_guard(cmd: str, raw_stdin: str | None = None) -> str:
+    """Run the guard's main() in-process with Bash tool format, return captured stdout."""
+    from autoskillit.hooks.guards.unsafe_install_guard import main
+
+    tool_input = {"command": cmd, "cwd": "/some/path"}
+    stdin_content = (
+        raw_stdin
+        if raw_stdin is not None
+        else json.dumps(
+            {
+                "tool_name": "Bash",
+                "tool_input": tool_input,
+            }
+        )
+    )
+    buf = io.StringIO()
+    with patch("sys.stdin", io.StringIO(stdin_content)):
+        with redirect_stdout(buf):
+            try:
+                main()
+            except SystemExit:
+                pass
+    return buf.getvalue()
+
+
 def _is_denied(output: str) -> bool:
     if not output:
         return False
     data = json.loads(output)
     return data.get("hookSpecificOutput", {}).get("permissionDecision") == "deny"
+
+
+class TestBashToolDenyPath:
+    """Bash tool sends command via 'command' key — guard must handle this format."""
+
+    def test_pip_install_editable_via_bash_tool(self):
+        assert _is_denied(_run_bash_guard("pip install -e ."))
+
+    def test_uv_pip_install_editable_via_bash_tool(self):
+        assert _is_denied(_run_bash_guard("uv pip install -e ."))
+
+    def test_pip_install_editable_long_flag_via_bash_tool(self):
+        assert _is_denied(_run_bash_guard("pip install --editable ."))
+
+    def test_uv_pip_install_editable_long_flag_via_bash_tool(self):
+        assert _is_denied(_run_bash_guard("uv pip install --editable ."))
+
+
+class TestMaturinDevelopDenied:
+    """maturin develop performs editable installs and must be blocked."""
+
+    def test_maturin_develop_denied(self):
+        assert _is_denied(_run_guard("maturin develop"))
+
+    def test_maturin_develop_with_args_denied(self):
+        assert _is_denied(_run_guard("maturin develop --release"))
+
+    def test_maturin_develop_via_bash_tool(self):
+        assert _is_denied(_run_bash_guard("maturin develop"))
+
+
+class TestSystemFlagDenied:
+    """--system flag installs into global environment — must be blocked for pip/uv."""
+
+    def test_uv_pip_install_system_flag_denied(self):
+        assert _is_denied(_run_guard("uv pip install foo --system"))
+
+    def test_pip_install_system_flag_denied(self):
+        assert _is_denied(_run_guard("pip install foo --system"))
+
+    def test_uv_pip_install_editable_with_system_denied(self):
+        assert _is_denied(_run_guard("uv pip install -e . --system"))
+
+    def test_system_flag_via_bash_tool(self):
+        assert _is_denied(_run_bash_guard("uv pip install foo --system"))
 
 
 class TestUnsafeInstallGuardDenied:

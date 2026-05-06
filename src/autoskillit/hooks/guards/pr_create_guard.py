@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PreToolUse hook: block gh pr create via run_cmd when kitchen is open.
+"""PreToolUse hook: block gh pr create via run_cmd or Bash tool when kitchen is open.
 
 Enforces the mandatory prepare_pr → compose_pr pipeline. Direct gh pr create
 calls bypass mandatory arch-lens, diff annotation, and automated code review.
@@ -50,7 +50,8 @@ def _is_gh_pr_create(cmd: str) -> bool:
 def main() -> None:
     try:
         data = json.loads(sys.stdin.read())
-        cmd = data.get("tool_input", {}).get("cmd", "")
+        tool_input = data.get("tool_input", {})
+        cmd = tool_input.get("command", "") or tool_input.get("cmd", "")
     except (json.JSONDecodeError, AttributeError, OSError):
         sys.exit(0)
 

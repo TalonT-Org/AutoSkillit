@@ -53,7 +53,15 @@ def _validate_experiment_type_file(path: Path, valid_lenses: set[str]) -> Valida
     errors: list[str] = []
     warnings: list[str] = []
 
-    raw_content = path.read_text(encoding="utf-8")
+    try:
+        raw_content = path.read_text(encoding="utf-8")
+    except OSError as e:
+        return ValidationResult(
+            filename=path.name,
+            path=path,
+            errors=[f"Cannot read file: {e}"],
+            warnings=[],
+        )
 
     try:
         data = load_yaml(path)
@@ -66,7 +74,16 @@ def _validate_experiment_type_file(path: Path, valid_lenses: set[str]) -> Valida
             raw_content=raw_content,
         )
 
-    if isinstance(data, dict) and data.get("classification_triggers") is None:
+    if not isinstance(data, dict):
+        return ValidationResult(
+            filename=path.name,
+            path=path,
+            errors=[f"YAML root must be a mapping, got {type(data).__name__}"],
+            warnings=[],
+            raw_content=raw_content,
+        )
+
+    if data.get("classification_triggers") is None:
         data["classification_triggers"] = []
 
     try:
@@ -117,7 +134,15 @@ def _validate_methodology_tradition_file(path: Path) -> ValidationResult:
     errors: list[str] = []
     warnings: list[str] = []
 
-    raw_content = path.read_text(encoding="utf-8")
+    try:
+        raw_content = path.read_text(encoding="utf-8")
+    except OSError as e:
+        return ValidationResult(
+            filename=path.name,
+            path=path,
+            errors=[f"Cannot read file: {e}"],
+            warnings=[],
+        )
 
     try:
         data = load_yaml(path)
@@ -130,7 +155,16 @@ def _validate_methodology_tradition_file(path: Path) -> ValidationResult:
             raw_content=raw_content,
         )
 
-    if isinstance(data, dict) and data.get("detection_keywords") is None:
+    if not isinstance(data, dict):
+        return ValidationResult(
+            filename=path.name,
+            path=path,
+            errors=[f"YAML root must be a mapping, got {type(data).__name__}"],
+            warnings=[],
+            raw_content=raw_content,
+        )
+
+    if data.get("detection_keywords") is None:
         data["detection_keywords"] = []
 
     try:

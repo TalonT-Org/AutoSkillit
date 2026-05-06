@@ -106,6 +106,106 @@ class TestFormatTokenTable:
         result = TelemetryFormatter.format_token_table(steps, total)
         assert "30s" in result
 
+    # T1
+    def test_non_anthropic_step_marked(self) -> None:
+        steps = [
+            {
+                "step_name": "implement",
+                "model": "MiniMax-M2.7-highspeed",
+                "input_tokens": 307600,
+                "output_tokens": 3400,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0,
+                "invocation_count": 1,
+                "wall_clock_seconds": 60.0,
+            },
+        ]
+        total = {
+            "input_tokens": 307600,
+            "output_tokens": 3400,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0,
+            "total_elapsed_seconds": 60.0,
+        }
+        result = TelemetryFormatter.format_token_table(steps, total)
+        assert "| implement* |" in result
+
+    # T2
+    def test_non_anthropic_footnote_present(self) -> None:
+        steps = [
+            {
+                "step_name": "implement",
+                "model": "MiniMax-M2.7-highspeed",
+                "input_tokens": 1000,
+                "output_tokens": 500,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0,
+                "invocation_count": 1,
+                "wall_clock_seconds": 10.0,
+            },
+        ]
+        total = {
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0,
+            "total_elapsed_seconds": 10.0,
+        }
+        result = TelemetryFormatter.format_token_table(steps, total)
+        assert "non-Anthropic provider" in result
+        assert "caching behavior may differ" in result
+
+    # T3
+    def test_anthropic_step_not_marked(self) -> None:
+        steps = [
+            {
+                "step_name": "plan",
+                "model": "claude-sonnet-4-6",
+                "input_tokens": 1000,
+                "output_tokens": 500,
+                "cache_read_input_tokens": 200,
+                "cache_creation_input_tokens": 100,
+                "invocation_count": 1,
+                "wall_clock_seconds": 10.0,
+            },
+        ]
+        total = {
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "cache_read_input_tokens": 200,
+            "cache_creation_input_tokens": 100,
+            "total_elapsed_seconds": 10.0,
+        }
+        result = TelemetryFormatter.format_token_table(steps, total)
+        assert "| plan |" in result
+        assert "plan*" not in result
+        assert "non-Anthropic" not in result
+
+    # T4
+    def test_empty_model_not_marked(self) -> None:
+        steps = [
+            {
+                "step_name": "plan",
+                "model": "",
+                "input_tokens": 1000,
+                "output_tokens": 500,
+                "cache_read_input_tokens": 200,
+                "cache_creation_input_tokens": 100,
+                "invocation_count": 1,
+                "wall_clock_seconds": 10.0,
+            },
+        ]
+        total = {
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "cache_read_input_tokens": 200,
+            "cache_creation_input_tokens": 100,
+            "total_elapsed_seconds": 10.0,
+        }
+        result = TelemetryFormatter.format_token_table(steps, total)
+        assert "plan*" not in result
+        assert "non-Anthropic" not in result
+
     def test_snapshot(self) -> None:
         """Golden snapshot test for token table format."""
         steps = [
@@ -871,3 +971,55 @@ def test_compact_kv_no_model_tag_when_empty() -> None:
     total = {}
     output = TelemetryFormatter.format_compact_kv(steps, total)
     assert "model:" not in output
+
+
+# T5
+def test_non_anthropic_step_marked_terminal() -> None:
+    steps = [
+        {
+            "step_name": "implement",
+            "model": "MiniMax-M2.7-highspeed",
+            "input_tokens": 307600,
+            "output_tokens": 3400,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0,
+            "invocation_count": 1,
+            "wall_clock_seconds": 60.0,
+        },
+    ]
+    total = {
+        "input_tokens": 307600,
+        "output_tokens": 3400,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0,
+        "total_elapsed_seconds": 60.0,
+    }
+    result = TelemetryFormatter.format_token_table_terminal(steps, total)
+    assert "implement*" in result
+    assert "non-Anthropic provider" in result
+
+
+# T6
+def test_non_anthropic_step_marked_compact_kv() -> None:
+    steps = [
+        {
+            "step_name": "implement",
+            "model": "MiniMax-M2.7-highspeed",
+            "input_tokens": 307600,
+            "output_tokens": 3400,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0,
+            "invocation_count": 1,
+            "wall_clock_seconds": 60.0,
+        },
+    ]
+    total = {
+        "input_tokens": 307600,
+        "output_tokens": 3400,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0,
+        "total_elapsed_seconds": 60.0,
+    }
+    result = TelemetryFormatter.format_compact_kv(steps, total)
+    assert "implement*" in result
+    assert "non-Anthropic provider" in result

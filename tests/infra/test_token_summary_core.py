@@ -640,8 +640,11 @@ def test_hook_format_model_table() -> None:
     }
     table = _format_model_table(aggregated)
     assert "## Model Usage Breakdown" in table
-    assert "claude-sonnet-4-6" in table
-    assert "MiniMax-M2.7" in table
+    assert "| Model | steps | uncached | output | cache_read | cache_write | time |" in table
+    assert "| claude-sonnet-4-6 | 1 | 100 | 50 | 0 | 0 | 30s |" in table
+    assert "| MiniMax-M2.7 | 1 | 500 | 200 | 0 | 0 | 1m 0s |" in table
+    table_lines = [ln for ln in table.splitlines() if ln.startswith("|")]
+    assert len(table_lines) == 4  # header + separator + 2 model rows
 
 
 def test_hook_format_model_table_no_model_returns_empty() -> None:

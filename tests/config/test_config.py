@@ -586,20 +586,8 @@ def test_secrets_only_keys_covers_all_github_secret_fields() -> None:
 class TestWorkspaceConfig:
     """WorkspaceConfig section is present in AutomationConfig with correct defaults."""
 
-    def test_workspace_config_exists_on_automation_config(self, tmp_path):
-        from autoskillit.config import load_config
-
+    def test_workspace_config_defaults(self, tmp_path):
         cfg = load_config(tmp_path)
         assert hasattr(cfg, "workspace")
-
-    def test_workspace_worktree_root_defaults_to_none(self, tmp_path):
-        from autoskillit.config import load_config
-
-        cfg = load_config(tmp_path)
         assert cfg.workspace.worktree_root is None
-
-    def test_workspace_runs_root_defaults_to_none(self, tmp_path):
-        from autoskillit.config import load_config
-
-        cfg = load_config(tmp_path)
         assert cfg.workspace.runs_root is None

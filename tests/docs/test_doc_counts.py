@@ -251,7 +251,7 @@ def test_doctor_check_count_is_31() -> None:
     )
 
 
-def test_bundled_recipe_count_is_13() -> None:
+def test_bundled_recipe_count_is_14() -> None:
     recipes = _bundled_recipes()
     expected = [
         "bem-wrapper",
@@ -264,6 +264,7 @@ def test_bundled_recipe_count_is_13() -> None:
         "promote-to-main-wrapper",
         "remediation",
         "research",
+        "research-archive",
         "research-design",
         "research-implement",
         "research-review",

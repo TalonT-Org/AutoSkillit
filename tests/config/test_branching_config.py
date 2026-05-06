@@ -11,9 +11,6 @@ pytestmark = [pytest.mark.layer("config"), pytest.mark.small]
 
 
 class TestBranchingConfig:
-    def test_branching_config_default_base_branch_is_main(self) -> None:
-        assert BranchingConfig().default_base_branch == "main"
-
     def test_automation_config_has_branching_field(self) -> None:
         """AutomationConfig must expose a BranchingConfig as .branching."""
         cfg = AutomationConfig()

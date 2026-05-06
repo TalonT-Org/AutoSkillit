@@ -450,13 +450,14 @@ def test_research_campaign_run_review_ingredients():
     recipe = load_recipe(path)
     d = recipe.dispatches[2]
     assert d.name == "run-review"
-    assert {
+    assert set(d.ingredients.keys()) == {
         "worktree_path",
         "research_dir",
         "experiment_plan",
         "visualization_plan_path",
         "report_path",
-    }.issubset(set(d.ingredients.keys()))
+        "source_dir",
+    }
     assert d.ingredients["source_dir"] == "${{ inputs.source_dir }}"
     for key in [
         "worktree_path",
@@ -477,14 +478,6 @@ def test_research_campaign_run_review_capture():
     assert d.capture["pr_url"] == "${{ result.pr_url }}"
     assert d.capture["all_diagram_paths"] == "${{ result.all_diagram_paths }}"
     assert d.capture["report_path_after_finalize"] == "${{ result.report_path_after_finalize }}"
-
-
-def test_research_campaign_run_review_capture_no_worktree_path():
-    path = pkg_root() / "recipes" / "campaigns" / "research-campaign.yaml"
-    recipe = load_recipe(path)
-    d = recipe.dispatches[2]
-    assert d.name == "run-review"
-    assert "worktree_path" not in d.capture
 
 
 def test_research_campaign_run_archive_ingredients():
@@ -541,6 +534,9 @@ def test_research_campaign_capture_values_reference_result():
     path = pkg_root() / "recipes" / "campaigns" / "research-campaign.yaml"
     recipe = load_recipe(path)
     for d in recipe.dispatches:
+        if d.name == "run-archive":
+            assert d.capture == {}, f"run-archive must have empty capture, got {d.capture!r}"
+            continue
         for val in d.capture.values():
             assert _RESULT_TEMPLATE_RE.match(val.strip()), (
                 f"Dispatch {d.name!r} capture value {val!r} does not reference result"

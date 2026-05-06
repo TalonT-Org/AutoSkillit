@@ -47,24 +47,6 @@ class TestGraceWindowCoherence:
         assert cfg.natural_exit_grace_seconds == 3.0
 
 
-class TestIdleOutputTimeoutCoherence:
-    """idle_output_timeout default must pass _timeout_coherence_gate."""
-
-    def test_default_idle_output_timeout_passes_coherence_gate(self, tmp_path) -> None:
-        """Pure-default config emits zero *_coherence log warnings."""
-        config_dir = tmp_path / ".autoskillit"
-        config_dir.mkdir()
-        (config_dir / "config.yaml").write_text("")
-        with structlog.testing.capture_logs() as cap_logs:
-            cfg = load_config(tmp_path)
-        coherence_warnings = [e for e in cap_logs if "_coherence" in e.get("event", "")]
-        assert coherence_warnings == [], (
-            f"Default config emitted coherence warnings: {coherence_warnings}. "
-            "Update the relevant default in defaults.yaml and _config_dataclasses.py."
-        )
-        assert cfg.run_skill.idle_output_timeout == 1000
-
-
 class TestAllDefaultsPassAllGates:
     """Universal guard: shipped defaults must produce zero validation warnings."""
 

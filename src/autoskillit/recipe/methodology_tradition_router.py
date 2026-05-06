@@ -75,6 +75,8 @@ def classify_methodology(
     resolve_by_priority: bool = False,
 ) -> TraditionRouterResult:
     """Stage-1 deterministic keyword classification of plan methodology."""
+    if min_keyword_matches < 1:
+        raise ValueError(f"min_keyword_matches must be >= 1, got {min_keyword_matches}")
     traditions = load_all_methodology_traditions(project_dir)
     text_lower = plan_text.lower()
 

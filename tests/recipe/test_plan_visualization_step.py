@@ -71,8 +71,7 @@ def test_tier_c_table_removed_from_skill_md() -> None:
     assert "| nlp | vis-lens-methodology-norms |" not in content
     assert "| cv | vis-lens-methodology-norms |" not in content
     assert "| rl | vis-lens-temporal |" not in content
-    tier_c_part = content.split("Tier C")[1] if "Tier C" in content else ""
-    assert "target_domain" not in tier_c_part
+    assert "| target_domain |" not in content
 
 
 def test_tier_c_methodology_router_present() -> None:

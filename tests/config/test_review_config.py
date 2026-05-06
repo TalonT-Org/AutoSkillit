@@ -1,8 +1,11 @@
 """Tests for ReviewConfig and local_review_rounds wiring."""
 
+from pathlib import Path
+
 import pytest
 import yaml
 
+import autoskillit.config
 from autoskillit.config import AutomationConfig, load_config
 
 pytestmark = [pytest.mark.layer("config"), pytest.mark.small]
@@ -37,10 +40,6 @@ class TestReviewConfigFromYaml:
 class TestReviewConfigDefaultsYaml:
     def test_review_config_defaults_yaml_coherence(self) -> None:
         """T1.4: defaults.yaml review.local_review_rounds == 3."""
-        from pathlib import Path
-
-        import autoskillit.config
-
         pkg_root = Path(autoskillit.config.__file__).parent
         defaults_file = pkg_root / "defaults.yaml"
         with open(defaults_file) as f:

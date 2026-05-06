@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from autoskillit.core import load_yaml, pkg_root
 
@@ -11,7 +12,7 @@ BUNDLED_METHODOLOGY_TRADITIONS_DIR: Path = pkg_root() / "recipes" / "methodology
 
 
 @dataclass(frozen=True)
-class DisambiguationException:
+class DisambiguationExceptionDef:
     when_present: str
     add_union_rules: tuple[str, ...]
 
@@ -22,11 +23,11 @@ class DisambiguationRuleDef:
     order: int
     description: str
     trigger_traditions: frozenset[str]
-    trigger_mode: str
+    trigger_mode: Literal["anchor_plus_any", "all_present"]
     anchor: str | None
     primary_tradition: str
     applied_union_rules: tuple[str, ...]
-    exceptions: tuple[DisambiguationException, ...]
+    exceptions: tuple[DisambiguationExceptionDef, ...]
 
 
 @dataclass(frozen=True)
@@ -52,44 +53,55 @@ def load_disambiguation_rules() -> tuple[
     list[DisambiguationRuleDef], list[CrossTraditionOverlapDef]
 ]:
     yaml_path = BUNDLED_METHODOLOGY_TRADITIONS_DIR / "_disambiguation.yaml"
-    data = load_yaml(yaml_path)
+    try:
+        data = load_yaml(yaml_path)
+    except Exception as exc:
+        raise RuntimeError(f"Failed to load disambiguation rules from {yaml_path}") from exc
 
     rules: list[DisambiguationRuleDef] = []
-    for r in data.get("disambiguation_rules", []):
-        exceptions = tuple(
-            DisambiguationException(
-                when_present=e["when_present"],
-                add_union_rules=tuple(e["add_union_rules"]),
+    for idx, r in enumerate(data.get("disambiguation_rules", [])):
+        try:
+            exceptions = tuple(
+                DisambiguationExceptionDef(
+                    when_present=e["when_present"],
+                    add_union_rules=tuple(e["add_union_rules"]),
+                )
+                for e in r.get("exceptions", [])
             )
-            for e in r.get("exceptions", [])
-        )
-        rules.append(
-            DisambiguationRuleDef(
-                name=r["name"],
-                order=r["order"],
-                description=r["description"],
-                trigger_traditions=frozenset(r["trigger_traditions"]),
-                trigger_mode=r["trigger_mode"],
-                anchor=r.get("anchor"),
-                primary_tradition=r["primary_tradition"],
-                applied_union_rules=tuple(r["applied_union_rules"]),
-                exceptions=exceptions,
+            rules.append(
+                DisambiguationRuleDef(
+                    name=r["name"],
+                    order=r["order"],
+                    description=r["description"],
+                    trigger_traditions=frozenset(r["trigger_traditions"]),
+                    trigger_mode=r["trigger_mode"],
+                    anchor=r.get("anchor"),
+                    primary_tradition=r["primary_tradition"],
+                    applied_union_rules=tuple(r["applied_union_rules"]),
+                    exceptions=exceptions,
+                )
             )
-        )
+        except (KeyError, TypeError) as exc:
+            name = r.get("name", f"<index {idx}>") if isinstance(r, dict) else f"<index {idx}>"
+            raise RuntimeError(f"Invalid disambiguation_rules entry {name!r}: {exc}") from exc
 
     overlaps: list[CrossTraditionOverlapDef] = []
-    for o in data.get("cross_tradition_overlaps", []):
-        overlaps.append(
-            CrossTraditionOverlapDef(
-                name=o["name"],
-                order=o["order"],
-                description=o["description"],
-                trigger_traditions=frozenset(o["trigger_traditions"]),
-                primary_tradition=o["primary_tradition"],
-                applied_union_rules=tuple(o["applied_union_rules"]),
-                overrides_primary=bool(o.get("overrides_primary", False)),
+    for idx, o in enumerate(data.get("cross_tradition_overlaps", [])):
+        try:
+            overlaps.append(
+                CrossTraditionOverlapDef(
+                    name=o["name"],
+                    order=o["order"],
+                    description=o["description"],
+                    trigger_traditions=frozenset(o["trigger_traditions"]),
+                    primary_tradition=o["primary_tradition"],
+                    applied_union_rules=tuple(o["applied_union_rules"]),
+                    overrides_primary=bool(o.get("overrides_primary", False)),
+                )
             )
-        )
+        except (KeyError, TypeError) as exc:
+            name = o.get("name", f"<index {idx}>") if isinstance(o, dict) else f"<index {idx}>"
+            raise RuntimeError(f"Invalid cross_tradition_overlaps entry {name!r}: {exc}") from exc
 
     rules.sort(key=lambda r: r.order)
     overlaps.sort(key=lambda o: o.order)
@@ -150,7 +162,6 @@ def disambiguate(
         sorted(candidate_names, key=lambda n: (tradition_priority.get(n, 999), n))
     )
 
-    # Phase 1: Sequential rule check (first match wins)
     for rule in sorted(rules, key=lambda r: r.order):
         if _rule_matches(rule, candidate_names):
             primary = rule.primary_tradition
@@ -162,7 +173,6 @@ def disambiguate(
                     trace_parts.append(f"exception_{exc.when_present}")
             break
 
-    # Phase 2: Overlap check (all matching overlaps accumulate)
     for overlap in sorted(overlaps, key=lambda o: o.order):
         if overlap.trigger_traditions.issubset(candidate_names):
             union_rules.extend(overlap.applied_union_rules)
@@ -171,7 +181,6 @@ def disambiguate(
                 primary = overlap.primary_tradition
                 trace_parts.append(f"overlap_primary_{overlap.name}")
 
-    # Phase 3: Fallthrough
     if primary is None:
         primary = sorted_candidates[0]
         trace_parts.append("fallthrough_priority")

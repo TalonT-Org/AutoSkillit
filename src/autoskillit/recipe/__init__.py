@@ -64,6 +64,7 @@ from autoskillit.recipe.io import (  # noqa: E402
 from autoskillit.recipe.loader import parse_recipe_metadata  # noqa: E402
 from autoskillit.recipe.methodology_disambiguation import (  # noqa: E402
     CrossTraditionOverlapDef,
+    DisambiguationExceptionDef,
     DisambiguationResult,
     DisambiguationRuleDef,
     disambiguate,
@@ -203,6 +204,7 @@ __all__ = [
     "is_out_of_scope_tradition",
     "load_all_methodology_traditions",
     "CrossTraditionOverlapDef",
+    "DisambiguationExceptionDef",
     "DisambiguationResult",
     "DisambiguationRuleDef",
     "disambiguate",

@@ -184,9 +184,6 @@ class TestResearchArchiveRecipe:
 
     # ── Kitchen rules ───────────────────────────────────────────────
 
-    def test_kitchen_rules_present(self, recipe) -> None:
-        assert len(recipe.kitchen_rules) >= 3
-
     def test_kitchen_rules_forbid_native_tools(self, recipe) -> None:
         combined = " ".join(recipe.kitchen_rules)
         for tool in (

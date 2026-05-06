@@ -35,6 +35,10 @@ def _write_campaign_state(state_path: Path, dispatches: list[dict]) -> None:
 
 
 class TestDispatchFoodTruckHaltEnforcement:
+    @pytest.fixture(autouse=True)
+    def _set_fleet_session(self, monkeypatch):
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+
     @pytest.mark.anyio
     async def test_dispatch_refuses_after_failure_when_halt_enabled(
         self, tool_ctx, monkeypatch, tmp_path
@@ -192,6 +196,10 @@ class TestDispatchFoodTruckHaltEnforcement:
 
 
 class TestDispatchFoodTruckRetryOnFailure:
+    @pytest.fixture(autouse=True)
+    def _set_fleet_session(self, monkeypatch):
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+
     @pytest.mark.anyio
     async def test_dispatch_resets_and_proceeds_when_retrying_failed_dispatch(
         self, tool_ctx, monkeypatch, tmp_path

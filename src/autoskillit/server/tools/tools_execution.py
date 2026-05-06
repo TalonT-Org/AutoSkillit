@@ -29,6 +29,7 @@ from autoskillit.server import mcp
 from autoskillit.server._guards import (
     _check_dry_walkthrough,
     _require_enabled,
+    _require_fleet,
     _require_orchestrator_or_higher,
     _validate_skill_command,
 )
@@ -677,7 +678,7 @@ async def run_skill(
 
 
 @mcp.tool(
-    tags={"autoskillit", "kitchen", "kitchen-core", "fleet"},
+    tags={"autoskillit", "kitchen-core", "fleet"},
     annotations={"readOnlyHint": True},
 )
 @track_response_size("dispatch_food_truck")
@@ -716,6 +717,8 @@ async def dispatch_food_truck(
     """
     if (gate := _require_enabled()) is not None:
         return gate
+    if (fleet_gate := _require_fleet("dispatch_food_truck")) is not None:
+        return fleet_gate
 
     try:
         # Feature guard: config authority check independent of MCP visibility state.
@@ -733,12 +736,6 @@ async def dispatch_food_truck(
             return fleet_error(
                 FleetErrorCode.FLEET_FEATURE_DISABLED,
                 "Fleet feature is disabled. Set features.experimental_enabled: true to enable.",
-            )
-
-        if os.environ.get("AUTOSKILLIT_HEADLESS") == "1":
-            return fleet_error(
-                FleetErrorCode.FLEET_HARD_REFUSAL_HEADLESS,
-                "dispatch_food_truck cannot be called from headless sessions.",
             )
 
         campaign_state_path_str = os.environ.get("AUTOSKILLIT_CAMPAIGN_STATE_PATH")
@@ -829,7 +826,7 @@ async def dispatch_food_truck(
 
 
 @mcp.tool(
-    tags={"autoskillit", "kitchen", "kitchen-core", "fleet"},
+    tags={"autoskillit", "kitchen-core", "fleet"},
     annotations={"readOnlyHint": True},
 )
 @track_response_size("record_gate_dispatch")
@@ -852,6 +849,8 @@ async def record_gate_dispatch(
     """
     if (gate := _require_enabled()) is not None:
         return gate
+    if (fleet_gate := _require_fleet("record_gate_dispatch")) is not None:
+        return fleet_gate
 
     try:
         from autoskillit.core import FleetErrorCode, fleet_error, is_feature_enabled

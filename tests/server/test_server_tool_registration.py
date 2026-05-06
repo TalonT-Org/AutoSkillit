@@ -40,6 +40,9 @@ class TestToolRegistration:
 
         from autoskillit.server import mcp
 
+        mcp.enable(tags={"fleet"})
+        mcp.enable(tags={"fleet-dispatch"})
+
         async with Client(mcp) as client:
             all_tools = await client.list_tools()
         tool_names = {t.name for t in all_tools}
@@ -130,12 +133,16 @@ class TestToolRegistration:
 
     @pytest.mark.anyio
     async def test_kitchen_tools_have_autoskillit_and_kitchen_tags(self, kitchen_enabled):
-        """Every tool in GATED_TOOLS carries both 'autoskillit' and 'kitchen' tags."""
+        """Every non-fleet tool in GATED_TOOLS carries both 'autoskillit' and 'kitchen' tags."""
+        from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_TOOLS
         from autoskillit.pipeline.gate import GATED_TOOLS
         from autoskillit.server import mcp
 
+        mcp.enable(tags={"fleet"})
+        mcp.enable(tags={"fleet-dispatch"})
+
         all_tools = {t.name: t for t in await mcp.list_tools()}
-        for name in GATED_TOOLS:
+        for name in GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS:
             tool = all_tools.get(name)
             assert tool is not None, f"Gated tool '{name}' not registered on server"
             assert "autoskillit" in tool.tags, f"Gated tool '{name}' missing 'autoskillit' tag"
@@ -214,6 +221,9 @@ class TestToolRegistration:
         from autoskillit.core.types import HEADLESS_TOOLS, PACK_REGISTRY
         from autoskillit.pipeline.gate import GATED_TOOLS
         from autoskillit.server import mcp
+
+        mcp.enable(tags={"fleet"})
+        mcp.enable(tags={"fleet-dispatch"})
 
         all_gated = GATED_TOOLS | HEADLESS_TOOLS
         pack_tags = frozenset(PACK_REGISTRY.keys())
@@ -589,6 +599,9 @@ class TestToolSchemas:
         from fastmcp.client import Client
 
         from autoskillit.server import mcp
+
+        mcp.enable(tags={"fleet"})
+        mcp.enable(tags={"fleet-dispatch"})
 
         async with Client(mcp) as client:
             tools = await client.list_tools()

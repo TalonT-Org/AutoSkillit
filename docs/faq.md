@@ -9,9 +9,11 @@ dry-walkthrough, worktree, test, and PR-review skills. See
 
 ### How many MCP tools does it expose?
 
-48. Four are free range (`open_kitchen`, `close_kitchen`, `disable_quota_guard`, `reload_session`) and 43 are
-kitchen-tagged (gated behind `open_kitchen`). One tool, `test_check`,
-carries the `headless` tag and is revealed only inside headless sessions.
+52. Fifteen are free-range: four always-visible (`open_kitchen`, `close_kitchen`,
+`disable_quota_guard`, `reload_session`) plus eleven fleet tools revealed only in
+fleet sessions via the `fleet`/`fleet-dispatch` tags. The remaining 37 are
+kitchen-tagged (gated behind `open_kitchen`). One kitchen tool, `test_check`,
+also carries the `headless` tag and is revealed only inside headless sessions.
 See [execution/tool-access.md](execution/tool-access.md).
 
 ### How many bundled skills are there?
@@ -32,7 +34,7 @@ and `research`. See [recipes/overview.md](recipes/overview.md).
 
 ### Why are some MCP tools hidden by default?
 
-To keep normal Claude Code sessions clean. The 43 kitchen-tagged tools only
+To keep normal Claude Code sessions clean. The 37 kitchen-tagged tools only
 appear after the orchestrator calls `open_kitchen`. See
 [execution/tool-access.md](execution/tool-access.md).
 

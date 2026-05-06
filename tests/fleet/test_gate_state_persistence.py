@@ -36,6 +36,10 @@ def _init_state(tmp_path: Path, *names: str) -> Path:
 
 
 class TestRecordGateDispatch:
+    @pytest.fixture(autouse=True)
+    def _set_fleet_session(self, monkeypatch):
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+
     @pytest.mark.anyio
     async def test_record_gate_dispatch_writes_success(self, tool_ctx, monkeypatch, tmp_path):
         sp = _init_state(tmp_path, "gate-check", "phase-one")
@@ -124,6 +128,10 @@ class TestRecordGateDispatch:
 
 
 class TestDispatchFoodTruckCampaignState:
+    @pytest.fixture(autouse=True)
+    def _set_fleet_session(self, monkeypatch):
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+
     @pytest.mark.anyio
     async def test_dispatch_food_truck_updates_campaign_state_on_success(
         self, tool_ctx, monkeypatch, tmp_path

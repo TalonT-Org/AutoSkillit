@@ -33,6 +33,22 @@ def main() -> None:
     if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
         sys.exit(0)
 
+    session_type = os.environ.get("AUTOSKILLIT_SESSION_TYPE", "")
+    if session_type and session_type != "fleet":
+        payload = json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": (
+                        f"dispatch_food_truck requires fleet session (current: {session_type})"
+                    ),
+                }
+            }
+        )
+        sys.stdout.write(payload + "\n")
+        sys.exit(0)
+
     # Headless: check if this is dispatch_food_truck
     tool_name: str = data.get("tool_name", "")
     tool = tool_name.split("__")[-1]

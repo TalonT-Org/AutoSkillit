@@ -493,13 +493,17 @@ def test_research_campaign_run_archive_ingredients():
     d = recipe.dispatches[3]
     assert d.name == "run-archive"
     assert set(d.ingredients.keys()) == {
+        "base_branch",
         "worktree_path",
         "research_dir",
         "pr_url",
         "all_diagram_paths",
         "report_path_after_finalize",
     }
+    assert d.ingredients["base_branch"] == "${{ inputs.base_branch }}"
     for key in d.ingredients:
+        if key == "base_branch":
+            continue
         assert d.ingredients[key] == f"${{{{ campaign.{key} }}}}"
 
 

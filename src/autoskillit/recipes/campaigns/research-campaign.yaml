@@ -108,6 +108,7 @@ dispatches:
     recipe: research-archive
     task: "Archive research artifacts and close experiment PR."
     ingredients:
+      base_branch: "${{ inputs.base_branch }}"
       worktree_path: "${{ campaign.worktree_path }}"
       research_dir: "${{ campaign.research_dir }}"
       pr_url: "${{ campaign.pr_url }}"

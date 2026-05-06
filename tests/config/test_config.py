@@ -588,5 +588,6 @@ class TestWorkspaceConfig:
 
     def test_workspace_config_defaults(self, tmp_path):
         cfg = load_config(tmp_path)
+        assert hasattr(cfg, "workspace")
         assert cfg.workspace.worktree_root is None
         assert cfg.workspace.runs_root is None

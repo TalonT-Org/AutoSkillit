@@ -4,7 +4,6 @@ description: >-
   run it, review the results, then archive artifacts. Dispatches to
   research-design, research-implement, research-review, and research-archive
   sub-recipes in sequence.
-autoskillit_version: "0.9.343"
 kind: campaign
 recipe_version: "1.0.0"
 categories:

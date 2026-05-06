@@ -332,7 +332,7 @@ def test_research_campaign_header_fields():
     ]
     assert recipe.continue_on_failure is False
     assert recipe.recipe_version == "1.0.0"
-    assert recipe.version == "0.9.343"
+    assert recipe.version is None
 
 
 def test_research_campaign_ingredients_match_research_yaml():

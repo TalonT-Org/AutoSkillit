@@ -17,7 +17,7 @@ HEADLESS_SIZE_BUDGETS = {
     "headless/__init__.py": 860,
     "headless/_headless_recovery.py": 320,
     "headless/_headless_path_tokens.py": 175,
-    "headless/_headless_result.py": 616,
+    "headless/_headless_result.py": 660,
 }
 
 

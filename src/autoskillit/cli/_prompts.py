@@ -536,6 +536,11 @@ CONTEXT LIMIT ROUTING — run_skill only (check BEFORE on_failure):
     If lifespan_started is true (model made tool calls before the thinking-only final turn),
     follow on_context_limit if defined — partial progress likely exists on disk.
     If lifespan_started is false, fall through to on_failure — no progress was made.
+- When run_skill returns "needs_retry: true" AND "retry_reason: idle_stall":
+  - The stdout idle watchdog killed the session. If lifespan_started is true (tool calls were
+    made before the stall), partial progress likely exists on disk. Follow on_context_limit
+    if defined, fall through to on_failure otherwise.
+  - If lifespan_started is false, fall through to on_failure — no progress was made.
 - When run_skill returns "needs_retry: true" AND "retry_reason: early_stop" or "zero_writes":
   - These are not context limit conditions. Fall through to on_failure.
 - WORKTREE-STALE CARVE-OUT: When the step invokes a worktree-creating skill

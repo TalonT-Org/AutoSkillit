@@ -837,7 +837,7 @@ async def dispatch_food_truck(
                             name=dispatch_name,
                             status=status,
                             dispatch_id=envelope.get("dispatch_id", ""),
-                            dispatched_session_id=envelope.get("l3_session_id", ""),
+                            dispatched_session_id=envelope.get("dispatched_session_id", ""),
                             reason=envelope.get("reason", ""),
                             token_usage=envelope.get("token_usage") or {},
                         ),

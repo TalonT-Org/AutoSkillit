@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.cli._validate import validate_registries
+from autoskillit.recipe import ExperimentTypeSpec
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -177,7 +178,10 @@ class TestValidateRegistries:
     ) -> None:
         """Empty classification_triggers produces ✗ error and exit 1."""
         monkeypatch.chdir(tmp_path)
-        yaml_content = VALID_EXPERIMENT_TYPE.replace("  - trigger_alpha\n  - trigger_beta", "")
+        yaml_content = VALID_EXPERIMENT_TYPE.replace(
+            "classification_triggers:\n  - trigger_alpha\n  - trigger_beta",
+            "classification_triggers: []",
+        )
         _write_yaml(tmp_path, "experiment-types", "empty_triggers.yaml", yaml_content)
 
         with pytest.raises(SystemExit) as exc_info:
@@ -185,7 +189,7 @@ class TestValidateRegistries:
         assert exc_info.value.code == 1
         out = capsys.readouterr().out
         assert "✗" in out
-        assert "classification_triggers" in out
+        assert "classification_triggers is empty" in out
 
     # T_VAL_6: Non-positive priority produces ✗ error and exit 1
     def test_non_positive_priority_error(
@@ -271,7 +275,10 @@ class TestValidateRegistries:
     ) -> None:
         """Empty detection_keywords produces ✗ error and exit 1."""
         monkeypatch.chdir(tmp_path)
-        yaml_content = VALID_METHODOLOGY_TRADITION.replace("  - keyword1\n  - keyword2", "")
+        yaml_content = VALID_METHODOLOGY_TRADITION.replace(
+            "detection_keywords:\n  - keyword1\n  - keyword2",
+            "detection_keywords: []",
+        )
         _write_yaml(tmp_path, "methodology-traditions", "empty_keywords.yaml", yaml_content)
 
         with pytest.raises(SystemExit) as exc_info:
@@ -279,7 +286,7 @@ class TestValidateRegistries:
         assert exc_info.value.code == 1
         out = capsys.readouterr().out
         assert "✗" in out
-        assert "detection_keywords" in out
+        assert "detection_keywords is empty" in out
 
     # T_VAL_11: Error report markdown file has expected structure
     def test_error_report_structure(
@@ -341,8 +348,9 @@ class TestValidateRegistries:
         yaml_err = VALID_EXPERIMENT_TYPE.replace("name: my-test-type\n", "")
         _write_yaml(tmp_path, "experiment-types", "error_type.yaml", yaml_err)
 
-        with pytest.raises(SystemExit):
+        with pytest.raises(SystemExit) as exc_info:
             validate_registries()
+        assert exc_info.value.code == 1
         out = capsys.readouterr().out
         assert "1 valid" in out
         assert "1 warning" in out
@@ -418,3 +426,37 @@ class TestValidateRegistries:
         out = capsys.readouterr().out
         assert "✗" in out
         assert "secondary" in out
+
+    # T_VAL_18: Duplicate is_fallback between user and bundled type is flagged
+    def test_duplicate_fallback_with_bundled_type(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        """User type with is_fallback=True conflicts with a bundled fallback type."""
+        monkeypatch.chdir(tmp_path)
+
+        bundled_fallback = ExperimentTypeSpec(
+            name="bundled-fallback-type",
+            classification_triggers=[],
+            dimension_weights={},
+            applicable_lenses={},
+            red_team_focus={},
+            l1_severity={},
+            is_fallback=True,
+        )
+        monkeypatch.setattr(
+            "autoskillit.cli._validate.load_types_from_dir",
+            lambda _: {"bundled-fallback-type": bundled_fallback},
+        )
+
+        yaml_content = VALID_EXPERIMENT_TYPE + "\nis_fallback: true\n"
+        _write_yaml(tmp_path, "experiment-types", "user_fallback.yaml", yaml_content)
+
+        with pytest.raises(SystemExit) as exc_info:
+            validate_registries()
+        assert exc_info.value.code == 1
+        out = capsys.readouterr().out
+        assert "✗" in out
+        assert "is_fallback" in out

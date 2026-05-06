@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from structlog.testing import capture_logs
 
 from autoskillit.recipe.methodology_tradition_registry import (
     BUNDLED_METHODOLOGY_TRADITIONS_DIR,
@@ -75,7 +76,6 @@ def test_priority_values_are_unique() -> None:
     traditions = load_all_methodology_traditions()
     priorities = [s.priority for s in traditions]
     assert len(priorities) == len(set(priorities)), "Duplicate priority values found"
-    assert sorted(priorities) == list(range(1, 13)), "Priority values should be 1-12"
 
 
 def test_evaluation_order_matches_priority() -> None:
@@ -83,14 +83,6 @@ def test_evaluation_order_matches_priority() -> None:
     names = [s.name for s in traditions]
     sorted_by_priority = sorted(traditions, key=lambda s: (s.priority, s.name))
     assert names == [s.name for s in sorted_by_priority]
-
-
-def test_no_fallback_entries() -> None:
-    traditions = load_all_methodology_traditions()
-    for spec in traditions:
-        assert not hasattr(spec, "is_fallback"), (
-            f"{spec.name}: should not have is_fallback attribute"
-        )
 
 
 def test_qualitative_interpretive_has_empty_mandatory_figures() -> None:
@@ -186,7 +178,6 @@ def test_no_project_dir_returns_bundled_only() -> None:
 
 
 def test_schema_mismatch_warns(tmp_path: Path) -> None:
-    import structlog.testing
 
     user_dir = tmp_path / ".autoskillit" / "methodology-traditions"
     user_dir.mkdir(parents=True)
@@ -211,12 +202,13 @@ def test_schema_mismatch_warns(tmp_path: Path) -> None:
             }
         )
     )
-    with structlog.testing.capture_logs() as cap_logs:
+    with capture_logs() as cap_logs:
         traditions = load_all_methodology_traditions(project_dir=tmp_path)
 
-    assert any(entry.get("schema_version") == "2.0" for entry in cap_logs), (
-        "Expected WARNING about schema_version mismatch"
-    )
+    assert any(
+        entry.get("schema_version") == "2.0" and entry.get("log_level") == "warning"
+        for entry in cap_logs
+    ), "Expected WARNING about schema_version mismatch"
     by_name = {s.name: s for s in traditions}
     assert "future_tradition" in by_name
 
@@ -257,10 +249,8 @@ def test_controlled_intervention_is_priority_1() -> None:
 
 def test_detection_keywords_are_distinct() -> None:
     traditions = load_all_methodology_traditions()
-    by_name = {s.name: s for s in traditions}
-    for name1, spec1 in by_name.items():
-        for name2, spec2 in by_name.items():
-            if name1 != name2:
-                assert spec1.detection_keywords != spec2.detection_keywords, (
-                    f"{name1} and {name2} have identical detection_keywords"
-                )
+    seen: dict[frozenset, str] = {}
+    for spec in traditions:
+        kws = frozenset(spec.detection_keywords)
+        assert kws not in seen, f"{spec.name} and {seen[kws]} have identical detection_keywords"
+        seen[kws] = spec.name

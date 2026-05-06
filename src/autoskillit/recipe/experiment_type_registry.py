@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from autoskillit.core import get_logger, load_yaml, pkg_root
 
@@ -94,7 +95,7 @@ def _load_types_from_dir(directory: Path) -> dict[str, ExperimentTypeSpec]:
     return result
 
 
-def parse_experiment_type(data: dict, source_path: Path) -> ExperimentTypeSpec:
+def parse_experiment_type(data: dict[str, Any], source_path: Path) -> ExperimentTypeSpec:
     return _parse_experiment_type(data, source_path)
 
 

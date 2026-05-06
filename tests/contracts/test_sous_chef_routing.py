@@ -347,3 +347,76 @@ def test_prompts_worktree_stale_carveout() -> None:
     assert "worktree" in prompts_text and "stale" in prompts_text, (
         "_prompts.py must contain a worktree-stale carve-out matching SKILL.md"
     )
+
+
+def test_skill_md_covers_all_prompts_routing_reasons() -> None:
+    """Every RetryReason with a routing rule in _prompts.py must also appear in SKILL.md."""
+    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+    from autoskillit.core.types import RetryReason
+
+    prompt_text = _build_orchestrator_prompt("test-recipe", mcp_prefix=DIRECT_PREFIX)
+    skill_md = _sous_chef_text()
+    routing_section = _extract_routing_section(skill_md)
+
+    for reason in RetryReason:
+        if reason in {
+            RetryReason.NONE,
+            RetryReason.BUDGET_EXHAUSTED,
+            RetryReason.CONTRACT_RECOVERY,
+            RetryReason.CLONE_CONTAMINATION,
+        }:
+            continue
+        if reason.value in prompt_text:
+            assert reason.value in routing_section, (
+                f"{reason.value} has a routing rule in _prompts.py but is missing "
+                f"from SKILL.md CONTEXT LIMIT ROUTING section"
+            )
+
+
+class TestWorktreeEarlyStopCarveout:
+    """SKILL.md routing contract: early_stop must check worktree_path evidence."""
+
+    def test_early_stop_references_worktree_path(self) -> None:
+        skill_md = _sous_chef_text()
+        routing_section = _extract_routing_section(skill_md)
+        idx = routing_section.find("early_stop")
+        assert idx != -1
+        window = routing_section[idx : idx + 500]
+        assert "worktree_path" in window, (
+            "early_stop routing rule must reference worktree_path evidence"
+        )
+
+    def test_early_stop_with_worktree_routes_to_on_context_limit(self) -> None:
+        skill_md = _sous_chef_text()
+        routing_section = _extract_routing_section(skill_md)
+        idx = routing_section.find("early_stop")
+        assert idx != -1
+        window = routing_section[idx : idx + 500]
+        assert "on_context_limit" in window, (
+            "early_stop with worktree_path must route to on_context_limit"
+        )
+
+
+class TestWorktreeZeroWritesCarveout:
+    """SKILL.md routing contract: zero_writes must check worktree_path evidence."""
+
+    def test_zero_writes_references_worktree_path(self) -> None:
+        skill_md = _sous_chef_text()
+        routing_section = _extract_routing_section(skill_md)
+        idx = routing_section.find("zero_writes")
+        assert idx != -1
+        window = routing_section[idx : idx + 500]
+        assert "worktree_path" in window, (
+            "zero_writes routing rule must reference worktree_path evidence"
+        )
+
+    def test_zero_writes_with_worktree_routes_to_on_context_limit(self) -> None:
+        skill_md = _sous_chef_text()
+        routing_section = _extract_routing_section(skill_md)
+        idx = routing_section.find("zero_writes")
+        assert idx != -1
+        window = routing_section[idx : idx + 500]
+        assert "on_context_limit" in window, (
+            "zero_writes with worktree_path must route to on_context_limit"
+        )

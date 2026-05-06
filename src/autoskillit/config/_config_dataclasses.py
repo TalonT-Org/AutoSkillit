@@ -93,7 +93,7 @@ class RunSkillConfig:
     completion_drain_timeout: float = 5.0
     exit_after_stop_delay_ms: int = 2000
     natural_exit_grace_seconds: float = 3.0
-    idle_output_timeout: int = 600
+    idle_output_timeout: int = 1000
     max_suppression_seconds: int = 1800
 
     # Safety margin (ms) above exit_after_stop_delay_ms that

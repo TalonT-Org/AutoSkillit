@@ -58,14 +58,14 @@ class TestTimeoutCoherenceGate:
             "idle_output_timeout_coherence" in entry.get("event", "") for entry in cap_logs
         )
 
-    def test_default_config_triggers_coherence_warning(self, tmp_path):
-        """With default config (idle_output_timeout=600), coherence gate warns about
-        wait_for_merge_queue (default 600s, recipe override 900s)."""
+    def test_default_config_does_not_trigger_coherence_warning(self, tmp_path):
+        """With default config (idle_output_timeout=1000), coherence gate is silent."""
         config_dir = tmp_path / ".autoskillit"
         config_dir.mkdir()
         (config_dir / "config.yaml").write_text("")
         with structlog.testing.capture_logs() as cap_logs:
             cfg = load_config(tmp_path)
-        # Default idle_output_timeout is 600
-        assert cfg.run_skill.idle_output_timeout == 600
-        assert any("idle_output_timeout_coherence" in entry.get("event", "") for entry in cap_logs)
+        assert cfg.run_skill.idle_output_timeout == 1000
+        assert not any(
+            "idle_output_timeout_coherence" in entry.get("event", "") for entry in cap_logs
+        )

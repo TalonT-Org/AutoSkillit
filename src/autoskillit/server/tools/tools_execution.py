@@ -414,7 +414,7 @@ async def run_skill(
             config default (RunSkillConfig.stale_threshold, default 1200s).
         idle_output_timeout: Override the idle stdout kill threshold in seconds.
             0 = disabled for this step. None = use global config
-            (RunSkillConfig.idle_output_timeout, default 600s).
+            (RunSkillConfig.idle_output_timeout, default 1000s).
         resume_session_id: Session ID from a previous run_skill call that was interrupted.
             When set, the session is resumed via --resume instead of starting fresh.
             The skill_command becomes a continuation instruction (non-slash text is allowed).

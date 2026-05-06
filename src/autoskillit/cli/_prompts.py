@@ -27,7 +27,7 @@ _MCP_RETRY_INSTRUCTION: str = (
 
 
 def _read_full_sous_chef() -> str:
-    """Read the full sous-chef SKILL.md for injection into L1/L3 orchestration sessions."""
+    """Read the full sous-chef SKILL.md for injection into L1/L2 orchestration sessions."""
     path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
     try:
         return path.read_text()
@@ -113,7 +113,7 @@ def _build_fleet_campaign_prompt(
     """Build the system prompt for an L3 campaign dispatcher headless session.
 
     Assembles a 10-section prompt that instructs a headless Claude session to
-    sequentially dispatch food trucks (L3 sessions), handle failures, respect
+    sequentially dispatch food trucks (L2 sessions), handle failures, respect
     quota, resume from prior state, and emit structured campaign-summary and
     progress markers.
     """
@@ -143,7 +143,7 @@ def _build_fleet_campaign_prompt(
 
 When you reach a dispatch with `gate: confirm` in the manifest:
 
-1. Do NOT call `{mcp_prefix}dispatch_food_truck`. Gate dispatches spawn no L3 session.
+1. Do NOT call `{mcp_prefix}dispatch_food_truck`. Gate dispatches spawn no L2 session.
 2. Call `AskUserQuestion` with the dispatch's `message` field as the question text.
 3. Evaluate the response:
    - Affirmative (yes / proceed / approve / confirm): call `{mcp_prefix}record_gate_dispatch`
@@ -156,7 +156,7 @@ When you reach a dispatch with `gate: confirm` in the manifest:
 
 In the campaign summary, for gate dispatch entries:
 - Set `status` to `success` or `failure` based on user response.
-- Set `l3_session_id` to `""` (no L3 session was spawned).
+- Set `l3_session_id` to `""` (no food truck session was spawned).
 - Set `elapsed_seconds` to the wall-clock time for the question/response exchange.
 - Set all `token_usage` fields to 0.
 """
@@ -183,7 +183,7 @@ dispatch name NOT listed above.
     if resumable_dispatch_name:
         _resume_session_line = (
             f'and pass resume_session_id="{resume_session_id}" to dispatch_food_truck'
-            " so the L3 session resumes from its prior context"
+            " so the L2 food truck session resumes from its prior context"
             if resume_session_id
             else ""
         )
@@ -235,7 +235,7 @@ The fleet_lock semaphore uses max_concurrent=1 for static dispatches — do NOT 
 static manifest calls in parallel. For dynamic dispatches (see the dynamic dispatch
 instructions section when present), `parallel: true` groups override this rule.
 
-Each dispatch is an independent L3 session with its own kitchen context. There is NO
+Each dispatch is an independent L2 food truck session with its own kitchen context. There is NO
 cross-dispatch state sharing managed by you — the runtime handles it
 via capture:. There is NO cross-dispatch token aggregation.
 
@@ -269,8 +269,8 @@ dispatch_food_truck(
 ```
 
 If a dispatch has no `capture:` field, pass `capture={{}}` or omit the parameter.
-The `${{{{ campaign.* }}}}` references in ingredients are resolved before the L3 session
-is started — the L3 agent always receives concrete values.
+The `${{{{ campaign.* }}}}` references in ingredients are resolved before the L2 session
+is started — the L2 food truck agent always receives concrete values.
 {gate_section}{dynamic_dispatch_section}
 ## FAILURE RECOVERY
 
@@ -735,7 +735,7 @@ You are a fleet dispatcher. You coordinate recipe execution across targets \
 by dispatching food trucks.
 
 TOOL SURFACE — these 10 tools are available in this session:
-- {mcp_prefix}dispatch_food_truck     — launch a headless L3 food truck for a recipe
+- {mcp_prefix}dispatch_food_truck     — launch a headless L2 food truck for a recipe
 - {mcp_prefix}batch_cleanup_clones    — clean up clone artifacts after all dispatches
 - {mcp_prefix}get_pipeline_report     — pipeline execution report
 - {mcp_prefix}get_token_summary       — token usage summary

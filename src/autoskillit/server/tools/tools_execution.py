@@ -455,7 +455,7 @@ async def run_skill(
 
         # Auto-enrich order_id from the fleet dispatcher's env variable when the
         # caller did not pass an explicit value. AUTOSKILLIT_DISPATCH_ID is injected
-        # by fleet/_api.py into every L3 session environment and inherited by all
+        # by fleet/_api.py into every L2 food truck session environment and inherited by all
         # sub-sessions, ensuring token log entries carry the correct order_id without
         # requiring recipe authors to thread it through every run_skill call.
         effective_order_id = order_id or os.environ.get("AUTOSKILLIT_DISPATCH_ID", "")
@@ -693,7 +693,7 @@ async def dispatch_food_truck(
     idle_output_timeout: int | None = None,
     ctx: Context = CurrentContext(),
 ) -> str:
-    """Dispatch a single food truck L3 session for one recipe.
+    """Dispatch a single food truck L2 session for one recipe.
 
     Spawns a headless subprocess that executes the given recipe with the
     provided task and ingredient overrides. Returns a JSON envelope with
@@ -701,10 +701,10 @@ async def dispatch_food_truck(
 
     Args:
         recipe: Recipe name to dispatch (must be kind=standard).
-        task: Task description for the L3 session.
+        task: Task description for the L2 food truck session.
         ingredients: Optional ingredient overrides (all values must be strings).
         dispatch_name: Optional display name for the dispatch record.
-        timeout_sec: Optional L3 session timeout override in seconds.
+        timeout_sec: Optional L2 session timeout override in seconds.
         capture: Optional dict mapping capture keys to "${{ result.field }}" templates.
             Extracted values are persisted in the campaign context for downstream
             dispatches to reference via "${{ campaign.key }}" in their ingredients.

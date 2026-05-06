@@ -45,7 +45,7 @@ def main() -> None:
                     "permissionDecisionReason": (
                         "dispatch_food_truck cannot be called from headless sessions. "
                         "This tool is only available to interactive callers (cook). "
-                        "Headless dispatch would create recursive L3 sessions."
+                        "Headless dispatch would create recursive L2 (food truck) sessions."
                     ),
                 }
             }

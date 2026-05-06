@@ -244,7 +244,7 @@ class SkillResult:
     """
     last_stop_reason: str = ""
     lifespan_started: bool = False
-    """True when the L3 session invoked at least one MCP tool (heuristic for server lifespan)."""
+    """True when the headless session called an MCP tool (heuristic for server lifespan)."""
     provider_used: str = field(default="")
     """Provider identifier stamped by _build_skill_result (e.g. 'anthropic', 'vertex')."""
     provider_fallback: bool = False

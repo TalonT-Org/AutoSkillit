@@ -364,7 +364,7 @@ class SessionType(StrEnum):
         L3 (FLEET) -> L2 (ORCHESTRATOR) -> L1 (headless worker) -> L0 (subagent)
 
     FLEET        -- L3: top-level campaign dispatcher.
-                    Launches L3 food trucks via dispatch_food_truck.
+                    Launches L2 food trucks via dispatch_food_truck.
     ORCHESTRATOR -- L2: recipe runner (interactive via order, or headless food truck).
                     Launches L1 headless workers via run_skill.
     SKILL        -- L1 skill session (headless worker launched by an orchestrator via

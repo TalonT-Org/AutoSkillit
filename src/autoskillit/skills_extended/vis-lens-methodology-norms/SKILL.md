@@ -29,6 +29,12 @@ hooks:
 - **experiment_plan_path** (optional positional arg 2) — Absolute path to the full
   experiment plan. If provided, read for complete experimental methodology and design.
   If omitted, locate the experiment plan by exploring the CWD.
+- **tradition_slug** (in context file) — When the context file contains a
+  `## Methodology Tradition` section with a `tradition_slug` field, use that
+  tradition directly instead of auto-detecting the ML sub-area in Step 0.
+  The tradition slug maps to a bundled tradition YAML in
+  `recipes/methodology-traditions/{slug}.yaml` which defines mandatory figures,
+  anti-patterns, and community norms for that research methodology.
 
 ## When to Use
 
@@ -84,12 +90,16 @@ overlays. The base lens should remain general enough to bootstrap any sub-area.
 
 ## Analysis Workflow
 
-### Step 0: Parse optional arguments and identify ML sub-area
+### Step 0: Parse optional arguments and identify methodology tradition
 
-If positional arg 1 (context_path) is provided and the file exists, read it to obtain
-IV/DV tables, H0/H1 hypotheses, controlled variables, and success criteria. If positional
-arg 2 (experiment_plan_path) is provided and exists, read the experiment plan for full
-methodology.
+If positional arg 1 (context_path) is provided and the file exists, read it. Check for
+a `## Methodology Tradition` section containing `tradition_slug`. If present:
+- Load the tradition YAML from `recipes/methodology-traditions/{tradition_slug}.yaml`
+- Use the tradition's `mandatory_figures`, `strongly_expected_figures`, and `anti_patterns`
+  as the norm source (instead of the ML Sub-Area table above)
+- Skip ML sub-area keyword detection — the tradition replaces it
+
+If no `tradition_slug` is provided, fall back to ML sub-area keyword detection:
 
 Identify the ML sub-area by scanning for keywords:
 - `classification`, `clf`, `precision`, `recall`, `confusion_matrix` → Supervised Classification

@@ -108,3 +108,9 @@ def test_frontmatter_activate_deps(slug: str) -> None:
     assert fm.get("activate_deps") == ["mermaid"], (
         f"vis-lens-{slug} frontmatter must have activate_deps: [mermaid]"
     )
+
+
+def test_methodology_norms_documents_tradition_slug() -> None:
+    """vis-lens-methodology-norms must document tradition_slug in context file handling."""
+    text = _read("methodology-norms")
+    assert "tradition_slug" in text

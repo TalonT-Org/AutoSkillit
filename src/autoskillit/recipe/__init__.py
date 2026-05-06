@@ -71,6 +71,11 @@ from autoskillit.recipe.methodology_tradition_registry import (  # noqa: E402
     load_traditions_from_dir,
     parse_methodology_tradition,
 )
+from autoskillit.recipe.methodology_tradition_router import (  # noqa: E402
+    TraditionRouterResult,
+    UnionRuleDef,
+    classify_methodology,
+)
 from autoskillit.recipe.repository import DefaultRecipeRepository  # noqa: E402
 from autoskillit.recipe.rules import rules_actions as _rules_actions  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_blocks as _rules_blocks  # noqa: E402 F401
@@ -190,6 +195,11 @@ __all__ = [
     "get_methodology_tradition_by_name",
     "is_out_of_scope_tradition",
     "load_all_methodology_traditions",
+    # --- methodology tradition router ---
+    "TraditionRouterResult",
+    "UnionRuleDef",
+    "classify_methodology",
+    # --- rerun detection ---
     "check_rerun_detection",
     "find_prior_runs",
     "CampaignDispatch",

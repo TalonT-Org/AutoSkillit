@@ -797,7 +797,7 @@ async def dispatch_food_truck(
             SessionCheckpoint.from_dict(resume_checkpoint) if resume_checkpoint else None
         )
         tool_ctx = _get_ctx()
-        from autoskillit.core.runtime.kitchen_state import find_caller_session_id
+        from autoskillit.core import find_caller_session_id
 
         caller_session_id = find_caller_session_id(project_dir=tool_ctx.project_dir)
         result = await execute_dispatch(

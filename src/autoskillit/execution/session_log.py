@@ -465,10 +465,7 @@ def flush_session_log(
 
     # Co-write session provenance record
     if cwd:
-        from autoskillit.core.runtime.session_provenance import (
-            ProvenanceRecord,
-            write_provenance_record,
-        )
+        from autoskillit.core import ProvenanceRecord, write_provenance_record
 
         write_provenance_record(
             ProvenanceRecord(

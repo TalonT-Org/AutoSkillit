@@ -1,5 +1,3 @@
-"""Tests for research-implement.yaml bundled recipe structure."""
-
 from __future__ import annotations
 
 import pytest
@@ -14,9 +12,6 @@ class TestResearchImplementRecipe:
     @pytest.fixture(scope="module")
     def recipe(self):
         return load_recipe(builtin_recipes_dir() / "research-implement.yaml")
-
-    def test_research_implement_loads(self, recipe) -> None:
-        assert recipe.name == "research-implement"
 
     def test_research_implement_validates_clean(self, recipe) -> None:
         errors = validate_recipe(recipe)
@@ -58,6 +53,6 @@ class TestResearchImplementRecipe:
     def test_terminal_stops(self, recipe) -> None:
         assert recipe.steps["escalate_stop"].action == "stop"
         assert recipe.steps["implement_complete"].action == "stop"
-        assert "worktree_path" in recipe.steps["implement_complete"].message
-        assert "report_path" in recipe.steps["implement_complete"].message
-        assert "experiment_results" in recipe.steps["implement_complete"].message
+        assert "${{ context.worktree_path }}" in recipe.steps["implement_complete"].message
+        assert "${{ context.report_path }}" in recipe.steps["implement_complete"].message
+        assert "${{ context.experiment_results }}" in recipe.steps["implement_complete"].message

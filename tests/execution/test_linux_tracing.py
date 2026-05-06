@@ -305,7 +305,6 @@ def test_proc_snapshot_has_captured_at_field():
     snap = read_proc_snapshot(os.getpid())
     assert snap is not None
     assert hasattr(snap, "captured_at")
-    assert snap.captured_at  # non-empty
     # Must be UTC-aware ISO 8601
     dt = datetime.fromisoformat(snap.captured_at)
     assert dt.tzinfo is not None

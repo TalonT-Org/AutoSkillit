@@ -45,4 +45,15 @@ anti_patterns:
     reason: "Control chart rules detect special cause variation; without them, signals cannot be distinguished from noise"
   - pattern: "Confusing QI with research"
     reason: "QI aims to improve local processes; research aims to generate generalizable knowledge"
-venue_specific_appendices: []
+venue_specific_appendices:
+  - sub_area: agentic_systems
+    trigger_keywords:
+      - process improvement
+      - workflow optimization
+      - task efficiency
+      - error reduction
+    expectations:
+      - figure: "Run Chart for Agent Performance"
+        source: "SQUIRE 2.0"
+      - figure: "Process Map for Task Workflow"
+        source: "Lean methodology"

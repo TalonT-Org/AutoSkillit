@@ -50,6 +50,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_methodology_tradition_registry.py` | Tests for `MethodologyTraditionSpec`, `load_all_methodology_traditions`, and `is_out_of_scope_tradition` |
 | `test_methodology_disambiguation.py` | Tests for `DisambiguationRuleDef`, `CrossTraditionOverlapDef`, `DisambiguationResult`, `disambiguate`, and `load_disambiguation_rules` |
 | `test_methodology_tradition_router.py` | Tests for `classify_methodology` two-stage Tier-C router: per-tradition classification, multi-match, union rules, determinism |
+| `test_methodology_venue_appendix.py` | Tests for Stage B venue appendix resolution: folding map, conditional branching, constraint evaluation |
 | `test_merge_prs.py` | Tests for merge-prs recipe structure |
 | `test_merge_prs_queue_any.py` | Tests for merge-prs-queue (any strategy) recipe |
 | `test_merge_prs_queue_common.py` | Shared queue behavior tests across all queue-capable recipes |

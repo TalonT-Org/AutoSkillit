@@ -114,3 +114,11 @@ def test_methodology_norms_documents_tradition_slug() -> None:
     """vis-lens-methodology-norms must document tradition_slug in context file handling."""
     text = _read("methodology-norms")
     assert "tradition_slug" in text
+
+
+def test_methodology_norms_documents_two_stage_matching() -> None:
+    """vis-lens-methodology-norms must document Stage A and Stage B two-stage matching."""
+    text = _read("methodology-norms")
+    assert "Stage A" in text or "stage A" in text
+    assert "Stage B" in text or "stage B" in text
+    assert "venue_specific_appendices" in text or "venue appendix" in text

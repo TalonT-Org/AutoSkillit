@@ -1,0 +1,140 @@
+schema_version: "1.0"
+
+ml_sub_area_folding:
+  - sub_area: foundation_models
+    display_name: "Foundation Models"
+    primary_parent: method_comparison_benchmarking
+    alternate_parents:
+      - parent: prediction_model_validation
+        trigger_keywords:
+          - calibration
+          - held-out
+          - few-shot scaling
+          - zero-shot validation
+      - parent: measurement_instrument_validation_tradition
+        trigger_keywords:
+          - psychometric
+          - latent trait
+          - item response theory
+          - Cronbach
+        constraint: only_if_explicit_construct_measurement
+
+  - sub_area: reinforcement_learning
+    display_name: "Reinforcement Learning"
+    primary_parent: method_comparison_benchmarking
+    alternate_parents:
+      - parent: simulation_modeling_tradition
+        trigger_keywords:
+          - multi-agent
+          - emergent behavior
+          - population dynamics
+          - swarm
+      - parent: prediction_model_validation
+        trigger_keywords:
+          - policy evaluation
+          - held-out task
+          - sample efficiency
+
+  - sub_area: supervised_classification
+    display_name: "Supervised Classification"
+    primary_parent: method_comparison_benchmarking
+    alternate_parents:
+      - parent: diagnostic_accuracy
+        trigger_keywords:
+          - medical imaging
+          - radiology
+          - pathology
+          - sensitivity
+          - specificity
+      - parent: prediction_model_validation
+        trigger_keywords:
+          - patient outcome
+          - prognosis
+          - risk prediction
+          - clinical decision
+
+  - sub_area: nlp
+    display_name: "NLP"
+    primary_parent: method_comparison_benchmarking
+    alternate_parents:
+      - parent: prediction_model_validation
+        trigger_keywords:
+          - clinical NLP
+          - risk scoring
+          - patient outcome
+          - clinical text
+      - parent: qualitative_interpretive_tradition
+        trigger_keywords:
+          - discourse analysis
+          - conversation analysis
+          - narrative
+          - thematic
+
+  - sub_area: computer_vision
+    display_name: "Computer Vision"
+    primary_parent: method_comparison_benchmarking
+    alternate_parents:
+      - parent: diagnostic_accuracy
+        trigger_keywords:
+          - medical imaging
+          - radiology
+          - pathology
+          - sensitivity
+          - specificity
+      - parent: prediction_model_validation
+        trigger_keywords:
+          - patient outcome
+          - prognosis
+          - clinical decision
+          - imaging biomarker
+
+  - sub_area: generative_models
+    display_name: "Generative Models"
+    primary_parent: method_comparison_benchmarking
+    alternate_parents:
+      - parent: measurement_instrument_validation_tradition
+        trigger_keywords:
+          - human evaluation instrument
+          - inter-rater
+          - construct validity
+          - scale development
+      - parent: qualitative_interpretive_tradition
+        trigger_keywords:
+          - human evaluation
+          - qualitative assessment
+          - expert rating
+          - content analysis
+
+  - sub_area: agentic_systems
+    display_name: "Agentic Systems"
+    primary_parent: method_comparison_benchmarking
+    alternate_parents:
+      - parent: simulation_modeling_tradition
+        trigger_keywords:
+          - multi-agent
+          - emergent behavior
+          - agent-based model
+          - swarm intelligence
+      - parent: quality_improvement
+        trigger_keywords:
+          - process improvement
+          - workflow optimization
+          - task efficiency
+          - error reduction
+
+  - sub_area: time_series
+    display_name: "Time-Series"
+    primary_parent: method_comparison_benchmarking
+    alternate_parents:
+      - parent: prediction_model_validation
+        trigger_keywords:
+          - clinical forecasting
+          - patient trajectory
+          - risk prediction
+          - mortality prediction
+      - parent: simulation_modeling_tradition
+        trigger_keywords:
+          - dynamical system
+          - differential equation
+          - compartmental model
+          - system dynamics

@@ -73,6 +73,7 @@ from autoskillit.recipe.methodology_disambiguation import (  # noqa: E402
 from autoskillit.recipe.methodology_tradition_registry import (  # noqa: E402
     BUNDLED_METHODOLOGY_TRADITIONS_DIR,
     MethodologyTraditionSpec,
+    VenueAppendixDef,
     get_methodology_tradition_by_name,
     is_out_of_scope_tradition,
     load_all_methodology_traditions,
@@ -83,6 +84,13 @@ from autoskillit.recipe.methodology_tradition_router import (  # noqa: E402
     TraditionRouterResult,
     UnionRuleDef,
     classify_methodology,
+)
+from autoskillit.recipe.methodology_venue_appendix import (  # noqa: E402
+    AlternateParentDef,
+    MLSubAreaFoldingDef,
+    VenueAppendixMatch,
+    load_ml_sub_area_folding,
+    resolve_venue_appendices,
 )
 from autoskillit.recipe.repository import DefaultRecipeRepository  # noqa: E402
 from autoskillit.recipe.rules import rules_actions as _rules_actions  # noqa: E402 F401
@@ -203,6 +211,12 @@ __all__ = [
     "get_methodology_tradition_by_name",
     "is_out_of_scope_tradition",
     "load_all_methodology_traditions",
+    "VenueAppendixDef",
+    "AlternateParentDef",
+    "MLSubAreaFoldingDef",
+    "VenueAppendixMatch",
+    "load_ml_sub_area_folding",
+    "resolve_venue_appendices",
     "CrossTraditionOverlapDef",
     "DisambiguationExceptionDef",
     "DisambiguationResult",

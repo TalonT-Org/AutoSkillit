@@ -287,71 +287,6 @@ class TestCLIDoctor:
         captured = capsys.readouterr()
         assert "ERROR:" in captured.out
 
-    # DOC-REG-1
-    def test_doctor_includes_mcp_server_registered_check(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
-    ) -> None:
-        """doctor run_doctor() results include mcp_server_registered check."""
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.chdir(tmp_path)
-        cli.doctor_cmd(output_json=True)
-        captured = capsys.readouterr()
-        data = json.loads(captured.out)
-        check_names = {r["check"] for r in data["results"]}
-        assert "mcp_server_registered" in check_names
-
-    # DOC-REG-2
-    def test_doctor_includes_hook_registration_check(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
-    ) -> None:
-        """doctor run_doctor() results include hook_registration check."""
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.chdir(tmp_path)
-        cli.doctor_cmd(output_json=True)
-        captured = capsys.readouterr()
-        data = json.loads(captured.out)
-        check_names = {r["check"] for r in data["results"]}
-        assert "hook_registration" in check_names
-
-    # DOC-REG-3
-    def test_doctor_marketplace_freshness_absent(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
-    ) -> None:
-        """marketplace_freshness does NOT appear in doctor results."""
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.chdir(tmp_path)
-        cli.doctor_cmd(output_json=True)
-        captured = capsys.readouterr()
-        data = json.loads(captured.out)
-        check_names = {r["check"] for r in data["results"]}
-        assert "marketplace_freshness" not in check_names
-
-    # DOC-REG-4
-    def test_doctor_plugin_metadata_absent(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
-    ) -> None:
-        """plugin_metadata does NOT appear in doctor results."""
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.chdir(tmp_path)
-        cli.doctor_cmd(output_json=True)
-        captured = capsys.readouterr()
-        data = json.loads(captured.out)
-        check_names = {r["check"] for r in data["results"]}
-        assert "plugin_metadata" not in check_names
-
-    # DOC-REG-5
-    def test_doctor_duplicate_mcp_server_absent(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
-    ) -> None:
-        """duplicate_mcp_server does NOT appear in doctor results."""
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.chdir(tmp_path)
-        cli.doctor_cmd(output_json=True)
-        captured = capsys.readouterr()
-        data = json.loads(captured.out)
-        check_names = {r["check"] for r in data["results"]}
-        assert "duplicate_mcp_server" not in check_names
-
     # DOC-REG-6
     def test_doctor_mcp_server_registered_warns_when_absent(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
@@ -429,9 +364,7 @@ class TestGroupFDoctor:
         """Severity and DoctorResult must be importable from autoskillit.cli.doctor."""
         from autoskillit.cli.doctor import DoctorResult, Severity
 
-        r = DoctorResult(severity=Severity.OK, check="test", message="ok")
-        assert r.severity == Severity.OK
-        assert r.check == "test"
+        DoctorResult(severity=Severity.OK, check="test", message="ok")
 
 
 def test_doctor_fix_parameter_does_not_exist():

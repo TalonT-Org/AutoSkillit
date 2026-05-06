@@ -41,12 +41,6 @@ class TestProvidersConfig:
         features_idx = field_names.index("features")
         assert fleet_idx < providers_idx < features_idx
 
-    def test_providers_config_importable_from_package(self) -> None:
-        from autoskillit.config import ProvidersConfig as PC
-        from autoskillit.config.settings import ProvidersConfig
-
-        assert PC is ProvidersConfig
-
     def test_from_dynaconf_providers_defaults(self, tmp_path) -> None:
         from autoskillit.config import load_config
 

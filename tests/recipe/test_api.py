@@ -730,7 +730,7 @@ def test_path_mtime_ns_exists_and_old_helpers_removed() -> None:
 
 def test_compute_registry_hash_changes_on_mtime(tmp_path: Path) -> None:
     """Registry hash changes when a YAML file's mtime changes."""
-    import time
+    import os
 
     from autoskillit.recipe._api import _compute_registry_hash
 
@@ -740,8 +740,9 @@ def test_compute_registry_hash_changes_on_mtime(tmp_path: Path) -> None:
     f.write_text("name: test\n")
     h1 = _compute_registry_hash(d)
 
-    time.sleep(0.01)
-    f.write_text("name: test\n")  # same content, new mtime
+    f.write_text("name: test\n")  # same content
+    stat = f.stat()
+    os.utime(f, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))  # +1 second
     h2 = _compute_registry_hash(d)
 
     assert h1 != h2

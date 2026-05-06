@@ -48,6 +48,25 @@ class TestPreCommitConfig:
             "test_architecture.py relies on this rule being enforced by ruff at pre-commit time"
         )
 
+    def test_sub_claude_md_hook_present(self):
+        """pre-commit config must include a sub-CLAUDE.md completeness check hook.
+
+        Without this, agents can commit new .py files without updating the
+        directory's CLAUDE.md file table, causing CI test failures.
+        """
+        config = yaml.safe_load(PRECOMMIT_CONFIG.read_text())
+        hooks = [hook for repo in config.get("repos", []) for hook in repo.get("hooks", [])]
+        sub_claude_hooks = [h for h in hooks if "check_sub_claude_md" in h.get("entry", "")]
+        assert sub_claude_hooks, (
+            "Missing 'check-sub-claude-md' hook in .pre-commit-config.yaml — "
+            "add it to catch sub-CLAUDE.md coverage gaps before CI"
+        )
+        hook = sub_claude_hooks[0]
+        assert hook.get("pass_filenames") is False, (
+            "check-sub-claude-md hook must use pass_filenames: false — "
+            "the script does its own filesystem scan"
+        )
+
 
 class TestCIWorkflow:
     def test_lockfile_check_present_in_workflow(self):

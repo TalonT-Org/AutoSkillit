@@ -124,15 +124,6 @@ steps:
       all_diagram_paths: "${{ result.diagram_path }}"
     on_success: stage_bundle
     on_failure: stage_bundle
-    note: >
-      LENS ITERATION: context.selected_lenses contains comma-separated lens slugs
-      (e.g. "fair-comparison,estimand-clarity"). context.lens_context_paths contains
-      the corresponding comma-separated context file paths. For each lens slug, run:
-        /autoskillit:exp-lens-{slug} {matching_context_path} ${{ context.experiment_plan }}
-      Run all selected lenses in parallel (multiple run_skill calls in a single
-      assistant message). Accumulate each diagram_path value into context.all_diagram_paths
-      using comma separation via capture_list. If a lens fails, continue with remaining
-      lenses — partial diagrams are acceptable (compose_research_pr handles empty lists).
 
   stage_bundle:
     tool: run_cmd
@@ -329,9 +320,11 @@ steps:
     note: >
       Targeted re-run of affected benchmarks after review resolution applied
       code fixes. Uses --adjust to read previous results and re-run only what
-      changed. Captures the updated results_path so re_generate_report uses the
-      new results. on_failure falls through to push as best-effort — the code
-      fixes from resolve are already committed and should still be pushed.
+      changed. Intentionally shadows the experiment_results ingredient (L58):
+      after this step, context.experiment_results holds the re-run results_path
+      so re_generate_report uses fresh data. on_failure falls through to push
+      as best-effort — the code fixes from resolve are already committed and
+      should still be pushed.
 
   re_generate_report:
     tool: run_skill
@@ -349,8 +342,10 @@ steps:
     note: >
       Re-generate the research report with updated benchmark results from the
       re-validation run. Passes context.experiment_results which was updated
-      by re_run_experiment to point to the new results file. Falls through to
-      push on failure.
+      by re_run_experiment to point to the new results file. Intentionally
+      shadows the report_path ingredient (L52): after this step,
+      context.report_path holds the regenerated path so downstream steps
+      receive the updated report. Falls through to push on failure.
 
   re_stage_bundle:
     tool: run_cmd
@@ -385,7 +380,7 @@ steps:
       cmd: "cd '${{ context.worktree_path }}' && git push"
       cwd: "${{ context.worktree_path }}"
       step_name: re_push_research
-    on_success: finalize_bundle_render
+    on_success: finalize_bundle
     on_failure: escalate_stop
 
   # --- FINALIZE + EXPORT PHASE ---
@@ -461,7 +456,7 @@ steps:
       success=true, pr_url=${{ context.pr_url }},
       report_path_after_finalize=${{ context.report_path_after_finalize }},
       worktree_path=${{ context.worktree_path }},
-      research_dir=${{ inputs.research_dir }}.
+      research_dir=${{ context.research_dir }}.
       Example sentinel:
       {"success": true, "pr_url": "<url>", "report_path_after_finalize": "<path>",
       "worktree_path": "<path>", "research_dir": "<path>"}

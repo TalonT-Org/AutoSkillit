@@ -116,15 +116,10 @@ class TestResearchReviewRecipe:
         assert recipe.steps["escalate_stop"].action == "stop"
 
     # --- Key routing adaptations ---
-    def test_prepare_research_pr_uses_context_worktree_path(self) -> None:
-        path = builtin_recipes_dir() / "research-review.yaml"
-        content = path.read_text()
-        # prepare_research_pr should reference context.worktree_path in skill_command and cwd
-        lines_with_ctx_wt = [
-            line for line in content.splitlines() if "context.worktree_path" in line
-        ]
-        # context.worktree_path should appear at least twice (skill_command + cwd)
-        assert len(lines_with_ctx_wt) >= 2
+    def test_prepare_research_pr_uses_context_worktree_path(self, recipe) -> None:
+        step = recipe.steps["prepare_research_pr"]
+        assert "context.worktree_path" in step.with_args.get("skill_command", "")
+        assert step.with_args.get("cwd") == "${{ context.worktree_path }}"
 
     def test_finalize_bundle_routes_to_finalize_bundle_render(self, recipe) -> None:
         step = recipe.steps["finalize_bundle"]
@@ -154,9 +149,9 @@ class TestResearchReviewRecipe:
         assert len(fallback) == 1
         assert fallback[0].route == "review_pr_complete"
 
-    def test_re_push_research_routes_to_finalize_bundle_render(self, recipe) -> None:
+    def test_re_push_research_routes_to_finalize_bundle(self, recipe) -> None:
         step = recipe.steps["re_push_research"]
-        assert step.on_success == "finalize_bundle_render"
+        assert step.on_success == "finalize_bundle"
 
     # --- Negative guards ---
     def test_no_archival_steps(self, recipe) -> None:

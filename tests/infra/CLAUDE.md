@@ -40,6 +40,7 @@ CI/CD configuration, security, guard coverage, and release sanity tests.
 | `test_pretty_output_recipe.py` | Tests: pretty_output token/timing, load_recipe, list_recipes, open_kitchen, deduplication |
 | `test_pyproject_bounds.py` | Tests for pyproject.toml version lower bounds |
 | `test_pyproject_metadata.py` | Verify pyproject.toml contains required public release metadata |
+| `test_resume_ownership_guard.py` | Tests for resume_ownership_guard.py PreToolUse hook — ownership validation at resume |
 | `test_release_sanity.py` | Release-readiness sanity checks |
 | `test_release_workflows.py` | Structural contract tests for the release CI workflows |
 | `test_remove_clone_guard.py` | Tests for the remove_clone_guard PreToolUse hook |

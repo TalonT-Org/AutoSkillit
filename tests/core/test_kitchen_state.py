@@ -187,3 +187,99 @@ def test_sweep_stale_markers_scoped_to_namespace(tmp_path, monkeypatch):
 
     # campaign-b marker untouched
     assert (dir_b / "fresh.json").exists()
+
+
+# --- find_caller_session_id ---
+
+
+def test_find_caller_session_id_returns_empty_when_no_dir(tmp_path, monkeypatch):
+    from autoskillit.core.runtime.kitchen_state import find_caller_session_id
+
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
+    result = find_caller_session_id()
+    assert result == ""
+
+
+def test_find_caller_session_id_returns_empty_when_dir_empty(tmp_path, monkeypatch):
+    from autoskillit.core.runtime.kitchen_state import find_caller_session_id
+
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
+    (tmp_path / "kitchen_state").mkdir()
+    result = find_caller_session_id()
+    assert result == ""
+
+
+def test_find_caller_session_id_returns_fresh_marker(tmp_path, monkeypatch):
+    from autoskillit.core.runtime.kitchen_state import find_caller_session_id, write_marker
+
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
+    write_marker("sess-abc", "recipe-1")
+    result = find_caller_session_id()
+    assert result == "sess-abc"
+
+
+def test_find_caller_session_id_picks_freshest_by_mtime(tmp_path, monkeypatch):
+    import time
+
+    from autoskillit.core.runtime.kitchen_state import find_caller_session_id, write_marker
+
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
+    write_marker("sess-old", "recipe-1")
+    time.sleep(0.05)
+    write_marker("sess-new", "recipe-2")
+    result = find_caller_session_id()
+    assert result == "sess-new"
+
+
+def test_find_caller_session_id_skips_stale_markers(tmp_path, monkeypatch):
+    from datetime import UTC, datetime, timedelta
+
+    from autoskillit.core.runtime.kitchen_state import find_caller_session_id
+
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
+    state_dir = tmp_path / "kitchen_state"
+    state_dir.mkdir()
+    stale_time = (datetime.now(UTC) - timedelta(hours=25)).isoformat()
+    (state_dir / "stale-sess.json").write_text(
+        json.dumps(
+            {
+                "session_id": "stale-sess",
+                "opened_at": stale_time,
+                "recipe_name": "r",
+                "marker_version": 1,
+            }
+        )
+    )
+    result = find_caller_session_id()
+    assert result == ""
+
+
+def test_find_caller_session_id_uses_state_dir_override(tmp_path, monkeypatch):
+    from autoskillit.core.runtime.kitchen_state import find_caller_session_id, write_marker
+
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
+    write_marker("sess-override", "recipe-1")
+    result = find_caller_session_id()
+    assert result == "sess-override"
+
+
+def test_find_caller_session_id_with_campaign_id(tmp_path, monkeypatch):
+    from autoskillit.core.runtime.kitchen_state import find_caller_session_id, write_marker
+
+    monkeypatch.delenv("AUTOSKILLIT_STATE_DIR", raising=False)
+    monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_ID", "camp-x")
+    monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+    write_marker("sess-camp", "recipe-1")
+    result = find_caller_session_id()
+    assert result == "sess-camp"
+
+
+def test_find_caller_session_id_project_dir_argument(tmp_path, monkeypatch):
+    from autoskillit.core.runtime.kitchen_state import find_caller_session_id, write_marker
+
+    monkeypatch.delenv("AUTOSKILLIT_STATE_DIR", raising=False)
+    monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
+    monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+    write_marker("sess-proj", "recipe-1")
+    result = find_caller_session_id(project_dir=tmp_path)
+    assert result == "sess-proj"

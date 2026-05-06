@@ -148,9 +148,6 @@ def find_caller_session_id(project_dir: Path | None = None) -> str:
     and returns the session_id from the first marker that passes the freshness check.
     Returns "" if no valid marker is found.
     """
-    # Import here to avoid polluting module-level stdlib-only contract
-    import os as _os
-
     override = os.environ.get("AUTOSKILLIT_STATE_DIR")
     if override:
         base = Path(override) / "kitchen_state"
@@ -163,8 +160,7 @@ def find_caller_session_id(project_dir: Path | None = None) -> str:
     if not base.is_dir():
         return ""
 
-    # Glob and sort by mtime descending
-    markers = sorted(base.glob("*.json"), key=lambda p: _os.path.getmtime(p), reverse=True)
+    markers = sorted(base.glob("*.json"), key=lambda p: os.path.getmtime(p), reverse=True)
 
     for p in markers:
         marker = read_marker(p.stem)

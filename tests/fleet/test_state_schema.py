@@ -98,8 +98,8 @@ class TestDispatchRecordSchemaV2:
         assert d.dispatched_starttime_ticks == 5678
         assert d.dispatched_boot_id == "boot-old"
 
-    def test_dispatch_record_serializes_l3_field_names(self) -> None:
-        """DispatchRecord.to_dict() must use l3_* field names."""
+    def test_dispatch_record_serializes_dispatched_field_names(self) -> None:
+        """DispatchRecord.to_dict() must use dispatched_* field names."""
         d = DispatchRecord(name="x", dispatched_pid=42, dispatched_session_id="sess-new")
         raw = d.to_dict()
         assert "dispatched_pid" in raw
@@ -138,6 +138,7 @@ class TestDispatchRecordSchemaV2:
         assert d.dispatched_pid == 1234
         assert d.dispatched_starttime_ticks == 5678
         assert d.dispatched_boot_id == "boot-old-l3"
+        assert d.caller_session_id == ""
 
     def test_read_state_handles_v1_without_ticks(self, tmp_path: Path) -> None:
         """read_state on a v1 file missing dispatched_starttime_ticks or dispatched_boot_id."""

@@ -792,3 +792,28 @@ def test_annotate_pr_diff_backward_compat_no_new_params(mock_run, tmp_path: Path
     )
     assert "review_mode" in result
     assert result["review_mode"] == "github"
+
+
+# ─── Type coercion: annotate_pr_diff with int pr_number (Step 1b) ───────────
+
+
+@patch("subprocess.run")
+def test_annotate_pr_diff_int_pr_number(mock_run, tmp_path: Path) -> None:
+    """annotate_pr_diff handles int pr_number from LLM JSON boundary.
+
+    Without the type coercion fix, passing pr_number=42 (int) causes
+    TypeError: argument of type 'int' is not iterable when constructing
+    the gh subprocess command list.
+    """
+    mock_run.return_value = subprocess.CompletedProcess(
+        args=[], returncode=0, stdout="+ diff content", stderr=""
+    )
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    result = annotate_pr_diff(pr_number=42, cwd=str(tmp_path), output_dir=str(output_dir))  # type: ignore[arg-type]
+    assert result["annotated_diff_path"]
+
+    # Verify the subprocess call received str "42", not int 42
+    gh_diff_call = mock_run.call_args_list[0]
+    cmd_list = gh_diff_call[0][0]
+    assert "42" in cmd_list, f"Expected '42' in command, got {cmd_list}"

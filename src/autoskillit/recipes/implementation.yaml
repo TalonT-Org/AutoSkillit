@@ -475,7 +475,7 @@ steps:
     optional: true
     skip_when_false: "inputs.open_pr"
     note: >
-      Extracts the integer PR number from the feature branch opened by compose_pr.
+      Extracts the PR number as a string for downstream steps.
       pr_number is required by the queue finale steps (enable_auto_merge, wait_for_queue).
 
   annotate_pr_diff:

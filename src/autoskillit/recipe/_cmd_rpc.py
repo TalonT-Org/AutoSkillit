@@ -149,7 +149,7 @@ def wait_for_direct_merge(
     poll_interval = poll_interval or "10"
     for _ in range(int(max_polls)):
         result = subprocess.run(
-            ["gh", "pr", "view", pr_number, "--json", "state", "--jq", ".state"],
+            ["gh", "pr", "view", str(pr_number), "--json", "state", "--jq", ".state"],
             capture_output=True,
             text=True,
         )
@@ -304,7 +304,7 @@ def force_push_and_wait_mergeability(
         raise RuntimeError(msg)
     for _ in range(int(max_polls)):
         r = subprocess.run(
-            ["gh", "pr", "view", review_pr_number, "--json", "mergeable", "-q", ".mergeable"],
+            ["gh", "pr", "view", str(review_pr_number), "--json", "mergeable", "-q", ".mergeable"],
             capture_output=True,
             text=True,
         )

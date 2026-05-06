@@ -332,6 +332,44 @@ def test_depends_on_acyclic_passes_on_dag():
 
 
 # ---------------------------------------------------------------------------
+# T-S1: campaign-dispatch-depends-on-is-sequential
+# ---------------------------------------------------------------------------
+
+
+def test_campaign_dispatch_depends_on_is_sequential_fires_on_fan_in():
+    recipe = _campaign(
+        dispatches=[
+            CampaignDispatch(name="phase-one", recipe="impl", task="a", depends_on=[]),
+            CampaignDispatch(name="phase-two", recipe="impl", task="b", depends_on=[]),
+            CampaignDispatch(
+                name="phase-merge",
+                recipe="impl",
+                task="c",
+                depends_on=["phase-one", "phase-two"],
+            ),
+        ]
+    )
+    found = _findings(recipe, "campaign-dispatch-depends-on-is-sequential")
+    assert len(found) == 1
+    assert found[0].severity == Severity.ERROR
+    assert "phase-merge" in found[0].message
+    assert "phase-one" in found[0].message or "phase-two" in found[0].message
+
+
+def test_campaign_dispatch_depends_on_is_sequential_passes_on_linear_chain():
+    recipe = _campaign(
+        dispatches=[
+            CampaignDispatch(name="a", recipe="impl", task="a", depends_on=[]),
+            CampaignDispatch(name="b", recipe="impl", task="b", depends_on=["a"]),
+            CampaignDispatch(name="c", recipe="impl", task="c", depends_on=["b"]),
+            CampaignDispatch(name="d", recipe="impl", task="d", depends_on=["c"]),
+        ]
+    )
+    found = _findings(recipe, "campaign-dispatch-depends-on-is-sequential")
+    assert found == []
+
+
+# ---------------------------------------------------------------------------
 # T28: campaign-task-non-empty
 # ---------------------------------------------------------------------------
 

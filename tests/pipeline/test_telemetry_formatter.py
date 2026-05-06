@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from autoskillit.core import ModelTotalEntry
 from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
 
 pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
@@ -784,7 +785,7 @@ def test_format_token_table_includes_model_column() -> None:
 
 
 def test_format_model_table() -> None:
-    model_totals = [
+    model_totals: list[ModelTotalEntry] = [
         {
             "model": "claude-sonnet-4-6",
             "step_count": 2,
@@ -815,7 +816,17 @@ def test_format_model_table_empty_returns_empty() -> None:
 
 
 def test_format_model_table_all_unknown_returns_empty() -> None:
-    totals = [{"model": "unknown", "step_count": 1, "input_tokens": 100}]
+    totals: list[ModelTotalEntry] = [
+        {
+            "model": "unknown",
+            "step_count": 1,
+            "input_tokens": 100,
+            "output_tokens": 0,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "elapsed_seconds": 0.0,
+        }
+    ]
     assert TelemetryFormatter.format_model_table(totals) == ""
 
 

@@ -8,7 +8,7 @@ maintains an output-equivalent inline implementation guarded by test 1g.
 
 from __future__ import annotations
 
-from autoskillit.core import TerminalColumn, _render_terminal_table
+from autoskillit.core import ModelTotalEntry, TerminalColumn, _render_terminal_table
 
 _TOKEN_COLUMNS = (
     TerminalColumn("STEP", max_width=40, align="<"),
@@ -363,7 +363,7 @@ class TelemetryFormatter:
         return "\n".join(lines)
 
     @staticmethod
-    def format_model_table(model_totals: list[dict]) -> str:
+    def format_model_table(model_totals: list[ModelTotalEntry]) -> str:
         """Produce markdown ## Model Usage Breakdown table. Returns '' when empty."""
         if not model_totals or all(m.get("model", "") == "unknown" for m in model_totals):
             return ""
@@ -386,7 +386,7 @@ class TelemetryFormatter:
         return "\n".join(lines)
 
     @staticmethod
-    def format_model_table_terminal(model_totals: list[dict]) -> str:
+    def format_model_table_terminal(model_totals: list[ModelTotalEntry]) -> str:
         """Produce padded-column terminal model breakdown table. Returns '' when empty."""
         if not model_totals or all(m.get("model", "") == "unknown" for m in model_totals):
             return ""

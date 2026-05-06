@@ -14,9 +14,9 @@ import re
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
-from autoskillit.core import get_logger
+from autoskillit.core import ModelTotalEntry, get_logger
 from autoskillit.pipeline.audit import _iter_session_log_entries
 
 logger = get_logger(__name__)
@@ -49,6 +49,9 @@ def _primary_model(token_usage: dict[str, Any]) -> str:
     mb = token_usage.get("model_breakdown", {})
     if not isinstance(mb, dict) or not mb:
         return ""
+    for m, v in mb.items():
+        if not isinstance(v, dict):
+            logger.warning("Unexpected model_breakdown entry type for %r: %r", m, type(v).__name__)
     return max(mb, key=lambda m: sum(mb[m].values()) if isinstance(mb[m], dict) else 0)
 
 
@@ -210,7 +213,7 @@ class DefaultTokenLog:
             total["turn_count"] += entry.turn_count
         return total
 
-    def compute_model_totals(self, *, order_id: str = "") -> list[dict[str, Any]]:
+    def compute_model_totals(self, *, order_id: str = "") -> list[ModelTotalEntry]:
         """Compute per-model aggregate token counts across all steps."""
         model_data: dict[str, dict[str, Any]] = {}
         for (oid, _step), entry in self._entries.items():
@@ -238,7 +241,7 @@ class DefaultTokenLog:
         for md in model_data.values():
             md["step_count"] = len(md.pop("_steps"))
             result.append(md)
-        return result
+        return cast(list[ModelTotalEntry], result)
 
     def clear(self) -> None:
         """Reset the store."""

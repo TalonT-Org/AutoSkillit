@@ -9,7 +9,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from autoskillit.core import DispatchGateType, pkg_root
+from autoskillit.core import DispatchGateType, Severity, pkg_root
+from autoskillit.recipe._analysis import make_validation_context
 from autoskillit.recipe.io import (
     _parse_recipe,
     find_campaign_by_name,
@@ -17,6 +18,7 @@ from autoskillit.recipe.io import (
     load_campaign_recipes_in_packs,
     load_recipe,
 )
+from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import CampaignDispatch, Recipe, RecipeKind
 from autoskillit.recipe.validator import validate_recipe
 
@@ -541,6 +543,38 @@ def test_research_campaign_capture_values_reference_result():
             assert _RESULT_TEMPLATE_RE.match(val.strip()), (
                 f"Dispatch {d.name!r} capture value {val!r} does not reference result"
             )
+
+
+_CAMPAIGN_ERROR_RULES = [
+    "dispatch-ingredients-keys-in-target-schema",
+    "dispatch-ingredient-values-are-strings",
+    "depends-on-refers-to-valid-dispatches",
+    "depends-on-acyclic",
+    "campaign-ingredient-refs-have-prior-capture",
+]
+
+
+def _research_campaign_ctx():
+    path = pkg_root() / "recipes" / "campaigns" / "research-campaign.yaml"
+    recipe = load_recipe(path)
+    project_dir = pkg_root() / "recipes"
+    available_recipes = frozenset(p.stem for p in project_dir.glob("*.yaml"))
+    return make_validation_context(
+        recipe,
+        available_recipes=available_recipes,
+        project_dir=project_dir,
+    )
+
+
+@pytest.mark.parametrize("rule", _CAMPAIGN_ERROR_RULES)
+def test_research_campaign_zero_error_findings(rule: str) -> None:
+    ctx = _research_campaign_ctx()
+    errors = [
+        f for f in run_semantic_rules(ctx) if f.rule == rule and f.severity == Severity.ERROR
+    ]
+    assert errors == [], f"research-campaign.yaml has ERROR findings for {rule!r}:\n" + "\n".join(
+        f"  {f.step_name}: {f.message}" for f in errors
+    )
 
 
 def test_implement_findings_has_model_context_window_ingredient():

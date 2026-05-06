@@ -92,18 +92,18 @@ ml_sub_area_folding:
     display_name: "Generative Models"
     primary_parent: method_comparison_benchmarking
     alternate_parents:
-      - parent: qualitative_interpretive_tradition
-        trigger_keywords:
-          - human evaluation
-          - qualitative assessment
-          - expert rating
-          - content analysis
       - parent: measurement_instrument_validation_tradition
         trigger_keywords:
           - human evaluation instrument
           - inter-rater
           - construct validity
           - scale development
+      - parent: qualitative_interpretive_tradition
+        trigger_keywords:
+          - human evaluation
+          - qualitative assessment
+          - expert rating
+          - content analysis
 
   - sub_area: agentic_systems
     display_name: "Agentic Systems"

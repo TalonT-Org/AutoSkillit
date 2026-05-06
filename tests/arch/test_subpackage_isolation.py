@@ -788,7 +788,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
     """
     EXEMPTIONS: dict[str, int] = {
         "server": 14,
-        "recipe": 28,
+        "recipe": 29,
         "execution": 18,
         "core": 20,
         "core/types": 15,

@@ -9,6 +9,10 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
+pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
+
 
 def _run_guard(
     tool_input: dict | None = None,

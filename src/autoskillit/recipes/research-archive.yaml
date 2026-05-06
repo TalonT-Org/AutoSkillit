@@ -1,0 +1,130 @@
+name: research-archive
+recipe_version: "1.0.0"
+categories: [research-family]
+requires_packs: [github, ci]
+description: >
+  Archival-phase sub-recipe extracted from research.yaml. Separates research
+  artifacts from experimental code, opens an artifact-only PR containing only
+  the research/ directory, tags the experiment branch for preservation, closes
+  the original PR with cross-references, and patches the token summary. All
+  steps are best-effort — failures route to patch_token_summary for graceful
+  degradation.
+summary: begin_archival > capture > branch > pr > tag > close > patch > complete | escalate
+
+ingredients:
+  # --- campaign-sourced (hidden) ---
+  worktree_path:
+    description: Path to the pre-created worktree (passed by campaign dispatch)
+    required: true
+    hidden: true
+  research_dir:
+    description: Path to the research/ directory in the worktree
+    required: true
+    hidden: true
+  pr_url:
+    description: URL of the original experiment PR (passed by campaign dispatch)
+    required: true
+    hidden: true
+
+  # --- user-input ---
+  base_branch:
+    description: Branch to target for the artifact PR
+    default: "main"
+
+kitchen_rules:
+  - >
+    NEVER use native Claude Code tools from the orchestrator: Read, Grep, Glob,
+    Edit, Write, Bash, Agent, WebFetch, WebSearch, NotebookEdit are ALL forbidden.
+    All work is delegated through run_cmd, run_python.
+  - "All archival steps are best-effort — route to patch_token_summary on failure."
+  - "Do NOT auto-merge the artifact PR — it is for human review only."
+
+steps:
+  begin_archival:
+    action: route
+    on_result:
+      - when: "${{ inputs.pr_url }}"
+        route: capture_experiment_branch
+      - route: patch_token_summary
+    note: >
+      Gate step for the archival phase. Routes to artifact extraction when
+      a PR URL is available, otherwise skips directly to patch_token_summary.
+
+  capture_experiment_branch:
+    tool: run_cmd
+    with:
+      cmd: "git -C '${{ inputs.worktree_path }}' rev-parse --abbrev-ref HEAD"
+      cwd: "${{ inputs.worktree_path }}"
+      step_name: capture_experiment_branch
+    capture:
+      experiment_branch: "${{ result.stdout | trim }}"
+    on_success: create_artifact_branch
+    on_failure: patch_token_summary
+
+  create_artifact_branch:
+    tool: run_cmd
+    with:
+      cmd: "bash scripts/recipe/create_artifact_branch.sh '${{ inputs.worktree_path }}' '${{ context.experiment_branch }}' '${{ inputs.base_branch }}' '${{ inputs.research_dir }}'"
+      cwd: "${{ inputs.worktree_path }}"
+      step_name: create_artifact_branch
+    capture:
+      artifact_branch: "${{ result.artifact_branch }}"
+    on_success: open_artifact_pr
+    on_failure: patch_token_summary
+
+  open_artifact_pr:
+    tool: run_cmd
+    with:
+      cmd: "bash scripts/recipe/open_artifact_pr.sh '${{ inputs.worktree_path }}' '${{ context.experiment_branch }}' '${{ context.artifact_branch }}' '${{ inputs.pr_url }}' '${{ inputs.base_branch }}' '${{ inputs.research_dir }}'"
+      cwd: "${{ inputs.worktree_path }}"
+      step_name: open_artifact_pr
+    capture:
+      artifact_pr_url: "${{ result.artifact_pr_url }}"
+    on_success: tag_experiment_branch
+    on_failure: patch_token_summary
+
+  tag_experiment_branch:
+    tool: run_cmd
+    with:
+      cmd: "bash scripts/recipe/tag_experiment_branch.sh '${{ inputs.worktree_path }}' '${{ context.experiment_branch }}' '${{ context.artifact_pr_url }}'"
+      cwd: "${{ inputs.worktree_path }}"
+      step_name: tag_experiment_branch
+    capture:
+      archive_tag: "${{ result.archive_tag }}"
+    on_success: close_experiment_pr
+    on_failure: patch_token_summary
+
+  close_experiment_pr:
+    tool: run_cmd
+    with:
+      cmd: >
+        ARTIFACT_PR="${{ context.artifact_pr_url }}" &&
+        ARCHIVE_TAG="${{ context.archive_tag }}" &&
+        CLOSE_BODY=$(printf '## Archived\n\nThis PR contained both research artifacts and experimental code.\n\n**Research record merged via:** %s\n**Full experiment branch preserved at:** `%s`\n\nThe artifact PR contains only files under `research/` (reports, scripts, results). The archive tag preserves the full experiment branch including variant code for reference.\n\nTo restore the full experiment: `git checkout %s`' "${ARTIFACT_PR}" "${ARCHIVE_TAG}" "${ARCHIVE_TAG}") &&
+        gh pr close '${{ inputs.pr_url }}' --comment "${CLOSE_BODY}"
+      cwd: "${{ inputs.worktree_path }}"
+      step_name: close_experiment_pr
+    on_success: patch_token_summary
+    on_failure: patch_token_summary
+
+  patch_token_summary:
+    description: "Collect all pipeline token data and patch the PR body with complete summary"
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.patch_pr_token_summary"
+      timeout: 60
+      pr_url: "${{ inputs.pr_url }}"
+      cwd: "${{ inputs.worktree_path }}"
+    on_success: research_complete
+    on_failure: escalate_stop
+
+  research_complete:
+    action: stop
+    message: >
+      Research archival complete. Artifacts separated into a dedicated PR,
+      experiment branch tagged and preserved, original PR closed with
+      cross-references to the artifact PR and archive tag.
+
+  escalate_stop:
+    action: stop
+    message: "Research archival pipeline failed — human intervention needed. Check the latest step output for details."

@@ -809,7 +809,9 @@ class DefaultHeadlessExecutor:
             merged_extras["AUTOSKILLIT_L3_TOOL_TAGS"] = ",".join(sorted(requires_packs))
 
         idle_cfg_val = cfg.run_skill.idle_output_timeout
-        if idle_cfg_val > 0:
+        if idle_output_timeout is not None:
+            merged_extras["AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT"] = str(idle_output_timeout)
+        elif idle_cfg_val > 0:
             merged_extras.setdefault("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(idle_cfg_val))
 
         spec = build_food_truck_cmd(

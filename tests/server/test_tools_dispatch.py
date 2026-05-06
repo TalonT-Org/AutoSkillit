@@ -778,3 +778,102 @@ async def test_dispatch_food_truck_marketplace_install_succeeds(tool_ctx_marketp
         )
     )
     assert result["success"] is True
+
+
+class TestDispatchFoodTruckIdleTimeout:
+    """Tests for idle_output_timeout passthrough through the dispatch chain."""
+
+    def _setup_dispatch(self, tool_ctx):
+        """Wire tool_ctx for a standard dispatch with InMemoryHeadlessExecutor."""
+        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        repo = InMemoryRecipeRepository()
+        recipe_info = _make_recipe_info("test-recipe")
+        repo.add_recipe("test-recipe", recipe_info)
+        repo.add_full_recipe(recipe_info.path, _make_standard_recipe("test-recipe"))
+        tool_ctx.recipes = repo
+        tool_ctx.executor = InMemoryHeadlessExecutor()
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_passes_idle_output_timeout_to_executor(
+        self, tool_ctx, monkeypatch
+    ):
+        """dispatch_food_truck MCP tool forwards idle_output_timeout to executor."""
+        from autoskillit.server.tools.tools_execution import dispatch_food_truck
+
+        self._setup_dispatch(tool_ctx)
+
+        await dispatch_food_truck(
+            recipe="test-recipe",
+            task="do-work",
+            idle_output_timeout=0,
+        )
+
+        executor = tool_ctx.executor
+        assert executor.dispatch_calls, "dispatch_food_truck executor was never called"
+        assert executor.dispatch_calls[0].idle_output_timeout == 0.0
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_idle_timeout_none_when_not_specified(
+        self, tool_ctx, monkeypatch
+    ):
+        """When idle_output_timeout is not specified, executor receives None."""
+        from autoskillit.server.tools.tools_execution import dispatch_food_truck
+
+        self._setup_dispatch(tool_ctx)
+
+        await dispatch_food_truck(
+            recipe="test-recipe",
+            task="do-work",
+        )
+
+        executor = tool_ctx.executor
+        assert executor.dispatch_calls, "dispatch_food_truck executor was never called"
+        assert executor.dispatch_calls[0].idle_output_timeout is None
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_idle_timeout_overrides_config_default(
+        self, tool_ctx, monkeypatch
+    ):
+        """Explicit idle_output_timeout=0 overrides the config default of 600."""
+        from autoskillit.server.tools.tools_execution import dispatch_food_truck
+
+        self._setup_dispatch(tool_ctx)
+        # Config idle_output_timeout is 600 (default from RunSkillConfig)
+        assert tool_ctx.config.run_skill.idle_output_timeout == 600
+
+        await dispatch_food_truck(
+            recipe="test-recipe",
+            task="do-work",
+            idle_output_timeout=0,
+        )
+
+        executor = tool_ctx.executor
+        assert executor.dispatch_calls, "dispatch_food_truck executor was never called"
+        # Executor receives 0.0, overriding the config default
+        assert executor.dispatch_calls[0].idle_output_timeout == 0.0
+
+    @pytest.mark.anyio
+    async def test_execute_dispatch_passes_idle_output_timeout_to_executor(
+        self, tool_ctx, monkeypatch
+    ):
+        """execute_dispatch forwards idle_output_timeout to executor.dispatch_food_truck."""
+        from autoskillit.fleet._api import execute_dispatch
+
+        self._setup_dispatch(tool_ctx)
+
+        await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="do-work",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+            idle_output_timeout=0,
+        )
+
+        executor = tool_ctx.executor
+        assert executor.dispatch_calls, "dispatch_food_truck was never called"
+        assert executor.dispatch_calls[0].idle_output_timeout == 0.0

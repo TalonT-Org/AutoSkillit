@@ -146,6 +146,7 @@ async def execute_dispatch(
     capture: dict[str, str] | None = None,
     resume_session_id: str | None = None,
     resume_checkpoint: SessionCheckpoint | None = None,
+    idle_output_timeout: int | None = None,
 ) -> str:
     """Execute a single food truck dispatch.
 
@@ -188,6 +189,7 @@ async def execute_dispatch(
             capture=capture,
             resume_session_id=resume_session_id,
             resume_checkpoint=resume_checkpoint,
+            idle_output_timeout=idle_output_timeout,
         )
     except asyncio.CancelledError:
         raise
@@ -245,6 +247,7 @@ async def _run_dispatch(
     capture: dict[str, str] | None = None,
     resume_session_id: str | None = None,
     resume_checkpoint: SessionCheckpoint | None = None,
+    idle_output_timeout: int | None = None,
 ) -> str:
     """Inner dispatch body — called after lock acquisition."""
     from autoskillit.fleet.state import (
@@ -380,6 +383,9 @@ async def _run_dispatch(
         dispatch_id=dispatch_id,
         project_dir=str(tool_ctx.project_dir),
         timeout=float(timeout_sec) if timeout_sec else None,
+        idle_output_timeout=float(idle_output_timeout)
+        if idle_output_timeout is not None
+        else None,
         env_extras={
             "AUTOSKILLIT_PROJECT_DIR": str(tool_ctx.project_dir),
             "AUTOSKILLIT_CAMPAIGN_ID": campaign_id,

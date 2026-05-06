@@ -690,6 +690,7 @@ async def dispatch_food_truck(
     capture: dict[str, str] | None = None,
     resume_session_id: str | None = None,
     resume_checkpoint: dict[str, object] | None = None,
+    idle_output_timeout: int | None = None,
     ctx: Context = CurrentContext(),
 ) -> str:
     """Dispatch a single food truck L3 session for one recipe.
@@ -786,6 +787,7 @@ async def dispatch_food_truck(
             capture=capture,
             resume_session_id=resume_session_id,
             resume_checkpoint=parsed_checkpoint,
+            idle_output_timeout=idle_output_timeout,
         )
 
         campaign_state_path_str = os.environ.get("AUTOSKILLIT_CAMPAIGN_STATE_PATH")

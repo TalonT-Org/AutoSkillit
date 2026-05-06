@@ -133,7 +133,6 @@ steps:
       step_name: implement_phase
     capture:
       worktree_path: "${{ result.worktree_path }}"
-      next: "${{ result.next }}"
     retries: 0
     on_success: next_phase_or_experiment
     on_failure: troubleshoot_implement_failure
@@ -169,7 +168,7 @@ steps:
   next_phase_or_experiment:
     action: route
     on_result:
-      - when: "${{ context.next }} == more_phases"
+      - when: "remaining phases exist in context.group_files"
         route: plan_phase
       - route: run_experiment
     note: >

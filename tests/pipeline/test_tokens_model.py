@@ -155,6 +155,7 @@ def test_model_totals_single_model_one_row() -> None:
         log.record(step, _make_usage_with_model("claude-sonnet-4-6"))
     totals = log.compute_model_totals()
     assert len(totals) == 1
+    assert totals[0]["step_count"] == 3
 
 
 def test_model_totals_mixed_providers() -> None:

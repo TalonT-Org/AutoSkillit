@@ -1,7 +1,7 @@
 ---
 name: diagnose-ci
-description: Diagnostic executor for CI failures. ALWAYS invoke this skill when instructed to diagnose CI failures. Do not fetch CI logs directly — use this skill first to load the diagnosis workflow.
 categories: [ci]
+description: Diagnostic executor for CI failures. ALWAYS invoke this skill when instructed to diagnose CI failures. Do not fetch CI logs directly — use this skill first to load the diagnosis workflow.
 hooks:
   PreToolUse:
     - matcher: "*"

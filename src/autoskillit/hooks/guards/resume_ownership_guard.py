@@ -8,6 +8,8 @@ import os
 import sys
 from pathlib import Path
 
+RESUME_OWNERSHIP_DENY_TRIGGER: str = "resume_session_id ownership validation failed"
+
 
 def _deny(reason: str) -> None:
     json.dump(

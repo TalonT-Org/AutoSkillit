@@ -24,6 +24,7 @@ session/ (see session/CLAUDE.md), ui/ (see ui/CLAUDE.md), update/ (see update/CL
 | `_features.py` | `features` subcommand group: list/status commands for feature gate inspection |
 | `_workspace.py` | Workspace clean helpers |
 | `_sessions.py` | `sessions analyze` CLI subcommand for cross-session DFG visualization |
+| `_validate.py` | `validate registries` subcommand for validating user-override registry files |
 
 ## Architecture Notes
 

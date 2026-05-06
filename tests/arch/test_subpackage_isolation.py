@@ -86,6 +86,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_fleet",  # cli/_fleet.py: fleet_app = App(name="fleet", ...)
         "_features",  # cli/_features.py: features_app = App(name="features", ...)
         "_sessions",  # cli/_sessions.py: sessions_app = App(name="sessions", ...)
+        "_validate",  # cli/_validate.py: validate_app = App(name="validate", ...)
     }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(

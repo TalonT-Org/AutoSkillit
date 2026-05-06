@@ -70,6 +70,7 @@ CLI command, subcommand, and interactive workflow tests.
 | `test_update_checks_prompt.py` | Tests for cli/_update_checks.py — UC-3 through UC-10: prompt consolidation, yes/no paths, dismissal |
 | `test_update_checks_split.py` | Structural guard for update_checks split |
 | `test_update_command.py` | Tests for cli/_update.py — first-class update command |
+| `test_validate_registries.py` | Tests for the validate registries CLI subcommand |
 | `test_workspace.py` | Tests for cli._workspace — age partitioning, display, and confirmation |
 
 ## Architecture Notes

@@ -26,5 +26,6 @@ src/autoskillit/hooks/hooks.json
 
 # Runtime sync state — generated on each install, not source
 .autoskillit/sync_manifest.json
+.autoskillit/validation-errors/
 .secrets.yaml
 .autoskillit/.secrets.yaml

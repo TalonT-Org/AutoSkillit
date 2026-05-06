@@ -3,3 +3,4 @@ temp/
 .onboarded
 sync_manifest.json
 test-filter-manifest.yaml
+validation-errors/

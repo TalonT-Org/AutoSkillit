@@ -218,7 +218,7 @@ class TestSyntheticPackScenarios:
     ):
         from fastmcp.client import Client
 
-        from autoskillit.core import GATED_TOOLS
+        from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_TOOLS, GATED_TOOLS
         from autoskillit.server import _apply_session_type_visibility, mcp
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
@@ -230,7 +230,7 @@ class TestSyntheticPackScenarios:
             tools = await client.list_tools()
         visible = {t.name for t in tools}
 
-        for name in GATED_TOOLS:
+        for name in GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS:
             assert name in visible, (
                 f"{name} should be visible under full kitchen fallback (empty L3_TOOL_TAGS)"
             )

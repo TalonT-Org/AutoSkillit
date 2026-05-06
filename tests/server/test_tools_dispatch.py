@@ -54,7 +54,18 @@ class TestDispatchFoodTruckGates:
 
         result = json.loads(await dispatch_food_truck(recipe="r", task="t"))
         assert result["success"] is False
-        assert result["error"] == "fleet_hard_refusal_headless"
+        assert result["subtype"] == "headless_error"
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_requires_fleet_session_type(self, tool_ctx, monkeypatch):
+        """Non-fleet session type → headless_error, even for interactive callers."""
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
+        monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
+        from autoskillit.server.tools.tools_execution import dispatch_food_truck
+
+        result = json.loads(await dispatch_food_truck(recipe="r", task="t"))
+        assert result["success"] is False
+        assert result["subtype"] == "headless_error"
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_requires_kitchen_open(self, tool_ctx, monkeypatch):
@@ -103,6 +114,7 @@ class TestDispatchFoodTruckGates:
 
         from autoskillit.server.tools.tools_execution import dispatch_food_truck
 
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
         # Gate is open (fleet session already booted), env var absent
         # Only config file has fleet disabled
         monkeypatch.delenv("AUTOSKILLIT_FEATURES__FLEET", raising=False)
@@ -717,6 +729,7 @@ async def test_dispatch_food_truck_tool_passes_resume_session_id_to_executor(
     """dispatch_food_truck MCP tool forwards resume_session_id all the way to the executor."""
     from autoskillit.server.tools.tools_execution import dispatch_food_truck
 
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
     tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
     repo = InMemoryRecipeRepository()
     recipe_info = _make_recipe_info("test-recipe")
@@ -782,6 +795,10 @@ async def test_dispatch_food_truck_marketplace_install_succeeds(tool_ctx_marketp
 
 class TestDispatchFoodTruckIdleTimeout:
     """Tests for idle_output_timeout passthrough through the dispatch chain."""
+
+    @pytest.fixture(autouse=True)
+    def _set_fleet_session(self, monkeypatch):
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
 
     def _setup_dispatch(self, tool_ctx):
         """Wire tool_ctx for a standard dispatch with InMemoryHeadlessExecutor."""

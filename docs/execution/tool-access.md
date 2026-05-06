@@ -65,7 +65,7 @@ Server startup sequence:
    → reveals test_check only (the sole headless-tagged tool)
 
 4. When open_kitchen is called:
-   ctx.enable_components(tags={"kitchen"})   → reveals all 48 kitchen tools
+   ctx.enable_components(tags={"kitchen"})   → reveals kitchen-tagged tools (not fleet)
    ctx.disable_components(tags={subset})     → re-hides each disabled subset
    (session-level enable overwrites server-level disable, so re-disabling is required)
 ```

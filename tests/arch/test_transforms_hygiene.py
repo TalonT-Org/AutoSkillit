@@ -310,3 +310,163 @@ def test_session_type_visibility_uses_known_tags():
         "Tag string literals in _session_type.py not in canonical sets:\n"
         + "\n".join(f"  {v}" for v in literal_tag_violations)
     )
+
+
+def test_tool_decorators_enforce_tag_partition():
+    """No @mcp.tool() decorator may carry both 'kitchen' and 'fleet'/'fleet-dispatch'."""
+    tools_dir = _SRC_ROOT / "server" / "tools"
+    violations = []
+
+    for path in sorted(tools_dir.glob("tools_*.py")):
+        source = path.read_text()
+        tree = ast.parse(source, filename=str(path))
+
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+
+            func_name = node.name
+
+            for decorator in node.decorator_list:
+                if not (
+                    isinstance(decorator, ast.Call)
+                    and isinstance(decorator.func, ast.Attribute)
+                    and decorator.func.attr == "tool"
+                ):
+                    continue
+
+                tags_value = None
+                for kw in decorator.keywords:
+                    if kw.arg == "tags":
+                        tags_value = kw.value
+                        break
+
+                if tags_value is None or not isinstance(tags_value, ast.Set):
+                    continue
+
+                tag_set = {
+                    elt.value
+                    for elt in tags_value.elts
+                    if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
+                }
+
+                has_kitchen = "kitchen" in tag_set
+                has_fleet_subset = bool({"fleet", "fleet-dispatch"} & tag_set)
+
+                if has_kitchen and has_fleet_subset:
+                    violations.append(f"{path.name}:{node.lineno} {func_name} → {sorted(tag_set)}")
+
+    assert not violations, (
+        "Tag partition violations (kitchen + fleet/fleet-dispatch on same tool):\n"
+        + "\n".join(f"  {v}" for v in violations)
+    )
+
+
+def test_tool_tags_are_literal_sets():
+    """Every @mcp.tool(tags=...) must use a set literal, not a variable or expression."""
+    tools_dir = _SRC_ROOT / "server" / "tools"
+    non_literals = []
+
+    for path in sorted(tools_dir.glob("tools_*.py")):
+        source = path.read_text()
+        tree = ast.parse(source, filename=str(path))
+
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+
+            for decorator in node.decorator_list:
+                if not (
+                    isinstance(decorator, ast.Call)
+                    and isinstance(decorator.func, ast.Attribute)
+                    and decorator.func.attr == "tool"
+                ):
+                    continue
+
+                for kw in decorator.keywords:
+                    if kw.arg == "tags" and not isinstance(kw.value, ast.Set):
+                        non_literals.append(
+                            f"{path.name}:{node.lineno} {node.name}"
+                            f" → tags is {type(kw.value).__name__}, not Set"
+                        )
+
+    assert not non_literals, (
+        "Non-literal tags values in @mcp.tool() decorators (use set literals):\n"
+        + "\n".join(f"  {v}" for v in non_literals)
+    )
+
+
+def test_fleet_tools_carry_required_subset_tag():
+    """Every FLEET_TOOLS entry must have 'fleet' in its decorator tags.
+
+    Every FLEET_DISPATCH_TOOLS entry must have 'fleet-dispatch' in its decorator tags.
+    """
+    from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_TOOLS
+
+    tools_dir = _SRC_ROOT / "server" / "tools"
+    name_to_tags: dict[str, set[str]] = {}
+
+    for path in sorted(tools_dir.glob("tools_*.py")):
+        source = path.read_text()
+        tree = ast.parse(source, filename=str(path))
+
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+
+            func_name = node.name
+
+            for decorator in node.decorator_list:
+                if not (
+                    isinstance(decorator, ast.Call)
+                    and isinstance(decorator.func, ast.Attribute)
+                    and decorator.func.attr == "tool"
+                ):
+                    continue
+
+                tags_value = None
+                for kw in decorator.keywords:
+                    if kw.arg == "tags":
+                        tags_value = kw.value
+                        break
+
+                if tags_value is None or not isinstance(tags_value, ast.Set):
+                    continue
+
+                tag_set = {
+                    elt.value
+                    for elt in tags_value.elts
+                    if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
+                }
+                name_to_tags[func_name] = tag_set
+
+    missing_fleet = []
+    for tool in FLEET_TOOLS:
+        if tool not in name_to_tags or "fleet" not in name_to_tags[tool]:
+            missing_fleet.append(tool)
+
+    missing_fd = []
+    for tool in FLEET_DISPATCH_TOOLS:
+        if tool not in name_to_tags or "fleet-dispatch" not in name_to_tags[tool]:
+            missing_fd.append(tool)
+
+    assert not missing_fleet, f"FLEET_TOOLS missing 'fleet' tag: {sorted(missing_fleet)}"
+    assert not missing_fd, (
+        f"FLEET_DISPATCH_TOOLS missing 'fleet-dispatch' tag: {sorted(missing_fd)}"
+    )
+
+
+def test_fleet_tools_do_not_carry_kitchen_umbrella_tag():
+    """TOOL_SUBSET_TAGS entries for fleet/fleet-dispatch tools must not include 'kitchen'."""
+    from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_TOOLS, TOOL_SUBSET_TAGS
+
+    violations = []
+    for tool in FLEET_TOOLS | FLEET_DISPATCH_TOOLS:
+        tags = TOOL_SUBSET_TAGS.get(tool, frozenset())
+        if "kitchen" in tags:
+            violations.append(f"{tool} → {sorted(tags)}")
+
+    assert not violations, (
+        "Fleet/fleet-dispatch tools with 'kitchen' in TOOL_SUBSET_TAGS:\n"
+        + "\n".join(f"  {v}" for v in violations)
+    )

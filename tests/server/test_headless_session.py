@@ -22,4 +22,27 @@ async def test_mcp_enable_kitchen_reveals_gated_tools(kitchen_enabled) -> None:
 
     async with Client(mcp) as client:
         tool_names = {t.name for t in await client.list_tools()}
-    assert GATED_TOOLS.issubset(tool_names), f"Missing gated tools: {GATED_TOOLS - tool_names}"
+    from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_TOOLS
+
+    non_fleet_gated = GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS
+    assert non_fleet_gated.issubset(tool_names), (
+        f"Missing gated tools: {non_fleet_gated - tool_names}"
+    )
+
+
+@pytest.mark.anyio
+async def test_mcp_enable_kitchen_does_not_reveal_fleet_tools(kitchen_enabled) -> None:
+    """mcp.enable(tags={'kitchen'}) must NOT reveal fleet-only tools to the client.
+
+    Fleet tools carry kitchen-core (visible to L2/L3 via tag enable) but are NOT
+    revealed when only the 'kitchen' umbrella tag is enabled.
+    """
+    from fastmcp.client import Client
+
+    from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_TOOLS
+    from autoskillit.server import mcp
+
+    async with Client(mcp) as client:
+        tool_names = {t.name for t in await client.list_tools()}
+    fleet_visible = (FLEET_TOOLS | FLEET_DISPATCH_TOOLS) & tool_names
+    assert fleet_visible == set(), f"Fleet tools visible after kitchen enable: {fleet_visible}"

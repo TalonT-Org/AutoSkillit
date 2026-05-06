@@ -22,7 +22,7 @@ logger = get_logger(__name__)
 
 
 @mcp.tool(
-    tags={"autoskillit", "kitchen", "kitchen-core", "fleet-dispatch"},
+    tags={"autoskillit", "kitchen-core", "fleet-dispatch"},
     annotations={"readOnlyHint": True},
 )
 @track_response_size("list_recipes")
@@ -60,7 +60,7 @@ async def list_recipes() -> str:
 
 
 @mcp.tool(
-    tags={"autoskillit", "kitchen", "kitchen-core", "fleet-dispatch"},
+    tags={"autoskillit", "kitchen-core", "fleet-dispatch"},
     annotations={"readOnlyHint": True},
     meta={"anthropic/maxResultSizeChars": 100_000},
 )

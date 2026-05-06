@@ -94,8 +94,8 @@ class TestSessionTypeVisibility:
             assert name not in tool_names, f"{name} should be hidden for fleet session"
 
     @pytest.mark.anyio
-    async def test_fleet_tools_retain_kitchen_tag(self, monkeypatch):
-        """Fleet-tagged tools must still carry the kitchen tag."""
+    async def test_fleet_tools_do_not_carry_kitchen_tag(self, monkeypatch):
+        """Fleet-tagged tools must NOT carry the kitchen tag (tag partition)."""
         from autoskillit.core import FLEET_TOOLS
         from autoskillit.server import _apply_session_type_visibility, mcp
 
@@ -106,7 +106,7 @@ class TestSessionTypeVisibility:
         for name in FLEET_TOOLS:
             tool = all_tools.get(name)
             assert tool is not None, f"{name} not registered"
-            assert "kitchen" in tool.tags, f"{name} must retain kitchen tag"
+            assert "kitchen" not in tool.tags, f"{name} must not carry kitchen tag"
             assert "fleet" in tool.tags, f"{name} must have fleet tag"
             assert "autoskillit" in tool.tags, f"{name} must retain autoskillit tag"
 
@@ -129,7 +129,7 @@ class TestSessionTypeVisibility:
 
     @pytest.mark.anyio
     async def test_orchestrator_headless_enables_kitchen_tag(self, monkeypatch):
-        from autoskillit.core import GATED_TOOLS
+        from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_TOOLS, GATED_TOOLS
         from autoskillit.server import _apply_session_type_visibility, mcp
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
@@ -138,7 +138,7 @@ class TestSessionTypeVisibility:
 
         tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
-        for name in GATED_TOOLS:
+        for name in GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS:
             assert name in tool_names, f"{name} should be visible for orchestrator+headless"
 
     @pytest.mark.anyio
@@ -212,7 +212,7 @@ class TestSessionTypeVisibility:
     @pytest.mark.anyio
     async def test_food_truck_without_tool_tags_sees_full_kitchen(self, monkeypatch):
         """ORCHESTRATOR+HEADLESS without L3_TOOL_TAGS falls back to full kitchen."""
-        from autoskillit.core import GATED_TOOLS
+        from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_TOOLS, GATED_TOOLS
         from autoskillit.server import _apply_session_type_visibility, mcp
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
@@ -223,7 +223,7 @@ class TestSessionTypeVisibility:
         tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
 
-        for name in GATED_TOOLS:
+        for name in GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS:
             assert name in tool_names
 
     @pytest.mark.anyio

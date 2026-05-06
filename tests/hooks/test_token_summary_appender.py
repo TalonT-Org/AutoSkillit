@@ -813,6 +813,30 @@ def test_e4_kitchen_id_renamed_in_hook_config(tmp_path: Path) -> None:
     assert result == "legacy-pipeline-uuid"
 
 
+# T9
+def test_non_anthropic_step_marked_in_format_table() -> None:
+    """Hook _format_table marks non-Anthropic step names with * and adds footnote."""
+    from autoskillit.hooks.token_summary_hook import _format_table
+
+    aggregated = {
+        "implement": {
+            "step_name": "implement",
+            "model": "MiniMax-M2.7-highspeed",
+            "input_tokens": 307600,
+            "output_tokens": 3400,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0,
+            "invocation_count": 1,
+            "elapsed_seconds": 60.0,
+            "peak_context": 0,
+            "turn_count": 0,
+        },
+    }
+    result = _format_table(aggregated)
+    assert "| implement* |" in result
+    assert "non-Anthropic provider" in result
+
+
 # ---------------------------------------------------------------------------
 # _unwrap_mcp_response unit tests
 # ---------------------------------------------------------------------------

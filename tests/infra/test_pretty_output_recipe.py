@@ -189,6 +189,54 @@ def test_hook_token_summary_output_equivalent_to_canonical():
     )
 
 
+def test_hook_token_summary_non_anthropic_equivalent_to_canonical():
+    """1g-ext: Hook and canonical produce identical * annotation and footnote."""
+    from autoskillit.hooks.formatters.pretty_output_hook import _fmt_get_token_summary
+    from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
+
+    data = {
+        "steps": [
+            {
+                "step_name": "plan",
+                "model": "claude-sonnet-4-6",
+                "input_tokens": 7000,
+                "output_tokens": 5939,
+                "cache_creation_input_tokens": 8495,
+                "cache_read_input_tokens": 252179,
+                "invocation_count": 1,
+                "wall_clock_seconds": 45.0,
+                "elapsed_seconds": 40.0,
+            },
+            {
+                "step_name": "implement",
+                "model": "MiniMax-M2.7-highspeed",
+                "input_tokens": 2031000,
+                "output_tokens": 122306,
+                "cache_creation_input_tokens": 280601,
+                "cache_read_input_tokens": 19071323,
+                "invocation_count": 3,
+                "wall_clock_seconds": 492.0,
+                "elapsed_seconds": 480.0,
+            },
+        ],
+        "total": {
+            "input_tokens": 2038000,
+            "output_tokens": 128245,
+            "cache_creation_input_tokens": 289096,
+            "cache_read_input_tokens": 19323502,
+            "total_elapsed_seconds": 537.0,
+        },
+        "mcp_responses": {
+            "total": {"total_invocations": 42, "total_estimated_response_tokens": 5000}
+        },
+    }
+    hook_output = _fmt_get_token_summary(data, _pipeline=False)
+    canonical_output = TelemetryFormatter.format_compact_kv(
+        data["steps"], data["total"], mcp_responses=data["mcp_responses"]
+    )
+    assert hook_output == canonical_output
+
+
 def test_fmt_run_skill_interactive_shows_four_token_fields():
     """_fmt_run_skill interactive mode shows all 4 token fields."""
     data = {

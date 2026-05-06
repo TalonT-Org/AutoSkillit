@@ -271,10 +271,14 @@ def _format_table(aggregated: dict[str, dict[str, Any]]) -> str:
     total_peak = 0
     total_cache_wr = 0
     total_time = 0.0
+    has_non_anthropic = False
 
     for entry in aggregated.values():
         name = entry["step_name"]
         model = entry.get("model", "")
+        if model and not model.startswith("claude-"):
+            name = f"{name}*"
+            has_non_anthropic = True
         count = entry.get("invocation_count", 1)
         inp = entry["input_tokens"]
         out = entry["output_tokens"]
@@ -303,6 +307,9 @@ def _format_table(aggregated: dict[str, dict[str, Any]]) -> str:
         f" | {_humanize(total_cache_rd)} | {_humanize(total_peak)}"
         f" | | {_humanize(total_cache_wr)} | {_fmt_duration(total_time)} |"
     )
+    if has_non_anthropic:
+        lines.append("")
+        lines.append(r"\* *Step used a non-Anthropic provider; caching behavior may differ.*")
 
     return "\n".join(lines)
 

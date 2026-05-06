@@ -360,8 +360,8 @@ class TestImportAndCallTypeCoercion:
         assert coercion_logs[0]["to_type"] == "str"
 
     @pytest.mark.anyio
-    async def test_unconvertible_value_passes_through(self):
-        """Non-numeric str for int param passes through without crash."""
+    async def test_unconvertible_value_not_coerced(self):
+        """Non-numeric str for int param is not coerced, callable fails."""
         result = json.loads(
             await run_python(
                 callable="tests.server._type_coercion_fixtures._int_param",

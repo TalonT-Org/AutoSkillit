@@ -115,9 +115,10 @@ _ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
             DispatchStatus.INTERRUPTED,
         }
     ),
+    # Retryable settled state: only explicit retry (→ PENDING) is allowed
+    DispatchStatus.FAILURE: frozenset({DispatchStatus.PENDING}),
     # Terminal states: no further transitions permitted
     DispatchStatus.SUCCESS: frozenset(),
-    DispatchStatus.FAILURE: frozenset(),
     DispatchStatus.INTERRUPTED: frozenset(),
     DispatchStatus.SKIPPED: frozenset(),
     DispatchStatus.REFUSED: frozenset(),
@@ -179,6 +180,52 @@ def has_failed_dispatch(state_path: Path) -> bool:
         d.status == DispatchStatus.FAILURE and d.reason not in _INFRASTRUCTURE_FAILURE_REASONS
         for d in state.dispatches
     )
+
+
+def _clear_dispatch_for_retry(d: DispatchRecord) -> None:
+    _validate_transition(d.status, DispatchStatus.PENDING, d.name)
+    d.status = DispatchStatus.PENDING
+    d.reason = ""
+    d.dispatch_id = ""
+    d.l3_session_id = ""
+    d.l3_session_log_dir = ""
+    d.l3_pid = 0
+    d.l3_starttime_ticks = 0
+    d.l3_boot_id = ""
+    d.token_usage = {}
+    d.started_at = 0.0
+    d.ended_at = 0.0
+    d.sidecar_path = None
+
+
+def reset_failed_dispatch(state_path: Path, dispatch_name: str) -> bool:
+    """Reset a FAILURE dispatch to PENDING, clearing all execution metadata.
+
+    Returns True if the dispatch was found in FAILURE state and reset,
+    False if the dispatch was not found, not in FAILURE, or the state file
+    is missing/corrupted. OSError raised by _write_state propagates to
+    the caller — write failures are not silently converted to False.
+
+    Thread-safe: uses _resume_lock + fcntl.LOCK_EX.
+    """
+    with _resume_lock:
+        if not state_path.exists():
+            return False
+        lock_path = state_path.with_suffix(".lock")
+        with open(lock_path, "wb") as _flock_handle:
+            fcntl.flock(_flock_handle, fcntl.LOCK_EX)
+
+            state = read_state(state_path)
+            if state is None:
+                return False
+
+            for d in state.dispatches:
+                if d.name == dispatch_name and d.status == DispatchStatus.FAILURE:
+                    _clear_dispatch_for_retry(d)
+                    _write_state(state_path, state)
+                    return True
+
+            return False
 
 
 def read_state(state_path: Path) -> CampaignState | None:
@@ -557,6 +604,8 @@ def crash_recover_dispatch(
 def resume_campaign_from_state(
     state_path: Path,
     continue_on_failure: bool,
+    *,
+    reset_on_retry: bool = False,
 ) -> ResumeDecision | None:
     """Determine the next dispatch for a resumed campaign.
 
@@ -566,6 +615,7 @@ def resume_campaign_from_state(
       3. If running exists and stale, mark it interrupted; skip alive ones.
       4. If failure exists and continue_on_failure=False, return None
          with reason fleet_halted_on_failure (encoded via a sentinel).
+         When reset_on_retry=True, reset all FAILURE dispatches to PENDING instead.
       5. Return ResumeDecision with next_dispatch_name and completed block.
 
     Returns None if the state file is missing/corrupted. Returns a
@@ -597,12 +647,19 @@ def resume_campaign_from_state(
                         d.reason = "stale_running_on_resume"
 
             # Phase 2: check for failure halt
+            did_reset = False
             for d in state.dispatches:
                 if d.status == DispatchStatus.FAILURE and not continue_on_failure:
-                    return ResumeDecision(
-                        next_dispatch_name="",
-                        completed_dispatches_block=FLEET_HALTED_SENTINEL,
-                    )
+                    if reset_on_retry:
+                        _clear_dispatch_for_retry(d)
+                        did_reset = True
+                    else:
+                        return ResumeDecision(
+                            next_dispatch_name="",
+                            completed_dispatches_block=FLEET_HALTED_SENTINEL,
+                        )
+            if did_reset:
+                _write_state(state_path, state)
 
             # Phase 3: build completed dispatches block and find next
             # RESUMABLE is selected before PENDING; RUNNING (alive) dispatches are skipped

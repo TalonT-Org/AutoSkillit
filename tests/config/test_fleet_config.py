@@ -137,17 +137,17 @@ class TestFleetConfig:
         assert cfg.fleet.max_concurrent_dispatches == 3
 
 
-def test_config_resolution_fleet_enabled_via_experimental() -> None:
-    """Full config resolution enables fleet via experimental_enabled=True from defaults."""
-    from pathlib import Path
-
+def test_config_resolution_fleet_enabled_via_experimental(tmp_path) -> None:
+    """Full config resolution enables fleet when experimental_enabled=True in project config."""
     from autoskillit.config.settings import load_config
     from autoskillit.core.feature_flags import is_feature_enabled
 
-    project_root = Path(__file__).resolve().parents[2]
-    if not (project_root / ".autoskillit" / "config.yaml").exists():
-        pytest.skip("project config not present (clean clone or CI)")
-    cfg = load_config(project_root)
+    config_dir = tmp_path / ".autoskillit"
+    config_dir.mkdir()
+    (config_dir / "config.yaml").write_text(
+        yaml.dump({"features": {"experimental_enabled": True}})
+    )
+    cfg = load_config(tmp_path)
     assert cfg.experimental_enabled is True
     assert (
         is_feature_enabled("fleet", cfg.features, experimental_enabled=cfg.experimental_enabled)

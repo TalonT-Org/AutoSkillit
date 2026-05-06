@@ -18,7 +18,9 @@ from autoskillit.recipe._cmd_rpc import (
     emit_fallback_map,
     ensure_results,
     export_local_bundle,
+    force_push_and_wait_mergeability,
     refetch_issues,
+    wait_for_direct_merge,
 )
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
@@ -494,3 +496,40 @@ def test_batch_create_issues_handles_graphql_error(tmp_path):
         mock_run.side_effect = error_side_effect
         with pytest.raises(RuntimeError, match="rate limited"):
             batch_create_issues(workspace=str(tmp_path))
+
+
+# ─── Type coercion: int pr_number for _cmd_rpc callables (Step 1c) ───────────
+
+
+@patch("autoskillit.recipe._cmd_rpc.subprocess.run")
+@patch("autoskillit.recipe._cmd_rpc.time.sleep")
+def test_wait_for_direct_merge_int_pr_number(mock_sleep, mock_run):
+    """wait_for_direct_merge handles int pr_number from LLM JSON boundary."""
+    mock_run.return_value = subprocess.CompletedProcess(
+        args=[], returncode=0, stdout="MERGED\n", stderr=""
+    )
+    result = wait_for_direct_merge(pr_number=42, max_polls="1", poll_interval="1")  # type: ignore[arg-type]
+    assert result["state"] == "merged"
+    # Verify the gh call was made with the PR number (coerced to str by str() guard)
+    assert mock_run.call_count >= 1
+
+
+@patch("autoskillit.recipe._cmd_rpc.subprocess.run")
+@patch("autoskillit.recipe._cmd_rpc.time.sleep")
+def test_force_push_int_review_pr_number(mock_sleep, mock_run, tmp_path):
+    """force_push_and_wait_mergeability handles int review_pr_number."""
+    with patch("autoskillit.recipe._cmd_rpc._detect_remote", return_value="origin"):
+        mock_run.side_effect = [
+            subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
+            subprocess.CompletedProcess(args=[], returncode=0, stdout="TRUE\n", stderr=""),
+        ]
+        result = force_push_and_wait_mergeability(
+            work_dir=str(tmp_path),
+            batch_branch="feat-x/42",
+            review_pr_number=1958,  # type: ignore[arg-type]
+            max_polls="1",
+            poll_interval="1",
+        )
+    assert result["ok"] == "true"
+    # Verify gh pr view was called (coerced to str by str() guard)
+    assert mock_run.call_count >= 2

@@ -254,3 +254,120 @@ class TestRunCmdSleepInterception:
         await run_cmd(cmd="sleep 0", cwd="/tmp", step_name="quota_wait")
         assert len(tool_ctx.runner.call_args_list) == 0
         assert any(e["step_name"] == "quota_wait" for e in tool_ctx.timing_log.get_report())
+
+
+# ─── Type coercion tests (Step 1a) ───────────────────────────────────────────
+
+
+@pytest.mark.usefixtures("tool_ctx")
+class TestImportAndCallTypeCoercion:
+    """Test _import_and_call annotation-aware type coercion."""
+
+    @pytest.mark.anyio
+    async def test_int_coerced_to_str(self):
+        """int value for str-annotated param is coerced to str."""
+        result = json.loads(
+            await run_python(
+                callable="tests.server._type_coercion_fixtures._str_only_param",
+                args={"value": 42},
+                timeout=10,
+            )
+        )
+        assert result["success"] is True
+        assert result["result"]["value"] == "42"
+
+    @pytest.mark.anyio
+    async def test_str_coerced_to_int(self):
+        """str value for int-annotated param is coerced to int."""
+        result = json.loads(
+            await run_python(
+                callable="tests.server._type_coercion_fixtures._int_param",
+                args={"value": "7"},
+                timeout=10,
+            )
+        )
+        assert result["success"] is True
+        assert result["result"]["value"] == 7
+
+    @pytest.mark.anyio
+    async def test_str_coerced_to_float(self):
+        """str value for float-annotated param is coerced to float."""
+        result = json.loads(
+            await run_python(
+                callable="tests.server._type_coercion_fixtures._typed_callable",
+                args={"name": "test", "count": 1, "ratio": "3.14"},
+                timeout=10,
+            )
+        )
+        assert result["success"] is True
+        assert result["result"]["ratio"] == 3.14
+
+    @pytest.mark.anyio
+    async def test_int_coerced_to_float(self):
+        """int value for float-annotated param is coerced to float."""
+        result = json.loads(
+            await run_python(
+                callable="tests.server._type_coercion_fixtures._typed_callable",
+                args={"name": "test", "count": 1, "ratio": 5},
+                timeout=10,
+            )
+        )
+        assert result["success"] is True
+        assert result["result"]["ratio"] == 5.0
+
+    @pytest.mark.anyio
+    async def test_correct_types_unchanged(self):
+        """Correct types pass through without coercion."""
+        result = json.loads(
+            await run_python(
+                callable="tests.server._type_coercion_fixtures._typed_callable",
+                args={"name": "hello", "count": 7, "ratio": 2.5},
+                timeout=10,
+            )
+        )
+        assert result["success"] is True
+        assert result["result"] == {"name": "hello", "count": 7, "ratio": 2.5}
+
+    @pytest.mark.anyio
+    async def test_none_still_uses_default(self):
+        """None still triggers default substitution (existing behavior)."""
+        result = json.loads(
+            await run_python(
+                callable="tests.server._type_coercion_fixtures._str_optional_param",
+                args={"value": None},
+                timeout=10,
+            )
+        )
+        assert result["success"] is True
+        assert result["result"]["value"] == "default"
+
+    @pytest.mark.anyio
+    async def test_coercion_logs_warning(self):
+        """Coercion emits a structlog warning with type info."""
+        with structlog.testing.capture_logs() as logs:
+            result = json.loads(
+                await run_python(
+                    callable="tests.server._type_coercion_fixtures._str_only_param",
+                    args={"value": 99},
+                    timeout=10,
+                )
+            )
+        assert result["success"] is True
+        coercion_logs = [log for log in logs if log.get("event") == "run_python type coerced"]
+        assert len(coercion_logs) == 1
+        assert coercion_logs[0]["arg"] == "value"
+        assert coercion_logs[0]["from_type"] == "int"
+        assert coercion_logs[0]["to_type"] == "str"
+
+    @pytest.mark.anyio
+    async def test_unconvertible_value_not_coerced(self):
+        """Non-numeric str for int param is not coerced, callable fails."""
+        result = json.loads(
+            await run_python(
+                callable="tests.server._type_coercion_fixtures._int_param",
+                args={"value": "not_a_number"},
+                timeout=10,
+            )
+        )
+        assert result["success"] is False
+        assert "AssertionError" in result["error"]

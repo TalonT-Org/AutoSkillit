@@ -110,7 +110,7 @@ def annotate_pr_diff(
             )
             review_mode = "github"
         result = subprocess.run(
-            ["gh", "pr", "diff", pr_number],
+            ["gh", "pr", "diff", str(pr_number)],
             capture_output=True,
             text=True,
             check=True,

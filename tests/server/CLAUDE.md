@@ -8,6 +8,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 |------|---------|
 | `__init__.py` | empty |
 | `_helpers.py` | Shared test builder utilities for tests/server/ |
+| `_type_coercion_fixtures.py` | Test fixtures for _import_and_call annotation-aware type coercion |
 | `conftest.py` | Shared fixtures for tests/server/ |
 | `test_editable_guard.py` | Unit tests for server/_editable_guard.py — scan_editable_installs_for_worktree |
 | `test_factory.py` | Tests for server/_factory.py make_context() composition root |

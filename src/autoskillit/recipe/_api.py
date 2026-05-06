@@ -165,14 +165,12 @@ def list_all(
         Includes "errors" key when recipes fail to parse.
     """
     from autoskillit.core import is_feature_enabled  # noqa: PLC0415
-    from autoskillit.recipe.schema import RecipeKind  # noqa: PLC0415
+    from autoskillit.recipe.schema import NON_INTERACTIVE_KINDS  # noqa: PLC0415
 
     _pdir = project_dir if project_dir is not None else Path.cwd()
     _features = features or {}
     fleet_enabled = is_feature_enabled("fleet", _features)
-    exclude_kinds = (
-        frozenset() if fleet_enabled else frozenset({RecipeKind.CAMPAIGN, RecipeKind.FOOD_TRUCK})
-    )
+    exclude_kinds = frozenset() if fleet_enabled else NON_INTERACTIVE_KINDS
     result = list_recipes(_pdir, exclude_kinds=exclude_kinds)
     return format_recipe_list_response(result)
 

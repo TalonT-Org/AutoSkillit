@@ -23,6 +23,11 @@ class RecipeKind(StrEnum):
     FOOD_TRUCK = "food-truck"
 
 
+NON_INTERACTIVE_KINDS: Final[frozenset[RecipeKind]] = frozenset(
+    {RecipeKind.CAMPAIGN, RecipeKind.FOOD_TRUCK}
+)
+
+
 @dataclass
 class RecipeIngredient:
     description: str

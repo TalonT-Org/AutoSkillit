@@ -480,7 +480,7 @@ class TestMissingRequiredIngredient:
 
     @pytest.mark.anyio
     async def test_task_auto_injected_from_top_level_param(self, tool_ctx, monkeypatch):
-        """Top-level task param auto-injects into effective_ingredients for recipes declaring task."""
+        """top-level task param auto-injects into effective_ingredients when recipe declares it."""
         _setup_dispatch_with_ingredients(
             tool_ctx, monkeypatch, {"task": {"required": True, "default": None}}
         )
@@ -503,7 +503,7 @@ class TestMissingRequiredIngredient:
 
         from autoskillit.fleet._api import execute_dispatch
 
-        raw = await execute_dispatch(
+        await execute_dispatch(
             tool_ctx=tool_ctx,
             recipe="test-recipe",
             task="top-level-value",
@@ -532,7 +532,7 @@ class TestMissingRequiredIngredient:
 
         from autoskillit.fleet._api import execute_dispatch
 
-        raw = await execute_dispatch(
+        await execute_dispatch(
             tool_ctx=tool_ctx,
             recipe="test-recipe",
             task="some-task",

@@ -743,9 +743,15 @@ async def dispatch_food_truck(
         campaign_state_path_str = os.environ.get("AUTOSKILLIT_CAMPAIGN_STATE_PATH")
         continue_on_failure_str = os.environ.get("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false")
         if campaign_state_path_str and continue_on_failure_str.lower() != "true":
-            from autoskillit.fleet import has_failed_dispatch  # noqa: PLC0415
+            from autoskillit.fleet import (  # noqa: PLC0415
+                has_failed_dispatch,
+                reset_failed_dispatch,
+            )
 
-            if has_failed_dispatch(Path(campaign_state_path_str)):
+            campaign_sp = Path(campaign_state_path_str)
+            if dispatch_name:
+                reset_failed_dispatch(campaign_sp, dispatch_name)
+            if has_failed_dispatch(campaign_sp):
                 return fleet_error(
                     FleetErrorCode.FLEET_CAMPAIGN_HALTED,
                     "Campaign halted: a prior dispatch failed and "

@@ -113,8 +113,6 @@ def _setup_run_checks(
     input_calls: list[str] = []
     monkeypatch.setattr("builtins.input", lambda _="": input_calls.append("called") or answer)
 
-    monkeypatch.setattr("autoskillit.core.any_kitchen_open", lambda **kw: False)
-
     return printed, input_calls
 
 
@@ -816,88 +814,4 @@ def test_all_dismissed_signals_produce_no_interactive_prompt(
     combined = " ".join(printed)
     assert "autoskillit update" in combined, (
         "All-dismissed signals must produce passive notification containing 'autoskillit update'"
-    )
-
-
-def test_run_update_checks_shows_notification_when_kitchen_open(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    printed, input_calls = _setup_run_checks(monkeypatch, tmp_path, binary_signal=True)
-    monkeypatch.setattr("autoskillit.core.any_kitchen_open", lambda **kw: True)
-
-    binary_signal_calls: list[bool] = []
-    monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._binary_signal",
-        lambda *a, **kw: binary_signal_calls.append(True) or None,
-    )
-
-    run_update_checks(home=tmp_path, command="update")
-
-    combined = " ".join(printed)
-    assert "kitchen" in combined.lower(), (
-        "run_update_checks must print a notification mentioning 'kitchen' when kitchen is open"
-    )
-    assert not input_calls, "run_update_checks must not prompt interactively when kitchen is open"
-    assert not binary_signal_calls, (
-        "run_update_checks must not proceed to signal checks when kitchen is open"
-    )
-
-
-def test_run_update_checks_kitchen_open_bypassed_for_non_mutation_command(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """run_update_checks with command='order' proceeds past kitchen guard even when open."""
-    printed, input_calls = _setup_run_checks(monkeypatch, tmp_path, binary_signal=True)
-
-    binary_signal_calls: list[bool] = []
-    monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._binary_signal",
-        lambda *a, **kw: binary_signal_calls.append(True) or None,
-    )
-
-    run_update_checks(home=tmp_path, command="order")
-
-    combined = " ".join(printed)
-    assert "kitchen" not in combined.lower(), (
-        "run_update_checks must NOT print the kitchen-suppression message for 'order'"
-    )
-    assert binary_signal_calls, (
-        "run_update_checks must call _binary_signal (signal gathering proceeds) for 'order'"
-    )
-
-
-def test_run_update_checks_kitchen_guard_active_for_update_command(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """run_update_checks with command='update' retains kitchen guard suppression."""
-    printed, input_calls = _setup_run_checks(monkeypatch, tmp_path, binary_signal=True)
-    monkeypatch.setattr("autoskillit.core.any_kitchen_open", lambda **kw: True)
-
-    binary_signal_calls: list[bool] = []
-    monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._binary_signal",
-        lambda *a, **kw: binary_signal_calls.append(True) or None,
-    )
-
-    run_update_checks(home=tmp_path, command="update")
-
-    combined = " ".join(printed)
-    assert "kitchen" in combined.lower(), (
-        "run_update_checks must suppress via kitchen guard for 'update'"
-    )
-    assert not input_calls, (
-        "run_update_checks must not prompt interactively for 'update' + kitchen"
-    )
-    assert not binary_signal_calls, (
-        "run_update_checks must not reach signal gathering for 'update' + kitchen"
-    )
-
-
-def test_kitchen_guarded_commands_registry() -> None:
-    """KITCHEN_GUARDED_COMMANDS must contain exactly the mutation commands."""
-    from autoskillit.cli.update._update_checks import KITCHEN_GUARDED_COMMANDS
-
-    assert KITCHEN_GUARDED_COMMANDS == frozenset({"update", "install", "init"}), (
-        f"KITCHEN_GUARDED_COMMANDS must be exactly {{'update', 'install', 'init'}}, "
-        f"got {KITCHEN_GUARDED_COMMANDS!r}"
     )

@@ -8,6 +8,7 @@ no network calls.
 
 from __future__ import annotations
 
+import functools
 import json
 from pathlib import Path
 
@@ -52,6 +53,7 @@ def _get_autoskillit_install_path() -> Path:
     return Path(install_path)
 
 
+@functools.lru_cache(maxsize=1)
 def detect_autoskillit_mcp_prefix() -> str:
     """Return the MCP prefix that autoskillit tools will use in a spawned session.
 

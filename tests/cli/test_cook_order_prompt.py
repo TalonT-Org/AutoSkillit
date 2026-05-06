@@ -259,6 +259,14 @@ class TestOrderMcpPrefixSelection:
     """order() must embed the resolved MCP prefix in the system prompt."""
 
     @pytest.fixture(autouse=True)
+    def _clear_prefix_cache(self):  # noqa: ANN204
+        from autoskillit.core._plugin_ids import detect_autoskillit_mcp_prefix as _fn
+
+        _fn.cache_clear()
+        yield
+        _fn.cache_clear()
+
+    @pytest.fixture(autouse=True)
     def _stub_preview(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("autoskillit.cli._preview.show_cook_preview", lambda *a, **kw: None)
 

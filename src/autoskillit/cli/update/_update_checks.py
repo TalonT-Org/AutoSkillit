@@ -47,8 +47,6 @@ logger = get_logger(__name__)
 
 _DISMISS_FILE = "update_check.json"
 
-KITCHEN_GUARDED_COMMANDS: frozenset[str] = frozenset({"update", "install", "init"})
-
 
 @dataclass(frozen=True)
 class Signal:
@@ -291,7 +289,7 @@ def _run_update_sequence(
         perform_restart()
 
 
-def run_update_checks(home: Path | None = None, *, command: str = "") -> None:
+def run_update_checks(home: Path | None = None) -> None:
     """Run the unified update check on interactive CLI invocations.
 
     At most one ``[Y/n]`` prompt is shown per invocation.  Guards:
@@ -316,16 +314,6 @@ def run_update_checks(home: Path | None = None, *, command: str = "") -> None:
         or not sys.stdout.isatty()
     ):
         return
-
-    if command in KITCHEN_GUARDED_COMMANDS:
-        from autoskillit.core import any_kitchen_open  # noqa: PLC0415
-
-        if any_kitchen_open(project_path=str(Path.cwd())):
-            print(
-                "Skipping update check: a kitchen is open for this project. "
-                "Run 'autoskillit update' manually after the pipeline finishes.",
-            )
-            return
 
     _skip_env: dict[str, str] = {
         **os.environ,

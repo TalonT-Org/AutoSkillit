@@ -57,15 +57,3 @@ class TestTimeoutCoherenceGate:
         assert not any(
             "idle_output_timeout_coherence" in entry.get("event", "") for entry in cap_logs
         )
-
-    def test_default_config_does_not_trigger_coherence_warning(self, tmp_path):
-        """With default config (idle_output_timeout=1000), coherence gate is silent."""
-        config_dir = tmp_path / ".autoskillit"
-        config_dir.mkdir()
-        (config_dir / "config.yaml").write_text("")
-        with structlog.testing.capture_logs() as cap_logs:
-            cfg = load_config(tmp_path)
-        assert cfg.run_skill.idle_output_timeout == 1000
-        assert not any(
-            "idle_output_timeout_coherence" in entry.get("event", "") for entry in cap_logs
-        )

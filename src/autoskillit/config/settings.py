@@ -236,6 +236,14 @@ class AutomationConfig:
         def val(section: dict[str, Any], key: str, default: Any) -> Any:
             return section.get(key, default)
 
+        def _parse_int_config(value: Any, field_name: str) -> int:
+            try:
+                return int(value)
+            except (ValueError, TypeError) as exc:
+                raise ConfigSchemaError(
+                    f"Config field '{field_name}' must be an integer, got {value!r}"
+                ) from exc
+
         tc = sec("test_check")
         cf = sec("classify_fix")
         rw = sec("reset_workspace")
@@ -429,8 +437,9 @@ class AutomationConfig:
                 event=val(ci, "event", _ci["event"]) or None,
             ),
             review=ReviewConfig(
-                local_review_rounds=int(
-                    val(rv, "local_review_rounds", _rv["local_review_rounds"])
+                local_review_rounds=_parse_int_config(
+                    val(rv, "local_review_rounds", _rv["local_review_rounds"]),
+                    "review.local_review_rounds",
                 ),
             ),
             skills=SkillsConfig(

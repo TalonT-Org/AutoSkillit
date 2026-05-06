@@ -122,5 +122,6 @@ def resolve_ingredient_defaults(project_dir: Path) -> dict[str, str]:
     except Exception:
         logger.warning("resolve_base_branch_failed", exc_info=True)
         resolved["base_branch"] = "main"
+        resolved["local_review_rounds"] = "0"
 
     return resolved

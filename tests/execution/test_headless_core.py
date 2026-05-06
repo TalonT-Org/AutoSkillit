@@ -2078,7 +2078,6 @@ class TestFailureCaptureInBuildSkillResult:
         )
         _build_skill_result(result, skill_command="/test", audit=tool_ctx.audit)
         record = tool_ctx.audit.get_report()[0]
-        assert record.timestamp  # non-empty ISO timestamp
         assert datetime.fromisoformat(record.timestamp)  # valid ISO 8601 format
 
     def test_stale_termination_is_captured(self, tool_ctx):

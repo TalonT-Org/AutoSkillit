@@ -10,6 +10,38 @@ import pytest
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
+_EXPECTED_PROCESS_SYMBOLS: frozenset[str] = frozenset(
+    {
+        "DefaultSubprocessRunner",
+        "_extract_stdout_session_id",
+        "_resolve_session_id",
+        "RaceAccumulator",
+        "RaceSignals",
+        "_has_active_api_connection",
+        "_has_active_child_processes",
+        "_heartbeat",
+        "_jsonl_contains_marker",
+        "_jsonl_has_record_type",
+        "_jsonl_last_record_type",
+        "_marker_is_standalone",
+        "_session_log_monitor",
+        "_wait_process_dead",
+        "_watch_heartbeat",
+        "_watch_process",
+        "_watch_session_log",
+        "async_kill_process_tree",
+        "create_temp_io",
+        "decide_termination_action",
+        "execute_termination_action",
+        "kill_process_tree",
+        "pty_wrap_command",
+        "read_temp_output",
+        "resolve_termination",
+        "run_managed_async",
+        "run_managed_sync",
+    }
+)
+
 
 def test_process_kill_exports():
     """kill_process_tree and async_kill_process_tree are defined in _process_kill submodule."""
@@ -96,10 +128,12 @@ def test_process_race_exports():
 
 
 def test_process_facade_reexports_all_public_symbols():
-    """process.py facade re-exports at least 21 public symbols."""
+    """process.py facade re-exports exactly the expected 27 public symbols."""
     from autoskillit.execution import process
 
     assert hasattr(process, "__all__")
-    assert len(process.__all__) >= 21, (
-        f"process.py __all__ has {len(process.__all__)} symbols, expected at least 21"
+    assert set(process.__all__) == _EXPECTED_PROCESS_SYMBOLS, (
+        f"process.__all__ mismatch.\n"
+        f"  Extra   : {set(process.__all__) - _EXPECTED_PROCESS_SYMBOLS}\n"
+        f"  Missing : {_EXPECTED_PROCESS_SYMBOLS - set(process.__all__)}"
     )

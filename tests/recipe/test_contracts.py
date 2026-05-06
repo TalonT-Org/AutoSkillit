@@ -852,3 +852,102 @@ def test_wait_for_ci_conclusion_allowed_values() -> None:
     conclusion = manifest["tool_output_contracts"]["wait_for_ci"]["fields"]["conclusion"]
     values = set(conclusion["allowed_values"])
     assert {"success", "failure", "cancelled", "timed_out", "no_runs", "error"}.issubset(values)
+
+
+# ---------------------------------------------------------------------------
+# Research recipe contract card tests
+# ---------------------------------------------------------------------------
+
+
+def test_research_recipe_card_generated_at_is_iso8601() -> None:
+    """research.yaml card's generated_at is a parseable ISO-8601 timestamp."""
+    import datetime
+
+    from autoskillit.recipe.io import builtin_recipes_dir
+
+    card = load_recipe_card("research", builtin_recipes_dir())
+    assert card is not None
+    generated_at = card.get("generated_at", "")
+    assert isinstance(generated_at, str) and generated_at, (
+        "generated_at must be a non-empty string"
+    )
+    try:
+        datetime.datetime.fromisoformat(generated_at)
+    except ValueError as exc:
+        pytest.fail(f"generated_at is not a valid ISO-8601 datetime: {generated_at!r}: {exc}")
+
+
+def test_research_recipe_card_structure() -> None:
+    """Research contract card contains all required top-level keys."""
+    from autoskillit.recipe.io import builtin_recipes_dir
+
+    card = load_recipe_card("research", builtin_recipes_dir())
+    assert card is not None
+    for key in ("generated_at", "bundled_manifest_version", "skill_hashes", "skills", "dataflow"):
+        assert key in card, f"Missing key: {key}"
+    assert card["bundled_manifest_version"] == "0.1.0"
+    assert card["skill_hashes"] == {}
+
+
+def test_research_recipe_card_contains_research_skills() -> None:
+    """Research card captures contracts for statically-resolvable skills."""
+    from autoskillit.recipe.io import builtin_recipes_dir
+
+    card = load_recipe_card("research", builtin_recipes_dir())
+    assert card is not None
+    skills = card["skills"]
+    expected_subset = {
+        "scope",
+        "plan-experiment",
+        "review-design",
+        "run-experiment",
+        "generate-report",
+        "resolve-failures",
+        "prepare-research-pr",
+        "compose-research-pr",
+        "implement-experiment",
+        "make-groups",
+        "make-plan",
+        "bundle-local-report",
+    }
+    required_fields = {"inputs", "outputs", "expected_output_patterns", "write_behavior"}
+    for skill_name in expected_subset:
+        assert skill_name in skills, f"Missing skill: {skill_name}"
+        entry = skills[skill_name]
+        for field in required_fields:
+            assert field in entry, f"{skill_name} missing '{field}'"
+        assert isinstance(entry["inputs"], list), f"{skill_name} 'inputs' must be a list"
+        assert isinstance(entry["outputs"], list), f"{skill_name} 'outputs' must be a list"
+        assert isinstance(entry["expected_output_patterns"], list), (
+            f"{skill_name} 'expected_output_patterns' must be a list"
+        )
+        assert entry["write_behavior"] in {"always", "conditional", "never"}, (
+            f"{skill_name} 'write_behavior' has unexpected value: {entry['write_behavior']!r}"
+        )
+
+
+def test_research_recipe_card_dataflow() -> None:
+    """Research card dataflow section is populated and has expected steps."""
+    from autoskillit.recipe.io import builtin_recipes_dir
+
+    card = load_recipe_card("research", builtin_recipes_dir())
+    assert card is not None
+    dataflow = card["dataflow"]
+    step_names = [entry["step"] for entry in dataflow]
+    assert "scope" in step_names
+    assert "plan_experiment" in step_names
+    for entry in dataflow:
+        assert "step" in entry, f"Dataflow entry missing 'step': {entry}"
+        assert "available" in entry, f"Step '{entry.get('step')}' missing 'available'"
+        assert "required" in entry, f"Step '{entry.get('step')}' missing 'required'"
+        assert "produced" in entry, f"Step '{entry.get('step')}' missing 'produced'"
+
+
+def test_research_contract_card_not_stale() -> None:
+    """Freshly generated card has no staleness warnings."""
+    from autoskillit.recipe.io import builtin_recipes_dir
+
+    contract = load_recipe_card("research", builtin_recipes_dir())
+    assert contract is not None
+    stale = check_contract_staleness(contract)
+    assert stale == []

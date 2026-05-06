@@ -135,7 +135,7 @@ async def _import_and_call(
             logger.warning(
                 "run_python stripped sentinel key from args",
                 callable=dotted_path,
-                key=key,
+                arg_name=key,
             )
             del args[key]
 
@@ -149,7 +149,7 @@ async def _import_and_call(
                 logger.warning(
                     "run_python dropped unrecognized arg",
                     callable=dotted_path,
-                    key=key,
+                    arg_name=key,
                     extra_args=[key],
                 )
                 del args[key]

@@ -506,7 +506,7 @@ class TestResumeReasonInPrompt:
     def test_context_exhausted_absent_from_resumable(self) -> None:
         prompt = _build(
             resumable_dispatch_name="impl-1",
-            resume_kill_reason="",
+            resume_kill_reason="context_exhausted",
         )
         assert "RESUMABLE DISPATCH: impl-1" in prompt
         idx = prompt.index("RESUMABLE DISPATCH: impl-1")

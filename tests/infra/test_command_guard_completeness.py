@@ -25,7 +25,7 @@ COMMAND_EXECUTING_TOOLS = {"Bash", "mcp__autoskillit__local__autoskillit__run_cm
 
 
 def _find_command_inspecting_guards() -> list[tuple[str, Path]]:
-    """Discover guards that inspect shell command text by scanning for .get("cmd" or .get("command".
+    """Discover guards that inspect shell command text.
 
     Returns list of (guard_name, guard_script_path) tuples.
     """

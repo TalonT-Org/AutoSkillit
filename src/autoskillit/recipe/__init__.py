@@ -62,6 +62,14 @@ from autoskillit.recipe.io import (  # noqa: E402
     load_recipe,
 )
 from autoskillit.recipe.loader import parse_recipe_metadata  # noqa: E402
+from autoskillit.recipe.methodology_disambiguation import (  # noqa: E402
+    CrossTraditionOverlapDef,
+    DisambiguationExceptionDef,
+    DisambiguationResult,
+    DisambiguationRuleDef,
+    disambiguate,
+    load_disambiguation_rules,
+)
 from autoskillit.recipe.methodology_tradition_registry import (  # noqa: E402
     BUNDLED_METHODOLOGY_TRADITIONS_DIR,
     MethodologyTraditionSpec,
@@ -195,6 +203,12 @@ __all__ = [
     "get_methodology_tradition_by_name",
     "is_out_of_scope_tradition",
     "load_all_methodology_traditions",
+    "CrossTraditionOverlapDef",
+    "DisambiguationExceptionDef",
+    "DisambiguationResult",
+    "DisambiguationRuleDef",
+    "disambiguate",
+    "load_disambiguation_rules",
     # --- methodology tradition router ---
     "TraditionRouterResult",
     "UnionRuleDef",

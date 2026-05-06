@@ -116,7 +116,7 @@ skills:
       required: true
       recommended: false
     - name: scope_report_path
-      type: string
+      type: file_path
       required: false
       recommended: false
     outputs:
@@ -253,6 +253,7 @@ skills:
     - 'groups_path = /tmp/groups.json
 
       %%ORDER_UP%%'
+    write_behavior: always
   make-plan:
     inputs:
     - name: task
@@ -292,7 +293,7 @@ skills:
   troubleshoot-experiment:
     inputs:
     - name: worktree_path
-      type: string
+      type: directory_path
       required: true
       recommended: false
     - name: step_name

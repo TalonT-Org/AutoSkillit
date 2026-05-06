@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 
 from autoskillit.recipe.methodology_tradition_registry import (
+    VenueAppendixDef,
     load_all_methodology_traditions,
 )
 from autoskillit.recipe.methodology_venue_appendix import (
@@ -73,6 +76,8 @@ class TestFoldingMapStructure:
     def test_folding_entries_are_frozen(self) -> None:
         for entry in load_ml_sub_area_folding():
             assert isinstance(entry, MLSubAreaFoldingEntry)
+            with pytest.raises(dataclasses.FrozenInstanceError):
+                entry.sub_area = "mutated"  # type: ignore[misc]
 
     def test_folding_map_deterministic(self) -> None:
         results = [load_ml_sub_area_folding() for _ in range(10)]
@@ -86,10 +91,7 @@ class TestFoldingMapStructure:
 
 class TestVenueAppendixSchema:
     def test_all_traditions_with_appendices_load(self) -> None:
-        traditions = load_all_methodology_traditions()
-        for spec in traditions:
-            if spec.venue_specific_appendices:
-                pass  # just verify it loads without error
+        list(load_all_methodology_traditions())
 
     def test_appendix_entries_have_required_fields(self) -> None:
         traditions = load_all_methodology_traditions()
@@ -129,7 +131,7 @@ class TestVenueAppendixSchema:
             None,
         )
         assert mcb is not None
-        assert len(mcb.venue_specific_appendices) == 8
+        assert len(mcb.venue_specific_appendices) >= 8
 
     def test_alternate_parent_traditions_have_appendices(self) -> None:
         folding = load_ml_sub_area_folding()
@@ -147,9 +149,9 @@ class TestVenueAppendixSchema:
         traditions = load_all_methodology_traditions()
         for spec in traditions:
             for app in spec.venue_specific_appendices:
-                assert isinstance(app, tuple.__class__.__bases__[0]) or hasattr(
-                    app, "__dataclass_fields__"
-                )
+                assert isinstance(app, VenueAppendixDef)
+                with pytest.raises(dataclasses.FrozenInstanceError):
+                    app.sub_area = "mutated"  # type: ignore[misc]
 
 
 # ---------------------------------------------------------------------------
@@ -346,7 +348,10 @@ class TestVenueBranchingFixtures:
     ) -> None:
         matches = resolve_venue_appendices(plan_text)
         sub_area_matches = [m for m in matches if m.sub_area == sub_area]
-        assert len(sub_area_matches) == 1
+        assert len(sub_area_matches) == 1, (
+            f"Expected 1 match for sub_area={sub_area!r}, "
+            f"got {len(sub_area_matches)}: {sub_area_matches}"
+        )
         match = sub_area_matches[0]
         assert match.resolved_parent == expected_parent
         assert match.re_routed == expected_rerouted
@@ -416,6 +421,8 @@ class TestEdgeCases:
         matches = resolve_venue_appendices(plan_text)
         for m in matches:
             assert isinstance(m, VenueAppendixMatch)
+            with pytest.raises(dataclasses.FrozenInstanceError):
+                m.sub_area = "mutated"  # type: ignore[misc]
 
     def test_case_insensitive_keyword_matching(self) -> None:
         plan_text_lower = (

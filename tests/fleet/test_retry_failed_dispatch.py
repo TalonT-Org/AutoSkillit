@@ -175,7 +175,6 @@ class TestResumeResetOnRetry:
         write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("d1", "d2", "d3"))
         append_dispatch_record(sp, DispatchRecord(name="d1", status=DispatchStatus.SUCCESS))
         append_dispatch_record(sp, DispatchRecord(name="d2", status=DispatchStatus.FAILURE))
-        append_dispatch_record(sp, DispatchRecord(name="d3", status=DispatchStatus.PENDING))
 
         decision = resume_campaign_from_state(sp, continue_on_failure=False, reset_on_retry=True)
 
@@ -204,7 +203,6 @@ class TestResumeResetOnRetry:
         sp = _state_path(tmp_path)
         write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("d1", "d2"))
         append_dispatch_record(sp, DispatchRecord(name="d1", status=DispatchStatus.SUCCESS))
-        append_dispatch_record(sp, DispatchRecord(name="d2", status=DispatchStatus.PENDING))
 
         decision = resume_campaign_from_state(sp, continue_on_failure=True, reset_on_retry=True)
 

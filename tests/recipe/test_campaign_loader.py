@@ -389,7 +389,6 @@ def test_research_campaign_dispatch_chain():
     assert recipe.dispatches[3].depends_on == ["run-review"]
     for d in recipe.dispatches:
         assert d.task, f"Dispatch {d.name!r} has empty task"
-        assert d.capture == {}
         assert d.gate is None
 
 
@@ -403,14 +402,144 @@ def test_research_campaign_dispatch_ingredients_are_strings():
             )
 
 
-def test_research_campaign_no_campaign_refs():
+def test_research_campaign_run_design_capture():
+    path = pkg_root() / "recipes" / "campaigns" / "research-campaign.yaml"
+    recipe = load_recipe(path)
+    d = recipe.dispatches[0]
+    assert d.name == "run-design"
+    assert set(d.capture.keys()) == {
+        "worktree_path",
+        "research_dir",
+        "experiment_plan",
+        "visualization_plan_path",
+    }
+    for key, val in d.capture.items():
+        assert val == f"${{{{ result.{key} }}}}"
+
+
+def test_research_campaign_run_implement_ingredients():
+    path = pkg_root() / "recipes" / "campaigns" / "research-campaign.yaml"
+    recipe = load_recipe(path)
+    d = recipe.dispatches[1]
+    assert d.name == "run-implement"
+    assert set(d.ingredients.keys()) == {
+        "worktree_path",
+        "research_dir",
+        "experiment_plan",
+        "visualization_plan_path",
+        "source_dir",
+    }
+    assert d.ingredients["worktree_path"] == "${{ campaign.worktree_path }}"
+    assert d.ingredients["research_dir"] == "${{ campaign.research_dir }}"
+    assert d.ingredients["experiment_plan"] == "${{ campaign.experiment_plan }}"
+    assert d.ingredients["visualization_plan_path"] == "${{ campaign.visualization_plan_path }}"
+    assert d.ingredients["source_dir"] == "${{ inputs.source_dir }}"
+
+
+def test_research_campaign_run_implement_capture():
+    path = pkg_root() / "recipes" / "campaigns" / "research-campaign.yaml"
+    recipe = load_recipe(path)
+    d = recipe.dispatches[1]
+    assert d.name == "run-implement"
+    assert set(d.capture.keys()) == {"report_path"}
+    assert d.capture["report_path"] == "${{ result.report_path }}"
+
+
+def test_research_campaign_run_review_ingredients():
+    path = pkg_root() / "recipes" / "campaigns" / "research-campaign.yaml"
+    recipe = load_recipe(path)
+    d = recipe.dispatches[2]
+    assert d.name == "run-review"
+    assert {
+        "worktree_path",
+        "research_dir",
+        "experiment_plan",
+        "visualization_plan_path",
+        "report_path",
+    }.issubset(set(d.ingredients.keys()))
+    assert d.ingredients["source_dir"] == "${{ inputs.source_dir }}"
+    for key in [
+        "worktree_path",
+        "research_dir",
+        "experiment_plan",
+        "visualization_plan_path",
+        "report_path",
+    ]:
+        assert d.ingredients[key] == f"${{{{ campaign.{key} }}}}"
+
+
+def test_research_campaign_run_review_capture():
+    path = pkg_root() / "recipes" / "campaigns" / "research-campaign.yaml"
+    recipe = load_recipe(path)
+    d = recipe.dispatches[2]
+    assert d.name == "run-review"
+    assert set(d.capture.keys()) == {"pr_url", "all_diagram_paths", "report_path_after_finalize"}
+    assert d.capture["pr_url"] == "${{ result.pr_url }}"
+    assert d.capture["all_diagram_paths"] == "${{ result.all_diagram_paths }}"
+    assert d.capture["report_path_after_finalize"] == "${{ result.report_path_after_finalize }}"
+
+
+def test_research_campaign_run_review_capture_no_worktree_path():
+    path = pkg_root() / "recipes" / "campaigns" / "research-campaign.yaml"
+    recipe = load_recipe(path)
+    d = recipe.dispatches[2]
+    assert d.name == "run-review"
+    assert "worktree_path" not in d.capture
+
+
+def test_research_campaign_run_archive_ingredients():
+    path = pkg_root() / "recipes" / "campaigns" / "research-campaign.yaml"
+    recipe = load_recipe(path)
+    d = recipe.dispatches[3]
+    assert d.name == "run-archive"
+    assert set(d.ingredients.keys()) == {
+        "worktree_path",
+        "research_dir",
+        "pr_url",
+        "all_diagram_paths",
+        "report_path_after_finalize",
+    }
+    for key in d.ingredients:
+        assert d.ingredients[key] == f"${{{{ campaign.{key} }}}}"
+
+
+def test_research_campaign_no_campaign_refs_in_run_design():
+    path = pkg_root() / "recipes" / "campaigns" / "research-campaign.yaml"
+    recipe = load_recipe(path)
+    d = recipe.dispatches[0]
+    for key, val in d.ingredients.items():
+        assert "${{ campaign." not in val
+
+
+def test_research_campaign_run_archive_no_capture():
+    path = pkg_root() / "recipes" / "campaigns" / "research-campaign.yaml"
+    recipe = load_recipe(path)
+    d = recipe.dispatches[3]
+    assert d.name == "run-archive"
+    assert d.capture == {}
+
+
+def test_research_campaign_capture_keys_are_identifiers():
+    from autoskillit.recipe.rules.rules_campaign import _IDENT_RE
+
     path = pkg_root() / "recipes" / "campaigns" / "research-campaign.yaml"
     recipe = load_recipe(path)
     for d in recipe.dispatches:
-        for key, val in d.ingredients.items():
-            assert "${{ campaign." not in val, (
-                f"Dispatch {d.name!r} ingredient {key!r} uses campaign ref {val!r} — "
-                "campaign refs are deferred to P3-WP3"
+        for key in d.capture.keys():
+            assert _IDENT_RE.match(key), (
+                f"Dispatch {d.name!r} capture key {key!r} is not a valid identifier"
+            )
+
+
+def test_research_campaign_capture_values_reference_result():
+    from autoskillit.recipe.rules.rules_campaign import _RESULT_TEMPLATE_RE
+
+    path = pkg_root() / "recipes" / "campaigns" / "research-campaign.yaml"
+    recipe = load_recipe(path)
+    for d in recipe.dispatches:
+        for val in d.capture.values():
+            assert _RESULT_TEMPLATE_RE.match(val.strip()), (
+                f"Dispatch {d.name!r} capture value {val!r} does not reference result"
             )
 
 

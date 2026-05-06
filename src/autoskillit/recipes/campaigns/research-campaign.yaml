@@ -66,15 +66,24 @@ dispatches:
     ingredients:
       issue_url: "${{ inputs.issue_url }}"
       source_dir: "${{ inputs.source_dir }}"
-    capture: {}
+    capture:
+      worktree_path: "${{ result.worktree_path }}"
+      research_dir: "${{ result.research_dir }}"
+      experiment_plan: "${{ result.experiment_plan }}"
+      visualization_plan_path: "${{ result.visualization_plan_path }}"
     depends_on: []
 
   - name: run-implement
     recipe: research-implement
     task: "Implement the research experiment plan."
     ingredients:
+      worktree_path: "${{ campaign.worktree_path }}"
+      research_dir: "${{ campaign.research_dir }}"
+      experiment_plan: "${{ campaign.experiment_plan }}"
+      visualization_plan_path: "${{ campaign.visualization_plan_path }}"
       source_dir: "${{ inputs.source_dir }}"
-    capture: {}
+    capture:
+      report_path: "${{ result.report_path }}"
     depends_on:
       - run-design
 
@@ -82,8 +91,16 @@ dispatches:
     recipe: research-review
     task: "Review the research experiment and open PR."
     ingredients:
+      worktree_path: "${{ campaign.worktree_path }}"
+      research_dir: "${{ campaign.research_dir }}"
+      experiment_plan: "${{ campaign.experiment_plan }}"
+      visualization_plan_path: "${{ campaign.visualization_plan_path }}"
+      report_path: "${{ campaign.report_path }}"
       source_dir: "${{ inputs.source_dir }}"
-    capture: {}
+    capture:
+      pr_url: "${{ result.pr_url }}"
+      all_diagram_paths: "${{ result.all_diagram_paths }}"
+      report_path_after_finalize: "${{ result.report_path_after_finalize }}"
     depends_on:
       - run-implement
 
@@ -91,7 +108,11 @@ dispatches:
     recipe: research-archive
     task: "Archive research artifacts and close experiment PR."
     ingredients:
-      base_branch: "${{ inputs.base_branch }}"
+      worktree_path: "${{ campaign.worktree_path }}"
+      research_dir: "${{ campaign.research_dir }}"
+      pr_url: "${{ campaign.pr_url }}"
+      all_diagram_paths: "${{ campaign.all_diagram_paths }}"
+      report_path_after_finalize: "${{ campaign.report_path_after_finalize }}"
     capture: {}
     depends_on:
       - run-review

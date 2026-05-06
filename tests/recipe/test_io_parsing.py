@@ -532,37 +532,18 @@ def test_load_recipe_preserves_step_description(tmp_path: Path) -> None:
     assert recipe.steps["build"].description == "Run the full build suite"
 
 
-def test_parse_recipe_kitchen_rules_string_raises() -> None:
-    """_parse_recipe raises ValueError when kitchen_rules is a string."""
+@pytest.mark.parametrize(
+    "bad_val",
+    ["not-a-list", {"rule": "val"}, 42],
+    ids=["string", "dict", "int"],
+)
+def test_parse_recipe_kitchen_rules_rejects_non_list(bad_val: object) -> None:
+    """_parse_recipe raises ValueError when kitchen_rules is not a list."""
     with pytest.raises(ValueError, match="kitchen_rules"):
         _parse_recipe(
             {
                 "name": "bad",
-                "kitchen_rules": "not-a-list",
-                "steps": {"s": {"tool": "run_cmd"}},
-            }
-        )
-
-
-def test_parse_recipe_kitchen_rules_dict_raises() -> None:
-    """_parse_recipe raises ValueError when kitchen_rules is a dict."""
-    with pytest.raises(ValueError, match="kitchen_rules"):
-        _parse_recipe(
-            {
-                "name": "bad",
-                "kitchen_rules": {"rule": "val"},
-                "steps": {"s": {"tool": "run_cmd"}},
-            }
-        )
-
-
-def test_parse_recipe_kitchen_rules_int_raises() -> None:
-    """_parse_recipe raises ValueError when kitchen_rules is an int."""
-    with pytest.raises(ValueError, match="kitchen_rules"):
-        _parse_recipe(
-            {
-                "name": "bad",
-                "kitchen_rules": 42,
+                "kitchen_rules": bad_val,
                 "steps": {"s": {"tool": "run_cmd"}},
             }
         )

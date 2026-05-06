@@ -319,6 +319,55 @@ def test_parse_recipe_requires_packs_defaults_to_empty():
     assert recipe.requires_packs == []
 
 
+# ---------------------------------------------------------------------------
+# Food-truck kind tests
+# ---------------------------------------------------------------------------
+
+
+def test_food_truck_excluded_from_order_menu(tmp_path: Path) -> None:
+    """kind: food-truck recipe is excluded when exclude_kinds includes FOOD_TRUCK."""
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    (recipes_dir / "food-truck-test.yaml").write_text(
+        "name: food-truck-test\ndescription: test\nkind: food-truck\n"
+        "steps:\n  done:\n    action: stop\n    message: sentinel done\n"
+    )
+    result = list_recipes(
+        tmp_path,
+        exclude_kinds=frozenset({RecipeKind.CAMPAIGN, RecipeKind.FOOD_TRUCK}),
+    )
+    names = {r.name for r in result.items}
+    assert "food-truck-test" not in names
+
+
+def test_food_truck_included_when_not_excluded(tmp_path: Path) -> None:
+    """kind: food-truck recipe is included when exclude_kinds does not include FOOD_TRUCK."""
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    (recipes_dir / "food-truck-test.yaml").write_text(
+        "name: food-truck-test\ndescription: test\nkind: food-truck\n"
+        "steps:\n  done:\n    action: stop\n    message: sentinel done\n"
+    )
+    result = list_recipes(tmp_path)
+    names = {r.name for r in result.items}
+    assert "food-truck-test" in names
+
+
+def test_list_all_excludes_food_truck_when_fleet_off(tmp_path: Path) -> None:
+    """list_all with fleet disabled excludes FOOD_TRUCK kind recipes."""
+    from autoskillit.recipe._api import list_all
+
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    (recipes_dir / "my-food-truck.yaml").write_text(
+        "name: my-food-truck\ndescription: test\nkind: food-truck\n"
+        "steps:\n  done:\n    action: stop\n    message: sentinel done\n"
+    )
+    result = list_all(tmp_path, features={"fleet": False})
+    names = {r["name"] for r in result["recipes"]}
+    assert "my-food-truck" not in names
+
+
 def test_research_recipe_loads_without_error():
     from autoskillit.core.paths import pkg_root
 

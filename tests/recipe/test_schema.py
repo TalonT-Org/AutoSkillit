@@ -202,6 +202,18 @@ def test_recipe_step_has_constant_field() -> None:
     assert step.constant is None
 
 
+# ---------------------------------------------------------------------------
+# RecipeKind enum
+# ---------------------------------------------------------------------------
+
+
+def test_food_truck_kind_exists() -> None:
+    """RecipeKind.FOOD_TRUCK exists and equals 'food-truck'."""
+    from autoskillit.recipe.schema import RecipeKind
+
+    assert RecipeKind.FOOD_TRUCK == "food-truck"
+
+
 def test_constant_step_parse_from_yaml() -> None:
     """A constant step is parsed from YAML into RecipeStep.constant."""
     from autoskillit.recipe.io import _parse_step

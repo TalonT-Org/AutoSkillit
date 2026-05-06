@@ -96,6 +96,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_rules_dataflow_nullable.py` | Tests for dataflow nullable semantic validation rule |
 | `test_rules_dedup.py` | Tests for dedup semantic validation rule |
 | `test_rules_features.py` | Tests for features semantic validation rule |
+| `test_rules_food_truck.py` | Tests for food_truck semantic validation rule |
 | `test_rules_graph.py` | Tests for graph semantic validation rule |
 | `test_rules_inline_script.py` | Tests for inline_script semantic validation rule |
 | `test_rules_inputs.py` | Tests for inputs semantic validation rule |

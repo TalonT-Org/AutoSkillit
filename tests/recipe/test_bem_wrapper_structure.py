@@ -20,7 +20,7 @@ def test_bem_wrapper_recipe_file_exists():
 def test_bem_wrapper_recipe_loads():
     recipe = _load()
     assert recipe.name == "bem-wrapper"
-    assert recipe.kind == "standard"
+    assert recipe.kind == "food-truck"
 
 
 def test_bem_wrapper_passes_validation():

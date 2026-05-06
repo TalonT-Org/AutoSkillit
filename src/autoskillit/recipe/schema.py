@@ -20,6 +20,7 @@ CAMPAIGN_REF_RE: Final = re.compile(r"\$\{\{\s*campaign\.(\w+)\s*\}\}")
 class RecipeKind(StrEnum):
     STANDARD = "standard"
     CAMPAIGN = "campaign"
+    FOOD_TRUCK = "food-truck"
 
 
 @dataclass

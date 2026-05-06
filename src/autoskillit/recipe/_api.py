@@ -170,7 +170,9 @@ def list_all(
     _pdir = project_dir if project_dir is not None else Path.cwd()
     _features = features or {}
     fleet_enabled = is_feature_enabled("fleet", _features)
-    exclude_kinds = frozenset() if fleet_enabled else frozenset({RecipeKind.CAMPAIGN})
+    exclude_kinds = (
+        frozenset() if fleet_enabled else frozenset({RecipeKind.CAMPAIGN, RecipeKind.FOOD_TRUCK})
+    )
     result = list_recipes(_pdir, exclude_kinds=exclude_kinds)
     return format_recipe_list_response(result)
 

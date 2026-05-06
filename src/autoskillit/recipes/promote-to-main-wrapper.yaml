@@ -2,7 +2,7 @@ name: promote-to-main-wrapper
 description: >-
   Thin wrapper that invokes the promote-to-main skill via run_skill, enabling
   campaign dispatch of integration branch promotions as L2 food trucks.
-kind: standard
+kind: food-truck
 recipe_version: "1.0.0"
 
 requires_packs:
@@ -58,7 +58,9 @@ steps:
 
   done:
     action: stop
-    message: "Promotion complete."
+    message: >-
+      Promotion complete. Emit your L3 sentinel JSON block now with
+      success=true, pr_url, verdict, and category_summary.
 
   escalate_stop:
     action: stop

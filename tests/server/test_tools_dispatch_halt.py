@@ -210,7 +210,7 @@ class TestDispatchFoodTruckRetryOnFailure:
         result = json.loads(
             await dispatch_food_truck(recipe="test-recipe", task="t", dispatch_name="d1")
         )
-        assert result.get("error") != "fleet_campaign_halted"
+        assert result.get("success") is True
 
     @pytest.mark.anyio
     async def test_dispatch_halts_when_different_dispatch_has_failure(

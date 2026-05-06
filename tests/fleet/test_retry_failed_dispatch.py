@@ -199,16 +199,21 @@ class TestResumeResetOnRetry:
         assert decision.completed_dispatches_block == FLEET_HALTED_SENTINEL
 
     def test_reset_on_retry_with_continue_on_failure_true_is_noop(self, tmp_path: Path):
-        """When continue_on_failure=True, reset_on_retry has no effect."""
+        """When continue_on_failure=True, reset_on_retry has no effect on FAILURE dispatches."""
         sp = _state_path(tmp_path)
-        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("d1", "d2"))
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("d1", "d2", "d3"))
         append_dispatch_record(sp, DispatchRecord(name="d1", status=DispatchStatus.SUCCESS))
+        append_dispatch_record(sp, DispatchRecord(name="d2", status=DispatchStatus.FAILURE))
 
         decision = resume_campaign_from_state(sp, continue_on_failure=True, reset_on_retry=True)
 
         assert decision is not None
-        assert decision.next_dispatch_name == "d2"
+        assert decision.next_dispatch_name == "d3"
         assert decision.completed_dispatches_block != FLEET_HALTED_SENTINEL
+        state = read_state(sp)
+        assert state is not None
+        d2 = next(d for d in state.dispatches if d.name == "d2")
+        assert d2.status == DispatchStatus.FAILURE
 
     def test_reset_on_retry_clears_dispatch_from_completed_block(self, tmp_path: Path):
         """Reset dispatch does NOT appear in completed_dispatches_block."""

@@ -711,9 +711,9 @@ def test_annotate_pr_diff_local_mode_uses_git_diff(mock_run, tmp_path: Path) -> 
         current_iteration="0",
         base_branch="main",
     )
-    mock_run.assert_called_once()
     args = mock_run.call_args[0][0]
     assert args[:3] == ["git", "diff", "main...HEAD"]
+    mock_run.assert_called_once()
 
 
 @patch("subprocess.run")
@@ -726,6 +726,7 @@ def test_annotate_pr_diff_github_mode_uses_gh_pr_diff(mock_run, tmp_path: Path) 
         output_dir=str(tmp_path),
         local_review_rounds="2",
         current_iteration="2",
+        base_branch="",
     )
     mock_run.assert_called_once()
     args = mock_run.call_args[0][0]

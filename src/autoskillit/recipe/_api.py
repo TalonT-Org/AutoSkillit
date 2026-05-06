@@ -115,7 +115,7 @@ def _compute_registry_hash(experiment_types_dir: Path) -> str:
             entries.append((p.name, p.stat().st_mtime_ns))
         except OSError:
             continue
-    return hashlib.md5(str(entries).encode()).hexdigest()
+    return hashlib.md5(str(entries).encode(), usedforsecurity=False).hexdigest()
 
 
 @_dc

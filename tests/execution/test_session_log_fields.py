@@ -810,3 +810,43 @@ def test_flush_session_log_provider_fallback_defaults_to_false(tmp_path):
     _flush(tmp_path, session_id="prov-def-002", proc_snapshots=None)
     entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip().split("\n")[-1])
     assert entry["provider_fallback"] is False
+
+
+# T8
+def test_token_usage_json_includes_model_identifier(tmp_path):
+    """flush_session_log writes model_identifier to token_usage.json."""
+    _flush(
+        tmp_path,
+        session_id="model-id-001",
+        proc_snapshots=None,
+        token_usage={
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "model_breakdown": {"claude-sonnet-4-6": {"input_tokens": 100, "output_tokens": 50}},
+        },
+    )
+    tu_path = tmp_path / "sessions" / "model-id-001" / "token_usage.json"
+    assert tu_path.exists()
+    data = json.loads(tu_path.read_text())
+    assert "model_identifier" in data
+    assert data["model_identifier"] == "claude-sonnet-4-6"
+
+
+def test_token_usage_json_model_identifier_empty_when_no_breakdown(tmp_path):
+    """flush_session_log writes empty model_identifier when no model_breakdown."""
+    _flush(
+        tmp_path,
+        session_id="model-id-002",
+        proc_snapshots=None,
+        token_usage={
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+        },
+    )
+    tu_path = tmp_path / "sessions" / "model-id-002" / "token_usage.json"
+    data = json.loads(tu_path.read_text())
+    assert data.get("model_identifier", "") == ""

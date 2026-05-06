@@ -221,6 +221,7 @@ def _load_sessions(
         if key not in aggregated:
             aggregated[key] = {
                 "step_name": key,
+                "model": "",
                 "input_tokens": 0,
                 "output_tokens": 0,
                 "cache_creation_input_tokens": 0,
@@ -233,6 +234,9 @@ def _load_sessions(
                 "turn_count": 0,
             }
         entry = aggregated[key]
+        _model = data.get("model_identifier", "")
+        if _model and not entry["model"]:
+            entry["model"] = _model
         entry["input_tokens"] += data.get("input_tokens", 0)
         entry["output_tokens"] += data.get("output_tokens", 0)
         entry["cache_creation_input_tokens"] += data.get("cache_creation_input_tokens", 0)
@@ -257,8 +261,8 @@ def _format_table(aggregated: dict[str, dict[str, Any]]) -> str:
     lines = [
         "## Token Usage Summary",
         "",
-        "| Step | count | uncached | output | cache_read | peak_ctx | turns | cache_write | time |",  # noqa: E501
-        "|------|-------|----------|--------|------------|----------|-------|-------------|------|",
+        "| Step | Model | count | uncached | output | cache_read | peak_ctx | turns | cache_write | time |",  # noqa: E501
+        "|------|-------|-------|----------|--------|------------|----------|-------|-------------|------|",
     ]
 
     total_input = 0
@@ -270,6 +274,7 @@ def _format_table(aggregated: dict[str, dict[str, Any]]) -> str:
 
     for entry in aggregated.values():
         name = entry["step_name"]
+        model = entry.get("model", "")
         count = entry.get("invocation_count", 1)
         inp = entry["input_tokens"]
         out = entry["output_tokens"]
@@ -280,8 +285,8 @@ def _format_table(aggregated: dict[str, dict[str, Any]]) -> str:
         elapsed = entry["elapsed_seconds"]
 
         lines.append(
-            f"| {name} | {count} | {_humanize(inp)} | {_humanize(out)} | {_humanize(cache_rd)}"
-            f" | {_humanize(peak_ctx)} | {turns} | {_humanize(cache_wr)}"
+            f"| {name} | {model} | {count} | {_humanize(inp)} | {_humanize(out)}"
+            f" | {_humanize(cache_rd)} | {_humanize(peak_ctx)} | {turns} | {_humanize(cache_wr)}"
             f" | {_fmt_duration(elapsed)} |"
         )
 
@@ -294,7 +299,7 @@ def _format_table(aggregated: dict[str, dict[str, Any]]) -> str:
         total_time += elapsed
 
     lines.append(
-        f"| **Total** | | {_humanize(total_input)} | {_humanize(total_output)}"
+        f"| **Total** | | | {_humanize(total_input)} | {_humanize(total_output)}"
         f" | {_humanize(total_cache_rd)} | {_humanize(total_peak)}"
         f" | | {_humanize(total_cache_wr)} | {_fmt_duration(total_time)} |"
     )
@@ -346,6 +351,55 @@ def _format_efficiency_table(aggregated: dict[str, dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def _format_model_table(aggregated: dict[str, dict[str, Any]]) -> str:
+    """Format per-model aggregate breakdown as ## Model Usage Breakdown table.
+
+    Returns '' when all entries have no model data (legacy sessions).
+    """
+    model_data: dict[str, dict[str, Any]] = {}
+    for entry in aggregated.values():
+        model = entry.get("model", "")
+        if not model:
+            continue
+        if model not in model_data:
+            model_data[model] = {
+                "model": model,
+                "_steps": set(),
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "elapsed_seconds": 0.0,
+            }
+        md = model_data[model]
+        md["_steps"].add(entry["step_name"])
+        md["input_tokens"] += entry["input_tokens"]
+        md["output_tokens"] += entry["output_tokens"]
+        md["cache_creation_input_tokens"] += entry["cache_creation_input_tokens"]
+        md["cache_read_input_tokens"] += entry["cache_read_input_tokens"]
+        md["elapsed_seconds"] += entry["elapsed_seconds"]
+
+    if not model_data:
+        return ""
+
+    lines = [
+        "## Model Usage Breakdown",
+        "",
+        "| Model | steps | uncached | output | cache_read | cache_write | time |",
+        "|-------|-------|----------|--------|------------|-------------|------|",
+    ]
+    for md in model_data.values():
+        step_count = len(md.pop("_steps"))
+        lines.append(
+            f"| {md['model']} | {step_count}"
+            f" | {_humanize(md['input_tokens'])} | {_humanize(md['output_tokens'])}"
+            f" | {_humanize(md['cache_read_input_tokens'])}"
+            f" | {_humanize(md['cache_creation_input_tokens'])}"
+            f" | {_fmt_duration(md['elapsed_seconds'])} |"
+        )
+    return "\n".join(lines)
+
+
 def main() -> None:
     """Entry point: read PostToolUse event from stdin, append token summary to PR."""
     try:
@@ -393,9 +447,12 @@ def main() -> None:
 
         token_table = _format_table(aggregated)
         efficiency_table = _format_efficiency_table(aggregated)
+        model_table = _format_model_table(aggregated)
         new_body = current_body + "\n\n" + token_table
         if efficiency_table:
             new_body += "\n\n" + efficiency_table
+        if model_table:
+            new_body += "\n\n" + model_table
 
         try:
             subprocess.run(

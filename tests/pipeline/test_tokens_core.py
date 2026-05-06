@@ -29,6 +29,7 @@ class TestTokenEntry:
         field_names = {f.name for f in fields(entry)}
         assert field_names == {
             "step_name",
+            "model",
             "input_tokens",
             "output_tokens",
             "cache_creation_input_tokens",
@@ -59,6 +60,7 @@ class TestTokenEntry:
         d = entry.to_dict()
         assert set(d.keys()) == {
             "step_name",
+            "model",
             "input_tokens",
             "output_tokens",
             "cache_creation_input_tokens",

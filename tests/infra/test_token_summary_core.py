@@ -544,6 +544,7 @@ def test_token_table_equivalence() -> None:
     steps_data = [
         {
             "step_name": "investigate",
+            "model": "claude-sonnet-4-6",
             "input_tokens": 7000,
             "output_tokens": 5939,
             "cache_creation_input_tokens": 8495,
@@ -555,6 +556,7 @@ def test_token_table_equivalence() -> None:
         },
         {
             "step_name": "implement",
+            "model": "claude-sonnet-4-6",
             "input_tokens": 2031000,
             "output_tokens": 122306,
             "cache_creation_input_tokens": 280601,
@@ -583,3 +585,182 @@ def test_token_table_equivalence() -> None:
         f"Canonical and hook token tables differ:\n"
         f"CANONICAL:\n{canonical_output}\n\nHOOK:\n{hook_output}"
     )
+
+
+# T6
+def test_format_table_includes_model_column() -> None:
+    """Hook _format_table includes Model column and value."""
+    from autoskillit.hooks.token_summary_hook import _format_table
+
+    aggregated = {
+        "plan": {
+            "step_name": "plan",
+            "model": "claude-sonnet-4-6",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 200,
+            "elapsed_seconds": 60.0,
+            "invocation_count": 1,
+            "loc_insertions": 0,
+            "loc_deletions": 0,
+            "peak_context": 0,
+            "turn_count": 5,
+        }
+    }
+    table = _format_table(aggregated)
+    assert "| Model |" in table
+    assert "claude-sonnet-4-6" in table
+
+
+# T7
+def test_hook_format_model_table() -> None:
+    """Hook _format_model_table produces per-model aggregate table."""
+    from autoskillit.hooks.token_summary_hook import _format_model_table
+
+    aggregated = {
+        "plan": {
+            "step_name": "plan",
+            "model": "claude-sonnet-4-6",
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "elapsed_seconds": 30.0,
+            "invocation_count": 1,
+        },
+        "implement": {
+            "step_name": "implement",
+            "model": "MiniMax-M2.7",
+            "input_tokens": 500,
+            "output_tokens": 200,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "elapsed_seconds": 60.0,
+            "invocation_count": 1,
+        },
+    }
+    table = _format_model_table(aggregated)
+    assert "## Model Usage Breakdown" in table
+    assert "claude-sonnet-4-6" in table
+    assert "MiniMax-M2.7" in table
+
+
+def test_hook_format_model_table_no_model_returns_empty() -> None:
+    """Hook _format_model_table returns '' when all entries have no model."""
+    from autoskillit.hooks.token_summary_hook import _format_model_table
+
+    aggregated = {
+        "plan": {
+            "step_name": "plan",
+            "model": "",
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "elapsed_seconds": 30.0,
+        }
+    }
+    assert _format_model_table(aggregated) == ""
+
+
+# T10
+def test_load_sessions_reads_model_identifier(tmp_path: Path) -> None:
+    """Hook _load_sessions populates model field from model_identifier in token_usage.json."""
+    from autoskillit.hooks.token_summary_hook import _load_sessions
+
+    kitchen_id = "test-kitchen-t10"
+    log_root = tmp_path / "logs"
+    log_root.mkdir()
+
+    sessions_dir = log_root / "sessions" / "s1"
+    sessions_dir.mkdir(parents=True)
+    (sessions_dir / "token_usage.json").write_text(
+        json.dumps(
+            {
+                "step_name": "plan",
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "timing_seconds": 10.0,
+                "model_identifier": "claude-sonnet-4-6",
+            }
+        )
+    )
+    (log_root / "sessions.jsonl").write_text(
+        json.dumps(
+            {
+                "session_id": "s1",
+                "dir_name": "s1",
+                "kitchen_id": kitchen_id,
+                "timestamp": "2026-01-01T00:00:00Z",
+            }
+        )
+        + "\n"
+    )
+
+    aggregated = _load_sessions(log_root, kitchen_id)
+    assert "plan" in aggregated
+    assert aggregated["plan"]["model"] == "claude-sonnet-4-6"
+
+
+# T11
+def test_model_table_equivalence() -> None:
+    """_format_model_table (hook) and format_model_table (canonical) produce equivalent output."""
+    from autoskillit.hooks.token_summary_hook import _format_model_table
+    from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
+
+    aggregated = {
+        "plan": {
+            "step_name": "plan",
+            "model": "claude-sonnet-4-6",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "cache_creation_input_tokens": 100,
+            "cache_read_input_tokens": 200,
+            "elapsed_seconds": 60.0,
+            "invocation_count": 1,
+        },
+        "implement": {
+            "step_name": "implement",
+            "model": "MiniMax-M2.7",
+            "input_tokens": 5000,
+            "output_tokens": 2000,
+            "cache_creation_input_tokens": 500,
+            "cache_read_input_tokens": 1000,
+            "elapsed_seconds": 120.0,
+            "invocation_count": 2,
+        },
+    }
+
+    hook_table = _format_model_table(aggregated)
+
+    model_totals = [
+        {
+            "model": "claude-sonnet-4-6",
+            "step_count": 1,
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "cache_creation_input_tokens": 100,
+            "cache_read_input_tokens": 200,
+            "elapsed_seconds": 60.0,
+        },
+        {
+            "model": "MiniMax-M2.7",
+            "step_count": 1,
+            "input_tokens": 5000,
+            "output_tokens": 2000,
+            "cache_creation_input_tokens": 500,
+            "cache_read_input_tokens": 1000,
+            "elapsed_seconds": 120.0,
+        },
+    ]
+    canonical_table = TelemetryFormatter.format_model_table(model_totals)
+
+    assert "## Model Usage Breakdown" in hook_table
+    assert "## Model Usage Breakdown" in canonical_table
+    assert "claude-sonnet-4-6" in hook_table
+    assert "claude-sonnet-4-6" in canonical_table
+    assert "MiniMax-M2.7" in hook_table
+    assert "MiniMax-M2.7" in canonical_table

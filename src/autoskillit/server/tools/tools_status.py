@@ -195,12 +195,17 @@ async def get_token_summary(clear: bool = False, format: str = "json", order_id:
                     write_telemetry_clear_marker(_get_log_root())
                 except Exception:
                     logger.debug("write_telemetry_clear_marker failed", exc_info=True)
+            model_totals = ctx.token_log.compute_model_totals(order_id=order_id)
             if format == "table":
                 token_table = TelemetryFormatter.format_token_table(steps, total)
                 efficiency_table = TelemetryFormatter.format_efficiency_table(steps, total)
+                model_table = TelemetryFormatter.format_model_table(model_totals)
+                result = token_table
                 if efficiency_table:
-                    return token_table + "\n\n" + efficiency_table
-                return token_table
+                    result += "\n\n" + efficiency_table
+                if model_table:
+                    result += "\n\n" + model_table
+                return result
             return json.dumps(
                 {
                     "steps": steps,
@@ -209,6 +214,7 @@ async def get_token_summary(clear: bool = False, format: str = "json", order_id:
                         "steps": mcp_report,
                         "total": mcp_total,
                     },
+                    "model_totals": model_totals,
                 }
             )
     except Exception as exc:
@@ -466,9 +472,12 @@ async def write_telemetry_files(
             token_total = tool_ctx.token_log.compute_total()
 
             token_path = out / "token_summary.md"
-            atomic_write(
-                token_path, TelemetryFormatter.format_token_table(token_steps, token_total)
-            )
+            token_content = TelemetryFormatter.format_token_table(token_steps, token_total)
+            model_totals = tool_ctx.token_log.compute_model_totals()
+            model_table = TelemetryFormatter.format_model_table(model_totals)
+            if model_table:
+                token_content += "\n\n" + model_table
+            atomic_write(token_path, token_content)
 
             timing_path = out / "timing_summary.md"
             atomic_write(

@@ -491,6 +491,7 @@ class TokenSummaryResult(TypedDict, total=False):
     steps: list[dict[str, Any]]
     total: dict[str, Any]
     mcp_responses: dict[str, Any]
+    model_totals: list[dict[str, Any]]
     success: bool
     error: str
 
@@ -535,6 +536,7 @@ class TokenUsageFileEntry(TypedDict):
     loc_insertions: int
     loc_deletions: int
     provider_used: str
+    model_identifier: str
 
 
 class SessionIndexEntry(TypedDict):

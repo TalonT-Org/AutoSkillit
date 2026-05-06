@@ -12,6 +12,7 @@ from autoskillit.core import TerminalColumn, _render_terminal_table
 
 _TOKEN_COLUMNS = (
     TerminalColumn("STEP", max_width=40, align="<"),
+    TerminalColumn("MODEL", max_width=30, align="<"),
     TerminalColumn("COUNT", max_width=5, align=">"),
     TerminalColumn("UNCACHED", max_width=10, align=">"),
     TerminalColumn("OUTPUT", max_width=10, align=">"),
@@ -51,6 +52,7 @@ _EFFICIENCY_MD_SEP = "|" + "|".join("-" * (len(h) + 2) for h in _eff_md_headers)
 
 _TOKEN_MD_LABELS: dict[str, str] = {
     "STEP": "Step",
+    "MODEL": "Model",
     "COUNT": "count",
     "UNCACHED": "uncached",
     "OUTPUT": "output",
@@ -68,6 +70,7 @@ _TOKEN_MD_SEP = "|" + "|".join("-" * (len(h) + 2) for h in _tok_md_headers) + "|
 _TOKEN_DISPLAY_FIELDS: frozenset[str] = frozenset(
     {
         "step_name",
+        "model",
         "input_tokens",
         "output_tokens",
         "cache_creation_input_tokens",
@@ -88,6 +91,7 @@ _TOKEN_EXCLUDED_FIELDS: frozenset[str] = frozenset(
 
 _TOKEN_FIELD_TO_COLUMN: dict[str, str] = {
     "step_name": "STEP",
+    "model": "MODEL",
     "input_tokens": "UNCACHED",
     "output_tokens": "OUTPUT",
     "cache_read_input_tokens": "CACHE_RD",
@@ -106,6 +110,31 @@ _TIMING_MD_LABELS: dict[str, str] = {
 _timing_md_headers = [_TIMING_MD_LABELS[c.label] for c in _TIMING_COLUMNS]
 _TIMING_MD_HEADER = "| " + " | ".join(_timing_md_headers) + " |"
 _TIMING_MD_SEP = "|" + "|".join("-" * (len(h) + 2) for h in _timing_md_headers) + "|"
+
+
+_MODEL_COLUMNS = (
+    TerminalColumn("MODEL", max_width=30, align="<"),
+    TerminalColumn("STEPS", max_width=7, align=">"),
+    TerminalColumn("INPUT", max_width=10, align=">"),
+    TerminalColumn("OUTPUT", max_width=10, align=">"),
+    TerminalColumn("CACHE_RD", max_width=10, align=">"),
+    TerminalColumn("CACHE_WR", max_width=10, align=">"),
+    TerminalColumn("TIME", max_width=8, align=">"),
+)
+
+_MODEL_MD_LABELS: dict[str, str] = {
+    "MODEL": "Model",
+    "STEPS": "steps",
+    "INPUT": "uncached",
+    "OUTPUT": "output",
+    "CACHE_RD": "cache_read",
+    "CACHE_WR": "cache_write",
+    "TIME": "time",
+}
+
+_model_md_headers = [_MODEL_MD_LABELS[c.label] for c in _MODEL_COLUMNS]
+_MODEL_MD_HEADER = "| " + " | ".join(_model_md_headers) + " |"
+_MODEL_MD_SEP = "|" + "|".join("-" * (len(h) + 2) for h in _model_md_headers) + "|"
 
 
 def _ratio(tokens: int, loc: int) -> str:
@@ -155,6 +184,7 @@ class TelemetryFormatter:
         ]
         for step in steps:
             name = step.get("step_name", "?")
+            model = step.get("model", "")
             count = step.get("invocation_count", 1)
             inp = h(step.get("input_tokens", 0))
             out = h(step.get("output_tokens", 0))
@@ -164,7 +194,7 @@ class TelemetryFormatter:
             cache_wr = h(step.get("cache_creation_input_tokens", 0))
             wc = step.get("wall_clock_seconds", step.get("elapsed_seconds", 0.0))
             lines.append(
-                f"| {name} | {count} | {inp} | {out} | {cache_rd} | {peak_ctx}"
+                f"| {name} | {model} | {count} | {inp} | {out} | {cache_rd} | {peak_ctx}"
                 f" | {turns} | {cache_wr} | {fmt_dur(wc)} |"
             )
 
@@ -175,7 +205,7 @@ class TelemetryFormatter:
         total_cache_wr = h(total.get("cache_creation_input_tokens", 0))
         total_time = total.get("total_elapsed_seconds", 0.0)
         lines.append(
-            f"| **Total** | | {total_in} | {total_out} | {total_cache_rd}"
+            f"| **Total** | | | {total_in} | {total_out} | {total_cache_rd}"
             f" | {total_peak} | | {total_cache_wr} | {fmt_dur(total_time)} |"
         )
         return "\n".join(lines)
@@ -207,11 +237,12 @@ class TelemetryFormatter:
         h = TelemetryFormatter._humanize
         fmt_dur = TelemetryFormatter._fmt_duration
 
-        rows: list[tuple[str, str, str, str, str, str, str, str, str]] = []
+        rows: list[tuple[str, str, str, str, str, str, str, str, str, str]] = []
         for step in steps:
             rows.append(
                 (
                     step.get("step_name", "?"),
+                    step.get("model", ""),
                     str(step.get("invocation_count", 1)),
                     h(step.get("input_tokens", 0)),
                     h(step.get("output_tokens", 0)),
@@ -225,6 +256,7 @@ class TelemetryFormatter:
 
         total_row = (
             "Total",
+            "",
             "",
             h(total.get("input_tokens", 0)),
             h(total.get("output_tokens", 0)),
@@ -265,6 +297,7 @@ class TelemetryFormatter:
         lines = ["## token_summary", ""]
         for step in steps:
             name = step.get("step_name", "?")
+            model = step.get("model", "")
             count = step.get("invocation_count", 1)
             inp = h(step.get("input_tokens", 0))
             out = h(step.get("output_tokens", 0))
@@ -273,10 +306,11 @@ class TelemetryFormatter:
             cache_wr = h(step.get("cache_creation_input_tokens", 0))
             turns = step.get("turn_count", 0)
             wc = step.get("wall_clock_seconds", step.get("elapsed_seconds", 0.0))
+            model_tag = f" model:{model}" if model else ""
             lines.append(
                 f"{name} x{count}"
                 f" [uc:{inp} out:{out} cr:{cache_rd} pk:{peak_ctx} cw:{cache_wr}"
-                f" turns:{turns} t:{wc:.1f}s]"
+                f" turns:{turns} t:{wc:.1f}s{model_tag}]"
             )
         if total:
             lines.append("")
@@ -327,6 +361,51 @@ class TelemetryFormatter:
             f" | {_ratio(total_cw, total_loc)} | {_ratio(total_out, total_loc)} |"
         )
         return "\n".join(lines)
+
+    @staticmethod
+    def format_model_table(model_totals: list[dict]) -> str:
+        """Produce markdown ## Model Usage Breakdown table. Returns '' when empty."""
+        if not model_totals or all(m.get("model", "") == "unknown" for m in model_totals):
+            return ""
+        h = TelemetryFormatter._humanize
+        fmt_dur = TelemetryFormatter._fmt_duration
+        lines = [
+            "## Model Usage Breakdown",
+            "",
+            _MODEL_MD_HEADER,
+            _MODEL_MD_SEP,
+        ]
+        for m in model_totals:
+            lines.append(
+                f"| {m.get('model', '')} | {m.get('step_count', 0)}"
+                f" | {h(m.get('input_tokens', 0))} | {h(m.get('output_tokens', 0))}"
+                f" | {h(m.get('cache_read_input_tokens', 0))}"
+                f" | {h(m.get('cache_creation_input_tokens', 0))}"
+                f" | {fmt_dur(m.get('elapsed_seconds', 0.0))} |"
+            )
+        return "\n".join(lines)
+
+    @staticmethod
+    def format_model_table_terminal(model_totals: list[dict]) -> str:
+        """Produce padded-column terminal model breakdown table. Returns '' when empty."""
+        if not model_totals or all(m.get("model", "") == "unknown" for m in model_totals):
+            return ""
+        h = TelemetryFormatter._humanize
+        fmt_dur = TelemetryFormatter._fmt_duration
+        rows: list[tuple[str, str, str, str, str, str, str]] = []
+        for m in model_totals:
+            rows.append(
+                (
+                    m.get("model", ""),
+                    str(m.get("step_count", 0)),
+                    h(m.get("input_tokens", 0)),
+                    h(m.get("output_tokens", 0)),
+                    h(m.get("cache_read_input_tokens", 0)),
+                    h(m.get("cache_creation_input_tokens", 0)),
+                    fmt_dur(m.get("elapsed_seconds", 0.0)),
+                )
+            )
+        return _render_terminal_table(_MODEL_COLUMNS, rows)
 
     @staticmethod
     def format_efficiency_table_terminal(steps: list[dict], total: dict) -> str:

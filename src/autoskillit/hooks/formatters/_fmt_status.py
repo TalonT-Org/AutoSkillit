@@ -20,6 +20,7 @@ def _fmt_get_token_summary(data: dict, _pipeline: bool) -> str:
     steps = data.get("steps", [])
     for step in steps:
         name = step.get("step_name", "?")
+        model = step.get("model", "")
         count = step.get("invocation_count", 1)
         inp = _fmt_tokens(step.get("input_tokens", 0))
         out = _fmt_tokens(step.get("output_tokens", 0))
@@ -28,10 +29,11 @@ def _fmt_get_token_summary(data: dict, _pipeline: bool) -> str:
         cache_wr = _fmt_tokens(step.get("cache_creation_input_tokens", 0))
         turns = step.get("turn_count", 0)
         wc = step.get("wall_clock_seconds", step.get("elapsed_seconds", 0.0))
+        model_tag = f" model:{model}" if model else ""
         lines.append(
             f"{name} x{count}"
             f" [uc:{inp} out:{out} cr:{cache_rd} pk:{peak_ctx} cw:{cache_wr}"
-            f" turns:{turns} t:{wc:.1f}s]"
+            f" turns:{turns} t:{wc:.1f}s{model_tag}]"
         )
     total = data.get("total", {})
     if total:
@@ -139,7 +141,9 @@ def _fmt_clone_repo(data: dict, _pipeline: bool) -> str:
     return "\n".join(lines)
 
 
-_FMT_TOKEN_SUMMARY_RENDERED: frozenset[str] = frozenset({"steps", "total", "mcp_responses"})
+_FMT_TOKEN_SUMMARY_RENDERED: frozenset[str] = frozenset(
+    {"steps", "total", "mcp_responses", "model_totals"}
+)
 _FMT_TOKEN_SUMMARY_SUPPRESSED: frozenset[str] = frozenset(
     {
         "success",  # only emitted from exception guard paths, not accessed by the formatter

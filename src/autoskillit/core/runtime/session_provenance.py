@@ -44,7 +44,7 @@ def provenance_path(project_dir: Path | None = None) -> Path:
 def write_provenance_record(record: ProvenanceRecord, project_dir: Path | None = None) -> None:
     """Append one JSON line to the provenance file.
 
-    Creates parent directories if needed. Catches and logs OSError — never raises.
+    Creates parent directories if needed. Silently swallows OSError — never raises.
     """
     path = provenance_path(project_dir)
     try:

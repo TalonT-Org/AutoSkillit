@@ -37,7 +37,7 @@ SMOKE_SCRIPT = PROJECT_ROOT / ".autoskillit" / "recipes" / "smoke-test.yaml"
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture()
 def smoke_recipe():
     from autoskillit.recipe.io import load_recipe as _load_recipe
 

@@ -7,12 +7,14 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | File | Purpose |
 |------|---------|
 | `__init__.py` | empty |
+| `_merge_queue_helpers.py` | Merge-queue test helper factories — _make_watcher, _queue_state |
 | `conftest.py` | Shared fixtures and helpers for tests/execution/ |
 | `test_anomaly_detection.py` | Tests for post-hoc anomaly detection over ProcSnapshot data |
 | `test_check_repo_merge_state.py` | Round-trip budget tests for fetch_repo_merge_state |
 | `test_ci.py` | L1 unit tests for execution/ci.py — CIWatcher service |
 | `test_ci_params.py` | Tests for CIRunScope query param composition and workflow scoping |
 | `test_clone_guard.py` | Tests for clone contamination guard — detect and revert direct changes |
+| `test_conftest_import_guard.py` | Structural guard: conftest.py must not import merge_queue at module level |
 | `test_commands.py` | Tests for execution/commands.py — ClaudeInteractiveCmd / ClaudeHeadlessCmd builders |
 | `test_db.py` | L1 unit tests for execution/db.py — SQL validation and authorizer |
 | `test_diff_annotator.py` | Behavioral tests for execution/diff_annotator.py |

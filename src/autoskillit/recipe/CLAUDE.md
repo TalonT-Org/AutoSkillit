@@ -20,6 +20,7 @@ Sub-package: rules/ (see rules/CLAUDE.md).
 | `experiment_type_registry.py` | `ExperimentTypeSpec`, `load_all_experiment_types` |
 | `methodology_tradition_registry.py` | `MethodologyTraditionSpec`, `load_all_methodology_traditions`, `get_methodology_tradition_by_name`, `is_out_of_scope_tradition` |
 | `methodology_tradition_router.py` | `TraditionRouterResult`, `UnionRuleDef`, `classify_methodology` — two-stage Tier-C router |
+| `methodology_disambiguation.py` | `DisambiguationRuleDef`, `CrossTraditionOverlapDef`, `DisambiguationResult`, `disambiguate`, `load_disambiguation_rules` |
 | `registry.py` | `RuleFinding`, `RuleSpec`, `semantic_rule` decorator |
 | `repository.py` | `RecipeRepository` implementation |
 | `_analysis.py` | `ValidationContext` + `make_validation_context` |

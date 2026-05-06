@@ -64,6 +64,44 @@ This lens currently covers 8 ML sub-areas. Future domain-specific variants (e.g.
 venue-specific norms, additional mandatory figure types, or sub-area-specific anti-pattern
 overlays. The base lens should remain general enough to bootstrap any sub-area.
 
+## Multi-Match Disambiguation Rules
+
+When multiple methodology traditions match a research plan, disambiguation rules are applied
+sequentially to determine the primary tradition and accumulate union rule sets.
+
+### Disambiguation Resolution Order
+
+1. **Rules 1–4** checked sequentially — first match determines `primary_tradition` and may add union rules
+2. **Overlaps 5–9** checked in parallel — all matching overlaps accumulate `applied_union_rules`; if no rule set primary, the first matching overlap's `primary_tradition` is used
+3. **Fallthrough** — highest-priority tradition (lowest `priority` number) from candidate set becomes primary
+
+### Disambiguation Rules
+
+| Order | Rule Name | Trigger Conditions | Resolution | Union Rules |
+|-------|-----------|-------------------|------------|-------------|
+| 1 | `prisma_dominance` | `systematic_synthesis` + any other tradition | primary = `systematic_synthesis` | — |
+| 1 (exception) | `prisma_dominance` + `prediction_model_validation` | `systematic_synthesis` + `prediction_model_validation` | primary = `systematic_synthesis` | +TRIPOD_SRMA |
+| 2 | `rct_economic_union` | `controlled_intervention` + `economic_evaluation` | primary = `controlled_intervention` | +CHEERS_union |
+| 3 | `arrive_supersedes_consort` | `animal_preclinical` + `controlled_intervention` | primary = `animal_preclinical` | — |
+| 4 | `benchmarking_prediction_nested` | `method_comparison_benchmarking` + `prediction_model_validation` | primary = `method_comparison_benchmarking` | +TRIPOD_nested |
+
+### Cross-Tradition Overlaps
+
+| Order | Overlap Name | Trigger Conditions | Primary if No Rule | Union Rules |
+|-------|--------------|-------------------|-------------------|-------------|
+| 5 | `tripod_consort_union` | `prediction_model_validation` + `controlled_intervention` | `controlled_intervention` | +TRIPOD_union |
+| 6 | `strobe_prisma_moose` | `observational_correlational` + `systematic_synthesis` | `systematic_synthesis` | +MOOSE_override |
+| 7 | `odd_controlled_nesting` | `simulation_modeling_tradition` + `controlled_intervention` | `simulation_modeling_tradition` | +controlled_intervention_secondary |
+| 8 | `benchmarking_prisma_separation` | `method_comparison_benchmarking` + `systematic_synthesis` | `method_comparison_benchmarking` | +PRISMA_curation_phase |
+| 9 | `srqr_consort_parallel` | `qualitative_interpretive_tradition` + `controlled_intervention` | `controlled_intervention` | +SRQR_parallel |
+
+### Output Format
+
+When disambiguation is invoked, the result includes:
+- **`primary_tradition`**: The selected primary methodology tradition name
+- **`applied_union_rules`**: Tuple of union rule strings accumulated from matching rules/overlaps
+- **`precedence_trace`**: String describing which rules and overlaps fired (e.g., `rule_prisma_dominance+overlap_strobe_prisma_moose`)
+
 ## Critical Constraints
 
 **NEVER:**

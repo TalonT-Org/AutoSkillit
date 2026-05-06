@@ -100,6 +100,8 @@ def _load_traditions_from_dir(directory: Path) -> dict[str, MethodologyTradition
         return {}
     result: dict[str, MethodologyTraditionSpec] = {}
     for path in sorted(directory.glob("*.yaml")):
+        if path.name.startswith("_"):
+            continue
         try:
             data = load_yaml(path)
             if isinstance(data, dict):

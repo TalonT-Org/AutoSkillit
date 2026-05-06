@@ -64,6 +64,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_remediation_pr_decomposition.py` | Tests for remediation PR decomposition recipe |
 | `test_remediation_recipe.py` | Tests for the remediation recipe structure |
 | `test_repository.py` | Tests for DefaultRecipeRepository |
+| `test_research_archive_recipe.py` | Tests for research-archive sub-recipe structure |
 | `test_research_bundle_lifecycle.py` | Tests for research bundle lifecycle in recipes |
 | `test_research_context_tracking.py` | Tests for research context tracking in recipes |
 | `test_research_implement_recipe.py` | Tests for research-implement sub-recipe structure |

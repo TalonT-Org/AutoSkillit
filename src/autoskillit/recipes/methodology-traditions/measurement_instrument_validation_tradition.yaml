@@ -44,4 +44,26 @@ anti_patterns:
     reason: "Content validity is the foundational measurement property and must be established before other properties"
   - pattern: "Conflating reliability with validity"
     reason: "Reliability (consistency) is distinct from validity (accuracy); high reliability does not imply validity"
-venue_specific_appendices: []
+venue_specific_appendices:
+  - sub_area: foundation_models
+    trigger_keywords:
+      - psychometric
+      - latent trait
+      - item response theory
+      - Cronbach
+    expectations:
+      - figure: "Structural Validity for Evaluation Framework"
+        source: "COSMIN 2.0"
+      - figure: "Item Characteristic Curves"
+        source: "COSMIN 2.0"
+  - sub_area: generative_models
+    trigger_keywords:
+      - human evaluation instrument
+      - inter-rater
+      - construct validity
+      - scale development
+    expectations:
+      - figure: "Human Evaluation Instrument Validation"
+        source: "COSMIN 2.0"
+      - figure: "Inter-Rater Reliability Plots"
+        source: "COSMIN 2.0"

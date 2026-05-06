@@ -18,7 +18,8 @@ Sub-package: rules/ (see rules/CLAUDE.md).
 | `_recipe_composition.py` | `_build_active_recipe` + sub-recipe merging |
 | `diagrams.py` | Flow diagram generation + staleness detection |
 | `experiment_type_registry.py` | `ExperimentTypeSpec`, `load_all_experiment_types` |
-| `methodology_tradition_registry.py` | `MethodologyTraditionSpec`, `load_all_methodology_traditions`, `get_methodology_tradition_by_name`, `is_out_of_scope_tradition` |
+| `methodology_tradition_registry.py` | `MethodologyTraditionSpec`, `VenueAppendixDef`, `load_all_methodology_traditions`, `get_methodology_tradition_by_name`, `is_out_of_scope_tradition` |
+| `methodology_venue_appendix.py` | `AlternateParentDef`, `MLSubAreaFoldingDef`, `VenueAppendixMatch`, `load_ml_sub_area_folding`, `resolve_venue_appendices` — Stage B venue-appendix resolution |
 | `methodology_tradition_router.py` | `TraditionRouterResult`, `UnionRuleDef`, `classify_methodology` — two-stage Tier-C router |
 | `methodology_disambiguation.py` | `DisambiguationRuleDef`, `CrossTraditionOverlapDef`, `DisambiguationResult`, `disambiguate`, `load_disambiguation_rules` |
 | `registry.py` | `RuleFinding`, `RuleSpec`, `semantic_rule` decorator |

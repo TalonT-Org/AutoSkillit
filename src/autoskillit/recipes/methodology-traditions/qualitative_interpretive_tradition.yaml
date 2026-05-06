@@ -42,4 +42,26 @@ anti_patterns:
     reason: "Researchers must discuss whether data saturation was achieved"
   - pattern: "Member checking unreported"
     reason: "COREQ encourages reporting of participant validation of findings"
-venue_specific_appendices: []
+venue_specific_appendices:
+  - sub_area: nlp
+    trigger_keywords:
+      - discourse analysis
+      - conversation analysis
+      - narrative
+      - thematic
+    expectations:
+      - figure: "Thematic Map for Discourse Analysis"
+        source: "COREQ/SRQR norms"
+      - figure: "Coding Framework Visualization"
+        source: "COREQ/SRQR norms"
+  - sub_area: generative_models
+    trigger_keywords:
+      - human evaluation
+      - qualitative assessment
+      - expert rating
+      - content analysis
+    expectations:
+      - figure: "Qualitative Evaluation Coding Tree"
+        source: "COREQ/SRQR norms"
+      - figure: "Expert Assessment Summary"
+        source: "COREQ/SRQR norms"

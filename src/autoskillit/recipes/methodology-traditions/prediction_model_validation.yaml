@@ -44,4 +44,68 @@ anti_patterns:
     reason: "Discrimination (AUC/c-statistic) measures ranking ability; calibration measures absolute probability accuracy"
   - pattern: "No sample size justification"
     reason: "Prediction models require sufficient events per variable to avoid overfitting"
-venue_specific_appendices: []
+venue_specific_appendices:
+  - sub_area: foundation_models
+    trigger_keywords:
+      - calibration
+      - held-out
+      - few-shot scaling
+      - zero-shot validation
+    expectations:
+      - figure: "Calibration Plot for Scaling Predictions"
+        source: "TRIPOD+AI norms"
+      - figure: "Held-Out Performance Curves"
+        source: "TRIPOD+AI norms"
+  - sub_area: reinforcement_learning
+    trigger_keywords:
+      - policy evaluation
+      - held-out task
+      - sample efficiency
+    expectations:
+      - figure: "Policy Evaluation Calibration"
+        source: "TRIPOD+AI norms"
+      - figure: "Held-Out Task Reward Curves"
+        source: "TRIPOD+AI norms"
+  - sub_area: supervised_classification
+    trigger_keywords:
+      - patient outcome
+      - prognosis
+      - risk prediction
+      - clinical decision
+    expectations:
+      - figure: "Clinical Calibration Plot"
+        source: "TRIPOD+AI norms"
+      - figure: "Decision Curve Analysis"
+        source: "TRIPOD+AI norms"
+  - sub_area: nlp
+    trigger_keywords:
+      - clinical NLP
+      - risk scoring
+      - patient outcome
+      - clinical text
+    expectations:
+      - figure: "Clinical Text Prediction Calibration"
+        source: "TRIPOD+AI norms"
+      - figure: "Risk Score Validation"
+        source: "TRIPOD+AI norms"
+  - sub_area: computer_vision
+    trigger_keywords:
+      - patient outcome
+      - prognosis
+      - clinical decision
+      - imaging biomarker
+    expectations:
+      - figure: "Imaging Biomarker Calibration"
+        source: "TRIPOD+AI norms"
+      - figure: "Imaging Prediction Curves"
+        source: "TRIPOD+AI norms"
+  - sub_area: time_series
+    trigger_keywords:
+      - clinical forecasting
+      - patient trajectory
+      - mortality prediction
+    expectations:
+      - figure: "Temporal Calibration Plot"
+        source: "TRIPOD+AI norms"
+      - figure: "Forecast Horizon Validation"
+        source: "TRIPOD+AI norms"

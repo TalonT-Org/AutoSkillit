@@ -44,4 +44,28 @@ anti_patterns:
     reason: "All participants should receive both index test and reference standard"
   - pattern: "Reporting accuracy without confidence intervals"
     reason: "Point estimates without CIs provide no sense of precision or uncertainty"
-venue_specific_appendices: []
+venue_specific_appendices:
+  - sub_area: supervised_classification
+    trigger_keywords:
+      - medical imaging
+      - radiology
+      - pathology
+      - sensitivity
+      - specificity
+    expectations:
+      - figure: "STARD Flow Diagram"
+        source: "STARD 2015"
+      - figure: "Sensitivity/Specificity at Operating Points"
+        source: "STARD 2015"
+  - sub_area: computer_vision
+    trigger_keywords:
+      - medical imaging
+      - radiology
+      - pathology
+      - sensitivity
+      - specificity
+    expectations:
+      - figure: "STARD Flow Diagram for Imaging Pipeline"
+        source: "STARD 2015"
+      - figure: "Cross-Tabulation for Diagnostic Imaging"
+        source: "STARD 2015"

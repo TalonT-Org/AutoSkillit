@@ -6,6 +6,8 @@ process.py remains a re-export facade for all public symbols.
 
 from __future__ import annotations
 
+import inspect
+
 import pytest
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -106,7 +108,6 @@ def test_process_facade_reexports_all_public_symbols():
 
 
 def test_default_subprocess_runner_pty_mode_default_false():
-    import inspect
 
     from autoskillit.execution.process import DefaultSubprocessRunner
 
@@ -115,7 +116,6 @@ def test_default_subprocess_runner_pty_mode_default_false():
 
 
 def test_run_managed_async_pty_mode_default_false():
-    import inspect
 
     from autoskillit.execution.process import run_managed_async
 

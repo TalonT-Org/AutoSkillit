@@ -1,4 +1,4 @@
-"""Merge-queue test helper factories — used by test_merge_queue_ejection and test_merge_queue_polling."""
+"""Merge-queue test helper factories used by merge_queue test modules."""
 
 from __future__ import annotations
 

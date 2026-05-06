@@ -183,6 +183,7 @@ __all__ = [
     "get_methodology_tradition_by_name",
     "is_out_of_scope_tradition",
     "load_all_methodology_traditions",
+    # --- methodology tradition router ---
     "TraditionRouterResult",
     "UnionRuleDef",
     "classify_methodology",

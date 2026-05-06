@@ -195,7 +195,9 @@ def fleet_campaign(
     if resume_campaign is not None:
         campaign_id = resume_campaign
         state_path = fleet_dir / campaign_id / "state.json"
-        resume_metadata = resume_campaign_from_state(state_path, parsed.continue_on_failure)
+        resume_metadata = resume_campaign_from_state(
+            state_path, parsed.continue_on_failure, reset_on_retry=True
+        )
         if resume_metadata is None:
             print(f"ERROR: Campaign state not found or corrupted for '{campaign_id}'")
             sys.exit(1)

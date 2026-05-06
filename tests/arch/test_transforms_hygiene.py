@@ -362,6 +362,40 @@ def test_tool_decorators_enforce_tag_partition():
     )
 
 
+def test_tool_tags_are_literal_sets():
+    """Every @mcp.tool(tags=...) must use a set literal, not a variable or expression."""
+    tools_dir = _SRC_ROOT / "server" / "tools"
+    non_literals = []
+
+    for path in sorted(tools_dir.glob("tools_*.py")):
+        source = path.read_text()
+        tree = ast.parse(source, filename=str(path))
+
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+
+            for decorator in node.decorator_list:
+                if not (
+                    isinstance(decorator, ast.Call)
+                    and isinstance(decorator.func, ast.Attribute)
+                    and decorator.func.attr == "tool"
+                ):
+                    continue
+
+                for kw in decorator.keywords:
+                    if kw.arg == "tags" and not isinstance(kw.value, ast.Set):
+                        non_literals.append(
+                            f"{path.name}:{node.lineno} {node.name}"
+                            f" → tags is {type(kw.value).__name__}, not Set"
+                        )
+
+    assert not non_literals, (
+        "Non-literal tags values in @mcp.tool() decorators (use set literals):\n"
+        + "\n".join(f"  {v}" for v in non_literals)
+    )
+
+
 def test_fleet_tools_carry_required_subset_tag():
     """Every FLEET_TOOLS entry must have 'fleet' in its decorator tags.
 

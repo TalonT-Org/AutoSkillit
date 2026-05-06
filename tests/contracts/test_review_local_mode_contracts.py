@@ -65,7 +65,7 @@ def test_resolve_review_contract_has_mode_input():
 
 
 def test_review_pr_contract_local_findings_output():
-    """Assert skill_contracts.yaml review-pr outputs includes local_findings_path when mode=local."""
+    """Assert review-pr has local_findings_path in skill_contracts.yaml outputs (mode=local)."""
     contracts = _contracts()
     outputs = contracts.get("skills", {}).get("review-pr", {}).get("outputs", [])
     output_names = [o["name"] for o in outputs]
@@ -112,7 +112,8 @@ def test_deferred_observations_schema_review_pr_documents_iteration():
 
 def test_deferred_observations_schema_resolve_review_documents_round():
     """Verify resolve-review SKILL.md documents the JSON schema for deferred_observations
-    with required fields: round, path, line, body, evidence, severity, dimension, verdict, category."""
+    with required fields: round, path, line, body, evidence, severity, dimension, verdict, category
+    """
     text = _resolve_review_skill()
     step36_idx = text.find("### Step 3.6")
     assert step36_idx >= 0

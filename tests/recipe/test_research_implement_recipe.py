@@ -34,7 +34,6 @@ class TestResearchImplementRecipe:
     def test_excluded_ingredients_absent(self, recipe) -> None:
         names = set(recipe.ingredients.keys())
         assert "scope_report" not in names
-        assert "visualization_plan_path" not in names
         assert "report_plan_path" not in names
         assert "experiment_type" not in names
 

@@ -40,6 +40,10 @@ ingredients:
   experiment_plan:
     description: Path to the experiment plan file (passed by campaign dispatch)
     required: true
+  visualization_plan_path:
+    description: Path to the visualization plan (passed by campaign dispatch)
+    required: true
+    hidden: true
 
 kitchen_rules:
   - >

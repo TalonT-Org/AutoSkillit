@@ -1,7 +1,5 @@
 """Tests for ReviewConfig and local_review_rounds wiring."""
 
-from __future__ import annotations
-
 import pytest
 import yaml
 

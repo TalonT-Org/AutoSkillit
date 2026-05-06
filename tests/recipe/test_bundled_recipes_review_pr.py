@@ -188,6 +188,9 @@ class TestAnnotatePrDiffLocalReviewRounds:
             "implementation.yaml",
             "implementation-groups.yaml",
             "remediation.yaml",
+            # merge-prs.yaml is excluded: it uses annotate_pr_diff with a fixed base and does
+            # not expose local_review_rounds as a recipe ingredient. Its annotate step wiring is
+            # covered by test_merge_prs_annotate_step_captures_diff_metrics_path.
         ],
     )
     def recipe(self, request: pytest.FixtureRequest) -> object:

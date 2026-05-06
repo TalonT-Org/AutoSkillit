@@ -23,7 +23,7 @@ def _skill_text() -> str:
 def test_review_pr_skill_documents_mode_parameter():
     """Assert SKILL.md contains mode= parameter documentation in Arguments section."""
     text = _skill_text()
-    assert "mode=<local|github>" in text or "mode=" in text, (
+    assert "mode=<local|github>" in text, (
         "review-pr/SKILL.md Arguments section must document the mode= keyword argument "
         "with format: mode=<local|github>"
     )
@@ -86,11 +86,12 @@ def test_review_pr_local_mode_emits_gate_tokens():
 
 
 def test_review_pr_local_mode_default_is_github():
-    """Assert SKILL.md states that when mode is absent or unrecognized, behavior defaults to github."""
+    """Assert SKILL.md states that absent/unrecognized mode defaults to github."""
     text = _skill_text()
-    # Find the mode documentation
-    assert "default:" in text.lower() or "default is" in text.lower(), (
-        "review-pr/SKILL.md must document the default value for mode parameter"
+    # Find the mode documentation — use a phrase specific to mode default, not generic "default:"
+    assert "absent or unrecognized" in text.lower() or 'default to "github"' in text.lower(), (
+        "review-pr/SKILL.md must document the default value for mode parameter using a "
+        "specific phrase like 'absent or unrecognized' or 'default to \"github\"'"
     )
     # Verify github is the default
     local_mode_idx = text.lower().find("mode=github")
@@ -138,7 +139,7 @@ def test_review_pr_local_mode_still_writes_raw_findings():
 
 
 def test_review_pr_local_mode_skips_step6_and_step7():
-    """Assert SKILL.md mode=local skips Step 6 (GitHub posting) and Step 7 (GitHub review submission)."""
+    """Assert SKILL.md mode=local skips Step 6 (GitHub posting) and Step 7 (review submission)."""
     text = _skill_text()
     local_mode_idx = text.lower().find("mode=local")
     assert local_mode_idx >= 0

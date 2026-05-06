@@ -23,7 +23,7 @@ def _skill_text() -> str:
 def test_resolve_review_skill_documents_mode_parameter():
     """Assert SKILL.md contains mode= parameter documentation in Arguments section."""
     text = _skill_text()
-    assert "mode=<local|github>" in text or "mode=" in text, (
+    assert "mode=<local|github>" in text, (
         "resolve-review/SKILL.md Arguments section must document the mode= keyword argument "
         "with format: mode=<local|github>"
     )

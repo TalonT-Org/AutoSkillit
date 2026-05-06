@@ -1,0 +1,341 @@
+name: research-implement
+recipe_version: "1.0.0"
+categories: [research-family]
+requires_packs: [research]
+description: >
+  Execution-phase sub-recipe extracted from research.yaml. Receives a pre-created
+  worktree and experiment plan from a campaign dispatch, then runs the full 18-step
+  implementation pipeline: stage data, decompose into phases, iteratively plan and
+  implement each phase, troubleshoot failures, run the experiment, generate a report,
+  test, and push. Terminates with sentinel emission of output paths.
+summary: stage > decompose > [plan > implement]* > experiment > report > test > push > complete
+
+ingredients:
+  # --- user-input ---
+  task:
+    description: Research question or topic to investigate
+    required: true
+  source_dir:
+    description: Path to the project root
+    required: true
+  base_branch:
+    description: Branch to target for the research PR
+    default: "main"
+  output_mode:
+    description: >
+      Where research outputs land. 'local' (default) produces a self-contained
+      bundle. 'pr' opens a GitHub PR alongside the bundle.
+    default: "local"
+  issue_url:
+    description: >
+      Optional URL to an existing GitHub issue describing the research goal.
+    required: false
+  # --- campaign-passed ---
+  worktree_path:
+    description: Path to the pre-created worktree (passed by campaign dispatch)
+    required: true
+  research_dir:
+    description: Path to the research/ directory in the worktree
+    required: true
+  experiment_plan:
+    description: Path to the experiment plan file (passed by campaign dispatch)
+    required: true
+
+kitchen_rules:
+  - >
+    NEVER use native Claude Code tools from the orchestrator: Read, Grep, Glob,
+    Edit, Write, Bash, Agent, WebFetch, WebSearch, NotebookEdit are ALL forbidden.
+    All work is delegated through run_skill, run_cmd, run_python.
+  - >
+    PHASE ITERATION: decompose_phases always runs. The agent maintains
+    a phase queue from group_files. For each phase, run plan_phase then
+    implement_phase. Advance to run_experiment when all phases complete.
+  - >
+    SENTINEL EMISSION: When reaching implement_complete, emit the L3 result
+    sentinel JSON block exactly as instructed in the step message — include
+    worktree_path, research_dir, report_path, and experiment_results (when available).
+
+steps:
+  # --- Pre-Flight ---
+  stage_data:
+    tool: run_skill
+    model: ""
+    with:
+      skill_command: "/autoskillit:stage-data ${{ inputs.experiment_plan }}"
+      cwd: "${{ inputs.worktree_path }}"
+      step_name: stage_data
+    capture:
+      verdict: "${{ result.verdict }}"
+      resource_report: "${{ result.resource_report }}"
+    on_result:
+      field: verdict
+      routes:
+        PASS: decompose_phases
+        WARN: decompose_phases
+        FAIL: escalate_stop
+    on_failure: escalate_stop
+    note: >
+      Pre-flight resource gate. Reads the experiment plan's data_manifest, checks
+      available disk space and network connectivity for external/gitignored data
+      entries, and creates the required directory structure in the worktree. PASS
+      and WARN proceed to decompose_phases. FAIL escalates immediately with a
+      detailed resource feasibility report rather than wasting compute on doomed
+      downloads.
+
+  # --- Phase Iteration ---
+  decompose_phases:
+    tool: run_skill
+    model: ""
+    with:
+      skill_command: "/autoskillit:make-groups ${{ inputs.experiment_plan }}"
+      cwd: "${{ inputs.worktree_path }}"
+      step_name: decompose
+    capture:
+      group_files: "${{ result.group_files }}"
+    on_success: plan_phase
+    on_failure: escalate_stop
+    note: >
+      Decomposes the experiment plan into sequenced phases. Each phase
+      becomes an independently plannable implementation unit. Typical
+      decomposition: infrastructure/logging -> data generators ->
+      plotting/analysis scripts -> experiment implementation.
+      ITERATION: The agent maintains a phase queue from group_files.
+      For each phase, run plan_phase then implement_phase before advancing.
+
+  plan_phase:
+    tool: run_skill
+    model: ""
+    with:
+      skill_command: "/autoskillit:make-plan ${{ context.group_files }}"
+      cwd: "${{ inputs.worktree_path }}"
+      step_name: plan_phase
+      group_files: "${{ context.group_files }}"
+    capture:
+      phase_plan_path: "${{ result.plan_path }}"
+    capture_list:
+      plan_parts: "${{ result.plan_parts }}"
+    on_success: implement_phase
+    on_failure: escalate_stop
+    note: >
+      Plans the current setup phase. Replace ${{ context.group_files }} in the
+      skill_command with the FIRST REMAINING phase file path from the list —
+      do NOT pass the entire list. Pass the path directly to the skill (do not read it).
+      Glob plan_dir for *_part_*.md or single plan file.
+      ITERATION: After each implement_phase cycle, advance to the next entry in
+      context.group_files for the following plan_phase iteration.
+
+  implement_phase:
+    tool: run_skill
+    model: ""
+    stale_threshold: 2400
+    idle_output_timeout: 0
+    with:
+      skill_command: "/autoskillit:implement-experiment ${{ context.phase_plan_path }}"
+      cwd: "${{ inputs.worktree_path }}"
+      step_name: implement_phase
+    capture:
+      worktree_path: "${{ result.worktree_path }}"
+    retries: 0
+    on_success: next_phase_or_experiment
+    on_failure: troubleshoot_implement_failure
+    on_exhausted: run_experiment
+    on_context_limit: run_experiment
+    note: >
+      Implements the current phase plan in an isolated worktree via implement-experiment.
+      Context exhaustion is a normal termination — the worktree is intact and
+      run_experiment picks up what was committed. Failures route to troubleshoot
+      for classification before re-planning or escalation.
+
+  troubleshoot_implement_failure:
+    tool: run_skill
+    model: ""
+    stale_threshold: 2400
+    idle_output_timeout: 0
+    with:
+      skill_command: "/autoskillit:troubleshoot-experiment ${{ context.worktree_path }} implement_phase"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: troubleshoot_implement_failure
+    capture:
+      is_fixable: "${{ result.is_fixable }}"
+    on_success: route_implement_failure
+    on_failure: escalate_stop
+
+  route_implement_failure:
+    action: route
+    on_result:
+      - when: "${{ context.is_fixable }} == true"
+        route: plan_phase
+      - route: escalate_stop
+
+  next_phase_or_experiment:
+    action: route
+    on_result:
+      - when: "${{ result.next }} == more_phases"
+        route: plan_phase
+      - route: run_experiment
+    note: >
+      Routing step. The agent evaluates remaining phases:
+      1. If more phases remain in group_files -> route to plan_phase.
+      2. If all phases complete -> route to run_experiment.
+
+  # --- Experiment + Report ---
+  run_experiment:
+    tool: run_skill
+    model: ""
+    stale_threshold: 2400
+    idle_output_timeout: 0
+    with:
+      skill_command: "/autoskillit:run-experiment ${{ context.worktree_path }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: run_experiment
+    capture:
+      experiment_results: "${{ result.results_path }}"
+    retries: 2
+    on_success: generate_report
+    on_failure: troubleshoot_run_failure
+    on_exhausted: ensure_results
+
+  troubleshoot_run_failure:
+    tool: run_skill
+    model: ""
+    stale_threshold: 2400
+    idle_output_timeout: 0
+    with:
+      skill_command: "/autoskillit:troubleshoot-experiment ${{ context.worktree_path }} run_experiment"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: troubleshoot_run_failure
+    capture:
+      run_is_fixable: "${{ result.is_fixable }}"
+    on_success: route_run_failure
+    on_failure: escalate_stop
+
+  route_run_failure:
+    action: route
+    on_result:
+      - when: "${{ context.run_is_fixable }} == true"
+        route: adjust_experiment
+      - route: escalate_stop
+
+  adjust_experiment:
+    tool: run_skill
+    model: ""
+    stale_threshold: 2400
+    idle_output_timeout: 0
+    with:
+      skill_command: "/autoskillit:run-experiment ${{ context.worktree_path }} --adjust"
+      cwd: "${{ context.worktree_path }}"
+      step_name: adjust
+    capture:
+      experiment_results: "${{ result.results_path }}"
+    on_success: run_experiment
+    on_failure: ensure_results
+
+  ensure_results:
+    tool: run_python
+    with:
+      callable: "autoskillit.recipe._cmd_rpc.ensure_results"
+      experiment_results: "${{ context.experiment_results }}"
+      worktree_path: "${{ context.worktree_path }}"
+      temp_subdir: "{{AUTOSKILLIT_TEMP}}"
+    capture:
+      experiment_results: "${{ result.experiment_results }}"
+    on_success: generate_report_inconclusive
+    on_failure: escalate_stop
+    note: >
+      Ensures context.experiment_results is a valid file path before calling
+      generate_report_inconclusive. Creates a minimal placeholder results file when
+      run-experiment never produced output (retries exhausted or adjust failed).
+
+  generate_report:
+    tool: run_skill
+    model: ""
+    with:
+      skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: generate_report
+    capture:
+      report_path: "${{ result.report_path }}"
+    on_success: test
+    on_failure: escalate_stop
+    on_context_limit: test
+    note: "Writes a conclusive research report to research/ in the worktree."
+
+  generate_report_inconclusive:
+    tool: run_skill
+    model: ""
+    with:
+      skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --inconclusive --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: generate_report
+    capture:
+      report_path: "${{ result.report_path }}"
+    on_success: test
+    on_failure: escalate_stop
+    on_context_limit: test
+    note: >
+      Writes an inconclusive research report. Experiments could not
+      prove or disprove the hypothesis. This is a valid outcome.
+
+  # --- Test + Push ---
+  test:
+    tool: test_check
+    with:
+      worktree_path: "${{ context.worktree_path }}"
+    on_success: push_branch
+    on_failure: fix_tests
+
+  fix_tests:
+    tool: run_skill
+    model: ""
+    with:
+      skill_command: "/autoskillit:resolve-failures ${{ context.worktree_path }} ${{ inputs.experiment_plan }} ${{ inputs.base_branch }}"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: fix
+    capture:
+      verdict: "${{ result.verdict }}"
+      fixes_applied: "${{ result.fixes_applied }}"
+    on_result:
+      - when: "${{ result.verdict }} == 'real_fix'"
+        route: retest
+      - when: "${{ result.verdict }} == 'already_green'"
+        route: retest
+      - when: "${{ result.verdict }} == 'flake_suspected'"
+        route: retest
+      - when: "${{ result.verdict }} == 'ci_only_failure'"
+        route: escalate_stop
+    on_failure: escalate_stop
+    on_context_limit: retest
+
+  retest:
+    tool: test_check
+    with:
+      worktree_path: "${{ context.worktree_path }}"
+    on_success: push_branch
+    on_failure: escalate_stop
+
+  push_branch:
+    tool: run_cmd
+    with:
+      cmd: "bash scripts/recipe/push_branch.sh '${{ inputs.output_mode }}' '${{ context.worktree_path }}'"
+      cwd: "${{ context.worktree_path }}"
+      step_name: push_branch
+    on_success: implement_complete
+    on_failure: escalate_stop
+
+  # --- Terminal Stops ---
+  escalate_stop:
+    action: stop
+    message: "Implementation pipeline failed — human intervention needed. Check the latest step output for details."
+
+  implement_complete:
+    action: stop
+    message: >-
+      Implementation phase complete. Emit the L3 result sentinel JSON block now.
+      The sentinel must include the following fields:
+      success=true, worktree_path=${{ context.worktree_path }},
+      research_dir=${{ inputs.research_dir }},
+      report_path=${{ context.report_path }},
+      experiment_results=${{ context.experiment_results }}.
+      Example sentinel:
+      {"success": true, "worktree_path": "<path>", "research_dir": "<path>",
+      "report_path": "<path>", "experiment_results": "<path>"}

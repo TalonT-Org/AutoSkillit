@@ -203,7 +203,8 @@ def reset_failed_dispatch(state_path: Path, dispatch_name: str) -> bool:
 
     Returns True if the dispatch was found in FAILURE state and reset,
     False if the dispatch was not found, not in FAILURE, or the state file
-    is missing/corrupted.
+    is missing/corrupted. OSError raised by _write_state propagates to
+    the caller — write failures are not silently converted to False.
 
     Thread-safe: uses _resume_lock + fcntl.LOCK_EX.
     """

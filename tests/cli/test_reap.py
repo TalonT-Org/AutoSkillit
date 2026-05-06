@@ -25,9 +25,9 @@ def _make_running_state(
     tmp_path: Path,
     *,
     dispatch_name: str = "d1",
-    l3_pid: int = 12345,
-    l3_starttime_ticks: int = 1000,
-    l3_boot_id: str = BOOT_ID,
+    dispatched_pid: int = 12345,
+    dispatched_starttime_ticks: int = 1000,
+    dispatched_boot_id: str = BOOT_ID,
 ) -> Path:
     """Create a state file with a single RUNNING dispatch."""
     sp = tmp_path / "state.json"
@@ -40,9 +40,9 @@ def _make_running_state(
         {
             "status": "running",
             "dispatch_id": "did-reap",
-            "l3_pid": l3_pid,
-            "l3_starttime_ticks": l3_starttime_ticks,
-            "l3_boot_id": l3_boot_id,
+            "dispatched_pid": dispatched_pid,
+            "dispatched_starttime_ticks": dispatched_starttime_ticks,
+            "dispatched_boot_id": dispatched_boot_id,
             "started_at": 1000.0,
         }
     )
@@ -58,7 +58,7 @@ def _reap(state_path: Path, *, dry_run: bool = False) -> None:
 
 class TestReap:
     def test_reap_kills_orphan(self, tmp_path: Path) -> None:
-        sp = _make_running_state(tmp_path, l3_pid=12345, l3_starttime_ticks=1000)
+        sp = _make_running_state(tmp_path, dispatched_pid=12345, dispatched_starttime_ticks=1000)
         with (
             patch("psutil.pid_exists", return_value=True),
             patch(
@@ -80,7 +80,7 @@ class TestReap:
         assert state.dispatches[0].reason == "reaped_orphan"
 
     def test_reap_skips_recycled_pid(self, tmp_path: Path) -> None:
-        sp = _make_running_state(tmp_path, l3_pid=12345, l3_starttime_ticks=1000)
+        sp = _make_running_state(tmp_path, dispatched_pid=12345, dispatched_starttime_ticks=1000)
         with (
             patch("psutil.pid_exists", return_value=True),
             patch(
@@ -102,7 +102,7 @@ class TestReap:
         assert state.dispatches[0].reason == "reaped_pid_recycled"
 
     def test_reap_marks_dead_pid(self, tmp_path: Path) -> None:
-        sp = _make_running_state(tmp_path, l3_pid=12345)
+        sp = _make_running_state(tmp_path, dispatched_pid=12345)
         with (
             patch("psutil.pid_exists", return_value=False),
             patch(
@@ -120,7 +120,7 @@ class TestReap:
         assert state.dispatches[0].reason == "reaped_dead_pid"
 
     def test_reap_idempotent(self, tmp_path: Path) -> None:
-        sp = _make_running_state(tmp_path, l3_pid=12345)
+        sp = _make_running_state(tmp_path, dispatched_pid=12345)
         with (
             patch("psutil.pid_exists", return_value=False),
             patch(
@@ -165,12 +165,12 @@ class TestReap:
         assert state.dispatches[0].status == DispatchStatus.SUCCESS
 
     def test_reap_skips_kill_after_reboot(self, tmp_path: Path) -> None:
-        """Dispatch with different l3_boot_id → machine rebooted, no kill."""
+        """Dispatch with different dispatched_boot_id → machine rebooted, no kill."""
         sp = _make_running_state(
             tmp_path,
-            l3_pid=12345,
-            l3_starttime_ticks=1000,
-            l3_boot_id=OTHER_BOOT_ID,
+            dispatched_pid=12345,
+            dispatched_starttime_ticks=1000,
+            dispatched_boot_id=OTHER_BOOT_ID,
         )
         with (
             patch(
@@ -188,7 +188,7 @@ class TestReap:
         assert state.dispatches[0].reason == "reaped_pid_recycled"
 
     def test_reap_dry_run_does_not_modify_state(self, tmp_path: Path) -> None:
-        sp = _make_running_state(tmp_path, l3_pid=12345, l3_starttime_ticks=1000)
+        sp = _make_running_state(tmp_path, dispatched_pid=12345, dispatched_starttime_ticks=1000)
         original_text = sp.read_text()
 
         with (
@@ -209,7 +209,7 @@ class TestReap:
 
     def test_reap_concurrent_flock(self, tmp_path: Path) -> None:
         """Two concurrent reap calls — second sees terminal states and skips cleanly."""
-        sp = _make_running_state(tmp_path, l3_pid=12345)
+        sp = _make_running_state(tmp_path, dispatched_pid=12345)
 
         with (
             patch("psutil.pid_exists", return_value=False),

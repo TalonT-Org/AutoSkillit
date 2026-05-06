@@ -57,11 +57,11 @@ class DispatchRecord:
     status: DispatchStatus = DispatchStatus.PENDING
     dispatch_id: str = ""
     caller_session_id: str = ""
-    l3_session_id: str = ""
-    l3_session_log_dir: str = ""
-    l3_pid: int = 0
-    l3_starttime_ticks: int = 0
-    l3_boot_id: str = ""
+    dispatched_session_id: str = ""
+    dispatched_session_log_dir: str = ""
+    dispatched_pid: int = 0
+    dispatched_starttime_ticks: int = 0
+    dispatched_boot_id: str = ""
     reason: str = ""
     kill_reason: str = ""
     infra_exit_category: str = ""
@@ -94,7 +94,7 @@ class ResumeDecision:
     next_dispatch_name: str
     completed_dispatches_block: str
     is_resumable: bool = False
-    l3_session_id: str = ""
+    dispatched_session_id: str = ""
     kill_reason: str = ""
 
 
@@ -197,11 +197,11 @@ def _clear_dispatch_for_retry(d: DispatchRecord) -> None:
     d.status = DispatchStatus.PENDING
     d.reason = ""
     d.dispatch_id = ""
-    d.l3_session_id = ""
-    d.l3_session_log_dir = ""
-    d.l3_pid = 0
-    d.l3_starttime_ticks = 0
-    d.l3_boot_id = ""
+    d.dispatched_session_id = ""
+    d.dispatched_session_log_dir = ""
+    d.dispatched_pid = 0
+    d.dispatched_starttime_ticks = 0
+    d.dispatched_boot_id = ""
     d.token_usage = {}
     d.started_at = 0.0
     d.ended_at = 0.0
@@ -255,11 +255,21 @@ def read_state(state_path: Path) -> CampaignState | None:
                 status=DispatchStatus(d.get("status", DispatchStatus.PENDING)),
                 dispatch_id=d.get("dispatch_id", ""),
                 caller_session_id=d.get("caller_session_id", ""),
-                l3_session_id=d.get("l3_session_id") or d.get("l2_session_id", ""),
-                l3_session_log_dir=d.get("l3_session_log_dir") or d.get("l2_session_log_dir", ""),
-                l3_pid=d.get("l3_pid") or d.get("l2_pid", 0),
-                l3_starttime_ticks=d.get("l3_starttime_ticks") or d.get("l2_starttime_ticks", 0),
-                l3_boot_id=d.get("l3_boot_id") or d.get("l2_boot_id", ""),
+                dispatched_session_id=d.get("dispatched_session_id")
+                or d.get("l3_session_id")
+                or d.get("l2_session_id", ""),
+                dispatched_session_log_dir=d.get("dispatched_session_log_dir")
+                or d.get("l3_session_log_dir")
+                or d.get("l2_session_log_dir", ""),
+                dispatched_pid=d.get("dispatched_pid")
+                if d.get("dispatched_pid") is not None
+                else d.get("l3_pid") or d.get("l2_pid", 0),
+                dispatched_starttime_ticks=d.get("dispatched_starttime_ticks")
+                if d.get("dispatched_starttime_ticks") is not None
+                else d.get("l3_starttime_ticks") or d.get("l2_starttime_ticks", 0),
+                dispatched_boot_id=d.get("dispatched_boot_id")
+                or d.get("l3_boot_id")
+                or d.get("l2_boot_id", ""),
                 reason=d.get("reason", ""),
                 kill_reason=d.get("kill_reason", ""),
                 infra_exit_category=d.get("infra_exit_category", ""),
@@ -302,12 +312,12 @@ def mark_dispatch_running(
     dispatch_name: str,
     *,
     dispatch_id: str,
-    l3_pid: int,
+    dispatched_pid: int,
     starttime_ticks: int = 0,
     boot_id: str = "",
     sidecar_path: str | None = None,
 ) -> None:
-    """Atomically mark a dispatch as running with its dispatch_id and l3_pid."""
+    """Atomically mark a dispatch as running with its dispatch_id and dispatched_pid."""
     state = read_state(state_path)
     if state is None:
         raise FileNotFoundError(f"State file not found or corrupted: {state_path}")
@@ -316,9 +326,9 @@ def mark_dispatch_running(
             _validate_transition(d.status, DispatchStatus.RUNNING, d.name)
             d.status = DispatchStatus.RUNNING
             d.dispatch_id = dispatch_id
-            d.l3_pid = l3_pid
-            d.l3_starttime_ticks = starttime_ticks
-            d.l3_boot_id = boot_id
+            d.dispatched_pid = dispatched_pid
+            d.dispatched_starttime_ticks = starttime_ticks
+            d.dispatched_boot_id = boot_id
             d.started_at = time.time()
             d.sidecar_path = sidecar_path
             break
@@ -711,7 +721,7 @@ def resume_campaign_from_state(
             completed_lines: list[str] = []
             next_name = ""
             is_resumable = False
-            resumable_l3_session_id = ""
+            resumable_dispatched_session_id = ""
             resumable_kill_reason = ""
             for d in state.dispatches:
                 if d.status in _VISIBLE_IN_BLOCK_STATUSES:
@@ -719,7 +729,7 @@ def resume_campaign_from_state(
                 elif d.status == DispatchStatus.RESUMABLE and not next_name:
                     next_name = d.name
                     is_resumable = True
-                    resumable_l3_session_id = d.l3_session_id
+                    resumable_dispatched_session_id = d.dispatched_session_id
                     resumable_kill_reason = d.kill_reason
                 elif (
                     d.status
@@ -741,6 +751,6 @@ def resume_campaign_from_state(
                 next_dispatch_name=next_name,
                 completed_dispatches_block=completed_block,
                 is_resumable=is_resumable,
-                l3_session_id=resumable_l3_session_id,
+                dispatched_session_id=resumable_dispatched_session_id,
                 kill_reason=resumable_kill_reason,
             )

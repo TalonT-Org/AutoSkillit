@@ -725,7 +725,7 @@ async def dispatch_food_truck(
 
     Spawns a headless subprocess that executes the given recipe with the
     provided task and ingredient overrides. Returns a JSON envelope with
-    dispatch_id, l3_session_id, l3_payload, and token_usage.
+    dispatch_id, dispatched_session_id, l3_payload, and token_usage.
 
     Args:
         recipe: Recipe name to dispatch (must be kind=standard).
@@ -837,7 +837,7 @@ async def dispatch_food_truck(
                             name=dispatch_name,
                             status=status,
                             dispatch_id=envelope.get("dispatch_id", ""),
-                            l3_session_id=envelope.get("l3_session_id", ""),
+                            dispatched_session_id=envelope.get("l3_session_id", ""),
                             reason=envelope.get("reason", ""),
                             token_usage=envelope.get("token_usage") or {},
                         ),

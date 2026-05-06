@@ -11,15 +11,15 @@ pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature
 
 class TestIsDispatchSessionAlive:
     def test_unstarted_dispatch_not_alive(self) -> None:
-        record = DispatchRecord(name="test")  # l3_pid defaults to 0
+        record = DispatchRecord(name="test")  # dispatched_pid defaults to 0
         assert not is_dispatch_session_alive(record)
 
     def test_different_boot_id_not_alive(self) -> None:
         record = DispatchRecord(
             name="test",
-            l3_pid=os.getpid(),
-            l3_boot_id="different-boot-id-xyz",
-            l3_starttime_ticks=999,
+            dispatched_pid=os.getpid(),
+            dispatched_boot_id="different-boot-id-xyz",
+            dispatched_starttime_ticks=999,
         )
         assert not is_dispatch_session_alive(record)
 
@@ -28,7 +28,10 @@ class TestIsDispatchSessionAlive:
         if boot_id is None:
             pytest.skip("Not on Linux")
         record = DispatchRecord(
-            name="test", l3_pid=999999999, l3_boot_id=boot_id, l3_starttime_ticks=999
+            name="test",
+            dispatched_pid=999999999,
+            dispatched_boot_id=boot_id,
+            dispatched_starttime_ticks=999,
         )
         assert not is_dispatch_session_alive(record)
 
@@ -39,7 +42,10 @@ class TestIsDispatchSessionAlive:
         if ticks is None or boot_id is None:
             pytest.skip("Not on Linux")
         record = DispatchRecord(
-            name="test", l3_pid=pid, l3_boot_id=boot_id, l3_starttime_ticks=ticks
+            name="test",
+            dispatched_pid=pid,
+            dispatched_boot_id=boot_id,
+            dispatched_starttime_ticks=ticks,
         )
         assert is_dispatch_session_alive(record)
 
@@ -48,12 +54,20 @@ class TestIsDispatchSessionAlive:
         boot_id = read_boot_id()
         if boot_id is None:
             pytest.skip("Not on Linux")
-        record = DispatchRecord(name="test", l3_pid=pid, l3_boot_id=boot_id, l3_starttime_ticks=-1)
+        record = DispatchRecord(
+            name="test",
+            dispatched_pid=pid,
+            dispatched_boot_id=boot_id,
+            dispatched_starttime_ticks=-1,
+        )
         assert not is_dispatch_session_alive(record)
 
     def test_missing_boot_id_on_record_not_alive(self) -> None:
         record = DispatchRecord(
-            name="test", l3_pid=os.getpid(), l3_boot_id="", l3_starttime_ticks=999
+            name="test",
+            dispatched_pid=os.getpid(),
+            dispatched_boot_id="",
+            dispatched_starttime_ticks=999,
         )
         assert not is_dispatch_session_alive(record)
 
@@ -61,7 +75,10 @@ class TestIsDispatchSessionAlive:
         from unittest.mock import patch
 
         record = DispatchRecord(
-            name="test", l3_pid=42, l3_boot_id="boot-id", l3_starttime_ticks=100
+            name="test",
+            dispatched_pid=42,
+            dispatched_boot_id="boot-id",
+            dispatched_starttime_ticks=100,
         )
         with patch("autoskillit.fleet._liveness.is_session_alive", return_value=True) as mock:
             result = is_dispatch_session_alive(record)

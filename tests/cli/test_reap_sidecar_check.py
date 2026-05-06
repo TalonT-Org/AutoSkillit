@@ -30,7 +30,7 @@ def test_reap_stale_dispatches_marks_resumable_when_sidecar_exists(tmp_path: Pat
     write_initial_state(sp, "c1", "camp", "manifest.yaml", [DispatchRecord(name="impl")])
     sidecar_file = sp.parent / "d1111_issues.jsonl"
     mark_dispatch_running(
-        sp, "impl", dispatch_id="d1111", l3_pid=0, sidecar_path=str(sidecar_file)
+        sp, "impl", dispatch_id="d1111", dispatched_pid=0, sidecar_path=str(sidecar_file)
     )
     sidecar_file.write_text(
         '{"issue_url":"https://github.com/o/r/issues/1","status":"completed","ts":"2026-01-01T00:00:00"}\n'
@@ -50,7 +50,7 @@ def test_reap_stale_dispatches_marks_interrupted_when_no_sidecar(tmp_path: Path)
 
     sp = _state_path(tmp_path)
     write_initial_state(sp, "c1", "camp", "manifest.yaml", [DispatchRecord(name="impl")])
-    mark_dispatch_running(sp, "impl", dispatch_id="d1111", l3_pid=0)
+    mark_dispatch_running(sp, "impl", dispatch_id="d1111", dispatched_pid=0)
 
     _reap_stale_dispatches(sp)
 
@@ -68,7 +68,7 @@ def test_reap_stale_dispatches_dry_run_does_not_modify_state(tmp_path: Path) -> 
     write_initial_state(sp, "c1", "camp", "manifest.yaml", [DispatchRecord(name="impl")])
     sidecar_file = sp.parent / "d1111_issues.jsonl"
     mark_dispatch_running(
-        sp, "impl", dispatch_id="d1111", l3_pid=0, sidecar_path=str(sidecar_file)
+        sp, "impl", dispatch_id="d1111", dispatched_pid=0, sidecar_path=str(sidecar_file)
     )
     sidecar_file.write_text(
         '{"issue_url":"https://github.com/o/r/issues/1","status":"completed","ts":"2026-01-01T00:00:00"}\n'

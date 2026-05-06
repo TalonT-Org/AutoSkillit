@@ -88,7 +88,7 @@ def _write_pid(
     starttime_ticks: int,
     sidecar_path: str | None = None,
 ) -> None:
-    """on_spawn callback: atomically mark dispatch as running with l3_pid and identity fields."""
+    """on_spawn callback: atomically mark dispatch as running with dispatched_pid."""
     from autoskillit.core import read_boot_id
     from autoskillit.fleet import mark_dispatch_running
 
@@ -97,7 +97,7 @@ def _write_pid(
             state_path,
             dispatch_name,
             dispatch_id=dispatch_id,
-            l3_pid=pid,
+            dispatched_pid=pid,
             starttime_ticks=starttime_ticks,
             boot_id=read_boot_id() or "",
             sidecar_path=sidecar_path,
@@ -394,10 +394,10 @@ async def _run_dispatch(
         )
 
     started_at = time.time()
-    _l3_pid: list[int] = []
+    _dispatched_pid: list[int] = []
 
     def _on_spawn(pid: int, ticks: int) -> None:
-        _l3_pid.append(pid)
+        _dispatched_pid.append(pid)
         _write_pid(state_path, effective_name, dispatch_id, pid, ticks, dispatch_sidecar_path)
 
     skill_result = await tool_ctx.executor.dispatch_food_truck(
@@ -435,8 +435,8 @@ async def _run_dispatch(
                 status=DispatchStatus.FAILURE,
                 dispatch_id=dispatch_id,
                 caller_session_id=caller_session_id,
-                l3_session_id=skill_result.session_id,
-                l3_pid=_l3_pid[0] if _l3_pid else 0,
+                dispatched_session_id=skill_result.session_id,
+                dispatched_pid=_dispatched_pid[0] if _dispatched_pid else 0,
                 reason=FleetErrorCode.FLEET_L3_TIMEOUT,
                 kill_reason=skill_result.retry_reason or "",
                 infra_exit_category=skill_result.infra_exit_category or "",
@@ -488,8 +488,8 @@ async def _run_dispatch(
             status=final_status,
             dispatch_id=dispatch_id,
             caller_session_id=caller_session_id,
-            l3_session_id=skill_result.session_id,
-            l3_pid=_l3_pid[0] if _l3_pid else 0,
+            dispatched_session_id=skill_result.session_id,
+            dispatched_pid=_dispatched_pid[0] if _dispatched_pid else 0,
             reason=reason,
             kill_reason=skill_result.retry_reason or "",
             infra_exit_category=skill_result.infra_exit_category or "",

@@ -445,7 +445,7 @@ def test_doctor_checks_plugin_cache_exists(tmp_path, monkeypatch, capsys):
     data = json.loads(captured.out)
     checks = [r for r in data["results"] if r["check"] == "plugin_cache_exists"]
     assert len(checks) == 1, "Expected a plugin_cache_exists check"
-    assert checks[0]["severity"] in ("warning", "error")
+    assert checks[0]["severity"] == "warning"
 
 
 def test_doctor_checks_installed_plugins_entry(tmp_path, monkeypatch, capsys):
@@ -461,7 +461,7 @@ def test_doctor_checks_installed_plugins_entry(tmp_path, monkeypatch, capsys):
     data = json.loads(captured.out)
     checks = [r for r in data["results"] if r["check"] == "installed_plugins_entry"]
     assert len(checks) == 1, "Expected an installed_plugins_entry check"
-    assert checks[0]["severity"] in ("warning", "error")
+    assert checks[0]["severity"] == "warning"
 
 
 def test_stale_gate_check_absent_from_doctor_output(tmp_path, monkeypatch, capsys):

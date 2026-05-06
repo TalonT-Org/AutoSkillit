@@ -65,7 +65,7 @@ class TestDispatchFoodTruckHaltEnforcement:
         from autoskillit.server.tools.tools_execution import dispatch_food_truck
 
         result = json.loads(await dispatch_food_truck(recipe="test-recipe", task="t"))
-        assert result.get("error") != "fleet_campaign_halted"
+        assert "dispatch_id" in result
 
     @pytest.mark.anyio
     async def test_dispatch_proceeds_when_no_campaign_state_path(self, tool_ctx, monkeypatch):
@@ -76,7 +76,7 @@ class TestDispatchFoodTruckHaltEnforcement:
         from autoskillit.server.tools.tools_execution import dispatch_food_truck
 
         result = json.loads(await dispatch_food_truck(recipe="test-recipe", task="t"))
-        assert result.get("error") != "fleet_campaign_halted"
+        assert "dispatch_id" in result
 
     @pytest.mark.anyio
     async def test_dispatch_proceeds_when_no_failures_in_state(
@@ -92,7 +92,7 @@ class TestDispatchFoodTruckHaltEnforcement:
         from autoskillit.server.tools.tools_execution import dispatch_food_truck
 
         result = json.loads(await dispatch_food_truck(recipe="test-recipe", task="t"))
-        assert result.get("error") != "fleet_campaign_halted"
+        assert "dispatch_id" in result
 
     @pytest.mark.anyio
     async def test_dispatch_proceeds_when_state_file_missing(
@@ -106,7 +106,7 @@ class TestDispatchFoodTruckHaltEnforcement:
         from autoskillit.server.tools.tools_execution import dispatch_food_truck
 
         result = json.loads(await dispatch_food_truck(recipe="test-recipe", task="t"))
-        assert result.get("error") != "fleet_campaign_halted"
+        assert "dispatch_id" in result
 
     @pytest.mark.anyio
     async def test_campaign_state_write_uses_envelope_dispatch_status(
@@ -178,7 +178,7 @@ class TestDispatchFoodTruckHaltEnforcement:
         from autoskillit.server.tools.tools_execution import dispatch_food_truck
 
         result = json.loads(await dispatch_food_truck(recipe="test-recipe", task="t"))
-        assert result.get("error") != "fleet_campaign_halted"
+        assert "dispatch_id" in result
 
     def _setup_standard_dispatch(self, tool_ctx, monkeypatch):
         """Wire tool_ctx for a successful standard dispatch."""

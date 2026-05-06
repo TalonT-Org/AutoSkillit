@@ -32,9 +32,7 @@ _FINGERPRINT_START = "---bug-fingerprint---"
 _FINGERPRINT_END = "---/bug-fingerprint---"
 
 
-@mcp.tool(
-    tags={"autoskillit", "kitchen", "github", "fleet-dispatch"}, annotations={"readOnlyHint": True}
-)
+@mcp.tool(tags={"autoskillit", "github", "fleet-dispatch"}, annotations={"readOnlyHint": True})
 @track_response_size("fetch_github_issue")
 async def fetch_github_issue(
     issue_url: str,
@@ -113,9 +111,7 @@ async def fetch_github_issue(
         return json.dumps({"success": False, "error": str(exc)})
 
 
-@mcp.tool(
-    tags={"autoskillit", "kitchen", "github", "fleet-dispatch"}, annotations={"readOnlyHint": True}
-)
+@mcp.tool(tags={"autoskillit", "github", "fleet-dispatch"}, annotations={"readOnlyHint": True})
 @track_response_size("get_issue_title")
 async def get_issue_title(issue_url: str) -> str:
     """Fetch only the title and slug for a GitHub issue — no body, no comments.

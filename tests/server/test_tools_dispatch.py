@@ -54,7 +54,18 @@ class TestDispatchFoodTruckGates:
 
         result = json.loads(await dispatch_food_truck(recipe="r", task="t"))
         assert result["success"] is False
-        assert result["error"] == "fleet_hard_refusal_headless"
+        assert result["subtype"] == "headless_error"
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_requires_fleet_session_type(self, tool_ctx, monkeypatch):
+        """Non-fleet session type → headless_error, even for interactive callers."""
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
+        monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
+        from autoskillit.server.tools.tools_execution import dispatch_food_truck
+
+        result = json.loads(await dispatch_food_truck(recipe="r", task="t"))
+        assert result["success"] is False
+        assert result["subtype"] == "headless_error"
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_requires_kitchen_open(self, tool_ctx, monkeypatch):

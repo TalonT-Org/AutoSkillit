@@ -1,5 +1,6 @@
 ---
 name: diagnose-ci
+description: Diagnostic executor for CI failures. ALWAYS invoke this skill when instructed to diagnose CI failures. Do not fetch CI logs directly — use this skill first to load the diagnosis workflow.
 categories: [ci]
 hooks:
   PreToolUse:
@@ -77,16 +78,16 @@ gh run list --branch {branch} --workflow {workflow} --event {event} --limit 1 --
 
 Parse the JSON to extract `databaseId` as `run_id`.
 
-When `gh` is not accessible or the command fails, proceed to Step 5 (write minimal diagnosis).
+When `gh` is not accessible or the command fails, proceed to Step 5 (write diagnosis report).
 
-### Step 3: Fetch Failure Summary
+### Step 2: Fetch Failure Summary
 
 ```bash
 gh run view {run_id} --log-failed
 ```
 Capture the output (stdout). This is the primary failure log.
 
-### Step 4: Fetch Per-Job Logs
+### Step 3: Fetch Per-Job Logs
 
 For each failing job in `ci_failed_jobs` (or all failed jobs from `gh run view` if not provided):
 ```bash
@@ -99,7 +100,7 @@ gh api repos/{owner}/{repo}/actions/jobs/{job_id}/logs
 
 Use `gh repo view --json nameWithOwner` to resolve `{owner}/{repo}` if needed.
 
-### Step 5: Classify Failure
+### Step 4: Classify Failure
 
 Analyze the log output to classify `failure_type` as one of:
 - `test` — pytest/jest/unit test failures
@@ -109,7 +110,7 @@ Analyze the log output to classify `failure_type` as one of:
 - `env` — missing environment variables, secrets, or infrastructure issues
 - `unknown` — cannot determine from logs
 
-#### Step 5a: Subtype Classification
+#### Step 4a: Subtype Classification
 
 After determining `failure_type`, classify `failure_subtype` using the following error-pattern decision tree (first match wins):
 
@@ -140,7 +141,7 @@ Determine `is_fixable`:
 - `true` for `test`, `lint`, `build`, `type_check`
 - `false` for `env`, `unknown`
 
-### Step 6: Write Diagnosis Report
+### Step 5: Write Diagnosis Report
 
 Create directory `{{AUTOSKILLIT_TEMP}}/diagnose-ci/` if it doesn't exist. Write the diagnosis file:
 
@@ -172,7 +173,7 @@ failure_subtype = {failure_subtype}
 
 Save to `{{AUTOSKILLIT_TEMP}}/diagnose-ci/diagnosis_{timestamp}.md`. (relative to the current working directory)
 
-### Step 7: Emit Output Tokens
+### Step 6: Emit Output Tokens
 
 Emit these tokens on their own lines at the end of your response:
 

@@ -1,0 +1,48 @@
+name: quality_improvement
+schema_version: "1.0"
+priority: 8
+display_name: "Quality Improvement and Patient Safety"
+canonical_guideline:
+  name: "SQUIRE 2.0"
+  governing_body: "EQUATOR"
+  stable_for_decade: true
+  canonical: true
+fields_spanned:
+  - medicine
+  - nursing
+  - healthcare_management
+  - public_health
+detection_keywords:
+  - quality improvement
+  - SQUIRE
+  - PDSA cycle
+  - Plan-Do-Study-Act
+  - process improvement
+  - clinical pathway
+  - implementation science
+  - lean
+  - six sigma
+mandatory_figures:
+  - figure: "Run Chart or Control Chart"
+    shows: "Process performance over time with centerline and control limits"
+    citation: "SQUIRE item 15"
+  - figure: "Intervention Logic Model"
+    shows: "Theory of change linking intervention to outcomes"
+    citation: "SQUIRE item 10"
+strongly_expected_figures:
+  - figure: "PDSA Cycle Diagram"
+    shows: "Iterative improvement cycles with Plan, Do, Study, Act phases"
+    source: "SQUIRE item 8"
+  - figure: "Process Map"
+    shows: "Current or proposed workflow with improvement targets"
+    source: "Lean methodology"
+anti_patterns:
+  - pattern: "No baseline measurement"
+    reason: "QI requires pre-intervention data to establish the problem and measure improvement"
+  - pattern: "Single post-intervention data point"
+    reason: "Multiple measurements over time are needed to demonstrate sustained improvement"
+  - pattern: "No control chart rules applied"
+    reason: "Control chart rules detect special cause variation; without them, signals cannot be distinguished from noise"
+  - pattern: "Confusing QI with research"
+    reason: "QI aims to improve local processes; research aims to generate generalizable knowledge"
+venue_specific_appendices: []

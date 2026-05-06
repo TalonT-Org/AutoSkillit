@@ -59,6 +59,12 @@ from autoskillit.recipe.io import (  # noqa: E402
     load_recipe,
 )
 from autoskillit.recipe.loader import parse_recipe_metadata  # noqa: E402
+from autoskillit.recipe.methodology_tradition_registry import (  # noqa: E402
+    MethodologyTraditionSpec,
+    get_methodology_tradition_by_name,
+    is_out_of_scope_tradition,
+    load_all_methodology_traditions,
+)
 from autoskillit.recipe.repository import DefaultRecipeRepository  # noqa: E402
 from autoskillit.recipe.rules import rules_actions as _rules_actions  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_blocks as _rules_blocks  # noqa: E402 F401
@@ -168,6 +174,10 @@ __all__ = [
     "ExperimentTypeSpec",
     "get_experiment_type_by_name",
     "load_all_experiment_types",
+    "MethodologyTraditionSpec",
+    "get_methodology_tradition_by_name",
+    "is_out_of_scope_tradition",
+    "load_all_methodology_traditions",
     "check_rerun_detection",
     "find_prior_runs",
     "CampaignDispatch",

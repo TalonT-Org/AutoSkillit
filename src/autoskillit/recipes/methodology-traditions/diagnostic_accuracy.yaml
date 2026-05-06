@@ -1,0 +1,47 @@
+name: diagnostic_accuracy
+schema_version: "1.0"
+priority: 4
+display_name: "Diagnostic Accuracy Study"
+canonical_guideline:
+  name: "STARD 2015"
+  governing_body: "EQUATOR"
+  stable_for_decade: true
+  canonical: true
+fields_spanned:
+  - medicine
+  - radiology
+  - pathology
+  - laboratory_science
+  - bioinformatics
+detection_keywords:
+  - diagnostic accuracy
+  - sensitivity
+  - specificity
+  - STARD
+  - ROC curve
+  - AUC
+  - positive predictive value
+  - reference standard
+  - index test
+mandatory_figures:
+  - figure: "STARD Flow Diagram"
+    shows: "Participant flow through index test and reference standard"
+    citation: "STARD item 13"
+  - figure: "ROC Curve"
+    shows: "Receiver operating characteristic with AUC"
+    citation: "STARD item 24"
+strongly_expected_figures:
+  - figure: "Cross-Tabulation (2x2 Table)"
+    shows: "True positives, false positives, false negatives, true negatives"
+    source: "STARD item 17"
+  - figure: "Calibration Plot"
+    shows: "Agreement between predicted and observed probabilities"
+    source: "STARD item 24"
+anti_patterns:
+  - pattern: "No reference standard defined"
+    reason: "Diagnostic accuracy requires a defensible reference standard against which the index test is compared"
+  - pattern: "Partial verification bias"
+    reason: "All participants should receive both index test and reference standard"
+  - pattern: "Reporting accuracy without confidence intervals"
+    reason: "Point estimates without CIs provide no sense of precision or uncertainty"
+venue_specific_appendices: []

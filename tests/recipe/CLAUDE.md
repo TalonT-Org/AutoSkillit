@@ -47,6 +47,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_issue_url_pipeline.py` | Tests for issue URL pipeline in recipe steps |
 | `test_loader.py` | Tests for path-based recipe metadata utilities |
 | `test_make_campaign_output_schema.py` | Tests for make-campaign recipe output schema |
+| `test_methodology_tradition_registry.py` | Tests for `MethodologyTraditionSpec`, `load_all_methodology_traditions`, and `is_out_of_scope_tradition` |
 | `test_merge_prs.py` | Tests for merge-prs recipe structure |
 | `test_merge_prs_queue_any.py` | Tests for merge-prs-queue (any strategy) recipe |
 | `test_merge_prs_queue_common.py` | Shared queue behavior tests across all queue-capable recipes |

@@ -1,0 +1,44 @@
+name: controlled_intervention
+schema_version: "1.0"
+priority: 1
+display_name: "Controlled Intervention (Randomized Trial)"
+canonical_guideline:
+  name: "CONSORT 2010"
+  governing_body: "EQUATOR"
+  stable_for_decade: true
+  canonical: true
+fields_spanned:
+  - medicine
+  - psychology
+  - software_engineering
+  - education
+  - public_health
+detection_keywords:
+  - randomized controlled trial
+  - RCT
+  - randomisation
+  - random allocation
+  - parallel group
+  - clinical trial
+  - CONSORT
+  - intent-to-treat
+  - ITT
+mandatory_figures:
+  - figure: "CONSORT Flow Diagram"
+    shows: "Participant flow showing enrollment, allocation, follow-up, and analysis"
+    citation: "CONSORT item 13a"
+strongly_expected_figures:
+  - figure: "Kaplan-Meier Survival Curve"
+    shows: "Time-to-event outcomes by arm"
+    source: "Standard survival analysis"
+  - figure: "Forest Plot of Subgroup Effects"
+    shows: "Hazard ratios across pre-specified subgroups"
+    source: "CONSORT item 19"
+anti_patterns:
+  - pattern: "Per-protocol analysis without intent-to-treat"
+    reason: "Intent-to-treat is the gold standard for RCTs; per-protocol introduces selection bias"
+  - pattern: "Missing allocation concealment description"
+    reason: "Allocation concealment is essential to prevent selection bias at enrollment"
+  - pattern: "No flow diagram"
+    reason: "CONSORT requires a flow diagram to transparently show attrition and protocol deviations"
+venue_specific_appendices: []

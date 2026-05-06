@@ -1,0 +1,49 @@
+name: method_comparison_benchmarking
+schema_version: "1.0"
+priority: 12
+display_name: "Method Comparison and Benchmarking"
+canonical_guideline:
+  name: "Weber et al. 2019"
+  governing_body: "community"
+  stable_for_decade: true
+  canonical: false
+fields_spanned:
+  - computer_science
+  - software_engineering
+  - machine_learning
+  - bioinformatics
+  - operations_research
+detection_keywords:
+  - benchmark
+  - method comparison
+  - baseline comparison
+  - state-of-the-art
+  - SOTA
+  - leaderboard
+  - ablation study
+  - performance comparison
+  - evaluation protocol
+mandatory_figures:
+  - figure: "Performance Comparison Table or Figure"
+    shows: "Quantitative metrics comparing all methods side-by-side"
+    citation: "Weber et al. 2019 Section 4"
+  - figure: "Statistical Significance Test Results"
+    shows: "Tests comparing method performance with p-values or confidence intervals"
+    citation: "Weber et al. 2019 Section 4"
+strongly_expected_figures:
+  - figure: "Critical Difference Diagram"
+    shows: "Post-hoc pairwise comparisons with statistical significance"
+    source: "Demšar 2006"
+  - figure: "Runtime-Accuracy Pareto Front"
+    shows: "Trade-off between computational cost and accuracy metrics"
+    source: "Weber et al. 2019"
+anti_patterns:
+  - pattern: "No statistical significance testing"
+    reason: "Performance differences must be tested for statistical significance"
+  - pattern: "Cherry-picked baselines"
+    reason: "All relevant competing methods should be included; omission of strong baselines biases conclusions"
+  - pattern: "Unreported hyperparameter tuning"
+    reason: "Methods must be fairly tuned before comparison to ensure valid assessment"
+  - pattern: "No ablation study"
+    reason: "Ablation studies isolate the contribution of individual components"
+venue_specific_appendices: []

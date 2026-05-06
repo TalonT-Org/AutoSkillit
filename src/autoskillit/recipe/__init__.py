@@ -67,6 +67,7 @@ from autoskillit.recipe.methodology_tradition_registry import (  # noqa: E402
     get_methodology_tradition_by_name,
     is_out_of_scope_tradition,
     load_all_methodology_traditions,
+    load_traditions_from_dir,
     parse_methodology_tradition,
 )
 from autoskillit.recipe.repository import DefaultRecipeRepository  # noqa: E402
@@ -183,6 +184,7 @@ __all__ = [
     "load_all_experiment_types",
     "MethodologyTraditionSpec",
     "parse_methodology_tradition",
+    "load_traditions_from_dir",
     "get_methodology_tradition_by_name",
     "is_out_of_scope_tradition",
     "load_all_methodology_traditions",

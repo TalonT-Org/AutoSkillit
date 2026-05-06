@@ -2,7 +2,7 @@
 
 Moved from autoskillit.cli._prompts — this module
 depends only on autoskillit.core and stdlib, making it importable from both
-the server and CLI layers without introducing cross-IL-3 coupling.
+the server and CLI layers without introducing cross-L3 coupling.
 """
 
 from __future__ import annotations
@@ -71,7 +71,7 @@ def _build_food_truck_prompt(
 You are an L2 food truck orchestrator. Execute the recipe '{recipe}' autonomously.
 Timeout: {l3_timeout_sec}s. Campaign: {campaign_id}. Dispatch: {dispatch_id}.
 
---- SECTION 1: SOUS-CHEF DISCIPLINE (L3 SUBSET) ---
+--- SECTION 1: SOUS-CHEF DISCIPLINE (L2/FOOD-TRUCK SUBSET) ---
 
 {sous_chef_block}
 

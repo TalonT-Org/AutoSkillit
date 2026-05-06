@@ -1,6 +1,6 @@
 """
-PreToolUse hook — blocks run_cmd calls that would install an editable package
-into system Python without an explicit --python .venv target.
+PreToolUse hook — blocks run_cmd and Bash tool calls that would install an editable
+package into system Python without an explicit --python .venv target.
 
 This guards the interactive orchestrator path (skill sessions cannot call
 run_cmd at all — they are blocked by skill_orchestration_guard.py).
@@ -16,7 +16,10 @@ _UNSAFE_PATTERNS = (
     "pip install --editable",
     "uv pip install -e",
     "uv pip install --editable",
+    "maturin develop",
 )
+
+_SYSTEM_FLAG_PATTERN = "pip install"
 
 
 def _is_unsafe_editable_install(cmd: str) -> bool:
@@ -35,10 +38,20 @@ def _is_unsafe_editable_install(cmd: str) -> bool:
     return True
 
 
+def _is_system_install(cmd: str) -> bool:
+    """Return True if cmd is a pip/uv install with --system flag."""
+    cmd_lower = cmd.lower()
+    if _SYSTEM_FLAG_PATTERN not in cmd_lower:
+        return False
+    tokens = cmd_lower.split()
+    return "--system" in tokens
+
+
 def main() -> None:
     try:
         data = json.loads(sys.stdin.read())
-        cmd = data.get("tool_input", {}).get("cmd", "")
+        tool_input = data.get("tool_input", {})
+        cmd = tool_input.get("command", "") or tool_input.get("cmd", "")
     except (json.JSONDecodeError, AttributeError, OSError):
         sys.exit(0)
 
@@ -61,6 +74,23 @@ def main() -> None:
             }
         )
         sys.stdout.write(payload + "\n")
+        sys.exit(0)
+
+    if _is_system_install(cmd):
+        payload = json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": (
+                        "Blocked: --system install from worktree contaminates global environment. "
+                        "Use `task install-worktree` or add `--python .venv/bin/python`."
+                    ),
+                }
+            }
+        )
+        sys.stdout.write(payload + "\n")
+        sys.exit(0)
 
     sys.exit(0)
 

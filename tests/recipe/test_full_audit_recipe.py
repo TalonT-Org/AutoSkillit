@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+import yaml
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -93,7 +94,6 @@ def test_full_audit_done_step_has_message() -> None:
 
 def test_full_audit_done_step_message_embeds_issue_urls_in_sentinel() -> None:
     """done step message must instruct the model to include issue_urls in the sentinel JSON."""
-    import yaml
 
     data = yaml.safe_load(RECIPE_PATH.read_text())
     message = data["steps"]["done"]["message"]
@@ -132,6 +132,7 @@ def test_full_audit_semantic_rules_no_errors() -> None:
             "audit-docs",
             "audit-review-decisions",
             "validate-audit",
+            "validate-test-audit",
         }
     )
     ctx = make_validation_context(recipe, available_skills=known_skills)
@@ -142,7 +143,6 @@ def test_full_audit_semantic_rules_no_errors() -> None:
 
 def test_full_audit_description_mentions_review_decisions() -> None:
     """full-audit description must mention audit-review-decisions."""
-    import yaml
 
     data = yaml.safe_load(RECIPE_PATH.read_text())
     assert "audit-review-decisions" in data["description"]
@@ -150,7 +150,6 @@ def test_full_audit_description_mentions_review_decisions() -> None:
 
 def test_full_audit_summary_mentions_six() -> None:
     """full-audit summary must reference 6 parallel chains."""
-    import yaml
 
     data = yaml.safe_load(RECIPE_PATH.read_text())
     assert "6" in data["summary"]
@@ -158,7 +157,6 @@ def test_full_audit_summary_mentions_six() -> None:
 
 def test_full_audit_run_audits_note_mentions_review_decisions() -> None:
     """run_audits note must include audit-review-decisions as the 6th skill."""
-    import yaml
 
     data = yaml.safe_load(RECIPE_PATH.read_text())
     note = data["steps"]["run_audits"]["note"]
@@ -167,11 +165,18 @@ def test_full_audit_run_audits_note_mentions_review_decisions() -> None:
 
 def test_full_audit_validate_audits_note_mentions_review_decisions() -> None:
     """validate_audits note must include review_decisions validation."""
-    import yaml
 
     data = yaml.safe_load(RECIPE_PATH.read_text())
     note = data["steps"]["validate_audits"]["note"]
     assert "review_decisions" in note
+
+
+def test_full_audit_validate_audits_routes_tests_to_specialized_skill() -> None:
+    """validate_audits step must route test audits to validate-test-audit."""
+
+    data = yaml.safe_load(RECIPE_PATH.read_text())
+    note = data["steps"]["validate_audits"]["note"]
+    assert "validate-test-audit" in note
 
 
 def test_full_audit_has_max_parallel_ingredient() -> None:
@@ -206,7 +211,6 @@ def test_full_audit_kitchen_rule_mentions_prefer_completion() -> None:
 
 
 def test_full_audit_run_audits_note_mentions_max_parallel() -> None:
-    import yaml
 
     data = yaml.safe_load(RECIPE_PATH.read_text())
     note = data["steps"]["run_audits"]["note"].lower()
@@ -214,7 +218,6 @@ def test_full_audit_run_audits_note_mentions_max_parallel() -> None:
 
 
 def test_full_audit_validate_audits_no_wave_barrier() -> None:
-    import yaml
 
     data = yaml.safe_load(RECIPE_PATH.read_text())
     note = data["steps"]["validate_audits"]["note"].lower()
@@ -222,7 +225,6 @@ def test_full_audit_validate_audits_no_wave_barrier() -> None:
 
 
 def test_full_audit_create_issues_uses_batched_graphql() -> None:
-    import yaml
 
     data = yaml.safe_load(RECIPE_PATH.read_text())
     step = data["steps"]["create_issues"]
@@ -241,7 +243,6 @@ def test_full_audit_create_issues_captures_issue_urls() -> None:
 
 
 def test_full_audit_recipe_version_bumped() -> None:
-    import yaml
     from packaging.version import Version
 
     data = yaml.safe_load(RECIPE_PATH.read_text())

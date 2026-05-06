@@ -39,6 +39,7 @@ Skill SKILL.md content compliance, placeholder contracts, and verdict guard test
 | `test_resolve_review_diff_hunk_preference.py` | Guards: resolve-review Step 3.5 prefers diff_hunk over source file reads |
 | `test_resolve_review_duplicate_comments.py` | Resolve review duplicate comments guard |
 | `test_resolve_review_intent_validation.py` | Structural guards for resolve-review intent-validation phase |
+| `test_resolve_review_local_mode.py` | Contract tests for resolve-review/SKILL.md local mode (mode=local) behavior |
 | `test_resolve_review_severity_and_reject_resolution.py` | Resolve review severity and reject resolution tests |
 | `test_resolve_review_thread_resolution.py` | Resolve review thread resolution tests |
 | `test_resolve_review_token_optimizations.py` | Structural guards for resolve-review SKILL.md token-optimization edits |
@@ -49,6 +50,7 @@ Skill SKILL.md content compliance, placeholder contracts, and verdict guard test
 | `test_review_pr_adaptive_dispatch_guards.py` | Behavioral guard tests for review-pr adaptive subagent dispatch |
 | `test_review_pr_diff_context_handoff.py` | Guards: review-pr writes diff_context handoff file in Step 8 before verdict emission |
 | `test_review_pr_inline_comment_guards.py` | Structural guards for review-pr/SKILL.md posting mechanics |
+| `test_review_pr_local_mode.py` | Contract tests for review-pr/SKILL.md local mode (mode=local) behavior |
 | `test_review_pr_prior_thread_awareness.py` | Behavioral guard tests for review-pr/SKILL.md prior-thread awareness (T_RPA1–T_RPA7) |
 | `test_review_pr_verdict_guards.py` | Behavioral guard tests for review-pr/SKILL.md verdict logic |
 | `test_review_research_pr_guards.py` | Behavioral guards for review-research-pr/SKILL.md |

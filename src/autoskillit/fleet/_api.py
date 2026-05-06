@@ -208,7 +208,7 @@ def classify_dispatch_outcome(
     sidecar_exists: bool = False,
     checkpoint: SessionCheckpoint | None = None,
 ) -> tuple[DispatchStatus, str]:
-    """Map L3 subprocess signals to a (DispatchStatus, reason) pair.
+    """Map L2 food truck subprocess signals to a (DispatchStatus, reason) pair.
 
     Pure function — no filesystem access, no side effects.
     Rules applied in order:

@@ -459,9 +459,9 @@ def build_food_truck_cmd(
     temp_dir_relpath: str | None = None,
     allowed_write_prefix: str = "",
 ) -> ClaudeHeadlessCmd:
-    """Build the complete headless command spec for an L3 food truck session.
+    """Build the complete headless command spec for an L2 food truck session.
 
-    A food truck session is an L3 orchestrator: it runs a full recipe
+    A food truck session is an L2 orchestrator: it runs a full recipe
     autonomously, always carries ``AUTOSKILLIT_SESSION_TYPE=orchestrator``,
     and restricts Claude native tools to ``--tools AskUserQuestion``.
 
@@ -489,7 +489,7 @@ def build_food_truck_cmd(
         Optional model override.
     env_extras
         Caller-provided env variables layered on top of the baseline.
-        Used for CAMPAIGN_ID, CAMPAIGN_STATE_PATH, PROJECT_DIR, L2_TOOL_TAGS,
+        Used for CAMPAIGN_ID, CAMPAIGN_STATE_PATH, PROJECT_DIR, L3_TOOL_TAGS,
         IDLE_OUTPUT_TIMEOUT. These override baseline but cannot override
         SESSION_TYPE or HEADLESS (applied last).
     output_format

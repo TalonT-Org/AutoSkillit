@@ -1,6 +1,6 @@
 name: implement-findings
 description: >-
-  Multi-issue L3 orchestration recipe for promote-to-main campaign. Processes
+  Multi-issue L2 orchestration recipe for promote-to-main campaign. Processes
   a batch of audit findings through the full implementation or remediation
   lifecycle. Issues within the same BEM group run in parallel via wavefront
   scheduling; groups run sequentially.

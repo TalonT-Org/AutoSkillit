@@ -2,7 +2,7 @@
 """PreToolUse hook — blocks dispatch_food_truck from headless callers.
 
 Defense-in-depth: dispatch_food_truck must never be called from a headless
-session regardless of SESSION_TYPE. This closes L3→L3 recursion where a
+session regardless of SESSION_TYPE. This closes L2→L2 recursion where a
 fleet session spawns another fleet session via dispatch.
 
 Interactive callers (cook with kitchen open) are always permitted.
@@ -45,7 +45,7 @@ def main() -> None:
                     "permissionDecisionReason": (
                         "dispatch_food_truck cannot be called from headless sessions. "
                         "This tool is only available to interactive callers (cook). "
-                        "Headless dispatch would create recursive L3 sessions."
+                        "Headless dispatch would create recursive L2 (food truck) sessions."
                     ),
                 }
             }

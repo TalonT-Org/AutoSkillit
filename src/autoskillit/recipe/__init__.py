@@ -39,10 +39,10 @@ from autoskillit.recipe.diagrams import (  # noqa: E402
 from autoskillit.recipe.experiment_type_registry import (  # noqa: E402
     BUNDLED_EXPERIMENT_TYPES_DIR,
     ExperimentTypeSpec,
-    _load_types_from_dir,
-    _parse_experiment_type,
     get_experiment_type_by_name,
     load_all_experiment_types,
+    load_types_from_dir,
+    parse_experiment_type,
 )
 from autoskillit.recipe.identity import (  # noqa: E402
     check_rerun_detection,
@@ -64,10 +64,10 @@ from autoskillit.recipe.io import (  # noqa: E402
 from autoskillit.recipe.loader import parse_recipe_metadata  # noqa: E402
 from autoskillit.recipe.methodology_tradition_registry import (  # noqa: E402
     MethodologyTraditionSpec,
-    _parse_methodology_tradition,
     get_methodology_tradition_by_name,
     is_out_of_scope_tradition,
     load_all_methodology_traditions,
+    parse_methodology_tradition,
 )
 from autoskillit.recipe.repository import DefaultRecipeRepository  # noqa: E402
 from autoskillit.recipe.rules import rules_actions as _rules_actions  # noqa: E402 F401
@@ -177,12 +177,12 @@ __all__ = [
     "find_sub_recipe_by_name",
     "BUNDLED_EXPERIMENT_TYPES_DIR",
     "ExperimentTypeSpec",
-    "_load_types_from_dir",
-    "_parse_experiment_type",
+    "load_types_from_dir",
+    "parse_experiment_type",
     "get_experiment_type_by_name",
     "load_all_experiment_types",
     "MethodologyTraditionSpec",
-    "_parse_methodology_tradition",
+    "parse_methodology_tradition",
     "get_methodology_tradition_by_name",
     "is_out_of_scope_tradition",
     "load_all_methodology_traditions",

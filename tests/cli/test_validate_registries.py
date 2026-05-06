@@ -6,9 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.recipe.experiment_type_registry import (
-    BUNDLED_EXPERIMENT_TYPES_DIR,
-)
+from autoskillit.cli._validate import validate_registries
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -88,8 +86,8 @@ class TestValidateRegistries:
     def _mock_bundled_types(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Patch bundled types loading to return empty dict."""
         monkeypatch.setattr(
-            "autoskillit.cli._validate._load_types_from_dir",
-            lambda dir: {} if dir == BUNDLED_EXPERIMENT_TYPES_DIR else {},
+            "autoskillit.cli._validate.load_types_from_dir",
+            lambda _: {},
         )
 
     # T_VAL_1: Valid experiment-type YAML produces ✓ output and exit 0
@@ -102,8 +100,6 @@ class TestValidateRegistries:
         """Valid experiment-type YAML produces ✓ output and exits 0."""
         monkeypatch.chdir(tmp_path)
         _write_yaml(tmp_path, "experiment-types", "my_type.yaml", VALID_EXPERIMENT_TYPE)
-
-        from autoskillit.cli._validate import validate_registries
 
         validate_registries()
         out = capsys.readouterr().out
@@ -125,8 +121,6 @@ class TestValidateRegistries:
         )
         _write_yaml(tmp_path, "experiment-types", "warn_type.yaml", yaml_content)
 
-        from autoskillit.cli._validate import validate_registries
-
         validate_registries()
         out = capsys.readouterr().out
         assert "⚠" in out
@@ -144,8 +138,6 @@ class TestValidateRegistries:
         monkeypatch.chdir(tmp_path)
         yaml_content = VALID_EXPERIMENT_TYPE.replace("name: my-test-type\n", "")
         _write_yaml(tmp_path, "experiment-types", "no_name.yaml", yaml_content)
-
-        from autoskillit.cli._validate import validate_registries
 
         with pytest.raises(SystemExit) as exc_info:
             validate_registries()
@@ -169,8 +161,6 @@ class TestValidateRegistries:
         )
         _write_yaml(tmp_path, "experiment-types", "bad_lens.yaml", yaml_content)
 
-        from autoskillit.cli._validate import validate_registries
-
         with pytest.raises(SystemExit) as exc_info:
             validate_registries()
         assert exc_info.value.code == 1
@@ -190,8 +180,6 @@ class TestValidateRegistries:
         yaml_content = VALID_EXPERIMENT_TYPE.replace("  - trigger_alpha\n  - trigger_beta", "")
         _write_yaml(tmp_path, "experiment-types", "empty_triggers.yaml", yaml_content)
 
-        from autoskillit.cli._validate import validate_registries
-
         with pytest.raises(SystemExit) as exc_info:
             validate_registries()
         assert exc_info.value.code == 1
@@ -210,8 +198,6 @@ class TestValidateRegistries:
         monkeypatch.chdir(tmp_path)
         yaml_content = VALID_EXPERIMENT_TYPE.replace("priority: 1", "priority: 0")
         _write_yaml(tmp_path, "experiment-types", "bad_priority.yaml", yaml_content)
-
-        from autoskillit.cli._validate import validate_registries
 
         with pytest.raises(SystemExit) as exc_info:
             validate_registries()
@@ -237,8 +223,6 @@ class TestValidateRegistries:
         _write_yaml(tmp_path, "experiment-types", "fallback1.yaml", yaml1)
         _write_yaml(tmp_path, "experiment-types", "fallback2.yaml", yaml2)
 
-        from autoskillit.cli._validate import validate_registries
-
         with pytest.raises(SystemExit) as exc_info:
             validate_registries()
         assert exc_info.value.code == 1
@@ -255,8 +239,6 @@ class TestValidateRegistries:
     ) -> None:
         """No user directories prints info message and exits 0."""
         monkeypatch.chdir(tmp_path)
-
-        from autoskillit.cli._validate import validate_registries
 
         validate_registries()
         out = capsys.readouterr().out
@@ -275,8 +257,6 @@ class TestValidateRegistries:
             tmp_path, "methodology-traditions", "my_tradition.yaml", VALID_METHODOLOGY_TRADITION
         )
 
-        from autoskillit.cli._validate import validate_registries
-
         validate_registries()
         out = capsys.readouterr().out
         assert "✓" in out
@@ -293,8 +273,6 @@ class TestValidateRegistries:
         monkeypatch.chdir(tmp_path)
         yaml_content = VALID_METHODOLOGY_TRADITION.replace("  - keyword1\n  - keyword2", "")
         _write_yaml(tmp_path, "methodology-traditions", "empty_keywords.yaml", yaml_content)
-
-        from autoskillit.cli._validate import validate_registries
 
         with pytest.raises(SystemExit) as exc_info:
             validate_registries()
@@ -313,8 +291,6 @@ class TestValidateRegistries:
         monkeypatch.chdir(tmp_path)
         yaml_content = VALID_EXPERIMENT_TYPE.replace("name: my-test-type\n", "")
         _write_yaml(tmp_path, "experiment-types", "parse_error.yaml", yaml_content)
-
-        from autoskillit.cli._validate import validate_registries
 
         with pytest.raises(SystemExit):
             validate_registries()
@@ -344,8 +320,6 @@ class TestValidateRegistries:
         )
         _write_yaml(tmp_path, "experiment-types", "warn_only.yaml", yaml_content)
 
-        from autoskillit.cli._validate import validate_registries
-
         validate_registries()
         out = capsys.readouterr().out
         assert "⚠" in out
@@ -366,8 +340,6 @@ class TestValidateRegistries:
         yaml_err = VALID_EXPERIMENT_TYPE.replace("name: my-test-type\n", "")
         _write_yaml(tmp_path, "experiment-types", "error_type.yaml", yaml_err)
 
-        from autoskillit.cli._validate import validate_registries
-
         with pytest.raises(SystemExit):
             validate_registries()
         out = capsys.readouterr().out
@@ -387,9 +359,7 @@ class TestValidateRegistries:
         yaml_content = VALID_EXPERIMENT_TYPE + "\nis_fallback: true\n"
         _write_yaml(tmp_path, "experiment-types", "single_fallback.yaml", yaml_content)
 
-        from autoskillit.cli._validate import validate_registries
-
         validate_registries()
         out = capsys.readouterr().out
         assert "✓" in out
-        assert "is_fallback" not in out.lower() or "error" not in out.lower()
+        assert "error" not in out.lower()

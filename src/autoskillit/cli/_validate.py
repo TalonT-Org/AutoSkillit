@@ -12,25 +12,14 @@ from autoskillit.core import YAMLError, atomic_write, load_yaml, pkg_root
 from autoskillit.recipe import (
     BUNDLED_EXPERIMENT_TYPES_DIR,
     ExperimentTypeSpec,
-    _load_types_from_dir,
-    _parse_experiment_type,
-    _parse_methodology_tradition,
+    load_types_from_dir,
+    parse_experiment_type,
+    parse_methodology_tradition,
 )
 
 validate_app = App(name="validate", help="Validation commands.")
 
 EXPECTED_SCHEMA_VERSION = "1.0"
-
-EXPERIMENT_TYPE_DIMENSION_KEYS = (
-    "clarity",
-    "methodological_rigor",
-    "external_validity",
-    "practical_significance",
-    "inferential_validity",
-    "ethical_compliance",
-    "reporting_completeness",
-    "transparency",
-)
 
 
 @dataclass
@@ -64,7 +53,7 @@ def _validate_experiment_type_file(path: Path, valid_lenses: set[str]) -> Valida
     errors: list[str] = []
     warnings: list[str] = []
 
-    raw_content = path.read_text()
+    raw_content = path.read_text(encoding="utf-8")
 
     try:
         data = load_yaml(path)
@@ -81,7 +70,7 @@ def _validate_experiment_type_file(path: Path, valid_lenses: set[str]) -> Valida
         data["classification_triggers"] = []
 
     try:
-        spec = _parse_experiment_type(data, path)
+        spec = parse_experiment_type(data, path)
     except (ValueError, TypeError) as e:
         return ValidationResult(
             filename=path.name,
@@ -128,7 +117,7 @@ def _validate_methodology_tradition_file(path: Path) -> ValidationResult:
     errors: list[str] = []
     warnings: list[str] = []
 
-    raw_content = path.read_text()
+    raw_content = path.read_text(encoding="utf-8")
 
     try:
         data = load_yaml(path)
@@ -145,7 +134,7 @@ def _validate_methodology_tradition_file(path: Path) -> ValidationResult:
         data["detection_keywords"] = []
 
     try:
-        spec = _parse_methodology_tradition(data, path)
+        spec = parse_methodology_tradition(data, path)
     except (ValueError, TypeError) as e:
         return ValidationResult(
             filename=path.name,
@@ -183,32 +172,30 @@ def _check_fallback_uniqueness(
 ) -> list[str]:
     fallback_errors: list[str] = []
 
+    user_type_filenames: dict[str, str] = {}
     all_types: dict[str, ExperimentTypeSpec] = dict(bundled_types)
     for result in user_results:
         if result.spec_name and result.status != "error":
-            data = load_yaml(result.path)
+            try:
+                data = load_yaml(result.path)
+            except (YAMLError, OSError):
+                continue
             if isinstance(data, dict):
                 try:
-                    spec = _parse_experiment_type(data, result.path)
+                    spec = parse_experiment_type(data, result.path)
                     all_types[spec.name] = spec
+                    user_type_filenames[spec.name] = result.filename
                 except (ValueError, TypeError):
                     pass
 
-    fallback_entries = [
-        (name, spec, result)
-        for name, spec in all_types.items()
-        for result in user_results
-        if result.spec_name == name and spec.is_fallback
-    ]
+    fallback_names = [name for name, spec in all_types.items() if spec.is_fallback]
 
-    if len(fallback_entries) > 1:
-        seen: set[str] = set()
-        for name, spec, result in fallback_entries:
-            if name not in seen:
-                fallback_errors.append(
-                    f"Multiple is_fallback=True entries found: '{name}' in {result.filename}"
-                )
-                seen.add(name)
+    if len(fallback_names) > 1:
+        for name in fallback_names:
+            filename = user_type_filenames.get(name, f"<bundled:{name}>")
+            fallback_errors.append(
+                f"Multiple is_fallback=True entries found: '{name}' in {filename}"
+            )
 
     return fallback_errors
 
@@ -248,13 +235,13 @@ l1_severity:
 ```"""
 
     how_to_fix = ""
-    if "missing 'name'" in str(result.errors):
+    if any("missing 'name'" in e for e in result.errors):
         how_to_fix = "Add a `name` field to your YAML file."
-    elif "applicable_lenses" in str(result.errors):
+    elif any("applicable_lenses" in e for e in result.errors):
         how_to_fix = "Ensure applicable_lenses slugs exist in skills_extended/ directories."
-    elif "classification_triggers" in str(result.errors):
+    elif any("classification_triggers" in e for e in result.errors):
         how_to_fix = "Add at least one classification trigger, or set is_fallback: true."
-    elif "priority" in str(result.errors):
+    elif any("priority" in e for e in result.errors):
         how_to_fix = "Set priority to a positive integer (higher = lower precedence)."
     elif result.errors:
         how_to_fix = "Fix the errors listed above and re-run validation."
@@ -302,7 +289,7 @@ def _format_stdout_report(
         ("methodology-tradition", r) for r in mt_results
     ]
 
-    for _registry_type, result in all_results:
+    for _, result in all_results:
         if result.status == "error":
             symbol = "✗"
         elif result.status == "warning":
@@ -359,14 +346,14 @@ def validate_registries() -> None:
             result = _validate_methodology_tradition_file(path)
             mt_results.append(result)
 
-    bundled_types = _load_types_from_dir(BUNDLED_EXPERIMENT_TYPES_DIR)
+    bundled_types = load_types_from_dir(BUNDLED_EXPERIMENT_TYPES_DIR)
     fallback_errors = _check_fallback_uniqueness(et_results, bundled_types)
 
     if fallback_errors:
         for result in et_results:
             if result.spec_name:
                 for error in fallback_errors:
-                    if result.spec_name in error:
+                    if f"'{result.spec_name}'" in error:
                         result.errors.append(error)
 
     print(_format_stdout_report(et_results, mt_results))

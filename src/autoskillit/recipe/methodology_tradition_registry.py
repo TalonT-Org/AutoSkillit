@@ -116,6 +116,10 @@ def _load_traditions_from_dir(directory: Path) -> dict[str, MethodologyTradition
     return result
 
 
+def parse_methodology_tradition(data: dict, source_path: Path) -> MethodologyTraditionSpec:
+    return _parse_methodology_tradition(data, source_path)
+
+
 def load_all_methodology_traditions(
     project_dir: Path | None = None,
 ) -> list[MethodologyTraditionSpec]:

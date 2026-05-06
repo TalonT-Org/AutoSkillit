@@ -1,10 +1,7 @@
 ---
 name: prepare-pr
 categories: [github]
-description: >
-  Reads plan(s), runs git diff, classifies changed files, selects 1–3 arch-lens slugs,
-  writes one context file per lens, and writes a PR prep file. Does NOT invoke arch-lens
-  skills. Part 1 of 3 in the decomposed PR flow.
+description: Preparation executor for pull-request metadata. ALWAYS invoke this skill when instructed to prepare PR metadata. Do not read plans or classify files directly — use this skill first to load the preparation workflow.
 hooks:
   PreToolUse:
     - matcher: "*"

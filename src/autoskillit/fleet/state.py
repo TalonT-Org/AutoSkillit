@@ -181,6 +181,22 @@ def has_failed_dispatch(state_path: Path) -> bool:
     )
 
 
+def _clear_dispatch_for_retry(d: DispatchRecord) -> None:
+    _validate_transition(d.status, DispatchStatus.PENDING, d.name)
+    d.status = DispatchStatus.PENDING
+    d.reason = ""
+    d.dispatch_id = ""
+    d.l3_session_id = ""
+    d.l3_session_log_dir = ""
+    d.l3_pid = 0
+    d.l3_starttime_ticks = 0
+    d.l3_boot_id = ""
+    d.token_usage = {}
+    d.started_at = 0.0
+    d.ended_at = 0.0
+    d.sidecar_path = None
+
+
 def reset_failed_dispatch(state_path: Path, dispatch_name: str) -> bool:
     """Reset a FAILURE dispatch to PENDING, clearing all execution metadata.
 
@@ -203,19 +219,7 @@ def reset_failed_dispatch(state_path: Path, dispatch_name: str) -> bool:
 
             for d in state.dispatches:
                 if d.name == dispatch_name and d.status == DispatchStatus.FAILURE:
-                    _validate_transition(d.status, DispatchStatus.PENDING, d.name)
-                    d.status = DispatchStatus.PENDING
-                    d.reason = ""
-                    d.dispatch_id = ""
-                    d.l3_session_id = ""
-                    d.l3_session_log_dir = ""
-                    d.l3_pid = 0
-                    d.l3_starttime_ticks = 0
-                    d.l3_boot_id = ""
-                    d.token_usage = {}
-                    d.started_at = 0.0
-                    d.ended_at = 0.0
-                    d.sidecar_path = None
+                    _clear_dispatch_for_retry(d)
                     _write_state(state_path, state)
                     return True
 
@@ -645,19 +649,7 @@ def resume_campaign_from_state(
             for d in state.dispatches:
                 if d.status == DispatchStatus.FAILURE and not continue_on_failure:
                     if reset_on_retry:
-                        _validate_transition(d.status, DispatchStatus.PENDING, d.name)
-                        d.status = DispatchStatus.PENDING
-                        d.reason = ""
-                        d.dispatch_id = ""
-                        d.l3_session_id = ""
-                        d.l3_session_log_dir = ""
-                        d.l3_pid = 0
-                        d.l3_starttime_ticks = 0
-                        d.l3_boot_id = ""
-                        d.token_usage = {}
-                        d.started_at = 0.0
-                        d.ended_at = 0.0
-                        d.sidecar_path = None
+                        _clear_dispatch_for_retry(d)
                         did_reset = True
                     else:
                         return ResumeDecision(

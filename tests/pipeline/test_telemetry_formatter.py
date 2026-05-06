@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from autoskillit.core import ModelTotalEntry
 from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
 
 pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
@@ -133,10 +134,10 @@ class TestFormatTokenTable:
             [
                 "## Token Usage Summary",
                 "",
-                "| Step | count | uncached | output | cache_read | peak_ctx | turns | cache_write | time |",  # noqa: E501
-                "|------|-------|----------|--------|------------|----------|-------|-------------|------|",  # noqa: E501
-                "| plan | 1 | 1.0k | 500 | 200 | 200 | 5 | 100 | 46s |",
-                "| **Total** | | 1.0k | 500 | 200 | 200 | | 100 | 46s |",
+                "| Step | Model | count | uncached | output | cache_read | peak_ctx | turns | cache_write | time |",  # noqa: E501
+                "|------|-------|-------|----------|--------|------------|----------|-------|-------------|------|",  # noqa: E501
+                "| plan |  | 1 | 1.0k | 500 | 200 | 200 | 5 | 100 | 46s |",
+                "| **Total** | | | 1.0k | 500 | 200 | 200 | | 100 | 46s |",
             ]
         )
         assert result == expected
@@ -743,3 +744,130 @@ def test_efficiency_table_no_peak_ctx_ratio() -> None:
     result = TelemetryFormatter.format_efficiency_table(steps, total)
     assert "peak_ctx/LoC" not in result
     assert "PK/LOC" not in TelemetryFormatter.format_efficiency_table_terminal(steps, total)
+
+
+# ---------------------------------------------------------------------------
+# Model column in format_token_table
+# ---------------------------------------------------------------------------
+
+
+def test_format_token_table_includes_model_column() -> None:
+    steps = [
+        {
+            "step_name": "plan",
+            "model": "claude-sonnet-4-6",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "invocation_count": 1,
+            "wall_clock_seconds": 60.0,
+            "peak_context": 0,
+            "turn_count": 5,
+        }
+    ]
+    total = {
+        "input_tokens": 1000,
+        "output_tokens": 500,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "total_elapsed_seconds": 60.0,
+        "peak_context": 0,
+    }
+    table = TelemetryFormatter.format_token_table(steps, total)
+    assert "| Model |" in table
+    assert "claude-sonnet-4-6" in table
+
+
+# ---------------------------------------------------------------------------
+# format_model_table
+# ---------------------------------------------------------------------------
+
+
+def test_format_model_table() -> None:
+    model_totals: list[ModelTotalEntry] = [
+        {
+            "model": "claude-sonnet-4-6",
+            "step_count": 2,
+            "input_tokens": 300,
+            "output_tokens": 130,
+            "cache_read_input_tokens": 5000,
+            "cache_creation_input_tokens": 100,
+            "elapsed_seconds": 120.0,
+        },
+        {
+            "model": "MiniMax-M2.7",
+            "step_count": 1,
+            "input_tokens": 500,
+            "output_tokens": 200,
+            "cache_read_input_tokens": 1200,
+            "cache_creation_input_tokens": 0,
+            "elapsed_seconds": 60.0,
+        },
+    ]
+    table = TelemetryFormatter.format_model_table(model_totals)
+    assert "## Model Usage Breakdown" in table
+    assert "| Model | steps | uncached | output | cache_read | cache_write | time |" in table
+    assert "| claude-sonnet-4-6 | 2 | 300 | 130 | 5.0k | 100 | 2m 0s |" in table
+    assert "| MiniMax-M2.7 | 1 | 500 | 200 | 1.2k | 0 | 1m 0s |" in table
+    table_lines = [ln for ln in table.splitlines() if ln.startswith("|")]
+    assert len(table_lines) == 4  # header + separator + 2 model rows
+
+
+def test_format_model_table_empty_returns_empty() -> None:
+    assert TelemetryFormatter.format_model_table([]) == ""
+
+
+def test_format_model_table_all_unknown_returns_empty() -> None:
+    totals: list[ModelTotalEntry] = [
+        {
+            "model": "unknown",
+            "step_count": 1,
+            "input_tokens": 100,
+            "output_tokens": 0,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "elapsed_seconds": 0.0,
+        }
+    ]
+    assert TelemetryFormatter.format_model_table(totals) == ""
+
+
+# ---------------------------------------------------------------------------
+# model tag in compact KV
+# ---------------------------------------------------------------------------
+
+
+def test_compact_kv_includes_model() -> None:
+    steps = [
+        {
+            "step_name": "plan",
+            "model": "claude-sonnet-4-6",
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "invocation_count": 1,
+            "turn_count": 0,
+            "wall_clock_seconds": 10.0,
+        }
+    ]
+    total = {"input_tokens": 100, "output_tokens": 50}
+    output = TelemetryFormatter.format_compact_kv(steps, total)
+    assert "model:claude-sonnet-4-6" in output
+
+
+def test_compact_kv_no_model_tag_when_empty() -> None:
+    steps = [
+        {
+            "step_name": "plan",
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "invocation_count": 1,
+            "turn_count": 0,
+            "wall_clock_seconds": 10.0,
+        }
+    ]
+    total = {}
+    output = TelemetryFormatter.format_compact_kv(steps, total)
+    assert "model:" not in output

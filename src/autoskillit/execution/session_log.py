@@ -394,6 +394,7 @@ def flush_session_log(
             "peak_context": token_usage.get("peak_context", 0),
             "turn_count": token_usage.get("turn_count", 0),
             "provider_used": provider_outcome.provider_used,
+            "model_identifier": model_identifier or _primary_model_identifier(token_usage),
         }
         atomic_write(session_dir / "token_usage.json", json.dumps(tu_data))
 

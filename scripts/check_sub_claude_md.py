@@ -76,6 +76,7 @@ def check_coverage(root: Path, expected: list[str]) -> list[str]:
     for rel_path in expected:
         claude_md = root / rel_path
         if not claude_md.exists():
+            failures.append(f"{rel_path}: CLAUDE.md not found")
             continue
         content = claude_md.read_text(encoding="utf-8")
         directory = claude_md.parent
@@ -84,7 +85,7 @@ def check_coverage(root: Path, expected: list[str]) -> list[str]:
                 if "`__init__.py`" not in content:
                     failures.append(f"{rel_path}: missing `__init__.py` in file table")
             else:
-                if py_file.name not in content:
+                if f"`{py_file.name}`" not in content:
                     failures.append(f"{rel_path}: missing {py_file.name}")
     return failures
 

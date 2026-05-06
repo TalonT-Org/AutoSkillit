@@ -12,7 +12,7 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 def test_process_kill_exports():
-    """_process_kill.py exports kill/async_kill functions."""
+    """kill_process_tree and async_kill_process_tree are defined in _process_kill submodule."""
     from autoskillit.execution.process._process_kill import (
         async_kill_process_tree,
         kill_process_tree,
@@ -25,7 +25,7 @@ def test_process_kill_exports():
 
 
 def test_process_pty_exports():
-    """_process_pty.py exports pty_wrap_command."""
+    """pty_wrap_command is defined in _process_pty submodule."""
     from autoskillit.execution.process._process_pty import pty_wrap_command
 
     assert callable(pty_wrap_command)
@@ -33,7 +33,8 @@ def test_process_pty_exports():
 
 
 def test_process_jsonl_exports():
-    """_process_jsonl.py exports JSONL parsing helpers."""
+    """_jsonl_contains_marker, _jsonl_has_record_type, and _marker_is_standalone
+    are defined in _process_jsonl submodule."""
     from autoskillit.execution.process._process_jsonl import (
         _jsonl_contains_marker,
         _jsonl_has_record_type,
@@ -49,7 +50,7 @@ def test_process_jsonl_exports():
 
 
 def test_process_io_exports():
-    """_process_io.py exports temp I/O helpers."""
+    """create_temp_io and read_temp_output are defined in _process_io submodule."""
     from autoskillit.execution.process._process_io import create_temp_io, read_temp_output
 
     assert callable(create_temp_io)
@@ -59,7 +60,8 @@ def test_process_io_exports():
 
 
 def test_process_monitor_exports():
-    """_process_monitor.py exports monitoring functions."""
+    """_heartbeat, _session_log_monitor, and _has_active_api_connection
+    are defined in _process_monitor submodule."""
     from autoskillit.execution.process._process_monitor import (
         _has_active_api_connection,
         _heartbeat,
@@ -77,7 +79,7 @@ def test_process_monitor_exports():
 
 
 def test_process_race_exports():
-    """_process_race.py exports race coordination types and functions."""
+    """Race types/functions are defined in _process_race submodule."""
     from autoskillit.execution.process._process_race import (
         RaceAccumulator,
         RaceSignals,

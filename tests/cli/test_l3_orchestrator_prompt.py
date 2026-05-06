@@ -237,7 +237,7 @@ class TestResumableSessionIdInjection:
 
     def test_no_resumable_section_when_dispatch_name_empty(self) -> None:
         prompt = _build(resumable_dispatch_name="", resume_session_id="sess-abc")
-        assert "RESUMABLE DISPATCH" not in prompt
+        assert "RESUMABLE DISPATCH:" not in prompt
 
 
 # --- K-9: TestInterruptCleanupSection ---
@@ -490,3 +490,42 @@ class TestK15IngredientsTableInjection:
         ingredients_pos = prompt.index("RECIPE INGREDIENTS")
         manifest_pos = prompt.index("DISPATCH MANIFEST")
         assert overview_pos < ingredients_pos < manifest_pos
+
+
+class TestResumeReasonInPrompt:
+    def test_idle_stall_resume_includes_reenter_guidance(self) -> None:
+        prompt = _build(
+            resumable_dispatch_name="impl-1",
+            resume_session_id="sess-1",
+            resume_kill_reason="idle_stall",
+        )
+        assert "RESUMABLE DISPATCH: impl-1" in prompt
+        assert "idle timeout" in prompt
+        assert "Resume is safe" in prompt
+
+    def test_context_exhausted_absent_from_resumable(self) -> None:
+        prompt = _build(
+            resumable_dispatch_name="impl-1",
+            resume_kill_reason="context_exhausted",
+        )
+        assert "RESUMABLE DISPATCH: impl-1" in prompt
+        idx = prompt.index("RESUMABLE DISPATCH: impl-1")
+        end_idx = prompt.index("## INTERRUPT/CLEANUP", idx)
+        resumable_section = prompt[idx:end_idx]
+        assert "context_exhausted" not in resumable_section
+        assert "Kill reason: unknown" in resumable_section
+
+    def test_api_error_resume_includes_retry_guidance(self) -> None:
+        prompt = _build(
+            resumable_dispatch_name="impl-1",
+            resume_kill_reason="resume",
+        )
+        assert "RESUMABLE DISPATCH: impl-1" in prompt
+        assert "transient infrastructure failure" in prompt
+
+    def test_resume_discipline_section_present(self) -> None:
+        prompt = _build()
+        assert "RESUME DISCIPLINE" in prompt
+        assert "idle_stall" in prompt
+        assert "context_exhausted" in prompt
+        assert "thinking_stall" in prompt

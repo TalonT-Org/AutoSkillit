@@ -757,3 +757,97 @@ class TestHasFailedDispatchReasonAware:
             DispatchRecord(name="d2", status=DispatchStatus.FAILURE, reason="task-failed"),
         )
         assert has_failed_dispatch(sp) is True
+
+
+class TestKillReasonPropagation:
+    def test_kill_reason_stored_in_dispatch_record(self, tmp_path: Path) -> None:
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("x"))
+        record = DispatchRecord(
+            name="x",
+            status=DispatchStatus.FAILURE,
+            kill_reason="idle_stall",
+        )
+        append_dispatch_record(sp, record)
+        state = read_state(sp)
+        assert state is not None
+        assert state.dispatches[0].kill_reason == "idle_stall"
+
+    def test_kill_reason_defaults_empty(self) -> None:
+        record = DispatchRecord(name="x")
+        assert record.kill_reason == ""
+
+    def test_kill_reason_round_trips_through_json(self, tmp_path: Path) -> None:
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("x"))
+        record = DispatchRecord(
+            name="x",
+            status=DispatchStatus.FAILURE,
+            kill_reason="context_exhausted",
+            infra_exit_category="context_exhausted",
+        )
+        append_dispatch_record(sp, record)
+        raw = sp.read_text(encoding="utf-8")
+        assert '"kill_reason"' in raw
+        assert '"infra_exit_category"' in raw
+        state = read_state(sp)
+        assert state is not None
+        assert state.dispatches[0].kill_reason == "context_exhausted"
+        assert state.dispatches[0].infra_exit_category == "context_exhausted"
+
+    def test_crash_recover_abandons_context_exhausted(self, tmp_path: Path) -> None:
+        sp = _state_path(tmp_path)
+        sidecar = tmp_path / "sidecar.jsonl"
+        sidecar.write_text("")
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("x"))
+        mark_dispatch_running(sp, "x", dispatch_id="d1", l3_pid=42)
+        from autoskillit.fleet import is_dispatch_session_alive
+
+        with patch(
+            f"{is_dispatch_session_alive.__module__}.is_dispatch_session_alive", return_value=False
+        ):
+            state = read_state(sp)
+            record = next(d for d in state.dispatches if d.name == "x")
+            record.kill_reason = "resume"
+            record.infra_exit_category = "context_exhausted"
+            record.sidecar_path = str(sidecar)
+            result = crash_recover_dispatch(sp, record)
+        assert result == DispatchStatus.INTERRUPTED
+
+    def test_crash_recover_resumes_idle_stall(self, tmp_path: Path) -> None:
+        sp = _state_path(tmp_path)
+        sidecar = tmp_path / "sidecar.jsonl"
+        sidecar.write_text("")
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("x"))
+        mark_dispatch_running(sp, "x", dispatch_id="d1", l3_pid=42)
+        from autoskillit.fleet import is_dispatch_session_alive
+
+        with patch(
+            f"{is_dispatch_session_alive.__module__}.is_dispatch_session_alive", return_value=False
+        ):
+            state = read_state(sp)
+            record = next(d for d in state.dispatches if d.name == "x")
+            record.kill_reason = "idle_stall"
+            record.infra_exit_category = ""
+            record.sidecar_path = str(sidecar)
+            result = crash_recover_dispatch(sp, record)
+        assert result == DispatchStatus.RESUMABLE
+
+    def test_resume_decision_includes_kill_reason(self, tmp_path: Path) -> None:
+        sp = _state_path(tmp_path)
+        sidecar = tmp_path / "sidecar.jsonl"
+        sidecar.write_text("")
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("x"))
+        mark_dispatch_running(sp, "x", dispatch_id="d1", l3_pid=42)
+        mark_dispatch_resumable(sp, "x", sidecar_path=str(sidecar))
+        data = json.loads(sp.read_text())
+        for d in data["dispatches"]:
+            if d["name"] == "x":
+                d["kill_reason"] = "idle_stall"
+                d["infra_exit_category"] = ""
+                d["l3_session_id"] = "sess-1"
+        sp.write_text(json.dumps(data))
+        decision = resume_campaign_from_state(sp, continue_on_failure=False)
+        assert decision is not None
+        assert decision.is_resumable is True
+        assert decision.kill_reason == "idle_stall"

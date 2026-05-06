@@ -15,7 +15,13 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core import FleetErrorCode, get_logger, write_versioned_json
+from autoskillit.core import (
+    FleetErrorCode,
+    InfraExitCategory,
+    RetryReason,
+    get_logger,
+    write_versioned_json,
+)
 
 logger = get_logger(__name__)
 
@@ -56,6 +62,8 @@ class DispatchRecord:
     l3_starttime_ticks: int = 0
     l3_boot_id: str = ""
     reason: str = ""
+    kill_reason: str = ""
+    infra_exit_category: str = ""
     token_usage: dict[str, Any] = field(default_factory=dict)
     started_at: float = 0.0
     ended_at: float = 0.0
@@ -86,6 +94,7 @@ class ResumeDecision:
     completed_dispatches_block: str
     is_resumable: bool = False
     l3_session_id: str = ""
+    kill_reason: str = ""
 
 
 _ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
@@ -250,6 +259,8 @@ def read_state(state_path: Path) -> CampaignState | None:
                 l3_starttime_ticks=d.get("l3_starttime_ticks") or d.get("l2_starttime_ticks", 0),
                 l3_boot_id=d.get("l3_boot_id") or d.get("l2_boot_id", ""),
                 reason=d.get("reason", ""),
+                kill_reason=d.get("kill_reason", ""),
+                infra_exit_category=d.get("infra_exit_category", ""),
                 token_usage=d.get("token_usage", {}),
                 started_at=d.get("started_at", 0.0),
                 ended_at=d.get("ended_at", 0.0),
@@ -567,6 +578,28 @@ def read_all_campaign_captures(
     return result
 
 
+_ABANDON_KILL_REASONS: frozenset[str] = frozenset(
+    {
+        RetryReason.STALE,
+        RetryReason.THINKING_STALL,
+        RetryReason.PATH_CONTAMINATION,
+        RetryReason.CLONE_CONTAMINATION,
+    }
+)
+
+
+def _is_abandon_kill_reason(kill_reason: str, infra_exit_category: str) -> bool:
+    """Check if stored kill metadata indicates resume would be futile."""
+    if kill_reason in _ABANDON_KILL_REASONS:
+        return True
+    if (
+        kill_reason == RetryReason.RESUME
+        and infra_exit_category == InfraExitCategory.CONTEXT_EXHAUSTED
+    ):
+        return True
+    return False
+
+
 def crash_recover_dispatch(
     state_path: Path,
     record: DispatchRecord,
@@ -583,6 +616,16 @@ def crash_recover_dispatch(
             logger.warning("crash_recover_dispatch: sidecar vanished during read", exc_info=True)
         else:
             if not raw_lines or read_sidecar_from_path(sidecar):
+                if _is_abandon_kill_reason(record.kill_reason, record.infra_exit_category):
+                    try:
+                        mark_dispatch_interrupted(state_path, record.name, reason=reason)
+                        return DispatchStatus.INTERRUPTED
+                    except Exception:
+                        logger.warning(
+                            "crash_recover_dispatch: failed to mark dispatch interrupted",
+                            exc_info=True,
+                        )
+                        return None
                 try:
                     mark_dispatch_resumable(state_path, record.name, sidecar_path=str(sidecar))
                     return DispatchStatus.RESUMABLE
@@ -667,6 +710,7 @@ def resume_campaign_from_state(
             next_name = ""
             is_resumable = False
             resumable_l3_session_id = ""
+            resumable_kill_reason = ""
             for d in state.dispatches:
                 if d.status in _VISIBLE_IN_BLOCK_STATUSES:
                     completed_lines.append(f"- {d.name}: {d.status}")
@@ -674,6 +718,7 @@ def resume_campaign_from_state(
                     next_name = d.name
                     is_resumable = True
                     resumable_l3_session_id = d.l3_session_id
+                    resumable_kill_reason = d.kill_reason
                 elif (
                     d.status
                     not in {
@@ -695,4 +740,5 @@ def resume_campaign_from_state(
                 completed_dispatches_block=completed_block,
                 is_resumable=is_resumable,
                 l3_session_id=resumable_l3_session_id,
+                kill_reason=resumable_kill_reason,
             )

@@ -86,15 +86,15 @@ def test_single_tradition_detected(tradition_slug, plan_snippet):
     assert result.precedence_trace == "stage1_single_match"
     assert tradition_slug in result.candidate_set
     assert len(result.candidate_set) == 1
-    assert result.applied_union_rules == []
+    assert result.applied_union_rules == ()
 
 
 def test_no_tradition_detected():
     result = classify_methodology("This paper describes a novel deep learning architecture.")
     assert result.primary_tradition is None
     assert result.precedence_trace == "stage1_no_match_fallback"
-    assert result.candidate_set == []
-    assert result.applied_union_rules == []
+    assert result.candidate_set == ()
+    assert result.applied_union_rules == ()
 
 
 def test_multi_match_returns_candidates():
@@ -150,7 +150,7 @@ def test_union_rule_not_applied_when_no_member_match():
     result = classify_methodology(plan_text, union_rules=[rule])
     assert result.primary_tradition == "controlled_intervention"
     assert result.precedence_trace == "stage1_single_match"
-    assert result.applied_union_rules == []
+    assert result.applied_union_rules == ()
 
 
 def test_deterministic_classification():

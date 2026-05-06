@@ -26,9 +26,9 @@ class TraditionRouterResult:
     """Result from two-stage methodology classification."""
 
     primary_tradition: str | None
-    applied_union_rules: list[str]
+    applied_union_rules: tuple[str, ...]
     precedence_trace: str
-    candidate_set: list[str]
+    candidate_set: tuple[str, ...]
 
 
 _WORD_BOUNDARY_RE_CACHE: dict[str, re.Pattern[str]] = {}
@@ -55,15 +55,15 @@ def _count_keyword_matches(text_lower: str, spec: MethodologyTraditionSpec) -> i
 def _try_union_rules(
     candidate_names: set[str],
     union_rules: list[UnionRuleDef],
-) -> tuple[str | None, list[str], str]:
+) -> tuple[str | None, tuple[str, ...], str]:
     for rule in union_rules:
         if candidate_names.issubset(rule.member_traditions):
             return (
                 rule.resolved_tradition,
-                [rule.name],
+                (rule.name,),
                 f"stage2_tiebreak_by_rule_{rule.name}",
             )
-    return None, [], ""
+    return None, (), ""
 
 
 def classify_methodology(
@@ -86,21 +86,22 @@ def classify_methodology(
         if hits >= min_keyword_matches:
             scored.append((spec, hits))
 
+    # Lower priority number = higher precedence (priority=1 outranks priority=999)
     scored.sort(key=lambda pair: (pair[0].priority, pair[0].name))
-    candidate_set = [spec.name for spec, _ in scored]
+    candidate_set = tuple(spec.name for spec, _ in scored)
 
     if len(candidate_set) == 0:
         return TraditionRouterResult(
             primary_tradition=None,
-            applied_union_rules=[],
+            applied_union_rules=(),
             precedence_trace="stage1_no_match_fallback",
-            candidate_set=[],
+            candidate_set=(),
         )
 
     if len(candidate_set) == 1:
         return TraditionRouterResult(
             primary_tradition=candidate_set[0],
-            applied_union_rules=[],
+            applied_union_rules=(),
             precedence_trace="stage1_single_match",
             candidate_set=candidate_set,
         )
@@ -119,14 +120,14 @@ def classify_methodology(
     if resolve_by_priority:
         return TraditionRouterResult(
             primary_tradition=candidate_set[0],
-            applied_union_rules=[],
+            applied_union_rules=(),
             precedence_trace="stage1_multi_match_resolved_by_priority",
             candidate_set=candidate_set,
         )
 
     return TraditionRouterResult(
         primary_tradition=None,
-        applied_union_rules=[],
+        applied_union_rules=(),
         precedence_trace="stage1_multi_match",
         candidate_set=candidate_set,
     )

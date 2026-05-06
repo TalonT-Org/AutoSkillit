@@ -52,6 +52,15 @@ def _fmt_get_token_summary(data: dict, _pipeline: bool) -> str:
         lines.append(f"mcp_invocations: {mcp_total.get('total_invocations', 0)}")
         est_tokens = mcp_total.get("total_estimated_response_tokens", 0)
         lines.append(f"mcp_response_tokens: ~{_fmt_tokens(est_tokens)}")
+    model_totals = data.get("model_totals", [])
+    if model_totals:
+        lines.append("")
+        for m in model_totals:
+            model_name = m.get("model", "unknown")
+            steps = m.get("step_count", 0)
+            inp = _fmt_tokens(m.get("input_tokens", 0))
+            out = _fmt_tokens(m.get("output_tokens", 0))
+            lines.append(f"model:{model_name} steps:{steps} [uc:{inp} out:{out}]")
     return "\n".join(lines)
 
 

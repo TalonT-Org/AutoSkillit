@@ -1,4 +1,4 @@
-"""Food truck prompt builder for L3 dispatch sessions.
+"""Food truck prompt builder for L2 food truck sessions.
 
 Moved from autoskillit.cli._prompts — this module
 depends only on autoskillit.core and stdlib, making it importable from both
@@ -53,9 +53,9 @@ def _build_food_truck_prompt(
     campaign_id: str,
     l3_timeout_sec: int,
 ) -> str:
-    """Build the system prompt for an L3 food truck headless session.
+    """Build the system prompt for an L2 food truck headless session.
 
-    The prompt is self-contained — the L3 session needs no runtime reference
+    The prompt is self-contained — the L2 food truck session needs no runtime reference
     material beyond what is embedded here. It assembles 8 sections:
     filtered sous-chef discipline, headless directives, routing/predicates,
     budget guidance, quota awareness, campaign task, ingredient values,
@@ -68,10 +68,10 @@ def _build_food_truck_prompt(
     sous_chef_block = _build_l3_sous_chef_block()
 
     return f"""\
-You are an L3 food truck orchestrator. Execute the recipe '{recipe}' autonomously.
+You are an L2 food truck orchestrator. Execute the recipe '{recipe}' autonomously.
 Timeout: {l3_timeout_sec}s. Campaign: {campaign_id}. Dispatch: {dispatch_id}.
 
---- SECTION 1: SOUS-CHEF DISCIPLINE (L3 SUBSET) ---
+--- SECTION 1: SOUS-CHEF DISCIPLINE (L2/FOOD-TRUCK SUBSET) ---
 
 {sous_chef_block}
 

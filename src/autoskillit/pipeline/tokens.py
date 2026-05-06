@@ -52,7 +52,14 @@ def _primary_model(token_usage: dict[str, Any]) -> str:
     for m, v in mb.items():
         if not isinstance(v, dict):
             logger.warning("Unexpected model_breakdown entry type for %r: %r", m, type(v).__name__)
-    return max(mb, key=lambda m: sum(mb[m].values()) if isinstance(mb[m], dict) else 0)
+    return max(
+        mb,
+        key=lambda m: (
+            sum(v for v in mb[m].values() if isinstance(v, (int, float)))
+            if isinstance(mb[m], dict)
+            else 0
+        ),
+    )
 
 
 @dataclass

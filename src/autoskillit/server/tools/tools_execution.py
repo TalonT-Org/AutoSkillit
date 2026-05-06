@@ -18,6 +18,7 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import (
+    DISPATCH_ID_ENV_VAR,
     LayoutError,
     SkillResult,
     ValidatedAddDir,
@@ -486,7 +487,7 @@ async def run_skill(
         # by fleet/_api.py into every L2 food truck session environment and inherited by all
         # sub-sessions, ensuring token log entries carry the correct order_id without
         # requiring recipe authors to thread it through every run_skill call.
-        effective_order_id = order_id or os.environ.get("AUTOSKILLIT_DISPATCH_ID", "")
+        effective_order_id = order_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
 
         if _get_config().safety.require_dry_walkthrough:
             if (gate_error := _check_dry_walkthrough(skill_command, cwd)) is not None:

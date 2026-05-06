@@ -187,6 +187,7 @@ __all__ = [
     "TraditionRouterResult",
     "UnionRuleDef",
     "classify_methodology",
+    # --- rerun detection ---
     "check_rerun_detection",
     "find_prior_runs",
     "CampaignDispatch",

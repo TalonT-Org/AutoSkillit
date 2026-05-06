@@ -329,10 +329,16 @@ def load_and_validate(
     from autoskillit.recipe.experiment_type_registry import (  # noqa: PLC0415
         BUNDLED_EXPERIMENT_TYPES_DIR,
     )
+    from autoskillit.recipe.methodology_tradition_registry import (  # noqa: PLC0415
+        BUNDLED_METHODOLOGY_TRADITIONS_DIR,
+    )
 
     _exp_types_hash = _compute_registry_hash(BUNDLED_EXPERIMENT_TYPES_DIR)
     _user_exp_types_dir = _pdir / ".autoskillit" / "experiment-types"
     _user_exp_hash = _compute_registry_hash(_user_exp_types_dir)
+    _method_traditions_hash = _compute_registry_hash(BUNDLED_METHODOLOGY_TRADITIONS_DIR)
+    _user_method_traditions_dir = _pdir / ".autoskillit" / "methodology-traditions"
+    _user_method_traditions_hash = _compute_registry_hash(_user_method_traditions_dir)
     cache_key = (
         name,
         str(_pdir),
@@ -340,6 +346,8 @@ def load_and_validate(
         tuple(sorted(ingredient_overrides.items())) if ingredient_overrides else (),
         _exp_types_hash,
         _user_exp_hash,
+        _method_traditions_hash,
+        _user_method_traditions_hash,
     )
 
     with _LOAD_CACHE_LOCK:

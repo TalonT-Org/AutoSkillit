@@ -1,0 +1,47 @@
+name: prediction_model_validation
+schema_version: "1.0"
+priority: 5
+display_name: "Prediction Model Validation"
+canonical_guideline:
+  name: "TRIPOD+AI 2024"
+  governing_body: "EQUATOR"
+  stable_for_decade: false
+  canonical: true
+fields_spanned:
+  - medicine
+  - machine_learning
+  - bioinformatics
+  - clinical_informatics
+  - epidemiology
+detection_keywords:
+  - prediction model
+  - TRIPOD
+  - calibration
+  - discrimination
+  - c-statistic
+  - external validation
+  - clinical prediction rule
+  - risk score
+  - prognostic model
+mandatory_figures:
+  - figure: "Calibration Plot"
+    shows: "Observed vs predicted probabilities across risk strata"
+    citation: "TRIPOD item 16"
+  - figure: "Participant Flow Diagram"
+    shows: "Enrollment, model development, and validation flow"
+    citation: "TRIPOD item 13"
+strongly_expected_figures:
+  - figure: "Decision Curve Analysis"
+    shows: "Net benefit across threshold probabilities"
+    source: "TRIPOD+AI item 16"
+  - figure: "Net Benefit Plot"
+    shows: "Clinical utility at varying decision thresholds"
+    source: "Vickers et al. 2008"
+anti_patterns:
+  - pattern: "No external validation"
+    reason: "Internal validation alone is insufficient; external validation demonstrates transportability"
+  - pattern: "Reporting discrimination without calibration"
+    reason: "Discrimination (AUC/c-statistic) measures ranking ability; calibration measures absolute probability accuracy"
+  - pattern: "No sample size justification"
+    reason: "Prediction models require sufficient events per variable to avoid overfitting"
+venue_specific_appendices: []

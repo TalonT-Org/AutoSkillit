@@ -1,0 +1,47 @@
+name: systematic_synthesis
+schema_version: "1.0"
+priority: 2
+display_name: "Systematic Synthesis (Meta-Analysis)"
+canonical_guideline:
+  name: "PRISMA 2020"
+  governing_body: "Cochrane"
+  stable_for_decade: true
+  canonical: true
+fields_spanned:
+  - medicine
+  - software_engineering
+  - education
+  - environmental_science
+  - psychology
+detection_keywords:
+  - systematic review
+  - meta-analysis
+  - PRISMA
+  - forest plot
+  - pooled estimate
+  - heterogeneity
+  - I-squared
+  - search strategy
+  - inclusion criteria
+mandatory_figures:
+  - figure: "PRISMA Flow Diagram"
+    shows: "Study identification, screening, eligibility, and inclusion at each stage"
+    citation: "PRISMA Section 16"
+  - figure: "Forest Plot"
+    shows: "Pooled effect estimates with confidence intervals per study"
+    citation: "PRISMA item 20d"
+strongly_expected_figures:
+  - figure: "Funnel Plot"
+    shows: "Publication bias assessment via asymmetry"
+    source: "Cochrane Handbook"
+  - figure: "Risk of Bias Summary"
+    shows: "Quality assessment across included studies"
+    source: "Cochrane RoB 2.0"
+anti_patterns:
+  - pattern: "Narrative review disguised as systematic review"
+    reason: "Systematic reviews require explicit search strategy, inclusion criteria, and quantitative synthesis"
+  - pattern: "No PRISMA flow diagram"
+    reason: "PRISMA requires transparent reporting of study selection process"
+  - pattern: "Vote counting instead of quantitative synthesis"
+    reason: "Vote counting (counting significant vs non-significant) ignores effect magnitudes and is methodologically invalid"
+venue_specific_appendices: []

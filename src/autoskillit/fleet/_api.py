@@ -13,6 +13,8 @@ from uuid import uuid4
 
 from autoskillit.core import (
     FleetErrorCode,
+    InfraExitCategory,
+    RetryReason,
     SessionCheckpoint,  # noqa: F401, TC001
     SkillResult,
     claude_code_log_path,
@@ -203,6 +205,28 @@ async def execute_dispatch(
         lock.release()
 
 
+_ABANDON_REASONS: frozenset[str] = frozenset(
+    {
+        RetryReason.STALE,
+        RetryReason.THINKING_STALL,
+        RetryReason.PATH_CONTAMINATION,
+        RetryReason.CLONE_CONTAMINATION,
+    }
+)
+
+
+def _is_abandon_reason(skill_result: SkillResult) -> bool:
+    """Return True when the kill reason indicates resume would be futile."""
+    if skill_result.retry_reason in _ABANDON_REASONS:
+        return True
+    if (
+        skill_result.retry_reason == RetryReason.RESUME
+        and skill_result.infra_exit_category == InfraExitCategory.CONTEXT_EXHAUSTED
+    ):
+        return True
+    return False
+
+
 def classify_dispatch_outcome(
     parsed: L3ParseResult,
     skill_result: SkillResult,
@@ -229,6 +253,8 @@ def classify_dispatch_outcome(
         return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L3_PARSE_FAILED
     has_progress = checkpoint is not None or sidecar_exists
     if skill_result.session_id and skill_result.lifespan_started and has_progress:
+        if _is_abandon_reason(skill_result):
+            return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
         return DispatchStatus.RESUMABLE, FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
     return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
 
@@ -407,6 +433,8 @@ async def _run_dispatch(
                 l3_session_id=skill_result.session_id,
                 l3_pid=_l3_pid[0] if _l3_pid else 0,
                 reason=FleetErrorCode.FLEET_L3_TIMEOUT,
+                kill_reason=skill_result.retry_reason or "",
+                infra_exit_category=skill_result.infra_exit_category or "",
                 token_usage=skill_result.token_usage or {},
                 started_at=started_at,
                 ended_at=ended_at,
@@ -457,6 +485,8 @@ async def _run_dispatch(
             l3_session_id=skill_result.session_id,
             l3_pid=_l3_pid[0] if _l3_pid else 0,
             reason=reason,
+            kill_reason=skill_result.retry_reason or "",
+            infra_exit_category=skill_result.infra_exit_category or "",
             token_usage=skill_result.token_usage or {},
             started_at=started_at,
             ended_at=ended_at,

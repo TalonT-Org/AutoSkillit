@@ -126,6 +126,9 @@ ci:
   workflow: null  # Workflow filename to filter CI runs, e.g. "tests.yml"
   event: null     # Trigger event to filter CI runs, e.g. "push"
 
+review:
+  local_review_rounds: 3
+
 subsets:
   disabled: []
   custom_tags: {}

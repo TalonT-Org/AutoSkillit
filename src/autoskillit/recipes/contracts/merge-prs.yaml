@@ -1453,7 +1453,9 @@ dataflow:
   required: []
   produced:
   - annotated_diff_path
+  - diff_metrics_path
   - hunk_ranges_path
+  - review_mode
 - step: review_pr_integration
   available:
   - annotated_diff_path

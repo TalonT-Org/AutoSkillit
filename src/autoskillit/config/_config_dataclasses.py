@@ -254,6 +254,11 @@ class CIConfig:
 
 
 @dataclass
+class ReviewConfig:
+    local_review_rounds: int = 3
+
+
+@dataclass
 class SkillsConfig:
     tier1: list[str] = field(default_factory=list)
     tier2: list[str] = field(default_factory=list)

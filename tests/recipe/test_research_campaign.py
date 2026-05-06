@@ -6,7 +6,7 @@ import yaml
 from autoskillit.recipe.contracts import check_contract_staleness, load_bundled_manifest
 from autoskillit.recipe.io import builtin_recipes_dir
 
-pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
 
 def test_research_campaign_contract_exists():
@@ -14,7 +14,8 @@ def test_research_campaign_contract_exists():
     assert (contracts_dir / "research-campaign.yaml").exists(), (
         'Regenerate: python -c "from autoskillit.recipe.contracts import generate_recipe_card; '
         "from autoskillit.recipe.io import builtin_recipes_dir; "
-        "generate_recipe_card(builtin_recipes_dir()/'campaigns'/'research-campaign.yaml', builtin_recipes_dir())\""
+        "generate_recipe_card("
+        "builtin_recipes_dir()/'campaigns'/'research-campaign.yaml', builtin_recipes_dir())\""
     )
 
 

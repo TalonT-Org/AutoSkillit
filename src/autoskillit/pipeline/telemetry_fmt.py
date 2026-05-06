@@ -137,6 +137,10 @@ _MODEL_MD_HEADER = "| " + " | ".join(_model_md_headers) + " |"
 _MODEL_MD_SEP = "|" + "|".join("-" * (len(h) + 2) for h in _model_md_headers) + "|"
 
 
+def _is_non_anthropic(model: str) -> bool:
+    return bool(model) and not model.startswith("claude-")
+
+
 def _ratio(tokens: int, loc: int) -> str:
     return f"{tokens / loc:.1f}" if loc > 0 else "—"
 
@@ -186,7 +190,7 @@ class TelemetryFormatter:
         for step in steps:
             name = step.get("step_name", "?")
             model = step.get("model", "")
-            if model and not model.startswith("claude-"):
+            if _is_non_anthropic(model):
                 name = f"{name}*"
                 has_non_anthropic = True
             count = step.get("invocation_count", 1)
@@ -249,7 +253,7 @@ class TelemetryFormatter:
         for step in steps:
             step_name = step.get("step_name", "?")
             model = step.get("model", "")
-            if model and not model.startswith("claude-"):
+            if _is_non_anthropic(model):
                 step_name = f"{step_name}*"
                 has_non_anthropic = True
             rows.append(
@@ -315,7 +319,7 @@ class TelemetryFormatter:
         for step in steps:
             name = step.get("step_name", "?")
             model = step.get("model", "")
-            if model and not model.startswith("claude-"):
+            if _is_non_anthropic(model):
                 name = f"{name}*"
                 has_non_anthropic = True
             count = step.get("invocation_count", 1)

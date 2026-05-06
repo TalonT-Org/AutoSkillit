@@ -38,6 +38,11 @@ ingredients:
   review_max_retries:
     description: Maximum number of review-resolve retry cycles before proceeding to CI
     default: "3"
+  local_review_rounds:
+    description: >-
+      Number of review-resolve cycles to run locally before switching to
+      GitHub-backed review. 0 disables local mode entirely.
+    default: ""
   issue_url:
     description: GitHub issue to close on merge
     required: false
@@ -490,14 +495,20 @@ steps:
       pr_number: "${{ context.pr_number }}"
       cwd: "${{ context.work_dir }}"
       output_dir: "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/review-pr"
+      base_branch: "${{ inputs.base_branch }}"
+      local_review_rounds: "${{ inputs.local_review_rounds }}"
+      current_iteration: "${{ context.review_loop_count }}"
     capture:
       annotated_diff_path: "${{ result.annotated_diff_path }}"
       hunk_ranges_path: "${{ result.hunk_ranges_path }}"
       diff_metrics_path: "${{ result.diff_metrics_path }}"
+      review_mode: "${{ result.review_mode }}"
     on_success: review_pr
     on_failure: review_pr
     optional: true
     skip_when_false: "inputs.open_pr"
+    optional_context_refs:
+      - review_loop_count
     note: >
       Pre-computes annotated diff with [LNNN] markers and hunk ranges JSON for
       review-pr. On failure, falls through to review_pr which uses empty fallback.
@@ -506,7 +517,7 @@ steps:
     tool: run_skill
     model: ""
     with:
-      skill_command: "/autoskillit:review-pr ${{ context.merge_target }} ${{ inputs.base_branch }} annotated_diff_path=${{ context.annotated_diff_path }} hunk_ranges_path=${{ context.hunk_ranges_path }} diff_metrics_path=${{ context.diff_metrics_path }}"
+      skill_command: "/autoskillit:review-pr ${{ context.merge_target }} ${{ inputs.base_branch }} annotated_diff_path=${{ context.annotated_diff_path }} hunk_ranges_path=${{ context.hunk_ranges_path }} diff_metrics_path=${{ context.diff_metrics_path }} mode=${{ context.review_mode }}"
       cwd: "${{ context.work_dir }}"
       step_name: "review_pr"
     capture:
@@ -526,6 +537,7 @@ steps:
     skip_when_false: "inputs.open_pr"
     optional_context_refs:
       - review_loop_count
+      - review_mode
     note: >
       Runs after compose_pr creates the PR. Invokes the review-pr skill as a
       headless session to leave inline review comments on the PR. The skill finds
@@ -539,7 +551,7 @@ steps:
     tool: run_skill
     model: ""
     with:
-      skill_command: "/autoskillit:resolve-review ${{ context.merge_target }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:resolve-review ${{ context.merge_target }} ${{ inputs.base_branch }} mode=${{ context.review_mode }}"
       cwd: "${{ context.work_dir }}"
       step_name: "resolve_review"
     capture:
@@ -556,6 +568,8 @@ steps:
       - when: "${{ result.verdict }} == 'ci_only_failure'"
         route: release_issue_failure
     on_failure: release_issue_failure
+    optional_context_refs:
+      - review_mode
     note: >
       Runs when review_pr reports issues (verdict=changes_requested). The clone
       (context.work_dir) has the feature branch (context.merge_target) checked out.

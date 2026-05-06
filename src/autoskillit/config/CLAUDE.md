@@ -9,7 +9,7 @@ IL-1 configuration layer — `AutomationConfig`, Dynaconf loader, schema validat
 | `__init__.py` | Re-exports `AutomationConfig`, `load_config`, `ConfigSchemaError` |
 | `ingredient_defaults.py` | Per-recipe ingredient default resolution |
 | `settings.py` | `AutomationConfig` + schema validate/write API |
-| `_config_dataclasses.py` | 24 leaf dataclasses + `ConfigSchemaError` |
+| `_config_dataclasses.py` | 26 leaf dataclasses + `ConfigSchemaError` |
 | `_config_loader.py` | `_make_dynaconf` + `load_config` layer helpers |
 
 ## Architecture Notes

@@ -143,6 +143,9 @@ skills:
     - name: base_branch
       type: string
       required: true
+    - name: mode
+      type: string
+      required: false
     outputs:
     - name: verdict
       type: string
@@ -153,6 +156,14 @@ skills:
         - ci_only_failure
     - name: fixes_applied
       type: integer
+    - name: deferred_observations_path
+      type: string
+      description: "Written when mode=local (accumulated DISCUSS findings) or when mode=github (posted from prior local rounds)."
+      required: false
+    - name: reject_patterns_path
+      type: string
+      description: "Written in local mode (accumulating across rounds without timestamp) or github mode (timestamped, one-shot)."
+      required: false
     write_behavior: conditional
     write_expected_when:
     - "verdict\\s*=\\s*real_fix"
@@ -551,6 +562,12 @@ skills:
       type: string
       required: false
       recommended: true
+    - name: diff_metrics_path
+      type: string
+      required: false
+    - name: mode
+      type: string
+      required: false
     outputs:
     - name: verdict
       type: string
@@ -559,6 +576,9 @@ skills:
         - approved_with_comments
         - changes_requested
         - needs_human
+    - name: local_findings_path
+      type: string
+      description: "Written when mode=local. Path to local_findings_{pr_number}.json output."
     expected_output_patterns:
     - "verdict\\s*=\\s*(approved|approved_with_comments|changes_requested|needs_human)"
     - "(?:%%REVIEW_GATE::(LOOP_REQUIRED|CLEAR)%%|verdict\\s*=\\s*approved_with_comments)"

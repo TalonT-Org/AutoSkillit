@@ -43,6 +43,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_protocol_definitions.py` | Tests for Protocol definitions in core/_type_protocols_*.py shards (REQ-PROTO-007) |
 | `test_protocol_satisfaction.py` | Tests for Protocol Contract Layer (GroupB) |
 | `test_protocol_satisfaction_five.py` | Protocol satisfaction tests — Group Five (issue #1523) |
+| `test_review_local_mode_contracts.py` | Contract tests for skill_contracts.yaml and SKILL.md validation for local review mode (mode=local) |
 | `test_review_pr_diff_annotation.py` | C-RPR-1: Contract tests for review-pr diff annotation inputs |
 | `test_run_experiment_contracts.py` | Contract tests for run-experiment SKILL.md — data provenance lifecycle |
 | `test_scope_contracts.py` | Contract tests for the scope skill's SKILL.md template |

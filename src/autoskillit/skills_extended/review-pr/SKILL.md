@@ -19,13 +19,16 @@ by the recipe pipeline after `open_pr_step` opens the PR.
 
 ## Arguments
 
-`/autoskillit:review-pr <feature-branch> <base-branch> [annotated_diff_path=<path>] [hunk_ranges_path=<path>] [diff_metrics_path=<path>]`
+`/autoskillit:review-pr <feature-branch> <base-branch> [annotated_diff_path=<path>] [hunk_ranges_path=<path>] [diff_metrics_path=<path>] [mode=<local|github>]`
 
 - **feature-branch** — The feature branch containing the changes to review
 - **base-branch** — The base branch the PR targets (e.g., "main")
 - **annotated_diff_path** (optional) — absolute path to a pre-computed annotated diff file (produced by `annotate_pr_diff` run_python step). When provided and present, read from file instead of running python3.
 - **hunk_ranges_path** (optional) — absolute path to a pre-computed hunk ranges JSON file (produced by `annotate_pr_diff` run_python step). When provided and present, read from file instead of running python3.
 - **diff_metrics_path** (optional) — absolute path to a pre-computed diff metrics JSON file (produced by `annotate_pr_diff` run_python step). Contains `dispatch_agents` list that determines which audit dimensions to spawn. When absent, all 6 standard agents are dispatched.
+- **mode** (optional, default: `github`) — Controls where findings are written:
+  - `mode=github` (or absent/unrecognized): current behavior — post findings as GitHub inline review comments via the GitHub Reviews API.
+  - `mode=local`: write findings to a local JSON file instead of posting to GitHub. Skips all GitHub API calls for comment posting. Still writes `diff_context_{pr_number}.json`, `raw_findings_{pr_number}.json`, and `summary_{pr_number}_{timestamp}.md` as normal. Gate tokens (`%%REVIEW_GATE::*%%`) are emitted identically in both modes.
 
 ## When to Use
 
@@ -65,6 +68,23 @@ escalation_user=$(gh api user -q .login 2>/dev/null || echo "")
 
 If `escalation_user` is non-empty, set `escalation_user_mention="@${escalation_user}"`.
 If empty (gh unavailable or not authenticated), set `escalation_user_mention=""`.
+
+Parse the optional `mode` keyword argument:
+
+```bash
+# Extract mode from keyword arguments
+MODE="github"
+for arg in "$@"; do
+    case "$arg" in
+        mode=local)  MODE="local" ;;
+        mode=github) MODE="github" ;;
+    esac
+done
+```
+
+If `mode` is absent or unrecognized, default to `"github"`. The mode controls where
+findings are written — `mode=local` skips all GitHub API posting and writes to a local
+JSON file instead.
 
 ### Step 1: Find the Open PR
 
@@ -453,6 +473,49 @@ else:
 
 ### Step 6: Post Inline Review Comments
 
+**MODE BRANCHING:**
+
+**When `mode=local`:**
+- Skip ALL GitHub API calls for posting comments (no batch review POST, no individual comment POSTs, no file-level comments, no summary review POST)
+- Instead, write findings to `{{AUTOSKILLIT_TEMP}}/review-pr/local_findings_{pr_number}.json`
+
+**Iteration tracking:** Before writing, check if `local_findings_{pr_number}.json` already exists. If so, read its `iteration` field and set the new value to `iteration + 1`. If the file does not exist, set `iteration` to `0`.
+
+Write the local findings JSON:
+```json
+{
+  "findings": [
+    {
+      "path": "src/foo.py",
+      "line": 42,
+      "body": "[critical] arch: finding text",
+      "severity": "critical",
+      "dimension": "arch",
+      "side": "RIGHT"
+    }
+  ],
+  "summary": "AutoSkillit PR Review — Verdict: {verdict}",
+  "verdict": "{verdict}",
+  "pr_number": "{pr_number}",
+  "iteration": {iteration_number}
+}
+```
+
+For `iteration_number`: read from existing file (`iteration + 1`) or start at `0`.
+
+Include all findings from `FILTERED_FINDINGS` + `UNPOSTABLE_FINDINGS` (same as what would have been posted to GitHub). Use `path` as the field name (not `file`) in the JSON output for consistency with resolve-review's expected format.
+
+**Still write mode-independent files:**
+- `{{AUTOSKILLIT_TEMP}}/review-pr/diff_context_{pr_number}.json` (Step 8)
+- `{{AUTOSKILLIT_TEMP}}/review-pr/raw_findings_{pr_number}.json` (Step 8)
+- `{{AUTOSKILLIT_TEMP}}/review-pr/summary_{pr_number}_{timestamp}.md` (Step 8)
+
+Then skip directly to Step 8 (verdict emission) — no GitHub API calls, no Step 6.5 confirmation, no Step 7 submission.
+
+**Gate token emission is mode-independent:** `%%REVIEW_GATE::LOOP_REQUIRED%%` on `changes_requested`, `%%REVIEW_GATE::CLEAR%%` on `approved`/`needs_human` — emitted identically in both modes.
+
+**When `mode=github`:** Execute Steps 6, 6.5, and 7 as documented below (current behavior unchanged).
+
 Build review comment bodies for each critical and warning finding. Use the `line` and `side`
 fields (modern GitHub Reviews API — not the deprecated `position` field) so that file line
 numbers from audit findings map directly without diff-position counting.
@@ -747,3 +810,12 @@ Exit 1 only for unrecoverable tool-level errors.
 - `verdict=needs_human` → `%%REVIEW_GATE::CLEAR%%` — Uncertain trade-offs; human review requested via the authenticated GitHub user mention (derived at runtime)
 
 Summary written to: `{{AUTOSKILLIT_TEMP}}/review-pr/summary_{pr_number}_{timestamp}.md`
+
+**Mode-conditional path output:**
+
+When `mode=local`, the following token is emitted:
+```
+local_findings_path = {AUTOSKILLIT_TEMP}/review-pr/local_findings_{pr_number}.json
+```
+
+When `mode=github`, no local_findings_path token is emitted (findings are posted directly to GitHub).

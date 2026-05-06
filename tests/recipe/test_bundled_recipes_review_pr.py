@@ -174,3 +174,61 @@ def test_merge_prs_annotate_step_captures_diff_metrics_path() -> None:
     recipe = load_recipe(builtin_recipes_dir() / "merge-prs.yaml")
     step = recipe.steps["annotate_pr_diff"]
     assert "diff_metrics_path" in step.capture
+
+
+# ---------------------------------------------------------------------------
+# T4.1–T4.7: local_review_rounds wiring tests
+# ---------------------------------------------------------------------------
+
+
+class TestAnnotatePrDiffLocalReviewRounds:
+    @pytest.fixture(
+        scope="class",
+        params=[
+            "implementation.yaml",
+            "implementation-groups.yaml",
+            "remediation.yaml",
+            # merge-prs.yaml is excluded: it uses annotate_pr_diff with a fixed base and does
+            # not expose local_review_rounds as a recipe ingredient. Its annotate step wiring is
+            # covered by test_merge_prs_annotate_step_captures_diff_metrics_path.
+        ],
+    )
+    def recipe(self, request: pytest.FixtureRequest) -> object:
+        return load_recipe(builtin_recipes_dir() / request.param)
+
+    def test_annotate_step_captures_review_mode(self, recipe: object) -> None:
+        """T4.1: annotate_pr_diff step captures review_mode."""
+        step = recipe.steps["annotate_pr_diff"]
+        assert "review_mode" in step.capture
+        assert step.capture["review_mode"] == "${{ result.review_mode }}"
+
+    def test_annotate_step_passes_local_review_rounds(self, recipe: object) -> None:
+        """T4.2: annotate_pr_diff step passes local_review_rounds via with_args."""
+        step = recipe.steps["annotate_pr_diff"]
+        assert "local_review_rounds" in step.with_args
+
+    def test_annotate_step_passes_current_iteration(self, recipe: object) -> None:
+        """T4.3: annotate_pr_diff step passes current_iteration via with_args."""
+        step = recipe.steps["annotate_pr_diff"]
+        assert "current_iteration" in step.with_args
+
+    def test_annotate_step_passes_base_branch(self, recipe: object) -> None:
+        """T4.4: annotate_pr_diff step passes base_branch via with_args."""
+        step = recipe.steps["annotate_pr_diff"]
+        assert "base_branch" in step.with_args
+
+    def test_review_pr_command_includes_mode(self, recipe: object) -> None:
+        """T4.5: review_pr skill_command includes mode=${{ context.review_mode }}."""
+        step = recipe.steps["review_pr"]
+        cmd = step.with_args.get("skill_command", "")
+        assert "mode=${{ context.review_mode }}" in cmd
+
+    def test_resolve_review_command_includes_mode(self, recipe: object) -> None:
+        """T4.6: resolve_review skill_command includes mode=${{ context.review_mode }}."""
+        step = recipe.steps["resolve_review"]
+        cmd = step.with_args.get("skill_command", "")
+        assert "mode=${{ context.review_mode }}" in cmd
+
+    def test_local_review_rounds_ingredient_exists(self, recipe: object) -> None:
+        """T4.7: local_review_rounds is in recipe.ingredients."""
+        assert "local_review_rounds" in recipe.ingredients

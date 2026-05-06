@@ -254,6 +254,17 @@ class CIConfig:
 
 
 @dataclass
+class ReviewConfig:
+    local_review_rounds: int = 3
+
+    def __post_init__(self) -> None:
+        if self.local_review_rounds < 0:
+            raise ValueError(
+                f"ReviewConfig.local_review_rounds must be >= 0, got {self.local_review_rounds}"
+            )
+
+
+@dataclass
 class SkillsConfig:
     tier1: list[str] = field(default_factory=list)
     tier2: list[str] = field(default_factory=list)

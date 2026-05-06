@@ -17,6 +17,7 @@ Configuration loading, defaults, and schema tests.
 | `test_packs_config.py` | Tests for PacksConfig loading and validation |
 | `test_providers_config.py` | Tests for ProvidersConfig loading and validation |
 | `test_quota_guard_config.py` | Tests for QuotaGuardConfig loading and validation |
+| `test_review_config.py` | Tests for ReviewConfig and local_review_rounds wiring |
 | `test_settings_allowed_labels.py` | Tests for GitHubConfig.allowed_labels field and check_label_allowed validation |
 | `test_settings_staged_label.py` | Tests for GitHubConfig.staged_label field and config layer resolution |
 | `test_skills_config.py` | Tests for SkillsConfig loading and validation |

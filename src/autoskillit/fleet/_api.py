@@ -313,6 +313,8 @@ async def _run_dispatch(
         )
 
     effective_ingredients = ingredients or {}
+    if "task" in full_recipe.ingredients and "task" not in effective_ingredients:
+        effective_ingredients = {"task": task, **effective_ingredients}
     if effective_ingredients:
         unknown = set(effective_ingredients.keys()) - set(full_recipe.ingredients.keys())
         if unknown:

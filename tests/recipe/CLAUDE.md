@@ -66,6 +66,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_repository.py` | Tests for DefaultRecipeRepository |
 | `test_research_bundle_lifecycle.py` | Tests for research bundle lifecycle in recipes |
 | `test_research_context_tracking.py` | Tests for research context tracking in recipes |
+| `test_research_implement_recipe.py` | Tests for research-implement sub-recipe structure |
 | `test_research_output_mode.py` | Tests for research output mode configuration |
 | `test_research_recipe_diag.py` | Tests for research recipe diagnostic output |
 | `test_research_stage_data_step.py` | Tests for stage-data step in research recipes |

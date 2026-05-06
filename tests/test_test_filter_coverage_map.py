@@ -62,7 +62,9 @@ class TestLoadCoverageMap:
         old_mtime = time.time() - (2 * 24 * 3600)
         os.utime(map_file, (old_mtime, old_mtime))
         assert load_coverage_map(map_file, max_age_days=1) is None
-        assert load_coverage_map(map_file, max_age_days=3) is not None
+        result_fresh = load_coverage_map(map_file, max_age_days=3)
+        assert result_fresh is not None
+        assert result_fresh["src/foo.py"] == {"tests/test_foo.py"}
 
     def test_malformed_json_returns_none(self, tmp_path: Path) -> None:
         """Returns None on JSON parse failure."""

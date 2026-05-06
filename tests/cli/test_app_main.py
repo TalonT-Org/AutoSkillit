@@ -36,39 +36,3 @@ def test_main_does_not_call_app_after_update_restart(monkeypatch: pytest.MonkeyP
         pass
 
     assert not app_called, "app() must not be called when update path exits the process"
-
-
-@pytest.mark.parametrize(
-    "argv_command",
-    [
-        "order",
-        "update",
-    ],
-)
-def test_main_passes_command_to_run_update_checks(
-    monkeypatch: pytest.MonkeyPatch, argv_command: str
-) -> None:
-    """main() must pass _first_arg as command= to run_update_checks()."""
-    app_module = importlib.import_module("autoskillit.cli.app")
-
-    monkeypatch.setattr(app_module, "app", lambda: None)
-    monkeypatch.setattr(
-        "autoskillit.cli._init_helpers.evict_direct_mcp_entry", lambda *a, **kw: None
-    )
-
-    captured_kwargs: list[dict[str, object]] = []
-
-    def spy_run_update_checks(**kwargs: object) -> None:
-        captured_kwargs.append(dict(kwargs))
-
-    monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.run_update_checks", spy_run_update_checks
-    )
-    monkeypatch.setattr(sys, "argv", ["autoskillit", argv_command])
-
-    app_module.main()
-
-    assert len(captured_kwargs) == 1, "run_update_checks must be called exactly once"
-    assert captured_kwargs[0].get("command") == argv_command, (
-        f"run_update_checks must receive command={argv_command!r}, got {captured_kwargs[0]!r}"
-    )

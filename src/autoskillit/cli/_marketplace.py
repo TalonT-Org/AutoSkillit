@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib.metadata
 import json
 import os
 import re
@@ -57,13 +56,6 @@ def _clear_plugin_cache() -> None:
         from autoskillit.core import sweep_retiring_cache
 
         sweep_retiring_cache()
-
-    from autoskillit.cli._installed_plugins import InstalledPluginsFile
-
-    try:
-        InstalledPluginsFile().remove(f"autoskillit@{_MARKETPLACE_NAME}")
-    except OSError:
-        pass  # non-fatal — install will proceed regardless
 
 
 def _ensure_marketplace() -> Path:
@@ -182,32 +174,7 @@ def install(*, scope: str = "user") -> bool:
     from autoskillit.core import _InstallLock
 
     with _InstallLock():
-        from autoskillit.core import any_kitchen_open
-
-        if any_kitchen_open(project_path=str(Path.cwd())):
-            from autoskillit.version import version_info
-
-            try:
-                vi = version_info(plugin_dir=str(_cache))
-            except (OSError, json.JSONDecodeError, importlib.metadata.PackageNotFoundError):
-                logger.warning("version_info_failed", plugin_dir=str(_cache), exc_info=True)
-                vi = {
-                    "match": False,
-                    "plugin_json_version": "unknown",
-                    "package_version": "unknown",
-                }
-            if not vi["match"]:
-                print(
-                    f"WARNING: Kitchen open — skipping plugin cache clear. "
-                    f"Cached version {vi['plugin_json_version']!r} ≠ "
-                    f"installed {vi['package_version']!r}. "
-                    f"Tool calls may fail with ENOENT until kitchens are closed "
-                    f"and `autoskillit install` is re-run."
-                )
-            else:
-                print("Kitchen open for this project — skipping plugin cache clear.")
-        else:
-            _clear_plugin_cache()
+        _clear_plugin_cache()
 
         # Regenerate hooks.json from the canonical registry with absolute paths
         hooks_json_path = pkg_root() / "hooks" / "hooks.json"

@@ -542,7 +542,6 @@ def test_run_update_command_invalidates_fetch_cache(
     info = _make_stable_info()
     monkeypatch.setattr("autoskillit.cli.update._update.detect_install", lambda: info)
     monkeypatch.setattr("autoskillit.cli.update._update.terminal_guard", FakeTG)
-    monkeypatch.setattr("autoskillit.core.any_kitchen_open", lambda **kw: False)
 
     upgrade_ok = subprocess.CompletedProcess([], returncode=0)
     install_ok = subprocess.CompletedProcess([], returncode=0)

@@ -39,15 +39,6 @@ def run_update_command(home: Path | None = None) -> None:
         "AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK": "1",
     }
 
-    from autoskillit.core import any_kitchen_open
-
-    if any_kitchen_open(project_path=str(Path.cwd())):
-        print(
-            "A kitchen is currently open for this project. "
-            "Close it or wait for the pipeline to finish.",
-        )
-        raise SystemExit(1)
-
     info = detect_install()
     cmd = upgrade_command(info)
     if cmd is None:

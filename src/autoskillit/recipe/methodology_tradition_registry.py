@@ -36,7 +36,8 @@ def _parse_int_field(data: dict, field_name: str, default: int, source_path: Pat
     except (ValueError, TypeError) as e:
         name = data.get("name", "?")
         raise TypeError(
-            f"Methodology tradition '{name}' field '{field_name}' must be an integer: {source_path}"
+            f"Methodology tradition '{name}' field '{field_name}' must be an integer:"
+            f" {source_path}"
         ) from e
 
 

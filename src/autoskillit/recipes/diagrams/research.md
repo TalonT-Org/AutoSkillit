@@ -85,12 +85,12 @@ route_pr_or_local
 |    |    |
 |    |    patch_token_summary
 |    |
-|    +-- [finalize_bundle] (local mode)
+|    +-- finalize_bundle (local mode)
 |    |    |
-|         finalize_bundle_render
-|         |    x fail [-> route_archive_or_export]
-|         |
-|         export_local_bundle
-|         |    x fail [-> patch_token_summary]
-|         |
-|         patch_token_summary
+|    |    finalize_bundle_render
+|    |    |    x fail [-> route_archive_or_export]
+|    |    |
+|    |    export_local_bundle
+|    |    |    x fail [-> patch_token_summary]
+|    |    |
+|    |    patch_token_summary

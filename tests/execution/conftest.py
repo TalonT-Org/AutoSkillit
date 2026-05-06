@@ -6,14 +6,12 @@ import json
 import pathlib
 import textwrap
 from collections.abc import Callable
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from autoskillit.core.types import SubprocessResult, TerminationReason
-from autoskillit.execution.merge_queue import DefaultMergeQueueWatcher, PRFetchState
 from autoskillit.execution.session import ClaudeSessionResult
 from tests._helpers import make_tracing_config
 
@@ -317,39 +315,6 @@ def merge_group_only_repo_state() -> dict[str, Any]:
         },
         "rest_completed_runs": {"workflow_runs": []},
         "rest_active_runs": {"workflow_runs": []},
-    }
-
-
-def _make_watcher() -> DefaultMergeQueueWatcher:
-    return DefaultMergeQueueWatcher(token=None)
-
-
-def _queue_state(
-    *,
-    merged: bool = False,
-    state: str = "OPEN",
-    mergeable: str = "MERGEABLE",
-    merge_state_status: str = "CLEAN",
-    auto_merge_present: bool = False,
-    auto_merge_enabled_at: datetime | None = None,
-    pr_node_id: str = "PR_kwDO_test",
-    in_queue: bool = False,
-    queue_state: str | None = None,
-    checks_state: str | None = None,
-    merge_group_checks_state: str | None = None,
-) -> PRFetchState:
-    return {
-        "merged": merged,
-        "state": state,
-        "mergeable": mergeable,
-        "merge_state_status": merge_state_status,
-        "auto_merge_present": auto_merge_present,
-        "auto_merge_enabled_at": auto_merge_enabled_at,
-        "pr_node_id": pr_node_id,
-        "in_queue": in_queue,
-        "queue_state": queue_state,
-        "checks_state": checks_state,
-        "merge_group_checks_state": merge_group_checks_state,
     }
 
 

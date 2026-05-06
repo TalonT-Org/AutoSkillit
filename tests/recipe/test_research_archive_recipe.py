@@ -19,7 +19,7 @@ class TestResearchArchiveRecipe:
         errors = validate_recipe(recipe)
         assert errors == [], f"Validation errors: {errors}"
 
-    def test_name(self, recipe) -> None:
+    def test_recipe_name(self, recipe) -> None:
         assert recipe.name == "research-archive"
 
     def test_recipe_version(self, recipe) -> None:

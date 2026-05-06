@@ -56,6 +56,7 @@ class DispatchRecord:
     name: str
     status: DispatchStatus = DispatchStatus.PENDING
     dispatch_id: str = ""
+    caller_session_id: str = ""
     l3_session_id: str = ""
     l3_session_log_dir: str = ""
     l3_pid: int = 0
@@ -253,6 +254,7 @@ def read_state(state_path: Path) -> CampaignState | None:
                 name=d["name"],
                 status=DispatchStatus(d.get("status", DispatchStatus.PENDING)),
                 dispatch_id=d.get("dispatch_id", ""),
+                caller_session_id=d.get("caller_session_id", ""),
                 l3_session_id=d.get("l3_session_id") or d.get("l2_session_id", ""),
                 l3_session_log_dir=d.get("l3_session_log_dir") or d.get("l2_session_log_dir", ""),
                 l3_pid=d.get("l3_pid") or d.get("l2_pid", 0),

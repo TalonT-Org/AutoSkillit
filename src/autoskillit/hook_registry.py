@@ -105,7 +105,7 @@ HOOK_REGISTRY: list[HookDef] = [
     ),
     HookDef(
         matcher=r"(mcp__.*autoskillit.*__)?dispatch_food_truck",
-        scripts=["guards/fleet_dispatch_guard.py"],
+        scripts=["guards/fleet_dispatch_guard.py", "guards/resume_ownership_guard.py"],
     ),
     HookDef(
         event_type="PostToolUse",
@@ -190,6 +190,7 @@ NEW_SUBDIR_BASENAMES: frozenset[str] = frozenset(
     {
         "skill_orchestration_guard.py",
         "skill_load_guard.py",
+        "resume_ownership_guard.py",
     }
 )
 

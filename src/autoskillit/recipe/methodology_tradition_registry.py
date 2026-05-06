@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from autoskillit.core import get_logger, load_yaml, pkg_root
 
@@ -114,6 +115,16 @@ def _load_traditions_from_dir(directory: Path) -> dict[str, MethodologyTradition
                 "Skipping malformed methodology tradition file: %s", path, exc_info=True
             )
     return result
+
+
+def parse_methodology_tradition(
+    data: dict[str, Any], source_path: Path
+) -> MethodologyTraditionSpec:
+    return _parse_methodology_tradition(data, source_path)
+
+
+def load_traditions_from_dir(directory: Path) -> dict[str, MethodologyTraditionSpec]:
+    return _load_traditions_from_dir(directory)
 
 
 def load_all_methodology_traditions(

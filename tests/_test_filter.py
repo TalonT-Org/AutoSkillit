@@ -370,6 +370,7 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
         {
             "recipe",
             "skills/test_review_design_guards.py",
+            "cli",
         }
     ),
     "registry": frozenset(
@@ -525,12 +526,13 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_tools_list_recipes.py",
             "server/test_tools_bootstrap.py",
             "server/test_tools_kitchen_visibility.py",
-            # CLI file-level entries (4 of 38 import autoskillit.recipe):
+            # CLI file-level entries (6 of 38 import autoskillit.recipe):
             "cli/test_cli_prompts.py",
             "cli/test_l3_orchestrator_prompt.py",
             "cli/test_cook_order_picker.py",
             "cli/test_fleet_list.py",
             "cli/test_preview.py",
+            "cli/test_validate_registries.py",
             # Execution file-level entries:
             "execution/test_headless_path_validation.py",
             "execution/test_zero_write_detection.py",

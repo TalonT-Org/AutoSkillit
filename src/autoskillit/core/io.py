@@ -124,6 +124,7 @@ _AUTOSKILLIT_GITIGNORE_ENTRIES = [
     ".onboarded",
     "sync_manifest.json",
     "test-filter-manifest.yaml",
+    "validation-errors/",
 ]
 
 _COMMITTED_BY_DESIGN: frozenset[str] = frozenset(

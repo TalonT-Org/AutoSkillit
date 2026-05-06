@@ -24,6 +24,7 @@ from autoskillit.cli._init_helpers import (
 )
 from autoskillit.cli._serve_guard import serve_with_signal_guard
 from autoskillit.cli._sessions import sessions_app
+from autoskillit.cli._validate import validate_app
 from autoskillit.cli.fleet import fleet_app
 from autoskillit.cli.session._cook import cook as cook_interactive
 from autoskillit.cli.session._order import _recipes_dir_for, order
@@ -49,6 +50,7 @@ app.command(workspace_app)
 app.command(fleet_app)
 app.command(features_app)
 app.command(sessions_app)
+app.command(validate_app)
 app.command(order)
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 
 from autoskillit.recipe.methodology_tradition_registry import (
@@ -20,6 +21,14 @@ class UnionRuleDef:
     member_traditions: frozenset[str]
     resolved_tradition: str
 
+    def __post_init__(self) -> None:
+        if self.resolved_tradition not in self.member_traditions:
+            raise ValueError(
+                f"UnionRuleDef '{self.name}': resolved_tradition "
+                f"'{self.resolved_tradition}' must be a member of "
+                f"member_traditions {self.member_traditions}"
+            )
+
 
 @dataclass(frozen=True)
 class TraditionRouterResult:
@@ -31,23 +40,16 @@ class TraditionRouterResult:
     candidate_set: tuple[str, ...]
 
 
-_WORD_BOUNDARY_RE_CACHE: dict[str, re.Pattern[str]] = {}
-
-
+@cache
 def _keyword_pattern(keyword: str) -> re.Pattern[str]:
-    if keyword not in _WORD_BOUNDARY_RE_CACHE:
-        escaped = re.escape(keyword.lower())
-        _WORD_BOUNDARY_RE_CACHE[keyword] = re.compile(
-            r"(?<!\w)" + escaped + r"(?!\w)",
-            re.IGNORECASE,
-        )
-    return _WORD_BOUNDARY_RE_CACHE[keyword]
+    escaped = re.escape(keyword)
+    return re.compile(r"(?<!\w)" + escaped + r"(?!\w)", re.IGNORECASE)
 
 
-def _count_keyword_matches(text_lower: str, spec: MethodologyTraditionSpec) -> int:
+def _count_keyword_matches(text: str, spec: MethodologyTraditionSpec) -> int:
     count = 0
     for kw in spec.detection_keywords:
-        if _keyword_pattern(kw).search(text_lower):
+        if _keyword_pattern(kw.lower()).search(text):
             count += 1
     return count
 
@@ -78,11 +80,10 @@ def classify_methodology(
     if min_keyword_matches < 1:
         raise ValueError(f"min_keyword_matches must be >= 1, got {min_keyword_matches}")
     traditions = load_all_methodology_traditions(project_dir)
-    text_lower = plan_text.lower()
 
     scored: list[tuple[MethodologyTraditionSpec, int]] = []
     for spec in traditions:
-        hits = _count_keyword_matches(text_lower, spec)
+        hits = _count_keyword_matches(plan_text, spec)
         if hits >= min_keyword_matches:
             scored.append((spec, hits))
 

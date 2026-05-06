@@ -807,8 +807,11 @@ def test_format_model_table() -> None:
     ]
     table = TelemetryFormatter.format_model_table(model_totals)
     assert "## Model Usage Breakdown" in table
-    assert "claude-sonnet-4-6" in table
-    assert "MiniMax-M2.7" in table
+    assert "| Model | steps | uncached | output | cache_read | cache_write | time |" in table
+    assert "| claude-sonnet-4-6 | 2 | 300 | 130 | 5.0k | 100 | 2m 0s |" in table
+    assert "| MiniMax-M2.7 | 1 | 500 | 200 | 1.2k | 0 | 1m 0s |" in table
+    table_lines = [ln for ln in table.splitlines() if ln.startswith("|")]
+    assert len(table_lines) == 4  # header + separator + 2 model rows
 
 
 def test_format_model_table_empty_returns_empty() -> None:

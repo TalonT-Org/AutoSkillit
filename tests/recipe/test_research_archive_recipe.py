@@ -44,6 +44,8 @@ class TestResearchArchiveRecipe:
             "worktree_path",
             "research_dir",
             "pr_url",
+            "all_diagram_paths",
+            "report_path_after_finalize",
             "base_branch",
         }
 

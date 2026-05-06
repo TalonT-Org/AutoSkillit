@@ -362,4 +362,4 @@ class TestValidateRegistries:
         validate_registries()
         out = capsys.readouterr().out
         assert "✓" in out
-        assert "error" not in out.lower()
+        assert "✗" not in out

@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from autoskillit.core import get_logger
+from autoskillit.core import DISPATCH_ID_ENV_VAR, get_logger
 
 logger = get_logger(__name__)
 
@@ -230,7 +230,7 @@ def patch_pr_token_summary(
     # AUTOSKILLIT_DISPATCH_ID is set by the fleet dispatcher on all L2 food truck sessions
     # and inherited by sub-sessions, providing correct multi-clone scoping
     # without requiring recipe authors to pass order_id explicitly.
-    effective_order_id = order_id or os.environ.get("AUTOSKILLIT_DISPATCH_ID", "")
+    effective_order_id = order_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
 
     log_root = resolve_log_dir(log_dir)
     token_log = DefaultTokenLog()

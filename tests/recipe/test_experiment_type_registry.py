@@ -332,6 +332,7 @@ def test_priority_assignments_match_contract() -> None:
         "qualitative_interpretive": 11,
         "exploratory": 999,
     }
+    assert set(EXPECTED_PRIORITIES.keys()) == EXPECTED_TYPES
     types = load_all_experiment_types()
     by_name = {s.name: s for s in types}
     for name, expected_priority in EXPECTED_PRIORITIES.items():

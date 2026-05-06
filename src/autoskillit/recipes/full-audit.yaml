@@ -118,7 +118,7 @@ steps:
       Do not wait for all audits to complete before beginning validation.
 
       For each succeeded audit, queue a validation:
-        1. run_skill(skill_command="/autoskillit:validate-audit {tests_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_tests")
+        1. run_skill(skill_command="/autoskillit:validate-test-audit {tests_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_tests")
         2. run_skill(skill_command="/autoskillit:validate-audit {cohesion_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_cohesion")
         3. run_skill(skill_command="/autoskillit:validate-audit {arch_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_arch")
         4. run_skill(skill_command="/autoskillit:validate-audit {feature_gates_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_feature_gates")

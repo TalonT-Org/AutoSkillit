@@ -75,6 +75,7 @@ _GLOBALLY_GUARDED_SKILLS: frozenset[str] = frozenset(
         "setup-project",
         "collapse-issues",
         "validate-audit",
+        "validate-test-audit",
     }
 )
 

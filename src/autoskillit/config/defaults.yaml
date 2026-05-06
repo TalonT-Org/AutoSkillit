@@ -207,6 +207,7 @@ skills:
     - run-experiment
     - generate-report
     - validate-audit
+    - validate-test-audit
     - vis-lens-always-on
     - vis-lens-antipattern
     - vis-lens-chart-select

@@ -2044,6 +2044,24 @@ skills:
     write_behavior: conditional
     write_expected_when:
       - "verdict\\s*=\\s*validated"
+  validate-test-audit:
+    inputs:
+      - name: audit_report_path
+        type: file_path
+        required: false
+    outputs:
+      - name: validated_report_path
+        type: file_path
+      - name: verdict
+        type: str
+    expected_output_patterns:
+      - "validated_report_path\\s*=\\s*\\S+"
+      - "verdict\\s*=\\s*\\S+"
+    pattern_examples:
+      - "validated_report_path = /tmp/autoskillit/validate-audit/validated_report_tests_2026-05-05_140000.md\nverdict = validated"
+    write_behavior: conditional
+    write_expected_when:
+      - "verdict\\s*=\\s*validated"
   promote-to-main:
     inputs:
     - name: batch_branch

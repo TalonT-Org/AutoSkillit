@@ -457,6 +457,9 @@ steps:
       report_path_after_finalize=${{ context.report_path_after_finalize }},
       worktree_path=${{ context.worktree_path }},
       research_dir=${{ context.research_dir }}.
+      Note: report_path_after_finalize is empty string when reached via the
+      guard_pr_url fallback (pr_url absent) — finalize_bundle is bypassed in
+      that path. Emit empty string for this field in that case.
       Example sentinel:
       {"success": true, "pr_url": "<url>", "report_path_after_finalize": "<path>",
       "worktree_path": "<path>", "research_dir": "<path>"}

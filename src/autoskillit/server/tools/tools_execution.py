@@ -45,13 +45,14 @@ def _coerce_scalar(val: object, annotation: object) -> object:
     Handles str, int, float, and Optional[T] / T | None variants.
     Skips containers, unions, bool, and unconvertible values.
     """
-    import typing
+    if isinstance(val, bool):
+        return val
 
     actual = annotation
 
     # Unwrap X | None (types.UnionType — bare union syntax, Python 3.10+)
     if isinstance(annotation, types.UnionType):
-        non_none = [a for a in annotation.__args__ if a is not type(None) and a is not None]
+        non_none = [a for a in annotation.__args__ if a is not type(None)]
         if len(non_none) == 1:
             actual = non_none[0]
     # Unwrap Optional[X] / Union[X, None] (typing.Union with __origin__)
@@ -60,7 +61,7 @@ def _coerce_scalar(val: object, annotation: object) -> object:
         origin = ann.__origin__
         args = ann.__args__
         if origin is typing.Union:
-            non_none = [a for a in args if a is not type(None) and a is not None]
+            non_none = [a for a in args if a is not type(None)]
             if len(non_none) == 1:
                 actual = non_none[0]
 

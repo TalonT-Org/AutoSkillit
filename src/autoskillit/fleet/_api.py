@@ -88,7 +88,7 @@ def _write_pid(
     starttime_ticks: int,
     sidecar_path: str | None = None,
 ) -> None:
-    """on_spawn callback: atomically mark dispatch as running with l3_pid and identity fields."""
+    """on_spawn callback: atomically mark dispatch as running with dispatched_pid."""
     from autoskillit.core import read_boot_id
     from autoskillit.fleet import mark_dispatch_running
 
@@ -97,7 +97,7 @@ def _write_pid(
             state_path,
             dispatch_name,
             dispatch_id=dispatch_id,
-            l3_pid=pid,
+            dispatched_pid=pid,
             starttime_ticks=starttime_ticks,
             boot_id=read_boot_id() or "",
             sidecar_path=sidecar_path,
@@ -149,6 +149,7 @@ async def execute_dispatch(
     resume_session_id: str | None = None,
     resume_checkpoint: SessionCheckpoint | None = None,
     idle_output_timeout: int | None = None,
+    caller_session_id: str = "",
 ) -> str:
     """Execute a single food truck dispatch.
 
@@ -192,6 +193,7 @@ async def execute_dispatch(
             resume_session_id=resume_session_id,
             resume_checkpoint=resume_checkpoint,
             idle_output_timeout=idle_output_timeout,
+            caller_session_id=caller_session_id,
         )
     except asyncio.CancelledError:
         raise
@@ -274,6 +276,7 @@ async def _run_dispatch(
     resume_session_id: str | None = None,
     resume_checkpoint: SessionCheckpoint | None = None,
     idle_output_timeout: int | None = None,
+    caller_session_id: str = "",
 ) -> str:
     """Inner dispatch body — called after lock acquisition."""
     from autoskillit.fleet.state import (
@@ -385,7 +388,7 @@ async def _run_dispatch(
         campaign_id=campaign_id,
         campaign_name=effective_name,
         manifest_path="",
-        dispatches=[DispatchRecord(name=effective_name)],
+        dispatches=[DispatchRecord(name=effective_name, caller_session_id=caller_session_id)],
     )
 
     if tool_ctx.executor is None:
@@ -395,10 +398,10 @@ async def _run_dispatch(
         )
 
     started_at = time.time()
-    _l3_pid: list[int] = []
+    _dispatched_pid: list[int] = []
 
     def _on_spawn(pid: int, ticks: int) -> None:
-        _l3_pid.append(pid)
+        _dispatched_pid.append(pid)
         _write_pid(state_path, effective_name, dispatch_id, pid, ticks, dispatch_sidecar_path)
 
     skill_result = await tool_ctx.executor.dispatch_food_truck(
@@ -411,6 +414,7 @@ async def _run_dispatch(
         order_id=dispatch_id,
         campaign_id=campaign_id,
         dispatch_id=dispatch_id,
+        caller_session_id=caller_session_id,
         project_dir=str(tool_ctx.project_dir),
         timeout=float(timeout_sec) if timeout_sec else None,
         idle_output_timeout=float(idle_output_timeout)
@@ -434,8 +438,9 @@ async def _run_dispatch(
                 name=effective_name,
                 status=DispatchStatus.FAILURE,
                 dispatch_id=dispatch_id,
-                l3_session_id=skill_result.session_id,
-                l3_pid=_l3_pid[0] if _l3_pid else 0,
+                caller_session_id=caller_session_id,
+                dispatched_session_id=skill_result.session_id,
+                dispatched_pid=_dispatched_pid[0] if _dispatched_pid else 0,
                 reason=FleetErrorCode.FLEET_L3_TIMEOUT,
                 kill_reason=skill_result.retry_reason or "",
                 infra_exit_category=skill_result.infra_exit_category or "",
@@ -450,7 +455,7 @@ async def _run_dispatch(
             f"L3 dispatch '{effective_name}' timed out",
             details={
                 "dispatch_id": dispatch_id,
-                "l3_session_id": skill_result.session_id,
+                "dispatched_session_id": skill_result.session_id,
                 "lifespan_started": skill_result.lifespan_started,
                 "token_usage": skill_result.token_usage,
             },
@@ -486,8 +491,9 @@ async def _run_dispatch(
             name=effective_name,
             status=final_status,
             dispatch_id=dispatch_id,
-            l3_session_id=skill_result.session_id,
-            l3_pid=_l3_pid[0] if _l3_pid else 0,
+            caller_session_id=caller_session_id,
+            dispatched_session_id=skill_result.session_id,
+            dispatched_pid=_dispatched_pid[0] if _dispatched_pid else 0,
             reason=reason,
             kill_reason=skill_result.retry_reason or "",
             infra_exit_category=skill_result.infra_exit_category or "",
@@ -513,7 +519,7 @@ async def _run_dispatch(
                 "success": envelope_success,
                 "dispatch_status": final_status.value,
                 "dispatch_id": dispatch_id,
-                "l3_session_id": skill_result.session_id,
+                "dispatched_session_id": skill_result.session_id,
                 "l3_payload": parsed.payload,
                 "reason": reason,
                 "token_usage": skill_result.token_usage,
@@ -527,7 +533,7 @@ async def _run_dispatch(
                 "success": False,
                 "dispatch_status": final_status.value,
                 "dispatch_id": dispatch_id,
-                "l3_session_id": skill_result.session_id,
+                "dispatched_session_id": skill_result.session_id,
                 "l3_payload": None,
                 "reason": FleetErrorCode.FLEET_L3_PARSE_FAILED,
                 "l3_raw_body": parsed.raw_body,
@@ -543,7 +549,7 @@ async def _run_dispatch(
                 "success": False,
                 "dispatch_status": final_status.value,
                 "dispatch_id": dispatch_id,
-                "l3_session_id": skill_result.session_id,
+                "dispatched_session_id": skill_result.session_id,
                 "l3_payload": None,
                 "reason": FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK,
                 "l3_parse_source": parsed.source,

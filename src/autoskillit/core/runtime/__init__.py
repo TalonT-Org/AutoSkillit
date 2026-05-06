@@ -9,6 +9,7 @@ from __future__ import annotations
 from ._linux_proc import is_session_alive, read_boot_id, read_starttime_ticks
 from .kitchen_state import (
     KitchenMarker,
+    find_caller_session_id,
     get_state_dir,
     is_marker_fresh,
     marker_path,
@@ -20,6 +21,12 @@ from .readiness import (
     cleanup_readiness_sentinel,
     readiness_sentinel_path,
     write_readiness_sentinel,
+)
+from .session_provenance import (
+    ProvenanceRecord,
+    provenance_path,
+    read_provenance_for_session,
+    write_provenance_record,
 )
 from .session_registry import (
     bridge_claude_session_id,
@@ -33,17 +40,22 @@ __all__ = [
     "KitchenMarker",
     "bridge_claude_session_id",
     "cleanup_readiness_sentinel",
+    "find_caller_session_id",
     "get_state_dir",
     "is_marker_fresh",
     "marker_path",
+    "provenance_path",
     "read_boot_id",
     "read_marker",
+    "read_provenance_for_session",
     "read_registry",
     "read_starttime_ticks",
     "readiness_sentinel_path",
     "registry_path",
     "sweep_stale_markers",
     "write_marker",
+    "write_provenance_record",
     "write_readiness_sentinel",
     "write_registry_entry",
+    "ProvenanceRecord",
 ]

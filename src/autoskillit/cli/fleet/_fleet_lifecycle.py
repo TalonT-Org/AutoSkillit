@@ -78,21 +78,23 @@ async def _fleet_signal_guard(
                         for dispatch in state.dispatches:
                             if dispatch.status != DispatchStatus.RUNNING:
                                 continue
-                            if dispatch.l3_pid == 0:
+                            if dispatch.dispatched_pid == 0:
                                 _transition_dead_dispatch(
                                     state_path, dispatch, reason=f"signal_{signame}"
                                 )
                                 continue
 
                             # Verify PID identity before killing
-                            current_ticks = read_starttime_ticks(dispatch.l3_pid)
+                            current_ticks = read_starttime_ticks(dispatch.dispatched_pid)
                             if current_ticks is not None:
                                 if (
-                                    dispatch.l3_starttime_ticks > 0
-                                    and current_ticks == dispatch.l3_starttime_ticks
+                                    dispatch.dispatched_starttime_ticks > 0
+                                    and current_ticks == dispatch.dispatched_starttime_ticks
                                 ):
                                     try:
-                                        await async_kill_process_tree(dispatch.l3_pid, timeout=5.0)
+                                        await async_kill_process_tree(
+                                            dispatch.dispatched_pid, timeout=5.0
+                                        )
                                     except Exception:
                                         logger.warning(
                                             "signal_guard: kill_process_tree failed",
@@ -101,13 +103,15 @@ async def _fleet_signal_guard(
                                 else:
                                     logger.warning(
                                         "signal_guard: PID %d recycled (ticks mismatch)",
-                                        dispatch.l3_pid,
+                                        dispatch.dispatched_pid,
                                     )
                             else:
                                 # Non-Linux fallback: psutil.pid_exists without identity check
-                                if psutil.pid_exists(dispatch.l3_pid):
+                                if psutil.pid_exists(dispatch.dispatched_pid):
                                     try:
-                                        await async_kill_process_tree(dispatch.l3_pid, timeout=5.0)
+                                        await async_kill_process_tree(
+                                            dispatch.dispatched_pid, timeout=5.0
+                                        )
                                     except Exception:
                                         logger.warning(
                                             "signal_guard: kill_process_tree failed (non-linux)",
@@ -184,7 +188,7 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
 
             for dispatch in running:
                 name = dispatch.name
-                pid = dispatch.l3_pid
+                pid = dispatch.dispatched_pid
 
                 if pid == 0:
                     if dry_run:
@@ -201,9 +205,9 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
 
                 # Boot ID check: if machine rebooted, all PIDs are recycled
                 if (
-                    dispatch.l3_boot_id != ""
+                    dispatch.dispatched_boot_id != ""
                     and current_boot_id is not None
-                    and dispatch.l3_boot_id != current_boot_id
+                    and dispatch.dispatched_boot_id != current_boot_id
                 ):
                     if dry_run:
                         logger.info(
@@ -230,7 +234,10 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
 
                 # Process is alive — check identity
                 current_ticks = read_starttime_ticks(pid)
-                if current_ticks is not None and current_ticks == dispatch.l3_starttime_ticks:
+                if (
+                    current_ticks is not None
+                    and current_ticks == dispatch.dispatched_starttime_ticks
+                ):
                     if dry_run:
                         logger.info(
                             "reap: [WOULD KILL]  %s  pid=%d  (orphan, identity match)", name, pid

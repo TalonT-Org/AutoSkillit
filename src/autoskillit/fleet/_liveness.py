@@ -6,4 +6,6 @@ from autoskillit.fleet.state import DispatchRecord
 
 def is_dispatch_session_alive(record: DispatchRecord) -> bool:
     """True only when boot_id, PID, and starttime_ticks all match — False on non-Linux."""
-    return is_session_alive(record.l3_pid, record.l3_boot_id, record.l3_starttime_ticks)
+    return is_session_alive(
+        record.dispatched_pid, record.dispatched_boot_id, record.dispatched_starttime_ticks
+    )

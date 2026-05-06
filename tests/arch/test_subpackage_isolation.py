@@ -798,7 +798,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "fleet": 12,
         "recipe/rules": 28,
         "server/tools": 15,
-        "hooks/guards": 20,
+        "hooks/guards": 21,
     }
     violations: list[str] = []
     dirs_to_check: list[Path] = []

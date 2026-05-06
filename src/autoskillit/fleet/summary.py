@@ -59,7 +59,7 @@ class PerDispatchEntry:
     status: CampaignSummaryStatus
     elapsed_seconds: float
     token_usage: DispatchTokenUsage
-    l3_session_id: str
+    dispatched_session_id: str
 
 
 @dataclass(frozen=True)
@@ -69,7 +69,7 @@ class SummaryErrorRecord:
     dispatch_name: str
     code: FleetErrorCode
     message: str
-    l3_session_id: str
+    dispatched_session_id: str
 
 
 @dataclass(frozen=True)
@@ -195,7 +195,9 @@ def parse_campaign_summary(text: str, campaign_id: str) -> CampaignParseResult:
                     cache_read=e["token_usage"]["cache_read"],
                     cache_creation=e["token_usage"]["cache_creation"],
                 ),
-                l3_session_id=e.get("l3_session_id") or e.get("l2_session_id", ""),
+                dispatched_session_id=e.get("dispatched_session_id")
+                or e.get("l3_session_id")
+                or e.get("l2_session_id", ""),
             )
             for e in data["per_dispatch"]
         ]
@@ -204,7 +206,9 @@ def parse_campaign_summary(text: str, campaign_id: str) -> CampaignParseResult:
                 dispatch_name=r["dispatch_name"],
                 code=FleetErrorCode(r["code"]),
                 message=r["message"],
-                l3_session_id=r.get("l3_session_id") or r.get("l2_session_id", ""),
+                dispatched_session_id=r.get("dispatched_session_id")
+                or r.get("l3_session_id")
+                or r.get("l2_session_id", ""),
             )
             for r in data["error_records"]
         ]
@@ -244,7 +248,7 @@ def serialize_campaign_summary(summary: CampaignSummary) -> str:
                     "cache_read": e.token_usage.cache_read,
                     "cache_creation": e.token_usage.cache_creation,
                 },
-                "l3_session_id": e.l3_session_id,
+                "dispatched_session_id": e.dispatched_session_id,
             }
             for e in summary.per_dispatch
         ],
@@ -253,7 +257,7 @@ def serialize_campaign_summary(summary: CampaignSummary) -> str:
                 "dispatch_name": r.dispatch_name,
                 "code": r.code,
                 "message": r.message,
-                "l3_session_id": r.l3_session_id,
+                "dispatched_session_id": r.dispatched_session_id,
             }
             for r in summary.error_records
         ],

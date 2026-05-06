@@ -172,7 +172,7 @@ When you reach a dispatch with `gate: confirm` in the manifest:
 
 In the campaign summary, for gate dispatch entries:
 - Set `status` to `success` or `failure` based on user response.
-- Set `l3_session_id` to `""` (no food truck session was spawned).
+- Set `dispatched_session_id` to `""` (no food truck session was spawned).
 - Set `elapsed_seconds` to the wall-clock time for the question/response exchange.
 - Set all `token_usage` fields to 0.
 """
@@ -365,7 +365,7 @@ Emit this EXACT block as your final output. No other text after the block.
         "cache_read": <int>,
         "cache_creation": <int>
       }},
-      "l3_session_id": "<session_id>"
+      "dispatched_session_id": "<session_id>"
     }}
   ],
   "error_records": [
@@ -373,7 +373,7 @@ Emit this EXACT block as your final output. No other text after the block.
       "dispatch_name": "<name>",
       "code": "<fleet_error_code>",
       "message": "<human_readable_error>",
-      "l3_session_id": "<session_id>"
+      "dispatched_session_id": "<session_id>"
     }}
   ]
 }}

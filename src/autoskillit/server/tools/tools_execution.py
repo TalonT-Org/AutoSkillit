@@ -726,7 +726,7 @@ async def dispatch_food_truck(
 
     Spawns a headless subprocess that executes the given recipe with the
     provided task and ingredient overrides. Returns a JSON envelope with
-    dispatch_id, l3_session_id, l3_payload, and token_usage.
+    dispatch_id, dispatched_session_id, l3_payload, and token_usage.
 
     Args:
         recipe: Recipe name to dispatch (must be kind=standard).
@@ -798,6 +798,9 @@ async def dispatch_food_truck(
             SessionCheckpoint.from_dict(resume_checkpoint) if resume_checkpoint else None
         )
         tool_ctx = _get_ctx()
+        from autoskillit.core import find_caller_session_id
+
+        caller_session_id = find_caller_session_id(project_dir=tool_ctx.project_dir)
         result = await execute_dispatch(
             tool_ctx=tool_ctx,
             recipe=recipe,
@@ -813,6 +816,7 @@ async def dispatch_food_truck(
             resume_session_id=resume_session_id,
             resume_checkpoint=parsed_checkpoint,
             idle_output_timeout=idle_output_timeout,
+            caller_session_id=caller_session_id,
         )
 
         campaign_state_path_str = os.environ.get("AUTOSKILLIT_CAMPAIGN_STATE_PATH")
@@ -834,7 +838,7 @@ async def dispatch_food_truck(
                             name=dispatch_name,
                             status=status,
                             dispatch_id=envelope.get("dispatch_id", ""),
-                            l3_session_id=envelope.get("l3_session_id", ""),
+                            dispatched_session_id=envelope.get("dispatched_session_id", ""),
                             reason=envelope.get("reason", ""),
                             token_usage=envelope.get("token_usage") or {},
                         ),

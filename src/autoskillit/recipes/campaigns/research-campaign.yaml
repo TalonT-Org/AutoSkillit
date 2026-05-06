@@ -59,6 +59,41 @@ ingredients:
     required: false
     default: "local"
 
-dispatches: []
+dispatches:
+  - name: run-design
+    recipe: research-design
+    task: "Run the research design phase: scope the question, plan the experiment, and optionally review the design."
+    ingredients:
+      issue_url: "${{ inputs.issue_url }}"
+      source_dir: "${{ inputs.source_dir }}"
+    capture: {}
+    depends_on: []
+
+  - name: run-implement
+    recipe: research-implement
+    task: "Implement the research experiment plan."
+    ingredients:
+      source_dir: "${{ inputs.source_dir }}"
+    capture: {}
+    depends_on:
+      - run-design
+
+  - name: run-review
+    recipe: research-review
+    task: "Review the research experiment and open PR."
+    ingredients:
+      source_dir: "${{ inputs.source_dir }}"
+    capture: {}
+    depends_on:
+      - run-implement
+
+  - name: run-archive
+    recipe: research-archive
+    task: "Archive research artifacts and close experiment PR."
+    ingredients:
+      base_branch: "${{ inputs.base_branch }}"
+    capture: {}
+    depends_on:
+      - run-review
 
 steps: {}

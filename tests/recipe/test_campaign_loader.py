@@ -312,11 +312,11 @@ def test_research_campaign_parseable():
     assert recipe.recipe_version == "1.0.0"
 
 
-def test_research_campaign_skeleton_structural_validation():
+def test_research_campaign_passes_structural_validation():
     path = pkg_root() / "recipes" / "campaigns" / "research-campaign.yaml"
     recipe = load_recipe(path)
     findings = validate_recipe(recipe)
-    assert findings == ["Campaign recipe must have at least one dispatch."]
+    assert findings == [], f"Unexpected findings: {findings}"
 
 
 def test_research_campaign_header_fields():
@@ -359,10 +359,10 @@ def test_research_campaign_ingredients_match_research_yaml():
     assert campaign_recipe.ingredients["output_mode"].default == "local"
 
 
-def test_research_campaign_dispatches_and_steps_empty():
+def test_research_campaign_has_four_dispatches():
     path = pkg_root() / "recipes" / "campaigns" / "research-campaign.yaml"
     recipe = load_recipe(path)
-    assert recipe.dispatches == []
+    assert len(recipe.dispatches) == 4
     assert recipe.steps == {}
 
 
@@ -372,6 +372,46 @@ def test_research_campaign_allowed_recipes_kebab_case():
 
     for name in recipe.allowed_recipes:
         assert re.match(r"^[a-z0-9]+(-[a-z0-9]+)*$", name)
+
+
+def test_research_campaign_dispatch_chain():
+    path = pkg_root() / "recipes" / "campaigns" / "research-campaign.yaml"
+    recipe = load_recipe(path)
+    names = [d.name for d in recipe.dispatches]
+    assert names == ["run-design", "run-implement", "run-review", "run-archive"]
+    assert recipe.dispatches[0].recipe == "research-design"
+    assert recipe.dispatches[0].depends_on == []
+    assert recipe.dispatches[1].recipe == "research-implement"
+    assert recipe.dispatches[1].depends_on == ["run-design"]
+    assert recipe.dispatches[2].recipe == "research-review"
+    assert recipe.dispatches[2].depends_on == ["run-implement"]
+    assert recipe.dispatches[3].recipe == "research-archive"
+    assert recipe.dispatches[3].depends_on == ["run-review"]
+    for d in recipe.dispatches:
+        assert d.task, f"Dispatch {d.name!r} has empty task"
+        assert d.capture == {}
+        assert d.gate is None
+
+
+def test_research_campaign_dispatch_ingredients_are_strings():
+    path = pkg_root() / "recipes" / "campaigns" / "research-campaign.yaml"
+    recipe = load_recipe(path)
+    for d in recipe.dispatches:
+        for key, val in d.ingredients.items():
+            assert isinstance(val, str), (
+                f"Dispatch {d.name!r} ingredient {key!r} is {type(val).__name__}, not str"
+            )
+
+
+def test_research_campaign_no_campaign_refs():
+    path = pkg_root() / "recipes" / "campaigns" / "research-campaign.yaml"
+    recipe = load_recipe(path)
+    for d in recipe.dispatches:
+        for key, val in d.ingredients.items():
+            assert "${{ campaign." not in val, (
+                f"Dispatch {d.name!r} ingredient {key!r} uses campaign ref {val!r} — "
+                "campaign refs are deferred to P3-WP3"
+            )
 
 
 def test_implement_findings_has_model_context_window_ingredient():

@@ -89,12 +89,12 @@ class TestAtomicWriteSurvivesPartialTmp:
 
         with patch("autoskillit.core.io.os.replace", side_effect=failing_replace):
             with pytest.raises(OSError, match="simulated crash"):
-                mark_dispatch_running(sp, "a", dispatch_id="d1", l3_pid=42)
+                mark_dispatch_running(sp, "a", dispatch_id="d1", dispatched_pid=42)
 
         assert sp.read_text(encoding="utf-8") == original
 
         # Retry succeeds
-        mark_dispatch_running(sp, "a", dispatch_id="d1", l3_pid=42)
+        mark_dispatch_running(sp, "a", dispatch_id="d1", dispatched_pid=42)
         state = read_state(sp)
         assert state is not None
         assert state.dispatches[0].status == DispatchStatus.RUNNING
@@ -117,7 +117,7 @@ class TestResumeMarksRunningInterrupted:
         sp = _state_path(tmp_path)
         write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("A", "B", "C"))
         append_dispatch_record(sp, DispatchRecord(name="A", status=DispatchStatus.SUCCESS))
-        mark_dispatch_running(sp, "B", dispatch_id="d-b", l3_pid=99)
+        mark_dispatch_running(sp, "B", dispatch_id="d-b", dispatched_pid=99)
 
         decision = resume_campaign_from_state(sp, continue_on_failure=True)
         assert decision is not None
@@ -158,7 +158,7 @@ class TestAtomicUnderConcurrentRead:
 
         def writer():
             barrier.wait()
-            mark_dispatch_running(sp, "a", dispatch_id="d1", l3_pid=42)
+            mark_dispatch_running(sp, "a", dispatch_id="d1", dispatched_pid=42)
 
         def reader():
             barrier.wait()
@@ -190,7 +190,7 @@ class TestWriteDiskFull:
 
         with patch("autoskillit.core.io.os.replace", side_effect=enospc_replace):
             with pytest.raises(OSError):
-                mark_dispatch_running(sp, "a", dispatch_id="d1", l3_pid=42)
+                mark_dispatch_running(sp, "a", dispatch_id="d1", dispatched_pid=42)
 
         assert sp.read_text(encoding="utf-8") == original
 
@@ -307,9 +307,9 @@ class TestResumeSkipsAliveRunningDispatch:
         record = DispatchRecord(
             name="issue-1",
             status=DispatchStatus.RUNNING,
-            l3_pid=12345,
-            l3_boot_id="abc",
-            l3_starttime_ticks=999,
+            dispatched_pid=12345,
+            dispatched_boot_id="abc",
+            dispatched_starttime_ticks=999,
         )
         monkeypatch.setattr(
             "autoskillit.fleet.is_dispatch_session_alive",
@@ -333,9 +333,9 @@ class TestResumeInterruptsStaleRunningDispatch:
         record = DispatchRecord(
             name="issue-1",
             status=DispatchStatus.RUNNING,
-            l3_pid=0,
-            l3_boot_id="",
-            l3_starttime_ticks=0,
+            dispatched_pid=0,
+            dispatched_boot_id="",
+            dispatched_starttime_ticks=0,
         )
         monkeypatch.setattr(
             "autoskillit.fleet.is_dispatch_session_alive",
@@ -357,9 +357,9 @@ class TestResumeLockPreventsDoubleInterrupt:
         record = DispatchRecord(
             name="issue-1",
             status=DispatchStatus.RUNNING,
-            l3_pid=0,
-            l3_boot_id="",
-            l3_starttime_ticks=0,
+            dispatched_pid=0,
+            dispatched_boot_id="",
+            dispatched_starttime_ticks=0,
         )
         monkeypatch.setattr(
             "autoskillit.fleet.is_dispatch_session_alive",
@@ -393,7 +393,7 @@ class TestResumeTransitionsRunningToResumable:
         write_initial_state(sp, "c1", "myCampaign", "manifest.yaml", _make_dispatches("impl"))
         sidecar_file = sp.parent / "d1111_issues.jsonl"
         mark_dispatch_running(
-            sp, "impl", dispatch_id="d1111", l3_pid=999, sidecar_path=str(sidecar_file)
+            sp, "impl", dispatch_id="d1111", dispatched_pid=999, sidecar_path=str(sidecar_file)
         )
         sidecar_file.write_text(
             '{"issue_url":"https://github.com/o/r/issues/1","status":"completed","ts":"2026-01-01T00:00:00"}\n'
@@ -418,7 +418,7 @@ class TestResumeTransitionsRunningToInterruptedNoSidecar:
     ) -> None:
         sp = _state_path(tmp_path)
         write_initial_state(sp, "c1", "myCampaign", "manifest.yaml", _make_dispatches("impl"))
-        mark_dispatch_running(sp, "impl", dispatch_id="d1111", l3_pid=999)
+        mark_dispatch_running(sp, "impl", dispatch_id="d1111", dispatched_pid=999)
         monkeypatch.setattr("autoskillit.fleet.is_dispatch_session_alive", lambda _: False)
 
         resume_campaign_from_state(sp, continue_on_failure=False)
@@ -437,7 +437,7 @@ class TestResumeTransitionsRunningToInterruptedCorruptSidecar:
         write_initial_state(sp, "c1", "myCampaign", "manifest.yaml", _make_dispatches("impl"))
         sidecar_file = sp.parent / "d1111_issues.jsonl"
         mark_dispatch_running(
-            sp, "impl", dispatch_id="d1111", l3_pid=999, sidecar_path=str(sidecar_file)
+            sp, "impl", dispatch_id="d1111", dispatched_pid=999, sidecar_path=str(sidecar_file)
         )
         sidecar_file.write_text("{not valid json{{{\n")
         monkeypatch.setattr("autoskillit.fleet.is_dispatch_session_alive", lambda _: False)
@@ -458,7 +458,7 @@ class TestResumeEmptySidecarIsResumable:
         write_initial_state(sp, "c1", "myCampaign", "manifest.yaml", _make_dispatches("impl"))
         sidecar_file = sp.parent / "d1111_issues.jsonl"
         mark_dispatch_running(
-            sp, "impl", dispatch_id="d1111", l3_pid=999, sidecar_path=str(sidecar_file)
+            sp, "impl", dispatch_id="d1111", dispatched_pid=999, sidecar_path=str(sidecar_file)
         )
         sidecar_file.write_text("")
         monkeypatch.setattr("autoskillit.fleet.is_dispatch_session_alive", lambda _: False)
@@ -479,7 +479,7 @@ class TestResumableSelectedBeforePending:
         write_initial_state(
             sp, "c1", "myCampaign", "manifest.yaml", _make_dispatches("impl-1", "impl-2")
         )
-        mark_dispatch_running(sp, "impl-1", dispatch_id="d1111", l3_pid=999)
+        mark_dispatch_running(sp, "impl-1", dispatch_id="d1111", dispatched_pid=999)
         # Non-existent sidecar is intentional: test covers selection ordering only,
         # not the sidecar-existence branch in crash_recover_dispatch.
         mark_dispatch_resumable(sp, "impl-1", sidecar_path=str(sp.parent / "d1111_issues.jsonl"))
@@ -490,17 +490,17 @@ class TestResumableSelectedBeforePending:
         assert decision.next_dispatch_name == "impl-1"
         assert decision.is_resumable is True
 
-    def test_resume_decision_carries_l3_session_id(self, tmp_path: Path) -> None:
+    def test_resume_decision_carries_dispatched_session_id(self, tmp_path: Path) -> None:
         sp = _state_path(tmp_path)
         write_initial_state(sp, "c1", "myCampaign", "manifest.yaml", _make_dispatches("impl-1"))
-        mark_dispatch_running(sp, "impl-1", dispatch_id="d2222", l3_pid=888)
+        mark_dispatch_running(sp, "impl-1", dispatch_id="d2222", dispatched_pid=888)
         append_dispatch_record(
             sp,
             DispatchRecord(
                 name="impl-1",
                 status=DispatchStatus.RESUMABLE,
                 dispatch_id="d2222",
-                l3_session_id="sess-xyz-test",
+                dispatched_session_id="sess-xyz-test",
                 sidecar_path=str(sp.parent / "d2222_issues.jsonl"),
             ),
         )
@@ -509,7 +509,7 @@ class TestResumableSelectedBeforePending:
 
         assert decision is not None
         assert decision.is_resumable is True
-        assert decision.l3_session_id == "sess-xyz-test"
+        assert decision.dispatched_session_id == "sess-xyz-test"
 
 
 class TestResumableStateTransitionsValid:
@@ -522,7 +522,7 @@ class TestResumableStateTransitionsValid:
         ]:
             sp = _state_path(tmp_path / next_status.value)
             write_initial_state(sp, "c1", "camp", "m.yaml", _make_dispatches("impl"))
-            mark_dispatch_running(sp, "impl", dispatch_id="d1", l3_pid=1)
+            mark_dispatch_running(sp, "impl", dispatch_id="d1", dispatched_pid=1)
             mark_dispatch_resumable(sp, "impl", sidecar_path=str(tmp_path / "s.jsonl"))
             append_dispatch_record(sp, DispatchRecord(name="impl", status=next_status))
             state = read_state(sp)
@@ -537,7 +537,7 @@ class TestMarkDispatchResumable:
         sp = _state_path(tmp_path)
         write_initial_state(sp, "c1", "myCampaign", "manifest.yaml", _make_dispatches("impl"))
         expected_sidecar = str(sp.parent / "d1111_issues.jsonl")
-        mark_dispatch_running(sp, "impl", dispatch_id="d1111", l3_pid=999)
+        mark_dispatch_running(sp, "impl", dispatch_id="d1111", dispatched_pid=999)
 
         mark_dispatch_resumable(sp, "impl", sidecar_path=expected_sidecar)
 
@@ -558,7 +558,7 @@ class TestSidecarPathSetOnMarkRunning:
             sp,
             "impl",
             dispatch_id="d1111",
-            l3_pid=999,
+            dispatched_pid=999,
             sidecar_path=expected_sidecar,
         )
 
@@ -588,7 +588,7 @@ class TestAppendDispatchRecordIllegalTransition:
     def test_running_to_success_succeeds(self, tmp_path: Path) -> None:
         sp = _state_path(tmp_path)
         write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("A"))
-        mark_dispatch_running(sp, "A", dispatch_id="d-a", l3_pid=99)
+        mark_dispatch_running(sp, "A", dispatch_id="d-a", dispatched_pid=99)
         append_dispatch_record(sp, DispatchRecord(name="A", status=DispatchStatus.SUCCESS))
         state = read_state(sp)
         assert state is not None
@@ -625,7 +625,7 @@ class TestResumeIncludesInterruptedInBlock:
         sp = _state_path(tmp_path)
         write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("A", "B", "C"))
         append_dispatch_record(sp, DispatchRecord(name="A", status=DispatchStatus.SUCCESS))
-        mark_dispatch_running(sp, "B", dispatch_id="d-b", l3_pid=99)
+        mark_dispatch_running(sp, "B", dispatch_id="d-b", dispatched_pid=99)
         append_dispatch_record(sp, DispatchRecord(name="B", status=DispatchStatus.INTERRUPTED))
         decision = resume_campaign_from_state(sp, continue_on_failure=True)
         assert decision is not None
@@ -643,9 +643,9 @@ class TestResumeIncludesRunningAliveInBlock:
         record_b = DispatchRecord(
             name="B",
             status=DispatchStatus.RUNNING,
-            l3_pid=12345,
-            l3_boot_id="abc",
-            l3_starttime_ticks=999,
+            dispatched_pid=12345,
+            dispatched_boot_id="abc",
+            dispatched_starttime_ticks=999,
         )
         record_c = DispatchRecord(name="C", status=DispatchStatus.PENDING)
         monkeypatch.setattr(
@@ -695,7 +695,9 @@ class TestCrashRecoverDispatchSidecarVanished:
         write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("impl"))
         sidecar = tmp_path / "sidecar.jsonl"
         sidecar.write_text('{"issue_url":"x","status":"completed"}\n', encoding="utf-8")
-        mark_dispatch_running(sp, "impl", dispatch_id="d-1", l3_pid=99, sidecar_path=str(sidecar))
+        mark_dispatch_running(
+            sp, "impl", dispatch_id="d-1", dispatched_pid=99, sidecar_path=str(sidecar)
+        )
 
         record = read_state(sp).dispatches[0]
 
@@ -800,7 +802,7 @@ class TestKillReasonPropagation:
         sidecar = tmp_path / "sidecar.jsonl"
         sidecar.write_text("")
         write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("x"))
-        mark_dispatch_running(sp, "x", dispatch_id="d1", l3_pid=42)
+        mark_dispatch_running(sp, "x", dispatch_id="d1", dispatched_pid=42)
         from autoskillit.fleet import is_dispatch_session_alive
 
         with patch(
@@ -819,7 +821,7 @@ class TestKillReasonPropagation:
         sidecar = tmp_path / "sidecar.jsonl"
         sidecar.write_text("")
         write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("x"))
-        mark_dispatch_running(sp, "x", dispatch_id="d1", l3_pid=42)
+        mark_dispatch_running(sp, "x", dispatch_id="d1", dispatched_pid=42)
         from autoskillit.fleet import is_dispatch_session_alive
 
         with patch(
@@ -838,14 +840,14 @@ class TestKillReasonPropagation:
         sidecar = tmp_path / "sidecar.jsonl"
         sidecar.write_text("")
         write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("x"))
-        mark_dispatch_running(sp, "x", dispatch_id="d1", l3_pid=42)
+        mark_dispatch_running(sp, "x", dispatch_id="d1", dispatched_pid=42)
         mark_dispatch_resumable(sp, "x", sidecar_path=str(sidecar))
         data = json.loads(sp.read_text())
         for d in data["dispatches"]:
             if d["name"] == "x":
                 d["kill_reason"] = "idle_stall"
                 d["infra_exit_category"] = ""
-                d["l3_session_id"] = "sess-1"
+                d["dispatched_session_id"] = "sess-1"
         sp.write_text(json.dumps(data))
         decision = resume_campaign_from_state(sp, continue_on_failure=False)
         assert decision is not None

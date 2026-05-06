@@ -136,7 +136,7 @@ class TestDispatchFoodTruckHaltEnforcement:
                 "success": False,
                 "dispatch_status": "resumable",
                 "dispatch_id": "test-dispatch-id",
-                "l3_session_id": "sess-abc",
+                "dispatched_session_id": "sess-abc",
                 "reason": "fleet_l3_no_result_block",
                 "token_usage": None,
                 "l3_parse_source": "stdout",

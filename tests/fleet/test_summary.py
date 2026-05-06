@@ -33,7 +33,7 @@ _VALID_SUMMARY_DICT: dict = {
                 "cache_read": 50,
                 "cache_creation": 10,
             },
-            "l3_session_id": "sess-abc",
+            "dispatched_session_id": "sess-abc",
         },
         {
             "name": "dispatch-2",
@@ -45,7 +45,7 @@ _VALID_SUMMARY_DICT: dict = {
                 "cache_read": 0,
                 "cache_creation": 0,
             },
-            "l3_session_id": "sess-def",
+            "dispatched_session_id": "sess-def",
         },
     ],
     "error_records": [
@@ -53,7 +53,7 @@ _VALID_SUMMARY_DICT: dict = {
             "dispatch_name": "dispatch-2",
             "code": "fleet_l3_timeout",
             "message": "Timed out after 300s",
-            "l3_session_id": "sess-def",
+            "dispatched_session_id": "sess-def",
         }
     ],
 }
@@ -194,7 +194,7 @@ class TestCampaignSummarySchema:
         assert rec.dispatch_name == "dispatch-2"
         assert rec.code == "fleet_l3_timeout"
         assert rec.message == "Timed out after 300s"
-        assert rec.l3_session_id == "sess-def"
+        assert rec.dispatched_session_id == "sess-def"
 
     def test_campaign_summary_no_cross_dispatch_aggregates(self):
         from autoskillit.fleet import validate_campaign_summary
@@ -250,7 +250,7 @@ class TestCampaignSummarySchema:
             "status": "success",
             # elapsed_seconds omitted → KeyError
             "token_usage": {"input": 1, "output": 1, "cache_read": 0, "cache_creation": 0},
-            "l3_session_id": "s",
+            "dispatched_session_id": "s",
         }
         data = {**_VALID_SUMMARY_DICT, "per_dispatch": [bad_entry]}
         text = _make_sentinel_text(data)

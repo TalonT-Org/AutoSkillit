@@ -102,6 +102,7 @@ class DispatchFoodTruckCall:
     order_id: str = ""
     campaign_id: str = ""
     dispatch_id: str = ""
+    caller_session_id: str = ""
     project_dir: str = ""
     timeout: float | None = None
     stale_threshold: float | None = None
@@ -219,6 +220,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         order_id: str = "",
         campaign_id: str = "",
         dispatch_id: str = "",
+        caller_session_id: str = "",
         project_dir: str = "",
         timeout: float | None = None,
         stale_threshold: float | None = None,
@@ -241,6 +243,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 order_id=order_id,
                 campaign_id=campaign_id,
                 dispatch_id=dispatch_id,
+                caller_session_id=caller_session_id,
                 project_dir=project_dir,
                 timeout=timeout,
                 stale_threshold=stale_threshold,

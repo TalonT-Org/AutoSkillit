@@ -296,9 +296,9 @@ def _force_running_state(
     for d in data["dispatches"]:
         if d["name"] == name:
             d["status"] = "running"
-            d["l3_pid"] = pid
-            d["l3_starttime_ticks"] = ticks
-            d["l3_boot_id"] = boot_id
+            d["dispatched_pid"] = pid
+            d["dispatched_starttime_ticks"] = ticks
+            d["dispatched_boot_id"] = boot_id
             d["started_at"] = time.time()
             break
     state_path.write_text(json.dumps(data), encoding="utf-8")
@@ -418,7 +418,7 @@ async def test_two_dispatch_happy_path(fleet_runtime: FleetRuntime) -> None:
         from autoskillit.fleet.state import DispatchStatus
 
         assert d.status == DispatchStatus.SUCCESS
-        assert d.l3_pid > 0
+        assert d.dispatched_pid > 0
         assert d.ended_at > d.started_at
 
 
@@ -772,7 +772,7 @@ async def test_l3_timeout_enforced(fleet_runtime: FleetRuntime) -> None:
     assert result["error"] == "fleet_l3_timeout"
     assert "details" in result
     assert "dispatch_id" in result["details"]
-    assert "l3_session_id" in result["details"]
+    assert "dispatched_session_id" in result["details"]
 
     state = rt.read_dispatch_state(result["details"]["dispatch_id"])
     assert state is not None

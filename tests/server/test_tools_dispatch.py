@@ -507,14 +507,14 @@ class TestDispatchFoodTruckExecution:
         result = json.loads(raw)
         assert result["success"] is True
         assert "dispatch_id" in result
-        assert result["l3_session_id"] == "sess-abc"
+        assert result["dispatched_session_id"] == "sess-abc"
         assert result["l3_payload"] == canned_payload
         assert result["token_usage"] == {"input_tokens": 100}
         assert result["l3_parse_source"] == "stdout"
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_on_spawn_writes_pid(self, tool_ctx, monkeypatch):
-        """on_spawn callback writes l3_pid into state.json via mark_dispatch_running."""
+        """on_spawn callback writes dispatched_pid into state.json via mark_dispatch_running."""
         from autoskillit.fleet._api import _write_pid
         from autoskillit.fleet.state import DispatchRecord, write_initial_state
 
@@ -532,7 +532,7 @@ class TestDispatchFoodTruckExecution:
 
         state_data = json.loads(state_path.read_text())
         dispatch_record = state_data["dispatches"][0]
-        assert dispatch_record["l3_pid"] == 54321
+        assert dispatch_record["dispatched_pid"] == 54321
         assert dispatch_record["status"] == "running"
         assert dispatch_record["dispatch_id"] == "dispatch-id-abc"
 
@@ -571,7 +571,7 @@ class TestDispatchFoodTruckExecution:
         state_path = tool_ctx.temp_dir / "dispatches" / f"{dispatch_id}.json"
         state = read_state(state_path)
         assert state is not None
-        assert any(d.l3_pid == 99999 for d in state.dispatches)
+        assert any(d.dispatched_pid == 99999 for d in state.dispatches)
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_invalidates_quota_cache(self, tool_ctx, monkeypatch):

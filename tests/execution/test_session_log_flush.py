@@ -756,3 +756,29 @@ def test_token_usage_file_entry_type_matches_written_fields(tmp_path):
     data = json.loads((session_dir / "token_usage.json").read_text())
     expected_keys = set(TokenUsageFileEntry.__annotations__.keys())
     assert set(data.keys()) == expected_keys
+
+
+def test_flush_co_writes_provenance_record(tmp_path, monkeypatch):
+    """flush_session_log writes a provenance record when cwd is non-empty."""
+    monkeypatch.delenv("AUTOSKILLIT_STATE_DIR", raising=False)
+    monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
+    project = tmp_path / "project"
+    project.mkdir()
+    _flush(
+        tmp_path,
+        cwd=str(project),
+        caller_session_id="caller-abc",
+        kitchen_id="kitchen-1",
+        dispatch_id="dispatch-1",
+        recipe_name="test-recipe",
+        step_name="implement",
+    )
+    prov_path = project / ".autoskillit" / "temp" / "session_provenance.jsonl"
+    assert prov_path.is_file()
+    record = json.loads(prov_path.read_text().strip().splitlines()[0])
+    assert record["session_id"] == "test-session-001"
+    assert record["caller_session_id"] == "caller-abc"
+    assert record["kitchen_id"] == "kitchen-1"
+    assert record["dispatch_id"] == "dispatch-1"
+    assert record["recipe_name"] == "test-recipe"
+    assert record["step_name"] == "implement"

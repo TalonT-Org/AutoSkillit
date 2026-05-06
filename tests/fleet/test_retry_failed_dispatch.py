@@ -65,10 +65,10 @@ class TestResetFailedDispatch:
                 status=DispatchStatus.FAILURE,
                 reason="task_failed",
                 dispatch_id="old-dispatch-id",
-                l3_session_id="old-session",
-                l3_pid=12345,
-                l3_starttime_ticks=999,
-                l3_boot_id="old-boot",
+                dispatched_session_id="old-session",
+                dispatched_pid=12345,
+                dispatched_starttime_ticks=999,
+                dispatched_boot_id="old-boot",
                 token_usage={"prompt_tokens": 100},
                 started_at=1000.0,
                 ended_at=2000.0,
@@ -85,11 +85,11 @@ class TestResetFailedDispatch:
         assert d2.status == DispatchStatus.PENDING
         assert d2.reason == ""
         assert d2.dispatch_id == ""
-        assert d2.l3_session_id == ""
-        assert d2.l3_session_log_dir == ""
-        assert d2.l3_pid == 0
-        assert d2.l3_starttime_ticks == 0
-        assert d2.l3_boot_id == ""
+        assert d2.dispatched_session_id == ""
+        assert d2.dispatched_session_log_dir == ""
+        assert d2.dispatched_pid == 0
+        assert d2.dispatched_starttime_ticks == 0
+        assert d2.dispatched_boot_id == ""
         assert d2.token_usage == {}
         assert d2.started_at == 0.0
         assert d2.ended_at == 0.0
@@ -180,7 +180,7 @@ class TestResumeResetOnRetry:
                 name="d2",
                 status=DispatchStatus.FAILURE,
                 dispatch_id="d2-uuid",
-                l3_session_id="d2-sess",
+                dispatched_session_id="d2-sess",
             ),
         )
 
@@ -194,7 +194,7 @@ class TestResumeResetOnRetry:
         d2 = next(d for d in state.dispatches if d.name == "d2")
         assert d2.status == DispatchStatus.PENDING
         assert d2.dispatch_id == ""
-        assert d2.l3_session_id == ""
+        assert d2.dispatched_session_id == ""
         d3 = next(d for d in state.dispatches if d.name == "d3")
         assert d3.status == DispatchStatus.PENDING
         assert d3.dispatch_id == ""

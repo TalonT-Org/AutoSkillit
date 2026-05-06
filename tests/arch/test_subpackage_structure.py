@@ -35,7 +35,13 @@ class TestCoreSubpackages:
         assert (SRC / "core" / "runtime" / "__init__.py").exists()
 
     def test_core_runtime_has_expected_modules(self):
-        expected = {"kitchen_state", "readiness", "session_registry", "_linux_proc"}
+        expected = {
+            "kitchen_state",
+            "readiness",
+            "session_provenance",
+            "session_registry",
+            "_linux_proc",
+        }
         actual = {p.stem for p in (SRC / "core" / "runtime").glob("*.py") if p.stem != "__init__"}
         assert actual == expected
 

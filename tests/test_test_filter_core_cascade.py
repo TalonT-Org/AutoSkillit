@@ -87,6 +87,7 @@ class TestModuleCascadeCore:
             "_type_plugin_source",
             "kitchen_state",
             "readiness",
+            "session_provenance",
             "session_registry",
             "tool_sequence_analysis",
         }

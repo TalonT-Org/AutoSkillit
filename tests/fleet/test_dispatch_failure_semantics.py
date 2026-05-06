@@ -155,7 +155,7 @@ class TestTimeoutPath:
 
     @pytest.mark.anyio
     async def test_timeout_envelope_includes_dispatch_metadata(self, tool_ctx, monkeypatch):
-        """Timeout envelope details includes dispatch_id, l3_session_id, and token_usage."""
+        """Timeout envelope includes dispatch_id, dispatched_session_id, and token_usage."""
         import dataclasses
 
         from tests.fakes import _DEFAULT_SKILL_RESULT
@@ -173,7 +173,7 @@ class TestTimeoutPath:
         result = await _run(tool_ctx)
         details = result.get("details", {})
         assert "dispatch_id" in details
-        assert details["l3_session_id"] == "sess-timeout-123"
+        assert details["dispatched_session_id"] == "sess-timeout-123"
         assert details["token_usage"] == {"input_tokens": 50}
 
     @pytest.mark.anyio

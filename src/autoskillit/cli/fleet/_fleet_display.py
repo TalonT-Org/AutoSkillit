@@ -123,7 +123,7 @@ def _build_status_rows(state: CampaignState) -> list[tuple[str, ...]]:
                 _humanize(tu.get("output_tokens", 0)),
                 _humanize(tu.get("cache_read_input_tokens", 0)),
                 _humanize(tu.get("cache_creation_input_tokens", 0)),
-                d.l3_session_log_dir or "-",
+                d.dispatched_session_log_dir or "-",
             )
         )
     totals = _aggregate_totals(state)

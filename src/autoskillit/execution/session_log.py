@@ -116,6 +116,7 @@ def flush_session_log(
     log_dir: str,
     cwd: str,
     kitchen_id: str = "",
+    caller_session_id: str = "",
     order_id: str = "",
     campaign_id: str = "",
     dispatch_id: str = "",
@@ -347,6 +348,7 @@ def flush_session_log(
         "campaign_id": campaign_id,
         "dispatch_id": dispatch_id,
         "github_api_requests": github_api_requests,
+        "caller_session_id": caller_session_id,
     }
     if versions is not None:
         effective_model_id = model_identifier or _primary_model_identifier(token_usage)
@@ -455,10 +457,28 @@ def flush_session_log(
         "github_api_requests": github_api_requests,
         "provider_used": provider_outcome.provider_used,
         "provider_fallback": provider_outcome.fallback_activated,
+        "caller_session_id": caller_session_id,
     }
     index_path = log_root / "sessions.jsonl"
     with index_path.open("a") as f:
         f.write(json.dumps(index_entry, sort_keys=True) + "\n")
+
+    # Co-write session provenance record
+    if cwd:
+        from autoskillit.core import ProvenanceRecord, write_provenance_record
+
+        write_provenance_record(
+            ProvenanceRecord(
+                session_id=session_id,
+                caller_session_id=caller_session_id,
+                kitchen_id=kitchen_id,
+                dispatch_id=dispatch_id,
+                recipe_name=recipe_identity.name,
+                step_name=step_name,
+                timestamp=start_ts or end_ts or "",
+            ),
+            project_dir=Path(cwd),
+        )
 
     # Retention: keep at most _MAX_SESSIONS session directories
     _enforce_retention(

@@ -55,6 +55,7 @@ from .runtime._linux_proc import is_session_alive as is_session_alive
 from .runtime._linux_proc import read_boot_id as read_boot_id
 from .runtime._linux_proc import read_starttime_ticks as read_starttime_ticks
 from .runtime.kitchen_state import KitchenMarker as KitchenMarker
+from .runtime.kitchen_state import find_caller_session_id as find_caller_session_id
 from .runtime.kitchen_state import get_state_dir as get_state_dir
 from .runtime.kitchen_state import is_marker_fresh as is_marker_fresh
 from .runtime.kitchen_state import read_marker as read_marker
@@ -62,6 +63,12 @@ from .runtime.kitchen_state import sweep_stale_markers as sweep_stale_markers
 from .runtime.readiness import cleanup_readiness_sentinel as cleanup_readiness_sentinel
 from .runtime.readiness import readiness_sentinel_path as readiness_sentinel_path
 from .runtime.readiness import write_readiness_sentinel as write_readiness_sentinel
+from .runtime.session_provenance import ProvenanceRecord as ProvenanceRecord
+from .runtime.session_provenance import provenance_path as provenance_path
+from .runtime.session_provenance import (
+    read_provenance_for_session as read_provenance_for_session,
+)
+from .runtime.session_provenance import write_provenance_record as write_provenance_record
 from .runtime.session_registry import bridge_claude_session_id as bridge_claude_session_id
 from .runtime.session_registry import read_registry as read_registry
 from .runtime.session_registry import registry_path as registry_path

@@ -8,13 +8,16 @@ changes:
     description: >
       DispatchRecord fields renamed from l2_* to l3_*.
       read_state falls back to old names for existing state files.
+      NOTE: l3_* fields were subsequently renamed to dispatched_* in 0.9.484
+      (see 0.9.483-to-0.9.484.yaml). The fallback chain is now:
+      dispatched_* → l3_* → l2_*.
     instruction: |
       No manual action required — read_state auto-migrates on read.
       After the first write-back, state files use new field names.
       Old field names: l2_session_id, l2_session_log_dir, l2_pid,
       l2_starttime_ticks, l2_boot_id.
-      New field names: l3_session_id, l3_session_log_dir, l3_pid,
-      l3_starttime_ticks, l3_boot_id.
+      New field names (0.9.484+): dispatched_session_id, dispatched_session_log_dir,
+      dispatched_pid, dispatched_starttime_ticks, dispatched_boot_id.
 
   - id: fleet-error-code-value-rename
     description: >

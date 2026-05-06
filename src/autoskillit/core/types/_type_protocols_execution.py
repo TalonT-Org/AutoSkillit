@@ -77,6 +77,7 @@ class HeadlessExecutor(Protocol):
         order_id: str = "",
         campaign_id: str = "",
         dispatch_id: str = "",
+        caller_session_id: str = "",
         project_dir: str = "",
         timeout: float | None = None,
         stale_threshold: float | None = None,

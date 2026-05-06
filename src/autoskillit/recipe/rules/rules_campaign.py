@@ -380,6 +380,32 @@ def _check_depends_on_acyclic(ctx: ValidationContext) -> list[RuleFinding]:
 
 
 @semantic_rule(
+    name="campaign-dispatch-depends-on-is-sequential",
+    description="Each dispatch's depends_on must have at most one entry (linear chain only)",
+    severity=Severity.ERROR,
+)
+def _check_campaign_dispatch_depends_on_is_sequential(ctx: ValidationContext) -> list[RuleFinding]:
+    if ctx.recipe.kind != RecipeKind.CAMPAIGN:
+        return []
+    findings: list[RuleFinding] = []
+    for d in ctx.recipe.dispatches:
+        if len(d.depends_on) > 1:
+            findings.append(
+                RuleFinding(
+                    rule="campaign-dispatch-depends-on-is-sequential",
+                    severity=Severity.ERROR,
+                    step_name="(top-level)",
+                    message=(
+                        f"Dispatch {d.name!r} has {len(d.depends_on)} entries in depends_on "
+                        f"({d.depends_on!r}). Campaign dispatches must form a linear chain: "
+                        "each dispatch may depend on at most one predecessor."
+                    ),
+                )
+            )
+    return findings
+
+
+@semantic_rule(
     name="campaign-task-non-empty",
     description="Each dispatch must have a non-empty task description",
     severity=Severity.ERROR,

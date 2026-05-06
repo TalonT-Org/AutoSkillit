@@ -74,6 +74,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_research_recipe_diag.py` | Tests for research recipe diagnostic output |
 | `test_research_review_recipe.py` | Tests for research-review sub-recipe structure |
 | `test_research_stage_data_step.py` | Tests for stage-data step in research recipes |
+| `test_research_sub_recipes.py` | Tests for research sub-recipe YAML structure (design, implement, review, archive) |
 | `test_resolve_ci_routing_invariant.py` | Tests for CI routing invariant in resolve steps |
 | `test_review_loop_routing_integration.py` | Integration tests for review loop routing |
 | `test_rule_decomposition.py` | Tests for semantic rule decomposition structure |

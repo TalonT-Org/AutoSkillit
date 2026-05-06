@@ -541,7 +541,7 @@ SOUS_CHEF_MANDATORY_SECTIONS: tuple[str, ...] = (
     "NARRATION SUPPRESSION",
 )
 
-# Strict subset of SOUS_CHEF_MANDATORY_SECTIONS delivered to L2 food truck sessions.
+# Strict subset of SOUS_CHEF_MANDATORY_SECTIONS delivered to L3 food truck sessions.
 SOUS_CHEF_L3_SECTIONS: tuple[str, ...] = (
     "CONTEXT LIMIT ROUTING",
     "STEP NAME IMMUTABILITY",

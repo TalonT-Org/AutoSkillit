@@ -69,21 +69,52 @@ def load_ml_sub_area_folding() -> list[MLSubAreaFoldingEntry]:
     yaml_path = BUNDLED_METHODOLOGY_TRADITIONS_DIR / "_ml_sub_area_folding.yaml"
     data = load_yaml(yaml_path)
     entries: list[MLSubAreaFoldingEntry] = []
-    for item in data.get("ml_sub_area_folding", []):
-        alternates = tuple(
-            AlternateParentDef(
-                parent=a["parent"],
-                trigger_keywords=tuple(a["trigger_keywords"]),
-                constraint=a.get("constraint"),
+    for i, item in enumerate(data.get("ml_sub_area_folding", [])):
+        if not isinstance(item, dict):
+            raise TypeError(
+                f"ml_sub_area_folding[{i}] must be a dict, got {type(item).__name__}: {yaml_path}"
             )
-            for a in item.get("alternate_parents", [])
-        )
+        for key in ("sub_area", "display_name", "primary_parent"):
+            if not isinstance(item.get(key), str) or not item[key]:
+                raise TypeError(
+                    f"ml_sub_area_folding[{i}] '{key}' must be a non-empty string: {yaml_path}"
+                )
+        alternates_raw = item.get("alternate_parents", [])
+        if not isinstance(alternates_raw, list):
+            raise TypeError(
+                f"ml_sub_area_folding[{i}] 'alternate_parents' must be a list, "
+                f"got {type(alternates_raw).__name__}: {yaml_path}"
+            )
+        alternates: list[AlternateParentDef] = []
+        for j, a in enumerate(alternates_raw):
+            if not isinstance(a, dict):
+                raise TypeError(
+                    f"ml_sub_area_folding[{i}] alternate_parents[{j}] must be a dict, "
+                    f"got {type(a).__name__}: {yaml_path}"
+                )
+            if not isinstance(a.get("parent"), str) or not a["parent"]:
+                raise TypeError(
+                    f"ml_sub_area_folding[{i}] alternate_parents[{j}] 'parent' "
+                    f"must be a non-empty string: {yaml_path}"
+                )
+            if not isinstance(a.get("trigger_keywords"), list):
+                raise TypeError(
+                    f"ml_sub_area_folding[{i}] alternate_parents[{j}] 'trigger_keywords' "
+                    f"must be a list: {yaml_path}"
+                )
+            alternates.append(
+                AlternateParentDef(
+                    parent=a["parent"],
+                    trigger_keywords=tuple(a["trigger_keywords"]),
+                    constraint=a.get("constraint"),
+                )
+            )
         entries.append(
             MLSubAreaFoldingEntry(
                 sub_area=item["sub_area"],
                 display_name=item["display_name"],
                 primary_parent=item["primary_parent"],
-                alternate_parents=alternates,
+                alternate_parents=tuple(alternates),
             )
         )
     return entries
@@ -114,6 +145,8 @@ def resolve_venue_appendices(
     2. For each detected sub-area, resolve conditional parent
     3. Collect venue appendices from resolved parent tradition
     """
+    import warnings
+
     folding = load_ml_sub_area_folding()
     traditions = {s.name: s for s in load_all_methodology_traditions(project_dir)}
 
@@ -122,6 +155,11 @@ def resolve_venue_appendices(
         parent, re_routed = _resolve_conditional_parent(entry, plan_text)
         spec = traditions.get(parent)
         if spec is None:
+            warnings.warn(
+                f"resolve_venue_appendices: tradition '{parent}' referenced by sub-area "
+                f"'{entry.sub_area}' not found — skipping",
+                stacklevel=2,
+            )
             continue
         for appendix in spec.venue_specific_appendices:
             if appendix.sub_area == entry.sub_area:

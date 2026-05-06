@@ -273,3 +273,20 @@ def test_provider_profile_in_private_env_vars() -> None:
     from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS
 
     assert "AUTOSKILLIT_PROVIDER_PROFILE" in AUTOSKILLIT_PRIVATE_ENV_VARS
+
+
+def test_headless_tools_contains_expected_names():
+    from autoskillit.core.types import HEADLESS_TOOLS
+
+    assert HEADLESS_TOOLS == {"test_check"}
+
+
+def test_free_range_tools_contains_expected_names():
+    from autoskillit.core.types import FREE_RANGE_TOOLS
+
+    assert FREE_RANGE_TOOLS == {
+        "open_kitchen",
+        "close_kitchen",
+        "disable_quota_guard",
+        "reload_session",
+    }

@@ -282,6 +282,9 @@ class TestDocstringSemantics:
 
         from autoskillit.server import mcp
 
+        mcp.enable(tags={"fleet"})
+        mcp.enable(tags={"fleet-dispatch"})
+
         async with Client(mcp) as client:
             tools = await client.list_tools()
         return {t.name: t for t in tools}
@@ -426,6 +429,9 @@ class TestLoadSkillScriptFailurePredicates:
         from fastmcp.client import Client
 
         from autoskillit.server import mcp
+
+        mcp.enable(tags={"fleet"})
+        mcp.enable(tags={"fleet-dispatch"})
 
         async with Client(mcp) as client:
             tools = await client.list_tools()

@@ -15,9 +15,6 @@ class TestResearchArchiveRecipe:
 
     # ── Header ──────────────────────────────────────────────────────
 
-    def test_loads_without_exception(self, recipe) -> None:
-        assert recipe is not None
-
     def test_validates_with_zero_errors(self, recipe) -> None:
         errors = validate_recipe(recipe)
         assert errors == [], f"Validation errors: {errors}"
@@ -161,7 +158,7 @@ class TestResearchArchiveRecipe:
     def test_patch_token_summary_routes_to_complete(self, recipe) -> None:
         step = recipe.steps["patch_token_summary"]
         assert step.on_success == "research_complete"
-        assert step.on_failure == "research_complete"
+        assert step.on_failure == "escalate_stop"
 
     # ── Terminal stops ──────────────────────────────────────────────
 
@@ -174,6 +171,14 @@ class TestResearchArchiveRecipe:
         step = recipe.steps["escalate_stop"]
         assert step.action == "stop"
         assert len(step.message) >= 10
+
+    def test_escalate_stop_is_reachable(self, recipe) -> None:
+        routers = [
+            name
+            for name, step in recipe.steps.items()
+            if step.on_failure == "escalate_stop" or step.on_success == "escalate_stop"
+        ]
+        assert routers, "escalate_stop must be reachable from at least one step"
 
     # ── Kitchen rules ───────────────────────────────────────────────
 

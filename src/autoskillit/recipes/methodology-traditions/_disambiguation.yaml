@@ -65,6 +65,7 @@ cross_tradition_overlaps:
     trigger_traditions: [method_comparison_benchmarking, systematic_synthesis]
     primary_tradition: method_comparison_benchmarking
     applied_union_rules: [PRISMA_curation_phase]
+    overrides_primary: true
 
   - name: srqr_consort_parallel
     order: 9

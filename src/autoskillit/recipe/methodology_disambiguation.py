@@ -5,11 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from autoskillit.core import load_yaml
+from autoskillit.core import load_yaml, pkg_root
 
-BUNDLED_METHODOLOGY_TRADITIONS_DIR: Path = (
-    Path(__file__).parent.parent / "recipes" / "methodology-traditions"
-)
+BUNDLED_METHODOLOGY_TRADITIONS_DIR: Path = pkg_root() / "recipes" / "methodology-traditions"
 
 
 @dataclass(frozen=True)
@@ -39,6 +37,7 @@ class CrossTraditionOverlapDef:
     trigger_traditions: frozenset[str]
     primary_tradition: str
     applied_union_rules: tuple[str, ...]
+    overrides_primary: bool = False
 
 
 @dataclass(frozen=True)
@@ -88,6 +87,7 @@ def load_disambiguation_rules() -> tuple[
                 trigger_traditions=frozenset(o["trigger_traditions"]),
                 primary_tradition=o["primary_tradition"],
                 applied_union_rules=tuple(o["applied_union_rules"]),
+                overrides_primary=bool(o.get("overrides_primary", False)),
             )
         )
 
@@ -167,7 +167,7 @@ def disambiguate(
         if overlap.trigger_traditions.issubset(candidate_names):
             union_rules.extend(overlap.applied_union_rules)
             trace_parts.append(f"overlap_{overlap.name}")
-            if primary is None:
+            if primary is None or overlap.overrides_primary:
                 primary = overlap.primary_tradition
                 trace_parts.append(f"overlap_primary_{overlap.name}")
 

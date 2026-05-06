@@ -55,6 +55,7 @@ def test_retry_reason_values():
         RetryReason.STALE,
         RetryReason.CLONE_CONTAMINATION,
         RetryReason.THINKING_STALL,
+        RetryReason.IDLE_STALL,
     }
     assert RetryReason.NONE.value == "none"
 

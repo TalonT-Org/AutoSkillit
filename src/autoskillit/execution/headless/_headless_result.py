@@ -228,12 +228,46 @@ def _build_skill_result(
         return _apply_budget_guard(stale_sr, skill_command, audit, max_consecutive_retries)
 
     if result.termination == TerminationReason.IDLE_STALL:
+        idle_session = parse_session_result(result.stdout)
+        idle_returncode = result.returncode if result.returncode is not None else -1
+        can_attempt_idle_stall_recovery = (
+            idle_session.subtype == CliSubtype.SUCCESS
+            and idle_session.result.strip()
+            and not idle_session.is_error
+        )
+        if can_attempt_idle_stall_recovery:
+            success = _compute_success(
+                idle_session,
+                idle_returncode,
+                TerminationReason.COMPLETED,
+                completion_marker=completion_marker,
+                channel_confirmation=result.channel_confirmation,
+            )
+            if success:
+                logger.warning(
+                    "Session idle-stalled but stdout contained a valid result; recovering"
+                )
+                return SkillResult(
+                    success=True,
+                    result=_truncate(idle_session.agent_result),
+                    session_id=idle_session.session_id or _resolve_skill_session_id(None, result),
+                    subtype="recovered_from_idle_stall",
+                    is_error=False,
+                    exit_code=idle_returncode,
+                    needs_retry=False,
+                    retry_reason=RetryReason.NONE,
+                    stderr=result.stderr if result.stderr else "",
+                    token_usage=idle_session.token_usage,
+                    last_stop_reason=idle_session.last_stop_reason,
+                    lifespan_started=idle_session.lifespan_started,
+                    provider_used=provider_used,
+                )
         _capture_failure(
             skill_command,
             exit_code=result.returncode if result.returncode is not None else -1,
             subtype="idle_stall",
             needs_retry=True,
-            retry_reason=RetryReason.STALE,
+            retry_reason=RetryReason.IDLE_STALL,
             stderr=result.stderr if result.stderr else "",
             audit=audit,
         )
@@ -246,14 +280,15 @@ def _build_skill_result(
                 "Session killed: stdout idle for configured threshold (no output growth). "
                 "Partial progress may have been made. Retry to continue."
             ),
-            session_id=_resolve_skill_session_id(None, result),
+            session_id=idle_session.session_id or _resolve_skill_session_id(None, result),
             subtype="idle_stall",
-            is_error=True,
+            is_error=False,
             exit_code=-1,
             needs_retry=True,
-            retry_reason=RetryReason.STALE,
+            retry_reason=RetryReason.IDLE_STALL,
             stderr="",
-            token_usage=None,
+            token_usage=idle_session.token_usage,
+            lifespan_started=idle_session.lifespan_started,
             provider_used=provider_used,
         )
         return _apply_budget_guard(idle_sr, skill_command, audit, max_consecutive_retries)

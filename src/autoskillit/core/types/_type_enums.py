@@ -52,6 +52,7 @@ class RetryReason(StrEnum):
     )
     CLONE_CONTAMINATION = "clone_contamination"
     THINKING_STALL = "thinking_stall"  # final turn: thinking blocks only, no text or tool output
+    IDLE_STALL = "idle_stall"  # stdout idle watchdog kill — session may have partial progress
 
 
 class InfraExitCategory(StrEnum):

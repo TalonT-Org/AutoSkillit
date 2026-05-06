@@ -62,3 +62,26 @@ def test_plan_visualization_skill_dir_exists() -> None:
     """src/autoskillit/skills_extended/plan-visualization/SKILL.md must exist."""
     skill_path = pkg_root() / "skills_extended" / "plan-visualization" / "SKILL.md"
     assert skill_path.exists(), f"plan-visualization skill directory not found at {skill_path}"
+
+
+def test_tier_c_table_removed_from_skill_md() -> None:
+    """Old Tier-C target_domain routing table must be removed from SKILL.md."""
+    path = pkg_root() / "skills_extended" / "plan-visualization" / "SKILL.md"
+    content = path.read_text()
+    assert "| nlp | vis-lens-methodology-norms |" not in content
+    assert "| cv | vis-lens-methodology-norms |" not in content
+    assert "| rl | vis-lens-temporal |" not in content
+    tier_c_part = content.split("Tier C")[1] if "Tier C" in content else ""
+    assert "target_domain" not in tier_c_part
+
+
+def test_tier_c_methodology_router_present() -> None:
+    """New two-stage methodology router keywords must be present in SKILL.md."""
+    path = pkg_root() / "skills_extended" / "plan-visualization" / "SKILL.md"
+    content = path.read_text()
+    assert "detection_keywords" in content
+    assert "candidate_set" in content
+    assert "precedence_trace" in content
+    assert "stage1_single_match" in content
+    assert "stage1_no_match_fallback" in content
+    assert "stage2_tiebreak" in content

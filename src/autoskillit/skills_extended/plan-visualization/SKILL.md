@@ -87,13 +87,43 @@ Experiment-type table (use when no override fires or to fill second Tier-B slot)
 
 Cap Tier B at 2 lenses total (overrides count toward this cap).
 
-**Tier C (0–1 based on target_domain):**
-| target_domain | Lens |
-|---|---|
-| nlp | vis-lens-methodology-norms |
-| cv | vis-lens-methodology-norms |
-| rl | vis-lens-temporal |
-| (others / general) | — (skip Tier C) |
+**Tier C (0–1 based on methodology tradition detection):**
+
+Tier C selects `vis-lens-methodology-norms` when the experiment plan's research
+methodology is identifiable from the 12 bundled methodology traditions.
+
+**Stage 1 — Deterministic keyword match:**
+1. Load all methodology traditions from `recipes/methodology-traditions/*.yaml`
+2. For each tradition, count how many of its `detection_keywords` appear in the
+   experiment plan text (case-insensitive, word-boundary matching)
+3. Build `candidate_set` = traditions with ≥ 2 keyword matches
+4. Branch on `len(candidate_set)`:
+
+| Candidates | Action | `precedence_trace` |
+|---|---|---|
+| 0 | Skip Tier C entirely | `stage1_no_match_fallback` |
+| 1 | Use that tradition as `primary_tradition` | `stage1_single_match` |
+| ≥ 2 | Proceed to Stage 2 | — |
+
+**Stage 2 — LLM arbitration (only when ≥ 2 candidates):**
+1. If any registered `UnionRuleDef` covers the candidate set, apply it:
+   select `resolved_tradition`, record rule name in `applied_union_rules`,
+   set `precedence_trace = "stage2_tiebreak_by_rule_{rule_name}"`
+2. Otherwise, select among candidates by analyzing the plan's primary research
+   question and methodology at temperature 0. Prefer the tradition whose
+   mandatory figures are most relevant to the stated research design.
+   Set `precedence_trace = "stage2_tiebreak_by_methodology_fit"`
+
+**Emit routing triple** (include as a fenced yaml block in the vis-lens context file):
+```yaml
+primary_tradition: <tradition_slug>
+applied_union_rules: [<rule_name>, ...]
+precedence_trace: "<trace_value>"
+candidate_set: [<tradition_slugs>]
+```
+
+When `primary_tradition` is set, add `vis-lens-methodology-norms` to `selected_lenses`
+and write the `tradition_slug` and routing triple into its context file (Step 2).
 
 Only add Tier C lens if it is not already in Tier A or Tier B.
 
@@ -133,6 +163,19 @@ Template for each context file:
 ## Expected Data Outputs
 {List the files or data structures the experiment will produce, from the plan's
 data_manifest or results/ section if available}
+```
+
+When the context file is for `vis-lens-methodology-norms`, append the following
+section to the template above:
+
+```
+## Methodology Tradition
+tradition_slug: {primary_tradition from Tier-C routing triple}
+routing_triple:
+  primary_tradition: {slug}
+  applied_union_rules: [{rules}]
+  precedence_trace: {trace}
+  candidate_set: [{candidates}]
 ```
 
 ### Step 3 — Run Vis-Lens Skills in Parallel

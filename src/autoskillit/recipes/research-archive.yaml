@@ -49,8 +49,8 @@ steps:
     note: >
       Gate step for the archival phase. Routes to artifact extraction when
       a PR URL is available, otherwise skips directly to patch_token_summary.
-      Uses inputs.pr_url (not context.pr_url) since pr_url is an ingredient
-      in this standalone recipe.
+      Uses inputs.pr_url since pr_url is an ingredient (not a captured
+      context value) in this standalone recipe.
 
   capture_experiment_branch:
     tool: run_cmd

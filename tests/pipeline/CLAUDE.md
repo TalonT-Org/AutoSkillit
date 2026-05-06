@@ -18,3 +18,4 @@ Audit log, gate state, token tracking, and PR-gate tests.
 | `test_timings.py` | Tests for autoskillit.pipeline.timings — pipeline step timing |
 | `test_tokens_core.py` | Tests for pipeline.tokens — TokenEntry, DefaultTokenLog core, and log-dir loading |
 | `test_tokens_filters.py` | Tests for pipeline.tokens — cwd filter, step name normalization, order/campaign ID scoping |
+| `test_tokens_model.py` | Tests for pipeline.tokens — model field capture, compute_model_totals, and load_from_log_dir model reading |

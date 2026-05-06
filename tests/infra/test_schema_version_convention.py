@@ -115,8 +115,8 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/execution/session_log.py", 304),
     ("src/autoskillit/execution/session_log.py", 366),
     ("src/autoskillit/execution/session_log.py", 370),
-    ("src/autoskillit/execution/session_log.py", 398),
-    ("src/autoskillit/execution/session_log.py", 401),
+    ("src/autoskillit/execution/session_log.py", 399),
+    ("src/autoskillit/execution/session_log.py", 402),
     # migration/store.py — failure store dicts
     ("src/autoskillit/migration/store.py", 54),
     ("src/autoskillit/migration/store.py", 64),
@@ -132,7 +132,7 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/server/tools/tools_kitchen.py", 112),
     ("src/autoskillit/server/tools/tools_kitchen.py", 552),
     # tools_status.py — mcp_data dict
-    ("src/autoskillit/server/tools/tools_status.py", 486),
+    ("src/autoskillit/server/tools/tools_status.py", 495),
     # tools_github.py — bug report dict
     ("src/autoskillit/server/tools/tools_github.py", 308),
     # _hooks.py — settings.json dict (co-owned with Claude CLI)

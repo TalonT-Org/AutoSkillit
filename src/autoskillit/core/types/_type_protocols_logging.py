@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
-from ._type_results import FailureRecord
+from ._type_results import FailureRecord, ModelTotalEntry
 
 __all__ = [
     "AuditLog",
@@ -66,6 +66,8 @@ class TokenLog(Protocol):
     def get_report(self, *, order_id: str = "") -> list[dict[str, Any]]: ...
 
     def compute_total(self, *, order_id: str = "") -> dict[str, Any]: ...
+
+    def compute_model_totals(self, *, order_id: str = "") -> list[ModelTotalEntry]: ...
 
     def clear(self) -> None: ...
 

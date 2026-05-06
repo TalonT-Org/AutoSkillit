@@ -38,6 +38,7 @@ __all__ = [
     "RunCmdResult",
     "TestCheckResult",
     "MergeWorktreeResult",
+    "ModelTotalEntry",
     "TokenSummaryResult",
     "TimingSummaryResult",
     "KitchenStatusResult",
@@ -485,12 +486,25 @@ class MergeWorktreeResult(TypedDict, total=False):
     poisoned_installs: list[str]
 
 
+class ModelTotalEntry(TypedDict):
+    """Per-model aggregate token counts produced by compute_model_totals()."""
+
+    model: str
+    step_count: int
+    input_tokens: int
+    output_tokens: int
+    cache_creation_input_tokens: int
+    cache_read_input_tokens: int
+    elapsed_seconds: float
+
+
 class TokenSummaryResult(TypedDict, total=False):
     """Typed return contract for get_token_summary (JSON payload path)."""
 
     steps: list[dict[str, Any]]
     total: dict[str, Any]
     mcp_responses: dict[str, Any]
+    model_totals: list[ModelTotalEntry]
     success: bool
     error: str
 
@@ -535,6 +549,7 @@ class TokenUsageFileEntry(TypedDict):
     loc_insertions: int
     loc_deletions: int
     provider_used: str
+    model_identifier: str
 
 
 class SessionIndexEntry(TypedDict):

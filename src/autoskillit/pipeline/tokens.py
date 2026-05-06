@@ -14,9 +14,9 @@ import re
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
-from autoskillit.core import get_logger
+from autoskillit.core import ModelTotalEntry, get_logger
 from autoskillit.pipeline.audit import _iter_session_log_entries
 
 logger = get_logger(__name__)
@@ -44,11 +44,30 @@ def canonical_step_name(step_name: str) -> str:
     return re.sub(r"-\d+$", "", step_name)
 
 
+def _primary_model(token_usage: dict[str, Any]) -> str:
+    """Return the model name with the most total tokens from model_breakdown."""
+    mb = token_usage.get("model_breakdown", {})
+    if not isinstance(mb, dict) or not mb:
+        return ""
+    for m, v in mb.items():
+        if not isinstance(v, dict):
+            logger.warning("Unexpected model_breakdown entry type for %r: %r", m, type(v).__name__)
+    return max(
+        mb,
+        key=lambda m: (
+            sum(v for v in mb[m].values() if isinstance(v, (int, float)))
+            if isinstance(mb[m], dict)
+            else 0
+        ),
+    )
+
+
 @dataclass
 class TokenEntry:
     """Accumulated token usage for a single YAML step name."""
 
     step_name: str
+    model: str = ""
     input_tokens: int = 0
     output_tokens: int = 0
     cache_creation_input_tokens: int = 0
@@ -106,6 +125,9 @@ class DefaultTokenLog:
         if key not in self._entries:
             self._entries[key] = TokenEntry(step_name=canonical)
         e = self._entries[key]
+        _model = _primary_model(token_usage)
+        if _model and not e.model:
+            e.model = _model
         e.input_tokens += token_usage.get("input_tokens", 0)
         e.output_tokens += token_usage.get("output_tokens", 0)
         e.cache_creation_input_tokens += token_usage.get("cache_creation_input_tokens", 0)
@@ -151,6 +173,8 @@ class DefaultTokenLog:
             if step not in aggregated:
                 aggregated[step] = TokenEntry(step_name=step)
             agg = aggregated[step]
+            if e.model and not agg.model:
+                agg.model = e.model
             agg.input_tokens += e.input_tokens
             agg.output_tokens += e.output_tokens
             agg.cache_creation_input_tokens += e.cache_creation_input_tokens
@@ -195,6 +219,36 @@ class DefaultTokenLog:
                 total["peak_context"] = entry.peak_context
             total["turn_count"] += entry.turn_count
         return total
+
+    def compute_model_totals(self, *, order_id: str = "") -> list[ModelTotalEntry]:
+        """Compute per-model aggregate token counts across all steps."""
+        model_data: dict[str, dict[str, Any]] = {}
+        for (oid, _step), entry in self._entries.items():
+            if order_id and oid != order_id:
+                continue
+            model = entry.model or "unknown"
+            if model not in model_data:
+                model_data[model] = {
+                    "model": model,
+                    "_steps": set(),
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                    "elapsed_seconds": 0.0,
+                }
+            md = model_data[model]
+            md["_steps"].add(entry.step_name)
+            md["input_tokens"] += entry.input_tokens
+            md["output_tokens"] += entry.output_tokens
+            md["cache_creation_input_tokens"] += entry.cache_creation_input_tokens
+            md["cache_read_input_tokens"] += entry.cache_read_input_tokens
+            md["elapsed_seconds"] += entry.elapsed_seconds
+        result = []
+        for md in model_data.values():
+            md["step_count"] = len(md.pop("_steps"))
+            result.append(md)
+        return cast(list[ModelTotalEntry], result)
 
     def clear(self) -> None:
         """Reset the store."""
@@ -250,6 +304,9 @@ class DefaultTokenLog:
             if key not in self._entries:
                 self._entries[key] = TokenEntry(step_name=step_name)
             e = self._entries[key]
+            _model = data.get("model_identifier", "")
+            if _model and not e.model:
+                e.model = _model
             e.input_tokens += data.get("input_tokens", 0)
             e.output_tokens += data.get("output_tokens", 0)
             e.cache_creation_input_tokens += data.get("cache_creation_input_tokens", 0)

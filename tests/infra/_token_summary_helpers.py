@@ -66,7 +66,7 @@ def _write_sessions(log_root: Path, entries: list[dict]) -> None:
         dir_name = entry["dir_name"]
         session_dir = log_root / "sessions" / dir_name
         session_dir.mkdir(parents=True, exist_ok=True)
-        token_data = {
+        token_data: dict = {
             "step_name": entry.get("step_name", "unknown"),
             "input_tokens": entry.get("input_tokens", 1000),
             "output_tokens": entry.get("output_tokens", 500),
@@ -78,4 +78,6 @@ def _write_sessions(log_root: Path, entries: list[dict]) -> None:
             "peak_context": entry.get("peak_context", 0),
             "turn_count": entry.get("turn_count", 0),
         }
+        if "model_identifier" in entry:
+            token_data["model_identifier"] = entry["model_identifier"]
         (session_dir / "token_usage.json").write_text(json.dumps(token_data))

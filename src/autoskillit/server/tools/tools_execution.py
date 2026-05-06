@@ -8,6 +8,8 @@ import json
 import os
 import re
 import time
+import types
+import typing
 from collections.abc import Callable
 from pathlib import Path
 
@@ -35,6 +37,55 @@ from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._subprocess import _run_subprocess
 
 logger = get_logger(__name__)
+
+
+def _coerce_scalar(val: object, annotation: object) -> object:
+    """Coerce val to match the annotated type.
+
+    Handles str, int, float, and Optional[T] / T | None variants.
+    Skips containers, unions, bool, and unconvertible values.
+    """
+    import typing
+
+    actual = annotation
+
+    # Unwrap X | None (types.UnionType — bare union syntax, Python 3.10+)
+    if isinstance(annotation, types.UnionType):
+        non_none = [a for a in annotation.__args__ if a is not type(None) and a is not None]
+        if len(non_none) == 1:
+            actual = non_none[0]
+    # Unwrap Optional[X] / Union[X, None] (typing.Union with __origin__)
+    elif hasattr(annotation, "__origin__") and hasattr(annotation, "__args__"):
+        ann: typing.Any = annotation  # type: ignore[name-defined]
+        origin = ann.__origin__
+        args = ann.__args__
+        if origin is typing.Union:
+            non_none = [a for a in args if a is not type(None) and a is not None]
+            if len(non_none) == 1:
+                actual = non_none[0]
+
+    # str ← int/float
+    if actual is str and not isinstance(val, str):
+        if isinstance(val, (int, float)):
+            return str(val)
+        return val
+    # int ← str (try/except for unconvertible)
+    if actual is int and not isinstance(val, int):
+        if isinstance(val, str):
+            try:
+                return int(val)
+            except ValueError:
+                return val
+        return val
+    # float ← str/int (try/except for unconvertible)
+    if actual is float and not isinstance(val, float):
+        if isinstance(val, (str, int)):
+            try:
+                return float(val)
+            except ValueError:
+                return val
+        return val
+    return val
 
 
 async def _import_and_call(
@@ -75,6 +126,10 @@ async def _import_and_call(
         return {"success": False, "error": f"{dotted_path!r} is not callable"}
 
     sig = inspect.signature(func)
+    try:
+        type_hints = typing.get_type_hints(func)
+    except Exception:
+        type_hints = {}
     coerced: dict[str, object] = {}
     for key, val in args.items():
         if val is None and key in sig.parameters:
@@ -87,6 +142,19 @@ async def _import_and_call(
                     default=repr(param.default),
                 )
                 coerced[key] = param.default
+                continue
+        if val is not None and key in type_hints:
+            annotation = type_hints[key]
+            coerced_val = _coerce_scalar(val, annotation)
+            if coerced_val is not val:
+                logger.warning(
+                    "run_python type coerced",
+                    callable=dotted_path,
+                    arg=key,
+                    from_type=type(val).__name__,
+                    to_type=type(coerced_val).__name__,
+                )
+                coerced[key] = coerced_val
                 continue
         coerced[key] = val
     args = coerced

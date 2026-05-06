@@ -27,7 +27,7 @@ _MCP_RETRY_INSTRUCTION: str = (
 
 
 def _read_full_sous_chef() -> str:
-    """Read the full sous-chef SKILL.md for injection into L2/L3 orchestration sessions."""
+    """Read the full sous-chef SKILL.md for injection into L1/L2 orchestration sessions."""
     path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
     try:
         return path.read_text()
@@ -156,7 +156,7 @@ When you reach a dispatch with `gate: confirm` in the manifest:
 
 In the campaign summary, for gate dispatch entries:
 - Set `status` to `success` or `failure` based on user response.
-- Set `l3_session_id` to `""` (no L2 session was spawned).
+- Set `l3_session_id` to `""` (no food truck session was spawned).
 - Set `elapsed_seconds` to the wall-clock time for the question/response exchange.
 - Set all `token_usage` fields to 0.
 """

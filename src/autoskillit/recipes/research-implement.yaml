@@ -99,8 +99,6 @@ steps:
       becomes an independently plannable implementation unit. Typical
       decomposition: infrastructure/logging -> data generators ->
       plotting/analysis scripts -> experiment implementation.
-      ITERATION: The agent maintains a phase queue from group_files.
-      For each phase, run plan_phase then implement_phase before advancing.
 
   plan_phase:
     tool: run_skill
@@ -195,6 +193,7 @@ steps:
     on_success: generate_report
     on_failure: troubleshoot_run_failure
     on_exhausted: ensure_results
+    on_context_limit: ensure_results
 
   troubleshoot_run_failure:
     tool: run_skill
@@ -230,6 +229,7 @@ steps:
       experiment_results: "${{ result.results_path }}"
     on_success: run_experiment
     on_failure: ensure_results
+    on_context_limit: ensure_results
 
   ensure_results:
     tool: run_python
@@ -296,13 +296,13 @@ steps:
       verdict: "${{ result.verdict }}"
       fixes_applied: "${{ result.fixes_applied }}"
     on_result:
-      - when: "${{ result.verdict }} == 'real_fix'"
+      - when: "${{ context.verdict }} == 'real_fix'"
         route: retest
-      - when: "${{ result.verdict }} == 'already_green'"
+      - when: "${{ context.verdict }} == 'already_green'"
         route: retest
-      - when: "${{ result.verdict }} == 'flake_suspected'"
+      - when: "${{ context.verdict }} == 'flake_suspected'"
         route: retest
-      - when: "${{ result.verdict }} == 'ci_only_failure'"
+      - when: "${{ context.verdict }} == 'ci_only_failure'"
         route: escalate_stop
     on_failure: escalate_stop
     on_context_limit: retest

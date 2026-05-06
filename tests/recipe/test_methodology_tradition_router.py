@@ -38,8 +38,8 @@ TRADITION_FIXTURES: list[tuple[str, str]] = [
     ),
     (
         "prediction_model_validation",
-        "External validation of the clinical prediction rule was performed using TRIPOD guidelines, "
-        "assessing calibration and discrimination via c-statistic.",
+        "External validation of the clinical prediction rule was performed "
+        "using TRIPOD guidelines, assessing calibration and discrimination via c-statistic.",
     ),
     (
         "simulation_modeling_tradition",
@@ -48,8 +48,8 @@ TRADITION_FIXTURES: list[tuple[str, str]] = [
     ),
     (
         "measurement_instrument_validation_tradition",
-        "Measurement properties were assessed using COSMIN criteria, evaluating internal consistency "
-        "via Cronbach alpha and test-retest reliability.",
+        "Measurement properties were assessed using COSMIN criteria, "
+        "evaluating internal consistency via Cronbach alpha and test-retest reliability.",
     ),
     (
         "quality_improvement",
@@ -99,7 +99,7 @@ def test_no_tradition_detected():
 
 def test_multi_match_returns_candidates():
     plan_text = (
-        "This systematic review and meta-analysis includes randomized controlled trials "
+        "This systematic review and meta-analysis includes randomized controlled trial "
         "following PRISMA and CONSORT guidelines with forest plots."
     )
     result = classify_methodology(plan_text)
@@ -112,7 +112,7 @@ def test_multi_match_returns_candidates():
 
 def test_multi_match_resolved_by_priority():
     plan_text = (
-        "This systematic review and meta-analysis includes randomized controlled trials "
+        "This systematic review and meta-analysis includes randomized controlled trial "
         "following PRISMA and CONSORT guidelines with forest plots."
     )
     result = classify_methodology(plan_text, resolve_by_priority=True)
@@ -128,7 +128,7 @@ def test_union_rule_applied():
         resolved_tradition="systematic_synthesis",
     )
     plan_text = (
-        "This systematic review and meta-analysis includes randomized controlled trials "
+        "This systematic review and meta-analysis includes randomized controlled trial "
         "following PRISMA and CONSORT guidelines."
     )
     result = classify_methodology(plan_text, union_rules=[rule])

@@ -129,6 +129,9 @@ async def _import_and_call(
     try:
         type_hints = typing.get_type_hints(func)
     except Exception:
+        logger.warning(
+            "get_type_hints failed, skipping coercion", callable=dotted_path, exc_info=True
+        )
         type_hints = {}
     coerced: dict[str, object] = {}
     for key, val in args.items():

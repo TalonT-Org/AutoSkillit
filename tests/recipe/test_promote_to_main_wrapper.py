@@ -72,3 +72,8 @@ def test_emit_result_echoes_all_tokens() -> None:
 
 def test_requires_packs_declared() -> None:
     assert _load().requires_packs == ["github"]
+
+
+def test_kind_is_food_truck() -> None:
+    recipe = _load()
+    assert recipe.kind == "food-truck"

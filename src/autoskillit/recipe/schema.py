@@ -20,6 +20,12 @@ CAMPAIGN_REF_RE: Final = re.compile(r"\$\{\{\s*campaign\.(\w+)\s*\}\}")
 class RecipeKind(StrEnum):
     STANDARD = "standard"
     CAMPAIGN = "campaign"
+    FOOD_TRUCK = "food-truck"
+
+
+NON_INTERACTIVE_KINDS: Final[frozenset[RecipeKind]] = frozenset(
+    {RecipeKind.CAMPAIGN, RecipeKind.FOOD_TRUCK}
+)
 
 
 @dataclass

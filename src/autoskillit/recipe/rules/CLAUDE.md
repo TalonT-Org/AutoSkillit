@@ -1,6 +1,6 @@
 # rules/
 
-Semantic validation rule modules for recipe analysis (26 rule files).
+Semantic validation rule modules for recipe analysis (27 rule files).
 
 ## Files
 
@@ -17,6 +17,7 @@ Semantic validation rule modules for recipe analysis (26 rule files).
 | `rules_contracts.py` | Skill contract completeness rules |
 | `rules_dataflow.py` | Dataflow analysis: pipeline-forbidden tool usage, output chaining |
 | `rules_features.py` | Feature-gated tool/skill reference validation |
+| `rules_food_truck.py` | Food-truck recipe validation: sentinel stop step requirement |
 | `rules_fixing.py` | Conditional-write skill must gate on declared verdict output |
 | `rules_graph.py` | Graph/routing analysis rules |
 | `rules_inline_script.py` | Detects inline shell scripts in `run_cmd` cmd fields |
@@ -36,4 +37,4 @@ Semantic validation rule modules for recipe analysis (26 rule files).
 
 ## Architecture Notes
 
-Side-effect registration: callers import the package to trigger `@semantic_rule` decorator registration of all 26 rule modules. Each rule receives a `ValidationContext` argument. No cross-imports between rule modules.
+Side-effect registration: callers import the package to trigger `@semantic_rule` decorator registration of all 27 rule modules. Each rule receives a `ValidationContext` argument. No cross-imports between rule modules.

@@ -104,6 +104,7 @@ from autoskillit.recipe.rules import rules_contracts as _rules_contracts  # noqa
 from autoskillit.recipe.rules import rules_dataflow as _rules_dataflow  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_features as _rules_features  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_fixing as _rules_fixing  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_food_truck as _rules_food_truck  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_graph as _rules_graph  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_inline_script as _rules_inline_script  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_inputs as _rules_inputs  # noqa: E402 F401
@@ -122,6 +123,7 @@ from autoskillit.recipe.rules import rules_worktree as _rules_worktree  # noqa: 
 from autoskillit.recipe.schema import (  # noqa: E402
     AUTOSKILLIT_VERSION_KEY,
     CAMPAIGN_REF_RE,
+    NON_INTERACTIVE_KINDS,
     CampaignDispatch,
     DataFlowReport,
     Recipe,
@@ -231,6 +233,7 @@ __all__ = [
     "check_rerun_detection",
     "find_prior_runs",
     "CampaignDispatch",
+    "NON_INTERACTIVE_KINDS",
     "RecipeKind",
     "find_campaign_by_name",
     "list_campaign_recipes",

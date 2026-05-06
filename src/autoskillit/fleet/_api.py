@@ -305,11 +305,13 @@ async def _run_dispatch(
             f"Recipe '{recipe}' could not be loaded: {exc}",
         )
 
-    if full_recipe.kind != "standard":
+    _DISPATCHABLE_KINDS = frozenset({"standard", "food-truck"})
+
+    if full_recipe.kind not in _DISPATCHABLE_KINDS:
         return fleet_error(
             FleetErrorCode.FLEET_INVALID_RECIPE_KIND,
             f"Recipe '{recipe}' has kind '{full_recipe.kind}'. "
-            "Only standard recipes can be dispatched as food trucks.",
+            "Only standard and food-truck recipes can be dispatched.",
         )
 
     effective_ingredients = ingredients or {}

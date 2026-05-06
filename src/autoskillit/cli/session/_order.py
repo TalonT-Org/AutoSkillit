@@ -108,6 +108,7 @@ def order(
         When True, attempt to restore a previous session.
     """
     from autoskillit.recipe import (
+        NON_INTERACTIVE_KINDS,
         find_recipe_by_name,
         list_recipes,
         load_recipe,
@@ -151,7 +152,10 @@ def order(
         from autoskillit.cli.ui._menu import SLOT_ZERO_SELECTED, run_selection_menu
         from autoskillit.recipe import GROUP_LABELS, group_rank
 
-        available = list_recipes(Path.cwd()).items
+        available = list_recipes(
+            Path.cwd(),
+            exclude_kinds=NON_INTERACTIVE_KINDS,
+        ).items
         if not available:
             print("No recipes found. Run 'autoskillit recipes list' to check.")
             sys.exit(1)
@@ -189,7 +193,10 @@ def order(
 
     _match = find_recipe_by_name(recipe, Path.cwd())
     if _match is None:
-        available = list_recipes(Path.cwd()).items
+        available = list_recipes(
+            Path.cwd(),
+            exclude_kinds=NON_INTERACTIVE_KINDS,
+        ).items
         print(f"Recipe not found: '{recipe}'")
         if available:
             print("Available recipes:")

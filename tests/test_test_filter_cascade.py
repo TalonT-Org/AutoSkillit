@@ -202,7 +202,9 @@ class TestRecipeCascadeNarrowing:
         )
 
     def test_recipe_cascade_no_hooks_full_directory(self, tmp_path: Path) -> None:
-        # hooks/test_fmt_status.py is not in the file-level cascade; it should be excluded.
+        # hooks/test_fmt_status.py is not in the file-level cascade or hook unconditionals;
+        # it should be excluded. Unconditional hook files (test_hook_executability.py etc.)
+        # are allowed to appear since they run regardless of trigger.
         tests_root = tmp_path / "tests"
         hooks_dir = tests_root / "hooks"
         hooks_dir.mkdir(parents=True, exist_ok=True)
@@ -214,8 +216,9 @@ class TestRecipeCascadeNarrowing:
             tests_root=tests_root,
         )
         assert result is not None
-        assert not any("/hooks/" in str(p) for p in result), (
-            f"hooks/test_fmt_status.py (not in cascade) should not appear; got {result}"
+        result_names = {p.name for p in result}
+        assert "test_fmt_status.py" not in result_names, (
+            "test_fmt_status.py (not in cascade or hook unconditionals) should not appear"
         )
 
     def test_recipe_cascade_fleet_file_level_only(self, tmp_path: Path) -> None:

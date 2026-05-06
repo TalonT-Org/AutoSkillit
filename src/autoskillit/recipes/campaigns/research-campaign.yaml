@@ -90,6 +90,8 @@ dispatches:
   - name: run-archive
     recipe: research-archive
     task: "Archive research artifacts and close experiment PR."
+    ingredients:
+      base_branch: "${{ inputs.base_branch }}"
     capture: {}
     depends_on:
       - run-review

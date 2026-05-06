@@ -39,8 +39,13 @@ class TestResearchArchiveRecipe:
 
     # ── Ingredients ─────────────────────────────────────────────────
 
-    def test_ingredient_count(self, recipe) -> None:
-        assert len(recipe.ingredients) == 4
+    def test_ingredient_names(self, recipe) -> None:
+        assert set(recipe.ingredients.keys()) == {
+            "worktree_path",
+            "research_dir",
+            "pr_url",
+            "base_branch",
+        }
 
     def test_campaign_sourced_ingredients_hidden_and_required(self, recipe) -> None:
         for name in ("worktree_path", "research_dir", "pr_url"):

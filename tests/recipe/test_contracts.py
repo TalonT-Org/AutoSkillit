@@ -852,3 +852,77 @@ def test_wait_for_ci_conclusion_allowed_values() -> None:
     conclusion = manifest["tool_output_contracts"]["wait_for_ci"]["fields"]["conclusion"]
     values = set(conclusion["allowed_values"])
     assert {"success", "failure", "cancelled", "timed_out", "no_runs", "error"}.issubset(values)
+
+
+# ---------------------------------------------------------------------------
+# Research recipe contract card tests
+# ---------------------------------------------------------------------------
+
+
+def test_load_research_recipe_card() -> None:
+    """load_recipe_card('research', ...) returns non-None after card generation."""
+    from autoskillit.recipe.io import builtin_recipes_dir
+
+    card = load_recipe_card("research", builtin_recipes_dir())
+    assert card is not None
+    assert isinstance(card, dict)
+
+
+def test_research_recipe_card_structure() -> None:
+    """Research contract card contains all required top-level keys."""
+    from autoskillit.recipe.io import builtin_recipes_dir
+
+    card = load_recipe_card("research", builtin_recipes_dir())
+    assert card is not None
+    for key in ("generated_at", "bundled_manifest_version", "skill_hashes", "skills", "dataflow"):
+        assert key in card, f"Missing key: {key}"
+    assert card["bundled_manifest_version"] == "0.1.0"
+    assert card["skill_hashes"] == {}
+
+
+def test_research_recipe_card_contains_research_skills() -> None:
+    """Research card captures contracts for statically-resolvable skills."""
+    from autoskillit.recipe.io import builtin_recipes_dir
+
+    card = load_recipe_card("research", builtin_recipes_dir())
+    assert card is not None
+    skills = card["skills"]
+    expected_subset = {
+        "scope",
+        "plan-experiment",
+        "review-design",
+        "run-experiment",
+        "generate-report",
+        "resolve-failures",
+        "prepare-research-pr",
+        "compose-research-pr",
+        "implement-experiment",
+        "make-groups",
+        "make-plan",
+        "bundle-local-report",
+    }
+    for skill_name in expected_subset:
+        assert skill_name in skills, f"Missing skill: {skill_name}"
+
+
+def test_research_recipe_card_dataflow() -> None:
+    """Research card dataflow section is populated and has expected steps."""
+    from autoskillit.recipe.io import builtin_recipes_dir
+
+    card = load_recipe_card("research", builtin_recipes_dir())
+    assert card is not None
+    dataflow = card["dataflow"]
+    assert len(dataflow) > 0
+    step_names = [entry["step"] for entry in dataflow]
+    assert "scope" in step_names
+    assert "plan_experiment" in step_names
+
+
+def test_research_contract_card_not_stale() -> None:
+    """Freshly generated card has no staleness warnings."""
+    from autoskillit.recipe.io import builtin_recipes_dir
+
+    contract = load_recipe_card("research", builtin_recipes_dir())
+    assert contract is not None
+    stale = check_contract_staleness(contract)
+    assert stale == []

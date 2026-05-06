@@ -1,0 +1,2535 @@
+generated_at: '2026-05-06T10:12:39.088966+00:00'
+bundled_manifest_version: 0.1.0
+skill_hashes: {}
+skills:
+  scope:
+    inputs:
+    - name: research_question
+      type: string
+      required: true
+      recommended: false
+    outputs:
+    - name: scope_report
+      type: file_path
+    expected_output_patterns:
+    - scope_report\s*=\s*/.+
+    pattern_examples:
+    - 'scope_report = /tmp/scope_report.md
+
+      %%ORDER_UP%%'
+    write_behavior: always
+  plan-experiment:
+    inputs:
+    - name: scope_report_path
+      type: file_path
+      required: true
+      recommended: false
+    - name: revision_guidance
+      type: file_path
+      required: false
+      recommended: false
+    outputs:
+    - name: experiment_plan
+      type: file_path
+    expected_output_patterns:
+    - experiment_plan\s*=\s*/.+
+    pattern_examples:
+    - 'experiment_plan = /tmp/experiment_plan.md
+
+      %%ORDER_UP%%'
+    write_behavior: always
+  review-design:
+    inputs:
+    - name: experiment_plan
+      type: file_path
+      required: true
+      recommended: false
+    outputs:
+    - name: verdict
+      type: string
+    - name: experiment_type
+      type: string
+    - name: evaluation_dashboard
+      type: file_path
+    - name: revision_guidance
+      type: file_path
+    expected_output_patterns:
+    - verdict\s*=\s*(GO|REVISE|STOP)
+    - (?:experiment_type\s*=\s*\S+|verdict\s*=\s*STOP)
+    pattern_examples:
+    - 'verdict = GO
+
+      experiment_type = benchmark
+
+      evaluation_dashboard = /tmp/eval.md
+
+      revision_guidance = /tmp/guidance.md
+
+      %%ORDER_UP%%'
+    - 'verdict = REVISE
+
+      experiment_type = benchmark
+
+      revision_guidance = /tmp/guidance.md
+
+      %%ORDER_UP%%'
+    - 'verdict = STOP
+
+      %%ORDER_UP%%'
+    - 'verdict = GO
+
+      experiment_type = causal_inference
+
+      evaluation_dashboard = /tmp/eval.md
+
+      %%ORDER_UP%%'
+    - 'verdict = GO
+
+      experiment_type = configuration_study
+
+      evaluation_dashboard = /tmp/eval.md
+
+      %%ORDER_UP%%'
+    - 'verdict = GO
+
+      experiment_type = robustness_audit
+
+      evaluation_dashboard = /tmp/eval.md
+
+      %%ORDER_UP%%'
+    - 'verdict = GO
+
+      experiment_type = exploratory
+
+      evaluation_dashboard = /tmp/eval.md
+
+      %%ORDER_UP%%'
+    write_behavior: always
+  plan-visualization:
+    inputs:
+    - name: source_dir
+      type: directory_path
+      required: true
+      recommended: false
+    - name: experiment_plan_path
+      type: file_path
+      required: true
+      recommended: false
+    - name: scope_report_path
+      type: string
+      required: false
+      recommended: false
+    outputs:
+    - name: visualization_plan_path
+      type: file_path
+    - name: report_plan_path
+      type: file_path
+    expected_output_patterns:
+    - visualization_plan_path\s*=\s*/.+
+    - report_plan_path\s*=\s*/.+
+    pattern_examples:
+    - 'visualization_plan_path = /tmp/plan-visualization/visualization-plan.md
+
+      report_plan_path = /tmp/plan-visualization/report-plan.md
+
+      %%ORDER_UP%%'
+    write_behavior: always
+  resolve-design-review:
+    inputs:
+    - name: evaluation_dashboard
+      type: file_path
+      required: true
+      recommended: false
+    - name: experiment_plan
+      type: file_path
+      required: true
+      recommended: false
+    outputs:
+    - name: resolution
+      type: string
+    - name: revision_guidance
+      type: file_path
+    expected_output_patterns:
+    - resolution\s*=\s*(revised|failed)
+    - (?:revision_guidance\s*=\s*/.+|resolution\s*=\s*failed)
+    pattern_examples:
+    - 'resolution = revised
+
+      revision_guidance = /tmp/guidance.md
+
+      %%ORDER_UP%%'
+    - 'resolution = failed
+
+      %%ORDER_UP%%'
+    write_behavior: always
+  stage-data:
+    inputs:
+    - name: experiment_plan
+      type: file_path
+      required: true
+      recommended: false
+    outputs:
+    - name: verdict
+      type: string
+    - name: resource_report
+      type: file_path
+    expected_output_patterns:
+    - verdict\s*=\s*(PASS|WARN|FAIL)
+    - resource_report\s*=\s*/.+
+    pattern_examples:
+    - 'verdict = PASS
+
+      resource_report = /tmp/stage-data/resource_feasibility_2026-04-13_120000.md
+
+      %%ORDER_UP%%'
+    write_behavior: always
+  setup-environment:
+    inputs:
+    - name: worktree_path
+      type: directory_path
+      required: true
+      recommended: false
+    - name: experiment_plan
+      type: file_path
+      required: true
+      recommended: false
+    outputs:
+    - name: env_mode
+      type: string
+    - name: env_report
+      type: file_path
+    - name: verdict
+      type: string
+    expected_output_patterns:
+    - env_mode\s*=\s*(none|docker|micromamba-host|unavailable)
+    - env_report\s*=\s*/.+
+    - verdict\s*=\s*(PASS|WARN|FAIL)
+    pattern_examples:
+    - 'env_mode = none
+
+      env_report = /tmp/setup-environment/env_setup_report.md
+
+      verdict = PASS
+
+      %%ORDER_UP%%'
+    - 'env_mode = docker
+
+      env_report = /tmp/setup-environment/env_setup_report.md
+
+      verdict = PASS
+
+      %%ORDER_UP%%'
+    - 'env_mode = micromamba-host
+
+      env_report = /tmp/setup-environment/env_setup_report.md
+
+      verdict = WARN
+
+      %%ORDER_UP%%'
+    - 'env_mode = unavailable
+
+      env_report = /tmp/setup-environment/env_setup_report.md
+
+      verdict = FAIL
+
+      %%ORDER_UP%%'
+    write_behavior: always
+  make-groups:
+    inputs:
+    - name: source_doc
+      type: file_path
+      required: true
+      recommended: false
+    outputs:
+    - name: groups_path
+      type: file_path
+    - name: manifest_path
+      type: file_path
+    - name: group_files
+      type: file_path_list
+    expected_output_patterns:
+    - groups_path\s*=\s*/.+
+    pattern_examples:
+    - 'groups_path = /tmp/groups.json
+
+      %%ORDER_UP%%'
+  make-plan:
+    inputs:
+    - name: task
+      type: string
+      required: true
+      recommended: false
+    outputs:
+    - name: plan_path
+      type: file_path
+    - name: plan_parts
+      type: file_path_list
+    expected_output_patterns:
+    - plan_path\s*=\s*/.+
+    pattern_examples:
+    - 'plan_path = /tmp/plan.md
+
+      %%ORDER_UP%%'
+    write_behavior: always
+  implement-experiment:
+    inputs:
+    - name: plan_path
+      type: file_path
+      required: true
+      recommended: false
+    outputs:
+    - name: worktree_path
+      type: directory_path
+    - name: branch_name
+      type: string
+    expected_output_patterns:
+    - worktree_path\s*=\s*/.+
+    pattern_examples:
+    - 'worktree_path = /tmp/worktrees/research-20260101-120000
+
+      %%ORDER_UP%%'
+    write_behavior: always
+  troubleshoot-experiment:
+    inputs:
+    - name: worktree_path
+      type: string
+      required: true
+      recommended: false
+    - name: step_name
+      type: string
+      required: true
+      recommended: false
+    outputs:
+    - name: diagnosis_path
+      type: file_path
+    - name: failure_type
+      type: string
+    - name: is_fixable
+      type: string
+    expected_output_patterns:
+    - is_fixable\s*=\s*(true|false)
+    pattern_examples:
+    - 'diagnosis_path = /tmp/diagnosis.md
+
+      failure_type = stale_timeout
+
+      is_fixable = true
+
+      %%ORDER_UP%%'
+    write_behavior: always
+  run-experiment:
+    inputs:
+    - name: worktree_path
+      type: directory_path
+      required: true
+      recommended: false
+    outputs:
+    - name: results_path
+      type: file_path
+    expected_output_patterns:
+    - results_path\s*=\s*/.+
+    pattern_examples:
+    - 'results_path = /tmp/run-experiment/results.md
+
+      %%ORDER_UP%%'
+    write_behavior: always
+  generate-report:
+    inputs:
+    - name: worktree_path
+      type: directory_path
+      required: true
+      recommended: false
+    - name: results_path
+      type: file_path
+      required: true
+      recommended: false
+    outputs:
+    - name: report_path
+      type: file_path
+    expected_output_patterns:
+    - report_path\s*=\s*/.+
+    pattern_examples:
+    - 'report_path = /tmp/research/report.md
+
+      %%ORDER_UP%%'
+    write_behavior: always
+  resolve-failures:
+    inputs:
+    - name: worktree_path
+      type: directory_path
+      required: true
+      recommended: false
+    - name: plan_path
+      type: file_path
+      required: true
+      recommended: false
+    - name: base_branch
+      type: string
+      required: true
+      recommended: false
+    - name: diagnosis_path
+      type: file_path
+      required: false
+      recommended: false
+    outputs:
+    - name: verdict
+      type: string
+    - name: fixes_applied
+      type: integer
+    expected_output_patterns: []
+    pattern_examples: []
+    write_behavior: conditional
+    write_expected_when:
+    - verdict\s*=\s*real_fix
+  prepare-research-pr:
+    inputs:
+    - name: report_path
+      type: file_path
+      required: true
+      recommended: false
+    - name: experiment_plan_path
+      type: file_path
+      required: true
+      recommended: false
+    - name: worktree_path
+      type: directory_path
+      required: true
+      recommended: false
+    - name: base_branch
+      type: string
+      required: true
+      recommended: false
+    outputs:
+    - name: prep_path
+      type: file_path
+    - name: selected_lenses
+      type: string
+    - name: lens_context_paths
+      type: string
+    expected_output_patterns:
+    - prep_path\s*=\s*/.+
+    - selected_lenses\s*=\s*\S+
+    - lens_context_paths\s*=\s*/.+
+    pattern_examples:
+    - 'prep_path = /abs/path/pr_prep_2026-04-07_101349.md
+
+      selected_lenses = fair-comparison,estimand-clarity
+
+      lens_context_paths = /abs/ctx1.md,/abs/ctx2.md
+
+      %%ORDER_UP%%'
+    write_behavior: always
+  compose-research-pr:
+    inputs:
+    - name: prep_path
+      type: file_path
+      required: true
+      recommended: false
+    - name: all_diagram_paths
+      type: string
+      required: true
+      recommended: false
+    - name: worktree_path
+      type: directory_path
+      required: true
+      recommended: false
+    - name: base_branch
+      type: string
+      required: true
+      recommended: false
+    - name: closing_issue
+      type: string
+      required: false
+      recommended: false
+    outputs:
+    - name: pr_url
+      type: string
+    expected_output_patterns:
+    - pr_url\s*=\s*(https://github\.com/.*/pull/\d+)?
+    pattern_examples:
+    - 'pr_url = https://github.com/owner/repo/pull/42
+
+      %%ORDER_UP%%'
+    - "pr_url = \n%%ORDER_UP%%"
+    write_behavior: always
+  review-research-pr:
+    inputs:
+    - name: worktree_path
+      type: directory_path
+      required: true
+      recommended: false
+    - name: base_branch
+      type: string
+      required: true
+      recommended: false
+    - name: pr_url
+      type: string
+      required: true
+      recommended: false
+    outputs:
+    - name: verdict
+      type: string
+    expected_output_patterns:
+    - verdict\s*=\s*(approved|changes_requested|needs_human)
+    pattern_examples:
+    - 'verdict = approved
+
+      %%ORDER_UP%%'
+    - 'verdict = changes_requested
+
+      %%ORDER_UP%%'
+    - 'verdict = needs_human
+
+      %%ORDER_UP%%'
+  audit-claims:
+    inputs:
+    - name: worktree_path
+      type: directory_path
+      required: true
+      recommended: false
+    - name: base_branch
+      type: string
+      required: true
+      recommended: false
+    - name: pr_url
+      type: string
+      required: true
+      recommended: false
+    outputs:
+    - name: verdict
+      type: string
+    expected_output_patterns:
+    - verdict\s*=\s*(approved|changes_requested|needs_human)
+    pattern_examples:
+    - 'verdict = approved
+
+      %%ORDER_UP%%'
+    - 'verdict = changes_requested
+
+      %%ORDER_UP%%'
+    - 'verdict = needs_human
+
+      %%ORDER_UP%%'
+  resolve-research-review:
+    inputs:
+    - name: worktree_path
+      type: directory_path
+      required: true
+      recommended: false
+    - name: base_branch
+      type: string
+      required: true
+      recommended: false
+    outputs:
+    - name: needs_rerun
+      type: string
+    - name: verdict
+      type: string
+    - name: fixes_applied
+      type: integer
+    expected_output_patterns:
+    - needs_rerun\s*=\s*(true|false)
+    pattern_examples:
+    - 'needs_rerun = true
+
+      verdict = real_fix
+
+      fixes_applied = 2
+
+      %%ORDER_UP%%'
+    - 'needs_rerun = false
+
+      verdict = already_green
+
+      fixes_applied = 0
+
+      %%ORDER_UP%%'
+    - 'needs_rerun = true
+
+      verdict = flake_suspected
+
+      fixes_applied = 0
+
+      %%ORDER_UP%%'
+    - 'needs_rerun = false
+
+      verdict = ci_only_failure
+
+      fixes_applied = 0
+
+      %%ORDER_UP%%'
+    write_behavior: conditional
+    write_expected_when:
+    - verdict\s*=\s*real_fix
+  resolve-claims-review:
+    inputs:
+    - name: worktree_path
+      type: directory_path
+      required: true
+      recommended: false
+    - name: base_branch
+      type: string
+      required: true
+      recommended: false
+    outputs:
+    - name: needs_rerun
+      type: string
+    - name: verdict
+      type: string
+    - name: fixes_applied
+      type: integer
+    expected_output_patterns:
+    - needs_rerun\s*=\s*(true|false)
+    pattern_examples:
+    - 'needs_rerun = true
+
+      verdict = real_fix
+
+      fixes_applied = 2
+
+      %%ORDER_UP%%'
+    - 'needs_rerun = false
+
+      verdict = already_green
+
+      fixes_applied = 0
+
+      %%ORDER_UP%%'
+    - 'needs_rerun = true
+
+      verdict = flake_suspected
+
+      fixes_applied = 0
+
+      %%ORDER_UP%%'
+    - 'needs_rerun = false
+
+      verdict = ci_only_failure
+
+      fixes_applied = 0
+
+      %%ORDER_UP%%'
+    write_behavior: conditional
+    write_expected_when:
+    - verdict\s*=\s*real_fix
+  bundle-local-report:
+    inputs:
+    - name: research_dir
+      type: directory_path
+      required: true
+      recommended: false
+    - name: report_path
+      type: file_path
+      required: true
+      recommended: false
+    - name: all_diagram_paths
+      type: string
+      required: false
+      recommended: false
+    - name: visualization_plan_path
+      type: file_path
+      required: false
+      recommended: false
+    outputs:
+    - name: html_path
+      type: file_path
+    expected_output_patterns:
+    - html_path\s*=\s*\S+
+    pattern_examples:
+    - 'html_path = /tmp/research/report.html
+
+      %%ORDER_UP%%'
+    write_behavior: conditional
+    write_expected_when:
+    - html_path\s*=\s*\S+
+dataflow:
+- step: scope
+  available:
+  - audit_claims
+  - base_branch
+  - issue_url
+  - output_mode
+  - review_design
+  - review_pr
+  - source_dir
+  - task
+  required:
+  - research_question
+  produced:
+  - scope_report
+- step: plan_experiment
+  available:
+  - audit_claims
+  - base_branch
+  - issue_url
+  - output_mode
+  - review_design
+  - review_pr
+  - scope_report
+  - source_dir
+  - task
+  required:
+  - scope_report_path
+  produced:
+  - experiment_plan
+- step: review_design
+  available:
+  - audit_claims
+  - base_branch
+  - experiment_plan
+  - issue_url
+  - output_mode
+  - review_design
+  - review_pr
+  - scope_report
+  - source_dir
+  - task
+  required: []
+  produced:
+  - verdict
+  - experiment_type
+  - evaluation_dashboard
+  - revision_guidance
+- step: plan_visualization
+  available:
+  - audit_claims
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_type
+  - issue_url
+  - output_mode
+  - review_design
+  - review_pr
+  - revision_guidance
+  - scope_report
+  - source_dir
+  - task
+  - verdict
+  required:
+  - experiment_plan_path
+  produced:
+  - visualization_plan_path
+  - report_plan_path
+- step: revise_design
+  available:
+  - audit_claims
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_type
+  - issue_url
+  - output_mode
+  - report_plan_path
+  - review_design
+  - review_pr
+  - revision_guidance
+  - scope_report
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  required: []
+  produced: []
+- step: resolve_design_review
+  available:
+  - audit_claims
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_type
+  - issue_url
+  - output_mode
+  - report_plan_path
+  - review_design
+  - review_pr
+  - revision_guidance
+  - scope_report
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  required: []
+  produced:
+  - revision_guidance
+- step: design_rejected
+  available:
+  - audit_claims
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_type
+  - issue_url
+  - output_mode
+  - report_plan_path
+  - review_design
+  - review_pr
+  - revision_guidance
+  - scope_report
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  required: []
+  produced: []
+- step: create_worktree
+  available:
+  - audit_claims
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_type
+  - issue_url
+  - output_mode
+  - report_plan_path
+  - review_design
+  - review_pr
+  - revision_guidance
+  - scope_report
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  required: []
+  produced:
+  - worktree_path
+  - research_dir
+- step: stage_data
+  available:
+  - audit_claims
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_type
+  - issue_url
+  - output_mode
+  - report_plan_path
+  - research_dir
+  - review_design
+  - review_pr
+  - revision_guidance
+  - scope_report
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced:
+  - verdict
+  - resource_report
+- step: setup_environment
+  available:
+  - audit_claims
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_type
+  - issue_url
+  - output_mode
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_pr
+  - revision_guidance
+  - scope_report
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced:
+  - verdict
+- step: decompose_phases
+  available:
+  - audit_claims
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_type
+  - issue_url
+  - output_mode
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_pr
+  - revision_guidance
+  - scope_report
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required:
+  - source_doc
+  produced:
+  - group_files
+- step: plan_phase
+  available:
+  - audit_claims
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_type
+  - group_files
+  - issue_url
+  - output_mode
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_pr
+  - revision_guidance
+  - scope_report
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required:
+  - task
+  produced:
+  - phase_plan_path
+- step: implement_phase
+  available:
+  - audit_claims
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_type
+  - group_files
+  - issue_url
+  - output_mode
+  - phase_plan_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_pr
+  - revision_guidance
+  - scope_report
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required:
+  - plan_path
+  produced:
+  - worktree_path
+- step: troubleshoot_implement_failure
+  available:
+  - audit_claims
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_type
+  - group_files
+  - issue_url
+  - output_mode
+  - phase_plan_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_pr
+  - revision_guidance
+  - scope_report
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced:
+  - is_fixable
+  positional_args: 1
+- step: route_implement_failure
+  available:
+  - audit_claims
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_type
+  - group_files
+  - is_fixable
+  - issue_url
+  - output_mode
+  - phase_plan_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_pr
+  - revision_guidance
+  - scope_report
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced: []
+- step: next_phase_or_experiment
+  available:
+  - audit_claims
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_type
+  - group_files
+  - is_fixable
+  - issue_url
+  - output_mode
+  - phase_plan_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_pr
+  - revision_guidance
+  - scope_report
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced: []
+- step: run_experiment
+  available:
+  - audit_claims
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_type
+  - group_files
+  - is_fixable
+  - issue_url
+  - output_mode
+  - phase_plan_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_pr
+  - revision_guidance
+  - scope_report
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced:
+  - experiment_results
+- step: troubleshoot_run_failure
+  available:
+  - audit_claims
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - group_files
+  - is_fixable
+  - issue_url
+  - output_mode
+  - phase_plan_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_pr
+  - revision_guidance
+  - scope_report
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced:
+  - run_is_fixable
+  positional_args: 1
+- step: route_run_failure
+  available:
+  - audit_claims
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - group_files
+  - is_fixable
+  - issue_url
+  - output_mode
+  - phase_plan_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_pr
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced: []
+- step: adjust_experiment
+  available:
+  - audit_claims
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - group_files
+  - is_fixable
+  - issue_url
+  - output_mode
+  - phase_plan_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_pr
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced:
+  - experiment_results
+  positional_args: 1
+- step: ensure_results
+  available:
+  - audit_claims
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - group_files
+  - is_fixable
+  - issue_url
+  - output_mode
+  - phase_plan_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_pr
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced:
+  - experiment_results
+- step: generate_report
+  available:
+  - audit_claims
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - group_files
+  - is_fixable
+  - issue_url
+  - output_mode
+  - phase_plan_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_pr
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced:
+  - report_path
+  positional_args: 2
+- step: generate_report_inconclusive
+  available:
+  - audit_claims
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - group_files
+  - is_fixable
+  - issue_url
+  - output_mode
+  - phase_plan_path
+  - report_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_pr
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced:
+  - report_path
+  positional_args: 3
+- step: test
+  available:
+  - audit_claims
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - group_files
+  - is_fixable
+  - issue_url
+  - output_mode
+  - phase_plan_path
+  - report_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_pr
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced: []
+- step: fix_tests
+  available:
+  - audit_claims
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - group_files
+  - is_fixable
+  - issue_url
+  - output_mode
+  - phase_plan_path
+  - report_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_pr
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required:
+  - plan_path
+  produced:
+  - verdict
+  - fixes_applied
+- step: retest
+  available:
+  - audit_claims
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - fixes_applied
+  - group_files
+  - is_fixable
+  - issue_url
+  - output_mode
+  - phase_plan_path
+  - report_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_pr
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced: []
+- step: push_branch
+  available:
+  - audit_claims
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - fixes_applied
+  - group_files
+  - is_fixable
+  - issue_url
+  - output_mode
+  - phase_plan_path
+  - report_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_pr
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced: []
+- step: prepare_research_pr
+  available:
+  - audit_claims
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - fixes_applied
+  - group_files
+  - is_fixable
+  - issue_url
+  - output_mode
+  - phase_plan_path
+  - report_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_pr
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required:
+  - experiment_plan_path
+  produced:
+  - prep_path
+  - selected_lenses
+  - lens_context_paths
+- step: run_experiment_lenses
+  available:
+  - audit_claims
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - fixes_applied
+  - group_files
+  - is_fixable
+  - issue_url
+  - lens_context_paths
+  - output_mode
+  - phase_plan_path
+  - prep_path
+  - report_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_pr
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - selected_lenses
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced: []
+- step: stage_bundle
+  available:
+  - audit_claims
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - fixes_applied
+  - group_files
+  - is_fixable
+  - issue_url
+  - lens_context_paths
+  - output_mode
+  - phase_plan_path
+  - prep_path
+  - report_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_pr
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - selected_lenses
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced: []
+- step: route_pr_or_local
+  available:
+  - audit_claims
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - fixes_applied
+  - group_files
+  - is_fixable
+  - issue_url
+  - lens_context_paths
+  - output_mode
+  - phase_plan_path
+  - prep_path
+  - report_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_pr
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - selected_lenses
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced: []
+- step: compose_research_pr
+  available:
+  - audit_claims
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - fixes_applied
+  - group_files
+  - is_fixable
+  - issue_url
+  - lens_context_paths
+  - output_mode
+  - phase_plan_path
+  - prep_path
+  - report_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_pr
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - selected_lenses
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced:
+  - pr_url
+  positional_args: 1
+- step: guard_pr_url
+  available:
+  - audit_claims
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - fixes_applied
+  - group_files
+  - is_fixable
+  - issue_url
+  - lens_context_paths
+  - output_mode
+  - phase_plan_path
+  - pr_url
+  - prep_path
+  - report_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_pr
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - selected_lenses
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced: []
+- step: review_research_pr
+  available:
+  - audit_claims
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - fixes_applied
+  - group_files
+  - is_fixable
+  - issue_url
+  - lens_context_paths
+  - output_mode
+  - phase_plan_path
+  - pr_url
+  - prep_path
+  - report_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_pr
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - selected_lenses
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced:
+  - review_verdict
+- step: audit_claims
+  available:
+  - audit_claims
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - fixes_applied
+  - group_files
+  - is_fixable
+  - issue_url
+  - lens_context_paths
+  - output_mode
+  - phase_plan_path
+  - pr_url
+  - prep_path
+  - report_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_pr
+  - review_verdict
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - selected_lenses
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced:
+  - audit_verdict
+- step: route_review_resolve
+  available:
+  - audit_claims
+  - audit_verdict
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - fixes_applied
+  - group_files
+  - is_fixable
+  - issue_url
+  - lens_context_paths
+  - output_mode
+  - phase_plan_path
+  - pr_url
+  - prep_path
+  - report_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_pr
+  - review_verdict
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - selected_lenses
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced: []
+- step: resolve_research_review
+  available:
+  - audit_claims
+  - audit_verdict
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - fixes_applied
+  - group_files
+  - is_fixable
+  - issue_url
+  - lens_context_paths
+  - output_mode
+  - phase_plan_path
+  - pr_url
+  - prep_path
+  - report_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_pr
+  - review_verdict
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - selected_lenses
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced:
+  - review_needs_rerun
+- step: route_claims_resolve
+  available:
+  - audit_claims
+  - audit_verdict
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - fixes_applied
+  - group_files
+  - is_fixable
+  - issue_url
+  - lens_context_paths
+  - output_mode
+  - phase_plan_path
+  - pr_url
+  - prep_path
+  - report_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_needs_rerun
+  - review_pr
+  - review_verdict
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - selected_lenses
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced: []
+- step: resolve_claims_review
+  available:
+  - audit_claims
+  - audit_verdict
+  - base_branch
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - fixes_applied
+  - group_files
+  - is_fixable
+  - issue_url
+  - lens_context_paths
+  - output_mode
+  - phase_plan_path
+  - pr_url
+  - prep_path
+  - report_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_needs_rerun
+  - review_pr
+  - review_verdict
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - selected_lenses
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced:
+  - claims_needs_rerun
+- step: merge_escalations
+  available:
+  - audit_claims
+  - audit_verdict
+  - base_branch
+  - claims_needs_rerun
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - fixes_applied
+  - group_files
+  - is_fixable
+  - issue_url
+  - lens_context_paths
+  - output_mode
+  - phase_plan_path
+  - pr_url
+  - prep_path
+  - report_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_needs_rerun
+  - review_pr
+  - review_verdict
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - selected_lenses
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced: []
+- step: re_run_experiment
+  available:
+  - audit_claims
+  - audit_verdict
+  - base_branch
+  - claims_needs_rerun
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - fixes_applied
+  - group_files
+  - is_fixable
+  - issue_url
+  - lens_context_paths
+  - output_mode
+  - phase_plan_path
+  - pr_url
+  - prep_path
+  - report_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_needs_rerun
+  - review_pr
+  - review_verdict
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - selected_lenses
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced:
+  - experiment_results
+  positional_args: 1
+- step: re_generate_report
+  available:
+  - audit_claims
+  - audit_verdict
+  - base_branch
+  - claims_needs_rerun
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - fixes_applied
+  - group_files
+  - is_fixable
+  - issue_url
+  - lens_context_paths
+  - output_mode
+  - phase_plan_path
+  - pr_url
+  - prep_path
+  - report_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_needs_rerun
+  - review_pr
+  - review_verdict
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - selected_lenses
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced:
+  - report_path
+  positional_args: 2
+- step: re_stage_bundle
+  available:
+  - audit_claims
+  - audit_verdict
+  - base_branch
+  - claims_needs_rerun
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - fixes_applied
+  - group_files
+  - is_fixable
+  - issue_url
+  - lens_context_paths
+  - output_mode
+  - phase_plan_path
+  - pr_url
+  - prep_path
+  - report_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_needs_rerun
+  - review_pr
+  - review_verdict
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - selected_lenses
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced: []
+- step: re_test
+  available:
+  - audit_claims
+  - audit_verdict
+  - base_branch
+  - claims_needs_rerun
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - fixes_applied
+  - group_files
+  - is_fixable
+  - issue_url
+  - lens_context_paths
+  - output_mode
+  - phase_plan_path
+  - pr_url
+  - prep_path
+  - report_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_needs_rerun
+  - review_pr
+  - review_verdict
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - selected_lenses
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced: []
+- step: re_push_research
+  available:
+  - audit_claims
+  - audit_verdict
+  - base_branch
+  - claims_needs_rerun
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - fixes_applied
+  - group_files
+  - is_fixable
+  - issue_url
+  - lens_context_paths
+  - output_mode
+  - phase_plan_path
+  - pr_url
+  - prep_path
+  - report_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_needs_rerun
+  - review_pr
+  - review_verdict
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - selected_lenses
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced: []
+- step: finalize_bundle
+  available:
+  - audit_claims
+  - audit_verdict
+  - base_branch
+  - claims_needs_rerun
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - fixes_applied
+  - group_files
+  - is_fixable
+  - issue_url
+  - lens_context_paths
+  - output_mode
+  - phase_plan_path
+  - pr_url
+  - prep_path
+  - report_path
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_needs_rerun
+  - review_pr
+  - review_verdict
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - selected_lenses
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced:
+  - report_path_after_finalize
+- step: finalize_bundle_render
+  available:
+  - audit_claims
+  - audit_verdict
+  - base_branch
+  - claims_needs_rerun
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - fixes_applied
+  - group_files
+  - is_fixable
+  - issue_url
+  - lens_context_paths
+  - output_mode
+  - phase_plan_path
+  - pr_url
+  - prep_path
+  - report_path
+  - report_path_after_finalize
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_needs_rerun
+  - review_pr
+  - review_verdict
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - selected_lenses
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required:
+  - report_path
+  produced:
+  - html_path
+- step: route_archive_or_export
+  available:
+  - audit_claims
+  - audit_verdict
+  - base_branch
+  - claims_needs_rerun
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - fixes_applied
+  - group_files
+  - html_path
+  - is_fixable
+  - issue_url
+  - lens_context_paths
+  - output_mode
+  - phase_plan_path
+  - pr_url
+  - prep_path
+  - report_path
+  - report_path_after_finalize
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_needs_rerun
+  - review_pr
+  - review_verdict
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - selected_lenses
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced: []
+- step: export_local_bundle
+  available:
+  - audit_claims
+  - audit_verdict
+  - base_branch
+  - claims_needs_rerun
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - fixes_applied
+  - group_files
+  - html_path
+  - is_fixable
+  - issue_url
+  - lens_context_paths
+  - output_mode
+  - phase_plan_path
+  - pr_url
+  - prep_path
+  - report_path
+  - report_path_after_finalize
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_needs_rerun
+  - review_pr
+  - review_verdict
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - selected_lenses
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced:
+  - local_bundle_path
+- step: begin_archival
+  available:
+  - audit_claims
+  - audit_verdict
+  - base_branch
+  - claims_needs_rerun
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - fixes_applied
+  - group_files
+  - html_path
+  - is_fixable
+  - issue_url
+  - lens_context_paths
+  - local_bundle_path
+  - output_mode
+  - phase_plan_path
+  - pr_url
+  - prep_path
+  - report_path
+  - report_path_after_finalize
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_needs_rerun
+  - review_pr
+  - review_verdict
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - selected_lenses
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced: []
+- step: capture_experiment_branch
+  available:
+  - audit_claims
+  - audit_verdict
+  - base_branch
+  - claims_needs_rerun
+  - evaluation_dashboard
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - fixes_applied
+  - group_files
+  - html_path
+  - is_fixable
+  - issue_url
+  - lens_context_paths
+  - local_bundle_path
+  - output_mode
+  - phase_plan_path
+  - pr_url
+  - prep_path
+  - report_path
+  - report_path_after_finalize
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_needs_rerun
+  - review_pr
+  - review_verdict
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - selected_lenses
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced:
+  - experiment_branch
+- step: create_artifact_branch
+  available:
+  - audit_claims
+  - audit_verdict
+  - base_branch
+  - claims_needs_rerun
+  - evaluation_dashboard
+  - experiment_branch
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - fixes_applied
+  - group_files
+  - html_path
+  - is_fixable
+  - issue_url
+  - lens_context_paths
+  - local_bundle_path
+  - output_mode
+  - phase_plan_path
+  - pr_url
+  - prep_path
+  - report_path
+  - report_path_after_finalize
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_needs_rerun
+  - review_pr
+  - review_verdict
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - selected_lenses
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced:
+  - artifact_branch
+- step: open_artifact_pr
+  available:
+  - artifact_branch
+  - audit_claims
+  - audit_verdict
+  - base_branch
+  - claims_needs_rerun
+  - evaluation_dashboard
+  - experiment_branch
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - fixes_applied
+  - group_files
+  - html_path
+  - is_fixable
+  - issue_url
+  - lens_context_paths
+  - local_bundle_path
+  - output_mode
+  - phase_plan_path
+  - pr_url
+  - prep_path
+  - report_path
+  - report_path_after_finalize
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_needs_rerun
+  - review_pr
+  - review_verdict
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - selected_lenses
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced:
+  - artifact_pr_url
+- step: tag_experiment_branch
+  available:
+  - artifact_branch
+  - artifact_pr_url
+  - audit_claims
+  - audit_verdict
+  - base_branch
+  - claims_needs_rerun
+  - evaluation_dashboard
+  - experiment_branch
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - fixes_applied
+  - group_files
+  - html_path
+  - is_fixable
+  - issue_url
+  - lens_context_paths
+  - local_bundle_path
+  - output_mode
+  - phase_plan_path
+  - pr_url
+  - prep_path
+  - report_path
+  - report_path_after_finalize
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_needs_rerun
+  - review_pr
+  - review_verdict
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - selected_lenses
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced:
+  - archive_tag
+- step: close_experiment_pr
+  available:
+  - archive_tag
+  - artifact_branch
+  - artifact_pr_url
+  - audit_claims
+  - audit_verdict
+  - base_branch
+  - claims_needs_rerun
+  - evaluation_dashboard
+  - experiment_branch
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - fixes_applied
+  - group_files
+  - html_path
+  - is_fixable
+  - issue_url
+  - lens_context_paths
+  - local_bundle_path
+  - output_mode
+  - phase_plan_path
+  - pr_url
+  - prep_path
+  - report_path
+  - report_path_after_finalize
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_needs_rerun
+  - review_pr
+  - review_verdict
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - selected_lenses
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced: []
+- step: patch_token_summary
+  available:
+  - archive_tag
+  - artifact_branch
+  - artifact_pr_url
+  - audit_claims
+  - audit_verdict
+  - base_branch
+  - claims_needs_rerun
+  - evaluation_dashboard
+  - experiment_branch
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - fixes_applied
+  - group_files
+  - html_path
+  - is_fixable
+  - issue_url
+  - lens_context_paths
+  - local_bundle_path
+  - output_mode
+  - phase_plan_path
+  - pr_url
+  - prep_path
+  - report_path
+  - report_path_after_finalize
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_needs_rerun
+  - review_pr
+  - review_verdict
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - selected_lenses
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced: []
+- step: research_complete
+  available:
+  - archive_tag
+  - artifact_branch
+  - artifact_pr_url
+  - audit_claims
+  - audit_verdict
+  - base_branch
+  - claims_needs_rerun
+  - evaluation_dashboard
+  - experiment_branch
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - fixes_applied
+  - group_files
+  - html_path
+  - is_fixable
+  - issue_url
+  - lens_context_paths
+  - local_bundle_path
+  - output_mode
+  - phase_plan_path
+  - pr_url
+  - prep_path
+  - report_path
+  - report_path_after_finalize
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_needs_rerun
+  - review_pr
+  - review_verdict
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - selected_lenses
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced: []
+- step: escalate_stop
+  available:
+  - archive_tag
+  - artifact_branch
+  - artifact_pr_url
+  - audit_claims
+  - audit_verdict
+  - base_branch
+  - claims_needs_rerun
+  - evaluation_dashboard
+  - experiment_branch
+  - experiment_plan
+  - experiment_results
+  - experiment_type
+  - fixes_applied
+  - group_files
+  - html_path
+  - is_fixable
+  - issue_url
+  - lens_context_paths
+  - local_bundle_path
+  - output_mode
+  - phase_plan_path
+  - pr_url
+  - prep_path
+  - report_path
+  - report_path_after_finalize
+  - report_plan_path
+  - research_dir
+  - resource_report
+  - review_design
+  - review_needs_rerun
+  - review_pr
+  - review_verdict
+  - revision_guidance
+  - run_is_fixable
+  - scope_report
+  - selected_lenses
+  - source_dir
+  - task
+  - verdict
+  - visualization_plan_path
+  - worktree_path
+  required: []
+  produced: []

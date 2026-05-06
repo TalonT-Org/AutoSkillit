@@ -19,6 +19,14 @@ _PLUGIN_KEY = "autoskillit@autoskillit-local"
 
 
 class TestDetectAutoskillitMcpPrefix:
+    @pytest.fixture(autouse=True)
+    def _clear_prefix_cache(self):  # noqa: ANN204
+        from autoskillit.core._plugin_ids import detect_autoskillit_mcp_prefix as _fn
+
+        _fn.cache_clear()
+        yield
+        _fn.cache_clear()
+
     def test_returns_marketplace_prefix_when_plugin_key_present(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

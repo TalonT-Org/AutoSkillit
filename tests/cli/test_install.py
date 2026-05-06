@@ -566,10 +566,10 @@ class TestGroupFInstall:
 def test_clear_plugin_cache_removes_nested_entry(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """_clear_plugin_cache must remove the entry from data['plugins'], not top-level data.
+    """_clear_plugin_cache retires old version dirs but preserves the plugins entry.
 
-    With the retiring-cache feature, old version directories survive under a grace
-    period instead of being immediately deleted.
+    The installed_plugins.json entry is left intact — `claude plugin install`
+    overwrites it atomically. Old version directories survive under a grace period.
     """
     from autoskillit.cli._marketplace import _clear_plugin_cache
 
@@ -597,8 +597,8 @@ def test_clear_plugin_cache_removes_nested_entry(
     _clear_plugin_cache()
 
     data = json.loads(installed_json.read_text())
-    assert "autoskillit@autoskillit-local" not in data.get("plugins", {})
-    assert data["version"] == 2  # other keys preserved
+    assert "autoskillit@autoskillit-local" in data.get("plugins", {})
+    assert data["version"] == 2
     # Old version dir survives under grace period
     assert old_version_dir.exists(), "Old version dir must survive under grace period"
     # Retiring registry must record the old version

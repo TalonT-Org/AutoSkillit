@@ -874,7 +874,7 @@ class TestHeadlessExecutorIdleOutputTimeout:
             "/investigate foo", cwd="/tmp", ctx=tool_ctx, idle_output_timeout=None
         )
         _, _cwd, _timeout, kwargs = tool_ctx.runner.call_args_list[0]
-        assert kwargs["idle_output_timeout"] == 600.0
+        assert kwargs["idle_output_timeout"] == 1000.0
 
 
 def _ndjson_with_write(result_text: str, file_paths: list[str], session_id: str = "test-session"):

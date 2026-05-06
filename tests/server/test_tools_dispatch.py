@@ -834,12 +834,12 @@ class TestDispatchFoodTruckIdleTimeout:
     async def test_dispatch_food_truck_idle_timeout_overrides_config_default(
         self, tool_ctx, monkeypatch
     ):
-        """Explicit idle_output_timeout=0 overrides the config default of 600."""
+        """Explicit idle_output_timeout=0 overrides the config default of 1000."""
         from autoskillit.server.tools.tools_execution import dispatch_food_truck
 
         self._setup_dispatch(tool_ctx)
-        # Config idle_output_timeout is 600 (default from RunSkillConfig)
-        assert tool_ctx.config.run_skill.idle_output_timeout == 600
+        # Config idle_output_timeout is 1000 (default from RunSkillConfig)
+        assert tool_ctx.config.run_skill.idle_output_timeout == 1000
 
         await dispatch_food_truck(
             recipe="test-recipe",

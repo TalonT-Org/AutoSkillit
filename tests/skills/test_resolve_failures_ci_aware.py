@@ -253,11 +253,11 @@ def test_ci_only_failure_requires_no_fix_applied(skill_text: str) -> None:
 def test_step3_green_always_yields_real_fix(skill_text: str) -> None:
     """Step 3 fix loop: green after fix MUST yield real_fix, never re-evaluates Step 2d."""
     step3_match = re.search(
-        r"Step 3.*?Step 4",
+        r"### Step 3.*?(?=\n### Step [45]|\Z)",
         skill_text,
         re.DOTALL,
     )
-    assert step3_match is not None, "Step 3 section must exist and precede Step 4"
+    assert step3_match is not None, "### Step 3 section must exist in SKILL.md"
     step3_text = step3_match.group(0)
     assert "real_fix" in step3_text, "Step 3 must directly assign verdict = real_fix on green exit"
     assert "step 2d" not in step3_text.lower() or "do not" in step3_text.lower(), (

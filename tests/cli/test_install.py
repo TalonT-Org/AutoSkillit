@@ -563,7 +563,7 @@ class TestGroupFInstall:
         )
 
 
-def test_clear_plugin_cache_removes_nested_entry(
+def test_clear_plugin_cache_preserves_plugins_entry(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """_clear_plugin_cache retires old version dirs but preserves the plugins entry.

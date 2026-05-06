@@ -79,7 +79,7 @@ class TestCLIOrderPicker:
 
         mock_result = MagicMock()
         mock_result.items = []
-        monkeypatch.setattr(_recipe_mod, "list_recipes", lambda _: mock_result)
+        monkeypatch.setattr(_recipe_mod, "list_recipes", lambda *a, **kw: mock_result)
 
         with pytest.raises(SystemExit) as exc_info:
             cli.order()
@@ -148,7 +148,7 @@ class TestCLIOrderPicker:
         fake_recipe.name = "some-recipe"
         mock_result = MagicMock()
         mock_result.items = [fake_recipe]
-        monkeypatch.setattr(_recipe_mod, "list_recipes", lambda _: mock_result)
+        monkeypatch.setattr(_recipe_mod, "list_recipes", lambda *a, **kw: mock_result)
         monkeypatch.setattr("builtins.input", lambda _prompt="": "99")
 
         with pytest.raises(SystemExit) as exc_info:

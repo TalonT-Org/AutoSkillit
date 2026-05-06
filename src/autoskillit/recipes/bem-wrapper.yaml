@@ -3,7 +3,7 @@ description: >-
   Re-fetch open audit issues, run build-execution-map, emit execution map path
   and compact dispatch plan. Used by the promote-to-main campaign to compute
   issue distribution before dispatching implementation L3s.
-kind: standard
+kind: food-truck
 recipe_version: "1.0.0"
 
 requires_packs: [github]

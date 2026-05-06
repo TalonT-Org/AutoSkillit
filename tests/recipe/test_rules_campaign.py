@@ -171,6 +171,29 @@ def test_campaign_rejects_dispatch_of_campaign_recipe(tmp_path: Path):
     assert found[0].severity == Severity.ERROR
 
 
+def test_dispatch_recipe_is_standard_allows_food_truck_target(tmp_path: Path):
+    """Campaign dispatching to a food-truck-kind recipe produces no findings."""
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    _write_recipe_yaml(
+        recipes_dir / "target-food-truck.yaml",
+        {
+            "name": "target-food-truck",
+            "description": "a food truck",
+            "kind": "food-truck",
+            "kitchen_rules": ["NEVER"],
+            "steps": {"done": {"action": "stop", "message": "sentinel done"}},
+        },
+    )
+    recipe = _campaign(
+        dispatches=[
+            CampaignDispatch(name="phase-one", recipe="target-food-truck", task="do it"),
+        ]
+    )
+    found = _findings(recipe, "dispatch-recipe-is-standard", project_dir=tmp_path)
+    assert found == []
+
+
 # ---------------------------------------------------------------------------
 # T21: dispatch-recipe-in-declared-packs
 # ---------------------------------------------------------------------------

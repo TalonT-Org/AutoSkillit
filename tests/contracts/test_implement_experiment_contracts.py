@@ -45,17 +45,25 @@ def test_implement_experiment_allows_pytest_collect_only() -> None:
     )
 
 
-def test_implement_experiment_step3_references_docker_build() -> None:
-    """Step 3 must instruct the agent to build a Docker image."""
+def test_implement_experiment_step3_references_env_mode() -> None:
+    """Step 3 must reference env_mode and write Dockerfile artifact, but NOT build."""
     text = SKILL_PATH.read_text()
     step3_section = (
         text.split("### Step 3")[1].split("### Step 4")[0]
         if "### Step 3" in text and "### Step 4" in text
         else text
     )
-    assert "docker build" in step3_section.lower(), (
-        "implement-experiment/SKILL.md Step 3 must reference 'docker build' — "
-        "Docker is the primary isolation mechanism for research execution"
+    assert "env_mode" in step3_section, (
+        "implement-experiment/SKILL.md Step 3 must reference 'env_mode' — "
+        "the environment mode is set by setup-environment upstream"
+    )
+    assert "Dockerfile" in step3_section, (
+        "implement-experiment/SKILL.md Step 3 must still write a Dockerfile "
+        "template as a reproducibility artifact"
+    )
+    assert "docker build" not in step3_section.lower(), (
+        "implement-experiment/SKILL.md Step 3 must NOT invoke 'docker build' — "
+        "environment construction is handled by setup-environment"
     )
 
 

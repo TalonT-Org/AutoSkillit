@@ -130,12 +130,66 @@ data, this is a pipeline failure — not a pipeline-level degradation.
 
 ### Step 3 — Execute Experiment
 
-Run the experiment as described in the plan. The experiment could be anything:
-scripts, benchmarks, data collection, manual measurements, tool invocations,
-custom pipelines, or any other procedure. Follow the plan's execution protocol.
+Read `env_mode` from context (set by `setup-environment` earlier in the
+recipe). Dispatch execution based on the mode:
+
+**`env_mode = docker`:**
+
+The Docker image `research-{slug}` was pre-built by `setup-environment`.
+Execute the experiment inside the container:
+
+```bash
+RESEARCH_DIR=$(ls -d "${WORKTREE_PATH}"/research/*/ 2>/dev/null | head -1)
+SLUG=$(basename "${RESEARCH_DIR%/}")
+docker run --rm -v "${RESEARCH_DIR}:/workspace" "research-${SLUG}" \
+  bash -c "cd /workspace && python scripts/run.py"
+```
+
+Adjust the entry-point command to match the actual script from the experiment
+plan. If the research directory contains a `Taskfile.yml` with a
+`run-experiment` task, prefer `task run-experiment` inside the container.
+
+**`env_mode = micromamba-host`:**
+
+A host micromamba environment `experiment-{slug}` was created by
+`setup-environment`. Execute the experiment inside that environment:
+
+```bash
+RESEARCH_DIR=$(ls -d "${WORKTREE_PATH}"/research/*/ 2>/dev/null | head -1)
+SLUG=$(basename "${RESEARCH_DIR%/}")
+cd "${RESEARCH_DIR}"
+micromamba run -n "experiment-${SLUG}" python scripts/run.py
+```
+
+Adjust the entry-point command to match the actual script from the experiment
+plan.
+
+**`env_mode = unavailable`:**
+
+No suitable environment could be provisioned. Emit the `blocked_experiment`
+structured output token and set the results status to FAILED:
+
+```
+blocked_experiment = env_mode is unavailable — setup-environment could not provision docker or micromamba-host
+```
+
+Write a results file with `## Status: FAILED` and the reason, then proceed
+to Step 5 (Save Results) to emit the `results_path` token.
+
+**`env_mode = none`:**
+
+Standard environment — no container or micromamba needed. Run the experiment
+directly in the worktree using the system Python:
+
+```bash
+RESEARCH_DIR=$(ls -d "${WORKTREE_PATH}"/research/*/ 2>/dev/null | head -1)
+cd "${RESEARCH_DIR}" && python scripts/run.py
+```
+
+---
 
 If the plan specifies multiple configurations or comparisons, execute all of
-them and collect results for each.
+them under the dispatched environment mode and collect results for each.
 
 ### Step 4 — Collect Results
 

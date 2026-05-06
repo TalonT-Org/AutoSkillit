@@ -157,11 +157,13 @@ required** — launch as many additional subagents as needed.
 - Understanding specific APIs, types, or interfaces the scripts will use
 - Any other codebase investigation needed to write correct experiment code
 
-### Step 3 — Set Up Container Environment
+### Step 3 — Write Environment Artifacts
 
-The research worktree is isolated via Docker. All experiment code runs inside
-a container built from the experiment's `environment.yml`. Nothing is installed
-on the host.
+The environment is already prepared by `setup-environment` (upstream in the
+recipe). Read `env_mode` from context to understand what environment was
+provisioned (`docker`, `micromamba-host`, or `unavailable`). This step writes
+the Dockerfile template and `environment.yml` into the worktree as
+reproducibility artifacts — it does NOT build or install anything.
 
 **3a — Write the Dockerfile:**
 
@@ -208,12 +210,6 @@ vars:
     sh: pwd
 
 tasks:
-  build-env:
-    desc: Build Docker image for this experiment
-    cmds:
-      - docker build --build-arg MAMBA_ENV={{.SLUG}} -t {{.IMAGE}} .
-    dir: "{{.RESEARCH_DIR}}"
-
   run-experiment:
     desc: Run experiment inside container (volume-mounts research dir)
     cmds:
@@ -229,15 +225,20 @@ tasks:
 
 Adjust the `run-experiment` command to match the actual entry-point script from the experiment plan.
 
-**3c — Build the Docker image:**
+**3c — Write `environment.yml` and note `env_mode`:**
 
-```bash
-cd "${RESEARCH_DIR}"
-docker build --build-arg MAMBA_ENV={slug} -t "research-{slug}" .
-```
+If the experiment plan specifies an `environment.yml`, write it to
+`${RESEARCH_DIR}/environment.yml`. This file is committed to the worktree
+as a reproducibility artifact — reviewers can inspect exact dependency
+versions.
 
-Verify the build succeeds before proceeding. If the build fails due to missing
-system packages, add them to the `apt-get install` layer and rebuild.
+Note the `env_mode` from context (set by `setup-environment`):
+- `docker` — a container image was pre-built; `run-experiment` will execute inside it
+- `micromamba-host` — a host environment was created; `run-experiment` will use `micromamba run`
+- `unavailable` — no environment could be provisioned; `run-experiment` will emit `blocked_experiment`
+- `none` — standard environment, no special setup needed
+
+Do NOT invoke any container or environment construction commands. The environment is already ready.
 
 **All commands from this point must run from `${WORKTREE_PATH}`.** Use absolute
 paths to avoid CWD drift across Bash tool calls.

@@ -359,7 +359,7 @@ def _format_model_table(aggregated: dict[str, dict[str, Any]]) -> str:
     model_data: dict[str, dict[str, Any]] = {}
     for entry in aggregated.values():
         model = entry.get("model", "")
-        if not model:
+        if not model or model == "unknown":
             continue
         if model not in model_data:
             model_data[model] = {
@@ -372,12 +372,12 @@ def _format_model_table(aggregated: dict[str, dict[str, Any]]) -> str:
                 "elapsed_seconds": 0.0,
             }
         md = model_data[model]
-        md["_steps"].add(entry["step_name"])
-        md["input_tokens"] += entry["input_tokens"]
-        md["output_tokens"] += entry["output_tokens"]
-        md["cache_creation_input_tokens"] += entry["cache_creation_input_tokens"]
-        md["cache_read_input_tokens"] += entry["cache_read_input_tokens"]
-        md["elapsed_seconds"] += entry["elapsed_seconds"]
+        md["_steps"].add(entry.get("step_name", ""))
+        md["input_tokens"] += entry.get("input_tokens", 0)
+        md["output_tokens"] += entry.get("output_tokens", 0)
+        md["cache_creation_input_tokens"] += entry.get("cache_creation_input_tokens", 0)
+        md["cache_read_input_tokens"] += entry.get("cache_read_input_tokens", 0)
+        md["elapsed_seconds"] += entry.get("elapsed_seconds", 0.0)
 
     if not model_data:
         return ""

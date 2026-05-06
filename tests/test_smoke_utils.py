@@ -680,6 +680,7 @@ def test_annotate_pr_diff_returns_review_mode_local(mock_run, tmp_path: Path) ->
         output_dir=str(tmp_path),
         local_review_rounds="3",
         current_iteration="0",
+        base_branch="main",
     )
     assert result["review_mode"] == "local"
 

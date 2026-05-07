@@ -115,8 +115,8 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/execution/session_log.py", 305),
     ("src/autoskillit/execution/session_log.py", 368),
     ("src/autoskillit/execution/session_log.py", 372),
-    ("src/autoskillit/execution/session_log.py", 401),
-    ("src/autoskillit/execution/session_log.py", 404),
+    ("src/autoskillit/execution/session_log.py", 403),
+    ("src/autoskillit/execution/session_log.py", 406),
     # migration/store.py — failure store dicts
     ("src/autoskillit/migration/store.py", 54),
     ("src/autoskillit/migration/store.py", 64),

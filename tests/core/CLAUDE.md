@@ -34,4 +34,5 @@ Core layer (IL-0) unit tests — paths, IO, types, feature flags.
 | `test_type_protocol_shards.py` | Type protocol shards guard |
 | `test_types.py` | Tests for shared type contracts — enum exhaustiveness |
 | `test_types_structure.py` | Tests for core/types.py split into focused sub-modules (P8-F2) |
+| `test_type_results_execution.py` | Tests for _type_results_execution.py — execution-scoped types |
 | `test_version_snapshot.py` | Tests for core/_version_snapshot.py |

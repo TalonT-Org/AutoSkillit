@@ -11,7 +11,11 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core.types._type_results import ProviderOutcome, RecipeIdentity, SessionTelemetry
+from autoskillit.core.types._type_results import ProviderOutcome
+from autoskillit.core.types._type_results_execution import (
+    RecipeIdentity,
+    SessionTelemetry,
+)
 from autoskillit.execution.session_log import (
     flush_session_log,
     read_telemetry_clear_marker,
@@ -694,7 +698,7 @@ def test_flush_helper_builds_and_passes_session_telemetry():
     import tempfile
     import unittest.mock as mock
 
-    from autoskillit.core.types._type_results import SessionTelemetry
+    from autoskillit.core.types._type_results_execution import SessionTelemetry
 
     captured: dict = {}
 

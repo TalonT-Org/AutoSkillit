@@ -7,7 +7,8 @@ import json
 
 import pytest
 
-from autoskillit.core.types._type_results import ProviderOutcome, RecipeIdentity
+from autoskillit.core.types._type_results import ProviderOutcome
+from autoskillit.core.types._type_results_execution import RecipeIdentity
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -60,7 +61,7 @@ class TestFlushOutputCompleteness:
     """Every ProviderOutcome field must appear in flush output."""
 
     def test_provider_outcome_fields_written_to_summary(self, tmp_path):
-        from autoskillit.core.types._type_results import SessionTelemetry
+        from autoskillit.core.types._type_results_execution import SessionTelemetry
         from autoskillit.execution.session_log import flush_session_log
 
         outcome = ProviderOutcome(provider_used="test-provider", fallback_activated=True)
@@ -85,7 +86,7 @@ class TestFlushOutputCompleteness:
         assert summary["provider_fallback"] is True
 
     def test_recipe_identity_fields_written_to_index(self, tmp_path):
-        from autoskillit.core.types._type_results import SessionTelemetry
+        from autoskillit.core.types._type_results_execution import SessionTelemetry
         from autoskillit.execution.session_log import flush_session_log
 
         identity = RecipeIdentity(

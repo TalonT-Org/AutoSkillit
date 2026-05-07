@@ -30,6 +30,8 @@ from ._type_protocols_workspace import *  # noqa: F401, F403
 from ._type_protocols_workspace import __all__ as _protocols_workspace_all
 from ._type_results import *  # noqa: F401, F403
 from ._type_results import __all__ as _results_all
+from ._type_results_execution import *  # noqa: F401, F403
+from ._type_results_execution import __all__ as _results_execution_all
 from ._type_resume import *  # noqa: F401, F403
 from ._type_resume import __all__ as _resume_all
 from ._type_subprocess import *  # noqa: F401, F403
@@ -48,6 +50,7 @@ __all__ = (
     + _protocols_recipe_all
     + _protocols_infra_all
     + _results_all
+    + _results_execution_all
     + _resume_all
     + _subprocess_all
 )

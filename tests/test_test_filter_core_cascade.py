@@ -91,6 +91,7 @@ class TestModuleCascadeCore:
             "tool_sequence_analysis",
             "_type_checkpoint",
             "_type_results",
+            "_type_results_execution",
         }
         assert set(MODULE_CASCADE_CORE.keys()) == expected_stems
 

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from autoskillit.server.tools import tools_execution  # noqa: F401
@@ -14,13 +12,11 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 class TestToolsExecutionDecomposition:
     def test_dispatch_food_truck_not_in_tools_execution(self):
         """dispatch_food_truck must live in tools_fleet_dispatch, not tools_execution."""
-        source = Path(tools_execution.__file__).read_text()
-        assert "def dispatch_food_truck(" not in source
+        assert not hasattr(tools_execution, "dispatch_food_truck")
 
     def test_record_gate_dispatch_not_in_tools_execution(self):
         """record_gate_dispatch must live in tools_fleet_dispatch, not tools_execution."""
-        source = Path(tools_execution.__file__).read_text()
-        assert "def record_gate_dispatch(" not in source
+        assert not hasattr(tools_execution, "record_gate_dispatch")
 
     def test_dispatch_food_truck_in_tools_fleet_dispatch(self):
         """dispatch_food_truck must be importable from tools_fleet_dispatch."""

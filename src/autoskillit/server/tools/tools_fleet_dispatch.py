@@ -173,7 +173,7 @@ async def dispatch_food_truck(
                             token_usage=envelope.get("token_usage") or {},
                         ),
                     )
-            except Exception:
+            except (json.JSONDecodeError, KeyError):
                 logger.warning("campaign state update failed", exc_info=True)
 
         return result

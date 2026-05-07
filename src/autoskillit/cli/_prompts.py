@@ -35,6 +35,17 @@ def _read_full_sous_chef() -> str:
         return ""
 
 
+def _ingredient_table_display_instruction(source: str) -> str:
+    """Return the display-verbatim instruction for an ingredient table."""
+    return (
+        f"Display the ingredient table from {source} verbatim in your response — "
+        "do not reformat or re-render it.\n"
+        "Then ask for the required fields (marked with *). If the recipe has both\n"
+        "a task and an issue_url ingredient, mention that a GitHub issue URL can be\n"
+        "provided as the task. Keep it to one or two short sentences."
+    )
+
+
 # ── Re-exports from domain submodules ───────────────────────────────────
 
 from autoskillit.cli._prompts_campaign import (  # noqa: E402
@@ -57,6 +68,7 @@ from autoskillit.cli._prompts_orchestrator import (  # noqa: E402
 __all__ = [
     "_MCP_RETRY_INSTRUCTION",
     "_read_full_sous_chef",
+    "_ingredient_table_display_instruction",
     "_build_fleet_campaign_prompt",
     "_has_dynamic_dispatch",
     "_build_dynamic_dispatch_section",

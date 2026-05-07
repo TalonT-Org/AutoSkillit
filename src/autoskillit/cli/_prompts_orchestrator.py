@@ -5,7 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.cli._prompts import _MCP_RETRY_INSTRUCTION, _read_full_sous_chef
+from autoskillit.cli._prompts import (
+    _MCP_RETRY_INSTRUCTION,
+    _ingredient_table_display_instruction,
+    _read_full_sous_chef,
+)
 from autoskillit.core import get_logger
 from autoskillit.hooks import QUOTA_GUARD_DENY_TRIGGER, QUOTA_POST_WARNING_TRIGGER
 
@@ -91,6 +95,11 @@ def _build_orchestrator_prompt(
             "- Passing ingredients to pipeline steps via `with:` arguments\n\n"
         )
 
+    _display_step = _ingredient_table_display_instruction(
+        "the open_kitchen response "
+        "(between --- INGREDIENTS TABLE --- and --- END TABLE --- markers)"
+    )
+
     return f"""\
 You are a pipeline orchestrator. Execute the recipe '{recipe_name}' step-by-step.
 
@@ -100,12 +109,7 @@ You are a pipeline orchestrator. Execute the recipe '{recipe_name}' step-by-step
    the ingredients table above (when present) is provided for reference only.
    DO NOT call AskUserQuestion or any other tool before open_kitchen.
    {_MCP_RETRY_INSTRUCTION.replace(chr(10), chr(10) + "   ")}
-2. The response contains a pre-formatted ingredients table
-   between --- INGREDIENTS TABLE --- and --- END TABLE --- markers.
-   Display it verbatim in your response — do not reformat or re-render it.
-   Then ask for the required fields (marked with *). If the recipe has both
-   a task and an issue_url ingredient, mention that a GitHub issue URL can
-   be provided as the task. Keep it to one or two short sentences.
+2. {_display_step}
 3. Collect ingredient values conversationally from the user's response.
 4. Execute the pipeline steps.
 

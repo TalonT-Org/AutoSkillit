@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from autoskillit.cli._prompts import _read_full_sous_chef
+from autoskillit.cli._prompts import _ingredient_table_display_instruction, _read_full_sous_chef
 from autoskillit.core import RetryReason
 
 if TYPE_CHECKING:
@@ -203,6 +203,18 @@ Do NOT re-dispatch from the full original issue list.
             "via AskUserQuestion. Do not dispatch until all required values are confirmed.\n"
         )
 
+    _first_action_section = ""
+    if ingredients_table:
+        _display = _ingredient_table_display_instruction(
+            "the ## RECIPE INGREDIENTS section in this system prompt"
+        )
+        _first_action_section = (
+            "\nFIRST ACTION — before asking for any inputs:\n\n"
+            f"1. {_display}\n\n"
+            "2. Collect ingredient values via AskUserQuestion.\n\n"
+            "3. Proceed only after all required ingredient values are confirmed.\n"
+        )
+
     return f"""\
 You are a fleet campaign dispatcher. Execute campaign '{campaign_recipe.name}' autonomously.
 Campaign ID: {campaign_id}. Dispatches: {dispatch_count}.
@@ -215,6 +227,7 @@ Campaign ID: {campaign_id}. Dispatches: {dispatch_count}.
 - Dispatch count: {dispatch_count} dispatches
 - Continue on failure: {campaign_recipe.continue_on_failure}
 {_ing_section}
+{_first_action_section}
 ## DISPATCH MANIFEST
 
 The following manifest defines all dispatches for this campaign:

@@ -143,7 +143,7 @@ steps:
       slot frees, dispatch the next queued validation immediately.
 
       Skip validation for any audit that failed in the audit dispatch phase.
-      Each validation writes to ${{ context.audit_run_dir }}/validate-audit/:
+      Each validation writes to ${{ context.audit_run_dir }}/:
       - validated_report_{source}_{timestamp}.md (first line: "validated: true")
       - contested_findings_{source}_{timestamp}.md (only if contested > 0)
       - validation_summary_{source}_{timestamp}.md (always written)

@@ -499,6 +499,7 @@ class AutomationConfig:
                 max_concurrent_dispatches=int(
                     val(fr, "max_concurrent_dispatches", _fr["max_concurrent_dispatches"])
                 ),
+                max_total_issues=int(val(fr, "max_total_issues", _fr["max_total_issues"])),
             ),
             providers=ProvidersConfig(
                 default_provider=val(pvd, "default_provider", _pvd["default_provider"]),

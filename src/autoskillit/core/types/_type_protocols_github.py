@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable
 
-from ._type_results import CIRunScope
+from ._type_results_execution import CIRunScope
 
 __all__ = ["GitHubFetcher", "CIWatcher", "MergeQueueWatcher"]
 

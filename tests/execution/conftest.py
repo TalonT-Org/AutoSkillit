@@ -222,8 +222,8 @@ def _assistant_ndjson(
 
 
 def _flush(tmp_path: Path, **overrides) -> None:
-    from autoskillit.core.types._type_results import (
-        ProviderOutcome,
+    from autoskillit.core.types._type_results import ProviderOutcome
+    from autoskillit.core.types._type_results_execution import (
         RecipeIdentity,
         SessionTelemetry,
     )

@@ -3,7 +3,6 @@ description: >
   Research sub-recipe: gather context, analyze findings, and produce a
   structured research report for the parent recipe.
 summary: gather → analyze → report
-autoskillit_version: "0.9.496"
 
 ingredients:
   source_dir:

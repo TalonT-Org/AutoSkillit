@@ -150,6 +150,16 @@ def test_run_review_has_non_empty_capture(recipe: Recipe) -> None:
         )
 
 
+def test_run_review_capture_keys(recipe: Recipe) -> None:
+    d = _dispatch_by_name(recipe, "run-review")
+    assert d is not None
+    assert set(d.capture.keys()) == {
+        "pr_url",
+        "all_diagram_paths",
+        "report_path_after_finalize",
+    }
+
+
 def test_run_archive_has_empty_capture(recipe: Recipe) -> None:
     d = _dispatch_by_name(recipe, "run-archive")
     assert d is not None

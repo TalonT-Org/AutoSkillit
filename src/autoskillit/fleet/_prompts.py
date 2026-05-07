@@ -71,7 +71,7 @@ def _build_food_truck_prompt(
 You are an L2 food truck orchestrator. Execute the recipe '{recipe}' autonomously.
 Timeout: {l3_timeout_sec}s. Campaign: {campaign_id}. Dispatch: {dispatch_id}.
 
---- SECTION 1: SOUS-CHEF DISCIPLINE (L2/FOOD-TRUCK SUBSET) ---
+--- SECTION 1: ADMIRAL DISCIPLINE (L2/FOOD-TRUCK SUBSET) ---
 
 {admiral_block}
 

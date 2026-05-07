@@ -31,7 +31,6 @@ class TestCoreUniversalModules:
             "_type_protocols_infra",
             "_type_enums",
             "_type_subprocess",
-            "_type_results",
         }
         assert required <= _CORE_UNIVERSAL_MODULES
 
@@ -91,6 +90,7 @@ class TestModuleCascadeCore:
             "session_registry",
             "tool_sequence_analysis",
             "_type_checkpoint",
+            "_type_results",
         }
         assert set(MODULE_CASCADE_CORE.keys()) == expected_stems
 
@@ -111,6 +111,25 @@ class TestModuleCascadeCore:
         assert "_type_checkpoint" in MODULE_CASCADE_CORE
         assert MODULE_CASCADE_CORE["_type_checkpoint"] == frozenset(
             {"core", "execution", "fleet", "server"}
+        )
+
+    def test_type_results_cascade(self) -> None:
+        assert MODULE_CASCADE_CORE["_type_results"] == frozenset(
+            {
+                "core",
+                "execution",
+                "pipeline",
+                "workspace",
+                "recipe",
+                "migration",
+                "fleet",
+                "server",
+                "cli",
+                "_llm_triage",
+                "_test_filter",
+                "hook_registry",
+                "smoke_utils",
+            }
         )
 
 
@@ -136,6 +155,7 @@ class TestBuildTestScopeCoreCascade:
         "cli",
         "hooks",
         "skills",
+        "planner",
         "arch",
         "contracts",
         "infra",
@@ -346,6 +366,22 @@ class TestBuildTestScopeCoreCascade:
         for excluded in ["cli", "config", "pipeline", "workspace", "recipe", "migration", "hooks"]:
             assert excluded not in dir_names, (
                 f"_type_checkpoint cascade should not include {excluded}"
+            )
+
+    def test_type_results_narrow_routing(self, tmp_path: Path) -> None:
+        tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
+        result = build_test_scope(
+            changed_files={"src/autoskillit/core/types/_type_results.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        dir_names = {p.name for p in result}
+        for pkg in ["core", "execution", "server", "fleet", "migration"]:
+            assert pkg in dir_names, f"_type_results cascade should include {pkg}"
+        for excluded in ["config", "hooks", "skills", "planner"]:
+            assert excluded not in dir_names, (
+                f"_type_results cascade should not include {excluded}"
             )
 
 

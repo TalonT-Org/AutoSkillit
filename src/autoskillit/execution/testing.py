@@ -10,11 +10,12 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import re
 import tempfile
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+import regex as re
 
 from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS, TestResult, get_logger
 

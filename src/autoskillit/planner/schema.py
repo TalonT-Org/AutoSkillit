@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-import re
 import warnings
 from typing import Any, Literal, TypedDict
+
+import regex as re
 
 
 class PhaseResult(TypedDict):

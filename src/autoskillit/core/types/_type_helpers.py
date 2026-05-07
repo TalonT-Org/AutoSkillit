@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import warnings
 from typing import Any
+
+import regex as re
 
 from ._type_constants import (
     AUTOSKILLIT_SKILL_PREFIX,

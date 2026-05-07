@@ -8,8 +8,9 @@ execution/ as headless skill result helpers.
 
 from __future__ import annotations
 
-import re
 from typing import Any
+
+import regex as re
 
 # ---------------------------------------------------------------------------
 # Linked issue extraction (used by review-pr fidelity subagent)

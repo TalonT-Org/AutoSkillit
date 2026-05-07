@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import os
 import random
-import re
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+import regex as re
 
 from autoskillit.cli._mcp_names import detect_autoskillit_mcp_prefix
 from autoskillit.cli._prompts import _build_orchestrator_prompt, _get_ingredients_table

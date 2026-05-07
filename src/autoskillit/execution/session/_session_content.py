@@ -5,8 +5,9 @@ Private sub-module — import from autoskillit.execution.session for public API.
 
 from __future__ import annotations
 
-import re
 from collections.abc import Sequence
+
+import regex as re
 
 from autoskillit.core import get_logger
 from autoskillit.execution.session._session_model import (

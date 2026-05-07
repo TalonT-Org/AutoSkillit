@@ -7,8 +7,9 @@ cardinality assertion.
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
+
+import regex as re
 
 _HUNK_HEADER = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 _FILE_HEADER = re.compile(r"^\+\+\+ b/(.+)$")

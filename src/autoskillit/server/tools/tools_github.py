@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import json
-import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import regex as re
 import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext

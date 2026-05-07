@@ -7,7 +7,7 @@ Used by:
 
 from __future__ import annotations
 
-import re
+import regex as re
 
 
 def extract_bash_blocks(content: str) -> list[str]:

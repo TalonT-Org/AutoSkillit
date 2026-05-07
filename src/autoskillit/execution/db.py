@@ -6,9 +6,10 @@ No dependency on MCP, config, types, or other autoskillit modules beyond _loggin
 from __future__ import annotations
 
 import base64
-import re
 import sqlite3
 import threading
+
+import regex as re
 
 from autoskillit.core import get_logger
 

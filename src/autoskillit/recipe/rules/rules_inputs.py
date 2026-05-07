@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-import re
-
+import regex as re
 from packaging.version import Version
 
 from autoskillit.core import (

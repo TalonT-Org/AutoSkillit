@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-import re
 import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cache, lru_cache
 from pathlib import Path
+
+import regex as re
 
 from autoskillit.core import load_yaml
 from autoskillit.recipe.methodology_tradition_registry import (

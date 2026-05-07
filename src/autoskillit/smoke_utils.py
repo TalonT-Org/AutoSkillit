@@ -232,9 +232,10 @@ def patch_pr_token_summary(
     timeout: int = 60,
 ) -> dict[str, str]:
     import os  # noqa: PLC0415
-    import re  # noqa: PLC0415
     import subprocess  # noqa: PLC0415
     import time  # noqa: PLC0415
+
+    import regex as re  # noqa: PLC0415
 
     from autoskillit.execution import resolve_log_dir  # noqa: PLC0415
     from autoskillit.pipeline import DefaultTokenLog, TelemetryFormatter  # noqa: PLC0415

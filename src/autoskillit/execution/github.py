@@ -7,13 +7,13 @@ Never raises — all errors are captured and returned as {"success": False, "err
 from __future__ import annotations
 
 import asyncio
-import re
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import httpx
+import regex as re
 
 from autoskillit.core import _parse_issue_ref, get_logger
 

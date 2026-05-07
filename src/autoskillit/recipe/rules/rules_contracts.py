@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import re as _re
+import regex as _re
 
 from autoskillit.core import Severity, get_logger, pkg_root
 from autoskillit.recipe._analysis import ValidationContext

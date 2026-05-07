@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import os
-import re
+
+import regex as re
 
 from autoskillit.core import get_logger, load_yaml, pkg_root
 

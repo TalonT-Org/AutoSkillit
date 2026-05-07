@@ -6,7 +6,7 @@ and review-blocked lists before merge ordering.
 
 from __future__ import annotations
 
-import re
+import regex as re
 
 _CI_PASSING_CONCLUSIONS = frozenset({"success", "skipped", "neutral"})
 

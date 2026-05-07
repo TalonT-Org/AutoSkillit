@@ -125,7 +125,9 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
     _initialize(ctx)
 
     try:
-        anyio.run(serve_with_signal_guard, mcp)
+        anyio.run(
+            serve_with_signal_guard, mcp, backend="asyncio", backend_options={"use_uvloop": True}
+        )
     except KeyboardInterrupt:
         pass  # Ctrl+C before anyio loop starts — rare during heavy import phase
 

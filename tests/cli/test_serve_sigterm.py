@@ -55,6 +55,44 @@ def test_serve_uses_anyio_run_not_mcp_run(monkeypatch, tmp_path):
     )
 
 
+def test_serve_passes_uvloop_backend_options(monkeypatch, tmp_path):
+    """serve() must pass backend='asyncio' and use_uvloop=True to anyio.run()."""
+    anyio_run_calls: list[dict] = []
+
+    monkeypatch.chdir(tmp_path)
+
+    mock_cfg = MagicMock()
+    mock_cfg.logging.level = "INFO"
+    mock_cfg.logging.json_output = None
+    mock_cfg.safety.protected_branches = []
+
+    monkeypatch.setattr("autoskillit.config.load_config", lambda _: mock_cfg)
+    monkeypatch.setattr("autoskillit.core.configure_logging", lambda **kw: None)
+    monkeypatch.setattr("autoskillit.server.make_context", lambda *a, **kw: MagicMock())
+    monkeypatch.setattr("autoskillit.server._initialize", lambda ctx: None)
+
+    def capture_anyio_run(coro_fn, *args, **kwargs):
+        anyio_run_calls.append({"fn": coro_fn, "kwargs": kwargs})
+
+    monkeypatch.setattr("anyio.run", capture_anyio_run)
+
+    from autoskillit.cli.app import serve
+
+    serve()
+
+    assert anyio_run_calls, "serve() did not call anyio.run()"
+    call_kwargs = anyio_run_calls[0]["kwargs"]
+    assert call_kwargs.get("backend") == "asyncio", (
+        f"Expected backend='asyncio', got {call_kwargs.get('backend')!r}. "
+        "The MCP server must use the asyncio backend with uvloop enabled."
+    )
+    assert call_kwargs.get("backend_options", {}).get("use_uvloop") is True, (
+        f"Expected backend_options['use_uvloop']=True, "
+        f"got {call_kwargs.get('backend_options')!r}. "
+        "The MCP server must enable uvloop for network I/O throughput."
+    )
+
+
 def test_sighup_in_serve_guard_signal_list() -> None:
     """_serve_guard.py must pass signal.SIGHUP to open_signal_receiver (AST guard).
 

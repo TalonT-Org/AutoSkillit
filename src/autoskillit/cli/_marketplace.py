@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+import regex as re
 
 import autoskillit.cli._hooks as _hooks_mod
 from autoskillit.cli._hooks import (

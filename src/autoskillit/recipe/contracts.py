@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import dataclasses
 import hashlib
-import re
 from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+import regex as re
 
 if TYPE_CHECKING:
     from autoskillit.core import SkillResolver

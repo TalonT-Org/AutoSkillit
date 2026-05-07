@@ -16,9 +16,7 @@ from autoskillit.recipe.io import (
     builtin_recipes_dir,
 )
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
 _MINIMAL_RECIPE = {
     "name": "test-recipe",
@@ -40,11 +38,6 @@ def _compile_json(yaml_path: Path) -> None:
     json_path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
-# ---------------------------------------------------------------------------
-# T1: prefers JSON when fresh
-# ---------------------------------------------------------------------------
-
-
 def test_load_recipe_dict_prefers_json_when_fresh(tmp_path, monkeypatch):
     yaml_path = tmp_path / "recipe.yaml"
     _write_yaml(yaml_path, _MINIMAL_RECIPE)
@@ -62,11 +55,6 @@ def test_load_recipe_dict_prefers_json_when_fresh(tmp_path, monkeypatch):
     assert load_yaml_calls == [], "load_yaml should not be called when JSON is fresh"
 
 
-# ---------------------------------------------------------------------------
-# T2: falls back when JSON missing
-# ---------------------------------------------------------------------------
-
-
 def test_load_recipe_dict_falls_back_when_json_missing(tmp_path, monkeypatch):
     yaml_path = tmp_path / "recipe.yaml"
     _write_yaml(yaml_path, _MINIMAL_RECIPE)
@@ -81,11 +69,6 @@ def test_load_recipe_dict_falls_back_when_json_missing(tmp_path, monkeypatch):
 
     assert result == _MINIMAL_RECIPE
     assert load_yaml_calls == [1], "load_yaml should be called when JSON sibling is absent"
-
-
-# ---------------------------------------------------------------------------
-# T3: falls back when JSON stale
-# ---------------------------------------------------------------------------
 
 
 def test_load_recipe_dict_falls_back_when_json_stale(tmp_path, monkeypatch):
@@ -111,11 +94,6 @@ def test_load_recipe_dict_falls_back_when_json_stale(tmp_path, monkeypatch):
     assert load_yaml_calls == [1], "load_yaml should be called when JSON is stale"
 
 
-# ---------------------------------------------------------------------------
-# T4: substitution applied on JSON path
-# ---------------------------------------------------------------------------
-
-
 def test_load_recipe_dict_applies_substitution_on_json(tmp_path):
     recipe_with_placeholder = {
         "name": "test-recipe",
@@ -136,18 +114,14 @@ def test_load_recipe_dict_applies_substitution_on_json(tmp_path):
     assert result["steps"]["run"]["with"]["worktree_path"] == "custom/temp"
 
 
-# ---------------------------------------------------------------------------
-# T5: handles JSON decode error (corrupt JSON)
-# ---------------------------------------------------------------------------
-
-
 def test_load_recipe_dict_handles_json_decode_error(tmp_path, monkeypatch):
     yaml_path = tmp_path / "recipe.yaml"
     _write_yaml(yaml_path, _MINIMAL_RECIPE)
     json_path = yaml_path.with_suffix(".json")
-    # Write newer mtime but corrupt content
+    # Write corrupt content with an explicitly future mtime so the freshness gate passes
     json_path.write_text("{ invalid json }", encoding="utf-8")
-    os.utime(json_path, None)  # make it newer than YAML
+    future_mtime = yaml_path.stat().st_mtime + 10
+    os.utime(json_path, (future_mtime, future_mtime))
 
     load_yaml_calls = []
     monkeypatch.setattr(
@@ -159,11 +133,6 @@ def test_load_recipe_dict_handles_json_decode_error(tmp_path, monkeypatch):
 
     assert result == _MINIMAL_RECIPE
     assert load_yaml_calls == [1], "load_yaml should be called when JSON is corrupt"
-
-
-# ---------------------------------------------------------------------------
-# T6: _collect_recipes produces identical results with JSON siblings
-# ---------------------------------------------------------------------------
 
 
 def test_collect_recipes_identical_with_json(tmp_path):
@@ -199,22 +168,12 @@ def test_collect_recipes_identical_with_json(tmp_path):
         assert a.kind == b.kind
 
 
-# ---------------------------------------------------------------------------
-# T7: roundtrip YAML -> JSON -> dict preserves data
-# ---------------------------------------------------------------------------
-
-
 def test_compile_recipes_roundtrip():
     for yaml_path in sorted(builtin_recipes_dir().rglob("*.yaml")):
         data = yaml.safe_load(yaml_path.read_bytes())
         json_text = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
         roundtripped = json.loads(json_text)
         assert roundtripped == data, f"Roundtrip failed for {yaml_path.name}"
-
-
-# ---------------------------------------------------------------------------
-# T8: bundled JSON files are fresh (freshness guard)
-# ---------------------------------------------------------------------------
 
 
 def test_bundled_json_files_are_fresh():
@@ -225,6 +184,6 @@ def test_bundled_json_files_are_fresh():
         yaml_data = yaml.safe_load(yaml_path.read_bytes())
         json_data = json.loads(json_path.read_text(encoding="utf-8"))
         assert json_data == yaml_data, f"JSON is stale for {yaml_path.name}"
-
-
-pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
+        assert json_path.stat().st_mtime_ns >= yaml_path.stat().st_mtime_ns, (
+            f"JSON mtime is older than YAML mtime for {yaml_path.name} — fast-path would be bypassed"
+        )

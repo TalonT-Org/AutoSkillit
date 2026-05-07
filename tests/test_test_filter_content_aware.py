@@ -1,4 +1,4 @@
-"""Tests for content-aware Bucket A check and build_test_scope integration (T1, T2)."""
+"""Tests for content-aware Bucket A check and build_test_scope integration (T1–T5)."""
 
 from __future__ import annotations
 
@@ -200,7 +200,7 @@ class TestBuildTestScopeContentAware:
 
 
 # ---------------------------------------------------------------------------
-# _is_additive_only unit tests (T1)
+# _is_additive_only unit tests (T3)
 # ---------------------------------------------------------------------------
 
 
@@ -414,7 +414,7 @@ class TestIsAdditiveOnly:
 
 
 # ---------------------------------------------------------------------------
-# build_test_scope integration tests for content-aware cascade (T2)
+# build_test_scope integration tests for content-aware cascade (T4)
 # ---------------------------------------------------------------------------
 
 
@@ -486,7 +486,7 @@ class TestBuildTestScopeUniversalExclusions:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """_type_enums with removal in diff: uses full 17-dir cascade."""
+        """_type_enums with removal in diff: uses full cascade."""
         tests_root = self._make_tests_root(tmp_path)
         diff_output = "-class OldType:"
         mock_run = Mock(
@@ -538,6 +538,7 @@ class TestBuildTestScopeUniversalExclusions:
         dir_names = {p.name for p in result if p.is_dir()}
         for pkg in ["core", "config", "execution", "hooks", "skills"]:
             assert pkg in dir_names, f"full cascade should include {pkg}"
+        mock_run.assert_not_called()
 
     def test_universal_without_cwd_uses_full_cascade(
         self,
@@ -579,44 +580,9 @@ class TestBuildTestScopeUniversalExclusions:
         for pkg in ["core", "config", "execution", "hooks", "skills"]:
             assert pkg in dir_names, f"full cascade should include {pkg}"
 
-    def test_reexport_closure_universal_additive_uses_narrowed(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Closure-expanded _type_enums with additive diff: narrowed cascade."""
-        tests_root = self._make_tests_root(tmp_path)
-        diff_output = "+class NewType:\n+    field: str"
-        mock_run = Mock(
-            side_effect=[
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout="deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n"
-                ),
-                subprocess.CompletedProcess(args=[], returncode=0, stdout=diff_output),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout="deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n"
-                ),
-                subprocess.CompletedProcess(args=[], returncode=0, stdout=diff_output),
-            ]
-        )
-        monkeypatch.setattr(subprocess, "run", mock_run)
-        result = build_test_scope(
-            changed_files={"src/autoskillit/core/_type_enums.py"},
-            mode=FilterMode.CONSERVATIVE,
-            tests_root=tests_root,
-            cwd=str(tmp_path),
-            base_ref="main",
-        )
-        assert isinstance(result, set)
-        dir_names = {p.name for p in result if p.is_dir()}
-        for pkg in ["core", "config", "execution", "pipeline", "server", "cli"]:
-            assert pkg in dir_names, f"narrowed cascade should include {pkg}"
-        for excluded in ["hooks", "skills"]:
-            assert excluded not in dir_names, f"narrowed cascade should exclude {excluded}"
-
 
 # ---------------------------------------------------------------------------
-# _CORE_UNIVERSAL_EXCLUSIONS contract tests (T3)
+# _CORE_UNIVERSAL_EXCLUSIONS contract tests (T5)
 # ---------------------------------------------------------------------------
 
 

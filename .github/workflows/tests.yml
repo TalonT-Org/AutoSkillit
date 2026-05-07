@@ -58,6 +58,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install uv
+        id: setup-uv
         uses: astral-sh/setup-uv@v7
         with:
           uv-version: "0.9.21"
@@ -81,8 +82,42 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Check api-simulator cache status (diagnostic - issue 2135)
+        run: |
+          echo "=== uv cache-hit output ==="
+          echo "Cache hit: ${{ steps.setup-uv.outputs.cache-hit }}"
+          echo ""
+          echo "=== uv cache dir ==="
+          uv cache dir
+          echo ""
+          echo "=== Looking for api-simulator in uv cache ==="
+          find "$(uv cache dir)" -path "*simulator*" -type f 2>/dev/null || echo "api-simulator NOT found in uv cache (will need Rust compilation)"
+          echo ""
+          echo "=== uv cache size ==="
+          du -sh "$(uv cache dir)" 2>/dev/null || echo "cache dir not found"
+
       - name: Install dependencies
-        run: uv sync --locked --extra dev
+        run: |
+          echo "=== Starting uv sync (timestamp: $(date -u +%H:%M:%S)) ==="
+          uv sync --locked --extra dev -v 2>&1 | tee /tmp/uv-sync.log
+          echo "=== Finished uv sync (timestamp: $(date -u +%H:%M:%S)) ==="
+          echo ""
+          echo "=== Rust/maturin compilation evidence ==="
+          grep -i "building\|compiling\|maturin\|cargo\|rustc\|Built api" /tmp/uv-sync.log || echo "No Rust compilation detected"
+          echo ""
+          echo "=== Cache/wheel reuse evidence ==="
+          grep -i "cached\|using cached\|found cached\|Installed.*api.simulator" /tmp/uv-sync.log || echo "No cache hit detected for api-simulator"
+
+      - name: Post-install api-simulator cache status (diagnostic - issue 2135)
+        run: |
+          echo "=== api-simulator in uv cache AFTER install ==="
+          find "$(uv cache dir)" -path "*simulator*" -type f 2>/dev/null | head -20
+          echo ""
+          echo "=== uv cache size AFTER install ==="
+          du -sh "$(uv cache dir)" 2>/dev/null || echo "cache dir not found"
+          echo ""
+          echo "=== Wheel file details ==="
+          find "$(uv cache dir)" -path "*simulator*" -name "*.whl" -exec ls -lh {} \; 2>/dev/null || echo "No wheel found"
 
       - name: Generate recipe diagrams
         run: uv run autoskillit recipes render

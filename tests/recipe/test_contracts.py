@@ -62,6 +62,7 @@ def test_get_skill_contract_defaults_required_false() -> None:
     manifest = {"skills": {"test-skill": {"inputs": [{"name": "x", "type": "string"}]}}}
     contract = get_skill_contract("test-skill", manifest)
     assert contract is not None
+    assert len(contract.inputs) == 1
     assert contract.inputs[0].required is False
 
 
@@ -71,6 +72,7 @@ def test_get_callable_contract_defaults_required_true() -> None:
     manifest = {"callable_contracts": {"mod.func": {"inputs": [{"name": "x", "type": "string"}]}}}
     contract = get_callable_contract("mod.func", manifest)
     assert contract is not None
+    assert len(contract.inputs) == 1
     assert contract.inputs[0].required is True
 
 

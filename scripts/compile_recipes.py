@@ -17,7 +17,14 @@ RECIPES_DIR = Path(__file__).resolve().parent.parent / "src" / "autoskillit" / "
 
 
 def _compile_one(yaml_path: Path) -> None:
-    data = yaml.load(yaml_path.read_bytes(), Loader=Loader)
+    try:
+        data = yaml.load(yaml_path.read_bytes(), Loader=Loader)
+    except yaml.YAMLError as exc:
+        raise SystemExit(f"ERROR: YAML parse failed in {yaml_path}: {exc}") from exc
+    if not isinstance(data, dict):
+        raise SystemExit(
+            f"ERROR: {yaml_path} top-level value is {type(data).__name__}, expected mapping"
+        )
     json_path = yaml_path.with_suffix(".json")
     json_path.write_text(
         json.dumps(data, indent=2, ensure_ascii=False) + "\n",
@@ -30,11 +37,16 @@ def main() -> int:
         print(f"ERROR: recipes dir not found: {RECIPES_DIR}", file=sys.stderr)
         return 1
     count = 0
+    errors = 0
     for yaml_path in sorted(RECIPES_DIR.rglob("*.yaml")):
-        _compile_one(yaml_path)
-        count += 1
-    print(f"Compiled {count} YAML files to JSON")
-    return 0
+        try:
+            _compile_one(yaml_path)
+            count += 1
+        except SystemExit as exc:
+            print(exc, file=sys.stderr)
+            errors += 1
+    print(f"Compiled {count} YAML files to JSON" + (f" ({errors} errors)" if errors else ""))
+    return 1 if errors else 0
 
 
 if __name__ == "__main__":

@@ -204,7 +204,7 @@ tasks:
   compile-recipes:
     desc: Pre-compile bundled recipe YAML files to JSON
     cmds:
-      - python scripts/compile_recipes.py
+      - uv run python scripts/compile_recipes.py
 
   install-worktree:
     desc: Set up development environment (isolated venv in worktrees, direct install in main)

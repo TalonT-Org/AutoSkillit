@@ -1023,27 +1023,15 @@ def test_tool_subset_tags_match_decorators() -> None:
     )
 
 
-def test_server_docstring_counts_accurate() -> None:
-    """server/__init__.py docstring numeric claims match actual frozenset sizes."""
-    from autoskillit.core.types import FREE_RANGE_TOOLS, GATED_TOOLS, HEADLESS_TOOLS
+def test_server_docstring_references_registry_constants() -> None:
+    """server/__init__.py docstring references registry constants, not hardcoded counts."""
+    import re
 
     docstring = (SRC_ROOT / "server" / "__init__.py").read_text()
-    expected_substrings: dict[str, str] = {
-        "gated": f"{len(GATED_TOOLS)} gated",
-        "headless-tagged": f"{len(HEADLESS_TOOLS)} headless-tagged",
-        "free-range": f"{len(FREE_RANGE_TOOLS)} free-range",
-        "kitchen-tagged": f"{len(GATED_TOOLS) + len(HEADLESS_TOOLS)} kitchen-tagged",
-    }
-
-    mismatches = [
-        f"'{label}': expected '{claim}' in docstring"
-        for label, claim in expected_substrings.items()
-        if claim not in docstring
-    ]
-
-    assert not mismatches, (
-        "server/__init__.py docstring count claims do not match frozenset sizes:\n"
-        + "\n".join(f"  {m}" for m in mismatches)
+    assert "GATED_TOOLS" in docstring, "docstring should reference GATED_TOOLS"
+    assert "UNGATED_TOOLS" in docstring, "docstring should reference UNGATED_TOOLS"
+    assert not re.search(r"\d+ kitchen-tagged", docstring), (
+        "docstring must not contain hardcoded tool counts — they rot as tools are added"
     )
 
 

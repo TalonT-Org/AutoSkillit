@@ -23,6 +23,8 @@ logger = get_logger(__name__)
 @mcp.tool(
     tags={"autoskillit", "kitchen", "kitchen-core", "headless"}, annotations={"readOnlyHint": True}
 )
+# No _require_enabled() — headless skill sessions need test_check without opening kitchen.
+# The kitchen tag governs visibility only; the headless tag provides access in SKILL sessions.
 @track_response_size("test_check")
 async def test_check(
     worktree_path: str,

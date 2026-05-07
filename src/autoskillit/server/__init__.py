@@ -1,18 +1,22 @@
 """MCP server for orchestrating automated skill-driven workflows.
 
-Kitchen tools (48 kitchen-tagged: 47 gated + 1 headless-tagged) are hidden at startup
-via FastMCP v3 mcp.disable(tags={'kitchen'}) applied once after all tool modules are
-imported. Each new session sees only the 4 free-range tools (open_kitchen, close_kitchen,
-disable_quota_guard, and reload_session).
+Tool gating uses two independent layers — see server/CLAUDE.md "Tool Gating
+Architecture" section for the full matrix.
+
+Tag-Visibility (FastMCP): kitchen-tagged tools are hidden at startup via
+mcp.disable(tags={'kitchen'}). Session-type dispatch (_apply_session_type_visibility)
+selectively reveals tags per session type. open_kitchen reveals all kitchen-tagged
+tools for interactive sessions.
+
+Application-Gate (Python): most tools call _require_enabled() internally, which
+checks ctx.gate.enabled and returns a gate_error envelope if the kitchen is closed.
+See GATED_TOOLS and UNGATED_TOOLS in core/types/_type_constants.py.
 
 Startup tag visibility is determined by AUTOSKILLIT_SESSION_TYPE (3-branch dispatch):
   FLEET — fleet-tagged tools pre-revealed
   ORCHESTRATOR + HEADLESS=1 — all kitchen-tagged tools pre-revealed
   SKILL + HEADLESS=1 — headless-tagged tools (test_check) pre-revealed
   ORCHESTRATOR/SKILL (interactive) — no pre-reveal; open_kitchen unlocks
-
-Calling the open_kitchen tool reveals all kitchen-tagged tools for that session
-via ctx.enable_components(tags={'kitchen'}).
 
 Transport: stdio (default for FastMCP).
 """

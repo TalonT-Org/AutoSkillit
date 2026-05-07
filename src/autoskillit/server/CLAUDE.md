@@ -33,3 +33,65 @@ This has regressed three times. Defense-in-depth:
 
 If you believe a tool genuinely needs `readOnlyHint: False`, you are wrong. All pipelines
 use independent branches. There is no shared mutable state between concurrent tool calls.
+
+## Tool Gating Architecture
+
+Tools are controlled by two independent mechanisms. A tool may be affected by one, both, or neither.
+
+### Tag-Visibility (FastMCP layer)
+
+Controls whether the tool appears in `tools/list` (whether the agent can see it):
+
+- `mcp.disable(tags={"kitchen"})` at startup hides all `kitchen`-tagged tools
+- `_apply_session_type_visibility()` selectively reveals tags per session type:
+  - **FLEET** sessions: `fleet`-tagged tools revealed; `fleet-dispatch` revealed only in dispatch mode
+  - **ORCHESTRATOR + HEADLESS**: `kitchen` (or `kitchen-core` + pack tags) revealed
+  - **SKILL + HEADLESS**: `headless`-tagged tools revealed (`test_check`)
+  - **Interactive** (no HEADLESS): nothing pre-revealed; `open_kitchen` reveals `kitchen` tag
+- Tags not disabled at startup (`kitchen-core`, `fleet-dispatch`, `fleet`, `headless`) remain
+  visible unless a session-type or feature-gate transform explicitly disables them
+- `ALL_VISIBILITY_TAGS` in `core/types/_type_constants.py` is the canonical set:
+  `{"kitchen", "headless", "fleet", "fleet-dispatch", "kitchen-core"}`
+
+### Application-Gate (Python layer)
+
+Controls whether the tool succeeds when called (independent of visibility):
+
+- Most kitchen tools call `_require_enabled()` as their first statement, which checks `ctx.gate.enabled`
+- Returns a `gate_error` JSON envelope if the kitchen hasn't been opened
+- `_require_enabled()` is defined in `server/_guards.py`; the error envelope is defined in `pipeline/gate.py`
+- Enforcement is validated by `test_gated_tools_call_require_enabled_first` in `tests/arch/test_layer_enforcement.py`
+
+### The Anomalies
+
+1. **Fleet-dispatch tools are tag-visible but application-gated.** `fetch_github_issue`, `get_issue_title`,
+   `list_recipes`, and `load_recipe` carry the `fleet-dispatch` tag (not `kitchen`), so they are
+   NOT hidden by `mcp.disable(tags={"kitchen"})`. In interactive sessions they appear in `tools/list`
+   without `open_kitchen`. But they call `_require_enabled()` internally — an agent that sees them
+   and calls them gets an unexpected gate error.
+
+2. **`test_check` is tag-hidden but NOT application-gated.** It carries the `kitchen` + `headless`
+   tags (hidden at startup), but does NOT call `_require_enabled()`. Headless skill sessions need
+   `test_check` without opening the kitchen — the `headless` tag provides visibility in SKILL sessions,
+   and skipping `_require_enabled()` lets the call succeed without a gate open.
+
+### Tool Gating Matrix
+
+| Category | Tag(s) | Hidden at startup? | Application-gated? | Example tools |
+|----------|--------|-------------------|--------------------|--------------|
+| Standard kitchen | `kitchen` | Yes | Yes (`_require_enabled`) | `run_cmd`, `run_skill`, `report_bug` |
+| Fleet tool | `fleet`, `kitchen-core` | No (no `kitchen` tag) | Yes (`_require_fleet` or `_require_enabled`) | `dispatch_food_truck`, `record_gate_dispatch` |
+| Fleet-dispatch tool | `fleet-dispatch` (± `kitchen-core`) | No (no `kitchen` tag) | Yes (`_require_enabled`) | `fetch_github_issue`, `list_recipes` |
+| Headless-exempt | `kitchen`, `headless` | Yes | No | `test_check` |
+| Free-range | _(none of the above)_ | No | No | `open_kitchen`, `close_kitchen` |
+
+### Registry Constants
+
+The canonical tool sets are in `core/types/_type_constants.py`:
+
+- `GATED_TOOLS` — all tools that call `_require_enabled()` (validated by arch test)
+- `UNGATED_TOOLS` = `FREE_RANGE_TOOLS` — tools with no gating at all
+- `HEADLESS_TOOLS` — `{"test_check"}` — kitchen-tagged but not application-gated
+- `FLEET_TOOLS` — fleet-session-only tools
+- `FLEET_DISPATCH_TOOLS` — fleet-dispatch-mode tools (always tag-visible, application-gated)
+- `ALL_VISIBILITY_TAGS` — `{"kitchen", "headless", "fleet", "fleet-dispatch", "kitchen-core"}`

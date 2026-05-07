@@ -652,8 +652,8 @@ def batch_create_issues(
     parsed: list[tuple[str, str, str]] = []
     for f in ticket_bodies:
         raw = f.read_text()
-        m = re.match(r"ticket_body_(\w+)_\d+_(.+)\.md", f.name)
-        ts = m.group(2) if m else ""
+        m = re.match(r"ticket_body_\w+_\d+_(.+)\.md", f.name)
+        ts = m.group(1) if m else ""
         title = _extract_title(raw)
         body = _strip_ticket_body(raw)
         parsed.append((title, body, ts))

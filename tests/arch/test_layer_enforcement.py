@@ -269,6 +269,7 @@ def test_ungated_tools_do_not_call_require_enabled() -> None:
     from autoskillit.server.tools import (
         tools_clone,
         tools_execution,
+        tools_fleet_dispatch,
         tools_git,
         tools_github,
         tools_issue_lifecycle,
@@ -280,6 +281,7 @@ def test_ungated_tools_do_not_call_require_enabled() -> None:
 
     _all_tool_modules = [
         tools_execution,
+        tools_fleet_dispatch,
         tools_git,
         tools_workspace,
         tools_clone,

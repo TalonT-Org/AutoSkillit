@@ -1,0 +1,247 @@
+"""MCP tool handlers: dispatch_food_truck, record_gate_dispatch."""
+
+from __future__ import annotations
+
+import functools
+import json
+import os
+from collections.abc import Callable
+from pathlib import Path
+
+from fastmcp import Context
+from fastmcp.dependencies import CurrentContext
+
+from autoskillit.core import get_logger
+from autoskillit.server import mcp
+from autoskillit.server._guards import _require_enabled, _require_fleet
+from autoskillit.server._notify import track_response_size
+
+logger = get_logger(__name__)
+
+
+def _get_food_truck_prompt_builder() -> Callable[..., str]:
+    """Return the food truck prompt builder with mcp_prefix pre-bound."""
+    from autoskillit.core import detect_autoskillit_mcp_prefix
+    from autoskillit.fleet import _build_food_truck_prompt
+
+    mcp_prefix = detect_autoskillit_mcp_prefix()
+    return functools.partial(_build_food_truck_prompt, mcp_prefix=mcp_prefix)
+
+
+@mcp.tool(
+    tags={"autoskillit", "kitchen-core", "fleet"},
+    annotations={"readOnlyHint": True},
+)
+@track_response_size("dispatch_food_truck")
+async def dispatch_food_truck(
+    recipe: str,
+    task: str,
+    ingredients: dict[str, str] | None = None,
+    dispatch_name: str | None = None,
+    timeout_sec: int | None = None,
+    capture: dict[str, str] | None = None,
+    resume_session_id: str | None = None,
+    resume_checkpoint: dict[str, object] | None = None,
+    idle_output_timeout: int | None = None,
+    ctx: Context = CurrentContext(),
+) -> str:
+    """Dispatch a single food truck L2 session for one recipe.
+
+    Spawns a headless subprocess that executes the given recipe with the
+    provided task and ingredient overrides. Returns a JSON envelope with
+    dispatch_id, dispatched_session_id, l3_payload, and token_usage.
+
+    Args:
+        recipe: Recipe name to dispatch (must be kind=standard).
+        task: Task description for the L2 food truck session.
+        ingredients: Optional ingredient overrides (all values must be strings).
+        dispatch_name: Optional display name for the dispatch record.
+        timeout_sec: Optional L2 session timeout override in seconds.
+        capture: Optional dict mapping capture keys to "${{ result.field }}" templates.
+            Extracted values are persisted in the campaign context for downstream
+            dispatches to reference via "${{ campaign.key }}" in their ingredients.
+        resume_checkpoint: Checkpoint dict from a prior RESUMABLE dispatch envelope.
+            Pass the "resume_checkpoint" field from the prior result to inject completed
+            items context into the resume prompt.
+
+    Never raises.
+    """
+    if (gate := _require_enabled()) is not None:
+        return gate
+    if (fleet_gate := _require_fleet("dispatch_food_truck")) is not None:
+        return fleet_gate
+
+    try:
+        # Feature guard: config authority check independent of MCP visibility state.
+        # Fleet sessions open the gate unconditionally at boot; this catch-all ensures
+        # dispatch_food_truck never executes when features.fleet is disabled in config.
+        from autoskillit.core import FleetErrorCode, fleet_error, is_feature_enabled
+        from autoskillit.server import _get_ctx as _get_ctx_for_feature_check
+
+        _feature_ctx = _get_ctx_for_feature_check()
+        if not is_feature_enabled(
+            "fleet",
+            _feature_ctx.config.features,
+            experimental_enabled=_feature_ctx.config.experimental_enabled,
+        ):
+            return fleet_error(
+                FleetErrorCode.FLEET_FEATURE_DISABLED,
+                "Fleet feature is disabled. Set features.experimental_enabled: true to enable.",
+            )
+
+        campaign_state_path_str = os.environ.get("AUTOSKILLIT_CAMPAIGN_STATE_PATH")
+        continue_on_failure_str = os.environ.get("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false")
+        if campaign_state_path_str and continue_on_failure_str.lower() != "true":
+            from autoskillit.fleet import (  # noqa: PLC0415
+                has_failed_dispatch,
+                reset_failed_dispatch,
+            )
+
+            campaign_sp = Path(campaign_state_path_str)
+            if dispatch_name:
+                reset_failed_dispatch(campaign_sp, dispatch_name)
+            if has_failed_dispatch(campaign_sp):
+                return fleet_error(
+                    FleetErrorCode.FLEET_CAMPAIGN_HALTED,
+                    "Campaign halted: a prior dispatch failed and "
+                    "continue_on_failure is false. "
+                    "No further dispatches permitted.",
+                )
+
+        from autoskillit.core import SessionCheckpoint  # noqa: PLC0415
+        from autoskillit.fleet import execute_dispatch
+        from autoskillit.server import _get_ctx
+        from autoskillit.server._misc import (  # noqa: PLC0415
+            _refresh_quota_cache,
+            check_and_sleep_if_needed,
+            invalidate_cache,
+        )
+
+        parsed_checkpoint = (
+            SessionCheckpoint.from_dict(resume_checkpoint) if resume_checkpoint else None
+        )
+        tool_ctx = _get_ctx()
+        from autoskillit.core import find_caller_session_id
+
+        caller_session_id = find_caller_session_id(project_dir=tool_ctx.project_dir)
+        result = await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe=recipe,
+            task=task,
+            ingredients=ingredients,
+            dispatch_name=dispatch_name,
+            timeout_sec=timeout_sec,
+            prompt_builder=_get_food_truck_prompt_builder(),
+            quota_checker=check_and_sleep_if_needed,
+            quota_refresher=_refresh_quota_cache,
+            cache_invalidator=invalidate_cache,
+            capture=capture,
+            resume_session_id=resume_session_id,
+            resume_checkpoint=parsed_checkpoint,
+            idle_output_timeout=idle_output_timeout,
+            caller_session_id=caller_session_id,
+        )
+
+        campaign_state_path_str = os.environ.get("AUTOSKILLIT_CAMPAIGN_STATE_PATH")
+        if campaign_state_path_str and dispatch_name:
+            try:
+                envelope = json.loads(result)
+                campaign_state_path = Path(campaign_state_path_str)
+                if campaign_state_path.exists():
+                    from autoskillit.fleet import (
+                        DispatchRecord,
+                        DispatchStatus,
+                        append_dispatch_record,
+                    )
+
+                    status = DispatchStatus(envelope["dispatch_status"])
+                    append_dispatch_record(
+                        campaign_state_path,
+                        DispatchRecord(
+                            name=dispatch_name,
+                            status=status,
+                            dispatch_id=envelope.get("dispatch_id", ""),
+                            dispatched_session_id=envelope.get("dispatched_session_id", ""),
+                            reason=envelope.get("reason", ""),
+                            token_usage=envelope.get("token_usage") or {},
+                        ),
+                    )
+            except Exception:
+                logger.warning("campaign state update failed", exc_info=True)
+
+        return result
+    except Exception as exc:
+        logger.error("dispatch_food_truck unhandled exception", exc_info=True)
+        from autoskillit.core import FleetErrorCode, fleet_error
+
+        return fleet_error(
+            FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
+            f"{type(exc).__name__}: {exc}",
+        )
+
+
+@mcp.tool(
+    tags={"autoskillit", "kitchen-core", "fleet"},
+    annotations={"readOnlyHint": True},
+)
+@track_response_size("record_gate_dispatch")
+async def record_gate_dispatch(
+    dispatch_name: str,
+    approved: bool,
+    ctx: Context = CurrentContext(),
+) -> str:
+    """Record the outcome of a gate dispatch to the campaign state file.
+
+    Gate dispatches are handled by AskUserQuestion (no L3 session). This tool
+    persists the user's approval/rejection so that campaign resume can skip
+    completed gates.
+
+    Args:
+        dispatch_name: Name of the gate dispatch in the campaign manifest.
+        approved: True if the user approved the gate, False if rejected.
+
+    Never raises.
+    """
+    if (gate := _require_enabled()) is not None:
+        return gate
+    if (fleet_gate := _require_fleet("record_gate_dispatch")) is not None:
+        return fleet_gate
+
+    try:
+        from autoskillit.core import FleetErrorCode, fleet_error, is_feature_enabled
+        from autoskillit.fleet import record_gate_outcome
+        from autoskillit.server import _get_ctx as _get_ctx_for_feature_check
+
+        _feature_ctx = _get_ctx_for_feature_check()
+        if not is_feature_enabled(
+            "fleet",
+            _feature_ctx.config.features,
+            experimental_enabled=_feature_ctx.config.experimental_enabled,
+        ):
+            return fleet_error(
+                FleetErrorCode.FLEET_FEATURE_DISABLED,
+                "Fleet feature is disabled. Set features.experimental_enabled: true to enable.",
+            )
+
+        campaign_state_path_str = os.environ.get("AUTOSKILLIT_CAMPAIGN_STATE_PATH")
+        if not campaign_state_path_str:
+            return fleet_error(
+                FleetErrorCode.FLEET_GATE_NO_CAMPAIGN,
+                "No AUTOSKILLIT_CAMPAIGN_STATE_PATH set — not running in campaign mode.",
+            )
+
+        result = record_gate_outcome(Path(campaign_state_path_str), dispatch_name, approved)
+        if not result.success:
+            return fleet_error(FleetErrorCode(result.error_code), result.error_message)
+
+        return json.dumps(
+            {"success": True, "dispatch_name": result.dispatch_name, "status": result.status}
+        )
+    except Exception as exc:
+        logger.error("record_gate_dispatch unhandled exception", exc_info=True)
+        from autoskillit.core import FleetErrorCode, fleet_error
+
+        return fleet_error(
+            FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
+            f"{type(exc).__name__}: {exc}",
+        )

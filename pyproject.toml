@@ -135,6 +135,10 @@ root_packages = ["autoskillit"]
 # inside TYPE_CHECKING blocks to avoid circular imports at runtime.
 exclude_type_checking_imports = true
 
+# Contract IDs below use IL-NNN (three-digit serial numbers, e.g. IL-001).
+# These are NOT import layer levels (IL-0 through IL-3).
+# IL-002 = config's contract; IL-2 = the recipe/migration/fleet import layer.
+
 # IL-001 | Lens: module-dependency | DS-001
 # Rationale: IL-0 (core) is the foundation layer; it must have zero upward imports to
 # remain independently testable and importable outside the autoskillit package.

@@ -157,10 +157,13 @@ generic_automation_mcp/
 
 **CRITICAL**: When using subagents, invoke with `CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=120000` to ensure subagents exit when finished.
 
-**Import layer vs. orchestration level:** Module docstrings and import-linter
-contracts use IL-N labels (IL-001–IL-009 in `pyproject.toml`) for the import
-dependency hierarchy — these are separate from the L0–L3 orchestration levels
-defined in `docs/orchestration-levels.md`.
+**Import layer vs. orchestration level — disambiguation table:**
+
+| Notation | System | Example | Meaning |
+|----------|--------|---------|---------|
+| IL-N (single digit) | Import layer level | IL-0, IL-2 | Module's position in the import DAG |
+| IL-NNN (three-digit) | Import-linter contract ID | IL-001, IL-009 | Specific pyproject.toml contract |
+| L-N | Orchestration level | L0, L3 | Runtime session spawning tier (see `docs/orchestration-levels.md`) |
 
 ## 7. Session Diagnostics
 

@@ -19,11 +19,11 @@ def test_format_ingredients_table_delegates_to_render_gfm_table():
     src = inspect.getsource(format_ingredients_table)
     assert "_render_gfm_table" in src, (
         "format_ingredients_table must delegate to _render_gfm_table. "
-        "Reverting to inline width math is prohibited — it bypasses the L0 cap contract."
+        "Reverting to inline width math is prohibited — it bypasses the IL-0 cap contract."
     )
     assert "max(len(" not in src, (
         "format_ingredients_table must not contain ad-hoc max(len(...)) width computation. "
-        "Width capping belongs in _render_gfm_table at L0."
+        "Width capping belongs in _render_gfm_table at IL-0."
     )
 
 

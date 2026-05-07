@@ -60,6 +60,10 @@ BUCKET_A_GLOBS: tuple[str, ...] = ("tests/*/conftest.py",)
 # Matches lines that only change a version string: -version = "0.9.x" / +version = "0.9.y"
 _VERSION_LINE_RE: re.Pattern[str] = re.compile(r'^[+-]version\s*=\s*"[^"]*"', re.IGNORECASE)
 
+# Matches removed lines that are class/function definitions or UPPER_CASE constant assignments.
+# Used by _is_additive_only to detect breaking changes.
+_BREAKING_DEF_RE: re.Pattern[str] = re.compile(r"^-\s*(class |def |[A-Z_]+ [=:])", re.MULTILINE)
+
 ALWAYS_RUN_CONSERVATIVE: frozenset[str] = frozenset(
     {
         "arch",
@@ -150,6 +154,12 @@ _CORE_UNIVERSAL_MODULES: frozenset[str] = frozenset(
         "_type_subprocess",
     }
 )
+
+# Maps universal module stems to test dirs safe to exclude when changes are additive-only.
+# Only consulted when stem is in _CORE_UNIVERSAL_MODULES and diff passes _is_additive_only.
+_CORE_UNIVERSAL_EXCLUSIONS: dict[str, frozenset[str]] = {
+    "_type_enums": frozenset({"hooks", "skills"}),
+}
 
 MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "feature_flags": frozenset(
@@ -860,6 +870,48 @@ def _is_only_version_changes_in_diff(
     return True  # all diff lines are version strings (or diff is empty)
 
 
+def _is_additive_only(
+    cwd: str | Path,
+    base_ref: str,
+    filepath: str,
+) -> bool:
+    """Return True if the diff for *filepath* contains no removed definitions.
+
+    Runs ``git merge-base HEAD base_ref`` then ``git diff --unified=0 <sha> -- filepath``.
+    Returns False on any git error (fail-open: caller uses the full cascade).
+
+    Checks for removed lines matching class definitions, function definitions,
+    or UPPER_CASE constant assignments. Lowercase field additions/modifications
+    are treated as additive — acceptable for the narrowing use case since the
+    excluded directories do not import those types.
+    """
+    try:
+        merge_base_result = subprocess.run(
+            ["git", "merge-base", "HEAD", base_ref],
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=True,
+        )
+        merge_base_sha = merge_base_result.stdout.strip()
+        if not re.fullmatch(r"[0-9a-f]{40}", merge_base_sha):
+            return False
+
+        diff_result = subprocess.run(
+            ["git", "diff", "--unified=0", merge_base_sha, "--", filepath],
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=True,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return False
+
+    return not _BREAKING_DEF_RE.search(diff_result.stdout)
+
+
 # Files in BUCKET_A_PATTERNS that may produce false positives from CI version bumps.
 # These are given a content check before triggering a full run.
 _VERSION_BUMP_FILES: frozenset[str] = frozenset({"pyproject.toml", "uv.lock"})
@@ -1147,7 +1199,17 @@ def build_test_scope(
             pkg = _file_to_package(f)
             if pkg == "core" and mode == FilterMode.CONSERVATIVE:
                 stem = Path(f).stem
-                if stem in _CORE_UNIVERSAL_MODULES or stem == "__init__":
+                if stem in _CORE_UNIVERSAL_MODULES:
+                    if (
+                        stem in _CORE_UNIVERSAL_EXCLUSIONS
+                        and cwd is not None
+                        and base_ref is not None
+                        and _is_additive_only(cwd, base_ref, f)
+                    ):
+                        test_dirs.update(cascade_map["core"] - _CORE_UNIVERSAL_EXCLUSIONS[stem])
+                    else:
+                        test_dirs.update(cascade_map["core"])
+                elif stem == "__init__":
                     test_dirs.update(cascade_map["core"])
                 elif stem in MODULE_CASCADE_CORE:
                     test_dirs.update(MODULE_CASCADE_CORE[stem])
@@ -1195,7 +1257,17 @@ def build_test_scope(
                     if pkg == "core" and mode == FilterMode.CONSERVATIVE:
                         stem = Path(f).stem
                         if stem in _CORE_UNIVERSAL_MODULES:
-                            test_dirs.update(cascade_map["core"])
+                            if (
+                                stem in _CORE_UNIVERSAL_EXCLUSIONS
+                                and cwd is not None
+                                and base_ref is not None
+                                and _is_additive_only(cwd, base_ref, f)
+                            ):
+                                test_dirs.update(
+                                    cascade_map["core"] - _CORE_UNIVERSAL_EXCLUSIONS[stem]
+                                )
+                            else:
+                                test_dirs.update(cascade_map["core"])
                         elif stem == "__init__":
                             core_cause_stems = {
                                 Path(c).stem

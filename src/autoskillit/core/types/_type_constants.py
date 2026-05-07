@@ -57,7 +57,7 @@ __all__ = [
     "SKILL_FILE_ADVISORY_MAP",
     "SKILL_ACTIVATE_DEPS_REQUIRED",
     "SOUS_CHEF_MANDATORY_SECTIONS",
-    "SOUS_CHEF_FOOD_TRUCK_SECTIONS",
+    "ADMIRAL_DISPATCH_SECTIONS",
     "KNOWN_CI_EVENTS",
 ]
 
@@ -537,14 +537,14 @@ SOUS_CHEF_MANDATORY_SECTIONS: tuple[str, ...] = (
     "NARRATION SUPPRESSION",
 )
 
-# Strict subset of SOUS_CHEF_MANDATORY_SECTIONS delivered to food truck sessions.
-SOUS_CHEF_FOOD_TRUCK_SECTIONS: tuple[str, ...] = (
+# Strict subset of SOUS_CHEF_MANDATORY_SECTIONS delivered to L3 dispatch sessions.
+ADMIRAL_DISPATCH_SECTIONS: tuple[str, ...] = (
     "CONTEXT LIMIT ROUTING",
     "STEP NAME IMMUTABILITY",
     "MERGE PHASE",
     "QUOTA WAIT PROTOCOL",
 )
-assert set(SOUS_CHEF_FOOD_TRUCK_SECTIONS).issubset(set(SOUS_CHEF_MANDATORY_SECTIONS))
+assert set(ADMIRAL_DISPATCH_SECTIONS).issubset(set(SOUS_CHEF_MANDATORY_SECTIONS))
 
 KNOWN_CI_EVENTS: frozenset[str] = frozenset(
     {

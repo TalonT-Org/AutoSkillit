@@ -116,10 +116,8 @@ def _build_fleet_campaign_prompt(
     progress markers.
     """
     dispatch_count = len(campaign_recipe.dispatches)
-    sous_chef_content = _read_full_sous_chef()
-    sous_chef_section = (
-        f"\n## SOUS-CHEF DISCIPLINE\n\n{sous_chef_content}\n" if sous_chef_content else ""
-    )
+    admiral_content = _read_full_sous_chef()
+    admiral_section = f"\n## ADMIRAL DISCIPLINE\n\n{admiral_content}\n" if admiral_content else ""
 
     has_gate_dispatches = any(d.gate for d in campaign_recipe.dispatches)
 
@@ -208,7 +206,7 @@ Do NOT re-dispatch from the full original issue list.
     return f"""\
 You are a fleet campaign dispatcher. Execute campaign '{campaign_recipe.name}' autonomously.
 Campaign ID: {campaign_id}. Dispatches: {dispatch_count}.
-{sous_chef_section}
+{admiral_section}
 ## CAMPAIGN OVERVIEW
 
 - Name: {campaign_recipe.name}

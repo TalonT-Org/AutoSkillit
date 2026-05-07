@@ -37,18 +37,18 @@ def _get_prompt() -> str:
     )
 
 
-def _get_sous_chef_block() -> str:
-    from autoskillit.fleet._prompts import _build_food_truck_sous_chef_block
+def _get_admiral_block() -> str:
+    from autoskillit.fleet._prompts import _build_admiral_dispatch_block
 
-    return _build_food_truck_sous_chef_block()
+    return _build_admiral_dispatch_block()
 
 
 # --- Group E-1: Sous-Chef Subset Filter ---
 
 
-class TestL3SousChefBlock:
+class TestAdmiralDispatchBlock:
     def test_retains_exactly_four_sections(self) -> None:
-        block = _get_sous_chef_block()
+        block = _get_admiral_block()
         for title in (
             "CONTEXT LIMIT ROUTING",
             "STEP NAME IMMUTABILITY",
@@ -59,7 +59,7 @@ class TestL3SousChefBlock:
         assert len(re.findall(r"^## ", block, re.MULTILINE)) == 4
 
     def test_excludes_five_sections(self) -> None:
-        block = _get_sous_chef_block()
+        block = _get_admiral_block()
         for title in (
             "MULTI-PART PLAN SEQUENCING",
             "AUDIT-IMPL ACROSS MULTI-GROUP",
@@ -70,7 +70,7 @@ class TestL3SousChefBlock:
             assert title not in block, f"Excluded section present: {title}"
 
     def test_no_dangling_crossrefs(self) -> None:
-        block = _get_sous_chef_block()
+        block = _get_admiral_block()
         for phrase in (
             "MULTI-PART PLAN",
             "AUDIT-IMPL",
@@ -87,11 +87,11 @@ class TestL3SousChefBlock:
         from autoskillit.fleet import _prompts as _fleet_prompts
 
         monkeypatch.setattr(_fleet_prompts, "pkg_root", lambda: tmp_path)
-        result = _fleet_prompts._build_food_truck_sous_chef_block()
+        result = _fleet_prompts._build_admiral_dispatch_block()
         assert result == ""
 
     def test_excludes_unretained_sections(self) -> None:
-        block = _get_sous_chef_block()
+        block = _get_admiral_block()
         for title in (
             "SKILL_COMMAND FORMATTING",
             "STEP EXECUTION IS NOT DISCRETIONARY",
@@ -101,22 +101,22 @@ class TestL3SousChefBlock:
 
     def test_l3_sections_constant_matches_build_output(self) -> None:
         from autoskillit.core.types._type_constants import (
-            SOUS_CHEF_FOOD_TRUCK_SECTIONS,
+            ADMIRAL_DISPATCH_SECTIONS,
             SOUS_CHEF_MANDATORY_SECTIONS,
         )
 
-        assert set(SOUS_CHEF_FOOD_TRUCK_SECTIONS).issubset(set(SOUS_CHEF_MANDATORY_SECTIONS))
-        block = _get_sous_chef_block()
-        for header in SOUS_CHEF_FOOD_TRUCK_SECTIONS:
+        assert set(ADMIRAL_DISPATCH_SECTIONS).issubset(set(SOUS_CHEF_MANDATORY_SECTIONS))
+        block = _get_admiral_block()
+        for header in ADMIRAL_DISPATCH_SECTIONS:
             assert f"## {header}" in block, (
-                f"_build_food_truck_sous_chef_block() missing food-truck section: {header!r}. "
-                "Update SOUS_CHEF_FOOD_TRUCK_SECTIONS or the allowlist in fleet/_prompts.py."
+                f"_build_admiral_dispatch_block() missing dispatch section: {header!r}. "
+                "Update ADMIRAL_DISPATCH_SECTIONS or the allowlist in fleet/_prompts.py."
             )
-        extra = set(SOUS_CHEF_MANDATORY_SECTIONS) - set(SOUS_CHEF_FOOD_TRUCK_SECTIONS)
+        extra = set(SOUS_CHEF_MANDATORY_SECTIONS) - set(ADMIRAL_DISPATCH_SECTIONS)
         for header in extra:
             assert f"## {header}" not in block, (
-                f"_build_food_truck_sous_chef_block() unexpectedly includes "
-                f"non-food-truck section: {header!r}"
+                f"_build_admiral_dispatch_block() unexpectedly includes "
+                f"non-dispatch section: {header!r}"
             )
 
 

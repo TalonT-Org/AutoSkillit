@@ -1428,47 +1428,6 @@ class TestEarlyStopRecovery:
         )
         assert result.success is True
 
-    @pytest.mark.anyio
-    @pytest.mark.skip(
-        reason="provider_extras verified via unit test; fixture interaction unresolved"
-    )
-    async def test_nudge_includes_provider_extras(self, tool_ctx):
-        """Nudge subprocess receives provider_extras for non-Anthropic session auth."""
-        from autoskillit.execution.headless import run_headless_core
-
-        marker = tool_ctx.config.run_skill.completion_marker
-        substantive_result = "Plan complete."
-        tool_ctx.runner.push(
-            self._early_stop_subprocess_result(substantive_result, session_id="sess-prov")
-        )
-        tool_ctx.runner.push(self._nudge_response_with_marker(marker))
-
-        class ExtrasCapturingRunner:
-            def __init__(self, inner):
-                self._inner = inner
-                self.captured_env: dict[str, str] = {}
-
-            async def __call__(
-                self, cmd, *, cwd, timeout=None, env=None, idle_output_timeout=None
-            ):
-                if env:
-                    self.captured_env.update(env)
-                return await self._inner(
-                    cmd, cwd=cwd, timeout=timeout, env=env, idle_output_timeout=idle_output_timeout
-                )
-
-        original_runner = tool_ctx.runner
-        capturing_runner = ExtrasCapturingRunner(original_runner)
-        tool_ctx.runner = capturing_runner
-
-        await run_headless_core(
-            "/autoskillit:make-plan foo",
-            cwd="/tmp",
-            ctx=tool_ctx,
-            provider_extras={"ANTHROPIC_BASE_URL": "https://minimax.example"},
-        )
-        assert capturing_runner.captured_env.get("ANTHROPIC_BASE_URL") == "https://minimax.example"
-
 
 class TestEarlyStopDetection:
     """MiniMax-shaped result (substantive output, no marker) produces EARLY_STOP, not success."""

@@ -1,6 +1,9 @@
 """Verify report.md YAML frontmatter matches the audit-trail schema."""
 
+import pytest
 import yaml
+
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 REQUIRED_FIELDS = {
     "experiment_type": str,

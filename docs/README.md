@@ -31,3 +31,5 @@ multi-level orchestrator. The bundled recipes implement issue → plan → workt
 - [decisions/](decisions/README.md) — architecture decision records
 - [design/](design/README.md) — design specifications for planned features and skills
 - [research/experiment-type-rationale.md](research/experiment-type-rationale.md) — dimension-weight rationale for experiment types
+- [research/silent-type-convention.md](research/silent-type-convention.md) — silent type detection and advisory convention
+- [research/audit-trail-format.md](research/audit-trail-format.md) — audit/ artifact structure and lifecycle

@@ -2,6 +2,10 @@
 
 from pathlib import Path
 
+import pytest
+
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+
 AUDIT_FORMAT_PATH = Path("docs/research/audit-trail-format.md")
 
 

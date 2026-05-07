@@ -2,6 +2,10 @@
 
 from pathlib import Path
 
+import pytest
+
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+
 CONVENTION_PATH = Path("docs/research/silent-type-convention.md")
 
 

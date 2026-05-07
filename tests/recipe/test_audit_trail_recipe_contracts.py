@@ -2,7 +2,10 @@
 
 from pathlib import Path
 
+import pytest
 import yaml
+
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 RECIPE_PATH = Path("src/autoskillit/recipes/research.yaml")
 

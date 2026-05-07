@@ -74,6 +74,8 @@ skills:
       type: file_path
     - name: revision_guidance
       type: file_path
+    - name: classification_timestamp
+      type: string
     expected_output_patterns:
     - verdict\s*=\s*(GO|REVISE|STOP)
     - (?:experiment_type\s*=\s*\S+|verdict\s*=\s*STOP)
@@ -144,6 +146,14 @@ skills:
     - name: visualization_plan_path
       type: file_path
     - name: report_plan_path
+      type: file_path
+    - name: disambiguation_rule_applied
+      type: string
+    - name: tier_c_lens
+      type: string
+    - name: methodology_tradition
+      type: string
+    - name: visualization_plan_trace_path
       type: file_path
     expected_output_patterns:
     - visualization_plan_path\s*=\s*/.+

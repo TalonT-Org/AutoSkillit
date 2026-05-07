@@ -2,8 +2,12 @@
 
 from pathlib import Path
 
+import pytest
 
-def test_create_worktree_creates_audit_directory(tmp_path: Path, monkeypatch):
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+
+
+def test_create_worktree_creates_audit_directory(tmp_path: Path):
     """create_worktree.sh creates research/{slug}/audit/ directory."""
     # Setup: mock AUTOSKILLIT_TEMP with evaluation_dashboard
     temp_dir = tmp_path / "temp" / "review-design"

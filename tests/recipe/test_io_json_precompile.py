@@ -156,9 +156,13 @@ def test_collect_recipes_identical_with_json(tmp_path):
     errors1: list = []
     _collect_recipes(RecipeSource.PROJECT, tmp_path, seen1, items1, errors1)
 
-    # Compile JSON siblings
+    # Compile JSON siblings and set future mtime so the fast path is exercised
     for r in recipes:
-        _compile_json(tmp_path / f"{r['name']}.yaml")
+        yaml_path = tmp_path / f"{r['name']}.yaml"
+        _compile_json(yaml_path)
+        json_path = yaml_path.with_suffix(".json")
+        future_mtime_ns = yaml_path.stat().st_mtime_ns + 10_000_000_000
+        os.utime(json_path, ns=(future_mtime_ns, future_mtime_ns))
 
     # Collect with JSON siblings
     seen2: set[str] = set()

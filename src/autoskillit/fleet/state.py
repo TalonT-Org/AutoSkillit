@@ -8,141 +8,36 @@ from __future__ import annotations
 
 import fcntl
 import json
-import threading
 import time
-from dataclasses import asdict, dataclass, field
-from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core import (
-    FleetErrorCode,
-    InfraExitCategory,
-    RetryReason,
-    get_logger,
-    write_versioned_json,
+from autoskillit.core import get_logger, write_versioned_json
+from autoskillit.fleet.state_gates import record_gate_outcome  # noqa: F401
+from autoskillit.fleet.state_recovery import (  # noqa: F401
+    crash_recover_dispatch,
+    has_failed_dispatch,
+    resume_campaign_from_state,
+)
+from autoskillit.fleet.state_types import (  # noqa: F401 — re-exported
+    _ABANDON_KILL_REASONS,
+    _ALLOWED_TRANSITIONS,
+    _COMPLETED_STATUSES,
+    _INFRASTRUCTURE_FAILURE_REASONS,
+    _SCHEMA_VERSION,
+    _VISIBLE_IN_BLOCK_STATUSES,
+    FLEET_HALTED_SENTINEL,
+    TERMINAL_DISPATCH_STATUSES,
+    CampaignState,
+    DispatchRecord,
+    DispatchStatus,
+    GateRecordResult,
+    ResumeDecision,
+    _resume_lock,
+    _validate_transition,
 )
 
 logger = get_logger(__name__)
-
-_resume_lock = threading.Lock()
-
-_SCHEMA_VERSION = 4
-
-FLEET_HALTED_SENTINEL = "fleet_halted_on_failure"
-
-
-class DispatchStatus(StrEnum):
-    """Status of a single dispatch within a campaign."""
-
-    PENDING = "pending"
-    RUNNING = "running"
-    SUCCESS = "success"
-    FAILURE = "failure"
-    INTERRUPTED = "interrupted"
-    RESUMABLE = "resumable"
-    SKIPPED = "skipped"
-    REFUSED = "refused"
-    RELEASED = "released"
-
-
-@dataclass
-class DispatchRecord:
-    """Runtime state of a single dispatch within a campaign.
-
-    Mutable: status and metadata fields are updated as the dispatch progresses.
-    """
-
-    name: str
-    status: DispatchStatus = DispatchStatus.PENDING
-    dispatch_id: str = ""
-    campaign_id: str = ""
-    caller_session_id: str = ""
-    dispatched_session_id: str = ""
-    dispatched_session_log_dir: str = ""
-    dispatched_pid: int = 0
-    dispatched_starttime_ticks: int = 0
-    dispatched_boot_id: str = ""
-    reason: str = ""
-    kill_reason: str = ""
-    infra_exit_category: str = ""
-    token_usage: dict[str, Any] = field(default_factory=dict)
-    started_at: float = 0.0
-    ended_at: float = 0.0
-    sidecar_path: str | None = None
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
-
-
-@dataclass
-class CampaignState:
-    """Top-level campaign state file content."""
-
-    schema_version: int
-    campaign_id: str
-    campaign_name: str
-    manifest_path: str
-    started_at: float
-    dispatches: list[DispatchRecord] = field(default_factory=list)
-    captured_values: dict[str, str] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class ResumeDecision:
-    """Result of the resume algorithm."""
-
-    next_dispatch_name: str
-    completed_dispatches_block: str
-    is_resumable: bool = False
-    dispatched_session_id: str = ""
-    kill_reason: str = ""
-
-
-_ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
-    DispatchStatus.PENDING: frozenset(
-        {
-            DispatchStatus.RUNNING,
-            DispatchStatus.SUCCESS,
-            DispatchStatus.FAILURE,
-            DispatchStatus.SKIPPED,
-            DispatchStatus.REFUSED,
-            DispatchStatus.RELEASED,
-        }
-    ),
-    DispatchStatus.RUNNING: frozenset(
-        {
-            DispatchStatus.SUCCESS,
-            DispatchStatus.FAILURE,
-            DispatchStatus.INTERRUPTED,
-            DispatchStatus.RESUMABLE,
-        }
-    ),
-    DispatchStatus.RESUMABLE: frozenset(
-        {
-            DispatchStatus.RUNNING,
-            DispatchStatus.SUCCESS,
-            DispatchStatus.FAILURE,
-            DispatchStatus.INTERRUPTED,
-        }
-    ),
-    # Retryable settled state: only explicit retry (→ PENDING) is allowed
-    DispatchStatus.FAILURE: frozenset({DispatchStatus.PENDING}),
-    # Terminal states: no further transitions permitted
-    DispatchStatus.SUCCESS: frozenset(),
-    DispatchStatus.INTERRUPTED: frozenset(),
-    DispatchStatus.SKIPPED: frozenset(),
-    DispatchStatus.REFUSED: frozenset(),
-    DispatchStatus.RELEASED: frozenset(),
-}
-
-
-def _validate_transition(current: str, new: str, dispatch_name: str) -> None:
-    """Raise ValueError if the status transition is not allowed."""
-    allowed = _ALLOWED_TRANSITIONS.get(current)
-    if allowed is not None and new not in allowed:
-        msg = f"Invalid transition for dispatch '{dispatch_name}': {current!r} -> {new!r}"
-        raise ValueError(msg)
 
 
 def write_initial_state(
@@ -166,34 +61,8 @@ def write_initial_state(
     write_versioned_json(state_path, payload, schema_version=_SCHEMA_VERSION)
 
 
-_INFRASTRUCTURE_FAILURE_REASONS: frozenset[str] = frozenset(
-    {
-        FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK,
-    }
-)
-
-
-def has_failed_dispatch(state_path: Path) -> bool:
-    """Check whether any dispatch has a FAILURE status attributable to logic (not infrastructure).
-
-    Infrastructure failures (e.g. fleet_l3_no_result_block) represent transient L3
-    disconnections and do not halt the campaign. Logic failures (e.g. completed_clean
-    with success=false) represent genuine task failures and do halt the campaign.
-
-    Returns False when the file is missing or corrupted (fail-open).
-    """
-    if not state_path.exists():
-        return False
-    state = read_state(state_path)
-    if state is None:
-        return False
-    return any(
-        d.status == DispatchStatus.FAILURE and d.reason not in _INFRASTRUCTURE_FAILURE_REASONS
-        for d in state.dispatches
-    )
-
-
 def _clear_dispatch_for_retry(d: DispatchRecord) -> None:
+    """Clear a dispatch record for retry."""
     _validate_transition(d.status, DispatchStatus.PENDING, d.name)
     d.status = DispatchStatus.PENDING
     d.reason = ""
@@ -250,38 +119,7 @@ def read_state(state_path: Path) -> CampaignState | None:
     except (OSError, json.JSONDecodeError):
         return None
     try:
-        dispatches = [
-            DispatchRecord(
-                name=d["name"],
-                status=DispatchStatus(d.get("status", DispatchStatus.PENDING)),
-                dispatch_id=d.get("dispatch_id", ""),
-                campaign_id=d.get("campaign_id", ""),
-                caller_session_id=d.get("caller_session_id", ""),
-                dispatched_session_id=d.get("dispatched_session_id")
-                or d.get("l3_session_id")
-                or d.get("l2_session_id", ""),
-                dispatched_session_log_dir=d.get("dispatched_session_log_dir")
-                or d.get("l3_session_log_dir")
-                or d.get("l2_session_log_dir", ""),
-                dispatched_pid=d.get("dispatched_pid")
-                if d.get("dispatched_pid") is not None
-                else d.get("l3_pid") or d.get("l2_pid", 0),
-                dispatched_starttime_ticks=d.get("dispatched_starttime_ticks")
-                if d.get("dispatched_starttime_ticks") is not None
-                else d.get("l3_starttime_ticks") or d.get("l2_starttime_ticks", 0),
-                dispatched_boot_id=d.get("dispatched_boot_id")
-                or d.get("l3_boot_id")
-                or d.get("l2_boot_id", ""),
-                reason=d.get("reason", ""),
-                kill_reason=d.get("kill_reason", ""),
-                infra_exit_category=d.get("infra_exit_category", ""),
-                token_usage=d.get("token_usage", {}),
-                started_at=d.get("started_at", 0.0),
-                ended_at=d.get("ended_at", 0.0),
-                sidecar_path=d.get("sidecar_path"),
-            )
-            for d in data["dispatches"]
-        ]
+        dispatches = [DispatchRecord.from_dict(d) for d in data["dispatches"]]
         return CampaignState(
             schema_version=data["schema_version"],
             campaign_id=data["campaign_id"],
@@ -383,88 +221,6 @@ def mark_dispatch_resumable(
     _write_state(state_path, state)
 
 
-@dataclass(frozen=True)
-class GateRecordResult:
-    """Result of a gate dispatch recording attempt."""
-
-    success: bool
-    dispatch_name: str
-    status: str = ""
-    error_code: str = ""
-    error_message: str = ""
-
-
-def record_gate_outcome(
-    state_path: Path,
-    dispatch_name: str,
-    approved: bool,
-) -> GateRecordResult:
-    """Record the outcome of a gate dispatch to the campaign state file.
-
-    Returns a GateRecordResult with success/failure and error details.
-
-    Thread-safe: _resume_lock (intra-process) + fcntl.flock(LOCK_EX)
-    (cross-process) prevent concurrent callers from corrupting state.
-    """
-    with _resume_lock:
-        lock_path = state_path.with_suffix(".lock")
-        with open(lock_path, "wb") as _flock_handle:
-            fcntl.flock(_flock_handle, fcntl.LOCK_EX)
-
-            state = read_state(state_path)
-            if state is None:
-                return GateRecordResult(
-                    success=False,
-                    dispatch_name=dispatch_name,
-                    error_code="fleet_gate_no_campaign",
-                    error_message=f"Campaign state file missing or corrupted: {state_path}",
-                )
-
-            match = next((d for d in state.dispatches if d.name == dispatch_name), None)
-            if match is None:
-                return GateRecordResult(
-                    success=False,
-                    dispatch_name=dispatch_name,
-                    error_code="fleet_gate_unknown_dispatch",
-                    error_message=f"Dispatch '{dispatch_name}' not found in campaign state.",
-                )
-
-            if match.status != DispatchStatus.PENDING:
-                return GateRecordResult(
-                    success=False,
-                    dispatch_name=dispatch_name,
-                    error_code="fleet_gate_already_recorded",
-                    error_message=(
-                        f"Dispatch '{dispatch_name}' is already {match.status.value}, not PENDING."
-                    ),
-                )
-
-            status = DispatchStatus.SUCCESS if approved else DispatchStatus.FAILURE
-            now = time.time()
-            new_record = DispatchRecord(
-                name=dispatch_name,
-                status=status,
-                reason="gate_approved" if approved else "gate_rejected",
-                started_at=now,
-                ended_at=now,
-            )
-            for i, d in enumerate(state.dispatches):
-                if d.name == new_record.name:
-                    _validate_transition(d.status, new_record.status, d.name)
-                    state.dispatches[i] = new_record
-                    _write_state(state_path, state)
-                    break
-            else:
-                state.dispatches.append(new_record)
-                _write_state(state_path, state)
-
-            return GateRecordResult(
-                success=True,
-                dispatch_name=dispatch_name,
-                status=status.value,
-            )
-
-
 def append_dispatch_record(
     state_path: Path,
     record: DispatchRecord,
@@ -485,29 +241,6 @@ def append_dispatch_record(
             return
     state.dispatches.append(record)
     _write_state(state_path, state)
-
-
-_COMPLETED_STATUSES = frozenset(
-    {DispatchStatus.SUCCESS, DispatchStatus.SKIPPED, DispatchStatus.FAILURE}
-)
-
-_VISIBLE_IN_BLOCK_STATUSES = _COMPLETED_STATUSES | frozenset(
-    {
-        DispatchStatus.INTERRUPTED,
-        DispatchStatus.REFUSED,
-        DispatchStatus.RELEASED,
-        DispatchStatus.RUNNING,
-    }
-)
-
-TERMINAL_DISPATCH_STATUSES: frozenset[str] = frozenset(
-    {
-        DispatchStatus.SUCCESS,
-        DispatchStatus.FAILURE,
-        DispatchStatus.SKIPPED,
-        DispatchStatus.RELEASED,
-    }
-)
 
 
 def build_protected_campaign_ids(project_dir: Path) -> frozenset[str]:
@@ -590,172 +323,6 @@ def read_all_campaign_captures(
             logger.warning("read_all_campaign_captures: skipping %s: %s", path, exc)
             continue
     return result
-
-
-_ABANDON_KILL_REASONS: frozenset[str] = frozenset(
-    {
-        RetryReason.STALE,
-        RetryReason.THINKING_STALL,
-        RetryReason.PATH_CONTAMINATION,
-        RetryReason.CLONE_CONTAMINATION,
-    }
-)
-
-
-def _is_abandon_kill_reason(kill_reason: str, infra_exit_category: str) -> bool:
-    """Check if stored kill metadata indicates resume would be futile."""
-    if kill_reason in _ABANDON_KILL_REASONS:
-        return True
-    if (
-        kill_reason == RetryReason.RESUME
-        and infra_exit_category == InfraExitCategory.CONTEXT_EXHAUSTED
-    ):
-        return True
-    return False
-
-
-def crash_recover_dispatch(
-    state_path: Path,
-    record: DispatchRecord,
-    reason: str = "stale_running_on_resume",
-) -> DispatchStatus | None:
-    """Recover a stale RUNNING dispatch to RESUMABLE or INTERRUPTED; None if both writes fail."""
-    from autoskillit.fleet.sidecar import read_sidecar_from_path  # noqa: PLC0415
-
-    sidecar = Path(record.sidecar_path) if record.sidecar_path else None
-    if sidecar is not None and sidecar.exists():
-        try:
-            raw_lines = [ln.strip() for ln in sidecar.read_text().splitlines() if ln.strip()]
-        except OSError:
-            logger.warning("crash_recover_dispatch: sidecar vanished during read", exc_info=True)
-        else:
-            if not raw_lines or read_sidecar_from_path(sidecar):
-                if _is_abandon_kill_reason(record.kill_reason, record.infra_exit_category):
-                    try:
-                        mark_dispatch_interrupted(state_path, record.name, reason=reason)
-                        return DispatchStatus.INTERRUPTED
-                    except Exception:
-                        logger.warning(
-                            "crash_recover_dispatch: failed to mark dispatch interrupted",
-                            exc_info=True,
-                        )
-                        return None
-                try:
-                    mark_dispatch_resumable(state_path, record.name, sidecar_path=str(sidecar))
-                    return DispatchStatus.RESUMABLE
-                except Exception:
-                    logger.warning(
-                        "crash_recover_dispatch: failed to mark dispatch resumable",
-                        exc_info=True,
-                    )
-    try:
-        mark_dispatch_interrupted(state_path, record.name, reason=reason)
-        return DispatchStatus.INTERRUPTED
-    except Exception:
-        logger.warning(
-            "crash_recover_dispatch: failed to mark dispatch interrupted", exc_info=True
-        )
-        return None
-
-
-def resume_campaign_from_state(
-    state_path: Path,
-    continue_on_failure: bool,
-    *,
-    reset_on_retry: bool = False,
-) -> ResumeDecision | None:
-    """Determine the next dispatch for a resumed campaign.
-
-    Algorithm:
-      1. Read state.json; return None if absent or corrupted.
-      2. Find first dispatch not in {success, skipped}.
-      3. If running exists and stale, mark it interrupted; skip alive ones.
-      4. If failure exists and continue_on_failure=False, return None
-         with reason fleet_halted_on_failure (encoded via a sentinel).
-         When reset_on_retry=True, reset all FAILURE dispatches to PENDING instead.
-      5. Return ResumeDecision with next_dispatch_name and completed block.
-
-    Returns None if the state file is missing/corrupted. Returns a
-    ResumeDecision with next_dispatch_name="" if all dispatches are
-    complete or the campaign is halted.
-
-    Thread-safe: _resume_lock (intra-process) + fcntl.flock(LOCK_EX)
-    (cross-process) prevent concurrent callers from corrupting state.
-    """
-    from autoskillit.fleet import is_dispatch_session_alive
-
-    with _resume_lock:
-        lock_path = state_path.with_suffix(".lock")
-        with open(lock_path, "wb") as _flock_handle:
-            fcntl.flock(_flock_handle, fcntl.LOCK_EX)
-
-            state = read_state(state_path)
-            if state is None:
-                return None
-
-            # Phase 1: crash recovery — skip live sessions, recover stale ones
-            for d in state.dispatches:
-                if d.status == DispatchStatus.RUNNING:
-                    if is_dispatch_session_alive(d):
-                        continue
-                    new_status = crash_recover_dispatch(state_path, d)
-                    if new_status is not None:
-                        d.status = new_status
-                        d.reason = "stale_running_on_resume"
-
-            # Phase 2: check for failure halt
-            did_reset = False
-            for d in state.dispatches:
-                if d.status == DispatchStatus.FAILURE and not continue_on_failure:
-                    if reset_on_retry:
-                        _clear_dispatch_for_retry(d)
-                        did_reset = True
-                    else:
-                        return ResumeDecision(
-                            next_dispatch_name="",
-                            completed_dispatches_block=FLEET_HALTED_SENTINEL,
-                        )
-            if did_reset:
-                _write_state(state_path, state)
-
-            # Phase 3: build completed dispatches block and find next
-            # RESUMABLE is selected before PENDING; RUNNING (alive) dispatches are skipped
-            completed_lines: list[str] = []
-            next_name = ""
-            is_resumable = False
-            resumable_dispatched_session_id = ""
-            resumable_kill_reason = ""
-            for d in state.dispatches:
-                if d.status in _VISIBLE_IN_BLOCK_STATUSES:
-                    completed_lines.append(f"- {d.name}: {d.status}")
-                elif d.status == DispatchStatus.RESUMABLE and not next_name:
-                    next_name = d.name
-                    is_resumable = True
-                    resumable_dispatched_session_id = d.dispatched_session_id
-                    resumable_kill_reason = d.kill_reason
-                elif (
-                    d.status
-                    not in {
-                        DispatchStatus.INTERRUPTED,
-                        DispatchStatus.RUNNING,
-                        DispatchStatus.REFUSED,
-                        DispatchStatus.RELEASED,
-                        DispatchStatus.FAILURE,
-                        DispatchStatus.RESUMABLE,
-                    }
-                    and not next_name
-                ):
-                    next_name = d.name
-
-            completed_block = "\n".join(completed_lines) if completed_lines else ""
-
-            return ResumeDecision(
-                next_dispatch_name=next_name,
-                completed_dispatches_block=completed_block,
-                is_resumable=is_resumable,
-                dispatched_session_id=resumable_dispatched_session_id,
-                kill_reason=resumable_kill_reason,
-            )
 
 
 def normalize_dispatch_token_usage(raw: dict[str, Any]) -> dict[str, int]:

@@ -54,6 +54,123 @@ class TestInitialState:
         for d in state.dispatches:
             assert d.status == DispatchStatus.PENDING
 
+    def test_read_state_round_trips_through_from_dict(self, tmp_path: Path) -> None:
+        sp = _state_path(tmp_path)
+        dispatches = [DispatchRecord(name=n) for n in ("a", "b")]
+        write_initial_state(sp, "cid", "cname", "/m.yaml", dispatches)
+        state = read_state(sp)
+        assert state is not None
+        assert [d.name for d in state.dispatches] == ["a", "b"]
+        assert all(d.status == DispatchStatus.PENDING for d in state.dispatches)
+
+
+class TestDispatchRecordFromDict:
+    def test_from_dict_canonical_fields(self) -> None:
+        d = {
+            "name": "build-docs",
+            "status": "running",
+            "dispatch_id": "abc",
+            "caller_session_id": "c1",
+            "dispatched_session_id": "s1",
+            "dispatched_session_log_dir": "/log",
+            "dispatched_pid": 1234,
+            "dispatched_starttime_ticks": 9999,
+            "dispatched_boot_id": "b1",
+            "reason": "started",
+            "kill_reason": "",
+            "infra_exit_category": "",
+            "token_usage": {"input": 100},
+            "started_at": 1.0,
+            "ended_at": 2.0,
+            "sidecar_path": "/s.jsonl",
+        }
+        rec = DispatchRecord.from_dict(d)
+        assert rec.name == "build-docs"
+        assert rec.status == DispatchStatus.RUNNING
+        assert rec.dispatched_session_id == "s1"
+        assert rec.dispatched_pid == 1234
+        assert rec.sidecar_path == "/s.jsonl"
+
+    def test_from_dict_legacy_l2_fields(self) -> None:
+        d = {
+            "name": "t",
+            "l2_session_id": "l2s",
+            "l2_session_log_dir": "/l2",
+            "l2_pid": 555,
+            "l2_starttime_ticks": 111,
+            "l2_boot_id": "l2b",
+        }
+        rec = DispatchRecord.from_dict(d)
+        assert rec.dispatched_session_id == "l2s"
+        assert rec.dispatched_pid == 555
+        assert rec.dispatched_starttime_ticks == 111
+        assert rec.dispatched_boot_id == "l2b"
+
+    def test_from_dict_l3_takes_priority_over_l2(self) -> None:
+        d = {
+            "name": "t",
+            "l3_session_id": "l3s",
+            "l2_session_id": "l2s",
+            "l3_pid": 333,
+            "l2_pid": 222,
+        }
+        rec = DispatchRecord.from_dict(d)
+        assert rec.dispatched_session_id == "l3s"
+        assert rec.dispatched_pid == 333
+
+    def test_from_dict_canonical_takes_priority_over_l3(self) -> None:
+        d = {"name": "t", "dispatched_session_id": "canon", "l3_session_id": "l3s"}
+        rec = DispatchRecord.from_dict(d)
+        assert rec.dispatched_session_id == "canon"
+
+    def test_from_dict_minimal_dict(self) -> None:
+        rec = DispatchRecord.from_dict({"name": "minimal"})
+        assert rec.name == "minimal"
+        assert rec.status == DispatchStatus.PENDING
+        assert rec.dispatched_pid == 0
+        assert rec.token_usage == {}
+        assert rec.sidecar_path is None
+
+    def test_from_dict_pid_zero_not_falsy(self) -> None:
+        d = {"name": "t", "dispatched_pid": 0, "l3_pid": 999}
+        rec = DispatchRecord.from_dict(d)
+        assert rec.dispatched_pid == 0
+
+    def test_from_dict_starttime_ticks_zero_not_falsy(self) -> None:
+        d = {"name": "t", "dispatched_starttime_ticks": 0, "l3_starttime_ticks": 888}
+        rec = DispatchRecord.from_dict(d)
+        assert rec.dispatched_starttime_ticks == 0
+
+
+class TestStateDecompositionImports:
+    def test_state_types_importable(self) -> None:
+        from autoskillit.fleet.state_types import (
+            DispatchRecord,
+            DispatchStatus,
+        )
+
+        assert DispatchStatus.PENDING == "pending"
+        assert hasattr(DispatchRecord, "from_dict")
+
+    def test_state_gates_importable(self) -> None:
+        from autoskillit.fleet.state_gates import record_gate_outcome
+
+        assert callable(record_gate_outcome)
+
+    def test_state_recovery_importable(self) -> None:
+        from autoskillit.fleet.state_recovery import (
+            resume_campaign_from_state,
+        )
+
+        assert callable(resume_campaign_from_state)
+
+    def test_backward_compat_from_state_module(self) -> None:
+        from autoskillit.fleet.state import (
+            read_state,
+        )
+
+        assert callable(read_state)
+
 
 class TestAppendDispatchRecord:
     def test_append_dispatch_record_updates_status(self, tmp_path: Path) -> None:

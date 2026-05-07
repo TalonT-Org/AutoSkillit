@@ -430,7 +430,8 @@ def test_new_type_full_schema_valid(type_name: str) -> None:
     assert len(spec.classification_triggers) >= 1
     assert spec.schema_version == "1.0"
     assert spec.is_fallback is False
-    assert 1 <= spec.priority <= 11
+    non_fallback_count = sum(1 for s in types if not s.is_fallback)
+    assert 1 <= spec.priority <= non_fallback_count
     assert "estimand_clarity" in spec.l1_severity
     assert "hypothesis_falsifiability" in spec.l1_severity
     assert "severity_cap" in spec.red_team_focus

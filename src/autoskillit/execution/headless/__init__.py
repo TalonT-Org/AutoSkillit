@@ -440,9 +440,15 @@ async def _execute_claude_headless(
         )
 
         if (
-            skill_result.retry_reason in (RetryReason.CONTRACT_RECOVERY, RetryReason.EARLY_STOP)
-            and skill_result.needs_retry
+            skill_result.needs_retry
             and skill_result.session_id
+            and (
+                skill_result.retry_reason == RetryReason.CONTRACT_RECOVERY
+                or (
+                    skill_result.retry_reason == RetryReason.EARLY_STOP
+                    and provider_extras is not None
+                )
+            )
         ):
             nudge_success = await _attempt_contract_nudge(
                 skill_result,

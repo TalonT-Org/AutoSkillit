@@ -38,7 +38,7 @@ _TOKEN_NAME_RE = re.compile(r"^(\w+)\s*=", re.MULTILINE)
 
 @pytest.mark.parametrize("skill_md", _all_skill_mds(), ids=lambda p: p.parent.name)
 def test_output_section_compatible_with_orchestration_directive(skill_md: Path) -> None:
-    """SKILL.md ## Output sections specifying contract tokens should reference the orchestration directive.
+    """SKILL.md Output sections with contract tokens should reference the orchestration directive.
 
     If an Output section declares structured output tokens (e.g., plan_path=), it should
     reference the ORCHESTRATION DIRECTIVE. This prevents the Output section from overriding

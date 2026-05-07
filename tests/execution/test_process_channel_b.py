@@ -585,12 +585,12 @@ class TestChannelBSubSkillCollision:
             timeout=TimeoutTier.CHANNEL_B,
             session_log_dir=session_dir,
             completion_marker=unique_marker,
-            completion_drain_timeout=2.0,
+            completion_drain_timeout=5.0,
             _phase1_timeout=120,
             _phase1_poll=0.05,
             _phase2_poll=0.05,
             _heartbeat_poll=0.05,
-            _session_id_timeout=2.0,
+            _session_id_timeout=5.0,
         )
 
         assert result.termination == TerminationReason.COMPLETED

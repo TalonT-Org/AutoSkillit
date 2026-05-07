@@ -450,8 +450,13 @@ class TestEdgeCases:
 
 
 class TestFoldingCaching:
-    def test_result_is_cached_via_lru_cache(self) -> None:
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self) -> None:  # type: ignore[misc]
         load_ml_sub_area_folding.cache_clear()
+        yield  # type: ignore[misc]
+        load_ml_sub_area_folding.cache_clear()
+
+    def test_result_is_cached_via_lru_cache(self) -> None:
         r1 = load_ml_sub_area_folding()
         r2 = load_ml_sub_area_folding()
         assert r1 is r2

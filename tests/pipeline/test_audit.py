@@ -705,10 +705,13 @@ def test_iter_session_log_entries_dispatch_id_filter_empty_passes_all(tmp_path):
     from autoskillit.pipeline.audit import _iter_session_log_entries
 
     _write_audit_session_dispatch_id(
-        tmp_path, "did-a1", [_valid_failure_record_dict()], dispatch_id="d-abc"
+        tmp_path, "did-d1", [_valid_failure_record_dict()], dispatch_id="d1"
     )
     _write_audit_session_dispatch_id(
-        tmp_path, "did-a2", [_valid_failure_record_dict()], dispatch_id="d-xyz"
+        tmp_path, "did-d2", [_valid_failure_record_dict()], dispatch_id="d2"
+    )
+    _write_audit_session_dispatch_id(
+        tmp_path, "did-empty", [_valid_failure_record_dict()], dispatch_id=""
     )
 
     results = list(
@@ -716,7 +719,44 @@ def test_iter_session_log_entries_dispatch_id_filter_empty_passes_all(tmp_path):
             tmp_path, since="", filename="audit_log.json", dispatch_id_filter=""
         )
     )
-    assert len(results) == 2
+    assert len(results) == 3
+
+
+def test_iter_entries_dispatch_id_filter_combined_with_campaign_id(tmp_path):
+    """dispatch_id_filter AND campaign_id_filter apply as AND logic."""
+    from pathlib import Path as _Path
+
+    from autoskillit.pipeline.audit import _iter_session_log_entries
+
+    for dir_name, dispatch_id, campaign_id in [
+        ("match", "d1", "c1"),
+        ("wrong-did", "d2", "c1"),
+        ("wrong-cid", "d1", "c2"),
+    ]:
+        session_dir = _Path(tmp_path) / "sessions" / dir_name
+        session_dir.mkdir(parents=True, exist_ok=True)
+        (session_dir / "audit_log.json").write_text(json.dumps([_valid_failure_record_dict()]))
+        index_entry = {
+            "dir_name": dir_name,
+            "timestamp": "2026-05-01T00:00:00+00:00",
+            "session_id": dir_name,
+            "dispatch_id": dispatch_id,
+            "campaign_id": campaign_id,
+        }
+        with (_Path(tmp_path) / "sessions.jsonl").open("a") as f:
+            f.write(json.dumps(index_entry) + "\n")
+
+    results = list(
+        _iter_session_log_entries(
+            tmp_path,
+            since="",
+            filename="audit_log.json",
+            dispatch_id_filter="d1",
+            campaign_id_filter="c1",
+        )
+    )
+    assert len(results) == 1
+    assert results[0].parent.name == "match"
 
 
 def test_iter_session_log_entries_dispatch_id_combined_with_order_id(tmp_path):

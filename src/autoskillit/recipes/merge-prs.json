@@ -672,7 +672,8 @@
         "escalation_required": "${{ result.escalation_required }}",
         "escalation_reason": "${{ result.escalation_reason }}",
         "task": "${{ result.conflict_report_path }}",
-        "current_pr_number": "${{ result.pr_number }}"
+        "current_pr_number": "${{ result.pr_number }}",
+        "merged": "${{ result.merged }}"
       },
       "on_result": [
         {
@@ -684,6 +685,10 @@
           "route": "plan"
         },
         {
+          "when": "${{ result.merged }} == false",
+          "route": "register_clone_failure"
+        },
+        {
           "route": "next_part_or_next_pr"
         }
       ],
@@ -691,7 +696,7 @@
       "retries": 5,
       "on_exhausted": "register_clone_failure",
       "on_context_limit": "register_clone_failure",
-      "note": "The agent reads context.pr_order_file at context.current_pr_number to get the current PR's complexity. Appends number and complexity to skill_command:\n  /autoskillit:merge-pr {pr_number} {complexity}\nescalation_required=true → ambiguous conflict, human intervention needed → escalate_stop. needs_plan=true → conflict_report_path set as context.task → plan. needs_plan=false (fallthrough) → PR merged directly → next_part_or_next_pr.\n"
+      "note": "The agent reads context.pr_order_file at context.current_pr_number to get the current PR's complexity. Appends number and complexity to skill_command:\n  /autoskillit:merge-pr {pr_number} {complexity}\nescalation_required=true → ambiguous conflict, human intervention needed → escalate_stop. needs_plan=true → conflict_report_path set as context.task → plan. merged=false (timeout/conflict) → register_clone_failure. merged=true + fallthrough → PR merged directly → next_part_or_next_pr.\n"
     },
     "plan": {
       "tool": "run_skill",
@@ -804,7 +809,8 @@
         "branch": "${{ context.worktree_branch_name }}",
         "event": "${{ context.ci_event }}",
         "timeout_seconds": 600,
-        "cwd": "${{ context.work_dir }}"
+        "cwd": "${{ context.work_dir }}",
+        "auto_trigger": "true"
       },
       "on_result": [
         {
@@ -813,14 +819,39 @@
         },
         {
           "when": "${{ result.conclusion }} == 'timed_out'",
-          "route": "wait_for_conflict_ci"
+          "route": "check_conflict_ci_loop"
         },
         {
           "route": "register_clone_failure"
         }
       ],
       "on_failure": "register_clone_failure",
-      "note": "Waits for CI to pass on the worktree branch before merging. 600 second timeout matches the merge-pr skill poll timeout. Routes on result.conclusion: success → merge_conflict_pr, timed_out → self (re-watch), no_runs/failure → register_clone_failure.\n"
+      "note": "Waits for CI to pass on the worktree branch before merging. 600 second timeout matches the merge-pr skill poll timeout. Routes on result.conclusion: success → merge_conflict_pr, timed_out → check_conflict_ci_loop (iteration guard), no_runs/failure → register_clone_failure.\n"
+    },
+    "check_conflict_ci_loop": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.smoke_utils.check_loop_iteration",
+        "current_iteration": "${{ context.conflict_ci_loop_count }}",
+        "max_iterations": "2"
+      },
+      "capture": {
+        "conflict_ci_loop_count": "${{ result.next_iteration }}"
+      },
+      "on_result": [
+        {
+          "when": "${{ result.max_exceeded }} == true",
+          "route": "register_clone_failure"
+        },
+        {
+          "route": "wait_for_conflict_ci"
+        }
+      ],
+      "on_failure": "register_clone_failure",
+      "optional_context_refs": [
+        "conflict_ci_loop_count"
+      ],
+      "note": "Caps the wait_for_conflict_ci re-poll loop at 2 iterations. After 2 timed_out results (1200s total), routes to register_clone_failure instead of spinning indefinitely.\n"
     },
     "merge_conflict_pr": {
       "tool": "run_cmd",
@@ -1076,7 +1107,8 @@
         "callable": "autoskillit.smoke_utils.annotate_pr_diff",
         "pr_number": "${{ context.review_pr_number }}",
         "cwd": "${{ context.work_dir }}",
-        "output_dir": "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/review-pr"
+        "output_dir": "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/review-pr",
+        "local_review_rounds": "0"
       },
       "capture": {
         "annotated_diff_path": "${{ result.annotated_diff_path }}",
@@ -1172,7 +1204,8 @@
         "event": "${{ context.ci_event }}",
         "timeout_seconds": 600,
         "cwd": "${{ context.work_dir }}",
-        "pr_url": "${{ context.pr_url }}"
+        "pr_url": "${{ context.pr_url }}",
+        "auto_trigger": "true"
       },
       "on_result": [
         {
@@ -1181,14 +1214,39 @@
         },
         {
           "when": "${{ result.conclusion }} == 'timed_out'",
-          "route": "ci_watch_pr"
+          "route": "check_ci_watch_pr_loop"
         },
         {
           "route": "register_clone_failure"
         }
       ],
       "on_failure": "diagnose_ci",
-      "note": "Waits for the GitHub Actions CI run on context.batch_branch to complete using the wait_for_ci MCP tool (timeout: 300 s). Routes on result.conclusion: success → register_clone_success, timed_out → self (re-watch), no_runs/failure → register_clone_failure. Tool-level failure routes to diagnose_ci for log capture.\n"
+      "note": "Waits for the GitHub Actions CI run on context.batch_branch to complete using the wait_for_ci MCP tool (timeout: 300 s). Routes on result.conclusion: success → patch_token_summary, timed_out → check_ci_watch_pr_loop (iteration guard), no_runs/failure → register_clone_failure. Tool-level failure routes to diagnose_ci for log capture.\n"
+    },
+    "check_ci_watch_pr_loop": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.smoke_utils.check_loop_iteration",
+        "current_iteration": "${{ context.ci_watch_pr_loop_count }}",
+        "max_iterations": "2"
+      },
+      "capture": {
+        "ci_watch_pr_loop_count": "${{ result.next_iteration }}"
+      },
+      "on_result": [
+        {
+          "when": "${{ result.max_exceeded }} == true",
+          "route": "register_clone_failure"
+        },
+        {
+          "route": "ci_watch_pr"
+        }
+      ],
+      "on_failure": "register_clone_failure",
+      "optional_context_refs": [
+        "ci_watch_pr_loop_count"
+      ],
+      "note": "Caps the ci_watch_pr re-poll loop at 2 iterations.\n"
     },
     "diagnose_ci": {
       "tool": "run_skill",

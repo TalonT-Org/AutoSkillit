@@ -120,7 +120,11 @@
       "outputs": [
         {
           "name": "merged",
-          "type": "string"
+          "type": "string",
+          "allowed_values": [
+            "true",
+            "false"
+          ]
         },
         {
           "name": "needs_plan",

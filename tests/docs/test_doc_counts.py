@@ -299,8 +299,8 @@ def _assert_doc_states_number(doc: Path, label: str, expected: int) -> None:
         DOCS_DIR / "execution" / "tool-access.md",
     ],
 )
-def test_docs_state_48_mcp_tools(doc_path: Path) -> None:
-    _assert_doc_states_number(doc_path, "MCP tools", 48)
+def test_docs_state_52_mcp_tools(doc_path: Path) -> None:
+    _assert_doc_states_number(doc_path, "MCP tools", 52)
 
 
 @pytest.mark.parametrize(
@@ -310,8 +310,8 @@ def test_docs_state_48_mcp_tools(doc_path: Path) -> None:
         DOCS_DIR / "execution" / "tool-access.md",
     ],
 )
-def test_docs_state_44_kitchen_tools(doc_path: Path) -> None:
-    _assert_doc_states_number(doc_path, "kitchen tools", 44)
+def test_docs_state_37_kitchen_tools(doc_path: Path) -> None:
+    _assert_doc_states_number(doc_path, "kitchen tools", 37)
 
 
 def test_skill_visibility_states_132_skills() -> None:

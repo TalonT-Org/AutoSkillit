@@ -21,7 +21,7 @@ pipeline primarily connects the L2 orchestrator and L1 workers:
   tool). Cannot call `run_skill`, `run_cmd`, or `run_python`.
 
 The boundary is enforced three ways: FastMCP visibility, the
-`leaf_orchestration_guard.py` PreToolUse hook, and the
+`skill_orchestration_guard.py` PreToolUse hook, and the
 `_require_orchestrator_or_higher()` runtime guard inside `tools_execution.py`. All
 three must independently agree before any orchestration tool can fire.
 

@@ -18,7 +18,10 @@ session/ (see session/CLAUDE.md), ui/ (see ui/CLAUDE.md), update/ (see update/CL
 | `_marketplace.py` | Plugin install/upgrade |
 | `_mcp_names.py` | MCP prefix detection |
 | `_onboarding.py` | First-run detection + guided menu |
-| `_prompts.py` | Orchestrator prompt builder |
+| `_prompts.py` | Prompt builder re-export hub + shared helpers (`_MCP_RETRY_INSTRUCTION`, `_read_full_sous_chef`) |
+| `_prompts_campaign.py` | L3 campaign dispatcher prompt builder |
+| `_prompts_orchestrator.py` | L1/L2 cook session prompt builder + ingredients table + greetings |
+| `_prompts_kitchen.py` | Open-kitchen and fleet-dispatch prompt builders |
 | `_preview.py` | Shared pre-launch preview: flow diagram + ingredient table display |
 | `_serve_guard.py` | Async signal-guarded MCP server bootstrap (extracted from `app.py`) |
 | `_features.py` | `features` subcommand group: list/status commands for feature gate inspection |

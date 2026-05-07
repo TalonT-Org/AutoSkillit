@@ -63,6 +63,10 @@ def test_analysis_graph_no_toplevel_igraph_import():
 
     src_file = Path(_analysis_graph_mod.__file__)
     tree = ast.parse(src_file.read_text())
+    # iter_child_nodes only visits direct children of the module node — it does not
+    # recurse into nested try/except or if-blocks. A top-level try/except ImportError
+    # wrapping igraph would be missed, but that edge case would also defeat the lazy-import
+    # purpose (module-load overhead at import time), so the coverage is intentionally scoped.
     for node in ast.iter_child_nodes(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:

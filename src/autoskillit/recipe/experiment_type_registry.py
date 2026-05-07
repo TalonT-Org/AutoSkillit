@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit.core import get_logger, load_yaml, pkg_root
+from autoskillit.recipe._registry_utils import dir_mtime
 
 logger = get_logger(__name__)
 
@@ -106,13 +107,6 @@ def load_types_from_dir(directory: Path) -> dict[str, ExperimentTypeSpec]:
 _exp_types_cache: dict[tuple[str | None, float, float], list[ExperimentTypeSpec]] = {}
 
 
-def _dir_mtime(path: Path) -> float:
-    try:
-        return path.stat().st_mtime
-    except OSError:
-        return 0.0
-
-
 def load_all_experiment_types(
     project_dir: Path | None = None,
 ) -> list[ExperimentTypeSpec]:
@@ -133,10 +127,10 @@ def load_all_experiment_types(
     Returns:
         Sorted list of ``ExperimentTypeSpec``, fallback entries last.
     """
-    bundled_mt = _dir_mtime(BUNDLED_EXPERIMENT_TYPES_DIR)
+    bundled_mt = dir_mtime(BUNDLED_EXPERIMENT_TYPES_DIR)
     if project_dir is not None:
         user_dir = Path(project_dir) / ".autoskillit" / "experiment-types"
-        user_mt = _dir_mtime(user_dir)
+        user_mt = dir_mtime(user_dir)
     else:
         user_mt = 0.0
     key: tuple[str | None, float, float] = (

@@ -17,6 +17,7 @@ Sub-package: rules/ (see rules/CLAUDE.md).
 | `_recipe_ingredients.py` | `format_ingredients_table` + `LoadRecipeResult` TypedDicts |
 | `_recipe_composition.py` | `_build_active_recipe` + sub-recipe merging |
 | `diagrams.py` | Flow diagram generation + staleness detection |
+| `_registry_utils.py` | `dir_mtime` — shared mtime helper for registry loaders |
 | `experiment_type_registry.py` | `ExperimentTypeSpec`, `load_all_experiment_types` |
 | `methodology_tradition_registry.py` | `MethodologyTraditionSpec`, `VenueAppendixDef`, `load_all_methodology_traditions`, `get_methodology_tradition_by_name`, `is_out_of_scope_tradition` |
 | `methodology_venue_appendix.py` | `AlternateParentDef`, `MLSubAreaFoldingDef`, `VenueAppendixMatch`, `load_ml_sub_area_folding`, `resolve_venue_appendices` — Stage B venue-appendix resolution |

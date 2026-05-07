@@ -776,6 +776,9 @@ class TestPromptsReExporter:
                 assert hasattr(_prompts, name), (
                     f"_prompts.py missing re-export: {name!r} from {mod.__name__}"
                 )
+                assert getattr(_prompts, name) is getattr(mod, name), (
+                    f"_prompts.py re-exports {name!r} as a different object than {mod.__name__}.{name}"
+                )
 
     def test_submodules_importable_independently(self) -> None:
         import importlib
@@ -787,3 +790,4 @@ class TestPromptsReExporter:
         ):
             mod = importlib.import_module(name)
             assert hasattr(mod, "__all__"), f"{name} missing __all__"
+            assert len(mod.__all__) > 0, f"{name}.__all__ is empty"

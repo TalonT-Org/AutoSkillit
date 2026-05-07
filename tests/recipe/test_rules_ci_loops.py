@@ -259,7 +259,8 @@ def test_merge_prs_yaml_wait_for_conflict_ci_flags_missing_auto_trigger() -> Non
         and f.step_name == "wait_for_conflict_ci"
     ]
     assert len(trigger_findings) == 0, (
-        "wait_for_conflict_ci in merge-prs.yaml must not trigger ci-conflict-path-missing-auto-trigger"
+        "wait_for_conflict_ci in merge-prs.yaml must not trigger"
+        " ci-conflict-path-missing-auto-trigger"
     )
 
 

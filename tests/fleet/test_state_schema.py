@@ -247,7 +247,7 @@ class TestNormalizeDispatchTokenUsage:
         assert result == {"input": 7, "output": 3, "cache_creation": 1, "cache_read": 2}
 
     def test_result_unpacks_into_dispatch_token_usage(self) -> None:
-        DispatchTokenUsage(
+        dtu = DispatchTokenUsage(
             **normalize_dispatch_token_usage(
                 {
                     "input_tokens": 10,
@@ -257,6 +257,10 @@ class TestNormalizeDispatchTokenUsage:
                 }
             )
         )
+        assert dtu.input == 10
+        assert dtu.output == 5
+        assert dtu.cache_creation == 2
+        assert dtu.cache_read == 3
 
     def test_importable_from_fleet_package(self) -> None:
         from autoskillit.fleet import normalize_dispatch_token_usage as imported

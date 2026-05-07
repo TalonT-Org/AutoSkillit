@@ -9,16 +9,12 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit.core import atomic_write, write_versioned_json
+from autoskillit.planner._sort_utils import _natural_sort_key
 from autoskillit.planner.schema import validate_wp_result
 
 _ASSIGNMENT_RE = re.compile(r"^(P\d+-A\d+)-")
 _FALLBACK_MIN_WPS = 5
 _FALLBACK_MAX_GROUP_SIZE = 5
-
-
-def _natural_sort_key(s: str) -> list[int | str]:
-    parts = re.split(r"(\d+)", s)
-    return [int(p) if p.isdigit() else p for p in parts]
 
 
 @dataclass(frozen=True)

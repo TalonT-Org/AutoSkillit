@@ -19,6 +19,7 @@ Planner manifest, validation, compilation, and merge tests.
 | `test_refine_phases_contract.py` | Contract conformance tests for planner-refine-phases skill registration |
 | `test_refine_wps_contract.py` | Contract conformance tests for planner-refine-wps skill registration |
 | `test_schema_conformance.py` | Schema conformance tests: SKILL.md-compliant data flows correctly through the pipeline |
+| `test_sort_utils.py` | Tests for _natural_sort_key: numeric segment ordering, pure text, pure digits, empty string |
 | `test_typed_dict_conformance.py` | TypedDict conformance: required-key sets, SKILL.md alignment, factory validation |
 | `test_validation.py` | Tests for validate_plan callable |
 

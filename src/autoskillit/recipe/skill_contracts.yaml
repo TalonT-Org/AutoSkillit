@@ -233,6 +233,7 @@ skills:
     - "groups_path\\s*=\\s*/.+"
     pattern_examples:
     - "groups_path = /tmp/groups.json\n%%ORDER_UP%%"
+    write_behavior: always
   make-plan:
     inputs:
     - name: task

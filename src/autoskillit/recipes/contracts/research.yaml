@@ -1,27 +1,6 @@
-generated_at: '2026-05-07T15:20:56.985145+00:00'
+generated_at: '2026-05-07T16:23:58.667262+00:00'
 bundled_manifest_version: 0.1.0
-skill_hashes:
-  scope: sha256:4558559dcaf18a071a4592354e7bc7a5d8b32a8f33081a1a5249bdb6e5e58d2c
-  plan-experiment: sha256:17f9a9ebece03e51a4e3c97ca2dcf01ff153e17b13a4d81b1c567b6511e01bf4
-  review-design: sha256:0b9632bfa71b3e0b435b8bcafd2fab563be03b059b40064227b6ea876b49f87a
-  plan-visualization: sha256:9a04fa8f54acf4b45404e2930dc1925185ffac5cf64107ead5d56153e7770fab
-  resolve-design-review: sha256:b388c32917da868f1de58fefa8d825b2e0a7c3bbbb1f909c73725f2733d4fc87
-  stage-data: sha256:ab68be2cbbf35d43242282798b505a1c79543dd21207ea20adc289bfb91a911a
-  setup-environment: sha256:88e8631d3044719523c9ff807438eb5c5a929a99cbab857aefd4adf4d9c06562
-  make-groups: sha256:e621b2d299ba4fcd6d83a1769944d414ae073d174e81fdd4ba75aab19b01e668
-  make-plan: sha256:36e41f3acf8cc344aea3eba03e0771cc7aa8d9e3de8a62b86ee6b1749161a19c
-  implement-experiment: sha256:6dee8a06f312ff81fddc41de2a191324547374047e6e2d44bfc703713f4ab88c
-  troubleshoot-experiment: sha256:7262ed2f21af66c1818cf0567ba2919ef4757a74fd49fd1e5fd2b9450ca13ac1
-  run-experiment: sha256:99456d313b796721bc671d2f8dd8924e793c1ecefed39999c1965099476d954c
-  generate-report: sha256:f469414b73e024632f4fa89234f8271354137127dd1fab5f39ef9424241f6f43
-  resolve-failures: sha256:8e4fcd073eb1d0163fced5b3226e6f19ba3c0aa58cbc1ce7e8c9b9c76588e2b3
-  prepare-research-pr: sha256:b33d6ccf9b88ee0c5625db7a326121ee82b44d28c8c3ae1b6df9adb73cfa8336
-  compose-research-pr: sha256:ad968d5559484d38d4810b2948dc0907966d12eb112bcd4964077fe8b96cf0af
-  review-research-pr: sha256:623bc3e93ba77f8ad159645101e41c4f98765804c28e64c30393055262c3c0da
-  audit-claims: sha256:9f74af040552810fbf19181ba98917b7add78ff68e8bbb09782c196cce2040be
-  resolve-research-review: sha256:50a717872bf8454c2f4e086d9e957f8b5adcf8500145d691e5ac20d29e638bc6
-  resolve-claims-review: sha256:7e38fdeb1b404b3db75e3b07fc789966c4da925a48f5aa0f38ce092a148b8d17
-  bundle-local-report: sha256:6d57eb2efb1e4fbe9a2d8b87b76eb6badc9460f52c539f68133e6b12795d7ed8
+skill_hashes: {}
 skills:
   scope:
     inputs:
@@ -142,6 +121,10 @@ skills:
       type: string
       required: false
       recommended: false
+    - name: experiment_type
+      type: string
+      required: false
+      recommended: false
     outputs:
     - name: visualization_plan_path
       type: file_path
@@ -158,10 +141,20 @@ skills:
     expected_output_patterns:
     - visualization_plan_path\s*=\s*/.+
     - report_plan_path\s*=\s*/.+
+    - methodology_tradition\s*=\s*\S+
     pattern_examples:
     - 'visualization_plan_path = /tmp/plan-visualization/visualization-plan.md
 
       report_plan_path = /tmp/plan-visualization/report-plan.md
+
+      methodology_tradition = controlled_intervention
+
+      %%ORDER_UP%%'
+    - 'visualization_plan_path = /tmp/plan-visualization/visualization-plan.md
+
+      report_plan_path = /tmp/plan-visualization/report-plan.md
+
+      methodology_tradition = null
 
       %%ORDER_UP%%'
     write_behavior: always
@@ -284,6 +277,7 @@ skills:
     - 'groups_path = /tmp/groups.json
 
       %%ORDER_UP%%'
+    write_behavior: always
   make-plan:
     inputs:
     - name: task
@@ -373,6 +367,14 @@ skills:
     - name: results_path
       type: file_path
       required: true
+      recommended: false
+    - name: experiment_type
+      type: string
+      required: false
+      recommended: false
+    - name: methodology_tradition
+      type: string
+      required: false
       recommended: false
     outputs:
     - name: report_path

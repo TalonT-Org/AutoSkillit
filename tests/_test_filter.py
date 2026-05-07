@@ -543,6 +543,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "fleet/test_pack_enforcement.py",
             "fleet/test_pack_enforcement_e2e.py",
             "fleet/test_dispatch_failure_semantics.py",
+            "fleet/test_research_campaign_dispatch.py",
             # Other file-level entries:
             "infra/test_pretty_output_recipe.py",
             "skills/test_planner_skill_contracts.py",

@@ -32,7 +32,6 @@ from autoskillit.server._guards import (
 from autoskillit.server._misc import SCENARIO_STEP_NAME_ENV
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._subprocess import _run_subprocess
-from autoskillit.server.tools._execution_helpers import _import_and_call
 
 logger = get_logger(__name__)
 
@@ -167,6 +166,8 @@ async def run_python(
             "autoskillit.run_python",
             extra={"callable": callable},
         )
+        from autoskillit.server.tools._execution_helpers import _import_and_call  # noqa: PLC0415
+
         result = await _import_and_call(callable, args=args, timeout=float(timeout))
         if not result.get("success"):
             await _notify(

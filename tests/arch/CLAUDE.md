@@ -45,6 +45,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_subpackage_isolation.py` | IL-1/IL-2/IL-3 sub-package isolation, __all__ completeness, size/file-count constraints |
 | `test_subpackage_structure.py` | REQ-ARCH-010: Validate post-reorganization subpackage structure |
 | `test_tool_annotation_completeness.py` | AST annotation test shield for MCP tool readOnlyHint semantics (layers 1a, 1b) |
+| `test_tools_execution_decomposition.py` | Structural decomposition guard for tools_execution.py split |
 | `test_transforms_hygiene.py` | Structural guards for FastMCP visibility tag hygiene |
 
 ## Architecture Notes

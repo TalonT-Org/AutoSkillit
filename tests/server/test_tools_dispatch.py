@@ -50,7 +50,7 @@ class TestDispatchFoodTruckGates:
     async def test_dispatch_food_truck_hard_refusal_headless(self, tool_ctx, monkeypatch):
         """AUTOSKILLIT_HEADLESS=1 → fleet_hard_refusal_headless, regardless of SESSION_TYPE."""
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-        from autoskillit.server.tools.tools_execution import dispatch_food_truck
+        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
         result = json.loads(await dispatch_food_truck(recipe="r", task="t"))
         assert result["success"] is False
@@ -61,7 +61,7 @@ class TestDispatchFoodTruckGates:
         """Non-fleet session type → headless_error, even for interactive callers."""
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
         monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
-        from autoskillit.server.tools.tools_execution import dispatch_food_truck
+        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
         result = json.loads(await dispatch_food_truck(recipe="r", task="t"))
         assert result["success"] is False
@@ -71,7 +71,7 @@ class TestDispatchFoodTruckGates:
     async def test_dispatch_food_truck_requires_kitchen_open(self, tool_ctx, monkeypatch):
         """Kitchen closed → gate_error_result JSON."""
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server.tools.tools_execution import dispatch_food_truck
+        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         result = json.loads(await dispatch_food_truck(recipe="r", task="t"))
@@ -112,7 +112,7 @@ class TestDispatchFoodTruckGates:
         """features.fleet: false in config → fleet_feature_disabled, regardless of gate state."""
         import dataclasses
 
-        from autoskillit.server.tools.tools_execution import dispatch_food_truck
+        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
         # Gate is open (fleet session already booted), env var absent
@@ -727,7 +727,7 @@ async def test_dispatch_food_truck_tool_passes_resume_session_id_to_executor(
     tool_ctx, monkeypatch
 ):
     """dispatch_food_truck MCP tool forwards resume_session_id all the way to the executor."""
-    from autoskillit.server.tools.tools_execution import dispatch_food_truck
+    from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
     tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
@@ -815,7 +815,7 @@ class TestDispatchFoodTruckIdleTimeout:
         self, tool_ctx, monkeypatch
     ):
         """dispatch_food_truck MCP tool forwards idle_output_timeout to executor."""
-        from autoskillit.server.tools.tools_execution import dispatch_food_truck
+        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
         self._setup_dispatch(tool_ctx)
 
@@ -834,7 +834,7 @@ class TestDispatchFoodTruckIdleTimeout:
         self, tool_ctx, monkeypatch
     ):
         """When idle_output_timeout is not specified, executor receives None."""
-        from autoskillit.server.tools.tools_execution import dispatch_food_truck
+        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
         self._setup_dispatch(tool_ctx)
 
@@ -852,7 +852,7 @@ class TestDispatchFoodTruckIdleTimeout:
         self, tool_ctx, monkeypatch
     ):
         """Explicit idle_output_timeout=0 overrides the config default of 1000."""
-        from autoskillit.server.tools.tools_execution import dispatch_food_truck
+        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
         self._setup_dispatch(tool_ctx)
         # Config idle_output_timeout is 1000 (default from RunSkillConfig)

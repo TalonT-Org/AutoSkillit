@@ -492,6 +492,52 @@ class TestK15IngredientsTableInjection:
         assert overview_pos < ingredients_pos < manifest_pos
 
 
+class TestK16IngredientDisplayFirstAction:
+    """K-16: Campaign FIRST ACTION instructs Claude to display the ingredient table."""
+
+    _TABLE = "| Name | Description | Default |\n| task | What to fix | — |"
+
+    def test_first_action_block_present_when_ingredients_table_provided(self) -> None:
+        prompt = _build(ingredients_table=self._TABLE)
+        assert "FIRST ACTION" in prompt
+
+    def test_first_action_instructs_display_verbatim(self) -> None:
+        prompt = _build(ingredients_table=self._TABLE)
+        first_action_idx = prompt.index("FIRST ACTION")
+        dispatch_manifest_idx = prompt.index("DISPATCH MANIFEST")
+        section = prompt[first_action_idx:dispatch_manifest_idx]
+        assert "verbatim" in section
+
+    def test_first_action_references_recipe_ingredients_section(self) -> None:
+        prompt = _build(ingredients_table=self._TABLE)
+        first_action_idx = prompt.index("FIRST ACTION")
+        dispatch_manifest_idx = prompt.index("DISPATCH MANIFEST")
+        section = prompt[first_action_idx:dispatch_manifest_idx]
+        assert "RECIPE INGREDIENTS" in section
+
+    def test_first_action_absent_when_no_ingredients_table(self) -> None:
+        prompt = _build(ingredients_table=None)
+        assert "FIRST ACTION" not in prompt
+
+    def test_first_action_does_not_call_open_kitchen(self) -> None:
+        prompt = _build(ingredients_table=self._TABLE)
+        first_action_idx = prompt.index("FIRST ACTION")
+        dispatch_manifest_idx = prompt.index("DISPATCH MANIFEST")
+        section = prompt[first_action_idx:dispatch_manifest_idx]
+        assert "open_kitchen(" not in section
+
+    def test_first_action_appears_before_dispatch_manifest(self) -> None:
+        prompt = _build(ingredients_table=self._TABLE)
+        assert prompt.index("FIRST ACTION") < prompt.index("DISPATCH MANIFEST")
+
+    def test_first_action_instructs_ask_user_question(self) -> None:
+        prompt = _build(ingredients_table=self._TABLE)
+        first_action_idx = prompt.index("FIRST ACTION")
+        dispatch_manifest_idx = prompt.index("DISPATCH MANIFEST")
+        section = prompt[first_action_idx:dispatch_manifest_idx]
+        assert "AskUserQuestion" in section
+
+
 class TestResumeReasonInPrompt:
     def test_idle_stall_resume_includes_reenter_guidance(self) -> None:
         prompt = _build(

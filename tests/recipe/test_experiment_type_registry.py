@@ -46,6 +46,16 @@ EXPECTED_DIMENSIONS = {
     "agent_implementability",
 }
 
+NEW_TYPES = {
+    "evidence_synthesis",
+    "factorial_design",
+    "simulation_modeling",
+    "instrument_validation",
+    "single_subject",
+    "observational_correlational",
+    "qualitative_interpretive",
+}
+
 
 def test_all_bundled_types_present() -> None:
     """All 12 bundled types load without error."""
@@ -346,18 +356,9 @@ def test_priority_assignments_match_contract() -> None:
 
 def test_new_types_dimension_weight_rationale_coverage() -> None:
     """For each new type, every H or M dimension weight has a rationale entry."""
-    new_types = {
-        "evidence_synthesis",
-        "factorial_design",
-        "simulation_modeling",
-        "instrument_validation",
-        "single_subject",
-        "observational_correlational",
-        "qualitative_interpretive",
-    }
     types = load_all_experiment_types()
     by_name = {s.name: s for s in types}
-    for name in new_types:
+    for name in NEW_TYPES:
         spec = by_name[name]
         for dim, weight in spec.dimension_weights.items():
             if weight in ("H", "M"):
@@ -413,6 +414,27 @@ def test_new_types_dimension_weights_spot_check() -> None:
 
     assert by_name["observational_correlational"].dimension_weights["ecological_validity"] == "H"
     assert by_name["observational_correlational"].dimension_weights["variance_protocol"] == "L"
+
+
+@pytest.mark.parametrize("type_name", sorted(NEW_TYPES))
+def test_new_type_full_schema_valid(type_name: str) -> None:
+    """Each new type has a complete, well-formed schema."""
+    types = load_all_experiment_types()
+    by_name = {s.name: s for s in types}
+    spec = by_name[type_name]
+    assert spec.name == type_name
+    assert set(spec.dimension_weights.keys()) == EXPECTED_DIMENSIONS
+    for dim, weight in spec.dimension_weights.items():
+        assert weight in VALID_WEIGHT_VALUES, f"{type_name}.{dim} = {weight!r}"
+    assert isinstance(spec.classification_triggers, list)
+    assert len(spec.classification_triggers) >= 1
+    assert spec.schema_version == "1.0"
+    assert spec.is_fallback is False
+    assert 1 <= spec.priority <= 11
+    assert "estimand_clarity" in spec.l1_severity
+    assert "hypothesis_falsifiability" in spec.l1_severity
+    assert "severity_cap" in spec.red_team_focus
+    assert "specific" in spec.red_team_focus
 
 
 def test_qualitative_interpretive_falsifiability_is_info() -> None:
@@ -639,7 +661,10 @@ def test_is_silent_type_qualitative_interpretive() -> None:
     assert is_silent_type(by_name["qualitative_interpretive"]) is True
 
 
-@pytest.mark.parametrize("name", ["causal_inference", "benchmark", "exploratory"])
+@pytest.mark.parametrize(
+    "name",
+    sorted(EXPECTED_TYPES - {"qualitative_interpretive"}),
+)
 def test_is_silent_type_false_for_standard_types(name: str) -> None:
     """Standard types are not silent types."""
     types = load_all_experiment_types()

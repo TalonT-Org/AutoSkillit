@@ -7,7 +7,7 @@ import yaml
 
 from autoskillit.recipe.io import _parse_recipe
 from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeStep
-from autoskillit.recipe.validator import run_semantic_rules, validate_recipe
+from autoskillit.recipe.validator import run_semantic_rules, validate_recipe_structure
 from tests.recipe.conftest import _make_workflow
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
@@ -249,9 +249,9 @@ steps:
 """
         )
     )
-    errors = validate_recipe(recipe)
+    errors = validate_recipe_structure(recipe)
     assert any("investigation_path" in e for e in errors), (
-        "validate_recipe must report an error about undeclared context reference "
+        "validate_recipe_structure must report an error about undeclared context reference "
         "'investigation_path' when the investigate step has no capture block"
     )
 
@@ -270,7 +270,7 @@ class TestConfirmAction:
                 "done": {"action": "stop", "message": "Done."},
             }
         )
-        errors = validate_recipe(recipe)
+        errors = validate_recipe_structure(recipe)
         assert any("message" in e.lower() for e in errors), (
             "Expected a validation error mentioning 'message'"
         )
@@ -286,7 +286,7 @@ class TestConfirmAction:
                 "done": {"action": "stop", "message": "Done."},
             }
         )
-        errors = validate_recipe(recipe)
+        errors = validate_recipe_structure(recipe)
         assert any("on_success" in e.lower() for e in errors)
 
     def test_confirm_action_requires_on_failure(self) -> None:
@@ -297,7 +297,7 @@ class TestConfirmAction:
                 "done": {"action": "stop", "message": "Done."},
             }
         )
-        errors = validate_recipe(recipe)
+        errors = validate_recipe_structure(recipe)
         assert any("on_failure" in e.lower() for e in errors)
 
     def test_confirm_action_valid_step(self) -> None:
@@ -319,7 +319,7 @@ class TestConfirmAction:
                 "done": {"action": "stop", "message": "Done."},
             }
         )
-        errors = validate_recipe(recipe)
+        errors = validate_recipe_structure(recipe)
         assert not errors
 
     def test_confirm_action_routing_targets_validated(self) -> None:
@@ -335,7 +335,7 @@ class TestConfirmAction:
                 "done": {"action": "stop", "message": "Done."},
             }
         )
-        errors = validate_recipe(recipe)
+        errors = validate_recipe_structure(recipe)
         assert any("nonexistent_step" in e for e in errors)
 
 
@@ -348,7 +348,7 @@ class TestConstantStepValidation:
     def test_constant_step_is_valid_discriminator(self) -> None:
         """A step with only constant set passes structural validation."""
         recipe = _make_workflow({"step1": {"constant": "main", "on_success": "done"}})
-        errors = validate_recipe(recipe)
+        errors = validate_recipe_structure(recipe)
         assert errors == []
 
     def test_constant_step_rejected_with_tool(self) -> None:
@@ -356,7 +356,7 @@ class TestConstantStepValidation:
         recipe = _make_workflow(
             {"step1": {"constant": "main", "tool": "run_cmd", "on_success": "done"}}
         )
-        errors = validate_recipe(recipe)
+        errors = validate_recipe_structure(recipe)
         assert any("multiple discriminators" in e for e in errors)
 
     def test_constant_step_capture_allows_literal_values(self) -> None:
@@ -367,7 +367,7 @@ class TestConstantStepValidation:
             "on_success": "done",
         }
         recipe = _make_workflow({"step1": step_data})
-        errors = validate_recipe(recipe)
+        errors = validate_recipe_structure(recipe)
         assert errors == []
 
     def test_non_constant_step_capture_still_requires_template(self) -> None:
@@ -379,11 +379,11 @@ class TestConstantStepValidation:
             "on_success": "done",
         }
         recipe = _make_workflow({"step1": step_data})
-        errors = validate_recipe(recipe)
+        errors = validate_recipe_structure(recipe)
         assert any("result." in e for e in errors)
 
     def test_step_without_any_discriminator_still_rejected(self) -> None:
         """A step with no discriminator (no tool/action/python/constant) is invalid."""
         recipe = _make_workflow({"step1": {"on_success": "done"}})
-        errors = validate_recipe(recipe)
+        errors = validate_recipe_structure(recipe)
         assert any("must have" in e for e in errors)

@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.recipe.schema import Recipe, RecipeStep, StepResultRoute
-from autoskillit.recipe.validator import run_semantic_rules
+from autoskillit.recipe.validator import run_semantic_rules, validate_recipe_structure
 from tests.recipe.conftest import _make_workflow
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
@@ -25,7 +25,6 @@ class TestPredicateOnResultValidation:
 
     def test_predicate_on_result_on_success_mutually_exclusive(self) -> None:
         """Step with predicate on_result (list) + on_success → validation error."""
-        from autoskillit.recipe.validator import validate_recipe
 
         wf = self._make_merge_recipe(
             {
@@ -38,12 +37,11 @@ class TestPredicateOnResultValidation:
                 "on_success": "push",  # mutually exclusive
             }
         )
-        errors = validate_recipe(wf)
+        errors = validate_recipe_structure(wf)
         assert any("on_result" in e and "on_success" in e for e in errors)
 
     def test_predicate_condition_invalid_route_target_rejected(self) -> None:
         """A condition referencing an unknown step name is a validation error."""
-        from autoskillit.recipe.validator import validate_recipe
 
         wf = self._make_merge_recipe(
             {
@@ -55,12 +53,11 @@ class TestPredicateOnResultValidation:
                 ],
             }
         )
-        errors = validate_recipe(wf)
+        errors = validate_recipe_structure(wf)
         assert any("nonexistent_step" in e for e in errors)
 
     def test_predicate_condition_route_valid_step_accepted(self) -> None:
         """All condition routes pointing to valid step names pass validation."""
-        from autoskillit.recipe.validator import validate_recipe
 
         wf = self._make_merge_recipe(
             {
@@ -73,7 +70,7 @@ class TestPredicateOnResultValidation:
                 "capture": {"cleanup_succeeded": "${{ result.cleanup_succeeded }}"},
             }
         )
-        errors = validate_recipe(wf)
+        errors = validate_recipe_structure(wf)
         assert errors == []
 
     def test_predicate_on_result_empty_conditions_rejected(self) -> None:
@@ -83,7 +80,6 @@ class TestPredicateOnResultValidation:
         which collapses empty conditions to on_result=None), the validator falls through to
         legacy format validation and emits an explicit error for the missing field.
         """
-        from autoskillit.recipe.validator import validate_recipe
 
         recipe = Recipe(
             name="test-predicate-empty",
@@ -97,12 +93,11 @@ class TestPredicateOnResultValidation:
                 "done": RecipeStep(action="stop", message="done"),
             },
         )
-        errors = validate_recipe(recipe)
+        errors = validate_recipe_structure(recipe)
         assert any("on_result.field must be non-empty" in e for e in errors)
 
     def test_predicate_format_with_on_failure_allowed(self) -> None:
         """validator.py must not reject on_failure alongside on_result.conditions."""
-        from autoskillit.recipe.validator import validate_recipe
 
         wf = self._make_merge_recipe(
             {
@@ -115,7 +110,7 @@ class TestPredicateOnResultValidation:
                 "on_failure": "cleanup_failure",
             }
         )
-        errors = validate_recipe(wf)
+        errors = validate_recipe_structure(wf)
         assert not any("mutually exclusive" in e for e in errors), errors
 
     def test_on_result_missing_failure_route_fires_for_predicate_format(self) -> None:

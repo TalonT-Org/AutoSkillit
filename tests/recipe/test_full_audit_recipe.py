@@ -18,10 +18,10 @@ def test_full_audit_recipe_file_exists() -> None:
 def test_full_audit_recipe_validates() -> None:
     """full-audit.yaml loads without errors and passes validate_recipe."""
     from autoskillit.recipe.io import load_recipe
-    from autoskillit.recipe.validator import validate_recipe
+    from autoskillit.recipe.validator import validate_recipe_structure
 
     recipe = load_recipe(RECIPE_PATH)
-    errors = validate_recipe(recipe)
+    errors = validate_recipe_structure(recipe)
     assert errors == [], f"Validation errors: {errors}"
 
 

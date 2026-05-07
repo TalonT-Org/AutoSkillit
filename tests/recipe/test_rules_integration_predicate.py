@@ -92,12 +92,13 @@ class TestRecipeIntegrationPredicateRouting:
 
     def test_both_recipes_validate_cleanly(self) -> None:
         """Both recipes have no structural errors after predicate routing changes."""
-        from autoskillit.recipe.validator import validate_recipe
 
-        if_errors = validate_recipe(self.if_recipe)
+        from autoskillit.recipe.validator import validate_recipe_structure
+
+        if_errors = validate_recipe_structure(self.if_recipe)
         assert if_errors == [], f"remediation.yaml has validation errors: {if_errors}"
 
-        ip_errors = validate_recipe(self.ip_recipe)
+        ip_errors = validate_recipe_structure(self.ip_recipe)
         assert ip_errors == [], f"implementation.yaml has validation errors: {ip_errors}"
 
     def test_both_recipes_no_error_semantic_findings(self) -> None:

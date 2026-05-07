@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.recipe.io import load_recipe
-from autoskillit.recipe.validator import validate_recipe
+from autoskillit.recipe.validator import validate_recipe_structure
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -25,7 +25,7 @@ def test_remediation_recipe_has_release_issue_success_step(recipe):
     Absence of this step means issues resolved via remediation never get the
     staged label applied.
     """
-    errors = validate_recipe(recipe)
+    errors = validate_recipe_structure(recipe)
     assert not errors, f"remediation.yaml failed schema validation: {errors}"
     step_names = list(recipe.steps.keys())
     assert any("release_issue" in name and "success" in name for name in step_names), (
@@ -183,5 +183,5 @@ def test_remediation_has_no_sprint_entry_step() -> None:
 def test_remediation_validates_clean_after_sprint_removal() -> None:
     """remediation.yaml must pass schema validation after sprint references removed."""
     recipe = load_recipe(RECIPE_PATH)
-    errors = validate_recipe(recipe)
+    errors = validate_recipe_structure(recipe)
     assert not errors, f"remediation.yaml failed validation after sprint removal: {errors}"

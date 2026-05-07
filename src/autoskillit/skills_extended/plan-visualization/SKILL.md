@@ -21,16 +21,12 @@ outputs, and synthesizes a complete visualization plan.
 ## Arguments
 
 ```
-/autoskillit:plan-visualization {source_dir} {experiment_plan_path} {scope_report_path} [{experiment_type}]
+/autoskillit:plan-visualization {source_dir} {experiment_plan_path} {scope_report_path}
 ```
 
 - `{source_dir}` — Absolute path to the source repo (the CWD before worktree creation)
 - `{experiment_plan_path}` — Absolute path to the finalized experiment plan markdown
 - `{scope_report_path}` — Absolute path to the scope report (may be empty string if absent)
-- `{experiment_type}` — Optional. Experiment type classification from review-design
-  (e.g., "benchmark", "causal_inference", "exploratory"). May be empty string or absent
-  when review-design was skipped. Used for metadata output only — does not affect lens selection
-  (lens selection reads experiment_type from the plan text in Step 0).
 
 ## Critical Constraints
 
@@ -47,14 +43,12 @@ outputs, and synthesizes a complete visualization plan.
 - Write a vis-lens context file for each selected lens before invoking it
 - Log every conflict resolution decision in the Conflict Resolution Log table
 - Emit `visualization_plan_path` and `report_plan_path` tokens as your final output
-- Emit `methodology_tradition` token — `null` when Tier-C is skipped, the tradition slug when matched
 
 ## Workflow
 
 ### Step 0 — Parse Arguments
 
-Extract `source_dir`, `experiment_plan_path`, `scope_report_path`, and `experiment_type`
-from arguments. `experiment_type` is optional — default to `null` if absent or empty.
+Extract `source_dir`, `experiment_plan_path`, and `scope_report_path` from arguments.
 Read the experiment plan at `experiment_plan_path`.
 
 Extract the following fields (use sensible defaults if absent):
@@ -222,22 +216,8 @@ Every resolution must be logged as a row in the Conflict Resolution Log table.
 
 Path: `{{AUTOSKILLIT_TEMP}}/plan-visualization/visualization-plan.md`
 
-Write a YAML metadata header (fenced with `---`) at the top of visualization-plan.md.
-The `experiment_type` value comes from the 4th positional argument. The
-`methodology_tradition` value comes from the Tier-C `primary_tradition` slug (or
-`null` if Tier-C was skipped). Include `tier_c_lens: vis-lens-methodology-norms`
-only when Tier-C was invoked. Always include `generated_at` with an ISO 8601
-timestamp.
-
 Content structure:
 ```markdown
----
-experiment_type: {experiment_type from arg, or null}
-methodology_tradition: {primary_tradition from Tier-C, or null}
-tier_c_lens: vis-lens-methodology-norms    # if Tier-C invoked, else omit
-generated_at: {ISO 8601 timestamp}
----
-
 # Visualization Plan
 
 ## Figure Inventory
@@ -306,10 +286,6 @@ Fill in the fields from the Tier-C routing performed in Step 1:
 - `precedence_trace`: `null` for now
 
 ### Step 7 — Emit Structured Tokens
-
-Emit `methodology_tradition` with the resolved `primary_tradition` slug from Tier-C.
-If Tier-C was skipped (no methodology tradition detected), emit `methodology_tradition = null`
-(the literal string `null`).
 
 ```
 visualization_plan_path = {absolute_path_to_visualization-plan.md}

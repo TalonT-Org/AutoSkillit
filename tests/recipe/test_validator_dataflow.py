@@ -14,7 +14,7 @@ from autoskillit.recipe.io import (
     load_recipe,
 )
 from autoskillit.recipe.schema import Recipe
-from autoskillit.recipe.validator import analyze_dataflow, validate_recipe
+from autoskillit.recipe.validator import analyze_dataflow, validate_recipe_structure
 from tests.recipe.conftest import _make_workflow, _write_yaml
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
@@ -179,7 +179,7 @@ def test_validate_recipe_uses_iter_steps_with_context_for_capture_refs(tmp_path:
     steps = list(iter_steps_with_context(wf))
     assert steps[1][2] == frozenset()
     # validate_recipe should catch the unsatisfied context reference
-    errors = validate_recipe(wf)
+    errors = validate_recipe_structure(wf)
     assert any("worktree_path" in e for e in errors)
 
 
@@ -230,7 +230,7 @@ class TestIsInstanceGuards:
             },
         }
         recipe = _parse_recipe(data)
-        result = validate_recipe(recipe)
+        result = validate_recipe_structure(recipe)
         assert isinstance(result, list)
         assert not any("dead" in str(f).lower() for f in result), (
             "DEAD_OUTPUT rule fired on a valid recipe — false positive"

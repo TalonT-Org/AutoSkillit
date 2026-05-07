@@ -84,7 +84,8 @@ def test_stage_data_on_failure_escalates(recipe) -> None:
 
 def test_research_recipe_still_validates(recipe) -> None:
     """research.yaml must pass structural validation after stage_data is added."""
-    from autoskillit.recipe.validator import validate_recipe
 
-    errors = validate_recipe(recipe)
+    from autoskillit.recipe.validator import validate_recipe_structure
+
+    errors = validate_recipe_structure(recipe)
     assert errors == [], f"Validation errors: {errors}"

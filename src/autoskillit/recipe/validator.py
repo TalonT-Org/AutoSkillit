@@ -23,8 +23,8 @@ from autoskillit.recipe.contracts import (
 from autoskillit.recipe.io import iter_steps_with_context
 from autoskillit.recipe.registry import (
     _RULE_REGISTRY,
+    RuleDef,
     RuleFinding,
-    RuleSpec,
     build_quality_dict,
     compute_recipe_validity,
     filter_version_rule,
@@ -42,7 +42,7 @@ logger = get_logger(__name__)
 # registry). Callers import from validator.py as the single public entry point.
 __all__ = [
     "RuleFinding",
-    "RuleSpec",
+    "RuleDef",
     "ValidationContext",
     "_RULE_REGISTRY",
     "_build_step_graph",
@@ -63,8 +63,12 @@ __all__ = [
 _SKILL_HINT = " (Use /autoskillit:write-recipe for schema guidance)"
 
 
-def validate_recipe(recipe: Recipe) -> list[str]:
-    """Return a list of validation errors (empty if valid)."""
+def validate_recipe_structure(recipe: Recipe) -> list[str]:
+    """Return structural validation errors (empty if valid).
+
+    Does not run semantic rules or contract checks; use validate_from_path()
+    for complete validation.
+    """
     errors: list[str] = []
 
     if not recipe.name:

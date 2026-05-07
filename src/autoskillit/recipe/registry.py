@@ -37,9 +37,9 @@ class RuleFinding:
         }
 
 
-@dataclass
-class RuleSpec:
-    """Internal: metadata for one registered rule."""
+@dataclass(frozen=True)
+class RuleDef:
+    """Static definition of a registered semantic rule."""
 
     name: str
     description: str
@@ -47,7 +47,7 @@ class RuleSpec:
     check: Callable[[ValidationContext], list[RuleFinding]]
 
 
-_RULE_REGISTRY: list[RuleSpec] = []
+_RULE_REGISTRY: list[RuleDef] = []
 
 
 @dataclass(frozen=True)
@@ -63,9 +63,9 @@ class BlockContext:
     parent: ValidationContext
 
 
-@dataclass
-class BlockRuleSpec:
-    """Internal: metadata for one registered block-level rule."""
+@dataclass(frozen=True)
+class BlockRuleDef:
+    """Static definition of a registered block-level semantic rule."""
 
     name: str
     description: str
@@ -73,7 +73,7 @@ class BlockRuleSpec:
     check: Callable[[BlockContext], list[RuleFinding]]
 
 
-_BLOCK_RULE_REGISTRY: list[BlockRuleSpec] = []
+_BLOCK_RULE_REGISTRY: list[BlockRuleDef] = []
 
 
 def semantic_rule(
@@ -87,7 +87,7 @@ def semantic_rule(
         fn: Callable[[ValidationContext], list[RuleFinding]],
     ) -> Callable[[ValidationContext], list[RuleFinding]]:
         _RULE_REGISTRY.append(
-            RuleSpec(name=name, description=description, severity=severity, check=fn)
+            RuleDef(name=name, description=description, severity=severity, check=fn)
         )
         return fn
 
@@ -110,7 +110,7 @@ def block_rule(
         fn: Callable[[BlockContext], list[RuleFinding]],
     ) -> Callable[[BlockContext], list[RuleFinding]]:
         _BLOCK_RULE_REGISTRY.append(
-            BlockRuleSpec(name=name, description=description, severity=severity, check=fn)
+            BlockRuleDef(name=name, description=description, severity=severity, check=fn)
         )
         return fn
 

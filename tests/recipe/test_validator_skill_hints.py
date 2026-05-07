@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.recipe.io import load_recipe
-from autoskillit.recipe.validator import validate_recipe
+from autoskillit.recipe.validator import validate_recipe_structure
 from tests.recipe.conftest import VALID_RECIPE, _write_yaml
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
@@ -20,7 +20,7 @@ class TestValidatorSkillHints:
         """'Recipe must have a name' error includes write-recipe hint."""
         data = {**VALID_RECIPE, "name": ""}
         wf = load_recipe(_write_yaml(tmp_path / "r.yaml", data))
-        errors = validate_recipe(wf)
+        errors = validate_recipe_structure(wf)
         name_errors = [e for e in errors if "name" in e.lower() and "must have" in e.lower()]
         assert name_errors, f"Expected a name-required error, got: {errors}"
         assert any(_HINT in e for e in name_errors), (
@@ -31,7 +31,7 @@ class TestValidatorSkillHints:
         """'Recipe must have at least one step' error includes write-recipe hint."""
         data = {"name": "no-steps", "description": "test", "kitchen_rules": ["rule"]}
         wf = load_recipe(_write_yaml(tmp_path / "r.yaml", data))
-        errors = validate_recipe(wf)
+        errors = validate_recipe_structure(wf)
         step_errors = [e for e in errors if "step" in e.lower() and "at least" in e.lower()]
         assert step_errors, f"Expected a steps-required error, got: {errors}"
         assert any(_HINT in e for e in step_errors), (
@@ -42,7 +42,7 @@ class TestValidatorSkillHints:
         """'Recipe has no kitchen_rules' error includes write-recipe hint."""
         data = {k: v for k, v in VALID_RECIPE.items() if k != "kitchen_rules"}
         wf = load_recipe(_write_yaml(tmp_path / "r.yaml", data))
-        errors = validate_recipe(wf)
+        errors = validate_recipe_structure(wf)
         kr_errors = [e for e in errors if "kitchen_rules" in e]
         assert kr_errors, f"Expected a kitchen_rules error, got: {errors}"
         assert any(_HINT in e for e in kr_errors), (
@@ -64,7 +64,7 @@ class TestValidatorSkillHints:
             },
         }
         wf = load_recipe(_write_yaml(tmp_path / "r.yaml", data))
-        errors = validate_recipe(wf)
+        errors = validate_recipe_structure(wf)
         cap_errors = [e for e in errors if "capture" in e and "result" in e]
         assert cap_errors, f"Expected a capture expression error, got: {errors}"
         assert any(_HINT in e for e in cap_errors), (
@@ -87,7 +87,7 @@ class TestValidatorSkillHints:
             },
         }
         wf = load_recipe(_write_yaml(tmp_path / "r.yaml", data))
-        errors = validate_recipe(wf)
+        errors = validate_recipe_structure(wf)
         input_errors = [e for e in errors if "undeclared input" in e]
         assert input_errors, f"Expected an undeclared-input error, got: {errors}"
         assert any(_HINT in e for e in input_errors), (
@@ -97,5 +97,5 @@ class TestValidatorSkillHints:
     def test_valid_recipe_has_no_hint_errors(self, tmp_path: Path) -> None:
         """A valid recipe produces zero validation errors (sanity check)."""
         wf = load_recipe(_write_yaml(tmp_path / "r.yaml", VALID_RECIPE))
-        errors = validate_recipe(wf)
+        errors = validate_recipe_structure(wf)
         assert errors == [], f"Valid recipe should have no errors, got: {errors}"

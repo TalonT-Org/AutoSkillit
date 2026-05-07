@@ -6,7 +6,7 @@ import pytest
 
 from autoskillit.core.paths import pkg_root
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
-from autoskillit.recipe.validator import run_semantic_rules, validate_recipe
+from autoskillit.recipe.validator import run_semantic_rules, validate_recipe_structure
 
 RESEARCH_RECIPE_PATH = builtin_recipes_dir() / "research.yaml"
 SCRIPTS_DIR = pkg_root().parent.parent / "scripts" / "recipe"
@@ -108,7 +108,7 @@ def test_finalize_bundle_has_post_compression_guard():
 
 
 def test_research_recipe_passes_semantic_rules(recipe):
-    errors = validate_recipe(recipe)
+    errors = validate_recipe_structure(recipe)
     assert not errors, f"Structural validation errors: {errors}"
     findings = run_semantic_rules(recipe)
     from tests.recipe.conftest import KNOWN_PART_B_VIOLATIONS

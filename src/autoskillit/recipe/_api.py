@@ -60,7 +60,7 @@ from autoskillit.recipe.validator import (
     filter_version_rule,
     findings_to_dicts,
     run_semantic_rules,
-    validate_recipe,
+    validate_recipe_structure,
 )
 
 logger = get_logger(__name__)
@@ -226,7 +226,7 @@ def validate_from_path(
     _skill_resolver = lister if isinstance(lister, _SkillResolver) else None
 
     recipe = _parse_recipe(data)
-    errors = validate_recipe(recipe)
+    errors = validate_recipe_structure(recipe)
     known_skills = frozenset(s.name for s in lister.list_all())
     ctx = make_validation_context(
         recipe, available_skills=known_skills, skill_resolver=_skill_resolver
@@ -432,12 +432,12 @@ def load_and_validate(
             )
 
             # Stage: structural validation on active recipe
-            errors = validate_recipe(active_recipe)
+            errors = validate_recipe_structure(active_recipe)
             if combined_recipe is not None:
                 # Dual validation: also validate the combined (merged) graph
-                combined_errors = validate_recipe(combined_recipe)
+                combined_errors = validate_recipe_structure(combined_recipe)
                 errors.extend(f"[combined] {e}" for e in combined_errors)
-            t0 = _t("validate_recipe", t0, name)
+            t0 = _t("validate_recipe_structure", t0, name)
 
             # Stage: semantic rules (builds ValidationContext once — shared computation)
             if lister is None:

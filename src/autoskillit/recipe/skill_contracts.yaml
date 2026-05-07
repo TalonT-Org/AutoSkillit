@@ -1,4 +1,8 @@
 version: 0.1.0
+# Default semantics for 'required' when omitted from an input:
+#   skills section          → required=false (skills are permissive)
+#   callable_contracts section → required=true  (callables are strict)
+# Best practice: always declare 'required' explicitly on every input.
 skills:
   troubleshoot-experiment:
     inputs:
@@ -1284,9 +1288,6 @@ skills:
     - name: scope_report_path
       type: string
       required: false
-    - name: experiment_type
-      type: string
-      required: false
     outputs:
     - name: visualization_plan_path
       type: file_path
@@ -1303,10 +1304,8 @@ skills:
     expected_output_patterns:
     - "visualization_plan_path\\s*=\\s*/.+"
     - "report_plan_path\\s*=\\s*/.+"
-    - "methodology_tradition\\s*=\\s*\\S+"
     pattern_examples:
-    - "visualization_plan_path = /tmp/plan-visualization/visualization-plan.md\nreport_plan_path = /tmp/plan-visualization/report-plan.md\nmethodology_tradition = controlled_intervention\n%%ORDER_UP%%"
-    - "visualization_plan_path = /tmp/plan-visualization/visualization-plan.md\nreport_plan_path = /tmp/plan-visualization/report-plan.md\nmethodology_tradition = null\n%%ORDER_UP%%"
+    - "visualization_plan_path = /tmp/plan-visualization/visualization-plan.md\nreport_plan_path = /tmp/plan-visualization/report-plan.md\n%%ORDER_UP%%"
     write_behavior: always
 
   stage-data:
@@ -1391,12 +1390,6 @@ skills:
     - name: results_path
       type: file_path
       required: true
-    - name: experiment_type
-      type: string
-      required: false
-    - name: methodology_tradition
-      type: string
-      required: false
     outputs:
     - name: report_path
       type: file_path

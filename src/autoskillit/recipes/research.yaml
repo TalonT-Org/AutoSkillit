@@ -157,10 +157,9 @@ steps:
     tool: run_skill
     model: ""
     with:
-      skill_command: "/autoskillit:plan-visualization ${{ inputs.source_dir }} ${{ context.experiment_plan }} ${{ context.scope_report }} ${{ context.experiment_type }}"
+      skill_command: "/autoskillit:plan-visualization ${{ inputs.source_dir }} ${{ context.experiment_plan }} ${{ context.scope_report }}"
       cwd: "${{ inputs.source_dir }}"
       step_name: plan_visualization
-    optional_context_refs: [experiment_type]
     capture:
       visualization_plan_path: "${{ result.visualization_plan_path }}"
       report_plan_path: "${{ result.report_plan_path }}"
@@ -452,7 +451,6 @@ steps:
       skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }} --experiment-type '${{ context.experiment_type }}' --methodology-traditions '${{ context.methodology_tradition }}' --design-review-verdict '${{ context.verdict }}' --disambiguation-rule-applied '${{ context.disambiguation_rule_applied }}' --tier-c-lens '${{ context.tier_c_lens }}' --classification-timestamp '${{ context.classification_timestamp }}'"
       cwd: "${{ context.worktree_path }}"
       step_name: generate_report
-    optional_context_refs: [experiment_type, methodology_tradition]
     capture:
       report_path: "${{ result.report_path }}"
     on_success: test
@@ -467,7 +465,6 @@ steps:
       skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --inconclusive --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }} --experiment-type '${{ context.experiment_type }}' --methodology-traditions '${{ context.methodology_tradition }}' --design-review-verdict '${{ context.verdict }}' --disambiguation-rule-applied '${{ context.disambiguation_rule_applied }}' --tier-c-lens '${{ context.tier_c_lens }}' --classification-timestamp '${{ context.classification_timestamp }}'"
       cwd: "${{ context.worktree_path }}"
       step_name: generate_report
-    optional_context_refs: [experiment_type, methodology_tradition]
     capture:
       report_path: "${{ result.report_path }}"
     on_success: test
@@ -754,7 +751,6 @@ steps:
       skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }} --experiment-type '${{ context.experiment_type }}' --methodology-traditions '${{ context.methodology_tradition }}' --design-review-verdict '${{ context.verdict }}' --disambiguation-rule-applied '${{ context.disambiguation_rule_applied }}' --tier-c-lens '${{ context.tier_c_lens }}' --classification-timestamp '${{ context.classification_timestamp }}'"
       cwd: "${{ context.worktree_path }}"
       step_name: re_generate_report
-    optional_context_refs: [experiment_type, methodology_tradition]
     capture:
       report_path: "${{ result.report_path }}"
     on_success: re_stage_bundle

@@ -220,10 +220,16 @@ def validate_from_path(
 
         lister = DefaultSkillResolver()
 
+    from autoskillit.core import SkillResolver as _SkillResolver  # noqa: PLC0415
+
+    _skill_resolver = lister if isinstance(lister, _SkillResolver) else None
+
     recipe = _parse_recipe(data)
     errors = validate_recipe(recipe)
     known_skills = frozenset(s.name for s in lister.list_all())
-    ctx = make_validation_context(recipe, available_skills=known_skills)
+    ctx = make_validation_context(
+        recipe, available_skills=known_skills, skill_resolver=_skill_resolver
+    )
     report = ctx.dataflow
     semantic_findings = run_semantic_rules(ctx)
 
@@ -439,6 +445,10 @@ def load_and_validate(
 
                 lister = DefaultSkillResolver()
 
+            from autoskillit.core import SkillResolver as _SkillResolver  # noqa: PLC0415
+
+            _skill_resolver = lister if isinstance(lister, _SkillResolver) else None
+
             known = frozenset(
                 r.name
                 for r in (_recipe_list if _recipe_list is not None else list_recipes(_pdir).items)
@@ -459,6 +469,7 @@ def load_and_validate(
                 available_skills=known_skills,
                 available_sub_recipes=known_sub_recipes,
                 project_dir=_pdir,
+                skill_resolver=_skill_resolver,
             )
             semantic_findings = run_semantic_rules(val_ctx)
             semantic_suggestions = findings_to_dicts(semantic_findings)

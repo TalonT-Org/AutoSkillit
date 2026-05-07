@@ -825,3 +825,61 @@ def test_transition_boundary_anti_confirmation_rule_passes(tmp_path: Path) -> No
     assert _BOUNDARY_RULE_ID not in rule_ids, (
         f"Rule must not fire when anti-confirmation instruction is present, got: {rule_ids}"
     )
+
+
+def test_rules_pass_ctx_skill_resolver_to_resolve_skill_md(tmp_path: Path) -> None:
+    """Rule functions thread ctx.skill_resolver through to _resolve_skill_md."""
+    from autoskillit.recipe._analysis import make_validation_context
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    # Build a minimal recipe with a run_skill step that triggers skill content rules
+    skill_dir = tmp_path / "test-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text("# test-skill\n## Arguments\nNone.\n")
+
+    recipe_yaml = tmp_path / "recipe.yaml"
+    recipe_yaml.write_text(
+        textwrap.dedent(
+            """\
+        name: test-recipe
+        kitchen_rules:
+          - "Use run_skill only."
+        steps:
+          run_impl:
+            tool: run_skill
+            with:
+              skill_command: "/autoskillit:test-skill"
+            on_success: done
+          done:
+            action: stop
+            message: "Done."
+        """
+        )
+    )
+    recipe = load_recipe(recipe_yaml)
+
+    # Track whether _resolve_skill_md received a non-None resolver
+    received_resolvers: list[object] = []
+    original_fn = _rsc._resolve_skill_md
+
+    def tracking_fn(skill_name: str, *, resolver: object = None) -> object:
+        received_resolvers.append(resolver)
+        return original_fn(skill_name, resolver=resolver)
+
+    resolver = DefaultSkillResolver()
+    ctx = make_validation_context(recipe, skill_resolver=resolver)
+
+    with (
+        patch.object(_rsc, "_resolve_skill_md", tracking_fn),
+        patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]),
+    ):
+        run_semantic_rules(ctx)
+
+    # At least one call should have received the resolver from ctx
+    non_none = [r for r in received_resolvers if r is not None]
+    assert len(non_none) > 0, (
+        "Expected rule functions to pass ctx.skill_resolver to _resolve_skill_md"
+    )
+    assert all(r is resolver for r in non_none), (
+        "Expected every non-None resolver to be the exact instance from ctx"
+    )

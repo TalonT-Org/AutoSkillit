@@ -17,6 +17,7 @@ _RETIRED_MAPPING: dict[str, str] = {
     "guards/leaf_orchestration_guard": "guards/skill_orchestration_guard",
     "guards/franchise_dispatch_guard": "guards/fleet_dispatch_guard",
     "guards/headless_orchestration_guard": "guards/skill_orchestration_guard",
+    "guards/mcp_health_guard": "guards/mcp_health_advisor",
 }
 
 

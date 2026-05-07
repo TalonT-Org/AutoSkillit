@@ -330,17 +330,20 @@ def test_repository_load_and_validate_passes_recipe_info_to_api(monkeypatch):
         *,
         suppressed=None,
         recipe_info=None,
+        recipe_list=None,
         resolved_defaults=None,
         ingredient_overrides=None,
         temp_dir=None,
         temp_dir_relpath=None,
     ):
         captured["recipe_info"] = recipe_info
+        captured["recipe_list"] = recipe_list
         return real_fn(
             name,
             project_dir,
             suppressed=suppressed,
             recipe_info=recipe_info,
+            recipe_list=recipe_list,
             resolved_defaults=resolved_defaults,
             ingredient_overrides=ingredient_overrides,
             temp_dir=temp_dir,
@@ -746,3 +749,91 @@ def test_compute_registry_hash_changes_on_mtime(tmp_path: Path) -> None:
     h2 = _compute_registry_hash(d)
 
     assert h1 != h2
+
+
+def test_load_and_validate_reuses_content_hash_from_recipe_info(tmp_path, monkeypatch):
+    """load_and_validate reuses match.content_hash for the result's content_hash field."""
+    import autoskillit.recipe._api as api_mod
+
+    monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
+
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    recipe_path = recipes_dir / "myrecipe.yaml"
+    recipe_path.write_text(MINIMAL_RECIPE_YAML)
+
+    # Create a RecipeInfo with content_hash pre-populated
+    from autoskillit.core import RecipeSource
+    from autoskillit.recipe.schema import RecipeInfo
+
+    info = RecipeInfo(
+        name="myrecipe",
+        description="test",
+        source=RecipeSource.PROJECT,
+        path=recipe_path,
+        content=None,
+        content_hash="sha256:abcd1234deadbeef",
+    )
+
+    result = api_mod.load_and_validate("myrecipe", tmp_path, recipe_info=info)
+
+    assert result.get("content_hash") == "sha256:abcd1234deadbeef"
+
+
+def test_load_and_validate_calls_list_recipes_once(tmp_path, monkeypatch):
+    """list_recipes is called exactly once when recipe_info is not provided."""
+    import autoskillit.recipe._api as api_mod
+
+    monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
+
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    recipe_path = recipes_dir / "myrecipe.yaml"
+    recipe_path.write_text(MINIMAL_RECIPE_YAML)
+
+    call_count = {"n": 0}
+    original_list_recipes = api_mod.list_recipes
+
+    def counting_list_recipes(*args, **kwargs):
+        call_count["n"] += 1
+        return original_list_recipes(*args, **kwargs)
+
+    monkeypatch.setattr(api_mod, "list_recipes", counting_list_recipes)
+
+    api_mod.load_and_validate("myrecipe", tmp_path)
+
+    assert call_count["n"] == 1
+
+
+def test_load_and_validate_skips_list_recipes_when_recipe_list_provided(tmp_path, monkeypatch):
+    """list_recipes is not called when recipe_list is provided alongside recipe_info."""
+    import autoskillit.recipe._api as api_mod
+
+    monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
+
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    recipe_path = recipes_dir / "myrecipe.yaml"
+    recipe_path.write_text(MINIMAL_RECIPE_YAML)
+
+    from autoskillit.core import RecipeSource
+    from autoskillit.recipe.schema import RecipeInfo
+
+    info = RecipeInfo(
+        name="myrecipe",
+        description="test",
+        source=RecipeSource.PROJECT,
+        path=recipe_path,
+        content=None,
+        content_hash=None,
+    )
+
+    def raising_list_recipes(*args, **kwargs):
+        raise AssertionError("list_recipes must not be called when recipe_list is provided")
+
+    monkeypatch.setattr(api_mod, "list_recipes", raising_list_recipes)
+
+    result = api_mod.load_and_validate("myrecipe", tmp_path, recipe_info=info, recipe_list=[info])
+
+    assert "error" not in result
+    assert result.get("content_hash") is not None

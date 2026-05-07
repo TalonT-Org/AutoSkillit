@@ -7,24 +7,10 @@ The class is a documentation anchor for future pipeline execution validation.
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
 import pytest
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
-
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture()
-def research_smoke_dir(tmp_path: Path) -> Path:
-    smoke_dir = tmp_path / "smoke-research"
-    smoke_dir.mkdir()
-    # No git init — Unit 1.1 guard must handle non-git source directories
-    return smoke_dir
 
 
 # ---------------------------------------------------------------------------

@@ -52,7 +52,7 @@ async def test_run_headless_core_forwards_provider_extras_to_build_cmd(
 
     assert captured["provider_extras"] == {"AWS_REGION": "us-east-1"}
     assert captured["profile_name"] == "bedrock"
-    assert "provider_extras" not in execute_kwargs
+    assert execute_kwargs.get("provider_extras") == {"AWS_REGION": "us-east-1"}
     assert "profile_name" not in execute_kwargs
 
 

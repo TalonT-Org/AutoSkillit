@@ -60,6 +60,16 @@ def main() -> None:
     except Exception:
         pass
 
+    marker = os.environ.get("AUTOSKILLIT_COMPLETION_MARKER", "").strip()
+    if marker:
+        reminder = (
+            "COMPLETION REMINDER: After completing your task, your final text output "
+            f"MUST end with exactly: {marker}\n"
+            "This is mandatory regardless of what the skill's Output section specifies."
+        )
+        payload = json.dumps({"additionalContext": reminder})
+        sys.stdout.write(payload + "\n")
+
     sys.exit(0)
 
 

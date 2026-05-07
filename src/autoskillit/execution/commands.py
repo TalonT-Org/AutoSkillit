@@ -216,7 +216,7 @@ def build_headless_resume_cmd(
     merged: dict[str, str] = dict(_SESSION_BASELINE_ENV)
     if env_extras:
         merged.update(env_extras)
-    return ClaudeHeadlessCmd(cmd=cmd, env=build_claude_env(extras=merged))
+    return ClaudeHeadlessCmd(cmd=cmd, env=build_claude_env(base={}, extras=merged))
 
 
 def _ensure_skill_prefix(skill_command: str, *, provider_profile: str = "") -> str:
@@ -291,6 +291,17 @@ def _inject_narration_suppression(skill_command: str, *, has_skill_prefix: bool 
         "ORCHESTRATION DIRECTIVE above."
     )
     return skill_command + directive
+
+
+def _inject_completion_reminder(prompt: str, marker: str) -> str:
+    """Append a short completion marker reminder as the final prompt line.
+
+    Provides recency-priority reinforcement for models that attend more strongly
+    to end-of-prompt instructions.
+    """
+    if not marker:
+        return prompt
+    return f"{prompt}\nRemember: end your final response with {marker}"
 
 
 def _build_resume_context(checkpoint: SessionCheckpoint) -> str:
@@ -378,25 +389,31 @@ def build_skill_session_cmd(
         )
         if resume_checkpoint and resume_checkpoint.completed_items:
             _resume_instruction += "\n\n" + _build_resume_context(resume_checkpoint)
-        prompt = _inject_narration_suppression(
-            _inject_cwd_anchor(
-                _inject_completion_directive(_resume_instruction, completion_marker),
-                cwd,
-                temp_dir_relpath=temp_dir_relpath,
-            )
+        prompt = _inject_completion_reminder(
+            _inject_narration_suppression(
+                _inject_cwd_anchor(
+                    _inject_completion_directive(_resume_instruction, completion_marker),
+                    cwd,
+                    temp_dir_relpath=temp_dir_relpath,
+                )
+            ),
+            completion_marker,
         )
     else:
         _has_prefix = bool(profile_name) and skill_command.strip().startswith("/")
-        prompt = _inject_narration_suppression(
-            _inject_cwd_anchor(
-                _inject_completion_directive(
-                    _ensure_skill_prefix(skill_command, provider_profile=profile_name or ""),
-                    completion_marker,
+        prompt = _inject_completion_reminder(
+            _inject_narration_suppression(
+                _inject_cwd_anchor(
+                    _inject_completion_directive(
+                        _ensure_skill_prefix(skill_command, provider_profile=profile_name or ""),
+                        completion_marker,
+                    ),
+                    cwd,
+                    temp_dir_relpath=temp_dir_relpath,
                 ),
-                cwd,
-                temp_dir_relpath=temp_dir_relpath,
+                has_skill_prefix=_has_prefix,
             ),
-            has_skill_prefix=_has_prefix,
+            completion_marker,
         )
     extras: dict[str, str] = {
         "AUTOSKILLIT_HEADLESS": "1",
@@ -423,6 +440,7 @@ def build_skill_session_cmd(
                 extras[k] = v
     if profile_name:
         extras["AUTOSKILLIT_PROVIDER_PROFILE"] = profile_name
+        extras["AUTOSKILLIT_COMPLETION_MARKER"] = completion_marker
 
     filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
     spec = build_headless_cmd(prompt, model=model, env_extras=extras, base=filtered_base)
@@ -514,21 +532,27 @@ def build_food_truck_cmd(
         )
         if resume_checkpoint and resume_checkpoint.completed_items:
             _resume_instruction += "\n\n" + _build_resume_context(resume_checkpoint)
-        prompt = _inject_narration_suppression(
-            _inject_cwd_anchor(
-                _inject_completion_directive(_resume_instruction, completion_marker),
-                cwd,
-                temp_dir_relpath=temp_dir_relpath,
-            )
+        prompt = _inject_completion_reminder(
+            _inject_narration_suppression(
+                _inject_cwd_anchor(
+                    _inject_completion_directive(_resume_instruction, completion_marker),
+                    cwd,
+                    temp_dir_relpath=temp_dir_relpath,
+                )
+            ),
+            completion_marker,
         )
     else:
         # No _ensure_skill_prefix — orchestrator_prompt is a complete system prompt.
-        prompt = _inject_narration_suppression(
-            _inject_cwd_anchor(
-                _inject_completion_directive(orchestrator_prompt, completion_marker),
-                cwd,
-                temp_dir_relpath=temp_dir_relpath,
-            )
+        prompt = _inject_completion_reminder(
+            _inject_narration_suppression(
+                _inject_cwd_anchor(
+                    _inject_completion_directive(orchestrator_prompt, completion_marker),
+                    cwd,
+                    temp_dir_relpath=temp_dir_relpath,
+                )
+            ),
+            completion_marker,
         )
 
     # Baseline env: headless + orchestrator session type + MCP settings.

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -198,6 +198,9 @@ async def _attempt_contract_nudge(
     completion_marker: str,
     cwd: str,
     runner: SubprocessRunner,
+    *,
+    provider_extras: Mapping[str, str] | None = None,
+    retry_reason: RetryReason = RetryReason.CONTRACT_RECOVERY,
 ) -> SkillResult | None:
     """Attempt a lightweight resume nudge to recover missing structured output tokens.
 
@@ -205,28 +208,39 @@ async def _attempt_contract_nudge(
     but omitted the structured output token. Instead of a full retry, resume the same
     session with a short feedback prompt asking the model to emit the missing token.
 
-    Returns a patched SkillResult(success=True) on success, or None to indicate the
-    nudge failed and the caller should fall through to the original CONTRACT_RECOVERY path.
-    """
-    hints = _extract_missing_token_hints(subprocess_result.stdout, expected_output_patterns)
-    if not hints:
-        logger.debug("nudge_skip_no_hints")
-        return None
+    When retry_reason is EARLY_STOP, the model produced substantive output but omitted
+    the completion marker. A simpler nudge prompt is used that bypasses the hints guard.
 
-    # Build the feedback prompt
-    token_lines = "\n".join(f"{name} = {path}" for name, path in hints)
-    prompt = (
-        "You completed your task and wrote the output file, but you omitted the "
-        "required structured output token in your final text response.\n\n"
-        f"Please emit ONLY the following (no other text):\n"
-        f"{token_lines}\n"
-        f"{completion_marker}"
-    )
+    Returns a patched SkillResult(success=True) on success, or None to indicate the
+    nudge failed and the caller should fall through to the original path.
+    """
+    if retry_reason == RetryReason.EARLY_STOP:
+        prompt = (
+            "Your response was complete but you omitted the required completion marker. "
+            f"Please emit ONLY the following text (nothing else):\n"
+            f"{completion_marker}"
+        )
+        patterns_to_check: Sequence[str] = []
+    else:
+        hints = _extract_missing_token_hints(subprocess_result.stdout, expected_output_patterns)
+        if not hints:
+            logger.debug("nudge_skip_no_hints")
+            return None
+        token_lines = "\n".join(f"{name} = {path}" for name, path in hints)
+        prompt = (
+            "You completed your task and wrote the output file, but you omitted the "
+            "required structured output token in your final text response.\n\n"
+            f"Please emit ONLY the following (no other text):\n"
+            f"{token_lines}\n"
+            f"{completion_marker}"
+        )
+        patterns_to_check = list(expected_output_patterns)
 
     spec = build_headless_resume_cmd(
         resume_session_id=skill_result.session_id,
         prompt=prompt,
         output_format=OutputFormat.JSON,
+        env_extras=dict(provider_extras) if provider_extras else None,
     )
 
     try:
@@ -247,7 +261,33 @@ async def _attempt_contract_nudge(
     nudge_session = parse_session_result(nudge_result.stdout)
     combined_result = skill_result.result + "\n" + nudge_session.result
 
-    if not _check_expected_patterns(combined_result, list(expected_output_patterns)):
+    if retry_reason == RetryReason.EARLY_STOP:
+        # For EARLY_STOP, success is determined by the marker being present
+        if completion_marker in nudge_session.result:
+            logger.info(
+                "nudge_recovery_success",
+                session_id=skill_result.session_id,
+                nudge_output_count=nudge_session.token_usage.get("output_tokens", 0)
+                if nudge_session.token_usage
+                else 0,
+            )
+            return dataclasses.replace(
+                skill_result,
+                success=True,
+                result=combined_result,
+                subtype="success",
+                needs_retry=False,
+                retry_reason=RetryReason.NONE,
+                token_usage=_merge_token_usage(
+                    skill_result.token_usage, nudge_session.token_usage
+                ),
+            )
+        logger.debug(
+            "nudge_early_stop_marker_not_found", nudge_result_len=len(nudge_session.result)
+        )
+        return None
+
+    if not _check_expected_patterns(combined_result, patterns_to_check):
         logger.debug(
             "nudge_patterns_not_found",
             nudge_result_len=len(nudge_session.result),

@@ -373,10 +373,10 @@ def load_and_validate(
     # Stage: find recipe
     if recipe_info is not None:
         match: RecipeInfo | None = recipe_info
-        _recipe_items = recipe_list
+        _recipe_list = recipe_list
     else:
         match = find_recipe_by_name(name, _pdir)
-        _recipe_items = None
+        _recipe_list = None
     t0 = _t("find_recipe", t0, name)
 
     if match is None:
@@ -441,9 +441,7 @@ def load_and_validate(
 
             known = frozenset(
                 r.name
-                for r in (
-                    _recipe_items if _recipe_items is not None else list_recipes(_pdir).items
-                )
+                for r in (_recipe_list if _recipe_list is not None else list_recipes(_pdir).items)
             )
             known_skills = frozenset(s.name for s in lister.list_all())
             sub_recipes_dir = builtin_sub_recipes_dir()

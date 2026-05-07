@@ -70,10 +70,15 @@ def _load_recipe_dict(
             text = json_path.read_text(encoding="utf-8")
             if temp_dir_relpath is not None:
                 text = substitute_temp_placeholder(text, temp_dir_relpath)
-            return _json.loads(text)
+            data = _json.loads(text)
+            if isinstance(data, dict):
+                return data
+            logger.warning(
+                "Pre-compiled JSON is not a mapping, falling back to YAML: %s", json_path
+            )
     except _json.JSONDecodeError:
         logger.warning("Pre-compiled JSON is corrupt, falling back to YAML: %s", json_path)
-    except (FileNotFoundError, OSError, ValueError):
+    except (FileNotFoundError, OSError):
         pass
     if raw_text is None:
         raw_text = yaml_path.read_text(encoding="utf-8")

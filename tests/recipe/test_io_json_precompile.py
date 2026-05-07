@@ -44,8 +44,8 @@ def test_load_recipe_dict_prefers_json_when_fresh(tmp_path, monkeypatch):
     _compile_json(yaml_path)
     # Ensure JSON mtime is strictly greater than YAML mtime (required by > freshness gate)
     json_path = yaml_path.with_suffix(".json")
-    future_mtime = yaml_path.stat().st_mtime + 10
-    os.utime(json_path, (future_mtime, future_mtime))
+    future_mtime_ns = yaml_path.stat().st_mtime_ns + 10_000_000_000
+    os.utime(json_path, ns=(future_mtime_ns, future_mtime_ns))
 
     load_yaml_calls = []
     monkeypatch.setattr(
@@ -82,8 +82,8 @@ def test_load_recipe_dict_falls_back_when_json_stale(tmp_path, monkeypatch):
 
     _compile_json(yaml_path)
     # Manually set JSON mtime to the past so YAML is newer
-    js_mtime = json_path.stat().st_mtime
-    os.utime(json_path, (js_mtime - 10, js_mtime - 10))
+    js_mtime_ns = json_path.stat().st_mtime_ns
+    os.utime(json_path, ns=(js_mtime_ns - 10_000_000_000, js_mtime_ns - 10_000_000_000))
 
     load_yaml_calls = []
     monkeypatch.setattr(
@@ -112,8 +112,8 @@ def test_load_recipe_dict_applies_substitution_on_json(tmp_path):
     _write_yaml(yaml_path, recipe_with_placeholder)
     _compile_json(yaml_path)
     json_path = yaml_path.with_suffix(".json")
-    future_mtime = yaml_path.stat().st_mtime + 10
-    os.utime(json_path, (future_mtime, future_mtime))
+    future_mtime_ns = yaml_path.stat().st_mtime_ns + 10_000_000_000
+    os.utime(json_path, ns=(future_mtime_ns, future_mtime_ns))
 
     result = _load_recipe_dict(yaml_path, temp_dir_relpath="custom/temp")
 
@@ -126,8 +126,8 @@ def test_load_recipe_dict_handles_json_decode_error(tmp_path, monkeypatch):
     json_path = yaml_path.with_suffix(".json")
     # Write corrupt content with an explicitly future mtime so the freshness gate passes
     json_path.write_text("{ invalid json }", encoding="utf-8")
-    future_mtime = yaml_path.stat().st_mtime + 10
-    os.utime(json_path, (future_mtime, future_mtime))
+    future_mtime_ns = yaml_path.stat().st_mtime_ns + 10_000_000_000
+    os.utime(json_path, ns=(future_mtime_ns, future_mtime_ns))
 
     load_yaml_calls = []
     monkeypatch.setattr(

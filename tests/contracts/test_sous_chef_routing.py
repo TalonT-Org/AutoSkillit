@@ -375,7 +375,7 @@ def test_skill_md_covers_all_prompts_routing_reasons() -> None:
 
 
 class TestWorktreeEarlyStopCarveout:
-    """SKILL.md routing contract: early_stop must check worktree_path evidence."""
+    """SKILL.md routing contract: early_stop must check has_progress_evidence."""
 
     def test_early_stop_references_worktree_path(self) -> None:
         skill_md = _sous_chef_text()
@@ -383,8 +383,8 @@ class TestWorktreeEarlyStopCarveout:
         idx = routing_section.find("early_stop")
         assert idx != -1
         window = routing_section[idx : idx + 500]
-        assert "worktree_path" in window, (
-            "early_stop routing rule must reference worktree_path evidence"
+        assert "has_progress_evidence" in window, (
+            "early_stop routing rule must reference has_progress_evidence"
         )
 
     def test_early_stop_with_worktree_routes_to_on_context_limit(self) -> None:
@@ -399,7 +399,7 @@ class TestWorktreeEarlyStopCarveout:
 
 
 class TestWorktreeZeroWritesCarveout:
-    """SKILL.md routing contract: zero_writes must check worktree_path evidence."""
+    """SKILL.md routing contract: zero_writes must check has_progress_evidence."""
 
     def test_zero_writes_references_worktree_path(self) -> None:
         skill_md = _sous_chef_text()
@@ -407,8 +407,8 @@ class TestWorktreeZeroWritesCarveout:
         idx = routing_section.find("zero_writes")
         assert idx != -1
         window = routing_section[idx : idx + 500]
-        assert "worktree_path" in window, (
-            "zero_writes routing rule must reference worktree_path evidence"
+        assert "has_progress_evidence" in window, (
+            "zero_writes routing rule must reference has_progress_evidence"
         )
 
     def test_zero_writes_with_worktree_routes_to_on_context_limit(self) -> None:

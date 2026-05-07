@@ -132,6 +132,14 @@ class TestExecuteClaudeHeadlessIdleEnv:
         from autoskillit.execution.headless import run_headless_core
 
         monkeypatch.setenv("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", "not-a-number")
+
+        async def _no_nudge(*_a, **_kw):
+            return None
+
+        monkeypatch.setattr(
+            "autoskillit.execution.headless._attempt_contract_nudge",
+            _no_nudge,
+        )
         minimal_ctx.config.run_skill.idle_output_timeout = 45
 
         runner = MockSubprocessRunner()

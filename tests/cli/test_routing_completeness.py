@@ -35,8 +35,8 @@ _EXPECTED_ROUTES: dict[RetryReason, tuple[str, str | None]] = {
     RetryReason.PATH_CONTAMINATION: ("on_failure", None),
     RetryReason.THINKING_STALL: ("on_context_limit", "lifespan_started"),
     RetryReason.IDLE_STALL: ("on_context_limit", "lifespan_started"),
-    RetryReason.EARLY_STOP: ("on_context_limit", "worktree_path"),
-    RetryReason.ZERO_WRITES: ("on_context_limit", "worktree_path"),
+    RetryReason.EARLY_STOP: ("on_context_limit", "has_progress_evidence"),
+    RetryReason.ZERO_WRITES: ("on_context_limit", "has_progress_evidence"),
 }
 
 

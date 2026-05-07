@@ -101,8 +101,12 @@ def _eval_compound_condition(when_expr: str) -> bool:
 
 
 @pytest.mark.parametrize("recipe_name", RECIPE_NAMES)
-def test_review_loop_routes_to_ci_watch_when_no_blocking(recipe_name: str) -> None:
-    """When had_blocking=false, routing proceeds to ci_watch regardless of iteration count."""
+def test_check_review_loop_approved_with_comments_is_non_blocking(recipe_name: str) -> None:
+    """When previous_verdict=approved_with_comments and local_rounds=0, had_blocking=false.
+
+    The approved_with_comments verdict does not trigger re-review — it is non-blocking
+    and routes directly to CI after the one-shot resolve_review cycle.
+    """
     result = check_review_loop(
         pr_number="42",
         current_iteration="0",
@@ -120,6 +124,38 @@ def test_review_loop_routes_to_ci_watch_when_no_blocking(recipe_name: str) -> No
         when_expr = when_expr.replace(f"${{{{ result.{key} }}}}", value)
     # Compound condition "false == true and false == false" must evaluate to False
     assert not _eval_compound_condition(when_expr)
+
+
+@pytest.mark.parametrize("recipe_name", RECIPE_NAMES)
+def test_check_review_loop_approved_with_local_rounds_forces_continuation(
+    recipe_name: str,
+) -> None:
+    """When previous_verdict=approved but local_review_rounds > 0 and not exhausted,
+    had_blocking=true.
+
+    The approved verdict is blocking when local review rounds are still being
+    exhausted, forcing continuation through the review loop until local_review_rounds
+    are exhausted.
+    """
+    result = check_review_loop(
+        pr_number="42",
+        current_iteration="0",
+        max_iterations="6",
+        previous_verdict="approved",
+        local_review_rounds="3",
+    )
+    assert result["had_blocking"] == "true"
+    assert result["max_exceeded"] == "false"
+    assert result["next_iteration"] == "1"
+    recipe = load_recipe(builtin_recipes_dir() / recipe_name)
+    step = recipe.steps["check_review_loop"]
+    conditions = step.on_result.conditions
+    review_condition = next(c for c in conditions if c.route == "review_pr")
+    when_expr = review_condition.when
+    for key, value in result.items():
+        when_expr = when_expr.replace(f"${{{{ result.{key} }}}}", value)
+    # Compound condition "true == true and false == false" must evaluate to True
+    assert _eval_compound_condition(when_expr)
 
 
 @pytest.mark.parametrize("recipe_name", RECIPE_NAMES)

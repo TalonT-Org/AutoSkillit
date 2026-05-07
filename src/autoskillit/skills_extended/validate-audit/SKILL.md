@@ -40,9 +40,11 @@ validated report carries a `validated: true` marker to signal downstream process
   with a non-zero status.
 
 - `AUTOSKILLIT_AUDIT_RUN_DIR` — optional environment variable. When set, all output
-  files are written under `$AUTOSKILLIT_AUDIT_RUN_DIR/validate-audit/` instead of
+  files are written directly under `$AUTOSKILLIT_AUDIT_RUN_DIR/` instead of
   `{{AUTOSKILLIT_TEMP}}/validate-audit/`. The recipe sets this to the per-run
-  directory created by `init_audit_run` to prevent cross-run file accumulation.
+  directory created by `init_audit_run` (which already includes the
+  `validate-audit/run-{stamp}-{hex}` path segments) to prevent cross-run file
+  accumulation.
 
 ## Critical Constraints
 
@@ -237,15 +239,12 @@ recipe's `init_audit_run` step), files are written to the per-run directory to
 prevent cross-run accumulation:
 
 ```bash
-AUDIT_BASE_DIR="${AUTOSKILLIT_AUDIT_RUN_DIR:-{{AUTOSKILLIT_TEMP}}}"
-mkdir -p "$AUDIT_BASE_DIR/validate-audit"
+AUDIT_BASE_DIR="${AUTOSKILLIT_AUDIT_RUN_DIR:-{{AUTOSKILLIT_TEMP}}/validate-audit}"
+mkdir -p "$AUDIT_BASE_DIR"
 ```
 
 **File 1 — Validated report**
-Path: `$AUDIT_BASE_DIR/validate-audit/validated_report_{source}_{YYYY-MM-DD_HHMMSS}.md`
-
-**File 1 — Validated report**
-Path: `{{AUTOSKILLIT_TEMP}}/validate-audit/validated_report_{source}_{YYYY-MM-DD_HHMMSS}.md`
+Path: `$AUDIT_BASE_DIR/validated_report_{source}_{YYYY-MM-DD_HHMMSS}.md`
 
 Structure:
 
@@ -279,7 +278,7 @@ Format: original finding text, VALID verdict badge, severity adjustment note if 
 ```
 
 **File 2 — Contested findings** (write only when `N_contested > 0`)
-Path: `$AUDIT_BASE_DIR/validate-audit/contested_findings_{source}_{YYYY-MM-DD_HHMMSS}.md`
+Path: `$AUDIT_BASE_DIR/contested_findings_{source}_{YYYY-MM-DD_HHMMSS}.md`
 
 Structure:
 
@@ -301,7 +300,7 @@ Structure:
 Write the full audit trail to a separate file. This file is NOT part of the issue body —
 it is posted as a comment after issue creation.
 
-Path: `$AUDIT_BASE_DIR/validate-audit/validation_summary_{source}_{YYYY-MM-DD_HHMMSS}.md`
+Path: `$AUDIT_BASE_DIR/validation_summary_{source}_{YYYY-MM-DD_HHMMSS}.md`
 
 Structure:
 
@@ -449,11 +448,11 @@ For each ticket group in the grouping manifest:
    - A subset Summary Table (only the rows for included finding IDs)
    - Only the `## Validated Findings` sub-sections for included finding IDs
    - A footer: `*Part of validated {source} audit — see full report for remaining tickets.*`
-3. Write to: `$AUDIT_BASE_DIR/validate-audit/ticket_body_{source}_{N}_{YYYY-MM-DD_HHMMSS}.md`
+3. Write to: `$AUDIT_BASE_DIR/ticket_body_{source}_{N}_{YYYY-MM-DD_HHMMSS}.md`
    where `{N}` is 1-indexed from the grouping manifest.
 
 Also write the grouping manifest itself to:
-`$AUDIT_BASE_DIR/validate-audit/grouping_manifest_{source}_{YYYY-MM-DD_HHMMSS}.md`
+`$AUDIT_BASE_DIR/grouping_manifest_{source}_{YYYY-MM-DD_HHMMSS}.md`
 
 The grouping manifest file is the structured text returned by the ticket grouper subagent,
 prefixed with:
@@ -504,11 +503,11 @@ rule and the validation summary content, write the combined text to a temp file,
 
 ## Output Location
 
-All output files are written under `$AUDIT_BASE_DIR/validate-audit/` where
-`AUDIT_BASE_DIR="${AUTOSKILLIT_AUDIT_RUN_DIR:-{{AUTOSKILLIT_TEMP}}}"`:
+All output files are written under `$AUDIT_BASE_DIR/` where
+`AUDIT_BASE_DIR="${AUTOSKILLIT_AUDIT_RUN_DIR:-{{AUTOSKILLIT_TEMP}}/validate-audit}"`:
 
 ```
-$AUDIT_BASE_DIR/validate-audit/
+$AUDIT_BASE_DIR/
 ├── validated_report_{source}_{YYYY-MM-DD_HHMMSS}.md      (always written; VALID findings only)
 ├── contested_findings_{source}_{YYYY-MM-DD_HHMMSS}.md    (when N_contested > 0)
 ├── validation_summary_{source}_{YYYY-MM-DD_HHMMSS}.md    (always written; audit trail)

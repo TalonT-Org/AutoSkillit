@@ -244,11 +244,6 @@ def test_load_and_validate_coerces_str_project_dir_to_path(tmp_path: Path) -> No
     assert call_kwargs.kwargs["project_dir"] == tmp_path
 
 
-# ---------------------------------------------------------------------------
-# Perf: recipe_list threading to DefaultRecipeRepository
-# ---------------------------------------------------------------------------
-
-
 def test_repository_load_and_validate_passes_recipe_list_to_api(tmp_path: Path) -> None:
     """DefaultRecipeRepository passes its cached recipe list to _api.load_and_validate."""
     captured_kwargs = {}

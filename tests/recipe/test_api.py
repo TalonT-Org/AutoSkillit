@@ -751,11 +751,6 @@ def test_compute_registry_hash_changes_on_mtime(tmp_path: Path) -> None:
     assert h1 != h2
 
 
-# ---------------------------------------------------------------------------
-# Perf: eliminate redundant I/O — content_hash reuse
-# ---------------------------------------------------------------------------
-
-
 def test_load_and_validate_reuses_content_hash_from_recipe_info(tmp_path, monkeypatch):
     """load_and_validate reuses match.content_hash for the result's content_hash field."""
     import autoskillit.recipe._api as api_mod
@@ -783,11 +778,6 @@ def test_load_and_validate_reuses_content_hash_from_recipe_info(tmp_path, monkey
     result = api_mod.load_and_validate("myrecipe", tmp_path, recipe_info=info)
 
     assert result.get("content_hash") == "sha256:abcd1234deadbeef"
-
-
-# ---------------------------------------------------------------------------
-# Perf: eliminate redundant I/O — list_recipes single call
-# ---------------------------------------------------------------------------
 
 
 def test_load_and_validate_calls_list_recipes_once(tmp_path, monkeypatch):

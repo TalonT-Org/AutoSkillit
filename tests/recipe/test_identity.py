@@ -271,11 +271,6 @@ def test_check_rerun_found(tmp_path):
     assert "2026-04-10" in result["message"]
 
 
-# ---------------------------------------------------------------------------
-# Perf: content_bytes passthrough to avoid redundant disk reads
-# ---------------------------------------------------------------------------
-
-
 def test_composite_hash_uses_content_bytes_when_provided(tmp_path):
     """compute_composite_hash uses content_bytes instead of reading from disk."""
     from autoskillit.recipe.identity import compute_composite_hash

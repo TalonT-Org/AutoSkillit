@@ -230,3 +230,124 @@ class TestResearchOutputModeEnum:
         )
         findings = [f for f in run_semantic_rules(recipe) if f.rule == "research-output-mode-enum"]
         assert len(findings) == 0
+
+
+class TestIngredientTypeDefaultInvalid:
+    """T3: ingredient-type-default-invalid semantic rule tests."""
+
+    def test_type_integer_with_empty_default_fires_error(self):
+        """An integer-typed ingredient with default='' must produce an ERROR."""
+        recipe = Recipe(
+            name="test",
+            description="Test recipe",
+            ingredients={
+                "local_review_rounds": RecipeIngredient(
+                    description="Number of local review rounds",
+                    type="integer",
+                    default="",
+                )
+            },
+            steps={"done": RecipeStep(action="stop", message="done")},
+        )
+        findings = run_semantic_rules(recipe)
+        rule_findings = [f for f in findings if f.rule == "ingredient-type-default-invalid"]
+        assert len(rule_findings) == 1, (
+            "Expected ingredient-type-default-invalid ERROR for integer type with empty default"
+        )
+        assert rule_findings[0].severity == Severity.ERROR
+        assert "local_review_rounds" in rule_findings[0].message
+        assert "integer" in rule_findings[0].message
+
+    def test_type_integer_with_non_numeric_default_fires_error(self):
+        """An integer-typed ingredient with a non-parseable default must produce an ERROR."""
+        recipe = Recipe(
+            name="test",
+            description="Test recipe",
+            ingredients={
+                "count": RecipeIngredient(
+                    description="A count",
+                    type="integer",
+                    default="not-a-number",
+                )
+            },
+            steps={"done": RecipeStep(action="stop", message="done")},
+        )
+        findings = run_semantic_rules(recipe)
+        rule_findings = [f for f in findings if f.rule == "ingredient-type-default-invalid"]
+        assert len(rule_findings) == 1
+        assert rule_findings[0].severity == Severity.ERROR
+
+    def test_type_integer_with_valid_int_default_is_clean(self):
+        """An integer-typed ingredient with a valid int default must NOT produce an error."""
+        recipe = Recipe(
+            name="test",
+            description="Test recipe",
+            ingredients={
+                "local_review_rounds": RecipeIngredient(
+                    description="Number of local review rounds",
+                    type="integer",
+                    default="3",
+                )
+            },
+            steps={"done": RecipeStep(action="stop", message="done")},
+        )
+        findings = run_semantic_rules(recipe)
+        rule_findings = [f for f in findings if f.rule == "ingredient-type-default-invalid"]
+        assert len(rule_findings) == 0
+
+    def test_type_integer_required_no_default_is_clean(self):
+        """An integer-typed ingredient with required=True and default=None is clean
+        (caller must supply it)."""
+        recipe = Recipe(
+            name="test",
+            description="Test recipe",
+            ingredients={
+                "local_review_rounds": RecipeIngredient(
+                    description="Number of local review rounds",
+                    type="integer",
+                    required=True,
+                    default=None,
+                )
+            },
+            steps={"done": RecipeStep(action="stop", message="done")},
+        )
+        findings = run_semantic_rules(recipe)
+        rule_findings = [f for f in findings if f.rule == "ingredient-type-default-invalid"]
+        assert len(rule_findings) == 0
+
+    def test_no_type_with_empty_default_is_clean(self):
+        """An ingredient with no type annotation and default='' is not flagged
+        by this rule (string auto-detect is allowed)."""
+        recipe = Recipe(
+            name="test",
+            description="Test recipe",
+            ingredients={
+                "base_branch": RecipeIngredient(
+                    description="Base branch",
+                    default="",
+                )
+            },
+            steps={"done": RecipeStep(action="stop", message="done")},
+        )
+        findings = run_semantic_rules(recipe)
+        rule_findings = [f for f in findings if f.rule == "ingredient-type-default-invalid"]
+        assert len(rule_findings) == 0
+
+    def test_type_string_with_empty_default_is_clean(self):
+        """A string-typed ingredient with default='' is not flagged
+        (string auto-detect is allowed)."""
+        recipe = Recipe(
+            name="test",
+            description="Test recipe",
+            ingredients={
+                "base_branch": RecipeIngredient(
+                    description="Base branch",
+                    type="string",
+                    default="",
+                )
+            },
+            steps={"done": RecipeStep(action="stop", message="done")},
+        )
+        findings = run_semantic_rules(recipe)
+        rule_findings = [f for f in findings if f.rule == "ingredient-type-default-invalid"]
+        assert len(rule_findings) == 0

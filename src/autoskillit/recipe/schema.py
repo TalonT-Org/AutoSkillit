@@ -33,6 +33,7 @@ class RecipeIngredient:
     description: str
     required: bool = False
     default: str | None = None
+    type: str | None = None
     hidden: bool = False  # When True, excluded from ingredients table shown to agent
 
     def __post_init__(self) -> None:

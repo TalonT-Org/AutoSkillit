@@ -84,7 +84,7 @@ class TestL3AdmiralDiscipline:
     def test_full_admiral_content_appended(self) -> None:
         prompt = _build()
         for header in SOUS_CHEF_MANDATORY_SECTIONS:
-            assert header in prompt, f"Missing sous-chef section: {header}"
+            assert header in prompt, f"Missing admiral section: {header}"
 
     def test_graceful_degradation_on_missing_skill_md(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path

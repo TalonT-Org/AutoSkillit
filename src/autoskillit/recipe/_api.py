@@ -301,6 +301,7 @@ def load_and_validate(
     *,
     suppressed: Sequence[str] | None = None,
     recipe_info: RecipeInfo | None = None,
+    recipe_list: list[RecipeInfo] | None = None,
     resolved_defaults: dict[str, str] | None = None,
     ingredient_overrides: dict[str, str] | None = None,
     temp_dir: Path | None = None,
@@ -372,8 +373,10 @@ def load_and_validate(
     # Stage: find recipe
     if recipe_info is not None:
         match: RecipeInfo | None = recipe_info
+        _recipe_items = recipe_list
     else:
         match = find_recipe_by_name(name, _pdir)
+        _recipe_items = None
     t0 = _t("find_recipe", t0, name)
 
     if match is None:
@@ -402,16 +405,19 @@ def load_and_validate(
             recipe = _parse_recipe(data)
 
             from autoskillit.recipe.identity import compute_composite_hash  # noqa: PLC0415
-            from autoskillit.recipe.staleness_cache import (  # noqa: PLC0415
-                compute_recipe_hash,
-            )
 
-            recipe.content_hash = compute_recipe_hash(match.path)
+            _recipe_bytes = match.path.read_bytes()
+            recipe.content_hash = (
+                match.content_hash
+                if match.content_hash
+                else "sha256:" + hashlib.sha256(_recipe_bytes).hexdigest()
+            )
             recipe.composite_hash = compute_composite_hash(
                 match.path,
                 recipe,
                 skills_dir=pkg_root() / "skills",
                 project_dir=_pdir,
+                content_bytes=_recipe_bytes,
             )
 
             # Stage: sub-recipe composition (lazy-loaded prefixes)
@@ -433,7 +439,12 @@ def load_and_validate(
 
                 lister = DefaultSkillResolver()
 
-            known = frozenset(r.name for r in list_recipes(_pdir).items)
+            known = frozenset(
+                r.name
+                for r in (
+                    _recipe_items if _recipe_items is not None else list_recipes(_pdir).items
+                )
+            )
             known_skills = frozenset(s.name for s in lister.list_all())
             sub_recipes_dir = builtin_sub_recipes_dir()
             known_sub_recipes: frozenset[str] = (

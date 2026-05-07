@@ -86,7 +86,8 @@ class DefaultRecipeRepository:
         temp_dir_relpath: str | None = None,
     ) -> dict[str, Any]:
         project_dir = Path(project_dir)
-        recipe_info = self.find(name, project_dir)
+        result = self._get_list(project_dir)
+        recipe_info = next((r for r in result.items if r.name == name), None)
         return cast(
             dict[str, Any],
             _api.load_and_validate(
@@ -94,6 +95,7 @@ class DefaultRecipeRepository:
                 project_dir=project_dir,
                 suppressed=suppressed,
                 recipe_info=recipe_info,
+                recipe_list=result.items,
                 resolved_defaults=resolved_defaults,
                 ingredient_overrides=ingredient_overrides,
                 temp_dir=temp_dir,

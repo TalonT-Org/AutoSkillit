@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit.core import get_logger, load_yaml, pkg_root
-from autoskillit.recipe._registry_utils import dir_mtime
+from autoskillit.recipe._registry_utils import _MISSING_MTIME, dir_mtime
 
 logger = get_logger(__name__)
 
@@ -239,7 +239,7 @@ def load_all_methodology_traditions(
         user_dir = Path(project_dir) / ".autoskillit" / "methodology-traditions"
         user_mt = dir_mtime(user_dir)
     else:
-        user_mt = 0.0
+        user_mt = _MISSING_MTIME
     key: tuple[str | None, float, float] = (
         str(project_dir) if project_dir is not None else None,
         bundled_mt,

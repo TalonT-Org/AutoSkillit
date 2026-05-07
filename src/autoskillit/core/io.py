@@ -24,6 +24,11 @@ try:
 except ImportError:
     _Loader = yaml.SafeLoader  # type: ignore[misc,assignment]
 
+try:
+    from yaml import CDumper as _Dumper
+except ImportError:
+    from yaml import Dumper as _Dumper  # type: ignore[misc,assignment]
+
 __all__ = [
     "YAMLError",
     "atomic_write",
@@ -203,4 +208,5 @@ def dump_yaml_str(data: Any, **kwargs: Any) -> str:
     ``default_flow_style=False``). Distinct from the removed ``dump_yaml`` which wrote
     to disk.
     """
-    return yaml.dump(data, **kwargs)
+    kwargs.pop("Dumper", None)
+    return yaml.dump(data, Dumper=_Dumper, **kwargs)

@@ -108,9 +108,6 @@ tests/recipe/fixtures/*:
 .autoskillit/config.yaml:
   - infra/
 
-.autoskillit/test-filter-manifest.yaml:
-  - infra/
-
 .autoskillit/recipes/*.yaml:
   - recipe/
 

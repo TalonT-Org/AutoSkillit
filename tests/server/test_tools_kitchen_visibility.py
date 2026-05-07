@@ -377,7 +377,8 @@ async def test_sous_chef_discipline_not_in_open_kitchen_result(tmp_path, monkeyp
     assert result["success"] is True
     assert "sous_chef_discipline" not in result, (
         "sous_chef_discipline must not be injected by open_kitchen; "
-        "food truck delivery is handled by _build_l3_sous_chef_block() in fleet/_prompts.py"
+        "food truck delivery is handled by _build_food_truck_sous_chef_block() "
+        "in fleet/_prompts.py"
     )
 
 

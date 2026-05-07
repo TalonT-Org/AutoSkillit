@@ -72,9 +72,9 @@ def _build_open_kitchen_prompt(mcp_prefix: str) -> str:
 
 def _build_fleet_dispatch_prompt(mcp_prefix: str, recipe_table: str | None = None) -> str:
     """Build the --append-system-prompt content for an ad-hoc fleet dispatcher session."""
-    from autoskillit.fleet import _build_l3_sous_chef_block  # noqa: PLC0415
+    from autoskillit.fleet import _build_food_truck_sous_chef_block  # noqa: PLC0415
 
-    sous_chef_block = _build_l3_sous_chef_block()
+    sous_chef_block = _build_food_truck_sous_chef_block()
     sous_chef_section = (
         f"\n## SOUS-CHEF DISCIPLINE (DISPATCH SUBSET)\n\n{sous_chef_block}\n"
         if sous_chef_block

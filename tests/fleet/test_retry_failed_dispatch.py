@@ -16,7 +16,7 @@ from autoskillit.fleet import (
     resume_campaign_from_state,
     write_initial_state,
 )
-from autoskillit.fleet.state import _validate_transition
+from autoskillit.fleet.state_types import _validate_transition
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 

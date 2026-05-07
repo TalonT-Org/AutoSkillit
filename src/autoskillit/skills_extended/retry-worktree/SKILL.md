@@ -121,6 +121,8 @@ fi
 if [ -z "$BASE_BRANCH" ]; then
     # Last resort: project-level default from config (always available)
     BASE_BRANCH="{{DEFAULT_BASE_BRANCH}}"
+    echo "WARNING: Could not determine base branch from git upstream or sidecar file."
+    echo "Falling back to project default: ${BASE_BRANCH}"
 fi
 ```
 

@@ -172,11 +172,14 @@ class TestBundledRecipesPassFailureDomainCheck:
         merge_step = recipe.steps[merge_step_name]
         if merge_step.on_result is None or not merge_step.on_result.conditions:
             pytest.skip("merge step has no on_result conditions")
+        found_rebase = False
         for cond in merge_step.on_result.conditions:
             if cond.when and "rebase" in cond.when and "post_rebase" not in cond.when:
+                found_rebase = True
                 target_step = recipe.steps[cond.route]
                 skill_cmd = target_step.with_args.get("skill_command", "")
                 assert "resolve-merge-conflicts" in skill_cmd, (
                     f"{recipe_name}: rebase routes to '{cond.route}' which invokes "
                     f"'{skill_cmd}', expected resolve-merge-conflicts"
                 )
+        assert found_rebase, f"{recipe_name}: no rebase condition found in merge step"

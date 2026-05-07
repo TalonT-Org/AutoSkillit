@@ -300,3 +300,43 @@ def test_is_test_feature_enabled_disabled_lifecycle_always_false(monkeypatch):
         assert result is False
     finally:
         _resolve_test_config.cache_clear()
+
+
+def test_no_per_test_config_cache_clear_fixture():
+    """The function-scoped autouse fixture that cleared _resolve_test_config cache
+    after every test has been removed. Verify it no longer exists in conftest."""
+    import ast
+    from pathlib import Path
+
+    import pytest
+
+    conftest_path = Path(__file__).resolve().parent / "conftest.py"
+    assert conftest_path.exists(), f"conftest.py not found at {conftest_path}"
+    tree = ast.parse(conftest_path.read_text())
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "_clear_resolve_test_config_cache":
+            for decorator in node.decorator_list:
+                if isinstance(decorator, ast.Call):
+                    for kw in decorator.keywords:
+                        if kw.arg == "scope" and isinstance(kw.value, ast.Constant):
+                            if kw.value.value == "session":
+                                return  # session-scoped is ok
+            pytest.fail(
+                "_clear_resolve_test_config_cache still exists as a non-session fixture. "
+                "It should be removed to stop per-test cache thrash."
+            )
+
+
+def test_resolve_test_config_cache_persists_across_calls():
+    """_resolve_test_config LRU cache should persist — calling it twice returns the same object."""
+    from tests.conftest import _resolve_test_config
+
+    _resolve_test_config.cache_clear()
+    try:
+        result1 = _resolve_test_config()
+        result2 = _resolve_test_config()
+        assert result1 is result2, "LRU cache should return the same object on repeated calls"
+        info = _resolve_test_config.cache_info()
+        assert info.hits >= 1, "Expected at least 1 cache hit"
+    finally:
+        _resolve_test_config.cache_clear()

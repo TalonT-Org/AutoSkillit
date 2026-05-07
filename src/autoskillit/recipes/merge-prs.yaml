@@ -1136,6 +1136,8 @@ steps:
         route: resolve_review_integration
       - when: "${{ result.verdict }} == needs_human"
         route: ci_watch_pr
+      - when: "${{ result.verdict }} == approved"
+        route: ci_watch_pr
       - when: "true"
         route: ci_watch_pr
     on_failure: resolve_review_integration

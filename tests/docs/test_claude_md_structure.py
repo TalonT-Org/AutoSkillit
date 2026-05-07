@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 
 CLAUDE_MD = Path(__file__).resolve().parents[2] / "CLAUDE.md"
+_SERVER_DIR = CLAUDE_MD.parent / "src" / "autoskillit" / "server"
 
 
 def test_claude_md_architecture_tree_has_subpackages() -> None:
@@ -83,3 +84,40 @@ def test_claude_md_defines_channel_b() -> None:
     assert re.search(r"Channel B[^.]*JSONL", content), (
         "CLAUDE.md references 'Channel B' without an inline definition mentioning JSONL"
     )
+
+
+def test_server_claude_md_has_tool_gating_section() -> None:
+    """server/CLAUDE.md documents the two-layer tool gating architecture."""
+    text = (_SERVER_DIR / "CLAUDE.md").read_text()
+    assert "## Tool Gating Architecture" in text
+    assert "### Tag-Visibility" in text
+    assert "### Application-Gate" in text
+
+
+def test_server_claude_md_gating_matrix_covers_categories() -> None:
+    """server/CLAUDE.md gating matrix includes all five tool categories."""
+    text = (_SERVER_DIR / "CLAUDE.md").read_text()
+    for category in [
+        "Standard kitchen",
+        "Fleet tool",
+        "Fleet-dispatch tool",
+        "Headless-exempt",
+        "Free-range",
+    ]:
+        assert category in text, f"Missing tool category {category!r} in gating matrix"
+
+
+def test_test_check_has_require_enabled_exception_comment() -> None:
+    """test_check has an inline comment explaining why it skips _require_enabled()."""
+    ws_file = _SERVER_DIR / "tools" / "tools_workspace.py"
+    src = ws_file.read_text()
+    lines = src.splitlines()
+    for i, line in enumerate(lines):
+        if "async def test_check(" in line:
+            region = lines[max(0, i - 10) : i]
+            comment_lines = [ln for ln in region if ln.lstrip().startswith("#")]
+            assert any("_require_enabled" in c for c in comment_lines), (
+                "test_check decorator region should contain a comment about _require_enabled"
+            )
+            return
+    raise AssertionError("async def test_check not found in tools_workspace.py")

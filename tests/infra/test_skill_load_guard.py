@@ -64,12 +64,17 @@ def _run_guard(
         return buf.getvalue()
 
 
-def _make_event(tool_name: str = "Read", session_id: str = "abc123") -> dict:
-    return {
+def _make_event(
+    tool_name: str = "Read", session_id: str = "abc123", agent_id: str | None = None
+) -> dict:
+    event = {
         "tool_name": tool_name,
         "tool_input": {"file_path": "/foo"},
         "session_id": session_id,
     }
+    if agent_id is not None:
+        event["agent_id"] = agent_id
+    return event
 
 
 def _create_flag(
@@ -206,3 +211,60 @@ def test_allows_silently_for_anthropic_case_insensitive(tmp_path):
         session_type="skill",
     )
     assert not out.strip()
+
+
+def test_allows_when_agent_id_present(tmp_path):
+    """T2-11: Subagent exemption — allow when agent_id is in payload."""
+    out = _run_guard(
+        _make_event("Read", agent_id="agent-uuid-123"),
+        tmp_dir=tmp_path,
+        provider_profile="minimax",
+        headless=True,
+        session_type="skill",
+    )
+    assert not out.strip()
+
+
+def test_denies_when_agent_id_is_empty_string(tmp_path):
+    """T2-12: Empty agent_id is falsy — guard proceeds normally."""
+    out = _run_guard(
+        _make_event("Read", agent_id=""),
+        tmp_dir=tmp_path,
+        provider_profile="minimax",
+        headless=True,
+        session_type="skill",
+    )
+    response = json.loads(out)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_flag_found_via_ancestor_walk_when_cwd_is_subdirectory(tmp_path):
+    """T2-13: Flag at project root found when CWD is a subdirectory."""
+    project = tmp_path / "project"
+    flag_dir = project / ".autoskillit" / "temp"
+    flag_dir.mkdir(parents=True)
+    (flag_dir / "skill_guard_abc123.flag").write_text("make-plan")
+
+    deep_cwd = project / "sub" / "deep"
+    out = _run_guard(
+        _make_event("Read"),
+        tmp_dir=deep_cwd,
+        provider_profile="minimax",
+        headless=True,
+        session_type="skill",
+    )
+    assert not out.strip()
+
+
+def test_denies_when_no_autoskillit_dir_in_ancestors(tmp_path):
+    """T2-14: Deny when no .autoskillit/ found in any ancestor (fallback to CWD)."""
+    bare_dir = tmp_path / "bare" / "dir"
+    out = _run_guard(
+        _make_event("Read"),
+        tmp_dir=bare_dir,
+        provider_profile="minimax",
+        headless=True,
+        session_type="skill",
+    )
+    response = json.loads(out)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "deny"

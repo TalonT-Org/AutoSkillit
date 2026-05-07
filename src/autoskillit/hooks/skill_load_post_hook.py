@@ -17,6 +17,12 @@ import sys
 import tempfile
 from pathlib import Path
 
+_HOOKS_DIR = str(Path(__file__).resolve().parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+
+from _hook_utils import find_project_root  # type: ignore[import-not-found]  # noqa: E402
+
 
 def _atomic_write(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -41,6 +47,9 @@ def main() -> None:
     except Exception:
         sys.exit(0)
 
+    if data.get("agent_id"):
+        sys.exit(0)
+
     if not os.environ.get("AUTOSKILLIT_PROVIDER_PROFILE", "").strip():
         sys.exit(0)
 
@@ -54,11 +63,11 @@ def main() -> None:
     if not session_id:
         sys.exit(0)
 
-    flag_path = Path.cwd() / ".autoskillit" / "temp" / f"skill_guard_{session_id}.flag"
+    flag_path = find_project_root() / ".autoskillit" / "temp" / f"skill_guard_{session_id}.flag"
     try:
         _atomic_write(flag_path, skill_name)
-    except Exception:
-        pass
+    except Exception as exc:
+        sys.stderr.write(f"skill_load_post_hook: failed to write flag {flag_path}: {exc}\n")
 
     marker = os.environ.get("AUTOSKILLIT_COMPLETION_MARKER", "").strip()
     if marker:

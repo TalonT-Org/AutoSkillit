@@ -51,17 +51,23 @@ def _run_hook(
 
 
 def _make_skill_event(
-    session_id: str = "abc123", skill: str = "implement-worktree-no-merge"
+    session_id: str = "abc123",
+    skill: str = "implement-worktree-no-merge",
+    agent_id: str | None = None,
 ) -> dict:
-    return {
+    event = {
         "tool_name": "Skill",
         "tool_input": {"skill": skill},
         "session_id": session_id,
     }
+    if agent_id is not None:
+        event["agent_id"] = agent_id
+    return event
 
 
 def test_writes_flag_when_provider_profile_set(tmp_path: Path) -> None:
     """T1-1: Flag file written with skill name when provider profile is set."""
+    (tmp_path / ".autoskillit").mkdir(parents=True)
     _run_hook(
         stdin_data=_make_skill_event(),
         tmp_dir=tmp_path,
@@ -180,3 +186,31 @@ def test_emits_additional_context_when_completion_marker_set(tmp_path: Path) -> 
     payload = json.loads(stdout)
     assert "additionalContext" in payload
     assert marker in payload["additionalContext"]
+
+
+def test_skips_flag_write_when_agent_id_present(tmp_path: Path) -> None:
+    """T1-7: No flag written when agent_id is present (subagent context)."""
+    _run_hook(
+        stdin_data=_make_skill_event(agent_id="agent-uuid-123"),
+        tmp_dir=tmp_path,
+        provider_profile="minimax",
+    )
+    flag_dir = tmp_path / ".autoskillit" / "temp"
+    flags = list(flag_dir.glob("skill_guard_*.flag"))
+    assert not flags, "No flag file should be created in subagent context"
+
+
+def test_writes_flag_to_project_root_via_ancestor_walk(tmp_path: Path) -> None:
+    """T1-8: Flag written to project root when CWD is a subdirectory."""
+    project = tmp_path / "project"
+    (project / ".autoskillit").mkdir(parents=True)
+
+    deep_cwd = project / "sub" / "deep"
+    _run_hook(
+        stdin_data=_make_skill_event(),
+        tmp_dir=deep_cwd,
+        provider_profile="minimax",
+    )
+    flag = project / ".autoskillit" / "temp" / "skill_guard_abc123.flag"
+    assert flag.exists(), "Flag must be written to project root, not CWD"
+    assert "implement-worktree-no-merge" in flag.read_text()

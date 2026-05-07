@@ -70,8 +70,8 @@ Controls whether the tool succeeds when called (independent of visibility):
    without `open_kitchen`. But they call `_require_enabled()` internally — an agent that sees them
    and calls them gets an unexpected gate error.
 
-2. **`test_check` is tag-hidden but NOT application-gated.** It carries the `kitchen` + `headless`
-   tags (hidden at startup), but does NOT call `_require_enabled()`. Headless skill sessions need
+2. **`test_check` is tag-hidden but NOT application-gated.** It carries the `kitchen`, `kitchen-core`,
+   `headless`, and `autoskillit` tags (hidden at startup), but does NOT call `_require_enabled()`. Headless skill sessions need
    `test_check` without opening the kitchen — the `headless` tag provides visibility in SKILL sessions,
    and skipping `_require_enabled()` lets the call succeed without a gate open.
 

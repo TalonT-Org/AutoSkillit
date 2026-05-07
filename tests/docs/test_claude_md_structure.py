@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 
 CLAUDE_MD = Path(__file__).resolve().parents[2] / "CLAUDE.md"
+_SERVER_DIR = CLAUDE_MD.parent / "src" / "autoskillit" / "server"
 
 
 def test_claude_md_architecture_tree_has_subpackages() -> None:
@@ -87,8 +88,7 @@ def test_claude_md_defines_channel_b() -> None:
 
 def test_server_claude_md_has_tool_gating_section() -> None:
     """server/CLAUDE.md documents the two-layer tool gating architecture."""
-    server_claude = CLAUDE_MD.parent / "src" / "autoskillit" / "server" / "CLAUDE.md"
-    text = server_claude.read_text()
+    text = (_SERVER_DIR / "CLAUDE.md").read_text()
     assert "## Tool Gating Architecture" in text
     assert "### Tag-Visibility" in text
     assert "### Application-Gate" in text
@@ -96,8 +96,7 @@ def test_server_claude_md_has_tool_gating_section() -> None:
 
 def test_server_claude_md_gating_matrix_covers_categories() -> None:
     """server/CLAUDE.md gating matrix includes all five tool categories."""
-    server_claude = CLAUDE_MD.parent / "src" / "autoskillit" / "server" / "CLAUDE.md"
-    text = server_claude.read_text()
+    text = (_SERVER_DIR / "CLAUDE.md").read_text()
     for category in [
         "Standard kitchen",
         "Fleet tool",
@@ -110,7 +109,7 @@ def test_server_claude_md_gating_matrix_covers_categories() -> None:
 
 def test_server_init_docstring_no_stale_tool_count() -> None:
     """server/__init__.py docstring must not contain hardcoded tool counts."""
-    init_file = CLAUDE_MD.parent / "src" / "autoskillit" / "server" / "__init__.py"
+    init_file = _SERVER_DIR / "__init__.py"
     # Read only the module docstring (first triple-quoted block)
     src = init_file.read_text()
     docstring_match = re.match(r'^"""(.*?)"""', src, re.DOTALL)
@@ -124,14 +123,14 @@ def test_server_init_docstring_no_stale_tool_count() -> None:
 
 def test_test_check_has_require_enabled_exception_comment() -> None:
     """test_check has an inline comment explaining why it skips _require_enabled()."""
-    ws_file = CLAUDE_MD.parent / "src" / "autoskillit" / "server" / "tools" / "tools_workspace.py"
+    ws_file = _SERVER_DIR / "tools" / "tools_workspace.py"
     src = ws_file.read_text()
     lines = src.splitlines()
-    # Find the line defining test_check and scan backwards to its decorator block
     for i, line in enumerate(lines):
         if "async def test_check(" in line:
-            decorator_region = "\n".join(lines[max(0, i - 10) : i])
-            assert "_require_enabled" in decorator_region, (
+            region = lines[max(0, i - 10) : i]
+            comment_lines = [ln for ln in region if ln.lstrip().startswith("#")]
+            assert any("_require_enabled" in c for c in comment_lines), (
                 "test_check decorator region should contain a comment about _require_enabled"
             )
             return

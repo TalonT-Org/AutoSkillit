@@ -85,6 +85,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_research_campaign_structure.py` | Structural assertions for the bundled research-campaign.yaml |
 | `test_research_yaml_backward_compat.py` | Regression guard: research.yaml loads cleanly, validates with zero errors, and retains RecipeKind.STANDARD |
 | `test_research_review_recipe.py` | Tests for research-review sub-recipe structure |
+| `test_research_smoke_fixtures.py` | Smoke-test fixture constants and classification/structural validation for the research recipe |
 | `test_research_stage_data_step.py` | Tests for stage-data step in research recipes |
 | `test_research_sub_recipes.py` | Tests for research sub-recipe YAML structure (design, implement, review, archive) |
 | `test_research_sub_recipe_rules.py` | Contract tests for research sub-recipe semantic rules and dataflow analysis |

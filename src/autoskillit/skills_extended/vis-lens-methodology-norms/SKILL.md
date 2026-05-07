@@ -141,6 +141,57 @@ alternate.
 provided directly), but Stage B still runs against the loaded tradition's `venue_specific_appendices`
 to detect ML sub-area specific figure requirements.
 
+## Out-of-Scope Tradition Handling
+
+Some methodology traditions (e.g., `qualitative_interpretive_tradition`) have an empty
+`mandatory_figures` list. These traditions do not mandate specific figure types — rigor
+is assessed through trustworthiness, transferability, dependability, and confirmability
+rather than statistical figures.
+
+**Detection:** After loading the tradition in Step 0, call `is_out_of_scope_tradition(spec)`
+from `recipe/methodology_tradition_registry.py`. This returns `True` when
+`len(spec.mandatory_figures) == 0`.
+
+**When detected (BEFORE Steps 1-4):**
+
+1. **Skip** Steps 1 through 4 entirely (no mandatory-figure scanning, no coverage check,
+   no gap analysis, no figure-spec emission)
+2. **Emit** a GO verdict with the following structured advisory matching the canonical
+   silent-type convention (`docs/research/silent-type-convention.md`):
+
+```yaml
+verdict: GO
+advisory_context:
+  subject_kind: methodology_tradition
+  subject_name: <tradition.name>
+  reasoning: "<tradition.display_name> traditions do not mandate statistical figures. Rigor lives in trustworthiness/transferability/dependability/confirmability."
+  reference_framework: "<tradition.canonical_guideline.name>"
+  strongly_expected_figures:  # map each entry in spec.strongly_expected_figures
+    - "<figure text from entry.figure> (<entry.source>)"
+    - "..."
+requires_decision: false
+```
+
+3. **Write** the advisory to `visualization-plan-trace.md` in the output directory
+   (`{{AUTOSKILLIT_TEMP}}/plan-visualization/visualization-plan-trace.md`), appended
+   after any existing Tier-C routing metadata
+4. **Also write** the advisory into the vis_spec output file
+   (`{{AUTOSKILLIT_TEMP}}/vis-lens-methodology-norms/vis_spec_methodology_norms_{timestamp}.md`)
+   under a `## Out-of-Scope Advisory` heading instead of the normal coverage/gap tables
+5. **Emit** the `diagram_path` structured output token as usual (pointing to the vis_spec file)
+
+**Populating the advisory fields:**
+- `subject_name`: Use `spec.name` (e.g., `qualitative_interpretive_tradition`)
+- `reasoning`: Compose from `spec.display_name` + the standard trustworthiness rationale
+- `reference_framework`: Use `spec.canonical_guideline["name"]` (e.g., `"COREQ/SRQR"`)
+- `strongly_expected_figures`: Map each entry in `spec.strongly_expected_figures` to its
+  `figure` value with the `source` in parentheses (e.g.,
+  `"Coding Tree or Thematic Map (COREQ item 28)"`)
+
+**ML sub-area fallback path:** If no `tradition_slug` is provided and the ML sub-area
+keyword detection path is taken, the out-of-scope gate does not apply — it only fires
+when a tradition is loaded (either via `tradition_slug` or via `classify_methodology`).
+
 ## Critical Constraints
 
 **NEVER:**
@@ -175,6 +226,8 @@ a `## Methodology Tradition` section containing `tradition_slug`. If present:
 - Use the tradition's `mandatory_figures`, `strongly_expected_figures`, and `anti_patterns`
   as the norm source (instead of the ML Sub-Area table above)
 - Skip ML sub-area keyword detection — the tradition replaces it
+- Check `is_out_of_scope_tradition(spec)`. If True, follow the Out-of-Scope Tradition
+  Handling section — skip Steps 1-4 and emit the GO advisory.
 
 If no `tradition_slug` is provided, fall back to ML sub-area keyword detection:
 

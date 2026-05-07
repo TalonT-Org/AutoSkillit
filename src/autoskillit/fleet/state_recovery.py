@@ -3,22 +3,18 @@
 from __future__ import annotations
 
 import fcntl
-import json
-import time
 from pathlib import Path
 
-from autoskillit.core import InfraExitCategory, RetryReason, get_logger, write_versioned_json
+from autoskillit.core import InfraExitCategory, RetryReason, get_logger
 from autoskillit.fleet.state_types import (
     _ABANDON_KILL_REASONS,
     _INFRASTRUCTURE_FAILURE_REASONS,
     _VISIBLE_IN_BLOCK_STATUSES,
     FLEET_HALTED_SENTINEL,
-    CampaignState,
     DispatchRecord,
     DispatchStatus,
     ResumeDecision,
     _resume_lock,
-    _validate_transition,
 )
 
 logger = get_logger(__name__)
@@ -65,6 +61,10 @@ def crash_recover_dispatch(
 ) -> DispatchStatus | None:
     """Recover a stale RUNNING dispatch to RESUMABLE or INTERRUPTED; None if both writes fail."""
     from autoskillit.fleet.sidecar import read_sidecar_from_path  # noqa: PLC0415
+    from autoskillit.fleet.state import (  # noqa: PLC0415
+        mark_dispatch_interrupted,
+        mark_dispatch_resumable,
+    )
 
     sidecar = Path(record.sidecar_path) if record.sidecar_path else None
     if sidecar is not None and sidecar.exists():
@@ -102,50 +102,6 @@ def crash_recover_dispatch(
         return None
 
 
-def mark_dispatch_interrupted(
-    state_path: Path,
-    dispatch_name: str,
-    *,
-    reason: str,
-) -> None:
-    """Atomically mark a dispatch as interrupted with a reason."""
-    state = read_state(state_path)
-    if state is None:
-        raise FileNotFoundError(f"State file not found or corrupted: {state_path}")
-    for d in state.dispatches:
-        if d.name == dispatch_name:
-            _validate_transition(d.status, DispatchStatus.INTERRUPTED, d.name)
-            d.status = DispatchStatus.INTERRUPTED
-            d.reason = reason
-            d.ended_at = time.time()
-            break
-    else:
-        raise ValueError(f"Dispatch '{dispatch_name}' not found in state")
-    _write_state(state_path, state)
-
-
-def mark_dispatch_resumable(
-    state_path: Path,
-    dispatch_name: str,
-    *,
-    sidecar_path: str,
-) -> None:
-    """Atomically transition a RUNNING dispatch to RESUMABLE, preserving the sidecar path."""
-    state = read_state(state_path)
-    if state is None:
-        raise FileNotFoundError(f"State file not found or corrupted: {state_path}")
-    for d in state.dispatches:
-        if d.name == dispatch_name:
-            _validate_transition(d.status, DispatchStatus.RESUMABLE, d.name)
-            d.status = DispatchStatus.RESUMABLE
-            d.sidecar_path = sidecar_path
-            d.ended_at = time.time()
-            break
-    else:
-        raise ValueError(f"Dispatch '{dispatch_name}' not found in state")
-    _write_state(state_path, state)
-
-
 def resume_campaign_from_state(
     state_path: Path,
     continue_on_failure: bool,
@@ -170,7 +126,12 @@ def resume_campaign_from_state(
     Thread-safe: _resume_lock (intra-process) + fcntl.flock(LOCK_EX)
     (cross-process) prevent concurrent callers from corrupting state.
     """
-    from autoskillit.fleet import is_dispatch_session_alive
+    from autoskillit.fleet import is_dispatch_session_alive  # noqa: PLC0415
+    from autoskillit.fleet.state import (  # noqa: PLC0415
+        _clear_dispatch_for_retry,
+        _write_state,
+        read_state,
+    )
 
     with _resume_lock:
         lock_path = state_path.with_suffix(".lock")
@@ -240,55 +201,3 @@ def resume_campaign_from_state(
                 dispatched_session_id=resumable_dispatched_session_id,
                 kill_reason=resumable_kill_reason,
             )
-
-
-def _clear_dispatch_for_retry(d: DispatchRecord) -> None:
-    """Clear a dispatch record for retry."""
-    _validate_transition(d.status, DispatchStatus.PENDING, d.name)
-    d.status = DispatchStatus.PENDING
-    d.reason = ""
-    d.dispatch_id = ""
-    d.dispatched_session_id = ""
-    d.dispatched_session_log_dir = ""
-    d.dispatched_pid = 0
-    d.dispatched_starttime_ticks = 0
-    d.dispatched_boot_id = ""
-    d.token_usage = {}
-    d.started_at = 0.0
-    d.ended_at = 0.0
-    d.sidecar_path = None
-
-
-def _write_state(state_path: Path, state: CampaignState) -> None:
-    """Internal: atomic write of full state to disk."""
-    payload = {
-        "campaign_id": state.campaign_id,
-        "campaign_name": state.campaign_name,
-        "manifest_path": state.manifest_path,
-        "started_at": state.started_at,
-        "dispatches": [d.to_dict() for d in state.dispatches],
-        "captured_values": state.captured_values,
-    }
-    write_versioned_json(state_path, payload, schema_version=state.schema_version)
-
-
-def read_state(state_path: Path) -> CampaignState | None:
-    """Load campaign state from disk."""
-    try:
-        data = json.loads(state_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    try:
-        dispatches = [DispatchRecord.from_dict(d) for d in data["dispatches"]]
-        return CampaignState(
-            schema_version=data["schema_version"],
-            campaign_id=data["campaign_id"],
-            campaign_name=data["campaign_name"],
-            manifest_path=data["manifest_path"],
-            started_at=data["started_at"],
-            dispatches=dispatches,
-            captured_values=data.get("captured_values", {}),
-        )
-    except (KeyError, ValueError, TypeError) as exc:
-        logger.warning("read_state: schema mismatch or corrupt payload in %s: %s", state_path, exc)
-        return None

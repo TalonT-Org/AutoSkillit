@@ -197,6 +197,7 @@ from .types import RetryReason as RetryReason
 from .types import SessionOutcome as SessionOutcome
 from .types import SessionSkillManager as SessionSkillManager
 from .types import ProviderOutcome as ProviderOutcome
+from .types import InfraOutcome as InfraOutcome
 from .types import RecipeIdentity as RecipeIdentity
 from .types import SessionTelemetry as SessionTelemetry
 from .types import SessionType as SessionType

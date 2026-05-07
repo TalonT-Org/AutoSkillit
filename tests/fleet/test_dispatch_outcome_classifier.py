@@ -6,7 +6,7 @@ import dataclasses
 
 import pytest
 
-from autoskillit.core import FleetErrorCode, SkillResult
+from autoskillit.core import FleetErrorCode, InfraOutcome, SkillResult
 from autoskillit.fleet import DispatchStatus
 from autoskillit.fleet._api import classify_dispatch_outcome
 from autoskillit.fleet.result_parser import L3ParseResult
@@ -118,7 +118,7 @@ class TestReasonAwareResumePolicy:
         skill_result = dataclasses.replace(
             skill_result,
             retry_reason="resume",
-            infra_exit_category="context_exhausted",
+            infra=InfraOutcome(exit_category="context_exhausted"),
         )
         status, reason = classify_dispatch_outcome(parsed, skill_result, sidecar_exists=True)
         assert status == DispatchStatus.FAILURE
@@ -129,7 +129,7 @@ class TestReasonAwareResumePolicy:
         skill_result = dataclasses.replace(
             skill_result,
             retry_reason="resume",
-            infra_exit_category="api_error",
+            infra=InfraOutcome(exit_category="api_error"),
         )
         status, reason = classify_dispatch_outcome(parsed, skill_result, sidecar_exists=True)
         assert status == DispatchStatus.RESUMABLE
@@ -140,7 +140,7 @@ class TestReasonAwareResumePolicy:
         skill_result = dataclasses.replace(
             skill_result,
             retry_reason="resume",
-            infra_exit_category="process_killed",
+            infra=InfraOutcome(exit_category="process_killed"),
         )
         status, reason = classify_dispatch_outcome(parsed, skill_result, sidecar_exists=True)
         assert status == DispatchStatus.RESUMABLE

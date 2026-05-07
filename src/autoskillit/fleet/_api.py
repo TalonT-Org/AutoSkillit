@@ -223,7 +223,7 @@ def _is_abandon_reason(skill_result: SkillResult) -> bool:
         return True
     if (
         skill_result.retry_reason == RetryReason.RESUME
-        and skill_result.infra_exit_category == InfraExitCategory.CONTEXT_EXHAUSTED
+        and skill_result.infra.exit_category == InfraExitCategory.CONTEXT_EXHAUSTED
     ):
         return True
     return False
@@ -443,7 +443,7 @@ async def _run_dispatch(
                 dispatched_pid=_dispatched_pid[0] if _dispatched_pid else 0,
                 reason=FleetErrorCode.FLEET_L3_TIMEOUT,
                 kill_reason=skill_result.retry_reason or "",
-                infra_exit_category=skill_result.infra_exit_category or "",
+                infra_exit_category=skill_result.infra.exit_category or "",
                 token_usage=skill_result.token_usage or {},
                 started_at=started_at,
                 ended_at=ended_at,
@@ -496,7 +496,7 @@ async def _run_dispatch(
             dispatched_pid=_dispatched_pid[0] if _dispatched_pid else 0,
             reason=reason,
             kill_reason=skill_result.retry_reason or "",
-            infra_exit_category=skill_result.infra_exit_category or "",
+            infra_exit_category=skill_result.infra.exit_category or "",
             token_usage=skill_result.token_usage or {},
             started_at=started_at,
             ended_at=ended_at,

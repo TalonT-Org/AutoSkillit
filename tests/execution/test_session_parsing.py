@@ -9,6 +9,8 @@ import structlog
 
 from autoskillit.core.types import (
     ChannelConfirmation,
+    InfraExitCategory,
+    InfraOutcome,
     RetryReason,
     SubprocessResult,
     TerminationReason,
@@ -819,7 +821,6 @@ class TestFullChainZeroWriteGate:
 
 def test_skill_result_to_json_includes_infra_exit_category():
     """infra_exit_category is serialized when non-empty."""
-    from autoskillit.core.types import InfraExitCategory
 
     sr = SkillResult(
         success=False,
@@ -831,7 +832,7 @@ def test_skill_result_to_json_includes_infra_exit_category():
         needs_retry=True,
         retry_reason=RetryReason.RESUME,
         stderr="",
-        infra_exit_category=InfraExitCategory.CONTEXT_EXHAUSTED,
+        infra=InfraOutcome(exit_category=InfraExitCategory.CONTEXT_EXHAUSTED),
     )
     data = json.loads(sr.to_json())
     assert data["infra_exit_category"] == "context_exhausted"

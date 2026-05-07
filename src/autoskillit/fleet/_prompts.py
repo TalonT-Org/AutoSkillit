@@ -10,17 +10,17 @@ from __future__ import annotations
 import json
 import re
 
-from autoskillit.core import SOUS_CHEF_FOOD_TRUCK_SECTIONS, get_logger, pkg_root
+from autoskillit.core import ADMIRAL_DISPATCH_SECTIONS, get_logger, pkg_root
 from autoskillit.hooks import QUOTA_GUARD_DENY_TRIGGER, QUOTA_POST_WARNING_TRIGGER
 
 logger = get_logger(__name__)
 
 
-def _build_food_truck_sous_chef_block() -> str:
-    """Extract the food-truck-relevant subset of sous-chef SKILL.md.
+def _build_admiral_dispatch_block() -> str:
+    """Extract the dispatch-relevant subset of sous-chef SKILL.md.
 
     Uses regex to split on ``## `` section headers and retains only sections
-    whose title starts with one of the SOUS_CHEF_FOOD_TRUCK_SECTIONS prefixes.
+    whose title starts with one of the ADMIRAL_DISPATCH_SECTIONS prefixes.
     Returns empty string if SKILL.md is absent (graceful degradation).
     """
     path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
@@ -36,7 +36,7 @@ def _build_food_truck_sous_chef_block() -> str:
 
     retained: list[str] = []
     for section in sections:
-        for title in SOUS_CHEF_FOOD_TRUCK_SECTIONS:
+        for title in ADMIRAL_DISPATCH_SECTIONS:
             if section.startswith(f"## {title}"):
                 retained.append(section.rstrip())
                 break
@@ -65,7 +65,7 @@ def _build_food_truck_prompt(
     ingredients_json = json.dumps(ingredients)
     ingredients_pretty_json = json.dumps(ingredients, indent=2)
 
-    sous_chef_block = _build_food_truck_sous_chef_block()
+    admiral_block = _build_admiral_dispatch_block()
 
     return f"""\
 You are an L2 food truck orchestrator. Execute the recipe '{recipe}' autonomously.
@@ -73,7 +73,7 @@ Timeout: {l3_timeout_sec}s. Campaign: {campaign_id}. Dispatch: {dispatch_id}.
 
 --- SECTION 1: SOUS-CHEF DISCIPLINE (L2/FOOD-TRUCK SUBSET) ---
 
-{sous_chef_block}
+{admiral_block}
 
 --- SECTION 2: HEADLESS OPERATING MODE ---
 

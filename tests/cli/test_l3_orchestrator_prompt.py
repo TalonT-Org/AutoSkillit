@@ -80,8 +80,8 @@ class TestL3PromptPlaceholders:
 # --- K-2: TestL3SousChefDiscipline ---
 
 
-class TestL3SousChefDiscipline:
-    def test_full_sous_chef_appended(self) -> None:
+class TestL3AdmiralDiscipline:
+    def test_full_admiral_content_appended(self) -> None:
         prompt = _build()
         for header in SOUS_CHEF_MANDATORY_SECTIONS:
             assert header in prompt, f"Missing sous-chef section: {header}"

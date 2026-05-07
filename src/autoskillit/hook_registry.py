@@ -94,7 +94,7 @@ HOOK_REGISTRY: list[HookDef] = [
     ),
     HookDef(
         matcher=r"Bash|Write|Edit|Read|Glob|Grep",
-        scripts=["guards/mcp_health_guard.py"],
+        scripts=["guards/mcp_health_advisor.py"],
         timeout_seconds=5,
         session_scope="interactive_only",
     ),
@@ -188,6 +188,7 @@ RETIRED_SCRIPT_BASENAMES: frozenset[str] = frozenset(
 # so test_moved_scripts_must_be_in_retired does not false-positive on it.
 NEW_SUBDIR_BASENAMES: frozenset[str] = frozenset(
     {
+        "mcp_health_advisor.py",
         "skill_orchestration_guard.py",
         "skill_load_guard.py",
         "resume_ownership_guard.py",

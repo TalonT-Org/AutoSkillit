@@ -105,6 +105,9 @@ tests/recipe/fixtures/*:
 .autoskillit/test-source-map.json:
   - infra/
 
+.autoskillit/test-filter-manifest.yaml:
+  - infra/
+
 .autoskillit/config.yaml:
   - infra/
 

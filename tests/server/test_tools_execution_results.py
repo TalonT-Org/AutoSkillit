@@ -641,7 +641,7 @@ class TestRunHeadlessCoreFlushTelemetry:
     async def test_flush_telemetry_kwargs_exhaustive(self, tool_ctx, monkeypatch):
         """headless.py passes a SessionTelemetry bundle covering all telemetry fields."""
         import autoskillit.execution.session_log as sl_mod
-        from autoskillit.core.types._type_results import SessionTelemetry
+        from autoskillit.core.types._type_results_execution import SessionTelemetry
 
         calls = []
 

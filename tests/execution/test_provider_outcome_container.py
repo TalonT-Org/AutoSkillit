@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.core.types._type_results import ProviderOutcome
+from autoskillit.core.types._type_results_execution import ProviderOutcome
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 

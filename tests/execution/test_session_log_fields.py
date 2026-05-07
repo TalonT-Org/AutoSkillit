@@ -10,7 +10,11 @@ from datetime import UTC, datetime
 
 import pytest
 
-from autoskillit.core.types._type_results import ProviderOutcome, RecipeIdentity, SessionTelemetry
+from autoskillit.core.types._type_results_execution import (
+    ProviderOutcome,
+    RecipeIdentity,
+    SessionTelemetry,
+)
 from autoskillit.execution.session_log import (
     flush_session_log,
 )

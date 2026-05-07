@@ -11,7 +11,11 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core.types._type_results import ProviderOutcome, RecipeIdentity, SessionTelemetry
+from autoskillit.core.types._type_results_execution import (
+    ProviderOutcome,
+    RecipeIdentity,
+    SessionTelemetry,
+)
 from autoskillit.execution.linux_tracing import read_boot_id, read_starttime_ticks
 from autoskillit.execution.session_log import (
     flush_session_log,

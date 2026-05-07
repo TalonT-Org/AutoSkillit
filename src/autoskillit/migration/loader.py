@@ -42,17 +42,24 @@ def _migrations_dir() -> Path:
     return pkg_root() / "migrations"
 
 
+_migrations_cache: dict[tuple[str, float], list[MigrationNote]] = {}
+
+
 def list_migrations() -> list[MigrationNote]:
     """Discover and parse all migration YAML files, sorted by filename."""
     mig_dir = _migrations_dir()
     if not mig_dir.is_dir():
         return []
-
+    key = (str(mig_dir), mig_dir.stat().st_mtime)
+    cached = _migrations_cache.get(key)
+    if cached is not None:
+        return cached
     notes: list[MigrationNote] = []
     for f in sorted(mig_dir.iterdir()):
         if f.suffix in (".yaml", ".yml") and f.is_file():
             note = _parse_migration(f)
             notes.append(note)
+    _migrations_cache[key] = notes
     return notes
 
 

@@ -254,3 +254,64 @@ def test_detection_keywords_are_distinct() -> None:
         kws = frozenset(spec.detection_keywords)
         assert kws not in seen, f"{spec.name} and {seen[kws]} have identical detection_keywords"
         seen[kws] = spec.name
+
+
+# ---------------------------------------------------------------------------
+# T2: Caching tests
+# ---------------------------------------------------------------------------
+
+_MINIMAL_TRADITION_YAML = {
+    "name": "test_tradition",
+    "schema_version": "1.0",
+    "priority": 99,
+    "display_name": "Test Tradition",
+    "canonical_guideline": {
+        "name": "TEST",
+        "governing_body": "test",
+        "stable_for_decade": True,
+        "canonical": True,
+    },
+    "fields_spanned": ["test_field"],
+    "detection_keywords": ["test keyword"],
+    "mandatory_figures": [],
+    "strongly_expected_figures": [],
+    "anti_patterns": [],
+}
+
+_MINIMAL_TRADITION_YAML_2 = {
+    "name": "test_tradition_2",
+    "schema_version": "1.0",
+    "priority": 99,
+    "display_name": "Test Tradition 2",
+    "canonical_guideline": {
+        "name": "TEST2",
+        "governing_body": "test",
+        "stable_for_decade": True,
+        "canonical": True,
+    },
+    "fields_spanned": ["test_field"],
+    "detection_keywords": ["test keyword 2"],
+    "mandatory_figures": [],
+    "strongly_expected_figures": [],
+    "anti_patterns": [],
+}
+
+
+class TestMethodologyTraditionCaching:
+    def test_bundled_result_is_cached_on_repeat_call(self) -> None:
+        r1 = load_all_methodology_traditions()
+        r2 = load_all_methodology_traditions()
+        assert r1 is r2
+
+    def test_mtime_change_invalidates_cache(self, tmp_path: Path) -> None:
+        user_dir = tmp_path / ".autoskillit" / "methodology-traditions"
+        user_dir.mkdir(parents=True)
+        (user_dir / "custom_trad.yaml").write_text(yaml.dump(_MINIMAL_TRADITION_YAML))
+        r1 = load_all_methodology_traditions(project_dir=tmp_path)
+        import time
+
+        time.sleep(0.05)
+        (user_dir / "custom_trad_2.yaml").write_text(yaml.dump(_MINIMAL_TRADITION_YAML_2))
+        r2 = load_all_methodology_traditions(project_dir=tmp_path)
+        assert r1 is not r2
+        assert len(r2) > len(r1)

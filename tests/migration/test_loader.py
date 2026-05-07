@@ -369,3 +369,44 @@ class TestApplicableMigrations:
         )
         result = applicable_migrations(None, "0.2.0")
         assert result == []
+
+
+# ---------------------------------------------------------------------------
+# ML13: Caching tests
+# ---------------------------------------------------------------------------
+
+
+class TestListMigrationsCaching:
+    def test_result_is_cached_on_repeat_call(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        mig_dir = _make_migrations_dir(tmp_path)
+        _write_migration(
+            mig_dir / "001_init.yaml",
+            {"from_version": "0.1.0", "to_version": "0.2.0", "changes": []},
+        )
+        monkeypatch.setattr("autoskillit.migration.loader._migrations_dir", lambda: mig_dir)
+        r1 = list_migrations()
+        r2 = list_migrations()
+        assert r1 is r2
+
+    def test_mtime_change_invalidates_cache(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        mig_dir = _make_migrations_dir(tmp_path)
+        _write_migration(
+            mig_dir / "001_init.yaml",
+            {"from_version": "0.1.0", "to_version": "0.2.0", "changes": []},
+        )
+        monkeypatch.setattr("autoskillit.migration.loader._migrations_dir", lambda: mig_dir)
+        r1 = list_migrations()
+        import time
+
+        time.sleep(0.05)
+        _write_migration(
+            mig_dir / "002_add.yaml",
+            {"from_version": "0.2.0", "to_version": "0.3.0", "changes": []},
+        )
+        r2 = list_migrations()
+        assert r1 is not r2
+        assert len(r2) == len(r1) + 1

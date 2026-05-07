@@ -211,6 +211,16 @@ def load_traditions_from_dir(directory: Path) -> dict[str, MethodologyTraditionS
     return _load_traditions_from_dir(directory)
 
 
+_traditions_cache: dict[tuple[str | None, float, float], list[MethodologyTraditionSpec]] = {}
+
+
+def _dir_mtime(path: Path) -> float:
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return 0.0
+
+
 def load_all_methodology_traditions(
     project_dir: Path | None = None,
 ) -> list[MethodologyTraditionSpec]:
@@ -230,6 +240,21 @@ def load_all_methodology_traditions(
     Returns:
         Sorted list of ``MethodologyTraditionSpec``.
     """
+    bundled_mt = _dir_mtime(BUNDLED_METHODOLOGY_TRADITIONS_DIR)
+    if project_dir is not None:
+        user_dir = Path(project_dir) / ".autoskillit" / "methodology-traditions"
+        user_mt = _dir_mtime(user_dir)
+    else:
+        user_mt = 0.0
+    key: tuple[str | None, float, float] = (
+        str(project_dir) if project_dir is not None else None,
+        bundled_mt,
+        user_mt,
+    )
+    cached = _traditions_cache.get(key)
+    if cached is not None:
+        return cached
+
     traditions = _load_traditions_from_dir(BUNDLED_METHODOLOGY_TRADITIONS_DIR)
 
     if project_dir is not None:
@@ -246,6 +271,7 @@ def load_all_methodology_traditions(
         traditions.update(user_traditions)
 
     sorted_traditions = sorted(traditions.values(), key=lambda s: (s.priority, s.name))
+    _traditions_cache[key] = sorted_traditions
     return sorted_traditions
 
 

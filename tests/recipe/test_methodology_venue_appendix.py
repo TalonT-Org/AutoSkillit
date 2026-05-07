@@ -442,3 +442,19 @@ class TestEdgeCases:
         matches_lower = resolve_venue_appendices(plan_text_lower)
         matches_mixed = resolve_venue_appendices(plan_text_mixed)
         assert {m.sub_area for m in matches_lower} == {m.sub_area for m in matches_mixed}
+
+
+# ---------------------------------------------------------------------------
+# T4: Caching tests
+# ---------------------------------------------------------------------------
+
+
+class TestFoldingCaching:
+    def test_result_is_cached_via_lru_cache(self) -> None:
+        load_ml_sub_area_folding.cache_clear()
+        r1 = load_ml_sub_area_folding()
+        r2 = load_ml_sub_area_folding()
+        assert r1 is r2
+        info = load_ml_sub_area_folding.cache_info()
+        assert info.hits >= 1
+        assert info.misses == 1

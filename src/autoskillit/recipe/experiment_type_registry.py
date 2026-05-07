@@ -103,6 +103,16 @@ def load_types_from_dir(directory: Path) -> dict[str, ExperimentTypeSpec]:
     return _load_types_from_dir(directory)
 
 
+_exp_types_cache: dict[tuple[str | None, float, float], list[ExperimentTypeSpec]] = {}
+
+
+def _dir_mtime(path: Path) -> float:
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return 0.0
+
+
 def load_all_experiment_types(
     project_dir: Path | None = None,
 ) -> list[ExperimentTypeSpec]:
@@ -123,6 +133,21 @@ def load_all_experiment_types(
     Returns:
         Sorted list of ``ExperimentTypeSpec``, fallback entries last.
     """
+    bundled_mt = _dir_mtime(BUNDLED_EXPERIMENT_TYPES_DIR)
+    if project_dir is not None:
+        user_dir = Path(project_dir) / ".autoskillit" / "experiment-types"
+        user_mt = _dir_mtime(user_dir)
+    else:
+        user_mt = 0.0
+    key: tuple[str | None, float, float] = (
+        str(project_dir) if project_dir is not None else None,
+        bundled_mt,
+        user_mt,
+    )
+    cached = _exp_types_cache.get(key)
+    if cached is not None:
+        return cached
+
     types = _load_types_from_dir(BUNDLED_EXPERIMENT_TYPES_DIR)
 
     if project_dir is not None:
@@ -142,7 +167,9 @@ def load_all_experiment_types(
     fallback = [s for s in types.values() if s.is_fallback]
     non_fallback.sort(key=lambda s: (s.priority, s.name))
     fallback.sort(key=lambda s: (s.priority, s.name))
-    return non_fallback + fallback
+    result = non_fallback + fallback
+    _exp_types_cache[key] = result
+    return result
 
 
 def get_experiment_type_by_name(

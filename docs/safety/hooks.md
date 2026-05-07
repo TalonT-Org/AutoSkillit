@@ -53,11 +53,11 @@ marker exists (TTL: 24 hours). Prevents leaf workers from attempting
 interactive user prompts that can never be answered. Fails open on parse
 errors or missing session ID. Session scope: headless only.
 
-### `leaf_orchestration_guard.py`
+### `skill_orchestration_guard.py`
 **Guarded tools:** `run_skill`, `run_cmd`, `run_python`
-Blocks orchestration tools from leaf-tier sessions. Enforces the tier
+Blocks orchestration tools from skill-tier sessions. Enforces the tier
 invariant: orchestrator and fleet sessions may call orchestration tools;
-leaf workers use native Claude Code tools only.
+skill workers use native Claude Code tools only.
 
 ### `unsafe_install_guard.py`
 **Guarded tool:** `run_cmd`

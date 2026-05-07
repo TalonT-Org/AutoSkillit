@@ -42,13 +42,19 @@ def make_assignment_result(
     return validate_assignment_result(data)
 
 
-def make_wp_result(wp_id: str, *, allow_stub: bool = False, **overrides: Any) -> dict[str, Any]:
+def make_wp_result(
+    wp_id: str, *, allow_stub: bool = False, n_deliverables: int = 1, **overrides: Any
+) -> dict[str, Any]:
+    if n_deliverables == 1:
+        deliverables = [f"src/mod_{wp_id}.py"]
+    else:
+        deliverables = [f"src/mod_{wp_id}_{i}.py" for i in range(n_deliverables)]
     data: dict[str, Any] = {
         "id": wp_id,
         "name": f"WP {wp_id}",
         "summary": "summary",
         "goal": "goal",
-        "deliverables": [f"src/mod_{wp_id}.py"],
+        "deliverables": deliverables,
         "technical_steps": ["step 1"],
         "acceptance_criteria": ["criterion 1"],
         "depends_on": [],

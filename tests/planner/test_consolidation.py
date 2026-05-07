@@ -807,3 +807,143 @@ def test_consolidate_wps_wp_index_in_work_packages(tmp_path: Path) -> None:
 
     assert (tmp_path / "work_packages" / "wp_index.json").exists()
     assert not (tmp_path / "wp_index.json").exists()
+
+
+# ---------------------------------------------------------------------------
+# Deliverable bound overflow — merge policy tests
+# ---------------------------------------------------------------------------
+
+
+def test_merge_group_overflows_deliverable_bound_raises(tmp_path: Path) -> None:
+    """3 WPs × 2 distinct deliverables = 6 unique; merge must not raise ValueError."""
+    wps = [
+        make_wp_result("P1-A1-WP1", n_deliverables=2),
+        make_wp_result("P1-A1-WP2", n_deliverables=2),
+        make_wp_result("P1-A1-WP3", n_deliverables=2),
+    ]
+    refined_path = _make_refined_wps(tmp_path, wps)
+    consolidation_dir = tmp_path / "work_packages" / "consolidation"
+    _make_manifest(
+        consolidation_dir,
+        "P1",
+        [
+            {
+                "merged_id": "P1-A1-WP1",
+                "source_wp_ids": ["P1-A1-WP1", "P1-A1-WP2", "P1-A1-WP3"],
+                "merge_order": ["P1-A1-WP1", "P1-A1-WP2", "P1-A1-WP3"],
+                "name": None,
+                "goal": None,
+            }
+        ],
+    )
+
+    # Before the fix: ValueError about deliverables count. After the fix: succeeds.
+    result = consolidate_wps(refined_wps_path=str(refined_path), planner_dir=str(tmp_path))
+    consolidated = json.loads((tmp_path / "consolidated_wps.json").read_text())
+    assert len(consolidated["work_packages"]) == 1
+    merged = consolidated["work_packages"][0]
+    assert len(merged["deliverables"]) == 5
+    assert result["merged_count"] == "1"
+
+
+def test_merge_group_caps_deliverables_at_bound_and_demotes_overflow(tmp_path: Path) -> None:
+    """3 WPs × 2 distinct deliverables; 6th unique deliverable must appear in files_touched."""
+    wps = [
+        make_wp_result("P1-A1-WP1", n_deliverables=2),
+        make_wp_result("P1-A1-WP2", n_deliverables=2),
+        make_wp_result("P1-A1-WP3", n_deliverables=2),
+    ]
+    refined_path = _make_refined_wps(tmp_path, wps)
+    consolidation_dir = tmp_path / "work_packages" / "consolidation"
+    _make_manifest(
+        consolidation_dir,
+        "P1",
+        [
+            {
+                "merged_id": "P1-A1-WP1",
+                "source_wp_ids": ["P1-A1-WP1", "P1-A1-WP2", "P1-A1-WP3"],
+                "merge_order": ["P1-A1-WP1", "P1-A1-WP2", "P1-A1-WP3"],
+                "name": None,
+                "goal": None,
+            }
+        ],
+    )
+
+    consolidate_wps(refined_wps_path=str(refined_path), planner_dir=str(tmp_path))
+
+    consolidated = json.loads((tmp_path / "consolidated_wps.json").read_text())
+    merged = consolidated["work_packages"][0]
+    # Exactly 5 deliverables (cap)
+    assert len(merged["deliverables"]) == 5
+    # The 6th unique deliverable was demoted to files_touched
+    assert "src/mod_P1-A1-WP3_1.py" in merged["files_touched"]
+
+
+def test_merge_group_exactly_at_bound_passes(tmp_path: Path) -> None:
+    """Union of 3 WPs with 1+2+2=5 unique deliverables must pass with exactly 5."""
+    wp1 = make_wp_result("P1-A1-WP1", n_deliverables=1)
+    wp2 = make_wp_result("P1-A1-WP2", n_deliverables=2)
+    wp3 = make_wp_result("P1-A1-WP3", n_deliverables=2)
+    refined_path = _make_refined_wps(tmp_path, [wp1, wp2, wp3])
+    consolidation_dir = tmp_path / "work_packages" / "consolidation"
+    _make_manifest(
+        consolidation_dir,
+        "P1",
+        [
+            {
+                "merged_id": "P1-A1-WP1",
+                "source_wp_ids": ["P1-A1-WP1", "P1-A1-WP2", "P1-A1-WP3"],
+                "merge_order": ["P1-A1-WP1", "P1-A1-WP2", "P1-A1-WP3"],
+                "name": None,
+                "goal": None,
+            }
+        ],
+    )
+
+    consolidate_wps(refined_wps_path=str(refined_path), planner_dir=str(tmp_path))
+
+    consolidated = json.loads((tmp_path / "consolidated_wps.json").read_text())
+    merged = consolidated["work_packages"][0]
+    assert len(merged["deliverables"]) == 5
+
+
+def test_fallback_groups_overflow_caps_deliverables(tmp_path: Path) -> None:
+    """3 WPs sharing a file, each with 2 deliverables → fallback caps at 5, demotes overflow."""
+    wps = [
+        make_wp_result("P1-A1-WP1", files_touched=["src/shared.py"], n_deliverables=2),
+        make_wp_result("P1-A1-WP2", files_touched=["src/shared.py"], n_deliverables=2),
+        make_wp_result("P1-A1-WP3", files_touched=["src/shared.py"], n_deliverables=2),
+        make_wp_result("P1-A1-WP4", files_touched=["src/other.py"]),
+        make_wp_result("P1-A1-WP5", files_touched=["src/other.py"]),
+    ]
+    refined_path = _make_refined_wps(tmp_path, wps)
+
+    consolidate_wps(refined_wps_path=str(refined_path), planner_dir=str(tmp_path))
+
+    consolidated = json.loads((tmp_path / "consolidated_wps.json").read_text())
+    output_ids = {wp["id"] for wp in consolidated["work_packages"]}
+    assert "P1-A1-WP1" in output_ids
+    assert "P1-A1-WP4" in output_ids
+    merged_a = next(wp for wp in consolidated["work_packages"] if wp["id"] == "P1-A1-WP1")
+    assert len(merged_a["deliverables"]) == 5
+
+
+def test_merge_policy_covers_all_wp_list_fields(tmp_path: Path) -> None:
+    """Every list field in WPResult must have a corresponding _LIST_MERGE_POLICIES entry."""
+    from autoskillit.planner.consolidation import _LIST_MERGE_POLICIES
+    from autoskillit.planner.schema import WPResult
+
+    # All WPResult fields that are list-typed and merged (not technical_steps/depends_on)
+    wp_result_fields = set(WPResult.__annotations__.keys())
+    merged_fields = wp_result_fields - {
+        "id",
+        "name",
+        "summary",
+        "goal",
+        "technical_steps",
+        "depends_on",
+    }
+    policy_fields = {p.field for p in _LIST_MERGE_POLICIES}
+    assert merged_fields == policy_fields, (
+        f"WPResult merged fields {merged_fields} != policy fields {policy_fields}"
+    )

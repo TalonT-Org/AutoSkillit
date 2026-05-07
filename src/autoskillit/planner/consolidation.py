@@ -6,11 +6,11 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from autoskillit.core import atomic_write, write_versioned_json
 from autoskillit.planner._sort_utils import _natural_sort_key
-from autoskillit.planner.schema import validate_wp_result
+from autoskillit.planner.schema import DELIVERABLE_BOUNDS, validate_wp_result
 
 _ASSIGNMENT_RE = re.compile(r"^(P\d+-A\d+)-")
 _FALLBACK_MIN_WPS = 5
@@ -24,6 +24,22 @@ class _ConsolidationGroup:
     merge_order: list[str]
     name: str | None
     goal: str | None
+
+
+class _FieldMergePolicy(NamedTuple):
+    field: str
+    cap: int | None
+    overflow_target: str | None
+
+
+# files_touched must come before deliverables so overflow demotion works correctly
+_LIST_MERGE_POLICIES: tuple[_FieldMergePolicy, ...] = (
+    _FieldMergePolicy("files_touched", cap=None, overflow_target=None),
+    _FieldMergePolicy("deliverables", cap=DELIVERABLE_BOUNDS[1], overflow_target="files_touched"),
+    _FieldMergePolicy("acceptance_criteria", cap=None, overflow_target=None),
+    _FieldMergePolicy("apis_defined", cap=None, overflow_target=None),
+    _FieldMergePolicy("apis_consumed", cap=None, overflow_target=None),
+)
 
 
 def _load_manifests(consolidation_dir: Path) -> list[dict[str, Any]]:
@@ -82,20 +98,25 @@ def _merge_group(
         s for wp in sources_in_order for s in wp.get("technical_steps", [])
     ]
 
-    for field in (
-        "deliverables",
-        "acceptance_criteria",
-        "files_touched",
-        "apis_defined",
-        "apis_consumed",
-    ):
+    for policy in _LIST_MERGE_POLICIES:
         seen: set[str] = set()
-        merged[field] = [
+        raw = [
             x
             for wp in sources_in_order
-            for x in wp.get(field, [])
+            for x in wp.get(policy.field, [])
             if not (x in seen or seen.add(x))  # type: ignore[func-returns-value]
         ]
+        if policy.cap is not None:
+            overflow = raw[policy.cap :]
+            merged[policy.field] = raw[: policy.cap]
+            if overflow and policy.overflow_target is not None:
+                existing: set[str] = set(merged.get(policy.overflow_target, []))
+                for entry in overflow:
+                    if entry not in existing:
+                        merged.setdefault(policy.overflow_target, []).append(entry)
+                        existing.add(entry)
+        else:
+            merged[policy.field] = raw
 
     # Collect all external deps; intra-group removal done in rewrite pass
     all_source_ids = set(group.source_wp_ids)

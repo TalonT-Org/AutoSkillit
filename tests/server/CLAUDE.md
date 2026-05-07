@@ -85,6 +85,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_tools_status_mcp_response.py` | Tests for MCP response tracking integration in tools_status handlers |
 | `test_tools_status_quota_and_db.py` | Tests for server status tools: quota events, telemetry writing, and DB access |
 | `test_tools_status_summaries.py` | Tests for server status tools: token and timing summaries |
+| `test_tools_types_module.py` | Tests for server/tools/_types.py TypedDict imports |
 | `test_tools_workspace.py` | Tests for autoskillit server workspace tools |
 | `test_track_response_size.py` | Tests for the track_response_size decorator in autoskillit.server._notify |
 | `test_wire_compat.py` | Wire compatibility tests |

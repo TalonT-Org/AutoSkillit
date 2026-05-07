@@ -188,7 +188,7 @@ async def test_missing_campaign_ref_returns_fleet_error(tool_ctx):
 
 @pytest.mark.anyio
 async def test_partial_capture_propagates_only_captured_keys(tool_ctx, monkeypatch):
-    """Design captured only worktree_path; implement requests research_dir which was never captured."""
+    """Design captured only worktree_path; implement requests uncaptured research_dir."""
     from autoskillit.fleet._api import execute_dispatch
     from autoskillit.fleet.result_parser import L3ParseResult
 

@@ -2,6 +2,7 @@
 
 import dataclasses
 import json
+from dataclasses import FrozenInstanceError
 from typing import Any, ClassVar
 
 import pytest
@@ -9,8 +10,10 @@ import pytest
 from autoskillit.core.types import (
     ChannelConfirmation,
     CIRunScope,
+    InfraOutcome,
     MergeFailedStep,
     MergeState,
+    ProviderOutcome,
     RestartScope,
     RetryReason,
     SessionOutcome,
@@ -421,11 +424,11 @@ class TestSkillResultCrashedFactory:
 
     def test_crashed_sets_provider_used_empty_string(self):
         result = SkillResult.crashed(exception=RuntimeError("boom"))
-        assert result.provider_used == ""
+        assert result.provider.provider_used == ""
 
     def test_crashed_sets_provider_fallback_false(self):
         result = SkillResult.crashed(exception=RuntimeError("boom"))
-        assert result.provider_fallback is False
+        assert result.provider.fallback_activated is False
 
 
 class TestSkillResultProviderFields:
@@ -443,15 +446,16 @@ class TestSkillResultProviderFields:
 
     def test_provider_used_defaults_to_empty_string(self):
         sr = SkillResult(**self._BASE_KWARGS)
-        assert sr.provider_used == ""
+        assert sr.provider.provider_used == ""
 
     def test_provider_fallback_defaults_to_false(self):
         sr = SkillResult(**self._BASE_KWARGS)
-        assert sr.provider_fallback is False
+        assert sr.provider.fallback_activated is False
 
     def test_to_json_includes_provider_used_when_non_empty(self):
         sr = SkillResult(
-            **self._BASE_KWARGS, provider_used="anthropic-vertex", provider_fallback=True
+            **self._BASE_KWARGS,
+            provider=ProviderOutcome(provider_used="anthropic-vertex", fallback_activated=True),
         )
         data = json.loads(sr.to_json())
         assert data["provider_used"] == "anthropic-vertex"
@@ -464,12 +468,127 @@ class TestSkillResultProviderFields:
         assert data["provider_used"] == ""
 
     def test_to_json_includes_provider_fallback_when_true(self):
-        sr = SkillResult(**self._BASE_KWARGS, provider_fallback=True)
+        sr = SkillResult(
+            **self._BASE_KWARGS,
+            provider=ProviderOutcome(provider_used="", fallback_activated=True),
+        )
         data = json.loads(sr.to_json())
         assert "provider_fallback" in data
         assert data["provider_fallback"] is True
 
     def test_provider_used_round_trips_via_json(self):
-        sr = SkillResult(**self._BASE_KWARGS, provider_used="bedrock-us")
+        sr = SkillResult(
+            **self._BASE_KWARGS,
+            provider=ProviderOutcome(provider_used="bedrock-us", fallback_activated=False),
+        )
         data = json.loads(sr.to_json())
         assert data["provider_used"] == "bedrock-us"
+
+
+class TestInfraOutcome:
+    def test_default_exit_category_is_empty(self):
+        outcome = InfraOutcome()
+        assert outcome.exit_category == ""
+
+    def test_custom_exit_category(self):
+        outcome = InfraOutcome(exit_category="context_exhausted")
+        assert outcome.exit_category == "context_exhausted"
+
+    def test_frozen_rejects_mutation(self):
+        outcome = InfraOutcome(exit_category="completed")
+        with pytest.raises(FrozenInstanceError):
+            outcome.exit_category = "api_error"
+
+
+class TestSkillResultExtensionBundles:
+    _BASE_KWARGS: ClassVar[dict[str, Any]] = {
+        "success": True,
+        "result": "ok",
+        "session_id": "",
+        "subtype": "success",
+        "is_error": False,
+        "exit_code": 0,
+        "needs_retry": False,
+        "retry_reason": RetryReason.NONE,
+        "stderr": "",
+    }
+
+    def test_provider_bundle_defaults_to_none_used(self):
+        sr = SkillResult(**self._BASE_KWARGS)
+        assert sr.provider == ProviderOutcome.none_used()
+        assert sr.provider.provider_used == ""
+        assert sr.provider.fallback_activated is False
+
+    def test_infra_bundle_defaults_to_empty(self):
+        sr = SkillResult(**self._BASE_KWARGS)
+        assert sr.infra == InfraOutcome()
+        assert sr.infra.exit_category == ""
+
+    def test_provider_bundle_accepts_custom_value(self):
+        sr = SkillResult(
+            **self._BASE_KWARGS,
+            provider=ProviderOutcome(provider_used="anthropic", fallback_activated=True),
+        )
+        assert sr.provider.provider_used == "anthropic"
+        assert sr.provider.fallback_activated is True
+
+    def test_infra_bundle_accepts_custom_value(self):
+        sr = SkillResult(
+            **self._BASE_KWARGS,
+            infra=InfraOutcome(exit_category="api_error"),
+        )
+        assert sr.infra.exit_category == "api_error"
+
+    def test_flat_provider_used_removed(self):
+        assert "provider_used" not in [f.name for f in dataclasses.fields(SkillResult)]
+
+    def test_flat_provider_fallback_removed(self):
+        assert "provider_fallback" not in [f.name for f in dataclasses.fields(SkillResult)]
+
+    def test_flat_infra_exit_category_removed(self):
+        assert "infra_exit_category" not in [f.name for f in dataclasses.fields(SkillResult)]
+
+    def test_to_json_emits_flat_provider_used_key(self):
+        sr = SkillResult(
+            **self._BASE_KWARGS,
+            provider=ProviderOutcome(provider_used="vertex", fallback_activated=False),
+        )
+        data = json.loads(sr.to_json())
+        assert data["provider_used"] == "vertex"
+
+    def test_to_json_emits_flat_provider_fallback_key(self):
+        sr = SkillResult(
+            **self._BASE_KWARGS,
+            provider=ProviderOutcome(provider_used="anthropic", fallback_activated=True),
+        )
+        data = json.loads(sr.to_json())
+        assert data["provider_fallback"] is True
+
+    def test_to_json_emits_flat_infra_exit_category_key(self):
+        sr = SkillResult(
+            **self._BASE_KWARGS,
+            infra=InfraOutcome(exit_category="context_exhausted"),
+        )
+        data = json.loads(sr.to_json())
+        assert data["infra_exit_category"] == "context_exhausted"
+
+    def test_to_json_provider_empty_defaults(self):
+        sr = SkillResult(**self._BASE_KWARGS)
+        data = json.loads(sr.to_json())
+        assert data["provider_used"] == ""
+        assert data["provider_fallback"] is False
+        assert data["infra_exit_category"] == ""
+
+    def test_replace_infra_bundle(self):
+        sr = SkillResult(**self._BASE_KWARGS)
+        sr2 = dataclasses.replace(sr, infra=InfraOutcome(exit_category="api_error"))
+        assert sr2.infra.exit_category == "api_error"
+        assert sr.infra.exit_category == ""
+
+    def test_replace_provider_bundle(self):
+        sr = SkillResult(**self._BASE_KWARGS)
+        sr2 = dataclasses.replace(
+            sr, provider=ProviderOutcome(provider_used="vertex", fallback_activated=True)
+        )
+        assert sr2.provider.provider_used == "vertex"
+        assert sr2.provider.fallback_activated is True

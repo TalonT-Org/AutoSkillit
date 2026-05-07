@@ -253,8 +253,8 @@ async def test_no_fallback_env_returns_empty_provider_used(
         stale_threshold=5.0,
     )
 
-    assert result.provider_used == ""
-    assert result.provider_fallback is False
+    assert result.provider.provider_used == ""
+    assert result.provider.fallback_activated is False
 
 
 @pytest.mark.anyio
@@ -295,8 +295,8 @@ async def test_provider_name_stamps_provider_used_on_result(
         provider_name="bedrock",
     )
 
-    assert result.provider_used == "bedrock"
-    assert result.provider_fallback is False
+    assert result.provider.provider_used == "bedrock"
+    assert result.provider.fallback_activated is False
 
 
 def test_headless_executor_protocol_includes_provider_params() -> None:
@@ -326,9 +326,9 @@ def test_build_skill_result_stamps_provider_used_on_result() -> None:
 
     sub_result = _sr(stdout="result: done\n", returncode=0)
     sr = _build_skill_result(sub_result, provider_used="vertex")
-    assert sr.provider_used == "vertex"
+    assert sr.provider.provider_used == "vertex"
     sr_default = _build_skill_result(sub_result)
-    assert sr_default.provider_used == ""
+    assert sr_default.provider.provider_used == ""
 
 
 def test_build_skill_result_provider_used_survives_budget_guard() -> None:
@@ -345,4 +345,4 @@ def test_build_skill_result_provider_used_survives_budget_guard() -> None:
         max_consecutive_retries=3,
         provider_used="bedrock",
     )
-    assert sr.provider_used == "bedrock"
+    assert sr.provider.provider_used == "bedrock"

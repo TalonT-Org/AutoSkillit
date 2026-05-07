@@ -26,6 +26,7 @@ __all__ = [
     "FailureRecord",
     "SessionTelemetry",
     "ProviderOutcome",
+    "InfraOutcome",
     "RecipeIdentity",
     "SkillResult",
     "CleanupResult",
@@ -198,6 +199,13 @@ class ProviderOutcome:
 
 
 @dataclass(frozen=True)
+class InfraOutcome:
+    """Infrastructure exit classification bundle."""
+
+    exit_category: str = ""
+
+
+@dataclass(frozen=True)
 class RecipeIdentity:
     """Typed bundle of recipe identification fields for session logging.
 
@@ -245,12 +253,10 @@ class SkillResult:
     last_stop_reason: str = ""
     lifespan_started: bool = False
     """True when the headless session called an MCP tool (heuristic for server lifespan)."""
-    provider_used: str = field(default="")
-    """Provider identifier stamped by _build_skill_result (e.g. 'anthropic', 'vertex')."""
-    provider_fallback: bool = False
-    """True when this result was produced by a fallback provider (not the primary)."""
-    infra_exit_category: str = ""
-    """Infrastructure exit classification (InfraExitCategory value)."""
+    provider: ProviderOutcome = field(default_factory=ProviderOutcome.none_used)
+    """Provider execution outcome bundle."""
+    infra: InfraOutcome = field(default_factory=InfraOutcome)
+    """Infrastructure exit classification bundle."""
 
     def to_json(self) -> str:
         data: dict[str, Any] = {
@@ -271,12 +277,12 @@ class SkillResult:
             "fs_writes_detected": self.fs_writes_detected,
             "last_stop_reason": self.last_stop_reason,
             "lifespan_started": self.lifespan_started,
-            "provider_fallback": self.provider_fallback,
-            "provider_used": self.provider_used,
+            "provider_fallback": self.provider.fallback_activated,
+            "provider_used": self.provider.provider_used,
+            "infra_exit_category": self.infra.exit_category,
         }
         if self.worktree_path is not None:
             data["worktree_path"] = self.worktree_path
-        data["infra_exit_category"] = self.infra_exit_category
         data["order_id"] = self.order_id
         return json.dumps(data, default=lambda o: o.value if isinstance(o, Enum) else str(o))
 

@@ -129,8 +129,8 @@ class TestProviderFallbackLoop:
         )
 
         assert call_count[0] == 2
-        assert result.provider_fallback is True
-        assert result.provider_used == "anthropic"
+        assert result.provider.fallback_activated is True
+        assert result.provider.provider_used == "anthropic"
 
     @pytest.mark.anyio
     async def test_budget_exhausted_triggers_fallback(self, minimal_ctx, tmp_path, monkeypatch):
@@ -157,8 +157,8 @@ class TestProviderFallbackLoop:
         )
 
         assert call_count[0] == 2
-        assert result.provider_fallback is True
-        assert result.provider_used == "anthropic"
+        assert result.provider.fallback_activated is True
+        assert result.provider.provider_used == "anthropic"
 
     @pytest.mark.anyio
     async def test_no_fallback_env_suppresses_retry(self, minimal_ctx, tmp_path, monkeypatch):
@@ -182,7 +182,7 @@ class TestProviderFallbackLoop:
         )
 
         assert call_count[0] == 1
-        assert result.provider_fallback is False
+        assert result.provider.fallback_activated is False
 
     @pytest.mark.anyio
     async def test_anthropic_provider_never_falls_back(self, minimal_ctx, tmp_path, monkeypatch):
@@ -209,4 +209,4 @@ class TestProviderFallbackLoop:
         )
 
         assert call_count[0] == 1
-        assert result.provider_fallback is False
+        assert result.provider.fallback_activated is False

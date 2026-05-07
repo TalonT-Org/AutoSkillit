@@ -423,7 +423,8 @@ def _check_ingredient_type_default_invalid(ctx: ValidationContext) -> list[RuleF
         if default is not None and default != "":
             try:
                 int(default)
-            except ValueError:
+                continue
+            except ValueError as exc:
                 findings.append(
                     RuleFinding(
                         rule="ingredient-type-default-invalid",
@@ -431,7 +432,7 @@ def _check_ingredient_type_default_invalid(ctx: ValidationContext) -> list[RuleF
                         step_name=ing_name,
                         message=(
                             f"Ingredient '{ing_name}' has type='integer' but default={default!r} "
-                            f"is not parseable as an integer."
+                            f"is not parseable as an integer ({exc})."
                         ),
                     )
                 )

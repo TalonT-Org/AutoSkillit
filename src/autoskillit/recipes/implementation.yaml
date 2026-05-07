@@ -559,6 +559,10 @@ steps:
         route: enrich_diff_context
       - when: "${{ result.verdict }} == approved_with_comments"
         route: enrich_diff_context
+      - when: "${{ result.verdict }} == needs_human"
+        route: check_review_loop
+      - when: "${{ result.verdict }} == approved"
+        route: check_review_loop
       - when: "true"
         route: check_review_loop
     on_failure: check_repo_ci_event

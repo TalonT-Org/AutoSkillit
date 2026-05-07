@@ -72,20 +72,42 @@ def _build_step_graph(recipe: Recipe) -> dict[str, set[str]]:
     return graph
 
 
+def _build_success_step_graph(recipe: Recipe) -> dict[str, set[str]]:
+    """Build an adjacency dict from recipe step routing edges, success paths only.
+
+    Includes on_result condition routes and on_success edges.
+    Excludes on_failure and on_context_limit — those are error-recovery paths,
+    not verdict-driven routing, and must not be checked by waypoint invariants.
+    """
+    graph: dict[str, set[str]] = {name: set() for name in recipe.steps}
+    for step_name, step in recipe.steps.items():
+        if step.on_result and step.on_result.conditions:
+            for cond in step.on_result.conditions:
+                if cond.route:
+                    graph[step_name].add(cond.route)
+        if step.on_success:
+            graph[step_name].add(step.on_success)
+    return graph
+
+
 def bfs_reachable_without_barrier(
     recipe: Recipe,
     start: str,
     barrier: str,
 ) -> set[str]:
-    """BFS from ``start`` through the recipe routing graph, stopping at ``barrier``.
+    """BFS from ``start`` through success-path routing edges, stopping at ``barrier``.
 
     Returns all step names reachable from ``start`` without crossing ``barrier``.
     The barrier step itself is not included in the returned set.
 
+    Only follows on_result conditions and on_success edges — error paths
+    (on_failure, on_context_limit) are excluded because they are not
+    verdict-driven routing and must not be checked by waypoint invariants.
+
     This is the canonical implementation of the BFS-barrier pattern previously
     duplicated inline in ``push-before-audit`` and ``merge-base-unpublished``.
     """
-    graph = _build_step_graph(recipe)
+    graph = _build_success_step_graph(recipe)
     return _bfs_capped(graph, {start}, {barrier})
 
 

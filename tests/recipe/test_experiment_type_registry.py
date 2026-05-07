@@ -11,6 +11,7 @@ import yaml
 from autoskillit.recipe.experiment_type_registry import (
     ExperimentTypeSpec,
     get_experiment_type_by_name,
+    is_silent_type,
     load_all_experiment_types,
 )
 
@@ -397,6 +398,8 @@ def test_new_types_dimension_weights_spot_check() -> None:
 
     assert by_name["qualitative_interpretive"].dimension_weights["causal_structure"] == "S"
     assert by_name["qualitative_interpretive"].dimension_weights["statistical_corrections"] == "S"
+    assert by_name["qualitative_interpretive"].dimension_weights["ecological_validity"] == "S"
+    assert by_name["qualitative_interpretive"].dimension_weights["data_acquisition"] == "L"
 
     assert by_name["single_subject"].dimension_weights["statistical_corrections"] == "S"
     assert by_name["single_subject"].dimension_weights["variance_protocol"] == "H"
@@ -621,3 +624,67 @@ class TestExperimentTypeCaching:
         r2 = load_all_experiment_types(project_dir=tmp_path)
         assert r1 is not r2
         assert len(r2) > len(r1)
+
+
+# ---------------------------------------------------------------------------
+# T1-T4: is_silent_type tests
+# ---------------------------------------------------------------------------
+
+
+def test_is_silent_type_qualitative_interpretive() -> None:
+    """qualitative_interpretive is a silent type (>=6 of 8 S dimensions)."""
+    types = load_all_experiment_types()
+    by_name = {s.name: s for s in types}
+    assert is_silent_type(by_name["qualitative_interpretive"]) is True
+
+
+@pytest.mark.parametrize("name", ["causal_inference", "benchmark", "exploratory"])
+def test_is_silent_type_false_for_standard_types(name: str) -> None:
+    """Standard types are not silent types."""
+    types = load_all_experiment_types()
+    by_name = {s.name: s for s in types}
+    assert is_silent_type(by_name[name]) is False
+
+
+def test_is_silent_type_threshold_boundary() -> None:
+    """5 of 8 S dims is not silent; 6 of 8 is silent."""
+    base = ExperimentTypeSpec(
+        name="test_type",
+        classification_triggers=["test"],
+        dimension_weights={
+            "causal_structure": "S",
+            "variance_protocol": "S",
+            "statistical_corrections": "S",
+            "ecological_validity": "S",
+            "measurement_alignment": "S",
+            "resource_proportionality": "H",
+            "data_acquisition": "H",
+            "agent_implementability": "H",
+        },
+        applicable_lenses={},
+        red_team_focus={},
+        l1_severity={},
+    )
+    assert is_silent_type(base) is False  # 5 of 8
+
+    from dataclasses import replace
+
+    six_s = replace(
+        base,
+        dimension_weights={
+            **base.dimension_weights,
+            "resource_proportionality": "S",
+        },
+    )
+    assert is_silent_type(six_s) is True  # 6 of 8
+
+
+def test_qualitative_interpretive_silent_type_weights() -> None:
+    """qualitative_interpretive has >=6 S dims and correct non-S dims."""
+    types = load_all_experiment_types()
+    by_name = {s.name: s for s in types}
+    qi = by_name["qualitative_interpretive"]
+    silent_count = sum(1 for v in qi.dimension_weights.values() if v == "S")
+    assert silent_count >= 6
+    assert qi.dimension_weights["data_acquisition"] == "L"
+    assert qi.dimension_weights["agent_implementability"] == "L"

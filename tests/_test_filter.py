@@ -401,6 +401,8 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
         {
             "recipe",
             "skills/test_review_design_guards.py",
+            "skills/test_review_design_contracts.py",
+            "integration",
             "cli",
         }
     ),

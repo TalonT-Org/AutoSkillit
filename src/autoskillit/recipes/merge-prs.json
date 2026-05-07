@@ -1076,7 +1076,8 @@
         "callable": "autoskillit.smoke_utils.annotate_pr_diff",
         "pr_number": "${{ context.review_pr_number }}",
         "cwd": "${{ context.work_dir }}",
-        "output_dir": "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/review-pr"
+        "output_dir": "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/review-pr",
+        "local_review_rounds": "0"
       },
       "capture": {
         "annotated_diff_path": "${{ result.annotated_diff_path }}",

@@ -131,9 +131,9 @@ _LARGE_CHANGESET_THRESHOLD: int = 30
 
 # Modules in this set trigger a full 17-directory cascade. A core/ module belongs
 # here if:
-# (a) it is imported at the top level of tests/conftest.py or tests/fakes.py, OR
-# (b) its types have concrete implementations in tests/fakes.py (protocol satisfaction),
-# because conftest.py imports fakes, making any signature break cascade to all dirs.
+# (a) it is imported at the top level of tests/conftest.py, OR
+# (b) its types have concrete implementations in tests/fakes.py (protocol satisfaction)
+#     AND fakes.py is imported at module level by test files across most directories.
 # If neither condition holds, use MODULE_CASCADE_CORE with an explicit narrower cascade.
 _CORE_UNIVERSAL_MODULES: frozenset[str] = frozenset(
     {
@@ -148,7 +148,6 @@ _CORE_UNIVERSAL_MODULES: frozenset[str] = frozenset(
         "_type_protocols_infra",
         "_type_enums",
         "_type_subprocess",
-        "_type_results",
     }
 )
 
@@ -190,6 +189,23 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "session_registry": frozenset({"core"}),
     "tool_sequence_analysis": frozenset({"core", "execution", "server", "cli"}),
     "_type_checkpoint": frozenset({"core", "execution", "fleet", "server"}),
+    "_type_results": frozenset(
+        {
+            "core",
+            "execution",
+            "pipeline",
+            "workspace",
+            "recipe",
+            "migration",
+            "fleet",
+            "server",
+            "cli",
+            "_llm_triage",
+            "_test_filter",
+            "hook_registry",
+            "smoke_utils",
+        }
+    ),
 }
 
 # Narrow per-module cascade for execution/. Modules not listed here fall through

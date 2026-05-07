@@ -16,7 +16,6 @@ from autoskillit.core.types import (
     TerminationReason,
 )
 from tests._helpers import _flush_structlog_proxy_caches
-from tests.fakes import MockSubprocessRunner
 
 _LAYER_DIRS: frozenset[str] = frozenset(
     {
@@ -304,6 +303,7 @@ def tool_ctx(monkeypatch, tmp_path):
     from autoskillit.pipeline.gate import DefaultGateState
     from autoskillit.server import _state
     from autoskillit.server._factory import make_context
+    from tests.fakes import MockSubprocessRunner
 
     mock_runner = MockSubprocessRunner()
     ctx = make_context(
@@ -331,6 +331,7 @@ def tool_ctx_marketplace(monkeypatch, tmp_path):
     from autoskillit.pipeline.gate import DefaultGateState
     from autoskillit.server import _state
     from autoskillit.server._factory import make_context
+    from tests.fakes import MockSubprocessRunner
 
     fake_cache = tmp_path / "marketplace_cache"
     fake_cache.mkdir()

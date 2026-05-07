@@ -734,8 +734,12 @@ def test_finalize_wp_manifest_accumulates_all_validation_errors(tmp_path: Path) 
     # Valid WP (should not appear in error)
     write_json(wp_dir / "P1-A1-WP3_result.json", make_wp_result("P1-A1-WP3"))
 
-    with pytest.raises(ValueError, match=r"2 WP validation errors"):
+    with pytest.raises(ValueError, match=r"2 WP validation errors") as exc_info:
         finalize_wp_manifest(str(wp_dir), str(tmp_path))
+
+    msg = str(exc_info.value)
+    assert "P1-A1-WP1_result.json" in msg
+    assert "P1-A1-WP2_result.json" in msg
 
 
 def test_finalize_wp_manifest_single_validation_error_message(tmp_path: Path) -> None:

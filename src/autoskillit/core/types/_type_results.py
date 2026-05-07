@@ -216,6 +216,7 @@ class SkillResult:
             "write_path_warnings": self.write_path_warnings,
             "write_call_count": self.write_call_count,
             "fs_writes_detected": self.fs_writes_detected,
+            "has_progress_evidence": self.has_progress_evidence,
             "last_stop_reason": self.last_stop_reason,
             "lifespan_started": self.lifespan_started,
             "provider_fallback": self.provider.fallback_activated,
@@ -269,6 +270,18 @@ class SkillResult:
         if self.needs_retry:
             return SessionOutcome.RETRIABLE
         return SessionOutcome.FAILED
+
+    @property
+    def has_progress_evidence(self) -> bool:
+        """Whether any evidence of meaningful progress exists.
+
+        Synthesizes worktree_path, fs_writes_detected, and write_call_count
+        into a single routing-ready signal. Used by routing rules instead of
+        checking individual artifact fields.
+        """
+        return (
+            self.worktree_path is not None or self.fs_writes_detected or self.write_call_count > 0
+        )
 
 
 @dataclass

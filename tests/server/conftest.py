@@ -109,6 +109,22 @@ _SUCCESS_JSON = (
 )
 
 
+@pytest.fixture(autouse=True)
+def _suppress_nudge(monkeypatch):
+    """Prevent the contract-nudge gate from firing on mock EARLY_STOP results.
+
+    Server command-building tests use mock results that lack the per-invocation
+    completion marker, causing _retry_fsm to classify them as EARLY_STOP. With
+    the widened nudge gate (no provider_extras guard), the nudge fires and
+    appends an extra runner call that breaks call_args_list[-1] assertions.
+    """
+
+    async def _noop(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr("autoskillit.execution.headless._attempt_contract_nudge", _noop)
+
+
 @pytest.fixture
 def build_ctx(tmp_path):
     """Factory: build_ctx(**overrides) → minimal ToolContext with overrides applied."""

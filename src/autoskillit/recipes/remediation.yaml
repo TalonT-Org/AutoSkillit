@@ -429,6 +429,7 @@ steps:
   prepare_pr:
     tool: run_skill
     model: ""
+    retries: 1
     with:
       skill_command: "/autoskillit:prepare-pr ${{ context.plan_path }} ${{ inputs.run_name }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
@@ -445,7 +446,8 @@ steps:
         route: compose_pr
       - route: release_issue_failure
     on_failure: release_issue_failure
-    on_context_limit: release_issue_failure
+    on_context_limit: prepare_pr
+    on_exhausted: release_issue_failure
     optional: true
     skip_when_false: "inputs.open_pr"
     note: >

@@ -16,8 +16,7 @@ def test_natural_sort_key_pure_text():
 
 
 def test_natural_sort_key_pure_digits():
-    key = _natural_sort_key("42")
-    assert any(isinstance(tok, int) for tok in key)
+    assert _natural_sort_key("42") == ["", 42, ""]
 
 
 def test_natural_sort_key_empty_string():

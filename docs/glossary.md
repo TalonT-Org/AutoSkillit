@@ -96,8 +96,8 @@ UUID). Recorded in pipeline telemetry.
 
 Leaf subagent. Terminal node in the orchestration hierarchy. Cannot launch
 sub-agents or headless sessions. Cannot call `run_skill`, `run_cmd`, or
-`run_python` (enforced by `skill_orchestration_guard.py`). Spawned by an L1
-via Claude Code's Agent/Task tool. See `docs/orchestration-levels.md`.
+`run_python`. Spawned by an L1 via Claude Code's Agent/Task tool. See
+`docs/orchestration-levels.md`.
 
 ### L1
 

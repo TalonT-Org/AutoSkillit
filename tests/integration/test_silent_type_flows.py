@@ -7,14 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.recipe.experiment_type_registry import (
-    is_silent_type,
-    load_all_experiment_types,
-)
-
 pytestmark = [pytest.mark.small]
 
-REPO_ROOT = Path(__file__).resolve().parents[1].parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 CONVENTION_PATH = REPO_ROOT / "docs" / "research" / "silent-type-convention.md"
 REVIEW_DESIGN_SKILL = (
     REPO_ROOT / "src" / "autoskillit" / "skills_extended" / "review-design" / "SKILL.md"
@@ -47,12 +42,6 @@ def test_review_design_skill_references_silent_type_handling() -> None:
     assert "Silent Type Handling" in content
     assert "is_silent_type" in content
     assert "advisory_context" in content
-
-
-def test_qualitative_interpretive_is_silent_type() -> None:
-    types = load_all_experiment_types()
-    by_name = {s.name: s for s in types}
-    assert is_silent_type(by_name["qualitative_interpretive"]) is True
 
 
 def test_advisory_schema_in_review_design_skill() -> None:

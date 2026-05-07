@@ -870,7 +870,7 @@
     "tests/infra/test_generated_file_write_guard.py",
     "tests/infra/test_hook_executability.py",
     "tests/infra/test_hook_settings.py",
-    "tests/infra/test_mcp_health_guard.py",
+    "tests/infra/test_mcp_health_advisor.py",
     "tests/infra/test_open_kitchen_guard.py",
     "tests/infra/test_pretty_output.py",
     "tests/infra/test_pretty_output_integration.py",

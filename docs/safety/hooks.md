@@ -93,7 +93,7 @@ pattern. The Grep tool wraps ripgrep, which uses ERE/PCRE syntax where bare
 zero-result failures. Returns the corrected ERE pattern (replacing `\|` with
 `|`) in the deny message.
 
-### `mcp_health_guard.py`
+### `mcp_health_advisor.py`
 **Matched tools:** `Bash`, `Write`, `Edit`, `Read`, `Glob`, `Grep`
 Detects MCP server disconnection by reading `active_kitchens.json` and checking
 PID liveness. Injects informational message suggesting `/MCP` reconnection when

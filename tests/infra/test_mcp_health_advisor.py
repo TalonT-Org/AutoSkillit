@@ -1,4 +1,4 @@
-"""Tests for mcp_health_guard PreToolUse hook."""
+"""Tests for mcp_health_advisor PreToolUse hook."""
 
 from __future__ import annotations
 
@@ -19,8 +19,8 @@ def _run_guard(
     cwd: Path | str | None = None,
     headless: bool = False,
 ) -> tuple[int, dict]:
-    """Run mcp_health_guard.py as a subprocess, return (returncode, parsed_stdout)."""
-    hook_path = pkg_root() / "hooks" / "guards" / "mcp_health_guard.py"
+    """Run mcp_health_advisor.py as a subprocess, return (returncode, parsed_stdout)."""
+    hook_path = pkg_root() / "hooks" / "guards" / "mcp_health_advisor.py"
     home = tmp_path / "fakehome"
     home.mkdir(exist_ok=True)
     ak_dir = home / ".autoskillit"
@@ -62,7 +62,7 @@ def _dead_pid(tmp_path: Path) -> int:
         return proc.pid
 
 
-def test_mcp_health_guard_dead_pid_injects_message(tmp_path: Path) -> None:
+def test_mcp_health_advisor_dead_pid_injects_message(tmp_path: Path) -> None:
     """Dead PID entry for current project → inject reconnection message."""
     dead_pid = _dead_pid(tmp_path)
     kitchens = [
@@ -83,14 +83,14 @@ def test_mcp_health_guard_dead_pid_injects_message(tmp_path: Path) -> None:
     )
 
 
-def test_mcp_health_guard_no_kitchens_silent(tmp_path: Path) -> None:
+def test_mcp_health_advisor_no_kitchens_silent(tmp_path: Path) -> None:
     """No active_kitchens.json at all → silent exit 0."""
     returncode, payload = _run_guard(tmp_path, {}, tool_name="Bash")
     assert returncode == 0
     assert payload == {}, f"Expected empty output, got: {payload}"
 
 
-def test_mcp_health_guard_alive_pid_silent(tmp_path: Path) -> None:
+def test_mcp_health_advisor_alive_pid_silent(tmp_path: Path) -> None:
     """Kitchen entry with alive PID → silent exit 0."""
     kitchens = [
         {
@@ -107,7 +107,7 @@ def test_mcp_health_guard_alive_pid_silent(tmp_path: Path) -> None:
     assert payload == {}, f"Expected empty output for alive PID, got: {payload}"
 
 
-def test_mcp_health_guard_headless_bypass(tmp_path: Path) -> None:
+def test_mcp_health_advisor_headless_bypass(tmp_path: Path) -> None:
     """AUTOSKILLIT_HEADLESS=1 → message suppressed even with dead PID."""
     dead_pid = _dead_pid(tmp_path)
     kitchens = [
@@ -130,7 +130,7 @@ def test_mcp_health_guard_headless_bypass(tmp_path: Path) -> None:
     assert payload == {}, f"Expected empty output in headless mode, got: {payload}"
 
 
-def test_mcp_health_guard_no_matching_project(tmp_path: Path) -> None:
+def test_mcp_health_advisor_no_matching_project(tmp_path: Path) -> None:
     """Kitchen entry for a different project_path → silent exit 0."""
     dead_pid = _dead_pid(tmp_path)
     kitchens = [
@@ -149,7 +149,7 @@ def test_mcp_health_guard_no_matching_project(tmp_path: Path) -> None:
     assert payload == {}, f"Expected empty output for non-matching project, got: {payload}"
 
 
-def test_mcp_health_guard_malformed_json_failopen(tmp_path: Path) -> None:
+def test_mcp_health_advisor_malformed_json_failopen(tmp_path: Path) -> None:
     """Malformed active_kitchens.json → fail-open (exit 0, empty output)."""
     home = tmp_path / "fakehome"
     home.mkdir(exist_ok=True)
@@ -157,7 +157,7 @@ def test_mcp_health_guard_malformed_json_failopen(tmp_path: Path) -> None:
     ak_dir.mkdir(exist_ok=True)
     (ak_dir / "active_kitchens.json").write_text("this is not valid JSON {{{{")
 
-    hook_path = pkg_root() / "hooks" / "guards" / "mcp_health_guard.py"
+    hook_path = pkg_root() / "hooks" / "guards" / "mcp_health_advisor.py"
     env = {**os.environ, "HOME": str(home)}
     result = subprocess.run(
         [sys.executable, str(hook_path)],

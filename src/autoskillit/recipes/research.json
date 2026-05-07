@@ -449,7 +449,7 @@
       "with": {
         "skill_command": "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --inconclusive --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }} --experiment-type '${{ context.experiment_type }}' --methodology-traditions '${{ context.methodology_tradition }}' --design-review-verdict '${{ context.verdict }}' --disambiguation-rule-applied '${{ context.disambiguation_rule_applied }}' --tier-c-lens '${{ context.tier_c_lens }}' --classification-timestamp '${{ context.classification_timestamp }}'",
         "cwd": "${{ context.worktree_path }}",
-        "step_name": "generate_report"
+        "step_name": "generate_report_inconclusive"
       },
       "capture": {
         "report_path": "${{ result.report_path }}"

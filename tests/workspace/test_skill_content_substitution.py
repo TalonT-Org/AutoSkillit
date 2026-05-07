@@ -38,8 +38,11 @@ def _provider_with_synth(
     body: str,
     *,
     temp_dir_relpath: str = ".autoskillit/temp",
+    default_base_branch: str = "main",
 ) -> tuple[SkillsDirectoryProvider, _StubInfo]:
-    provider = SkillsDirectoryProvider(temp_dir_relpath=temp_dir_relpath)
+    provider = SkillsDirectoryProvider(
+        temp_dir_relpath=temp_dir_relpath, default_base_branch=default_base_branch
+    )
     info = _StubInfo(_make_synth_skill_md(tmp_path, name, body), name)
     monkeypatch.setattr(provider._resolver, "resolve", lambda n: info if n == name else None)
     return provider, info
@@ -54,6 +57,57 @@ def test_get_skill_content_substitutes_default_temp_dir(
     content = provider.get_skill_content("synth_default", gated=False)
     assert "{{AUTOSKILLIT_TEMP}}" not in content
     assert ".autoskillit/temp/foo/output.md" in content
+
+
+def test_get_skill_content_substitutes_default_base_branch(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """{{DEFAULT_BASE_BRANCH}} resolves to the default when no explicit value set."""
+    provider, _ = _provider_with_synth(
+        monkeypatch,
+        tmp_path,
+        "synth_base_branch",
+        "Merging into {{DEFAULT_BASE_BRANCH}}",
+        default_base_branch="main",
+    )
+    content = provider.get_skill_content("synth_base_branch", gated=False)
+    assert "{{DEFAULT_BASE_BRANCH}}" not in content
+    assert "main" in content
+
+
+def test_get_skill_content_substitutes_explicit_base_branch(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """{{DEFAULT_BASE_BRANCH}} resolves to the explicit value passed to constructor."""
+    provider, _ = _provider_with_synth(
+        monkeypatch,
+        tmp_path,
+        "synth_develop",
+        "Merging into {{DEFAULT_BASE_BRANCH}}",
+        default_base_branch="develop",
+    )
+    content = provider.get_skill_content("synth_develop", gated=False)
+    assert "{{DEFAULT_BASE_BRANCH}}" not in content
+    assert "develop" in content
+
+
+def test_get_skill_content_substitutes_both_placeholders(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Both {{AUTOSKILLIT_TEMP}} and {{DEFAULT_BASE_BRANCH}} are substituted."""
+    provider, _ = _provider_with_synth(
+        monkeypatch,
+        tmp_path,
+        "synth_both",
+        "Using {{AUTOSKILLIT_TEMP}} and {{DEFAULT_BASE_BRANCH}}",
+        temp_dir_relpath=".autoskillit/temp",
+        default_base_branch="develop",
+    )
+    content = provider.get_skill_content("synth_both", gated=False)
+    assert "{{AUTOSKILLIT_TEMP}}" not in content
+    assert "{{DEFAULT_BASE_BRANCH}}" not in content
+    assert ".autoskillit/temp" in content
+    assert "develop" in content
 
 
 def test_get_skill_content_substitutes_custom_temp_dir(

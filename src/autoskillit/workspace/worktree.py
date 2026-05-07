@@ -11,7 +11,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from autoskillit.core import CleanupResult, SubprocessRunner, resolve_temp_dir
+from autoskillit.core import CleanupResult, SubprocessRunner, atomic_write, resolve_temp_dir
 
 WORKTREES_DIR = "worktrees"
 
@@ -118,3 +118,28 @@ def remove_worktree_sidecar(
     except OSError as exc:
         result.failed.append((sidecar_str, str(exc)))
     return result
+
+
+def write_worktree_sidecar(
+    project_root: Path,
+    worktree_name: str,
+    base_branch: str,
+    *,
+    temp_dir: Path | None = None,
+) -> Path:
+    """Write the base-branch sidecar file for a worktree.
+
+    Creates ``<temp_dir>/worktrees/<worktree_name>/base-branch`` containing
+    the branch name. Uses ``atomic_write`` from ``core/io`` for crash-safe
+    writes (intermediate directories created automatically).
+
+    This is the code-level counterpart to the inline bash sidecar write
+    in implement-worktree-no-merge. Prefer this function over inline
+    mkdir+echo, as it uses the same path resolution as
+    ``remove_worktree_sidecar`` and the testing module's reader.
+    """
+    resolved_temp = temp_dir if temp_dir is not None else resolve_temp_dir(project_root, None)
+    sidecar_dir = _sidecar_root_for(resolved_temp) / worktree_name
+    sidecar_file = sidecar_dir / "base-branch"
+    atomic_write(sidecar_file, base_branch.strip() + "\n")
+    return sidecar_file

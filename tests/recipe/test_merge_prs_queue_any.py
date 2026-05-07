@@ -16,9 +16,9 @@ pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
 def test_implementation_recipe_is_valid(impl_recipe) -> None:
-    """validate_recipe must pass with no errors after queue finale steps are added."""
+    """validate_recipe_structure must pass with no errors after queue finale steps are added."""
     errors = validate_recipe_structure(impl_recipe)
-    assert errors == [], f"validate_recipe errors: {errors}"
+    assert errors == [], f"validate_recipe_structure errors: {errors}"
 
 
 # ---------------------------------------------------------------------------
@@ -193,9 +193,9 @@ def test_implementation_route_queue_mode_requires_merge_group_trigger(impl_recip
 
 
 def test_remediation_recipe_is_valid(remed_recipe) -> None:
-    """validate_recipe must pass with no errors after queue finale steps are added."""
+    """validate_recipe_structure must pass with no errors after queue finale steps are added."""
     errors = validate_recipe_structure(remed_recipe)
-    assert errors == [], f"validate_recipe errors: {errors}"
+    assert errors == [], f"validate_recipe_structure errors: {errors}"
 
 
 # ---------------------------------------------------------------------------

@@ -25,9 +25,9 @@ def pmp_recipe():
 
 
 def test_merge_prs_queue_recipe_is_valid(pmp_recipe) -> None:
-    """validate_recipe must pass with no errors after queue steps are added."""
+    """validate_recipe_structure must pass with no errors after queue steps are added."""
     errors = validate_recipe_structure(pmp_recipe)
-    assert errors == [], f"validate_recipe errors: {errors}"
+    assert errors == [], f"validate_recipe_structure errors: {errors}"
 
 
 # ---------------------------------------------------------------------------

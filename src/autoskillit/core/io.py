@@ -208,4 +208,5 @@ def dump_yaml_str(data: Any, **kwargs: Any) -> str:
     ``default_flow_style=False``). Distinct from the removed ``dump_yaml`` which wrote
     to disk.
     """
+    kwargs.pop("Dumper", None)
     return yaml.dump(data, Dumper=_Dumper, **kwargs)

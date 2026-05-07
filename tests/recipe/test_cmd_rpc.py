@@ -556,25 +556,20 @@ def test_batch_create_issues_ignores_prior_run_files(tmp_path):
             f"# Issue {n}\n\nBody from Run 2."
         )
 
-    # Call batch_create_issues WITHOUT audit_run_dir — current (buggy) behavior
-    # returns 5, but we need it to return 2 when only run-2 files are present
+    # Call batch_create_issues WITHOUT audit_run_dir — globs all 5 files
     with (
         patch("autoskillit.recipe._cmd_rpc.subprocess.run") as mock_run,
         patch("autoskillit.recipe._cmd_rpc.time.sleep"),
     ):
         mock_run.side_effect = _make_side_effect(
             issue_data=[
-                {"number": 4, "url": "https://github.com/org/repo/issues/4"},
-                {"number": 5, "url": "https://github.com/org/repo/issues/5"},
+                {"number": i, "url": f"https://github.com/org/repo/issues/{i}"}
+                for i in range(1, 6)
             ]
         )
         result = batch_create_issues(workspace=str(tmp_path))
 
-    # BUG: without audit_run_dir, this returns "5" (all files in directory)
-    # After the fix, this should still return "5" because audit_run_dir is not
-    # provided — but the test documents the expected behavior after fix:
-    # when audit_run_dir IS provided, only files within that dir are processed.
-    # This test FAILS today because the function has no audit_run_dir parameter.
+    # Without audit_run_dir, batch_create_issues counts ALL files in the directory
     assert result["issue_count"] == "5", (
         "Without audit_run_dir, batch_create_issues counts ALL files in the directory"
     )

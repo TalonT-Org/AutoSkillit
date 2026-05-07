@@ -45,9 +45,10 @@ def _check_callable_scoped_discovery(ctx: ValidationContext) -> list[RuleFinding
                             severity=Severity.ERROR,
                             step_name=step_name,
                             message=(
-                                f"step '{step_name}': {callable_suffix} call is missing "
-                                f"'{required_key}' in with args. Without a scoped directory, "
-                                f"the callable will glob all files including those from prior runs."
+                                f"step '{step_name}': {callable_suffix} call is "
+                                f"missing '{required_key}' in with args. Without a "
+                                f"scoped directory, the callable will glob all files "
+                                f"including those from prior runs."
                             ),
                         )
                     )

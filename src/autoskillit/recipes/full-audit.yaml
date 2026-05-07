@@ -123,11 +123,9 @@ steps:
     model: ""
     description: "Validate each audit report in parallel"
     with:
-      skill_command: "/autoskillit:validate-audit"
+      skill_command: "/autoskillit:validate-audit --audit-run-dir ${{ context.audit_run_dir }}"
       cwd: "${{ inputs.workspace }}"
       step_name: "validate_audits"
-      env:
-        AUTOSKILLIT_AUDIT_RUN_DIR: "${{ context.audit_run_dir }}"
     note: >
       PREFER-COMPLETION VALIDATION — Start validating as each audit finishes.
       Do not wait for all audits to complete before beginning validation.

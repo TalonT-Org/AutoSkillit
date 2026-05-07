@@ -21,17 +21,19 @@ class TestExecutionTypesImport:
     def test_ci_run_scope_importable(self):
         from autoskillit.core.types._type_results_execution import CIRunScope
 
-        assert CIRunScope() is not None
+        assert CIRunScope().workflow is None
 
     def test_backward_compat_via_core_gateway(self):
         """All moved types are still importable from autoskillit.core."""
+        import inspect
+
         from autoskillit.core import (
             CIRunScope,
             RecipeIdentity,
             SessionTelemetry,
         )
 
-        assert all(cls is not None for cls in [SessionTelemetry, RecipeIdentity, CIRunScope])
+        assert all(inspect.isclass(cls) for cls in [SessionTelemetry, RecipeIdentity, CIRunScope])
 
 
 class TestExecutionTypesNotInResults:

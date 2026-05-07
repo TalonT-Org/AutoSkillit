@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from autoskillit.core import SkillResolver  # noqa: PLC0415
+    from autoskillit.core import SkillResolver
 
 from autoskillit.recipe._analysis_bfs import _bfs_with_facts, bfs_reachable
 from autoskillit.recipe._analysis_blocks import extract_blocks

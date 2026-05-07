@@ -130,7 +130,7 @@ async def _import_and_call(
 
     try:
         type_hints = typing.get_type_hints(func)
-    except Exception:
+    except (NameError, TypeError, AttributeError):
         logger.warning(
             "get_type_hints failed, skipping coercion", callable=dotted_path, exc_info=True
         )
@@ -181,6 +181,7 @@ async def _import_and_call(
             "run_python execution failed",
             dotted_path=dotted_path,
             error=type(exc).__name__,
+            exc_info=True,
         )
         return {"success": False, "error": f"{type(exc).__name__}: {exc}"}
 

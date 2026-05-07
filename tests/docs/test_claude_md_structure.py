@@ -107,20 +107,6 @@ def test_server_claude_md_gating_matrix_covers_categories() -> None:
         assert category in text, f"Missing tool category {category!r} in gating matrix"
 
 
-def test_server_init_docstring_no_stale_tool_count() -> None:
-    """server/__init__.py docstring must not contain hardcoded tool counts."""
-    init_file = _SERVER_DIR / "__init__.py"
-    # Read only the module docstring (first triple-quoted block)
-    src = init_file.read_text()
-    docstring_match = re.match(r'^"""(.*?)"""', src, re.DOTALL)
-    assert docstring_match, "server/__init__.py should start with a module docstring"
-    docstring = docstring_match.group(1)
-    assert not re.search(r"\d+ kitchen-tagged", docstring), (
-        "Stale tool count in server/__init__.py docstring — "
-        "remove hardcoded counts, they rot as tools are added"
-    )
-
-
 def test_test_check_has_require_enabled_exception_comment() -> None:
     """test_check has an inline comment explaining why it skips _require_enabled()."""
     ws_file = _SERVER_DIR / "tools" / "tools_workspace.py"

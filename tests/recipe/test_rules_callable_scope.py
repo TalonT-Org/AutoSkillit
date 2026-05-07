@@ -33,8 +33,8 @@ def test_callable_requires_scoped_discovery_flags_batch_create_issues():
     )
     findings = run_semantic_rules(recipe)
     scoped_rule_findings = [f for f in findings if f.rule == "callable-requires-scoped-discovery"]
-    assert len(scoped_rule_findings) >= 1, (
-        "callable-requires-scoped-discovery must fire when batch_create_issues "
+    assert len(scoped_rule_findings) == 1, (
+        "callable-requires-scoped-discovery must fire exactly once when batch_create_issues "
         "is called without audit_run_dir"
     )
     assert all(f.severity == Severity.ERROR for f in scoped_rule_findings)

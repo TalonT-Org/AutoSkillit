@@ -614,7 +614,6 @@ def test_batch_create_issues_scoped_to_audit_run_dir(tmp_path):
                 {"number": 5, "url": "https://github.com/org/repo/issues/5"},
             ]
         )
-        # After fix: audit_run_dir parameter directs glob to the scoped directory
         result = batch_create_issues(workspace=str(tmp_path), audit_run_dir=str(run2_dir))
 
     assert result["issue_count"] == "2", (

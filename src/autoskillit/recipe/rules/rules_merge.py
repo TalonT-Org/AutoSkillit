@@ -37,6 +37,18 @@ _RECOVERABLE_FAILED_STEPS: frozenset[str] = frozenset(
     }
 )
 
+_MERGE_FAILURE_DOMAINS: dict[str, str] = {
+    MergeFailedStep.DIRTY_TREE: "code",
+    MergeFailedStep.TEST_GATE: "code",
+    MergeFailedStep.POST_REBASE_TEST_GATE: "code",
+    MergeFailedStep.REBASE: "git_conflict",
+}
+
+_REQUIRED_SKILL_BY_DOMAIN: dict[str, str] = {
+    "code": "resolve-failures",
+    "git_conflict": "resolve-merge-conflicts",
+}
+
 _FAILED_STEP_PATTERN = re.compile(r"result\.failed_step\s*==\s*['\"](\w+)['\"]")
 
 
@@ -81,6 +93,68 @@ def _check_merge_routing_completeness(ctx: ValidationContext) -> list[RuleFindin
                     ),
                 )
             )
+    return findings
+
+
+_SKILL_CMD_PATTERN = re.compile(r"/(?:autoskillit:)?([\w-]+)")
+
+
+@semantic_rule(
+    name="merge-failure-skill-domain-mismatch",
+    description=(
+        "A merge_worktree on_result condition routes a recoverable failed_step to a "
+        "step whose skill does not match the failure domain. Git-conflict failures "
+        "(rebase) must route to resolve-merge-conflicts; code failures (dirty_tree, "
+        "test_gate, post_rebase_test_gate) must route to resolve-failures."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_merge_failure_skill_domain_mismatch(
+    ctx: ValidationContext,
+) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "merge_worktree":
+            continue
+        if not step.on_result or not step.on_result.conditions:
+            continue
+
+        for condition in step.on_result.conditions:
+            if condition.when is None:
+                continue
+            m = _FAILED_STEP_PATTERN.search(condition.when)
+            if not m:
+                continue
+            failed_step_value = m.group(1)
+            domain = _MERGE_FAILURE_DOMAINS.get(failed_step_value)
+            if domain is None:
+                continue
+
+            target_step = ctx.recipe.steps.get(condition.route)
+            if target_step is None or target_step.tool != "run_skill":
+                continue
+
+            skill_cmd = target_step.with_args.get("skill_command", "")
+            skill_match = _SKILL_CMD_PATTERN.search(skill_cmd)
+            if not skill_match:
+                continue
+            actual_skill = skill_match.group(1)
+
+            required_skill = _REQUIRED_SKILL_BY_DOMAIN[domain]
+            if actual_skill != required_skill:
+                findings.append(
+                    RuleFinding(
+                        rule="merge-failure-skill-domain-mismatch",
+                        severity=Severity.ERROR,
+                        step_name=step_name,
+                        message=(
+                            f"failed_step == '{failed_step_value}' (domain: {domain}) "
+                            f"routes to step '{condition.route}' which invokes "
+                            f"'{actual_skill}', but {domain} failures require "
+                            f"'{required_skill}'."
+                        ),
+                    )
+                )
     return findings
 
 

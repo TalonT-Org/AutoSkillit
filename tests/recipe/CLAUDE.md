@@ -112,6 +112,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_rules_merge_base_unpublished.py` | Tests for merge_base_unpublished semantic validation rule |
 | `test_rules_merge_queue_push.py` | Tests for merge_queue_push semantic validation rule |
 | `test_rules_merge_routing_incomplete.py` | Tests for merge_routing_incomplete semantic validation rule |
+| `test_rules_merge_failure_domain.py` | Tests for merge-failure-skill-domain-mismatch semantic validation rule |
 | `test_rules_multipart_iteration.py` | Tests for multipart_iteration semantic validation rule |
 | `test_rules_on_context_limit.py` | Tests for on_context_limit semantic validation rule |
 | `test_rules_on_result_failure_route.py` | Tests for on_result_failure_route semantic validation rule |

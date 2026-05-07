@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit.core import get_logger, load_yaml, pkg_root
+from autoskillit.recipe._registry_utils import _MISSING_MTIME, dir_mtime
 
 logger = get_logger(__name__)
 
@@ -211,6 +212,9 @@ def load_traditions_from_dir(directory: Path) -> dict[str, MethodologyTraditionS
     return _load_traditions_from_dir(directory)
 
 
+_traditions_cache: dict[tuple[str | None, float, float], list[MethodologyTraditionSpec]] = {}
+
+
 def load_all_methodology_traditions(
     project_dir: Path | None = None,
 ) -> list[MethodologyTraditionSpec]:
@@ -230,6 +234,21 @@ def load_all_methodology_traditions(
     Returns:
         Sorted list of ``MethodologyTraditionSpec``.
     """
+    bundled_mt = dir_mtime(BUNDLED_METHODOLOGY_TRADITIONS_DIR)
+    if project_dir is not None:
+        user_dir = Path(project_dir) / ".autoskillit" / "methodology-traditions"
+        user_mt = dir_mtime(user_dir)
+    else:
+        user_mt = _MISSING_MTIME
+    key: tuple[str | None, float, float] = (
+        str(project_dir) if project_dir is not None else None,
+        bundled_mt,
+        user_mt,
+    )
+    cached = _traditions_cache.get(key)
+    if cached is not None:
+        return list(cached)
+
     traditions = _load_traditions_from_dir(BUNDLED_METHODOLOGY_TRADITIONS_DIR)
 
     if project_dir is not None:
@@ -246,7 +265,8 @@ def load_all_methodology_traditions(
         traditions.update(user_traditions)
 
     sorted_traditions = sorted(traditions.values(), key=lambda s: (s.priority, s.name))
-    return sorted_traditions
+    _traditions_cache[key] = sorted_traditions
+    return list(sorted_traditions)
 
 
 def get_methodology_tradition_by_name(

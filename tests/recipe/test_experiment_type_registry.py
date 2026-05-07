@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -551,3 +552,72 @@ def test_get_experiment_type_by_name_not_found() -> None:
     """get_experiment_type_by_name returns None for an unknown type name."""
     spec = get_experiment_type_by_name("nonexistent")
     assert spec is None
+
+
+# ---------------------------------------------------------------------------
+# T1: Caching tests
+# ---------------------------------------------------------------------------
+
+_MINIMAL_EXP_TYPE_YAML = {
+    "name": "test_exp",
+    "classification_triggers": ["test trigger"],
+    "dimension_weights": {
+        "causal_structure": "H",
+        "variance_protocol": "M",
+        "statistical_corrections": "M",
+        "ecological_validity": "M",
+        "measurement_alignment": "M",
+        "resource_proportionality": "M",
+        "data_acquisition": "M",
+        "agent_implementability": "M",
+    },
+    "applicable_lenses": {},
+    "red_team_focus": {"specific": "test", "severity_cap": "warning"},
+    "l1_severity": {
+        "estimand_clarity": "warning",
+        "hypothesis_falsifiability": "warning",
+    },
+}
+
+_MINIMAL_EXP_TYPE_YAML_2 = {
+    "name": "test_exp_2",
+    "classification_triggers": ["test trigger 2"],
+    "dimension_weights": {
+        "causal_structure": "H",
+        "variance_protocol": "M",
+        "statistical_corrections": "M",
+        "ecological_validity": "M",
+        "measurement_alignment": "M",
+        "resource_proportionality": "M",
+        "data_acquisition": "M",
+        "agent_implementability": "M",
+    },
+    "applicable_lenses": {},
+    "red_team_focus": {"specific": "test", "severity_cap": "warning"},
+    "l1_severity": {
+        "estimand_clarity": "warning",
+        "hypothesis_falsifiability": "warning",
+    },
+}
+
+
+class TestExperimentTypeCaching:
+    def test_bundled_result_is_cached_on_repeat_call(self) -> None:
+        """Two calls with project_dir=None return equal defensive copies."""
+        r1 = load_all_experiment_types()
+        r2 = load_all_experiment_types()
+        assert r1 == r2
+        assert r1 is not r2
+
+    def test_mtime_change_invalidates_cache(self, tmp_path: Path) -> None:
+        """Adding a file to the user dir changes dir mtime, causing cache miss."""
+        user_dir = tmp_path / ".autoskillit" / "experiment-types"
+        user_dir.mkdir(parents=True)
+        (user_dir / "custom_exp.yaml").write_text(yaml.dump(_MINIMAL_EXP_TYPE_YAML))
+        r1 = load_all_experiment_types(project_dir=tmp_path)
+        (user_dir / "custom_exp_2.yaml").write_text(yaml.dump(_MINIMAL_EXP_TYPE_YAML_2))
+        old_mt = user_dir.stat().st_mtime
+        os.utime(user_dir, (old_mt + 2, old_mt + 2))
+        r2 = load_all_experiment_types(project_dir=tmp_path)
+        assert r1 is not r2
+        assert len(r2) > len(r1)

@@ -150,6 +150,29 @@ Injects a reminder to call `/autoskillit:open-kitchen` when resuming a
 prior session (transcript_path size > 0). Without this, resumed orchestrator
 sessions silently lose access to the kitchen tools.
 
+## Fail Modes
+
+All guard scripts fail-**open** for malformed or unparseable input: a JSON decode
+failure produces exit 0 (approve). This prevents a broken hook from blocking the
+entire tool chain.
+
+Three guards additionally fail-**closed** for valid input with unrecognized values,
+as a defense-in-depth measure against privilege escalation:
+
+| Guard | Fail-closed condition | Rationale |
+|-------|----------------------|-----------|
+| `skill_command_guard.py` | Unexpected runtime error (not JSON parse) | Unknown failure mode = deny rather than risk executing an unvalidated command |
+| `open_kitchen_guard.py` | Unrecognized `AUTOSKILLIT_SESSION_TYPE` | Unknown session type should not gain kitchen access |
+| `skill_orchestration_guard.py` | Unrecognized `AUTOSKILLIT_SESSION_TYPE` | Unknown session type should not call orchestration tools (`run_skill`, `run_cmd`, `run_python`) |
+
+**Design principle:** Garbage-in (malformed hook input) = fail-open. Unknown-tier
+(valid input, unrecognized value) = fail-closed.
+
+All remaining guards (`fleet_dispatch_guard.py`, `quota_guard.py`,
+`mcp_health_advisor.py`, `branch_protection_guard.py`, etc.) fail-open in every
+failure scenario — malformed input, unrecognized session types, runtime errors,
+and missing data.
+
 ## Drift detection
 
 `cli/_doctor.py:_check_hook_registry_drift` calls `generate_hooks_json()` and

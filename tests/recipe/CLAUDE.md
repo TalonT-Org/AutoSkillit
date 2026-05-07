@@ -12,6 +12,9 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_anti_pattern_guards.py` | Guards for anti-patterns in recipe definitions |
 | `test_api.py` | Tests for recipe/_api.py orchestration API |
 | `test_api_split.py` | Structural guard for recipe API split |
+| `test_audit_trail_artifacts.py` | Tests for audit/ directory creation and artifact copy in create_worktree.sh |
+| `test_audit_trail_format_doc.py` | Tests for audit-trail-format.md documentation |
+| `test_audit_trail_recipe_contracts.py` | Tests for research.yaml audit-trail captures and threading |
 | `test_bem_wrapper_structure.py` | Tests for BEM wrapper recipe structure |
 | `test_bundled_model_field.py` | Tests that all run_skill steps declare a model: field across bundled recipes |
 | `test_bundled_recipe_hidden_policy.py` | Tests for hidden policy in bundled recipes |
@@ -63,6 +66,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_promote_to_main_wrapper.py` | Tests for the promote-to-main wrapper recipe |
 | `test_recipe_ci_watch_event.py` | Tests for CI watch event in recipe steps |
 | `test_recipe_order.py` | Tests for BUNDLED_RECIPE_ORDER stable display order registry |
+| `test_report_frontmatter_schema.py` | Tests for report.md YAML frontmatter audit-trail schema |
 | `test_recipe_scripts.py` | Tests for recipe script callables |
 | `test_recipe_temp_substitution.py` | Tests for {{AUTOSKILLIT_TEMP}} substitution in recipe steps |
 | `test_remediation_depth_ingredient.py` | Tests for remediation depth ingredient configuration |
@@ -138,6 +142,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_rules_worktree.py` | Tests for worktree semantic validation rule |
 | `test_schema.py` | Tests for Recipe, RecipeStep, and DataFlowWarning schema |
 | `test_skill_emit_consistency.py` | Tests for skill emit consistency in recipe steps |
+| `test_silent_type_convention.py` | Tests for silent-type-convention.md documentation |
 | `test_staleness_cache.py` | Tests for recipe staleness cache |
 | `test_sub_recipe_loading.py` | Tests for sub-recipe loading and composition |
 | `test_sub_recipe_schema.py` | Tests for sub-recipe schema structure |

@@ -39,8 +39,8 @@ validated report carries a `validated: true` marker to signal downstream process
   If no files exist under any of these directories, print an error message and exit
   with a non-zero status.
 
-- `AUDOSKILLIT_AUDIT_RUN_DIR` — optional environment variable. When set, all output
-  files are written under `$AUDOSKILLIT_AUDIT_RUN_DIR/validate-audit/` instead of
+- `AUTOSKILLIT_AUDIT_RUN_DIR` — optional environment variable. When set, all output
+  files are written under `$AUTOSKILLIT_AUDIT_RUN_DIR/validate-audit/` instead of
   `{{AUTOSKILLIT_TEMP}}/validate-audit/`. The recipe sets this to the per-run
   directory created by `init_audit_run` to prevent cross-run file accumulation.
 
@@ -48,7 +48,7 @@ validated report carries a `validated: true` marker to signal downstream process
 
 **NEVER:**
 - Modify any source code files
-- Create files outside `$AUDOSKILLIT_AUDIT_RUN_DIR/validate-audit/` (when set) or `{{AUTOSKILLIT_TEMP}}/validate-audit/` (fallback)
+- Create files outside `$AUTOSKILLIT_AUDIT_RUN_DIR/validate-audit/` (when set) or `{{AUTOSKILLIT_TEMP}}/validate-audit/` (fallback)
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message
 - Write output files before synthesizing ALL subagent results
 - Subagents must NOT create their own files — they return findings in response text only
@@ -232,12 +232,12 @@ After all agents return:
 
 ### Step 5 — Generate Output Files
 
-Set the output base directory. When `AUDOSKILLIT_AUDIT_RUN_DIR` is set (by the
+Set the output base directory. When `AUTOSKILLIT_AUDIT_RUN_DIR` is set (by the
 recipe's `init_audit_run` step), files are written to the per-run directory to
 prevent cross-run accumulation:
 
 ```bash
-AUDIT_BASE_DIR="${AUDOSKILLIT_AUDIT_RUN_DIR:-{{AUTOSKILLIT_TEMP}}}"
+AUDIT_BASE_DIR="${AUTOSKILLIT_AUDIT_RUN_DIR:-{{AUTOSKILLIT_TEMP}}}"
 mkdir -p "$AUDIT_BASE_DIR/validate-audit"
 ```
 
@@ -505,7 +505,7 @@ rule and the validation summary content, write the combined text to a temp file,
 ## Output Location
 
 All output files are written under `$AUDIT_BASE_DIR/validate-audit/` where
-`AUDIT_BASE_DIR="${AUDOSKILLIT_AUDIT_RUN_DIR:-{{AUTOSKILLIT_TEMP}}}"`:
+`AUDIT_BASE_DIR="${AUTOSKILLIT_AUDIT_RUN_DIR:-{{AUTOSKILLIT_TEMP}}}"`:
 
 ```
 $AUDIT_BASE_DIR/validate-audit/

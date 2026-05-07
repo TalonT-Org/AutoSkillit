@@ -777,7 +777,8 @@ class TestPromptsReExporter:
                     f"_prompts.py missing re-export: {name!r} from {mod.__name__}"
                 )
                 assert getattr(_prompts, name) is getattr(mod, name), (
-                    f"_prompts.py re-exports {name!r} as a different object than {mod.__name__}.{name}"
+                    f"_prompts.py re-exports {name!r} as a different object "
+                    f"than {mod.__name__}.{name}"
                 )
 
     def test_submodules_importable_independently(self) -> None:

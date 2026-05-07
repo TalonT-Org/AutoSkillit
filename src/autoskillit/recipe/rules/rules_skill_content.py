@@ -363,17 +363,17 @@ def _check_output_section_no_markdown_directive(ctx: ValidationContext) -> list[
         if not skill_data or not skill_data.get("expected_output_patterns"):
             continue  # Only check skills that have contracts with patterns
 
-        skill_md_path = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
-        if skill_md_path is None:
+        skill_md = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
+        if skill_md is None:
             continue  # unknown-skill-command rule handles missing skills
 
         try:
-            skill_md = skill_md_path.read_text(encoding="utf-8")
+            content = skill_md.read_text(encoding="utf-8")
         except OSError:
             continue  # file deleted or unreadable between resolution and read
 
         output_section_match = re.search(
-            r"##\s+Output\b(.+?)(?:^##|\Z)", skill_md, re.DOTALL | re.MULTILINE
+            r"##\s+Output\b(.+?)(?:^##|\Z)", content, re.DOTALL | re.MULTILINE
         )
         if not output_section_match:
             continue  # No output section — other rules handle this
@@ -504,11 +504,11 @@ def _check_transition_boundary_anti_confirmation(ctx: ValidationContext) -> list
         skill_name = resolve_skill_name(skill_cmd)
         if skill_name is None:
             continue
-        skill_md_path = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
-        if skill_md_path is None:
+        skill_md = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
+        if skill_md is None:
             continue
         try:
-            content = skill_md_path.read_text(encoding="utf-8")
+            content = skill_md.read_text(encoding="utf-8")
         except OSError:
             continue
         unprotected: list[tuple[str, str]] = []

@@ -929,3 +929,12 @@ class TestManifestApplyManifest:
             ["src/autoskillit/recipes/cook.yaml", "docs/guide.md"], manifest
         )
         assert result == {"recipe/", "docs/"}
+
+    def test_apply_manifest_sub_recipes_yaml(self) -> None:
+        manifest = manifest_load_manifest(MANIFEST_PATH)
+        assert manifest is not None
+        result = manifest_apply_manifest(
+            ["src/autoskillit/recipes/sub-recipes/research.yaml"],
+            manifest,
+        )
+        assert result == {"recipe/"}

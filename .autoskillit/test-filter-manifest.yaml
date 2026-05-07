@@ -32,6 +32,9 @@ src/autoskillit/recipes/experiment-types/*.yaml:
 src/autoskillit/recipes/methodology-traditions/*.yaml:
   - recipe/
 
+src/autoskillit/recipes/sub-recipes/*.yaml:
+  - recipe/
+
 src/autoskillit/recipe/skill_contracts.yaml:
   - contracts/
   - skills/

@@ -79,12 +79,18 @@ class DispatchRecord:
                 or d.get("l2_session_log_dir", "")
             ),
             dispatched_pid=(
-                pid_raw if pid_raw is not None else d.get("l3_pid") or d.get("l2_pid", 0)
+                pid_raw
+                if pid_raw is not None
+                else (l3_pid if (l3_pid := d.get("l3_pid")) is not None else d.get("l2_pid", 0))
             ),
             dispatched_starttime_ticks=(
                 ticks_raw
                 if ticks_raw is not None
-                else d.get("l3_starttime_ticks") or d.get("l2_starttime_ticks", 0)
+                else (
+                    l3_ticks
+                    if (l3_ticks := d.get("l3_starttime_ticks")) is not None
+                    else d.get("l2_starttime_ticks", 0)
+                )
             ),
             dispatched_boot_id=(
                 d.get("dispatched_boot_id") or d.get("l3_boot_id") or d.get("l2_boot_id", "")

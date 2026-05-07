@@ -92,6 +92,10 @@ def crash_recover_dispatch(
                         "crash_recover_dispatch: failed to mark dispatch resumable",
                         exc_info=True,
                     )
+    logger.debug(
+        "crash_recover_dispatch: no sidecar for %s — falling back to interrupted",
+        record.name,
+    )
     try:
         mark_dispatch_interrupted(state_path, record.name, reason=reason)
         return DispatchStatus.INTERRUPTED

@@ -77,9 +77,6 @@ def record_gate_outcome(
                     state.dispatches[i] = new_record
                     _write_state(state_path, state)
                     break
-            else:
-                state.dispatches.append(new_record)
-                _write_state(state_path, state)
 
             return GateRecordResult(
                 success=True,

@@ -199,3 +199,30 @@ def test_precautionary_skip_paths_do_not_contain_matching_files() -> None:
             f"Precautionary skip {skip_path!r} now contains import-layer label patterns: "
             f"{violations!r}. Move it to _LOAD_BEARING_SKIP_PATHS."
         )
+
+
+def test_no_bare_import_layer_labels_in_arch_tests() -> None:
+    """Arch test files must use IL-N, not bare L-N, for import-layer references.
+
+    test_import_layer_labels.py is exempt because its regex patterns
+    necessarily contain L-number literals as detection targets.
+    """
+    arch_dir = Path(__file__).parent
+    pattern = re.compile(r"(?<!orchestration-)(?<!IL-)\bL[0-3]\b")
+    exempt = {"test_import_layer_labels.py"}
+
+    violations: dict[str, list[str]] = {}
+    for py_file in sorted(arch_dir.glob("test_*.py")):
+        if py_file.name in exempt:
+            continue
+        for lineno, line in enumerate(py_file.read_text(encoding="utf-8").splitlines(), 1):
+            if pattern.search(line):
+                violations.setdefault(py_file.name, []).append(f"{lineno}: {line.strip()!r}")
+
+    assert not violations, (
+        "Found bare L-number import-layer labels in arch tests — use IL-N:\n"
+        + "\n".join(
+            f"  {name}:\n" + "\n".join(f"    {v}" for v in lines)
+            for name, lines in sorted(violations.items())
+        )
+    )

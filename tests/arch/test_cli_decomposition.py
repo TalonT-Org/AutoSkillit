@@ -41,7 +41,7 @@ def _body_is_only_sys_exit(node: ast.ExceptHandler) -> bool:
 
 
 # CD1
-# cli/app.py is L3 and can import from every internal layer (L0–L2), which makes
+# cli/app.py is IL-3 and can import from every internal layer (IL-0–IL-2), which makes
 # it the single easiest place for AI to dump new logic — it bypasses all layer
 # restrictions that guard other modules.  This limit exists to keep that file
 # decomposed.  Only a human may raise it beyond 750.

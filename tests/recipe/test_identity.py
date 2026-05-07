@@ -269,3 +269,31 @@ def test_check_rerun_found(tmp_path):
     assert result is not None
     assert result["rule"] == "duplicate-run-detected"
     assert "2026-04-10" in result["message"]
+
+
+def test_composite_hash_uses_content_bytes_when_provided(tmp_path):
+    """compute_composite_hash uses content_bytes instead of reading from disk."""
+    from autoskillit.recipe.identity import compute_composite_hash
+    from autoskillit.recipe.io import load_recipe
+
+    skills_dir = tmp_path / "skills"
+    skills_dir.mkdir()
+
+    p = _write_recipe(tmp_path, "test")
+    recipe = load_recipe(p)
+    bytes_data = p.read_bytes()
+
+    # Delete the file so disk read would fail
+    p.unlink()
+
+    h = compute_composite_hash(
+        p,
+        recipe,
+        skills_dir=skills_dir,
+        project_dir=tmp_path,
+        content_bytes=bytes_data,
+    )
+
+    # Should succeed using provided bytes; hash should be valid sha256: format
+    assert h.startswith("sha256:")
+    assert len(h) == 71  # sha256: prefix + 64 hex chars

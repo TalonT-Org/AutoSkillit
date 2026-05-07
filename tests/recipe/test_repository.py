@@ -242,3 +242,31 @@ def test_load_and_validate_coerces_str_project_dir_to_path(tmp_path: Path) -> No
         f"Expected Path, got {type(call_kwargs.kwargs['project_dir'])}"
     )
     assert call_kwargs.kwargs["project_dir"] == tmp_path
+
+
+def test_repository_load_and_validate_passes_recipe_list_to_api(tmp_path: Path) -> None:
+    """DefaultRecipeRepository passes its cached recipe list to _api.load_and_validate."""
+    captured_kwargs = {}
+
+    def capturing_load_and_validate(*args, **kwargs):
+        captured_kwargs.update(kwargs)
+        return {}
+
+    foo = _make_recipe_info("foo", tmp_path / "foo.yaml")
+
+    with patch.object(
+        DefaultRecipeRepository,
+        "_get_list",
+        return_value=_load_result(foo),
+    ):
+        with patch(
+            "autoskillit.recipe._api.load_and_validate",
+            side_effect=capturing_load_and_validate,
+        ):
+            repo = DefaultRecipeRepository()
+            repo.load_and_validate("foo", tmp_path)
+
+    assert "recipe_list" in captured_kwargs
+    assert captured_kwargs["recipe_list"] is not None
+    assert isinstance(captured_kwargs["recipe_list"], list)
+    assert captured_kwargs["recipe_list"][0].name == "foo"

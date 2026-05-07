@@ -22,6 +22,7 @@ def compute_composite_hash(
     *,
     skills_dir: Path,
     project_dir: Path,
+    content_bytes: bytes | None = None,
     _seen: frozenset[Path] | None = None,
 ) -> str:
     """Compute a composite hash covering the recipe, referenced skills, and sub-recipes.
@@ -36,7 +37,7 @@ def compute_composite_hash(
 
     hasher.update(b"autoskillit-composite-v1\n")
 
-    hasher.update(recipe_path.read_bytes())
+    hasher.update(content_bytes if content_bytes is not None else recipe_path.read_bytes())
 
     skill_names: set[str] = set()
     for step in recipe.steps.values():

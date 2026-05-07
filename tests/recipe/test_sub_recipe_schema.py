@@ -6,7 +6,7 @@ import pytest
 
 from autoskillit.recipe.io import _parse_step
 from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeStep
-from autoskillit.recipe.validator import validate_recipe
+from autoskillit.recipe.validator import validate_recipe_structure
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -51,7 +51,7 @@ def test_sub_recipe_is_valid_discriminator() -> None:
         },
         kitchen_rules=["no native tools"],
     )
-    errors = validate_recipe(recipe)
+    errors = validate_recipe_structure(recipe)
     # Should not error about missing discriminator
     discriminator_errors = [e for e in errors if "must have 'tool'" in e]
     assert not discriminator_errors
@@ -73,7 +73,7 @@ def test_sub_recipe_requires_gate() -> None:
         },
         kitchen_rules=["no native tools"],
     )
-    errors = validate_recipe(recipe)
+    errors = validate_recipe_structure(recipe)
     assert any("must have a 'gate' field" in e for e in errors)
 
 
@@ -93,7 +93,7 @@ def test_sub_recipe_gate_must_be_known_ingredient() -> None:
         },
         kitchen_rules=["no native tools"],
     )
-    errors = validate_recipe(recipe)
+    errors = validate_recipe_structure(recipe)
     assert any("undeclared ingredient 'flag_mode'" in e for e in errors)
 
 
@@ -114,7 +114,7 @@ def test_sub_recipe_discriminator_exclusion() -> None:
         },
         kitchen_rules=["no native tools"],
     )
-    errors = validate_recipe(recipe)
+    errors = validate_recipe_structure(recipe)
     assert any("sub_recipe" in e and "mutually exclusive" in e for e in errors)
 
 
@@ -134,5 +134,5 @@ def test_sub_recipe_step_requires_on_success() -> None:
         },
         kitchen_rules=["no native tools"],
     )
-    errors = validate_recipe(recipe)
+    errors = validate_recipe_structure(recipe)
     assert any("must have 'on_success'" in e for e in errors)

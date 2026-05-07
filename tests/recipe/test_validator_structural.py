@@ -13,7 +13,7 @@ from autoskillit.recipe.io import (
     load_recipe,
 )
 from autoskillit.recipe.schema import Recipe, RecipeStep
-from autoskillit.recipe.validator import validate_recipe
+from autoskillit.recipe.validator import validate_recipe_structure
 from tests.recipe.conftest import VALID_RECIPE, _write_yaml
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
@@ -27,7 +27,7 @@ pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 class TestValidateRecipe:
     def test_valid_recipe_no_errors(self, tmp_path: Path) -> None:
         wf = load_recipe(_write_yaml(tmp_path / "recipe.yaml", VALID_RECIPE))
-        errors = validate_recipe(wf)
+        errors = validate_recipe_structure(wf)
         assert errors == []
 
     # WF2
@@ -35,7 +35,7 @@ class TestValidateRecipe:
         data = {**VALID_RECIPE, "name": ""}
         f = _write_yaml(tmp_path / "recipe.yaml", data)
         wf = load_recipe(f)
-        errors = validate_recipe(wf)
+        errors = validate_recipe_structure(wf)
         assert any("name" in e.lower() for e in errors)
 
     # WF3
@@ -43,7 +43,7 @@ class TestValidateRecipe:
         data = {"name": "no-steps", "description": "Missing steps", "kitchen_rules": ["test"]}
         f = _write_yaml(tmp_path / "recipe.yaml", data)
         wf = load_recipe(f)
-        errors = validate_recipe(wf)
+        errors = validate_recipe_structure(wf)
         assert any("step" in e.lower() for e in errors)
 
     # WF5
@@ -59,7 +59,7 @@ class TestValidateRecipe:
         }
         f = _write_yaml(tmp_path / "recipe.yaml", data)
         wf = load_recipe(f)
-        errors = validate_recipe(wf)
+        errors = validate_recipe_structure(wf)
         assert any("nonexistent" in e for e in errors)
 
     # WF6
@@ -69,7 +69,7 @@ class TestValidateRecipe:
         assert len(yamls) >= 4
         for f in yamls:
             wf = load_recipe(f)
-            errors = validate_recipe(wf)
+            errors = validate_recipe_structure(wf)
             assert errors == [], f"Validation errors in {f.name}: {errors}"
 
     # WF10
@@ -82,7 +82,7 @@ class TestValidateRecipe:
         }
         f = _write_yaml(tmp_path / "recipe.yaml", data)
         wf = load_recipe(f)
-        errors = validate_recipe(wf)
+        errors = validate_recipe_structure(wf)
         assert any("message" in e.lower() for e in errors)
 
     def test_step_needs_tool_or_action(self, tmp_path: Path) -> None:
@@ -94,7 +94,7 @@ class TestValidateRecipe:
         }
         f = _write_yaml(tmp_path / "recipe.yaml", data)
         wf = load_recipe(f)
-        errors = validate_recipe(wf)
+        errors = validate_recipe_structure(wf)
         assert any("tool" in e and "action" in e for e in errors)
 
     def test_input_reference_validation(self, tmp_path: Path) -> None:
@@ -108,7 +108,7 @@ class TestValidateRecipe:
         }
         f = _write_yaml(tmp_path / "recipe.yaml", data)
         wf = load_recipe(f)
-        errors = validate_recipe(wf)
+        errors = validate_recipe_structure(wf)
         assert any("missing_input" in e for e in errors)
 
     def test_retry_block_raises_on_load(self, tmp_path: Path) -> None:
@@ -143,7 +143,7 @@ class TestValidateRecipe:
             "steps": {"run": {"python": "mod.fn", "tool": "run_cmd"}},
         }
         wf = load_recipe(_write_yaml(tmp_path / "recipe.yaml", data))
-        errors = validate_recipe(wf)
+        errors = validate_recipe_structure(wf)
         assert any("python" in e and "tool" in e for e in errors)
 
     def test_python_step_requires_dotted_path(self, tmp_path: Path) -> None:
@@ -154,7 +154,7 @@ class TestValidateRecipe:
             "steps": {"check": {"python": "bare_name"}},
         }
         wf = load_recipe(_write_yaml(tmp_path / "recipe.yaml", data))
-        errors = validate_recipe(wf)
+        errors = validate_recipe_structure(wf)
         assert any("dotted" in e.lower() or "module" in e.lower() for e in errors)
 
     # CAP3
@@ -175,7 +175,7 @@ class TestValidateRecipe:
             },
         }
         wf = load_recipe(_write_yaml(tmp_path / "recipe.yaml", data))
-        errors = validate_recipe(wf)
+        errors = validate_recipe_structure(wf)
         assert not any("capture" in e for e in errors)
 
     # CAP4
@@ -190,7 +190,7 @@ class TestValidateRecipe:
             },
         }
         wf = load_recipe(_write_yaml(tmp_path / "recipe.yaml", data))
-        errors = validate_recipe(wf)
+        errors = validate_recipe_structure(wf)
         assert any("result" in e and "capture" in e for e in errors)
 
     # CAP5
@@ -205,7 +205,7 @@ class TestValidateRecipe:
             },
         }
         wf = load_recipe(_write_yaml(tmp_path / "recipe.yaml", data))
-        errors = validate_recipe(wf)
+        errors = validate_recipe_structure(wf)
         assert any("capture" in e and "result" in e for e in errors)
 
     # CAP6
@@ -229,7 +229,7 @@ class TestValidateRecipe:
             },
         }
         wf = load_recipe(_write_yaml(tmp_path / "recipe.yaml", data))
-        errors = validate_recipe(wf)
+        errors = validate_recipe_structure(wf)
         assert not any("context" in e for e in errors)
 
     # CAP7
@@ -247,7 +247,7 @@ class TestValidateRecipe:
             },
         }
         wf = load_recipe(_write_yaml(tmp_path / "recipe.yaml", data))
-        errors = validate_recipe(wf)
+        errors = validate_recipe_structure(wf)
         assert any("nonexistent" in e and "context" in e for e in errors)
 
     # CAP8
@@ -270,7 +270,7 @@ class TestValidateRecipe:
             },
         }
         wf = load_recipe(_write_yaml(tmp_path / "recipe.yaml", data))
-        errors = validate_recipe(wf)
+        errors = validate_recipe_structure(wf)
         assert any("wp" in e and "context" in e for e in errors)
 
     # CON1
@@ -283,7 +283,7 @@ class TestValidateRecipe:
         data = {**VALID_RECIPE}
         data.pop("kitchen_rules", None)
         wf = load_recipe(_write_yaml(tmp_path / "recipe.yaml", data))
-        errors = validate_recipe(wf)
+        errors = validate_recipe_structure(wf)
         warnings = [e for e in errors if "kitchen_rules" in e.lower()]
         assert warnings
 
@@ -319,7 +319,7 @@ class TestValidateRecipe:
         }
         f = _write_yaml(tmp_path / "recipe.yaml", data)
         wf = load_recipe(f)
-        errors = validate_recipe(wf)
+        errors = validate_recipe_structure(wf)
         assert any("on_result" in e and "on_success" in e for e in errors)
 
     # T_OR6
@@ -342,7 +342,7 @@ class TestValidateRecipe:
         }
         f = _write_yaml(tmp_path / "recipe.yaml", data)
         wf = load_recipe(f)
-        errors = validate_recipe(wf)
+        errors = validate_recipe_structure(wf)
         assert errors == []
 
     # VER3
@@ -358,7 +358,7 @@ class TestValidateRecipe:
             "autoskillit_version": "0.2.0",
         }
         wf = _parse_recipe(data)
-        errors = validate_recipe(wf)
+        errors = validate_recipe_structure(wf)
         assert errors == []
 
     def test_validator_rejects_zero_stale_threshold(self) -> None:
@@ -368,7 +368,7 @@ class TestValidateRecipe:
             steps={"s": RecipeStep(tool="run_skill", on_success="done", stale_threshold=0)},
             kitchen_rules=["test"],
         )
-        errors = validate_recipe(recipe)
+        errors = validate_recipe_structure(recipe)
         assert any("stale_threshold" in e for e in errors)
 
     def test_validator_rejects_negative_stale_threshold(self) -> None:
@@ -378,7 +378,7 @@ class TestValidateRecipe:
             steps={"s": RecipeStep(tool="run_skill", on_success="done", stale_threshold=-1)},
             kitchen_rules=["test"],
         )
-        errors = validate_recipe(recipe)
+        errors = validate_recipe_structure(recipe)
         assert any("stale_threshold" in e for e in errors)
 
     def test_validator_accepts_positive_stale_threshold(self) -> None:
@@ -388,7 +388,7 @@ class TestValidateRecipe:
             steps={"s": RecipeStep(tool="run_skill", on_success="done", stale_threshold=2400)},
             kitchen_rules=["test"],
         )
-        errors = validate_recipe(recipe)
+        errors = validate_recipe_structure(recipe)
         assert not any("stale_threshold" in e for e in errors)
 
     def test_validator_rejects_negative_idle_output_timeout(self) -> None:
@@ -398,7 +398,7 @@ class TestValidateRecipe:
             steps={"s": RecipeStep(tool="run_skill", on_success="done", idle_output_timeout=-1)},
             kitchen_rules=["test"],
         )
-        errors = validate_recipe(recipe)
+        errors = validate_recipe_structure(recipe)
         assert any("idle_output_timeout" in e for e in errors)
 
     def test_validator_accepts_zero_idle_output_timeout(self) -> None:
@@ -409,7 +409,7 @@ class TestValidateRecipe:
             steps={"s": RecipeStep(tool="run_skill", on_success="done", idle_output_timeout=0)},
             kitchen_rules=["test"],
         )
-        errors = validate_recipe(recipe)
+        errors = validate_recipe_structure(recipe)
         assert not any("idle_output_timeout" in e for e in errors)
 
     def test_validator_accepts_positive_idle_output_timeout(self) -> None:
@@ -419,5 +419,11 @@ class TestValidateRecipe:
             steps={"s": RecipeStep(tool="run_skill", on_success="done", idle_output_timeout=120)},
             kitchen_rules=["test"],
         )
-        errors = validate_recipe(recipe)
+        errors = validate_recipe_structure(recipe)
         assert not any("idle_output_timeout" in e for e in errors)
+
+
+def test_validate_recipe_structure_importable() -> None:
+    from autoskillit.recipe import validate_recipe_structure
+
+    assert callable(validate_recipe_structure)

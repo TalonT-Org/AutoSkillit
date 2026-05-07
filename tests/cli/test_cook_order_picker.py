@@ -528,7 +528,7 @@ class TestOrderResumeParsing:
                 return_value=MagicMock(path=tmp_path / "dummy.yaml", name="my-recipe"),
             ),
             patch("autoskillit.recipe.load_recipe", return_value=MagicMock()),
-            patch("autoskillit.recipe.validate_recipe", return_value=[]),
+            patch("autoskillit.recipe.validate_recipe_structure", return_value=[]),
             patch("builtins.input", return_value=""),
         ):
             with pytest.raises(SystemExit) as exc_info:

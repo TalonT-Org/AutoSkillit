@@ -149,7 +149,7 @@ from autoskillit.recipe.validator import (  # noqa: E402
     analyze_dataflow,
     make_validation_context,
     run_semantic_rules,
-    validate_recipe,
+    validate_recipe_structure,
 )
 
 __all__ = [
@@ -180,7 +180,7 @@ __all__ = [
     "list_recipes",
     "find_recipe_by_name",
     "iter_steps_with_context",
-    "validate_recipe",
+    "validate_recipe_structure",
     "make_validation_context",
     "run_semantic_rules",
     "analyze_dataflow",

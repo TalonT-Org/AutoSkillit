@@ -323,7 +323,7 @@ def test_implementation_recipe_valid():
     from pathlib import Path
 
     from autoskillit.recipe.io import load_recipe
-    from autoskillit.recipe.validator import validate_recipe
+    from autoskillit.recipe.validator import validate_recipe_structure
 
     recipe_path = (
         Path(__file__).parent.parent.parent
@@ -333,5 +333,5 @@ def test_implementation_recipe_valid():
         / "implementation.yaml"
     )
     recipe = load_recipe(recipe_path)
-    errors = validate_recipe(recipe)
+    errors = validate_recipe_structure(recipe)
     assert not errors, f"implementation.yaml failed validation: {errors}"

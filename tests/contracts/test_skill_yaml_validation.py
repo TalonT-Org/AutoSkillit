@@ -20,7 +20,7 @@ def test_skill_md_yaml_examples_are_valid_workflows() -> None:
         _parse_recipe as _parse_workflow,
     )
     from autoskillit.recipe.validator import (
-        validate_recipe as validate_workflow,
+        validate_recipe_structure as validate_workflow,
     )
 
     yaml_block_re = re.compile(r"```yaml\n(.*?)```", re.DOTALL)

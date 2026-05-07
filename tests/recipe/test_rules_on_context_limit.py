@@ -4,7 +4,7 @@ import pytest
 
 from autoskillit.core.types import Severity
 from autoskillit.recipe.schema import Recipe, RecipeStep
-from autoskillit.recipe.validator import run_semantic_rules
+from autoskillit.recipe.validator import run_semantic_rules, validate_recipe_structure
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -14,7 +14,6 @@ class TestOnContextLimitField:
 
     def test_on_context_limit_invalid_target_raises_validation_error(self) -> None:
         """on_context_limit must reference a declared step name."""
-        from autoskillit.recipe.validator import validate_recipe
 
         recipe = Recipe(
             name="test",
@@ -34,13 +33,12 @@ class TestOnContextLimitField:
                 "done": RecipeStep(action="stop", message="done"),
             },
         )
-        errors = validate_recipe(recipe)
+        errors = validate_recipe_structure(recipe)
         assert errors, "Expected validation errors for unknown on_context_limit target"
         assert any("on_context_limit" in e for e in errors)
 
     def test_on_context_limit_valid_target_passes_validation(self) -> None:
         """on_context_limit referencing a valid step passes validation."""
-        from autoskillit.recipe.validator import validate_recipe
 
         recipe = Recipe(
             name="test",
@@ -67,12 +65,11 @@ class TestOnContextLimitField:
                 "done": RecipeStep(action="stop", message="done"),
             },
         )
-        errors = validate_recipe(recipe)
+        errors = validate_recipe_structure(recipe)
         assert not errors, f"Expected no errors but got: {errors}"
 
     def test_on_exhausted_invalid_target_raises_validation_error(self) -> None:
         """on_exhausted must reference a declared step name or be a reserved terminal."""
-        from autoskillit.recipe.validator import validate_recipe
 
         recipe = Recipe(
             name="test",
@@ -92,12 +89,11 @@ class TestOnContextLimitField:
                 "done": RecipeStep(action="stop", message="done"),
             },
         )
-        errors = validate_recipe(recipe)
+        errors = validate_recipe_structure(recipe)
         assert errors, "Expected validation errors for unknown on_exhausted target"
 
     def test_on_exhausted_escalate_reserved_passes_validation(self) -> None:
         """on_exhausted: 'escalate' is reserved — passes validation without an escalate step."""
-        from autoskillit.recipe.validator import validate_recipe
 
         recipe = Recipe(
             name="test",
@@ -116,7 +112,7 @@ class TestOnContextLimitField:
                 "done": RecipeStep(action="stop", message="done"),
             },
         )
-        errors = validate_recipe(recipe)
+        errors = validate_recipe_structure(recipe)
         assert not errors, f"Expected no errors but got: {errors}"
 
     def test_unbounded_cycle_without_retries_produces_warning(self) -> None:

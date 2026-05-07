@@ -252,11 +252,11 @@ class RecipeMigrationAdapter(HeadlessMigrationAdapter):
 
     def validate(self, path: Path) -> tuple[bool, str]:
         from autoskillit.recipe import load_recipe as _parse_recipe  # noqa: PLC0415
-        from autoskillit.recipe import validate_recipe  # noqa: PLC0415
+        from autoskillit.recipe import validate_recipe_structure  # noqa: PLC0415
 
         try:
             recipe = _parse_recipe(path)
-            errors = validate_recipe(recipe)
+            errors = validate_recipe_structure(recipe)
             if errors:
                 return False, "; ".join(str(e) for e in errors)
             return True, ""

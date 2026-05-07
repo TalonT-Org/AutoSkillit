@@ -165,6 +165,7 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
         SkillInput(
             name=inp["name"],
             type=inp["type"],
+            # Skill inputs default to optional — skills are permissive by design.
             required=inp.get("required", False),
             recommended=inp.get("recommended", False),
         )
@@ -222,6 +223,7 @@ def get_callable_contract(
         SkillInput(
             name=inp["name"],
             type=inp["type"],
+            # Callable inputs default to required — callables are strict by design.
             required=inp.get("required", True),
             nullable=inp.get("nullable", True),
         )

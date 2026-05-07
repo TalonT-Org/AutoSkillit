@@ -158,13 +158,13 @@ def test_load_and_validate_returns_cached_result_on_second_call(tmp_path, monkey
     recipe_yaml.write_text(MINIMAL_RECIPE_YAML)
 
     calls = []
-    real_validate = api_mod.validate_recipe
+    real_validate = api_mod.validate_recipe_structure
 
     def counting_validate(recipe):
         calls.append(1)
         return real_validate(recipe)
 
-    monkeypatch.setattr(api_mod, "validate_recipe", counting_validate)
+    monkeypatch.setattr(api_mod, "validate_recipe_structure", counting_validate)
 
     api_mod.load_and_validate("myrecipe", tmp_path)
     api_mod.load_and_validate("myrecipe", tmp_path)
@@ -184,13 +184,13 @@ def test_load_and_validate_cache_invalidated_on_recipe_mtime_change(tmp_path, mo
     recipe_yaml.write_text(MINIMAL_RECIPE_YAML)
 
     calls = []
-    real_validate = api_mod.validate_recipe
+    real_validate = api_mod.validate_recipe_structure
 
     def counting_validate(recipe):
         calls.append(1)
         return real_validate(recipe)
 
-    monkeypatch.setattr(api_mod, "validate_recipe", counting_validate)
+    monkeypatch.setattr(api_mod, "validate_recipe_structure", counting_validate)
 
     api_mod.load_and_validate("myrecipe", tmp_path)
     recipe_yaml.touch()
@@ -210,13 +210,13 @@ def test_load_and_validate_cache_invalidated_on_pkg_version_change(tmp_path, mon
     (recipes_dir / "myrecipe.yaml").write_text(MINIMAL_RECIPE_YAML)
 
     calls = []
-    real_validate = api_mod.validate_recipe
+    real_validate = api_mod.validate_recipe_structure
 
     def counting_validate(recipe):
         calls.append(1)
         return real_validate(recipe)
 
-    monkeypatch.setattr(api_mod, "validate_recipe", counting_validate)
+    monkeypatch.setattr(api_mod, "validate_recipe_structure", counting_validate)
 
     api_mod.load_and_validate("myrecipe", tmp_path)
     monkeypatch.setattr(api_mod, "_get_pkg_version", lambda: "99.99.99")
@@ -236,13 +236,13 @@ def test_load_and_validate_cache_invalidated_on_dir_mtime_change(tmp_path, monke
     (recipes_dir / "myrecipe.yaml").write_text(MINIMAL_RECIPE_YAML)
 
     calls = []
-    real_validate = api_mod.validate_recipe
+    real_validate = api_mod.validate_recipe_structure
 
     def counting_validate(recipe):
         calls.append(1)
         return real_validate(recipe)
 
-    monkeypatch.setattr(api_mod, "validate_recipe", counting_validate)
+    monkeypatch.setattr(api_mod, "validate_recipe_structure", counting_validate)
 
     api_mod.load_and_validate("myrecipe", tmp_path)
     (recipes_dir / "newrecipe.yaml").write_text(
@@ -282,7 +282,7 @@ def test_load_and_validate_logs_stage_timing_at_debug(tmp_path, monkeypatch):
     assert len(stage_calls) >= 4
     assert "find_recipe" in stage_calls
     assert "yaml_parse" in stage_calls
-    assert "validate_recipe" in stage_calls
+    assert "validate_recipe_structure" in stage_calls
     assert "semantic_rules" in stage_calls
 
 

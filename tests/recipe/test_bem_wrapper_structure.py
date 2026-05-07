@@ -2,7 +2,7 @@ import pytest
 
 from autoskillit.recipe.contracts import load_bundled_manifest
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
-from autoskillit.recipe.validator import validate_recipe
+from autoskillit.recipe.validator import validate_recipe_structure
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -25,7 +25,7 @@ def test_bem_wrapper_recipe_loads():
 
 def test_bem_wrapper_passes_validation():
     recipe = _load()
-    errors = validate_recipe(recipe)
+    errors = validate_recipe_structure(recipe)
     assert errors == [], f"Unexpected validation errors: {errors}"
 
 

@@ -717,6 +717,13 @@ class TestGetPrReviews:
 
 
 class TestBulkCloseIssues:
+    @pytest.fixture(autouse=True)
+    def _mock_rate_limit_sleep(self, monkeypatch):
+        monkeypatch.setattr(
+            "autoskillit.server.tools.tools_pr_ops.asyncio.sleep",
+            AsyncMock(),
+        )
+
     @pytest.mark.anyio
     async def test_closes_all_issues_successfully(self, tool_ctx):
         for _ in range(3):

@@ -880,3 +880,6 @@ def test_rules_pass_ctx_skill_resolver_to_resolve_skill_md(tmp_path: Path) -> No
     assert len(non_none) > 0, (
         "Expected rule functions to pass ctx.skill_resolver to _resolve_skill_md"
     )
+    assert all(r is resolver for r in non_none), (
+        "Expected every non-None resolver to be the exact instance from ctx"
+    )

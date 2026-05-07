@@ -75,6 +75,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_research_implement_recipe.py` | Tests for research-implement sub-recipe structure |
 | `test_research_output_mode.py` | Tests for research output mode configuration |
 | `test_research_recipe_diag.py` | Tests for research recipe diagnostic output |
+| `test_research_campaign_rules.py` | Contract tests for research-campaign.yaml semantic rules |
 | `test_research_campaign_structure.py` | Structural assertions for the bundled research-campaign.yaml |
 | `test_research_review_recipe.py` | Tests for research-review sub-recipe structure |
 | `test_research_stage_data_step.py` | Tests for stage-data step in research recipes |

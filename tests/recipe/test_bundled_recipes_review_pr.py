@@ -269,29 +269,12 @@ class TestLocalReviewRoundsDefault:
         assert ing.default is not None
         int(ing.default)  # raises ValueError if not parseable
 
-    def test_local_review_rounds_default_matches_config_resolved_value(
-        self, recipe: object
-    ) -> None:
-        """T5: display default and runtime default must agree (both non-empty or both empty)."""
-        from autoskillit.config.ingredient_defaults import resolve_ingredient_defaults
-
+    def test_local_review_rounds_type_is_integer(self, recipe: object) -> None:
+        """T5: local_review_rounds must declare type=integer for semantic rule enforcement."""
         ing = recipe.ingredients["local_review_rounds"]
-        project_dir = str(builtin_recipes_dir())
-        resolved = resolve_ingredient_defaults(project_dir)
-        resolved_value = resolved.get("local_review_rounds", "")
-        # If YAML default is empty (auto-detect), resolved must be non-empty.
-        # If YAML default is non-empty, resolved must match it.
-        if ing.default == "":
-            assert resolved_value != "", (
-                f"{recipe.name}: local_review_rounds.default='' but "
-                f"resolve_ingredient_defaults also returned '' — "
-                f"display and runtime would both get the empty sentinel"
-            )
-        else:
-            assert ing.default == resolved_value, (
-                f"{recipe.name}: local_review_rounds.default={ing.default!r} differs from "
-                f"resolve_ingredient_defaults={resolved_value!r}"
-            )
+        assert ing.type == "integer", (
+            f"{recipe.name}: local_review_rounds.type must be 'integer', got {ing.type!r}"
+        )
 
 
 class TestReviewMaxRetriesDefault:

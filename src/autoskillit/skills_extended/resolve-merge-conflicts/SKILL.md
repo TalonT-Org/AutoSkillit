@@ -43,9 +43,9 @@ hooks:
 
 - Called by queue-ejection, direct-merge, immediate-merge, and CI-conflict paths
   when `merge_worktree` fails with `failed_step=rebase` and `state=worktree_intact_rebase_aborted`
-- Called by the `rebase_conflict_fix` step in ``implementation.yaml``,
-  ``implementation-groups.yaml``, and ``remediation.yaml`` when ``merge_worktree`` returns
-  ``failed_step == 'rebase'``
+- Called by the `rebase_conflict_fix` step in `implementation.yaml`,
+  `implementation-groups.yaml`, and `remediation.yaml` when `merge_worktree` returns
+  `failed_step == 'rebase'`
 - The worktree must still be intact (rebase aborted cleanly, no partial state)
 
 ## Workflow

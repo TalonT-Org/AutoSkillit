@@ -47,9 +47,6 @@ def test_merge_pr_skill_references_plain_squash_fallback() -> None:
     )
 
 
-# Tests 1e and 1f: pre-flight mergeability check and timeout output template
-
-
 def test_merge_pr_skill_has_pre_flight_mergeability_check() -> None:
     """Test 1e: merge-pr SKILL.md must contain a pre-flight mergeability check."""
     content = SKILL_PATH.read_text()

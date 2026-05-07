@@ -614,13 +614,8 @@ def test_pmp_push_ejected_fix_has_force_true(recipe) -> None:
     )
 
 
-# ---------------------------------------------------------------------------
-# T6: merge-prs.yaml annotate_pr_diff step must pass local_review_rounds explicitly
-# ---------------------------------------------------------------------------
-
-
 def test_annotate_pr_diff_passes_local_review_rounds_explicitly(recipe) -> None:
-    """T6: annotate_pr_diff step must include local_review_rounds in its with_args.
+    """annotate_pr_diff step must include local_review_rounds in its with_args.
 
     When local_review_rounds is omitted, the Python default '' is passed to
     annotate_pr_diff, forcing review_mode='github' regardless of user config.
@@ -631,11 +626,6 @@ def test_annotate_pr_diff_passes_local_review_rounds_explicitly(recipe) -> None:
         "annotate_pr_diff step must explicitly pass local_review_rounds to remove "
         "the dependency on the Python default '' which forces github review mode"
     )
-
-
-# ---------------------------------------------------------------------------
-# merged=false guard, loop guards, auto_trigger
-# ---------------------------------------------------------------------------
 
 
 def test_merge_pr_captures_merged(recipe) -> None:

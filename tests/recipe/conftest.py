@@ -10,7 +10,8 @@ import yaml
 from autoskillit.recipe.io import _parse_step, builtin_recipes_dir, load_recipe
 from autoskillit.recipe.schema import Recipe, RecipeStep
 
-# Known violations fixed in Part C — excluded from general semantic-error assertions.
+# Excluded from general semantic-error assertions — these rules fire on recipes
+# that have not yet been updated (tracked in PR #2158).
 NO_AUTOSKILLIT_IMPORT = "no-autoskillit-import-in-skill-python-block"
 KNOWN_PART_B_VIOLATIONS: frozenset[str] = frozenset(
     {

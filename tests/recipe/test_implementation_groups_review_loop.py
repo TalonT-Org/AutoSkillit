@@ -86,7 +86,6 @@ def test_check_review_loop_with_args_has_previous_verdict(recipe) -> None:
     assert "review_verdict" in step.with_args["previous_verdict"]
 
 
-# Test 1d: ci_watch bounded loop
 def test_ci_watch_timed_out_routes_to_guard(recipe) -> None:
     """Test 1d: ci_watch timed_out route goes to check_ci_timed_out_loop, not self."""
     step = recipe.steps["ci_watch"]

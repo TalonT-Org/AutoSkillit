@@ -12,10 +12,10 @@ pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
 def test_rule_def_is_frozen() -> None:
-    assert dataclasses.fields(RuleDef)
+    assert dataclasses.is_dataclass(RuleDef)
     assert RuleDef.__dataclass_params__.frozen is True
 
 
 def test_block_rule_def_is_frozen() -> None:
-    assert dataclasses.fields(BlockRuleDef)
+    assert dataclasses.is_dataclass(BlockRuleDef)
     assert BlockRuleDef.__dataclass_params__.frozen is True

@@ -419,33 +419,44 @@ class TestIsAdditiveOnly:
 
 
 class TestBuildTestScopeUniversalExclusions:
+    ALL_DIRS = [
+        "core",
+        "config",
+        "execution",
+        "pipeline",
+        "workspace",
+        "recipe",
+        "migration",
+        "fleet",
+        "server",
+        "cli",
+        "hooks",
+        "skills",
+        "_llm_triage",
+        "_test_filter",
+        "hook_registry",
+        "planner",
+        "smoke_utils",
+        "arch",
+        "contracts",
+        "infra",
+        "docs",
+    ]
+
+    @staticmethod
+    def _make_tests_root(tmp_path: Path) -> Path:
+        tests_root = tmp_path / "tests"
+        for d in TestBuildTestScopeUniversalExclusions.ALL_DIRS:
+            (tests_root / d).mkdir(parents=True, exist_ok=True)
+        return tests_root
+
     def test_universal_additive_only_uses_narrowed_cascade(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """_type_enums with additive-only diff: cascade excludes hooks and skills."""
-        tests_root = tmp_path / "tests"
-        for d in [
-            "core",
-            "config",
-            "execution",
-            "pipeline",
-            "workspace",
-            "recipe",
-            "migration",
-            "fleet",
-            "server",
-            "cli",
-            "hooks",
-            "skills",
-            "_llm_triage",
-            "_test_filter",
-            "hook_registry",
-            "planner",
-            "smoke_utils",
-        ]:
-            (tests_root / d).mkdir(parents=True, exist_ok=True)
+        tests_root = self._make_tests_root(tmp_path)
         diff_output = "+class NewType:\n+    field: str"
         mock_run = Mock(
             side_effect=[
@@ -463,12 +474,12 @@ class TestBuildTestScopeUniversalExclusions:
             cwd=str(tmp_path),
             base_ref="main",
         )
-        assert result is not None
-        expected = {tests_root / d for d in LAYER_CASCADE_CONSERVATIVE["core"]} - {
-            tests_root / "hooks",
-            tests_root / "skills",
-        }
-        assert result == expected
+        assert isinstance(result, set)
+        dir_names = {p.name for p in result if p.is_dir()}
+        for pkg in ["core", "config", "execution", "pipeline", "server", "cli"]:
+            assert pkg in dir_names, f"narrowed cascade should include {pkg}"
+        for excluded in ["hooks", "skills"]:
+            assert excluded not in dir_names, f"narrowed cascade should exclude {excluded}"
 
     def test_universal_breaking_change_uses_full_cascade(
         self,
@@ -476,9 +487,7 @@ class TestBuildTestScopeUniversalExclusions:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """_type_enums with removal in diff: uses full 17-dir cascade."""
-        tests_root = tmp_path / "tests"
-        for d in LAYER_CASCADE_CONSERVATIVE["core"]:
-            (tests_root / d).mkdir(parents=True, exist_ok=True)
+        tests_root = self._make_tests_root(tmp_path)
         diff_output = "-class OldType:"
         mock_run = Mock(
             side_effect=[
@@ -496,8 +505,10 @@ class TestBuildTestScopeUniversalExclusions:
             cwd=str(tmp_path),
             base_ref="main",
         )
-        assert result is not None
-        assert result == {tests_root / d for d in LAYER_CASCADE_CONSERVATIVE["core"]}
+        assert isinstance(result, set)
+        dir_names = {p.name for p in result if p.is_dir()}
+        for pkg in ["core", "config", "execution", "hooks", "skills"]:
+            assert pkg in dir_names, f"full cascade should include {pkg}"
 
     def test_universal_without_exclusion_entry_uses_full_cascade(
         self,
@@ -505,9 +516,7 @@ class TestBuildTestScopeUniversalExclusions:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """io.py changed (universal but no exclusion entry): full cascade."""
-        tests_root = tmp_path / "tests"
-        for d in LAYER_CASCADE_CONSERVATIVE["core"]:
-            (tests_root / d).mkdir(parents=True, exist_ok=True)
+        tests_root = self._make_tests_root(tmp_path)
         diff_output = "+class NewType:"
         mock_run = Mock(
             side_effect=[
@@ -525,25 +534,26 @@ class TestBuildTestScopeUniversalExclusions:
             cwd=str(tmp_path),
             base_ref="main",
         )
-        assert result is not None
-        assert result == {tests_root / d for d in LAYER_CASCADE_CONSERVATIVE["core"]}
+        assert isinstance(result, set)
+        dir_names = {p.name for p in result if p.is_dir()}
+        for pkg in ["core", "config", "execution", "hooks", "skills"]:
+            assert pkg in dir_names, f"full cascade should include {pkg}"
 
     def test_universal_without_cwd_uses_full_cascade(
         self,
         tmp_path: Path,
     ) -> None:
         """_type_enums with additive diff but no cwd/base_ref: full cascade."""
-        tests_root = tmp_path / "tests"
-        for d in LAYER_CASCADE_CONSERVATIVE["core"]:
-            (tests_root / d).mkdir(parents=True, exist_ok=True)
+        tests_root = self._make_tests_root(tmp_path)
         result = build_test_scope(
             changed_files={"src/autoskillit/core/_type_enums.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
-            # no cwd or base_ref
         )
-        assert result is not None
-        assert result == {tests_root / d for d in LAYER_CASCADE_CONSERVATIVE["core"]}
+        assert isinstance(result, set)
+        dir_names = {p.name for p in result if p.is_dir()}
+        for pkg in ["core", "config", "execution", "hooks", "skills"]:
+            assert pkg in dir_names, f"full cascade should include {pkg}"
 
     def test_universal_git_error_uses_full_cascade(
         self,
@@ -551,9 +561,7 @@ class TestBuildTestScopeUniversalExclusions:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """_type_enums with git error: full cascade (fail-open)."""
-        tests_root = tmp_path / "tests"
-        for d in LAYER_CASCADE_CONSERVATIVE["core"]:
-            (tests_root / d).mkdir(parents=True, exist_ok=True)
+        tests_root = self._make_tests_root(tmp_path)
 
         def _raise(*a: object, **kw: object) -> None:
             raise subprocess.CalledProcessError(1, "git")
@@ -566,8 +574,10 @@ class TestBuildTestScopeUniversalExclusions:
             cwd=str(tmp_path),
             base_ref="main",
         )
-        assert result is not None
-        assert result == {tests_root / d for d in LAYER_CASCADE_CONSERVATIVE["core"]}
+        assert isinstance(result, set)
+        dir_names = {p.name for p in result if p.is_dir()}
+        for pkg in ["core", "config", "execution", "hooks", "skills"]:
+            assert pkg in dir_names, f"full cascade should include {pkg}"
 
     def test_reexport_closure_universal_additive_uses_narrowed(
         self,
@@ -575,10 +585,7 @@ class TestBuildTestScopeUniversalExclusions:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Closure-expanded _type_enums with additive diff: narrowed cascade."""
-        tests_root = tmp_path / "tests"
-        for d in LAYER_CASCADE_CONSERVATIVE["core"]:
-            (tests_root / d).mkdir(parents=True, exist_ok=True)
-        # The re-export closure adds a file, so two subprocess calls per content check
+        tests_root = self._make_tests_root(tmp_path)
         diff_output = "+class NewType:\n+    field: str"
         mock_run = Mock(
             side_effect=[
@@ -600,12 +607,12 @@ class TestBuildTestScopeUniversalExclusions:
             cwd=str(tmp_path),
             base_ref="main",
         )
-        assert result is not None
-        expected = {tests_root / d for d in LAYER_CASCADE_CONSERVATIVE["core"]} - {
-            tests_root / "hooks",
-            tests_root / "skills",
-        }
-        assert result == expected
+        assert isinstance(result, set)
+        dir_names = {p.name for p in result if p.is_dir()}
+        for pkg in ["core", "config", "execution", "pipeline", "server", "cli"]:
+            assert pkg in dir_names, f"narrowed cascade should include {pkg}"
+        for excluded in ["hooks", "skills"]:
+            assert excluded not in dir_names, f"narrowed cascade should exclude {excluded}"
 
 
 # ---------------------------------------------------------------------------

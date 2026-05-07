@@ -311,6 +311,7 @@ def test_no_per_test_config_cache_clear_fixture():
     import pytest
 
     conftest_path = Path(__file__).resolve().parent / "conftest.py"
+    assert conftest_path.exists(), f"conftest.py not found at {conftest_path}"
     tree = ast.parse(conftest_path.read_text())
     for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef) and node.name == "_clear_resolve_test_config_cache":

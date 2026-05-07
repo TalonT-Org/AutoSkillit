@@ -336,11 +336,16 @@ def compute_skill_closure(
 class SkillsDirectoryProvider:
     """Provides bundled skill content with tier-aware frontmatter injection."""
 
-    def __init__(self, temp_dir_relpath: str = ".autoskillit/temp") -> None:
+    def __init__(
+        self,
+        temp_dir_relpath: str = ".autoskillit/temp",
+        default_base_branch: str = "main",
+    ) -> None:
         if "\n" in temp_dir_relpath or ": " in temp_dir_relpath:
             raise ValueError(f"temp_dir_relpath is YAML-unsafe: {temp_dir_relpath!r}")
         self._resolver = DefaultSkillResolver()
         self._temp_dir_relpath = temp_dir_relpath
+        self._default_base_branch = default_base_branch
 
     @property
     def resolver(self) -> SkillResolver:
@@ -366,7 +371,8 @@ class SkillsDirectoryProvider:
         content = skill_info.path.read_text()
         if gated:
             content = _inject_disable_model_invocation(content)
-        return content.replace("{{AUTOSKILLIT_TEMP}}", self._temp_dir_relpath)
+        content = content.replace("{{AUTOSKILLIT_TEMP}}", self._temp_dir_relpath)
+        return content.replace("{{DEFAULT_BASE_BRANCH}}", self._default_base_branch)
 
 
 class DefaultSessionSkillManager:

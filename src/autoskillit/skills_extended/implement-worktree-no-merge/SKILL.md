@@ -101,9 +101,14 @@ git worktree add -b "${WORKTREE_NAME}" "${WORKTREE_PATH}"
 WORKTREE_PATH="$(cd "${WORKTREE_PATH}" && pwd)"
 
 # Record the base branch in two ways for reliable discovery by retry-worktree:
-# 1) Write an explicit file store (works with any Git version, works offline)
-mkdir -p "{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_NAME}"
-echo "${CURRENT_BRANCH}" > "{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_NAME}/base-branch"
+# 1) Write an explicit file store via code-level writer (works with any Git version, works offline)
+python3 -c "
+from pathlib import Path
+import sys
+sys.path.insert(0, '$(git rev-parse --show-toplevel)')
+from autoskillit.workspace.worktree import write_worktree_sidecar
+write_worktree_sidecar(Path('$(git rev-parse --show-toplevel)'), '${WORKTREE_NAME}', '${CURRENT_BRANCH}')
+"
 # 2) Set git upstream tracking (requires remote tracking ref in local fetch cache)
 REMOTE=$(git remote get-url upstream 2>/dev/null | grep -qv "^file://" && echo upstream || echo origin)
 if ! git fetch "$REMOTE" "${CURRENT_BRANCH}" 2>/dev/null; then

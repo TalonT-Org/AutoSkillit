@@ -104,6 +104,71 @@ def _has_commit_guard_ancestor(
 
 
 @semantic_rule(
+    name="merge-fix-cycle-without-iteration-guard",
+    description=(
+        "A merge_worktree step routes recoverable failures to a fix/assess step, "
+        "creating a merge→fix→test→merge cycle. Without a check_loop_iteration guard, "
+        "this cycle can loop unboundedly on structurally unresolvable conflicts."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_merge_fix_cycle_without_guard(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "merge_worktree":
+            continue
+        if not step.on_result or not step.on_result.conditions:
+            continue
+
+        fix_routes: set[str] = set()
+        for cond in step.on_result.conditions:
+            if cond.when and "failed_step" in cond.when:
+                fix_routes.add(cond.route)
+
+        if not fix_routes:
+            continue
+
+        has_guard = False
+        for fix_step_name in fix_routes:
+            reachable = bfs_reachable(ctx.step_graph, fix_step_name) | {fix_step_name}
+            for reached in reachable:
+                if _is_loop_guard_step(reached, ctx):
+                    has_guard = True
+                    break
+            if has_guard:
+                break
+
+        if not has_guard:
+            findings.append(
+                RuleFinding(
+                    rule="merge-fix-cycle-without-iteration-guard",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"merge_worktree step '{step_name}' routes recoverable failures "
+                        f"to {sorted(fix_routes)}, creating a merge→fix→test cycle "
+                        f"with no check_loop_iteration guard. This can loop unboundedly "
+                        f"on structurally unresolvable conflicts. Add a check_merge_fix_loop "
+                        f"step (run_python calling check_loop_iteration) between test and "
+                        f"commit_guard to cap the cycle at 3 iterations."
+                    ),
+                )
+            )
+    return findings
+
+
+def _is_loop_guard_step(step_name: str, ctx: ValidationContext) -> bool:
+    """Return True if step_name is a loop iteration guard via check_loop_iteration."""
+    step = ctx.recipe.steps.get(step_name)
+    if step is None:
+        return False
+    if step.tool != "run_python":
+        return False
+    callable_str = step.with_args.get("callable", "")
+    return callable_str == "autoskillit.smoke_utils.check_loop_iteration"
+
+
+@semantic_rule(
     name="gh-pr-merge-silent-success-routing",
     description=(
         "A run_cmd step that executes 'gh pr merge' must not route its on_failure "

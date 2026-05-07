@@ -53,6 +53,7 @@ from autoskillit.workspace.worktree import (
     list_git_worktrees,
     remove_git_worktree,
     remove_worktree_sidecar,
+    write_worktree_sidecar,
 )
 
 delete_directory_contents = _delete_directory_contents
@@ -71,6 +72,7 @@ __all__ = [
     "register_clone",
     "remove_git_worktree",
     "remove_worktree_sidecar",
+    "write_worktree_sidecar",
     "RUNS_DIR",
     "DefaultSkillResolver",
     "SkillResolver",

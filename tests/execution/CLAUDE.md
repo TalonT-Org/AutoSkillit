@@ -77,6 +77,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_session_adjudication_outcome.py` | Tests for _compute_outcome, content state evaluation, and session adjudication consistency |
 | `test_session_adjudication_retry.py` | Tests for _compute_retry, _is_kill_anomaly, and related retry adjudication logic |
 | `test_session_adjudication_success.py` | Tests for _compute_success adjudication logic |
+| `test_session_content.py` | Tests for session content validation and token normalization (`_strip_markdown_from_tokens`) |
 | `test_session_debug_logging.py` | Tests for debug logging instrumentation in session.py |
 | `test_session_state_persistence.py` | Tests for persist_session_state, read_session_state, and clear_session_state |
 | `test_session_log_fields.py` | Tests for flush_session_log field coverage: write warnings, kitchen/order IDs, crash exception, raw stdout, per-turn fields |

@@ -51,8 +51,9 @@ If the array is empty (`[]`) there are no issues to implement — skip to INTERR
 3. If `parallel` is `true`: issue ALL `{mcp_prefix}dispatch_food_truck` calls for this
    group **in a single response (parallel tool calls)** — do not wait for one to
    complete before issuing the next. The fleet semaphore gates actual concurrency;
-   calls queue when the semaphore is saturated. **This overrides the general
-   sequential discipline — parallel groups are an explicit exception.**
+   if `at_capacity()` returns FLEET_PARALLEL_REFUSED, wait for a running dispatch to
+   complete and retry — the semaphore is a fast-fail, not a queue. **This overrides the
+   general sequential discipline — parallel groups are an explicit exception.**
 4. If `parallel` is `false`: dispatch each batch and wait for it to complete before
    dispatching the next batch in this group.
 5. Wait for ALL food trucks in this group to complete before advancing to the next group.
@@ -226,9 +227,8 @@ The following manifest defines all dispatches for this campaign:
 ## CAMPAIGN DISCIPLINE
 
 Execute static manifest dispatches SEQUENTIALLY via {mcp_prefix}dispatch_food_truck.
-The fleet_lock semaphore uses max_concurrent=1 for static dispatches — do NOT issue
-static manifest calls in parallel. For dynamic dispatches (see the dynamic dispatch
-instructions section when present), `parallel: true` groups override this rule.
+Static manifest dispatches are SEQUENTIAL — do NOT issue static manifest calls in parallel,
+regardless of the fleet semaphore's max_concurrent_dispatches setting.
 
 Each dispatch is an independent L2 food truck session with its own kitchen context. There is NO
 cross-dispatch state sharing managed by you — the runtime handles it

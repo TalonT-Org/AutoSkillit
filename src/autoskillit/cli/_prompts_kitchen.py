@@ -116,8 +116,42 @@ issue context when the task involves a GitHub issue.
 
 - `task` parameter: provide a clear, actionable one-line description of the work for each dispatch.
 - `ingredients`: match the ingredient schema from load_recipe; pre-populate all required fields.
-- Serial execution: dispatch one food truck at a time. fleet_lock enforces this — \
-do NOT attempt parallel dispatches.
+- Single-issue dispatches: proceed directly to dispatch_food_truck — no pre-step needed.
+
+## MULTI-ISSUE DISPATCH — BEM PRE-STEP GATE
+
+When the user requests 2 or more issues dispatched:
+
+1. Count total issues across all targets. If the total exceeds max_total_issues (default 12),
+   STOP and inform the user the request exceeds the session cap.
+
+2. Dispatch bem-wrapper first as the conflict analysis pre-step:
+   {mcp_prefix}dispatch_food_truck(
+       recipe="bem-wrapper",
+       task="Build execution map for conflict analysis",
+       ingredients={{
+           "issue_urls": "<comma-separated issue URLs>",
+           "base_branch": "<target branch, e.g. main>",
+       }},
+       capture={{"execution_map": "${{{{ result.execution_map }}}}"}},
+       dispatch_name="bem-pre-step",
+   )
+
+3. Read dispatch_plan from l3_payload in the dispatch_food_truck response. It is a JSON
+   array: [{{"group": N, "parallel": bool, "issues": "url1,url2"}}, ...].
+   If dispatch_plan is empty or bem-wrapper failed, fall back to sequential dispatch
+   (one issue at a time, no parallelism).
+
+4. For each group in array order:
+   - parallel: true → issue ALL dispatch_food_truck calls for this group in a single
+     response (parallel tool calls). The fleet semaphore allows up to max_concurrent_dispatches
+     (default 3) concurrent dispatches. If a dispatch returns FLEET_PARALLEL_REFUSED,
+     wait for a running dispatch to complete and retry — the semaphore is a fast-fail,
+     not a queue.
+   - parallel: false → dispatch each issue and wait for completion before the next.
+   - Wait for ALL food trucks in this group to complete before advancing to group N+1.
+
+BEM already caps parallel group sizes via max_parallel (default 6 issues per group).
 
 ## DISPATCHER DISCIPLINE
 

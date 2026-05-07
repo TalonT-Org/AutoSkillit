@@ -280,7 +280,8 @@ workspace:
 
 fleet:
   default_timeout_sec: 3600
-  max_concurrent_dispatches: 1
+  max_concurrent_dispatches: 3
+  max_total_issues: 12
 
 providers:
   default_provider: null

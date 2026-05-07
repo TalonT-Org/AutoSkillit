@@ -141,6 +141,27 @@ def test_load_recipe_dict_handles_json_decode_error(tmp_path, monkeypatch):
     assert load_yaml_calls == [1], "load_yaml should be called when JSON is corrupt"
 
 
+def test_load_recipe_dict_falls_back_when_json_is_not_mapping(tmp_path, monkeypatch):
+    yaml_path = tmp_path / "recipe.yaml"
+    _write_yaml(yaml_path, _MINIMAL_RECIPE)
+    json_path = yaml_path.with_suffix(".json")
+    # Write valid JSON that is a list (not a mapping) with a future mtime
+    json_path.write_text("[1, 2, 3]\n", encoding="utf-8")
+    future_mtime_ns = yaml_path.stat().st_mtime_ns + 10_000_000_000
+    os.utime(json_path, ns=(future_mtime_ns, future_mtime_ns))
+
+    load_yaml_calls = []
+    monkeypatch.setattr(
+        "autoskillit.recipe.io.load_yaml",
+        lambda *a, **kw: load_yaml_calls.append(1) or _MINIMAL_RECIPE,
+    )
+
+    result = _load_recipe_dict(yaml_path)
+
+    assert result == _MINIMAL_RECIPE
+    assert load_yaml_calls == [1], "load_yaml should be called when JSON is not a mapping"
+
+
 def test_collect_recipes_identical_with_json(tmp_path):
     recipes = [
         {"name": "recipe-a", "description": "A", "steps": {"done": {"action": "stop"}}},

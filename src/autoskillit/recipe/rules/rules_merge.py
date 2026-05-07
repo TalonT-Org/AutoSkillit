@@ -122,7 +122,7 @@ def _check_merge_fix_cycle_without_guard(ctx: ValidationContext) -> list[RuleFin
 
         fix_routes: set[str] = set()
         for cond in step.on_result.conditions:
-            if cond.when and "failed_step" in cond.when:
+            if cond.when and re.search(r"\bfailed_step\b", cond.when):
                 fix_routes.add(cond.route)
 
         if not fix_routes:

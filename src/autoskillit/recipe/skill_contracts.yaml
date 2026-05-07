@@ -2610,11 +2610,22 @@ callable_contracts:
     - name: chunk_size
       type: str
       required: false
+    - name: audit_run_dir
+      type: directory_path
+      required: false
     outputs:
     - name: issue_urls
       type: str
     - name: issue_count
       type: str
+  autoskillit.recipe._cmd_rpc.create_audit_run_dir:
+    inputs:
+    - name: temp_dir
+      type: directory_path
+      required: true
+    outputs:
+    - name: audit_run_dir
+      type: directory_path
 
 tool_output_contracts:
   wait_for_ci:

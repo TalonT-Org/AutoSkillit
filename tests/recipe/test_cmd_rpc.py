@@ -15,6 +15,7 @@ from autoskillit.recipe._cmd_rpc import (
     check_eject_limit,
     commit_guard,
     compute_branch,
+    create_audit_run_dir,
     emit_fallback_map,
     ensure_results,
     export_local_bundle,
@@ -653,6 +654,24 @@ def test_batch_create_issues_audit_run_dir_only(tmp_path):
     assert result["issue_count"] == "1", (
         "batch_create_issues should only process files in audit_run_dir"
     )
+
+
+def test_batch_create_issues_audit_run_dir_not_a_directory(tmp_path):
+    """batch_create_issues raises ValueError when audit_run_dir does not exist."""
+    bogus = str(tmp_path / "nonexistent")
+    with pytest.raises(ValueError, match="audit_run_dir must be an existing directory"):
+        batch_create_issues(workspace=str(tmp_path), audit_run_dir=bogus)
+
+
+def test_create_audit_run_dir_wraps_os_error(tmp_path, monkeypatch):
+    """create_audit_run_dir wraps OSError with a descriptive ValueError."""
+    monkeypatch.setattr(Path, "mkdir", _raise_os_error)
+    with pytest.raises(ValueError, match="cannot create audit run directory"):
+        create_audit_run_dir(temp_dir=str(tmp_path))
+
+
+def _raise_os_error(*_args, **_kwargs):
+    raise OSError("Permission denied")
 
 
 @patch("autoskillit.recipe._cmd_rpc.subprocess.run")

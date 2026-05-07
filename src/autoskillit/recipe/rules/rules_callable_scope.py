@@ -7,7 +7,6 @@ from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 # Callables that discover files via glob and require a scoped directory argument.
-# Map: callable suffix -> required scoping parameter name.
 SCOPED_CALLABLES: dict[str, str] = {
     "batch_create_issues": "audit_run_dir",
 }
@@ -36,8 +35,9 @@ def _check_callable_scoped_discovery(ctx: ValidationContext) -> list[RuleFinding
         if step.tool != "run_python":
             continue
         callable_val = str(step.with_args.get("callable", ""))
-        for callable_suffix, required_key in SCOPED_CALLABLES.items():
-            if callable_suffix in callable_val:
+        callable_leaf = callable_val.rsplit(".", 1)[-1]
+        for callable_name, required_key in SCOPED_CALLABLES.items():
+            if callable_leaf == callable_name:
                 if required_key not in step.with_args:
                     findings.append(
                         RuleFinding(
@@ -45,7 +45,7 @@ def _check_callable_scoped_discovery(ctx: ValidationContext) -> list[RuleFinding
                             severity=Severity.ERROR,
                             step_name=step_name,
                             message=(
-                                f"step '{step_name}': {callable_suffix} call is "
+                                f"step '{step_name}': {callable_name} call is "
                                 f"missing '{required_key}' in with args. Without a "
                                 f"scoped directory, the callable will glob all files "
                                 f"including those from prior runs."

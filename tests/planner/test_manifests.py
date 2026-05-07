@@ -2,10 +2,16 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from tests.planner.conftest import make_assignment_result, make_phase_result, make_wp_result
+from tests.planner.conftest import (
+    make_assignment_result,
+    make_phase_result,
+    make_wp_result,
+    write_json,
+)
 
 pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.feature("planner")]
 
@@ -690,3 +696,64 @@ def test_expand_wps_wp_index_path_in_work_packages(tmp_path):
     assert len(ctx_files) >= 1
     ctx = json.loads(ctx_files[0].read_text())
     assert "work_packages" in ctx["wp_index_path"]
+
+
+def _raw_wp(wp_id: str, **overrides: Any) -> dict[str, Any]:
+    """Build a raw WP dict WITHOUT running validate_wp_result (allows invalid data)."""
+    base: dict[str, Any] = {
+        "id": wp_id,
+        "name": f"WP {wp_id}",
+        "summary": "",
+        "goal": "",
+        "deliverables": [f"src/mod_{wp_id}.py"],
+        "technical_steps": [],
+        "files_touched": [],
+        "apis_defined": [],
+        "apis_consumed": [],
+        "depends_on": [],
+        "acceptance_criteria": [],
+    }
+    base.update(overrides)
+    return base
+
+
+def test_finalize_wp_manifest_accumulates_all_validation_errors(tmp_path: Path) -> None:
+    """When multiple WP result files fail validation, all errors appear in the exception."""
+    from autoskillit.planner.manifests import finalize_wp_manifest
+
+    wp_dir = tmp_path / "work_packages"
+    wp_dir.mkdir()
+
+    # WP with 0 deliverables (violates lower bound) — use _raw_wp to bypass validation
+    write_json(wp_dir / "P1-A1-WP1_result.json", _raw_wp("P1-A1-WP1", deliverables=[]))
+    # WP with 6 deliverables (violates upper bound)
+    write_json(
+        wp_dir / "P1-A1-WP2_result.json",
+        _raw_wp("P1-A1-WP2", deliverables=[f"f{i}.py" for i in range(6)]),
+    )
+    # Valid WP (should not appear in error)
+    write_json(wp_dir / "P1-A1-WP3_result.json", make_wp_result("P1-A1-WP3"))
+
+    with pytest.raises(ValueError, match=r"2 WP validation errors") as exc_info:
+        finalize_wp_manifest(str(wp_dir), str(tmp_path))
+
+    msg = str(exc_info.value)
+    assert "P1-A1-WP1_result.json" in msg
+    assert "P1-A1-WP2_result.json" in msg
+
+
+def test_finalize_wp_manifest_single_validation_error_message(tmp_path: Path) -> None:
+    """Single validation error still produces a clear message."""
+    from autoskillit.planner.manifests import finalize_wp_manifest
+
+    wp_dir = tmp_path / "work_packages"
+    wp_dir.mkdir()
+
+    # Use _raw_wp to bypass make_wp_result validation for out-of-bounds deliverable count
+    write_json(
+        wp_dir / "P1-A1-WP1_result.json",
+        _raw_wp("P1-A1-WP1", deliverables=[f"f{i}.py" for i in range(6)]),
+    )
+
+    with pytest.raises(ValueError, match=r"1 WP validation error"):
+        finalize_wp_manifest(str(wp_dir), str(tmp_path))

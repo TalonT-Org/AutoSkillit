@@ -16,13 +16,17 @@ except ImportError:
 RECIPES_DIR = Path(__file__).resolve().parent.parent / "src" / "autoskillit" / "recipes"
 
 
+class CompileError(Exception):
+    """Raised when a single recipe file fails to compile."""
+
+
 def _compile_one(yaml_path: Path) -> None:
     try:
         data = yaml.load(yaml_path.read_bytes(), Loader=Loader)
     except yaml.YAMLError as exc:
-        raise SystemExit(f"ERROR: YAML parse failed in {yaml_path}: {exc}") from exc
+        raise CompileError(f"ERROR: YAML parse failed in {yaml_path}: {exc}") from exc
     if not isinstance(data, dict):
-        raise SystemExit(
+        raise CompileError(
             f"ERROR: {yaml_path} top-level value is {type(data).__name__}, expected mapping"
         )
     json_path = yaml_path.with_suffix(".json")
@@ -42,7 +46,7 @@ def main() -> int:
         try:
             _compile_one(yaml_path)
             count += 1
-        except SystemExit as exc:
+        except CompileError as exc:
             print(exc, file=sys.stderr)
             errors += 1
     print(f"Compiled {count} YAML files to JSON" + (f" ({errors} errors)" if errors else ""))

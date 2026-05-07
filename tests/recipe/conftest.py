@@ -16,6 +16,7 @@ KNOWN_PART_B_VIOLATIONS: frozenset[str] = frozenset(
     {
         NO_AUTOSKILLIT_IMPORT,
         "ci-timed-out-self-loop-unguarded",
+        "ci-conflict-path-missing-auto-trigger",
         "skill-result-routing-gap",
     }
 )

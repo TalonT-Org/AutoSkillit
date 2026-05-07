@@ -99,50 +99,9 @@ if TYPE_CHECKING:
     )
 
 __all__ = [
-    # Locally-defined public API
     "DefaultHeadlessExecutor",
     "PostSessionMetrics",
-    "_compute_post_session_metrics",
-    "_derive_step_name_from_skill_command",
-    "_execute_claude_headless",
-    "_recursive_snapshot",
-    "_resolve_model",
-    "_resolve_skill_temp_dir",
-    "_session_log_dir",
     "run_headless_core",
-    # Re-exports from _headless_git
-    "_capture_git_head_sha",
-    "_compute_loc_changed",
-    # Re-exports from _headless_path_tokens
-    "_INTENTIONALLY_EXCLUDED_PATH_TOKENS",
-    "_OUTPUT_PATH_PATTERN",
-    "_OUTPUT_PATH_TOKENS",
-    "_RECOVERABLE_PATH_TOKENS",
-    "_WORKTREE_PATH_PATTERN",
-    "_build_path_token_set",
-    "_extract_output_paths",
-    "_extract_worktree_path",
-    "_validate_output_paths",
-    # Re-exports from _headless_recovery
-    "_CHANNEL_B_RECOVERABLE_SUBTYPES",
-    "_NUDGE_TIMEOUT",
-    "_TOKEN_NAME_RE",
-    "_attempt_contract_nudge",
-    "_extract_missing_token_hints",
-    "_is_path_capture_pattern",
-    "_merge_token_usage",
-    "_recover_block_from_assistant_messages",
-    "_recover_from_separate_marker",
-    "_synthesize_from_write_artifacts",
-    # Re-exports from _headless_result
-    "_apply_budget_guard",
-    "_build_error_path_telemetry",
-    "_build_session_telemetry",
-    "_build_skill_result",
-    "_capture_failure",
-    "_resolve_skill_session_id",
-    # Re-exports from _headless_scan
-    "_scan_jsonl_write_paths",
 ]
 
 logger = get_logger(__name__)

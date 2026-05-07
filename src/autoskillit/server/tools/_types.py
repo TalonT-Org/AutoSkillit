@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any, TypedDict
 
-from autoskillit.core.types._type_results import ModelTotalEntry
+from autoskillit.core import ModelTotalEntry
 
 __all__ = [
     "RunSkillResult",

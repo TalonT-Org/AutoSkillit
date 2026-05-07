@@ -60,6 +60,7 @@ class PerDispatchEntry:
     elapsed_seconds: float
     token_usage: DispatchTokenUsage
     dispatched_session_id: str
+    dispatch_id: str
 
 
 @dataclass(frozen=True)
@@ -198,6 +199,7 @@ def parse_campaign_summary(text: str, campaign_id: str) -> CampaignParseResult:
                 dispatched_session_id=e.get("dispatched_session_id")
                 or e.get("l3_session_id")
                 or e.get("l2_session_id", ""),
+                dispatch_id=e.get("dispatch_id", ""),
             )
             for e in data["per_dispatch"]
         ]
@@ -249,6 +251,7 @@ def serialize_campaign_summary(summary: CampaignSummary) -> str:
                     "cache_creation": e.token_usage.cache_creation,
                 },
                 "dispatched_session_id": e.dispatched_session_id,
+                "dispatch_id": e.dispatch_id,
             }
             for e in summary.per_dispatch
         ],

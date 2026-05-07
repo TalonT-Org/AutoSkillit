@@ -42,6 +42,10 @@ def test_load_recipe_dict_prefers_json_when_fresh(tmp_path, monkeypatch):
     yaml_path = tmp_path / "recipe.yaml"
     _write_yaml(yaml_path, _MINIMAL_RECIPE)
     _compile_json(yaml_path)
+    # Ensure JSON mtime is strictly greater than YAML mtime (required by > freshness gate)
+    json_path = yaml_path.with_suffix(".json")
+    future_mtime = yaml_path.stat().st_mtime + 10
+    os.utime(json_path, (future_mtime, future_mtime))
 
     load_yaml_calls = []
     monkeypatch.setattr(
@@ -108,6 +112,9 @@ def test_load_recipe_dict_applies_substitution_on_json(tmp_path):
     yaml_path = tmp_path / "recipe.yaml"
     _write_yaml(yaml_path, recipe_with_placeholder)
     _compile_json(yaml_path)
+    json_path = yaml_path.with_suffix(".json")
+    future_mtime = yaml_path.stat().st_mtime + 10
+    os.utime(json_path, (future_mtime, future_mtime))
 
     result = _load_recipe_dict(yaml_path, temp_dir_relpath="custom/temp")
 

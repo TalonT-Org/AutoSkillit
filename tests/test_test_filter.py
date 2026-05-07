@@ -433,6 +433,7 @@ class TestBuildTestScope:
             manifest=manifest,
             tests_root=tests_root,
         )
+        assert result is not None
         assert result is not FullRunReason.UNMAPPED_FILE
 
 

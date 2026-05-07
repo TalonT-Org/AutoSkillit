@@ -10,6 +10,7 @@ import pytest
 
 from autoskillit.planner.compiler import compile_plan
 from autoskillit.planner.consolidation import consolidate_wps
+from autoskillit.planner.schema import DELIVERABLE_BOUNDS
 from autoskillit.planner.validation import validate_plan
 from tests.planner.conftest import (
     make_assignment_result,
@@ -842,7 +843,7 @@ def test_merge_group_overflows_deliverable_bound_raises(tmp_path: Path) -> None:
     consolidated = json.loads((tmp_path / "consolidated_wps.json").read_text())
     assert len(consolidated["work_packages"]) == 1
     merged = consolidated["work_packages"][0]
-    assert len(merged["deliverables"]) == 5
+    assert len(merged["deliverables"]) == DELIVERABLE_BOUNDS[1]
     assert result["merged_count"] == "1"
 
 
@@ -873,9 +874,7 @@ def test_merge_group_caps_deliverables_at_bound_and_demotes_overflow(tmp_path: P
 
     consolidated = json.loads((tmp_path / "consolidated_wps.json").read_text())
     merged = consolidated["work_packages"][0]
-    # Exactly 5 deliverables (cap)
-    assert len(merged["deliverables"]) == 5
-    # The 6th unique deliverable was demoted to files_touched
+    assert len(merged["deliverables"]) == DELIVERABLE_BOUNDS[1]
     assert "src/mod_P1-A1-WP3_1.py" in merged["files_touched"]
 
 
@@ -904,7 +903,7 @@ def test_merge_group_exactly_at_bound_passes(tmp_path: Path) -> None:
 
     consolidated = json.loads((tmp_path / "consolidated_wps.json").read_text())
     merged = consolidated["work_packages"][0]
-    assert len(merged["deliverables"]) == 5
+    assert len(merged["deliverables"]) == DELIVERABLE_BOUNDS[1]
 
 
 def test_fallback_groups_overflow_caps_deliverables(tmp_path: Path) -> None:
@@ -925,7 +924,7 @@ def test_fallback_groups_overflow_caps_deliverables(tmp_path: Path) -> None:
     assert "P1-A1-WP1" in output_ids
     assert "P1-A1-WP4" in output_ids
     merged_a = next(wp for wp in consolidated["work_packages"] if wp["id"] == "P1-A1-WP1")
-    assert len(merged_a["deliverables"]) == 5
+    assert len(merged_a["deliverables"]) == DELIVERABLE_BOUNDS[1]
 
 
 def test_merge_policy_covers_all_wp_list_fields(tmp_path: Path) -> None:

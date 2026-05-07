@@ -359,8 +359,9 @@ async def _execute_claude_headless(
             )
             return dataclasses.replace(
                 _crashed,
-                provider_used=current_provider_name,
-                provider_fallback=fallback_activated,
+                provider=ProviderOutcome(
+                    provider_used=current_provider_name, fallback_activated=fallback_activated
+                ),
             )
         except BaseException:
             logger.warning("headless_runner_cancelled", exc_info=True)
@@ -594,8 +595,9 @@ async def _execute_claude_headless(
         logger.debug("token_log_record_failed", exc_info=True)
     skill_result = dataclasses.replace(
         skill_result,
-        provider_used=current_provider_name,
-        provider_fallback=fallback_activated,
+        provider=ProviderOutcome(
+            provider_used=current_provider_name, fallback_activated=fallback_activated
+        ),
     )
     return skill_result
 

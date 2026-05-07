@@ -160,8 +160,8 @@ class TestProviderFieldsReachFlush:
             step_name="implement",
         )
 
-        assert result.provider_fallback is True
-        assert result.provider_used == "anthropic"
+        assert result.provider.fallback_activated is True
+        assert result.provider.provider_used == "anthropic"
         assert len(flush_calls) == 1
         outcome = flush_calls[0]["provider_outcome"]
         assert outcome.provider_used == "anthropic"

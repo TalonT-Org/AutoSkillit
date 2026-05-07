@@ -12,7 +12,9 @@ from autoskillit.core import (
     CliSubtype,
     FailureRecord,
     InfraExitCategory,
+    InfraOutcome,
     KillReason,
+    ProviderOutcome,
     RetryReason,
     SessionOutcome,
     SessionTelemetry,
@@ -197,7 +199,9 @@ def _build_skill_result(
                     stderr=result.stderr if result.stderr else "",
                     token_usage=stale_session.token_usage,
                     last_stop_reason=stale_session.last_stop_reason,
-                    provider_used=provider_used,
+                    provider=ProviderOutcome(
+                        provider_used=provider_used, fallback_activated=False
+                    ),
                 )
         # No valid result in stdout — fall through to original stale response
         _capture_failure(
@@ -223,7 +227,7 @@ def _build_skill_result(
             retry_reason=RetryReason.STALE,
             stderr="",
             token_usage=None,
-            provider_used=provider_used,
+            provider=ProviderOutcome(provider_used=provider_used, fallback_activated=False),
         )
         return _apply_budget_guard(stale_sr, skill_command, audit, max_consecutive_retries)
 
@@ -260,7 +264,9 @@ def _build_skill_result(
                     token_usage=idle_session.token_usage,
                     last_stop_reason=idle_session.last_stop_reason,
                     lifespan_started=idle_session.lifespan_started,
-                    provider_used=provider_used,
+                    provider=ProviderOutcome(
+                        provider_used=provider_used, fallback_activated=False
+                    ),
                 )
         _capture_failure(
             skill_command,
@@ -289,7 +295,7 @@ def _build_skill_result(
             stderr="",
             token_usage=idle_session.token_usage,
             lifespan_started=idle_session.lifespan_started,
-            provider_used=provider_used,
+            provider=ProviderOutcome(provider_used=provider_used, fallback_activated=False),
         )
         return _apply_budget_guard(idle_sr, skill_command, audit, max_consecutive_retries)
 
@@ -523,8 +529,8 @@ def _build_skill_result(
             fs_writes_detected=fs_writes_detected,
             last_stop_reason=session.last_stop_reason,
             lifespan_started=session.lifespan_started,
-            provider_used=provider_used,
-            infra_exit_category=infra_category.value,
+            provider=ProviderOutcome(provider_used=provider_used, fallback_activated=False),
+            infra=InfraOutcome(exit_category=infra_category.value),
         )
     else:
         sr = SkillResult(
@@ -546,8 +552,8 @@ def _build_skill_result(
             kill_reason=result.kill_reason,
             last_stop_reason=session.last_stop_reason,
             lifespan_started=session.lifespan_started,
-            provider_used=provider_used,
-            infra_exit_category=infra_category.value,
+            provider=ProviderOutcome(provider_used=provider_used, fallback_activated=False),
+            infra=InfraOutcome(exit_category=infra_category.value),
         )
     sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
 

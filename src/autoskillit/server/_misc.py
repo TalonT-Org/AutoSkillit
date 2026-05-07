@@ -203,8 +203,8 @@ def persist_run_skill_state(skill_result: SkillResult, project_dir: Path) -> Non
             pid=os.getpid(),
             boot_id="",
             starttime_ticks=0,
-            infra_exit_category=skill_result.infra_exit_category
-            if skill_result.infra_exit_category
+            infra_exit_category=skill_result.infra.exit_category
+            if skill_result.infra.exit_category
             else None,
         )
         state_dir = ensure_project_temp(project_dir) / "session_state"

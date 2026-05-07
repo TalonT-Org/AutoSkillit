@@ -31,13 +31,15 @@ class TestToolsExecutionDecomposition:
         assert callable(record_gate_dispatch)
 
     def test_import_and_call_in_helpers(self):
-        """_import_and_call must be importable from tools_execution_helpers."""
-        from autoskillit.server.tools.tools_execution_helpers import _import_and_call
+        """_import_and_call must be importable from _execution_helpers, not tools_execution."""
+        from autoskillit.server.tools._execution_helpers import _import_and_call
 
         assert callable(_import_and_call)
+        assert not hasattr(tools_execution, "_import_and_call")
 
     def test_coerce_scalar_in_helpers(self):
-        """_coerce_scalar must be importable from tools_execution_helpers."""
-        from autoskillit.server.tools.tools_execution_helpers import _coerce_scalar
+        """_coerce_scalar must be importable from _execution_helpers, not tools_execution."""
+        from autoskillit.server.tools._execution_helpers import _coerce_scalar
 
         assert callable(_coerce_scalar)
+        assert not hasattr(tools_execution, "_coerce_scalar")

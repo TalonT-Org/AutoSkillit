@@ -32,7 +32,7 @@ from autoskillit.server._guards import (
 from autoskillit.server._misc import SCENARIO_STEP_NAME_ENV
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._subprocess import _run_subprocess
-from autoskillit.server.tools.tools_execution_helpers import _import_and_call
+from autoskillit.server.tools._execution_helpers import _import_and_call
 
 logger = get_logger(__name__)
 

@@ -1,6 +1,6 @@
 # tools/
 
-MCP `@mcp.tool()` handlers registered on import (16 tool modules).
+MCP `@mcp.tool()` handlers registered on import (15 tool modules).
 
 ## Files
 
@@ -14,7 +14,7 @@ MCP `@mcp.tool()` handlers registered on import (16 tool modules).
 | `tools_ci_merge_queue.py` | `toggle_auto_merge`, `enqueue_pr`, `wait_for_merge_queue` |
 | `tools_clone.py` | `clone_repo`, `remove_clone`, `push_to_remote`, `register_clone_status`, `batch_cleanup_clones`, `bootstrap_clone` |
 | `tools_execution.py` | `run_cmd`, `run_python`, `run_skill` |
-| `tools_execution_helpers.py` | `_import_and_call`, `_coerce_scalar` subprocess coercion helpers |
+| `_execution_helpers.py` | `_import_and_call`, `_coerce_scalar` subprocess coercion helpers (no MCP tools) |
 | `tools_fleet_dispatch.py` | `dispatch_food_truck`, `record_gate_dispatch` |
 | `tools_git.py` | `merge_worktree`, `classify_fix`, `create_unique_branch`, `create_and_publish_branch`, `check_pr_mergeable` |
 | `tools_github.py` | `fetch_github_issue`, `get_issue_title`, `report_bug` |

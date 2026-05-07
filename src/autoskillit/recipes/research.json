@@ -130,13 +130,10 @@
       "tool": "run_skill",
       "model": "",
       "with": {
-        "skill_command": "/autoskillit:plan-visualization ${{ inputs.source_dir }} ${{ context.experiment_plan }} ${{ context.scope_report }} ${{ context.experiment_type }}",
+        "skill_command": "/autoskillit:plan-visualization ${{ inputs.source_dir }} ${{ context.experiment_plan }} ${{ context.scope_report }}",
         "cwd": "${{ inputs.source_dir }}",
         "step_name": "plan_visualization"
       },
-      "optional_context_refs": [
-        "experiment_type"
-      ],
       "capture": {
         "visualization_plan_path": "${{ result.visualization_plan_path }}",
         "report_plan_path": "${{ result.report_plan_path }}",
@@ -440,7 +437,11 @@
       },
       "optional_context_refs": [
         "experiment_type",
-        "methodology_tradition"
+        "methodology_tradition",
+        "verdict",
+        "disambiguation_rule_applied",
+        "tier_c_lens",
+        "classification_timestamp"
       ],
       "capture": {
         "report_path": "${{ result.report_path }}"
@@ -460,7 +461,11 @@
       },
       "optional_context_refs": [
         "experiment_type",
-        "methodology_tradition"
+        "methodology_tradition",
+        "verdict",
+        "disambiguation_rule_applied",
+        "tier_c_lens",
+        "classification_timestamp"
       ],
       "capture": {
         "report_path": "${{ result.report_path }}"
@@ -760,7 +765,11 @@
       },
       "optional_context_refs": [
         "experiment_type",
-        "methodology_tradition"
+        "methodology_tradition",
+        "verdict",
+        "disambiguation_rule_applied",
+        "tier_c_lens",
+        "classification_timestamp"
       ],
       "capture": {
         "report_path": "${{ result.report_path }}"

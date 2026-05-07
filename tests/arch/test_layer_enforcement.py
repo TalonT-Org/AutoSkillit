@@ -3,7 +3,7 @@
 Tests:
   - MCP tool registry completeness (bidirectional equality with _gate registry)
   - Import layer contract (each module only imports from same or lower layer)
-  - L1 package runtime isolation
+  - IL-1 package runtime isolation
   - Cross-package submodule import restrictions
   - server/tools/tools_*.py import constraints
   - Notification and convention guards
@@ -29,19 +29,19 @@ from tests.arch._rules import RuleDescriptor
 
 # ── Sub-package layer registry ────────────────────────────────────────────────
 SUBPACKAGE_LAYERS: dict[str, int] = {
-    # Layer 0: core/ — zero autoskillit internal imports
+    # IL-0: core/ — zero autoskillit internal imports
     "core": 0,
-    # Layer 1: domain primitives — may import only from L0
+    # IL-1: domain primitives — may import only from IL-0
     "config": 1,
     "pipeline": 1,
     "execution": 1,
     "workspace": 1,
     "planner": 1,
-    # Layer 2: domain services — may import from L0 and L1
+    # IL-2: domain services — may import from IL-0 and IL-1
     "recipe": 2,
     "migration": 2,
     "fleet": 2,
-    # Layer 3: application layer — may import from L0–L2
+    # IL-3: application layer — may import from IL-0–IL-2
     "server": 3,
     "cli": 3,
 }
@@ -61,7 +61,7 @@ LAYER_RULES: dict[str, RuleDescriptor] = {
         lens="module-dependency",
         description=(
             "Each autoskillit sub-package may only import from packages at the same or lower "
-            "layer (L0 \u2264 L1 \u2264 L2 \u2264 L3). Upward imports introduce coupling that "
+            "layer (IL-0 \u2264 IL-1 \u2264 IL-2 \u2264 IL-3). Upward imports introduce coupling that "
             "hinders independent testing and layering guarantees."
         ),
         rationale=(
@@ -75,15 +75,15 @@ LAYER_RULES: dict[str, RuleDescriptor] = {
     ),
     "REQ-ARCH-003": RuleDescriptor(
         rule_id="REQ-ARCH-003",
-        name="l1-packages-no-runtime-l2-l3-imports",
+        name="il1-packages-no-runtime-il2-il3-imports",
         lens="module-dependency",
         description=(
-            "L1 sub-packages (config, pipeline, execution, workspace) must not import from "
-            "L2 or L3 packages at runtime. TYPE_CHECKING-guarded imports are permitted."
+            "IL-1 sub-packages (config, pipeline, execution, workspace) must not import from "
+            "IL-2 or IL-3 packages at runtime. TYPE_CHECKING-guarded imports are permitted."
         ),
         rationale=(
-            "Runtime L1\u2192L2 imports would introduce cyclic dependency risk because L2 "
-            "packages (recipe, migration) are permitted to import from L1."
+            "Runtime IL-1\u2192IL-2 imports would introduce cyclic dependency risk because IL-2 "
+            "packages (recipe, migration) are permitted to import from IL-1."
         ),
         exemptions=frozenset(),
         severity="high",
@@ -349,8 +349,8 @@ def test_import_layer_enforcement(pkg_name: str, layer: int) -> None:
             imported_layer = SUBPACKAGE_LAYERS[imported_stem]
             if imported_layer > layer:
                 violations.append(
-                    f"  {_rel(py_file)}:{lineno}: {pkg_name} (L{layer}) imports "
-                    f"{imported_stem} (L{imported_layer}) — upward import"
+                    f"  {_rel(py_file)}:{lineno}: {pkg_name} (IL-{layer}) imports "
+                    f"{imported_stem} (IL-{imported_layer}) — upward import"
                 )
 
     assert not violations, f"Layer violations in {pkg_name}/:\n" + "\n".join(violations)
@@ -360,14 +360,14 @@ def test_import_layer_enforcement(pkg_name: str, layer: int) -> None:
     "pkg_name",
     [pkg for pkg, layer in SUBPACKAGE_LAYERS.items() if layer in {1, 2}],
 )
-def test_l2_no_deferred_upward_imports(pkg_name: str) -> None:
-    """L1/L2 sub-packages must not use deferred imports that violate layer contracts.
+def test_il2_no_deferred_upward_imports(pkg_name: str) -> None:
+    """IL-1/IL-2 sub-packages must not use deferred imports that violate layer contracts.
 
     Extends test_import_layer_enforcement to cover function-body (deferred) imports
     via ast.walk, not just tree.body scans. Mirrors the upward-only rule applied at
-    module level: L1 packages (config, pipeline, execution, workspace) may not
-    deferred-import an L2+ package; L2 packages (recipe, migration) may not
-    deferred-import an L3 package (server, cli) — always forbidden.
+    module level: IL-1 packages (config, pipeline, execution, workspace) may not
+    deferred-import an IL-2+ package; IL-2 packages (recipe, migration) may not
+    deferred-import an IL-3 package (server, cli) — always forbidden.
     """
     pkg_dir = SRC_ROOT / pkg_name
     if not pkg_dir.exists():
@@ -399,8 +399,8 @@ def test_l2_no_deferred_upward_imports(pkg_name: str) -> None:
                 imported_layer = SUBPACKAGE_LAYERS[imported_stem]
                 if imported_layer > pkg_layer:
                     violations.append(
-                        f"  {_rel(py_file)}:{node.lineno}: {pkg_name} (L{pkg_layer}) "
-                        f"deferred-imports {imported_stem} (L{imported_layer})"
+                        f"  {_rel(py_file)}:{node.lineno}: {pkg_name} (IL-{pkg_layer}) "
+                        f"deferred-imports {imported_stem} (IL-{imported_layer})"
                         f" — upward deferred import"
                     )
 
@@ -426,7 +426,7 @@ def test_workspace_deferred_import_has_comment() -> None:
 
 
 def test_layer_enforcement_detects_upward_import(tmp_path: Path) -> None:
-    """A L1 module importing a L3 module triggers a violation."""
+    """An IL-1 module importing an IL-3 module triggers a violation."""
     f = tmp_path / "fake_l1.py"
     f.write_text("from autoskillit.server import mcp\n")
     violations: list[str] = []
@@ -436,14 +436,14 @@ def test_layer_enforcement_detects_upward_import(tmp_path: Path) -> None:
             parts = node.module.split(".")
             if parts[0] == "autoskillit" and len(parts) > 1:
                 imported = parts[1]
-                # synthetic module is L1; upward = strictly greater
+                # synthetic module is IL-1; upward = strictly greater
                 if SUBPACKAGE_LAYERS.get(imported, 0) > 1:
                     violations.append(imported)
     assert violations  # must detect the upward import
 
 
-def test_l0_no_dynamic_internal_imports() -> None:
-    """L0 code must not dynamically import autoskillit subpackages."""
+def test_il0_no_dynamic_internal_imports() -> None:
+    """IL-0 code must not dynamically import autoskillit subpackages."""
     violations = []
     for src_file in sorted(_CORE_SRC.rglob("*.py")):
         tree = ast.parse(src_file.read_text(), filename=str(src_file))
@@ -463,11 +463,12 @@ def test_l0_no_dynamic_internal_imports() -> None:
                         f"{src_file.name}:{node.lineno}: importlib.import_module({arg.value!r})"
                     )
     assert not violations, (
-        "L0 (core/) must not dynamically import autoskillit subpackages:\n" + "\n".join(violations)
+        "IL-0 (core/) must not dynamically import autoskillit subpackages:\n"
+        + "\n".join(violations)
     )
 
 
-# ── L1 Package Runtime Isolation Tests ────────────────────────────────────────
+# ── IL-1 Package Runtime Isolation Tests ────────────────────────────────────────
 
 
 def test_execution_imports_only_core() -> None:
@@ -664,7 +665,7 @@ def test_server_tools_import_only_allowed_packages() -> None:
 
 def test_server_non_tools_no_cli_imports() -> None:
     """REQ-ARCH-003b: server/*.py (non-tools_*) files must not import from
-    autoskillit.cli — cross-L3 peer dependency. TYPE_CHECKING exempt.
+    autoskillit.cli — cross-IL-3 peer dependency. TYPE_CHECKING exempt.
     """
     DENIED = {"cli"}
     non_tools_files = [
@@ -681,11 +682,11 @@ def test_server_non_tools_no_cli_imports() -> None:
                 if parts[1] in DENIED:
                     violations.append(
                         f"{path.name}:{node.lineno} imports from "
-                        f"autoskillit.{parts[1]} (cross-L3 peer, not allowed)"
+                        f"autoskillit.{parts[1]} (cross-IL-3 peer, not allowed)"
                     )
 
     assert not violations, (
-        "server/*.py (non-tools_*) files import from peer-L3 autoskillit sub-packages:\n"
+        "server/*.py (non-tools_*) files import from peer-IL-3 autoskillit sub-packages:\n"
         + "\n".join(violations)
     )
 
@@ -944,7 +945,7 @@ def test_display_categories_sync() -> None:
 
 
 def test_tool_categories_not_in_core() -> None:
-    """TOOL_CATEGORIES must not be exported from the L0 core layer."""
+    """TOOL_CATEGORIES must not be exported from the IL-0 core layer."""
     import autoskillit.core
     import autoskillit.core.types._type_constants
 
@@ -1125,7 +1126,7 @@ def test_default_classes_only_instantiated_inside_factory_or_allowlist() -> None
 _TESTS_ROOT = Path(__file__).parent.parent  # = tests/
 
 # Allowed autoskillit top-level packages per test layer directory.
-# L3 dirs (server, cli) use wildcard "autoskillit" meaning any sub-package is allowed.
+# IL-3 dirs (server, cli) use wildcard "autoskillit" meaning any sub-package is allowed.
 _TEST_LAYER_ALLOWED: dict[str, frozenset[str]] = {
     "tests/core": frozenset({"autoskillit.core"}),
     "tests/config": frozenset({"autoskillit.core", "autoskillit.config"}),
@@ -1185,7 +1186,7 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     # workspace tests
     "tests/workspace/test_clone_ci_contract.py": frozenset({"autoskillit.execution"}),
     "tests/workspace/test_skills.py": frozenset({"autoskillit.config"}),
-    # recipe tests — recipe layer is L2 and may use workspace (L1 sibling)
+    # recipe tests — recipe layer is IL-2 and may use workspace (IL-1 sibling)
     "tests/recipe/test_contracts.py": frozenset({"autoskillit.workspace"}),
     "tests/recipe/test_rules_skill_content.py": frozenset({"autoskillit.workspace"}),
     # review loop routing integration imports root-level smoke_utils
@@ -1253,7 +1254,7 @@ def test_test_files_respect_layer_boundaries(
 ) -> None:
     """Each test_*.py in a layered directory may only import from its allowed autoskillit packages.
 
-    L3 test dirs (server/, cli/) use a wildcard and may import from any autoskillit sub-package.
+    IL-3 test dirs (server/, cli/) use a wildcard and may import from any autoskillit sub-package.
     Known intentional cross-refs are listed in _TEST_LAYER_ALLOWLIST with rationale.
     conftest.py files are exempt (only test_*.py is scanned).
     """

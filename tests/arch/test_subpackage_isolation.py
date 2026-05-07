@@ -437,7 +437,7 @@ def test_server_uses_recipe_io_not_recipe_loader_for_discovery() -> None:
     assert "from autoskillit.recipe.loader import load_recipe" not in combined_src
 
 
-# ── New L2 sub-package tests (T1–T7 from groupC plan) ─────────────────────────
+# ── New IL-2 sub-package tests (T1–T7 from groupC plan) ─────────────────────────
 
 
 def test_recipe_subpackage_importable() -> None:
@@ -520,7 +520,7 @@ def test_old_flat_migration_modules_removed() -> None:
         )
 
 
-# ── New L3 package tests (groupD plan) ────────────────────────────────────────
+# ── New IL-3 package tests (groupD plan) ────────────────────────────────────────
 
 
 def test_server_is_package() -> None:
@@ -724,9 +724,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         (_type_enums, _type_protocols_logging, _type_protocols_execution,
         _type_protocols_github, _type_protocols_workspace, _type_protocols_recipe,
         _type_protocols_infra, _type_results, _type_subprocess, etc.) to
-        prevent circular imports while keeping L0 types co-located. Also houses
-        _terminal_table.py as the L0 shared terminal rendering primitive so that
-        both cli/ (L3) and pipeline/ (L1) can import it without layer violations.
+        prevent circular imports while keeping IL-0 types co-located. Also houses
+        _terminal_table.py as the IL-0 shared terminal rendering primitive so that
+        both cli/ (IL-3) and pipeline/ (IL-1) can import it without layer violations.
         _claude_env.py adds the canonical IDE-scrubbing env builder for all
         claude subprocess launches. kitchen_state.py adds the stdlib-only
         kitchen-open session marker reader for hook subprocesses.
@@ -735,13 +735,13 @@ def test_no_subpackage_exceeds_10_files() -> None:
         _plugin_cache.py adds the plugin cache lifecycle: retiring cache sweep,
         install locking, and kitchen registry (accessible from server/ without
         cli/ import).
-        feature_flags.py adds the L0 is_feature_enabled() primitive — must live
+        feature_flags.py adds the IL-0 is_feature_enabled() primitive — must live
         in core/ to be importable by all layers without cross-layer violations.
         session_registry.py adds the stdlib-only session registry mapping
         autoskillit launch IDs to Claude Code session UUIDs for the scoped
         resume picker.
         tool_sequence_analysis.py adds the stdlib-only cross-session tool call
-        sequence DFG analysis (L0; must live in core/ to be importable by server/).
+        sequence DFG analysis (IL-0; must live in core/ to be importable by server/).
         Monolithic protocol module split into 6 domain-grouped shard files (net +5 files).
         _install_detect.py adds the is_dev_install() predicate for config resolution
         to auto-detect whether the install is editable when experimental_enabled is absent,
@@ -767,7 +767,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         _doctor_mcp.py, _doctor_hooks.py, _doctor_install.py, _doctor_config.py,
         _doctor_runtime.py, _doctor_env.py, _doctor_features.py, _doctor_fleet.py.
         _prompts.py (819 lines) was decomposed into three domain-focused submodules:
-        _prompts_campaign.py (L3 campaign dispatcher), _prompts_orchestrator.py
+        _prompts_campaign.py (IL-3 campaign dispatcher), _prompts_orchestrator.py
         (IL-1/IL-2 cook session), and _prompts_kitchen.py (open-kitchen + fleet-dispatch),
         with _prompts.py reduced to a shared-helpers + re-export hub (~50 lines).
         Exempt at 20 files.
@@ -839,7 +839,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
 def test_data_directories_are_not_python_packages() -> None:
     """REQ-ARCH-005: data-only directories under src/autoskillit/ must not
     contain __init__.py — that turns them into phantom Python packages
-    distinct from the real L2 module of similar name."""
+    distinct from the real IL-2 module of similar name."""
     src = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
     data_dirs = {"migrations", "recipes", "skills", "skills_extended"}
     offenders: list[str] = []
@@ -880,7 +880,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "recovery + IDLE_STALL routing + contract nudge resume tier "
         "+ DIR_MISSING late-bind recovery arm + RecordingSubprocessRunner "
         "step-name auto-derivation gate + recipe identity threading "
-        "+ _execute_claude_headless extraction + dispatch_food_truck L2 path "
+        "+ _execute_claude_headless extraction + dispatch_food_truck orchestration-L2 path "
         "+ campaign_id/dispatch_id propagation kwargs "
         "+ fs-level write detection (pre/post temp-dir snapshot + _resolve_skill_temp_dir); "
         "splitting would fragment the adjudication pipeline across modules",

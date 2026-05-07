@@ -64,7 +64,17 @@ def test_orchestration_doc_cross_references_levels():
 def test_claude_md_has_il_disambiguation():
     claude_md = REPO_ROOT / "CLAUDE.md"
     text = claude_md.read_text()
-    paragraphs = text.split("\n\n")
-    assert any("IL-" in p and "import" in p.lower() for p in paragraphs), (
-        "CLAUDE.md Section 6 must contain a paragraph with both IL-N notation and 'import'"
+    assert "| IL-N" in text, "CLAUDE.md must contain the '| IL-N' row in the disambiguation table"
+    assert "| IL-NNN" in text, (
+        "CLAUDE.md must contain the '| IL-NNN' row in the disambiguation table"
+    )
+    assert "| L-N" in text, "CLAUDE.md must contain the '| L-N' row in the disambiguation table"
+    assert "Import layer level" in text, (
+        "Disambiguation table must explain IL-N as 'Import layer level'"
+    )
+    assert "Import-linter contract ID" in text, (
+        "Disambiguation table must explain IL-NNN as 'Import-linter contract ID'"
+    )
+    assert "Orchestration level" in text or "orchestration level" in text, (
+        "Disambiguation table must explain L-N as orchestration level"
     )

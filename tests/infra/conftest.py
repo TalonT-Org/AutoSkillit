@@ -17,16 +17,7 @@ class FormatterCoverageDef(NamedTuple):
 
 
 def _build_registry() -> dict[str, FormatterCoverageDef]:
-    from autoskillit.core.types._type_results import (
-        CloneSuccessResult,
-        KitchenStatusResult,
-        MergeWorktreeResult,
-        RunCmdResult,
-        RunSkillResult,
-        TestCheckResult,
-        TimingSummaryResult,
-        TokenSummaryResult,
-    )
+    from autoskillit.core.types._type_results import CloneSuccessResult
     from autoskillit.hooks.formatters.pretty_output_hook import (
         _FMT_CLONE_REPO_RENDERED,
         _FMT_CLONE_REPO_SUPPRESSED,
@@ -53,6 +44,15 @@ def _build_registry() -> dict[str, FormatterCoverageDef]:
     )
     from autoskillit.recipe._api import ListRecipesResult, LoadRecipeResult
     from autoskillit.recipe._recipe_ingredients import OpenKitchenResult
+    from autoskillit.server.tools._types import (
+        KitchenStatusResult,
+        MergeWorktreeResult,
+        RunCmdResult,
+        RunSkillResult,
+        TestCheckResult,
+        TimingSummaryResult,
+        TokenSummaryResult,
+    )
 
     return {
         "run_skill": FormatterCoverageDef(

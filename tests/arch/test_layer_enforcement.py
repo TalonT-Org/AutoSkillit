@@ -12,6 +12,7 @@ Tests:
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 
 import pytest
@@ -1025,9 +1026,10 @@ def test_tool_subset_tags_match_decorators() -> None:
 
 def test_server_docstring_references_registry_constants() -> None:
     """server/__init__.py docstring references registry constants, not hardcoded counts."""
-    import re
-
-    docstring = (SRC_ROOT / "server" / "__init__.py").read_text()
+    src = (SRC_ROOT / "server" / "__init__.py").read_text()
+    match = re.match(r'^"""(.*?)"""', src, re.DOTALL)
+    assert match, "server/__init__.py should start with a module docstring"
+    docstring = match.group(1)
     assert "GATED_TOOLS" in docstring, "docstring should reference GATED_TOOLS"
     assert "UNGATED_TOOLS" in docstring, "docstring should reference UNGATED_TOOLS"
     assert not re.search(r"\d+ kitchen-tagged", docstring), (

@@ -49,22 +49,36 @@ class TestLoadYamlExtended:
         with pytest.raises(YAMLError):
             load_yaml("{bad yaml: [unclosed")
 
-    def test_load_yaml_uses_c_loader_when_available(self, monkeypatch):
+    @pytest.mark.parametrize(
+        "input_kind",
+        ["string", "path"],
+        ids=["str-input", "path-input"],
+    )
+    def test_load_yaml_uses_c_loader_when_available(self, tmp_path, monkeypatch, input_kind):
         import yaml as _yaml
 
         from autoskillit.core.io import load_yaml
 
         if not getattr(_yaml, "__with_libyaml__", False):
             pytest.skip("LibYAML not available")
-        captured = {}
+        captured: dict[str, object] = {}
         original_load = _yaml.load
 
         def spy(data, *, Loader=None, **kw):
+            assert not kw, f"unexpected kwargs passed to yaml.load: {kw}"
             captured["Loader"] = Loader
             return original_load(data, Loader=Loader, **kw)
 
         monkeypatch.setattr("autoskillit.core.io.yaml.load", spy)
-        load_yaml("key: val")
+
+        if input_kind == "path":
+            p = tmp_path / "t.yaml"
+            p.write_text("a: 1\n")
+            result = load_yaml(p)
+            assert result == {"a": 1}
+        else:
+            load_yaml("key: val")
+
         assert captured["Loader"] is _yaml.CSafeLoader
 
     def test_loader_is_csafe_or_safe(self):
@@ -76,27 +90,6 @@ class TestLoadYamlExtended:
             assert _Loader is _yaml.CSafeLoader
         else:
             assert _Loader is _yaml.SafeLoader
-
-    def test_load_yaml_path_uses_c_loader(self, tmp_path, monkeypatch):
-        import yaml as _yaml
-
-        from autoskillit.core.io import load_yaml
-
-        if not getattr(_yaml, "__with_libyaml__", False):
-            pytest.skip("LibYAML not available")
-        p = tmp_path / "t.yaml"
-        p.write_text("a: 1\n")
-        captured = {}
-        original_load = _yaml.load
-
-        def spy(data, *, Loader=None, **kw):
-            captured["Loader"] = Loader
-            return original_load(data, Loader=Loader, **kw)
-
-        monkeypatch.setattr("autoskillit.core.io.yaml.load", spy)
-        result = load_yaml(p)
-        assert result == {"a": 1}
-        assert captured["Loader"] is _yaml.CSafeLoader
 
 
 class TestDumpYamlStr:

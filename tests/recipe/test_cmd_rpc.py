@@ -434,7 +434,7 @@ def test_batch_create_issues_ignores_validation_summary_file(tmp_path):
     """batch_create_issues must not append validation_summary content to issue bodies.
 
     The validation_summary file is a bulk audit artifact covering all findings
-    for a source. SKILL.md line 300-301 states it is NOT part of the issue body.
+    for a source. SKILL.md § Issue Body Construction states it is NOT part of the issue body.
     """
     va_dir = tmp_path / ".autoskillit" / "temp" / "validate-audit"
     va_dir.mkdir(parents=True)

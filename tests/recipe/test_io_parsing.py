@@ -600,6 +600,27 @@ def test_parse_step_handles_all_recipe_step_fields() -> None:
     )
 
 
+def test_parse_recipe_handles_all_recipe_fields() -> None:
+    """Combined handled+computed fields must equal Recipe.__dataclass_fields__."""
+    from autoskillit.recipe.io import _PARSE_RECIPE_HANDLED_FIELDS, _RECIPE_COMPUTED_FIELDS
+
+    schema_fields = frozenset(Recipe.__dataclass_fields__)
+    combined = _PARSE_RECIPE_HANDLED_FIELDS | _RECIPE_COMPUTED_FIELDS
+    assert combined == schema_fields, (
+        f"_parse_recipe field list is out of sync.\n"
+        f"  Missing from handled+computed: {schema_fields - combined}\n"
+        f"  Extra in handled+computed:     {combined - schema_fields}"
+    )
+
+
+def test_parse_recipe_handled_and_computed_are_disjoint() -> None:
+    """Parsed and computed field sets must not overlap."""
+    from autoskillit.recipe.io import _PARSE_RECIPE_HANDLED_FIELDS, _RECIPE_COMPUTED_FIELDS
+
+    overlap = _PARSE_RECIPE_HANDLED_FIELDS & _RECIPE_COMPUTED_FIELDS
+    assert not overlap, f"Fields in both handled and computed: {overlap}"
+
+
 def test_step_provider_field_parses_correctly() -> None:
     step = _parse_step({"tool": "run_skill", "provider": "minimax"})
     assert step.provider == "minimax"

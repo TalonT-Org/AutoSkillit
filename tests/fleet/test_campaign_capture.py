@@ -124,6 +124,207 @@ def test_interpolate_multiple_refs_in_one_value():
     assert result == {"path": "foo/bar"}
 
 
+def test_extract_captures_bool_value_uses_json_dumps():
+    from autoskillit.fleet._api import _extract_captures
+
+    result = _extract_captures(
+        {"flag": "${{ result.flag }}"},
+        {"flag": True},
+    )
+    assert result == {"flag": "true"}
+    assert result["flag"] != "True"
+
+
+def test_extract_captures_none_value_uses_json_dumps():
+    from autoskillit.fleet._api import _extract_captures
+
+    result = _extract_captures(
+        {"val": "${{ result.val }}"},
+        {"val": None},
+    )
+    assert result == {"val": "null"}
+    assert result["val"] != "None"
+
+
+def test_extract_captures_float_value_uses_json_dumps():
+    from autoskillit.fleet._api import _extract_captures
+
+    result = _extract_captures(
+        {"pi": "${{ result.pi }}"},
+        {"pi": 3.14},
+    )
+    assert result == {"pi": "3.14"}
+
+
+def test_extract_captures_empty_spec_returns_empty():
+    from autoskillit.fleet._api import _extract_captures
+
+    result = _extract_captures({}, {"anything": "value"})
+    assert result == {}
+
+
+def test_interpolate_campaign_refs_empty_ingredients():
+    from autoskillit.fleet._api import _interpolate_campaign_refs
+
+    result = _interpolate_campaign_refs({}, {"k": "v"})
+    assert result == {}
+
+
+# ---------------------------------------------------------------------------
+# Research-campaign capture field tests
+# ---------------------------------------------------------------------------
+
+
+def test_extract_research_design_captures():
+    from autoskillit.fleet._api import _extract_captures
+
+    spec = {
+        "worktree_path": "${{ result.worktree_path }}",
+        "research_dir": "${{ result.research_dir }}",
+        "experiment_plan": "${{ result.experiment_plan }}",
+        "visualization_plan_path": "${{ result.visualization_plan_path }}",
+    }
+    payload = {
+        "worktree_path": "/tmp/wt-123",
+        "research_dir": "/tmp/wt-123/research",
+        "experiment_plan": "plan.md",
+        "visualization_plan_path": "/tmp/wt-123/viz.yaml",
+    }
+    result = _extract_captures(spec, payload)
+    assert result == {
+        "worktree_path": "/tmp/wt-123",
+        "research_dir": "/tmp/wt-123/research",
+        "experiment_plan": "plan.md",
+        "visualization_plan_path": "/tmp/wt-123/viz.yaml",
+    }
+
+
+def test_extract_research_implement_capture():
+    from autoskillit.fleet._api import _extract_captures
+
+    result = _extract_captures(
+        {"report_path": "${{ result.report_path }}"},
+        {"report_path": "/tmp/wt-123/report.md"},
+    )
+    assert result == {"report_path": "/tmp/wt-123/report.md"}
+
+
+def test_extract_research_review_captures():
+    from autoskillit.fleet._api import _extract_captures
+
+    spec = {
+        "pr_url": "${{ result.pr_url }}",
+        "all_diagram_paths": "${{ result.all_diagram_paths }}",
+        "report_path_after_finalize": "${{ result.report_path_after_finalize }}",
+    }
+    payload = {
+        "pr_url": "https://github.com/org/repo/pull/42",
+        "all_diagram_paths": "/tmp/diagrams/arch.png",
+        "report_path_after_finalize": "/tmp/wt-123/report-final.md",
+    }
+    result = _extract_captures(spec, payload)
+    assert result == {
+        "pr_url": "https://github.com/org/repo/pull/42",
+        "all_diagram_paths": "/tmp/diagrams/arch.png",
+        "report_path_after_finalize": "/tmp/wt-123/report-final.md",
+    }
+
+
+def test_extract_research_review_all_diagram_paths_list():
+    from autoskillit.fleet._api import _extract_captures
+
+    result = _extract_captures(
+        {"all_diagram_paths": "${{ result.all_diagram_paths }}"},
+        {"all_diagram_paths": ["arch.png", "flow.png"]},
+    )
+    assert result == {"all_diagram_paths": '["arch.png", "flow.png"]'}
+    assert "'" not in result["all_diagram_paths"]
+
+
+def test_extract_research_partial_payload_skips_missing():
+    from autoskillit.fleet._api import _extract_captures
+
+    spec = {
+        "worktree_path": "${{ result.worktree_path }}",
+        "research_dir": "${{ result.research_dir }}",
+        "experiment_plan": "${{ result.experiment_plan }}",
+        "visualization_plan_path": "${{ result.visualization_plan_path }}",
+    }
+    payload = {
+        "worktree_path": "/tmp/wt-123",
+        "experiment_plan": "plan.md",
+    }
+    result = _extract_captures(spec, payload)
+    assert result == {
+        "worktree_path": "/tmp/wt-123",
+        "experiment_plan": "plan.md",
+    }
+    assert "research_dir" not in result
+    assert "visualization_plan_path" not in result
+
+
+def test_extract_empty_string_path_is_captured():
+    from autoskillit.fleet._api import _extract_captures
+
+    result = _extract_captures(
+        {"p": "${{ result.p }}"},
+        {"p": ""},
+    )
+    assert result == {"p": ""}
+
+
+def test_extract_research_capture_all_fields_combined():
+    from autoskillit.fleet._api import _extract_captures
+
+    spec = {
+        "worktree_path": "${{ result.worktree_path }}",
+        "research_dir": "${{ result.research_dir }}",
+        "experiment_plan": "${{ result.experiment_plan }}",
+        "visualization_plan_path": "${{ result.visualization_plan_path }}",
+        "report_path": "${{ result.report_path }}",
+        "pr_url": "${{ result.pr_url }}",
+        "all_diagram_paths": "${{ result.all_diagram_paths }}",
+    }
+    payload = {
+        "worktree_path": "/tmp/wt-123",
+        "research_dir": "/tmp/wt-123/research",
+        "experiment_plan": "plan.md",
+        "visualization_plan_path": "/tmp/wt-123/viz.yaml",
+        "report_path": "/tmp/wt-123/report.md",
+        "pr_url": "https://github.com/org/repo/pull/42",
+        "all_diagram_paths": ["a.png", "b.png"],
+    }
+    result = _extract_captures(spec, payload)
+    assert len(result) == 7
+    assert result["worktree_path"] == "/tmp/wt-123"
+    assert result["all_diagram_paths"] == '["a.png", "b.png"]'
+
+
+def test_interpolate_campaign_worktree_and_report_path():
+    from autoskillit.fleet._api import _interpolate_campaign_refs
+
+    result = _interpolate_campaign_refs(
+        {
+            "wt": "${{ campaign.worktree_path }}",
+            "rpt": "${{ campaign.report_path }}",
+        },
+        {"worktree_path": "/tmp/wt-123", "report_path": "/tmp/wt-123/report.md"},
+    )
+    assert result == {"wt": "/tmp/wt-123", "rpt": "/tmp/wt-123/report.md"}
+
+
+def test_interpolate_campaign_unresolved_research_ref_raises():
+    import pytest
+
+    from autoskillit.fleet._api import _interpolate_campaign_refs
+
+    with pytest.raises(ValueError, match="has not been captured"):
+        _interpolate_campaign_refs(
+            {"plan": "${{ campaign.experiment_plan }}"},
+            {},
+        )
+
+
 # ---------------------------------------------------------------------------
 # Integration path via execute_dispatch
 # ---------------------------------------------------------------------------

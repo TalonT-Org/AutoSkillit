@@ -102,6 +102,35 @@ def test_check_review_loop_with_args_has_previous_verdict(recipe) -> None:
     assert "review_verdict" in step.with_args["previous_verdict"]
 
 
+# Test 1d: ci_watch bounded loop
+def test_ci_watch_timed_out_routes_to_guard(recipe) -> None:
+    """Test 1d: ci_watch timed_out route goes to check_ci_timed_out_loop, not self."""
+    step = recipe.steps["ci_watch"]
+    assert step.on_result is not None
+    timed_out_conds = [c for c in step.on_result.conditions if c.when and "timed_out" in c.when]
+    assert timed_out_conds, "ci_watch must have a timed_out condition"
+    assert timed_out_conds[0].route == "check_ci_timed_out_loop", (
+        "ci_watch timed_out must route to check_ci_timed_out_loop, not self"
+    )
+
+
+def test_check_ci_timed_out_loop_exists_with_correct_pattern(recipe) -> None:
+    """Test 1d: check_ci_timed_out_loop uses check_loop_iteration with max_iterations: 2."""
+    assert "check_ci_timed_out_loop" in recipe.steps
+    step = recipe.steps["check_ci_timed_out_loop"]
+    assert step.tool == "run_python"
+    assert "check_loop_iteration" in step.with_args.get("callable", "")
+    assert step.with_args.get("max_iterations") == "2"
+    assert step.on_result is not None
+    max_exceeded_conds = [
+        c
+        for c in step.on_result.conditions
+        if c.when and "max_exceeded" in c.when and "true" in c.when
+    ]
+    assert max_exceeded_conds, "check_ci_timed_out_loop must route max_exceeded==true"
+    assert max_exceeded_conds[0].route == "detect_ci_conflict"
+
+
 def test_remediation_next_or_done_step_exists(recipe) -> None:
     """T_REM_MP1: remediation.yaml must have a next_or_done routing step."""
     assert "next_or_done" in recipe.steps

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.core import Severity
 from autoskillit.recipe.contracts import load_bundled_manifest
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
@@ -29,36 +28,15 @@ def _make_recipe(steps: dict[str, RecipeStep]) -> Recipe:
 
 
 def test_merge_pr_step_flags_merged_false_not_routed() -> None:
-    """The merge_pr step in merge-prs.yaml must trigger skill-result-routing-gap.
-
-    The merged=false value is not explicitly routed in on_result conditions.
-    """
+    """merge-prs.yaml: merge_pr step has merged=false guard — no finding expected."""
     recipe = load_recipe(builtin_recipes_dir() / "merge-prs.yaml")
     findings = run_semantic_rules(recipe)
     skill_routing_findings = [
         f for f in findings if f.rule == "skill-result-routing-gap" and f.step_name == "merge_pr"
     ]
-    assert len(skill_routing_findings) >= 1, (
-        "skill-result-routing-gap must fire for merge_pr step when merged=false is not routed"
+    assert len(skill_routing_findings) == 0, (
+        "merge_pr step in merge-prs.yaml must not trigger skill-result-routing-gap"
     )
-    messages = " ".join(f.message for f in skill_routing_findings)
-    assert "merged" in messages and "false" in messages, (
-        f"Finding message must mention 'merged' and 'false', got: {messages}"
-    )
-
-
-def test_skill_result_routing_gap_severity_is_error() -> None:
-    """skill-result-routing-gap must emit ERROR severity."""
-    recipe = load_recipe(builtin_recipes_dir() / "merge-prs.yaml")
-    findings = run_semantic_rules(recipe)
-    skill_routing_findings = [
-        f for f in findings if f.rule == "skill-result-routing-gap" and f.step_name == "merge_pr"
-    ]
-    assert len(skill_routing_findings) >= 1
-    for finding in skill_routing_findings:
-        assert finding.severity == Severity.ERROR, (
-            f"skill-result-routing-gap must be ERROR, got {finding.severity}"
-        )
 
 
 def test_skill_result_routing_gap_passes_when_all_values_routed() -> None:

@@ -103,7 +103,7 @@ def test_timed_out_self_loop_with_guard_is_clean() -> None:
 
 
 def test_merge_prs_yaml_wait_for_conflict_ci_flags_timed_out_loop() -> None:
-    """merge-prs.yaml: wait_for_conflict_ci has unguarded timed_out self-loop."""
+    """merge-prs.yaml: wait_for_conflict_ci has guarded timed_out loop — no finding expected."""
     recipe = load_recipe(builtin_recipes_dir() / "merge-prs.yaml")
     findings = run_semantic_rules(recipe)
     loop_findings = [
@@ -111,13 +111,13 @@ def test_merge_prs_yaml_wait_for_conflict_ci_flags_timed_out_loop() -> None:
         for f in findings
         if f.rule == "ci-timed-out-self-loop-unguarded" and f.step_name == "wait_for_conflict_ci"
     ]
-    assert len(loop_findings) >= 1, (
-        "wait_for_conflict_ci in merge-prs.yaml must trigger ci-timed-out-self-loop-unguarded"
+    assert len(loop_findings) == 0, (
+        "wait_for_conflict_ci in merge-prs.yaml must not trigger ci-timed-out-self-loop-unguarded"
     )
 
 
 def test_merge_prs_yaml_ci_watch_pr_flags_timed_out_loop() -> None:
-    """merge-prs.yaml: ci_watch_pr has unguarded timed_out self-loop."""
+    """merge-prs.yaml: ci_watch_pr has guarded timed_out loop — no finding expected."""
     recipe = load_recipe(builtin_recipes_dir() / "merge-prs.yaml")
     findings = run_semantic_rules(recipe)
     loop_findings = [
@@ -125,8 +125,8 @@ def test_merge_prs_yaml_ci_watch_pr_flags_timed_out_loop() -> None:
         for f in findings
         if f.rule == "ci-timed-out-self-loop-unguarded" and f.step_name == "ci_watch_pr"
     ]
-    assert len(loop_findings) >= 1, (
-        "ci_watch_pr in merge-prs.yaml must trigger ci-timed-out-self-loop-unguarded"
+    assert len(loop_findings) == 0, (
+        "ci_watch_pr in merge-prs.yaml must not trigger ci-timed-out-self-loop-unguarded"
     )
 
 
@@ -135,7 +135,7 @@ def test_merge_prs_yaml_ci_watch_pr_flags_timed_out_loop() -> None:
     ["implementation.yaml", "remediation.yaml", "implementation-groups.yaml"],
 )
 def test_ci_watch_in_recipes_flags_timed_out_loop(recipe_name: str) -> None:
-    """Recipes with ci_watch step that has unguarded timed_out self-loop must fire the rule."""
+    """Recipes with ci_watch step that has guarded timed_out loop — no finding expected."""
     recipe = load_recipe(builtin_recipes_dir() / recipe_name)
     findings = run_semantic_rules(recipe)
     loop_findings = [
@@ -143,8 +143,8 @@ def test_ci_watch_in_recipes_flags_timed_out_loop(recipe_name: str) -> None:
         for f in findings
         if f.rule == "ci-timed-out-self-loop-unguarded" and f.step_name == "ci_watch"
     ]
-    assert len(loop_findings) >= 1, (
-        f"{recipe_name}: ci_watch must trigger ci-timed-out-self-loop-unguarded"
+    assert len(loop_findings) == 0, (
+        f"{recipe_name}: ci_watch must not trigger ci-timed-out-self-loop-unguarded"
     )
 
 
@@ -249,7 +249,7 @@ def test_conflict_path_with_auto_trigger_is_clean() -> None:
 
 
 def test_merge_prs_yaml_wait_for_conflict_ci_flags_missing_auto_trigger() -> None:
-    """merge-prs.yaml: wait_for_conflict_ci lacks auto_trigger: true."""
+    """merge-prs.yaml: wait_for_conflict_ci has auto_trigger: true — no finding expected."""
     recipe = load_recipe(builtin_recipes_dir() / "merge-prs.yaml")
     findings = run_semantic_rules(recipe)
     trigger_findings = [
@@ -258,13 +258,13 @@ def test_merge_prs_yaml_wait_for_conflict_ci_flags_missing_auto_trigger() -> Non
         if f.rule == "ci-conflict-path-missing-auto-trigger"
         and f.step_name == "wait_for_conflict_ci"
     ]
-    assert len(trigger_findings) >= 1, (
-        "wait_for_conflict_ci in merge-prs.yaml must trigger ci-conflict-path-missing-auto-trigger"
+    assert len(trigger_findings) == 0, (
+        "wait_for_conflict_ci in merge-prs.yaml must not trigger ci-conflict-path-missing-auto-trigger"
     )
 
 
 def test_merge_prs_yaml_ci_watch_pr_flags_missing_auto_trigger() -> None:
-    """merge-prs.yaml: ci_watch_pr lacks auto_trigger: true."""
+    """merge-prs.yaml: ci_watch_pr has auto_trigger: true — no finding expected."""
     recipe = load_recipe(builtin_recipes_dir() / "merge-prs.yaml")
     findings = run_semantic_rules(recipe)
     trigger_findings = [
@@ -272,8 +272,8 @@ def test_merge_prs_yaml_ci_watch_pr_flags_missing_auto_trigger() -> None:
         for f in findings
         if f.rule == "ci-conflict-path-missing-auto-trigger" and f.step_name == "ci_watch_pr"
     ]
-    assert len(trigger_findings) >= 1, (
-        "ci_watch_pr in merge-prs.yaml must trigger ci-conflict-path-missing-auto-trigger"
+    assert len(trigger_findings) == 0, (
+        "ci_watch_pr in merge-prs.yaml must not trigger ci-conflict-path-missing-auto-trigger"
     )
 
 

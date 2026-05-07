@@ -10,14 +10,11 @@ import yaml
 from autoskillit.recipe.io import _parse_step, builtin_recipes_dir, load_recipe
 from autoskillit.recipe.schema import Recipe, RecipeStep
 
-# Known violations fixed in Parts B and C — excluded from general semantic-error assertions.
+# Known violations fixed in Part C — excluded from general semantic-error assertions.
 NO_AUTOSKILLIT_IMPORT = "no-autoskillit-import-in-skill-python-block"
 KNOWN_PART_B_VIOLATIONS: frozenset[str] = frozenset(
     {
         NO_AUTOSKILLIT_IMPORT,
-        "ci-timed-out-self-loop-unguarded",
-        "ci-conflict-path-missing-auto-trigger",
-        "skill-result-routing-gap",
     }
 )
 

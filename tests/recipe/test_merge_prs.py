@@ -631,3 +631,99 @@ def test_annotate_pr_diff_passes_local_review_rounds_explicitly(recipe) -> None:
         "annotate_pr_diff step must explicitly pass local_review_rounds to remove "
         "the dependency on the Python default '' which forces github review mode"
     )
+
+
+# ---------------------------------------------------------------------------
+# merged=false guard, loop guards, auto_trigger
+# ---------------------------------------------------------------------------
+
+
+def test_merge_pr_captures_merged(recipe) -> None:
+    """merge_pr step captures result.merged."""
+    step = recipe.steps["merge_pr"]
+    assert step.capture is not None
+    assert "merged" in step.capture
+    assert "${{ result.merged }}" in step.capture["merged"]
+
+
+def test_merge_pr_routes_merged_false_to_failure(recipe) -> None:
+    """merge_pr on_result routes merged=false to register_clone_failure."""
+    step = recipe.steps["merge_pr"]
+    assert step.on_result is not None
+    conditions = step.on_result.conditions
+    merged_false_conds = [
+        c for c in conditions if c.when and "merged" in c.when and "false" in c.when
+    ]
+    assert merged_false_conds, "merge_pr must have a when clause for merged==false"
+    assert merged_false_conds[0].route == "register_clone_failure", (
+        "merged=false route must go to register_clone_failure, not "
+        f"{merged_false_conds[0].route!r}"
+    )
+
+
+def test_wait_for_conflict_ci_has_auto_trigger(recipe) -> None:
+    """wait_for_conflict_ci has auto_trigger: true."""
+    step = recipe.steps["wait_for_conflict_ci"]
+    assert step.with_args.get("auto_trigger") == "true"
+
+
+def test_wait_for_conflict_ci_timed_out_routes_to_guard(recipe) -> None:
+    """wait_for_conflict_ci timed_out route goes to check_conflict_ci_loop, not self."""
+    step = recipe.steps["wait_for_conflict_ci"]
+    assert step.on_result is not None
+    timed_out_conds = [c for c in step.on_result.conditions if c.when and "timed_out" in c.when]
+    assert timed_out_conds, "wait_for_conflict_ci must have a timed_out condition"
+    assert timed_out_conds[0].route == "check_conflict_ci_loop", (
+        "wait_for_conflict_ci timed_out must route to check_conflict_ci_loop, not self"
+    )
+
+
+def test_check_conflict_ci_loop_exists_with_correct_pattern(recipe) -> None:
+    """check_conflict_ci_loop step uses check_loop_iteration with max_iterations: 2."""
+    assert "check_conflict_ci_loop" in recipe.steps
+    step = recipe.steps["check_conflict_ci_loop"]
+    assert step.tool == "run_python"
+    assert "check_loop_iteration" in step.with_args.get("callable", "")
+    assert step.with_args.get("max_iterations") == "2"
+    assert step.on_result is not None
+    max_exceeded_conds = [
+        c
+        for c in step.on_result.conditions
+        if c.when and "max_exceeded" in c.when and "true" in c.when
+    ]
+    assert max_exceeded_conds, "check_conflict_ci_loop must route max_exceeded==true"
+    assert max_exceeded_conds[0].route == "register_clone_failure"
+
+
+def test_ci_watch_pr_has_auto_trigger(recipe) -> None:
+    """ci_watch_pr has auto_trigger: true."""
+    step = recipe.steps["ci_watch_pr"]
+    assert step.with_args.get("auto_trigger") == "true"
+
+
+def test_ci_watch_pr_timed_out_routes_to_guard(recipe) -> None:
+    """ci_watch_pr timed_out route goes to check_ci_watch_pr_loop, not self."""
+    step = recipe.steps["ci_watch_pr"]
+    assert step.on_result is not None
+    timed_out_conds = [c for c in step.on_result.conditions if c.when and "timed_out" in c.when]
+    assert timed_out_conds, "ci_watch_pr must have a timed_out condition"
+    assert timed_out_conds[0].route == "check_ci_watch_pr_loop", (
+        "ci_watch_pr timed_out must route to check_ci_watch_pr_loop, not self"
+    )
+
+
+def test_check_ci_watch_pr_loop_exists_with_correct_pattern(recipe) -> None:
+    """check_ci_watch_pr_loop step uses check_loop_iteration with max_iterations: 2."""
+    assert "check_ci_watch_pr_loop" in recipe.steps
+    step = recipe.steps["check_ci_watch_pr_loop"]
+    assert step.tool == "run_python"
+    assert "check_loop_iteration" in step.with_args.get("callable", "")
+    assert step.with_args.get("max_iterations") == "2"
+    assert step.on_result is not None
+    max_exceeded_conds = [
+        c
+        for c in step.on_result.conditions
+        if c.when and "max_exceeded" in c.when and "true" in c.when
+    ]
+    assert max_exceeded_conds, "check_ci_watch_pr_loop must route max_exceeded==true"
+    assert max_exceeded_conds[0].route == "register_clone_failure"

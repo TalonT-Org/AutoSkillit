@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from autoskillit.core.paths import pkg_root
 
 SKILL_PATH = pkg_root() / "skills_extended" / "merge-pr" / "SKILL.md"
@@ -42,4 +44,37 @@ def test_merge_pr_skill_references_plain_squash_fallback() -> None:
     assert "--squash" in content.replace("--squash --auto", ""), (
         "merge-pr SKILL.md must reference plain '--squash' (without --auto) as a "
         "fallback for repos where autoMergeAllowed=false"
+    )
+
+
+# Tests 1e and 1f: pre-flight mergeability check and timeout output template
+
+
+def test_merge_pr_skill_has_pre_flight_mergeability_check() -> None:
+    """Test 1e: merge-pr SKILL.md must contain a pre-flight mergeability check."""
+    content = SKILL_PATH.read_text()
+    assert "mergeable" in content, "merge-pr SKILL.md must contain a pre-flight mergeability check"
+    mergeable_pos = content.find("mergeable")
+    merge_cmd_pos = content.find("gh pr merge")
+    assert merge_cmd_pos != -1, "gh pr merge command must exist in SKILL.md"
+    assert mergeable_pos < merge_cmd_pos, (
+        "Pre-flight mergeability check must appear before the gh pr merge command"
+    )
+
+
+def test_merge_pr_skill_has_timeout_output_template() -> None:
+    """Test 1f: merge-pr SKILL.md Step 5 output templates must include a timeout case."""
+    content = SKILL_PATH.read_text()
+    assert "timeout_error" in content, (
+        "merge-pr SKILL.md Step 5 output templates must include a timeout case"
+    )
+    # Verify timeout template has merged=false and timeout_error=true
+    timeout_section_match = re.search(
+        r'On timeout.*?\{[^}]*"merged":\s*false[^}]*"timeout_error":\s*true[^}]*\}',
+        content,
+        re.DOTALL,
+    )
+    assert timeout_section_match is not None, (
+        "merge-pr SKILL.md must have a timeout output case with "
+        "merged=false and timeout_error=true"
     )

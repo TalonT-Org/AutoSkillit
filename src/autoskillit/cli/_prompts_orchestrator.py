@@ -1,4 +1,4 @@
-"""L1/L2 cook session prompt builder + ingredients table + greetings."""
+"""IL-1/IL-2 cook session prompt builder + ingredients table + greetings."""
 
 from __future__ import annotations
 

@@ -335,17 +335,17 @@ class TestWorktreeStaleCarveout:
 
 
 def test_prompts_worktree_stale_carveout() -> None:
-    """_prompts.py orchestrator prompt must contain the worktree-stale carve-out."""
+    """_prompts_orchestrator.py orchestrator prompt must contain the worktree-stale carve-out."""
     prompts_path = (
         Path(__file__).resolve().parent.parent.parent
         / "src"
         / "autoskillit"
         / "cli"
-        / "_prompts.py"
+        / "_prompts_orchestrator.py"
     )
     prompts_text = prompts_path.read_text().lower()
     assert "worktree" in prompts_text and "stale" in prompts_text, (
-        "_prompts.py must contain a worktree-stale carve-out matching SKILL.md"
+        "_prompts_orchestrator.py must contain a worktree-stale carve-out matching SKILL.md"
     )
 
 

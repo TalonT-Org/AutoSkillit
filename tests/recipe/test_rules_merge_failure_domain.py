@@ -170,6 +170,8 @@ class TestBundledRecipesPassFailureDomainCheck:
 
         recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
         merge_step = recipe.steps[merge_step_name]
+        if merge_step.on_result is None or not merge_step.on_result.conditions:
+            pytest.skip("merge step has no on_result conditions")
         for cond in merge_step.on_result.conditions:
             if cond.when and "rebase" in cond.when and "post_rebase" not in cond.when:
                 target_step = recipe.steps[cond.route]

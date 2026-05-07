@@ -271,3 +271,68 @@ class TestNormalizeDispatchTokenUsage:
         import autoskillit.fleet
 
         assert "normalize_dispatch_token_usage" in autoskillit.fleet.__all__
+
+
+class TestDispatchRecordSchemaV3:
+    def test_normalize_maps_cache_keys_to_canonical_names(self) -> None:
+        result = normalize_dispatch_token_usage(
+            {
+                "input_tokens": 10,
+                "output_tokens": 5,
+                "cache_creation_input_tokens": 200,
+                "cache_read_input_tokens": 300,
+            }
+        )
+        assert result["cache_creation"] == 200
+        assert result["cache_read"] == 300
+        assert "cache_creation_input_tokens" not in result
+        assert "cache_read_input_tokens" not in result
+
+    def test_normalize_defaults_missing_cache_keys_to_zero(self) -> None:
+        result = normalize_dispatch_token_usage({"input_tokens": 10, "output_tokens": 5})
+        assert result["cache_creation"] == 0
+        assert result["cache_read"] == 0
+
+    def test_campaign_id_roundtrip_via_dispatch_record(self, tmp_path: Path) -> None:
+        sp = tmp_path / "state.json"
+        write_initial_state(
+            sp,
+            "camp-xyz",
+            "test",
+            "/m.yaml",
+            [DispatchRecord(name="a", campaign_id="camp-xyz")],
+        )
+        state = read_state(sp)
+        assert state is not None
+        assert state.dispatches[0].campaign_id == "camp-xyz"
+        assert json.loads(sp.read_text())["dispatches"][0]["campaign_id"] == "camp-xyz"
+
+    def test_backward_compat_missing_campaign_id_defaults_to_empty_string(
+        self, tmp_path: Path
+    ) -> None:
+        sp = tmp_path / "state_v1.json"
+        v1_payload = {
+            "schema_version": 1,
+            "campaign_id": "cid-v1",
+            "campaign_name": "old-campaign",
+            "manifest_path": "/m.yaml",
+            "started_at": 0.0,
+            "dispatches": [
+                {
+                    "name": "dispatch-a",
+                    "status": "running",
+                    "dispatch_id": "did-old",
+                    "l2_session_id": "",
+                    "l2_session_log_dir": "",
+                    "l2_pid": 9999,
+                    "reason": "",
+                    "token_usage": {},
+                    "started_at": 0.0,
+                    "ended_at": 0.0,
+                }
+            ],
+        }
+        sp.write_text(json.dumps(v1_payload))
+        state = read_state(sp)
+        assert state is not None
+        assert state.dispatches[0].campaign_id == ""

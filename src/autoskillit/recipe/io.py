@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json as _json
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -49,6 +50,39 @@ def substitute_temp_placeholder(text: str, temp_dir_relpath: str) -> str:
     return text.replace(_TEMP_PLACEHOLDER, temp_dir_relpath)
 
 
+def _load_recipe_dict(
+    yaml_path: Path,
+    *,
+    raw_text: str | None = None,
+    temp_dir_relpath: str | None = None,
+) -> dict:
+    """Load a recipe dict, preferring a pre-compiled JSON sibling when fresh.
+
+    Args:
+        yaml_path: Path to the .yaml recipe file.
+        raw_text: Already-read YAML text (avoids redundant I/O on fallback).
+        temp_dir_relpath: When set, ``{{AUTOSKILLIT_TEMP}}`` is replaced in the
+            text before parsing (applies to both JSON and YAML paths).
+    """
+    json_path = yaml_path.with_suffix(".json")
+    try:
+        if json_path.stat().st_mtime_ns >= yaml_path.stat().st_mtime_ns:
+            text = json_path.read_text(encoding="utf-8")
+            if temp_dir_relpath is not None:
+                text = substitute_temp_placeholder(text, temp_dir_relpath)
+            return _json.loads(text)
+    except (FileNotFoundError, OSError, ValueError):
+        pass
+    if raw_text is None:
+        raw_text = yaml_path.read_text(encoding="utf-8")
+    if temp_dir_relpath is not None:
+        raw_text = substitute_temp_placeholder(raw_text, temp_dir_relpath)
+    data = load_yaml(raw_text)
+    if not isinstance(data, dict):
+        raise ValueError(f"Recipe file must contain a YAML mapping: {yaml_path}")
+    return data
+
+
 def load_recipe(path: Path, temp_dir_relpath: str = ".autoskillit/temp") -> Recipe:
     """Parse a YAML recipe file into a Recipe dataclass.
 
@@ -61,11 +95,7 @@ def load_recipe(path: Path, temp_dir_relpath: str = ".autoskillit/temp") -> Reci
     ``_analysis.py`` imports ``iter_steps_with_context`` from this module, so a
     top-level import here would create a cycle.
     """
-    raw_text = path.read_text(encoding="utf-8")
-    substituted = substitute_temp_placeholder(raw_text, temp_dir_relpath)
-    data = load_yaml(substituted)
-    if not isinstance(data, dict):
-        raise ValueError(f"Recipe file must contain a YAML mapping: {path}")
+    data = _load_recipe_dict(path, temp_dir_relpath=temp_dir_relpath)
     recipe = _parse_recipe(data)
     from autoskillit.recipe.staleness_cache import compute_recipe_hash  # noqa: PLC0415
 
@@ -503,9 +533,7 @@ def _collect_recipes(
         if f.suffix in (".yaml", ".yml") and f.is_file():
             try:
                 raw = f.read_text(encoding="utf-8")
-                data = load_yaml(raw)
-                if not isinstance(data, dict):
-                    raise ValueError("recipe must be a YAML mapping")
+                data = _load_recipe_dict(f, raw_text=raw)
                 recipe = _parse_recipe(data)
                 if recipe.name and recipe.name not in seen:
                     seen.add(recipe.name)

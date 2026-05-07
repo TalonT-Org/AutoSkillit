@@ -1,0 +1,437 @@
+{
+  "name": "planner",
+  "recipe_version": "2",
+  "description": "Progressive decomposition pipeline with mixed dispatch. Analyzes a codebase,\ngenerates phases, then elaborates each tier (phases, assignments, work packages).\nPhases and assignments elaborate in parallel; work packages elaborate sequentially\n(one phase at a time) to smooth token spend rate. Each tier follows the pattern:\nelaborate → merge → refine. Reconciles dependencies, validates the dependency\ngraph, and compiles a manifest ready for issue creation.\n",
+  "summary": "init > analyze > [domain?] > gen-phases > parallel-phases > parallel-assignments > sequential-wps > reconcile > validate/refine > compile",
+  "requires_packs": [
+    "kitchen-core"
+  ],
+  "requires_features": [
+    "planner"
+  ],
+  "categories": [
+    "orchestration-family"
+  ],
+  "kitchen_rules": [
+    "Never invoke native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the orchestrator. All codebase interaction runs inside headless skill sessions.",
+    "Route to on_failure or escalate_stop rather than attempting inline recovery.",
+    "The refine/validate cycle is bounded by retries. If refine is exhausted, halt.",
+    "PARALLEL DISPATCH: When a step note says 'PARALLEL DISPATCH', iterate the comma-separated list in the referenced context variable. For each item, substitute it into the skill_command template placeholder and issue one run_skill call. Issue ALL calls in a single assistant message so they execute concurrently. Accumulate each result via capture_list.",
+    "SEQUENTIAL DISPATCH: When a step note says 'SEQUENTIAL DISPATCH', iterate the comma-separated list in the referenced context variable. For each item, substitute it into the skill_command template placeholder and issue one run_skill call. Wait for the call to complete before issuing the next. Accumulate each result via capture_list."
+  ],
+  "ingredients": {
+    "task": {
+      "description": "Task description to decompose into a plan. Accepts either an absolute file path or inline text.",
+      "required": true
+    },
+    "source_dir": {
+      "description": "Absolute path to the repository root to analyze.",
+      "required": true
+    },
+    "planner_assess_review_approach": {
+      "description": "When true, run planner-assess-review-approach after reconcile_deps to annotate WPs that would benefit from a review-approach research pass before implementation.\n",
+      "required": false,
+      "default": "false",
+      "hidden": false
+    }
+  },
+  "steps": {
+    "init": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.planner.create_run_dir",
+        "args": {
+          "temp_dir": "{{AUTOSKILLIT_TEMP}}"
+        }
+      },
+      "capture": {
+        "planner_dir": "${{ result.planner_dir }}"
+      },
+      "on_success": "resolve_task",
+      "on_failure": "escalate_stop"
+    },
+    "resolve_task": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.planner.resolve_task_input",
+        "task": "${{ inputs.task }}",
+        "planner_dir": "${{ context.planner_dir }}"
+      },
+      "capture": {
+        "task_file_path": "${{ result.task_file_path }}",
+        "task_label": "${{ result.task_label }}"
+      },
+      "on_success": "analyze",
+      "on_failure": "escalate_stop"
+    },
+    "analyze": {
+      "tool": "run_skill",
+      "model": "",
+      "with": {
+        "skill_command": "/autoskillit:planner-analyze ${{ context.planner_dir }}",
+        "cwd": "${{ inputs.source_dir }}",
+        "output_dir": "${{ context.planner_dir }}"
+      },
+      "on_success": "extract_domain",
+      "on_failure": "escalate_stop"
+    },
+    "extract_domain": {
+      "tool": "run_skill",
+      "model": "",
+      "with": {
+        "skill_command": "/autoskillit:planner-extract-domain ${{ context.planner_dir }}/analysis.json \"${{ context.task_file_path }}\"\n",
+        "cwd": "${{ inputs.source_dir }}",
+        "output_dir": "${{ context.planner_dir }}"
+      },
+      "on_success": "generate_phases",
+      "on_failure": "generate_phases"
+    },
+    "generate_phases": {
+      "tool": "run_skill",
+      "model": "",
+      "with": {
+        "skill_command": "/autoskillit:planner-generate-phases ${{ context.planner_dir }}/analysis.json ${{ context.planner_dir }}/domain_knowledge.md \"${{ context.task_file_path }}\"\n",
+        "cwd": "${{ inputs.source_dir }}",
+        "output_dir": "${{ context.planner_dir }}"
+      },
+      "capture": {
+        "phase_manifest_path": "${{ result.phase_manifest_path }}"
+      },
+      "on_success": "build_plan_snapshot",
+      "on_failure": "escalate_stop"
+    },
+    "build_plan_snapshot": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.planner.merge.build_plan_snapshot",
+        "phases_dir": "${{ context.planner_dir }}/phases",
+        "phase_manifest_path": "${{ context.phase_manifest_path }}",
+        "output_path": "${{ context.planner_dir }}/plan_snapshot.json",
+        "task_file_path": "${{ context.task_file_path }}",
+        "source_dir": "${{ inputs.source_dir }}"
+      },
+      "capture": {
+        "plan_snapshot_path": "${{ result.snapshot_path }}",
+        "phase_ids": "${{ result.phase_ids }}"
+      },
+      "on_success": "elaborate_phases",
+      "on_failure": "escalate_stop"
+    },
+    "elaborate_phases": {
+      "tool": "run_skill",
+      "model": "",
+      "with": {
+        "skill_command": "/autoskillit:planner-elaborate-phase ${{ context.plan_snapshot_path }} {phase_id} ${{ context.planner_dir }}/phases",
+        "cwd": "${{ inputs.source_dir }}",
+        "output_dir": "${{ context.planner_dir }}",
+        "dispatch_items": "${{ context.phase_ids }}"
+      },
+      "capture_list": {
+        "elab_result_path": "${{ result.elab_result_path }}"
+      },
+      "on_success": "merge_phases",
+      "on_failure": "escalate_stop",
+      "note": "PARALLEL DISPATCH: context.phase_ids contains comma-separated phase IDs (e.g. \"P1,P2,P3\"). For each phase_id, substitute it into the {phase_id} placeholder in skill_command and issue one run_skill call. Run ALL elaborations in parallel (all run_skill calls in a single message). Accumulate each elab_result_path value via capture_list.\n"
+    },
+    "merge_phases": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.planner.merge.merge_tier_results",
+        "results_dir": "${{ context.planner_dir }}/phases",
+        "output_path": "${{ context.planner_dir }}/combined_plan.json",
+        "key": "phases",
+        "task_file_path": "${{ context.task_file_path }}",
+        "source_dir": "${{ inputs.source_dir }}"
+      },
+      "capture": {
+        "combined_phases_path": "${{ result.merged_path }}"
+      },
+      "on_success": "refine_phases",
+      "on_failure": "escalate_stop"
+    },
+    "refine_phases": {
+      "tool": "run_skill",
+      "model": "",
+      "with": {
+        "skill_command": "/autoskillit:planner-refine-phases ${{ context.combined_phases_path }} ${{ context.planner_dir }}",
+        "cwd": "${{ inputs.source_dir }}",
+        "output_dir": "${{ context.planner_dir }}"
+      },
+      "capture": {
+        "refined_plan_path": "${{ result.refined_plan_path }}"
+      },
+      "on_success": "expand_assignments",
+      "on_failure": "escalate_stop"
+    },
+    "expand_assignments": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.planner.expand_assignments",
+        "refined_plan_path": "${{ context.refined_plan_path }}",
+        "output_dir": "${{ context.planner_dir }}",
+        "task_file_path": "${{ context.task_file_path }}"
+      },
+      "capture": {
+        "assignment_context_paths": "${{ result.context_paths }}"
+      },
+      "on_success": "elaborate_assignments",
+      "on_failure": "escalate_stop"
+    },
+    "elaborate_assignments": {
+      "tool": "run_skill",
+      "model": "",
+      "with": {
+        "skill_command": "/autoskillit:planner-elaborate-assignments {context_path} ${{ context.planner_dir }}",
+        "cwd": "${{ inputs.source_dir }}",
+        "output_dir": "${{ context.planner_dir }}/assignments",
+        "dispatch_items": "${{ context.assignment_context_paths }}"
+      },
+      "capture_list": {
+        "phase_assignments_result_dir": "${{ result.phase_assignments_result_dir }}"
+      },
+      "on_success": "merge_assignments",
+      "on_failure": "escalate_stop",
+      "note": "PARALLEL DISPATCH: context.assignment_context_paths contains comma-separated paths to per-phase context files. For each context_path, substitute it into the {context_path} placeholder in skill_command and issue one run_skill call. Run ALL elaborations in parallel. Accumulate results via capture_list.\n"
+    },
+    "merge_assignments": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.planner.merge.merge_tier_results",
+        "results_dir": "${{ context.planner_dir }}/assignments",
+        "output_path": "${{ context.planner_dir }}/combined_assignments.json",
+        "key": "assignments",
+        "task_file_path": "${{ context.task_file_path }}",
+        "source_dir": "${{ inputs.source_dir }}"
+      },
+      "capture": {
+        "refine_context_paths": "${{ result.refine_context_paths }}"
+      },
+      "on_success": "refine_assignments",
+      "on_failure": "escalate_stop"
+    },
+    "refine_assignments": {
+      "tool": "run_skill",
+      "model": "",
+      "with": {
+        "skill_command": "/autoskillit:planner-refine-assignments {context_path} ${{ context.refined_plan_path }} ${{ context.planner_dir }}",
+        "cwd": "${{ inputs.source_dir }}",
+        "output_dir": "${{ context.planner_dir }}/refine_contexts",
+        "dispatch_items": "${{ context.refine_context_paths }}"
+      },
+      "capture_list": {
+        "phase_refined_path": "${{ result.phase_refined_path }}"
+      },
+      "on_success": "merge_refined_assignments",
+      "on_failure": "escalate_stop",
+      "note": "PARALLEL DISPATCH: context.refine_context_paths contains comma-separated paths to per-phase context files produced by merge_tier_results. For each context_path, substitute it into the {context_path} placeholder and issue one run_skill call. Run ALL refinements in parallel. Accumulate results via capture_list.\n"
+    },
+    "merge_refined_assignments": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.planner.merge.merge_refined_assignments",
+        "planner_dir": "${{ context.planner_dir }}"
+      },
+      "capture": {
+        "refined_assignments_path": "${{ result.refined_assignments_path }}"
+      },
+      "on_success": "expand_wps",
+      "on_failure": "escalate_stop"
+    },
+    "expand_wps": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.planner.expand_wps",
+        "refined_assignments_path": "${{ context.refined_assignments_path }}",
+        "output_dir": "${{ context.planner_dir }}",
+        "task_file_path": "${{ context.task_file_path }}"
+      },
+      "capture": {
+        "wp_context_paths": "${{ result.context_paths }}"
+      },
+      "on_success": "elaborate_wps",
+      "on_failure": "escalate_stop"
+    },
+    "elaborate_wps": {
+      "tool": "run_skill",
+      "model": "",
+      "with": {
+        "skill_command": "/autoskillit:planner-elaborate-wps {context_path} ${{ context.planner_dir }}",
+        "cwd": "${{ inputs.source_dir }}",
+        "output_dir": "${{ context.planner_dir }}/work_packages",
+        "dispatch_items": "${{ context.wp_context_paths }}"
+      },
+      "capture_list": {
+        "phase_wps_result_dir": "${{ result.phase_wps_result_dir }}"
+      },
+      "on_success": "finalize_wp_manifest",
+      "on_failure": "escalate_stop",
+      "note": "SEQUENTIAL DISPATCH: context.wp_context_paths contains comma-separated paths to per-phase WP context files. For each context_path, substitute it into the {context_path} placeholder in skill_command and issue one run_skill call. Wait for each elaboration to complete before starting the next. Accumulate results via capture_list.\n"
+    },
+    "finalize_wp_manifest": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.planner.finalize_wp_manifest",
+        "work_packages_dir": "${{ context.planner_dir }}/work_packages",
+        "output_dir": "${{ context.planner_dir }}"
+      },
+      "on_success": "merge_wps",
+      "on_failure": "escalate_stop"
+    },
+    "merge_wps": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.planner.merge.merge_tier_results",
+        "results_dir": "${{ context.planner_dir }}/work_packages",
+        "output_path": "${{ context.planner_dir }}/combined_wps.json",
+        "key": "work_packages",
+        "task_file_path": "${{ context.task_file_path }}",
+        "source_dir": "${{ inputs.source_dir }}"
+      },
+      "capture": {
+        "combined_wps_path": "${{ result.merged_path }}"
+      },
+      "on_success": "refine_wps",
+      "on_failure": "escalate_stop"
+    },
+    "refine_wps": {
+      "tool": "run_skill",
+      "model": "",
+      "with": {
+        "skill_command": "/autoskillit:planner-refine-wps ${{ context.combined_wps_path }} ${{ context.refined_plan_path }} ${{ context.refined_assignments_path }} ${{ context.planner_dir }}\n",
+        "cwd": "${{ inputs.source_dir }}",
+        "output_dir": "${{ context.planner_dir }}"
+      },
+      "capture": {
+        "refined_wps_path": "${{ result.refined_wps_path }}"
+      },
+      "on_success": "consolidate_wps_analyze",
+      "on_failure": "escalate_stop"
+    },
+    "consolidate_wps_analyze": {
+      "tool": "run_skill",
+      "model": "",
+      "with": {
+        "skill_command": "/autoskillit:planner-consolidate-wps ${{ context.refined_wps_path }} ${{ context.planner_dir }}\n",
+        "cwd": "${{ inputs.source_dir }}",
+        "output_dir": "${{ context.planner_dir }}"
+      },
+      "on_success": "consolidate_wps_merge",
+      "on_failure": "consolidate_wps_merge",
+      "note": "Analysis-only step: always routes to consolidate_wps_merge regardless of success or failure. If the skill fails, the merge callable falls back to passing all WPs through unchanged (no consolidation manifests = no-op merge).\n"
+    },
+    "consolidate_wps_merge": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.planner.consolidate_wps",
+        "refined_wps_path": "${{ context.refined_wps_path }}",
+        "planner_dir": "${{ context.planner_dir }}"
+      },
+      "capture": {
+        "consolidated_wps_path": "${{ result.consolidated_wps_path }}"
+      },
+      "on_success": "validate_task_alignment",
+      "on_failure": "escalate_stop"
+    },
+    "validate_task_alignment": {
+      "tool": "run_skill",
+      "model": "",
+      "with": {
+        "skill_command": "/autoskillit:planner-validate-task-alignment ${{ context.consolidated_wps_path }} ${{ context.refined_plan_path }} ${{ context.planner_dir }}\n",
+        "cwd": "${{ inputs.source_dir }}",
+        "output_dir": "${{ context.planner_dir }}"
+      },
+      "capture": {
+        "alignment_findings_path": "${{ result.alignment_findings_path }}"
+      },
+      "on_success": "reconcile_deps",
+      "on_failure": "reconcile_deps"
+    },
+    "reconcile_deps": {
+      "tool": "run_skill",
+      "model": "",
+      "with": {
+        "skill_command": "/autoskillit:planner-reconcile-deps ${{ context.planner_dir }}",
+        "cwd": "${{ inputs.source_dir }}",
+        "output_dir": "${{ context.planner_dir }}",
+        "consolidated_wps_path": "${{ context.consolidated_wps_path }}"
+      },
+      "on_success": "assess_review_approach_step",
+      "on_failure": "escalate_stop"
+    },
+    "assess_review_approach_step": {
+      "tool": "run_skill",
+      "model": "",
+      "optional": true,
+      "skip_when_false": "inputs.planner_assess_review_approach",
+      "with": {
+        "skill_command": "/autoskillit:planner-assess-review-approach ${{ context.consolidated_wps_path }} ${{ context.planner_dir }}\n",
+        "cwd": "${{ inputs.source_dir }}",
+        "output_dir": "${{ context.planner_dir }}"
+      },
+      "capture": {
+        "review_approach_assessment_path": "${{ result.review_approach_assessment_path }}"
+      },
+      "on_success": "validate",
+      "on_failure": "validate",
+      "on_context_limit": "validate",
+      "note": "Optional review-approach benefit assessment pass. Non-fatal: routes to validate on both success and failure. Skipped when planner_assess_review_approach ingredient is false (default).\n"
+    },
+    "validate": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.planner.validate_plan",
+        "output_dir": "${{ context.planner_dir }}"
+      },
+      "capture": {
+        "verdict": "${{ result.verdict }}"
+      },
+      "on_success": "check_verdict",
+      "on_failure": "escalate_stop"
+    },
+    "check_verdict": {
+      "action": "route",
+      "on_result": [
+        {
+          "when": "${{ context.verdict }} == fail",
+          "route": "refine"
+        },
+        {
+          "route": "compile"
+        }
+      ]
+    },
+    "refine": {
+      "tool": "run_skill",
+      "model": "",
+      "with": {
+        "skill_command": "/autoskillit:planner-refine ${{ context.planner_dir }}/validation.json ${{ context.planner_dir }}\n",
+        "cwd": "${{ inputs.source_dir }}",
+        "output_dir": "${{ context.planner_dir }}"
+      },
+      "retries": 2,
+      "on_success": "validate",
+      "on_exhausted": "escalate_stop",
+      "on_failure": "escalate_stop"
+    },
+    "compile": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.planner.compile_plan",
+        "output_dir": "${{ context.planner_dir }}",
+        "task_file_path": "${{ context.task_file_path }}",
+        "task_label": "${{ context.task_label }}",
+        "source_dir": "${{ inputs.source_dir }}"
+      },
+      "on_success": "done",
+      "on_failure": "escalate_stop"
+    },
+    "done": {
+      "action": "stop",
+      "message": "Planning complete. Plan artifacts written to ${{ context.planner_dir }}/. Use compile output to create GitHub issues and milestones.\n"
+    },
+    "escalate_stop": {
+      "action": "stop",
+      "message": "Planner pipeline failed — human intervention needed. Review the latest step output for details."
+    }
+  }
+}

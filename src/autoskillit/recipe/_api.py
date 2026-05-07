@@ -45,6 +45,7 @@ from autoskillit.recipe.diagrams import (
 )
 from autoskillit.recipe.io import (
     RecipeInfo,
+    _load_recipe_dict,
     _parse_recipe,
     builtin_recipes_dir,
     builtin_sub_recipes_dir,
@@ -390,7 +391,6 @@ def load_and_validate(
 
     raw = match.content if match.content is not None else match.path.read_text()
     _temp_relpath = temp_dir_relpath or ".autoskillit/temp"
-    raw = substitute_temp_placeholder(raw, _temp_relpath)
     suggestions: list[dict[str, Any]] = []
     valid = True
     recipe = None
@@ -404,7 +404,7 @@ def load_and_validate(
 
     try:
         # Stage: yaml parse
-        data = load_yaml(raw)
+        data = _load_recipe_dict(match.path, raw_text=raw, temp_dir_relpath=_temp_relpath)
         t0 = _t("yaml_parse", t0, name)
 
         if isinstance(data, dict) and "steps" in data:

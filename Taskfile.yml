@@ -201,8 +201,14 @@ tasks:
     cmds:
       - uv run python -c "from autoskillit.hook_registry import HOOK_REGISTRY_HASH, HOOKS_DIR; (HOOKS_DIR / 'registry.sha256').write_text(HOOK_REGISTRY_HASH + '\n')"
 
+  compile-recipes:
+    desc: Pre-compile bundled recipe YAML files to JSON
+    cmds:
+      - python scripts/compile_recipes.py
+
   install-worktree:
     desc: Set up development environment (isolated venv in worktrees, direct install in main)
+    deps: [compile-recipes]
     status:
       - test -x .venv/bin/python
       - uv sync --check --all-extras 2>/dev/null

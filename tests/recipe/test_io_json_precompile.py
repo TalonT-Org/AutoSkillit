@@ -1,0 +1,230 @@
+"""Tests for JSON pre-compilation fast path in recipe I/O."""
+
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+
+import pytest
+import yaml
+
+from autoskillit.core import RecipeSource
+from autoskillit.recipe.io import (
+    _collect_recipes,
+    _load_recipe_dict,
+    builtin_recipes_dir,
+)
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+_MINIMAL_RECIPE = {
+    "name": "test-recipe",
+    "description": "A test recipe",
+    "steps": {
+        "done": {"action": "stop", "message": "Done."},
+    },
+}
+
+
+def _write_yaml(path: Path, data: dict) -> None:
+    path.write_text(yaml.dump(data, default_flow_style=False), encoding="utf-8")
+
+
+def _compile_json(yaml_path: Path) -> None:
+    """Inline compilation: YAML -> JSON sibling."""
+    data = yaml.safe_load(yaml_path.read_bytes())
+    json_path = yaml_path.with_suffix(".json")
+    json_path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# T1: prefers JSON when fresh
+# ---------------------------------------------------------------------------
+
+
+def test_load_recipe_dict_prefers_json_when_fresh(tmp_path, monkeypatch):
+    yaml_path = tmp_path / "recipe.yaml"
+    _write_yaml(yaml_path, _MINIMAL_RECIPE)
+    _compile_json(yaml_path)
+
+    load_yaml_calls = []
+    monkeypatch.setattr(
+        "autoskillit.recipe.io.load_yaml",
+        lambda *a, **kw: load_yaml_calls.append(1) or _MINIMAL_RECIPE,
+    )
+
+    result = _load_recipe_dict(yaml_path)
+
+    assert result == _MINIMAL_RECIPE
+    assert load_yaml_calls == [], "load_yaml should not be called when JSON is fresh"
+
+
+# ---------------------------------------------------------------------------
+# T2: falls back when JSON missing
+# ---------------------------------------------------------------------------
+
+
+def test_load_recipe_dict_falls_back_when_json_missing(tmp_path, monkeypatch):
+    yaml_path = tmp_path / "recipe.yaml"
+    _write_yaml(yaml_path, _MINIMAL_RECIPE)
+
+    load_yaml_calls = []
+    monkeypatch.setattr(
+        "autoskillit.recipe.io.load_yaml",
+        lambda *a, **kw: load_yaml_calls.append(1) or _MINIMAL_RECIPE,
+    )
+
+    result = _load_recipe_dict(yaml_path)
+
+    assert result == _MINIMAL_RECIPE
+    assert load_yaml_calls == [1], "load_yaml should be called when JSON sibling is absent"
+
+
+# ---------------------------------------------------------------------------
+# T3: falls back when JSON stale
+# ---------------------------------------------------------------------------
+
+
+def test_load_recipe_dict_falls_back_when_json_stale(tmp_path, monkeypatch):
+    yaml_path = tmp_path / "recipe.yaml"
+    _write_yaml(yaml_path, _MINIMAL_RECIPE)
+    json_path = yaml_path.with_suffix(".json")
+
+    # Write JSON first, then write YAML over it to ensure YAML is newer
+    _compile_json(yaml_path)
+    # Manually set JSON mtime to the past so YAML is newer
+    js_mtime = json_path.stat().st_mtime
+    os.utime(json_path, (js_mtime - 10, js_mtime - 10))
+
+    load_yaml_calls = []
+    monkeypatch.setattr(
+        "autoskillit.recipe.io.load_yaml",
+        lambda *a, **kw: load_yaml_calls.append(1) or _MINIMAL_RECIPE,
+    )
+
+    result = _load_recipe_dict(yaml_path)
+
+    assert result == _MINIMAL_RECIPE
+    assert load_yaml_calls == [1], "load_yaml should be called when JSON is stale"
+
+
+# ---------------------------------------------------------------------------
+# T4: substitution applied on JSON path
+# ---------------------------------------------------------------------------
+
+
+def test_load_recipe_dict_applies_substitution_on_json(tmp_path):
+    recipe_with_placeholder = {
+        "name": "test-recipe",
+        "description": "A test",
+        "steps": {
+            "run": {
+                "tool": "test_check",
+                "with": {"worktree_path": "{{AUTOSKILLIT_TEMP}}"},
+            },
+        },
+    }
+    yaml_path = tmp_path / "recipe.yaml"
+    _write_yaml(yaml_path, recipe_with_placeholder)
+    _compile_json(yaml_path)
+
+    result = _load_recipe_dict(yaml_path, temp_dir_relpath="custom/temp")
+
+    assert result["steps"]["run"]["with"]["worktree_path"] == "custom/temp"
+
+
+# ---------------------------------------------------------------------------
+# T5: handles JSON decode error (corrupt JSON)
+# ---------------------------------------------------------------------------
+
+
+def test_load_recipe_dict_handles_json_decode_error(tmp_path, monkeypatch):
+    yaml_path = tmp_path / "recipe.yaml"
+    _write_yaml(yaml_path, _MINIMAL_RECIPE)
+    json_path = yaml_path.with_suffix(".json")
+    # Write newer mtime but corrupt content
+    json_path.write_text("{ invalid json }", encoding="utf-8")
+    os.utime(json_path, None)  # make it newer than YAML
+
+    load_yaml_calls = []
+    monkeypatch.setattr(
+        "autoskillit.recipe.io.load_yaml",
+        lambda *a, **kw: load_yaml_calls.append(1) or _MINIMAL_RECIPE,
+    )
+
+    result = _load_recipe_dict(yaml_path)
+
+    assert result == _MINIMAL_RECIPE
+    assert load_yaml_calls == [1], "load_yaml should be called when JSON is corrupt"
+
+
+# ---------------------------------------------------------------------------
+# T6: _collect_recipes produces identical results with JSON siblings
+# ---------------------------------------------------------------------------
+
+
+def test_collect_recipes_identical_with_json(tmp_path):
+    recipes = [
+        {"name": "recipe-a", "description": "A", "steps": {"done": {"action": "stop"}}},
+        {"name": "recipe-b", "description": "B", "steps": {"done": {"action": "stop"}}},
+        {"name": "recipe-c", "description": "C", "steps": {"done": {"action": "stop"}}},
+    ]
+    for r in recipes:
+        _write_yaml(tmp_path / f"{r['name']}.yaml", r)
+
+    # Collect without JSON siblings
+    seen1: set[str] = set()
+    items1: list = []
+    errors1: list = []
+    _collect_recipes(RecipeSource.PROJECT, tmp_path, seen1, items1, errors1)
+
+    # Compile JSON siblings
+    for r in recipes:
+        _compile_json(tmp_path / f"{r['name']}.yaml")
+
+    # Collect with JSON siblings
+    seen2: set[str] = set()
+    items2: list = []
+    errors2: list = []
+    _collect_recipes(RecipeSource.PROJECT, tmp_path, seen2, items2, errors2)
+
+    # Assert identical name/description/version/kind
+    for a, b in zip(sorted(items1, key=lambda x: x.name), sorted(items2, key=lambda x: x.name)):
+        assert a.name == b.name
+        assert a.description == b.description
+        assert a.version == b.version
+        assert a.kind == b.kind
+
+
+# ---------------------------------------------------------------------------
+# T7: roundtrip YAML -> JSON -> dict preserves data
+# ---------------------------------------------------------------------------
+
+
+def test_compile_recipes_roundtrip():
+    for yaml_path in sorted(builtin_recipes_dir().rglob("*.yaml")):
+        data = yaml.safe_load(yaml_path.read_bytes())
+        json_text = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+        roundtripped = json.loads(json_text)
+        assert roundtripped == data, f"Roundtrip failed for {yaml_path.name}"
+
+
+# ---------------------------------------------------------------------------
+# T8: bundled JSON files are fresh (freshness guard)
+# ---------------------------------------------------------------------------
+
+
+def test_bundled_json_files_are_fresh():
+    for yaml_path in sorted(builtin_recipes_dir().rglob("*.yaml")):
+        json_path = yaml_path.with_suffix(".json")
+        assert json_path.exists(), f"Missing JSON sibling for {yaml_path.name}"
+
+        yaml_data = yaml.safe_load(yaml_path.read_bytes())
+        json_data = json.loads(json_path.read_text(encoding="utf-8"))
+        assert json_data == yaml_data, f"JSON is stale for {yaml_path.name}"
+
+
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]

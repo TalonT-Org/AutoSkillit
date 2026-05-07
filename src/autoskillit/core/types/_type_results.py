@@ -279,10 +279,10 @@ class SkillResult:
             "lifespan_started": self.lifespan_started,
             "provider_fallback": self.provider.fallback_activated,
             "provider_used": self.provider.provider_used,
+            "infra_exit_category": self.infra.exit_category,
         }
         if self.worktree_path is not None:
             data["worktree_path"] = self.worktree_path
-        data["infra_exit_category"] = self.infra.exit_category
         data["order_id"] = self.order_id
         return json.dumps(data, default=lambda o: o.value if isinstance(o, Enum) else str(o))
 

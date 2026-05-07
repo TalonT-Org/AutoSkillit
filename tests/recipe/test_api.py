@@ -846,3 +846,4 @@ def test_load_and_validate_skips_list_recipes_when_recipe_list_provided(tmp_path
     result = api_mod.load_and_validate("myrecipe", tmp_path, recipe_info=info, recipe_list=[info])
 
     assert "error" not in result
+    assert result.get("name") == "myrecipe"

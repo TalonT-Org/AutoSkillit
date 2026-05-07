@@ -326,6 +326,7 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
                 description=inp_data.get("description", ""),
                 required=inp_data.get("required", False),
                 default=inp_data.get("default"),
+                type=inp_data.get("type"),
                 hidden=bool(inp_data.get("hidden", False)),
             )
 

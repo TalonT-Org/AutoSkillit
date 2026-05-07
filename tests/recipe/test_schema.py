@@ -559,3 +559,40 @@ def test_recipe_requires_features_rejects_unknown_feature() -> None:
 
     with pytest.raises(ValueError, match="Unknown features"):
         Recipe(name="x", description="d", requires_features=["nonexistent_feature_xyz"])
+
+
+# ---------------------------------------------------------------------------
+# T2: RecipeIngredient.type field (ingredient type enforcement)
+# ---------------------------------------------------------------------------
+
+
+def test_recipe_ingredient_type_field_exists() -> None:
+    """RecipeIngredient must have a type field."""
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    ing = RecipeIngredient(description="d", type="integer", default="3")
+    assert hasattr(ing, "type")
+
+
+def test_recipe_ingredient_type_stores_value() -> None:
+    """RecipeIngredient.type must store the provided type string."""
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    ing = RecipeIngredient(description="d", type="integer", default="3")
+    assert ing.type == "integer"
+
+
+def test_recipe_ingredient_type_defaults_to_none() -> None:
+    """RecipeIngredient.type must default to None when not provided."""
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    ing = RecipeIngredient(description="d")
+    assert ing.type is None
+
+
+def test_recipe_ingredient_type_can_be_explicitly_none() -> None:
+    """RecipeIngredient.type may be explicitly set to None."""
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    ing = RecipeIngredient(description="d", type=None)
+    assert ing.type is None

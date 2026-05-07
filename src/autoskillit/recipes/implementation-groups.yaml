@@ -42,7 +42,8 @@ ingredients:
     description: >-
       Number of review-resolve cycles to run locally before switching to
       GitHub-backed review. 0 disables local mode entirely.
-    default: ""
+    type: integer
+    default: "3"
   issue_url:
     description: GitHub issue to close on merge
     required: false

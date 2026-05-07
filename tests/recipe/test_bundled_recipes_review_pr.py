@@ -232,3 +232,74 @@ class TestAnnotatePrDiffLocalReviewRounds:
     def test_local_review_rounds_ingredient_exists(self, recipe: object) -> None:
         """T4.7: local_review_rounds is in recipe.ingredients."""
         assert "local_review_rounds" in recipe.ingredients
+
+
+# ---------------------------------------------------------------------------
+# T1: local_review_rounds default is not empty string (explicit numeric)
+# T5: display and runtime defaults are consistent
+# T7: review_max_retries default tested for all three recipes
+# ---------------------------------------------------------------------------
+
+
+class TestLocalReviewRoundsDefault:
+    """T1 + T5: local_review_rounds must have explicit non-empty default."""
+
+    @pytest.fixture(
+        scope="class",
+        params=[
+            "implementation.yaml",
+            "implementation-groups.yaml",
+            "remediation.yaml",
+        ],
+    )
+    def recipe(self, request: pytest.FixtureRequest) -> object:
+        return load_recipe(builtin_recipes_dir() / request.param)
+
+    def test_local_review_rounds_default_is_not_empty_string(self, recipe: object) -> None:
+        """T1: local_review_rounds.default must NOT be '' in bundled recipes."""
+        ing = recipe.ingredients["local_review_rounds"]
+        assert ing.default != "", (
+            f"{recipe.name}: local_review_rounds.default is '', "
+            "which creates a shadow-default that bypasses type semantics"
+        )
+
+    def test_local_review_rounds_default_is_parseable_as_int(self, recipe: object) -> None:
+        """T1: local_review_rounds.default must be parseable as int."""
+        ing = recipe.ingredients["local_review_rounds"]
+        assert ing.default is not None
+        try:
+            int(ing.default)
+        except ValueError:
+            pytest.fail(
+                f"{recipe.name}: local_review_rounds.default={ing.default!r} "
+                "is not parseable as int"
+            )
+
+    def test_local_review_rounds_type_is_integer(self, recipe: object) -> None:
+        """T5: local_review_rounds must declare type=integer for semantic rule enforcement."""
+        ing = recipe.ingredients["local_review_rounds"]
+        assert ing.type == "integer", (
+            f"{recipe.name}: local_review_rounds.type must be 'integer', got {ing.type!r}"
+        )
+
+
+class TestReviewMaxRetriesDefault:
+    """T7: review_max_retries.default must be '3' for all three main recipes."""
+
+    @pytest.fixture(
+        scope="class",
+        params=[
+            "implementation.yaml",
+            "implementation-groups.yaml",
+            "remediation.yaml",
+        ],
+    )
+    def recipe(self, request: pytest.FixtureRequest) -> object:
+        return load_recipe(builtin_recipes_dir() / request.param)
+
+    def test_review_max_retries_default_is_3(self, recipe: object) -> None:
+        """T7: review_max_retries.default must be '3' in all bundled recipes."""
+        ing = recipe.ingredients["review_max_retries"]
+        assert ing.default == "3", (
+            f"{recipe.name}: review_max_retries.default is {ing.default!r}, expected '3'"
+        )

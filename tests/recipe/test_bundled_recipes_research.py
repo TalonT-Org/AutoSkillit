@@ -473,3 +473,64 @@ class TestResearchRecipeStructure:
         step = recipe.steps["stage_bundle"]
         assert step.on_success == "route_pr_or_local"
         assert step.on_failure == "route_pr_or_local"
+
+    # --- experiment_type / methodology_tradition threading tests ---
+
+    def test_plan_visualization_receives_experiment_type(self, recipe) -> None:
+        step = recipe.steps["plan_visualization"]
+        cmd = step.with_args["skill_command"]
+        assert "context.experiment_type" in cmd
+
+    def test_plan_visualization_captures_methodology_tradition(self, recipe) -> None:
+        step = recipe.steps["plan_visualization"]
+        assert "methodology_tradition" in step.capture
+        assert "result.methodology_tradition" in step.capture["methodology_tradition"]
+
+    def test_generate_report_receives_experiment_type_and_methodology_tradition(
+        self, recipe
+    ) -> None:
+        step = recipe.steps["generate_report"]
+        cmd = step.with_args["skill_command"]
+        assert "--experiment-type" in cmd
+        assert "context.experiment_type" in cmd
+        assert "--methodology-tradition" in cmd
+        assert "context.methodology_tradition" in cmd
+
+    def test_generate_report_inconclusive_receives_experiment_type_and_methodology_tradition(
+        self, recipe
+    ) -> None:
+        step = recipe.steps["generate_report_inconclusive"]
+        cmd = step.with_args["skill_command"]
+        assert "--experiment-type" in cmd
+        assert "context.experiment_type" in cmd
+        assert "--methodology-tradition" in cmd
+        assert "context.methodology_tradition" in cmd
+
+    def test_re_generate_report_receives_experiment_type_and_methodology_tradition(
+        self, recipe
+    ) -> None:
+        step = recipe.steps["re_generate_report"]
+        cmd = step.with_args["skill_command"]
+        assert "--experiment-type" in cmd
+        assert "context.experiment_type" in cmd
+        assert "--methodology-tradition" in cmd
+        assert "context.methodology_tradition" in cmd
+
+    def test_plan_visualization_contract_declares_methodology_tradition_output(self) -> None:
+        from autoskillit.recipe.contracts import get_skill_contract, load_bundled_manifest
+
+        manifest = load_bundled_manifest()
+        contract = get_skill_contract("plan-visualization", manifest)
+        assert contract is not None
+        output_names = {out.name for out in contract.outputs}
+        assert "methodology_tradition" in output_names
+
+    def test_generate_report_contract_declares_classification_inputs(self) -> None:
+        from autoskillit.recipe.contracts import get_skill_contract, load_bundled_manifest
+
+        manifest = load_bundled_manifest()
+        contract = get_skill_contract("generate-report", manifest)
+        assert contract is not None
+        input_names = {inp.name for inp in contract.inputs}
+        assert "experiment_type" in input_names
+        assert "methodology_tradition" in input_names

@@ -29,6 +29,8 @@ results are valid findings, not failures.
 
 ```
 /autoskillit:generate-report {worktree_path} {results_path} [--inconclusive]
+[--output-mode {local|pr}] [--issue-url {url}]
+[--experiment-type {type}] [--methodology-tradition {tradition}]
 ```
 
 - `{worktree_path}` — Absolute path to the worktree (required). First path-like
@@ -44,6 +46,11 @@ results are valid findings, not failures.
 - `--issue-url {url}` — Optional. GitHub issue URL. When output_mode=local and this is
   supplied, inject a blockquote reference at the top of report.md. In pr mode, skip —
   the PR body handles the issue link.
+- `--experiment-type {type}` — Optional. Experiment type classification (e.g., "benchmark",
+  "causal_inference"). When absent or "null", write `experiment_type: null` in frontmatter.
+- `--methodology-tradition {tradition}` — Optional. Methodology tradition slug from Tier-C
+  routing (e.g., "controlled_intervention"). When absent or "null", write
+  `methodology_tradition: null` in frontmatter.
 
 ## Inputs
 
@@ -216,9 +223,22 @@ research/YYYY-MM-DD-{slug}/
 
 The `{slug}` is a kebab-case summary of the research topic (max 40 chars).
 
+Write a YAML frontmatter block (fenced with `---`) at the very top of report.md,
+before the title heading. Use the values from `--experiment-type` and
+`--methodology-tradition` flags. If a flag is absent or its value is the literal
+string `null`, write the key with value `null` (not omitted). Always include
+`generated_at`. If `--output-mode local` with `--issue-url`, the issue blockquote
+goes AFTER the frontmatter, before the title.
+
 The report structure:
 
 ```markdown
+---
+experiment_type: {value from --experiment-type, or null}
+methodology_tradition: {value from --methodology-tradition, or null}
+generated_at: {ISO 8601 timestamp}
+---
+
 # {Research Title}
 
 > Research report for [Issue #{N}]({issue_url}) — {date}

@@ -49,6 +49,17 @@ _INTERNAL_SKILLS: frozenset[str] = frozenset({"sous-chef"})
 
 _OVERRIDE_SEARCH_DIRS: tuple[str, ...] = (".claude/skills", ".autoskillit/skills")
 
+_LIST_ALL_CACHE: list[SkillInfo] | None = None
+_LIST_ALL_CACHE_KEY: tuple[float, float] = (0.0, 0.0)
+
+
+def _dir_mtime(path: Path) -> float:
+    """Return directory mtime, or 0.0 if the path is inaccessible."""
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return 0.0
+
 
 def detect_project_local_overrides(project_dir: Path) -> frozenset[str]:
     """Return the set of bundled skill names overridden by project-local SKILL.md files.
@@ -95,20 +106,30 @@ class DefaultSkillResolver:
     def __init__(self) -> None:
         self._dir = bundled_skills_dir()
         self._extended_dir = bundled_skills_extended_dir()
+        self._resolve_cache: dict[str, SkillInfo | None] = {}
 
     def resolve(self, name: str) -> SkillInfo | None:
         """Resolve a skill name to its path. Checks skills/ before skills_extended/."""
+        if name in self._resolve_cache:
+            return self._resolve_cache[name]
         for directory, source in (
             (self._dir, SkillSource.BUNDLED),
             (self._extended_dir, SkillSource.BUNDLED_EXTENDED),
         ):
             skill_path = directory / name / "SKILL.md"
             if skill_path.is_file():
-                return _skill_info_from_frontmatter(name, source, skill_path)
+                info = _skill_info_from_frontmatter(name, source, skill_path)
+                self._resolve_cache[name] = info
+                return info
+        self._resolve_cache[name] = None
         return None
 
     def list_all(self) -> list[SkillInfo]:
         """List all public bundled skills from both directories."""
+        global _LIST_ALL_CACHE, _LIST_ALL_CACHE_KEY
+        key = (_dir_mtime(self._dir), _dir_mtime(self._extended_dir))
+        if _LIST_ALL_CACHE is not None and _LIST_ALL_CACHE_KEY == key:
+            return _LIST_ALL_CACHE
         bundled = _scan_directory(SkillSource.BUNDLED, self._dir)
         extended = _scan_directory(SkillSource.BUNDLED_EXTENDED, self._extended_dir)
         combined = sorted(bundled + extended, key=lambda s: s.name)
@@ -119,6 +140,8 @@ class DefaultSkillResolver:
             raise RuntimeError(
                 f"Skill name collision across skills/ and skills_extended/: {sorted(dupes)}"
             )
+        _LIST_ALL_CACHE = combined
+        _LIST_ALL_CACHE_KEY = key
         return combined
 
 

@@ -41,3 +41,34 @@ def test_bfs_reachable_traverses_graph() -> None:
     assert bfs_reachable(graph, "a") == {"b", "c", "d"}
     assert bfs_reachable(graph, "b") == {"d"}
     assert bfs_reachable(graph, "d") == set()
+
+
+# ---------------------------------------------------------------------------
+# ValidationContext.skill_resolver tests
+# ---------------------------------------------------------------------------
+
+
+def test_validation_context_skill_resolver_default() -> None:
+    """ValidationContext.skill_resolver defaults to None."""
+    from autoskillit.recipe._analysis import ValidationContext
+    from autoskillit.recipe.schema import DataFlowReport, Recipe
+
+    recipe = Recipe(name="t", description="t", steps={}, kitchen_rules=["t"])
+    ctx = ValidationContext(
+        recipe=recipe,
+        step_graph={},
+        dataflow=DataFlowReport(warnings=[], summary=""),
+    )
+    assert ctx.skill_resolver is None
+
+
+def test_make_validation_context_passes_skill_resolver() -> None:
+    """make_validation_context sets skill_resolver on the returned context."""
+    from autoskillit.recipe._analysis import make_validation_context
+    from autoskillit.recipe.schema import Recipe
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    recipe = Recipe(name="t", description="t", steps={}, kitchen_rules=["t"])
+    resolver = DefaultSkillResolver()
+    ctx = make_validation_context(recipe, skill_resolver=resolver)
+    assert ctx.skill_resolver is resolver

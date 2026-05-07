@@ -12,6 +12,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from autoskillit.core import SkillResolver  # noqa: PLC0415
 
 from autoskillit.recipe._analysis_bfs import _bfs_with_facts, bfs_reachable
 from autoskillit.recipe._analysis_blocks import extract_blocks
@@ -74,6 +78,7 @@ class ValidationContext:
     provider_profiles: frozenset[str] = field(default_factory=frozenset)
     skill_category_map: dict[str, frozenset[str]] | None = None
     overridden_skills: frozenset[str] | None = None
+    skill_resolver: SkillResolver | None = None
     blocks: tuple[RecipeBlock, ...] = field(default_factory=tuple)
     predecessors: dict[str, set[str]] = field(default_factory=dict)
 
@@ -123,6 +128,7 @@ def make_validation_context(
     disabled_subsets: frozenset[str] = frozenset(),
     disabled_features: frozenset[str] = frozenset(),
     provider_profiles: frozenset[str] = frozenset(),
+    skill_resolver: SkillResolver | None = None,
 ) -> ValidationContext:
     """Build a ``ValidationContext`` from a recipe.
 
@@ -148,6 +154,7 @@ def make_validation_context(
         disabled_subsets=disabled_subsets,
         disabled_features=disabled_features,
         provider_profiles=provider_profiles,
+        skill_resolver=skill_resolver,
         blocks=extract_blocks(recipe, step_graph, predecessors=predecessors),
         predecessors=predecessors,
     )

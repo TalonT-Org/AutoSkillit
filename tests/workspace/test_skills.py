@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+import autoskillit.workspace.skills as _skills_mod
 from autoskillit.core.types import SkillSource
 from autoskillit.workspace.skills import (
     DefaultSkillResolver,
@@ -733,3 +734,81 @@ def test_audit_docs_skill_md_exists() -> None:
     info = resolver.resolve("audit-docs")
     assert info is not None
     assert info.path.exists()
+
+
+# ---------------------------------------------------------------------------
+# Cache tests
+# ---------------------------------------------------------------------------
+
+
+def test_list_all_cache_hit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Second list_all() call returns cached result without re-scanning."""
+    monkeypatch.setattr(_skills_mod, "_LIST_ALL_CACHE", None)
+    monkeypatch.setattr(_skills_mod, "_LIST_ALL_CACHE_KEY", (0.0, 0.0))
+    resolver = DefaultSkillResolver()
+    result1 = resolver.list_all()
+    call_count = 0
+    original_scan = _skills_mod._scan_directory
+
+    def counting_scan(*args: object, **kwargs: object) -> list[object]:
+        nonlocal call_count
+        call_count += 1
+        return original_scan(*args, **kwargs)  # type: ignore[no-any-return]
+
+    monkeypatch.setattr(_skills_mod, "_scan_directory", counting_scan)
+    result2 = resolver.list_all()
+    assert result2 == result1
+    assert call_count == 0  # Cache hit — no re-scan
+
+
+def test_list_all_cache_invalidation_on_mtime_change(monkeypatch: pytest.MonkeyPatch) -> None:
+    """list_all() re-scans when directory mtime changes."""
+    monkeypatch.setattr(_skills_mod, "_LIST_ALL_CACHE", None)
+    monkeypatch.setattr(_skills_mod, "_LIST_ALL_CACHE_KEY", (0.0, 0.0))
+    resolver = DefaultSkillResolver()
+    result1 = resolver.list_all()
+    monkeypatch.setattr(_skills_mod, "_LIST_ALL_CACHE_KEY", (999.0, 999.0))
+    call_count = 0
+    original_scan = _skills_mod._scan_directory
+
+    def counting_scan(*args: object, **kwargs: object) -> list[object]:
+        nonlocal call_count
+        call_count += 1
+        return original_scan(*args, **kwargs)  # type: ignore[no-any-return]
+
+    monkeypatch.setattr(_skills_mod, "_scan_directory", counting_scan)
+    result2 = resolver.list_all()
+    assert result2 == result1  # Same content
+    assert call_count == 2  # Re-scanned both directories
+
+
+def test_resolve_instance_cache_hit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Second resolve() for same name returns cached SkillInfo without disk I/O."""
+    monkeypatch.setattr(_skills_mod, "_LIST_ALL_CACHE", None)
+    monkeypatch.setattr(_skills_mod, "_LIST_ALL_CACHE_KEY", (0.0, 0.0))
+    resolver = DefaultSkillResolver()
+    result1 = resolver.resolve("make-plan")
+    assert result1 is not None
+    call_count = 0
+    original_fn = _skills_mod._skill_info_from_frontmatter
+
+    def counting_fn(*args: object, **kwargs: object) -> object:
+        nonlocal call_count
+        call_count += 1
+        return original_fn(*args, **kwargs)
+
+    monkeypatch.setattr(_skills_mod, "_skill_info_from_frontmatter", counting_fn)
+    result2 = resolver.resolve("make-plan")
+    assert result2 is not None
+    assert result2.name == result1.name
+    assert call_count == 0  # Cache hit
+
+
+def test_resolve_instance_cache_caches_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    """resolve() caches None for unknown skills to avoid repeated is_file() checks."""
+    monkeypatch.setattr(_skills_mod, "_LIST_ALL_CACHE", None)
+    monkeypatch.setattr(_skills_mod, "_LIST_ALL_CACHE_KEY", (0.0, 0.0))
+    resolver = DefaultSkillResolver()
+    result1 = resolver.resolve("nonexistent-skill-xyz")
+    assert result1 is None
+    assert "nonexistent-skill-xyz" in resolver._resolve_cache

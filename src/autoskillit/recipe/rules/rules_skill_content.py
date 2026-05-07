@@ -95,7 +95,7 @@ def _check_undefined_bash_placeholder(ctx: ValidationContext) -> list[RuleFindin
         if skill_name is None:
             continue
 
-        skill_md = _resolve_skill_md(skill_name)
+        skill_md = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
         if skill_md is None:
             continue  # unknown-skill-command rule handles missing skills
 
@@ -169,7 +169,7 @@ def _check_hardcoded_origin_remote(ctx: ValidationContext) -> list[RuleFinding]:
         skill_name = resolve_skill_name(skill_cmd)
         if skill_name is None:
             continue
-        skill_md = _resolve_skill_md(skill_name)
+        skill_md = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
         if skill_md is None:
             continue  # unknown-skill-command rule handles missing skills
         try:
@@ -226,7 +226,7 @@ def _check_no_autoskillit_import(ctx: ValidationContext) -> list[RuleFinding]:
         skill_name = resolve_skill_name(skill_cmd)
         if skill_name is None:
             continue
-        skill_md = _resolve_skill_md(skill_name)
+        skill_md = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
         if skill_md is None:
             continue
         try:
@@ -289,7 +289,7 @@ def _check_no_grep_bre_alternation(ctx: ValidationContext) -> list[RuleFinding]:
         skill_name = resolve_skill_name(skill_cmd)
         if skill_name is None:
             continue
-        skill_md = _resolve_skill_md(skill_name)
+        skill_md = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
         if skill_md is None:
             continue  # unknown-skill-command rule handles missing skills
         try:
@@ -363,7 +363,7 @@ def _check_output_section_no_markdown_directive(ctx: ValidationContext) -> list[
         if not skill_data or not skill_data.get("expected_output_patterns"):
             continue  # Only check skills that have contracts with patterns
 
-        skill_md_path = _resolve_skill_md(skill_name)
+        skill_md_path = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
         if skill_md_path is None:
             continue  # unknown-skill-command rule handles missing skills
 
@@ -416,7 +416,7 @@ def _check_no_gh_issue_comment(ctx: ValidationContext) -> list[RuleFinding]:
         skill_name = resolve_skill_name(skill_cmd)
         if skill_name is None:
             continue
-        skill_md = _resolve_skill_md(skill_name)
+        skill_md = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
         if skill_md is None:
             continue
         try:
@@ -504,7 +504,7 @@ def _check_transition_boundary_anti_confirmation(ctx: ValidationContext) -> list
         skill_name = resolve_skill_name(skill_cmd)
         if skill_name is None:
             continue
-        skill_md_path = _resolve_skill_md(skill_name)
+        skill_md_path = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
         if skill_md_path is None:
             continue
         try:

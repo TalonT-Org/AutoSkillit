@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import json
-import re
 import secrets
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TypedDict
 
 from autoskillit.core import atomic_write, write_versioned_json
+from autoskillit.planner._sort_utils import _natural_sort_key
 from autoskillit.planner.schema import (
     ASSIGN_RESULT_FILE_RE,
     PHASE_RESULT_FILE_RE,
@@ -21,8 +21,6 @@ from autoskillit.planner.schema import (
     validate_wp_result,
 )
 
-_NATURAL_SORT_RE = re.compile(r"(\d+)")
-
 
 class _PhaseBucket(TypedDict):
     id: str
@@ -32,10 +30,6 @@ class _PhaseBucket(TypedDict):
     wp_scopes: list[str]
     wp_estimated_files: list[list[str]]
     wp_count: int
-
-
-def _natural_sort_key(s: str) -> list[int | str]:
-    return [int(tok) if tok.isdigit() else tok for tok in _NATURAL_SORT_RE.split(s)]
 
 
 def create_run_dir(temp_dir: str) -> RunDirResult:

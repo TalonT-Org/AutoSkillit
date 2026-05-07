@@ -98,6 +98,12 @@ if TYPE_CHECKING:
         ToolContext,
     )
 
+__all__ = [
+    "DefaultHeadlessExecutor",
+    "PostSessionMetrics",
+    "run_headless_core",
+]
+
 logger = get_logger(__name__)
 
 

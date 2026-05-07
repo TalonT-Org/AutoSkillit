@@ -29,10 +29,11 @@ Key properties:
 
 - Interactive variant: `autoskillit cook`
 - Headless variant: `run_skill` worker
-- SessionType: `SKILL` (both interactive and headless)
+- SessionType: `SKILL` (headless variant); interactive cook carries CLI label `"cook"` (not a SessionType enum member)
 - Can spawn L0 subagents via Agent/Task tool
-- Headless variant cannot call `run_skill` (enforced by `skill_orchestration_guard.py`
-  and `skill_cmd_guard.py`); interactive L1 sessions bypass this constraint
+- Headless variant cannot call `run_skill` *in headless mode* (enforced by
+  `skill_orchestration_guard.py` and `skill_cmd_guard.py`); interactive L1 sessions
+  bypass all tier guards via the ``AUTOSKILLIT_HEADLESS`` short-circuit
 
 ```
 L1 (interactive cook)
@@ -52,7 +53,7 @@ code itself.
 
 Key properties:
 
-- Interactive variant: `autoskillit order` (SessionType `ORCHESTRATOR`)
+- Interactive variant: `autoskillit order` (CLI label `"order"`; headless equivalent carries SessionType `ORCHESTRATOR`)
 - Headless variant: food truck (dispatched by L3, SessionType `ORCHESTRATOR`)
 - Spawns L1 workers via `run_skill`
 - Has full kitchen access (37 kitchen-tagged MCP tools)
@@ -88,12 +89,18 @@ L3 (interactive fleet)
 
 ## Mapping Table
 
-| Orchestration Level | SessionType enum | CLI command | Headless variant |
-|---|---|---|---|
-| L0 (leaf) | n/a — Claude Agent | n/a | Always headless |
-| L1 (session) | `SKILL` | `autoskillit cook` | `run_skill` worker |
-| L2 (orchestrator) | `ORCHESTRATOR` | `autoskillit order` | Food truck |
-| L3 (fleet) | `FLEET` | `autoskillit fleet` | None — no L4 exists |
+| Orchestration Level | SessionType enum (headless) | CLI label (interactive) | CLI command | Headless variant |
+|---|---|---|---|---|
+| L0 (leaf) | n/a — Claude Agent | n/a | n/a | Always headless |
+| L1 (session) | `SKILL` | `"cook"` | `autoskillit cook` | `run_skill` worker |
+| L2 (orchestrator) | `ORCHESTRATOR` | `"order"` | `autoskillit order` | Food truck |
+| L3 (fleet) | `FLEET` | `"fleet"` | `autoskillit fleet` | None — no L4 exists |
+
+> **Note:** `SessionType` enum values (`SKILL`, `ORCHESTRATOR`, `FLEET`) apply to headless
+> sessions only and are read from the `AUTOSKILLIT_SESSION_TYPE` environment variable.
+> Interactive sessions carry CLI display labels (`"cook"`, `"order"`, `"fleet"`) that are
+> not `SessionType` enum members and bypass tier enforcement via the
+> `AUTOSKILLIT_HEADLESS` short-circuit in tier guards.
 
 ## Key Rules
 

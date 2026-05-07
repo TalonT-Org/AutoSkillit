@@ -88,6 +88,15 @@ def build_interactive_cmd(
         interactive picker). ``NamedResume`` passes ``--resume <id>``.
     env_extras
         Optional caller overrides merged into the resolved env after IDE scrubbing.
+
+    Orchestration level
+    -------------------
+    An interactive session operates at L1 (cook, ``autoskillit cook``) by default.
+    It becomes an L2 orchestrator (order, ``autoskillit order``) when the user
+    calls ``open_kitchen``, granting full kitchen access and the ability to dispatch
+    L1 ``run_skill`` workers. Unlike headless sessions, the orchestration level of
+    an interactive session is determined at runtime by kitchen state, not by a
+    ``SESSION_TYPE`` env variable.
     """
     cmd = ["claude", ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS]
     match resume_spec:

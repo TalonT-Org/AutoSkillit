@@ -58,6 +58,8 @@ TOKEN_USAGE_FILE_KEYS: frozenset[str] = frozenset(
         "loc_deletions",
         "provider_used",
         "model_identifier",
+        "dispatch_id",
+        "campaign_id",
     }
 )
 

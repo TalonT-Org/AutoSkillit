@@ -397,6 +397,8 @@ def flush_session_log(
             "turn_count": token_usage.get("turn_count", 0),
             "provider_used": provider_outcome.provider_used,
             "model_identifier": model_identifier or _primary_model_identifier(token_usage),
+            "dispatch_id": dispatch_id,
+            "campaign_id": campaign_id,
         }
         atomic_write(session_dir / "token_usage.json", json.dumps(tu_data))
 

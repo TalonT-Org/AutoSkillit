@@ -550,6 +550,8 @@ class TokenUsageFileEntry(TypedDict):
     loc_deletions: int
     provider_used: str
     model_identifier: str
+    dispatch_id: str
+    campaign_id: str
 
 
 class SessionIndexEntry(TypedDict):

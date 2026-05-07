@@ -82,6 +82,8 @@ def _write_sessions(log_root: Path, entries: list[dict]) -> None:
             "loc_deletions": entry.get("loc_deletions", 0),
             "peak_context": entry.get("peak_context", 0),
             "turn_count": entry.get("turn_count", 0),
+            "dispatch_id": entry.get("dispatch_id", ""),
+            "campaign_id": entry.get("campaign_id", ""),
         }
         if "model_identifier" in entry:
             token_data["model_identifier"] = entry["model_identifier"]

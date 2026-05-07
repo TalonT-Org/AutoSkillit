@@ -134,10 +134,10 @@ def cook(
 
     from autoskillit.cli._installed_plugins import InstalledPluginsFile
     from autoskillit.cli._onboarding import is_first_run, run_onboarding_menu
+    from autoskillit.cli.session._constants import SESSION_TYPE_COOK
     from autoskillit.core import (
         _AUTOSKILLIT_PLUGIN_KEY,
         LAUNCH_ID_ENV_VAR,
-        SESSION_TYPE_COOK,
         SESSION_TYPE_ENV_VAR,
         BareResume,
         DirectInstall,

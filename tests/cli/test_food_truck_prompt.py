@@ -38,9 +38,9 @@ def _get_prompt() -> str:
 
 
 def _get_sous_chef_block() -> str:
-    from autoskillit.fleet._prompts import _build_l3_sous_chef_block
+    from autoskillit.fleet._prompts import _build_food_truck_sous_chef_block
 
-    return _build_l3_sous_chef_block()
+    return _build_food_truck_sous_chef_block()
 
 
 # --- Group E-1: Sous-Chef Subset Filter ---
@@ -87,7 +87,7 @@ class TestL3SousChefBlock:
         from autoskillit.fleet import _prompts as _fleet_prompts
 
         monkeypatch.setattr(_fleet_prompts, "pkg_root", lambda: tmp_path)
-        result = _fleet_prompts._build_l3_sous_chef_block()
+        result = _fleet_prompts._build_food_truck_sous_chef_block()
         assert result == ""
 
     def test_excludes_unretained_sections(self) -> None:
@@ -101,21 +101,22 @@ class TestL3SousChefBlock:
 
     def test_l3_sections_constant_matches_build_output(self) -> None:
         from autoskillit.core.types._type_constants import (
-            SOUS_CHEF_L3_SECTIONS,
+            SOUS_CHEF_FOOD_TRUCK_SECTIONS,
             SOUS_CHEF_MANDATORY_SECTIONS,
         )
 
-        assert set(SOUS_CHEF_L3_SECTIONS).issubset(set(SOUS_CHEF_MANDATORY_SECTIONS))
+        assert set(SOUS_CHEF_FOOD_TRUCK_SECTIONS).issubset(set(SOUS_CHEF_MANDATORY_SECTIONS))
         block = _get_sous_chef_block()
-        for header in SOUS_CHEF_L3_SECTIONS:
+        for header in SOUS_CHEF_FOOD_TRUCK_SECTIONS:
             assert f"## {header}" in block, (
-                f"_build_l3_sous_chef_block() missing L3 section: {header!r}. "
-                "Update SOUS_CHEF_L3_SECTIONS or the allowlist in fleet/_prompts.py."
+                f"_build_food_truck_sous_chef_block() missing food-truck section: {header!r}. "
+                "Update SOUS_CHEF_FOOD_TRUCK_SECTIONS or the allowlist in fleet/_prompts.py."
             )
-        extra = set(SOUS_CHEF_MANDATORY_SECTIONS) - set(SOUS_CHEF_L3_SECTIONS)
+        extra = set(SOUS_CHEF_MANDATORY_SECTIONS) - set(SOUS_CHEF_FOOD_TRUCK_SECTIONS)
         for header in extra:
             assert f"## {header}" not in block, (
-                f"_build_l3_sous_chef_block() unexpectedly includes non-L3 section: {header!r}"
+                f"_build_food_truck_sous_chef_block() unexpectedly includes "
+                f"non-food-truck section: {header!r}"
             )
 
 

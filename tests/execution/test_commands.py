@@ -469,11 +469,11 @@ class TestBuildSkillSessionCmd:
     ) -> None:
         monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", "/tmp/state")
         monkeypatch.setenv("AUTOSKILLIT_PROJECT_DIR", "/tmp/proj")
-        monkeypatch.setenv("AUTOSKILLIT_L3_TOOL_TAGS", "kitchen")
+        monkeypatch.setenv("AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS", "kitchen")
         spec = build_skill_session_cmd("/investigate foo", **self.BASE)
         assert "AUTOSKILLIT_CAMPAIGN_STATE_PATH" not in spec.env
         assert "AUTOSKILLIT_PROJECT_DIR" not in spec.env
-        assert "AUTOSKILLIT_L3_TOOL_TAGS" not in spec.env
+        assert "AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS" not in spec.env
 
     def test_provider_extras_injected_into_env(self) -> None:
         spec = build_skill_session_cmd(
@@ -670,11 +670,11 @@ class TestBuildFoodTruckCmd:
 
     def test_private_vars_scrubbed_from_host_env(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", "/tmp/state")
-        monkeypatch.setenv("AUTOSKILLIT_L3_TOOL_TAGS", "kitchen")
+        monkeypatch.setenv("AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS", "kitchen")
         monkeypatch.setenv("AUTOSKILLIT_PROJECT_DIR", "/tmp/proj")
         spec = build_food_truck_cmd(**self.BASE)
         assert "AUTOSKILLIT_CAMPAIGN_STATE_PATH" not in spec.env
-        assert "AUTOSKILLIT_L3_TOOL_TAGS" not in spec.env
+        assert "AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS" not in spec.env
         assert "AUTOSKILLIT_PROJECT_DIR" not in spec.env
 
     def test_model_injected_when_provided(self):
@@ -707,15 +707,15 @@ class TestBuildFoodTruckCmd:
 
 class TestBuildFoodTruckCmdPackTags:
     def test_env_extras_with_l3_tool_tags_passes_through(self):
-        """env_extras containing AUTOSKILLIT_L3_TOOL_TAGS reaches subprocess env."""
+        """env_extras containing AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS reaches subprocess env."""
         spec = build_food_truck_cmd(
             orchestrator_prompt="...",
             plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
             cwd="/repo",
             completion_marker="%%DONE%%",
-            env_extras={"AUTOSKILLIT_L3_TOOL_TAGS": "github,ci,clone,telemetry"},
+            env_extras={"AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS": "github,ci,clone,telemetry"},
         )
-        assert spec.env["AUTOSKILLIT_L3_TOOL_TAGS"] == "github,ci,clone,telemetry"
+        assert spec.env["AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS"] == "github,ci,clone,telemetry"
 
 
 class TestBuildFoodTruckCmdFeatureParity:

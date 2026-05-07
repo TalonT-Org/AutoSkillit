@@ -487,7 +487,7 @@ def build_food_truck_cmd(
     - Does NOT call ``_ensure_skill_prefix`` (prompt is a complete orchestrator prompt)
     - Sets ``SESSION_TYPE=orchestrator`` (not ``skill``)
     - Accepts caller-provided ``env_extras`` for campaign-specific variables
-      (CAMPAIGN_ID, CAMPAIGN_STATE_PATH, PROJECT_DIR, L3_TOOL_TAGS, etc.)
+      (CAMPAIGN_ID, CAMPAIGN_STATE_PATH, PROJECT_DIR, FOOD_TRUCK_TOOL_TAGS, etc.)
     - Always emits ``--plugin-dir``: DirectInstall uses plugin_dir, MarketplaceInstall
       uses cache_path (food truck sessions are fresh subprocesses that need explicit
       plugin loading, unlike skill sessions where the parent already has it).
@@ -507,7 +507,7 @@ def build_food_truck_cmd(
         Optional model override.
     env_extras
         Caller-provided env variables layered on top of the baseline.
-        Used for CAMPAIGN_ID, CAMPAIGN_STATE_PATH, PROJECT_DIR, L3_TOOL_TAGS,
+        Used for CAMPAIGN_ID, CAMPAIGN_STATE_PATH, PROJECT_DIR, FOOD_TRUCK_TOOL_TAGS,
         IDLE_OUTPUT_TIMEOUT. These override baseline but cannot override
         SESSION_TYPE or HEADLESS (applied last).
     output_format

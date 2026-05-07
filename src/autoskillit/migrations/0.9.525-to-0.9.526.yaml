@@ -1,0 +1,12 @@
+from_version: "0.9.525"
+to_version: "0.9.526"
+description: >
+  Rename L3 identifiers to food-truck in session/gating layer.
+changes:
+  - id: food-truck-env-var-rename
+    description: >
+      Environment variable AUTOSKILLIT_L3_TOOL_TAGS renamed to
+      AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS. Internal-only env var passed
+      between dispatch_food_truck and child sessions.
+    instruction: |
+      Internal-only env var. No user action required.

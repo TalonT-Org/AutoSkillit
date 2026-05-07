@@ -422,6 +422,20 @@ class TestBuildTestScope:
         dir_names = {p.name for p in result}
         assert dir_names == {"arch", "contracts", "infra", "docs"}
 
+    def test_scope_tests_claude_md_not_unmapped(self, tmp_path: Path) -> None:
+        tests_root = tmp_path / "tests"
+        for d in ["core", "arch", "contracts"]:
+            (tests_root / d).mkdir(parents=True, exist_ok=True)
+        manifest = {"tests/**/CLAUDE.md": []}
+        result = build_test_scope(
+            changed_files={"tests/core/CLAUDE.md"},
+            mode=FilterMode.CONSERVATIVE,
+            manifest=manifest,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        assert result is not FullRunReason.UNMAPPED_FILE
+
 
 # ---------------------------------------------------------------------------
 # Conservative vs Aggressive Tests (M1–M4)
@@ -820,6 +834,16 @@ class TestApplyManifest:
         result = apply_manifest({"docs/developer/SETUP.md"}, manifest)
         assert result == {"docs"}
 
+    def test_apply_manifest_tests_claude_md_empty_cascade(self) -> None:
+        manifest = {"tests/**/CLAUDE.md": []}
+        result = apply_manifest({"tests/core/CLAUDE.md"}, manifest)
+        assert result == set()
+
+    def test_apply_manifest_tests_nested_claude_md(self) -> None:
+        manifest = {"tests/**/CLAUDE.md": []}
+        result = apply_manifest({"tests/execution/CLAUDE.md"}, manifest)
+        assert result == set()
+
 
 # ---------------------------------------------------------------------------
 # Behavioral equivalence cross-validation (EQ1–EQ2)
@@ -890,10 +914,13 @@ class TestManifestLoadManifest:
         manifest = manifest_load_manifest(MANIFEST_PATH)
         assert isinstance(manifest, dict)
         assert len(manifest) >= 22
+        non_empty_count = 0
         for pattern, dirs in manifest.items():
             assert isinstance(dirs, list)
-            assert len(dirs) > 0
             assert all(isinstance(d, str) for d in dirs)
+            if len(dirs) > 0:
+                non_empty_count += 1
+        assert non_empty_count >= 22
 
     def test_load_manifest_missing_file_raises(self, tmp_path: Path) -> None:
         with pytest.raises(FileNotFoundError):

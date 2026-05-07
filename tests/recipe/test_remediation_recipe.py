@@ -103,7 +103,7 @@ def test_check_review_loop_with_args_has_previous_verdict(recipe) -> None:
 
 
 def test_ci_watch_timed_out_routes_to_guard(recipe) -> None:
-    """Test 1d: ci_watch timed_out route goes to check_ci_timed_out_loop, not self."""
+    """ci_watch timed_out route goes to check_ci_timed_out_loop, not self."""
     step = recipe.steps["ci_watch"]
     assert step.on_result is not None
     timed_out_conds = [c for c in step.on_result.conditions if c.when and "timed_out" in c.when]
@@ -114,7 +114,7 @@ def test_ci_watch_timed_out_routes_to_guard(recipe) -> None:
 
 
 def test_check_ci_timed_out_loop_exists_with_correct_pattern(recipe) -> None:
-    """Test 1d: check_ci_timed_out_loop uses check_loop_iteration with max_iterations: 2."""
+    """check_ci_timed_out_loop uses check_loop_iteration with max_iterations: 2."""
     assert "check_ci_timed_out_loop" in recipe.steps
     step = recipe.steps["check_ci_timed_out_loop"]
     assert step.tool == "run_python"

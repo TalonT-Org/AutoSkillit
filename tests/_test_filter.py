@@ -62,7 +62,9 @@ _VERSION_LINE_RE: re.Pattern[str] = re.compile(r'^[+-]version\s*=\s*"[^"]*"', re
 
 # Matches removed lines that are class/function definitions or UPPER_CASE constant assignments.
 # Used by _is_additive_only to detect breaking changes.
-_BREAKING_DEF_RE: re.Pattern[str] = re.compile(r"^-\s*(class |def |[A-Z_]+ [=:])", re.MULTILINE)
+_BREAKING_DEF_RE: re.Pattern[str] = re.compile(
+    r"^-\s*(class |def |[A-Z_][A-Z0-9_]*\s*[=:])", re.MULTILINE
+)
 
 ALWAYS_RUN_CONSERVATIVE: frozenset[str] = frozenset(
     {
@@ -885,6 +887,8 @@ def _is_additive_only(
     are treated as additive — acceptable for the narrowing use case since the
     excluded directories do not import those types.
     """
+    if Path(filepath).is_absolute():
+        return False
     try:
         merge_base_result = subprocess.run(
             ["git", "merge-base", "HEAD", base_ref],

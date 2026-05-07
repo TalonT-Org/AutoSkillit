@@ -583,9 +583,14 @@ async def test_report_bug_raises_on_oversized_duplicate_body(tool_ctx, tmp_path)
     }
     tool_ctx.github_client = mock_gh
 
-    # The occurrence section will push it over MAX_ISSUE_BODY_CHARS
-    with pytest.raises(ValueError, match="Issue body exceeds"):
+    # The occurrence section will push it over MAX_ISSUE_BODY_CHARS.
+    # check_body_size raises ValueError inside _file_or_update_github_issue,
+    # which catches all exceptions and returns them in the result dict.
+    result = json.loads(
         await report_bug("brand new error text", str(tmp_path), severity="blocking")
+    )
+    assert result["github"]["skipped"] is True
+    assert "Issue body exceeds" in result["github"]["reason"]
 
 
 @pytest.mark.anyio

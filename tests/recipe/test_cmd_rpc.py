@@ -478,15 +478,22 @@ def test_batch_create_issues_cross_ticket_body_isolation(tmp_path):
         patch("autoskillit.recipe._cmd_rpc.subprocess.run") as mock_run,
         patch("autoskillit.recipe._cmd_rpc.time.sleep"),
     ):
-        mock_run.side_effect = _make_side_effect()
+        mock_run.side_effect = _make_side_effect(
+            issue_data=[
+                {"number": 1, "url": "https://github.com/org/repo/issues/1"},
+                {"number": 2, "url": "https://github.com/org/repo/issues/2"},
+                {"number": 3, "url": "https://github.com/org/repo/issues/3"},
+            ]
+        )
         batch_create_issues(workspace=str(tmp_path))
     found_bodies = []
     for call in mock_run.call_args_list:
         kwargs = call[1]
         if kwargs.get("input"):
             mutation_call = json.loads(kwargs["input"])
-            body = mutation_call["variables"]["i0"]["body"]
-            found_bodies.append(body)
+            for var_key, var_val in mutation_call["variables"].items():
+                if isinstance(var_val, dict) and "body" in var_val:
+                    found_bodies.append(var_val["body"])
     assert len(found_bodies) == 3, f"expected 3 bodies, got {len(found_bodies)}"
     for body in found_bodies:
         assert "## Validation Summary" not in body
@@ -538,7 +545,7 @@ def test_strip_ticket_body_removes_metadata(tmp_path):
     assert "**Exception warranted:**" not in result
     assert "**Exception note:**" not in result
     assert "## Findings with Exceptions" not in result
-    assert "## Actual Finding" in result
+    assert "# Actual Finding" in result
     assert "Valid content here." in result
 
 

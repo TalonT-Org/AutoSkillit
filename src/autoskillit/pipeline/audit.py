@@ -103,8 +103,7 @@ def _iter_session_log_entries(
                             sessions where a single order spans multiple clone directories.
                             All active filters apply as AND logic.
         dispatch_id_filter: If non-empty, only yield sessions whose ``dispatch_id`` field
-                            matches this string exactly. Uses ``.get()`` for backward
-                            compatibility with pre-existing index entries lacking the field.
+                            matches this string exactly.
                             All active filters apply as AND logic.
 
     Yields:

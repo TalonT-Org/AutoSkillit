@@ -158,6 +158,97 @@ def test_crl_had_blocking_false_when_empty_verdict() -> None:
 
 
 # ---------------------------------------------------------------------------
+# T_CRL15–T_CRL18: check_review_loop with local_review_rounds parameter
+# ---------------------------------------------------------------------------
+
+
+def test_crl_local_rounds_not_exhausted_approved_is_blocking() -> None:
+    """When local_review_rounds > 0 and iteration < local_rounds, approved is blocking.
+
+    The approved verdict must trigger re-review until local_review_rounds are
+    exhausted, so review_loop_count advances on every local round.
+    """
+    result = check_review_loop(
+        pr_number="42",
+        current_iteration="0",
+        max_iterations="6",
+        previous_verdict="approved",
+        local_review_rounds="3",
+    )
+    assert result["had_blocking"] == "true"
+    assert result["next_iteration"] == "1"
+    assert result["max_exceeded"] == "false"
+
+
+def test_crl_local_rounds_exhausted_approved_is_non_blocking() -> None:
+    """When iteration >= local_review_rounds, approved is non-blocking.
+
+    Once local rounds are exhausted, approved exits to CI immediately.
+    """
+    result = check_review_loop(
+        pr_number="42",
+        current_iteration="3",
+        max_iterations="6",
+        previous_verdict="approved",
+        local_review_rounds="3",
+    )
+    assert result["had_blocking"] == "false"
+    assert result["next_iteration"] == "4"
+
+
+def test_crl_changes_requested_always_blocking_regardless_of_local_rounds() -> None:
+    """changes_requested is always blocking, even after local rounds exhausted."""
+    result = check_review_loop(
+        pr_number="42",
+        current_iteration="5",
+        max_iterations="6",
+        previous_verdict="changes_requested",
+        local_review_rounds="3",
+    )
+    assert result["had_blocking"] == "true"
+
+
+def test_crl_no_local_rounds_approved_is_non_blocking() -> None:
+    """When local_review_rounds is absent or zero, approved is non-blocking as before.
+
+    This preserves backward compatibility: without local_review_rounds configured,
+    the only blocking verdict is changes_requested.
+    """
+    result = check_review_loop(
+        pr_number="42",
+        current_iteration="0",
+        max_iterations="3",
+        previous_verdict="approved",
+        local_review_rounds="",
+    )
+    assert result["had_blocking"] == "false"
+
+
+def test_crl_local_rounds_zero_approved_is_non_blocking() -> None:
+    """local_review_rounds="0" means no local rounds, approved is non-blocking."""
+    result = check_review_loop(
+        pr_number="42",
+        current_iteration="0",
+        max_iterations="3",
+        previous_verdict="approved",
+        local_review_rounds="0",
+    )
+    assert result["had_blocking"] == "false"
+
+
+def test_crl_needs_human_non_blocking_when_local_rounds_exhausted() -> None:
+    """needs_human is non-blocking when local rounds are exhausted."""
+    result = check_review_loop(
+        pr_number="42",
+        current_iteration="3",
+        max_iterations="6",
+        previous_verdict="needs_human",
+        local_review_rounds="3",
+    )
+    assert result["had_blocking"] == "false"
+
+
+# ---------------------------------------------------------------------------
 # T_SU_LI1–T_SU_LI5: check_loop_iteration tests (generic loop iteration guard)
 # ---------------------------------------------------------------------------
 

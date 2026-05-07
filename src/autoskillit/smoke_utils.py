@@ -154,27 +154,42 @@ def check_review_loop(
     current_iteration: str = "",
     max_iterations: str = "3",
     previous_verdict: str = "",
+    local_review_rounds: str = "",
 ) -> dict[str, str]:
     """Pure iteration guard for the review-resolve loop.
 
     Returns next_iteration, max_exceeded, and had_blocking to determine
     whether to re-review (blocking + iterations remain) or proceed to ci_watch.
 
-    ``had_blocking`` is true only when ``previous_verdict == "changes_requested"``.
-    ``approved_with_comments`` intentionally yields ``had_blocking=false`` — the
-    resolve_review pass is one-shot and does not trigger a re-review cycle.
+    ``had_blocking`` is true when:
+    - ``previous_verdict == "changes_requested"`` (always blocking), OR
+    - ``local_review_rounds > 0`` and ``current_iteration < local_review_rounds``
+      (any verdict, including ``approved``, must re-review until local rounds exhausted)
+
+    ``approved_with_comments`` intentionally yields ``had_blocking=false`` when
+    ``local_review_rounds`` is absent or exhausted — the resolve_review pass is
+    one-shot and does not trigger a re-review cycle.
     """
     current_iteration = current_iteration or ""
     max_iterations = max_iterations or ""
     previous_verdict = previous_verdict or ""
+    local_review_rounds = local_review_rounds or ""
     iteration = int(current_iteration.strip()) if current_iteration.strip() else 0
     next_iteration = iteration + 1
     max_iter = int(max_iterations.strip()) if max_iterations.strip() else 3
+    try:
+        local_rounds = int(local_review_rounds.strip()) if local_review_rounds.strip() else 0
+    except ValueError:
+        local_rounds = 0
+
+    is_blocking_verdict = previous_verdict.strip() == "changes_requested"
+    local_rounds_not_exhausted = local_rounds > 0 and iteration < local_rounds
+    had_blocking = "true" if (is_blocking_verdict or local_rounds_not_exhausted) else "false"
 
     return {
         "next_iteration": str(next_iteration),
         "max_exceeded": "true" if next_iteration >= max_iter else "false",
-        "had_blocking": "true" if previous_verdict.strip() == "changes_requested" else "false",
+        "had_blocking": had_blocking,
     }
 
 

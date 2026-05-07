@@ -90,6 +90,7 @@ class TestModuleCascadeCore:
             "session_provenance",
             "session_registry",
             "tool_sequence_analysis",
+            "_type_checkpoint",
         }
         assert set(MODULE_CASCADE_CORE.keys()) == expected_stems
 
@@ -104,6 +105,12 @@ class TestModuleCascadeCore:
     def test_type_protocols_workspace_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["_type_protocols_workspace"] == frozenset(
             {"core", "pipeline", "recipe", "workspace"}
+        )
+
+    def test_type_checkpoint_entry_exists(self) -> None:
+        assert "_type_checkpoint" in MODULE_CASCADE_CORE
+        assert MODULE_CASCADE_CORE["_type_checkpoint"] == frozenset(
+            {"core", "execution", "fleet", "server"}
         )
 
 
@@ -323,6 +330,22 @@ class TestBuildTestScopeCoreCascade:
         for excluded in ["cli", "server", "execution", "fleet", "migration", "hooks"]:
             assert excluded not in dir_names, (
                 f"_type_protocols_workspace cascade should not include {excluded}"
+            )
+
+    def test_type_checkpoint_narrow_routing(self, tmp_path: Path) -> None:
+        tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
+        result = build_test_scope(
+            changed_files={"src/autoskillit/core/types/_type_checkpoint.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        dir_names = {p.name for p in result}
+        for pkg in ["core", "execution", "fleet", "server"]:
+            assert pkg in dir_names, f"_type_checkpoint cascade should include {pkg}"
+        for excluded in ["cli", "config", "pipeline", "workspace", "recipe", "migration", "hooks"]:
+            assert excluded not in dir_names, (
+                f"_type_checkpoint cascade should not include {excluded}"
             )
 
 

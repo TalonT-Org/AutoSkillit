@@ -67,7 +67,7 @@ def main() -> None:
     try:
         _atomic_write(flag_path, skill_name)
     except Exception as exc:
-        print(f"skill_load_post_hook: failed to write flag {flag_path}: {exc}", file=sys.stderr)
+        sys.stderr.write(f"skill_load_post_hook: failed to write flag {flag_path}: {exc}\n")
 
     marker = os.environ.get("AUTOSKILLIT_COMPLETION_MARKER", "").strip()
     if marker:

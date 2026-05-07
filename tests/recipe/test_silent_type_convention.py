@@ -6,7 +6,8 @@ import pytest
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
-CONVENTION_PATH = Path("docs/research/silent-type-convention.md")
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+CONVENTION_PATH = _REPO_ROOT / "docs" / "research" / "silent-type-convention.md"
 
 
 def test_silent_type_convention_exists():

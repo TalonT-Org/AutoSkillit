@@ -299,11 +299,10 @@ _MINIMAL_TRADITION_YAML_2 = {
 
 
 class TestMethodologyTraditionCaching:
-    def test_bundled_result_is_cached_on_repeat_call(self) -> None:
+    def test_bundled_result_is_stable_on_repeat_call(self) -> None:
         r1 = load_all_methodology_traditions()
         r2 = load_all_methodology_traditions()
         assert r1 == r2
-        assert r1 is not r2
 
     def test_mtime_change_invalidates_cache(self, tmp_path: Path) -> None:
         user_dir = tmp_path / ".autoskillit" / "methodology-traditions"

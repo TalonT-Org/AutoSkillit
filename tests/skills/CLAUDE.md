@@ -67,6 +67,7 @@ Skill SKILL.md content compliance, placeholder contracts, and verdict guard test
 | `test_troubleshoot_experiment_contracts.py` | Troubleshoot experiment skill discoverability test |
 | `test_validate_audit_contracts.py` | Contract tests for the validate-audit skill SKILL.md |
 | `test_validate_test_audit_contracts.py` | Contract tests for the validate-test-audit skill SKILL.md |
+| `test_vis_lens_methodology_norms.py` | Skill-level integration tests for vis-lens-methodology-norms tradition expansion |
 | `test_vis_lens_structural.py` | Structural assertions for P0 vis-lens skills |
 
 ## Architecture Notes

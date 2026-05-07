@@ -64,11 +64,12 @@ def test_validation_context_skill_resolver_default() -> None:
 
 def test_make_validation_context_passes_skill_resolver() -> None:
     """make_validation_context sets skill_resolver on the returned context."""
+    from unittest.mock import Mock
+
     from autoskillit.recipe._analysis import make_validation_context
     from autoskillit.recipe.schema import Recipe
-    from autoskillit.workspace.skills import DefaultSkillResolver
 
     recipe = Recipe(name="t", description="t", steps={}, kitchen_rules=["t"])
-    resolver = DefaultSkillResolver()
+    resolver = Mock()
     ctx = make_validation_context(recipe, skill_resolver=resolver)
     assert ctx.skill_resolver is resolver

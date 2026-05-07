@@ -558,8 +558,9 @@ async def test_report_bug_raises_on_oversized_duplicate_body(tool_ctx, tmp_path)
     tool_ctx.config.report_bug.github_filing = True
     tool_ctx.config.github.default_repo = "owner/repo"
 
-    # Existing body is already near the limit
-    existing_body = "x" * 49_000
+    # Existing body must be large enough that adding the occurrence section
+    # (~200 chars of formatting + error context) exceeds MAX_ISSUE_BODY_CHARS (50K).
+    existing_body = "x" * 50_000
     mock_executor = AsyncMock()
     mock_executor.run.return_value = _skill_ok(
         "## Report\n" + _FINGERPRINT_START + "\nfp\n" + _FINGERPRINT_END

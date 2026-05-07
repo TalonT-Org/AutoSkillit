@@ -185,7 +185,7 @@ Run: `gh pr view {pr_number} --json mergeable --jq '.mergeable'`
 
 - If `MERGEABLE`: proceed to Step 2
 - If `CONFLICTING`: skip Step 2, set `needs_plan=true`, write a conflict report noting the PR has git-level conflicts, proceed to Step 5 output
-- If `UNKNOWN`: wait 10 seconds, retry up to 3 times. If still `UNKNOWN` after 3 retries, treat as `CONFLICTING`
+- If `UNKNOWN`: wait 10 seconds, retry up to 3 times. If still `UNKNOWN` after 3 retries, treat as `CONFLICTING` (sets `needs_plan=true`, same as git-level conflicts — distinct from the poll-loop timeout path which sets `needs_plan=false, timeout_error=true`)
 
 ### Step 2: Simple Path — gh pr merge
 

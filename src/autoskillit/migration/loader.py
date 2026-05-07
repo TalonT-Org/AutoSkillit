@@ -12,6 +12,7 @@ from pathlib import Path
 from packaging.version import Version
 
 from autoskillit.core import load_yaml, pkg_root
+from autoskillit.recipe._registry_utils import dir_mtime
 
 
 @dataclass
@@ -50,7 +51,7 @@ def list_migrations() -> list[MigrationNote]:
     mig_dir = _migrations_dir()
     if not mig_dir.is_dir():
         return []
-    key = (str(mig_dir), mig_dir.stat().st_mtime)
+    key = (str(mig_dir), dir_mtime(mig_dir))
     cached = _migrations_cache.get(key)
     if cached is not None:
         return list(cached)

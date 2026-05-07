@@ -36,8 +36,6 @@ from autoskillit.server.tools.tools_execution_helpers import _import_and_call
 
 logger = get_logger(__name__)
 
-_RUN_PYTHON_SENTINEL_KEYS: frozenset[str] = frozenset({"callable", "timeout"})
-
 _PURE_SLEEP_RE = re.compile(
     r'^(?:python3?\s+-c\s+["\']import time;\s*time\.sleep\((?P<py_secs>\d+(?:\.\d+)?)\)["\']'
     r"|sleep\s+(?P<sh_secs>\d+(?:\.\d+)?))$"

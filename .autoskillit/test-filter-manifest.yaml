@@ -12,11 +12,22 @@ src/autoskillit/recipes/*.yaml:
   - recipe/
   - contracts/
 
+src/autoskillit/recipes/*.json:
+  - recipe/
+  - contracts/
+
 src/autoskillit/recipes/campaigns/*.yaml:
   - recipe/
   - cli/
 
+src/autoskillit/recipes/campaigns/*.json:
+  - recipe/
+  - cli/
+
 src/autoskillit/recipes/examples/*.yaml:
+  - recipe/
+
+src/autoskillit/recipes/examples/*.json:
   - recipe/
 
 src/autoskillit/recipes/diagrams/*.md:
@@ -26,13 +37,26 @@ src/autoskillit/recipes/contracts/*.yaml:
   - recipe/
   - contracts/
 
+src/autoskillit/recipes/contracts/*.json:
+  - recipe/
+  - contracts/
+
 src/autoskillit/recipes/experiment-types/*.yaml:
+  - recipe/
+
+src/autoskillit/recipes/experiment-types/*.json:
   - recipe/
 
 src/autoskillit/recipes/methodology-traditions/*.yaml:
   - recipe/
 
+src/autoskillit/recipes/methodology-traditions/*.json:
+  - recipe/
+
 src/autoskillit/recipes/sub-recipes/*.yaml:
+  - recipe/
+
+src/autoskillit/recipes/sub-recipes/*.json:
   - recipe/
 
 src/autoskillit/recipe/skill_contracts.yaml:

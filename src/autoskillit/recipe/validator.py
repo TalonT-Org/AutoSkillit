@@ -64,11 +64,10 @@ _SKILL_HINT = " (Use /autoskillit:write-recipe for schema guidance)"
 
 
 def validate_recipe_structure(recipe: Recipe) -> list[str]:
-    """Return structural validation errors (empty if structurally valid).
+    """Return structural validation errors (empty if valid).
 
-    NOTE: This does NOT run semantic rules or contract checks. For complete
-    validation, use validate_from_path(). The MCP tool 'validate_recipe'
-    runs all three; this function runs structural checks only.
+    Does not run semantic rules or contract checks; use validate_from_path()
+    for complete validation.
     """
     errors: list[str] = []
 

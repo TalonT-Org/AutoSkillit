@@ -946,3 +946,26 @@ def test_ci_watch_post_queue_fix_has_auto_trigger() -> None:
             assert step.with_args.get("auto_trigger") in ("true", True), (
                 f"{name}: {step_name} missing auto_trigger: true"
             )
+
+
+# ---------------------------------------------------------------------------
+# Module-level regex constants
+# ---------------------------------------------------------------------------
+
+
+def test_no_runs_re_is_module_level_constant():
+    import re
+
+    import autoskillit.recipe.rules.rules_ci as rules_ci
+
+    assert hasattr(rules_ci, "_NO_RUNS_RE")
+    assert isinstance(rules_ci._NO_RUNS_RE, re.Pattern)
+
+
+def test_timed_out_re_is_module_level_constant():
+    import re
+
+    import autoskillit.recipe.rules.rules_ci as rules_ci
+
+    assert hasattr(rules_ci, "_TIMED_OUT_RE")
+    assert isinstance(rules_ci._TIMED_OUT_RE, re.Pattern)

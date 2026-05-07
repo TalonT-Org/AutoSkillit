@@ -519,9 +519,12 @@ Emit these lines as your final output:
 ```
 verdict = GO|REVISE|STOP
 experiment_type = {experiment_type}
+classification_timestamp = {ISO 8601 UTC timestamp}
 evaluation_dashboard = /absolute/path/{{AUTOSKILLIT_TEMP}}/review-design/evaluation_dashboard_{slug}_{YYYY-MM-DD_HHMMSS}.md
 revision_guidance = /absolute/path/{{AUTOSKILLIT_TEMP}}/review-design/revision_guidance_{slug}_{YYYY-MM-DD_HHMMSS}.md
 ```
+
+`classification_timestamp` is the UTC timestamp (e.g., `2026-04-13T15:32:00Z`) at the moment the experiment-type classification is finalized, before writing the evaluation dashboard.
 
 `revision_guidance` line is emitted ONLY when verdict = REVISE. When verdict is GO or STOP,
 omit the `revision_guidance` line entirely.

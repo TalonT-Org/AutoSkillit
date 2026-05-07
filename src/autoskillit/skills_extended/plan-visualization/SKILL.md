@@ -279,6 +279,32 @@ Content structure:
 | Appendix | all | full captions |
 ```
 
+### Step 6.5 — Write visualization-plan-trace.md
+
+After completing Tier-C routing, write a trace file capturing routing decisions:
+
+Path: `{{AUTOSKILLIT_TEMP}}/plan-visualization/visualization-plan-trace.md`
+
+Content structure:
+```markdown
+# Visualization Plan Trace
+
+## Tier-C Routing Decision
+
+- **tier_c_lens**: {selected_lens_name or null}
+- **primary_tradition**: {methodology_tradition_slug or null}
+- **disambiguation_rule_applied**: {rule_name or null}
+- **applied_union_rules**: [{list of union rules applied, or empty if none}]
+- **precedence_trace**: [{chain of precedence resolution, or null}]
+```
+
+Fill in the fields from the Tier-C routing performed in Step 1:
+- `tier_c_lens`: the lens selected by Tier-C (0-or-1), or `null` if target_domain was `general`/others
+- `primary_tradition`: the `target_domain` value that determined Tier-C selection (e.g., `nlp`, `cv`, `rl`, `general`)
+- `disambiguation_rule_applied`: `null` for now (disambiguation rules from #844 not yet implemented)
+- `applied_union_rules`: empty list `[]` for now
+- `precedence_trace`: `null` for now
+
 ### Step 7 — Emit Structured Tokens
 
 Emit `methodology_tradition` with the resolved `primary_tradition` slug from Tier-C.
@@ -288,5 +314,8 @@ If Tier-C was skipped (no methodology tradition detected), emit `methodology_tra
 ```
 visualization_plan_path = {absolute_path_to_visualization-plan.md}
 report_plan_path = {absolute_path_to_report-plan.md}
-methodology_tradition = {primary_tradition slug, or "null" if Tier-C skipped}
+disambiguation_rule_applied = {disambiguation_rule_applied or null}
+tier_c_lens = {tier_c_lens or null}
+methodology_tradition = {primary_tradition or null}
+visualization_plan_trace_path = {absolute_path_to_visualization-plan-trace.md}
 ```

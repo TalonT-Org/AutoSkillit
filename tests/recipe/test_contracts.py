@@ -642,6 +642,7 @@ ALWAYS_WRITE_SKILLS = {
     "implement-worktree",
     "implement-worktree-no-merge",
     "make-campaign",
+    "make-groups",
     "make-plan",
     "plan-experiment",
     "plan-visualization",

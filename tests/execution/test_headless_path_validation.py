@@ -1404,6 +1404,7 @@ class TestEarlyStopRecovery:
             "/autoskillit:make-plan foo",
             cwd="/tmp",
             ctx=tool_ctx,
+            provider_extras={"ANTHROPIC_BASE_URL": "https://minimax.example"},
         )
         assert result.success is True
         assert len(tool_ctx.runner.call_args_list) == 2
@@ -1423,6 +1424,7 @@ class TestEarlyStopRecovery:
             "/autoskillit:make-plan foo",
             cwd="/tmp",
             ctx=tool_ctx,
+            provider_extras={"ANTHROPIC_BASE_URL": "https://minimax.example"},
         )
         assert result.success is True
 

@@ -13,19 +13,19 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit.core import get_logger, write_versioned_json
-from autoskillit.fleet.state_gates import record_gate_outcome  # noqa: F401
-from autoskillit.fleet.state_recovery import (  # noqa: F401
+from autoskillit.fleet.state_gates import record_gate_outcome
+from autoskillit.fleet.state_recovery import (
     crash_recover_dispatch,
     has_failed_dispatch,
     resume_campaign_from_state,
 )
-from autoskillit.fleet.state_types import (  # noqa: F401 — re-exported
-    _ABANDON_KILL_REASONS,
-    _ALLOWED_TRANSITIONS,
-    _COMPLETED_STATUSES,
-    _INFRASTRUCTURE_FAILURE_REASONS,
-    _SCHEMA_VERSION,
-    _VISIBLE_IN_BLOCK_STATUSES,
+from autoskillit.fleet.state_types import (
+    _ABANDON_KILL_REASONS,  # noqa: F401
+    _ALLOWED_TRANSITIONS,  # noqa: F401
+    _COMPLETED_STATUSES,  # noqa: F401
+    _INFRASTRUCTURE_FAILURE_REASONS,  # noqa: F401
+    _SCHEMA_VERSION,  # noqa: F401
+    _VISIBLE_IN_BLOCK_STATUSES,  # noqa: F401
     FLEET_HALTED_SENTINEL,
     TERMINAL_DISPATCH_STATUSES,
     CampaignState,
@@ -36,6 +36,34 @@ from autoskillit.fleet.state_types import (  # noqa: F401 — re-exported
     _resume_lock,
     _validate_transition,
 )
+
+__all__ = [
+    # re-exported from state_gates
+    "record_gate_outcome",
+    # re-exported from state_recovery
+    "crash_recover_dispatch",
+    "has_failed_dispatch",
+    "resume_campaign_from_state",
+    # re-exported from state_types
+    "FLEET_HALTED_SENTINEL",
+    "TERMINAL_DISPATCH_STATUSES",
+    "CampaignState",
+    "DispatchRecord",
+    "DispatchStatus",
+    "GateRecordResult",
+    "ResumeDecision",
+    # local
+    "write_initial_state",
+    "read_state",
+    "mark_dispatch_running",
+    "mark_dispatch_interrupted",
+    "mark_dispatch_resumable",
+    "reset_failed_dispatch",
+    "append_dispatch_record",
+    "build_protected_campaign_ids",
+    "write_captured_values",
+    "read_all_campaign_captures",
+]
 
 logger = get_logger(__name__)
 

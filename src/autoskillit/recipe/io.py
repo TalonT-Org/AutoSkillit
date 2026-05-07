@@ -272,6 +272,47 @@ if _PARSE_STEP_HANDLED_FIELDS != frozenset(RecipeStep.__dataclass_fields__):
         f"{_PARSE_STEP_HANDLED_FIELDS - frozenset(RecipeStep.__dataclass_fields__)}"
     )
 
+_PARSE_RECIPE_HANDLED_FIELDS: frozenset[str] = frozenset(
+    {
+        "name",
+        "description",
+        "summary",
+        "ingredients",
+        "steps",
+        "kitchen_rules",
+        "version",
+        "recipe_version",
+        "experimental",
+        "requires_packs",
+        "kind",
+        "dispatches",
+        "categories",
+        "requires_recipe_packs",
+        "allowed_recipes",
+        "continue_on_failure",
+        "requires_features",
+    }
+)
+
+_RECIPE_COMPUTED_FIELDS: frozenset[str] = frozenset(
+    {
+        "content_hash",
+        "composite_hash",
+        "blocks",
+    }
+)
+
+if _PARSE_RECIPE_HANDLED_FIELDS | _RECIPE_COMPUTED_FIELDS != frozenset(
+    Recipe.__dataclass_fields__
+):
+    _expected = frozenset(Recipe.__dataclass_fields__)
+    _combined = _PARSE_RECIPE_HANDLED_FIELDS | _RECIPE_COMPUTED_FIELDS
+    raise RuntimeError(
+        "_parse_recipe field list is out of sync with Recipe schema.\n"
+        f"  Missing from handled+computed: {_expected - _combined}\n"
+        f"  Extra in handled+computed:     {_combined - _expected}"
+    )
+
 
 def _parse_recipe(data: dict[str, Any]) -> Recipe:
     name = data.get("name", "")

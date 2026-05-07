@@ -239,6 +239,7 @@ def test_output_path_tokens_synchronized() -> None:
             "prep_path",
             # plan-visualization outputs (groupF Part A)
             "visualization_plan_path",
+            "visualization_plan_trace_path",
             "report_plan_path",
             # bundle-local-report output (groupG)
             "html_path",

@@ -348,6 +348,7 @@ class TestOutputPathTokensDerivedFromContracts:
             "triage_manifest",
             "triage_report",
             "visualization_plan_path",
+            "visualization_plan_trace_path",
             "html_path",
             "resource_report",
             "execution_map",

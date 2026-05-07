@@ -145,6 +145,10 @@ async def dispatch_food_truck(
         campaign_state_path_str = os.environ.get("AUTOSKILLIT_CAMPAIGN_STATE_PATH")
         if campaign_state_path_str and dispatch_name:
             try:
+                if not isinstance(result, str):
+                    raise TypeError(
+                        f"execute_dispatch returned {type(result).__name__}, expected str"
+                    )
                 envelope = json.loads(result)
                 campaign_state_path = Path(campaign_state_path_str)
                 if campaign_state_path.exists():
@@ -154,7 +158,10 @@ async def dispatch_food_truck(
                         append_dispatch_record,
                     )
 
-                    status = DispatchStatus(envelope["dispatch_status"])
+                    raw_status = envelope.get("dispatch_status")
+                    if raw_status is None:
+                        raise KeyError("dispatch_status missing from dispatch envelope")
+                    status = DispatchStatus(raw_status)
                     append_dispatch_record(
                         campaign_state_path,
                         DispatchRecord(
@@ -232,7 +239,11 @@ async def record_gate_dispatch(
 
         result = record_gate_outcome(Path(campaign_state_path_str), dispatch_name, approved)
         if not result.success:
-            return fleet_error(FleetErrorCode(result.error_code), result.error_message)
+            try:
+                error_code = FleetErrorCode(result.error_code)
+            except ValueError:
+                error_code = FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH
+            return fleet_error(error_code, result.error_message)
 
         return json.dumps(
             {"success": True, "dispatch_name": result.dispatch_name, "status": result.status}

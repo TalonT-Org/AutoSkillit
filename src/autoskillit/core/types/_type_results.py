@@ -1,7 +1,9 @@
 """Core result dataclasses — universal types.
 
-Execution-scoped types (SessionTelemetry, ProviderOutcome, RecipeIdentity,
-CIRunScope) live in _type_results_execution.py for narrower test cascade.
+Execution-scoped types (SessionTelemetry, RecipeIdentity, CIRunScope) live in
+_type_results_execution.py for narrower test cascade. ProviderOutcome stays here
+because SkillResult.provider references it, and SkillResult is consumed by 13+
+directories — a cross-import would undermine the cascade narrowing.
 """
 
 from __future__ import annotations
@@ -13,7 +15,6 @@ from pathlib import Path
 from typing import Any, Generic, Literal, TypedDict, TypeVar
 
 from ._type_enums import KillReason, RetryReason, SessionOutcome
-from ._type_results_execution import ProviderOutcome
 
 T = TypeVar("T")
 
@@ -24,6 +25,7 @@ __all__ = [
     "ValidatedAddDir",
     "WriteBehaviorSpec",
     "FailureRecord",
+    "ProviderOutcome",
     "InfraOutcome",
     "SkillResult",
     "CleanupResult",
@@ -137,6 +139,23 @@ class FailureRecord:
 
     def to_dict(self) -> dict:  # type: ignore[type-arg]
         return asdict(self)
+
+
+@dataclass(frozen=True)
+class ProviderOutcome:
+    """Typed bundle of provider execution outcome fields.
+
+    All fields are required — constructing without any field is a TypeError,
+    making omissions visible at construction time rather than silently defaulting.
+    """
+
+    provider_used: str
+    fallback_activated: bool
+
+    @classmethod
+    def none_used(cls) -> ProviderOutcome:
+        """Sentinel for paths where no provider selection occurred."""
+        return cls(provider_used="", fallback_activated=False)
 
 
 @dataclass(frozen=True)

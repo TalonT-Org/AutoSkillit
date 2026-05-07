@@ -49,8 +49,8 @@ __all__ = (
     + _protocols_workspace_all
     + _protocols_recipe_all
     + _protocols_infra_all
-    + _results_execution_all
     + _results_all
+    + _results_execution_all
     + _resume_all
     + _subprocess_all
 )

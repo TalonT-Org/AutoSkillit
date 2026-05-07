@@ -149,8 +149,8 @@ class TestInitializeClearMarker:
     def test_initialize_uses_clear_marker_as_since_bound(self, tool_ctx, tmp_path, monkeypatch):
         from datetime import UTC, datetime, timedelta
 
+        from autoskillit.core.types._type_results import ProviderOutcome
         from autoskillit.core.types._type_results_execution import (
-            ProviderOutcome,
             RecipeIdentity,
             SessionTelemetry,
         )

@@ -11,8 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core.types._type_results import ProviderOutcome
 from autoskillit.core.types._type_results_execution import (
-    ProviderOutcome,
     RecipeIdentity,
     SessionTelemetry,
 )

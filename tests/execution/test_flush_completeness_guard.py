@@ -7,7 +7,8 @@ import json
 
 import pytest
 
-from autoskillit.core.types._type_results_execution import ProviderOutcome, RecipeIdentity
+from autoskillit.core.types._type_results import ProviderOutcome
+from autoskillit.core.types._type_results_execution import RecipeIdentity
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 

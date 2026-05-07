@@ -2,8 +2,8 @@ from unittest.mock import patch
 
 import pytest
 
+from autoskillit.core.types._type_results import ProviderOutcome
 from autoskillit.core.types._type_results_execution import (
-    ProviderOutcome,
     RecipeIdentity,
     SessionTelemetry,
 )

@@ -3,7 +3,8 @@
 Narrow-cascade peer of _type_results.py. These types are consumed primarily by
 execution/, server/, and pipeline/ — not by workspace/, recipe/, migration/, or
 the root-level utility modules. Splitting them here means changes cascade to
-4 test directories instead of 13.
+4 test directories instead of 13. ProviderOutcome lives in _type_results.py
+because SkillResult.provider references it (universal consumer surface).
 
 Zero autoskillit imports outside this sub-package (IL-0).
 """
@@ -17,7 +18,6 @@ from ._type_constants import KNOWN_CI_EVENTS
 
 __all__ = [
     "SessionTelemetry",
-    "ProviderOutcome",
     "RecipeIdentity",
     "CIRunScope",
 ]
@@ -52,23 +52,6 @@ class SessionTelemetry:
             loc_insertions=0,
             loc_deletions=0,
         )
-
-
-@dataclass(frozen=True)
-class ProviderOutcome:
-    """Typed bundle of provider execution outcome fields.
-
-    All fields are required — constructing without any field is a TypeError,
-    making omissions visible at construction time rather than silently defaulting.
-    """
-
-    provider_used: str
-    fallback_activated: bool
-
-    @classmethod
-    def none_used(cls) -> ProviderOutcome:
-        """Sentinel for paths where no provider selection occurred."""
-        return cls(provider_used="", fallback_activated=False)
 
 
 @dataclass(frozen=True)

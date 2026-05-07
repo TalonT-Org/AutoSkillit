@@ -11,8 +11,8 @@ from datetime import UTC, datetime, timedelta
 import anyio
 import pytest
 
+from autoskillit.core.types._type_results import ProviderOutcome
 from autoskillit.core.types._type_results_execution import (
-    ProviderOutcome,
     RecipeIdentity,
     SessionTelemetry,
 )

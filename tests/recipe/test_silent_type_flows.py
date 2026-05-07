@@ -1,8 +1,7 @@
 """Integration tests for silent-type convention flows.
 
-Shared between Work Item 2.3 (review-design silent-type) and Work Item 4.7
-(vis-lens out-of-scope traditions). Tests verify that registry, convention
-doc, and SKILL.md files are aligned on advisory schema and behavior.
+Tests verify that registry, convention doc, and SKILL.md files are aligned
+on advisory schema and behavior.
 """
 
 from __future__ import annotations
@@ -25,7 +24,7 @@ _CONVENTION_PATH = _REPO_ROOT / "docs" / "research" / "silent-type-convention.md
 
 
 class TestVisLensOutOfScopeFlow:
-    """Work Item 4.7: vis-lens-methodology-norms out-of-scope tradition path."""
+    """vis-lens-methodology-norms out-of-scope tradition path."""
 
     def test_qualitative_tradition_is_out_of_scope(self) -> None:
         spec = get_methodology_tradition_by_name("qualitative_interpretive_tradition")
@@ -37,22 +36,28 @@ class TestVisLensOutOfScopeFlow:
         assert spec is not None
         assert len(spec.strongly_expected_figures) >= 1
         for entry in spec.strongly_expected_figures:
+            assert isinstance(entry, dict), f"Expected dict, got {type(entry)}"
             assert "figure" in entry
             assert "source" in entry
 
     def test_qualitative_tradition_has_reference_framework(self) -> None:
         spec = get_methodology_tradition_by_name("qualitative_interpretive_tradition")
         assert spec is not None
+        assert "name" in spec.canonical_guideline, "canonical_guideline missing 'name' key"
         assert spec.canonical_guideline["name"] == "COREQ/SRQR"
 
     def test_vis_lens_skill_documents_out_of_scope_advisory(self) -> None:
         skill_md = (_SKILLS_DIR / "vis-lens-methodology-norms" / "SKILL.md").read_text()
         for term in [
+            "Out-of-Scope Tradition Handling",
             "advisory_context",
             "subject_kind",
             "methodology_tradition",
             "strongly_expected_figures",
             "is_out_of_scope_tradition",
+            "verdict: GO",
+            "requires_decision: false",
+            "visualization-plan-trace.md",
         ]:
             assert term in skill_md, f"SKILL.md missing '{term}'"
 

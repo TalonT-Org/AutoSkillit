@@ -122,22 +122,3 @@ def test_methodology_norms_documents_two_stage_matching() -> None:
     assert "Stage A" in text or "stage A" in text
     assert "Stage B" in text or "stage B" in text
     assert "venue_specific_appendices" in text or "venue appendix" in text
-
-
-def test_methodology_norms_documents_out_of_scope_handling() -> None:
-    """vis-lens-methodology-norms must document out-of-scope tradition handling."""
-    text = _read("methodology-norms")
-    assert "Out-of-Scope Tradition Handling" in text
-    assert "is_out_of_scope_tradition" in text
-    assert "advisory_context" in text
-    assert "strongly_expected_figures" in text
-
-
-def test_methodology_norms_advisory_matches_convention() -> None:
-    """vis-lens-methodology-norms advisory must align with silent-type convention."""
-    text = _read("methodology-norms")
-    assert "subject_kind" in text
-    assert "methodology_tradition" in text
-    assert "verdict: GO" in text
-    assert "requires_decision: false" in text
-    assert "visualization-plan-trace.md" in text

@@ -430,11 +430,16 @@ def test_batch_create_issues_chunks_large_batches(tmp_path):
     assert result["issue_count"] == "25"
 
 
-def test_batch_create_issues_appends_validation_summary(tmp_path):
+def test_batch_create_issues_ignores_validation_summary_file(tmp_path):
+    """batch_create_issues must not append validation_summary content to issue bodies.
+
+    The validation_summary file is a bulk audit artifact covering all findings
+    for a source. SKILL.md line 300-301 states it is NOT part of the issue body.
+    """
     va_dir = tmp_path / ".autoskillit" / "temp" / "validate-audit"
     va_dir.mkdir(parents=True)
     (va_dir / "ticket_body_tests_1_2026-01-01_120000.md").write_text(
-        "# Audit Finding\n\nSome finding."
+        "validated: true\n\n# Audit Finding\n\nSome finding."
     )
     (va_dir / "validation_summary_tests_2026-01-01_120000.md").write_text(
         "## Validation Summary\nAll clear."
@@ -445,17 +450,19 @@ def test_batch_create_issues_appends_validation_summary(tmp_path):
     ):
         mock_run.side_effect = _make_side_effect()
         batch_create_issues(workspace=str(tmp_path))
-    found = False
     for call in mock_run.call_args_list:
         kwargs = call[1]
         if kwargs.get("input"):
             mutation_call = json.loads(kwargs["input"])
             body = mutation_call["variables"]["i0"]["body"]
-            assert "## Validation Summary" in body
-            assert "All clear." in body
-            found = True
-            break
-    assert found, "no createIssue mutation call found in mock_run calls"
+            assert "## Validation Summary" not in body, (
+                "validation_summary content must not be appended to issue bodies"
+            )
+            assert "All clear." not in body, (
+                "validation_summary content must not be appended to issue bodies"
+            )
+            return
+    pytest.fail("no createIssue mutation call found in mock_run calls")
 
 
 def test_batch_create_issues_handles_no_tickets(tmp_path):

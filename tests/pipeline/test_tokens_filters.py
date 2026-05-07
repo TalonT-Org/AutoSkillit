@@ -435,3 +435,46 @@ def test_load_from_log_dir_order_id_filter_cross_cwd(tmp_path):
     assert "rectify" in step_names
     assert "implement" in step_names
     assert "review" not in step_names
+
+
+def _write_token_session_dispatch_id(
+    log_root: Path,
+    dir_name: str,
+    dispatch_id: str,
+    timestamp: str = "2026-05-01T00:00:00+00:00",
+) -> None:
+    """Write a token_usage session with dispatch_id in the index."""
+    session_dir = log_root / "sessions" / dir_name
+    session_dir.mkdir(parents=True, exist_ok=True)
+    tu_data = {
+        "step_name": "implement",
+        "input_tokens": 100,
+        "output_tokens": 50,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "timing_seconds": 5.0,
+    }
+    (session_dir / "token_usage.json").write_text(json.dumps(tu_data))
+    index_entry = {
+        "dir_name": dir_name,
+        "timestamp": timestamp,
+        "session_id": dir_name,
+        "dispatch_id": dispatch_id,
+    }
+    with (log_root / "sessions.jsonl").open("a") as f:
+        f.write(json.dumps(index_entry) + "\n")
+
+
+def test_token_load_dispatch_id_filter(tmp_path):
+    """DefaultTokenLog.load_from_log_dir respects dispatch_id_filter."""
+    _write_token_session_dispatch_id(tmp_path, "d1-a", dispatch_id="d1")
+    _write_token_session_dispatch_id(tmp_path, "d1-b", dispatch_id="d1")
+    _write_token_session_dispatch_id(tmp_path, "d2-a", dispatch_id="d2")
+
+    log = DefaultTokenLog()
+    n = log.load_from_log_dir(tmp_path, dispatch_id_filter="d1")
+    assert n == 2
+
+    log2 = DefaultTokenLog()
+    n2 = log2.load_from_log_dir(tmp_path, dispatch_id_filter="")
+    assert n2 == 3

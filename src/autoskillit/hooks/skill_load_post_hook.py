@@ -18,6 +18,15 @@ import tempfile
 from pathlib import Path
 
 
+def _find_project_root() -> Path:
+    """Walk up from CWD to find nearest ancestor containing .autoskillit/."""
+    cwd = Path.cwd()
+    for ancestor in [cwd, *cwd.parents]:
+        if (ancestor / ".autoskillit").is_dir():
+            return ancestor
+    return cwd
+
+
 def _atomic_write(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
@@ -41,6 +50,9 @@ def main() -> None:
     except Exception:
         sys.exit(0)
 
+    if data.get("agent_id"):
+        sys.exit(0)
+
     if not os.environ.get("AUTOSKILLIT_PROVIDER_PROFILE", "").strip():
         sys.exit(0)
 
@@ -54,7 +66,7 @@ def main() -> None:
     if not session_id:
         sys.exit(0)
 
-    flag_path = Path.cwd() / ".autoskillit" / "temp" / f"skill_guard_{session_id}.flag"
+    flag_path = _find_project_root() / ".autoskillit" / "temp" / f"skill_guard_{session_id}.flag"
     try:
         _atomic_write(flag_path, skill_name)
     except Exception:

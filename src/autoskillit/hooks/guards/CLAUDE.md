@@ -25,9 +25,24 @@ PreToolUse guard scripts — standalone Python processes enforcing tool-call pol
 | `skill_cmd_guard.py` | Validates `skill_command` path argument format |
 | `skill_command_guard.py` | Blocks `run_skill` with non-slash `skill_command` |
 | `unsafe_install_guard.py` | Blocks `pip install -e` targeting system Python |
-| `skill_load_guard.py` | Denies native tools until Skill tool is called in non-Anthropic headless skill sessions |
+| `skill_load_guard.py` | Denies native tools until Skill tool is called in non-Anthropic headless skill sessions; exempts subagents via `agent_id` |
 | `write_guard.py` | Blocks Write/Edit outside allowed prefix in read-only sessions |
 
 ## Architecture Notes
 
 Each guard is a standalone Python script executed as a subprocess (not imported as a module). Protocol: read PreToolUse JSON from stdin, write decision JSON to stdout, exit 0. Most are stdlib-only for fast startup. Guards fail-open for malformed input. `skill_command_guard.py` has split error handling: malformed JSON fails-open (approve), unexpected runtime errors fail-closed (deny).
+
+## Hook Payload Fields for Guard Development
+
+### `agent_id` — Subagent Detection
+
+Claude Code includes `agent_id` in the hook JSON payload (stdin) when the hook fires
+inside a subagent (L0). The field is absent in top-level sessions. This is the standard
+mechanism for detecting subagent context in hook scripts.
+
+- `agent_id` — present ONLY in subagent context; absent at top-level
+- `agent_type` — also present in subagent context (e.g., `"Explore"`, `"general-purpose"`)
+- Subagents cannot spawn nested subagents, so the check is binary: top-level vs. one-level-deep
+- Check: `if data.get("agent_id"): sys.exit(0)` for unconditional subagent exemption
+
+Used by: `skill_load_guard.py`, `skill_load_post_hook.py`

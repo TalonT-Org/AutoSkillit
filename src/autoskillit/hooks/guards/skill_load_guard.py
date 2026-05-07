@@ -9,6 +9,11 @@ When gated, checks for ``.autoskillit/temp/skill_guard_{session_id}.flag``.
 If absent, denies with a directive message instructing the model to call
 the Skill tool first.
 
+Known limitation: when the model invokes Skill + native tools in a single
+parallel message, the native tools fire PreToolUse before the Skill PostToolUse
+writes the flag. This costs one wasted turn but self-resolves on the next turn.
+This is inherent to the PreToolUse/PostToolUse timing model.
+
 Stdlib-only — no autoskillit imports.
 """
 
@@ -20,6 +25,16 @@ import sys
 from pathlib import Path
 
 SKILL_LOAD_DENY_TRIGGER: str = "SKILL LOADING REQUIRED"
+
+
+def _find_project_root() -> Path:
+    """Walk up from CWD to find nearest ancestor containing .autoskillit/."""
+    cwd = Path.cwd()
+    for ancestor in [cwd, *cwd.parents]:
+        if (ancestor / ".autoskillit").is_dir():
+            return ancestor
+    return cwd
+
 
 _DENY_MESSAGE: str = (
     "SKILL LOADING REQUIRED. You MUST call the Skill tool to load the skill "
@@ -37,6 +52,9 @@ def main() -> None:
     except Exception:
         sys.exit(0)
 
+    if data.get("agent_id"):
+        sys.exit(0)
+
     profile = os.environ.get("AUTOSKILLIT_PROVIDER_PROFILE", "").strip()
     if not profile or profile.casefold() == "anthropic":
         sys.exit(0)
@@ -51,7 +69,7 @@ def main() -> None:
     if not session_id:
         sys.exit(0)
 
-    flag_path = Path.cwd() / ".autoskillit" / "temp" / f"skill_guard_{session_id}.flag"
+    flag_path = _find_project_root() / ".autoskillit" / "temp" / f"skill_guard_{session_id}.flag"
     if flag_path.exists():
         sys.exit(0)
 

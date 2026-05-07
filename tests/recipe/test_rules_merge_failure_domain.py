@@ -68,7 +68,9 @@ class TestMergeFailureSkillDomainMismatch:
                 "rebase_fix": {
                     "tool": "run_skill",
                     "with": {
-                        "skill_command": "/autoskillit:resolve-merge-conflicts /tmp/wt /tmp/plan main"
+                        "skill_command": (
+                            "/autoskillit:resolve-merge-conflicts /tmp/wt /tmp/plan main"
+                        )
                     },
                     "on_success": "done",
                 },
@@ -106,7 +108,9 @@ class TestMergeFailureSkillDomainMismatch:
                 "conflict_fix": {
                     "tool": "run_skill",
                     "with": {
-                        "skill_command": "/autoskillit:resolve-merge-conflicts /tmp/wt /tmp/plan main"
+                        "skill_command": (
+                            "/autoskillit:resolve-merge-conflicts /tmp/wt /tmp/plan main"
+                        )
                     },
                     "on_success": "done",
                 },
@@ -140,6 +144,7 @@ class TestMergeFailureSkillDomainMismatch:
         assert errors == []
 
 
+@pytest.mark.medium
 class TestBundledRecipesPassFailureDomainCheck:
     """Integration tests: bundled recipes pass the new rule."""
 
@@ -177,7 +182,7 @@ class TestBundledRecipesPassFailureDomainCheck:
             if cond.when and "rebase" in cond.when and "post_rebase" not in cond.when:
                 found_rebase = True
                 target_step = recipe.steps[cond.route]
-                skill_cmd = target_step.with_args.get("skill_command", "")
+                skill_cmd = (target_step.with_args or {}).get("skill_command", "")
                 assert "resolve-merge-conflicts" in skill_cmd, (
                     f"{recipe_name}: rebase routes to '{cond.route}' which invokes "
                     f"'{skill_cmd}', expected resolve-merge-conflicts"

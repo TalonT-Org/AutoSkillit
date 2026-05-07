@@ -143,10 +143,38 @@ class TestMergeFailureSkillDomainMismatch:
 class TestBundledRecipesPassFailureDomainCheck:
     """Integration tests: bundled recipes pass the new rule."""
 
-    def test_bundled_recipes_pass_failure_domain_skill_check(self):
+    @pytest.mark.parametrize(
+        "recipe_name",
+        ["implementation", "remediation", "implementation-groups"],
+    )
+    def test_bundled_recipes_pass_failure_domain_skill_check(self, recipe_name):
         """All three merge_worktree recipes route rebase to resolve-merge-conflicts."""
-        pytest.skip("Recipe YAML fixes are pending — run after step 2c/2d/2e")
+        from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 
-    def test_rebase_routes_to_merge_conflict_skill(self):
+        recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+        findings = run_semantic_rules(recipe)
+        errors = [f for f in findings if f.rule == "merge-failure-skill-domain-mismatch"]
+        assert errors == [], f"{recipe_name}: {[e.message for e in errors]}"
+
+    @pytest.mark.parametrize(
+        "recipe_name,merge_step_name",
+        [
+            ("implementation", "merge"),
+            ("remediation", "merge"),
+            ("implementation-groups", "merge"),
+        ],
+    )
+    def test_rebase_routes_to_merge_conflict_skill(self, recipe_name, merge_step_name):
         """rebase condition in each recipe routes to a step invoking resolve-merge-conflicts."""
-        pytest.skip("Recipe YAML fixes are pending — run after step 2c/2d/2e")
+        from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+
+        recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+        merge_step = recipe.steps[merge_step_name]
+        for cond in merge_step.on_result.conditions:
+            if cond.when and "rebase" in cond.when and "post_rebase" not in cond.when:
+                target_step = recipe.steps[cond.route]
+                skill_cmd = target_step.with_args.get("skill_command", "")
+                assert "resolve-merge-conflicts" in skill_cmd, (
+                    f"{recipe_name}: rebase routes to '{cond.route}' which invokes "
+                    f"'{skill_cmd}', expected resolve-merge-conflicts"
+                )

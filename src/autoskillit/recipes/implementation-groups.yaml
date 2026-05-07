@@ -312,7 +312,7 @@ steps:
       - when: "result.failed_step == 'post_rebase_test_gate'"
         route: fix
       - when: "result.failed_step == 'rebase'"
-        route: fix
+        route: rebase_conflict_fix
       - when: "result.error"
         route: release_issue_failure
       - route: next_or_done
@@ -366,6 +366,24 @@ steps:
     on_failure: release_issue_failure
     on_context_limit: test
     note: "Fixes test failures without merging. Routes back to test for re-validation before merge_worktree. on_context_limit routes needs_retry=True to test (worktree may already be green) instead of re-running fix blindly."
+
+  rebase_conflict_fix:
+    tool: run_skill
+    model: ""
+    with:
+      skill_command: "/autoskillit:resolve-merge-conflicts ${{ context.worktree_path }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: "rebase_conflict_fix"
+    capture:
+      conflict_escalation_required: "${{ result.escalation_required }}"
+    on_result:
+      - when: "${{ result.escalation_required }} == true"
+        route: release_issue_failure
+      - route: test
+    on_failure: release_issue_failure
+    on_context_limit: release_issue_failure
+    retries: 1
+    on_exhausted: release_issue_failure
 
   next_or_done:
     action: route

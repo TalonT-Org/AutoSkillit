@@ -23,13 +23,13 @@ def _load(path: Path) -> dict:
 
 
 def _uv_version_pins(workflow: dict) -> list[str]:
-    """Return all uv-version values declared in setup-uv steps."""
+    """Return all version values declared in setup-uv steps."""
     pins = []
     for job in workflow.get("jobs", {}).values():
         for step in job.get("steps", []):
             uses = step.get("uses", "")
             if "setup-uv" in uses:
-                pins.append(step.get("with", {}).get("uv-version", ""))
+                pins.append(step.get("with", {}).get("version", ""))
     return pins
 
 

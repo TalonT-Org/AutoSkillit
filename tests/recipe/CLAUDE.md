@@ -93,6 +93,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_rules_callable_scope.py` | Tests for callable-requires-scoped-discovery semantic validation rule |
 | `test_rules_campaign.py` | Tests for campaign semantic validation rule |
 | `test_rules_ci.py` | Tests for CI semantic validation rule |
+| `test_rules_ci_loops.py` | Tests for ci-timed-out-self-loop-unguarded and ci-conflict-path-missing-auto-trigger rules |
 | `test_rules_clone.py` | Tests for clone semantic validation rule |
 | `test_rules_cmd.py` | Tests for cmd semantic validation rule |
 | `test_rules_conditional_push.py` | Tests for conditional_push semantic validation rule |
@@ -128,6 +129,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_rules_skill_command_prefix.py` | Tests for skill_command_prefix semantic validation rule |
 | `test_rules_skill_content.py` | Tests for skill_content semantic validation rule |
 | `test_rules_skills.py` | Tests for skills semantic validation rule |
+| `test_rules_skill_routing.py` | Tests for skill-result-routing-gap rule and merge-pr contract allowed_values |
 | `test_rules_subset_disabled.py` | Tests for subset_disabled semantic validation rule |
 | `test_rules_temp_path.py` | Tests for temp_path semantic validation rule |
 | `test_rules_tools.py` | Tests for tools semantic validation rule |

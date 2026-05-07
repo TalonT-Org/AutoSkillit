@@ -6,6 +6,7 @@ import re
 
 from autoskillit.core import PRState, Severity
 from autoskillit.recipe._analysis import ValidationContext
+from autoskillit.recipe._rule_helpers import _is_loop_guard_step
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 
@@ -488,3 +489,105 @@ def _check_ci_timeout_minimum(ctx: ValidationContext) -> list[RuleFinding]:
                 )
             )
     return findings
+
+
+@semantic_rule(
+    name="ci-timed-out-self-loop-unguarded",
+    description=(
+        "A wait_for_ci step whose on_result routes timed_out back to itself "
+        "must have a check_loop_iteration guard on that path to prevent unbounded looping. "
+        "timed_out means CI is still running — it should be polled with a bounded iteration "
+        "count, not routed to a bare self-loop with no cap."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_ci_timed_out_self_loop_unguarded(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "wait_for_ci":
+            continue
+        if not step.on_result or not step.on_result.conditions:
+            continue
+        conditions = step.on_result.conditions
+        timed_out_routes: list[str] = []
+        for cond in conditions:
+            if cond.when is not None and "timed_out" in cond.when:
+                timed_out_routes.append(cond.route)
+        for route in timed_out_routes:
+            if route == step_name:
+                if not _is_loop_guard_step(step_name, ctx):
+                    findings.append(
+                        RuleFinding(
+                            rule="ci-timed-out-self-loop-unguarded",
+                            severity=Severity.ERROR,
+                            step_name=step_name,
+                            message=(
+                                f"Step '{step_name}' has a timed_out self-loop with no "
+                                f"check_loop_iteration guard on the path. "
+                                f"Unbounded polling can result from this pattern."
+                            ),
+                        )
+                    )
+    return findings
+
+
+@semantic_rule(
+    name="ci-conflict-path-missing-auto-trigger",
+    description=(
+        "A wait_for_ci step on a conflict-resolution path must have auto_trigger: true. "
+        "After a force-push of a conflict fix, CI may not have been triggered yet — "
+        "auto_trigger ensures the empty-commit CI trigger fires on the next poll cycle."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_ci_conflict_path_missing_auto_trigger(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    conflict_trigger_steps: set[str] = set()
+    for step_name, step in ctx.recipe.steps.items():
+        if not step.on_result or not step.on_result.conditions:
+            continue
+        for cond in step.on_result.conditions:
+            if cond.when is not None and "CONFLICTING" in cond.when:
+                conflict_trigger_steps.add(step_name)
+                break
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "wait_for_ci":
+            continue
+        is_on_conflict_path = (
+            "conflict" in step_name.lower()
+            or step_name in conflict_trigger_steps
+            or _has_conflict_ancestor(step_name, conflict_trigger_steps, ctx)
+        )
+        if not is_on_conflict_path:
+            continue
+        auto_trigger = (step.with_args or {}).get("auto_trigger", "")
+        if auto_trigger != "true":
+            findings.append(
+                RuleFinding(
+                    rule="ci-conflict-path-missing-auto-trigger",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' is on a conflict-resolution path but lacks "
+                        f"auto_trigger: 'true' in with_args. After a conflict fix push, "
+                        f"CI may not have fired yet — auto_trigger is mandatory here."
+                    ),
+                )
+            )
+    return findings
+
+
+def _has_conflict_ancestor(
+    step_name: str, conflict_steps: set[str], ctx: ValidationContext
+) -> bool:
+    visited: set[str] = set()
+    queue = list(ctx.predecessors.get(step_name, set()))
+    while queue:
+        current = queue.pop(0)
+        if current in visited:
+            continue
+        visited.add(current)
+        if current in conflict_steps:
+            return True
+        queue.extend(ctx.predecessors.get(current, set()))
+    return False

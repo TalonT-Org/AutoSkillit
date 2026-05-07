@@ -6,6 +6,7 @@ import re
 
 from autoskillit.core import MergeFailedStep, Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext, bfs_reachable
+from autoskillit.recipe._rule_helpers import _is_loop_guard_step
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 logger = get_logger(__name__)
@@ -155,17 +156,6 @@ def _check_merge_fix_cycle_without_guard(ctx: ValidationContext) -> list[RuleFin
                 )
             )
     return findings
-
-
-def _is_loop_guard_step(step_name: str, ctx: ValidationContext) -> bool:
-    """Return True if step_name is a loop iteration guard via check_loop_iteration."""
-    step = ctx.recipe.steps.get(step_name)
-    if step is None:
-        return False
-    if step.tool != "run_python":
-        return False
-    callable_str = step.with_args.get("callable", "")
-    return callable_str == "autoskillit.smoke_utils.check_loop_iteration"
 
 
 @semantic_rule(

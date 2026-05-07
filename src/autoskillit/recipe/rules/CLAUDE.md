@@ -1,6 +1,6 @@
 # rules/
 
-Semantic validation rule modules for recipe analysis (27 rule files).
+Semantic validation rule modules for recipe analysis (28 rule files).
 
 ## Files
 
@@ -10,6 +10,7 @@ Semantic validation rule modules for recipe analysis (27 rule files).
 | `rules_actions.py` | Semantic rules for `stop`/`route`/`confirm` action-type steps |
 | `rules_blocks.py` | Block-level budget rules; loads `block_budgets.yaml` at import |
 | `rules_bypass.py` | Rules for `skip_when_false` bypass routing contracts |
+| `rules_callable_scope.py` | Enforces scoped directory args for file-discovering callables (e.g. `batch_create_issues` → `audit_run_dir`) |
 | `rules_campaign.py` | Campaign recipe validation: dispatch names, ingredient refs |
 | `rules_ci.py` | CI polling patterns: PR state handling, CI step ordering |
 | `rules_clone.py` | Clone/push dataflow rules: missing remote URL, local-strategy capture |
@@ -37,4 +38,4 @@ Semantic validation rule modules for recipe analysis (27 rule files).
 
 ## Architecture Notes
 
-Side-effect registration: callers import the package to trigger `@semantic_rule` decorator registration of all 27 rule modules. Each rule receives a `ValidationContext` argument. No cross-imports between rule modules.
+Side-effect registration: callers import the package to trigger `@semantic_rule` decorator registration of all 28 rule modules. Each rule receives a `ValidationContext` argument. No cross-imports between rule modules.

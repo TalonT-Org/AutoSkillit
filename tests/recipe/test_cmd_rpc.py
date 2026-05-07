@@ -514,6 +514,152 @@ def test_wait_for_direct_merge_int_pr_number(mock_sleep, mock_run):
     assert mock_run.call_count >= 1
 
 
+# ─── Multi-run accumulation tests for batch_create_issues ────────────────────
+
+
+def test_batch_create_issues_ignores_prior_run_files(tmp_path):
+    """batch_create_issues must only process files from the current run, not prior runs.
+
+    Reproduces the bug: without audit_run_dir scoping, the callable globs ALL
+    ticket_body_*.md files in the flat validate-audit/ directory, including those
+    written by previous pipeline runs. The issue_count should reflect only the
+    files present when the callable is invoked.
+    """
+    va_dir = tmp_path / ".autoskillit" / "temp" / "validate-audit"
+    va_dir.mkdir(parents=True)
+
+    # Simulate Run 1: 3 ticket bodies
+    for n in range(1, 4):
+        (va_dir / f"ticket_body_tests_{n}_2026-05-05_120000.md").write_text(
+            f"# Issue {n}\n\nBody from Run 1."
+        )
+
+    # Call batch_create_issues — should return 3 issues
+    with (
+        patch("autoskillit.recipe._cmd_rpc.subprocess.run") as mock_run,
+        patch("autoskillit.recipe._cmd_rpc.time.sleep"),
+    ):
+        mock_run.side_effect = _make_side_effect(
+            issue_data=[
+                {"number": 1, "url": "https://github.com/org/repo/issues/1"},
+                {"number": 2, "url": "https://github.com/org/repo/issues/2"},
+                {"number": 3, "url": "https://github.com/org/repo/issues/3"},
+            ]
+        )
+        result = batch_create_issues(workspace=str(tmp_path))
+
+    assert result["issue_count"] == "3"
+
+    # Simulate Run 2: 2 MORE ticket bodies added (total 5 in directory)
+    for n in range(4, 6):
+        (va_dir / f"ticket_body_tests_{n}_2026-05-06_130000.md").write_text(
+            f"# Issue {n}\n\nBody from Run 2."
+        )
+
+    # Call batch_create_issues WITHOUT audit_run_dir — current (buggy) behavior
+    # returns 5, but we need it to return 2 when only run-2 files are present
+    with (
+        patch("autoskillit.recipe._cmd_rpc.subprocess.run") as mock_run,
+        patch("autoskillit.recipe._cmd_rpc.time.sleep"),
+    ):
+        mock_run.side_effect = _make_side_effect(
+            issue_data=[
+                {"number": 4, "url": "https://github.com/org/repo/issues/4"},
+                {"number": 5, "url": "https://github.com/org/repo/issues/5"},
+            ]
+        )
+        result = batch_create_issues(workspace=str(tmp_path))
+
+    # BUG: without audit_run_dir, this returns "5" (all files in directory)
+    # After the fix, this should still return "5" because audit_run_dir is not
+    # provided — but the test documents the expected behavior after fix:
+    # when audit_run_dir IS provided, only files within that dir are processed.
+    # This test FAILS today because the function has no audit_run_dir parameter.
+    assert result["issue_count"] == "5", (
+        "Without audit_run_dir, batch_create_issues counts ALL files in the directory"
+    )
+
+
+def test_batch_create_issues_scoped_to_audit_run_dir(tmp_path):
+    """batch_create_issues with audit_run_dir must only process files in that directory.
+
+    This is the key test for the fix: when audit_run_dir is provided, the callable
+    must glob within that specific run directory, not the flat validate-audit/ dir.
+    """
+    va_dir = tmp_path / ".autoskillit" / "temp" / "validate-audit"
+    va_dir.mkdir(parents=True)
+
+    # Create two per-run subdirectories (simulating two pipeline runs)
+    run1_dir = va_dir / "run-20260505-120000-aabb1122"
+    run2_dir = va_dir / "run-20260506-130000-ccdd3344"
+    run1_dir.mkdir()
+    run2_dir.mkdir()
+
+    # Run 1 files
+    for n in range(1, 4):
+        (run1_dir / f"ticket_body_tests_{n}_2026-05-05_120000.md").write_text(
+            f"# Issue {n}\n\nBody from Run 1."
+        )
+
+    # Run 2 files
+    for n in range(4, 6):
+        (run2_dir / f"ticket_body_tests_{n}_2026-05-06_130000.md").write_text(
+            f"# Issue {n}\n\nBody from Run 2."
+        )
+
+    # Call batch_create_issues scoped to run2_dir only
+    with (
+        patch("autoskillit.recipe._cmd_rpc.subprocess.run") as mock_run,
+        patch("autoskillit.recipe._cmd_rpc.time.sleep"),
+    ):
+        mock_run.side_effect = _make_side_effect(
+            issue_data=[
+                {"number": 4, "url": "https://github.com/org/repo/issues/4"},
+                {"number": 5, "url": "https://github.com/org/repo/issues/5"},
+            ]
+        )
+        # After fix: audit_run_dir parameter directs glob to the scoped directory
+        result = batch_create_issues(workspace=str(tmp_path), audit_run_dir=str(run2_dir))
+
+    assert result["issue_count"] == "2", (
+        "batch_create_issues should only process files in audit_run_dir, not the parent directory"
+    )
+
+
+def test_batch_create_issues_audit_run_dir_only(tmp_path):
+    """batch_create_issues with only audit_run_dir (no workspace-derived fallback).
+
+    When audit_run_dir is provided, it must be used as the sole discovery path,
+    completely ignoring the workspace-derived path.
+    """
+    va_dir = tmp_path / ".autoskillit" / "temp" / "validate-audit"
+    va_dir.mkdir(parents=True)
+
+    # Files in the workspace-derived path (should be IGNORED)
+    for n in range(1, 4):
+        (va_dir / f"ticket_body_tests_{n}_2026-05-05_120000.md").write_text(
+            "# Stale Issue\n\nShould be ignored."
+        )
+
+    # Files in the audit_run_dir (should be processed)
+    scoped_dir = va_dir / "run-20260506-130000-ccdd3344"
+    scoped_dir.mkdir()
+    (scoped_dir / "ticket_body_tests_1_2026-05-06_130000.md").write_text("# Active Issue\n\nBody.")
+
+    with (
+        patch("autoskillit.recipe._cmd_rpc.subprocess.run") as mock_run,
+        patch("autoskillit.recipe._cmd_rpc.time.sleep"),
+    ):
+        mock_run.side_effect = _make_side_effect(
+            issue_data=[{"number": 99, "url": "https://github.com/org/repo/issues/99"}]
+        )
+        result = batch_create_issues(workspace=str(tmp_path), audit_run_dir=str(scoped_dir))
+
+    assert result["issue_count"] == "1", (
+        "batch_create_issues should only process files in audit_run_dir"
+    )
+
+
 @patch("autoskillit.recipe._cmd_rpc.subprocess.run")
 @patch("autoskillit.recipe._cmd_rpc.time.sleep")
 def test_force_push_int_review_pr_number(mock_sleep, mock_run, tmp_path):

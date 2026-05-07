@@ -180,6 +180,10 @@ def check_review_loop(
     try:
         local_rounds = int(local_review_rounds.strip()) if local_review_rounds.strip() else 0
     except ValueError:
+        logger.warning(
+            "Invalid local_review_rounds value %r, defaulting to 0",
+            local_review_rounds.strip(),
+        )
         local_rounds = 0
 
     is_blocking_verdict = previous_verdict.strip() == "changes_requested"

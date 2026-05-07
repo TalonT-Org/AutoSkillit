@@ -648,3 +648,43 @@ def test_load_recipe_step_with_provider_field(tmp_path: Path) -> None:
     recipe_file.write_text(yaml_content)
     recipe = load_recipe(recipe_file)
     assert recipe.steps["run_step"].provider == "minimax"
+
+
+# ---------------------------------------------------------------------------
+# T4: _parse_recipe reads type: from YAML ingredient block
+# ---------------------------------------------------------------------------
+
+
+def test_parse_recipe_reads_ingredient_type_field() -> None:
+    """_parse_recipe must parse the 'type' key from a YAML ingredient block."""
+    data = {
+        "name": "test",
+        "description": "Test recipe",
+        "ingredients": {
+            "local_review_rounds": {
+                "description": "Number of local review rounds",
+                "type": "integer",
+                "default": "3",
+            }
+        },
+        "steps": {"done": {"action": "stop", "message": "Done."}},
+    }
+    recipe = _parse_recipe(data)
+    assert recipe.ingredients["local_review_rounds"].type == "integer"
+
+
+def test_parse_recipe_defaults_type_to_none_when_absent() -> None:
+    """When 'type' is absent from a YAML ingredient block, .type must be None."""
+    data = {
+        "name": "test",
+        "description": "Test recipe",
+        "ingredients": {
+            "base_branch": {
+                "description": "Base branch to target",
+                "default": "main",
+            }
+        },
+        "steps": {"done": {"action": "stop", "message": "Done."}},
+    }
+    recipe = _parse_recipe(data)
+    assert recipe.ingredients["base_branch"].type is None

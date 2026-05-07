@@ -381,3 +381,75 @@ def _check_research_output_mode_enum(
             )
         ]
     return []
+
+
+@semantic_rule(
+    name="ingredient-type-default-invalid",
+    description=(
+        "Integer-typed ingredients must not use '' as default "
+        "(auto-detect sentinel is invalid for numerics)"
+    ),
+    severity=Severity.ERROR,
+)
+def _check_ingredient_type_default_invalid(ctx: ValidationContext) -> list[RuleFinding]:
+    """Reject integer-typed ingredients that use '' as default or have non-parseable defaults."""
+    wf = ctx.recipe
+    findings: list[RuleFinding] = []
+
+    for ing_name, ing in (wf.ingredients or {}).items():
+        if getattr(ing, "type", None) != "integer":
+            continue
+
+        default = getattr(ing, "default", None)
+        required = getattr(ing, "required", False)
+
+        # Empty string default is the auto-detect sentinel — invalid for integer types
+        if default == "":
+            findings.append(
+                RuleFinding(
+                    rule="ingredient-type-default-invalid",
+                    severity=Severity.ERROR,
+                    step_name=ing_name,
+                    message=(
+                        f"Ingredient '{ing_name}' has type='integer' but default='' "
+                        "(auto-detect sentinel). Integer-typed ingredients must use an "
+                        "explicit numeric default. Suggested fix: default='3'."
+                    ),
+                )
+            )
+            continue
+
+        # Non-empty but non-parseable default
+        if default is not None and default != "":
+            try:
+                int(default)
+            except ValueError:
+                findings.append(
+                    RuleFinding(
+                        rule="ingredient-type-default-invalid",
+                        severity=Severity.ERROR,
+                        step_name=ing_name,
+                        message=(
+                            f"Ingredient '{ing_name}' has type='integer' but default={default!r} "
+                            f"is not parseable as an integer."
+                        ),
+                    )
+                )
+            continue
+
+        # None default with required=False and no explicit value — silently absent numeric field
+        if default is None and not required:
+            findings.append(
+                RuleFinding(
+                    rule="ingredient-type-default-invalid",
+                    severity=Severity.ERROR,
+                    step_name=ing_name,
+                    message=(
+                        f"Ingredient '{ing_name}' has type='integer', required=False, and "
+                        f"default=None. Integer-typed non-required ingredients must declare "
+                        f"an explicit default to avoid ambiguity."
+                    ),
+                )
+            )
+
+    return findings

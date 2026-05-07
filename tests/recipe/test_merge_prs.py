@@ -612,3 +612,22 @@ def test_pmp_push_ejected_fix_has_force_true(recipe) -> None:
         "push_ejected_fix must include force='true' — it follows a resolve-merge-conflicts "
         "step that rewrites commit SHAs, so a non-fast-forward force push is required"
     )
+
+
+# ---------------------------------------------------------------------------
+# T6: merge-prs.yaml annotate_pr_diff step must pass local_review_rounds explicitly
+# ---------------------------------------------------------------------------
+
+
+def test_annotate_pr_diff_passes_local_review_rounds_explicitly(recipe) -> None:
+    """T6: annotate_pr_diff step must include local_review_rounds in its with_args.
+
+    When local_review_rounds is omitted, the Python default '' is passed to
+    annotate_pr_diff, forcing review_mode='github' regardless of user config.
+    Making it explicit documents the intent and respects the recipe's own default.
+    """
+    step = recipe.steps["annotate_pr_diff"]
+    assert "local_review_rounds" in step.with_args, (
+        "annotate_pr_diff step must explicitly pass local_review_rounds to remove "
+        "the dependency on the Python default '' which forces github review mode"
+    )

@@ -232,3 +232,85 @@ class TestAnnotatePrDiffLocalReviewRounds:
     def test_local_review_rounds_ingredient_exists(self, recipe: object) -> None:
         """T4.7: local_review_rounds is in recipe.ingredients."""
         assert "local_review_rounds" in recipe.ingredients
+
+
+# ---------------------------------------------------------------------------
+# T1: local_review_rounds default is not empty string (explicit numeric)
+# T5: display and runtime defaults are consistent
+# T7: review_max_retries default tested for all three recipes
+# ---------------------------------------------------------------------------
+
+
+class TestLocalReviewRoundsDefault:
+    """T1 + T5: local_review_rounds must have explicit non-empty default."""
+
+    @pytest.fixture(
+        scope="class",
+        params=[
+            "implementation.yaml",
+            "implementation-groups.yaml",
+            "remediation.yaml",
+        ],
+    )
+    def recipe(self, request: pytest.FixtureRequest) -> object:
+        return load_recipe(builtin_recipes_dir() / request.param)
+
+    def test_local_review_rounds_default_is_not_empty_string(self, recipe: object) -> None:
+        """T1: local_review_rounds.default must NOT be '' in bundled recipes."""
+        ing = recipe.ingredients["local_review_rounds"]
+        assert ing.default != "", (
+            f"{recipe.name}: local_review_rounds.default is '', "
+            "which creates a shadow-default that bypasses type semantics"
+        )
+
+    def test_local_review_rounds_default_is_parseable_as_int(self, recipe: object) -> None:
+        """T1: local_review_rounds.default must be parseable as int."""
+        ing = recipe.ingredients["local_review_rounds"]
+        assert ing.default is not None
+        int(ing.default)  # raises ValueError if not parseable
+
+    def test_local_review_rounds_default_matches_config_resolved_value(
+        self, recipe: object
+    ) -> None:
+        """T5: display default and runtime default must agree (both non-empty or both empty)."""
+        from autoskillit.config.ingredient_defaults import resolve_ingredient_defaults
+
+        ing = recipe.ingredients["local_review_rounds"]
+        project_dir = str(builtin_recipes_dir())
+        resolved = resolve_ingredient_defaults(project_dir)
+        resolved_value = resolved.get("local_review_rounds", "")
+        # If YAML default is empty (auto-detect), resolved must be non-empty.
+        # If YAML default is non-empty, resolved must match it.
+        if ing.default == "":
+            assert resolved_value != "", (
+                f"{recipe.name}: local_review_rounds.default='' but "
+                f"resolve_ingredient_defaults also returned '' — "
+                f"display and runtime would both get the empty sentinel"
+            )
+        else:
+            assert ing.default == resolved_value, (
+                f"{recipe.name}: local_review_rounds.default={ing.default!r} differs from "
+                f"resolve_ingredient_defaults={resolved_value!r}"
+            )
+
+
+class TestReviewMaxRetriesDefault:
+    """T7: review_max_retries.default must be '3' for all three main recipes."""
+
+    @pytest.fixture(
+        scope="class",
+        params=[
+            "implementation.yaml",
+            "implementation-groups.yaml",
+            "remediation.yaml",
+        ],
+    )
+    def recipe(self, request: pytest.FixtureRequest) -> object:
+        return load_recipe(builtin_recipes_dir() / request.param)
+
+    def test_review_max_retries_default_is_3(self, recipe: object) -> None:
+        """T7: review_max_retries.default must be '3' in all bundled recipes."""
+        ing = recipe.ingredients["review_max_retries"]
+        assert ing.default == "3", (
+            f"{recipe.name}: review_max_retries.default is {ing.default!r}, expected '3'"
+        )

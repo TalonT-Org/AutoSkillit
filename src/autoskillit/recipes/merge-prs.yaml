@@ -1231,8 +1231,6 @@ steps:
       Caps the ci_watch_pr re-poll loop at 2 iterations.
 
   diagnose_ci:
-
-  diagnose_ci:
     tool: run_skill
     model: ""
     with:

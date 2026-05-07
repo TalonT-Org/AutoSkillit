@@ -28,9 +28,9 @@ def test_check_review_loop_uses_run_python_with_callable(recipe) -> None:
     """check_review_loop must use run_python tool with the smoke_utils callable."""
     step = recipe.steps["check_review_loop"]
     assert step.tool == "run_python"
+    assert step.with_args.get("callable") == "autoskillit.smoke_utils.check_review_loop"
 
 
-# Test 1d: ci_watch bounded loop
 def test_ci_watch_timed_out_routes_to_guard(recipe) -> None:
     """Test 1d: ci_watch timed_out route goes to check_ci_timed_out_loop, not self."""
     step = recipe.steps["ci_watch"]

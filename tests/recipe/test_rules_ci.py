@@ -948,11 +948,6 @@ def test_ci_watch_post_queue_fix_has_auto_trigger() -> None:
             )
 
 
-# ---------------------------------------------------------------------------
-# Module-level regex constants
-# ---------------------------------------------------------------------------
-
-
 def test_no_runs_re_is_module_level_constant():
     import re
 
@@ -960,6 +955,7 @@ def test_no_runs_re_is_module_level_constant():
 
     assert hasattr(rules_ci, "_NO_RUNS_RE")
     assert isinstance(rules_ci._NO_RUNS_RE, re.Pattern)
+    assert rules_ci._NO_RUNS_RE.pattern == r"""==\s*['"]?no_runs['"]?"""
 
 
 def test_timed_out_re_is_module_level_constant():
@@ -969,3 +965,4 @@ def test_timed_out_re_is_module_level_constant():
 
     assert hasattr(rules_ci, "_TIMED_OUT_RE")
     assert isinstance(rules_ci._TIMED_OUT_RE, re.Pattern)
+    assert rules_ci._TIMED_OUT_RE.pattern == r"""==\s*['"]?timed_out['"]?"""

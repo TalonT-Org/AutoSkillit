@@ -48,9 +48,13 @@ results are valid findings, not failures.
   the PR body handles the issue link.
 - `--experiment-type {type}` — Optional. Experiment type classification (e.g., "benchmark",
   "causal_inference"). When absent or "null", write `experiment_type: null` in frontmatter.
-- `--methodology-tradition {tradition}` — Optional. Methodology tradition slug from Tier-C
+- `--methodology-traditions {tradition}` — Optional. Methodology tradition slug from Tier-C
   routing (e.g., "controlled_intervention"). When absent or "null", write
-  `methodology_tradition: null` in frontmatter.
+  `methodology_traditions: []` in frontmatter; otherwise wrap in a YAML list.
+- `--design-review-verdict {verdict}` — Optional. GO/REVISE/STOP verdict from design review.
+- `--disambiguation-rule-applied {rule}` — Optional. Disambiguation rule applied during Tier-C routing.
+- `--tier-c-lens {lens}` — Optional. Tier-C vis-lens selected.
+- `--classification-timestamp {timestamp}` — Optional. UTC timestamp of design classification.
 
 ## Inputs
 
@@ -235,7 +239,15 @@ The report structure:
 ```markdown
 ---
 experiment_type: {value from --experiment-type, or null}
-methodology_tradition: {value from --methodology-tradition, or null}
+methodology_traditions:
+  - {value from --methodology-traditions, or empty list if null}
+disambiguation_rule_applied: {value from --disambiguation-rule-applied, or null}
+tier_c_lens: {value from --tier-c-lens, or null}
+design_review_verdict: {value from --design-review-verdict, or null}
+classification_timestamp: {value from --classification-timestamp, or null}
+audit_trail_path:
+  design_review: research/{slug}/audit/design-review-dashboard.md
+  visualization_trace: research/{slug}/audit/visualization-plan-trace.md
 generated_at: {ISO 8601 timestamp}
 ---
 
@@ -368,6 +380,19 @@ analysis if relevant to the experiment type.}
 ## Conclusions
 
 {Direct answer to the research question.}
+
+## Design Review Summary
+
+**Verdict:** {design_review_verdict}
+
+The design review evaluated the experiment plan against {experiment_type} criteria.
+The review confirmed the experimental design meets quality standards.
+
+For detailed evaluation dimensions, scorecard, and adversarial findings, see
+[`audit/design-review-dashboard.md`](audit/design-review-dashboard.md).
+
+For visualization tier routing decisions and methodology tradition analysis, see
+[`audit/visualization-plan-trace.md`](audit/visualization-plan-trace.md).
 
 ## Recommendations
 

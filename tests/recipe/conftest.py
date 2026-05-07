@@ -86,3 +86,30 @@ VALID_RECIPE = {
 def _write_yaml(path: Path, data: dict) -> Path:
     path.write_text(yaml.dump(data, default_flow_style=False))
     return path
+
+
+# ---------------------------------------------------------------------------
+# Audit trail test fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def sample_report_frontmatter() -> dict:
+    return {
+        "experiment_type": "causal_inference",
+        "methodology_traditions": ["controlled_intervention"],
+        "disambiguation_rule_applied": None,
+        "tier_c_lens": "vis-lens-methodology-norms",
+        "design_review_verdict": "GO",
+        "classification_timestamp": "2026-04-13T15:32:00Z",
+        "audit_trail_path": {
+            "design_review": "research/test-slug/audit/design-review-dashboard.md",
+            "visualization_trace": "research/test-slug/audit/visualization-plan-trace.md",
+        },
+    }
+
+
+@pytest.fixture
+def sample_report_text(sample_report_frontmatter: dict) -> str:
+    fm = yaml.dump(sample_report_frontmatter, default_flow_style=False, sort_keys=False)
+    return f"---\n{fm}---\n\n# Test Report\n\nBody content."

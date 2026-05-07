@@ -138,6 +138,7 @@ steps:
       experiment_type: "${{ result.experiment_type }}"
       evaluation_dashboard: "${{ result.evaluation_dashboard }}"
       revision_guidance: "${{ result.revision_guidance }}"
+      classification_timestamp: "${{ result.classification_timestamp }}"
     skip_when_false: inputs.review_design
     retries: 2
     on_exhausted: create_worktree
@@ -163,7 +164,10 @@ steps:
     capture:
       visualization_plan_path: "${{ result.visualization_plan_path }}"
       report_plan_path: "${{ result.report_plan_path }}"
+      disambiguation_rule_applied: "${{ result.disambiguation_rule_applied }}"
+      tier_c_lens: "${{ result.tier_c_lens }}"
       methodology_tradition: "${{ result.methodology_tradition }}"
+      visualization_plan_trace_path: "${{ result.visualization_plan_trace_path }}"
     on_success: create_worktree
     on_failure: escalate_stop
     note: >
@@ -212,7 +216,7 @@ steps:
   create_worktree:
     tool: run_cmd
     with:
-      cmd: "bash scripts/recipe/create_worktree.sh '${{ inputs.source_dir }}' '${{ inputs.task }}' '${{ context.experiment_plan }}' '${{ context.scope_report }}' '${{ context.evaluation_dashboard }}' '${{ context.visualization_plan_path }}' '${{ context.report_plan_path }}' '{{AUTOSKILLIT_TEMP}}'"
+      cmd: "bash scripts/recipe/create_worktree.sh '${{ inputs.source_dir }}' '${{ inputs.task }}' '${{ context.experiment_plan }}' '${{ context.scope_report }}' '${{ context.evaluation_dashboard }}' '${{ context.visualization_plan_path }}' '${{ context.report_plan_path }}' '{{AUTOSKILLIT_TEMP}}' '${{ context.visualization_plan_trace_path }}'"
       cwd: "${{ inputs.source_dir }}"
       step_name: create_worktree
     capture:
@@ -445,7 +449,7 @@ steps:
     tool: run_skill
     model: ""
     with:
-      skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }} --experiment-type ${{ context.experiment_type }} --methodology-tradition ${{ context.methodology_tradition }}"
+      skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }} --experiment-type '${{ context.experiment_type }}' --methodology-traditions '${{ context.methodology_tradition }}' --design-review-verdict '${{ context.verdict }}' --disambiguation-rule-applied '${{ context.disambiguation_rule_applied }}' --tier-c-lens '${{ context.tier_c_lens }}' --classification-timestamp '${{ context.classification_timestamp }}'"
       cwd: "${{ context.worktree_path }}"
       step_name: generate_report
     optional_context_refs: [experiment_type, methodology_tradition]
@@ -460,7 +464,7 @@ steps:
     tool: run_skill
     model: ""
     with:
-      skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --inconclusive --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }} --experiment-type ${{ context.experiment_type }} --methodology-tradition ${{ context.methodology_tradition }}"
+      skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --inconclusive --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }} --experiment-type '${{ context.experiment_type }}' --methodology-traditions '${{ context.methodology_tradition }}' --design-review-verdict '${{ context.verdict }}' --disambiguation-rule-applied '${{ context.disambiguation_rule_applied }}' --tier-c-lens '${{ context.tier_c_lens }}' --classification-timestamp '${{ context.classification_timestamp }}'"
       cwd: "${{ context.worktree_path }}"
       step_name: generate_report
     optional_context_refs: [experiment_type, methodology_tradition]
@@ -747,7 +751,7 @@ steps:
     tool: run_skill
     model: ""
     with:
-      skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }} --experiment-type ${{ context.experiment_type }} --methodology-tradition ${{ context.methodology_tradition }}"
+      skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }} --experiment-type '${{ context.experiment_type }}' --methodology-traditions '${{ context.methodology_tradition }}' --design-review-verdict '${{ context.verdict }}' --disambiguation-rule-applied '${{ context.disambiguation_rule_applied }}' --tier-c-lens '${{ context.tier_c_lens }}' --classification-timestamp '${{ context.classification_timestamp }}'"
       cwd: "${{ context.worktree_path }}"
       step_name: re_generate_report
     optional_context_refs: [experiment_type, methodology_tradition]

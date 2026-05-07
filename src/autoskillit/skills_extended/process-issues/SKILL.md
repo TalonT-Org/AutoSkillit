@@ -192,7 +192,13 @@ Processing X issues:
 1. **Check pre_claimed_urls:** If `issue_url` is NOT in `pre_claimed_urls` → skip
    (excluded by upfront claim phase — another session holds it).
 
-2. **Optionally append pickup status to issue body** (if `--status-updates` is active):
+2. **Pre-dispatch check:** Before executing the recipe for this issue, check if any
+   previously completed issue in the CURRENT batch has `status: failure`. If so, skip
+   this issue with `status: skipped` and continue to the next issue in the batch.
+   This prevents wasted compute on issues within the same batch after a failure,
+   while still allowing the batch failure gate below to capture the full failure count.
+
+3. **Optionally append pickup status to issue body** (if `--status-updates` is active):
    ```bash
    PROCESS_BODY_FILE="{{AUTOSKILLIT_TEMP}}/process-issues/status_{number}_$(date +%s).md"
    mkdir -p "$(dirname "$PROCESS_BODY_FILE")"
@@ -203,7 +209,7 @@ Processing X issues:
    sleep 1
    ```
 
-3. **Determine recipe name and `run_name`:**
+4. **Determine recipe name and `run_name`:**
 
    | `recipe` field | Recipe to load | `run_name` | PR Title Prefix |
    |---------------|----------------|------------|-----------------|
@@ -216,7 +222,7 @@ Processing X issues:
    The `run_name` encodes recipe origin for the `open-pr` skill, which derives
    the PR title prefix from it by convention (see `open-pr` SKILL.md).
 
-4. **Load the recipe:**
+5. **Load the recipe:**
    ```
    load_recipe("{recipe_name}")
    ```
@@ -224,7 +230,7 @@ Processing X issues:
    follow each step in the recipe, calling the specified MCP tool with the
    specified `with:` arguments.
 
-5. **Execute the recipe** with these ingredient values:
+6. **Execute the recipe** with these ingredient values:
    - `task`: the issue title (the recipe's `make-plan` step detects `issue_url`
      and fetches full content internally)
    - `issue_url`: the constructed issue URL
@@ -239,7 +245,7 @@ Processing X issues:
    `upfront_claimed` ingredient) and recognize the pre-existing label as a
    valid reentry, returning `claimed=true` to proceed normally.
 
-6. **After recipe returns** (any outcome), append to completed_urls:
+7. **After recipe returns** (any outcome), append to completed_urls:
    ```
    completed_urls.append(issue_url)
    ```
@@ -247,7 +253,7 @@ Processing X issues:
    - On success path (`done` step reached): `{issue_number, recipe, status: success, pr_url}`
    - On failure path (`escalate_stop` reached): `{issue_number, recipe, status: failure, error}`
 
-7. **Optionally append completion status to issue body** (if `--status-updates` is active):
+8. **Optionally append completion status to issue body** (if `--status-updates` is active):
    ```bash
    PROCESS_BODY_FILE="{{AUTOSKILLIT_TEMP}}/process-issues/status_{number}_$(date +%s).md"
    mkdir -p "$(dirname "$PROCESS_BODY_FILE")"
@@ -267,6 +273,15 @@ For each url in uncompleted:
 Log: "Released N upfront-claimed issues due to fatal failure"
 Propagate the error
 ```
+
+**Batch failure gate (mandatory):** After all issues in the current batch have been
+processed, count the number of issues with `status: failure`. If ANY issue in this
+batch has `status: failure`:
+  1. Log: "Batch {N} had {count} failure(s). Halting batch processing."
+  2. Skip all remaining batches.
+  3. Proceed directly to Step 4 (Summary Report), recording unprocessed issues
+     from remaining batches as `status: skipped`.
+  4. Call `release_issue()` for each pre-claimed but unprocessed issue URL.
 
 **3c. After all issues in batch complete** (if `--merge-batch` is active):
 

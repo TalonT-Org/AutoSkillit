@@ -457,7 +457,7 @@ class TestBuildTestScopeUniversalExclusions:
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
         result = build_test_scope(
-            changed_files={"src/core/_type_enums.py"},
+            changed_files={"src/autoskillit/core/_type_enums.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
             cwd=str(tmp_path),
@@ -490,7 +490,7 @@ class TestBuildTestScopeUniversalExclusions:
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
         result = build_test_scope(
-            changed_files={"src/core/_type_enums.py"},
+            changed_files={"src/autoskillit/core/_type_enums.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
             cwd=str(tmp_path),
@@ -519,7 +519,7 @@ class TestBuildTestScopeUniversalExclusions:
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
         result = build_test_scope(
-            changed_files={"src/core/io.py"},
+            changed_files={"src/autoskillit/core/io.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
             cwd=str(tmp_path),
@@ -537,7 +537,7 @@ class TestBuildTestScopeUniversalExclusions:
         for d in LAYER_CASCADE_CONSERVATIVE["core"]:
             (tests_root / d).mkdir(parents=True, exist_ok=True)
         result = build_test_scope(
-            changed_files={"src/core/_type_enums.py"},
+            changed_files={"src/autoskillit/core/_type_enums.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
             # no cwd or base_ref
@@ -560,7 +560,7 @@ class TestBuildTestScopeUniversalExclusions:
 
         monkeypatch.setattr(subprocess, "run", _raise)
         result = build_test_scope(
-            changed_files={"src/core/_type_enums.py"},
+            changed_files={"src/autoskillit/core/_type_enums.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
             cwd=str(tmp_path),
@@ -594,7 +594,7 @@ class TestBuildTestScopeUniversalExclusions:
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
         result = build_test_scope(
-            changed_files={"src/core/_type_enums.py"},
+            changed_files={"src/autoskillit/core/_type_enums.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
             cwd=str(tmp_path),

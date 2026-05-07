@@ -321,12 +321,13 @@ def test_req_imp_007_server_cli_no_unauthorized_cross_submodule_imports() -> Non
     cross-package submodule rule that REQ-IMP-001 enforces for the IL-0–IL-2
     layers, with a small explicit allowlist:
 
-      server/_factory.py     — Composition Root, may import any layer
-      server/git.py          — REQ-IMP-005 exemption
-      server/tools_kitchen.py — REQ-IMP-006 ban (covered separately)
-      cli/app.py             — REQ-IMP-004 exemption (Typer composition)
-      cli/_cook.py           — allowlisted composition boundary
-      cli/_workspace.py      — allowlisted composition boundary
+      server/_factory.py       — Composition Root, may import any layer
+      server/git.py            — REQ-IMP-005 exemption
+      server/tools/tools_kitchen.py — REQ-IMP-006 ban (covered separately)
+      cli/app.py               — REQ-IMP-004 exemption (Typer composition)
+      cli/session/_cook.py     — REQ-IMP-011: session cook orchestrates recipe +
+                                 workspace + execution
+      cli/_workspace.py        — REQ-IMP-012: workspace CLI wires execution + workspace packages
 
     Every other file in server/ and cli/ must import only:
       autoskillit.core, autoskillit.config, autoskillit.pipeline,
@@ -338,8 +339,8 @@ def test_req_imp_007_server_cli_no_unauthorized_cross_submodule_imports() -> Non
         Path("server/git.py"),
         Path("server/tools/tools_kitchen.py"),
         Path("cli/app.py"),
-        Path("cli/session/_cook.py"),
-        Path("cli/_workspace.py"),
+        Path("cli/session/_cook.py"),  # REQ-IMP-011
+        Path("cli/_workspace.py"),  # REQ-IMP-012
     }
     forbidden_pkgs = {"execution", "workspace", "recipe", "migration"}
     violations: list[str] = []

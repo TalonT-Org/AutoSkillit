@@ -19,6 +19,11 @@ from typing import Any
 import yaml
 from yaml import YAMLError as YAMLError  # explicit re-export for callers and type checkers
 
+try:
+    from yaml import CSafeLoader as _Loader
+except ImportError:
+    _Loader = yaml.SafeLoader  # type: ignore[misc,assignment]
+
 __all__ = [
     "YAMLError",
     "atomic_write",
@@ -187,8 +192,8 @@ def load_yaml(source: os.PathLike[str] | str) -> Any:
     """
     if isinstance(source, os.PathLike):
         with open(source, "rb") as fh:
-            return yaml.safe_load(fh)
-    return yaml.safe_load(source)
+            return yaml.load(fh, Loader=_Loader)
+    return yaml.load(source, Loader=_Loader)
 
 
 def dump_yaml_str(data: Any, **kwargs: Any) -> str:

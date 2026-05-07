@@ -109,7 +109,7 @@ def _is_yaml_dump(node: ast.expr) -> bool:
 # Any new site that writes a dict payload SHOULD use write_versioned_json.
 _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # core/io.py — write_versioned_json itself (the blessed helper) uses atomic_write+json.dumps
-    ("src/autoskillit/core/io.py", 118),
+    ("src/autoskillit/core/io.py", 123),
     # session_log.py — github_api_usage dict, summary dict, meta.json sidecar,
     # token_usage dict, step_timing dict
     ("src/autoskillit/execution/session_log.py", 305),

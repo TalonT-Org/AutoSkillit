@@ -9,7 +9,7 @@ MIGRATIONS_DIR = Path(__file__).parents[2] / "src" / "autoskillit" / "migrations
 
 
 def test_vis_lens_rename_migration_note_exists():
-    """A migration note must cover the vis-lens-domain-norms → vis-lens-methodology-norms rename."""
+    """Migration note covers vis-lens-domain-norms → vis-lens-methodology-norms rename."""
     notes = list(MIGRATIONS_DIR.glob("*.yaml"))
     matches = []
     for note_path in notes:

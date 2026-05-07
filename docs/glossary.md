@@ -13,8 +13,11 @@ Common mistake: `Arch Lens` or `arch lens`.
 
 ### bundled recipes
 
-The 5 YAML recipes shipped under `src/autoskillit/recipes/`: `implementation`,
-`implementation-groups`, `merge-prs`, `remediation`, and `research`.
+The 14 YAML recipes shipped under `src/autoskillit/recipes/`: `bem-wrapper`,
+`full-audit`, `implement-findings`, `implementation`, `implementation-groups`,
+`merge-prs`, `planner`, `promote-to-main-wrapper`, `remediation`,
+`research`, `research-archive`, `research-design`, `research-implement`,
+and `research-review`.
 Distinguished from project-local recipes that live under
 `.autoskillit/recipes/`. Common mistake: "the built-in recipes".
 
@@ -76,13 +79,13 @@ need to run outside the local machine.
 
 ### kitchen
 
-The collection of 44 kitchen-tagged MCP tools that the orchestrator must
+The collection of 37 kitchen-tagged MCP tools that the orchestrator must
 explicitly reveal via `open_kitchen` before they can be called. Hidden at
 server startup via `mcp.disable(tags={'kitchen'})`.
 
 ### kitchen tools
 
-Synonym for the 44 kitchen-tagged MCP tools. Two words, no hyphen.
+Synonym for the 37 kitchen-tagged MCP tools. Two words, no hyphen.
 
 ### kitchen_id
 
@@ -93,8 +96,8 @@ UUID). Recorded in pipeline telemetry.
 
 Leaf subagent. Terminal node in the orchestration hierarchy. Cannot launch
 sub-agents or headless sessions. Cannot call `run_skill`, `run_cmd`, or
-`run_python` (enforced by `leaf_orchestration_guard.py`). Spawned by an L1
-via Claude Code's Agent/Task tool. See `docs/orchestration-levels.md`.
+`run_python`. Spawned by an L1 via Claude Code's Agent/Task tool. See
+`docs/orchestration-levels.md`.
 
 ### L1
 
@@ -197,7 +200,7 @@ that runs many sibling implementations in parallel waves rather than serially.
 ### worker
 
 A headless Claude session spawned by the orchestrator via `run_skill`. L1
-boundary — workers cannot call `run_skill`, `run_cmd`, or `run_python`.
+boundary — headless workers cannot call `run_skill`, `run_cmd`, or `run_python`.
 
 ### worktree
 

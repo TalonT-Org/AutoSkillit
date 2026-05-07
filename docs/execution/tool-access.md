@@ -42,7 +42,7 @@ remain hidden even after `open_kitchen`.
 | Tag | Meaning |
 |-----|---------|
 | `autoskillit` | Identifies the tool as belonging to AutoSkillit. Present on every tool. |
-| `kitchen` | Tool is hidden at startup via `mcp.disable(tags={'kitchen'})`. 42 tools carry this tag. |
+| `kitchen` | Tool is hidden at startup via `mcp.disable(tags={'kitchen'})`. 37 tools carry this tag. |
 | `headless` | Tool is revealed in headless sessions via `mcp.enable(tags={'headless'})`. Additive — also carries `kitchen`. |
 | `github` | Functional category: GitHub-interacting tools. Can be disabled as a subset. |
 | `ci` | Functional category: CI/merge-queue polling tools. Can be disabled as a subset. |
@@ -55,7 +55,7 @@ Server startup sequence:
 
 ```
 1. mcp.disable(tags={"kitchen"})
-   → hides 42 kitchen-tagged tools (including the 1 headless-tagged tool)
+   → hides 37 kitchen-tagged tools (including the 1 headless-tagged tool)
 
 2. mcp.disable(tags={subset}) for each entry in config.subsets.disabled
    → e.g. hides all github-tagged tools if "github" is disabled
@@ -77,7 +77,7 @@ Three independent layers prevent headless sessions from calling orchestration to
 | Layer | Mechanism | What It Blocks |
 |-------|-----------|----------------|
 | 1. FastMCP | Kitchen tools remain hidden (`mcp.enable(headless)` does not reveal kitchen-only tools) | `run_skill`, `run_cmd`, `run_python`, `merge_worktree`, and all other kitchen-only tools |
-| 2. Hook | `leaf_orchestration_guard.py` PreToolUse hook | `run_skill`, `run_cmd`, `run_python` |
+| 2. Hook | `skill_orchestration_guard.py` PreToolUse hook | `run_skill`, `run_cmd`, `run_python` |
 | 3. Code | `_require_orchestrator_or_higher()` guard in `tools_execution.py` | `run_skill`, `run_cmd`, `run_python` |
 
 All three layers must independently agree before any orchestration tool can execute.
@@ -215,7 +215,7 @@ GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`, FL = `fleet`
 
 ---
 
-**Total: 48 tools** — 4 Free Range + 44 Kitchen-tagged (of which 1, `test_check`, additionally carries the `headless` tag and is revealed inside headless sessions)
+**Total: 52 tools** — 4 Free Range + 11 Fleet + 37 Kitchen-tagged (of which 1, `test_check`, additionally carries the `headless` tag and is revealed inside headless sessions)
 
 For subset configuration that can hide functional-category tools, see
 [Subset Categories](../skills/subsets.md).

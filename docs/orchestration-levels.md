@@ -31,8 +31,8 @@ Key properties:
 - Headless variant: `run_skill` worker
 - SessionType: `SKILL` (both interactive and headless)
 - Can spawn L0 subagents via Agent/Task tool
-- Cannot call `run_skill` (enforced by `skill_orchestration_guard.py` and
-  `skill_cmd_guard.py`)
+- Headless variant cannot call `run_skill` (enforced by `skill_orchestration_guard.py`
+  and `skill_cmd_guard.py`); interactive L1 sessions bypass this constraint
 
 ```
 L1 (interactive cook)
@@ -55,7 +55,7 @@ Key properties:
 - Interactive variant: `autoskillit order` (SessionType `ORCHESTRATOR`)
 - Headless variant: food truck (dispatched by L3, SessionType `ORCHESTRATOR`)
 - Spawns L1 workers via `run_skill`
-- Has full kitchen access (44 kitchen-tagged MCP tools)
+- Has full kitchen access (37 kitchen-tagged MCP tools)
 
 ```
 L2 (interactive order)
@@ -97,7 +97,7 @@ L3 (interactive fleet)
 
 ## Key Rules
 
-- **L1 workers cannot call `run_skill`.** The boundary is enforced three ways:
+- **Headless L1 workers cannot call `run_skill`.** The boundary is enforced three ways:
   FastMCP visibility tags, the `skill_orchestration_guard.py` PreToolUse hook,
   and the `_require_orchestrator_or_higher()` runtime guard in
   `tools_execution.py`. All three must independently agree.

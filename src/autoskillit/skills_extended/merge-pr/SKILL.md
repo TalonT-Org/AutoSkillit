@@ -179,6 +179,14 @@ AUTO_MERGE_ALLOWED=$(gh api graphql -f query="query {
 Capture `AUTO_MERGE_ALLOWED` ("true" or "false"). On gh failure, default to "false"
 (the safe path: use plain `--squash`, not `--squash --auto`).
 
+### Step 1.9: Pre-flight Mergeability Check
+
+Run: `gh pr view {pr_number} --json mergeable --jq '.mergeable'`
+
+- If `MERGEABLE`: proceed to Step 2
+- If `CONFLICTING`: skip Step 2, set `needs_plan=true`, write a conflict report noting the PR has git-level conflicts, proceed to Step 5 output
+- If `UNKNOWN`: wait 10 seconds, retry up to 3 times. If still `UNKNOWN` after 3 retries, treat as `CONFLICTING` (sets `needs_plan=true`, same as git-level conflicts — distinct from the poll-loop timeout path which sets `needs_plan=false, timeout_error=true`)
+
 ### Step 2: Simple Path — gh pr merge
 
 **When `AUTO_MERGE_ALLOWED == true`** (repo has branch protection with required checks):
@@ -441,6 +449,20 @@ with `conflict_report_path` set. The pipeline then routes to make-plan → imple
 }
 ```
 
+**On timeout (poll loop exceeded 600s):**
+```json
+{
+    "merged": false,
+    "needs_plan": false,
+    "deletion_regression": false,
+    "escalation_required": false,
+    "timeout_error": true,
+    "pr_number": 47,
+    "pr_branch": "feature/db-refactor",
+    "pr_title": "Refactor database layer"
+}
+```
+
 Exit 0 in all cases — `needs_plan=true` and `escalation_required=true` are routing signals, not failures.
 
 After printing the result block, emit the following structured output tokens as the
@@ -514,6 +536,18 @@ escalation_reason = {human-readable description of why the conflict cannot be re
 pr_number = {pr_number}
 pr_branch = {pr_branch_name}
 pr_title = {pr_title}
+```
+
+**On timeout:**
+```
+merged = false
+needs_plan = false
+deletion_regression = false
+escalation_required = false
+timeout_error = true
+pr_number = {pr_number}
+pr_branch = {branch_name}
+pr_title = {title}
 ```
 
 Emit `conflict_report_path=` only when `needs_plan=true` and a conflict plan file was

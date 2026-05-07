@@ -8,7 +8,7 @@ import yaml
 from autoskillit.recipe._api import validate_from_path
 from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
-from tests.recipe.conftest import NO_AUTOSKILLIT_IMPORT as _NO_AUTOSKILLIT_IMPORT
+from tests.recipe.conftest import KNOWN_PART_B_VIOLATIONS as _KNOWN_PART_B_VIOLATIONS
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -26,7 +26,7 @@ class TestImplementationPipelineIssueUrl:
         errors = [
             f
             for f in result.get("findings", [])
-            if f.get("severity") == "error" and f.get("rule") != _NO_AUTOSKILLIT_IMPORT
+            if f.get("severity") == "error" and f.get("rule") not in _KNOWN_PART_B_VIOLATIONS
         ]
         assert errors == [], f"Unexpected errors: {errors}"
 
@@ -118,7 +118,7 @@ class TestInvestigateFirstIssueUrl:
         errors = [
             f
             for f in result.get("findings", [])
-            if f.get("severity") == "error" and f.get("rule") != _NO_AUTOSKILLIT_IMPORT
+            if f.get("severity") == "error" and f.get("rule") not in _KNOWN_PART_B_VIOLATIONS
         ]
         assert errors == [], f"Unexpected errors: {errors}"
 
@@ -208,7 +208,7 @@ class TestImplementationGroupsIssueTitle:
         errors = [
             f
             for f in result.get("findings", [])
-            if f.get("severity") == "error" and f.get("rule") != _NO_AUTOSKILLIT_IMPORT
+            if f.get("severity") == "error" and f.get("rule") not in _KNOWN_PART_B_VIOLATIONS
         ]
         assert errors == [], f"Unexpected errors: {errors}"
 

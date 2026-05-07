@@ -692,7 +692,7 @@ steps:
       - when: "${{ result.conclusion }} == 'no_runs'"
         route: handle_no_ci_runs
       - when: "${{ result.conclusion }} == 'timed_out'"
-        route: ci_watch
+        route: check_ci_timed_out_loop
       - route: detect_ci_conflict
     on_failure: detect_ci_conflict
     optional: true
@@ -705,7 +705,27 @@ steps:
       Routes on result.conclusion: success → check_repo_merge_state,
       no_runs → handle_no_ci_runs (auto_trigger fires first: empty commit + force-push +
       re-poll; handle_no_ci_runs reached only when push fails),
-      timed_out → self (re-watch), failure → detect_ci_conflict.
+      timed_out → check_ci_timed_out_loop (iteration guard), failure → detect_ci_conflict.
+
+  check_ci_timed_out_loop:
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.check_loop_iteration"
+      current_iteration: "${{ context.ci_timed_out_loop_count }}"
+      max_iterations: "2"
+    capture:
+      ci_timed_out_loop_count: "${{ result.next_iteration }}"
+    on_result:
+      - when: "${{ result.max_exceeded }} == true"
+        route: detect_ci_conflict
+      - route: ci_watch
+    on_failure: detect_ci_conflict
+    optional_context_refs:
+      - ci_timed_out_loop_count
+    note: >
+      Caps the ci_watch re-poll loop at 2 iterations.
+      After 2 timed_out results (1200s total), routes to detect_ci_conflict
+      instead of spinning indefinitely.
 
   handle_no_ci_runs:
     tool: check_repo_merge_state

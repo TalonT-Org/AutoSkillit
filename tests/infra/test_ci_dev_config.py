@@ -142,14 +142,16 @@ class TestCIWorkflow:
         )
 
     def test_setup_uv_action_has_version_pin(self):
-        """All setup-uv action usages must specify a uv-version pin.
+        """All setup-uv action usages must specify a version pin.
 
-        Without uv-version, astral-sh/setup-uv calls the GitHub API to resolve the
+        Without version, astral-sh/setup-uv calls the GitHub API to resolve the
         latest release on every cache miss. On macOS runners, cache misses are frequent
         (the cache key includes the Python version), causing network timeout failures
         before any uv command runs.
 
-        If this test fails, add 'uv-version: "X.Y.Z"' to all setup-uv steps in tests.yml.
+        If this test fails, add 'version: "X.Y.Z"' to all setup-uv steps in tests.yml.
+        Note: the correct input parameter is 'version', not 'uv-version' — 'uv-version'
+        is an output of the action and is silently ignored as an input.
         """
         workflow = yaml.safe_load(CI_WORKFLOW.read_text())
         for job_name, job in workflow.get("jobs", {}).items():
@@ -157,9 +159,9 @@ class TestCIWorkflow:
                 uses = step.get("uses", "")
                 if "setup-uv" in uses:
                     with_block = step.get("with", {}) or {}
-                    assert "uv-version" in with_block, (
-                        f"CI job '{job_name}' uses {uses!r} without a uv-version pin — "
-                        "add 'uv-version: \"X.Y.Z\"' to prevent GitHub API network failures"
+                    assert "version" in with_block, (
+                        f"CI job '{job_name}' uses {uses!r} without a version pin — "
+                        "add 'version: \"X.Y.Z\"' to prevent GitHub API network failures"
                         " on macOS runner cache misses"
                     )
 

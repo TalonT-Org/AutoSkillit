@@ -31,6 +31,24 @@ def compute_food_truck_tool_surface(recipe_name: str) -> frozenset[str]:
     return frozenset(expected)
 
 
+def _simple_prompt_builder(**kwargs) -> str:
+    return f"prompt-for-{kwargs.get('recipe', 'unknown')}"
+
+
+async def _no_sleep_quota_checker(config, **kwargs) -> dict:
+    return {
+        "should_sleep": False,
+        "sleep_seconds": 0,
+        "utilization": None,
+        "resets_at": None,
+        "window_name": None,
+    }
+
+
+async def _noop_quota_refresher(config, **kwargs) -> None:
+    pass
+
+
 def _make_recipe_info(name: str = "test-recipe", path_prefix: str = "/fake/"):
     from pathlib import Path
 

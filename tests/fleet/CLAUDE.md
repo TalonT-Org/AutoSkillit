@@ -27,6 +27,7 @@ Fleet campaign dispatch, state persistence, and sidecar tests.
 | `test_liveness.py` | Liveness tests for Linux proc helpers |
 | `test_pack_enforcement.py` | Fleet per-recipe tool-surface enforcement tests |
 | `test_pack_enforcement_e2e.py` | Fleet per-recipe tool-surface e2e tests using a real MCP server subprocess |
+| `test_research_campaign_dispatch.py` | Tests for multi-recipe research campaign dispatch capture propagation (Group J) |
 | `test_result_parser.py` | Tests for fleet.result_parser — L2 result block parsing |
 | `test_retry_failed_dispatch.py` | Tests for explicit retry of failed campaign dispatches via FAILURE → PENDING state transition |
 | `test_sidecar.py` | Sidecar tests |

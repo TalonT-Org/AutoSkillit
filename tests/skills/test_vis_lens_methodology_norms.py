@@ -447,8 +447,8 @@ def test_cache_invalidation(tmp_path: Path) -> None:
     names_1 = {s.name for s in r1}
     assert "cache_test_tradition" in names_1
 
-    yaml_path.unlink()
     old_mt = user_dir.stat().st_mtime
+    yaml_path.unlink()
     os.utime(user_dir, (old_mt + 2, old_mt + 2))
 
     r2 = load_all_methodology_traditions(project_dir=tmp_path)
@@ -468,7 +468,7 @@ class TestIntegratedPipeline:
 
         venue_matches = resolve_venue_appendices(plan_text)
         sub_areas = {m.sub_area for m in venue_matches}
-        assert "supervised_classification" in sub_areas or "computer_vision" in sub_areas
+        assert "supervised_classification" in sub_areas
 
     def test_multi_tradition_disambiguation_then_venue(self) -> None:
         plan_text = (

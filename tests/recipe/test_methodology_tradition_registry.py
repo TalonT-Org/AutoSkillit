@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -309,10 +310,9 @@ class TestMethodologyTraditionCaching:
         user_dir.mkdir(parents=True)
         (user_dir / "custom_trad.yaml").write_text(yaml.dump(_MINIMAL_TRADITION_YAML))
         r1 = load_all_methodology_traditions(project_dir=tmp_path)
-        import time
-
-        time.sleep(0.05)
         (user_dir / "custom_trad_2.yaml").write_text(yaml.dump(_MINIMAL_TRADITION_YAML_2))
+        old_mt = user_dir.stat().st_mtime
+        os.utime(user_dir, (old_mt + 2, old_mt + 2))
         r2 = load_all_methodology_traditions(project_dir=tmp_path)
         assert r1 is not r2
         assert len(r2) > len(r1)

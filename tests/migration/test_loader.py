@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -401,7 +402,6 @@ class TestListMigrationsCaching:
         )
         monkeypatch.setattr("autoskillit.migration.loader._migrations_dir", lambda: mig_dir)
         r1 = list_migrations()
-        import os
 
         _write_migration(
             mig_dir / "002_add.yaml",

@@ -217,6 +217,7 @@ def finalize_wp_manifest(work_packages_dir: str, output_dir: str) -> dict[str, s
     )
     items = []
     index_entries = []
+    errors: list[str] = []
     for f in result_files:
         try:
             raw = json.loads(f.read_text())
@@ -227,7 +228,8 @@ def finalize_wp_manifest(work_packages_dir: str, output_dir: str) -> dict[str, s
         try:
             data = validate_wp_result(raw, allow_stub=bool(raw.get("elaboration_failed")))
         except (ValueError, KeyError) as exc:
-            raise ValueError(f"Invalid WP result in {f}: {exc}") from exc
+            errors.append(f"{f.name}: {exc}")
+            continue
         items.append(
             {
                 "id": data["id"],
@@ -238,6 +240,12 @@ def finalize_wp_manifest(work_packages_dir: str, output_dir: str) -> dict[str, s
             }
         )
         index_entries.append(_build_index_entry(data))
+
+    if errors:
+        detail = "; ".join(errors)
+        raise ValueError(
+            f"{len(errors)} WP validation error{'s' if len(errors) != 1 else ''}: {detail}"
+        )
 
     items.sort(key=lambda i: _natural_sort_key(str(i["id"])))
     index_entries.sort(key=lambda e: _natural_sort_key(str(e["id"])))

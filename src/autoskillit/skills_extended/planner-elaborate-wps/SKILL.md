@@ -93,11 +93,13 @@ Each L0 receives a self-contained prompt that:
 3. Lists all sibling WPs in short-form for dependency detection
 4. Provides phase goal and scope
 5. Instructs the L0 to use Grep/Glob/Read for codebase analysis (no sub-subagents)
-6. Instructs the L0 to return results as JSON between triple-backtick json fences
+6. Instructs the L0 to produce exactly 1–5 deliverables (hard constraint — validate_wp_result rejects out-of-range counts)
+7. Instructs the L0 to return results as JSON between triple-backtick json fences
 
 Each L0 MUST:
 - Use Grep/Glob/Read for codebase analysis (no sub-subagent spawning — they are actual leaf nodes)
 - Elaborate the WP with all mandatory fields
+- Produce exactly 1–5 deliverables — if the WP naturally spans more than 5 files, group related files into logical deliverables (e.g., "test suite for module X" rather than individual test files)
 - Return structured JSON between ` ```json ` and ` ``` ` delimiters
 
 Expected L0 return schema:
@@ -112,7 +114,7 @@ Expected L0 return schema:
   "apis_defined": ["..."],
   "apis_consumed": ["..."],
   "depends_on": ["..."],
-  "deliverables": ["1-5 files"],
+  "deliverables": ["(exactly 1–5 items, hard limit) file_or_logical_group", "..."],
   "acceptance_criteria": ["..."]
 }
 ```

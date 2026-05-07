@@ -361,6 +361,33 @@ class TestBuildSkillSessionCmd:
         prompt_idx = cmd.index("-p") + 1 if "-p" in cmd else cmd.index("--print") + 1
         assert "DONE" in cmd[prompt_idx]
 
+    def test_completion_marker_is_last_instruction_in_prompt(self):
+        """The completion marker value must appear in the final line of the assembled prompt."""
+        params = {
+            **self.BASE,
+            "completion_marker": "%%ORDER_UP::abc12345%%",
+            "profile_name": "minimax",
+        }
+        spec = build_skill_session_cmd("/autoskillit:make-plan arg", **params)
+        prompt_idx = spec.cmd.index(ClaudeFlags.PRINT) + 1
+        prompt = spec.cmd[prompt_idx]
+        last_block = prompt.split("\n\n")[-1]
+        assert "%%ORDER_UP::abc12345%%" in last_block
+
+    def test_completion_reminder_follows_efficiency_directive(self):
+        """The end-of-prompt marker reminder must be the last directive."""
+        params = {
+            **self.BASE,
+            "completion_marker": "%%ORDER_UP::abc12345%%",
+            "profile_name": "minimax",
+        }
+        spec = build_skill_session_cmd("/autoskillit:make-plan arg", **params)
+        prompt_idx = spec.cmd.index(ClaudeFlags.PRINT) + 1
+        prompt = spec.cmd[prompt_idx]
+        eff_pos = prompt.index("EFFICIENCY DIRECTIVE")
+        reminder_pos = prompt.index("Remember: end your final response with")
+        assert reminder_pos > eff_pos
+
     def test_cwd_anchor_appended(self):
         """Working-directory anchor must appear in the prompt."""
         spec = build_skill_session_cmd("/investigate foo", **self.BASE)
@@ -1020,3 +1047,59 @@ class TestBuildSkillSessionCmdResume:
         resume_idx = spec.cmd.index("--resume")
         add_dir_idx = spec.cmd.index("--add-dir")
         assert resume_idx > add_dir_idx
+
+
+class TestCompletionReminderPositionInvariant:
+    """Parametrized invariant: completion marker must appear in final prompt blocks.
+
+    This guards against any future refactoring that buries the reminder in the
+    middle of the prompt, and verifies the invariant across all builder functions.
+    """
+
+    @pytest.mark.parametrize(
+        "builder",
+        [
+            "skill_session_non_resume",
+            "skill_session_resume",
+            "food_truck_non_resume",
+        ],
+    )
+    def test_marker_in_final_two_blocks(self, builder: str) -> None:
+        """Completion marker must appear in the last two \\n\\n-delimited blocks."""
+        marker = "%%ORDER_UP::test123%%"
+        if builder == "skill_session_non_resume":
+            spec = build_skill_session_cmd(
+                "/autoskillit:make-plan arg",
+                cwd="/repo",
+                completion_marker=marker,
+                model=None,
+                plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
+                output_format=OutputFormat.JSON,
+                profile_name="minimax",
+            )
+        elif builder == "skill_session_resume":
+            spec = build_skill_session_cmd(
+                "/autoskillit:make-plan arg",
+                cwd="/repo",
+                completion_marker=marker,
+                model=None,
+                plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
+                output_format=OutputFormat.JSON,
+                profile_name="minimax",
+                resume_session_id="sess-abc",
+            )
+        else:  # food_truck_non_resume
+            spec = build_food_truck_cmd(
+                orchestrator_prompt="Run the campaign",
+                plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
+                cwd="/repo",
+                completion_marker=marker,
+            )
+        prompt_idx = spec.cmd.index(ClaudeFlags.PRINT) + 1
+        prompt = spec.cmd[prompt_idx]
+        blocks = prompt.split("\n\n")
+        last_two = "\n\n".join(blocks[-2:])
+        assert marker in last_two, (
+            f"[{builder}] Completion marker must appear in the last two prompt blocks. "
+            f"Last block: {blocks[-1][:100]!r}"
+        )

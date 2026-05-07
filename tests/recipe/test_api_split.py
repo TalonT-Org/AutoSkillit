@@ -53,3 +53,29 @@ def test_recipe_init_surface_unchanged():
     )
 
     assert callable(make_validation_context)
+
+
+def test_analysis_graph_no_toplevel_igraph_import():
+    import ast
+    from pathlib import Path
+
+    src_file = (
+        Path(__file__).parent.parent.parent
+        / "src"
+        / "autoskillit"
+        / "recipe"
+        / "_analysis_graph.py"
+    )
+    tree = ast.parse(src_file.read_text())
+    for node in ast.iter_child_nodes(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                assert alias.name != "igraph", (
+                    f"Top-level 'import igraph' found at line {node.lineno}; "
+                    "must be a function-level import inside build_recipe_graph()"
+                )
+        if isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] == "igraph":
+            assert False, (
+                f"Top-level 'from {node.module} import ...' found at line {node.lineno}; "
+                "igraph must only be imported inside build_recipe_graph()"
+            )

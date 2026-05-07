@@ -122,6 +122,8 @@ def test_flush_to_hook_cross_seam(tmp_path):
         "turn_count": 3,
         "provider_used": "test-provider",
         "model_identifier": "test-model",
+        "dispatch_id": "test-dispatch",
+        "campaign_id": "test-campaign",
     }
     (session_dir / "token_usage.json").write_text(json.dumps(tu_data))
 

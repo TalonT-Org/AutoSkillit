@@ -758,6 +758,48 @@ def test_token_usage_file_entry_type_matches_written_fields(tmp_path):
     assert set(data.keys()) == expected_keys
 
 
+def test_token_usage_json_includes_dispatch_and_campaign_ids(tmp_path):
+    """flush_session_log writes dispatch_id and campaign_id to token_usage.json."""
+    _flush(
+        tmp_path,
+        step_name="implement",
+        dispatch_id="d-abc-123",
+        campaign_id="c-xyz-789",
+        token_usage={
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "cache_creation_input_tokens": 10,
+            "cache_read_input_tokens": 20,
+        },
+        timing_seconds=5.0,
+        proc_snapshots=None,
+        success=True,
+    )
+    tu = json.loads((tmp_path / "sessions" / "test-session-001" / "token_usage.json").read_text())
+    assert tu["dispatch_id"] == "d-abc-123"
+    assert tu["campaign_id"] == "c-xyz-789"
+
+
+def test_token_usage_json_dispatch_campaign_default_empty(tmp_path):
+    """dispatch_id and campaign_id present as empty strings when omitted."""
+    _flush(
+        tmp_path,
+        step_name="plan",
+        token_usage={
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+        },
+        timing_seconds=2.0,
+        proc_snapshots=None,
+        success=True,
+    )
+    tu = json.loads((tmp_path / "sessions" / "test-session-001" / "token_usage.json").read_text())
+    assert tu["dispatch_id"] == ""
+    assert tu["campaign_id"] == ""
+
+
 def test_flush_co_writes_provenance_record(tmp_path, monkeypatch):
     """flush_session_log writes a provenance record when cwd is non-empty."""
     monkeypatch.delenv("AUTOSKILLIT_STATE_DIR", raising=False)

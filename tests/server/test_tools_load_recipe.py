@@ -209,7 +209,7 @@ class TestLoadRecipeExceptionHandling:
         recipes_dir = tmp_path / ".autoskillit" / "recipes"
         recipes_dir.mkdir(parents=True)
         (recipes_dir / "test.yaml").write_text("name: test\n")
-        with patch("autoskillit.recipe._api.load_yaml", side_effect=YAMLError("bad yaml")):
+        with patch("autoskillit.recipe._api._load_recipe_dict", side_effect=YAMLError("bad yaml")):
             result = json.loads(await load_recipe(name="test"))
         assert "error" not in result
         assert any(

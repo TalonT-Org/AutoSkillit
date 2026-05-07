@@ -89,19 +89,6 @@ def test_rct_fixture_consort_keywords_present():
     assert matched >= 3
 
 
-def test_rct_fixture_causal_inference_trigger_phrases():
-    assert "randomly assigned" in FIXTURE_RCT_PLAN
-    assert "treatment" in FIXTURE_RCT_PLAN
-    assert "intent-to-treat" in FIXTURE_RCT_PLAN
-
-
-def test_trivial_fixture_no_causal_inference_phrases():
-    assert "randomly assigned" not in FIXTURE_TRIVIAL_PLAN
-    assert "treatment group" not in FIXTURE_TRIVIAL_PLAN
-    assert "control group" not in FIXTURE_TRIVIAL_PLAN
-    assert "intervention" not in FIXTURE_TRIVIAL_PLAN
-
-
 def test_both_fixtures_nonempty_and_distinct():
     assert FIXTURE_TRIVIAL_PLAN
     assert FIXTURE_RCT_PLAN

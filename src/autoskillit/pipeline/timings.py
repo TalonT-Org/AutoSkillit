@@ -110,6 +110,7 @@ class DefaultTimingLog:
         kitchen_id_filter: str = "",
         campaign_id_filter: str = "",
         order_id_filter: str = "",
+        dispatch_id_filter: str = "",
     ) -> int:
         """Reconstruct timing entries from persisted session logs.
 
@@ -122,6 +123,7 @@ class DefaultTimingLog:
             Falls back to pipeline_id for sessions written before the rename.
         campaign_id_filter: if non-empty, only sessions whose campaign_id matches are loaded.
         order_id_filter: if non-empty, only sessions whose order_id matches are loaded.
+        dispatch_id_filter: if non-empty, only sessions whose dispatch_id matches are loaded.
 
         Returns the count of session directories successfully loaded.
         """
@@ -134,6 +136,7 @@ class DefaultTimingLog:
             kitchen_id_filter,
             campaign_id_filter,
             order_id_filter,
+            dispatch_id_filter,
         ):
             try:
                 data = json.loads(st_path.read_text(encoding="utf-8"))

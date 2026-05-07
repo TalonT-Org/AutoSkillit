@@ -71,6 +71,7 @@ def _iter_session_log_entries(
     kitchen_id_filter: str = "",
     campaign_id_filter: str = "",
     order_id_filter: str = "",
+    dispatch_id_filter: str = "",
 ) -> Iterator[Path]:
     """Yield per-session file paths from sessions.jsonl that pass the filters.
 
@@ -100,6 +101,10 @@ def _iter_session_log_entries(
         order_id_filter:    If non-empty, only yield sessions whose ``order_id`` field
                             matches this string exactly. Supersedes cwd_filter for fleet
                             sessions where a single order spans multiple clone directories.
+                            All active filters apply as AND logic.
+        dispatch_id_filter: If non-empty, only yield sessions whose ``dispatch_id`` field
+                            matches this string exactly. Uses ``.get()`` for backward
+                            compatibility with pre-existing index entries lacking the field.
                             All active filters apply as AND logic.
 
     Yields:
@@ -149,6 +154,9 @@ def _iter_session_log_entries(
             continue
 
         if order_id_filter and idx.get("order_id") != order_id_filter:
+            continue
+
+        if dispatch_id_filter and idx.get("dispatch_id") != dispatch_id_filter:
             continue
 
         dir_name = idx.get("dir_name", "")
@@ -252,6 +260,7 @@ class DefaultAuditLog:
         kitchen_id_filter: str = "",
         campaign_id_filter: str = "",
         order_id_filter: str = "",
+        dispatch_id_filter: str = "",
     ) -> int:
         """Reconstruct failure records from persisted session logs.
 
@@ -264,6 +273,7 @@ class DefaultAuditLog:
             Falls back to pipeline_id for sessions written before the rename.
         campaign_id_filter: if non-empty, only sessions whose campaign_id matches are loaded.
         order_id_filter: if non-empty, only sessions whose order_id matches are loaded.
+        dispatch_id_filter: if non-empty, only sessions whose dispatch_id matches are loaded.
 
         Returns the count of session directories successfully loaded.
         """
@@ -276,6 +286,7 @@ class DefaultAuditLog:
             kitchen_id_filter,
             campaign_id_filter,
             order_id_filter,
+            dispatch_id_filter,
         ):
             try:
                 data = json.loads(al_path.read_text(encoding="utf-8"))

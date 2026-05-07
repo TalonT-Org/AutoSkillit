@@ -437,3 +437,42 @@ def test_timing_load_campaign_id_filter(tmp_path):
     log3 = DefaultTimingLog()
     n3 = log3.load_from_log_dir(tmp_path, campaign_id_filter="")
     assert n3 == 3
+
+
+def _write_timing_session_dispatch_id(
+    log_root: Path,
+    dir_name: str,
+    dispatch_id: str,
+    timestamp: str = "2026-05-01T00:00:00+00:00",
+) -> None:
+    """Write a step_timing session with dispatch_id in the index."""
+    session_dir = log_root / "sessions" / dir_name
+    session_dir.mkdir(parents=True, exist_ok=True)
+    (session_dir / "step_timing.json").write_text(
+        json.dumps({"step_name": "implement", "total_seconds": 10.0})
+    )
+    index_entry = {
+        "dir_name": dir_name,
+        "timestamp": timestamp,
+        "campaign_id": "",
+        "dispatch_id": dispatch_id,
+    }
+    with (log_root / "sessions.jsonl").open("a") as f:
+        f.write(json.dumps(index_entry) + "\n")
+
+
+def test_timing_load_dispatch_id_filter(tmp_path):
+    """DefaultTimingLog.load_from_log_dir respects dispatch_id_filter."""
+    from autoskillit.pipeline.timings import DefaultTimingLog
+
+    _write_timing_session_dispatch_id(tmp_path, "d1-a", dispatch_id="d1")
+    _write_timing_session_dispatch_id(tmp_path, "d1-b", dispatch_id="d1")
+    _write_timing_session_dispatch_id(tmp_path, "d2-a", dispatch_id="d2")
+
+    log = DefaultTimingLog()
+    n = log.load_from_log_dir(tmp_path, dispatch_id_filter="d1")
+    assert n == 2
+
+    log2 = DefaultTimingLog()
+    n2 = log2.load_from_log_dir(tmp_path, dispatch_id_filter="")
+    assert n2 == 3

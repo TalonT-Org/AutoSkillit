@@ -758,3 +758,37 @@ def test_orchestrator_prompt_no_resume_session_id_in_context_limit_routing():
         "on_context_limit routing must not instruct L2 to pass resume_session_id; "
         "context-exhausted sessions must start fresh"
     )
+
+
+class TestPromptsReExporter:
+    """Guard: _prompts.py re-exports every public symbol from submodules."""
+
+    def test_reexporter_exposes_all_symbols(self) -> None:
+        from autoskillit.cli import (
+            _prompts,
+            _prompts_campaign,
+            _prompts_kitchen,
+            _prompts_orchestrator,
+        )
+
+        for mod in (_prompts_campaign, _prompts_orchestrator, _prompts_kitchen):
+            for name in mod.__all__:
+                assert hasattr(_prompts, name), (
+                    f"_prompts.py missing re-export: {name!r} from {mod.__name__}"
+                )
+                assert getattr(_prompts, name) is getattr(mod, name), (
+                    f"_prompts.py re-exports {name!r} as a different object "
+                    f"than {mod.__name__}.{name}"
+                )
+
+    def test_submodules_importable_independently(self) -> None:
+        import importlib
+
+        for name in (
+            "autoskillit.cli._prompts_campaign",
+            "autoskillit.cli._prompts_orchestrator",
+            "autoskillit.cli._prompts_kitchen",
+        ):
+            mod = importlib.import_module(name)
+            assert hasattr(mod, "__all__"), f"{name} missing __all__"
+            assert len(mod.__all__) > 0, f"{name}.__all__ is empty"

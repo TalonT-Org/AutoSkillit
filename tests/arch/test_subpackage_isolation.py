@@ -766,7 +766,11 @@ def test_no_subpackage_exceeds_10_files() -> None:
         _process_*.py pattern: _doctor_types.py (shared DoctorResult type),
         _doctor_mcp.py, _doctor_hooks.py, _doctor_install.py, _doctor_config.py,
         _doctor_runtime.py, _doctor_env.py, _doctor_features.py, _doctor_fleet.py.
-        Exempt at 36 files.
+        _prompts.py (819 lines) was decomposed into three domain-focused submodules:
+        _prompts_campaign.py (L3 campaign dispatcher), _prompts_orchestrator.py
+        (IL-1/IL-2 cook session), and _prompts_kitchen.py (open-kitchen + fleet-dispatch),
+        with _prompts.py reduced to a shared-helpers + re-export hub (~50 lines).
+        Exempt at 20 files.
       hooks/ — REQ-CNST-003-E6: hooks/ hosts one standalone script per hook event
         (PreToolUse, PostToolUse, SessionStart). Each script must remain a separate
         file so Claude Code can invoke it directly as a subprocess. pretty_output_hook.py
@@ -795,7 +799,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "execution": 18,
         "core": 20,
         "core/types": 16,
-        "cli": 18,
+        "cli": 20,
         "hooks": 9,
         "pipeline": 12,
         "fleet": 12,

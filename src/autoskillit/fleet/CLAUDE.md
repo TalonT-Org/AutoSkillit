@@ -16,7 +16,10 @@ IL-2 fleet campaign layer — parallel issue dispatch, semaphore, sidecar, liven
 | `_sidecar_rpc.py` | `run_python`-callable entry points: `write_sidecar_entry`, `get_remaining_issues` |
 | `_findings_rpc.py` | `run_python`-callable entry points: `parse_and_resume`, `load_execution_map` |
 | `_checkpoint_bridge.py` | `checkpoint_from_sidecar` — converts `IssueSidecarEntry` list to `SessionCheckpoint` |
-| `state.py` | Campaign state persistence — `DispatchRecord`, `DispatchStatus`, atomic writes, resume algorithm |
+| `state.py` | Campaign state I/O and mutations — `read_state`, `_write_state`, `mark_dispatch_*`, re-exports from `state_types`, `state_gates`, `state_recovery` |
+| `state_types.py` | Campaign state types — `DispatchStatus`, `DispatchRecord`, `CampaignState`, `ResumeDecision`, `GateRecordResult`, constants |
+| `state_gates.py` | Gate dispatch recording — `record_gate_outcome` |
+| `state_recovery.py` | Crash recovery + resume — `has_failed_dispatch`, `crash_recover_dispatch`, `resume_campaign_from_state` |
 | `summary.py` | Campaign summary schema v1: frozen dataclasses, sentinel parser, validator |
 
 ## Architecture Notes

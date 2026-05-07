@@ -791,7 +791,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         configurable asyncio.BoundedSemaphore implementation of the FleetLock protocol.
         Placed in fleet/ rather than server/ to preserve conservative test-filter cascade
         narrowing: changes to fleet/_semaphore.py only cascade to fleet/ tests, not to
-        server/ tests. Exempt at 11 files.
+        server/ tests. state.py was decomposed into state_types.py, state_gates.py, and
+        state_recovery.py to reduce the 757-line monolith and centralize deserialization
+        logic on DispatchRecord.from_dict. Exempt at 15 files.
     """
     EXEMPTIONS: dict[str, int] = {
         "server": 14,
@@ -802,7 +804,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "cli": 20,
         "hooks": 9,
         "pipeline": 12,
-        "fleet": 12,
+        "fleet": 15,
         "recipe/rules": 29,
         "server/tools": 16,
         "hooks/guards": 21,

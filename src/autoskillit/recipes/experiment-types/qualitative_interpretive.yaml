@@ -9,10 +9,10 @@ dimension_weights:
   causal_structure: S
   variance_protocol: S
   statistical_corrections: S
-  ecological_validity: H
-  measurement_alignment: H
-  resource_proportionality: L
-  data_acquisition: H
+  ecological_validity: S
+  measurement_alignment: S
+  resource_proportionality: S
+  data_acquisition: L
   agent_implementability: L
 applicable_lenses:
   primary: exp-lens-estimand-clarity
@@ -24,6 +24,4 @@ l1_severity:
   estimand_clarity: warning
   hypothesis_falsifiability: info
 dimension_weight_rationale:
-  ecological_validity: "Naturalistic inquiry is a defining epistemological commitment; decontextualized data is structurally invalid"
-  measurement_alignment: "Credibility of coding schemes, member-checking, and audit trail serve as measurement validity analogues"
-  data_acquisition: "Purposive sampling strategy and data saturation criteria determine whether interpretive claims are warranted"
+  data_acquisition: "Purposive sampling strategy remains assessable at reduced rigor; saturation criteria are checked but qualitative validity is outside the quantitative audit framework"

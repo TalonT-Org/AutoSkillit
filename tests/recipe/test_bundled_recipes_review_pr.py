@@ -267,7 +267,13 @@ class TestLocalReviewRoundsDefault:
         """T1: local_review_rounds.default must be parseable as int."""
         ing = recipe.ingredients["local_review_rounds"]
         assert ing.default is not None
-        int(ing.default)  # raises ValueError if not parseable
+        try:
+            int(ing.default)
+        except ValueError:
+            pytest.fail(
+                f"{recipe.name}: local_review_rounds.default={ing.default!r} "
+                "is not parseable as int"
+            )
 
     def test_local_review_rounds_type_is_integer(self, recipe: object) -> None:
         """T5: local_review_rounds must declare type=integer for semantic rule enforcement."""

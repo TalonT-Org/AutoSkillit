@@ -56,12 +56,46 @@ class TestInitialState:
 
     def test_read_state_round_trips_through_from_dict(self, tmp_path: Path) -> None:
         sp = _state_path(tmp_path)
-        dispatches = [DispatchRecord(name=n) for n in ("a", "b")]
+        dispatches = [
+            DispatchRecord(
+                name="a",
+                status=DispatchStatus.RUNNING,
+                dispatch_id="d1",
+                caller_session_id="c1",
+                dispatched_session_id="s1",
+                dispatched_session_log_dir="/log",
+                dispatched_pid=1234,
+                dispatched_starttime_ticks=9999,
+                dispatched_boot_id="b1",
+                reason="started",
+                kill_reason="",
+                infra_exit_category="",
+                token_usage={"input": 100},
+                started_at=1.0,
+                ended_at=2.0,
+                sidecar_path="/s.jsonl",
+            ),
+            DispatchRecord(name="b"),
+        ]
         write_initial_state(sp, "cid", "cname", "/m.yaml", dispatches)
         state = read_state(sp)
         assert state is not None
         assert [d.name for d in state.dispatches] == ["a", "b"]
-        assert all(d.status == DispatchStatus.PENDING for d in state.dispatches)
+        a = state.dispatches[0]
+        assert a.status == DispatchStatus.RUNNING
+        assert a.dispatch_id == "d1"
+        assert a.caller_session_id == "c1"
+        assert a.dispatched_session_id == "s1"
+        assert a.dispatched_session_log_dir == "/log"
+        assert a.dispatched_pid == 1234
+        assert a.dispatched_starttime_ticks == 9999
+        assert a.dispatched_boot_id == "b1"
+        assert a.reason == "started"
+        assert a.token_usage == {"input": 100}
+        assert a.started_at == 1.0
+        assert a.ended_at == 2.0
+        assert a.sidecar_path == "/s.jsonl"
+        assert state.dispatches[1].status == DispatchStatus.PENDING
 
 
 class TestDispatchRecordFromDict:
@@ -87,8 +121,19 @@ class TestDispatchRecordFromDict:
         rec = DispatchRecord.from_dict(d)
         assert rec.name == "build-docs"
         assert rec.status == DispatchStatus.RUNNING
+        assert rec.dispatch_id == "abc"
+        assert rec.caller_session_id == "c1"
         assert rec.dispatched_session_id == "s1"
+        assert rec.dispatched_session_log_dir == "/log"
         assert rec.dispatched_pid == 1234
+        assert rec.dispatched_starttime_ticks == 9999
+        assert rec.dispatched_boot_id == "b1"
+        assert rec.reason == "started"
+        assert rec.kill_reason == ""
+        assert rec.infra_exit_category == ""
+        assert rec.token_usage == {"input": 100}
+        assert rec.started_at == 1.0
+        assert rec.ended_at == 2.0
         assert rec.sidecar_path == "/s.jsonl"
 
     def test_from_dict_legacy_l2_fields(self) -> None:
@@ -102,6 +147,7 @@ class TestDispatchRecordFromDict:
         }
         rec = DispatchRecord.from_dict(d)
         assert rec.dispatched_session_id == "l2s"
+        assert rec.dispatched_session_log_dir == "/l2"
         assert rec.dispatched_pid == 555
         assert rec.dispatched_starttime_ticks == 111
         assert rec.dispatched_boot_id == "l2b"
@@ -111,12 +157,21 @@ class TestDispatchRecordFromDict:
             "name": "t",
             "l3_session_id": "l3s",
             "l2_session_id": "l2s",
+            "l3_session_log_dir": "/l3",
+            "l2_session_log_dir": "/l2",
             "l3_pid": 333,
             "l2_pid": 222,
+            "l3_starttime_ticks": 300,
+            "l2_starttime_ticks": 200,
+            "l3_boot_id": "l3b",
+            "l2_boot_id": "l2b",
         }
         rec = DispatchRecord.from_dict(d)
         assert rec.dispatched_session_id == "l3s"
+        assert rec.dispatched_session_log_dir == "/l3"
         assert rec.dispatched_pid == 333
+        assert rec.dispatched_starttime_ticks == 300
+        assert rec.dispatched_boot_id == "l3b"
 
     def test_from_dict_canonical_takes_priority_over_l3(self) -> None:
         d = {"name": "t", "dispatched_session_id": "canon", "l3_session_id": "l3s"}

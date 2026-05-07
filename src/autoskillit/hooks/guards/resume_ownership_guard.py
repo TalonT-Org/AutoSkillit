@@ -60,6 +60,7 @@ def main() -> None:
     except (json.JSONDecodeError, ValueError):
         sys.exit(0)
 
+    # Interactive sessions bypass ownership — the human user is the implicit owner.
     if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
         sys.exit(0)
 

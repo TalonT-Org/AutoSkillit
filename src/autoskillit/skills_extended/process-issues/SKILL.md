@@ -195,8 +195,9 @@ Processing X issues:
 2. **Pre-dispatch check:** Before executing the recipe for this issue, check if any
    previously completed issue in the CURRENT batch has `status: failure`. If so, skip
    this issue with `status: skipped` and continue to the next issue in the batch.
-   This prevents wasted compute on issues within the same batch after a failure,
-   while still allowing the batch failure gate below to capture the full failure count.
+   This prevents wasted compute on issues within the same batch after a failure.
+   Skipped issues are recorded as `status: skipped` (not `status: failure`), so the
+   batch failure gate below counts only the original failure(s) that triggered the skip.
 
 3. **Optionally append pickup status to issue body** (if `--status-updates` is active):
    ```bash

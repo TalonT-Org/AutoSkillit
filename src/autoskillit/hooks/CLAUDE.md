@@ -16,6 +16,7 @@ Sub-packages: guards/ (see guards/CLAUDE.md), formatters/ (see formatters/CLAUDE
 | `token_summary_hook.py` | Appends Token Usage Summary to PR body |
 | `session_start_hook.py` | Injects open-kitchen reminder on resume |
 | `skill_load_post_hook.py` | `PostToolUse`: writes skill-loaded flag for non-Anthropic provider guard |
+| `_hook_utils.py` | Shared stdlib-only utilities for hook scripts (e.g., `find_project_root`) |
 
 ## Architecture Notes
 

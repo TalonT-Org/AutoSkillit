@@ -783,6 +783,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         and review_loop_gate.py add the review gate enforcement hooks. recipe_write_advisor.py
         adds a non-blocking advisory hook for recipe YAML writes. write_guard.py
         blocks Write/Edit outside the allowed prefix in read-only skill sessions.
+        _hook_utils.py provides shared stdlib-only utilities (e.g., find_project_root)
+        for hook scripts that need common path resolution logic.
         Exempt at 28 files.
       pipeline/ — REQ-CNST-003-E7: pipeline/ added github_api_log.py for session-scoped
         GitHub API request tracking (DefaultGitHubApiLog accumulator + GitHubApiEntry).
@@ -802,7 +804,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "core": 20,
         "core/types": 16,
         "cli": 20,
-        "hooks": 9,
+        "hooks": 10,
         "pipeline": 12,
         "fleet": 15,
         "recipe/rules": 29,

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-06T10:12:39.088966+00:00",
+  "generated_at": "2026-05-07T16:23:58.667262+00:00",
   "bundled_manifest_version": "0.1.0",
   "skill_hashes": {},
   "skills": {
@@ -80,6 +80,10 @@
         {
           "name": "revision_guidance",
           "type": "file_path"
+        },
+        {
+          "name": "classification_timestamp",
+          "type": "string"
         }
       ],
       "expected_output_patterns": [
@@ -113,7 +117,13 @@
         },
         {
           "name": "scope_report_path",
-          "type": "file_path",
+          "type": "string",
+          "required": false,
+          "recommended": false
+        },
+        {
+          "name": "experiment_type",
+          "type": "string",
           "required": false,
           "recommended": false
         }
@@ -126,14 +136,32 @@
         {
           "name": "report_plan_path",
           "type": "file_path"
+        },
+        {
+          "name": "disambiguation_rule_applied",
+          "type": "string"
+        },
+        {
+          "name": "tier_c_lens",
+          "type": "string"
+        },
+        {
+          "name": "methodology_tradition",
+          "type": "string"
+        },
+        {
+          "name": "visualization_plan_trace_path",
+          "type": "file_path"
         }
       ],
       "expected_output_patterns": [
         "visualization_plan_path\\s*=\\s*/.+",
-        "report_plan_path\\s*=\\s*/.+"
+        "report_plan_path\\s*=\\s*/.+",
+        "methodology_tradition\\s*=\\s*\\S+"
       ],
       "pattern_examples": [
-        "visualization_plan_path = /tmp/plan-visualization/visualization-plan.md\nreport_plan_path = /tmp/plan-visualization/report-plan.md\n%%ORDER_UP%%"
+        "visualization_plan_path = /tmp/plan-visualization/visualization-plan.md\nreport_plan_path = /tmp/plan-visualization/report-plan.md\nmethodology_tradition = controlled_intervention\n%%ORDER_UP%%",
+        "visualization_plan_path = /tmp/plan-visualization/visualization-plan.md\nreport_plan_path = /tmp/plan-visualization/report-plan.md\nmethodology_tradition = null\n%%ORDER_UP%%"
       ],
       "write_behavior": "always"
     },
@@ -331,7 +359,7 @@
       "inputs": [
         {
           "name": "worktree_path",
-          "type": "directory_path",
+          "type": "string",
           "required": true,
           "recommended": false
         },
@@ -399,6 +427,18 @@
           "name": "results_path",
           "type": "file_path",
           "required": true,
+          "recommended": false
+        },
+        {
+          "name": "experiment_type",
+          "type": "string",
+          "required": false,
+          "recommended": false
+        },
+        {
+          "name": "methodology_tradition",
+          "type": "string",
+          "required": false,
           "recommended": false
         }
       ],
@@ -498,7 +538,7 @@
         },
         {
           "name": "lens_context_paths",
-          "type": "file_path_list"
+          "type": "string"
         }
       ],
       "expected_output_patterns": [
@@ -521,7 +561,7 @@
         },
         {
           "name": "all_diagram_paths",
-          "type": "file_path_list",
+          "type": "string",
           "required": true,
           "recommended": false
         },
@@ -593,8 +633,7 @@
         "verdict = approved\n%%ORDER_UP%%",
         "verdict = changes_requested\n%%ORDER_UP%%",
         "verdict = needs_human\n%%ORDER_UP%%"
-      ],
-      "write_behavior": "always"
+      ]
     },
     "audit-claims": {
       "inputs": [
@@ -630,8 +669,7 @@
         "verdict = approved\n%%ORDER_UP%%",
         "verdict = changes_requested\n%%ORDER_UP%%",
         "verdict = needs_human\n%%ORDER_UP%%"
-      ],
-      "write_behavior": "always"
+      ]
     },
     "resolve-research-review": {
       "inputs": [
@@ -663,13 +701,13 @@
         }
       ],
       "expected_output_patterns": [
-        "needs_rerun\\s*=\\s*(true|false)",
-        "verdict\\s*=\\s*(real_fix|already_green)",
-        "fixes_applied\\s*=\\s*\\d+"
+        "needs_rerun\\s*=\\s*(true|false)"
       ],
       "pattern_examples": [
         "needs_rerun = true\nverdict = real_fix\nfixes_applied = 2\n%%ORDER_UP%%",
-        "needs_rerun = false\nverdict = already_green\nfixes_applied = 0\n%%ORDER_UP%%"
+        "needs_rerun = false\nverdict = already_green\nfixes_applied = 0\n%%ORDER_UP%%",
+        "needs_rerun = true\nverdict = flake_suspected\nfixes_applied = 0\n%%ORDER_UP%%",
+        "needs_rerun = false\nverdict = ci_only_failure\nfixes_applied = 0\n%%ORDER_UP%%"
       ],
       "write_behavior": "conditional",
       "write_expected_when": [
@@ -706,13 +744,13 @@
         }
       ],
       "expected_output_patterns": [
-        "needs_rerun\\s*=\\s*(true|false)",
-        "verdict\\s*=\\s*(real_fix|already_green)",
-        "fixes_applied\\s*=\\s*\\d+"
+        "needs_rerun\\s*=\\s*(true|false)"
       ],
       "pattern_examples": [
         "needs_rerun = true\nverdict = real_fix\nfixes_applied = 2\n%%ORDER_UP%%",
-        "needs_rerun = false\nverdict = already_green\nfixes_applied = 0\n%%ORDER_UP%%"
+        "needs_rerun = false\nverdict = already_green\nfixes_applied = 0\n%%ORDER_UP%%",
+        "needs_rerun = true\nverdict = flake_suspected\nfixes_applied = 0\n%%ORDER_UP%%",
+        "needs_rerun = false\nverdict = ci_only_failure\nfixes_applied = 0\n%%ORDER_UP%%"
       ],
       "write_behavior": "conditional",
       "write_expected_when": [
@@ -823,7 +861,8 @@
         "verdict",
         "experiment_type",
         "evaluation_dashboard",
-        "revision_guidance"
+        "revision_guidance",
+        "classification_timestamp"
       ]
     },
     {
@@ -831,6 +870,7 @@
       "available": [
         "audit_claims",
         "base_branch",
+        "classification_timestamp",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_type",
@@ -849,7 +889,11 @@
       ],
       "produced": [
         "visualization_plan_path",
-        "report_plan_path"
+        "report_plan_path",
+        "disambiguation_rule_applied",
+        "tier_c_lens",
+        "methodology_tradition",
+        "visualization_plan_trace_path"
       ]
     },
     {
@@ -857,10 +901,13 @@
       "available": [
         "audit_claims",
         "base_branch",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_type",
         "issue_url",
+        "methodology_tradition",
         "output_mode",
         "report_plan_path",
         "review_design",
@@ -869,8 +916,10 @@
         "scope_report",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
-        "visualization_plan_path"
+        "visualization_plan_path",
+        "visualization_plan_trace_path"
       ],
       "required": [],
       "produced": []
@@ -880,10 +929,13 @@
       "available": [
         "audit_claims",
         "base_branch",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_type",
         "issue_url",
+        "methodology_tradition",
         "output_mode",
         "report_plan_path",
         "review_design",
@@ -892,8 +944,10 @@
         "scope_report",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
-        "visualization_plan_path"
+        "visualization_plan_path",
+        "visualization_plan_trace_path"
       ],
       "required": [],
       "produced": [
@@ -905,10 +959,13 @@
       "available": [
         "audit_claims",
         "base_branch",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_type",
         "issue_url",
+        "methodology_tradition",
         "output_mode",
         "report_plan_path",
         "review_design",
@@ -917,8 +974,10 @@
         "scope_report",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
-        "visualization_plan_path"
+        "visualization_plan_path",
+        "visualization_plan_trace_path"
       ],
       "required": [],
       "produced": []
@@ -928,10 +987,13 @@
       "available": [
         "audit_claims",
         "base_branch",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_type",
         "issue_url",
+        "methodology_tradition",
         "output_mode",
         "report_plan_path",
         "review_design",
@@ -940,8 +1002,10 @@
         "scope_report",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
-        "visualization_plan_path"
+        "visualization_plan_path",
+        "visualization_plan_trace_path"
       ],
       "required": [],
       "produced": [
@@ -954,10 +1018,13 @@
       "available": [
         "audit_claims",
         "base_branch",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_type",
         "issue_url",
+        "methodology_tradition",
         "output_mode",
         "report_plan_path",
         "research_dir",
@@ -967,8 +1034,10 @@
         "scope_report",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -982,10 +1051,13 @@
       "available": [
         "audit_claims",
         "base_branch",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_type",
         "issue_url",
+        "methodology_tradition",
         "output_mode",
         "report_plan_path",
         "research_dir",
@@ -996,8 +1068,10 @@
         "scope_report",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -1010,10 +1084,13 @@
       "available": [
         "audit_claims",
         "base_branch",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_type",
         "issue_url",
+        "methodology_tradition",
         "output_mode",
         "report_plan_path",
         "research_dir",
@@ -1024,8 +1101,10 @@
         "scope_report",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [
@@ -1040,11 +1119,14 @@
       "available": [
         "audit_claims",
         "base_branch",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_type",
         "group_files",
         "issue_url",
+        "methodology_tradition",
         "output_mode",
         "report_plan_path",
         "research_dir",
@@ -1055,8 +1137,10 @@
         "scope_report",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [
@@ -1071,11 +1155,14 @@
       "available": [
         "audit_claims",
         "base_branch",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_type",
         "group_files",
         "issue_url",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "report_plan_path",
@@ -1087,8 +1174,10 @@
         "scope_report",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [
@@ -1103,11 +1192,14 @@
       "available": [
         "audit_claims",
         "base_branch",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_type",
         "group_files",
         "issue_url",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "report_plan_path",
@@ -1119,8 +1211,10 @@
         "scope_report",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -1134,12 +1228,15 @@
       "available": [
         "audit_claims",
         "base_branch",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_type",
         "group_files",
         "is_fixable",
         "issue_url",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "report_plan_path",
@@ -1151,8 +1248,10 @@
         "scope_report",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -1163,12 +1262,15 @@
       "available": [
         "audit_claims",
         "base_branch",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_type",
         "group_files",
         "is_fixable",
         "issue_url",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "report_plan_path",
@@ -1180,8 +1282,10 @@
         "scope_report",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -1192,12 +1296,15 @@
       "available": [
         "audit_claims",
         "base_branch",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_type",
         "group_files",
         "is_fixable",
         "issue_url",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "report_plan_path",
@@ -1209,8 +1316,10 @@
         "scope_report",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -1223,6 +1332,8 @@
       "available": [
         "audit_claims",
         "base_branch",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_results",
@@ -1230,6 +1341,7 @@
         "group_files",
         "is_fixable",
         "issue_url",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "report_plan_path",
@@ -1241,8 +1353,10 @@
         "scope_report",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -1256,6 +1370,8 @@
       "available": [
         "audit_claims",
         "base_branch",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_results",
@@ -1263,6 +1379,7 @@
         "group_files",
         "is_fixable",
         "issue_url",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "report_plan_path",
@@ -1275,8 +1392,10 @@
         "scope_report",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -1287,6 +1406,8 @@
       "available": [
         "audit_claims",
         "base_branch",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_results",
@@ -1294,6 +1415,7 @@
         "group_files",
         "is_fixable",
         "issue_url",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "report_plan_path",
@@ -1306,8 +1428,10 @@
         "scope_report",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -1321,6 +1445,8 @@
       "available": [
         "audit_claims",
         "base_branch",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_results",
@@ -1328,6 +1454,7 @@
         "group_files",
         "is_fixable",
         "issue_url",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "report_plan_path",
@@ -1340,8 +1467,10 @@
         "scope_report",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -1354,6 +1483,8 @@
       "available": [
         "audit_claims",
         "base_branch",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_results",
@@ -1361,6 +1492,7 @@
         "group_files",
         "is_fixable",
         "issue_url",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "report_plan_path",
@@ -1373,21 +1505,25 @@
         "scope_report",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
       "produced": [
         "report_path"
       ],
-      "positional_args": 2
+      "positional_args": 14
     },
     {
       "step": "generate_report_inconclusive",
       "available": [
         "audit_claims",
         "base_branch",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_results",
@@ -1395,6 +1531,7 @@
         "group_files",
         "is_fixable",
         "issue_url",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "report_path",
@@ -1408,21 +1545,25 @@
         "scope_report",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
       "produced": [
         "report_path"
       ],
-      "positional_args": 3
+      "positional_args": 15
     },
     {
       "step": "test",
       "available": [
         "audit_claims",
         "base_branch",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_results",
@@ -1430,6 +1571,7 @@
         "group_files",
         "is_fixable",
         "issue_url",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "report_path",
@@ -1443,8 +1585,10 @@
         "scope_report",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -1455,6 +1599,8 @@
       "available": [
         "audit_claims",
         "base_branch",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_results",
@@ -1462,6 +1608,7 @@
         "group_files",
         "is_fixable",
         "issue_url",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "report_path",
@@ -1475,8 +1622,10 @@
         "scope_report",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [
@@ -1492,6 +1641,8 @@
       "available": [
         "audit_claims",
         "base_branch",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_results",
@@ -1500,6 +1651,7 @@
         "group_files",
         "is_fixable",
         "issue_url",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "report_path",
@@ -1513,8 +1665,10 @@
         "scope_report",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -1525,6 +1679,8 @@
       "available": [
         "audit_claims",
         "base_branch",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_results",
@@ -1533,6 +1689,7 @@
         "group_files",
         "is_fixable",
         "issue_url",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "report_path",
@@ -1546,8 +1703,10 @@
         "scope_report",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -1558,6 +1717,8 @@
       "available": [
         "audit_claims",
         "base_branch",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_results",
@@ -1566,6 +1727,7 @@
         "group_files",
         "is_fixable",
         "issue_url",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "report_path",
@@ -1579,8 +1741,10 @@
         "scope_report",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [
@@ -1597,6 +1761,8 @@
       "available": [
         "audit_claims",
         "base_branch",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_results",
@@ -1606,6 +1772,7 @@
         "is_fixable",
         "issue_url",
         "lens_context_paths",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "prep_path",
@@ -1621,8 +1788,10 @@
         "selected_lenses",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -1633,6 +1802,8 @@
       "available": [
         "audit_claims",
         "base_branch",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_results",
@@ -1642,6 +1813,7 @@
         "is_fixable",
         "issue_url",
         "lens_context_paths",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "prep_path",
@@ -1657,8 +1829,10 @@
         "selected_lenses",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -1669,6 +1843,8 @@
       "available": [
         "audit_claims",
         "base_branch",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_results",
@@ -1678,6 +1854,7 @@
         "is_fixable",
         "issue_url",
         "lens_context_paths",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "prep_path",
@@ -1693,8 +1870,10 @@
         "selected_lenses",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -1705,6 +1884,8 @@
       "available": [
         "audit_claims",
         "base_branch",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_results",
@@ -1714,6 +1895,7 @@
         "is_fixable",
         "issue_url",
         "lens_context_paths",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "prep_path",
@@ -1729,8 +1911,10 @@
         "selected_lenses",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -1744,6 +1928,8 @@
       "available": [
         "audit_claims",
         "base_branch",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_results",
@@ -1753,6 +1939,7 @@
         "is_fixable",
         "issue_url",
         "lens_context_paths",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "pr_url",
@@ -1769,8 +1956,10 @@
         "selected_lenses",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -1781,6 +1970,8 @@
       "available": [
         "audit_claims",
         "base_branch",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_results",
@@ -1790,6 +1981,7 @@
         "is_fixable",
         "issue_url",
         "lens_context_paths",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "pr_url",
@@ -1806,8 +1998,10 @@
         "selected_lenses",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -1820,6 +2014,8 @@
       "available": [
         "audit_claims",
         "base_branch",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_results",
@@ -1829,6 +2025,7 @@
         "is_fixable",
         "issue_url",
         "lens_context_paths",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "pr_url",
@@ -1846,8 +2043,10 @@
         "selected_lenses",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -1861,6 +2060,8 @@
         "audit_claims",
         "audit_verdict",
         "base_branch",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_results",
@@ -1870,6 +2071,7 @@
         "is_fixable",
         "issue_url",
         "lens_context_paths",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "pr_url",
@@ -1887,8 +2089,10 @@
         "selected_lenses",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -1900,6 +2104,8 @@
         "audit_claims",
         "audit_verdict",
         "base_branch",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_results",
@@ -1909,6 +2115,7 @@
         "is_fixable",
         "issue_url",
         "lens_context_paths",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "pr_url",
@@ -1926,8 +2133,10 @@
         "selected_lenses",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -1941,6 +2150,8 @@
         "audit_claims",
         "audit_verdict",
         "base_branch",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_results",
@@ -1950,6 +2161,7 @@
         "is_fixable",
         "issue_url",
         "lens_context_paths",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "pr_url",
@@ -1968,8 +2180,10 @@
         "selected_lenses",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -1981,6 +2195,8 @@
         "audit_claims",
         "audit_verdict",
         "base_branch",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_results",
@@ -1990,6 +2206,7 @@
         "is_fixable",
         "issue_url",
         "lens_context_paths",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "pr_url",
@@ -2008,8 +2225,10 @@
         "selected_lenses",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -2024,6 +2243,8 @@
         "audit_verdict",
         "base_branch",
         "claims_needs_rerun",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_results",
@@ -2033,6 +2254,7 @@
         "is_fixable",
         "issue_url",
         "lens_context_paths",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "pr_url",
@@ -2051,8 +2273,10 @@
         "selected_lenses",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -2065,6 +2289,8 @@
         "audit_verdict",
         "base_branch",
         "claims_needs_rerun",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_results",
@@ -2074,6 +2300,7 @@
         "is_fixable",
         "issue_url",
         "lens_context_paths",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "pr_url",
@@ -2092,8 +2319,10 @@
         "selected_lenses",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -2109,6 +2338,8 @@
         "audit_verdict",
         "base_branch",
         "claims_needs_rerun",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_results",
@@ -2118,6 +2349,7 @@
         "is_fixable",
         "issue_url",
         "lens_context_paths",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "pr_url",
@@ -2136,15 +2368,17 @@
         "selected_lenses",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
       "produced": [
         "report_path"
       ],
-      "positional_args": 2
+      "positional_args": 14
     },
     {
       "step": "re_stage_bundle",
@@ -2153,6 +2387,8 @@
         "audit_verdict",
         "base_branch",
         "claims_needs_rerun",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_results",
@@ -2162,6 +2398,7 @@
         "is_fixable",
         "issue_url",
         "lens_context_paths",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "pr_url",
@@ -2180,8 +2417,10 @@
         "selected_lenses",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -2194,6 +2433,8 @@
         "audit_verdict",
         "base_branch",
         "claims_needs_rerun",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_results",
@@ -2203,6 +2444,7 @@
         "is_fixable",
         "issue_url",
         "lens_context_paths",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "pr_url",
@@ -2221,8 +2463,10 @@
         "selected_lenses",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -2235,6 +2479,8 @@
         "audit_verdict",
         "base_branch",
         "claims_needs_rerun",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_results",
@@ -2244,6 +2490,7 @@
         "is_fixable",
         "issue_url",
         "lens_context_paths",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "pr_url",
@@ -2262,8 +2509,10 @@
         "selected_lenses",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -2276,6 +2525,8 @@
         "audit_verdict",
         "base_branch",
         "claims_needs_rerun",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_results",
@@ -2285,6 +2536,7 @@
         "is_fixable",
         "issue_url",
         "lens_context_paths",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "pr_url",
@@ -2303,8 +2555,10 @@
         "selected_lenses",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -2319,6 +2573,8 @@
         "audit_verdict",
         "base_branch",
         "claims_needs_rerun",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_results",
@@ -2328,6 +2584,7 @@
         "is_fixable",
         "issue_url",
         "lens_context_paths",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "pr_url",
@@ -2347,8 +2604,10 @@
         "selected_lenses",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [
@@ -2365,6 +2624,8 @@
         "audit_verdict",
         "base_branch",
         "claims_needs_rerun",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_results",
@@ -2375,6 +2636,7 @@
         "is_fixable",
         "issue_url",
         "lens_context_paths",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "pr_url",
@@ -2394,8 +2656,10 @@
         "selected_lenses",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -2408,6 +2672,8 @@
         "audit_verdict",
         "base_branch",
         "claims_needs_rerun",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_results",
@@ -2418,6 +2684,7 @@
         "is_fixable",
         "issue_url",
         "lens_context_paths",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "pr_url",
@@ -2437,8 +2704,10 @@
         "selected_lenses",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -2453,6 +2722,8 @@
         "audit_verdict",
         "base_branch",
         "claims_needs_rerun",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_results",
@@ -2464,6 +2735,7 @@
         "issue_url",
         "lens_context_paths",
         "local_bundle_path",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "pr_url",
@@ -2483,8 +2755,10 @@
         "selected_lenses",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -2497,6 +2771,8 @@
         "audit_verdict",
         "base_branch",
         "claims_needs_rerun",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_plan",
         "experiment_results",
@@ -2508,6 +2784,7 @@
         "issue_url",
         "lens_context_paths",
         "local_bundle_path",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "pr_url",
@@ -2527,8 +2804,10 @@
         "selected_lenses",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -2543,6 +2822,8 @@
         "audit_verdict",
         "base_branch",
         "claims_needs_rerun",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_branch",
         "experiment_plan",
@@ -2555,6 +2836,7 @@
         "issue_url",
         "lens_context_paths",
         "local_bundle_path",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "pr_url",
@@ -2574,8 +2856,10 @@
         "selected_lenses",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -2591,6 +2875,8 @@
         "audit_verdict",
         "base_branch",
         "claims_needs_rerun",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_branch",
         "experiment_plan",
@@ -2603,6 +2889,7 @@
         "issue_url",
         "lens_context_paths",
         "local_bundle_path",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "pr_url",
@@ -2622,8 +2909,10 @@
         "selected_lenses",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -2640,6 +2929,8 @@
         "audit_verdict",
         "base_branch",
         "claims_needs_rerun",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_branch",
         "experiment_plan",
@@ -2652,6 +2943,7 @@
         "issue_url",
         "lens_context_paths",
         "local_bundle_path",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "pr_url",
@@ -2671,8 +2963,10 @@
         "selected_lenses",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -2690,6 +2984,8 @@
         "audit_verdict",
         "base_branch",
         "claims_needs_rerun",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_branch",
         "experiment_plan",
@@ -2702,6 +2998,7 @@
         "issue_url",
         "lens_context_paths",
         "local_bundle_path",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "pr_url",
@@ -2721,8 +3018,10 @@
         "selected_lenses",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -2738,6 +3037,8 @@
         "audit_verdict",
         "base_branch",
         "claims_needs_rerun",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_branch",
         "experiment_plan",
@@ -2750,6 +3051,7 @@
         "issue_url",
         "lens_context_paths",
         "local_bundle_path",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "pr_url",
@@ -2769,8 +3071,10 @@
         "selected_lenses",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -2786,6 +3090,8 @@
         "audit_verdict",
         "base_branch",
         "claims_needs_rerun",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_branch",
         "experiment_plan",
@@ -2798,6 +3104,7 @@
         "issue_url",
         "lens_context_paths",
         "local_bundle_path",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "pr_url",
@@ -2817,8 +3124,10 @@
         "selected_lenses",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],
@@ -2834,6 +3143,8 @@
         "audit_verdict",
         "base_branch",
         "claims_needs_rerun",
+        "classification_timestamp",
+        "disambiguation_rule_applied",
         "evaluation_dashboard",
         "experiment_branch",
         "experiment_plan",
@@ -2846,6 +3157,7 @@
         "issue_url",
         "lens_context_paths",
         "local_bundle_path",
+        "methodology_tradition",
         "output_mode",
         "phase_plan_path",
         "pr_url",
@@ -2865,8 +3177,10 @@
         "selected_lenses",
         "source_dir",
         "task",
+        "tier_c_lens",
         "verdict",
         "visualization_plan_path",
+        "visualization_plan_trace_path",
         "worktree_path"
       ],
       "required": [],

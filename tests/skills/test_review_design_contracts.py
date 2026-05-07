@@ -590,3 +590,14 @@ def test_agent_implementability_l4_step5_placement(skill_text: str) -> None:
     assert "agent_implementability" in step5_text, (
         "agent_implementability must be placed in Step 5 (Level 4 dimensions)"
     )
+
+
+# ── Silent type handling (T5) ───────────────────────────────────────────────
+
+
+def test_silent_type_handling_section_in_skill(skill_text: str) -> None:
+    """SKILL.md must contain a Silent Type Handling section with required fields."""
+    assert "Silent Type Handling" in skill_text
+    assert "is_silent_type" in skill_text
+    assert "advisory_context" in skill_text
+    assert "subject_kind" in skill_text

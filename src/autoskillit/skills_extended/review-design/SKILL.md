@@ -158,6 +158,57 @@ or weight=S (SILENT — dimension not spawned, not mentioned in output). Pass th
 `dimension_weights` dict to the triage subagent so it can return the complete weight
 matrix for this plan.
 
+### Silent Type Handling (after Step 1)
+
+After Step 1 classification, check whether the experiment type is "silent" — an
+experiment type where quantitative-audit dimension scoring does not apply.
+
+**Detection rule:** An experiment type is silent when **>=6 of 8 `dimension_weights`**
+are equal to `S`. Use `is_silent_type(spec)` from `experiment_type_registry` (or count
+the `S` values directly from the loaded registry entry).
+
+**Reference:** `docs/research/silent-type-convention.md` defines the shared convention
+consumed by both review-design (this skill) and vis-lens-methodology-norms (#846).
+
+**When `is_silent_type` returns True:**
+
+1. **Skip Steps 2-7 entirely** — do not launch L1, L2, L3, L4, or red-team subagents.
+2. **Emit verdict = GO** with `requires_decision: false`.
+3. **Write evaluation_dashboard** with a "Scope Advisory" section containing:
+
+   ```yaml
+   verdict: GO
+   advisory_context:
+     subject_kind: experiment_type
+     subject_name: {experiment_type}
+     reasoning: "Quantitative audit framework does not apply to {experiment_type}. Design rigor is assessed via domain-appropriate criteria (e.g., trustworthiness, transferability, dependability, confirmability for qualitative research)."
+     reference_framework: "SRQR / COREQ"
+   requires_decision: false
+   ```
+
+4. **Write machine-readable YAML summary** in the dashboard:
+
+   ```yaml
+   # --- review-design machine summary ---
+   verdict: GO
+   experiment_type: {type}
+   critical_count: 0
+   warning_count: 0
+   blocking_count: 0
+   required_count: 0
+   advisory_count: 1
+   red_team_count: 0
+   active_dimensions: 0
+   warning_threshold: 0
+   ```
+
+5. **Proceed to Step 8** (Emit Output Tokens) — the recipe routes to `plan_visualization`.
+
+The advisory is appended to the evaluation dashboard file (which is later copied to
+`research/{slug}/audit/design-review-dashboard.md` by `create_worktree.sh`).
+
+**When `is_silent_type` returns False:** Continue with the standard path (Steps 2-7).
+
 ### Subagent Evaluation Scope (applies to ALL dimension subagents)
 
 **Include this instruction block in every dimension subagent prompt.**

@@ -178,3 +178,15 @@ def get_experiment_type_by_name(
         if spec.name == name:
             return spec
     return None
+
+
+_SILENT_THRESHOLD = 6
+
+
+def is_silent_type(spec: ExperimentTypeSpec) -> bool:
+    """Return True when >=6 of 8 dimension_weights are 'S' (suppressed).
+
+    Silent experiment types lack dimensional signal strength for opinionated
+    design-review scoring. See docs/research/silent-type-convention.md.
+    """
+    return sum(1 for v in spec.dimension_weights.values() if v == "S") >= _SILENT_THRESHOLD

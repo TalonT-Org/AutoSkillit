@@ -59,13 +59,9 @@ def test_analysis_graph_no_toplevel_igraph_import():
     import ast
     from pathlib import Path
 
-    src_file = (
-        Path(__file__).parent.parent.parent
-        / "src"
-        / "autoskillit"
-        / "recipe"
-        / "_analysis_graph.py"
-    )
+    import autoskillit.recipe._analysis_graph as _analysis_graph_mod
+
+    src_file = Path(_analysis_graph_mod.__file__)
     tree = ast.parse(src_file.read_text())
     for node in ast.iter_child_nodes(tree):
         if isinstance(node, ast.Import):

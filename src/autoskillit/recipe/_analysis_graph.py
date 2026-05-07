@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import dataclasses
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import igraph
 
 from autoskillit.core import get_logger
 from autoskillit.recipe.schema import _TERMINAL_TARGETS, Recipe, RecipeStep

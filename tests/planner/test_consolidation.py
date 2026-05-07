@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, get_type_hints
 
 import pytest
 
@@ -874,7 +874,20 @@ def test_merge_group_caps_deliverables_at_bound_and_demotes_overflow(tmp_path: P
     consolidated = json.loads((tmp_path / "consolidated_wps.json").read_text())
     merged = consolidated["work_packages"][0]
     assert len(merged["deliverables"]) == DELIVERABLE_BOUNDS[1]
-    assert "src/mod_P1-A1-WP3_1.py" in merged["files_touched"]
+    all_union: list[str] = []
+    seen_union: set[str] = set()
+    for wp in wps:
+        for d in wp["deliverables"]:
+            if d not in seen_union:
+                all_union.append(d)
+                seen_union.add(d)
+    expected_overflow = set(all_union[DELIVERABLE_BOUNDS[1] :])
+    assert not (expected_overflow & set(merged["deliverables"])), (
+        "overflow items must not appear in deliverables"
+    )
+    assert expected_overflow <= set(merged["files_touched"]), (
+        "overflow items must appear in files_touched"
+    )
 
 
 def test_merge_group_exactly_at_bound_passes(tmp_path: Path) -> None:
@@ -926,13 +939,12 @@ def test_fallback_groups_overflow_caps_deliverables(tmp_path: Path) -> None:
     assert len(merged_a["deliverables"]) == DELIVERABLE_BOUNDS[1]
 
 
-def test_merge_policy_covers_all_wp_list_fields(tmp_path: Path) -> None:
+def test_merge_policy_covers_all_wp_list_fields() -> None:
     """Every list field in WPResult must have a corresponding _LIST_MERGE_POLICIES entry."""
     from autoskillit.planner.consolidation import _LIST_MERGE_POLICIES
     from autoskillit.planner.schema import WPResult
 
-    # All WPResult fields that are list-typed and merged (not technical_steps/depends_on)
-    wp_result_fields = set(WPResult.__annotations__.keys())
+    wp_result_fields = set(get_type_hints(WPResult).keys())
     merged_fields = wp_result_fields - {
         "id",
         "name",

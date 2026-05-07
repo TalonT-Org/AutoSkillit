@@ -196,9 +196,8 @@ def test_skips_flag_write_when_agent_id_present(tmp_path: Path) -> None:
         provider_profile="minimax",
     )
     flag_dir = tmp_path / ".autoskillit" / "temp"
-    if flag_dir.exists():
-        flags = list(flag_dir.glob("skill_guard_*.flag"))
-        assert not flags, "No flag file should be created in subagent context"
+    flags = list(flag_dir.glob("skill_guard_*.flag"))
+    assert not flags, "No flag file should be created in subagent context"
 
 
 def test_writes_flag_to_project_root_via_ancestor_walk(tmp_path: Path) -> None:

@@ -69,8 +69,8 @@ def main() -> None:
     flag_path = _find_project_root() / ".autoskillit" / "temp" / f"skill_guard_{session_id}.flag"
     try:
         _atomic_write(flag_path, skill_name)
-    except Exception:
-        pass
+    except Exception as exc:
+        print(f"skill_load_post_hook: failed to write flag {flag_path}: {exc}", file=sys.stderr)
 
     marker = os.environ.get("AUTOSKILLIT_COMPLETION_MARKER", "").strip()
     if marker:

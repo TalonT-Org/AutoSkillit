@@ -10,7 +10,8 @@ Type re-export hub and all typed building blocks for the autoskillit package (IL
 | `_type_enums.py` | All `StrEnum` discriminators (`RetryReason`, `KillReason`, `Severity`, etc.) |
 | `_type_constants.py` | Shared constants: tool lists, env var names, version string |
 | `_type_subprocess.py` | `SubprocessResult` dataclass and `SubprocessRunner` protocol |
-| `_type_results.py` | Core result dataclasses: `SkillResult`, `LoadResult`, `FailureRecord`, `WriteBehaviorSpec`, `SessionTelemetry` |
+| `_type_results_execution.py` | Execution-scoped result dataclasses: `SessionTelemetry`, `ProviderOutcome`, `RecipeIdentity`, `CIRunScope` |
+| `_type_results.py` | Core result dataclasses: `SkillResult`, `LoadResult`, `FailureRecord`, `WriteBehaviorSpec` |
 | `_type_protocols_logging.py` | Protocols: `AuditLog`, `TokenLog`, `TimingLog`, `McpResponseLog`, `GitHubApiLog`, `SupportsDebug`, `SupportsLogger` |
 | `_type_protocols_execution.py` | Protocols: `TestRunner`, `HeadlessExecutor`, `OutputPatternResolver`, `WriteExpectedResolver` |
 | `_type_protocols_github.py` | Protocols: `GitHubFetcher`, `CIWatcher`, `MergeQueueWatcher` |
@@ -24,7 +25,7 @@ Type re-export hub and all typed building blocks for the autoskillit package (IL
 
 ## Architecture Notes
 
-Internal dependency DAG: enums -> constants -> subprocess -> results -> protocols -> helpers. All modules have zero `autoskillit` imports outside this sub-package (IL-0 hard constraint). Production code imports from `autoskillit.core`, not from this package directly.
+Internal dependency DAG: enums -> constants -> subprocess -> results_execution -> results -> protocols -> helpers. All modules have zero `autoskillit` imports outside this sub-package (IL-0 hard constraint). Production code imports from `autoskillit.core`, not from this package directly.
 
 ## Extension Bundle Pattern
 

@@ -206,6 +206,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
             "smoke_utils",
         }
     ),
+    "_type_results_execution": frozenset({"core", "execution", "server", "pipeline"}),
 }
 
 # Narrow per-module cascade for execution/. Modules not listed here fall through

@@ -1,7 +1,7 @@
-"""Core result dataclasses.
+"""Core result dataclasses — universal types.
 
-Zero autoskillit imports outside this sub-package. Provides LoadResult, SkillResult,
-CleanupResult, and related dataclasses.
+Execution-scoped types (SessionTelemetry, ProviderOutcome, RecipeIdentity,
+CIRunScope) live in _type_results_execution.py for narrower test cascade.
 """
 
 from __future__ import annotations
@@ -12,8 +12,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Generic, Literal, TypedDict, TypeVar
 
-from ._type_constants import KNOWN_CI_EVENTS
 from ._type_enums import KillReason, RetryReason, SessionOutcome
+from ._type_results_execution import ProviderOutcome
 
 T = TypeVar("T")
 
@@ -24,13 +24,9 @@ __all__ = [
     "ValidatedAddDir",
     "WriteBehaviorSpec",
     "FailureRecord",
-    "SessionTelemetry",
-    "ProviderOutcome",
     "InfraOutcome",
-    "RecipeIdentity",
     "SkillResult",
     "CleanupResult",
-    "CIRunScope",
     "CloneSuccessResult",
     "CloneGateUncommitted",
     "CloneGateUnpublished",
@@ -144,77 +140,10 @@ class FailureRecord:
 
 
 @dataclass(frozen=True)
-class SessionTelemetry:
-    """Typed bundle of all per-session telemetry fields passed to flush_session_log.
-
-    All fields are required — constructing without any field is a TypeError,
-    making omissions visible at construction time rather than silently defaulting
-    to None and skipping the corresponding write gate inside flush_session_log.
-    """
-
-    token_usage: dict[str, Any] | None
-    timing_seconds: float | None
-    audit_record: dict[str, Any] | None
-    github_api_usage: dict[str, Any] | None
-    github_api_requests: int
-    loc_insertions: int
-    loc_deletions: int
-
-    @classmethod
-    def empty(cls) -> SessionTelemetry:
-        """Zero-value sentinel for error paths where no telemetry is available."""
-        return cls(
-            token_usage=None,
-            timing_seconds=None,
-            audit_record=None,
-            github_api_usage=None,
-            github_api_requests=0,
-            loc_insertions=0,
-            loc_deletions=0,
-        )
-
-
-@dataclass(frozen=True)
-class ProviderOutcome:
-    """Typed bundle of provider execution outcome fields.
-
-    All fields are required — constructing without any field is a TypeError,
-    making omissions visible at construction time rather than silently defaulting.
-    """
-
-    provider_used: str
-    fallback_activated: bool
-
-    @classmethod
-    def none_used(cls) -> ProviderOutcome:
-        """Sentinel for paths where no provider selection occurred."""
-        return cls(provider_used="", fallback_activated=False)
-
-
-@dataclass(frozen=True)
 class InfraOutcome:
     """Infrastructure exit classification bundle."""
 
     exit_category: str = ""
-
-
-@dataclass(frozen=True)
-class RecipeIdentity:
-    """Typed bundle of recipe identification fields for session logging.
-
-    All fields required — prevents silent empty-string drift when new recipe
-    fields are added to flush_session_log but not wired from callers.
-    """
-
-    name: str
-    content_hash: str
-    composite_hash: str
-    version: str
-
-    @classmethod
-    def empty(cls) -> RecipeIdentity:
-        """Sentinel for sessions not driven by a recipe."""
-        return cls(name="", content_hash="", composite_hash="", version="")
 
 
 @dataclass
@@ -340,26 +269,6 @@ class CleanupResult:
             "failed": [{"path": p, "error": e} for p, e in self.failed],
             "skipped": self.skipped,
         }
-
-
-@dataclass(frozen=True)
-class CIRunScope:
-    """Immutable scope parameters that uniquely identify which CI workflow runs are relevant.
-
-    Passed as a single argument through the CIWatcher protocol so that adding a new
-    scope axis requires changing only this dataclass and the API params builder —
-    not every method signature in the call chain.
-    """
-
-    workflow: str | None = None  # workflow filename, e.g. "tests.yml"
-    head_sha: str | None = None  # commit SHA to pin results to
-    event: str | None = None  # trigger event, e.g. "push", "pull_request"
-
-    def __post_init__(self) -> None:
-        if self.event is not None and self.event not in KNOWN_CI_EVENTS:
-            raise ValueError(
-                f"Invalid CI event {self.event!r}. Valid events: {sorted(KNOWN_CI_EVENTS)}"
-            )
 
 
 class CloneSuccessResult(TypedDict):

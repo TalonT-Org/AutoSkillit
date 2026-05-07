@@ -11,19 +11,17 @@ class TestServerToolTypesImport:
     def test_kitchen_status_result_importable(self):
         from autoskillit.server.tools._types import KitchenStatusResult
 
-        assert hasattr(KitchenStatusResult, "__required_keys__") or hasattr(
-            KitchenStatusResult, "__optional_keys__"
-        )
+        assert "package_version" in KitchenStatusResult.__optional_keys__
 
     def test_token_summary_result_importable(self):
         from autoskillit.server.tools._types import TokenSummaryResult
 
-        assert "model_totals" in TokenSummaryResult.__annotations__
+        assert "model_totals" in TokenSummaryResult.__optional_keys__
 
     def test_timing_summary_result_importable(self):
         from autoskillit.server.tools._types import TimingSummaryResult
 
-        assert "steps" in TimingSummaryResult.__annotations__
+        assert "steps" in TimingSummaryResult.__optional_keys__
 
     def test_run_skill_result_importable(self):
         from autoskillit.server.tools._types import RunSkillResult

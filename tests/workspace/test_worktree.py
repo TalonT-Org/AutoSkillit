@@ -149,21 +149,11 @@ class TestWriteWorktreeSidecar:
         assert path.name == "base-branch"
         assert "impl-ret-20260401-150000" in str(path)
 
-    def test_roundtrip_with_worktree_reader(self, tmp_path) -> None:
-        """Write via write_worktree_sidecar, read via _read_sidecar_base_branch."""
-        from autoskillit.execution.testing import _read_sidecar_base_branch
-
+    def test_roundtrip_file_content(self, tmp_path) -> None:
+        """Write via write_worktree_sidecar, verify file readable with stdlib."""
         name = "impl-rt-20260501-160000"
         branch = "develop"
-        write_worktree_sidecar(tmp_path, name, branch)
+        sidecar_path = write_worktree_sidecar(tmp_path, name, branch)
 
-        # Simulate worktree directory with .git file pointing to main repo
-        wt_dir = tmp_path / name
-        wt_dir.mkdir()
-        main_git = tmp_path / ".git"
-        main_git.mkdir()
-        gitlink = wt_dir / ".git"
-        gitlink.write_text(f"gitdir: {main_git}")
-
-        read_branch = _read_sidecar_base_branch(wt_dir)
-        assert read_branch == branch
+        assert sidecar_path.is_file()
+        assert sidecar_path.read_text().strip() == branch

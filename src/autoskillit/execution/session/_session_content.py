@@ -21,10 +21,10 @@ logger = get_logger(__name__)
 _MARKDOWN_BOLD_EQUALS_RE: re.Pattern[str] = re.compile(
     r"\*\*{1,2}(\w[\w_-]*)\*{1,2}(\s*=)", re.MULTILINE
 )
-# Bold + colon: **key**: value OR **key** : value → key = value
-# Handles both nested (**:) and post-closure (** :) colon positions.
+# Bold + colon: **key:** value OR **key**: value OR **key** : value → key = value
+# Handles colon inside bold (**key:**), immediately after (**key**:), or spaced (**key** :).
 _MARKDOWN_BOLD_COLON_RE: re.Pattern[str] = re.compile(
-    r"\*\*{1,2}(\w[\w_-]*)\*+:\s+", re.MULTILINE
+    r"\*\*(\w[\w_-]*)(?:\*{0,2}:\*{0,2}|\*{1,2}\s*:)\s+", re.MULTILINE
 )
 # Italic + equals: *key* = value → key = value
 _MARKDOWN_ITALIC_EQUALS_RE: re.Pattern[str] = re.compile(

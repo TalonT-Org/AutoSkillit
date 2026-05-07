@@ -149,3 +149,5 @@ src/autoskillit/core/__init__.pyi:
   - core/
   - arch/
   - contracts/
+
+tests/**/CLAUDE.md: []

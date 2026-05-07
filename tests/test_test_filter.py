@@ -422,6 +422,19 @@ class TestBuildTestScope:
         dir_names = {p.name for p in result}
         assert dir_names == {"arch", "contracts", "infra", "docs"}
 
+    def test_scope_tests_claude_md_not_unmapped(self, tmp_path: Path) -> None:
+        tests_root = tmp_path / "tests"
+        for d in ["core", "arch", "contracts"]:
+            (tests_root / d).mkdir(parents=True, exist_ok=True)
+        manifest = {"tests/**/CLAUDE.md": []}
+        result = build_test_scope(
+            changed_files={"tests/core/CLAUDE.md"},
+            mode=FilterMode.CONSERVATIVE,
+            manifest=manifest,
+            tests_root=tests_root,
+        )
+        assert result is not FullRunReason.UNMAPPED_FILE
+
 
 # ---------------------------------------------------------------------------
 # Conservative vs Aggressive Tests (M1–M4)
@@ -819,6 +832,16 @@ class TestApplyManifest:
         manifest = {"docs/**/*.md": ["docs"]}
         result = apply_manifest({"docs/developer/SETUP.md"}, manifest)
         assert result == {"docs"}
+
+    def test_apply_manifest_tests_claude_md_empty_cascade(self) -> None:
+        manifest = {"tests/**/CLAUDE.md": []}
+        result = apply_manifest({"tests/core/CLAUDE.md"}, manifest)
+        assert result == set()
+
+    def test_apply_manifest_tests_nested_claude_md(self) -> None:
+        manifest = {"tests/**/CLAUDE.md": []}
+        result = apply_manifest({"tests/execution/CLAUDE.md"}, manifest)
+        assert result == set()
 
 
 # ---------------------------------------------------------------------------

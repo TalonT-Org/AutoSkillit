@@ -937,6 +937,13 @@ def test_fallback_groups_overflow_caps_deliverables(tmp_path: Path) -> None:
     assert "P1-A1-WP4" in output_ids
     merged_a = next(wp for wp in consolidated["work_packages"] if wp["id"] == "P1-A1-WP1")
     assert len(merged_a["deliverables"]) == DELIVERABLE_BOUNDS[1]
+    shared_wps_ordered = sorted(
+        [wp for wp in wps if "src/shared.py" in wp["files_touched"]],
+        key=lambda w: w["id"],
+    )
+    all_deliverables = [d for wp in shared_wps_ordered for d in wp["deliverables"]]
+    expected_overflow = set(all_deliverables[DELIVERABLE_BOUNDS[1] :])
+    assert expected_overflow <= set(merged_a["files_touched"])
 
 
 def test_merge_policy_covers_all_wp_list_fields() -> None:

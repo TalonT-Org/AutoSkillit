@@ -535,17 +535,17 @@ def _check_on_result_missing_tool_output_value(ctx: ValidationContext) -> list[R
 )
 def _check_skill_result_routing_gap(ctx: ValidationContext) -> list[RuleFinding]:
     findings: list[RuleFinding] = []
+    try:
+        manifest = load_bundled_manifest()
+    except (FileNotFoundError, OSError, ValueError):
+        logger.warning("failed to load bundled manifest", exc_info=True)
+        return findings
     for step_name, step in ctx.recipe.steps.items():
         if step.tool != "run_skill":
             continue
         skill_command = (step.with_args or {}).get("skill_command", "")
         skill_name = resolve_skill_name(skill_command)
         if not skill_name:
-            continue
-        try:
-            manifest = load_bundled_manifest()
-        except Exception:
-            logger.warning("failed to load bundled manifest for skill %s", skill_name)
             continue
         skill_contract = manifest.get("skills", {}).get(skill_name, {})
         outputs_with_allowed_values: dict[str, list[str]] = {}

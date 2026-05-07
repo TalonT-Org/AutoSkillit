@@ -6,7 +6,6 @@ import re
 
 from autoskillit.core import PRState, Severity
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe._rule_helpers import _is_loop_guard_step
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 
@@ -515,19 +514,18 @@ def _check_ci_timed_out_self_loop_unguarded(ctx: ValidationContext) -> list[Rule
                 timed_out_routes.append(cond.route)
         for route in timed_out_routes:
             if route == step_name:
-                if not _is_loop_guard_step(step_name, ctx):
-                    findings.append(
-                        RuleFinding(
-                            rule="ci-timed-out-self-loop-unguarded",
-                            severity=Severity.ERROR,
-                            step_name=step_name,
-                            message=(
-                                f"Step '{step_name}' has a timed_out self-loop with no "
-                                f"check_loop_iteration guard on the path. "
-                                f"Unbounded polling can result from this pattern."
-                            ),
-                        )
+                findings.append(
+                    RuleFinding(
+                        rule="ci-timed-out-self-loop-unguarded",
+                        severity=Severity.ERROR,
+                        step_name=step_name,
+                        message=(
+                            f"Step '{step_name}' has a timed_out self-loop with no "
+                            f"check_loop_iteration guard on the path. "
+                            f"Unbounded polling can result from this pattern."
+                        ),
                     )
+                )
     return findings
 
 

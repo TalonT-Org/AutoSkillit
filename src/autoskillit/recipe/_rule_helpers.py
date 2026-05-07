@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-from autoskillit.core import get_logger
 from autoskillit.recipe._analysis import ValidationContext
-
-logger = get_logger(__name__)
 
 
 def _is_loop_guard_step(step_name: str, ctx: ValidationContext) -> bool:

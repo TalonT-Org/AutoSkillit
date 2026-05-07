@@ -124,3 +124,59 @@ def test_skips_when_session_id_absent(tmp_path: Path) -> None:
     if flag_dir.exists():
         flags = list(flag_dir.glob("skill_guard_*.flag"))
         assert not flags, "No flag file should be created when session_id is absent"
+
+
+def _run_hook_with_marker(
+    *,
+    stdin_data: dict | str,
+    tmp_dir: Path,
+    provider_profile: str | None = None,
+    completion_marker: str | None = None,
+) -> tuple[str, int]:
+    """Run skill_load_post_hook.main() with AUTOSKILLIT_COMPLETION_MARKER support."""
+    from autoskillit.hooks.skill_load_post_hook import main  # noqa: PLC0415
+
+    stdin_content = stdin_data if isinstance(stdin_data, str) else json.dumps(stdin_data)
+
+    env_base = {
+        k: v
+        for k, v in os.environ.items()
+        if k not in ("AUTOSKILLIT_PROVIDER_PROFILE", "AUTOSKILLIT_COMPLETION_MARKER")
+    }
+    if provider_profile is not None:
+        env_base["AUTOSKILLIT_PROVIDER_PROFILE"] = provider_profile
+    if completion_marker is not None:
+        env_base["AUTOSKILLIT_COMPLETION_MARKER"] = completion_marker
+
+    buf = io.StringIO()
+    exit_code = 0
+    with (
+        patch.dict(os.environ, env_base, clear=True),
+        contextlib.redirect_stdout(buf),
+        unittest.mock.patch("sys.stdin", io.StringIO(stdin_content)),
+        unittest.mock.patch(
+            "autoskillit.hooks.skill_load_post_hook.Path.cwd", return_value=tmp_dir
+        ),
+    ):
+        try:
+            main()
+        except SystemExit as exc:
+            exit_code = int(exc.code) if exc.code is not None else 0
+
+    return buf.getvalue(), exit_code
+
+
+def test_emits_additional_context_when_completion_marker_set(tmp_path: Path) -> None:
+    """T1-6: When AUTOSKILLIT_COMPLETION_MARKER is set, hook emits additionalContext JSON."""
+    marker = "%%ORDER_UP::abc12345%%"
+    stdout, exit_code = _run_hook_with_marker(
+        stdin_data=_make_skill_event(),
+        tmp_dir=tmp_path,
+        provider_profile="minimax",
+        completion_marker=marker,
+    )
+    assert exit_code == 0
+    assert stdout.strip(), "Hook must emit additionalContext to stdout"
+    payload = json.loads(stdout)
+    assert "additionalContext" in payload
+    assert marker in payload["additionalContext"]

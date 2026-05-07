@@ -220,6 +220,7 @@ async def _execute_claude_headless(
     provider_name: str = "",
     provider_fallback_env: dict[str, str] | None = None,
     provider_fallback_name: str = "",
+    provider_extras: Mapping[str, str] | None = None,
 ) -> SkillResult:
     """Shared subprocess execution for headless Claude sessions.
 
@@ -439,7 +440,7 @@ async def _execute_claude_headless(
         )
 
         if (
-            skill_result.retry_reason == RetryReason.CONTRACT_RECOVERY
+            skill_result.retry_reason in (RetryReason.CONTRACT_RECOVERY, RetryReason.EARLY_STOP)
             and skill_result.needs_retry
             and skill_result.session_id
         ):
@@ -450,6 +451,8 @@ async def _execute_claude_headless(
                 completion_marker,
                 cwd,
                 runner,
+                provider_extras=provider_extras,
+                retry_reason=skill_result.retry_reason,
             )
             if nudge_success is not None:
                 skill_result = nudge_success
@@ -699,6 +702,7 @@ async def run_headless_core(
             provider_name=provider_name,
             provider_fallback_env=provider_fallback_env,
             provider_fallback_name=provider_fallback_name,
+            provider_extras=provider_extras,
         )
 
 

@@ -129,7 +129,7 @@ class DefaultSkillResolver:
         global _LIST_ALL_CACHE, _LIST_ALL_CACHE_KEY
         key = (_dir_mtime(self._dir), _dir_mtime(self._extended_dir))
         if _LIST_ALL_CACHE is not None and _LIST_ALL_CACHE_KEY == key:
-            return _LIST_ALL_CACHE
+            return list(_LIST_ALL_CACHE)
         bundled = _scan_directory(SkillSource.BUNDLED, self._dir)
         extended = _scan_directory(SkillSource.BUNDLED_EXTENDED, self._extended_dir)
         combined = sorted(bundled + extended, key=lambda s: s.name)
@@ -142,7 +142,7 @@ class DefaultSkillResolver:
             )
         _LIST_ALL_CACHE = combined
         _LIST_ALL_CACHE_KEY = key
-        return combined
+        return list(combined)
 
 
 def bundled_skills_dir() -> Path:

@@ -38,7 +38,7 @@ class TestRecipeIntegrationPredicateRouting:
 
         cond3 = step.on_result.conditions[3]
         assert cond3.when == "result.failed_step == 'rebase'"
-        assert cond3.route == "assess"
+        assert cond3.route == "rebase_conflict_fix"
 
         cond4 = step.on_result.conditions[4]
         assert cond4.when == "result.error"
@@ -74,7 +74,7 @@ class TestRecipeIntegrationPredicateRouting:
 
         cond3 = step.on_result.conditions[3]
         assert cond3.when == "result.failed_step == 'rebase'"
-        assert cond3.route == "fix"
+        assert cond3.route == "rebase_conflict_fix"
 
         cond4 = step.on_result.conditions[4]
         assert cond4.when == "result.error"

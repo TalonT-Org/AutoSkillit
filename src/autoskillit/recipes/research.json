@@ -435,6 +435,14 @@
         "cwd": "${{ context.worktree_path }}",
         "step_name": "generate_report"
       },
+      "optional_context_refs": [
+        "experiment_type",
+        "methodology_tradition",
+        "verdict",
+        "disambiguation_rule_applied",
+        "tier_c_lens",
+        "classification_timestamp"
+      ],
       "capture": {
         "report_path": "${{ result.report_path }}"
       },
@@ -451,6 +459,14 @@
         "cwd": "${{ context.worktree_path }}",
         "step_name": "generate_report"
       },
+      "optional_context_refs": [
+        "experiment_type",
+        "methodology_tradition",
+        "verdict",
+        "disambiguation_rule_applied",
+        "tier_c_lens",
+        "classification_timestamp"
+      ],
       "capture": {
         "report_path": "${{ result.report_path }}"
       },
@@ -747,6 +763,14 @@
         "cwd": "${{ context.worktree_path }}",
         "step_name": "re_generate_report"
       },
+      "optional_context_refs": [
+        "experiment_type",
+        "methodology_tradition",
+        "verdict",
+        "disambiguation_rule_applied",
+        "tier_c_lens",
+        "classification_timestamp"
+      ],
       "capture": {
         "report_path": "${{ result.report_path }}"
       },

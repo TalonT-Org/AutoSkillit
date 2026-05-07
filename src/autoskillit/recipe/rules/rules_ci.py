@@ -559,7 +559,7 @@ def _check_ci_conflict_path_missing_auto_trigger(ctx: ValidationContext) -> list
         if not is_on_conflict_path:
             continue
         auto_trigger = (step.with_args or {}).get("auto_trigger", "")
-        if auto_trigger != "true":
+        if str(auto_trigger).lower() != "true":
             findings.append(
                 RuleFinding(
                     rule="ci-conflict-path-missing-auto-trigger",
@@ -578,10 +578,12 @@ def _check_ci_conflict_path_missing_auto_trigger(ctx: ValidationContext) -> list
 def _has_conflict_ancestor(
     step_name: str, conflict_steps: set[str], ctx: ValidationContext
 ) -> bool:
+    from collections import deque
+
     visited: set[str] = set()
-    queue = list(ctx.predecessors.get(step_name, set()))
+    queue = deque(ctx.predecessors.get(step_name, set()))
     while queue:
-        current = queue.pop(0)
+        current = queue.popleft()
         if current in visited:
             continue
         visited.add(current)

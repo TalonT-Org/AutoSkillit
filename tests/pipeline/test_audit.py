@@ -651,3 +651,125 @@ def test_iter_session_log_entries_order_id_filter(tmp_path):
     assert len(results) == 2
     dir_names = {p.parent.name for p in results}
     assert dir_names == {"oid-a1", "oid-a2"}
+
+
+def _write_audit_session_dispatch_id(
+    log_root: Path,
+    dir_name: str,
+    records: list,
+    dispatch_id: str = "",
+    timestamp: str = "2026-05-01T00:00:00+00:00",
+) -> None:
+    """Write audit session with dispatch_id in the index entry."""
+    from pathlib import Path as _Path
+
+    session_dir = _Path(log_root) / "sessions" / dir_name
+    session_dir.mkdir(parents=True, exist_ok=True)
+    (session_dir / "audit_log.json").write_text(json.dumps(records))
+    index_entry = {
+        "dir_name": dir_name,
+        "timestamp": timestamp,
+        "session_id": dir_name,
+        "dispatch_id": dispatch_id,
+    }
+    with (_Path(log_root) / "sessions.jsonl").open("a") as f:
+        f.write(json.dumps(index_entry) + "\n")
+
+
+def test_iter_session_log_entries_dispatch_id_filter(tmp_path):
+    """dispatch_id_filter selects only sessions with matching dispatch_id."""
+    from autoskillit.pipeline.audit import _iter_session_log_entries
+
+    _write_audit_session_dispatch_id(
+        tmp_path, "did-a1", [_valid_failure_record_dict()], dispatch_id="d-abc"
+    )
+    _write_audit_session_dispatch_id(
+        tmp_path, "did-a2", [_valid_failure_record_dict()], dispatch_id="d-abc"
+    )
+    _write_audit_session_dispatch_id(
+        tmp_path, "did-xyz", [_valid_failure_record_dict()], dispatch_id="d-xyz"
+    )
+
+    results = list(
+        _iter_session_log_entries(
+            tmp_path, since="", filename="audit_log.json", dispatch_id_filter="d-abc"
+        )
+    )
+    assert len(results) == 2
+    dir_names = {p.parent.name for p in results}
+    assert dir_names == {"did-a1", "did-a2"}
+
+
+def test_iter_session_log_entries_dispatch_id_filter_empty_passes_all(tmp_path):
+    """Empty dispatch_id_filter passes all sessions through."""
+    from autoskillit.pipeline.audit import _iter_session_log_entries
+
+    _write_audit_session_dispatch_id(
+        tmp_path, "did-a1", [_valid_failure_record_dict()], dispatch_id="d-abc"
+    )
+    _write_audit_session_dispatch_id(
+        tmp_path, "did-a2", [_valid_failure_record_dict()], dispatch_id="d-xyz"
+    )
+
+    results = list(
+        _iter_session_log_entries(
+            tmp_path, since="", filename="audit_log.json", dispatch_id_filter=""
+        )
+    )
+    assert len(results) == 2
+
+
+def test_iter_session_log_entries_dispatch_id_combined_with_order_id(tmp_path):
+    """dispatch_id_filter AND order_id_filter apply as AND logic."""
+    from pathlib import Path as _Path
+
+    from autoskillit.pipeline.audit import _iter_session_log_entries
+
+    for dir_name, dispatch_id, order_id in [
+        ("both-match", "d1", "o1"),
+        ("dispatch-only", "d1", "o2"),
+        ("order-only", "d2", "o1"),
+    ]:
+        session_dir = _Path(tmp_path) / "sessions" / dir_name
+        session_dir.mkdir(parents=True, exist_ok=True)
+        (session_dir / "audit_log.json").write_text(json.dumps([_valid_failure_record_dict()]))
+        index_entry = {
+            "dir_name": dir_name,
+            "timestamp": "2026-05-01T00:00:00+00:00",
+            "session_id": dir_name,
+            "dispatch_id": dispatch_id,
+            "order_id": order_id,
+        }
+        with (_Path(tmp_path) / "sessions.jsonl").open("a") as f:
+            f.write(json.dumps(index_entry) + "\n")
+
+    results = list(
+        _iter_session_log_entries(
+            tmp_path,
+            since="",
+            filename="audit_log.json",
+            dispatch_id_filter="d1",
+            order_id_filter="o1",
+        )
+    )
+    assert len(results) == 1
+    assert results[0].parent.name == "both-match"
+
+
+def test_audit_load_dispatch_id_filter(tmp_path):
+    """DefaultAuditLog.load_from_log_dir respects dispatch_id_filter."""
+    from autoskillit.pipeline.audit import DefaultAuditLog
+
+    _write_audit_session_dispatch_id(
+        tmp_path, "d1-a", [_valid_failure_record_dict()], dispatch_id="d1"
+    )
+    _write_audit_session_dispatch_id(
+        tmp_path, "d1-b", [_valid_failure_record_dict()], dispatch_id="d1"
+    )
+    _write_audit_session_dispatch_id(
+        tmp_path, "d2-a", [_valid_failure_record_dict()], dispatch_id="d2"
+    )
+
+    log = DefaultAuditLog()
+    n = log.load_from_log_dir(tmp_path, dispatch_id_filter="d1")
+    assert n == 2

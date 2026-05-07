@@ -43,6 +43,7 @@ class AuditLog(Protocol):
         kitchen_id_filter: str = "",
         campaign_id_filter: str = "",
         order_id_filter: str = "",
+        dispatch_id_filter: str = "",
     ) -> int: ...
 
 
@@ -80,6 +81,7 @@ class TokenLog(Protocol):
         kitchen_id_filter: str = "",
         campaign_id_filter: str = "",
         order_id_filter: str = "",
+        dispatch_id_filter: str = "",
     ) -> int: ...
 
 
@@ -104,6 +106,7 @@ class TimingLog(Protocol):
         kitchen_id_filter: str = "",
         campaign_id_filter: str = "",
         order_id_filter: str = "",
+        dispatch_id_filter: str = "",
     ) -> int: ...
 
 

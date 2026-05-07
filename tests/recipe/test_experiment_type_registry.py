@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -666,8 +667,6 @@ def test_is_silent_type_threshold_boundary() -> None:
         l1_severity={},
     )
     assert is_silent_type(base) is False  # 5 of 8
-
-    from dataclasses import replace
 
     six_s = replace(
         base,

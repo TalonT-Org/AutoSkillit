@@ -540,6 +540,8 @@ def test_flush_index_token_fields_zero_when_no_step(tmp_path):
     assert entry["step_name"] == ""
     assert entry["input_tokens"] == 0
     assert entry["output_tokens"] == 0
+    assert entry["cache_creation_input_tokens"] == 0
+    assert entry["cache_read_input_tokens"] == 0
 
 
 def test_token_usage_json_schema(tmp_path):
@@ -556,6 +558,8 @@ def test_token_usage_json_schema(tmp_path):
         timing_seconds=15.0,
         proc_snapshots=None,
         success=False,
+        dispatch_id="disp-abc",
+        campaign_id="camp-xyz",
     )
     tu = json.loads((tmp_path / "sessions" / "test-session-001" / "token_usage.json").read_text())
     assert tu["session_label"] == "plan"
@@ -566,6 +570,8 @@ def test_token_usage_json_schema(tmp_path):
     assert tu["timing_seconds"] == 15.0
     assert tu["peak_context"] == 0
     assert tu["turn_count"] == 0
+    assert tu["dispatch_id"] == "disp-abc"
+    assert tu["campaign_id"] == "camp-xyz"
 
 
 def test_token_usage_json_includes_peak_context_and_turn_count(tmp_path):

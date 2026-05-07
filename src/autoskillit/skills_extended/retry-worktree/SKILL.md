@@ -113,17 +113,16 @@ if [ -z "$BASE_BRANCH" ]; then
     # Fallback: read explicit file store written by implement-worktree-no-merge
     MAIN_GIT_DIR=$(git rev-parse --git-common-dir)
     MAIN_REPO_ROOT=$(dirname "${MAIN_GIT_DIR}")
-    STORE_FILE="${MAIN_REPO_ROOT}/{{AUTOSKILLIT_TEMP}}/worktrees/${CURRENT_BRANCH}/base-branch"
+    WORKTREE_DIR_NAME=$(basename "$(pwd)")
+    STORE_FILE="${MAIN_REPO_ROOT}/{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_DIR_NAME}/base-branch"
     BASE_BRANCH=$(cat "${STORE_FILE}" 2>/dev/null)
 fi
 
 if [ -z "$BASE_BRANCH" ]; then
-    echo "ERROR: Cannot determine base branch from git structure."
-    echo "Both the upstream tracking ref and the explicit base-branch file at"
-    echo "{{AUTOSKILLIT_TEMP}}/worktrees/${CURRENT_BRANCH}/base-branch are missing."
-    echo "Ensure the worktree was created by implement-worktree-no-merge,"
-    echo "which writes both stores at worktree creation time."
-    exit 1
+    # Last resort: project-level default from config (always available)
+    BASE_BRANCH="{{DEFAULT_BASE_BRANCH}}"
+    echo "WARNING: Could not determine base branch from git upstream or sidecar file."
+    echo "Falling back to project default: ${BASE_BRANCH}"
 fi
 ```
 

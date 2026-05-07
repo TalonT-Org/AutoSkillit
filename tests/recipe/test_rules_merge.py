@@ -268,6 +268,136 @@ def test_multiple_merge_steps_each_checked_independently() -> None:
 
 
 # ---------------------------------------------------------------------------
+# merge-fix-cycle-without-iteration-guard rule tests
+# ---------------------------------------------------------------------------
+
+
+def test_merge_fix_cycle_without_guard_fires() -> None:
+    """merge→fix→test→merge cycle without check_loop_iteration → ERROR."""
+    recipe = _make_recipe(
+        {
+            "commit_guard": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "git commit -m 'x' || true"},
+                on_success="merge",
+                on_failure="merge",
+            ),
+            "merge": RecipeStep(
+                tool="merge_worktree",
+                with_args={"worktree_path": "/tmp/wt", "base_branch": "main"},
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(route="fix", when="result.failed_step == 'rebase'"),
+                    ]
+                ),
+                on_success="done",
+                on_failure="done",
+            ),
+            "fix": RecipeStep(
+                tool="run_skill",
+                with_args={
+                    "skill_command": "/autoskillit:resolve-failures /tmp/wt",
+                    "step_name": "fix",
+                },
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(route="test", when="result.verdict == 'real_fix'"),
+                    ]
+                ),
+                on_failure="done",
+            ),
+            "test": RecipeStep(
+                tool="test_check",
+                with_args={"worktree_path": "/tmp/wt"},
+                on_success="commit_guard",
+                on_failure="fix",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "merge-fix-cycle-without-iteration-guard"]
+    assert len(flagged) == 1, f"Expected 1 ERROR, got: {flagged}"
+    assert flagged[0].severity == Severity.ERROR
+
+
+def test_merge_fix_cycle_with_guard_is_clean() -> None:
+    """merge→fix→test→check_merge_fix_loop→commit_guard→merge → no finding."""
+    recipe = _make_recipe(
+        {
+            "commit_guard": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "git commit -m 'x' || true"},
+                on_success="merge",
+                on_failure="merge",
+            ),
+            "merge": RecipeStep(
+                tool="merge_worktree",
+                with_args={"worktree_path": "/tmp/wt", "base_branch": "main"},
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(route="fix", when="result.failed_step == 'rebase'"),
+                    ]
+                ),
+                on_success="done",
+                on_failure="done",
+            ),
+            "fix": RecipeStep(
+                tool="run_skill",
+                with_args={
+                    "skill_command": "/autoskillit:resolve-failures /tmp/wt",
+                    "step_name": "fix",
+                },
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(route="test", when="result.verdict == 'real_fix'"),
+                    ]
+                ),
+                on_failure="done",
+            ),
+            "test": RecipeStep(
+                tool="test_check",
+                with_args={"worktree_path": "/tmp/wt"},
+                on_success="check_merge_fix_loop",
+                on_failure="fix",
+            ),
+            "check_merge_fix_loop": RecipeStep(
+                tool="run_python",
+                with_args={
+                    "callable": "autoskillit.smoke_utils.check_loop_iteration",
+                    "current_iteration": "${{ context.merge_fix_count }}",
+                    "max_iterations": "3",
+                },
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(
+                            route="release_issue_failure",
+                            when="${{ result.max_exceeded }} == true",
+                        ),
+                    ]
+                ),
+                on_success="commit_guard",
+                on_failure="release_issue_failure",
+            ),
+            "release_issue_failure": RecipeStep(action="stop", message="failure"),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "merge-fix-cycle-without-iteration-guard"]
+    assert flagged == [], f"Unexpected finding: {flagged}"
+
+
+@pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])
+def test_bundled_recipes_merge_fix_cycle_guarded(recipe_name: str) -> None:
+    """All bundled recipes with merge→fix cycle must have check_merge_fix_loop guard."""
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "merge-fix-cycle-without-iteration-guard"]
+    assert flagged == [], f"{recipe_name}: {flagged}"
+
+
+# ---------------------------------------------------------------------------
 # gh-pr-merge-silent-success-routing rule tests
 # ---------------------------------------------------------------------------
 

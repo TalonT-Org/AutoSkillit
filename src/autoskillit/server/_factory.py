@@ -292,7 +292,10 @@ def make_context(
     temp_dir = resolve_temp_dir(project_dir, config.workspace.temp_dir)
     temp_dir_relpath = temp_dir_display_str(config.workspace.temp_dir)
 
-    provider = SkillsDirectoryProvider(temp_dir_relpath=temp_dir_relpath)
+    provider = SkillsDirectoryProvider(
+        temp_dir_relpath=temp_dir_relpath,
+        default_base_branch=config.branching.default_base_branch,
+    )
     ephemeral_root = resolve_ephemeral_root()
     session_mgr = DefaultSessionSkillManager(provider, ephemeral_root)
 

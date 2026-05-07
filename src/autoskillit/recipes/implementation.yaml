@@ -260,8 +260,28 @@ steps:
     tool: test_check
     with:
       worktree_path: "${{ context.worktree_path }}"
-    on_success: commit_guard
+    on_success: check_merge_fix_loop
     on_failure: fix
+
+  check_merge_fix_loop:
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.check_loop_iteration"
+      current_iteration: "${{ context.merge_fix_count }}"
+      max_iterations: "3"
+    capture:
+      merge_fix_count: "${{ result.next_iteration }}"
+    on_result:
+      - when: "${{ result.max_exceeded }} == true"
+        route: release_issue_failure
+      - route: commit_guard
+    on_failure: release_issue_failure
+    optional_context_refs:
+      - merge_fix_count
+    note: >
+      Iteration guard for the merge→fix→test cycle. Caps the loop at 3
+      iterations (enough for legitimate flake recovery but not enough to
+      burn 30+ minutes on structurally unresolvable conflicts).
 
   commit_guard:
     tool: run_python

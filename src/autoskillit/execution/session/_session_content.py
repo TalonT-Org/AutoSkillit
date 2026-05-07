@@ -17,8 +17,25 @@ from autoskillit.execution.session._session_model import (
 
 logger = get_logger(__name__)
 
-# Compiled once at module level — no per-call overhead
-_MARKDOWN_TOKEN_RE: re.Pattern[str] = re.compile(r"\*{1,2}(\w[\w_-]*)\*{1,2}(\s*=)", re.MULTILINE)
+# Bold + equals: **key** = value → key = value
+_MARKDOWN_BOLD_EQUALS_RE: re.Pattern[str] = re.compile(
+    r"\*\*{1,2}(\w[\w_-]*)\*{1,2}(\s*=)", re.MULTILINE
+)
+# Bold + colon: **key:** value OR **key**: value OR **key** : value → key = value
+# Handles colon inside bold (**key:**), immediately after (**key**:), or spaced (**key** :).
+_MARKDOWN_BOLD_COLON_RE: re.Pattern[str] = re.compile(
+    r"\*\*(\w[\w_-]*)(?:\*{0,2}:\*{0,2}|\*{1,2}\s*:)\s+", re.MULTILINE
+)
+# Italic + equals: *key* = value → key = value
+_MARKDOWN_ITALIC_EQUALS_RE: re.Pattern[str] = re.compile(
+    r"(?<!\*)\*(\w[\w_-]*)\*(\s*=)", re.MULTILINE
+)
+# Italic + colon: *key*: value → key = value
+_MARKDOWN_ITALIC_COLON_RE: re.Pattern[str] = re.compile(
+    r"(?<!\*)\*(\w[\w_-]*)\*:\s+", re.MULTILINE
+)
+# Backtick: `key` = value → key = value
+_MARKDOWN_BACKTICK_RE: re.Pattern[str] = re.compile(r"`(\w[\w_-]*)`(\s*=)", re.MULTILINE)
 
 
 def _strip_markdown_from_tokens(text: str) -> str:
@@ -26,15 +43,22 @@ def _strip_markdown_from_tokens(text: str) -> str:
 
     Transforms model output like:
         **plan_path** = /abs/path/plan.md
+        **Plan_Path:** /abs/path/plan.md
+        `plan_path` = /abs/path/plan.md
     into the canonical form:
         plan_path = /abs/path/plan.md
 
     Applied before regex pattern matching to make adjudication tolerant of the
-    model's choice to visually style its output summary. Only `*word*` and
-    `**word**` patterns adjacent to `=` are normalized — decorators elsewhere
-    in the text are left unchanged.
+    model's choice to visually style its output summary. Three decorator variants
+    are handled: bold/italic with equals, bold/italic with colon, and backtick
+    wrapping. Decorators elsewhere in the text are left unchanged.
     """
-    return _MARKDOWN_TOKEN_RE.sub(r"\1\2", text)
+    text = _MARKDOWN_BOLD_EQUALS_RE.sub(lambda m: m.group(1).lower() + m.group(2), text)
+    text = _MARKDOWN_BOLD_COLON_RE.sub(lambda m: m.group(1).lower() + " = ", text)
+    text = _MARKDOWN_ITALIC_EQUALS_RE.sub(lambda m: m.group(1).lower() + m.group(2), text)
+    text = _MARKDOWN_ITALIC_COLON_RE.sub(lambda m: m.group(1).lower() + " = ", text)
+    text = _MARKDOWN_BACKTICK_RE.sub(lambda m: m.group(1).lower() + m.group(2), text)
+    return text
 
 
 def _check_expected_patterns(result: str, patterns: Sequence[str]) -> bool:

@@ -473,6 +473,10 @@ def test_timing_load_dispatch_id_filter(tmp_path):
     n = log.load_from_log_dir(tmp_path, dispatch_id_filter="d1")
     assert n == 2
 
+    log_d2 = DefaultTimingLog()
+    n_d2 = log_d2.load_from_log_dir(tmp_path, dispatch_id_filter="d2")
+    assert n_d2 == 1
+
     log2 = DefaultTimingLog()
     n2 = log2.load_from_log_dir(tmp_path, dispatch_id_filter="")
     assert n2 == 3

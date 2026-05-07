@@ -5,8 +5,12 @@ import pytest
 from autoskillit.core.types import Severity
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.validator import RuleFinding, run_semantic_rules
-from tests.recipe.conftest import NO_AUTOSKILLIT_IMPORT as _NO_AUTOSKILLIT_IMPORT
-from tests.recipe.conftest import _make_workflow
+from tests.recipe.conftest import (
+    KNOWN_PART_B_VIOLATIONS as _KNOWN_PART_B_VIOLATIONS,
+)
+from tests.recipe.conftest import (
+    _make_workflow,
+)
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -56,7 +60,7 @@ def test_bundled_workflows_pass_semantic_rules() -> None:
         errors = [
             f
             for f in findings
-            if f.severity == Severity.ERROR and f.rule != _NO_AUTOSKILLIT_IMPORT
+            if f.severity == Severity.ERROR and f.rule not in _KNOWN_PART_B_VIOLATIONS
         ]
         assert not errors, (
             f"Bundled workflow {path.name} has error-severity semantic findings: {errors}"

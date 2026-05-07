@@ -8,9 +8,14 @@ from autoskillit.core import (
     SKILL_TOOLS,
     Severity,
     get_logger,
+    resolve_skill_name,
 )
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe.contracts import _CONTEXT_REF_RE, get_tool_output_contract
+from autoskillit.recipe.contracts import (
+    _CONTEXT_REF_RE,
+    get_tool_output_contract,
+    load_bundled_manifest,
+)
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 logger = get_logger(__name__)
@@ -515,4 +520,92 @@ def _check_on_result_missing_tool_output_value(ctx: ValidationContext) -> list[R
                 ),
             )
         )
+    return findings
+
+
+@semantic_rule(
+    name="skill-result-routing-gap",
+    description=(
+        "A run_skill step that captures a skill output with declared allowed_values "
+        "must have an explicit on_result condition for every allowed value. "
+        "If the output is not captured at all and the catch-all routes to a "
+        "non-terminal step, unhandled values silently fall through to the success path."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_skill_result_routing_gap(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    try:
+        manifest = load_bundled_manifest()
+    except (FileNotFoundError, OSError, ValueError):
+        logger.warning("failed to load bundled manifest", exc_info=True)
+        return findings
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        skill_command = (step.with_args or {}).get("skill_command", "")
+        skill_name = resolve_skill_name(skill_command)
+        if not skill_name:
+            continue
+        skill_contract = manifest.get("skills", {}).get(skill_name, {})
+        outputs_with_allowed_values: dict[str, list[str]] = {}
+        for output in skill_contract.get("outputs", []):
+            if "allowed_values" in output:
+                outputs_with_allowed_values[output["name"]] = output["allowed_values"]
+        if not outputs_with_allowed_values:
+            continue
+        captured_outputs = set()
+        if step.capture:
+            for captured_var, capture_expr in step.capture.items():
+                for output_name in outputs_with_allowed_values:
+                    if f"result.{output_name}" in capture_expr:
+                        captured_outputs.add(output_name)
+        if not step.on_result or not step.on_result.conditions:
+            if captured_outputs:
+                for output_name in captured_outputs:
+                    findings.append(
+                        RuleFinding(
+                            rule="skill-result-routing-gap",
+                            severity=Severity.ERROR,
+                            step_name=step_name,
+                            message=(
+                                f"Step '{step_name}' captures '{output_name}' but has no "
+                                f"on_result conditions to route its allowed values "
+                                f"{outputs_with_allowed_values[output_name]}."
+                            ),
+                        )
+                    )
+            continue
+        conditions = step.on_result.conditions or []
+        for output_name, allowed_values in outputs_with_allowed_values.items():
+            explicitly_routed: set[str] = set()
+            catchall_route: str | None = None
+            for cond in conditions:
+                if cond.when is None:
+                    catchall_route = cond.route
+                else:
+                    for val in allowed_values:
+                        if val in cond.when:
+                            explicitly_routed.add(val)
+            unrouted = [v for v in allowed_values if v not in explicitly_routed]
+            if not unrouted:
+                continue
+            if catchall_route is None:
+                continue
+            catchall_step = ctx.recipe.steps.get(catchall_route)
+            is_terminal = catchall_step is not None and catchall_step.action == "stop"
+            if is_terminal:
+                continue
+            findings.append(
+                RuleFinding(
+                    rule="skill-result-routing-gap",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' has allowed value(s) {unrouted} of "
+                        f"'{output_name}' not explicitly routed in on_result. "
+                        f"Catch-all routes to non-terminal step '{catchall_route}'."
+                    ),
+                )
+            )
     return findings

@@ -16,6 +16,7 @@ Sub-package: rules/ (see rules/CLAUDE.md).
 | `_cmd_rpc.py` | `run_python` callables for externalized recipe cmd scripts |
 | `_recipe_ingredients.py` | `format_ingredients_table` + `LoadRecipeResult` TypedDicts |
 | `_recipe_composition.py` | `_build_active_recipe` + sub-recipe merging |
+| `_rule_helpers.py` | Shared helper utilities for recipe semantic rules |
 | `diagrams.py` | Flow diagram generation + staleness detection |
 | `_registry_utils.py` | `dir_mtime` — shared mtime helper for registry loaders |
 | `experiment_type_registry.py` | `ExperimentTypeSpec`, `load_all_experiment_types` |

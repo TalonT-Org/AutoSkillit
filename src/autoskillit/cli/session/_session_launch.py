@@ -98,10 +98,10 @@ def _run_interactive_session(
 def _write_order_entry(project_dir: Path, recipe_name: str | None) -> dict[str, str]:
     import uuid
 
+    from autoskillit.cli.session._constants import SESSION_TYPE_ORDER
     from autoskillit.core import (
         LAUNCH_ID_ENV_VAR,
         SESSION_TYPE_ENV_VAR,
-        SESSION_TYPE_ORDER,
         write_registry_entry,
     )
 

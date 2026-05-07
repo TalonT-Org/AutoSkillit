@@ -78,9 +78,10 @@ def test_private_env_vars_includes_franchise_tier_vars() -> None:
         "AUTOSKILLIT_KITCHEN_SESSION_ID",
         "AUTOSKILLIT_CAMPAIGN_STATE_PATH",
         "AUTOSKILLIT_PROJECT_DIR",
-        "AUTOSKILLIT_L3_TOOL_TAGS",
+        "AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS",
     }
     assert expected <= AUTOSKILLIT_PRIVATE_ENV_VARS
+    assert "AUTOSKILLIT_L3_TOOL_TAGS" not in AUTOSKILLIT_PRIVATE_ENV_VARS
 
 
 def test_campaign_id_env_var_and_kitchen_session_id_env_var_exported_from_core() -> None:
@@ -290,3 +291,16 @@ def test_free_range_tools_contains_expected_names():
         "disable_quota_guard",
         "reload_session",
     }
+
+
+# ---------------------------------------------------------------------------
+# T4: SESSION_TYPE_COOK/ORDER moved to cli/session/_constants.py
+# ---------------------------------------------------------------------------
+
+
+def test_session_type_cook_order_not_in_core_types() -> None:
+    """SESSION_TYPE_COOK/ORDER are CLI labels, not core type constants."""
+    from autoskillit.core.types import _type_constants
+
+    assert not hasattr(_type_constants, "SESSION_TYPE_COOK")
+    assert not hasattr(_type_constants, "SESSION_TYPE_ORDER")

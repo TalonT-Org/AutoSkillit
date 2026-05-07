@@ -9,7 +9,7 @@ from ._api import classify_dispatch_outcome, execute_dispatch
 from ._checkpoint_bridge import checkpoint_from_sidecar
 from ._liveness import is_dispatch_session_alive
 from ._prompts import _build_food_truck_prompt as _build_food_truck_prompt
-from ._prompts import _build_l3_sous_chef_block as _build_l3_sous_chef_block
+from ._prompts import _build_food_truck_sous_chef_block as _build_food_truck_sous_chef_block
 from ._semaphore import FleetSemaphore
 from .result_parser import L3ParseResult, parse_l3_result_block
 from .sidecar import (
@@ -63,7 +63,7 @@ __all__ = [
     "classify_dispatch_outcome",
     "execute_dispatch",
     "_build_food_truck_prompt",
-    "_build_l3_sous_chef_block",
+    "_build_food_truck_sous_chef_block",
     "L3ParseResult",
     "parse_l3_result_block",
     "CampaignParseResult",

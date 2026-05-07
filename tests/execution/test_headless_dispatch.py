@@ -231,7 +231,7 @@ class TestDispatchFoodTruck:
 
 
 class TestDispatchFoodTruckPackInjection:
-    """Tests that dispatch_food_truck correctly injects AUTOSKILLIT_L3_TOOL_TAGS."""
+    """Tests that dispatch_food_truck correctly injects AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS."""
 
     @pytest.mark.anyio
     async def test_requires_packs_injected_as_l3_tool_tags(self, minimal_ctx, tmp_path: Path):
@@ -265,11 +265,11 @@ class TestDispatchFoodTruckPackInjection:
         _cmd, _cwd, _timeout, kwargs = runner.call_args_list[0]
         env = kwargs.get("env")
         assert env is not None
-        assert env["AUTOSKILLIT_L3_TOOL_TAGS"] == "ci,clone,github"
+        assert env["AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS"] == "ci,clone,github"
 
     @pytest.mark.anyio
     async def test_requires_packs_empty_omits_l3_tool_tags(self, minimal_ctx, tmp_path: Path):
-        """dispatch_food_truck with empty requires_packs does not inject L3_TOOL_TAGS."""
+        """dispatch_food_truck with empty requires_packs does not inject FOOD_TRUCK_TOOL_TAGS."""
         from autoskillit.core.types import SubprocessResult, TerminationReason
         from autoskillit.execution.headless import DefaultHeadlessExecutor
         from tests.fakes import MockSubprocessRunner
@@ -299,7 +299,7 @@ class TestDispatchFoodTruckPackInjection:
         _cmd, _cwd, _timeout, kwargs = runner.call_args_list[0]
         env = kwargs.get("env")
         assert env is not None
-        assert "AUTOSKILLIT_L3_TOOL_TAGS" not in env
+        assert "AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS" not in env
 
 
 class TestDispatchFoodTruckGuards:
@@ -315,13 +315,13 @@ class TestDispatchFoodTruckGuards:
         minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
         executor = DefaultHeadlessExecutor(minimal_ctx)
 
-        with pytest.raises(ValueError, match="AUTOSKILLIT_L3_TOOL_TAGS"):
+        with pytest.raises(ValueError, match="AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS"):
             await executor.dispatch_food_truck(
                 "some prompt",
                 str(tmp_path),
                 completion_marker="DONE",
                 requires_packs=["ci"],
-                env_extras={"AUTOSKILLIT_L3_TOOL_TAGS": "ci"},
+                env_extras={"AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS": "ci"},
             )
 
     @pytest.mark.anyio

@@ -36,7 +36,7 @@ def fleet_runtime():
             **os.environ,
             "AUTOSKILLIT_SESSION_TYPE": "orchestrator",
             "AUTOSKILLIT_HEADLESS": "1",
-            "AUTOSKILLIT_L3_TOOL_TAGS": packs,
+            "AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS": packs,
         }
 
         transport = StdioTransport(

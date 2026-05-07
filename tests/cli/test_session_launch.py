@@ -159,6 +159,13 @@ def test_run_interactive_session_suppresses_system_prompt_on_bare_resume(
     assert ClaudeFlags.APPEND_SYSTEM_PROMPT not in captured["cmd"]
 
 
+def test_session_type_cook_order_in_cli_session() -> None:
+    from autoskillit.cli.session._constants import SESSION_TYPE_COOK, SESSION_TYPE_ORDER
+
+    assert SESSION_TYPE_COOK == "cook"
+    assert SESSION_TYPE_ORDER == "order"
+
+
 def test_run_interactive_session_appends_system_prompt_on_fresh_session(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

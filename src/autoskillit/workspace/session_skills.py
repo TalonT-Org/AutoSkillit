@@ -343,6 +343,8 @@ class SkillsDirectoryProvider:
     ) -> None:
         if "\n" in temp_dir_relpath or ": " in temp_dir_relpath:
             raise ValueError(f"temp_dir_relpath is YAML-unsafe: {temp_dir_relpath!r}")
+        if "\n" in default_base_branch or ": " in default_base_branch:
+            raise ValueError(f"default_base_branch is YAML-unsafe: {default_base_branch!r}")
         self._resolver = DefaultSkillResolver()
         self._temp_dir_relpath = temp_dir_relpath
         self._default_base_branch = default_base_branch

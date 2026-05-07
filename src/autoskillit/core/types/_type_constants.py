@@ -13,6 +13,7 @@ from typing import NamedTuple
 from ._type_enums import FeatureLifecycle, FleetErrorCode
 
 __all__ = [
+    "MAX_ISSUE_BODY_CHARS",
     "AUTOSKILLIT_INSTALLED_VERSION",
     "AUTOSKILLIT_PRIVATE_ENV_VARS",
     "CONTEXT_EXHAUSTION_MARKER",
@@ -64,6 +65,10 @@ __all__ = [
 ]
 
 AUTOSKILLIT_INSTALLED_VERSION: str = version("autoskillit")
+
+# GitHub API hard limit for issue body is 65,536 chars. Using 50,000 leaves
+# headroom for GitHub's own metadata rendering and prevents search indexer lag.
+MAX_ISSUE_BODY_CHARS: int = 50_000
 
 # Session type environment variable and valid values.
 # String aliases for consumers that cannot import SessionType StrEnum

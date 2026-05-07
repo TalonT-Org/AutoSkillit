@@ -12,7 +12,7 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import atomic_write, get_logger
+from autoskillit.core import atomic_write, check_body_size, get_logger
 from autoskillit.pipeline import write_status
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
@@ -557,6 +557,7 @@ async def _file_or_update_github_issue(
                 f"{diag_section}"
             )
             new_body = existing_body + occurrence_section
+            check_body_size(new_body, context=f"occurrence update for issue #{issue_number}")
             update_result = await github_client.update_issue_body(
                 owner, repo, issue_number, new_body
             )
@@ -576,6 +577,7 @@ async def _file_or_update_github_issue(
             "\n\n" + _format_diagnostics_section(diag, condensed=False) if diag is not None else ""
         )
         issue_body = report_text + diag_section
+        check_body_size(issue_body, context="report_bug new issue")
         create_result = await github_client.create_issue(
             owner,
             repo,

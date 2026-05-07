@@ -10,6 +10,7 @@ from unittest.mock import patch
 import pytest
 
 from autoskillit.recipe._cmd_rpc import (
+    _strip_ticket_body,
     batch_create_issues,
     check_dropped_healthy_loop,
     check_eject_limit,
@@ -429,15 +430,16 @@ def test_batch_create_issues_chunks_large_batches(tmp_path):
     assert result["issue_count"] == "25"
 
 
-def test_batch_create_issues_appends_validation_summary(tmp_path):
+def test_batch_create_issues_does_not_append_validation_summary(tmp_path):
+    """Validation summary must not be appended to issue bodies."""
     va_dir = tmp_path / ".autoskillit" / "temp" / "validate-audit"
     va_dir.mkdir(parents=True)
+    # Create a realistic 14K validation summary
+    large_summary = "## Validation Summary\n" + "x" * 14_000
     (va_dir / "ticket_body_tests_1_2026-01-01_120000.md").write_text(
         "# Audit Finding\n\nSome finding."
     )
-    (va_dir / "validation_summary_tests_2026-01-01_120000.md").write_text(
-        "## Validation Summary\nAll clear."
-    )
+    (va_dir / "validation_summary_tests_2026-01-01_120000.md").write_text(large_summary)
     with (
         patch("autoskillit.recipe._cmd_rpc.subprocess.run") as mock_run,
         patch("autoskillit.recipe._cmd_rpc.time.sleep"),
@@ -450,11 +452,94 @@ def test_batch_create_issues_appends_validation_summary(tmp_path):
         if kwargs.get("input"):
             mutation_call = json.loads(kwargs["input"])
             body = mutation_call["variables"]["i0"]["body"]
-            assert "## Validation Summary" in body
-            assert "All clear." in body
+            # Summary must NOT be in the body
+            assert "## Validation Summary" not in body
+            # Body must be small (under 5K for a 1K input)
+            assert len(body) < 5000, f"body too large: {len(body)}"
             found = True
             break
     assert found, "no createIssue mutation call found in mock_run calls"
+
+
+def test_batch_create_issues_cross_ticket_body_isolation(tmp_path):
+    """None of 3 tickets sharing a source/timestamp may contain the validation summary."""
+    va_dir = tmp_path / ".autoskillit" / "temp" / "validate-audit"
+    va_dir.mkdir(parents=True)
+    # 3 tickets from same source/timestamp
+    for n in range(1, 4):
+        (va_dir / f"ticket_body_tests_{n}_2026-01-01_120000.md").write_text(
+            f"# Title {n}\n\nUnique marker: TICKET_{n}\n\nFinding content."
+        )
+    # 14K aggregate summary
+    (va_dir / "validation_summary_tests_2026-01-01_120000.md").write_text(
+        "## Validation Summary\n" + "y" * 14_000
+    )
+    with (
+        patch("autoskillit.recipe._cmd_rpc.subprocess.run") as mock_run,
+        patch("autoskillit.recipe._cmd_rpc.time.sleep"),
+    ):
+        mock_run.side_effect = _make_side_effect()
+        batch_create_issues(workspace=str(tmp_path))
+    found_bodies = []
+    for call in mock_run.call_args_list:
+        kwargs = call[1]
+        if kwargs.get("input"):
+            mutation_call = json.loads(kwargs["input"])
+            body = mutation_call["variables"]["i0"]["body"]
+            found_bodies.append(body)
+    assert len(found_bodies) == 3, f"expected 3 bodies, got {len(found_bodies)}"
+    for body in found_bodies:
+        assert "## Validation Summary" not in body
+        assert "y" * 100 not in body  # summary filler
+    # Each body must contain its own unique marker
+    for n in range(1, 4):
+        assert f"TICKET_{n}" in found_bodies[n - 1]
+
+
+def test_batch_create_issues_raises_on_oversized_body(tmp_path):
+    """batch_create_issues raises ValueError when a ticket body exceeds MAX_ISSUE_BODY_CHARS."""
+    va_dir = tmp_path / ".autoskillit" / "temp" / "validate-audit"
+    va_dir.mkdir(parents=True)
+    # Body well over 50K
+    (va_dir / "ticket_body_tests_1_2026-01-01_120000.md").write_text(
+        "# Audit Finding\n\n" + "z" * 60_000
+    )
+    with (
+        patch("autoskillit.recipe._cmd_rpc.subprocess.run") as mock_run,
+        patch("autoskillit.recipe._cmd_rpc.time.sleep"),
+    ):
+        mock_run.side_effect = _make_side_effect()
+        with pytest.raises(ValueError, match="Issue body exceeds"):
+            batch_create_issues(workspace=str(tmp_path))
+
+
+def test_strip_ticket_body_removes_metadata(tmp_path):
+    """_strip_ticket_body removes internal metadata and exception sections."""
+    raw = (
+        "validated: true\n"
+        ".autoskillit/path/to/something\n"
+        "contested_findings_001.md\n"
+        "| CONTESTED | some finding |\n"
+        "**Contested:** 2\n"
+        "**Exception warranted:** 1\n"
+        "**Exception note:** some note\n"
+        "## Findings with Exceptions\n"
+        "finding with exception\n"
+        "---\n"
+        "# Actual Finding\n\n"
+        "Valid content here.\n"
+    )
+    result = _strip_ticket_body(raw)
+    assert "validated: true" not in result
+    assert ".autoskillit/" not in result
+    assert "contested_findings_" not in result
+    assert "| CONTESTED |" not in result
+    assert "**Contested:**" not in result
+    assert "**Exception warranted:**" not in result
+    assert "**Exception note:**" not in result
+    assert "## Findings with Exceptions" not in result
+    assert "## Actual Finding" in result
+    assert "Valid content here." in result
 
 
 def test_batch_create_issues_handles_no_tickets(tmp_path):

@@ -552,6 +552,43 @@ async def test_report_bug_updates_duplicate_issue_body(tool_ctx, tmp_path):
 
 
 @pytest.mark.anyio
+async def test_report_bug_raises_on_oversized_duplicate_body(tool_ctx, tmp_path):
+    """When existing body + occurrence section exceeds MAX_ISSUE_BODY_CHARS, raise ValueError."""
+    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx.config.report_bug.github_filing = True
+    tool_ctx.config.github.default_repo = "owner/repo"
+
+    # Existing body is already near the limit
+    existing_body = "x" * 49_000
+    mock_executor = AsyncMock()
+    mock_executor.run.return_value = _skill_ok(
+        "## Report\n" + _FINGERPRINT_START + "\nfp\n" + _FINGERPRINT_END
+    )
+    tool_ctx.executor = mock_executor
+
+    mock_gh = AsyncMock()
+    mock_gh.has_token = True
+    mock_gh.search_issues.return_value = {
+        "success": True,
+        "total_count": 1,
+        "items": [
+            {
+                "number": 7,
+                "title": "fp",
+                "html_url": "https://github.com/owner/repo/issues/7",
+                "body": existing_body,
+                "state": "open",
+            }
+        ],
+    }
+    tool_ctx.github_client = mock_gh
+
+    # The occurrence section will push it over MAX_ISSUE_BODY_CHARS
+    with pytest.raises(ValueError, match="Issue body exceeds"):
+        await report_bug("brand new error text", str(tmp_path), severity="blocking")
+
+
+@pytest.mark.anyio
 async def test_report_bug_skips_comment_if_already_present(tool_ctx, tmp_path):
     """If error_context is already in the issue body, no comment is posted."""
     tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")

@@ -16,6 +16,7 @@ from ._type_constants import (
     AUTOSKILLIT_SKILL_PREFIX,
     FLEET_ERROR_CODES,
     HEADLESS_ENV_VAR,
+    MAX_ISSUE_BODY_CHARS,
     SESSION_TYPE_ENV_VAR,
     SKILL_COMMAND_PREFIX,
 )
@@ -23,6 +24,7 @@ from ._type_enums import SessionType, SkillSource
 from ._type_protocols_workspace import SkillResolver
 
 __all__ = [
+    "check_body_size",
     "extract_path_arg",
     "extract_skill_name",
     "fleet_error",
@@ -135,6 +137,15 @@ def truncate_text(text: str, max_len: int = 5000) -> str:
     if len(text) <= max_len:
         return text
     return f"...[truncated {len(text) - max_len} chars]...\n" + text[-max_len:]
+
+
+def check_body_size(body: str, *, context: str = "") -> None:
+    """Raise ValueError if body exceeds MAX_ISSUE_BODY_CHARS."""
+    if len(body) > MAX_ISSUE_BODY_CHARS:
+        raise ValueError(
+            f"Issue body exceeds {MAX_ISSUE_BODY_CHARS} chars "
+            f"({len(body)} chars){f': {context}' if context else ''}"
+        )
 
 
 def fleet_error(

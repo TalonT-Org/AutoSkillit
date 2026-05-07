@@ -229,3 +229,5 @@ from .types import resolve_target_skill as resolve_target_skill
 from .types import resume_spec_from_cli as resume_spec_from_cli
 from .types import session_type as session_type
 from .types import truncate_text as truncate_text
+from .types import check_body_size as check_body_size
+from .types import MAX_ISSUE_BODY_CHARS as MAX_ISSUE_BODY_CHARS

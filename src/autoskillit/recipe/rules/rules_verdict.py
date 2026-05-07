@@ -54,6 +54,7 @@ def _is_terminal_step(step: object) -> bool:
         getattr(step, "on_result", None) is None
         and getattr(step, "on_success", None) is None
         and getattr(step, "on_failure", None) is None
+        and getattr(step, "on_context_limit", None) is None
     )
 
 
@@ -126,8 +127,9 @@ def _check_unrouted_verdict_values(ctx: ValidationContext) -> list[RuleFinding]:
                 (arm for arm in conditions if not arm.when or arm.when.strip() == "true"),
                 None,
             )
-            catch_all_is_terminal = catch_all_arm is not None and _is_terminal_step(
-                ctx.recipe.steps.get(catch_all_arm.route)
+            catch_all_is_terminal = catch_all_arm is not None and (
+                catch_all_arm.route is None
+                or _is_terminal_step(ctx.recipe.steps.get(catch_all_arm.route))
             )
             if len(unrouted) <= 1 and catch_all_is_terminal:
                 continue

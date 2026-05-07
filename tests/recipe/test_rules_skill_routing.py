@@ -106,7 +106,7 @@ def test_skill_result_routing_gap_fires_when_catchall_goes_to_success() -> None:
                         when="${{ result.merged }} == true",
                     ),
                     StepResultCondition(
-                        route="next_pr",  # non-terminal catch-all — merged=false silently falls here
+                        route="next_pr",
                     ),
                 ]
             ),

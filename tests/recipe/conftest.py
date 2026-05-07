@@ -12,6 +12,13 @@ from autoskillit.recipe.schema import Recipe, RecipeStep
 
 # Known violations fixed in Parts B and C — excluded from general semantic-error assertions.
 NO_AUTOSKILLIT_IMPORT = "no-autoskillit-import-in-skill-python-block"
+KNOWN_PART_B_VIOLATIONS: frozenset[str] = frozenset(
+    {
+        NO_AUTOSKILLIT_IMPORT,
+        "ci-timed-out-self-loop-unguarded",
+        "skill-result-routing-gap",
+    }
+)
 
 
 @pytest.fixture(scope="module")

@@ -545,6 +545,7 @@ def _check_skill_result_routing_gap(ctx: ValidationContext) -> list[RuleFinding]
         try:
             manifest = load_bundled_manifest()
         except Exception:
+            logger.warning("failed to load bundled manifest for skill %s", skill_name)
             continue
         skill_contract = manifest.get("skills", {}).get(skill_name, {})
         outputs_with_allowed_values: dict[str, list[str]] = {}

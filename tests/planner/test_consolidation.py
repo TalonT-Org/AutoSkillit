@@ -815,7 +815,7 @@ def test_consolidate_wps_wp_index_in_work_packages(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_merge_group_overflows_deliverable_bound_raises(tmp_path: Path) -> None:
+def test_merge_group_overflows_deliverable_bound_caps_at_bound(tmp_path: Path) -> None:
     """3 WPs × 2 distinct deliverables = 6 unique; merge must not raise ValueError."""
     wps = [
         make_wp_result("P1-A1-WP1", n_deliverables=2),
@@ -838,7 +838,6 @@ def test_merge_group_overflows_deliverable_bound_raises(tmp_path: Path) -> None:
         ],
     )
 
-    # Before the fix: ValueError about deliverables count. After the fix: succeeds.
     result = consolidate_wps(refined_wps_path=str(refined_path), planner_dir=str(tmp_path))
     consolidated = json.loads((tmp_path / "consolidated_wps.json").read_text())
     assert len(consolidated["work_packages"]) == 1

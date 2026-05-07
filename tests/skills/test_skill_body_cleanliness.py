@@ -1,5 +1,7 @@
 """Assert that no SKILL.md body references %%ORDER_UP%%."""
 
+from __future__ import annotations
+
 import re
 from pathlib import Path
 
@@ -35,6 +37,26 @@ _ORCHESTRATION_REF_RE = re.compile(
 )
 _TOKEN_NAME_RE = re.compile(r"^(\w+)\s*=", re.MULTILINE)
 
+_KNOWN_VIOLATORS: frozenset[str] = frozenset(
+    {
+        "compose-pr",
+        "compose-research-pr",
+        "make-campaign",
+        "make-plan",
+        "prepare-issue",
+        "prepare-pr",
+        "prepare-research-pr",
+        "rectify",
+        "resolve-claims-review",
+        "resolve-research-review",
+        "resolve-review",
+        "review-pr",
+        "setup-environment",
+        "setup-project",
+        "stage-data",
+    }
+)
+
 
 @pytest.mark.parametrize("skill_md", _all_skill_mds(), ids=lambda p: p.parent.name)
 def test_output_section_compatible_with_orchestration_directive(skill_md: Path) -> None:
@@ -43,34 +65,31 @@ def test_output_section_compatible_with_orchestration_directive(skill_md: Path) 
     If an Output section declares structured output tokens (e.g., plan_path=), it should
     reference the ORCHESTRATION DIRECTIVE. This prevents the Output section from overriding
     the prompt-level completion marker for non-Claude providers.
-
-    Advisory test: fails on pre-existing non-compliant skills but is designed to catch
-    new regressions where a newly-added or modified skill creates an Output section
-    that competes with the prompt-level completion directive.
     """
+    skill_name = skill_md.parent.name
     text = skill_md.read_text()
     output_match = _OUTPUT_SECTION_RE.search(text)
     if not output_match:
-        return  # No Output section - nothing to check
+        return
 
     output_start = output_match.end()
     next_section = re.search(r"^##\s+\w", text[output_start:], re.MULTILINE)
     output_end = len(text) if next_section is None else output_start + next_section.start()
     output_text = text[output_start:output_end]
 
-    # Extract token names on left-hand side of = signs
     token_names = set(_TOKEN_NAME_RE.findall(output_text))
     if not token_names:
-        return  # No structured tokens in this Output section
+        return
 
-    # Check for orchestration directive reference
     has_ref = bool(_ORCHESTRATION_REF_RE.search(output_text))
-    if not has_ref:
-        import warnings
+    if has_ref:
+        return
 
-        warnings.warn(
-            f"{skill_md.parent.name}/SKILL.md ## Output section specifies contract tokens "
-            f"({sorted(token_names)}) but does not reference the ORCHESTRATION DIRECTIVE. "
-            "Consider adding: 'Include the completion marker from the ORCHESTRATION DIRECTIVE'.",
-            stacklevel=2,
-        )
+    msg = (
+        f"{skill_name}/SKILL.md ## Output section specifies contract tokens "
+        f"({sorted(token_names)}) but does not reference the ORCHESTRATION DIRECTIVE. "
+        "Add: 'Include the completion marker from the ORCHESTRATION DIRECTIVE'."
+    )
+    if skill_name in _KNOWN_VIOLATORS:
+        pytest.xfail(msg)
+    pytest.fail(msg)

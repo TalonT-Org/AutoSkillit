@@ -6,31 +6,19 @@ import json
 
 import pytest
 
-from tests.fleet._helpers import _make_recipe_info
+from tests.fleet._helpers import (
+    _make_recipe_info,
+    _no_sleep_quota_checker,
+    _noop_quota_refresher,
+    _simple_prompt_builder,
+)
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
 
-def _simple_prompt_builder(**kwargs) -> str:
-    return f"prompt-for-{kwargs.get('recipe', 'unknown')}"
-
-
-async def _no_sleep_quota_checker(config, **kwargs) -> dict:
-    return {
-        "should_sleep": False,
-        "sleep_seconds": 0,
-        "utilization": None,
-        "resets_at": None,
-        "window_name": None,
-    }
-
-
-async def _noop_quota_refresher(config, **kwargs) -> None:
-    pass
-
-
 def _read_state_file(tool_ctx) -> dict:
     state_files = list((tool_ctx.temp_dir / "dispatches").glob("*.json"))
+    assert len(state_files) == 1, f"Expected 1 state file, found {len(state_files)}: {state_files}"
     return json.loads(state_files[0].read_text())
 
 
@@ -183,7 +171,8 @@ async def test_missing_campaign_ref_returns_fleet_error(tool_ctx):
 
     result = json.loads(raw)
     assert result["success"] is False
-    assert "error" in result
+    assert result["error"] == "FLEET_UNKNOWN_INGREDIENT"
+    assert "campaign.worktree_path" in result["user_visible_message"]
 
 
 @pytest.mark.anyio
@@ -240,3 +229,4 @@ async def test_partial_capture_propagates_only_captured_keys(tool_ctx, monkeypat
     result = json.loads(raw)
     assert result["success"] is False
     assert "error" in result
+    assert "campaign.research_dir" in result["user_visible_message"]

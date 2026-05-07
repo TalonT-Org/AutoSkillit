@@ -171,7 +171,7 @@ async def test_missing_campaign_ref_returns_fleet_error(tool_ctx):
 
     result = json.loads(raw)
     assert result["success"] is False
-    assert result["error"] == "FLEET_UNKNOWN_INGREDIENT"
+    assert result["error"] == "fleet_unknown_ingredient"
     assert "campaign.worktree_path" in result["user_visible_message"]
 
 

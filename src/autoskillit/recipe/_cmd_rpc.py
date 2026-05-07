@@ -615,7 +615,10 @@ def create_audit_run_dir(temp_dir: str) -> dict[str, str]:
         raise ValueError("temp_dir must be a non-empty path")
     stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     run_dir = Path(temp_dir) / "validate-audit" / f"run-{stamp}-{secrets.token_hex(4)}"
-    run_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        run_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise ValueError(f"cannot create audit run directory {run_dir}: {exc}") from exc
     return {"audit_run_dir": str(run_dir)}
 
 
@@ -636,6 +639,10 @@ def batch_create_issues(
         raise ValueError(f"workspace must be an existing directory, got: {workspace!r}")
     if audit_run_dir:
         temp_dir = Path(audit_run_dir)
+        if not temp_dir.is_dir():
+            raise ValueError(
+                f"audit_run_dir must be an existing directory, got: {audit_run_dir!r}"
+            )
     else:
         temp_dir = Path(workspace) / ".autoskillit" / "temp" / "validate-audit"
     ticket_bodies = sorted(temp_dir.glob("ticket_body_*.md"))

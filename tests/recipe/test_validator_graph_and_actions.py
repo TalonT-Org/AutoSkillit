@@ -251,7 +251,7 @@ steps:
     )
     errors = validate_recipe_structure(recipe)
     assert any("investigation_path" in e for e in errors), (
-        "validate_recipe must report an error about undeclared context reference "
+        "validate_recipe_structure must report an error about undeclared context reference "
         "'investigation_path' when the investigate step has no capture block"
     )
 

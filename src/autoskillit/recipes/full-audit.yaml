@@ -55,6 +55,19 @@ steps:
     retries: 0
     on_exhausted: escalate_stop
 
+  init_audit_run:
+    tool: run_python
+    description: "Create a unique per-run directory for this audit pipeline"
+    with:
+      callable: "autoskillit.recipe._cmd_rpc.create_audit_run_dir"
+      temp_dir: "{{AUTOSKILLIT_TEMP}}"
+    capture:
+      audit_run_dir: "${{ result.audit_run_dir }}"
+    on_success: run_audits
+    on_failure: escalate_stop
+    retries: 0
+    on_exhausted: escalate_stop
+
   run_audits:
     tool: run_skill
     model: ""
@@ -110,7 +123,7 @@ steps:
     model: ""
     description: "Validate each audit report in parallel"
     with:
-      skill_command: "/autoskillit:validate-audit"
+      skill_command: "/autoskillit:validate-audit --audit-run-dir ${{ context.audit_run_dir }}"
       cwd: "${{ inputs.workspace }}"
       step_name: "validate_audits"
     note: >
@@ -130,9 +143,11 @@ steps:
       slot frees, dispatch the next queued validation immediately.
 
       Skip validation for any audit that failed in the audit dispatch phase.
-      Each validation writes to {{AUTOSKILLIT_TEMP}}/validate-audit/:
+      Each validation writes to ${{ context.audit_run_dir }}/:
       - validated_report_{source}_{timestamp}.md (first line: "validated: true")
       - contested_findings_{source}_{timestamp}.md (only if contested > 0)
+      - validation_summary_{source}_{timestamp}.md (always written)
+      - ticket_body_{source}_{N}_{timestamp}.md (one per ticket group)
 
       After all complete, discover the validated_report_*.md files from session
       output. Record paths for the issue creation wave.
@@ -152,6 +167,7 @@ steps:
     with:
       callable: "autoskillit.recipe._cmd_rpc.batch_create_issues"
       workspace: "${{ inputs.workspace }}"
+      audit_run_dir: "${{ context.audit_run_dir }}"
       timeout: 120
     note: >
       BATCHED ISSUE CREATION via GraphQL — The callable discovers all

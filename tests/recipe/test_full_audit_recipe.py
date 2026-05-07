@@ -48,6 +48,7 @@ def test_full_audit_recipe_step_names() -> None:
     recipe = load_recipe(RECIPE_PATH)
     expected = {
         "checkout",
+        "init_audit_run",
         "run_audits",
         "validate_audits",
         "create_issues",

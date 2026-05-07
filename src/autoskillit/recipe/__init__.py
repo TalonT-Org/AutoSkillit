@@ -96,6 +96,9 @@ from autoskillit.recipe.repository import DefaultRecipeRepository  # noqa: E402
 from autoskillit.recipe.rules import rules_actions as _rules_actions  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_blocks as _rules_blocks  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_bypass as _rules_bypass  # noqa: E402 F401
+from autoskillit.recipe.rules import (  # noqa: E402
+    rules_callable_scope as _rules_callable_scope,  # noqa: F401
+)
 from autoskillit.recipe.rules import rules_campaign as _rules_campaign  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_ci as _rules_ci  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_clone as _rules_clone  # noqa: E402 F401

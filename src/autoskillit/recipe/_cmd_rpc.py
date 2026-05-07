@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 import re
+import secrets
 import subprocess
 import time
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from autoskillit.core import atomic_write
@@ -602,15 +603,48 @@ def _ensure_and_resolve_labels(cwd: str, owner: str, repo_name: str) -> list[str
     return [repo["impl"]["id"], repo["enh"]["id"]]
 
 
+def create_audit_run_dir(temp_dir: str) -> dict[str, str]:
+    """Create a unique per-run directory for validate-audit outputs.
+
+    Follows the same pattern as ``create_run_dir`` in planner/manifests.py:
+    creates ``{temp_dir}/validate-audit/run-{stamp}-{hex}/`` so that each
+    pipeline invocation writes to an isolated subdirectory, preventing cross-run
+    file accumulation in the flat ``validate-audit/`` namespace.
+    """
+    if not temp_dir:
+        raise ValueError("temp_dir must be a non-empty path")
+    stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+    run_dir = Path(temp_dir) / "validate-audit" / f"run-{stamp}-{secrets.token_hex(4)}"
+    try:
+        run_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise ValueError(f"cannot create audit run directory {run_dir}: {exc}") from exc
+    return {"audit_run_dir": str(run_dir)}
+
+
 def batch_create_issues(
     workspace: str,
     chunk_size: str = "20",
     timeout: int = 120,
+    audit_run_dir: str = "",
 ) -> dict[str, str]:
-    """Batch-create GitHub issues from validated ticket body files via GraphQL."""
+    """Batch-create GitHub issues from validated ticket body files via GraphQL.
+
+    The ``audit_run_dir`` parameter scopes file discovery to a per-run directory
+    (created by ``create_audit_run_dir``). When provided, only ticket body files
+    within that directory are processed. When empty, falls back to the
+    workspace-derived path for direct CLI invocation compatibility.
+    """
     if not workspace or not Path(workspace).is_dir():
         raise ValueError(f"workspace must be an existing directory, got: {workspace!r}")
-    temp_dir = Path(workspace) / ".autoskillit" / "temp" / "validate-audit"
+    if audit_run_dir:
+        temp_dir = Path(audit_run_dir)
+        if not temp_dir.is_dir():
+            raise ValueError(
+                f"audit_run_dir must be an existing directory, got: {audit_run_dir!r}"
+            )
+    else:
+        temp_dir = Path(workspace) / ".autoskillit" / "temp" / "validate-audit"
     ticket_bodies = sorted(temp_dir.glob("ticket_body_*.md"))
     if not ticket_bodies:
         return {"issue_urls": "", "issue_count": "0"}

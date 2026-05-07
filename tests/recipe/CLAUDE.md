@@ -89,6 +89,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_rules_blocks.py` | Tests for blocks semantic validation rule |
 | `test_rules_bypass.py` | Tests for bypass semantic validation rule |
 | `test_rules_callable_inputs.py` | Tests for callable_inputs semantic validation rule |
+| `test_rules_callable_scope.py` | Tests for callable-requires-scoped-discovery semantic validation rule |
 | `test_rules_campaign.py` | Tests for campaign semantic validation rule |
 | `test_rules_ci.py` | Tests for CI semantic validation rule |
 | `test_rules_clone.py` | Tests for clone semantic validation rule |

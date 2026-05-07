@@ -34,6 +34,7 @@ _VALID_SUMMARY_DICT: dict = {
                 "cache_creation": 10,
             },
             "dispatched_session_id": "sess-abc",
+            "dispatch_id": "disp-001",
         },
         {
             "name": "dispatch-2",
@@ -46,6 +47,7 @@ _VALID_SUMMARY_DICT: dict = {
                 "cache_creation": 0,
             },
             "dispatched_session_id": "sess-def",
+            "dispatch_id": "disp-002",
         },
     ],
     "error_records": [
@@ -258,3 +260,35 @@ class TestCampaignSummarySchema:
         assert isinstance(result, ParseFailure)
         assert result.kind == ParseFailureKind.FIELD_ERROR
         assert "elapsed_seconds" in result.message
+
+    def test_per_dispatch_entry_dispatch_id_roundtrip(self) -> None:
+        from autoskillit.fleet import (
+            CampaignSummary,
+            parse_campaign_summary,
+            serialize_campaign_summary,
+        )
+
+        result = parse_campaign_summary(_VALID_SENTINEL_TEXT, _VALID_CAMPAIGN_ID)
+        assert isinstance(result, CampaignSummary)
+        assert result.per_dispatch[0].dispatch_id == "disp-001"
+        assert result.per_dispatch[1].dispatch_id == "disp-002"
+
+        serialized = serialize_campaign_summary(result)
+        restored = parse_campaign_summary(serialized, _VALID_CAMPAIGN_ID)
+        assert isinstance(restored, CampaignSummary)
+        assert restored.per_dispatch[0].dispatch_id == "disp-001"
+        assert restored.per_dispatch[1].dispatch_id == "disp-002"
+
+    def test_per_dispatch_entry_dispatch_id_defaults_to_empty_string(self) -> None:
+        import copy
+
+        from autoskillit.fleet import CampaignSummary, parse_campaign_summary
+
+        d = copy.deepcopy(_VALID_SUMMARY_DICT)
+        for entry in d["per_dispatch"]:
+            entry.pop("dispatch_id", None)
+        text = _make_sentinel_text(d)
+        result = parse_campaign_summary(text, _VALID_CAMPAIGN_ID)
+        assert isinstance(result, CampaignSummary)
+        assert result.per_dispatch[0].dispatch_id == ""
+        assert result.per_dispatch[1].dispatch_id == ""

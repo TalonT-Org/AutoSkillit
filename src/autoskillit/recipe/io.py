@@ -408,7 +408,7 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
                     DispatchGateType(_raw_gate) if _raw_gate else None
                 )
             except ValueError:
-                d_gate = _raw_gate  # type: ignore[assignment]  # Invalid; caught by validate_recipe
+                d_gate = _raw_gate  # type: ignore[assignment]  # Invalid; caught by validate_recipe_structure
             d_recipe = d.get("recipe", "")
             if not d_name:
                 raise ValueError(f"Campaign dispatch is missing required 'name' field: {d!r}")

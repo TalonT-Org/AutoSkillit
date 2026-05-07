@@ -164,7 +164,7 @@ def fleet_campaign(
         resume_campaign_from_state,
         write_initial_state,
     )
-    from autoskillit.recipe import find_campaign_by_name, load_recipe, validate_recipe
+    from autoskillit.recipe import find_campaign_by_name, load_recipe, validate_recipe_structure
 
     match = find_campaign_by_name(campaign_name, Path.cwd())
     if match is None:
@@ -180,7 +180,7 @@ def fleet_campaign(
         print(f"Campaign structure error: {exc}")
         sys.exit(1)
 
-    errors = validate_recipe(parsed)
+    errors = validate_recipe_structure(parsed)
     if errors:
         print(f"Campaign '{campaign_name}' failed validation:")
         for err in errors:

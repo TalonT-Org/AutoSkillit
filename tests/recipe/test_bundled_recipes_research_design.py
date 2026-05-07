@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
-from autoskillit.recipe.validator import validate_recipe
+from autoskillit.recipe.validator import validate_recipe_structure
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -17,7 +17,7 @@ class TestResearchDesignRecipeStructure:
         assert recipe is not None
 
     def test_validates_with_zero_errors(self, recipe) -> None:
-        errors = validate_recipe(recipe)
+        errors = validate_recipe_structure(recipe)
         assert errors == [], f"Validation errors: {errors}"
 
     def test_recipe_name(self, recipe) -> None:

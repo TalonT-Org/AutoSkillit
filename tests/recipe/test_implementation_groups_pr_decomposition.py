@@ -3,7 +3,7 @@
 import pytest
 
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
-from autoskillit.recipe.validator import validate_recipe
+from autoskillit.recipe.validator import validate_recipe_structure
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -54,5 +54,5 @@ def test_run_arch_lenses_still_gated_on_open_pr(recipe):
 
 
 def test_recipe_validates_clean(recipe):
-    errors = validate_recipe(recipe)
+    errors = validate_recipe_structure(recipe)
     assert not errors, f"Validation errors: {errors}"

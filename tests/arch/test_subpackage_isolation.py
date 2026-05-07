@@ -455,8 +455,8 @@ def test_recipe_subpackage_importable() -> None:
         load_recipe,
         load_recipe_card,
         run_semantic_rules,
-        validate_recipe,
         validate_recipe_cards,
+        validate_recipe_structure,
     )
 
 
@@ -466,11 +466,11 @@ def test_contracts_module_has_staleitem() -> None:
 
 
 def test_validator_module_has_validate() -> None:
-    """T3: recipe/validator.py exposes validate_recipe, run_semantic_rules, analyze_dataflow."""
+    """T3: validator.py exposes validate_recipe_structure + run_semantic_rules."""
     from autoskillit.recipe.validator import (  # noqa: F401
         analyze_dataflow,
         run_semantic_rules,
-        validate_recipe,
+        validate_recipe_structure,
     )
 
 
@@ -808,7 +808,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "pipeline": 12,
         "fleet": 15,
         "recipe/rules": 29,
-        "server/tools": 18,
+        "server/tools": 16,
         "hooks/guards": 21,
     }
     violations: list[str] = []

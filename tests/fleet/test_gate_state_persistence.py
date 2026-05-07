@@ -45,7 +45,7 @@ class TestRecordGateDispatch:
         sp = _init_state(tmp_path, "gate-check", "phase-one")
         monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(sp))
 
-        from autoskillit.server.tools.tools_fleet_dispatch import record_gate_dispatch
+        from autoskillit.server.tools.tools_execution import record_gate_dispatch
 
         raw = await record_gate_dispatch(dispatch_name="gate-check", approved=True)
         result = json.loads(raw)
@@ -64,7 +64,7 @@ class TestRecordGateDispatch:
         sp = _init_state(tmp_path, "gate-check", "phase-one")
         monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(sp))
 
-        from autoskillit.server.tools.tools_fleet_dispatch import record_gate_dispatch
+        from autoskillit.server.tools.tools_execution import record_gate_dispatch
 
         raw = await record_gate_dispatch(dispatch_name="gate-check", approved=False)
         result = json.loads(raw)
@@ -83,7 +83,7 @@ class TestRecordGateDispatch:
         sp = _init_state(tmp_path, "full-audit", "review-gate")
         monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(sp))
 
-        from autoskillit.server.tools.tools_fleet_dispatch import record_gate_dispatch
+        from autoskillit.server.tools.tools_execution import record_gate_dispatch
 
         raw = await record_gate_dispatch(dispatch_name="nonexistent", approved=True)
         result = json.loads(raw)
@@ -103,7 +103,7 @@ class TestRecordGateDispatch:
         )
         monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(sp))
 
-        from autoskillit.server.tools.tools_fleet_dispatch import record_gate_dispatch
+        from autoskillit.server.tools.tools_execution import record_gate_dispatch
 
         raw = await record_gate_dispatch(dispatch_name="gate-check", approved=True)
         result = json.loads(raw)
@@ -114,7 +114,7 @@ class TestRecordGateDispatch:
     async def test_record_gate_dispatch_requires_campaign_state_path(self, tool_ctx, monkeypatch):
         monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", raising=False)
 
-        from autoskillit.server.tools.tools_fleet_dispatch import record_gate_dispatch
+        from autoskillit.server.tools.tools_execution import record_gate_dispatch
 
         raw = await record_gate_dispatch(dispatch_name="gate-check", approved=True)
         result = json.loads(raw)
@@ -158,7 +158,7 @@ class TestDispatchFoodTruckCampaignState:
 
         monkeypatch.setattr(autoskillit.fleet, "execute_dispatch", _fake_execute)
 
-        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+        from autoskillit.server.tools.tools_execution import dispatch_food_truck
 
         await dispatch_food_truck(recipe="full-audit", task="audit", dispatch_name="full-audit")
 
@@ -193,7 +193,7 @@ class TestDispatchFoodTruckCampaignState:
 
         monkeypatch.setattr(autoskillit.fleet, "execute_dispatch", _fake_execute)
 
-        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+        from autoskillit.server.tools.tools_execution import dispatch_food_truck
 
         await dispatch_food_truck(recipe="full-audit", task="audit", dispatch_name="full-audit")
 
@@ -224,7 +224,7 @@ class TestDispatchFoodTruckCampaignState:
 
         monkeypatch.setattr(autoskillit.fleet, "execute_dispatch", _fake_execute)
 
-        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+        from autoskillit.server.tools.tools_execution import dispatch_food_truck
 
         raw = await dispatch_food_truck(
             recipe="full-audit", task="audit", dispatch_name="full-audit"
@@ -257,7 +257,7 @@ class TestDispatchFoodTruckCampaignState:
 
         monkeypatch.setattr(autoskillit.fleet, "execute_dispatch", _fake_execute)
 
-        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+        from autoskillit.server.tools.tools_execution import dispatch_food_truck
 
         await dispatch_food_truck(recipe="full-audit", task="audit", dispatch_name=None)
 

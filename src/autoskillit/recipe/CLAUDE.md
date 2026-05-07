@@ -7,7 +7,7 @@ Sub-package: rules/ (see rules/CLAUDE.md).
 
 | File | Purpose |
 |------|---------|
-| `__init__.py` | Re-exports `load_recipe`, `validate_recipe`, `analyze_dataflow` |
+| `__init__.py` | Re-exports `load_recipe`, `validate_recipe_structure`, `analyze_dataflow` |
 | `contracts.py` | Contract card generation + staleness triage |
 | `io.py` | `load_recipe`, `list_recipes`, `iter_steps_with_context` |
 | `order.py` | `BUNDLED_RECIPE_ORDER` — stable display order registry for Group 0 recipes |
@@ -24,7 +24,7 @@ Sub-package: rules/ (see rules/CLAUDE.md).
 | `methodology_venue_appendix.py` | `AlternateParentDef`, `MLSubAreaFoldingDef`, `VenueAppendixMatch`, `load_ml_sub_area_folding`, `resolve_venue_appendices` — Stage B venue-appendix resolution |
 | `methodology_tradition_router.py` | `TraditionRouterResult`, `UnionRuleDef`, `classify_methodology` — two-stage Tier-C router |
 | `methodology_disambiguation.py` | `DisambiguationRuleDef`, `CrossTraditionOverlapDef`, `DisambiguationResult`, `disambiguate`, `load_disambiguation_rules` |
-| `registry.py` | `RuleFinding`, `RuleSpec`, `semantic_rule` decorator |
+| `registry.py` | `RuleFinding`, `RuleDef`, `BlockRuleDef`, `semantic_rule` decorator |
 | `repository.py` | `RecipeRepository` implementation |
 | `_analysis.py` | `ValidationContext` + `make_validation_context` |
 | `_analysis_graph.py` | `RouteEdge` + `build_recipe_graph` + step graph primitives |
@@ -37,7 +37,7 @@ Sub-package: rules/ (see rules/CLAUDE.md).
 | `identity.py` | Recipe identity hashing — content and composite fingerprints |
 | `schema.py` | `Recipe`, `RecipeStep`, `DataFlowWarning` |
 | `staleness_cache.py` | Staleness cache for contract and diagram freshness checks |
-| `validator.py` | `validate_recipe`, `analyze_dataflow` |
+| `validator.py` | `validate_recipe_structure`, `analyze_dataflow` |
 
 ## Architecture Notes
 

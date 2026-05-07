@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
-from autoskillit.recipe.validator import validate_recipe
+from autoskillit.recipe.validator import validate_recipe_structure
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -193,5 +193,5 @@ def test_implementation_has_no_sprint_entry_step() -> None:
 def test_implementation_validates_clean_after_sprint_removal() -> None:
     """implementation.yaml must pass schema validation after sprint references removed."""
     recipe = load_recipe(RECIPE_PATH)
-    errors = validate_recipe(recipe)
+    errors = validate_recipe_structure(recipe)
     assert not errors, f"implementation.yaml failed validation after sprint removal: {errors}"

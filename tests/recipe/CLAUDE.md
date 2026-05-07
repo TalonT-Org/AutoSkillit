@@ -34,6 +34,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_contracts.py` | Contract tests for recipe schema and recipe step contracts |
 | `test_contracts_block_fingerprint.py` | Tests for block fingerprint contract |
 | `test_diagnose_ci_subtype_output.py` | Tests for CI subtype diagnosis output |
+| `test_registry_types.py` | Tests for `RuleDef` and `BlockRuleDef` frozen dataclasses |
 | `test_diagrams.py` | Tests for recipe flow diagram generation and staleness detection |
 | `test_experiment_type_registry.py` | Tests for ExperimentTypeSpec and load_all_experiment_types |
 | `test_full_audit_recipe.py` | Tests for the full audit recipe structure |

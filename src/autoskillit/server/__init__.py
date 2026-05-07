@@ -87,9 +87,6 @@ from autoskillit.server.tools import (  # noqa: E402, F401
     tools_execution as _tools_execution,
 )
 from autoskillit.server.tools import (  # noqa: E402, F401
-    tools_fleet_dispatch as _tools_fleet_dispatch,
-)
-from autoskillit.server.tools import (  # noqa: E402, F401
     tools_git as _tools_git,
 )
 from autoskillit.server.tools import (  # noqa: E402, F401

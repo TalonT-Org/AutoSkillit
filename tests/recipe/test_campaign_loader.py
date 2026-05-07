@@ -20,7 +20,7 @@ from autoskillit.recipe.io import (
 )
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import CampaignDispatch, Recipe, RecipeKind
-from autoskillit.recipe.validator import validate_recipe
+from autoskillit.recipe.validator import validate_recipe_structure
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -225,7 +225,7 @@ def test_validate_recipe_skips_step_check_for_campaign():
         dispatches=[CampaignDispatch(name="phase-one", recipe="impl", task="Do it")],
         steps={},
     )
-    errors = validate_recipe(recipe)
+    errors = validate_recipe_structure(recipe)
     assert "Recipe must have at least one step." not in errors
 
 
@@ -237,7 +237,7 @@ def test_validate_recipe_requires_dispatches_for_campaign():
         dispatches=[],
         steps={},
     )
-    errors = validate_recipe(recipe)
+    errors = validate_recipe_structure(recipe)
     assert any("dispatch" in e.lower() for e in errors)
 
 
@@ -248,7 +248,7 @@ def test_validate_recipe_standard_recipe_still_requires_steps():
         kind=RecipeKind.STANDARD,
         steps={},
     )
-    errors = validate_recipe(recipe)
+    errors = validate_recipe_structure(recipe)
     assert any("step" in e.lower() for e in errors)
 
 
@@ -275,7 +275,7 @@ def test_promote_to_main_campaign_parseable():
 def test_promote_to_main_campaign_passes_validation():
     path = pkg_root() / "recipes" / "campaigns" / "promote-to-main.yaml"
     recipe = load_recipe(path)
-    findings = validate_recipe(recipe)
+    findings = validate_recipe_structure(recipe)
     assert findings == [], f"Unexpected findings: {findings}"
 
 
@@ -317,7 +317,7 @@ def test_research_campaign_parseable():
 def test_research_campaign_passes_structural_validation():
     path = pkg_root() / "recipes" / "campaigns" / "research-campaign.yaml"
     recipe = load_recipe(path)
-    findings = validate_recipe(recipe)
+    findings = validate_recipe_structure(recipe)
     assert findings == [], f"Unexpected findings: {findings}"
 
 

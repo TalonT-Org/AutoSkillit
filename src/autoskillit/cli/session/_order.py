@@ -112,7 +112,7 @@ def order(
         find_recipe_by_name,
         list_recipes,
         load_recipe,
-        validate_recipe,
+        validate_recipe_structure,
     )
 
     if os.environ.get("CLAUDECODE"):
@@ -215,7 +215,7 @@ def order(
         print(f"Recipe structure error: {exc}")
         sys.exit(1)
 
-    errors = validate_recipe(parsed)
+    errors = validate_recipe_structure(parsed)
     if errors:
         print(f"Recipe '{recipe}' failed validation:")
         for err in errors:

@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.recipe.io import builtin_sub_recipes_dir, load_recipe
-from autoskillit.recipe.validator import validate_recipe
+from autoskillit.recipe.validator import validate_recipe_structure
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -35,7 +35,7 @@ class TestResearchDesignSubRecipe:
         assert any("visualization_plan_path" in s.capture for s in recipe.steps.values())
 
     def test_validates_cleanly(self, recipe) -> None:
-        assert validate_recipe(recipe) == []
+        assert validate_recipe_structure(recipe) == []
 
 
 class TestResearchImplementSubRecipe:
@@ -60,7 +60,7 @@ class TestResearchImplementSubRecipe:
         assert any("research_dir" in s.capture for s in recipe.steps.values())
 
     def test_validates_cleanly(self, recipe) -> None:
-        assert validate_recipe(recipe) == []
+        assert validate_recipe_structure(recipe) == []
 
 
 class TestResearchReviewSubRecipe:
@@ -84,7 +84,7 @@ class TestResearchReviewSubRecipe:
         assert any("review_verdict" in s.capture for s in recipe.steps.values())
 
     def test_validates_cleanly(self, recipe) -> None:
-        assert validate_recipe(recipe) == []
+        assert validate_recipe_structure(recipe) == []
 
 
 class TestResearchArchiveSubRecipe:
@@ -108,4 +108,4 @@ class TestResearchArchiveSubRecipe:
         assert any("archive_tag" in s.capture for s in recipe.steps.values())
 
     def test_validates_cleanly(self, recipe) -> None:
-        assert validate_recipe(recipe) == []
+        assert validate_recipe_structure(recipe) == []

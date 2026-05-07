@@ -4,7 +4,7 @@ import pytest
 
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.schema import RecipeKind
-from autoskillit.recipe.validator import validate_recipe
+from autoskillit.recipe.validator import validate_recipe_structure
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -18,7 +18,7 @@ class TestResearchYamlBackwardCompat:
         assert recipe is not None
 
     def test_research_yaml_validates_with_no_errors(self, recipe):
-        errors = validate_recipe(recipe)
+        errors = validate_recipe_structure(recipe)
         assert errors == []
 
     def test_research_yaml_kind_is_standard(self, recipe):

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.recipe.validator import validate_recipe
+from autoskillit.recipe.validator import validate_recipe_structure
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -17,7 +17,7 @@ pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 def test_implementation_recipe_is_valid(impl_recipe) -> None:
     """validate_recipe must pass with no errors after queue finale steps are added."""
-    errors = validate_recipe(impl_recipe)
+    errors = validate_recipe_structure(impl_recipe)
     assert errors == [], f"validate_recipe errors: {errors}"
 
 
@@ -194,7 +194,7 @@ def test_implementation_route_queue_mode_requires_merge_group_trigger(impl_recip
 
 def test_remediation_recipe_is_valid(remed_recipe) -> None:
     """validate_recipe must pass with no errors after queue finale steps are added."""
-    errors = validate_recipe(remed_recipe)
+    errors = validate_recipe_structure(remed_recipe)
     assert errors == [], f"validate_recipe errors: {errors}"
 
 

@@ -29,8 +29,6 @@ results are valid findings, not failures.
 
 ```
 /autoskillit:generate-report {worktree_path} {results_path} [--inconclusive]
-[--output-mode {local|pr}] [--issue-url {url}]
-[--experiment-type {type}] [--methodology-tradition {tradition}]
 ```
 
 - `{worktree_path}` — Absolute path to the worktree (required). First path-like
@@ -226,13 +224,6 @@ research/YYYY-MM-DD-{slug}/
 ```
 
 The `{slug}` is a kebab-case summary of the research topic (max 40 chars).
-
-Write a YAML frontmatter block (fenced with `---`) at the very top of report.md,
-before the title heading. Use the values from `--experiment-type` and
-`--methodology-tradition` flags. If a flag is absent or its value is the literal
-string `null`, write the key with value `null` (not omitted). Always include
-`generated_at`. If `--output-mode local` with `--issue-url`, the issue blockquote
-goes AFTER the frontmatter, before the title.
 
 The report structure:
 

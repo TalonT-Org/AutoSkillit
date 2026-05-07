@@ -49,7 +49,7 @@ class TestDispatchFoodTruckHaltEnforcement:
         monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(state_path))
         monkeypatch.setenv("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false")
 
-        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+        from autoskillit.server.tools.tools_execution import dispatch_food_truck
 
         result = json.loads(await dispatch_food_truck(recipe="r", task="t"))
         assert result["success"] is False
@@ -66,7 +66,7 @@ class TestDispatchFoodTruckHaltEnforcement:
         monkeypatch.setenv("AUTOSKILLIT_CONTINUE_ON_FAILURE", "true")
 
         self._setup_standard_dispatch(tool_ctx, monkeypatch)
-        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+        from autoskillit.server.tools.tools_execution import dispatch_food_truck
 
         result = json.loads(await dispatch_food_truck(recipe="test-recipe", task="t"))
         assert "dispatch_id" in result
@@ -77,7 +77,7 @@ class TestDispatchFoodTruckHaltEnforcement:
         monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", raising=False)
 
         self._setup_standard_dispatch(tool_ctx, monkeypatch)
-        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+        from autoskillit.server.tools.tools_execution import dispatch_food_truck
 
         result = json.loads(await dispatch_food_truck(recipe="test-recipe", task="t"))
         assert "dispatch_id" in result
@@ -93,7 +93,7 @@ class TestDispatchFoodTruckHaltEnforcement:
         monkeypatch.setenv("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false")
 
         self._setup_standard_dispatch(tool_ctx, monkeypatch)
-        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+        from autoskillit.server.tools.tools_execution import dispatch_food_truck
 
         result = json.loads(await dispatch_food_truck(recipe="test-recipe", task="t"))
         assert "dispatch_id" in result
@@ -107,7 +107,7 @@ class TestDispatchFoodTruckHaltEnforcement:
         monkeypatch.setenv("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false")
 
         self._setup_standard_dispatch(tool_ctx, monkeypatch)
-        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+        from autoskillit.server.tools.tools_execution import dispatch_food_truck
 
         result = json.loads(await dispatch_food_truck(recipe="test-recipe", task="t"))
         assert "dispatch_id" in result
@@ -149,7 +149,7 @@ class TestDispatchFoodTruckHaltEnforcement:
             AsyncMock(return_value=resumable_envelope),
         )
 
-        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+        from autoskillit.server.tools.tools_execution import dispatch_food_truck
 
         self._setup_standard_dispatch(tool_ctx, monkeypatch)
         await dispatch_food_truck(recipe="test-recipe", task="t", dispatch_name="d1")
@@ -179,7 +179,7 @@ class TestDispatchFoodTruckHaltEnforcement:
         monkeypatch.setenv("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false")
 
         self._setup_standard_dispatch(tool_ctx, monkeypatch)
-        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+        from autoskillit.server.tools.tools_execution import dispatch_food_truck
 
         result = json.loads(await dispatch_food_truck(recipe="test-recipe", task="t"))
         assert "dispatch_id" in result
@@ -213,7 +213,7 @@ class TestDispatchFoodTruckRetryOnFailure:
         monkeypatch.setenv("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false")
 
         self._setup_standard_dispatch(tool_ctx, monkeypatch)
-        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+        from autoskillit.server.tools.tools_execution import dispatch_food_truck
 
         result = json.loads(
             await dispatch_food_truck(recipe="test-recipe", task="t", dispatch_name="d1")
@@ -233,7 +233,7 @@ class TestDispatchFoodTruckRetryOnFailure:
         monkeypatch.setenv("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false")
 
         self._setup_standard_dispatch(tool_ctx, monkeypatch)
-        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+        from autoskillit.server.tools.tools_execution import dispatch_food_truck
 
         result = json.loads(
             await dispatch_food_truck(recipe="test-recipe", task="t", dispatch_name="d2")
@@ -254,7 +254,7 @@ class TestDispatchFoodTruckRetryOnFailure:
         monkeypatch.setenv("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false")
 
         self._setup_standard_dispatch(tool_ctx, monkeypatch)
-        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+        from autoskillit.server.tools.tools_execution import dispatch_food_truck
 
         result = json.loads(await dispatch_food_truck(recipe="test-recipe", task="t"))
         assert result["success"] is False

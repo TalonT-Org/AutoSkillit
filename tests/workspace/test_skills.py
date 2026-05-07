@@ -812,3 +812,4 @@ def test_resolve_instance_cache_caches_none(monkeypatch: pytest.MonkeyPatch) -> 
     result1 = resolver.resolve("nonexistent-skill-xyz")
     assert result1 is None
     assert "nonexistent-skill-xyz" in resolver._resolve_cache
+    assert resolver._resolve_cache["nonexistent-skill-xyz"] is None

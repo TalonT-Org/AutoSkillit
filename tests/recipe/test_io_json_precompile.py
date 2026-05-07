@@ -80,7 +80,6 @@ def test_load_recipe_dict_falls_back_when_json_stale(tmp_path, monkeypatch):
     _write_yaml(yaml_path, _MINIMAL_RECIPE)
     json_path = yaml_path.with_suffix(".json")
 
-    # Write JSON first, then write YAML over it to ensure YAML is newer
     _compile_json(yaml_path)
     # Manually set JSON mtime to the past so YAML is newer
     js_mtime = json_path.stat().st_mtime

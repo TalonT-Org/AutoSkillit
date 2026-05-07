@@ -57,7 +57,7 @@ def test_check_ci_timed_out_loop_exists_with_correct_pattern(recipe) -> None:
     ]
     assert max_exceeded_conds, "check_ci_timed_out_loop must route max_exceeded==true"
     assert max_exceeded_conds[0].route == "detect_ci_conflict"
-    assert step.with_args.get("callable") == "autoskillit.smoke_utils.check_review_loop"
+    assert step.with_args.get("callable") == "autoskillit.smoke_utils.check_loop_iteration"
 
 
 # T_IP_LOOP3

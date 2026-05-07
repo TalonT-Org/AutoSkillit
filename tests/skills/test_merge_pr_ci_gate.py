@@ -55,10 +55,12 @@ def test_merge_pr_skill_has_pre_flight_mergeability_check() -> None:
     content = SKILL_PATH.read_text()
     assert "mergeable" in content, "merge-pr SKILL.md must contain a pre-flight mergeability check"
     mergeable_pos = content.find("mergeable")
-    merge_cmd_pos = content.find("gh pr merge")
-    assert merge_cmd_pos != -1, "gh pr merge command must exist in SKILL.md"
+    step2_pos = content.find("### Step 2")
+    assert step2_pos != -1, "Step 2 heading must exist in SKILL.md"
+    merge_cmd_pos = content.find("gh pr merge", step2_pos)
+    assert merge_cmd_pos != -1, "gh pr merge command must exist in Step 2 of SKILL.md"
     assert mergeable_pos < merge_cmd_pos, (
-        "Pre-flight mergeability check must appear before the gh pr merge command"
+        "Pre-flight mergeability check must appear before the gh pr merge command in Step 2"
     )
 
 

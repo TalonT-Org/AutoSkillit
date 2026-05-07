@@ -463,3 +463,54 @@ def test_on_result_values_in_allowed_values_ignores_non_verdict_conditions(
         "on-result-values-in-allowed-values must not fire for catch-all 'when: true' "
         "conditions that don't reference a specific verdict value"
     )
+
+
+# ---------------------------------------------------------------------------
+# unrouted-verdict-value tightening: single-value to non-terminal catch-all
+# ---------------------------------------------------------------------------
+
+
+def test_unrouted_verdict_catches_bypass_to_non_terminal_even_when_single_value():
+    """
+    unrouted-verdict-value must fire when the single unrouted value falls to a
+    catch-all that routes to a non-terminal step — not just any catch-all.
+    Previously the rule silently allowed any single unrouted value.
+
+    review-pr has allowed_values [approved, changes_requested, needs_human].
+    Routing changes_requested and needs_human explicitly leaves approved as the
+    sole unrouted value falling to a non-terminal catch-all.
+    """
+    recipe = _make_recipe(
+        {
+            "review_pr": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/autoskillit:review-pr main main"},
+                capture={"verdict": "${{ result.verdict }}"},
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(
+                            route="resolve_review",
+                            when="${{ result.verdict }} == changes_requested",
+                        ),
+                        StepResultCondition(
+                            route="resolve_review",
+                            when="${{ result.verdict }} == needs_human",
+                        ),
+                        StepResultCondition(
+                            route="check_repo_ci_event",
+                            when="true",  # approved falls through to non-terminal
+                        ),
+                    ]
+                ),
+                on_failure="resolve_review",
+            ),
+            "resolve_review": RecipeStep(on_success="check_repo_ci_event"),
+            "check_repo_ci_event": RecipeStep(),
+        }
+    )
+    violations = run_semantic_rules(recipe)
+    rule_ids = [v.rule for v in violations]
+    assert "unrouted-verdict-value" in rule_ids, (
+        "unrouted-verdict-value must fire when the single unrouted value falls "
+        "through to a non-terminal catch-all step."
+    )

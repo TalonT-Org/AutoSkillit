@@ -622,11 +622,15 @@
         },
         {
           "when": "${{ result.verdict }} == needs_human",
-          "route": "check_repo_ci_event"
+          "route": "check_review_loop"
+        },
+        {
+          "when": "${{ result.verdict }} == approved",
+          "route": "check_review_loop"
         },
         {
           "when": "true",
-          "route": "check_repo_ci_event"
+          "route": "check_review_loop"
         }
       ],
       "on_failure": "check_repo_ci_event",
@@ -637,7 +641,7 @@
         "review_loop_count",
         "review_mode"
       ],
-      "note": "Runs after compose_pr creates the PR. Invokes the review-pr skill as a headless session to leave inline review comments on the PR. The skill finds the open PR by feature branch name (context.merge_target). Captures verdict as review_verdict and routes via on_result: changes_requested/approved_with_comments → resolve_review, needs_human → check_repo_ci_event (explicit), approved → check_repo_ci_event. On tool-level failure (MCP error, gh unavailable), routes to check_repo_ci_event (no review to resolve). Skipped when open_pr=false.\n"
+      "note": "Runs after compose_pr creates the PR. Invokes the review-pr skill as a headless session to leave inline review comments on the PR. The skill finds the open PR by feature branch name (context.merge_target). Captures verdict as review_verdict and routes via on_result: changes_requested/approved_with_comments → resolve_review; all other verdicts (including approved, needs_human) → check_review_loop (mandatory waypoint to increment review_loop_count). On tool-level failure (MCP error, gh unavailable), routes to check_repo_ci_event (no review to resolve). Skipped when open_pr=false.\n"
     },
     "resolve_review": {
       "tool": "run_skill",
@@ -694,7 +698,8 @@
         "pr_number": "${{ context.pr_number }}",
         "current_iteration": "${{ context.review_loop_count }}",
         "max_iterations": "${{ inputs.review_max_retries }}",
-        "previous_verdict": "${{ context.review_verdict }}"
+        "previous_verdict": "${{ context.review_verdict }}",
+        "local_review_rounds": "${{ inputs.local_review_rounds }}"
       },
       "capture": {
         "review_loop_count": "${{ result.next_iteration }}"
@@ -714,7 +719,7 @@
         "review_loop_count",
         "review_verdict"
       ],
-      "note": "Compound iteration + blocking guard. Routes back to review_pr only when the previous verdict was changes_requested (had_blocking=true) AND the iteration budget is not exhausted (max_exceeded=false); otherwise proceeds to check_repo_ci_event.\n"
+      "note": "Compound iteration + blocking guard. Routes back to review_pr only when had_blocking=true AND max_exceeded=false. had_blocking is true when previous_verdict=changes_requested OR (local_review_rounds > 0 AND iteration < local_review_rounds), ensuring local review rounds are fully exhausted before exiting to CI.\n"
     },
     "check_repo_ci_event": {
       "tool": "check_repo_merge_state",

@@ -44,6 +44,8 @@ steps:
         route: escalate_stop
       - when: "${{ result.verdict }} == 'created'"
         route: emit_result
+      - when: "${{ result.verdict }} == 'dry_run'"
+        route: emit_result
       - route: emit_result
     on_context_limit: escalate_stop
     on_failure: escalate_stop

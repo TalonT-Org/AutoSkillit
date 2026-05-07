@@ -44,14 +44,20 @@ class TestReviewPrRecipeIntegration:
         step = recipe.steps["review_pr"]  # type: ignore[attr-defined]
         assert step.skip_when_false == "inputs.open_pr"
 
-    def test_review_pr_routes_to_ci_watch_on_success(self, recipe: object) -> None:
-        """T_RP4: review_pr has on_result with catch-all route to check_repo_ci_event."""
+    def test_review_pr_catch_all_routes_to_check_review_loop(self, recipe: object) -> None:
+        """T_RP4: catch-all routes through check_review_loop (mandatory waypoint).
+
+        All verdicts (approved, needs_human, any future verdict) must pass through
+        check_review_loop to ensure review_loop_count is always incremented.
+        """
         step = recipe.steps["review_pr"]  # type: ignore[attr-defined]
         assert step.on_result is not None
         default_conditions = [
             c for c in step.on_result.conditions if c.when is None or c.when == "true"
         ]
-        assert any(c.route == "check_repo_ci_event" for c in default_conditions)
+        assert any(c.route == "check_review_loop" for c in default_conditions), (
+            "catch-all must route to check_review_loop, not directly to check_repo_ci_event"
+        )
 
     def test_review_pr_captures_verdict(self, recipe: object) -> None:
         """T_RP4b: review_pr captures the verdict output as review_verdict to avoid clobber."""

@@ -48,6 +48,10 @@
           "route": "emit_result"
         },
         {
+          "when": "${{ result.verdict }} == 'dry_run'",
+          "route": "emit_result"
+        },
+        {
           "route": "emit_result"
         }
       ],

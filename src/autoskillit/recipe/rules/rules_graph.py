@@ -11,6 +11,7 @@ from autoskillit.core import (
     resolve_skill_name,
 )
 from autoskillit.recipe._analysis import ValidationContext
+from autoskillit.recipe._analysis_bfs import bfs_reachable_without_barrier
 from autoskillit.recipe.contracts import (
     _CONTEXT_REF_RE,
     get_tool_output_contract,
@@ -609,3 +610,42 @@ def _check_skill_result_routing_gap(ctx: ValidationContext) -> list[RuleFinding]
                 )
             )
     return findings
+
+
+@semantic_rule(
+    name="review-loop-waypoint-guard",
+    description=(
+        "check_repo_ci_event must not be reachable from review_pr without "
+        "traversing check_review_loop. Bypassing check_review_loop prevents "
+        "review_loop_count from incrementing, causing review_mode to remain "
+        "'local' permanently and no GitHub comments to be posted on clean PRs."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_review_loop_waypoint(ctx: ValidationContext) -> list[RuleFinding]:
+    steps = ctx.recipe.steps
+    if not all(k in steps for k in ("review_pr", "check_review_loop", "check_repo_ci_event")):
+        return []
+
+    reachable = bfs_reachable_without_barrier(
+        recipe=ctx.recipe,
+        start="review_pr",
+        barrier="check_review_loop",
+    )
+
+    if "check_repo_ci_event" not in reachable:
+        return []
+
+    return [
+        RuleFinding(
+            rule="review-loop-waypoint-guard",
+            severity=Severity.ERROR,
+            step_name="review_pr",
+            message=(
+                "check_repo_ci_event is reachable from review_pr without crossing "
+                "check_review_loop. All review_pr verdicts must route through "
+                "check_review_loop so review_loop_count is always incremented and "
+                "review_mode can graduate from 'local' to 'github'."
+            ),
+        )
+    ]

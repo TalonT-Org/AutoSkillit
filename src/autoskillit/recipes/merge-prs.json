@@ -1144,6 +1144,10 @@
           "route": "ci_watch_pr"
         },
         {
+          "when": "${{ result.verdict }} == approved",
+          "route": "ci_watch_pr"
+        },
+        {
           "when": "true",
           "route": "ci_watch_pr"
         }

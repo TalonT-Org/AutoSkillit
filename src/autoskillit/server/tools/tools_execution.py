@@ -65,8 +65,8 @@ async def run_cmd(
 
     Never raises.
     """
-    if (headless := _require_orchestrator_or_higher("run_cmd")) is not None:
-        return headless
+    if (tier_gate := _require_orchestrator_or_higher("run_cmd")) is not None:
+        return tier_gate
     if (gate := _require_enabled()) is not None:
         return gate
     try:
@@ -151,8 +151,8 @@ async def run_python(
 
     Never raises.
     """
-    if (headless := _require_orchestrator_or_higher("run_python")) is not None:
-        return headless
+    if (tier_gate := _require_orchestrator_or_higher("run_python")) is not None:
+        return tier_gate
     if (gate := _require_enabled()) is not None:
         return gate
     try:
@@ -260,8 +260,8 @@ async def run_skill(
 
     Never raises.
     """
-    if (headless := _require_orchestrator_or_higher("run_skill")) is not None:
-        return headless
+    if (tier_gate := _require_orchestrator_or_higher("run_skill")) is not None:
+        return tier_gate
     if (gate := _require_enabled()) is not None:
         return gate
     if not resume_session_id and (cmd_error := _validate_skill_command(skill_command)) is not None:

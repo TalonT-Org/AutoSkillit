@@ -166,9 +166,9 @@ advisory_context:
   subject_name: <tradition.name>
   reasoning: "<tradition.display_name> traditions do not mandate statistical figures. Rigor lives in trustworthiness/transferability/dependability/confirmability."
   reference_framework: "<tradition.canonical_guideline.name>"
-  strongly_expected_figures:
-    - "<figure text from tradition.strongly_expected_figures[0].figure>"
-    - "<figure text from tradition.strongly_expected_figures[1].figure>"
+  strongly_expected_figures:  # map each entry in spec.strongly_expected_figures
+    - "<figure text from entry.figure> (<entry.source>)"
+    - "..."
 requires_decision: false
 ```
 

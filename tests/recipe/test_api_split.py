@@ -53,3 +53,29 @@ def test_recipe_init_surface_unchanged():
     )
 
     assert callable(make_validation_context)
+
+
+def test_analysis_graph_no_toplevel_igraph_import():
+    import ast
+    from pathlib import Path
+
+    import autoskillit.recipe._analysis_graph as _analysis_graph_mod
+
+    src_file = Path(_analysis_graph_mod.__file__)
+    tree = ast.parse(src_file.read_text())
+    # iter_child_nodes only visits direct children of the module node — it does not
+    # recurse into nested try/except or if-blocks. A top-level try/except ImportError
+    # wrapping igraph would be missed, but that edge case would also defeat the lazy-import
+    # purpose (module-load overhead at import time), so the coverage is intentionally scoped.
+    for node in ast.iter_child_nodes(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                assert alias.name != "igraph", (
+                    f"Top-level 'import igraph' found at line {node.lineno}; "
+                    "must be a function-level import inside build_recipe_graph()"
+                )
+        if isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] == "igraph":
+            assert False, (
+                f"Top-level 'from {node.module} import ...' found at line {node.lineno}; "
+                "igraph must only be imported inside build_recipe_graph()"
+            )

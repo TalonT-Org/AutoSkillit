@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import dataclasses
+from typing import TYPE_CHECKING
 
-import igraph
+if TYPE_CHECKING:
+    import igraph
 
 from autoskillit.core import get_logger
 from autoskillit.recipe.schema import _TERMINAL_TARGETS, Recipe, RecipeStep
@@ -70,6 +72,8 @@ def build_recipe_graph(recipe: Recipe) -> igraph.Graph:
     Returns:
         A directed ``igraph.Graph`` with vertex and edge attributes as described.
     """
+    import igraph  # noqa: PLC0415
+
     step_names = list(recipe.steps.keys())
     name_to_id: dict[str, int] = {name: i for i, name in enumerate(step_names)}
 

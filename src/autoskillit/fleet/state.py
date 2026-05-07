@@ -56,6 +56,7 @@ class DispatchRecord:
     name: str
     status: DispatchStatus = DispatchStatus.PENDING
     dispatch_id: str = ""
+    campaign_id: str = ""
     caller_session_id: str = ""
     dispatched_session_id: str = ""
     dispatched_session_log_dir: str = ""
@@ -254,6 +255,7 @@ def read_state(state_path: Path) -> CampaignState | None:
                 name=d["name"],
                 status=DispatchStatus(d.get("status", DispatchStatus.PENDING)),
                 dispatch_id=d.get("dispatch_id", ""),
+                campaign_id=d.get("campaign_id", ""),
                 caller_session_id=d.get("caller_session_id", ""),
                 dispatched_session_id=d.get("dispatched_session_id")
                 or d.get("l3_session_id")
@@ -754,3 +756,13 @@ def resume_campaign_from_state(
                 dispatched_session_id=resumable_dispatched_session_id,
                 kill_reason=resumable_kill_reason,
             )
+
+
+def normalize_dispatch_token_usage(raw: dict[str, Any]) -> dict[str, int]:
+    """Map raw Claude session token keys to canonical DispatchTokenUsage key set."""
+    return {
+        "input": int(raw.get("input_tokens", 0)),
+        "output": int(raw.get("output_tokens", 0)),
+        "cache_creation": int(raw.get("cache_creation_input_tokens", 0)),
+        "cache_read": int(raw.get("cache_read_input_tokens", 0)),
+    }

@@ -10,7 +10,9 @@ import pytest
 from autoskillit.fleet import (
     DispatchRecord,
     DispatchStatus,
+    DispatchTokenUsage,
     mark_dispatch_running,
+    normalize_dispatch_token_usage,
     read_state,
     write_initial_state,
 )
@@ -171,3 +173,101 @@ class TestDispatchRecordSchemaV2:
         assert d.dispatched_pid == 9999
         assert d.dispatched_starttime_ticks == 0
         assert d.dispatched_boot_id == ""
+
+
+class TestCampaignIdField:
+    def test_dispatch_record_has_campaign_id_default_empty(self) -> None:
+        d = DispatchRecord(name="x")
+        assert d.campaign_id == ""
+
+    def test_dispatch_record_campaign_id_in_to_dict(self) -> None:
+        d = DispatchRecord(name="x", campaign_id="cmp-42")
+        raw = d.to_dict()
+        assert raw["campaign_id"] == "cmp-42"
+
+    def test_read_state_deserializes_campaign_id(self, tmp_path: Path) -> None:
+        sp = tmp_path / "state.json"
+        write_initial_state(
+            sp, "cmp-99", "test", "/m.yaml", [DispatchRecord(name="a", campaign_id="cmp-99")]
+        )
+        state = read_state(sp)
+        assert state is not None
+        assert state.dispatches[0].campaign_id == "cmp-99"
+
+    def test_read_state_defaults_campaign_id_when_absent(self, tmp_path: Path) -> None:
+        sp = tmp_path / "state.json"
+        payload = {
+            "schema_version": 4,
+            "campaign_id": "cmp-old",
+            "campaign_name": "test",
+            "manifest_path": "/m.yaml",
+            "started_at": 1.0,
+            "dispatches": [{"name": "a", "status": "pending"}],
+        }
+        sp.write_text(json.dumps(payload))
+        state = read_state(sp)
+        assert state is not None
+        assert state.dispatches[0].campaign_id == ""
+
+    def test_campaign_id_round_trip(self, tmp_path: Path) -> None:
+        sp = tmp_path / "state.json"
+        write_initial_state(
+            sp, "cmp-rt", "test", "/m.yaml", [DispatchRecord(name="a", campaign_id="cmp-rt")]
+        )
+        state = read_state(sp)
+        assert state is not None
+        assert state.dispatches[0].campaign_id == "cmp-rt"
+
+
+class TestNormalizeDispatchTokenUsage:
+    def test_full_mapping(self) -> None:
+        result = normalize_dispatch_token_usage(
+            {
+                "input_tokens": 10,
+                "output_tokens": 5,
+                "cache_creation_input_tokens": 2,
+                "cache_read_input_tokens": 3,
+            }
+        )
+        assert result == {"input": 10, "output": 5, "cache_creation": 2, "cache_read": 3}
+
+    def test_empty_dict_returns_zeros(self) -> None:
+        result = normalize_dispatch_token_usage({})
+        assert result == {"input": 0, "output": 0, "cache_creation": 0, "cache_read": 0}
+
+    def test_string_values_coerced_to_int(self) -> None:
+        result = normalize_dispatch_token_usage(
+            {
+                "input_tokens": "7",
+                "output_tokens": "3",
+                "cache_creation_input_tokens": "1",
+                "cache_read_input_tokens": "2",
+            }
+        )
+        assert result == {"input": 7, "output": 3, "cache_creation": 1, "cache_read": 2}
+
+    def test_result_unpacks_into_dispatch_token_usage(self) -> None:
+        dtu = DispatchTokenUsage(
+            **normalize_dispatch_token_usage(
+                {
+                    "input_tokens": 10,
+                    "output_tokens": 5,
+                    "cache_creation_input_tokens": 2,
+                    "cache_read_input_tokens": 3,
+                }
+            )
+        )
+        assert dtu.input == 10
+        assert dtu.output == 5
+        assert dtu.cache_creation == 2
+        assert dtu.cache_read == 3
+
+    def test_importable_from_fleet_package(self) -> None:
+        from autoskillit.fleet import normalize_dispatch_token_usage as imported
+
+        assert callable(imported)
+
+    def test_in_fleet_all(self) -> None:
+        import autoskillit.fleet
+
+        assert "normalize_dispatch_token_usage" in autoskillit.fleet.__all__

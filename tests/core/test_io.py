@@ -119,6 +119,34 @@ class TestDumpYamlStr:
         # Block style: items on separate lines, no inline [...] for lists
         assert "[1, 2, 3]" not in result
 
+    def test_dumper_is_cdumper_or_dumper(self):
+        import yaml as _yaml
+
+        from autoskillit.core.io import _Dumper
+
+        if getattr(_yaml, "__with_libyaml__", False):
+            assert _Dumper is _yaml.CDumper
+        else:
+            assert _Dumper is _yaml.Dumper
+
+    def test_dump_yaml_str_uses_c_dumper_when_available(self, monkeypatch):
+        import yaml as _yaml
+
+        from autoskillit.core.io import dump_yaml_str
+
+        if not getattr(_yaml, "__with_libyaml__", False):
+            pytest.skip("LibYAML not available")
+        captured: dict[str, object] = {}
+        original_dump = _yaml.dump
+
+        def spy(data, **kw):
+            captured["Dumper"] = kw.get("Dumper")
+            return original_dump(data, **kw)
+
+        monkeypatch.setattr("autoskillit.core.io.yaml.dump", spy)
+        dump_yaml_str({"x": 1})
+        assert captured["Dumper"] is _yaml.CDumper
+
 
 class TestYamlConsolidationArchitecture:
     def test_only_yaml_imports_yaml_directly(self):

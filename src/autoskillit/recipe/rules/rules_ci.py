@@ -8,6 +8,9 @@ from autoskillit.core import PRState, Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
+_NO_RUNS_RE = re.compile(r"""==\s*['"]?no_runs['"]?""")
+_TIMED_OUT_RE = re.compile(r"""==\s*['"]?timed_out['"]?""")
+
 
 @semantic_rule(
     name="ci-polling-inline-shell",
@@ -154,7 +157,6 @@ def _check_ci_failure_conflict_gate(ctx: ValidationContext) -> list[RuleFinding]
     severity=Severity.ERROR,
 )
 def _check_ci_no_runs_unguarded(ctx: ValidationContext) -> list[RuleFinding]:
-    no_runs_re = re.compile(r"""==\s*['"]?no_runs['"]?""")
     findings: list[RuleFinding] = []
     for name, step in ctx.recipe.steps.items():
         if step.tool != "wait_for_ci":
@@ -162,7 +164,7 @@ def _check_ci_no_runs_unguarded(ctx: ValidationContext) -> list[RuleFinding]:
         has_no_runs_guard = False
         if step.on_result and step.on_result.conditions:
             has_explicit_no_runs = any(
-                c.when and no_runs_re.search(c.when) for c in step.on_result.conditions
+                c.when and _NO_RUNS_RE.search(c.when) for c in step.on_result.conditions
             )
             has_catch_all = any(not c.when for c in step.on_result.conditions)
             has_no_runs_guard = has_explicit_no_runs or has_catch_all
@@ -196,7 +198,6 @@ def _check_ci_no_runs_unguarded(ctx: ValidationContext) -> list[RuleFinding]:
     severity=Severity.ERROR,
 )
 def _check_ci_timed_out_unguarded(ctx: ValidationContext) -> list[RuleFinding]:
-    timed_out_re = re.compile(r"""==\s*['"]?timed_out['"]?""")
     findings: list[RuleFinding] = []
     for name, step in ctx.recipe.steps.items():
         if step.tool != "wait_for_ci":
@@ -206,7 +207,7 @@ def _check_ci_timed_out_unguarded(ctx: ValidationContext) -> list[RuleFinding]:
         has_explicit_timed_out = False
         if step.on_result and step.on_result.conditions:
             has_explicit_timed_out = any(
-                c.when and timed_out_re.search(c.when) for c in step.on_result.conditions
+                c.when and _TIMED_OUT_RE.search(c.when) for c in step.on_result.conditions
             )
         if has_explicit_timed_out:
             continue

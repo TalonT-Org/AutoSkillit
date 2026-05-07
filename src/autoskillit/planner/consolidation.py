@@ -99,6 +99,11 @@ def _merge_group(
     ]
 
     for policy in _LIST_MERGE_POLICIES:
+        if policy.overflow_target is not None:
+            assert policy.overflow_target in merged, (
+                f"overflow_target {policy.overflow_target!r} for field {policy.field!r} "
+                "must appear before it in _LIST_MERGE_POLICIES"
+            )
         seen: set[str] = set()
         raw = [
             x

@@ -388,7 +388,8 @@ class TestListMigrationsCaching:
         monkeypatch.setattr("autoskillit.migration.loader._migrations_dir", lambda: mig_dir)
         r1 = list_migrations()
         r2 = list_migrations()
-        assert r1 is r2
+        assert r1 == r2
+        assert r1 is not r2
 
     def test_mtime_change_invalidates_cache(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -400,13 +401,14 @@ class TestListMigrationsCaching:
         )
         monkeypatch.setattr("autoskillit.migration.loader._migrations_dir", lambda: mig_dir)
         r1 = list_migrations()
-        import time
+        import os
 
-        time.sleep(0.05)
         _write_migration(
             mig_dir / "002_add.yaml",
             {"from_version": "0.2.0", "to_version": "0.3.0", "changes": []},
         )
+        old_mt = mig_dir.stat().st_mtime
+        os.utime(mig_dir, (old_mt + 2, old_mt + 2))
         r2 = list_migrations()
         assert r1 is not r2
         assert len(r2) == len(r1) + 1

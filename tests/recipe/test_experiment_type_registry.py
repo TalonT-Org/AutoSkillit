@@ -602,10 +602,11 @@ _MINIMAL_EXP_TYPE_YAML_2 = {
 
 class TestExperimentTypeCaching:
     def test_bundled_result_is_cached_on_repeat_call(self) -> None:
-        """Two calls with project_dir=None return the same object."""
+        """Two calls with project_dir=None return equal defensive copies."""
         r1 = load_all_experiment_types()
         r2 = load_all_experiment_types()
-        assert r1 is r2
+        assert r1 == r2
+        assert r1 is not r2
 
     def test_mtime_change_invalidates_cache(self, tmp_path: Path) -> None:
         """Adding a file to the user dir changes dir mtime, causing cache miss."""

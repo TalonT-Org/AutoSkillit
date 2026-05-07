@@ -140,7 +140,7 @@ def load_all_experiment_types(
     )
     cached = _exp_types_cache.get(key)
     if cached is not None:
-        return cached
+        return list(cached)
 
     types = _load_types_from_dir(BUNDLED_EXPERIMENT_TYPES_DIR)
 
@@ -163,7 +163,7 @@ def load_all_experiment_types(
     fallback.sort(key=lambda s: (s.priority, s.name))
     result = non_fallback + fallback
     _exp_types_cache[key] = result
-    return result
+    return list(result)
 
 
 def get_experiment_type_by_name(

@@ -247,7 +247,7 @@ def load_all_methodology_traditions(
     )
     cached = _traditions_cache.get(key)
     if cached is not None:
-        return cached
+        return list(cached)
 
     traditions = _load_traditions_from_dir(BUNDLED_METHODOLOGY_TRADITIONS_DIR)
 
@@ -266,7 +266,7 @@ def load_all_methodology_traditions(
 
     sorted_traditions = sorted(traditions.values(), key=lambda s: (s.priority, s.name))
     _traditions_cache[key] = sorted_traditions
-    return sorted_traditions
+    return list(sorted_traditions)
 
 
 def get_methodology_tradition_by_name(

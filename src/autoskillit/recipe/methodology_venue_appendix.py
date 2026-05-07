@@ -67,7 +67,7 @@ def _has_keyword_match(text: str, keywords: tuple[str, ...] | list[str]) -> bool
 
 
 @lru_cache(maxsize=1)
-def load_ml_sub_area_folding() -> list[MLSubAreaFoldingDef]:
+def load_ml_sub_area_folding() -> tuple[MLSubAreaFoldingDef, ...]:
     yaml_path = BUNDLED_METHODOLOGY_TRADITIONS_DIR / "_ml_sub_area_folding.yaml"
     data = load_yaml(yaml_path)
     if not isinstance(data, dict):
@@ -127,7 +127,7 @@ def load_ml_sub_area_folding() -> list[MLSubAreaFoldingDef]:
                 alternate_parents=tuple(alternates),
             )
         )
-    return entries
+    return tuple(entries)
 
 
 def _resolve_conditional_parent(

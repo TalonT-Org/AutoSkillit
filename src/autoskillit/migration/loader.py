@@ -53,14 +53,14 @@ def list_migrations() -> list[MigrationNote]:
     key = (str(mig_dir), mig_dir.stat().st_mtime)
     cached = _migrations_cache.get(key)
     if cached is not None:
-        return cached
+        return list(cached)
     notes: list[MigrationNote] = []
     for f in sorted(mig_dir.iterdir()):
         if f.suffix in (".yaml", ".yml") and f.is_file():
             note = _parse_migration(f)
             notes.append(note)
     _migrations_cache[key] = notes
-    return notes
+    return list(notes)
 
 
 def applicable_migrations(

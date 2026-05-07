@@ -39,7 +39,7 @@ def test_research_sub_recipe_has_no_error_severity_findings(recipe_path: Path) -
 @pytest.mark.parametrize(
     "path",
     _RESEARCH_SUB_RECIPE_PATHS,
-    ids=[p.stem for p in _RESEARCH_SUB_RECIPE_PATHS],
+    ids=lambda p: p.stem,
 )
 def test_research_sub_recipe_has_clean_dataflow(path: Path) -> None:
     recipe = load_recipe(path)

@@ -22,7 +22,7 @@ from yaml import YAMLError as YAMLError  # explicit re-export for callers and ty
 try:
     from yaml import CSafeLoader as _Loader
 except ImportError:
-    pass
+    _Loader = yaml.SafeLoader  # type: ignore[misc,assignment]
 
 __all__ = [
     "YAMLError",

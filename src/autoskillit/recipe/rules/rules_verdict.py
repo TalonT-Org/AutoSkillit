@@ -46,6 +46,17 @@ def _is_explicit_condition(when: str | None, value: str) -> bool:
     return bool(re.search(r"\b" + re.escape(value) + r"\b", when))
 
 
+def _is_terminal_step(step: object) -> bool:
+    """Return True if the step has no outgoing routing edges (a true leaf step)."""
+    if step is None:
+        return False
+    return (
+        getattr(step, "on_result", None) is None
+        and getattr(step, "on_success", None) is None
+        and getattr(step, "on_failure", None) is None
+    )
+
+
 @semantic_rule(
     name="unrouted-verdict-value",
     description=(
@@ -107,10 +118,18 @@ def _check_unrouted_verdict_values(ctx: ValidationContext) -> list[RuleFinding]:
                 for value in allowed_values
                 if not any(_is_explicit_condition(c.when, value) for c in conditions)
             ]
-            # Allow at most one value to fall through the catch-all (the intended default).
-            # Fire only when two or more values share the catch-all — that is the
-            # silent-fallthrough bug pattern (e.g. needs_human treated identically to approved).
-            if len(unrouted) <= 1:
+            # Allow one value to fall through the catch-all ONLY when the catch-all
+            # routes to a genuine terminal step (no on_result/on_success/on_failure).
+            # When the catch-all routes to a non-terminal step, the rule fires
+            # regardless of how many values are unrouted.
+            catch_all_arm = next(
+                (arm for arm in conditions if not arm.when or arm.when.strip() == "true"),
+                None,
+            )
+            catch_all_is_terminal = catch_all_arm is not None and _is_terminal_step(
+                ctx.recipe.steps.get(catch_all_arm.route)
+            )
+            if len(unrouted) <= 1 and catch_all_is_terminal:
                 continue
             for value in unrouted:
                 findings.append(

@@ -30,7 +30,23 @@ PreToolUse guard scripts — standalone Python processes enforcing tool-call pol
 
 ## Architecture Notes
 
-Each guard is a standalone Python script executed as a subprocess (not imported as a module). Protocol: read PreToolUse JSON from stdin, write decision JSON to stdout, exit 0. Most are stdlib-only for fast startup. Guards fail-open for malformed input. `skill_command_guard.py` has split error handling: malformed JSON fails-open (approve), unexpected runtime errors fail-closed (deny).
+Each guard is a standalone Python script executed as a subprocess (not imported as a module). Protocol: read PreToolUse JSON from stdin, write decision JSON to stdout, exit 0. Most are stdlib-only for fast startup.
+
+### Fail-Mode Contract
+
+All guards fail-**open** for malformed/unparseable input (JSON decode failure = exit 0 = approve).
+This prevents a broken hook from blocking the entire tool chain.
+
+Three guards additionally fail-**closed** for valid input with unrecognized values, as a
+defense-in-depth measure against privilege escalation:
+
+| Guard | Fail-closed condition | Rationale |
+|-------|----------------------|-----------|
+| `skill_command_guard.py` | Unexpected runtime error (not JSON parse) | Unknown failure mode = deny rather than risk executing an unvalidated command |
+| `open_kitchen_guard.py` | Unrecognized `AUTOSKILLIT_SESSION_TYPE` | Unknown session type should not gain kitchen access |
+| `skill_orchestration_guard.py` | Unrecognized `AUTOSKILLIT_SESSION_TYPE` | Unknown session type should not call orchestration tools (`run_skill`, `run_cmd`, `run_python`) |
+
+**Design principle:** Garbage-in (malformed hook input) = fail-open. Unknown-tier (valid input, unrecognized value) = fail-closed.
 
 ## Hook Payload Fields for Guard Development
 

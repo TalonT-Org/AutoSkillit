@@ -949,26 +949,20 @@ def test_ci_watch_post_queue_fix_has_auto_trigger() -> None:
 
 
 def test_no_runs_re_is_module_level_constant():
-    import re
-
     import regex
 
     import autoskillit.recipe.rules.rules_ci as rules_ci
 
     assert hasattr(rules_ci, "_NO_RUNS_RE")
-    # Both re.Pattern and regex.Pattern are acceptable (regex is a drop-in replacement)
-    assert isinstance(rules_ci._NO_RUNS_RE, (re.Pattern, regex.Pattern))
+    assert isinstance(rules_ci._NO_RUNS_RE, regex.Pattern)
     assert rules_ci._NO_RUNS_RE.pattern == r"""==\s*['"]?no_runs['"]?"""
 
 
 def test_timed_out_re_is_module_level_constant():
-    import re
-
     import regex
 
     import autoskillit.recipe.rules.rules_ci as rules_ci
 
     assert hasattr(rules_ci, "_TIMED_OUT_RE")
-    # Both re.Pattern and regex.Pattern are acceptable (regex is a drop-in replacement)
-    assert isinstance(rules_ci._TIMED_OUT_RE, (re.Pattern, regex.Pattern))
+    assert isinstance(rules_ci._TIMED_OUT_RE, regex.Pattern)
     assert rules_ci._TIMED_OUT_RE.pattern == r"""==\s*['"]?timed_out['"]?"""

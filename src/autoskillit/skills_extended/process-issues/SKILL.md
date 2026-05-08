@@ -201,8 +201,7 @@ Processing X issues:
 
 3. **Promote queued → in-progress for this issue:**
    Call `claim_issue(issue_url=<url>, allow_reentry=true)`
-   (No label argument — defaults to in-progress. The registry-driven
-   swap_labels removes "queued" via IN_PROGRESS.removes_on_entry
+   (No label argument — defaults to in-progress; removes the "queued" label
    and adds "in-progress".)
 
 4. **Optionally append pickup status to issue body** (if `--status-updates` is active):

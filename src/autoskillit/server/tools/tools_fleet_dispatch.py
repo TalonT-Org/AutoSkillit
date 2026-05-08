@@ -189,10 +189,10 @@ async def dispatch_food_truck(
             caller_session_id=caller_session_id,
         )
 
-        if campaign_state_path_str:
+        if campaign_state_path_str and dispatch_name:
             _write_dispatch_to_campaign_state(
                 campaign_state_path_str,
-                dispatch_name or recipe,
+                dispatch_name,
                 result,
             )
 

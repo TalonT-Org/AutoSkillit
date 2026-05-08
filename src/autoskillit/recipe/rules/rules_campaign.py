@@ -376,11 +376,7 @@ def _check_dispatch_required_ingredient_provided(
         for auto in _AUTO_INJECTED_CAMPAIGN_INGREDIENTS:
             effective_ingredients.add(auto)
         for key, ing in target.ingredients.items():
-            if (
-                getattr(ing, "required", False)
-                and getattr(ing, "default", None) is None
-                and key not in effective_ingredients
-            ):
+            if ing.required and ing.default is None and key not in effective_ingredients:
                 findings.append(
                     RuleFinding(
                         rule="dispatch-required-ingredient-provided",

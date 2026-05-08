@@ -103,6 +103,17 @@ def test_all_predicate_steps_have_on_failure() -> None:
                 )
 
 
+def test_all_tool_steps_have_on_failure() -> None:
+    """Every tool/python step in every bundled recipe must have on_failure."""
+    for yaml_file in sorted(builtin_recipes_dir().glob("*.yaml")):
+        recipe = load_recipe(yaml_file)
+        for step_name, step in recipe.steps.items():
+            if step.tool is not None or step.python is not None:
+                assert step.on_failure is not None, (
+                    f"{recipe.name}:{step_name} is a tool/python step with no on_failure"
+                )
+
+
 def test_audit_impl_on_failure_routes_to_escalation() -> None:
     """audit_impl.on_failure must route to an escalation step in each recipe."""
     impl = load_recipe(builtin_recipes_dir() / "implementation.yaml")

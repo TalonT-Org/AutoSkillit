@@ -139,6 +139,12 @@ Summary: `needs_retry=true` + `retry_reason=resume` + `subtype=stale` → re-exe
          `needs_retry=true` + `retry_reason=stale` → decrement retries counter → `on_failure` when exhausted (no partial progress, not a context limit).
          `needs_retry=true` + `retry_reason=stale` + worktree-creating step → one-shot re-execute (bypasses retries budget; on_failure if repeated stale).
 
+**Fallback — `on_failure` is undefined (None):**
+If the routing decision is to follow `on_failure` but the step has no `on_failure`
+declared, this is a recipe authoring error. Emit the L3 result sentinel with
+`success=false` and `reason=missing_on_failure`, then halt. Do NOT improvise a
+routing target — the recipe is structurally incomplete.
+
 ---
 
 ## AUDIT-IMPL ACROSS MULTI-GROUP PIPELINES

@@ -247,6 +247,7 @@ class DispatchCompleted:
     l3_raw_body: str | None = None
     l3_parse_error: str | None = None
     resume_checkpoint: dict[str, Any] | None = None
+    stderr: str = ""
 
     def to_envelope(self) -> str:
         d: dict[str, Any] = {
@@ -259,6 +260,7 @@ class DispatchCompleted:
             "l3_payload": self.l3_payload,
             "l3_parse_source": self.l3_parse_source,
             "lifespan_started": self.lifespan_started,
+            "stderr": self.stderr,
         }
         if self.l3_raw_body is not None:
             d["l3_raw_body"] = self.l3_raw_body

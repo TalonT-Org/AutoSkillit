@@ -20,6 +20,7 @@ from autoskillit.core import (
     SkillResult,
     claude_code_log_path,
     get_logger,
+    truncate_text,
 )
 from autoskillit.fleet.result_parser import L3ParseResult, parse_l3_result_block
 from autoskillit.fleet.state import DispatchStatus
@@ -29,6 +30,8 @@ if TYPE_CHECKING:
     from autoskillit.pipeline.context import ToolContext
 
 logger = get_logger(__name__)
+
+ENVELOPE_STDERR_MAX = 2000
 
 _CAMPAIGN_REF_RE = re.compile(r"\$\{\{\s*campaign\.(\w+)\s*\}\}")
 _RESULT_REF_RE = re.compile(r"^\$\{\{\s*result\.([\w-]+)\s*\}\}$")
@@ -484,6 +487,7 @@ async def _run_dispatch(
             reason=FleetErrorCode.FLEET_L3_TIMEOUT,
             token_usage=normalize_dispatch_token_usage(skill_result.token_usage or {}),
             lifespan_started=skill_result.lifespan_started,
+            stderr=truncate_text(skill_result.stderr or "", ENVELOPE_STDERR_MAX),
         )
 
     jsonl_path = claude_code_log_path(str(tool_ctx.project_dir), skill_result.session_id or "")
@@ -547,6 +551,7 @@ async def _run_dispatch(
             l3_payload=parsed.payload,
             l3_parse_source=parsed.source,
             lifespan_started=skill_result.lifespan_started,
+            stderr=truncate_text(skill_result.stderr or "", ENVELOPE_STDERR_MAX),
         )
     elif parsed.outcome == "completed_dirty":
         return DispatchCompleted(
@@ -561,6 +566,7 @@ async def _run_dispatch(
             l3_parse_error=parsed.parse_error,
             l3_parse_source=parsed.source,
             lifespan_started=skill_result.lifespan_started,
+            stderr=truncate_text(skill_result.stderr or "", ENVELOPE_STDERR_MAX),
         )
     else:
         return DispatchCompleted(
@@ -574,4 +580,5 @@ async def _run_dispatch(
             l3_parse_source=parsed.source,
             lifespan_started=skill_result.lifespan_started,
             resume_checkpoint=dispatch_checkpoint.to_dict() if dispatch_checkpoint else None,
+            stderr=truncate_text(skill_result.stderr or "", ENVELOPE_STDERR_MAX),
         )

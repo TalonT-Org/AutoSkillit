@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.cli.doctor._doctor_fleet import _check_fleet_state_schema
-from autoskillit.fleet.state_types import _SCHEMA_VERSION
+from autoskillit.fleet import FLEET_STATE_SCHEMA_VERSION
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
@@ -21,7 +21,7 @@ class TestCheckFleetStateSchema:
         state_file.write_text(
             json.dumps(
                 {
-                    "schema_version": _SCHEMA_VERSION,
+                    "schema_version": FLEET_STATE_SCHEMA_VERSION,
                     "campaign_id": "abc",
                     "campaign_name": "test",
                     "manifest_path": "/m.yaml",

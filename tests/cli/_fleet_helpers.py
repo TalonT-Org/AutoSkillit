@@ -149,13 +149,11 @@ def _setup_campaign_with_sessions(
 def _make_state(*, statuses: list[str]) -> CampaignState:
     """Build an in-memory CampaignState for unit-testing _compute_exit_code."""
     from autoskillit.fleet import CampaignState, DispatchRecord, DispatchStatus
-    from autoskillit.fleet.state_types import _SCHEMA_VERSION
 
     dispatches = [
         DispatchRecord(name=f"d{i}", status=DispatchStatus(s)) for i, s in enumerate(statuses)
     ]
     return CampaignState(
-        schema_version=_SCHEMA_VERSION,
         campaign_id="test-id",
         campaign_name="test",
         manifest_path="manifest.yaml",
@@ -167,7 +165,6 @@ def _make_state(*, statuses: list[str]) -> CampaignState:
 def _make_state_with_tokens(*, input_total: int) -> CampaignState:
     """Build an in-memory CampaignState with known token totals."""
     from autoskillit.fleet import CampaignState, DispatchRecord, DispatchStatus
-    from autoskillit.fleet.state_types import _SCHEMA_VERSION
 
     dispatches = [
         DispatchRecord(
@@ -177,7 +174,6 @@ def _make_state_with_tokens(*, input_total: int) -> CampaignState:
         )
     ]
     return CampaignState(
-        schema_version=_SCHEMA_VERSION,
         campaign_id="test-id",
         campaign_name="test",
         manifest_path="manifest.yaml",

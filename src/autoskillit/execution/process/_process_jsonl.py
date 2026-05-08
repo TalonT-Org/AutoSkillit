@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 
 from autoskillit.core import ClaudeContentBlockType, get_logger
-from autoskillit.core._json import fast_loads as _fast_loads
+from autoskillit.core import fast_loads as _fast_loads
 
 logger = get_logger(__name__)
 

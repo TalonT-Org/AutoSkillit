@@ -32,10 +32,10 @@ import anyio
 import anyio.abc
 import psutil
 
+from autoskillit.core import fast_dumps as _fast_dumps
 from autoskillit.core import get_logger
 from autoskillit.core import read_boot_id as read_boot_id
 from autoskillit.core import read_starttime_ticks as read_starttime_ticks
-from autoskillit.core._json import fast_dumps as _fast_dumps
 
 if TYPE_CHECKING:
     from autoskillit.config import LinuxTracingConfig

@@ -1,3 +1,5 @@
+from ._json import fast_dumps as fast_dumps
+from ._json import fast_loads as fast_loads
 from ._claude_env import build_claude_env as build_claude_env
 from ._install_detect import DirectUrlInfo as DirectUrlInfo
 from ._install_detect import _is_release_tag as _is_release_tag

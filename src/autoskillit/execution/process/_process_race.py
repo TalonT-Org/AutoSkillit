@@ -11,7 +11,7 @@ import anyio
 import anyio.abc
 
 from autoskillit.core import ChannelBStatus, ChannelConfirmation, TerminationReason, get_logger
-from autoskillit.core._json import fast_loads as _fast_loads
+from autoskillit.core import fast_loads as _fast_loads
 from autoskillit.execution.process._process_monitor import _heartbeat, _session_log_monitor
 
 logger = get_logger(__name__)

@@ -18,7 +18,7 @@ from typing import Any
 import yaml
 from yaml import YAMLError as YAMLError  # explicit re-export for callers and type checkers
 
-from autoskillit.core._json import fast_dumps as _fast_dumps
+from ._json import fast_dumps as _fast_dumps
 
 try:
     from yaml import CSafeLoader as _Loader

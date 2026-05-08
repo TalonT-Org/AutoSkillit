@@ -29,7 +29,7 @@ from autoskillit.core import (
     get_logger,
     iter_merged_assistant_turns,
 )
-from autoskillit.core._json import fast_dumps as _fast_dumps
+from autoskillit.core import fast_dumps as _fast_dumps
 from autoskillit.execution.anomaly_detection import (
     detect_anomalies,
     detect_identity_drift,

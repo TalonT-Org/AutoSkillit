@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit.core import atomic_write, get_logger
-from autoskillit.core._json import fast_dumps as _fast_dumps
+from autoskillit.core import fast_dumps as _fast_dumps
 
 logger = get_logger(__name__)
 

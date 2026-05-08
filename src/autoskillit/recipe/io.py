@@ -17,7 +17,7 @@ from autoskillit.core import (
     load_yaml,
     pkg_root,
 )
-from autoskillit.core._json import fast_loads as _fast_loads
+from autoskillit.core import fast_loads as _fast_loads
 from autoskillit.recipe.order import BUNDLED_RECIPE_ORDER
 from autoskillit.recipe.schema import (
     AUTOSKILLIT_VERSION_KEY,

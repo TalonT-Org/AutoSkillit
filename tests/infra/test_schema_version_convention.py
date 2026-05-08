@@ -108,15 +108,6 @@ def _is_yaml_dump(node: ast.expr) -> bool:
 # Quota cache is NOT here because it's migrated to write_versioned_json in Phase 4.
 # Any new site that writes a dict payload SHOULD use write_versioned_json.
 _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
-    # core/io.py — write_versioned_json itself (the blessed helper) uses atomic_write+json.dumps
-    ("src/autoskillit/core/io.py", 128),
-    # session_log.py — github_api_usage dict, summary dict, meta.json sidecar,
-    # token_usage dict, step_timing dict
-    ("src/autoskillit/execution/session_log.py", 305),
-    ("src/autoskillit/execution/session_log.py", 368),
-    ("src/autoskillit/execution/session_log.py", 372),
-    ("src/autoskillit/execution/session_log.py", 403),
-    ("src/autoskillit/execution/session_log.py", 406),
     # migration/store.py — failure store dicts
     ("src/autoskillit/migration/store.py", 54),
     ("src/autoskillit/migration/store.py", 64),
@@ -124,8 +115,6 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/workspace/clone_registry.py", 89),
     # staleness_cache.py — cache dict
     ("src/autoskillit/recipe/staleness_cache.py", 67),
-    # background.py — payload dict
-    ("src/autoskillit/pipeline/background.py", 132),
     # _lifespan.py — hooks.json self-heal on startup drift (co-owned with Claude plugin system)
     ("src/autoskillit/server/_lifespan.py", 56),
     # tools_kitchen.py — hook config dict
@@ -166,8 +155,6 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/planner/manifests.py", 255),
     # _cmd_rpc.py — emit_fallback_map: BEM fallback execution map (recipe-internal)
     ("src/autoskillit/recipe/_cmd_rpc.py", 445),
-    # _session_state.py — session state persistence (ephemeral process-scoped state)
-    ("src/autoskillit/execution/session/_session_state.py", 65),
 }
 
 

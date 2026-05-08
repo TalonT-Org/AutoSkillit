@@ -151,7 +151,7 @@ class TestWriteTelemetryFiles:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.usefixtures("tool_ctx")
+@pytest.mark.usefixtures("tool_ctx_kitchen_open")
 class TestReadDb:
     """Integration tests for read_db tool with real SQLite databases."""
 

@@ -61,8 +61,8 @@ class TestLoadRecipeTools:
     """Tests for kitchen-gated load_recipe tool."""
 
     @pytest.fixture(autouse=True)
-    def _ensure_ctx(self, tool_ctx):
-        """Ensure server context is initialized (gate open by default)."""
+    def _ensure_ctx(self, tool_ctx_kitchen_open):
+        """Ensure server context is initialized with gate open."""
 
     # SS2
     @pytest.mark.anyio
@@ -195,8 +195,8 @@ class TestLoadRecipeExceptionHandling:
     """CC-1: Outer except in load_recipe must catch anticipated exceptions only."""
 
     @pytest.fixture(autouse=True)
-    def _setup_ctx(self, tool_ctx):
-        """Initialize ToolContext so load_recipe can call _get_config()."""
+    def _setup_ctx(self, tool_ctx_kitchen_open):
+        """Initialize ToolContext with gate open so load_recipe can call _get_config()."""
 
     @pytest.mark.anyio
     async def test_yaml_error_surfaces_as_suggestion(
@@ -437,8 +437,8 @@ class TestLoadRecipeReadOnly:
     """P4: load_recipe is strictly read-only — no migration, no contract card generation."""
 
     @pytest.fixture(autouse=True)
-    def _ensure_ctx(self, tool_ctx):
-        """Ensure server context is initialized (gate open by default)."""
+    def _ensure_ctx(self, tool_ctx_kitchen_open):
+        """Ensure server context is initialized with gate open."""
 
     @pytest.mark.anyio
     async def test_load_recipe_does_not_call_migration_engine(self, tmp_path, monkeypatch):
@@ -525,8 +525,8 @@ class TestLoadRecipeIngredientsOnly:
     """load_recipe(ingredients_only=True) strips content, preserves metadata."""
 
     @pytest.fixture(autouse=True)
-    def _ensure_ctx(self, tool_ctx):
-        """Ensure server context is initialized (gate open by default)."""
+    def _ensure_ctx(self, tool_ctx_kitchen_open):
+        """Ensure server context is initialized with gate open."""
 
     @pytest.mark.anyio
     async def test_load_recipe_ingredients_only_strips_content(self, tmp_path, monkeypatch):

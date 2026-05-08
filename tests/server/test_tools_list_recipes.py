@@ -18,8 +18,8 @@ class TestListRecipeTools:
     """Tests for kitchen-gated list_recipes tool."""
 
     @pytest.fixture(autouse=True)
-    def _ensure_ctx(self, tool_ctx):
-        """Ensure server context is initialized (gate open by default)."""
+    def _ensure_ctx(self, tool_ctx_kitchen_open):
+        """Ensure server context is initialized with gate open."""
 
     # SS1
     @pytest.mark.anyio

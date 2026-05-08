@@ -103,7 +103,7 @@ class TestProcessRunnerResult:
         assert "5" in stderr
 
 
-@pytest.mark.usefixtures("tool_ctx")
+@pytest.mark.usefixtures("tool_ctx_kitchen_open")
 class TestRunPython:
     """run_python tool: import, call, timeout, async support."""
 
@@ -261,7 +261,7 @@ class TestRunCmdSleepInterception:
 # ─── Type coercion tests (Step 1a) ───────────────────────────────────────────
 
 
-@pytest.mark.usefixtures("tool_ctx")
+@pytest.mark.usefixtures("tool_ctx_kitchen_open")
 class TestImportAndCallTypeCoercion:
     """Test _import_and_call annotation-aware type coercion."""
 

@@ -99,8 +99,8 @@ class TestValidateRecipeTool:
     """Tests for kitchen-gated validate_recipe tool."""
 
     @pytest.fixture(autouse=True)
-    def _ensure_ctx(self, tool_ctx):
-        """Ensure server context is initialized (gate open by default)."""
+    def _ensure_ctx(self, tool_ctx_kitchen_open):
+        """Ensure server context is initialized with gate open."""
 
     # VS1
     @pytest.mark.anyio
@@ -252,8 +252,8 @@ class TestMigrationSuggestions:
     """MSUG2: validate_recipe surfaces migration warnings."""
 
     @pytest.fixture(autouse=True)
-    def _ensure_ctx(self, tool_ctx):
-        """Ensure server context is initialized (gate open by default)."""
+    def _ensure_ctx(self, tool_ctx_kitchen_open):
+        """Ensure server context is initialized with gate open."""
 
     # MSUG2
     @pytest.mark.anyio

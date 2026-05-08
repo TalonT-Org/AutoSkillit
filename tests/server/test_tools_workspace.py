@@ -26,9 +26,9 @@ class TestResetWorkspace:
     """T6, T7: reset_workspace preserves configured dirs, requires marker."""
 
     @pytest.fixture(autouse=True)
-    def _set_reset_command(self, tool_ctx):
+    def _set_reset_command(self, tool_ctx_kitchen_open):
         """Configure reset_workspace with a command for these tests."""
-        tool_ctx.config = AutomationConfig(
+        tool_ctx_kitchen_open.config = AutomationConfig(
             reset_workspace=ResetWorkspaceConfig(
                 command=["make", "clean"],
                 preserve_dirs={".cache", "reports"},

@@ -55,7 +55,7 @@ class TestKitchenStatus:
     """kitchen_status tool returns version health info."""
 
     @pytest.fixture(autouse=True)
-    def _setup(self, tool_ctx, monkeypatch, tmp_path):
+    def _setup(self, tool_ctx_kitchen_open, monkeypatch, tmp_path):
         monkeypatch.chdir(tmp_path)
 
     @pytest.mark.anyio

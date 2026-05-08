@@ -30,7 +30,7 @@ class TestResearchDesignRecipeStructure:
         assert recipe.categories == ["research-family"]
 
     def test_requires_packs(self, recipe) -> None:
-        assert recipe.requires_packs == ["research"]
+        assert recipe.requires_packs == ["research", "vis-lens"]
 
     def test_ingredient_count(self, recipe) -> None:
         assert len(recipe.ingredients) == 5

@@ -79,6 +79,12 @@ def _check_unknown_skill_command(ctx: ValidationContext) -> list[RuleFinding]:
     severity=Severity.WARNING,
 )
 def _check_subset_disabled_skill(ctx: ValidationContext) -> list[RuleFinding]:
+    """Flag steps that reference skills disabled by the user's subsets.disabled config.
+
+    Note: This rule checks USER CONFIG vs RECIPE compatibility.
+    For RECIPE DECLARATION completeness (requires_packs vs skill categories),
+    see 'undeclared-pack-requirement' in rules_packs.py.
+    """
     if not ctx.disabled_subsets:
         return []
     category_map = (

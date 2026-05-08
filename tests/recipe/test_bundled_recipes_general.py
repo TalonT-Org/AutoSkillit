@@ -9,7 +9,7 @@ import structlog.testing
 
 from autoskillit.core import SKILL_TOOLS
 from autoskillit.recipe._analysis import build_recipe_graph
-from autoskillit.recipe.contracts import load_bundled_manifest
+from autoskillit.recipe.contracts import load_bundled_manifest, resolve_skill_name
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.rules.rules_merge import _is_commit_guard
 from autoskillit.recipe.validator import run_semantic_rules
@@ -579,7 +579,6 @@ def test_resolve_failures_steps_have_on_context_limit() -> None:
     Without on_context_limit, context exhaustion mid-fix falls through to
     on_failure, discarding all uncommitted edits and losing partial progress.
     """
-    from autoskillit.recipe.contracts import resolve_skill_name
 
     for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):
         recipe = load_recipe(yaml_path)
@@ -682,3 +681,30 @@ def test_reenroll_stalled_pr_has_loop_guard(recipe_name: str) -> None:
     assert reenroll.on_success == "check_stall_loop", (
         f"reenroll_stalled_pr must route to check_stall_loop, got: {reenroll.on_success!r}"
     )
+
+
+def test_requires_packs_covers_all_default_disabled_skill_categories() -> None:
+    """Every recipe's requires_packs must cover all default-disabled pack categories
+    needed by its run_skill steps. This is a structural defense-in-depth guard
+    complementary to the undeclared-pack-requirement semantic rule."""
+    category_map = _get_skill_category_map()
+    default_disabled = frozenset(
+        name for name, pdef in PACK_REGISTRY.items() if not pdef.default_enabled
+    )
+    for path in sorted(builtin_recipes_dir().glob("*.yaml")):
+        recipe = load_recipe(path)
+        needed_packs: set[str] = set()
+        for step_name, step in recipe.steps.items():
+            if step.tool not in SKILL_TOOLS:
+                continue
+            skill_cmd = (step.with_args or {}).get("skill_command") or ""
+            skill_name = resolve_skill_name(skill_cmd)
+            if skill_name is None:
+                continue
+            categories = category_map.get(skill_name, frozenset())
+            needed_packs.update(categories & default_disabled)
+        missing = needed_packs - set(recipe.requires_packs)
+        assert not missing, (
+            f"{path.name}: run_skill steps reference default-disabled packs {sorted(missing)} "
+            f"but requires_packs={recipe.requires_packs!r} is missing them"
+        )

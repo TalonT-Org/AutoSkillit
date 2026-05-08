@@ -1,6 +1,7 @@
 {
   "name": "research-archive",
   "recipe_version": "1.0.0",
+  "kind": "food-truck",
   "categories": [
     "research-family"
   ],
@@ -23,16 +24,6 @@
     },
     "pr_url": {
       "description": "URL of the original experiment PR (passed by campaign dispatch)",
-      "required": true,
-      "hidden": true
-    },
-    "all_diagram_paths": {
-      "description": "Paths to all generated diagrams (passed by campaign dispatch)",
-      "required": true,
-      "hidden": true
-    },
-    "report_path_after_finalize": {
-      "description": "Path to the finalized research report (passed by campaign dispatch)",
       "required": true,
       "hidden": true
     },

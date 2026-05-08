@@ -157,9 +157,12 @@ def build_ctx(tmp_path):
 
 @pytest.fixture
 def build_ctx_open(build_ctx):
-    """build_ctx variant with gate open."""
+    """build_ctx variant with gate open — returns a factory callable like build_ctx."""
     from autoskillit.pipeline.gate import DefaultGateState
 
-    ctx = build_ctx()
-    ctx.gate = DefaultGateState(enabled=True)
-    return ctx
+    def _factory(**overrides):
+        ctx = build_ctx(**overrides)
+        ctx.gate = DefaultGateState(enabled=True)
+        return ctx
+
+    return _factory

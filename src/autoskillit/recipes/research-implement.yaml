@@ -270,7 +270,8 @@ steps:
     optional_context_refs:
       - run_fix_count
     note: >
-      Iteration guard for run_experiment → troubleshoot → adjust_experiment cycle.
+      Iteration guard for the adjust_experiment → check_run_fix_loop → run_experiment
+      sub-loop (entered via troubleshoot_run_failure → route_run_failure → adjust_experiment).
       Caps experiment fix loops at 3 iterations. On exhaustion, proceeds to
       ensure_results to salvage whatever data exists.
 

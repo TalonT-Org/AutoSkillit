@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+import threading
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -48,6 +49,7 @@ class _WarningLogger(Protocol):
 
 
 _SCHEMA_DRIFT_LOGGED: set[tuple[str, int]] = set()
+_SCHEMA_DRIFT_LOCK = threading.Lock()
 
 
 def resolve_temp_dir(project_dir: Path, override: str | None = None) -> Path:
@@ -161,20 +163,23 @@ def read_versioned_json(
     observed = raw.get("schema_version")
     if observed != expected_version:
         cache_key = (str(path.resolve()), expected_version)
-        if cache_key not in _SCHEMA_DRIFT_LOGGED:
-            _SCHEMA_DRIFT_LOGGED.add(cache_key)
-            if logger is not None:
-                logger.warning(
-                    "schema_drift",
-                    path=str(path),
-                    expected=expected_version,
-                    observed=observed,
-                )
+        with _SCHEMA_DRIFT_LOCK:
+            if cache_key not in _SCHEMA_DRIFT_LOGGED:
+                _SCHEMA_DRIFT_LOGGED.add(cache_key)
             else:
-                warnings.warn(
-                    f"schema_drift: path={path} expected={expected_version} observed={observed}",
-                    stacklevel=2,
-                )
+                return None
+        if logger is not None:
+            logger.warning(
+                "schema_drift",
+                path=str(path),
+                expected=expected_version,
+                observed=observed,
+            )
+        else:
+            warnings.warn(
+                f"schema_drift: path={path} expected={expected_version} observed={observed}",
+                stacklevel=2,
+            )
         return None
     return raw
 

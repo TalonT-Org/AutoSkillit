@@ -8,6 +8,7 @@ import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import anyio
 import anyio.abc
@@ -15,7 +16,26 @@ import psutil
 
 from autoskillit.core import get_logger
 
+if TYPE_CHECKING:
+    from autoskillit.fleet import CampaignStateMutator, DispatchRecord
+
 logger = get_logger(__name__)
+
+
+def _apply_stale_dispatch(
+    dispatch: DispatchRecord,
+    reason: str,
+    m: CampaignStateMutator,
+) -> None:
+    from autoskillit.fleet import classify_stale_dispatch  # noqa: PLC0415
+
+    new_status, sidecar = classify_stale_dispatch(dispatch)
+    dispatch.status = new_status
+    dispatch.reason = reason
+    if sidecar:
+        dispatch.sidecar_path = sidecar
+    dispatch.ended_at = time.time()
+    m.mark_dirty()
 
 
 @asynccontextmanager
@@ -56,28 +76,16 @@ async def _fleet_signal_guard(
                     from autoskillit.execution import async_kill_process_tree, read_starttime_ticks
                     from autoskillit.fleet import (  # noqa: PLC0415
                         CampaignStateMutator,
-                        DispatchRecord,
                         DispatchStatus,
-                        classify_stale_dispatch,
                     )
 
                     with CampaignStateMutator(state_path) as m:
                         if m.state is not None:
-
-                            def _apply_stale(d: DispatchRecord) -> None:
-                                new_status, sidecar = classify_stale_dispatch(d)
-                                d.status = new_status
-                                d.reason = f"signal_{signame}"
-                                if sidecar:
-                                    d.sidecar_path = sidecar
-                                d.ended_at = time.time()
-                                m.mark_dirty()
-
                             for dispatch in m.state.dispatches:
                                 if dispatch.status != DispatchStatus.RUNNING:
                                     continue
                                 if dispatch.dispatched_pid == 0:
-                                    _apply_stale(dispatch)
+                                    _apply_stale_dispatch(dispatch, f"signal_{signame}", m)
                                     continue
 
                                 # Verify PID identity before killing
@@ -121,7 +129,7 @@ async def _fleet_signal_guard(
                                             dispatch.dispatched_pid,
                                         )
 
-                                _apply_stale(dispatch)
+                                _apply_stale_dispatch(dispatch, f"signal_{signame}", m)
 
                     if cleanup_on_interrupt:
                         try:
@@ -166,7 +174,6 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
     from autoskillit.fleet import (  # noqa: PLC0415
         CampaignStateMutator,
         DispatchStatus,
-        classify_stale_dispatch,
     )
 
     current_boot_id = read_boot_id()
@@ -197,13 +204,7 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
                 if dry_run:
                     logger.info("reap: [WOULD MARK]  %s  pid=0  (no PID recorded)", name)
                 else:
-                    new_status, sidecar = classify_stale_dispatch(dispatch)
-                    dispatch.status = new_status
-                    dispatch.reason = "reaped_dead_pid"
-                    if sidecar:
-                        dispatch.sidecar_path = sidecar
-                    dispatch.ended_at = time.time()
-                    m.mark_dirty()
+                    _apply_stale_dispatch(dispatch, "reaped_dead_pid", m)
                     logger.info("reap: [MARKED]      %s  (no PID recorded)", name)
                 continue
 
@@ -218,13 +219,7 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
                         "reap: [WOULD MARK]  %s  pid=%d  (rebooted, pid_recycled)", name, pid
                     )
                 else:
-                    new_status, sidecar = classify_stale_dispatch(dispatch)
-                    dispatch.status = new_status
-                    dispatch.reason = "reaped_pid_recycled"
-                    if sidecar:
-                        dispatch.sidecar_path = sidecar
-                    dispatch.ended_at = time.time()
-                    m.mark_dirty()
+                    _apply_stale_dispatch(dispatch, "reaped_pid_recycled", m)
                     logger.info(
                         "reap: [MARKED]      %s  pid=%d  (rebooted, pid_recycled)",
                         name,
@@ -236,13 +231,7 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
                 if dry_run:
                     logger.info("reap: [WOULD MARK]  %s  pid=%d  (process dead)", name, pid)
                 else:
-                    new_status, sidecar = classify_stale_dispatch(dispatch)
-                    dispatch.status = new_status
-                    dispatch.reason = "reaped_dead_pid"
-                    if sidecar:
-                        dispatch.sidecar_path = sidecar
-                    dispatch.ended_at = time.time()
-                    m.mark_dirty()
+                    _apply_stale_dispatch(dispatch, "reaped_dead_pid", m)
                     logger.info("reap: [MARKED]      %s  pid=%d  (process dead)", name, pid)
                 continue
 
@@ -260,13 +249,7 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
                         logger.warning(
                             "reap: kill_process_tree failed for pid=%d", pid, exc_info=True
                         )
-                    new_status, sidecar = classify_stale_dispatch(dispatch)
-                    dispatch.status = new_status
-                    dispatch.reason = "reaped_orphan"
-                    if sidecar:
-                        dispatch.sidecar_path = sidecar
-                    dispatch.ended_at = time.time()
-                    m.mark_dirty()
+                    _apply_stale_dispatch(dispatch, "reaped_orphan", m)
                     logger.info("reap: [KILLED]      %s  pid=%d  (orphan reaped)", name, pid)
             else:
                 if dry_run:
@@ -274,13 +257,7 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
                         "reap: [WOULD MARK]  %s  pid=%d  (PID recycled, no kill)", name, pid
                     )
                 else:
-                    new_status, sidecar = classify_stale_dispatch(dispatch)
-                    dispatch.status = new_status
-                    dispatch.reason = "reaped_pid_recycled"
-                    if sidecar:
-                        dispatch.sidecar_path = sidecar
-                    dispatch.ended_at = time.time()
-                    m.mark_dirty()
+                    _apply_stale_dispatch(dispatch, "reaped_pid_recycled", m)
                     logger.info(
                         "reap: [MARKED]      %s  pid=%d  (PID recycled, no kill)",
                         name,

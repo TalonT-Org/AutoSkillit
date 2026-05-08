@@ -100,9 +100,17 @@ async def test_fleet_semaphore_acquire_succeeds_within_timeout():
         await asyncio.sleep(0.05)
         s.release()
 
-    asyncio.create_task(release_soon())
-    await s.acquire()
-    assert s.active_count == 1
+    task = asyncio.create_task(release_soon())
+    try:
+        await s.acquire()
+        assert s.active_count == 1
+    finally:
+        if not task.done():
+            task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
 
 @pytest.mark.anyio

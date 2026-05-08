@@ -361,6 +361,7 @@ async def _run_dispatch(
                 effective_ingredients, accumulated_captures
             )
         except ValueError as exc:
+            logger.warning("ingredient interpolation failed", exc_info=True)
             return DispatchRejected(
                 error_code=FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
                 message=str(exc),
@@ -541,7 +542,7 @@ async def _run_dispatch(
             dispatch_id=dispatch_id,
             dispatched_session_id=skill_result.session_id or "",
             reason=reason,
-            token_usage=skill_result.token_usage or {},
+            token_usage=normalize_dispatch_token_usage(skill_result.token_usage or {}),
             l3_payload=parsed.payload,
             l3_parse_source=parsed.source,
             lifespan_started=skill_result.lifespan_started,
@@ -553,7 +554,7 @@ async def _run_dispatch(
             dispatch_id=dispatch_id,
             dispatched_session_id=skill_result.session_id or "",
             reason=FleetErrorCode.FLEET_L3_PARSE_FAILED,
-            token_usage=skill_result.token_usage or {},
+            token_usage=normalize_dispatch_token_usage(skill_result.token_usage or {}),
             l3_payload=None,
             l3_raw_body=parsed.raw_body,
             l3_parse_error=parsed.parse_error,
@@ -567,7 +568,7 @@ async def _run_dispatch(
             dispatch_id=dispatch_id,
             dispatched_session_id=skill_result.session_id or "",
             reason=FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK,
-            token_usage=skill_result.token_usage or {},
+            token_usage=normalize_dispatch_token_usage(skill_result.token_usage or {}),
             l3_payload=None,
             l3_parse_source=parsed.source,
             lifespan_started=skill_result.lifespan_started,

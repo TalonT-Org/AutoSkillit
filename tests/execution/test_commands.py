@@ -15,6 +15,7 @@ from autoskillit.core import (
     NoResume,
     OutputFormat,
 )
+from autoskillit.core.types._type_dispatch_identity import DispatchIdentity
 from autoskillit.execution.commands import (
     _HEADLESS_EXCLUSIVE_VARS,
     _MAX_MCP_OUTPUT_TOKENS_VALUE,
@@ -811,6 +812,19 @@ class TestBuildFoodTruckCmdResume:
     def test_none_resume_session_id_omits_resume_flag(self):
         spec = build_food_truck_cmd(**self.BASE, resume_session_id=None)
         assert "--resume" not in spec.cmd
+
+    @pytest.mark.parametrize(
+        "attr",
+        ["sentinel_open", "sentinel_close", "completion_marker"],
+    )
+    def test_resume_prompt_contains_sentinel_markers(self, attr: str):
+        """Resume prompt must contain all sentinel markers from DispatchIdentity."""
+        identity = DispatchIdentity.from_dispatch_id("aaaabbbb-cccc-dddd-eeee-ffffffffffff")
+        spec = build_food_truck_cmd(
+            **self.BASE, resume_session_id="abc-123", sentinel_contract=identity.sentinel_contract
+        )
+        prompt = spec.cmd[spec.cmd.index("-p") + 1]
+        assert getattr(identity, attr) in prompt
 
 
 def test_headless_exclusive_vars_contains_max_mcp_output_tokens() -> None:

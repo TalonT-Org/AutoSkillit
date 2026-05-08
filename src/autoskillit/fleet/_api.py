@@ -8,11 +8,11 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
-from uuid import uuid4
 
 import regex as re
 
 from autoskillit.core import (
+    DispatchIdentity,
     FleetErrorCode,
     InfraExitCategory,
     RetryReason,
@@ -366,8 +366,10 @@ async def _run_dispatch(
     if quota_result.get("should_sleep"):
         await asyncio.sleep(quota_result.get("sleep_seconds", 0))
 
-    dispatch_id = str(uuid4())
-    completion_marker = f"%%L3_DONE::{dispatch_id[:8]}%%"
+    identity = DispatchIdentity.fresh()
+    dispatch_id = identity.dispatch_id
+    completion_marker = identity.completion_marker
+    sentinel_contract = identity.sentinel_contract
     from autoskillit.fleet.sidecar import sidecar_path as compute_sidecar_path  # noqa: PLC0415
 
     dispatch_sidecar_path = str(compute_sidecar_path(dispatch_id, tool_ctx.project_dir))
@@ -437,6 +439,7 @@ async def _run_dispatch(
         },
         requires_packs=list(full_recipe.requires_packs) or ["kitchen-core"],
         on_spawn=_on_spawn,
+        sentinel_contract=sentinel_contract,
     )
     ended_at = time.time()
 

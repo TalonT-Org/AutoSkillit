@@ -817,6 +817,7 @@ class DefaultHeadlessExecutor:
         provider_name: str = "",
         provider_fallback_env: dict[str, str] | None = None,
         provider_fallback_name: str = "",
+        sentinel_contract: str = "",
     ) -> SkillResult:
         cfg = self._ctx.config
         resolved_model = _resolve_model(model, cfg)
@@ -855,6 +856,7 @@ class DefaultHeadlessExecutor:
             scenario_step_name=step_name,
             temp_dir_relpath=temp_dir_display_str(cfg.workspace.temp_dir),
             allowed_write_prefix=allowed_write_prefix,
+            sentinel_contract=sentinel_contract,
         )
 
         effective_timeout = timeout if timeout is not None else fleet_cfg.default_timeout_sec

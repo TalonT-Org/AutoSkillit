@@ -485,6 +485,7 @@ def build_food_truck_cmd(
     scenario_step_name: str = "",
     temp_dir_relpath: str | None = None,
     allowed_write_prefix: str = "",
+    sentinel_contract: str = "",
 ) -> ClaudeHeadlessCmd:
     """Build the complete headless command spec for an L2 food truck session.
 
@@ -532,6 +533,10 @@ def build_food_truck_cmd(
         Falls back to the canonical default when None.
     allowed_write_prefix
         If non-empty, sets ``AUTOSKILLIT_ALLOWED_WRITE_PREFIX`` in the subprocess env.
+    sentinel_contract
+        Section 8 sentinel contract text to inject into the resume prompt.
+        Required when resume_session_id is set to ensure the resumed session
+        can emit parseable sentinel markers.
     """
     if resume_session_id:
         _resume_instruction = (
@@ -541,6 +546,8 @@ def build_food_truck_cmd(
         )
         if resume_checkpoint and resume_checkpoint.completed_items:
             _resume_instruction += "\n\n" + _build_resume_context(resume_checkpoint)
+        if sentinel_contract:
+            _resume_instruction += "\n\n" + sentinel_contract
         prompt = _inject_completion_reminder(
             _inject_narration_suppression(
                 _inject_cwd_anchor(

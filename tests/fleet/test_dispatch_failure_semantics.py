@@ -309,14 +309,21 @@ class TestDispatchStatusEnvelopeField:
     ):
         """no_sentinel + session_id + lifespan_started + sidecar → dispatch_status='resumable'."""
         import dataclasses
-        from uuid import UUID
 
+        from autoskillit.core import DispatchIdentity
         from tests.fakes import _DEFAULT_SKILL_RESULT, InMemoryHeadlessExecutor
 
         _setup_dispatch(tool_ctx, monkeypatch)
 
         fixed_dispatch_id = "aaaabbbb-cccc-dddd-eeee-ffffffffffff"
-        monkeypatch.setattr("autoskillit.fleet._api.uuid4", lambda: UUID(fixed_dispatch_id))
+        _fixed_identity = DispatchIdentity.from_dispatch_id(fixed_dispatch_id)
+
+        class _FixedDispatchIdentity:
+            @classmethod
+            def fresh(cls) -> DispatchIdentity:
+                return _fixed_identity
+
+        monkeypatch.setattr("autoskillit.fleet._api.DispatchIdentity", _FixedDispatchIdentity)
 
         from autoskillit.fleet.sidecar import sidecar_path
 

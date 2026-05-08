@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import dataclasses
-import re
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+import regex as re
 
 from autoskillit.core import CliSubtype, OutputFormat, RetryReason, SkillResult, get_logger
 from autoskillit.execution.commands import build_headless_resume_cmd

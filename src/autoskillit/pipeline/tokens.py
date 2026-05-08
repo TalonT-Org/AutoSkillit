@@ -10,11 +10,12 @@ with a defensive copy getter.
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
+
+import regex as re
 
 from autoskillit.core import ModelTotalEntry, get_logger
 from autoskillit.pipeline.audit import _iter_session_log_entries

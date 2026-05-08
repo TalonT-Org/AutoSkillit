@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import re
+import regex as re
 
 # Matches any line that contains a git command followed by a remote-aware verb.
 # Expanded from rules_skill_content.py to include push, merge-base, diff, ls-remote.

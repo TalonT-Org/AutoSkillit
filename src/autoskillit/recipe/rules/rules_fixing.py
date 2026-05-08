@@ -13,8 +13,9 @@ Modelled on the rebase-then-push-requires-force rule in rules_tools.py.
 
 from __future__ import annotations
 
-import re
 from collections import deque
+
+import regex as re
 
 from autoskillit.core import SKILL_TOOLS, Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext

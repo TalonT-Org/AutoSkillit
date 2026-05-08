@@ -9,7 +9,8 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import re
+
+import regex as re
 
 from autoskillit.core import get_logger
 from autoskillit.execution.merge_queue._merge_queue_classifier import _QUERY_FIELD_MAP

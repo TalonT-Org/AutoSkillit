@@ -8,7 +8,8 @@ the server and CLI layers without introducing cross-L3 coupling.
 from __future__ import annotations
 
 import json
-import re
+
+import regex as re
 
 from autoskillit.core import ADMIRAL_DISPATCH_SECTIONS, get_logger, pkg_root
 from autoskillit.hooks import QUOTA_GUARD_DENY_TRIGGER, QUOTA_POST_WARNING_TRIGGER

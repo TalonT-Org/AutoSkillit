@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import re
+import regex as re
 
 from autoskillit.core import MergeFailedStep, Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext, bfs_reachable

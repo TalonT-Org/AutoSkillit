@@ -75,7 +75,7 @@ def _scrub_auth(text: str) -> str:
     token = os.environ.get("GITHUB_TOKEN")
     if token:
         text = text.replace(token, "***")
-    import re
+    import regex as re
 
     text = re.sub(r"(?i)Bearer\s+\S+", "Bearer ***", text)
     return text

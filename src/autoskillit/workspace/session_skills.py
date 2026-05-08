@@ -8,12 +8,13 @@ Provides three components:
 
 from __future__ import annotations
 
-import re
 import shutil
 import tempfile
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+import regex as re
 
 from autoskillit.core import (
     FEATURE_REGISTRY,

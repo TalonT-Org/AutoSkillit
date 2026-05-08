@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
+
+import regex as re
 
 from autoskillit.recipe.methodology_tradition_registry import (
     MethodologyTraditionSpec,

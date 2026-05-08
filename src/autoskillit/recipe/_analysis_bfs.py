@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import re
 from collections import deque
+
+import regex as re
 
 from autoskillit.recipe.contracts import RESULT_CAPTURE_RE
 from autoskillit.recipe.schema import Recipe

@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import json
-import re
 import secrets
 import subprocess
 import time
 from datetime import UTC, date, datetime
 from pathlib import Path
+
+import regex as re
 
 from autoskillit.core import atomic_write
 

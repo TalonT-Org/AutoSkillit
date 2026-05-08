@@ -11,8 +11,9 @@ module.  This module only loads and checks pre-rendered artifacts.
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
+
+import regex as re
 
 from autoskillit.recipe.staleness_cache import compute_recipe_hash
 

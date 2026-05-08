@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import json
-import re
 import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
+
+import regex as re
 
 from autoskillit.core import (
     FleetErrorCode,

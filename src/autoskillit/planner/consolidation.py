@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+import regex as re
 
 from autoskillit.core import atomic_write, write_versioned_json
 from autoskillit.planner._sort_utils import _natural_sort_key

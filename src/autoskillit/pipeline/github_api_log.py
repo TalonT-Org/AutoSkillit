@@ -8,9 +8,10 @@ session log-write time via flush_session_log().
 from __future__ import annotations
 
 import asyncio
-import re
 from dataclasses import dataclass, field
 from typing import Any
+
+import regex as re
 
 
 @dataclass

@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
-import re
 import shutil
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+import regex as re
 
 from autoskillit import __version__
 from autoskillit.core import (
